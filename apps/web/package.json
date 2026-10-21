@@ -1,0 +1,31 @@
+{
+  "name": "@shinsa/web",
+  "license": "UNLICENSED",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "check-types": "tsc --noEmit",
+    "dev": "vite --port 5181 --strictPort"
+  },
+  "dependencies": {
+    "@shinsa/core": "workspace:*",
+    "@shinsa/ui": "workspace:*",
+    "lucide-react": "0.563.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "shiki": "3.23.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.1"
+  }
+}
