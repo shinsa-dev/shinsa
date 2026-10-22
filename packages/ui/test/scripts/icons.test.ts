@@ -1,0 +1,157 @@
+import { afterAll, describe, expect, it, spyOn } from 'bun:test';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  DEFAULT_RADIUS,
+  discoverIcons,
+  generateIcons,
+  isKnownIcon,
+  listKnownIcons,
+  listSourceFiles,
+  OUT,
+  renderIconMarkup,
+  renderIconsModule,
+} from '../../scripts/icons';
+
+const scratch = mkdtempSync(join(tmpdir(), 'shinsa-icons-'));
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
+function tree(root: string, files: Record<string, string>) {
+  for (const [path, content] of Object.entries(files)) {
+    const full = join(root, path);
+    mkdirSync(join(full, '..'), { recursive: true });
+    writeFileSync(full, content);
+  }
+  return root;
+}
+
+const known = listKnownIcons();
+
+describe('listSourceFiles', () => {
+  it('walks source files, skipping dependencies, builds, tests and dotfiles', () => {
+    const root = tree(join(scratch, 'walk'), {
+      'a.tsx': '',
+      'sub/c.ts': '',
+      'sub/d.mdx': '',
+      'b.test.tsx': '',
+      'notes.md': '',
+      'node_modules/x.ts': '',
+      'dist/y.js': '',
+      'test/z.ts': '',
+      '.cache/w.ts': '',
+    });
+    expect([...listSourceFiles(root)].map((file) => file.slice(root.length + 1)).sort()).toEqual([
+      'a.tsx',
+      'sub/c.ts',
+      'sub/d.mdx',
+    ]);
+  });
+});
+
+describe('the catalog', () => {
+  it('knows Central icons, their filled variants and our custom marks', () => {
+    expect(isKnownIcon(known, 'IconCheckmark1')).toBe(true);
+    expect(isKnownIcon(known, 'IconBellFilled')).toBe(true);
+    expect(isKnownIcon(known, 'IconPriorityHigh')).toBe(true);
+    expect(isKnownIcon(known, 'IconNotARealIcon')).toBe(false);
+  });
+});
+
+describe('discoverIcons', () => {
+  it('finds icons by prop, by object key and by any literal that names a real icon', () => {
+    const found = discoverIcons(
+      [
+        "<Icon name='IconBell' />",
+        "const action = { icon: 'IconClock' };",
+        "const fallback = 'IconGlobe';",
+        "const label = 'IconNotARealIcon';",
+        '<Badge icon="IconFolder1" />',
+      ],
+      known
+    );
+    expect([...found.keys()].sort()).toEqual(['IconBell', 'IconClock', 'IconFolder1', 'IconGlobe']);
+    expect([...(found.get('IconBell') ?? [])]).toEqual([DEFAULT_RADIUS]);
+  });
+
+  it('adds a radius written on the same tag, ignoring radii Central does not ship', () => {
+    const found = discoverIcons(
+      ["<Icon name='IconBell' radius='0' /><Icon name='IconClock' radius='7' />"],
+      known
+    );
+    expect([...(found.get('IconBell') ?? [])].sort()).toEqual(['0', '3']);
+    expect([...(found.get('IconClock') ?? [])]).toEqual(['3']);
+  });
+
+  it('gives every chevron the square radius Icon resolves it to', () => {
+    const found = discoverIcons(["<Icon name='IconChevronDownMedium' />"], known);
+    expect([...(found.get('IconChevronDownMedium') ?? [])].sort()).toEqual(['0', '3']);
+  });
+});
+
+describe('renderIconMarkup', () => {
+  it('renders Central icons as raw currentColor paths', () => {
+    const markup = renderIconMarkup('IconBell', '3');
+    expect(markup).toContain('stroke="currentColor"');
+    expect(markup).not.toContain('<svg');
+    expect(markup).not.toContain('mask');
+  });
+
+  it('renders the filled style from the Filled suffix', () => {
+    expect(renderIconMarkup('IconBellFilled', '3')).not.toBe(renderIconMarkup('IconBell', '3'));
+  });
+
+  it('applies the optical corrections', () => {
+    expect(renderIconMarkup('IconCheckmark1', '3')).toContain('stroke-width="2.5"');
+    expect(renderIconMarkup('IconPaperPlaneTopRight', '3')).toStartWith(
+      '<g transform="translate(12 12) scale(0.9) translate(-12 -12)">'
+    );
+    expect(renderIconMarkup('IconApple', '3')).toStartWith('<g transform="translate(0.14 -1.03)">');
+  });
+
+  it('uses our own artwork for custom marks', () => {
+    expect(renderIconMarkup('IconPriorityHigh', '0')).toStartWith('<g fill="currentColor"><rect');
+  });
+
+  it('fails loudly for a name Central does not have', () => {
+    const warn = spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(() => renderIconMarkup('IconNotARealIcon', '3')).toThrow(
+      'Failed to extract SVG for IconNotARealIcon@r3'
+    );
+    warn.mockRestore();
+  });
+});
+
+describe('renderIconsModule', () => {
+  it('writes sorted names and radii, so the output is stable', () => {
+    const module = renderIconsModule(
+      new Map([
+        ['IconClock', new Set(['3'] as const)],
+        ['IconBell', new Set(['3', '0'] as const)],
+      ])
+    );
+    expect(module.indexOf("'IconBell',")).toBeLessThan(module.indexOf("'IconClock',"));
+    expect(module).toContain(`IconBell: {\n    '0': '${renderIconMarkup('IconBell', '0')}',\n    '3': `);
+    expect(module).toContain("export const DEFAULT_ICON_RADIUS: IconRadius = '3';");
+  });
+});
+
+describe('generateIcons', () => {
+  it('scans the given roots', () => {
+    const root = tree(join(scratch, 'scan'), {
+      'page.tsx': "<Icon name='IconBell' /><Icon name='IconClock' />",
+    });
+    const { module, icons } = generateIcons([root]);
+    expect(icons).toBe(2);
+    expect(module).toContain("'IconBell',\n  'IconClock',\n] as const;");
+  });
+
+  it('refuses to write an empty icon set', () => {
+    const root = tree(join(scratch, 'empty'), { 'page.tsx': 'export {};' });
+    expect(() => generateIcons([root])).toThrow('No icon usages found');
+  });
+
+  it('matches the committed paths.ts, so the bundle carries exactly the icons the workspace uses', () => {
+    expect(generateIcons().module).toBe(readFileSync(OUT, 'utf8'));
+  });
+});

@@ -39,7 +39,7 @@ work and asks the human for small, specific pieces of judgment.** Nothing else r
 
 You write an **intent** ("block duplicating code-first paywalls", "the embedded chat should
 use MCP v2"). Shinsa turns it into a **task**: one deliverable, one worktree, one branch, at most
-one PR (or a stack). A task is the only thing with a lifecycle. Chats, runs, agents, checks are
+one PR. A task is the only thing with a lifecycle. Chats, runs, agents, checks are
 parts of a task, never things the human manages.
 
 The repo is inferred (from the intent, recent work, mentioned files) and confirmed at the spec
@@ -90,9 +90,14 @@ toward its next gate and to decide what reaches the human, in what order.
 
 - Turns intents into tasks; proposes size and spec; picks the provider and model.
 - Orders work across tasks: dependencies (embedded chat waits on MCP v2), what unblocks the
-  most, what you said matters. Stacks PRs and rebases dependents when a base merges.
+  most, what you said matters. A task that depends on nothing starts at once, on its own agent,
+  however many others are running, and lands at your review whatever its priority; priority only
+  decides how high its decisions sit. A task that depends on others waits, costing nothing, until
+  every one of them has merged, then starts from the updated default branch (`docs/engine.md` →
+  Scheduling).
 - Drives the PR loop: watches CI and review bots, sends fixes, re-requests review.
-- Writes the briefing: what is in your queue and why, in two sentences, kept current.
+- Writes the briefing: the one decision to take now and why, the two or three after it, what
+  agents are doing, and a heads-up when something is stuck. Kept current.
 - Keeps notes per task so nothing depends on the human remembering it.
 - Never approves, never merges, never commits to main.
 
@@ -116,8 +121,12 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
 - **Task page.** Everything about one task for when you want to look: spec, timeline of runs,
   the agents' transcripts (read-only by default, you *can* talk to the agent), evidence, PR.
   Reachable from any gate; never required.
-- **Everything.** A plain, searchable list of all tasks and their stage. For looking things up,
-  not for managing.
+- **All tasks: the roadmap.** Every task in to-do order: ready to merge, changes to review, plan
+  to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
+  that handle several parents), then done and cancelled, collapsed. Priority then age
+  inside each section. This is the page to open each day and work down. A task can be told to
+  wait for others from here, from the task page and from ⌘K, and the new-task box can start a
+  request "after ‹task›".
 
 ## 5. Review, the core surface
 
@@ -171,7 +180,7 @@ Browser or desktop app ──WebSocket──► shinsa serve (Bun, on your machi
 
 A fresh codebase in the Polis/Buzzkit shape, enforced as strictly:
 
-- Bun workspaces + Turborepo. `apps/daemon` (Bun server, also serves the web app),
+- Bun workspaces + Turborepo. `apps/server` (Bun server and the `shinsa` command, also serves the web app),
   `apps/web` (React, the product UI), `packages/core` (domain, `decide`, queue, prompts and the
   wire protocol, all pure), `packages/ui` (design system). Provider adapters beyond Claude move
   into `packages/providers` when the second provider lands.
@@ -223,9 +232,9 @@ Built and verified end to end against a scratch repository:
   back to the builder; "Spec first" in the composer.
 - **M3** built, unit-tested, not yet run against GitHub: PR opening, the 45 second PR watcher, CI and
   review-thread fix rounds, the merge gate, settlement and worktree cleanup.
-- **M4** partly: focus by area with an expiry, the briefing, stacked tasks (triage detects a task
-  that builds on unmerged work, branches from it, targets its PR at it, holds the merge gate until
-  the base merges, then retargets). Still open: the manager learning priorities from corrections.
+- **M4** partly: focus by area with an expiry, the briefing, dependencies (triage, the new-task
+  box or the task menus make a task wait on one or several others; it starts after all of them
+  merge, chains, fan-outs and diamonds included). Still open: the manager learning priorities from corrections.
 - **M5/M6** not started: preview servers and simulator capture driven by Shinsa itself (agents
   already capture evidence through the evidence skill), Codex and other providers, standalone
   review of any GitHub PR.
@@ -233,15 +242,21 @@ Built and verified end to end against a scratch repository:
 ### Second pass (2026-10-21, evening)
 
 - **The hand-over protocol.** Specs, work reports and review findings are fixed shapes with hard
-  length limits (`packages/core/src/report.ts`), enforced on every tool call. The work report is
+  length limits (`packages/core/src/report/validate.ts`), enforced on every tool call. The work report is
   the review: phases in reading order, each pointing at line ranges ranked critical, high or normal,
   plus checks run and judgement calls.
 - **Code-first review.** The review screen is a split: the walkthrough on the left (phases, or every
   spot ranked by attention, then agent findings, judgement calls, checks), the code on the right with
   the whole file as context, the spot spotlit, findings inline, line comments, `j`/`k` to step.
   Changes is a separate tab: a file tree and the full diff. Spec, Evidence and Agents are tabs too.
-- **Desktop shell.** A left rail ranks what needs you (briefing, decisions, agents working, waiting,
-  held by focus); the task fills the rest. Home is the top decision. ⌘K or `c` starts a task.
+- **Desktop shell.** Home and the queue button show the same queue: Needs you, In progress, Not
+  started, Waiting on another task and Outside your focus. A task page steps through what needs you (Next, "2 of 5") and moves on by
+  itself once you decide. Cards is the default layout: no rail, a "3 need you" button at the top
+  left, next to the logo, opens the queue over the page. Sidebar, picked in Settings, keeps the queue in a permanent rail.
+- **Command menu.** ⌘K, the app's only keyboard shortcut, opens a menu that acts on the page in
+  front of you first (the task's decision, tabs, priority, worktree, cancel; Home's Now task; a
+  Settings section; the All tasks filters), then jumps to any task, switches focus, layout and
+  theme, and starts a task from whatever you typed.
 - **No repositories to manage.** Shinsa finds git repositories on the machine, registers one the
   first time it works there and files it into an area named after its GitHub owner.
 - **`shinsa` CLI.** The server is `shinsa serve`; `shinsa do "<request>"`, `shinsa status` and
@@ -250,6 +265,20 @@ Built and verified end to end against a scratch repository:
   controls are more compact and less rounded, the secondary button has real contrast.
 - **Next:** an Electron desktop app around `shinsa serve` (the old Shinsa's `apps/desktop` shape),
   dev-server previews in review, the PR half against a real GitHub repository.
+
+### Third pass (2026-10-22): the roadmap
+
+- **Everything starts.** Tasks without a dependency are planned, built and checked at once, each on
+  its own agent; the "Hold new work" and "Agents at once" settings are gone. Low priority work still runs and
+  lands lower in Needs you and the guide.
+- **Dependencies instead of stacks.** A task waits on one or several others (from triage, the
+  new-task box's "After ‹task›", or the Waits on menu and ⌘K) and starts on its own once all of
+  them are merged or done, from the updated default branch. Several tasks can wait on the same
+  one. A cancelled parent pauses its waiting dependents with a
+  clear note.
+- **All tasks is the roadmap**, in to-do order with status-coloured sections; Home's queue, the
+  sidebar and ⌘K use the same sections, tones and order. Paused is orange everywhere now, so it
+  never reads as a review.
 
 ## 11. Open questions
 

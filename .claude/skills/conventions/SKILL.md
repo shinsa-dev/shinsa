@@ -1,128 +1,113 @@
 ---
 name: conventions
-description: Polis code conventions — load before writing or reviewing code anywhere in this monorepo. The API's route/domain/response patterns, the dashboard's loader/action model, the verb catalog, observability, and readability style, with right/wrong examples. Complements the terse rules in CLAUDE.md.
+description: Shinsa code conventions — load before writing or reviewing code anywhere in this monorepo (packages/core, apps/server, apps/web, packages/ui). The verb catalog, where things live, the core's event-sourcing rules, tests and coverage, errors and logs, and readability style, with right/wrong examples. Complements the terse rules in CLAUDE.md.
 ---
 
-# Polis conventions
+# Shinsa conventions
 
-`CLAUDE.md` carries the law; this skill carries the worked examples. When they disagree, `CLAUDE.md` wins, and fix the drift in the same change. For what a page shows and why, load `polis-dashboard`. For user-facing strings, load `copy`. The structure is copied from `../buzzkit` and `../cs`; when something here is silent, do what they do.
+`CLAUDE.md` carries the law; this skill carries the worked examples. When they disagree, `CLAUDE.md` wins, and fix the drift in the same change. For UI work also load `design`; for any string a person or an agent reads, load `copy`. Adapted from Buzzkit's `conventions`; when this is silent, do what Buzzkit does.
 
-## Repo shape
+## Where things live
 
 | Path | What it is |
 |---|---|
-| `apps/api` | Cloudflare Worker, Elysia + `CloudflareAdapter`. Owns D1, secrets, auth, `/v1`, the crons. No `app.listen()`, no `fs`, no `process.env`. |
-| `apps/web` | React Router 8 SSR on a Worker. Renders; calls the API; holds nothing. |
-| `packages/core` | Money, FX, crypto, period maths, ledger, rollup, recurring costs. No Worker globals. |
-| `packages/connectors` | Superwall and SideShift clients, fixtures and syncs. One directory per connector; a connector with several concerns gets one sub-directory per concern with its own barrel (`sideshift/{catalog,posts,spend}`). |
-| `packages/attribution` | The attribution model. Pure maths, imports nothing from the workspace. |
-| `packages/database` | Drizzle schema over D1, migrations in `drizzle/`. |
-| `packages/eden` | Wire types re-exported from the API's `types.ts` / `serialize.ts`. |
-| `packages/auth` | better-auth config. |
-| `packages/observability` | `createBufferedLogger`, `createTraceRunner`, `createInstrument`. |
-| `packages/ui` | The design system, vendored from buzzkit. |
+| `packages/core` | Pure domain: one folder per concern under `src/` (`model`, `events`, `commands`, `effects`, `state`, `decide`, `queue`, `briefing`, `report`, `chat`, `prompts`, `progress`, `protocol`). No `node:*`, no Bun, no I/O. See `packages/core/CLAUDE.md` |
+| `apps/server` | All I/O: event log, effect runner, agent runs, git, GitHub, HTTP. Folder per concern; see `apps/server/CLAUDE.md` |
+| `apps/web` | Renders server state, owns nothing. Every action is a `UserCommand` through `sendCommand` |
+| `packages/ui` | The design system. Reusable beyond Shinsa, imports nothing from the workspace |
 
-## apps/api — thin routes, fat domain
+- **A folder is a concern with an `index.ts` barrel.** Importers outside the folder use the barrel (`../state/index.ts`) or, inside one package where a barrel would cycle, the concrete file (`../state/queries.ts`). Files inside a folder import each other directly, never their own barrel. Packages import each other only by package name (`@shinsa/core`), never by path.
+- **The package barrel is the contract.** Everything `packages/core/src/index.ts` exports stays importable by the same name. Moving a file is free; renaming or removing an export changes every consumer and needs their updates in the same change.
+- **Tests mirror `src/` file for file**: `packages/core/test/decide/gates.test.ts` ↔ `src/decide/gates.ts`. Shared helpers live beside them (`test/harness.ts`, `test/briefing/fixtures.ts`), never in `src/`.
+- **No single-use constants.** A value gets a name when it is reused or is a tunable (`MAX_STALLED_FIXES`, `ACTIVITY_LIMIT`). A lookup table (`Record<GateKind, string>`) beats a `switch` that only returns strings.
 
-A route file mirrors its URL (`src/modules/v1/metrics/platforms/index.ts` → `GET /v1/metrics/platforms`), is always `index.ts`, and holds nothing but the Elysia instance.
-
-```ts
-// right: scope in the guard, domain call, mask/serialize, envelope
-export const metrics = new Elysia()
-  .use(auth)
-  .guard({ scope: 'dashboard:read', query: RangeQuerySchema, detail: { tags: ['Metrics'] } })
-  .get('/metrics', async ({ db, viewer, workspace, query }) => {
-    const result = await resolveTotals(db, workspace.id, query.from, query.to);
-    return Response.success(maskTotals(result, hasScope(viewer.scopes, 'money:read'))).send();
-  });
-```
-
-```ts
-// wrong: SQL in the route, a helper defined beside it, a hand-built response
-export const metrics = new Elysia().get('/metrics', async ({ query }) => {
-  const rows = await db.all(sql`select …`);
-  return { ok: true, rows };
-});
-```
-
-- Every route declares **one** scope. Two verbs on one path with different scopes put the scope on each handler (`{ scope: 'money:write', body: … }`), not on the guard.
-- URLs follow the resource map in `apps/api/CLAUDE.md`: plural kebab nouns, actions as `POST` to a sub-resource (`/connections/:id/syncs`), read models under `/metrics` and `/spend`.
-- Register every leaf in `modules/v1/index.ts` under a `/* /v1/path */` comment. Parents never `.use()` children.
-- Repeated query/params shapes are named schemas: shared ones in `libs/schemas.ts` (`RangeQuerySchema`, `BucketQuerySchema`, `IdParamsSchema`), resource ones in `api/<resource>/schemas.ts`.
-- Responses: `Response.success(x).send()`, `Response.list(items).send()`, `.status(201).send(set)` for creates, `markDeleted(x)` for DELETE. Dates serialize to ISO strings in the envelope.
-
-The domain directory is `api/<resource>/`: `index.ts` (primary queries + re-exports of every sibling), `types.ts`, `schemas.ts`, `serialize.ts`, `mask.ts` when money is involved, and concept files named for their concern (`connections/sync.ts`, `connections/sources.ts`, `members/setup.ts`). Importers use the barrel (`@/api/members/index`); siblings import each other directly.
-
-**`types.ts` and `serialize.ts` never import through `@/`.** `packages/eden` re-exports them into the dashboard by relative path, where `@/` resolves to the dashboard. Package and sibling imports only.
-
-## The verb catalog
+## Function verbs — one catalog, no synonyms
 
 | Verb | Contract |
 |---|---|
-| `find*` | one row or value, **throws** `NotFoundError` / `UnavailableError` when absent |
-| `select*` | one row, returns `null` when absent |
-| `list*` | many rows (including series) |
-| `count*` | a total |
-| `resolve*` | derive a value: an aggregate (`resolveTotals`), an input (`resolveRecurringInput`), a stamp |
-| `create*` / `update*` | plain writes |
-| `upsert*` / `replace*` / `write*` | idempotent writes |
-| `softDelete*` · `remove*` | soft delete · take something away (a membership) |
+| `find*` | one value, **throws** `DomainError` when absent (`findTask`) |
+| `select*` | one value, returns `null` when absent (`selectTask`) |
+| `list*` / `count*` | many values / a total |
+| `resolve*` | derive a value: a queue, a label, a fallback (`resolveQueue`, `resolveModelLabel`) |
+| `create*` / `update*` | plain writes; in core, `create*` also builds a fresh value (`createState`, `createSettings`) |
+| `upsert*` / `write*` / `replace*` | idempotent writes |
+| `remove*` | take something away |
 | `assert*` | invariant check that throws, returns `void` |
-| `serialize*` · `mask*` | response shape · money redaction by scope |
-| `request*` · `sync*` · `apply*` · `record*` | outbound call · connector run · effects |
+| `serialize*` / `parse*` / `validate*` | to text or wire shape / from untrusted text / check a hand-over and return `{ ok, errors }` |
+| `describe*` | a sentence for a person (`describeChecks`, `describeError`) |
+| `request*` · `sync*` · `apply*` · `record*` | ask for an effect · reconcile with the outside · fold an event · store a fact reported from outside |
+| `is*` / `has*` / `needs*` | boolean predicates |
 
-Banned in `apps/api/src` and `packages/**`: `get*`, `fetch*`, `set*`, `load*`, `delete*`, `destroy*` (lint-enforced). The dashboard's `api.server.ts` follows the catalog too (`findTotals`, `listSeries`, `createMember`, `removeRecurringCost`). If you null-check a `find*`, it should have been a `select*`.
+Banned in `apps/server/src`, `apps/web/src` and `packages/core` (lint-enforced): `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*`.
 
-## Observability
+**The `find*`/`select*` split is a contract callers rely on.** If you null-check the result it must be `select*`; if absence is an error it must be `find*`.
 
-- Every unit of work is `trace('resource.verb', attrs?, async (span) => …)`: two segments, static, mirroring the function (`members.create`, `connections.sync`). Provider, source and outcome are attributes, never part of the name. `scheduler.*` is the one interpolated family, and only `sweep()` uses it.
-- Stamp outcomes: `span.set('member.role', role)`, counts from sweeps.
-- Logs: `log.info/warn/error('[Prefix] Sentence', fields)` with every id in scope and `error: describeError(error)`. Never `console` outside `api.server.ts`'s one annotated failure log and `scripts/`.
-- A `catch` rethrows, converts to a typed result, or logs with context. `.catch(() => undefined)` is a silent swallow and is not allowed.
+**The decider has its own vocabulary**, one verb per kind of step, so a reader can tell what a function does to a task without opening it: `start*` begins a step (`startPlanning`, `startFix`), `reactTo*` decides what a fact means (`reactToPullRequest`), `answer*` handles a gate, `settle*` ends a task, `retry*` restarts the current step, `open*` / `withdraw*` gates, `request*` asks for an effect (`requestPush`).
 
-## apps/web — loaders are the source of truth
+**Name collisions across folders are bugs.** If two folders need a helper with the same name and different behaviour (`quoteTitles` for the decider's curly quotes, `listQuotedTitles` for an agent prompt's straight ones), the names must differ. If an import needs an alias, the name is wrong.
+
+## packages/core — decide, events, state
 
 ```ts
-// right
-export async function loader({ request, context }: Route.LoaderArgs) {
-  const { ctx, scope } = await resolveScope(request, context);
-  requireScope(scope, 'money:read');
-  const current = { from: scope.range.from, to: scope.range.to };
-  const [totals, payees] = await Promise.all([findTotals(ctx, current), listSpendPayees(ctx, current)]);
-  return { scope, totals, payees };
+// right: a command handler validates, emits facts, and asks for effects
+export function blockTask(decider: Decider, command: CommandOf<'task.block'>) {
+  const task = decider.task(command.taskId);
+  if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
+  changeDependencies(decider, task.id, resolveDependencies(decider, task, command.blockedBy), 'you');
 }
 ```
 
-- `lib/api.server.ts` is the only API caller. `lib/actions/*.server.ts` holds every action; the route's `action` is one line calling it. Actions return `{ error }` for an `ApiError` and throw the rest.
-- Types come from `@shinsa/eden`. A missing type is exported from the API and re-exported there, never re-declared.
-- `viewer.money ? findSpendBreakdown(ctx, range) : Promise.resolve({})` is fine: a ternary picking which promise to start. `viewer.money ? await x() : y` is not.
-- Components live in the route file unless two routes use them; shared ones go to `components/<area>/`, reusable-beyond-Polis ones to `packages/ui`.
+```ts
+// wrong: mutating state, reading the clock, doing I/O
+export function blockTask(state: ShinsaState, command: CommandOf<'task.block'>) {
+  state.tasks[command.taskId].blockedBy = command.blockedBy;
+  state.tasks[command.taskId].updatedAt = Date.now();
+}
+```
+
+- **State is the event log.** `decide` is pure given `now` and `newId`; it never mutates its input (the `Decider` works on a clone) and every change is an event folded by `applyEvent`. Replaying the log must rebuild the same state, so `applyEvent` reads only the event and the state before it, and never stores a shared constant by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
+- **Events are facts, past tense** (`task.staged`, `pull_request.push_requested`). Never remove an event type or change what it means: old logs replay forever. A new field is optional; a new behaviour is a new event.
+- **Commands are idempotent where the world can repeat them.** A system or agent command that arrives twice (a retried effect, a duplicate tool call) is a no-op the second time: `checks.record` outside `checking` is ignored, an `agent.ask` with a known gate id opens nothing, a write that changes nothing emits nothing.
+- **Validation throws `DomainError(code, message)` before anything is emitted.** The code is `snake_case`; the message is a sentence the human or the agent can act on (`copy` skill).
+- **Exhaustive switches over unions.** `decide`'s `apply` lists every command type; `applyEvent` every event type. Don't add a `default` that swallows a new member; let the type checker and `useExhaustiveSwitchCases` fail instead.
+- **No dead branches.** If an invariant makes a branch unreachable (no decision gate can be open while an agent runs), delete the branch and let `test/decide/invariants.test.ts` hold the invariant. Code kept only for event logs from an older version gets a test that builds that old state with `applyEvent`.
+- **The invariants** are listed in `packages/core/CLAUDE.md` and checked after every random command in `invariants.test.ts`. A change that needs to break one changes the invariant, its test and `docs/engine.md` together.
 
 ## Readability
 
-1. **No comments.** A comment is a name you have not found, a function you have not extracted, or a paragraph that belongs in `docs/`.
-2. **Never wrap a call chain in a ternary.** Guards and early returns.
+1. **No comments.** Names and structure carry the meaning; the reasons live in `CLAUDE.md` and `docs/`. Only functional directives (`biome-ignore`, `@ts-expect-error`) are allowed (lint-enforced).
+2. **Never wrap a call chain in a ternary.** Guards and early returns; ternaries are for small value picks.
 3. **Multi-line arrow bodies get a block and an explicit `return`.** One-liners stay expressions.
 4. **Blank lines separate phases in long functions only.** A guard and a return read as one unit.
-5. **No single-use constants.** A value gets a name when it is reused or is a tunable (`PAYEE_LIMIT`, `SETUP_LINK_TTL_SECONDS`).
-6. **No dead parameters.** When a filter stops being meaningful (per-app scoping), remove it from the signature rather than passing `null` forever.
+5. **No dead parameters.** When an argument stops meaning anything (a `required = true` nobody passes), remove it.
+6. **Narrow types, no `any`.** Untrusted input is `unknown` and narrowed once (`readField` in `briefing/parse.ts`, `Reader` in `report/validate.ts`); a cast is allowed only right after the runtime check that justifies it.
 
-## Data rules
+## Errors and logs (apps/server)
 
-- Money is integer minor units end to end.
-- Days are `YYYY-MM-DD` strings; D1 timestamps are integer epochs, read with `isoDay` / `epochMillis` from `apps/api/src/utils/sql.ts`.
-- A write that moves a number marks its days dirty and runs `rollupPending`, scoped to the days it touched.
-- Soft delete (`deletedAt`) for domain rows; auth sessions are the one hard delete, because revoking them is the point.
+- One JSON line per log entry: `log.info/warn/error('[Area] Sentence', fields)` with every id in scope and `error: describeError(error)`. Never `console` outside `scripts/`.
+- A `catch` rethrows, converts to a typed result, or logs with context. `.catch(() => undefined)` is a silent swallow and is not allowed.
+- An effect never writes state: it reports back with a command (`effect.fail`, `pull_request.record`). An effect that gives up becomes a failure gate, never just a log line.
+
+## Tests and coverage
+
+- `packages/core` and `apps/server` enforce 100% line and function coverage in their `bunfig.toml`; `bun test` fails below it. Coverage is the floor, not the goal: every test names a behaviour in its title and asserts what a person or an agent would see.
+- A bug fix comes with the test that fails without it. Prove it: revert the fix, watch the test fail, restore.
+- `decide` tests go through `createHarness()` with real commands (`test/harness.ts`: `reachReviewGate`, `reachShipping`, `pushFix`, `shipAndMerge`), never by building state by hand, except for state an older version could have written.
+- When a test needs git, it creates a throwaway repository; in sandboxes set `GIT_CONFIG_GLOBAL` to a clean file.
+
+## Docs — in the same change
+
+A behaviour change updates `docs/engine.md` (core and server rules), `docs/spec.md` (what the product does), `docs/design.md` (UI) and the `CLAUDE.md` of every package it touches, in the same change. A settled pattern goes into `CLAUDE.md` or this skill.
 
 ## Before you finish
 
 ```sh
 bunx biome check --write .     # lint, format, Grit plugins
-bun lint                       # + comments ban + verb catalog
+bun lint                       # + comments ban, verb catalog, class checks
 bun check-types
-bun run test
-bunx knip
-bun dev                        # sign in, open every page you touched, read the browser console
+bun run test                   # every workspace, with the coverage floor
+bunx knip                      # dead exports: run it after exporting anything
+bun deps                       # dependency drift (sherif)
 ```
 
-Other agents work in this tree. Check `git status --short` and leave their files alone.
+Other agents work in this tree. Check `git status --short`, leave their files alone, and say in your report which changes are yours.

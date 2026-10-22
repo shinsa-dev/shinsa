@@ -1,0 +1,5 @@
+[test]
+preload = ["./test/helpers/preload.ts"]
+coverageThreshold = { lines = 1.0, functions = 1.0 }
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["test/**", "../../packages/**", "src/main.ts"]

@@ -63,7 +63,7 @@
           "level": "error",
           "options": {
             "paths": {
-              "@central-icons-react/all": "Icons come from lucide-react, like paywall-next (redrawn glyphs in @shinsa/ui/components/icons)."
+              "lucide-react": "Icons come exclusively from @shinsa/ui <Icon /> (Central Icons)."
             }
           }
         }

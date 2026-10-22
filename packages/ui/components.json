@@ -1,0 +1,26 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@shinsa/ui/components",
+    "utils": "@shinsa/ui/lib/utils",
+    "hooks": "@shinsa/ui/hooks",
+    "lib": "@shinsa/ui/lib",
+    "ui": "@shinsa/ui/components"
+  },
+  "rtl": false,
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {
+    "@bklit": "https://bklit.com/r/{name}.json"
+  }
+}

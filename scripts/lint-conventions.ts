@@ -12,7 +12,7 @@ type BabelNode = {
   [key: string]: unknown;
 };
 
-const ROOTS = ['apps/cli/src', 'apps/cli/test', 'apps/web/src', 'packages', 'scripts'];
+const ROOTS = ['apps/server/src', 'apps/server/test', 'apps/web/src', 'packages', 'scripts'];
 
 const SKIPPED_SEGMENTS = new Set(['node_modules', '.types', 'dist', '.wrangler', 'generated']);
 
@@ -20,7 +20,7 @@ const BANNED_VERB_PATTERN = /^(get|fetch|load|set|delete|destroy)[A-Z]/;
 
 const BANNED_VERB_ALLOWLIST = new Set<string>([]);
 
-const VERB_CHECK_ROOTS = ['apps/cli/src', 'apps/web/src', 'packages/core'];
+const VERB_CHECK_ROOTS = ['apps/server/src', 'apps/web/src', 'packages/core'];
 
 const COMMENT_CHECK_EXCLUDED_ROOTS = ['packages/ui', 'apps/web/src/features/ui'];
 
@@ -34,18 +34,76 @@ const BANNED_CLASSES: { pattern: RegExp; message: string }[] = [
     message: 'Raw font size; use a type role (docs/design.md → Sizing → Type roles)',
   },
   {
-    pattern: /(?:^|[\s:'"`])rounded(?:-[trblse]{1,2})?-\[\d/,
-    message: 'Raw corner; there is one 3px corner (rounded-*), plus rounded-full',
-  },
-  {
     pattern: /(?:^|[\s:'"`])font-(?:thin|extralight|light|bold|extrabold|black)\b/,
-    message: 'Weights are 400, 500 (font-medium) and 600 (font-semibold) for inline strong only',
+    message: 'Weights are 400, 450 (font-medium) and 550 (font-semibold) for inline strong only',
   },
   {
-    pattern: /(?:^|[\s:'"`])(?:shadow|ring)-(?!0\b)[a-z0-9[]/,
-    message: 'No shadows and no rings; depth is the surface steps, focus recolours the border',
+    pattern: /(?:^|[\s:'"`])gap(?:-[xy])?-0\.5\b/,
+    message: 'A 2px gap; a title over its description is gap-px, anything wider is gap-1 or more',
+  },
+  {
+    pattern: /(?:^|[\s:'"`])shadow-(?:xs|sm|md|lg|xl|[1-4])\b/,
+    message:
+      'No shadows in Shinsa: depth is the surface steps and one hairline ring (docs/design.md → Shape & depth)',
+  },
+  {
+    pattern: /(?:^|[\s:'"`])(?:shadow|ring)-\[/,
+    message: 'Raw shadow or ring; use the shadow tokens (shadow-1…4, shadow-control*)',
   },
 ];
+
+const PAIRED_CLASSES: { pattern: RegExp; unless: RegExp; message: string }[] = [
+  {
+    pattern: /(?:^|[\s'"`])hover:/,
+    unless: /(?:^|[\s'"`])active:/,
+    message:
+      'Hover is the only feedback. Pair every hover: class with the same active: value on the same line (docs/design.md → Where Shinsa differs, 15)',
+  },
+  {
+    pattern: /(?:^|[\s'"`])group-hover(?:\/[\w-]+)?:/,
+    unless: /(?:^|[\s'"`])group-active(?:\/[\w-]+)?:|(?:^|[\s'"`])opacity-0\b/,
+    message:
+      'Hover is the only feedback. Pair group-hover: with group-active: (docs/design.md → Where Shinsa differs, 15)',
+  },
+  {
+    pattern: /(?:^|[\s'"`])rounded-xl border border-border bg-card\b/,
+    unless: /^$/,
+    message:
+      'A hand-built card. Use CARD from components/surface.ts (docs/design.md → Where Shinsa differs, 15)',
+  },
+  {
+    pattern: /IconCheck[^\n]*-green-|-green-[^\n]*IconCheck/,
+    unless: /^$/,
+    message:
+      "A green checkmark. Checkmarks are the accent (only the progress track's done steps are green): CheckMark / CHECK_TEXT from components/check-mark.tsx",
+  },
+];
+
+const CORNER_CHECK_ROOTS = ['packages/ui/src', 'apps/web/src'];
+
+const RAW_CORNER = /(?:^|[\s:'"`])(?:[a-z]+:)*rounded(?:-[trblse]{1,2})?-\[(?!inherit\])/;
+
+const CORNER_MESSAGE =
+  'Raw corner. Corners come from the radius tokens, and a nested corner is concentric: inner = outer − padding. Use rounded-control / -control-sm / -popup / -item / -segment (globals.css → Corners), or add a derived token there';
+
+const FOCUS_CHECK_ROOTS = ['packages/ui/src', 'apps/web/src'];
+
+const FOCUS_STATE =
+  /(?:^|[\s'"`])[^\s'"`]*\b(?:focus|focus-visible|focus-within)(?:\/[\w-]+)?:(?=[^\s'"`])|(?:^|[\s'"`:])ring-offset-/;
+
+const FOCUS_MESSAGE =
+  'Focus state. Shinsa draws no focus rings, outlines or focus washes; keep outline-none (docs/design.md → No focus states)';
+
+const TIME_CHECK_ROOTS = ['apps/web/src'];
+
+const TIME_COMPONENT_FILE = 'apps/web/src/components/time-ago.tsx';
+
+const TIME_FORMATTERS = new Set(['formatAge', 'formatDuration']);
+
+const TIME_COMPONENTS = new Set(['TimeAgo', 'Duration']);
+
+const TIME_MESSAGE =
+  'A time rendered without its tooltip. Render it through TimeAgo or Duration (components/time-ago.tsx), so hovering shows the exact time (docs/design.md → Where Shinsa differs, 13)';
 
 const ALLOWED_COMMENT_PATTERN = /^\s*(biome-ignore|@ts-|\/\s*<reference|\/v1\/|#region|#endregion)/;
 
@@ -141,10 +199,55 @@ function collectVerbViolations(file: string, program: BabelNode, violations: Vio
   });
 }
 
+function readElementName(node: BabelNode): string | null {
+  const name = (node.openingElement as BabelNode | undefined)?.name as
+    | (BabelNode & { name?: string })
+    | undefined;
+  return name?.type === 'JSXIdentifier' && name.name ? name.name : null;
+}
+
+function isUntimedFormatter(node: BabelNode, ancestors: BabelNode[]): boolean {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee as BabelNode & { name?: string };
+  if (callee.type !== 'Identifier' || !callee.name || !TIME_FORMATTERS.has(callee.name)) return false;
+  if (!ancestors.some((ancestor) => ancestor.type.startsWith('JSX'))) return false;
+  const attribute = ancestors.some((ancestor) => ancestor.type === 'JSXAttribute');
+  const element = [...ancestors].reverse().find((ancestor) => ancestor.type === 'JSXElement');
+  const owner = element ? readElementName(element) : null;
+  return !(attribute && owner && TIME_COMPONENTS.has(owner));
+}
+
+function walkWithAncestors(
+  node: BabelNode,
+  ancestors: BabelNode[],
+  visit: (node: BabelNode, ancestors: BabelNode[]) => void
+): void {
+  visit(node, ancestors);
+  const next = [...ancestors, node];
+  for (const value of Object.values(node)) {
+    const children = Array.isArray(value) ? value : [value];
+    for (const child of children) {
+      if (child && typeof child === 'object' && 'type' in child)
+        walkWithAncestors(child as BabelNode, next, visit);
+    }
+  }
+}
+
+function collectTimeViolations(file: string, program: BabelNode, violations: Violation[]): void {
+  walkWithAncestors(program, [], (node, ancestors) => {
+    if (isUntimedFormatter(node, ancestors)) {
+      violations.push({ file, line: node.loc?.start.line ?? 0, message: TIME_MESSAGE });
+    }
+  });
+}
+
 function collectClassViolations(file: string, source: string, violations: Violation[]): void {
   source.split('\n').forEach((line, index) => {
     for (const { pattern, message } of BANNED_CLASSES) {
       if (pattern.test(line)) violations.push({ file, line: index + 1, message });
+    }
+    for (const { pattern, unless, message } of PAIRED_CLASSES) {
+      if (pattern.test(line) && !unless.test(line)) violations.push({ file, line: index + 1, message });
     }
   });
 }
@@ -180,6 +283,27 @@ function checkFile(file: string, violations: Violation[]): void {
   }
   if (isClassChecked(file)) {
     collectClassViolations(file, source, violations);
+  }
+  if (file.endsWith('.tsx') && CORNER_CHECK_ROOTS.some((root) => file.startsWith(root))) {
+    source.split('\n').forEach((line, index) => {
+      if (RAW_CORNER.test(line)) violations.push({ file, line: index + 1, message: CORNER_MESSAGE });
+    });
+  }
+  if (
+    file.endsWith('.tsx') &&
+    FOCUS_CHECK_ROOTS.some((root) => file.startsWith(root)) &&
+    !CLASS_CHECK_EXCLUDED_ROOTS.some((root) => file.startsWith(root))
+  ) {
+    source.split('\n').forEach((line, index) => {
+      if (FOCUS_STATE.test(line)) violations.push({ file, line: index + 1, message: FOCUS_MESSAGE });
+    });
+  }
+  if (
+    file.endsWith('.tsx') &&
+    file !== TIME_COMPONENT_FILE &&
+    TIME_CHECK_ROOTS.some((root) => file.startsWith(root))
+  ) {
+    collectTimeViolations(file, parsed.program, violations);
   }
   if (VERB_CHECK_ROOTS.some((verbRoot) => file.startsWith(verbRoot))) {
     collectVerbViolations(file, parsed.program, violations);

@@ -4,14 +4,14 @@
     ".": {
       "entry": ["scripts/*.ts"]
     },
-    "apps/cli": {
-      "entry": ["test/**/*.test.ts"]
-    },
     "apps/web": {
       "ignoreDependencies": ["tailwindcss"]
     },
     "packages/ui": {
       "entry": ["src/**/*.{ts,tsx}"]
+    },
+    "apps/server": {
+      "entry": ["test/**/*.test.ts"]
     }
   }
 }

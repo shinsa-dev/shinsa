@@ -14,7 +14,7 @@
     "lint:conventions": "bun scripts/lint-conventions.ts",
     "prepare": "husky",
     "seed": "bun scripts/seed.ts",
-    "start": "bun run --cwd apps/cli start",
+    "start": "bun run --cwd apps/server start",
     "test": "turbo run test"
   },
   "devDependencies": {

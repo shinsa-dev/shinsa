@@ -1,0 +1,131 @@
+#!/usr/bin/env bun
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+
+interface FakePullRequest {
+  number: number;
+  head: string;
+  base: string;
+  title: string;
+  state: 'OPEN' | 'MERGED' | 'CLOSED';
+  checks: 'pending' | 'passing' | 'failing' | 'none';
+  mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
+  unresolved: number;
+  mergedWith: string | null;
+  reviewDecision?: string | null;
+}
+
+interface FakeState {
+  next: number;
+  defaultChecks: FakePullRequest['checks'];
+  pulls: FakePullRequest[];
+  calls: string[][];
+}
+
+const path = Bun.env.FAKE_GH_STATE || '/dev/null';
+const state: FakeState = path !== '/dev/null' && existsSync(path)
+  ? JSON.parse(readFileSync(path, 'utf8'))
+  : { next: 1, defaultChecks: 'pending', pulls: [], calls: [] };
+const args = Bun.argv.slice(2);
+state.calls.push(args);
+
+function save() {
+  writeFileSync(path, JSON.stringify(state, null, 2));
+}
+
+function flag(name: string) {
+  const index = args.indexOf(name);
+  return index === -1 ? null : (args[index + 1] ?? null);
+}
+
+function find(target: string | undefined) {
+  if (!target) return undefined;
+  return state.pulls.find((pull) => String(pull.number) === target || pull.head === target);
+}
+
+function rollup(checks: FakePullRequest['checks']) {
+  if (checks === 'none') return [];
+  const conclusion = checks === 'passing' ? 'SUCCESS' : checks === 'failing' ? 'FAILURE' : '';
+  return [{ __typename: 'CheckRun', status: checks === 'pending' ? 'IN_PROGRESS' : 'COMPLETED', conclusion }];
+}
+
+function headSha(branch: string) {
+  const result = Bun.spawnSync(['git', 'rev-parse', `refs/heads/${branch}`], { cwd: Bun.env.FAKE_GH_ORIGIN ?? '.' });
+  return result.exitCode === 0 ? result.stdout.toString().trim() : null;
+}
+
+const [group, command] = args;
+if (group === 'pr' && command === 'view') {
+  const pull = find(args[2]);
+  save();
+  if (!pull) {
+    console.error('no pull requests found');
+    process.exit(1);
+  }
+  console.log(
+    JSON.stringify({
+      number: pull.number,
+      url: `https://github.com/acme/app/pull/${pull.number}`,
+      state: pull.state,
+      mergeable: pull.mergeable,
+      reviewDecision: pull.reviewDecision ?? null,
+      baseRefName: pull.base,
+      headRefOid: headSha(pull.head),
+      statusCheckRollup: rollup(pull.checks),
+    })
+  );
+  process.exit(0);
+}
+if (group === 'pr' && command === 'create') {
+  const head = flag('--head') ?? '';
+  if (find(head)?.state === 'OPEN') {
+    console.error('a pull request already exists');
+    process.exit(1);
+  }
+  const pull: FakePullRequest = {
+    number: state.next++,
+    head,
+    base: flag('--base') ?? 'main',
+    title: flag('--title') ?? '',
+    state: 'OPEN',
+    checks: state.defaultChecks,
+    mergeable: 'MERGEABLE',
+    unresolved: 0,
+    mergedWith: null,
+  };
+  state.pulls.push(pull);
+  save();
+  console.log(`https://github.com/acme/app/pull/${pull.number}`);
+  process.exit(0);
+}
+if (group === 'pr' && command === 'edit') {
+  const pull = find(args[2]);
+  if (pull) pull.base = flag('--base') ?? pull.base;
+  save();
+  process.exit(pull ? 0 : 1);
+}
+if (group === 'pr' && command === 'merge') {
+  const pull = find(args[2]);
+  if (!pull || pull.state !== 'OPEN') {
+    save();
+    process.exit(1);
+  }
+  pull.state = 'MERGED';
+  pull.mergedWith = args[3] ?? null;
+  save();
+  process.exit(0);
+}
+if (group === 'api' && command === 'graphql') {
+  const number = args.find((arg) => arg.startsWith('number='))?.slice('number='.length);
+  save();
+  console.log(String(find(number)?.unresolved ?? 0));
+  process.exit(0);
+}
+if (group === 'api' && command === 'user') {
+  save();
+  if (!Bun.env.FAKE_GH_LOGIN) process.exit(1);
+  console.log(Bun.env.FAKE_GH_LOGIN);
+  process.exit(0);
+}
+save();
+console.error(`fake gh: unsupported ${args.join(' ')}`);
+process.exit(1);

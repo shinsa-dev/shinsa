@@ -1,0 +1,71 @@
+export type ShinsaEffect =
+  | { kind: 'task.triage'; taskId: string }
+  | { kind: 'worktree.create'; taskId: string }
+  | { kind: 'run.execute'; runId: string }
+  | { kind: 'run.cancel'; runId: string }
+  | { kind: 'run.steer'; runId: string; text: string }
+  | { kind: 'question.resolve'; gateId: string }
+  | { kind: 'checks.run'; taskId: string; round: number }
+  | { kind: 'pull_request.open'; taskId: string }
+  | { kind: 'pull_request.push'; taskId: string }
+  | { kind: 'pull_request.merge'; taskId: string }
+  | { kind: 'pull_request.watch'; taskId: string }
+  | { kind: 'worktree.remove'; taskId: string }
+  | { kind: 'briefing.request'; areaId: string | null };
+
+export type ShinsaEffectKind = ShinsaEffect['kind'];
+
+export const PROCESS_BOUND_EFFECTS: ReadonlySet<ShinsaEffectKind> = new Set<ShinsaEffectKind>([
+  'run.execute',
+  'run.cancel',
+  'run.steer',
+  'question.resolve',
+]);
+
+export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
+  switch (effect.kind) {
+    case 'run.execute':
+    case 'run.cancel':
+      return `${effect.kind}:${effect.runId}`;
+    case 'run.steer':
+      return `${effect.kind}:${effect.runId}:${seq}`;
+    case 'question.resolve':
+      return `${effect.kind}:${effect.gateId}`;
+    case 'checks.run':
+      return `${effect.kind}:${effect.taskId}:${effect.round}:${seq}`;
+    case 'briefing.request':
+      return `${effect.kind}:${effect.areaId ?? '*'}:${seq}`;
+    case 'task.triage':
+    case 'worktree.create':
+    case 'worktree.remove':
+    case 'pull_request.open':
+    case 'pull_request.push':
+    case 'pull_request.merge':
+    case 'pull_request.watch':
+      return `${effect.kind}:${effect.taskId}:${seq}`;
+  }
+}
+
+export function resolveEffectLane(effect: ShinsaEffect) {
+  switch (effect.kind) {
+    case 'briefing.request':
+      return 'briefing';
+    case 'run.execute':
+      return `run:${effect.runId}`;
+    case 'run.cancel':
+      return `cancel:${effect.runId}`;
+    case 'run.steer':
+      return `steer:${effect.runId}`;
+    case 'question.resolve':
+      return `gate:${effect.gateId}`;
+    case 'task.triage':
+    case 'worktree.create':
+    case 'worktree.remove':
+    case 'checks.run':
+    case 'pull_request.open':
+    case 'pull_request.push':
+    case 'pull_request.merge':
+    case 'pull_request.watch':
+      return `task:${effect.taskId}`;
+  }
+}

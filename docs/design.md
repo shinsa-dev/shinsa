@@ -1,10 +1,11 @@
 # Shinsa design system
 
-Shinsa's UI is **paywall-next's Application register, copied as it is**: the tokens in
-`packages/ui/src/styles/globals.css` and every primitive in `packages/ui/src/components` come from
-`superwall/paywall-next` `apps/web2`. The full specification follows below, unchanged. `/ui` renders
-every token and component in both themes; when this file and the code disagree, fix one of them in
-the same change.
+Shinsa's UI follows **paywall-next's Application register**; the kit itself (tokens and primitives
+in `packages/ui`) is Buzzkit's, which shares paywall-next's rules. The full paywall-next
+specification follows below, unchanged; where it names its own files (`components/ui/*.tsx`,
+`styles.css`), Shinsa's are `packages/ui/src/components/*.tsx` and
+`packages/ui/src/styles/globals.css` (18 below has the layout). `/ui` renders every token and
+component in both themes; when this file and the code disagree, fix one of them in the same change.
 
 ## Where Shinsa differs
 
@@ -13,21 +14,404 @@ Only these, and they win over anything below:
 1. **Font.** ABC Areal (variable) for everything, ABC Areal Mono for code. Read every mention of
    Manrope as ABC Areal and of Roboto Mono as ABC Areal Mono. The files are in
    `packages/ui/src/styles/fonts` (Dinamo licence).
-2. **Accent.** One fixed blue, `--accent-token: oklch(0.58 0.155 247)`, with a white label. Read every
-   mention of teal as this blue. The chart's first series is the accent.
-3. **The primary button has texture.** `Button` `default` carries the `primary-texture` utility: a
-   faint top-down sheen, a white inner highlight on the top edge and a deeper blue inner edge and
-   foot. It is the one shadow in the system; nothing else takes `shadow-*` or `ring-*`.
-4. **Light mode ships.** paywall-next only defines a placeholder light branch; Shinsa's is a tuned
-   ramp on the same cool tint: canvas `L 0.982`, cards `L 0.997`, popovers white, muted `L 0.955`,
-   secondary `L 0.925`, text `L 0.2`. Dark mode is paywall-next's, unchanged.
+2. **Accent.** One blue, `--primary-4` (`oklch(0.6 0.215 256)` light, `oklch(0.62 0.2 256)` dark), with
+   a white label. Read every mention of teal as this blue. The chart's first series is the accent.
+3. **The primary button keeps a highlight.** `Button` `primary` (the default variant) and
+   `destructive` draw `shadow-control`: a 1px edge and a white inner highlight on the top edge. It is
+   the one shadow in the system; everything else that looks raised is the `bg-3` hairline (the
+   `shadow-1…4` and `shadow-md` tokens are that hairline and nothing else).
+4. **Both themes ship.** Light: page white, surfaces `bg-2` `L 0.973`, `bg-3` `L 0.955` (the hairline),
+   `bg-4` `L 0.928`, text `fg-4` `L 0.21`; popovers sit on the page colour. Dark: page `L 0.174`,
+   surfaces `L 0.197 → 0.299`, text `L 0.946`, popovers a step up on `bg-2`.
 5. **No Superwall product pieces.** Sections below about campaigns, paywalls, integrations, the
    Superwall sidebar, app icons, superadmin markers and the date-range control describe paywall-next
    and are kept as reference only. Shinsa's own composites (rail, list rows, gate glyphs, banners,
    page header) live in `apps/web/src/components` and are on `/ui` under Shinsa.
+6. **Long panes get an overlay scrollbar.** `ScrollArea` keeps native wheel, trackpad
+   and keyboard scrolling and draws a thin thumb (`fg-a1`) that fades in on hover or scroll,
+   lingers briefly, widens under the pointer and can be dragged; a press on the bare track centres
+   the thumb there. The geometry is `lib/scroll.ts`, shared with `ScrollFade`. The task chat scrolls in one;
+   other scrollers keep the hidden-scrollbar rule below.
+7. **The task chat follows Kanna's transcript.** One centred column the composer's width; every
+   item is a row box (`px-3 py-2 mb-1`, 20px from item to item) with the same inset left and
+   right. Agent text is full-width `prose-chat` markdown (13px, 1.625 leading, 20/12px paragraph
+   margins, highlighted code fences). A run is introduced by one quiet `text-2xs` label with a
+   hairline ("Phase 1 of 2: …"), never icons, agent names, models or times. It renders the chat
+   protocol (`docs/engine.md`), never a provider's tool names.
+   - **While a run works** it shows one live card (`rounded-xl`, `bg-card`): the agent's latest
+     interim message (13px, four lines at most) over a quiet `text-2xs` line with a pulse, the
+     current step ("Running bun test", shimmering), the time and the step count. A new message
+     swaps in: the old one slides up and fades, the new one rises in from below, and the card's
+     height eases; under reduced motion it simply changes. The line opens the card onto
+     everything so far.
+   - **When a run ends** the work folds into one quiet row, "Worked for 3m · 14 steps ›", and the
+     final reply sits under it as the main content (the last interim text when a run has none).
+     Hand-over cards (plan, phase, fix, review, question) and errors stay outside the fold; the
+     brief from Shinsa lives inside it. A message from you starts a new turn with its own fold.
+   - **The detail** is the full log on a left hairline: interim messages, then tool calls as 20px
+     rows, a 16px icon in a 20px slot about 6px from a medium `fg-3` label (`gap-px`, optically),
+     the chevron on hover; two or more in a row fold into one row ("Ran 3 commands and read 2
+     files"), and an opened row hangs its detail off a hairline rail. Commands, reads, writes and
+     edits render highlighted (language from the file extension), edits as a diff, long output
+     capped with "Show N more lines"; images from tool results and evidence show as thumbnails
+     that open in the image viewer.
+   - **The image viewer** (`components/image-viewer.tsx`, `useImageViewer`) opens every image in
+     the chat and in evidence: attachments, tool results, evidence. A `black/85` backdrop, the image
+     fitted to the window (never upscaled) and morphing out of its thumbnail (a fade under reduced
+     motion). Click toggles fit and 100% (2× for small images) around the pointer, and so does a
+     double-click; the wheel, a trackpad pinch or a two-finger pinch zooms toward the pointer; drag
+     pans while zoomed; `+`, `-` and `0` zoom from the keyboard. Arrows (on screen and the arrow
+     keys) step through the images of the same message or tool group. A close button, Esc or a
+     click on the backdrop closes it, back into the thumbnail. A pill at the bottom carries the
+     caption (attachment name, evidence title or file name), "2 of 5" and the zoom level.
+   - The user's own message is just its bubble (`rounded-3xl`, `bg-muted`, `px-3.5 py-1.5`);
+     attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
+     `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`.
+8. **One queue, two sizes.** `features/queue/task-queue.tsx` is the only list of tasks by what they
+   need: Needs you (every open decision in focus, in `resolveQueue` order: priority first, then
+   ready to merge, changes to review, plan to approve, needs your answer, paused), In progress,
+   Waiting on another task (in chain order, collapsed) and Outside your focus (collapsed). The
+   middle two take their title, icon and
+   tone from the All tasks roadmap (`lib/roadmap.ts`, see 16), so the two never disagree. Home
+   renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
+   20px gate or stage tile, title, status line and age. There Needs you becomes Also needs you
+   and leaves out the tasks the guide above already names (hidden when none are left).
+   **The Home guide** (`features/home/home-guide.tsx`) sits right under the greeting, above the
+   composer, and renders the briefing (`docs/engine.md` → The briefing) as editorial prose, not a
+   card: no border, no tint. The greeting is the page's one heading (`text-base` medium `fg-4`);
+   every guide line is a step quieter, `text-sm` `fg-3` with `leading-relaxed` and `fg-4` task
+   links, 6px apart. Each line names one task and says why in one sentence, nothing else: "Start
+   with ‹task›: why." then "Then ‹task›: why.", "After that, …", "Finally, …". No status words,
+   repository chips, pull request numbers or separate action links: the task's tile says the
+   state, the link opens the place to act and its preview card holds the rest. Two `fg-2` asides
+   follow: what agents are doing (a pulse, two named tasks with their verb, the rest as a dotted
+   "2 more" that opens an `InfoPopover` of task rows) and the note behind an info glyph, never about a
+   task the lines above already name and never about decisions outside the focus (the focus is
+   your choice; the queue's collapsed Outside your focus section is where those live). Every line
+   starts on the column's left edge, an aside's marker included. Inline tiles sit `align-middle`
+   and 1px up, centred between the text's x-height and cap height; the aside markers centre on the
+   same point. Nothing to
+   decide reads "Nothing needs you right now." (`fg-4`) and one calm sentence.
+   **Smart links** (`components/smart/`) are one inline component per entity, shared by the Home
+   guide, the chat, every rendered markdown block and the overview's facts. A task link
+   (`TaskLink`) is a 16px state tile (gate or stage glyph) and the title, medium `fg-4`,
+   underlined on hover; the tile and first word never part at a wrap. It goes where the work is
+   (`?tab=code` for a review, `?tab=chat&run=` for a question or a running agent) and, on hover,
+   opens a preview card: status in its tone, what is happening now, repository, branch and pull
+   request (each with its icon), how long it has waited (`TimeAgo`, exact time on hover) and its
+   one action as a button. A pull request link (`PrLink`) is a tile in the pull request's tone
+   (green open, red failing, amber running, purple merged) and `#N`; it opens GitHub and its card
+   (`PullRequestDetails`, the same body as the overview's pull request fact) shows the task, CI,
+   unresolved comments, conflicts and the checks. `RepoChip` and `BranchChip` are a 14px `fg-2`
+   icon and the name (the branch in mono); their cards are the overview's repository and branch
+   facts. A file link (`FileLink`) is inline code; when the file is in the current task's diff it
+   opens it in Code → All files (`?tab=code&view=changes&file=`) with a tooltip naming the path and
+   lines, otherwise it stays plain code. Smart anchors carry `data-smart`, so prose link styling
+   (blue, underlined) never applies to them.
+   `ReferenceText` and the markdown renderer turn text into these pieces from the reference
+   syntax (`docs/engine.md` → References): `shinsa://` links, a quoted task title, an exact title
+   of 12 characters or more, and a bare `#N` that only one pull request has. An unknown id or a
+   malformed reference renders as its plain label, never a broken link. The current task (the
+   page's route) is the scope: its own title is not auto-linked, and file links resolve against
+   it. One-line previews (`InlineMarkdown`, inside rows and buttons) show references as plain
+   medium text instead of nested links. On Home, `GuideText` keeps "pull request #N" written as
+   "the pull request" and does not link numbers, since the task card already shows it.
+   **The compact queue.** The sidebar and the queue button render the queue `compact`: collapsible `h-6` headers with a 14px icon in a 20px slot, the same rows
+   without the age. Every leading icon in the sidebar (nav items, the Focus dot, section icons,
+   row tiles) sits in a 20px slot 6px in from the row (`ps-1.5 pe-2.5`), so their centres share
+   one vertical axis. Open and closed sections are shared by both through `localStorage`, and a
+   section can always be collapsed, the one holding the task on screen included. Until you have
+   toggled a section yourself it opens when it holds the task on screen; after that your choice
+   wins everywhere (`useSectionOpen`).
+9. **Moving through decisions.** The task page's tab row ends with `‹ 2 of 5 Next ›`, stepping
+   through Needs you in order (`resolveQueueStep` in core). Acting never moves you: approving,
+   merging, answering, replying or cancelling stays on the task and confirms with a toast.
+10. **Two layouts, picked in Settings → Appearance.** Cards (the default) has no rail: a top
+    bar with a "3 need you" button that opens the compact queue, and task pages centred on the
+    same axis as Home (see 12). The button sits at the top left, right after the Shinsa logo,
+    because that corner is navigation and nothing on the right (Focus) moves when it comes and
+    goes; it shows on task pages wherever the gutter queue card does not (below `xl`, and on
+    Code). Sidebar is a permanent rail with the queue; it never hides. From
+    `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
+    keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
+    bound to a key, and Enter sends in every input.
+11. **No focus states.** Nothing marks keyboard focus: no ring, outline, border recolour or wash
+    (Shape & depth → No focus states). Focus rules below are paywall-next reference only.
+12. **The task page has one left edge and no details panel.** The heading is a `text-base` medium
+    title over the task's request as a `text-xs` `fg-2` description (`gap-px`, two lines at most;
+    a long request expands on click), with the task view tabs at the end. The header carries no
+    gate action: "Approve" alone never said whether it approved a plan, the changes or a merge.
+    The decision lives on the Overview's first card, next to what it decides on. Its
+    title, the tab labels and the content (the Overview cards, the chat column) start on the
+    same left edge at every width and on every tab, so switching to Code never moves the heading:
+    in Sidebar the header and 36px tab row compute their start padding from the centred
+    `max-w-3xl` column; in Cards the heading and tab row sit in that column themselves. Shared
+    pieces (heading, task menu, `‹ 2 of 5 Next ›`, the code view) live in
+    `features/task/task-parts.tsx`.
+    - **The decision card.** The Overview opens with the task's now card
+      (`features/overview/now-card.tsx`), and a gate's actions sit at its top right, each named
+      for what it decides: a review gate has Review (outline, opens Code) then **Approve
+      changes** (primary; its tooltip says it opens the pull request, and it is disabled while
+      line comments are drafted); a merge gate has Review then **Merge #N**; a plan gate has
+      **Approve plan** over the plan itself; a paused task has Retry; a question has its answer
+      box. Status labels say what waits on you the same way: Plan to approve, **Changes to
+      review** (never the bare "Ready for review"), Ready to merge.
+    - **Panels keep their action when collapsed.** An Overview panel's header action ("Review the
+      code" on What changed) stays in the header whether the panel is open or closed
+      (`components/panel.tsx`).
+    - **Task facts.** What a details panel would hold is one quiet wrapped row at the top of the
+      Overview (`features/overview/task-facts.tsx`): state, repository, branch, pull request,
+      priority, started (added, for a task that has not started), and, when they apply, the task
+      it is stacked on (older tasks only), what it waits on and what it unblocks (or the checks,
+      when there is no pull request yet). Waits on reads "Waits on ‹A›, ‹B›" and is a click menu,
+      not a popover (`WaitsOnItems`): the tasks it waits on (each opens, with its status), then
+      Wait for another task (a submenu of open tasks with a checkmark on each it waits on; the
+      ones it waits on sort first, a click ticks or unticks one and the menu stays open) and Stop
+      waiting (clears them all). Each item is an `h-6`
+      chip, a 14px icon 6px from `text-xs` `fg-3`, `px-1.5` and pulled out by the same amount so
+      the first icon sits on the column edge. Items with more to say open an `InfoPopover` on
+      hover (see 15), never a tooltip: the pull request shows CI, unresolved comments, mergeable, each
+      check with its state and a link to GitHub; the branch its full name and base; the
+      repository its path, area and default branch; several related tasks list as links.
+      Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/priority.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
+    - **Cards.** The column is centred on the window, the same centre as Home. The compact queue
+      (current task highlighted) is a card in the left gutter, hung off the column's outer edge
+      so it never pushes the column; from `xl` down, and on the Code tab where the diff takes the
+      full width, it becomes the "3 need you" `sm` secondary button at the top left of the top
+      bar (see 10), opening the same queue in a popover.
 
-`bun lint:conventions` checks the app for raw `text-[N]` sizes, raw corners, `font-bold` and any
-`shadow-*` or `ring-*`.
+13. **Anything you hover that has more to tell has a tooltip**, as in Buzzkit. Four kinds:
+    - **Every time** goes through `components/time-ago.tsx`: `TimeAgo` ("2h ago", or `compact`
+      for the bare "2h" a row ends with, or a `label` such as "Started 2h ago") and `Duration`
+      ("Worked for 3m", the live card's running clock). Each renders a `<time>` whose tooltip
+      opens after 150ms with the exact moment: the date bright and the clock muted
+      ("Wed, Oct 22, 2026 2:14 PM"); a duration shows "2:14 PM to 2:17 PM" ("Since 2:14 PM" while
+      it runs) with the day muted. `detail` adds a muted second line naming what the time is
+      when the row doesn't say it ("Waiting on you", "Step started", "Finished", "Last message").
+      Toasts are the only times without one. A bare `formatAge(…)` or `formatDuration(…)` in JSX
+      is a bug, and the lint below rejects it.
+    - **Icon-only buttons** name their action in a tooltip through `Hint`
+      (`components/hint.tsx`): copy ("Copy", then "Copied"), the task and area `•••` menus
+      ("Task actions", "Area options"), collapse and expand ("Collapse summary"), previous and
+      next spot, the image viewer's close, previous and next (with their key, `Esc`, `←`, `→`),
+      send, comment on a line, the compact bar's queue and new-task buttons, the sidebar's resize
+      handle (following the pointer down the edge). The tooltip repeats the `aria-label`.
+    - **Text from data that can be cut off** is `Truncate` (`@shinsa/ui/components/truncate`):
+      task titles in every row, previews, repository names and paths, branch and file paths,
+      check names and details, tool targets, run headlines, attachment names, the image
+      caption. Its tooltip, with the full text, appears only when the text really is clipped.
+      Text that is already a popover or menu trigger (the Focus menu, the repository and branch
+      facts) keeps a plain `truncate`, so two overlays never stack.
+    - **Small marks that carry meaning without a label** get a short tooltip: queue tiles
+      (`GateGlyph`, `WorkingGlyph`: "Changes to review", "Building · Agent working"), the
+      finished tiles on Home ("Merged", "Done"), area dots ("Superwall area"), check and to-do
+      icons ("Passed", "Failed", "In progress"), the progress track's steps (step, count and
+      state, then the plan's phases), the diff counts ("12 lines added · 3 lines removed"), a
+      changed file's status letter ("Modified") and risk dot ("High risk" and the reason), its
+      comment count, a pull request badge ("Pull request #4531 · Checks passing"), a
+      repository's GitHub or folder icon. The command menu's search button reads "Search and actions" with
+      its `⌘K` key.
+    Content follows Buzzkit's scanning rules: the value first in `fg-4`, the qualifier muted in
+    `TooltipLabel`, states in their status colour (`*-text`), lists one item per line in the
+    foreground, mixed bright and muted text inside one `whitespace-nowrap` span. Never a sentence
+    where a value and its label will do.
+14. **The command menu (⌘K) reaches the whole app, and knows where you are.** It is Buzzkit's
+    menu (`features/command/command-menu.tsx`, rendered once by `App` on `CommandDialog` from
+    `@shinsa/ui/components/command`), opened by ⌘K / Ctrl K from anywhere (inputs included) or
+    by the magnifying-glass button in the sidebar header and the compact bar. Every action goes
+    through the same `sendCommand` the buttons use; the menu adds no commands of its own.
+    - **Pages contribute what they know.** `useRegisterCommands(sections)`
+      (`features/command/registry.ts`) registers ranked sections while a component is mounted
+      and drops them on unmount; the latest closures sit behind a ref and the menu re-renders
+      only when the serialised sections change. A command is `run`, `go` (a path), `link`
+      (opens a new tab), `page` (a nested list, or a `compose` page whose input becomes a
+      message field), `choice` (a value list, current one checked) or `search` (types the query
+      into the page's own search). Context sections sort first (`RANK.context`), then the queue
+      (`RANK.next`), then the global ones.
+    - **On a task page** (`TaskHeader` calls `useTaskPageCommands`, so Sidebar and Cards share
+      it) the task leads: its decision first, each named for what it does (Approve the plan /
+      Revise the plan, Approve the changes / Review the changes / Request changes, Merge #N or
+      Merge the pull request, Answer the question, Retry / Retry with guidance), then View (Overview, Code, Chat, and Guided review / All files on Code), then
+      This task (Wait for another task…, a choice that ticks every task it waits on and toggles
+      the one you pick, and Stop waiting, Set priority with the priority icons,
+      Message the agent, Open the pull request
+      on GitHub, Copy branch name, Open in editor, Open a terminal, Show in Finder, Restart the
+      current step, Mark as done, Cancel task behind a confirm page), then Next and Previous
+      task that needs you (`resolveQueueStep`). Request changes carries the review's draft line
+      comments and Approve the changes is disabled while there are any, as on the page.
+    - **On Home** it is about getting to tasks: Needs you lists the tasks waiting on a decision
+      (the briefing's Now task first, then queue order, up to eight), each row opening its task;
+      their decisions stay out of the root and match only while typing. **Settings** offers Jump to (each section scrolls into view) and
+      Change a setting (every select on the page as a choice). **All tasks** offers Filter by
+      status, Clear filters and "Search all tasks for …"; the filter and search live in the URL
+      (`?status=&q=`), and an active status shows as a removable button beside the search.
+    - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, and
+      Jump to a task, a page of every task), Go to (Home, All tasks, Settings), Focus (Switch
+      focus area; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
+      typing) and Appearance (Switch layout, Change theme). With an empty query, Recent lists the
+      last tasks visited (`shinsa.recent-tasks`) that no group above already shows.
+    - **Typing** matches by word (`score.ts`: whole label, label prefix, word prefix, then
+      substring; hints and keywords count at 0.7). Groups are ordered by their best match, since
+      cmdk's own group sort does not work. Choices flatten into their options ("urgent", "dark",
+      "cards"), every task matches by title, repository, branch and status, and the queue's
+      decisions match across tasks ("merge" finds Merge #4531 on whichever task it is). At the
+      bottom, always: "Create task: …" (starts it straight away) and "Edit it before starting"
+      (Home's composer, filled in).
+    - Rows: 24px. Icons are plain, never on a tile; a task's is its status icon in the status
+      colour, then the title as `Truncate`, the repository as the hint and the status at the
+      right edge. The current value of a choice (and the current page or view) carries a 14px
+      check in `primary`. There is no footer. Pages show a crumb in the input whose text sits as
+      far from the search icon as the query does; Backspace on an empty input goes back and
+      re-selects the row that opened the page; a choice page opens on the current value.
+      `CommandList` takes the page as `page`: entering scrolls the list to the top, going back
+      restores the scroll it had, and the highlight slides from where it was on screen to the
+      new row instead of travelling through the list's scroll (cmdk never scrolls a controlled
+      value into view, so the list does it). Closing resets the menu to the root. Escape restores
+      focus to where it was; a command that runs declines the restore so what it focuses keeps
+      it.
+
+15. **Consistency comes from shared pieces, not from care at the call site.** Everything below
+    has one owner; a hand-built copy is a bug. Measured in the browser at 900 and 1280, both
+    themes.
+    - **Info popovers** (`components/info-popover.tsx`): anything that shows more on hover (task
+      facts, smart-link preview cards, "2 more", related tasks) is an `InfoPopover`, built on
+      `PreviewCard`. It opens on hover after 80ms, closes 120ms after the pointer leaves, sits
+      8px from its trigger (bottom, start), and a click does nothing to it: it never toggles or
+      sticks open. Real menus (priority, the task menu, focus, the queue button) stay click
+      dropdowns. Inside: `InfoHeader` (title over a `text-2xs` description, `gap-px`,
+      `px-3 py-2.5`), `InfoSection` (a hairline above, optional `text-2xs` title) and `InfoRow`
+      (a 28px label/value row: icon and label left, value right, 16px minimum between them).
+      Task lists inside one are `TaskPopoverRows` (`components/smart/task-link.tsx`): glyph,
+      title over status line, `rounded-item` rows in a `p-1` frame.
+    - **Label and value pairs** in popovers and tooltips sit apart: label left, value right
+      (`justify-between`, `gap-4`), via `InfoRow` or `InfoLine` for tooltips. Never a value run on
+      after its label with a space. A status the icon already says is not printed: no "Done",
+      "Complete", "Passed" or "Passing" next to a check (the progress track's step tooltips are the exception: every step says its status, "Done" included); "In progress", "Failed", "Running",
+      "Waiting on you" stay.
+    - **Checkmarks are the accent**, everywhere: check and to-do glyphs, the current value in a
+      menu, a select or ⌘K, copy confirmations, done tiles, settled tasks in ⌘K, the "decision"
+      activity, toasts, popovers, tooltips, and GFM task-list checkboxes in agent markdown
+      (`accent-color`). They come from `components/check-mark.tsx` (`CheckMark`, `CHECK_TEXT`,
+      `SELECTION_CHECK_TEXT`, `CheckOutcomeIcon` for pass / fail / skipped). The one exception
+      is the progress track: its done steps (a 15px check on `green` at 29%) and the line
+      between them are green, so done reads apart from the blue pulse of the current step.
+    - **Page headings** (`components/page-heading.tsx`): one `PageHeading` for Task, All tasks
+      and Settings (Home's greeting uses its `PAGE_TITLE`): a `text-base` medium `fg-4` title on a
+      20px line (`leading-tight`), the description or count `text-xs` `fg-2` directly under it
+      (`gap-px`), flush with the column's left edge.
+    - **Canvas sections** (`components/section-label.tsx`): a `SectionLabel` (`h-6`, `text-2xs`
+      medium `fg-2`, the count in normal weight, `px-1`) 4px over its card; with a description
+      the two lines stack `gap-px`. Home's queue sections and every Settings group use it.
+    - **Settings is titles only**: no section or row descriptions, just the group label and each
+      row's title with its control (a 40px row). Model selects show the display name ("Opus 5.5")
+      from the first paint (`KNOWN_AGENT_MODELS`, refined by the live catalog), never the raw
+      alias.
+      Section → section is 24px (`gap-6`) on every page.
+    - **Cards** (`components/surface.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
+      card surface. A card pads the same on all four sides; the shared `Card` slot carries no
+      padding of its own, so nothing doubles up. Settings groups are `p-1.5` (6px on every side,
+      measured), rows inside `px-1.5`, so text sits 12px from the edge and an inner surface (an
+      area's repositories) sits 6px from it on three sides; `CARD_HEADER` is the one card header strip (36px, `bg-bg-a1`, 14px icon 8px
+      from a `text-xs` medium `fg-4` title, `px-3`), used by `Panel`, the chat's hand-over cards
+      and the live card's row; `CARD_FOOTER` the one footer (`px-3 py-2.5`, `bg-bg-a1`). Every
+      card's inset is 12px (`p-3`): the Overview's now card included. Anything nested in a card
+      or in the chat column (answer box, code fences, code snippets, tool blocks, images,
+      message links) is `rounded-lg`.
+    - **Composers**: the task composer, Home's new-task box and the question's answer box share
+      `COMPOSER_FIELD` (text 12px in, 10px from the top) and `COMPOSER_FOOTER` (6px around a
+      28px `sm` control, no divider).
+    - **Title over description is `gap-px`**, with no exceptions: page headings, card eyebrow over
+      title, list rows, activity rows, plan and phase steps, check rows, popover headers and
+      task rows, review findings, message links. A title next to its description on one line
+      (⌘K rows, a section label and its count, "Waits on ‹task›") is 6px (`gap-1.5`).
+    - **Numbered steps** are `StepNumber` (`components/step-number.tsx`): a 20px `bg-bg-a2` tile,
+      `rounded-control-sm`, in the plan, What changed, the chat's plan card and the review
+      walkthrough.
+    - **Task actions** have one source, `features/task/task-actions.ts` (`TASK_ACTION`: label and
+      icon). The task page's `•••` menu, the All tasks context menu (`TaskActionItems`) and ⌘K's
+      This task section all read it, so every action carries the same icon everywhere: copy
+      branch, open the pull request, open in editor, open a terminal, show in Finder, restart the
+      current step, mark as done, and Cancel task in the destructive style.
+    - **Dependencies** have one source, `features/task/dependency-menu.tsx`: `DependencyItems`
+      (the Wait for another task submenu and Stop waiting) sits in the task page's `•••` menu, the
+      All tasks context menu, the Waits on fact and All tasks' chain arrow (`WaitsOnItems`);
+      `listDependencyCommands` gives ⌘K the same two ("Wait for another task…" as a multi-value
+      choice, `value` a list, every current one checked, "Stop waiting"). Several at once is the
+      normal case: every list adds or removes one task and never replaces the others. Before building
+      starts the label is Wait for another task; once building has started it is Merge after
+      another task, because that is all a new dependency can still do.
+    - **Status tones** come from `components/status.tsx` and `components/tone.ts`, nowhere else:
+      Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
+      Ready to merge green, working stages blue, Not started (waiting on another task) neutral. The All tasks section icons,
+      the queue's section icons, the gate tiles, ⌘K's task icons and the status labels all read
+      them (`resolveTaskGlyph`, `resolveTaskStatus`).
+    - **Hover is never the only feedback**: every `hover:` class has the same `active:` value on
+      the same line (`group-hover:` pairs with `group-active:`, unless it only reveals something
+      from `opacity-0`).
+
+16. **All tasks is the roadmap.** `features/tasks/task-list.tsx` lists every task in to-do order,
+    grouped by `resolveRoadmapGroup` (`lib/roadmap.ts`): Ready to merge, Changes to review, Plan to
+    approve, Needs your answer, Paused, In progress, Waiting on another task, Done and Cancelled
+    (both collapsed). Each section header is a sticky
+    `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
+    Inside a section rows sort by priority, then oldest first; Done and Cancelled show the latest
+    first. Waiting on another task is drawn as a tree that handles every shape
+    (`orderChains`): each task appears once. Its depth is its longest path from a task outside the
+    section, and it sits under the parent at the level above that comes last on screen, so in a
+    diamond (B and C wait on A, D on B and C) D sits under whichever of B and C is shown second,
+    after both. Fan-out siblings sit side by side under their parent. The status column names
+    every parent, "Waits on ‹A›, ‹B›", each a link that opens it and truncates on its own, with
+    all of them, one per line, in the tooltip ("‹task› was cancelled" when one was). A nested
+    row's corner arrow sits under its parent's priority mark (26px per level) and is a 20px
+    button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
+    "Waits on" and the parents in its tooltip; it opens the Waits on menu. Every row starts with
+    its priority mark. Filter by status in
+    ⌘K offers the same sections with the same icons.
+17. **New tasks can wait.** Home's composer has a When to start select beside priority: Start now,
+    or "After ‹task›" for any open task. Picking one sends `blockedBy` with `task.create` and the
+    button reads Add instead of Start.
+18. **The kit (`packages/ui`).** Imported as `@shinsa/ui/components/<name>`, `@shinsa/ui/lib/<name>`,
+    `@shinsa/ui/hooks/<name>` and `@shinsa/ui/styles/globals.css`:
+    - `src/components/` holds every primitive, one flat file each (`button.tsx`, `dialog.tsx`, …);
+      the icon set is the one folder, `components/icon/`.
+    - `src/lib/` is the logic the components share, pure and unit-tested: `cn` (with the theme's
+      corner, shadow and leading tokens taught to tailwind-merge, so `cn('rounded-control',
+      'rounded-popup')` keeps only the override), `scroll.ts` (edge fades, the overlay thumb, drag
+      and track presses), `truncate.ts` (the middle cut), `pointer-intent.ts` (preview cards
+      holding while the pointer heads for them), `avatar.ts` (pastel palettes, generated faces) and
+      `icon-swap.ts`.
+    - `src/hooks/`: `useMediaQuery` (and `useIsMobile` on it), `useControllableOpen` (open state for
+      `Select` and `DropdownMenu`, controlled or not) and `useAnimatedIndicator` (the sliding
+      highlight behind menus, lists and tabs).
+    - `scripts/icons.ts` is the icon generator (below); `test/` mirrors `src/` and `scripts/` file
+      for file. `bun run --cwd packages/ui test` runs it (Bun with happy-dom and Testing Library)
+      and fails under 100% line and function coverage of `lib`, `hooks` and `scripts`; components
+      are tested for behaviour (states, roles, names), never for class strings.
+19. **Icons are Central Icons**, through `<Icon name='Icon…' />` from `@shinsa/ui/components/icon`.
+    Read every mention of Lucide, `SIcon` or an owned `icons.tsx` below as this. The paths are
+    pre-rendered into `components/icon/paths.ts` from the names the workspace uses: run
+    `bun run --cwd packages/ui generate:icons` after using a new name (`--check` fails when the
+    file is stale, and the kit's tests check it too). Marks Central lacks (the priority bars, brand
+    marks) are drawn into `components/icon/custom.ts`. Icons render at 50% opacity, a step quieter
+    than their text; chevrons draw square-cornered.
+20. **The kit's control ramp is a step denser than paywall-next's.** Button `xs` 22 / `sm` 24 /
+    `default` 26 / `lg` 30 (icon sizes the same squares), `Input`, `SelectTrigger`, `ComboboxInput`
+    and the default tab list 26 (`sm` 24), menu, select and command rows 24, `Badge` 18 / 20, glyphs
+    14px in `xs` and `sm` controls and 16px from `default` up. Read the Sizing tables below with these heights.
+21. **Invalid** is a 1px `red-4` ring on `Input`, `Textarea` and `ComboboxInput`, and on a
+    `Checkbox` or `RadioGroupItem` only while it is unchecked. `FieldError` announces the message
+    (`role="alert"`), each distinct message once.
+22. **Busy buttons stay themselves.** `Button loading` keeps its colours and width, swaps its icon
+    (or, without one, adds a leading spinner), sets `aria-busy` and ignores presses and keys, so a
+    busy submit can't fire twice. It is never `disabled`.
+23. **The kit's icon-only buttons carry their tooltip**, as 13 requires: the dialog and sheet close
+    X ("Close") and `CodeBlock`'s copy ("Copy", then "Copied").
+
+`bun lint:conventions` checks the app for raw `text-[N]` sizes, raw corners, `font-bold`, any
+`shadow-*` or `ring-*`, any `focus:` / `focus-visible:` / `focus-within:` state, and
+`formatAge(…)` or `formatDuration(…)` rendered in JSX outside `components/time-ago.tsx` (pass the
+time to `TimeAgo` or `Duration` instead), a `hover:` without its `active:` pair, a hand-built card
+(`rounded-xl border border-border bg-card` instead of `CARD`) and a green check glyph.
 
 ---
 
@@ -115,7 +499,7 @@ it (e.g. `hover:border-foreground/20`).
 
 `--accent-token` is `teal-300` (`#46d7d4`), **fixed in both modes**. It is the
 single most important beat on a surface: the primary button fill (with ink
-text), the focus border, the active-tab underline, the active nav row, and text
+text), the active-tab underline, the active nav row, and text
 selection. It is a rail or an edge, never a large fill — the primary button is
 the one carve-out. Orange appears in product UI only as a chart hue and as
 `destructive`, never as the accent.
@@ -402,27 +786,51 @@ customer's app.
 
 ## Shape & depth
 
+### No shadows
+
+Shinsa draws no shadows. Every surface (card, table, popup, dialog, the
+outline button) is separated by its fill step and one 1px hairline in `bg-3`,
+drawn as an inset ring in dark mode. The `shadow-1…4` tokens are that ring and
+nothing else; `bun lint:conventions` rejects `shadow-xs…lg` and `shadow-1…4`
+in app code. The primary and destructive buttons keep their inner top
+highlight, the one exception.
+
+A popup (popover, menu, select, combobox, preview card, dialog) draws its edge
+with that `shadow-*` ring alone, on the `popover` fill. Never add `border` to
+one as well: the ring and the border stack into a 2px edge. Tooltips and
+toasts are the inverse, a `border` and no shadow.
+
+### Gaps
+
+A title over its description is `gap-px`. `gap-0.5` is banned (the lint
+rejects it): the next step up is `gap-1`.
+
 ### Corners
 
-**One 3px corner.** `--radius` and every `--radius-*` step are pinned to 3px,
-so `rounded-sm` through `rounded-2xl` are the same corner and size never
-changes the language. Use the scale, never `rounded-[Npx]`.
+**The law: a nested corner is concentric with its parent.** Inner radius =
+outer radius − the padding between the two edges. No exceptions, at any depth:
+a menu item in a popup, a segment in a tab track, a button flush in a card
+footer. When the padding is larger than the outer radius the inner corner is
+free again (it no longer reads against the outer one), and takes its own
+token.
 
-Carve-outs round **fully** (`rounded-full`), use a source ratio, or sit
-concentric inside a 3px frame (a dialog footer strip's inner bottom corners,
-`rounded-b-[calc(var(--radius-2xl)-1px)]` = 2px):
+The radii are tokens derived from each other with `calc()` in `globals.css`
+(Corners), so the law holds by construction:
 
-- Circular controls: avatars, switch tracks and thumbs, radio controls and
-  dots, scrollbar thumbs, status dots, circular count pills, spinners.
-- **App icons** keep the iOS/Android squircle via `rounded-app-icon` (22%) —
-  and so do their fallback tile and skeleton, so the shape doesn't pop on load.
-- Device mockups keep the device's own radius — `DeviceFrame` (54 on an
-  iPhone 17, scaled) — and everything drawn inside one keeps its literal
-  radii, such as `SurveyPreview`'s action sheet or
-  `RetentionMessagingSplitDialog`'s cancellation sheet (its 6px icon tile is
-  part of that mockup).
+| Token | Value | Use |
+| --- | --- | --- |
+| `rounded-control-sm` | 6px | xs / sm controls (22 / 24px) |
+| `rounded-control` | 7px = control-sm + 1 | default and lg controls, inputs, tab tracks |
+| `rounded-item` | 6px | a row inside a popup |
+| `rounded-popup` | 10px = item + 4 (`p-1`) | menus, selects, comboboxes, command, popovers |
+| `rounded-segment` | 5px = control − 2 (`p-0.5`) | a tab or segment inside a track, and its sliding indicator |
 
-Never invent a third radius.
+Cards, dialogs and sheets keep the larger `rounded-2xl` / `rounded-3xl`.
+`rounded-full` is for circles only (avatars, switches, dots, spinners).
+
+Never write `rounded-[Npx]` or a free `calc()` in a class: `bun lint:conventions`
+fails on any raw corner in `packages/ui` and `apps/web`. A new nesting gets a
+new derived token in `globals.css`, written as parent − padding.
 
 ### No shadows
 
@@ -435,45 +843,22 @@ border and type. **Carve-out:** illustrative artwork (the dashboard-migration
 welcome artwork) and the `DotMatrixLoader` glow may use `drop-shadow` as part
 of the drawing — never on UI chrome.
 
-### Focus is a border, never a ring
+### No focus states
 
-**No `ring-*` anywhere** — not for focus, not for selection, not as a glow.
-Focus-visible recolours the control's own 1px border to `primary`:
+Shinsa draws **no focus states**: no `ring-*`, no outline, no border recolour and no
+background wash marks focus, on controls, rows, tabs, fields or links. Every interactive element
+carries `outline-none`, and the base layer in `globals.css` removes the browser's own `:focus` /
+`:focus-visible` outline for anything that doesn't. Keyboard movement inside a floating list
+(menu, select, combobox, command) still moves the list's highlight, because that highlight is the
+list's selection, not a focus mark. `bun lint:conventions` rejects `focus:`, `focus-visible:`,
+`focus-within:` and `ring-offset-*` in `packages/ui` and `apps/web`. Anything below that describes
+a focus border, ring, underline or wash is paywall-next reference and does not apply.
 
-- Every focusable control carries a 1px border, **transparent where it isn't
-  drawn** (ghost buttons, tabs, default toggles, segments), so
-  every control has an edge to recolour and focusing never shifts layout.
-- Fields (input, input group, textarea, select trigger, combobox, number
-  field): the border turns `primary`; invalid turns it `destructive`.
-- A teal-filled control (`default` button, a checked checkbox, radio or
-  switch) recolours its edge to `foreground` — a teal edge vanishes into a
-  teal fill.
-- Text links underline (`decoration-primary`) instead of boxing their text
-  (`TextLink`).
-- Items inside a floating list (menu, select, combobox, command, context menu)
-  show keyboard focus as the `bg-accent` highlight — the list's own pattern —
-  not a border.
-- Checkbox, radio, switch (unchecked) and slider thumb: their border turns
-  `primary`.
 - **Selected** states that used to be a ring (a picked card, tile or swatch)
-  are a `primary` border too — `border-primary`, never `ring-2 ring-primary`.
-- Fused groups (button groups, toggle groups, input groups): a focused part's
-  shared edge is its neighbour's start border, so that border recolours with
-  it and the outline is whole.
-- Focus colour changes ride the same `transition-colors duration-hover`.
-- **Borderless controls inside a bordered frame** (a bare input in a pill, a
-  select in a chip): the frame's border turns `primary` via
-  `has-[…:focus-visible]:border-primary`. A control never ends up with no
-  focus signal at all.
-- **Popup search rows** — the search input at the top of a combobox or picker
-  popup — stay edgeless (`border-transparent has-focus-visible:border-transparent`),
-  like the command palette's input: they hold focus for the popup's whole life
-  and the popup's border already frames them.
+  are a `primary` border — `border-primary`, never `ring-2 ring-primary`.
 - **Selected rows in a `divide-y` list** draw their primary edge on `::before`
   (`before:absolute before:inset-0 before:border before:border-primary`), so it
   neither doubles the dividers nor changes the row's height.
-- **On a teal surface** (the default button, the Superwall Wednesday card),
-  focus recolours the edge to that surface's ink instead of `primary`.
 - **Knockout edges.** A badge or dot laid over another element (the audit-log
   action chip over an avatar, the point on a confidence-interval bar) is cut
   out by a 2px border in the surface colour (`border-card`, `border-popover`
@@ -952,6 +1337,8 @@ section with no skeleton is `SectionLoading` (a 20px `icon-tertiary`
 - **Lucide** (`lucide-react`) for product UI: stroke icons in `currentColor`.
   Pixel-grid icons belong to the Marketing register only.
 - **Owned glyphs** live in `components/ui/icons.tsx`, built with Lucide's `createLucideIcon` so props and classes match (the filled placement bolts, above, are plain SVG components instead); import them, never the Lucide original, so each is decided in one place. Today: `PlacementBoltIcon` / `PlacementBoltOffIcon`, `PrioritizedBoltIcon`, and `XIcon` — the one X for close, clear and remove, Lucide's X geometry (it spans 12 of 24 units: 8px at 16px, 7px at 14px — an X is a quiet control). A chip's remove X takes the badge size (12px).
+- **Home is `IconHomeRoundDoor`** wherever an icon stands for Home (top bar, sidebar, command
+  menu, buttons, empty states), never the door-less house.
 - The sidebar's own rows use a bespoke set (`components/sidebar/nav-icons.tsx`),
   drawn on an 18px grid and rendered at 16px, with an outlined unselected and
   a filled selected twin.
@@ -999,6 +1386,10 @@ every surface.
   `data-[active=true]:[&>svg]:text-primary data-[active=true]:[&>svg]:filter-none`.
 - Semantic colours (primary, destructive, success, warning) are plain text
   colours.
+- **A destructive menu row's icon is its label's red**, at full opacity, not the
+  muted icon of a plain row. `DESTRUCTIVE_ITEM` (`menu-icon.tsx`) carries it for
+  `DropdownMenuItem` and `CommandItem` `variant='destructive'`, and the row's
+  highlight turns `red-a2`.
 - **Inherited ink counts too.** `text-fg-secondary`, `text-fg-tertiary`,
   `text-muted-foreground`, `text-fg-muted`, `text-sidebar-foreground` and any
   `text-*/NN` are translucent, so an icon that inherits them from its parent
@@ -1182,7 +1573,7 @@ size="sm" variant="secondary"`. `ListToolbarLabel` is a 14px medium title on the
 - **Breakpoints follow the shell, not the window.** `sm`…`2xl` read
   `data-shell-bp` on `<html>`. Use
   `useShellBreakpoint()` in JS; don't add arbitrary `min-[…]` breakpoints.
-- **Scrollbars are hidden** app-wide, except tables that overflow horizontally may show a thin horizontal scrollbar so every column is reachable with a mouse.
+- **Scrollbars are hidden** app-wide, except tables that overflow horizontally may show a thin horizontal scrollbar so every column is reachable with a mouse, and long panes that scroll in a `ScrollArea` (the task chat), which draw its overlay thumb.
 - **A mouse wheel scrolls a sideways row.** With scrollbars hidden and no
   Shift held, a wheel over an overflowing tab strip, toolbar or chip row would
   do nothing, so one document listener (`lib/wheel-scroll-x.ts`) turns a
@@ -1472,30 +1863,20 @@ inline editors, anything floating or tucked inside another control. The top bar 
 rare primary call-to-action on an empty page. Onboarding's footer is a dialog
 footer strip, so its Continue is `default`.
 
-Variants:
+Variants (Shinsa has exactly five):
 
-- `default` — teal fill, ink text; hover `primary/90`. The one filled accent.
-- `outline` — border, no fill; hover brings in `bg-accent` and lifts the border
-  to `foreground/20`.
-- `secondary` — built like a card: `border-border` + `bg-card` (the sanctioned
-  exception to fill or border). Hover, pressed and open keep the card fill and
-  lay a 3% foreground wash over it as a background image; the border lifts to
-  `foreground/20` like outline. The hover lift never overrides focus. Same look
-  as the filter pickers.
-- `ghost` — transparent border, `text-fg-secondary`; hover is `bg-accent`
-  and brightens text to foreground and the icon's `icon-tertiary` fade to full.
-- `destructive` — a 10% destructive tint with a `destructive/20` border
-  (15% on hover), not a solid fill.
-- `destructive-outline` — a `destructive/40` border carries the warning at
-  rest; hover only brings in the 8% tint, the border doesn't change.
-- `link` — inline text, no box. Underline on hover, in the brand teal
-  (`decoration-primary`), offset 3px.
-- `plain` — bare text that acts: no padding, fill or border box (`border-0`),
-  so its label sits exactly where plain text would. Hover brightens the text
-  and lifts an icon's fade, like ghost; focus is still a primary border, drawn
-  by a pseudo-element 4 × 2px outside the label so it costs no layout. The
-  sortable table header is built on it. Never rebuild it with a ghost button
-  and a negative margin.
+- `primary` — the blue fill, white text. The one filled accent; at most one per
+  group of actions.
+- `secondary` — no fill at rest, `text-fg-2`; hover lays a faint wash and
+  brightens the text. **The only variant that sits beside a primary** (Cancel,
+  Back, Request changes next to Approve).
+- `outline` — a raised surface with a hairline ring. For a standalone action
+  or a trigger (a picker, a menu button) with no primary near it. **Never
+  next to a primary button.**
+- `destructive` — red fill, white text, for the confirming action of
+  something irreversible. Its companion is `secondary`, never `outline`.
+- `link` — inline text in `primary-text`, no box; the label itself takes the
+  press.
 
 Visible horizontal spacing steps 2px per size — outer edge → text: `xs` 8 · `sm` 10 · `default` 12 · `lg` 14 · `xl` 16 (written `--spacing(n) - 1px` for the border). An icon sits **1px outside** the text inset (a glyph's own box carries empty space, so at the text's inset it reads indented): 7 / 9 / 11 / 13 / 15. Icon ↔ label gap: 6 / 8 / 8 / 10 / 10. The `-mx-px` icon margin eats 1px of each `gap-*`, so the classes are written 1px above these. **Icons sit 0.5px above the label's cap-height middle** — one device pixel at 2x. Centred exactly on the caps, a symmetric glyph like `+` reads low next to mostly-lowercase labels. Flex centring alone lands anywhere from 0 to 0.25px off that target depending on text size and line height, so each size corrects by its measured value. Icon-only sizes have no label and stay box-centred. Sizes are one value at every width: `xs` 24 · `sm` 28 · `default` 32 · `lg` 36 · `xl` 40. Type: `xs` 13px, `sm`/`default`/`lg` 14px, `xl`
 16px. Un-sized SVGs render at 80% opacity;
@@ -1642,7 +2023,7 @@ as the part's own border over its own fill, or reproduce the fill under it
 
 **Truncate.** One line by default, or up to two with `lines={2}` for gallery
 names and paywall results. It ends in an ellipsis and, only when it's actually
-clipped, shows the full text in a tooltip after 125ms
+clipped, shows the full text in a tooltip after 150ms
 (`components/ui/truncate.tsx`, ported from buzzkit). Use it instead of a bare
 `truncate` span wherever text comes from data or a label can meet a narrow
 container; `middle` cuts in the centre for ids (plain-string children only).

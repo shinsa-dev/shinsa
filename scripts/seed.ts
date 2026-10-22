@@ -1,7 +1,8 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { EventLog } from '../apps/cli/src/store.ts';
+import { convertClaudeSession } from '../apps/server/src/agents/index.ts';
+import { EventLog } from '../apps/server/src/store/index.ts';
 import type {
   Area,
   CodeSpot,
@@ -18,6 +19,7 @@ import type {
   TaskStage,
   WorkReport,
 } from '../packages/core/src/index.ts';
+import { CHAT_PROTOCOL_VERSION, type ChatEvent, type ChatTool } from '../packages/core/src/index.ts';
 
 const ROOT = Bun.env.SHINSA_SEED_DIR ?? join(homedir(), '.shinsa-seed');
 const DATA = join(ROOT, 'data');
@@ -469,13 +471,13 @@ interface SeedTask {
   branch: string;
   ageHours: number;
   specFirst?: boolean;
-  baseTaskId?: string;
+  blockedBy?: string[];
   worktreePath?: string;
   spec?: SpecDocument;
   report?: WorkReport;
   summary?: string;
   findings?: ReviewFinding[];
-  runs?: { role: RunRole; minutes: number; summary: string; failed?: boolean }[];
+  runs?: { role: RunRole; minutes: number; summary: string; reply?: string; failed?: boolean }[];
   gate?: { kind: GateKind; purpose?: GatePurpose; title: string; body: string };
   pullRequest?: { number: number; checks: 'passing' | 'failing' | 'pending'; comments?: number };
   merged?: boolean;
@@ -483,6 +485,49 @@ interface SeedTask {
 }
 
 type Push = (at: number, event: ShinsaEventInput) => void;
+
+const SMALL_PLAN = [
+  { title: 'Find the cause', detail: 'Reproduce it and trace where it goes wrong.' },
+  { title: 'Make the change', detail: 'Fix it in the narrowest place that covers every caller.' },
+  { title: 'Verify it', detail: 'Run the checks and confirm the behaviour by hand.' },
+];
+
+const LARGE_PLAN = [
+  { title: 'Read the current code', detail: 'Map what exists and where the change has to land.' },
+  { title: 'Build the core change', detail: 'The new behaviour, behind the existing interfaces.' },
+  { title: 'Wire it into the app', detail: 'Connect the screens and commands that use it.' },
+  { title: 'Test and capture evidence', detail: 'Tests for the logic, recordings for anything visible.' },
+];
+
+const LIVE_STAGES = new Set<TaskStage>(['planning', 'building', 'reviewing', 'fixing']);
+
+const SEED_CHECKS = [
+  { name: 'bun run lint', outcome: 'pass' as const, detail: null },
+  { name: 'bun run check-types', outcome: 'pass' as const, detail: null },
+  { name: 'bun test', outcome: 'pass' as const, detail: null },
+];
+
+const BUILT_STAGES = new Set<TaskStage>([
+  'checking',
+  'awaiting_review',
+  'shipping',
+  'awaiting_merge',
+  'merged',
+]);
+
+function resolveSeedSpec(task: SeedTask): SpecDocument {
+  if (task.spec) return task.spec;
+  return {
+    goal: task.intent,
+    plan: task.size === 'large' ? LARGE_PLAN : SMALL_PLAN,
+    behaviour: [],
+    approach: 'Planned by the agent.',
+    files: [],
+    outOfScope: [],
+    verification: [],
+    questions: [],
+  };
+}
 
 function pushTask(task: SeedTask, push: Push) {
   const created = NOW - task.ageHours * HOUR;
@@ -506,8 +551,10 @@ function pushTask(task: SeedTask, push: Push) {
     repoId: task.repo.id,
     size: task.size,
     branch: task.branch,
-    baseTaskId: task.baseTaskId ?? null,
   });
+  if (task.blockedBy) {
+    push(step(0.05), { type: 'task.blocked', taskId: task.id, blockedBy: task.blockedBy, by: 'you' });
+  }
   if (task.worktreePath) {
     push(step(0.1), {
       type: 'worktree.created',
@@ -516,8 +563,10 @@ function pushTask(task: SeedTask, push: Push) {
       branch: task.branch,
     });
   }
-  for (const [index, run] of (task.runs ?? []).entries()) {
+  const runs = task.runs ?? [];
+  for (const [index, run] of runs.entries()) {
     const runId = `${task.id}-run-${index}`;
+    const live = index === runs.length - 1 && !run.failed && LIVE_STAGES.has(task.stage);
     push(step(0.5), {
       type: 'run.started',
       run: {
@@ -531,8 +580,10 @@ function pushTask(task: SeedTask, push: Push) {
         endedAt: null,
         outcome: null,
         summary: null,
+        status: 'running',
       },
     });
+    if (live) continue;
     push(step(run.minutes), {
       type: 'run.ended',
       runId,
@@ -540,8 +591,35 @@ function pushTask(task: SeedTask, push: Push) {
       summary: run.summary,
     });
   }
-  if (task.spec) {
-    push(step(0.2), { type: 'spec.proposed', taskId: task.id, body: task.spec.goal, document: task.spec });
+  const planning = task.stage === 'triage' || task.stage === 'queued' || task.stage === 'planning';
+  if (!planning) {
+    const spec = resolveSeedSpec(task);
+    push(step(0.2), { type: 'spec.proposed', taskId: task.id, body: spec.goal, document: spec });
+    const finished = BUILT_STAGES.has(task.stage)
+      ? spec.plan.length
+      : task.stage === 'building'
+        ? Math.floor(spec.plan.length / 2)
+        : 0;
+    for (let index = 0; index < finished; index += 1) {
+      push(step(2), {
+        type: 'phase.completed',
+        taskId: task.id,
+        report: {
+          index,
+          summary: task.report?.phases[index]?.summary ?? spec.plan[index]?.detail ?? 'Done.',
+          spots: task.report?.phases[index]?.spots ?? [],
+          decisions: index === 0 ? (task.report?.decisions ?? []) : [],
+          at: 0,
+        },
+      });
+      push(step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
+    }
+    if (task.stage === 'building' && finished < spec.plan.length) {
+      push(step(1), { type: 'phase.updated', taskId: task.id, index: finished, status: 'active' });
+    }
+  }
+  if (BUILT_STAGES.has(task.stage) && task.stage !== 'checking') {
+    push(step(0.3), { type: 'checks.recorded', taskId: task.id, results: SEED_CHECKS });
   }
   if (task.report || task.summary) {
     push(step(0.2), {
@@ -578,7 +656,10 @@ function pushTask(task: SeedTask, push: Push) {
       status: 'open',
       title: task.gate.title,
       body: task.gate.body,
-      runId: null,
+      runId:
+        task.gate.purpose && task.gate.purpose !== 'decision' && (task.runs?.length ?? 0) > 0
+          ? `${task.id}-run-${(task.runs?.length ?? 1) - 1}`
+          : null,
       openedAt: at,
       answeredAt: null,
       decision: null,
@@ -599,9 +680,177 @@ function buildEvents(tasks: SeedTask[], areas: Area[], repos: Repo[]) {
   push(NOW - 3 * MINUTE, {
     type: 'briefing.written',
     areaId: null,
-    text: 'Start with the embedded chat rework: it is ready for review and unblocks the tool-calls work stacked on it. After that, the code-first duplicate fix is clean and waiting to merge.',
+    text: 'Start with “Run the embedded chat on MCP v2”: it is ready for review, and the tool calls work waits on it. Then “Refuse to duplicate code-first paywalls” and “Rewrite the framework command registry”.',
+    briefing: {
+      now: {
+        taskId: 'task-embedded-chat',
+        why: 'Built and checked, and “Let the embedded chat call paywall tools” waits on it, so reviewing it first frees that work',
+      },
+      next: [
+        { taskId: 'task-duplicate', why: 'Pull request #4531 is clean and ready to merge' },
+        { taskId: 'task-command-registry', why: 'The plan needs your approval before building starts' },
+      ],
+      running: 'Agents are working on the remaining tasks.',
+      note: null,
+    },
   });
   return timeline.sort((a, b) => a.at - b.at);
+}
+
+interface SeedRunTimes {
+  task: SeedTask;
+  role: RunRole;
+  index: number;
+  startedAt: number;
+  endedAt: number | null;
+  failed: boolean;
+}
+
+type TimedEvent = { at: number; event: ChatEvent };
+
+const SEED_FILES: Record<string, { read: string; edit: string; test: string }> = {
+  'repo-paywall': {
+    read: 'src/export/clickhouse.ts',
+    edit: 'src/export/clickhouse.ts',
+    test: 'bun test src/export',
+  },
+  'repo-kanna': {
+    read: 'src/client/app/ChatPage/index.tsx',
+    edit: 'src/server/ws-router.ts',
+    test: 'bun test',
+  },
+};
+
+function seedFiles(task: SeedTask) {
+  return SEED_FILES[task.repo.id] ?? { read: 'src/index.ts', edit: 'src/index.ts', test: 'bun test' };
+}
+
+function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
+  const { task, role } = times;
+  const files = seedFiles(task);
+  const brief: ChatEvent = {
+    type: 'user',
+    from: 'shinsa',
+    text: `You are the ${role} for "${task.title}".\n\nThe request: ${task.intent}\n\nWork in the task's worktree and hand over through the Shinsa tools.`,
+    attachments: [],
+  };
+  const call = (callId: string, tool: ChatTool): ChatEvent => ({ type: 'tool_call', callId, tool });
+  const ok = (callId: string, output: string): ChatEvent => ({
+    type: 'tool_result',
+    callId,
+    status: 'ok',
+    output,
+    images: [],
+  });
+  const say = (text: string): ChatEvent => ({ type: 'agent', phase: 'interim', text });
+  const work: ChatEvent[] = [
+    { type: 'status', status: 'started', outcome: null },
+    brief,
+    say(`I'll start by reading how ${files.read.split('/').at(-1)} handles this today.`),
+    call('read-1', { kind: 'read', path: files.read, range: { start: 1, end: 40 } }),
+    ok(
+      'read-1',
+      '1\texport async function runExport(app: App) {\n2\t  const chunks = planChunks(app);\n3\t  for (const chunk of chunks) await writeChunk(chunk);\n4\t}'
+    ),
+    call('grep-1', { kind: 'search', mode: 'content', query: 'writeChunk', path: 'src' }),
+    ok('grep-1', 'src/export/clickhouse.ts:3\nsrc/export/chunks.ts:18'),
+    say(
+      'The chunk loop has no retry, so one slow chunk fails the whole export. I will wrap the write and keep the offset.'
+    ),
+    call('edit-1', {
+      kind: 'edit',
+      path: files.edit,
+      hunks: [
+        {
+          before: '  for (const chunk of chunks) await writeChunk(chunk);',
+          after: '  for (const chunk of chunks) await retry(() => writeChunk(chunk), { attempts: 3 });',
+        },
+      ],
+    }),
+    ok('edit-1', 'The file has been updated.'),
+    say('Running the tests for the export now.'),
+    call('test-1', {
+      kind: 'command',
+      action: 'run',
+      command: files.test,
+      description: 'Run the export tests',
+    }),
+  ];
+  if (task.gate?.purpose === 'agent_question' && live) {
+    return [
+      ...work,
+      ok('test-1', ' 12 pass\n 0 fail'),
+      say('The tests pass. One decision is yours before I go further.'),
+      call('ask-1', {
+        kind: 'shinsa',
+        name: 'ask',
+        args: { question: task.gate.title, context: task.gate.body },
+      }),
+      { type: 'status', status: 'waiting', outcome: null },
+    ];
+  }
+  if (live) return work;
+  const handover: ChatTool =
+    role === 'planner'
+      ? { kind: 'shinsa', name: 'propose_plan', args: { goal: task.intent, plan: SMALL_PLAN } }
+      : role === 'reviewer'
+        ? { kind: 'shinsa', name: 'report_review', args: { findings: task.findings ?? [] } }
+        : { kind: 'shinsa', name: 'complete_fix', args: { summary: task.summary ?? task.title } };
+  const seeded = task.runs?.[times.index];
+  const summary = seeded?.summary ?? 'Done.';
+  const ending: ChatEvent[] = times.failed
+    ? [ok('test-1', ' 11 pass\n 1 fail'), { type: 'error', text: summary }]
+    : [
+        ok('test-1', ' 12 pass\n 0 fail'),
+        call('handover-1', handover),
+        ok('handover-1', 'Handed over.'),
+        { type: 'agent', phase: 'final', text: seeded?.reply ?? summary },
+      ];
+  return [
+    ...work,
+    ...ending,
+    { type: 'status', status: 'ended', outcome: times.failed ? 'failed' : 'completed' },
+  ];
+}
+
+function spreadEvents(events: ChatEvent[], startedAt: number, endedAt: number): TimedEvent[] {
+  const span = Math.max(events.length, endedAt - startedAt);
+  return events.map((event, index) => ({
+    at: startedAt + Math.round((span * index) / Math.max(1, events.length - 1)),
+    event,
+  }));
+}
+
+function writeTranscript(dir: string, runId: string, timed: TimedEvent[]) {
+  const lines = timed.map(({ at, event }, index) =>
+    JSON.stringify({ ...event, v: CHAT_PROTOCOL_VERSION, id: `${runId}-${index}`, at })
+  );
+  writeFileSync(join(dir, `${runId}.jsonl`), `${lines.join('\n')}\n`);
+}
+
+function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: ShinsaEventInput }[]) {
+  const byTask = new Map(tasks.map((task) => [task.id, task]));
+  const times = new Map<string, SeedRunTimes>();
+  for (const { at, event } of timeline) {
+    if (event.type === 'run.started') {
+      const task = byTask.get(event.run.taskId);
+      const index = Number(event.run.id.split('-run-').at(-1));
+      if (task)
+        times.set(event.run.id, {
+          task,
+          role: event.run.role,
+          index,
+          startedAt: at,
+          endedAt: null,
+          failed: false,
+        });
+    }
+    if (event.type === 'run.ended') {
+      const run = times.get(event.runId);
+      if (run) Object.assign(run, { endedAt: at, failed: event.outcome === 'failed' });
+    }
+  }
+  return [...times.entries()];
 }
 
 function seed() {
@@ -664,15 +913,6 @@ function seed() {
   });
   rmSync(join(chatPath, 'src/chat/transport.ts'));
   commitWorktree(chatPath, 'feat(chat): run the embedded chat on MCP v2');
-  const toolsPath = createWorktree(
-    paywallPath,
-    'task-chat-tools',
-    'feat/embedded-chat-tools',
-    'feat/embedded-chat-mcp',
-    {
-      'src/chat/tools.ts': "export const CHAT_TOOLS = ['paywall.read', 'paywall.update'] as const;\n",
-    }
-  );
   const duplicatePath = createWorktree(paywallPath, 'task-duplicate', 'fix/code-first-duplicate', 'main', {
     'src/paywalls/duplicate.ts': DUPLICATE_NEW,
     'src/paywalls/errors.ts': ERRORS_NEW,
@@ -706,6 +946,24 @@ function seed() {
       worktreePath: chatPath,
       spec: {
         goal: 'The embedded chat sends every message through an MCP v2 session and shows tool results inline, so the chat can act on the paywall it is embedded in.',
+        plan: [
+          {
+            title: 'Open an MCP v2 session',
+            detail: 'One session per embedded chat, reconnecting with backoff.',
+          },
+          {
+            title: 'Route messages through it',
+            detail: 'Every send goes over the session instead of the old endpoint.',
+          },
+          {
+            title: 'Render tool results inline',
+            detail: 'Tool calls and their results show in the transcript.',
+          },
+          {
+            title: 'Test reconnects',
+            detail: 'Drop the connection mid-reply and confirm the draft survives.',
+          },
+        ],
         behaviour: [
           'Messages stream from the MCP server instead of arriving as one reply.',
           'Tool results appear as their own rows, with failures labelled.',
@@ -718,7 +976,7 @@ function seed() {
           { path: sessionFile, change: 'New: connection, reconnect limit, completion stream.' },
           { path: 'src/chat/transport.ts', change: 'Deleted; nothing else imports it.' },
         ],
-        outOfScope: ['Calling paywall tools from the chat (stacked task).'],
+        outOfScope: ['Calling paywall tools from the chat (a task that waits on this one).'],
         verification: [
           'Unit tests for the session reconnect limit.',
           'Recording of a chat with one tool call.',
@@ -823,7 +1081,13 @@ function seed() {
         { role: 'triage', minutes: 0.2, summary: 'Large: new transport and a behaviour change.' },
         { role: 'planner', minutes: 6, summary: 'Proposed the MCP session spec.' },
         { role: 'builder', minutes: 34, summary: 'Built the session and rewired the chat.' },
-        { role: 'reviewer', minutes: 4, summary: 'One suggestion on the reconnect counter.' },
+        {
+          role: 'reviewer',
+          minutes: 4,
+          summary: 'One suggestion on the reconnect counter.',
+          reply:
+            'One suggestion, nothing blocking. The reconnect counter in [mcp-session.ts](shinsa://file/src/chat/mcp-session.ts#L15) only resets after a successful connect, so a flaky server gets three new tries every time.\n\n[Let the embedded chat call paywall tools](shinsa://task/task-chat-tools) waits on this change, and #4531 from "Refuse to duplicate code-first paywalls" touches the same editor, so merging that first keeps the conflicts small. The work is on [feat/embedded-chat-mcp](shinsa://branch/feat/embedded-chat-mcp) in [paywall-next](shinsa://repo/paywall-next).',
+        },
       ],
       gate: {
         kind: 'review',
@@ -837,13 +1101,118 @@ function seed() {
       title: 'Let the embedded chat call paywall tools',
       repo: paywall,
       size: 'large',
-      stage: 'building',
-      reason: 'building on the embedded chat branch',
+      stage: 'queued',
+      reason: 'waiting for “Run the embedded chat on MCP v2” to finish',
       branch: 'feat/embedded-chat-tools',
       ageHours: 20,
-      baseTaskId: 'task-embedded-chat',
-      worktreePath: toolsPath,
-      runs: [{ role: 'triage', minutes: 0.2, summary: 'Stacked on the embedded chat rework.' }],
+      blockedBy: ['task-embedded-chat'],
+    },
+    {
+      id: 'task-chat-paywall-editing',
+      intent: 'Edit a paywall from inside the embedded chat: the chat proposes the change and shows it live.',
+      title: 'Edit paywalls from the embedded chat',
+      repo: paywall,
+      size: 'large',
+      stage: 'queued',
+      reason: 'waiting for “Let the embedded chat call paywall tools” to finish',
+      branch: 'feat/embedded-chat-paywall-editing',
+      ageHours: 18,
+      blockedBy: ['task-chat-tools'],
+    },
+    {
+      id: 'task-tool-progress',
+      intent: 'Show a progress line in the chat while a streamed MCP tool is still running.',
+      title: 'Show tool progress in the chat',
+      repo: paywall,
+      size: 'small',
+      stage: 'queued',
+      reason: 'waiting for “Stream MCP tool results” to finish',
+      branch: 'feat/chat-tool-progress',
+      ageHours: 0.9,
+      blockedBy: ['task-stream-tools'],
+    },
+    {
+      id: 'task-tool-retry',
+      intent: 'Retry a streamed MCP tool call from the chat when it fails halfway.',
+      title: 'Retry failed tool calls in the chat',
+      repo: paywall,
+      size: 'small',
+      priority: 'high',
+      stage: 'queued',
+      reason: 'waiting for “Stream MCP tool results” to finish',
+      branch: 'feat/chat-tool-retry',
+      ageHours: 0.85,
+      blockedBy: ['task-stream-tools'],
+    },
+    {
+      id: 'task-tool-summary',
+      intent: 'At the end of a chat, summarise which tools ran, how long they took and which were retried.',
+      title: 'Summarise tool runs at the end of a chat',
+      repo: paywall,
+      size: 'large',
+      stage: 'queued',
+      reason: 'waiting for “Show tool progress in the chat”, “Retry failed tool calls in the chat” to finish',
+      branch: 'feat/chat-tool-summary',
+      ageHours: 0.8,
+      blockedBy: ['task-tool-progress', 'task-tool-retry'],
+    },
+    {
+      id: 'task-webhook-docs',
+      intent: 'Document signed webhooks and the export retry rules in the integration guide.',
+      title: 'Document signed webhooks and export retries',
+      repo: docs,
+      size: 'small',
+      priority: 'low',
+      stage: 'queued',
+      reason: 'waiting for “Sign outgoing webhooks”, “Retry ClickHouse exports that time out” to finish',
+      branch: 'docs/webhooks-and-export-retries',
+      ageHours: 0.35,
+      blockedBy: ['task-webhook-signing', 'task-export-retry'],
+    },
+    {
+      id: 'task-retire-old-editor',
+      intent: 'Retire the old editor route once the banner has pointed people to the new one.',
+      title: 'Retire the old editor route',
+      repo: paywall,
+      size: 'small',
+      stage: 'queued',
+      reason:
+        'waiting for “Banner for the old editor”, “Move through the paywall gallery with arrow keys” to finish',
+      branch: 'chore/retire-old-editor',
+      ageHours: 0.7,
+      blockedBy: ['task-old-banner', 'task-gallery-shortcuts'],
+      gate: {
+        kind: 'question',
+        purpose: 'failure',
+        title: '“Banner for the old editor” was cancelled',
+        body: 'This task was waiting for it to finish. Retry to keep waiting on “Move through the paywall gallery with arrow keys” only, wait for another task instead, or cancel this one.',
+      },
+    },
+    {
+      id: 'task-gallery-shortcuts',
+      intent: 'Arrow keys should move between paywalls in the gallery.',
+      title: 'Move through the paywall gallery with arrow keys',
+      repo: paywall,
+      size: 'small',
+      priority: 'low',
+      stage: 'planning',
+      reason: 'planning the phases',
+      branch: 'feat/gallery-arrow-keys',
+      ageHours: 0.8,
+      runs: [{ role: 'planner', minutes: 0, summary: '' }],
+    },
+    {
+      id: 'task-webhook-signing',
+      intent: 'Sign outgoing webhooks so customers can verify them.',
+      title: 'Sign outgoing webhooks',
+      repo: paywall,
+      size: 'small',
+      priority: 'high',
+      stage: 'planning',
+      reason: 'planning the phases',
+      branch: 'feat/webhook-signing',
+      ageHours: 0.4,
+      runs: [{ role: 'planner', minutes: 0, summary: '' }],
     },
     {
       id: 'task-duplicate',
@@ -919,6 +1288,22 @@ function seed() {
       ageHours: 5,
       spec: {
         goal: 'Every framework command declares its arguments and help text in one place, so the CLI, the docs and the agents read the same definition.',
+        plan: [
+          {
+            title: 'Define the command schema',
+            detail: 'One declaration for arguments, flags and help text.',
+          },
+          {
+            title: 'Port the existing commands',
+            detail: 'Move every command onto the schema without changing behaviour.',
+          },
+          {
+            title: 'Generate docs and help',
+            detail: 'The CLI help and the docs page read the same definition.',
+          },
+          { title: 'Expose it to agents', detail: 'The MCP server lists commands from the schema.' },
+          { title: 'Verify every command', detail: 'Snapshot the help output and run each command once.' },
+        ],
         behaviour: [
           '`superwall help <command>` prints generated help.',
           'Unknown flags fail with the closest suggestion.',
@@ -1069,7 +1454,10 @@ function seed() {
       reason: 'building',
       branch: 'feat/mcp-stream-tools',
       ageHours: 1,
-      runs: [{ role: 'triage', minutes: 0.2, summary: 'Small.' }],
+      runs: [
+        { role: 'triage', minutes: 0.2, summary: 'Small.' },
+        { role: 'builder', minutes: 4, summary: 'Streaming the tool results.' },
+      ],
     },
     {
       id: 'task-effect-orm',
@@ -1102,6 +1490,7 @@ function seed() {
       title: 'Fall back to a cheaper model near the usage limit',
       repo: kanna,
       size: 'small',
+      priority: 'low',
       stage: 'awaiting_review',
       reason: 'built, checked and ready for review',
       branch: 'feat/usage-aware-defaults',
@@ -1178,14 +1567,59 @@ function seed() {
   ];
 
   const log = new EventLog(join(DATA, 'shinsa.sqlite'));
+  const timeline = buildEvents(tasks, areas, [paywall, kanna, docs, prints]);
   let seq = 0;
-  for (const { at, event } of buildEvents(tasks, areas, [paywall, kanna, docs, prints])) {
-    log.appendEvents([event], seq, at);
+  for (const { at, event } of timeline) {
+    log.commit([event], [], seq, at);
     seq += 1;
   }
   log.close();
+  const transcripts = join(DATA, 'transcripts');
+  mkdirSync(transcripts, { recursive: true });
+  const runTimes = listRunTimes(tasks, timeline);
+  for (const [runId, times] of runTimes) {
+    if (times.role === 'triage') continue;
+    const live = times.endedAt === null;
+    const events = buildRunEvents(times, live);
+    writeTranscript(transcripts, runId, spreadEvents(events, times.startedAt, times.endedAt ?? NOW - MINUTE));
+  }
+  const session =
+    Bun.env.SHINSA_SEED_SESSION ??
+    join(
+      homedir(),
+      '.claude/projects/-Users-christo-Developer-Projects-kanna/b01ee811-357f-4a18-9fc5-329fe21c81fd.jsonl'
+    );
+  if (existsSync(session)) {
+    const evidence = join(DATA, 'evidence');
+    mkdirSync(evidence, { recursive: true });
+    let images = 0;
+    const entries = convertClaudeSession(readFileSync(session, 'utf8'), (data, mediaType) => {
+      images += 1;
+      const file = `seed-image-${images}.${mediaType.split('/')[1] ?? 'png'}`;
+      writeFileSync(join(evidence, file), Buffer.from(data, 'base64'));
+      return `/api/evidence/${file}`;
+    });
+    const window = runTimes.find(([runId]) => runId === 'task-embedded-chat-run-2')?.[1];
+    const first = entries[0]?.at ?? 0;
+    const span = Math.max(1, (entries.at(-1)?.at ?? first) - first);
+    const fitted = window
+      ? entries.map((entry) => ({
+          ...entry,
+          at:
+            window.startedAt +
+            Math.round(((entry.at - first) / span) * ((window.endedAt ?? NOW) - window.startedAt)),
+        }))
+      : entries;
+    writeFileSync(
+      join(transcripts, 'task-embedded-chat-run-2.jsonl'),
+      `${fitted.map((entry) => JSON.stringify(entry)).join('\n')}\n`
+    );
+    console.info(`Seeded a crowded chat with ${entries.length} entries from ${session}`);
+  }
   console.info(`Seeded ${tasks.length} tasks into ${DATA}`);
-  console.info(`Run: SHINSA_DATA_DIR=${DATA} SHINSA_INSPECT=1 SHINSA_PORT=5190 bun run --cwd apps/cli start`);
+  console.info(
+    `Run: SHINSA_DATA_DIR=${DATA} SHINSA_INSPECT=1 SHINSA_PORT=5190 bun run --cwd apps/server start`
+  );
 }
 
 seed();
