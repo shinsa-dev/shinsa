@@ -26,12 +26,14 @@ afterEach(() => {
 function setUp(preferences: Partial<NotificationPreferences>) {
   const plays: [string, number][] = [];
   const notices: DecisionNotice[] = [];
+  const page = { quiet: false };
   const watcher = new AttentionWatcher({
     preferences: () => ({ ...DEFAULT_PREFERENCES, ...preferences }),
     play: (soundId, count) => plays.push([soundId, count]),
     notify: (notice) => notices.push(notice),
+    quiet: () => page.quiet,
   });
-  return { watcher, plays, notices };
+  return { watcher, plays, notices, page };
 }
 
 function state(gateIds: string[], patch = {}) {
@@ -53,6 +55,21 @@ function state(gateIds: string[], patch = {}) {
     patch,
   });
 }
+
+describe('a quiet page', () => {
+  it('neither chimes nor notifies while the desktop app has them, and does not ring them later', () => {
+    const { watcher, plays, notices, page } = setUp({ sound: 'always', notify: 'always' });
+    watcher.observe(state([]));
+    page.quiet = true;
+    watcher.observe(state(['g-1']));
+    page.quiet = false;
+    watcher.observe(state(['g-1']));
+    expect(plays).toEqual([]);
+    expect(notices).toEqual([]);
+    watcher.observe(state(['g-1', 'g-2']));
+    expect(notices.map((notice) => notice.gateId)).toEqual(['g-2']);
+  });
+});
 
 describe('chiming and notifying on new decisions', () => {
   it('stays quiet for the first snapshot after a load, then chimes once per burst', () => {

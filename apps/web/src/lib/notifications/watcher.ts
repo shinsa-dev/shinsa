@@ -7,6 +7,7 @@ interface AttentionAlerts {
   preferences: () => NotificationPreferences;
   play: (soundId: NotificationPreferences['soundId'], count: number) => void;
   notify: (notice: DecisionNotice) => void;
+  quiet: () => boolean;
 }
 
 export class AttentionWatcher {
@@ -21,7 +22,7 @@ export class AttentionWatcher {
     const now = Date.now();
     const fresh = listNewDecisions(this.#seen, state, now);
     this.#seen = listOpenGateIds(state);
-    if (fresh.length === 0) return;
+    if (fresh.length === 0 || this.#alerts.quiet()) return;
     const preferences = this.#alerts.preferences();
     if (shouldAlert(preferences.sound, document)) this.#alerts.play(preferences.soundId, fresh.length);
     if (!shouldAlert(preferences.notify, document)) return;

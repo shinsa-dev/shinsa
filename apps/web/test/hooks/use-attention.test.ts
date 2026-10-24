@@ -4,6 +4,7 @@ import { useAttention } from '@/hooks/use-attention.ts';
 import { writeNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { installDesktop } from '../support/desktop.ts';
 import { installAudio, installNotifications } from '../support/notifications.ts';
+import { pushSurfaces, startFakeServer, stopFakeServer } from '../support/server.ts';
 import { createGate, createShinsaState, createTask } from '../support/state.ts';
 
 function meta(name: string) {
@@ -76,6 +77,41 @@ describe('useAttention', () => {
     expect(audio.created).toHaveLength(1);
     notifications.shown[0]?.click();
     expect(location.pathname).toBe('/tasks/t-1');
+  });
+
+  it('in a browser or Floaty, plays no sound and shows no notification while the desktop app is connected, but keeps the count', () => {
+    const audio = installAudio();
+    const notifications = installNotifications('granted');
+    restores.push(audio.restore, notifications.restore, stopFakeServer);
+    startFakeServer();
+    pushSurfaces(true);
+    restores.push(() => pushSurfaces(false));
+    writeNotificationPreferences({ sound: 'always', notify: 'always' });
+    const { rerender } = renderHook(({ state }) => useAttention(state), {
+      initialProps: { state: withGates() },
+    });
+    rerender({ state: withGates(question('g-1')) });
+    expect(notifications.shown).toEqual([]);
+    expect(audio.created).toEqual([]);
+    expect(document.title).toBe('[1] Shinsa');
+    expect([meta('floaty:status'), meta('floaty:badge')]).toEqual(['waiting', '1']);
+  });
+
+  it('in the desktop app, keeps notifying while it is the connected app', () => {
+    const notifications = installNotifications('granted');
+    const desktop = installDesktop();
+    restores.push(notifications.restore, desktop.restore, stopFakeServer);
+    startFakeServer();
+    pushSurfaces(true);
+    restores.push(() => pushSurfaces(false));
+    writeNotificationPreferences({ notify: 'always' });
+    const { rerender } = renderHook(({ state }) => useAttention(state), {
+      initialProps: { state: withGates() },
+    });
+    rerender({ state: withGates(question('g-1')) });
+    expect(desktop.notices.map((notice) => notice.tag)).toEqual(['g-1']);
+    expect(desktop.badges.at(-1)).toBe(1);
+    expect(document.title).toBe('[1] Shinsa');
   });
 
   it('in the desktop app, hands the notification and the Dock badge to the app, never to the browser', () => {

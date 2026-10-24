@@ -19,6 +19,8 @@ export const TEST_BOTH = 'Play the sound and show a test notification';
 
 export const UNSUPPORTED = 'This browser cannot show notifications.';
 
+export const HANDLED_BY_APP = 'The Shinsa app is open and handles notifications, so this page stays quiet.';
+
 async function requestPermissionWithToast() {
   const permission = await requestNotificationPermission();
   if (permission === 'granted') return true;

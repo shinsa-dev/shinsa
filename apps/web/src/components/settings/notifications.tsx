@@ -1,7 +1,10 @@
 import { Button } from '@shinsa/ui/components/button';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { useDesktopConnected } from '@/lib/connection/socket.ts';
+import { isPageQuiet } from '@/lib/desktop.ts';
 import {
+  HANDLED_BY_APP,
   needsTestNotification,
   TEST_BOTH,
   TEST_SOUND,
@@ -16,15 +19,24 @@ import {
   useNotificationPreferences,
 } from '@/lib/preferences/notifications.ts';
 import { ALERT_ITEMS, SOUND_ITEMS } from '@/lib/settings.ts';
-import { SettingRow, SettingsGroup } from './group.tsx';
+import { SettingRow, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 export function NotificationGroup({
   preferences,
+  quiet = false,
   onChange,
 }: {
   preferences: NotificationPreferences;
+  quiet?: boolean;
   onChange: (patch: Partial<NotificationPreferences>) => void;
 }) {
+  if (quiet) {
+    return (
+      <SettingsGroup title='Notifications'>
+        <SettingsEmpty>{HANDLED_BY_APP}</SettingsEmpty>
+      </SettingsGroup>
+    );
+  }
   return (
     <SettingsGroup title='Notifications'>
       <SettingRow title='Play a sound'>
@@ -67,6 +79,7 @@ export function NotificationSettings() {
   return (
     <NotificationGroup
       preferences={useNotificationPreferences()}
+      quiet={isPageQuiet(useDesktopConnected())}
       onChange={(patch) => void updateNotifications(patch)}
     />
   );
