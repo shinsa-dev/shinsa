@@ -9,7 +9,6 @@ export function TokenText({ text, tokens }: { text: string; tokens: Token[] | un
         <span
           // biome-ignore lint/suspicious/noArrayIndexKey: tokens have no identity beyond their position
           key={index}
-          className='code-token'
           style={token.style}
         >
           {token.content}

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 import type { ChatTool } from '@shinsa/core';
 import {
   CODE_ARGUMENTS,
-  countRows,
   formatStructured,
   isLongMarkdown,
   parseNumbered,
@@ -11,7 +10,6 @@ import {
   splitArguments,
   splitLines,
 } from '@/lib/chat/tool-output.ts';
-import { resolveDiffRows } from '@/lib/code/edit-diff.ts';
 import { commandTool, createToolCall, readTool } from '../../support/chat.ts';
 
 const fetchTool: ChatTool = { kind: 'fetch', url: 'https://example.com', query: null, prompt: null };
@@ -103,11 +101,7 @@ describe('parseNumbered', () => {
   });
 });
 
-describe('countRows and resolveEditStats', () => {
-  it('counts added and removed lines', () => {
-    expect(countRows(resolveDiffRows('a\nb', 'a\nc\nd'))).toEqual({ added: 2, removed: 1 });
-  });
-
+describe('resolveEditStats', () => {
   it('sums the lines an edit adds and removes across its hunks', () => {
     const edit: ChatTool = {
       kind: 'edit',

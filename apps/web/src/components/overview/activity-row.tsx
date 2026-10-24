@@ -1,4 +1,4 @@
-import type { Activity, ShinsaState } from '@shinsa/core';
+import type { Activity, ReviewComment, ShinsaState } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { InAppLink } from '@/components/links/link.tsx';
 import { EvidenceItem } from '@/components/overview/evidence-item.tsx';
@@ -7,6 +7,7 @@ import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { type ActivityActor, resolveActivityActor, resolveActivityGlyph } from '@/lib/overview/activity.ts';
 import { isVisualEvidence } from '@/lib/overview/evidence.ts';
+import { describeCommentPlace } from '@/lib/review/draft.ts';
 import { resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
 function ActorLabel({ state, actor }: { state: ShinsaState; actor: ActivityActor }) {
@@ -18,6 +19,20 @@ function ActorLabel({ state, actor }: { state: ShinsaState; actor: ActivityActor
     >
       {actor.label}
     </InAppLink>
+  );
+}
+
+function SentComments({ comments }: { comments: ReviewComment[] }) {
+  return (
+    <ul className='flex flex-col gap-1 pt-0.5'>
+      {comments.map((comment) => (
+        <li key={`${describeCommentPlace(comment)}:${comment.text}`} className='flex flex-col gap-px text-xs'>
+          <span className='font-mono text-2xs text-fg-2'>{describeCommentPlace(comment)}</span>
+          {comment.text && <span className='text-fg-4'>{comment.text}</span>}
+          {comment.suggestion && <span className='text-fg-2'>Suggested change</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -49,6 +64,7 @@ export function ActivityRow({
             <Markdown text={entry.detail} className='text-fg-4 text-xs' />
           </div>
         )}
+        {entry.comments && entry.comments.length > 0 && <SentComments comments={entry.comments} />}
         {run && (
           <button
             type='button'

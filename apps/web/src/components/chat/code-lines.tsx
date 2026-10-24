@@ -4,7 +4,6 @@ import * as React from 'react';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
 import { TokenText } from '@/components/text/code-fence.tsx';
 import { splitLines } from '@/lib/chat/tool-output.ts';
-import type { DiffRow } from '@/lib/code/edit-diff.ts';
 import { type Token, useLanguageTokens } from '@/lib/code/highlight.ts';
 import { formatCount } from '@/lib/format/count.ts';
 
@@ -12,12 +11,9 @@ export interface CodeLine {
   text: string;
   tokens?: Token[];
   number?: number | null;
-  kind?: DiffRow['kind'];
 }
 
 const VISIBLE_LINES = 14;
-
-const DIFF_MARK: Record<DiffRow['kind'], string> = { add: '+', remove: '−', context: ' ' };
 
 const SHOW_MORE =
   'flex h-7 w-full cursor-pointer items-center justify-center gap-1 border-border border-t text-2xs text-fg-2 transition-colors duration-150 hover:bg-bg-a1 hover:text-fg-4 active:bg-bg-a1 active:text-fg-4';
@@ -38,7 +34,7 @@ export function CodeLines({
   tone = 'default',
 }: {
   lines: CodeLine[];
-  gutter?: 'numbers' | 'diff' | null;
+  gutter?: 'numbers' | null;
   wrap?: boolean;
   tone?: 'default' | 'failed';
 }) {
@@ -54,30 +50,11 @@ export function CodeLines({
           )}
         >
           {shown.map((line, index) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
-              key={index}
-              className={cn(
-                'flex',
-                line.kind === 'add' && 'bg-green-a1',
-                line.kind === 'remove' && 'bg-red-a1'
-              )}
-            >
+            // biome-ignore lint/suspicious/noArrayIndexKey: lines are positional
+            <div key={index} className='flex'>
               {gutter === 'numbers' && (
                 <span className='w-11 shrink-0 select-none pr-3 text-right text-fg-1 tabular-nums'>
                   {line.number ?? ''}
-                </span>
-              )}
-              {gutter === 'diff' && (
-                <span
-                  className={cn(
-                    'w-7 shrink-0 select-none text-center',
-                    line.kind === 'add' && 'text-green-text',
-                    line.kind === 'remove' && 'text-red-text',
-                    (line.kind ?? 'context') === 'context' && 'text-fg-1'
-                  )}
-                >
-                  {DIFF_MARK[line.kind ?? 'context']}
                 </span>
               )}
               <span

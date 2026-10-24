@@ -9,6 +9,9 @@ export const ROW_INDENT = 'ps-6.25';
 
 export const SHIMMER_LINE = 'block truncate leading-normal';
 
+export const SELECTED_WASH =
+  'outline-2 outline-transparent transition-colors duration-500 data-focused:bg-primary-a1 data-focused:outline-primary-a1';
+
 const LINE = 'flex h-5 min-w-0 max-w-full items-center gap-px self-start text-left text-xs';
 
 const LINE_BUTTON = `group/row ${LINE} cursor-pointer`;

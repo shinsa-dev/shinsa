@@ -5,13 +5,13 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CodeLines, DetailBlock, HighlightedBlock, ShowMoreButton } from '@/components/chat/code-lines.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { CodeDiff } from '@/components/text/code-diff.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { humanize } from '@/lib/chat/tool-describe.ts';
 import {
   CODE_ARGUMENTS,
-  countRows,
   formatStructured,
   isLongMarkdown,
   parseNumbered,
@@ -19,8 +19,8 @@ import {
   splitArguments,
   splitLines,
 } from '@/lib/chat/tool-output.ts';
-import { resolveDiffRows } from '@/lib/code/edit-diff.ts';
 import { useLanguageTokens, useTokens } from '@/lib/code/highlight.ts';
+import { countLineChanges } from '@/lib/code/line-changes.ts';
 
 const TODO_MARK: Record<ChatTodoStatus, { icon: IconName; className: string; label: string }> = {
   completed: { icon: 'IconCheckCircle2', className: 'text-primary-text', label: 'Done' },
@@ -123,17 +123,13 @@ function EditDiff({
   path: string;
   labelled: boolean;
 }) {
-  const rows = React.useMemo(() => resolveDiffRows(before, after), [before, after]);
-  const oldTokens = useTokens(before, path);
-  const newTokens = useTokens(after, path);
-  const lines = rows.map((row) => ({
-    text: row.text,
-    kind: row.kind,
-    tokens: row.kind === 'remove' ? oldTokens?.[row.oldIndex ?? -1] : newTokens?.[row.newIndex ?? -1],
-  }));
+  const source = React.useMemo(
+    () => ({ kind: 'files' as const, path, before, after }),
+    [path, before, after]
+  );
   return (
-    <DetailBlock label={labelled && <DiffStats {...countRows(rows)} />} copy={after}>
-      <CodeLines lines={lines} gutter='diff' />
+    <DetailBlock label={labelled && <DiffStats {...countLineChanges(before, after)} />} copy={after}>
+      <CodeDiff source={source} />
     </DetailBlock>
   );
 }
@@ -178,17 +174,15 @@ function WriteDetail({
   content: string;
   running: boolean;
 }) {
-  const tokens = useTokens(content || null, path);
+  const source = React.useMemo(
+    () => ({ kind: 'files' as const, path, before: null, after: content }),
+    [path, content]
+  );
   if (!content) return <ToolResult call={call} running={running} />;
-  const lines = splitLines(content).map((text, index) => ({
-    text,
-    number: index + 1,
-    tokens: tokens?.[index],
-  }));
   return (
     <>
       <DetailBlock copy={content}>
-        <CodeLines lines={lines} gutter='numbers' />
+        <CodeDiff source={source} numbered />
       </DetailBlock>
       {call.failed && <ToolResult call={call} running={running} />}
     </>

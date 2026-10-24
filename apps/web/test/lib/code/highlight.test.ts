@@ -56,14 +56,30 @@ describe('resolveFenceLanguage', () => {
 });
 
 describe('requestTokens', () => {
-  it('highlights each line with a light and a dark colour', async () => {
+  it('colours each line from the --code-* tokens the editor reads, so both themes follow', async () => {
     const tokens = await requestTokens('const a = 1;\nlet b', 'typescript');
     expect(tokens).toHaveLength(2);
     expect(tokens?.[0]?.map((token) => token.content).join('')).toBe('const a = 1;');
-    expect(tokens?.[0]?.[0]?.style as Record<string, string>).toEqual({
-      '--shiki-light': '#D73A49',
-      '--shiki-dark': '#F47067',
-    });
+    expect(tokens?.[0]?.map((token) => [token.content, token.style?.color])).toEqual([
+      ['const', 'var(--code-keyword)'],
+      [' a ', 'var(--fg-4)'],
+      ['=', 'var(--code-punctuation)'],
+      [' ', 'var(--fg-4)'],
+      ['1', 'var(--code-number)'],
+      [';', 'var(--code-punctuation)'],
+    ]);
+  });
+
+  it('marks added and removed lines of a diff in the tones, and links underlined', async () => {
+    const diff = await requestTokens('-old\n+new', 'diff');
+    expect(diff?.map((line) => line.map((token) => token.style?.color))).toEqual([
+      ['var(--red-text)'],
+      ['var(--green-text)'],
+    ]);
+    const markdown = await requestTokens('[docs](https://example.com)', 'markdown');
+    expect(markdown?.[0]?.find((token) => token.content === 'https://example.com')?.style?.color).toBe(
+      'var(--code-function)'
+    );
   });
 
   it('reuses the same work for the same code and language', () => {

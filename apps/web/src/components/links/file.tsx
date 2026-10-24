@@ -1,8 +1,10 @@
 import type { Task } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
 import { TooltipLabel } from '@shinsa/ui/components/tooltip';
 import { cn } from '@shinsa/ui/lib/utils';
 import { InAppLink } from '@/components/links/link.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import { formatLineRange } from '@/lib/format/count.ts';
 import { hasChanges } from '@/lib/tasks/tabs.ts';
 import { resolveTaskPath } from '@/router.ts';
@@ -43,8 +45,9 @@ export function FileLink({
           line,
           end,
         })}
-        className='group/link cursor-pointer no-underline outline-none'
+        className='group/link inline-flex cursor-pointer items-center gap-1 align-bottom no-underline outline-none'
       >
+        <Icon name={resolveFileIcon(path)} size='sm' />
         <code
           className={cn(
             FILE_CODE,

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import type { ThemeRegistration } from 'shiki';
 
 export interface Token {
   content: string;
@@ -87,18 +88,87 @@ const MAX_HIGHLIGHTED_CHARACTERS = 400_000;
 
 const cache = new Map<string, Promise<Token[][] | null>>();
 
+const SCOPE_TOKENS: Record<string, string[]> = {
+  keyword: [
+    'keyword',
+    'storage.type',
+    'storage.modifier',
+    'keyword.operator.new',
+    'keyword.operator.expression',
+    'keyword.operator.logical.python',
+    'variable.language',
+  ],
+  string: [
+    'string',
+    'string.regexp',
+    'constant.character',
+    'punctuation.definition.string',
+    'markup.inline.raw',
+    'markup.fenced_code',
+  ],
+  number: ['constant.numeric', 'constant.language', 'support.constant'],
+  comment: ['comment', 'punctuation.definition.comment', 'string.quoted.docstring'],
+  function: [
+    'entity.name.function',
+    'support.function',
+    'meta.function-call entity.name.function',
+    'variable.function',
+  ],
+  type: [
+    'entity.name.type',
+    'entity.name.class',
+    'entity.name.namespace',
+    'entity.other.inherited-class',
+    'support.type',
+    'support.class',
+    'storage.type.primitive',
+  ],
+  property: [
+    'variable.other.property',
+    'variable.other.object.property',
+    'support.type.property-name',
+    'meta.object-literal.key',
+    'entity.other.attribute-name',
+  ],
+  tag: ['entity.name.tag', 'markup.heading', 'entity.name.section', 'punctuation.definition.heading'],
+  punctuation: ['punctuation', 'meta.brace', 'keyword.operator', 'storage.type.function.arrow'],
+  meta: ['meta.decorator', 'punctuation.decorator', 'meta.preprocessor', 'keyword.control.directive'],
+};
+
+export const CODE_THEME: ThemeRegistration = {
+  name: 'shinsa-code',
+  type: 'light',
+  colors: { 'editor.foreground': 'var(--fg-4)', 'editor.background': 'transparent' },
+  tokenColors: [
+    ...Object.entries(SCOPE_TOKENS).map(([token, scope]) => ({
+      scope,
+      settings: { foreground: `var(--code-${token})` },
+    })),
+    { scope: 'meta.template.expression', settings: { foreground: 'var(--fg-4)' } },
+    {
+      scope: 'markup.underline.link',
+      settings: { foreground: 'var(--code-function)', fontStyle: 'underline' },
+    },
+    {
+      scope: ['markup.inserted', 'punctuation.definition.inserted'],
+      settings: { foreground: 'var(--green-text)' },
+    },
+    {
+      scope: ['markup.deleted', 'punctuation.definition.deleted'],
+      settings: { foreground: 'var(--red-text)' },
+    },
+    { scope: 'invalid', settings: { foreground: 'var(--red-text)' } },
+  ],
+};
+
 async function tokenize(code: string, language: string): Promise<Token[][] | null> {
   const { codeToTokens } = await import('shiki');
   const result = await codeToTokens(code, {
     lang: language as Parameters<typeof codeToTokens>[1]['lang'],
-    themes: { light: 'github-light', dark: 'github-dark-dimmed' },
-    defaultColor: false,
+    theme: CODE_THEME,
   });
   return result.tokens.map((line) =>
-    line.map((token) => ({
-      content: token.content,
-      style: token.htmlStyle as React.CSSProperties | undefined,
-    }))
+    line.map((token) => ({ content: token.content, style: token.color ? { color: token.color } : undefined }))
   );
 }
 

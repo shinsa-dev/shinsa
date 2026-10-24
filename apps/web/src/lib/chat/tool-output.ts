@@ -1,6 +1,6 @@
 import type { ChatTool } from '@shinsa/core';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
-import { type DiffRow, resolveDiffRows } from '@/lib/code/edit-diff.ts';
+import { countLineChanges } from '@/lib/code/line-changes.ts';
 
 export const CODE_ARGUMENTS: ReadonlySet<string> = new Set(['code', 'function', 'script', 'js']);
 
@@ -63,17 +63,10 @@ export function parseNumbered(text: string) {
   };
 }
 
-export function countRows(rows: DiffRow[]) {
-  return {
-    added: rows.filter((row) => row.kind === 'add').length,
-    removed: rows.filter((row) => row.kind === 'remove').length,
-  };
-}
-
 export function resolveEditStats(tool: ChatTool) {
   if (tool.kind !== 'edit' || tool.hunks.length === 0) return null;
   return tool.hunks
-    .map((hunk) => countRows(resolveDiffRows(hunk.before, hunk.after)))
+    .map((hunk) => countLineChanges(hunk.before, hunk.after))
     .reduce((total, next) => ({ added: total.added + next.added, removed: total.removed + next.removed }));
 }
 
