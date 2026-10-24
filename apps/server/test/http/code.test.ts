@@ -77,6 +77,17 @@ describe('code reads', () => {
     expect(refs.commits.map((commit) => commit.subject)).toEqual(['feat: phase one']);
   });
 
+  test('takes the task’s handle as well as its id', async () => {
+    const { engine, taskId, base, head } = await startWithTask();
+    const handle = engine.state.tasks[taskId]?.handle ?? '';
+    expect(handle).not.toBe('');
+    const refs = (await (await fetch(`${base}/api/tasks/${handle}/refs`)).json()) as TaskRefs;
+    expect(refs.head).toBe(head);
+    const blob = await fetch(`${base}/api/tasks/${handle}/blob?path=src/app.ts&ref=${head}`);
+    expect(blob.status).toBe(200);
+    expect((await fetch(`${base}/api/tasks/NOPE-1/refs`)).status).toBe(404);
+  });
+
   test('a read at a named commit is immutable and answered from the browser cache the second time', async () => {
     const { call, head } = await startWithTask();
     const first = await call(`paths?ref=${head}`);
@@ -189,6 +200,7 @@ describe('code reads', () => {
     expect((await json<{ matches: unknown[] }>(`search?ref=${head}&q=val.e&regex=1`)).matches).toHaveLength(
       1
     );
+    expect((await json<{ matches: unknown[] }>(`search?ref=${head}&q=valu&word=1`)).matches).toEqual([]);
     expect((await call(`search?ref=${head}`)).status).toBe(400);
     expect((await call(`search?ref=${head}&q=${'x'.repeat(CODE_LIMITS.queryLength + 1)}`)).status).toBe(400);
     for (const glob of ['-x', ':(top)*', 'x'.repeat(201)]) {

@@ -55,11 +55,11 @@ describe('settings', () => {
   test('a value is read as JSON when it is JSON and as text otherwise', async () => {
     const fake = createFakeClient();
     expect((await runSpec(fake, ['settings', 'set', 'maxFixRounds', '4'])).text).toBe('Set maxFixRounds.');
-    await runSpec(fake, ['settings', 'set', 'agentModels', '{"builder":"opus"}']);
+    await runSpec(fake, ['settings', 'set', 'agentModels', '{"agent":"opus"}']);
     await runSpec(fake, ['settings', 'set', 'mergeMethod', 'squash']);
     expect(fake.sent).toEqual([
       { type: 'settings.change', patch: { maxFixRounds: 4 } },
-      { type: 'settings.change', patch: { agentModels: { builder: 'opus' } } },
+      { type: 'settings.change', patch: { agentModels: { agent: 'opus' } } },
       { type: 'settings.change', patch: { mergeMethod: 'squash' } },
     ]);
   });
@@ -307,6 +307,8 @@ describe('repositories', () => {
           '--checks',
           'bun lint',
           '--waive-checks',
+          '--workspace',
+          'gitbutler',
         ])
       ).text
     ).toBe('Saved the repository.');
@@ -322,6 +324,7 @@ describe('repositories', () => {
           projectId: 'project-1',
           checkCommands: ['bun test', 'bun lint'],
           checksWaived: true,
+          workspace: 'gitbutler',
         },
       },
       {

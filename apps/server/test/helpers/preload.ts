@@ -32,6 +32,8 @@ process.env.FAKE_GH_REGISTRY = ghRegistry;
 process.env.FAKE_CODEX_REGISTRY = codexRegistry;
 process.env.FAKE_EUNOE_REGISTRY = eunoeRegistry;
 process.env.FAKE_MCP_REGISTRY = mcpRegistry;
+process.env.FAKE_BUT_HOME = join(home, 'but');
+mkdirSync(process.env.FAKE_BUT_HOME);
 delete process.env.CODEX_EXECUTABLE;
 
 function signal(pid: number, name: NodeJS.Signals | 0) {

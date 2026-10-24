@@ -3,7 +3,8 @@ import {
   CODE_LIMITS,
   DomainError,
   resolveImageType,
-  resolveRoundBase,
+  resolvePullRequestBase,
+  selectTaskByReference,
   type TaskDiff,
   type TaskRefs,
   WORKING_REF,
@@ -23,7 +24,7 @@ import {
   searchFiles,
 } from '../git/files.ts';
 import { ObjectCache } from '../git/objects.ts';
-import { resolveTaskRefs } from '../git/task-refs.ts';
+import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { assertRepoPath, resolveInside } from './paths.ts';
 import type { ApiRoute } from './routes.ts';
@@ -71,22 +72,27 @@ function readSearch(url: URL): SearchQuery {
     );
   if (glob && (glob.length > MAX_GLOB_LENGTH || /^[-:]|\0/.test(glob)))
     throw new DomainError('glob_invalid', 'Name the files to search as a pattern such as src/**/*.ts.');
-  return { query, regex: readFlag(url, 'regex'), caseSensitive: readFlag(url, 'case'), glob };
+  return {
+    query,
+    regex: readFlag(url, 'regex'),
+    caseSensitive: readFlag(url, 'case'),
+    wholeWord: readFlag(url, 'word'),
+    glob,
+  };
 }
 
 export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): ApiRoute[] {
-  function selectCodeTask(taskId: string): CodeTask | null {
-    const task = engine.state.tasks[taskId];
+  function selectCodeTask(reference: string): CodeTask | null {
+    const task = selectTaskByReference(engine.state, reference);
     const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
     if (!task || !repo || !existsSync(repo.path)) return null;
-    const worktree = task.worktreePath && existsSync(task.worktreePath) ? task.worktreePath : null;
-    return { task, repoPath: repo.path, worktree };
+    return { task, repoPath: repo.path, worktree: resolveTaskCheckout(task) };
   }
 
   function resolveRefs(found: CodeTask, signal: AbortSignal) {
     const repo = engine.state.repos[found.task.repoId ?? ''];
     if (!repo) throw new DomainError('code_unavailable', 'This task has no repository.');
-    return resolveTaskRefs(repo, found.task, resolveRoundBase(found.task), signal);
+    return resolveTaskRefs(repo, found.task, resolvePullRequestBase(engine.state, found.task), signal);
   }
 
   async function resolveRef(
@@ -158,7 +164,7 @@ export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): Api
       method: 'GET',
       pattern: new RegExp(`^/api/tasks/([^/]+)/${name}$`),
       respond: ([, id = ''], request) => {
-        const found = selectCodeTask(id);
+        const found = selectCodeTask(decodeURIComponent(id));
         if (!found)
           return Promise.resolve(respondError('code_unavailable', 'This task has no code to read.', 404));
         return respond(found, request, new URL(request.url));

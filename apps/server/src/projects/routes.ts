@@ -4,6 +4,7 @@ import { readJsonObject } from '../http/body.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import { type LoginResolver, listLocalRepos, type RootSource, upsertRepo } from '../repos/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
+import { listWorkspaceSupport } from '../workspaces/index.ts';
 import { resolveProjectFolder } from './folders.ts';
 
 interface ProjectChangesContext {
@@ -94,6 +95,12 @@ export function createProjectRoutes(context: ProjectRoutesContext): ApiRoute[] {
       method: 'GET',
       pattern: /^\/api\/repos\/local$/,
       respond: async () => Response.json({ repos: listLocalRepoViews(engine, await roots.listRoots()) }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/repos\/workspaces$/,
+      respond: async () =>
+        Response.json({ support: await listWorkspaceSupport(Object.values(engine.state.repos)) }),
     },
     {
       method: 'POST',

@@ -12,6 +12,8 @@ import {
   SETTINGS_KEYS,
   type Settings,
   type UserCommand,
+  WORKSPACE_MODES,
+  type WorkspaceMode,
 } from '@shinsa/core';
 import { resolveProjectFolder } from '../projects/folders.ts';
 import type { SurfaceClient } from './client.ts';
@@ -87,6 +89,7 @@ async function buildRepoPatch(client: SurfaceClient, values: Values): Promise<Re
     ...(values.project === undefined ? {} : { projectId }),
     ...(values.checks === undefined ? {} : { checkCommands: values.checks as string[] }),
     ...(typeof values.waiveChecks === 'boolean' ? { checksWaived: values.waiveChecks } : {}),
+    ...(values.workspace ? { workspace: readValue(values, 'workspace') as WorkspaceMode } : {}),
   };
 }
 
@@ -197,7 +200,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['settings', 'set'],
-    summary: 'Change a setting. The value is JSON (true, 3, null, {"builder":"codex"}) or plain text.',
+    summary: 'Change a setting. The value is JSON (true, 3, null, {"agent":"codex"}) or plain text.',
     command: 'settings.change',
     fields: [
       {
@@ -337,7 +340,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['repos', 'update'],
-    summary: "Change a repository's name, default branch, project or check commands.",
+    summary: "Change a repository's name, default branch, project, check commands or where agents work.",
     command: 'repo.update',
     fields: [
       REPO_FIELD,
@@ -353,6 +356,13 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         name: 'waiveChecks',
         kind: 'boolean',
         description: 'Work without checks. Only the human changes it.',
+      },
+      {
+        name: 'workspace',
+        kind: 'choice',
+        choices: WORKSPACE_MODES,
+        description:
+          'Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it.',
       },
     ],
     build: async (values, client) => ({

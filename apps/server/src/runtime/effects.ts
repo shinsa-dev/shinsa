@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import {
   evaluatePullRequestWatch,
-  isLaterRound,
   isSamePullRequest,
   isSamePullRequestWatch,
   isTaskSettled,
@@ -11,26 +10,17 @@ import {
   type PullRequest,
   type Repo,
   type RoundPullRequest,
-  resolveRoundBase,
+  resolvePullRequestBase,
   resolveTaskPipeline,
-  resolveTaskProject,
+  resolveTaskWorkspace,
   type ShinsaEffect,
-  selectFolderProject,
   type Task,
 } from '@shinsa/core';
 import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
 import { runChecks } from '../checks/index.ts';
-import type { ServerConfig } from '../config/index.ts';
-import {
-  createWorktree,
-  discardEdits,
-  pushBranch,
-  refreshWorktree,
-  removeIsolatedWorktrees,
-  removeWorktree,
-  resolveHead,
-} from '../git/index.ts';
+import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
+import { removeIsolatedWorktrees } from '../git/index.ts';
 import {
   createPullRequest,
   mergePullRequest,
@@ -48,8 +38,9 @@ import {
   upsertRepo,
   verifySetup,
 } from '../repos/index.ts';
-import type { TriageResolver } from '../triage/index.ts';
+import { resolveRepoProject, type TriageResolver } from '../triage/index.ts';
 import type { RepositoryFinder } from '../triage/message.ts';
+import { describeWorkspaceProblem, Workspaces } from '../workspaces/index.ts';
 import type { EffectContext, Engine } from './engine.ts';
 
 export interface EffectRunnerOptions {
@@ -58,6 +49,7 @@ export interface EffectRunnerOptions {
   resolveLogin?: LoginResolver;
   roots?: RootSource;
   watchIntervalMs?: number;
+  workspaces?: Workspaces;
 }
 
 const WATCH_INTERVAL_MS = 45_000;
@@ -106,6 +98,7 @@ export class EffectRunner {
   readonly #resolveLogin: LoginResolver;
   readonly #roots: RootSource;
   readonly #watchIntervalMs: number;
+  readonly #workspaces: Workspaces;
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
   readonly #taskSyncs = new Map<string, Promise<unknown>>();
   readonly #background = new Set<Promise<unknown>>();
@@ -129,6 +122,8 @@ export class EffectRunner {
     this.#resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
+    this.#workspaces =
+      options.workspaces ?? new Workspaces({ dataDir: config.dataDir, worktreesDir: config.worktreesDir });
   }
 
   apply(effect: ShinsaEffect, context: EffectContext): Promise<void> {
@@ -159,6 +154,8 @@ export class EffectRunner {
         return this.#watch(effect.taskId, context);
       case 'worktree.remove':
         return this.#removeWorktree(effect.taskId, context);
+      case 'scratch.remove':
+        return this.#removeScratch(effect.taskId);
       case 'briefing.request':
         this.#briefings.schedule();
         return Promise.resolve();
@@ -240,7 +237,7 @@ export class EffectRunner {
     if (!task || !repo || signal.aborted) return null;
     let read: PullRequestRead | null;
     try {
-      const wanted = resolveRoundBase(task) ?? repo.defaultBranch;
+      const wanted = resolvePullRequestBase(this.#engine.state, task) ?? repo.defaultBranch;
       if (task.pullRequest?.state === 'open' && task.pullRequest.base && task.pullRequest.base !== wanted) {
         await retargetPullRequest(repo, task.pullRequest.number, wanted, signal);
       }
@@ -325,9 +322,7 @@ export class EffectRunner {
 
   #registerRepo(task: Task, path: string | null, context: EffectContext) {
     if (!path) return Promise.resolve(null);
-    const state = this.#engine.state;
-    const projectId =
-      selectFolderProject(Object.values(state.projects), path)?.id ?? resolveTaskProject(state, task);
+    const projectId = resolveRepoProject(this.#engine.state, task, path);
     return upsertRepo(this.#engine, path, this.#resolveLogin, projectId, {
       id: `${context.key}:repo.register`,
     });
@@ -370,6 +365,16 @@ export class EffectRunner {
       { defaultBranch: needsWorktree(pipeline), checks: pipeline.includes('build') },
       context.signal
     );
+    if (needsWorktree(pipeline) && problems.every((problem) => problem.kind !== 'repository')) {
+      const mode = resolveTaskWorkspace(this.#engine.state, task);
+      const workspace = await describeWorkspaceProblem(
+        repo,
+        mode,
+        task.worktreePath !== null,
+        context.signal
+      );
+      if (workspace) problems.push(workspace);
+    }
     if (context.signal.aborted) return;
     await this.#engine.dispatch(
       { type: 'config.record', taskId: task.id, problems, ...(bind ? { repoId: repo.id } : {}) },
@@ -380,29 +385,16 @@ export class EffectRunner {
   async #createWorktree(taskId: string, context: EffectContext) {
     const { task, repo } = this.#requireTask(taskId);
     if (task.stage !== 'triage' || !task.branch) return;
-    if (task.worktreePath && existsSync(task.worktreePath)) {
-      if (task.phaseReports.length === 0 && isLaterRound(task))
-        await discardEdits(task.worktreePath, context.signal);
-      else if (task.phaseReports.length === 0 && !task.pullRequest)
-        await refreshWorktree(repo, task.worktreePath, context.signal);
-      if (context.signal.aborted) return;
-      await this.#engine.dispatch(
-        { type: 'worktree.ready', taskId, path: task.worktreePath, branch: task.branch },
-        { id: `${context.key}:worktree.ready` }
-      );
-      return;
-    }
-    const worktree = await createWorktree(
-      repo,
-      this.#config.worktreesDir,
-      taskId,
-      task.branch,
-      resolveRoundBase(task),
-      context.signal
-    );
+    const worktree = await this.#workspaces.resolve(task).prepare(repo, task, context.signal);
     if (context.signal.aborted) return;
     await this.#engine.dispatch(
-      { type: 'worktree.ready', taskId, path: worktree.path, branch: worktree.branch },
+      {
+        type: 'worktree.ready',
+        taskId,
+        path: worktree.path,
+        branch: worktree.branch,
+        ...(worktree.returnBranch === undefined ? {} : { returnBranch: worktree.returnBranch }),
+      },
       { id: `${context.key}:worktree.ready` }
     );
   }
@@ -412,7 +404,13 @@ export class EffectRunner {
     if (task.stage !== 'checking' || !task.worktreePath) return;
     await this.#runs.quiesce(taskId);
     const planChecks = task.plan?.document?.checks ?? [];
-    const results = await runChecks(repo, task.worktreePath, planChecks, context.signal);
+    const release = await this.#workspaces.resolve(task).claim(repo, task, context.signal);
+    let results: Awaited<ReturnType<typeof runChecks>>;
+    try {
+      results = await runChecks(repo, task.worktreePath, planChecks, context.signal);
+    } finally {
+      await release();
+    }
     if (context.signal.aborted) return;
     await this.#engine.dispatch(
       { type: 'checks.record', taskId, results },
@@ -420,11 +418,11 @@ export class EffectRunner {
     );
   }
 
-  async #pushHead(taskId: string, path: string, branch: string, context: EffectContext) {
+  async #pushHead(task: Task, repo: Repo, context: EffectContext) {
+    const taskId = task.id;
     await this.#runs.quiesce(taskId);
     if (context.signal.aborted) return false;
-    await pushBranch(path, branch, context.signal);
-    const sha = await resolveHead(path);
+    const sha = await this.#workspaces.resolve(task).push(repo, task, context.signal);
     await this.#engine.dispatch(
       { type: 'pull_request.record_push', taskId, sha },
       { id: `${context.key}:pull_request.record_push:${sha}` }
@@ -435,22 +433,27 @@ export class EffectRunner {
   async #openPullRequest(taskId: string, context: EffectContext) {
     const { task, repo } = this.#requireTask(taskId);
     if (!task.worktreePath || !task.branch) throw new Error('The task has no worktree.');
-    const pushed = await this.#pushHead(taskId, task.worktreePath, task.branch, context);
+    const pushed = await this.#pushHead(task, repo, context);
     if (!pushed || context.signal.aborted) return;
-    const read = await createPullRequest(repo, task, resolveRoundBase(task), context.signal);
+    const read = await createPullRequest(
+      repo,
+      task,
+      resolvePullRequestBase(this.#engine.state, task),
+      context.signal
+    );
     if (!read) throw new Error('GitHub did not return the new pull request.');
     await this.#recordRead(taskId, read);
     this.#syncSoon(taskId);
   }
 
   async #push(taskId: string, context: EffectContext) {
-    const { task } = this.#requireTask(taskId);
+    const { task, repo } = this.#requireTask(taskId);
     if (!task.worktreePath || !task.branch) throw new Error('The task has no worktree.');
     if (!task.pullRequest) {
       await this.#openPullRequest(taskId, context);
       return;
     }
-    if (await this.#pushHead(taskId, task.worktreePath, task.branch, context)) this.#syncSoon(taskId);
+    if (await this.#pushHead(task, repo, context)) this.#syncSoon(taskId);
   }
 
   async #mergeStack(repo: Repo, stacked: RoundPullRequest[], signal: AbortSignal) {
@@ -513,10 +516,22 @@ export class EffectRunner {
     if (repo) await this.#removeIsolated(repo, taskId);
     if (!task?.worktreePath || !repo) return;
     try {
-      await removeWorktree(repo, task.worktreePath);
+      await this.#workspaces.resolve(task).remove(repo, task);
     } catch (error) {
       log.warn('[Effects] Could not remove a worktree', { taskId, error: describeError(error) });
     }
     await this.#engine.dispatch({ type: 'worktree.gone', taskId }, { id: `${context.key}:worktree.gone` });
+  }
+
+  #isReopened(taskId: string) {
+    const task = this.#engine.state.tasks[taskId];
+    return task !== undefined && !isTaskSettled(task);
+  }
+
+  async #removeScratch(taskId: string) {
+    if (this.#isReopened(taskId)) return;
+    await this.#runs.quiesce(taskId);
+    if (this.#isReopened(taskId)) return;
+    rmSync(resolveScratchPath(this.#config.dataDir, taskId), { recursive: true, force: true });
   }
 }

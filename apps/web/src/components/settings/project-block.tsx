@@ -10,6 +10,7 @@ import * as React from 'react';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
+import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import {
   describeProjectKey,
   describeProjectRemoval,
@@ -23,6 +24,7 @@ import {
 import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty } from './group.tsx';
 import { ProjectDialog } from './project-dialog.tsx';
 import { AddMenu, type ProjectDialogValue, ProjectMenu } from './project-menu.tsx';
+import { WorkspaceSelect } from './workspace-select.tsx';
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -32,7 +34,7 @@ function RemoveButton({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
-export function RepoRow({ repo, action }: { repo: Repo; action?: React.ReactNode }) {
+function RepoRow({ repo, action }: { repo: Repo; action?: React.ReactNode }) {
   return (
     <PathRow
       icon={repo.remote ? 'IconGithub' : 'IconFolder1'}
@@ -108,6 +110,23 @@ interface ProjectProps {
   state: ShinsaState;
   project: Project;
   actions: ProjectActions;
+}
+
+export function LooseRepoRow({
+  repo,
+  actions,
+  support,
+}: {
+  repo: Repo;
+  actions: ProjectActions;
+  support: WorkspaceSupportMap | null;
+}) {
+  return (
+    <RepoRow
+      repo={repo}
+      action={<WorkspaceSelect repo={repo} support={support} onChange={actions.changeWorkspace} />}
+    />
+  );
 }
 
 function ProjectDialogs({
@@ -193,7 +212,12 @@ function ProjectFolderRow({ project, folder, actions }: Omit<ProjectProps, 'stat
   );
 }
 
-export function ProjectBlock({ state, project, actions }: ProjectProps) {
+export function ProjectBlock({
+  state,
+  project,
+  actions,
+  support,
+}: ProjectProps & { support: WorkspaceSupportMap | null }) {
   const repos = listProjectRepoRows(state, project.id);
   const [adding, setAdding] = React.useState(false);
   const empty = repos.length === 0 && project.folders.length === 0 && !adding;
@@ -215,10 +239,13 @@ export function ProjectBlock({ state, project, actions }: ProjectProps) {
           key={repo.id}
           repo={repo}
           action={
-            <RemoveButton
-              label={`Remove ${repo.name} from the project`}
-              onClick={() => void actions.removeRepo(repo)}
-            />
+            <>
+              <WorkspaceSelect repo={repo} support={support} onChange={actions.changeWorkspace} />
+              <RemoveButton
+                label={`Remove ${repo.name} from the project`}
+                onClick={() => void actions.removeRepo(repo)}
+              />
+            </>
           }
         />
       ))}

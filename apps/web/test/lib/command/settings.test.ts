@@ -8,6 +8,7 @@ import { DEFAULT_PREFERENCES, readNotificationPreferences } from '@/lib/preferen
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { installNotifications } from '../../support/notifications.ts';
+import { createRepo } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
 
@@ -103,14 +104,10 @@ describe('Change a setting', () => {
       ['Speed for task agents', 'Standard'],
       ['Model for quick jobs', 'Sonnet'],
       ['Speed for quick jobs', 'Standard'],
-      ['Planner model', 'Opus'],
-      ['Planner speed', 'Standard'],
-      ['Builder model', 'Opus'],
-      ['Builder speed', 'Standard'],
+      ['Agent model', 'Opus'],
+      ['Agent speed', 'Standard'],
       ['Reviewer model', 'Opus'],
       ['Reviewer speed', 'Standard'],
-      ['Fixer model', 'Opus'],
-      ['Fixer speed', 'Standard'],
       ['Answerer model', 'Opus'],
       ['Answerer speed', 'Standard'],
       ['Classifier model', 'Sonnet'],
@@ -136,14 +133,14 @@ describe('Change a setting', () => {
       value: 'off',
       options: [{ value: 'off', label: 'Standard', icon: 'IconSpeedMiddle' }],
     });
-    expect(find(held, 'settings.speed.builder')).toMatchObject({ value: 'off', options: [{ value: 'off' }] });
+    expect(find(held, 'settings.speed.agent')).toMatchObject({ value: 'off', options: [{ value: 'off' }] });
     const open = listSettingsSections(settings, MODELS, DEFAULT_PREFERENCES, createSnapshot());
     expect(find(open, 'settings.speed.task')).toMatchObject({ value: 'on', hint: 'Fast' });
   });
 
   it('keeps the per-role choices for typing, and the cost limit for setups without a weekly limit', () => {
     const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, createSnapshot());
-    expect(find(sections, 'settings.model.builder')).toMatchObject({ searchOnly: true });
+    expect(find(sections, 'settings.model.agent')).toMatchObject({ searchOnly: true });
     expect(find(sections, 'settings.budget')).toMatchObject({
       label: 'Cost limit per task',
       hint: 'No limit',
@@ -171,7 +168,7 @@ describe('Change a setting', () => {
   it('saves each change as a settings patch', () => {
     const settings: Settings = {
       ...createSettings(),
-      agentModels: { builder: 'sonnet' },
+      agentModels: { agent: 'sonnet' },
       autoResume: false,
       compaction: 'claude',
     };
@@ -184,7 +181,7 @@ describe('Change a setting', () => {
     pick(sections, 'settings.budget', '5');
     pick(sections, 'settings.budget', 'off');
     pick(sections, 'settings.merge', 'rebase');
-    pick(sections, 'settings.model.planner', 'claude:sonnet');
+    pick(sections, 'settings.model.reviewer', 'claude:sonnet');
     pick(sections, 'settings.model.quick', 'codex:gpt-6-astra');
     pick(sections, 'settings.model.task', 'mixed');
     pick(sections, 'settings.usage-limit', '10');
@@ -196,7 +193,7 @@ describe('Change a setting', () => {
     pick(sections, 'settings.compaction', '5');
     pick(sections, 'settings.compaction.mode', 'eunoe_default');
     pick(sections, 'settings.speed.task', 'on');
-    pick(sections, 'settings.speed.builder', 'off');
+    pick(sections, 'settings.speed.agent', 'off');
     expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
       [{ type: 'settings.change', patch: { attentionLimit: 3 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { approvePlans: true } }, 'Saved.'],
@@ -210,8 +207,8 @@ describe('Change a setting', () => {
         {
           type: 'settings.change',
           patch: {
-            agentProviders: { planner: 'claude' },
-            agentModels: { builder: 'sonnet', planner: 'sonnet' },
+            agentProviders: { reviewer: 'claude' },
+            agentModels: { agent: 'sonnet', reviewer: 'sonnet' },
           },
         },
         'Saved.',
@@ -221,7 +218,7 @@ describe('Change a setting', () => {
           type: 'settings.change',
           patch: {
             agentProviders: { classifier: 'codex', writer: 'codex' },
-            agentModels: { builder: 'sonnet', classifier: 'gpt-6-astra', writer: 'gpt-6-astra' },
+            agentModels: { agent: 'sonnet', classifier: 'gpt-6-astra', writer: 'gpt-6-astra' },
           },
         },
         'Saved.',
@@ -237,20 +234,18 @@ describe('Change a setting', () => {
       [
         {
           type: 'settings.change',
-          patch: {
-            agentFastModes: { planner: true, builder: true, reviewer: true, fixer: true, answerer: true },
-          },
+          patch: { agentFastModes: { agent: true, reviewer: true, answerer: true } },
         },
         'Saved.',
       ],
-      [{ type: 'settings.change', patch: { agentFastModes: { builder: false } } }, 'Saved.'],
+      [{ type: 'settings.change', patch: { agentFastModes: { agent: false } } }, 'Saved.'],
     ] as never);
   });
 
   it('offers every provider’s models in one choice, and a role on Codex reads its Codex model', () => {
-    const settings: Settings = { ...createSettings(), agentProviders: { fixer: 'codex' } };
+    const settings: Settings = { ...createSettings(), agentProviders: { agent: 'codex' } };
     const sections = listSettingsSections(settings, MODELS, DEFAULT_PREFERENCES);
-    const model = find(sections, 'settings.model.fixer');
+    const model = find(sections, 'settings.model.agent');
     if (model.kind !== 'choice') throw new Error('Not a choice');
     expect(model).toMatchObject({ value: 'codex:gpt-6-astra', icon: 'IconOpenaiCodex' });
     expect(model.options.map((option) => option.label)).toEqual([
@@ -322,5 +317,46 @@ describe('Setup', () => {
     if (command.kind === 'run') command.run();
     expect(restart).toHaveBeenCalledTimes(1);
     restart.mockRestore();
+  });
+});
+
+describe('Where agents work', () => {
+  it('each repository is a choice found by search, GitButler only where it is set up, and picking one saves it', () => {
+    const repos = [createRepo({ id: 'web' }), createRepo({ id: 'app', workspace: 'gitbutler' })];
+    const support = {
+      web: { butInstalled: false, gitButlerWorkspace: true },
+      app: { butInstalled: true, gitButlerWorkspace: true },
+    };
+    const sections = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES, null, {
+      repos,
+      support,
+    });
+    const web = find(sections, 'settings.workspace.web');
+    expect(web).toMatchObject({
+      kind: 'choice',
+      label: 'Where agents work in web',
+      hint: 'Worktrees',
+      searchOnly: true,
+      value: 'worktrees',
+      keywords: expect.arrayContaining(['gitbutler', 'main checkout']),
+    });
+    if (web.kind !== 'choice') throw new Error('not a choice');
+    expect(web.options.map((option) => option.value)).toEqual(['worktrees', 'main_checkout']);
+    const app = find(sections, 'settings.workspace.app');
+    if (app.kind !== 'choice') throw new Error('not a choice');
+    expect(app.options.map((option) => option.value)).toEqual(['worktrees', 'gitbutler', 'main_checkout']);
+    expect(sections.flatMap((section) => section.commands).map((command) => command.id)).toContain(
+      'settings.workspace.app'
+    );
+    pick(sections, 'settings.workspace.web', 'main_checkout');
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'repo.update', repoId: 'web', patch: { workspace: 'main_checkout' } },
+      'New tasks in web work in its checkout, one at a time. Tasks already working keep where they are.'
+    );
+    expect(
+      listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES).flatMap((section) =>
+        section.commands.filter((command) => command.id.startsWith('settings.workspace.'))
+      )
+    ).toEqual([]);
   });
 });

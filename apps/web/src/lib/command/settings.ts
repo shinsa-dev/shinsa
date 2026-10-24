@@ -3,8 +3,10 @@ import {
   type AgentProviderInfo,
   type CompactionMode,
   listAgentProviders,
+  type Repo,
   resolveCompaction,
   resolveIdleCompaction,
+  resolveRepoWorkspace,
   type Settings,
 } from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
@@ -21,6 +23,7 @@ import {
 } from '@/lib/accounts/limits.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
+import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
 import { updateNotifications } from '@/lib/notifications/settings.ts';
 import type { AlertPreference, NotificationPreferences, SoundId } from '@/lib/preferences/notifications.ts';
@@ -80,6 +83,7 @@ import {
   resolveSettingsTab,
 } from '@/lib/settings-tabs.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
+import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate } from '@/router.ts';
 
 const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] = [
@@ -96,14 +100,11 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
       'opus',
       'sonnet',
       'codex',
-      'planner',
-      'builder',
+      'agent',
       'reviewer',
-      'fixer',
       'answerer',
       'investigator',
       'researcher',
-      'operator',
       'classifier',
       'writer',
       'fast mode',
@@ -166,7 +167,17 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
   {
     title: 'Projects',
     icon: 'IconLayersTwo',
-    keywords: ['repositories', 'repos', 'folders', 'keys', 'colours'],
+    keywords: [
+      'repositories',
+      'repos',
+      'folders',
+      'keys',
+      'colours',
+      'where agents work',
+      'worktrees',
+      'gitbutler',
+      'checkout',
+    ],
   },
   { title: 'Appearance', icon: 'IconSun', keywords: ['theme', 'layout', 'dark', 'light'] },
   { title: 'Setup', icon: 'IconArrowRotateClockwise', keywords: ['onboarding', 'setup chat'] },
@@ -405,11 +416,33 @@ function listUsageChoices(settings: Settings, snapshot: AccountsSnapshot | null)
   return choices;
 }
 
+export interface WorkspaceChoices {
+  repos: Repo[];
+  support: WorkspaceSupportMap | null;
+}
+
+function listWorkspaceChoices({ repos, support }: WorkspaceChoices): Command[] {
+  return [...repos]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((repo) => {
+      const choice = settingChoice(
+        `workspace.${repo.id}`,
+        `${WORKSPACE_TITLE} in ${repo.name}`,
+        listWorkspaceItems(repo, support),
+        resolveRepoWorkspace(repo),
+        (value) => void changeWorkspace(repo, value as Parameters<typeof changeWorkspace>[1]),
+        true
+      );
+      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'gitbutler', 'main checkout'] };
+    });
+}
+
 export function listSettingsSections(
   settings: Settings,
   providers: AgentProviderInfo[],
   notifications: NotificationPreferences,
-  snapshot: AccountsSnapshot | null = null
+  snapshot: AccountsSnapshot | null = null,
+  workspaces: WorkspaceChoices = { repos: [], support: null }
 ): CommandSection[] {
   return [
     { id: 'settings.sections', heading: 'Jump to', rank: RANK.context, commands: listJumpCommands() },
@@ -423,6 +456,7 @@ export function listSettingsSections(
         ...listGroupChoices(settings, providers, snapshot),
         ...listRoleChoices(settings, providers, snapshot),
         ...listUsageChoices(settings, snapshot),
+        ...listWorkspaceChoices(workspaces),
       ],
     },
     {

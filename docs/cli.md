@@ -376,7 +376,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 
 ### shinsa plans revise
 
-Ask the planner to revise the plan.
+Ask the agent to revise the plan.
 
 ```
 shinsa plans revise <task> <feedback...> [--json]
@@ -421,7 +421,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 
 ### shinsa reviews revise
 
-Request changes; a fixer makes them.
+Request changes; the agent makes them.
 
 ```
 shinsa reviews revise <task> <feedback...> [--json]
@@ -463,7 +463,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `--fix` | list, optional | Finding numbers to fix (from 0). |
 | `--dismiss` | list, optional | Finding numbers to dismiss (from 0). |
-| `--note` | text, optional | A note for the fixer. |
+| `--note` | text, optional | A note for the agent. |
 
 ## merges
 
@@ -510,7 +510,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
-| `<notes>` | text, optional | Notes for the operator. |
+| `<notes>` | text, optional | Notes for the agent. |
 
 ### shinsa operations finish
 
@@ -801,7 +801,7 @@ Every task agent's tool: `settings_get` (reads).
 
 ### shinsa settings set
 
-Change a setting. The value is JSON (true, 3, null, {"builder":"codex"}) or plain text.
+Change a setting. The value is JSON (true, 3, null, {"agent":"codex"}) or plain text.
 
 ```
 shinsa settings set <key> <value...> [--json]
@@ -954,10 +954,10 @@ Every task agent's tool: `repos_list` (reads).
 
 ### shinsa repos update
 
-Change a repository's name, default branch, project or check commands.
+Change a repository's name, default branch, project, check commands or where agents work.
 
 ```
-shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--waive-checks] [--json]
+shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--waive-checks] [--workspace <worktrees|gitbutler|main_checkout>] [--json]
 ```
 
 Every task agent's tool: `repos_update`. Sends `repo.update`.
@@ -970,6 +970,7 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--project` | text, optional | Its project (key, name or id), or none. |
 | `--checks` | list, optional | The check commands, in order. Repeat the option for each. Only the human changes them. |
 | `--waive-checks` | boolean, optional | Work without checks. Only the human changes it. |
+| `--workspace` | choice, optional | Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it. |
 
 ### shinsa repos remove
 

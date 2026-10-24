@@ -105,13 +105,18 @@ function resolveHead(repo: Repo, task: Task, worktree: string | null, signal?: A
   return resolveFirstCommit(repo.path, refs, signal);
 }
 
+export function resolveTaskCheckout(task: Pick<Task, 'workspace' | 'worktreePath'>) {
+  if (task.workspace === 'gitbutler' || !task.worktreePath) return null;
+  return existsSync(task.worktreePath) ? task.worktreePath : null;
+}
+
 export async function resolveTaskRefs(
   repo: Repo,
   task: Task,
   baseBranch: string | null,
   signal?: AbortSignal
 ): Promise<TaskRefs> {
-  const worktree = task.worktreePath && existsSync(task.worktreePath) ? task.worktreePath : null;
+  const worktree = resolveTaskCheckout(task);
   const head = await resolveHead(repo, task, worktree, signal);
   if (!head)
     throw new DomainError('code_unavailable', 'The code for this task is no longer in the repository.');

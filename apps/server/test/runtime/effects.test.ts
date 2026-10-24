@@ -12,7 +12,7 @@ import {
 } from '@shinsa/core';
 import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
-import type { ServerConfig } from '../../src/config/index.ts';
+import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts';
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
@@ -335,6 +335,37 @@ describe('triage', () => {
     expect(Object.values(engine.state.repos).map((repo) => repo.name)).toEqual(['app']);
   });
 
+  test('a repository outside the task’s project is bound while the task keeps its project, and filed by its owner', async () => {
+    const { root } = await createGitRepo();
+    const config = createTestConfig(createTempDir(), { roots: [root] });
+    const engine = new Engine(new EventLog(config.databasePath));
+    await engine.dispatch({ type: 'project.write', project: { name: 'Shinsa', color: 'blue' } });
+    const [project] = Object.values(engine.state.projects);
+    const projectId = project?.id ?? '';
+    await engine.dispatch({
+      type: 'repo.register',
+      repo: { name: 'shinsa', path: '/code/shinsa', defaultBranch: 'main', remote: null, checkCommands: [] },
+      projectName: null,
+      projectId,
+    });
+    await engine.dispatch({ type: 'task.create', request: 'Fix the button in app', repoId: null, projectId });
+    const [task] = Object.values(engine.state.tasks);
+    const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
+      resolveLogin: () => Promise.resolve(null),
+      triage: (state, current, local) =>
+        resolveTriage(state, current, local, <T>() =>
+          Promise.resolve({ title: 'Fix the button', repo: 'app', size: 'small', branch: 'fix/button' } as T)
+        ),
+    });
+    await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, createContext());
+    const app = Object.values(engine.state.repos).find((repo) => repo.name === 'app');
+    expect(app?.projectId).not.toBe(projectId);
+    expect(engine.state.tasks[task?.id ?? '']).toMatchObject({ repoId: app?.id, projectId });
+    await runner.stop();
+    engine.stop();
+    await engine.settle();
+  });
+
   test('the kind of task and its priority are sent with why triage chose them', async () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
@@ -573,6 +604,56 @@ describe('worktrees', () => {
       { type: 'worktree.gone', taskId: 'task-1' },
       { type: 'worktree.gone', taskId: 'task-1' },
     ]);
+  });
+});
+
+describe('scratch folders', () => {
+  function writeScratch(dataDir: string) {
+    const scratch = resolveScratchPath(dataDir, 'task-1');
+    mkdirSync(join(scratch, 'notes'), { recursive: true });
+    writeFileSync(join(scratch, 'notes', 'answer.md'), 'x');
+    return scratch;
+  }
+
+  test('a settled task’s scratch folder is removed once its runs stop, and removing it again is harmless', async () => {
+    for (const stage of ['done', 'merged', 'cancelled'] as const) {
+      const { runner, config, calls, dispatched } = setup(withTask({ stage, repoId: null }));
+      const scratch = writeScratch(config.dataDir);
+      await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
+      expect(existsSync(scratch)).toBe(false);
+      await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
+      expect(calls).toEqual(['quiesce:task-1', 'quiesce:task-1']);
+      expect(dispatched).toEqual([]);
+    }
+    const gone = setup();
+    await gone.runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
+    expect(gone.calls).toEqual(['quiesce:task-1']);
+  });
+
+  test('a task reopened before or while its runs stop keeps its scratch folder', async () => {
+    const reopened = setup(withTask({ stage: 'answering', repoId: null }));
+    const kept = writeScratch(reopened.config.dataDir);
+    await reopened.runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
+    expect(existsSync(kept)).toBe(true);
+    expect(reopened.calls).toEqual([]);
+
+    const stub = createStubEngine(withTask({ stage: 'done', repoId: null }));
+    const config = createTestConfig(createTempDir());
+    const scratch = writeScratch(config.dataDir);
+    const runs = {
+      quiesce: () => {
+        stub.update((state) => {
+          const task = state.tasks['task-1'];
+          if (task) task.stage = 'answering';
+        });
+        return Promise.resolve();
+      },
+    } as unknown as RunSupervisor;
+    const runner = new EffectRunner(stub.engine, config, runs, createBriefings().briefings, {
+      triage: () => Promise.resolve(null),
+    });
+    await runner.apply({ kind: 'scratch.remove', taskId: 'task-1' }, createContext());
+    expect(existsSync(scratch)).toBe(true);
   });
 });
 

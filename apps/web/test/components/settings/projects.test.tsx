@@ -1,11 +1,13 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { Project, ProjectInput, Repo, ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
+import { resetWorkspaceSupport, type WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import type { ProjectActions } from '@/lib/projects.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createProject, createRepo, createShinsaState } from '../../support/state.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 const SUPERWALL = createProject({
   id: 'p1',
@@ -27,8 +29,33 @@ function createActions(overrides: Partial<ProjectActions> = {}) {
     removeRepo: mock(async (_repo: Repo) => true),
     addFolder: mock(async (_project: Project, _path: string): Promise<string | null> => null),
     removeFolder: mock(async () => true),
+    changeWorkspace: mock(async (_repo: Repo, _mode: string) => true),
   };
   return Object.assign(actions, overrides) as typeof actions;
+}
+
+let support: WorkspaceSupportMap = {};
+
+beforeEach(() => {
+  resetWorkspaceSupport();
+  support = {};
+  spyOn(globalThis, 'fetch').mockImplementation((async () =>
+    Response.json({ support })) as unknown as typeof fetch);
+});
+
+afterEach(() => {
+  mock.restore();
+});
+
+async function chooseWorkspace(repo: string, option: string) {
+  fireEvent.click(screen.getByRole('combobox', { name: `Where agents work in ${repo}` }));
+  await settle();
+  const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+  const item = within(list).getByRole('option', { name: new RegExp(`^${option}`) });
+  fireEvent.pointerDown(item, { pointerType: 'mouse' });
+  fireEvent.click(item);
+  await settle();
+  return item;
 }
 
 function renderProjects(state: ShinsaState, actions = createActions()) {
@@ -116,7 +143,7 @@ describe('Settings → Projects', () => {
       saved.resolve(null);
       await saved.promise;
     });
-    await waitFor(() => expect(screen.queryByLabelText('Name')).toBeNull());
+    await waitForGone(() => screen.queryByLabelText('Name'));
     changes.push(...observer.takeRecords());
     observer.disconnect();
     expect(changes).toEqual([]);
@@ -237,5 +264,26 @@ describe('Settings → Projects', () => {
         'Project removed. Its repositories have no project now.'
       )
     );
+  });
+
+  it('each repository says where agents work, and offers GitButler only once it is set up there', async () => {
+    support = {
+      web: { butInstalled: true, gitButlerWorkspace: true },
+      notes: { butInstalled: true, gitButlerWorkspace: false },
+    };
+    const actions = renderProjects(superwallState());
+    await settle();
+    const web = screen.getByRole('combobox', { name: 'Where agents work in web' });
+    expect(web.textContent).toContain('Worktrees');
+    await chooseWorkspace('web', 'GitButler');
+    expect(actions.changeWorkspace.mock.calls[0]?.[1]).toBe('gitbutler');
+    await chooseWorkspace('notes', 'Main checkout');
+    expect(actions.changeWorkspace.mock.calls[1]?.[1]).toBe('main_checkout');
+    fireEvent.click(screen.getByRole('combobox', { name: 'Where agents work in notes' }));
+    await settle();
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    const gitbutler = within(list).getByRole('option', { name: /^GitButler/ });
+    expect(gitbutler.getAttribute('aria-disabled')).toBe('true');
+    expect(gitbutler.textContent).toContain('Run `but setup` in this repository to use it.');
   });
 });

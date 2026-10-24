@@ -140,4 +140,14 @@ describe('a project’s repositories and folders', () => {
       { path: realpathSync(web.path), name: 'web', repoId: null, projectId },
     ]);
   });
+
+  test('every registered repository says whether GitButler can hold its agents', async () => {
+    const { home, engine, call, projectId } = await setup();
+    const app = await createGitRepo({ root: home, name: 'app', remote: false });
+    await call('POST', `/api/projects/${projectId}/repos`, { path: app.path });
+    const repoId = Object.keys(engine.state.repos)[0] ?? '';
+    expect(await call('GET', '/api/repos/workspaces')).toEqual({
+      support: { [repoId]: { butInstalled: true, gitButlerWorkspace: false } },
+    });
+  });
 });

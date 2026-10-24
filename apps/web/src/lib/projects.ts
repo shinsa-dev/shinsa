@@ -9,6 +9,7 @@ import {
   resolveTaskProject,
   type ShinsaState,
   type Task,
+  type WorkspaceMode,
 } from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
@@ -20,6 +21,7 @@ import {
 } from '@/lib/connection/projects.ts';
 import { sendCommand } from '@/lib/connection/socket.ts';
 import { formatCount } from '@/lib/format/count.ts';
+import { changeWorkspace } from '@/lib/workspaces.ts';
 
 export type ProjectField = 'name' | 'key' | 'description';
 
@@ -257,6 +259,7 @@ export interface ProjectActions {
   removeRepo: (repo: Repo) => Promise<boolean>;
   addFolder: (project: Project, path: string) => Promise<string | null>;
   removeFolder: (project: Project, folder: string) => Promise<boolean>;
+  changeWorkspace: (repo: Repo, mode: WorkspaceMode) => Promise<boolean>;
 }
 
 async function saveProject(input: ProjectInput, done: string) {
@@ -302,4 +305,5 @@ export const PROJECT_ACTIONS: ProjectActions = {
       },
       'Folder removed.'
     ),
+  changeWorkspace,
 };

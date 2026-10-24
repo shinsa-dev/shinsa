@@ -5,17 +5,18 @@ import {
   isTaskSettled,
   type ShinsaCommand,
   type ShinsaEvent,
+  selectStackTarget,
   serializeTaskReferences,
   validateFindings,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
 } from '@shinsa/core';
-import { commitWorktree, resolveHead, resolveTree } from '../git/index.ts';
+import { resolveHead } from '../git/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { ScheduleToolCall } from '../schedules/index.ts';
-import { runCommandOrThrow } from '../shell/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
+import type { Workspaces } from '../workspaces/index.ts';
 import { awaitDelegation } from './delegations.ts';
 import { assertProtocol, HANDED_OVER, readString, resolveCommitMessage, storeEvidence } from './handover.ts';
 import { createManageClient, isSurfaceTool, type ManageAccess, readSurfaceToolCall } from './manage/index.ts';
@@ -43,6 +44,7 @@ interface ToolCallsOptions {
   schedules: ScheduleToolHandler | null;
   minuteMs: number;
   manage: ManageAccess | null;
+  workspaces: Workspaces;
 }
 
 interface ToolCall {
@@ -124,14 +126,22 @@ export class ToolCalls {
 
   async #commitThenDispatch(call: ToolCall, command: CommitHandOver, dispatch: CallDispatch) {
     const { run, task } = this.#findCurrent(call.runId, call.attemptId);
-    const path = task.worktreePath;
-    if (!path) return dispatch({ ...command, treeHash: null });
-    const before = await resolveHead(path);
-    const committed = await commitWorktree(path, resolveCommitMessage(task, run));
+    const repo = task.repoId ? this.#options.engine.state.repos[task.repoId] : undefined;
+    if (!task.worktreePath || !repo) return dispatch({ ...command, treeHash: null });
+    const { engine, workspaces } = this.#options;
+    const commit = await workspaces
+      .resolve(task)
+      .commit(
+        repo,
+        task,
+        resolveCommitMessage(task, run),
+        (branch) => selectStackTarget(engine.state, task, branch) !== null
+      );
     try {
-      return await dispatch({ ...command, treeHash: await resolveTree(path) });
+      if (commit.stackedOn) await dispatch({ type: 'task.stack', taskId: task.id, branch: commit.stackedOn });
+      return await dispatch({ ...command, treeHash: commit.treeHash });
     } catch (error) {
-      if (committed) await runCommandOrThrow(['git', 'reset', '--soft', before], path);
+      await commit.undo();
       throw error;
     }
   }
