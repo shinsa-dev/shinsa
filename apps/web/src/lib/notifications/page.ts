@@ -1,3 +1,4 @@
+import { updateDesktopBadge } from '@/lib/desktop.ts';
 import { type PageAttention, resolveWindowTitle } from './attention.ts';
 
 function writeMetaTag(name: string, content: string) {
@@ -14,4 +15,5 @@ export function writePageAttention({ status, badge }: PageAttention, subject: st
   document.title = resolveWindowTitle(badge, subject);
   writeMetaTag('floaty:status', status);
   writeMetaTag('floaty:badge', String(badge));
+  updateDesktopBadge(badge);
 }

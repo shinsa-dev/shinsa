@@ -1,0 +1,33 @@
+import { describe, expect, it } from 'bun:test';
+import { describeServer, parseHealth } from '../../src/lib/health.ts';
+
+describe('parseHealth', () => {
+  it('reads the version when the server reports one', () => {
+    expect(parseHealth({ ok: true, seq: 4, problems: [], version: '0.4.0', pid: 12 })).toEqual({
+      version: '0.4.0',
+    });
+  });
+
+  it('answers without a version from a server that has none, or a log with damaged entries', () => {
+    expect(parseHealth({ ok: false, seq: 4, problems: [{ seq: 1 }] })).toEqual({ version: null });
+    expect(parseHealth({ ok: true, version: '' })).toEqual({ version: null });
+  });
+
+  it('refuses an answer that is not Shinsa’s', () => {
+    expect(parseHealth(null)).toBeNull();
+    expect(parseHealth('ok')).toBeNull();
+    expect(parseHealth({ status: 'ok' })).toBeNull();
+  });
+});
+
+describe('describeServer', () => {
+  it('names the server the window shows', () => {
+    expect(describeServer('http://127.0.0.1:5180', { version: '0.4.0' })).toBe(
+      'Shinsa 0.4.0 at http://127.0.0.1:5180'
+    );
+    expect(describeServer('http://127.0.0.1:5180', { version: null })).toBe(
+      'Shinsa at http://127.0.0.1:5180'
+    );
+    expect(describeServer('http://127.0.0.1:5180', null)).toBe('Shinsa at http://127.0.0.1:5180');
+  });
+});

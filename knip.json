@@ -11,6 +11,9 @@
     "packages/ui": {
       "entry": ["src/**/*.{ts,tsx}"]
     },
+    "apps/desktop": {
+      "entry": ["src/main/index.ts", "src/preload/index.ts", "test/**/*.test.ts"]
+    },
     "apps/server": {
       "entry": ["test/**/*.test.ts", "test/e2e/soak/child.ts", "test/helpers/mcp/stdio-server.ts"],
       "ignoreDependencies": ["@chroxify/eunoe"]

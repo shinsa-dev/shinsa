@@ -3,7 +3,10 @@ import {
   readNotificationPermission,
   requestNotificationPermission,
   showDecisionNotification,
+  showTestNotification,
+  TEST_NOTIFICATION,
 } from '@/lib/notifications/browser.ts';
+import { installDesktop } from '../../support/desktop.ts';
 import { installNotifications } from '../../support/notifications.ts';
 
 const NOTICE = { gateId: 'g-1', taskId: 't-1', title: 'Paint it', body: 'Which colour?' };
@@ -43,6 +46,17 @@ describe('browser notifications', () => {
     expect(opened).toEqual(['t-1']);
     expect(focus).toHaveBeenCalledTimes(1);
     focus.mockRestore();
+  });
+
+  it('in the desktop app, needs no browser permission and leaves the notification to the app', async () => {
+    fake = installNotifications('denied');
+    const desktop = installDesktop();
+    expect(readNotificationPermission()).toBe('granted');
+    expect(await requestNotificationPermission()).toBe('granted');
+    showTestNotification();
+    expect(desktop.notices).toEqual([{ ...TEST_NOTIFICATION, tag: 'shinsa-test', path: null }]);
+    expect(fake.shown).toEqual([]);
+    desktop.restore();
   });
 
   it('shows nothing once the browser said no', () => {

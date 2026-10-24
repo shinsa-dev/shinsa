@@ -1,0 +1,23 @@
+{
+  "name": "@shinsa/desktop",
+  "productName": "Shinsa",
+  "license": "UNLICENSED",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shinsa for Mac: a window around shinsa serve",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "bun build src/main/index.ts --outfile dist/main.cjs --target node --format cjs --external electron && bun build src/preload/index.ts --outfile dist/preload.cjs --target browser --format cjs --external electron",
+    "check-types": "tsc --noEmit",
+    "dev": "bun run build && electron .",
+    "package": "bun run build && electron-builder --mac --arm64 --publish never && codesign --force --deep --sign - release/mac-arm64/Shinsa.app",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "electron": "44.9.3",
+    "electron-builder": "^26.18.0",
+    "typescript": "^7.0.2"
+  }
+}

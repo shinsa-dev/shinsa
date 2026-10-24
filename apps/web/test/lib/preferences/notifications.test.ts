@@ -6,11 +6,20 @@ import {
   useNotificationPreferences,
   writeNotificationPreferences,
 } from '@/lib/preferences/notifications.ts';
+import { installDesktop } from '../../support/desktop.ts';
 
 describe('notification preferences', () => {
   it('start quiet: a sound in the background, no notifications', () => {
     expect(readNotificationPreferences()).toEqual(DEFAULT_PREFERENCES);
     expect(DEFAULT_PREFERENCES).toEqual({ sound: 'unfocused', soundId: 'chime', notify: 'never' });
+  });
+
+  it('notify in the background by default in the desktop app', () => {
+    const desktop = installDesktop();
+    expect(readNotificationPreferences()).toEqual({ ...DEFAULT_PREFERENCES, notify: 'unfocused' });
+    writeNotificationPreferences({ notify: 'never' });
+    expect(readNotificationPreferences().notify).toBe('never');
+    desktop.restore();
   });
 
   it('ignore a stored value they do not know', () => {

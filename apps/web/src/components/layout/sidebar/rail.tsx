@@ -21,8 +21,8 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
 
   return (
     <nav className='flex h-full w-full flex-col bg-sidebar [--glyph-ring:var(--color-sidebar)]'>
-      <div className='flex h-11 shrink-0 items-center gap-2 ps-3.5 pe-2'>
-        <BrandLink onNavigate={onNavigate} />
+      <div data-window-drag className='flex h-11 shrink-0 items-center gap-2 desktop:ps-20 ps-3.5 pe-2'>
+        <BrandLink onNavigate={onNavigate} className='desktop:hidden' />
         <ConnectionStatus />
         <span className='flex-1' />
         {route.name !== 'onboarding' && <UsageMenu state={state} />}

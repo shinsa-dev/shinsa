@@ -2,6 +2,8 @@
 
 @source "./";
 
+@custom-variant desktop (&:where([data-desktop="window"] *));
+
 .code-token {
   color: var(--shiki-light);
 }
@@ -191,4 +193,14 @@
 
 .chat-swap-out {
   animation: chat-swap-out 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+[data-desktop] [data-window-drag] {
+  -webkit-app-region: drag;
+}
+
+[data-desktop] [data-window-drag] :is(button, a, input, [role="button"], [role="status"]),
+[data-desktop]
+  :is([data-sonner-toaster], [role="dialog"], [role="menu"], [role="listbox"], [role="tooltip"]) {
+  -webkit-app-region: no-drag;
 }

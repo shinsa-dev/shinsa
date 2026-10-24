@@ -6,7 +6,7 @@
     "build": "turbo run build",
     "check-types": "turbo run check-types && tsc --noEmit -p tsconfig.json",
     "deps": "sherif -i @types/node",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=!@shinsa/desktop",
     "format": "biome format .",
     "format:fix": "biome format . --write",
     "knip": "knip",

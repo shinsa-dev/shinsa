@@ -6,7 +6,10 @@ import { requestNewTaskOnHome } from '@/lib/command/menu.ts';
 
 export function CompactBar({ onMenu }: { onMenu: () => void }) {
   return (
-    <header className='flex h-11 shrink-0 items-center gap-2 border-border border-b px-2 md:hidden'>
+    <header
+      data-window-drag
+      className='flex h-11 shrink-0 items-center gap-2 border-border border-b px-2 desktop:ps-20 md:hidden'
+    >
       <Hint label='Open the queue'>
         <Button
           variant='secondary'

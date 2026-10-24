@@ -1,0 +1,19 @@
+appId: studio.overclock.shinsa
+productName: Shinsa
+directories:
+  output: release
+files:
+  - dist/**
+  - static/**
+  - package.json
+protocols:
+  - name: Shinsa
+    schemes:
+      - shinsa
+mac:
+  target:
+    - target: dir
+      arch: arm64
+  category: public.app-category.developer-tools
+  minimumSystemVersion: "14.0"
+  identity: null

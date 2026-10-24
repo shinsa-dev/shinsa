@@ -1,6 +1,7 @@
 import { type ShinsaState, selectTaskByReference } from '@shinsa/core';
 import * as React from 'react';
 import { useMinute } from '@/hooks/use-minute.ts';
+import { notifyDesktop } from '@/lib/desktop.ts';
 import { resolvePageAttention, resolveTaskSubject } from '@/lib/notifications/attention.ts';
 import { showDecisionNotification } from '@/lib/notifications/browser.ts';
 import { writePageAttention } from '@/lib/notifications/page.ts';
@@ -20,10 +21,13 @@ export function useAttention(state: ShinsaState, taskReference: string | null = 
       new AttentionWatcher({
         preferences: readNotificationPreferences,
         play: (soundId, count) => void playSound(soundId, count),
-        notify: (notice) =>
+        notify: (notice) => {
+          const path = resolveTaskPath(resolveTaskTarget(latest.current, notice.taskId));
+          if (notifyDesktop({ title: notice.title, body: notice.body, tag: notice.gateId, path })) return;
           showDecisionNotification(notice, (taskId) =>
             navigate(resolveTaskPath(resolveTaskTarget(latest.current, taskId)))
-          ),
+          );
+        },
       })
   );
   React.useEffect(() => {

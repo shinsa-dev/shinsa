@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Shinsa</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #18181b;
+        --muted: #71717a;
+        --code: #f4f4f5;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #101012;
+          --fg: #f4f4f5;
+          --muted: #a1a1aa;
+          --code: #1f1f23;
+        }
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .drag {
+        position: fixed;
+        inset: 0 0 auto;
+        height: 44px;
+        -webkit-app-region: drag;
+      }
+      main {
+        display: grid;
+        place-content: center;
+        height: 100%;
+        padding: 0 32px;
+        max-width: 26rem;
+        margin: 0 auto;
+        gap: 6px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+      code {
+        font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: var(--code);
+        padding: 1px 4px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="drag"></div>
+    <main>
+      <h1>Shinsa is not running</h1>
+      <p>Nothing answers at <code id="url"></code> yet. The window opens Shinsa as soon as it does.</p>
+      <p id="hint"></p>
+    </main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      document.getElementById('url').textContent = params.get('url') ?? '';
+      document.getElementById('hint').textContent = params.get('hint') ?? '';
+    </script>
+  </body>
+</html>

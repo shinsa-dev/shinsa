@@ -16,3 +16,4 @@ worker-configuration.d.ts
 .kanna
 .pilot
 coverage
+apps/desktop/release

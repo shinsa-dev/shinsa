@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isDesktop } from '@/lib/desktop.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export type AlertPreference = 'never' | 'unfocused' | 'always';
@@ -40,7 +41,7 @@ export function readNotificationPreferences(): NotificationPreferences {
   const value: NotificationPreferences = {
     sound: readOne(SOUND_KEY, ALERTS, DEFAULT_PREFERENCES.sound),
     soundId: readOne(SOUND_ID_KEY, SOUND_IDS, DEFAULT_PREFERENCES.soundId),
-    notify: readOne(NOTIFY_KEY, ALERTS, DEFAULT_PREFERENCES.notify),
+    notify: readOne(NOTIFY_KEY, ALERTS, isDesktop() ? 'unfocused' : DEFAULT_PREFERENCES.notify),
   };
   const key = `${value.sound}/${value.soundId}/${value.notify}`;
   if (cached?.key !== key) cached = { key, value };

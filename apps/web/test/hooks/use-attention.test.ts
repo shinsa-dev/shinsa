@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { renderHook } from '@testing-library/react';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { writeNotificationPreferences } from '@/lib/preferences/notifications.ts';
+import { installDesktop } from '../support/desktop.ts';
 import { installAudio, installNotifications } from '../support/notifications.ts';
 import { createGate, createShinsaState, createTask } from '../support/state.ts';
 
@@ -75,5 +76,24 @@ describe('useAttention', () => {
     expect(audio.created).toHaveLength(1);
     notifications.shown[0]?.click();
     expect(location.pathname).toBe('/tasks/t-1');
+  });
+
+  it('in the desktop app, hands the notification and the Dock badge to the app, never to the browser', () => {
+    const audio = installAudio();
+    const notifications = installNotifications('granted');
+    const desktop = installDesktop();
+    restores.push(audio.restore, notifications.restore, desktop.restore);
+    writeNotificationPreferences({ notify: 'always' });
+    const state = (gates: ReturnType<typeof question>[]) =>
+      createShinsaState({ tasks: [createTask({ id: 't-1', title: 'Paint it', handle: 'SW-142' })], gates });
+    const { rerender } = renderHook(({ current }) => useAttention(current), {
+      initialProps: { current: state([]) },
+    });
+    rerender({ current: state([question('g-1')]) });
+    expect(notifications.shown).toEqual([]);
+    expect(desktop.notices).toEqual([
+      { title: 'Paint it', body: 'Question g-1', tag: 'g-1', path: '/tasks/SW-142' },
+    ]);
+    expect(desktop.badges.at(-1)).toBe(1);
   });
 });

@@ -1,8 +1,10 @@
+import { isDesktop, notifyDesktop } from '@/lib/desktop.ts';
 import type { DecisionNotice } from './attention.ts';
 
 type NotificationPermissionState = NotificationPermission | 'unsupported';
 
 export function readNotificationPermission(): NotificationPermissionState {
+  if (isDesktop()) return 'granted';
   return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
 }
 
@@ -18,6 +20,7 @@ export const TEST_NOTIFICATION = {
 };
 
 export function showTestNotification() {
+  if (notifyDesktop({ ...TEST_NOTIFICATION, tag: 'shinsa-test', path: null })) return;
   const notification = new Notification(TEST_NOTIFICATION.title, {
     body: TEST_NOTIFICATION.body,
     tag: 'shinsa-test',

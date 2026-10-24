@@ -12,7 +12,7 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
   const route = useRoute();
   const activeTaskId = useRouteTaskId(state);
   return (
-    <header className='shrink-0'>
+    <header data-window-drag className='shrink-0 desktop:ps-16'>
       <div className={cn(CARDS_FRAME, 'flex h-11 items-center gap-1')}>
         <BrandLink className='me-2' />
         {route.name === 'task' && <QueueMenu state={state} activeTaskId={activeTaskId} />}
