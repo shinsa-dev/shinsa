@@ -10,7 +10,8 @@ Every command talks to the running server on the configured host (`SHINSA_HOST` 
 its id or its exact title; an account by id or email; a repository by name or id; a project by key, name or id.
 Every task agent has each command that is not yours alone as a tool of the same name with `_` for spaces and
 dashes, taking the same fields in snake_case; what it does is logged as on your behalf from its task. A command
-marked yours alone has no tool (`docs/engine.md` → Who can change Shinsa).
+marked yours alone has no tool (`docs/engine.md` → Who can change Shinsa), and `tasks create` has none either:
+an agent files a task with `create_task`, which files it once however often the call is repeated.
 
 ## tasks
 
@@ -85,7 +86,7 @@ Create a task. Shinsa classifies it, plans it and builds it.
 shinsa tasks create <request...> [--repo <text>] [--project <text>] [--priority <urgent|high|normal|low>] [--plan-first] [--ask] [--after <list>] [--account <text>] [--json]
 ```
 
-Every task agent's tool: `tasks_create`. Sends `task.create`.
+Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -103,7 +104,7 @@ Every task agent's tool: `tasks_create`. Sends `task.create`.
 Send a message to a task's agent. At an open decision it is your feedback, never an approval.
 
 ```
-shinsa tasks message <task> <text...> [--as <feedback|new_round|separate_task>] [--json]
+shinsa tasks message <task> <text...> [--as <feedback|acknowledge|new_round|separate_task>] [--json]
 ```
 
 Every task agent's tool: `tasks_message`. Sends `task.message`.
@@ -112,7 +113,7 @@ Every task agent's tool: `tasks_message`. Sends `task.message`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<text>` | text, required | The message. |
-| `--as` | choice, optional | feedback on the current round, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides. |
+| `--as` | choice, optional | feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides. |
 
 ### shinsa tasks retry
 
@@ -187,30 +188,30 @@ Every task agent's tool: `tasks_prioritize`. Sends `task.prioritize`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<priority>` | choice, required | low, normal, high or urgent. |
 
-### shinsa tasks block
+### shinsa tasks wait-on
 
 Make a task wait on other tasks. The list replaces the tasks it waits on now.
 
 ```
-shinsa tasks block <task> <waitsOn...> [--json]
+shinsa tasks wait-on <task> <waitsOn...> [--json]
 ```
 
-Every task agent's tool: `tasks_block`. Sends `task.block`.
+Every task agent's tool: `tasks_wait_on`. Sends `task.wait_on`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<waitsOn>` | list, required | The tasks it waits on. |
 
-### shinsa tasks unblock
+### shinsa tasks stop-waiting
 
 Stop a task waiting on other tasks.
 
 ```
-shinsa tasks unblock <task> [--json]
+shinsa tasks stop-waiting <task> [--json]
 ```
 
-Every task agent's tool: `tasks_unblock`. Sends `task.block`.
+Every task agent's tool: `tasks_stop_waiting`. Sends `task.wait_on`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -231,15 +232,15 @@ Every task agent's tool: `tasks_bind`. Sends `task.bind_account`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<account>` | text, required | The account (id or email), or any. |
 
-### shinsa tasks check-now
+### shinsa tasks check-in-now
 
-Fire a waiting agent's next check now.
+Fire a waiting agent's next check-in now.
 
 ```
-shinsa tasks check-now <task> [--json]
+shinsa tasks check-in-now <task> [--json]
 ```
 
-Every task agent's tool: `tasks_check_now`. Sends `monitor.check_now`.
+Every task agent's tool: `tasks_check_in_now`. Sends `monitor.check_in_now`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
@@ -314,7 +315,7 @@ Every task agent's tool: `rounds_ship`. Sends `round.ship`.
 Answer any open decision by its gate id.
 
 ```
-shinsa gates answer <gate> --decision <approve|revise|reject|answer> [--response <text>] [--plan-version <integer>] [--verdicts <json>] [--json]
+shinsa gates answer <gate> --decision <approve|revise|reject|reply|waive> [--response <text>] [--plan-version <integer>] [--verdicts <json>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `gate.answer`.
@@ -322,8 +323,8 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<gate>` | text, required | The gate id, from `shinsa tasks show`. |
-| `--decision` | choice, required | approve, revise, reject or answer. |
-| `--response` | text, optional | Your answer or feedback. |
+| `--decision` | choice, required | approve, revise, reject, reply or waive. |
+| `--response` | text, optional | Your reply or feedback. |
 | `--plan-version` | integer, optional | The plan version you read, for a plan. |
 | `--verdicts` | json, optional | Review verdicts: [{"index":0,"verdict":"fix","note":null}]. |
 
@@ -497,7 +498,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 
 ### shinsa operations run
 
-Run the operation of a change that merged. Notes go to the operator with any it has.
+Run the operation of a change that merged. Notes replace the ones saved on the operation.
 
 ```
 shinsa operations run <task> [<notes...>] [--json]
@@ -534,74 +535,74 @@ Answer an agent's question on a task.
 shinsa questions answer <task> <answer...> [--json]
 ```
 
-Every task agent's tool: `questions_answer`. Sends `gate.answer`.
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `gate.answer`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<answer>` | text, required | Your answer. |
 
-## followups
+## suggestions
 
-### shinsa followups list
+### shinsa suggestions list
 
-List the follow-up tasks agents suggested on a task.
+List the tasks agents suggested on a task.
 
 ```
-shinsa followups list <task> [--json]
+shinsa suggestions list <task> [--json]
 ```
 
-Every task agent's tool: `followups_list` (reads).
+Every task agent's tool: `suggestions_list` (reads).
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa followups accept
+### shinsa suggestions accept
 
-Add a suggested follow-up to the roadmap as a new task.
+Add a suggested task to the roadmap.
 
 ```
-shinsa followups accept <task> <suggestion> [--after-this] [--json]
+shinsa suggestions accept <task> <suggestion> [--after-this] [--json]
 ```
 
-Every task agent's tool: `followups_accept`. Sends `suggestion.accept`.
+Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
-| `<suggestion>` | text, required | The follow-up id, from `shinsa followups list`. |
+| `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 | `--after-this` | boolean, optional | Start it only after this task merges. |
 
-### shinsa followups dismiss
+### shinsa suggestions dismiss
 
-Dismiss a suggested follow-up.
+Dismiss a suggested task.
 
 ```
-shinsa followups dismiss <task> <suggestion> [--json]
+shinsa suggestions dismiss <task> <suggestion> [--json]
 ```
 
-Every task agent's tool: `followups_dismiss`. Sends `suggestion.dismiss`.
+Every task agent's tool: `suggestions_dismiss`. Sends `suggestion.dismiss`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
-| `<suggestion>` | text, required | The follow-up id, from `shinsa followups list`. |
+| `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 
-### shinsa followups keep
+### shinsa suggestions keep
 
-Keep a suggested separate task in this task instead, as its next round.
+Keep a suggested task in this task instead, as its next round.
 
 ```
-shinsa followups keep <task> <suggestion> [--json]
+shinsa suggestions keep <task> <suggestion> [--json]
 ```
 
-Every task agent's tool: `followups_keep`. Sends `suggestion.keep`.
+Every task agent's tool: `suggestions_keep`. Sends `suggestion.keep`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
-| `<suggestion>` | text, required | The follow-up id, from `shinsa followups list`. |
+| `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 
 ## runs
 
@@ -638,7 +639,7 @@ Every task agent's tool: `runs_dismiss`. Sends `run.dismiss_silence`.
 
 ### shinsa delegations list
 
-List the work agents delegated to other agents.
+List the delegations: work agents handed to other agents.
 
 ```
 shinsa delegations list [--task <text>] [--json]
@@ -652,7 +653,7 @@ Every task agent's tool: `delegations_list` (reads).
 
 ### shinsa delegations stop
 
-Stop a delegated task and everything it delegated.
+Stop a delegation and every delegation it started.
 
 ```
 shinsa delegations stop <run> [--json]
@@ -809,7 +810,7 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 
 | Argument | Kind | What it is |
 | --- | --- | --- |
-| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode. |
+| `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes. |
 | `<value>` | text, required | The new value. |
 
 ## projects
@@ -873,7 +874,7 @@ Every task agent's tool: `projects_remove`. Sends `project.remove`.
 
 ### shinsa projects add-repo
 
-Put a repository in a project, registering it if Shinsa has not worked there yet.
+Put a repository in a project, registering it if no agent has worked there yet.
 
 ```
 shinsa projects add-repo <project> <path> [--json]
@@ -942,7 +943,7 @@ Every task agent's tool: `focus_clear`. Sends `focus.change`.
 
 ### shinsa repos list
 
-List the repositories Shinsa has worked in.
+List the repositories agents have worked in.
 
 ```
 shinsa repos list [--json]
@@ -966,8 +967,8 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--name` | text, optional | Its name. |
 | `--default-branch` | text, optional | The branch pull requests target. |
 | `--project` | text, optional | Its project (key, name or id), or none. |
-| `--checks` | list, optional | The check commands, in order. Repeat the option for each. |
-| `--waive-checks` | boolean, optional | Work without checks. |
+| `--checks` | list, optional | The check commands, in order. Repeat the option for each. Only the human changes them. |
+| `--waive-checks` | boolean, optional | Work without checks. Only the human changes it. |
 
 ### shinsa repos remove
 
@@ -1158,6 +1159,32 @@ shinsa providers [--json]
 ```
 
 Every task agent's tool: `providers` (reads).
+
+## versions
+
+### shinsa versions list
+
+Show the installed Claude Code and Codex, the latest of each and the Claude Agent SDK Shinsa runs.
+
+```
+shinsa versions list [--json]
+```
+
+Every task agent's tool: `versions_list` (reads).
+
+### shinsa versions update
+
+Update Claude Code or Codex with its own updater.
+
+```
+shinsa versions update <program> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<program>` | choice, required | claude or codex. |
 
 ## health
 

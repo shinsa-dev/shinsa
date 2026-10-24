@@ -1,6 +1,6 @@
 # Shinsa
 
-A human-assisted coding harness. Agents do the work end to end; the human only appears at gates: reviewing a change, approving a merge, answering a question (and approving a plan, when switched on). Everything between gates is the harness's job. The product spec and its status are `docs/spec.md`; the agent engine (roles, lifecycle, outbox, recovery, accounts, delegation, schedules) is `docs/engine.md`; every object, its schema and its name (the glossary, commands, events, effects, open naming questions) is `docs/protocol.md`; the design system is `docs/design.md` and the `design` skill; where each harness feature comes from (T3 Code, Kanna, Paperclip) and how far it is built is `docs/harness-plan.md`.
+A control plane for coding agents. Agents do the work end to end; the human only appears at gates: reviewing a change, approving a merge, answering a question (and approving a plan, when switched on). Everything between gates is Shinsa's job. The product spec and its status are `docs/spec.md`; the agent engine (roles, lifecycle, outbox, recovery, accounts, delegation, schedules) is `docs/engine.md`; every object, its schema and its name (the glossary, commands, events, effects, the naming decisions) is `docs/protocol.md`; the design system is `docs/design.md` and the `design` skill; where each harness feature comes from (T3 Code, Kanna, Paperclip) and how far it is built is `docs/harness-plan.md`.
 
 ## Project structure
 
@@ -41,7 +41,7 @@ web ──WebSocket──► shinsa serve
   pull request; a new idea in the chat starts the next round on the same branch, worktree and agent sessions, shipped
   onto the open pull request or stacked on it. Merge ends a round, not the task; you (or an agent, once nothing is open)
   mark the task done (`docs/engine.md` → Rounds).
-- **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → the setup check → planning → building → checking → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
+- **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → setup verification → planning → building → checking → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets ("kind of task" on screen, shape in code) and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
 - **The hand-over protocol** (`packages/core/src/report/`): plans, phase hand-overs, fixes, review findings and
   inquiry results have fixed fields with hard length limits. The tools publish the limits in their schemas;
   `validate*` rejects a hand-over that breaks one and tells the agent what to fix. Shinsa assembles the work report
@@ -58,9 +58,13 @@ web ──WebSocket──► shinsa serve
   Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/server/src/agents/policy.ts` (no commit, push, rebase, `reset --hard`, `gh pr create|merge`, checkout of the default branch or a human-only `shinsa` command), through a PreToolUse hook for Claude.
 - **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge` Shinsa
   takes; GitHub branch protection is what stops a shell from taking another (`docs/engine.md` → Who can change Shinsa).
-- **Some decisions are human-only**: their surface specs are `humanOnly`, so no agent has a tool or a shell command
-  for them, and core refuses them on your behalf (`docs/engine.md` → Who can change Shinsa has the list and the HTTP
-  guard).
+- **Some decisions are human-only**: closing any gate, the settings in `HUMAN_ONLY_SETTINGS` and a repository's
+  checks (`HUMAN_ONLY_REPO_FIELDS`). Their surface specs are `humanOnly`, so no agent has a tool or a shell command for
+  them, and core refuses them on your behalf: nothing sent for you closes a gate, and a message an agent sends to a
+  task at a gate is kept for its next agent (`docs/engine.md` → Who can change Shinsa has the list and the HTTP guard).
+- **No backwards compatibility.** Shinsa has never shipped: a rename or a removal is done everywhere at once, with no
+  readers for old events, stored shapes or transcripts, no data migrations and no redirects for old routes or ids
+  (`docs/protocol.md` → Naming decisions).
 
 ## Commands
 

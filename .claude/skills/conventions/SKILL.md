@@ -19,7 +19,7 @@ description: Shinsa code conventions — load before writing or reviewing code a
 - **A folder is a concern with an `index.ts` barrel.** Importers outside the folder use the barrel (`../state/index.ts`) or, inside one package where a barrel would cycle, the concrete file (`../state/queries.ts`). Files inside a folder import each other directly, never their own barrel. Packages import each other only by package name (`@shinsa/core`), never by path.
 - **The package barrel is the contract.** Everything `packages/core/src/index.ts` exports stays importable by the same name. Moving a file is free; renaming or removing an export changes every consumer and needs their updates in the same change.
 - **Tests follow `src/`**: one test folder per source folder and a test file per module with behaviour of its own (`packages/core/test/decide/gates.test.ts` ↔ `src/decide/gates.ts`); a module that only serves another is covered through it. Shared helpers live beside them (`test/harness.ts`, `test/briefing/fixtures.ts`), never in `src/`.
-- **No single-use constants.** A value gets a name when it is reused or is a tunable (`MAX_STALLED_FIXES`, `ACTIVITY_LIMIT`). A lookup table (`Record<GateKind, string>`) beats a `switch` that only returns strings.
+- **No single-use constants.** A value gets a name when it is reused or is a tunable (`MAX_STALLED_FIXES`, `ACTIVITY_LIMIT`). A lookup table (`Record<GateType, string>`) beats a `switch` that only returns strings.
 
 ## Function verbs — one catalog, no synonyms
 
@@ -50,27 +50,27 @@ Banned in `apps/server/src`, `apps/web/src` and `packages/core` (lint-enforced):
 
 ```ts
 // right: a command handler validates, emits facts, and asks for effects
-export function blockTask(decider: Decider, command: CommandOf<'task.block'>) {
+export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>) {
   const task = decider.task(command.taskId);
   if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
-  changeDependencies(decider, task.id, resolveDependencies(decider, task, command.blockedBy), 'you');
+  changeDependencies(decider, task.id, resolveDependencies(decider, task, command.waitsOn), 'you');
 }
 ```
 
 ```ts
 // wrong: mutating state, reading the clock, doing I/O
-export function blockTask(state: ShinsaState, command: CommandOf<'task.block'>) {
-  state.tasks[command.taskId].blockedBy = command.blockedBy;
+export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on'>) {
+  state.tasks[command.taskId].waitsOn = command.waitsOn;
   state.tasks[command.taskId].updatedAt = Date.now();
 }
 ```
 
 - **State is the event log.** `decide` is pure given `now` and `newId`; it never mutates its input (the `Decider` works on a clone) and every change is an event folded by `applyEvent`. Replaying the log must rebuild the same state, so `applyEvent` reads only the event and the state before it, and never stores a shared constant by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
-- **Events are facts, past tense** (`task.staged`, `pull_request.push_requested`). Never remove an event type or change what it means: old logs replay forever. A new field is optional; a new behaviour is a new event.
+- **Events are facts, past tense** (`task.staged`, `pull_request.push_requested`). Shinsa has never shipped, so it keeps no backwards compatibility: a renamed or removed event, field or value changes everywhere at once, with no reader for the old shape, no migration and no default that only an old log needs.
 - **Commands are idempotent where the world can repeat them.** A system or agent command that arrives twice (a retried effect, a duplicate tool call) is a no-op the second time: `checks.record` outside `checking` is ignored, an `agent.ask` with a known gate id opens nothing, a write that changes nothing emits nothing.
 - **Validation throws `DomainError(code, message)` before anything is emitted.** The code is `snake_case`; the message is a sentence the human or the agent can act on (`copy` skill).
 - **Exhaustive switches over unions.** `decide`'s `apply` lists every command type; `applyEvent` every event type. Don't add a `default` that swallows a new member; let the type checker and `useExhaustiveSwitchCases` fail instead.
-- **No dead branches.** If an invariant makes a branch unreachable (no decision gate can be open while an agent runs), delete the branch and let `test/decide/invariants.test.ts` hold the invariant. Code kept only for event logs from an older version gets a test that builds that old state with `applyEvent`.
+- **No dead branches.** If an invariant makes a branch unreachable (no decision gate can be open while an agent runs), delete the branch and let `test/decide/invariants.test.ts` hold the invariant. Code kept only for event logs from an older version is deleted.
 - **The invariants** are listed in `packages/core/CLAUDE.md` and checked after every random command in `invariants.test.ts`. A change that needs to break one changes the invariant, its test and `docs/engine.md` together.
 
 ## Readability

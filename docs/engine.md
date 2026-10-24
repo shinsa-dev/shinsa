@@ -10,8 +10,9 @@ escalates instead of looping). The rules live in `packages/core` (pure, `decide`
 
 ## Agents
 
-Each step is its own agent, and each role's provider (Claude or Codex) and model are set in Settings → Agents. The
-agent that builds never reviews its own work.
+Each step is its own agent, and each role's provider (Claude or Codex) and model are set in Settings → Agents →
+Models: Task agents (Opus) and Quick jobs (Sonnet), and per role underneath. The agent that builds never reviews its
+own work.
 
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
@@ -21,25 +22,25 @@ agent that builds never reviews its own work.
 | Reviewer | Opus | always fresh, cannot edit | findings (`report_review`) |
 | Fixer | Opus | resumes the latest builder or fixer session | a summary (`complete_fix`) |
 | Answerer | Opus | fresh, in the repository itself, cannot edit; a follow-up resumes it | an answer (`answer`), optionally a proposed change (Task shapes, below) |
-| Investigator | the Answerer's | fresh, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships); a follow-up resumes it | findings (`report_findings`), optionally a proposed fix |
+| Investigator | the Answerer's | fresh, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships); a follow-up resumes it | a diagnosis (`report_diagnosis`), optionally a proposed fix |
 | Researcher | the Answerer's | fresh, cannot edit, in the worktree when the task has one, else the repository; a follow-up resumes it | a report (`submit_report`), optionally a proposed change |
-| Operator | the Builder's | fresh, in the task's worktree, after you approved its plan | how the operation went (`report_outcome`) |
+| Operator | the Builder's | fresh, in the task's worktree, after you approved its plan | how the operation went (`report_outcome`), after the evidence its plan asks for |
 | Writer | Sonnet | one call, no thinking | the Home guide: now, up next, a heads-up |
 
 Besides its hand-over tool, every working role can ask (`ask`; never the reviewer, which cannot ask the human
 anything), keep notes, find and read other tasks (`find_tasks`, `read_task`, which never changes anything), suggest
-follow-ups, delegate (Delegation, below), file a task (`create_task`; the builder also `split_task`) and schedule work,
+tasks, delegate (Delegation, below), file a task (`create_task`; the builder also `split_task`) and schedule work,
 and the building and long-running roles can wait (`wait_for`). So every task agent can read across the roadmap, file a
-task, schedule work and suggest follow-ups, while its hand-over stays its own. Which role gets which tool is one
+task, schedule work and suggest tasks, while its hand-over stays its own. Which role gets which tool is one
 table, `listToolNames` in `packages/core/src/domain/tools.ts`: the server serves exactly those tools, `decide` refuses
 a call the run's role does not have, and each prompt's house rules name only the tools the agent has. The matrix is
 `docs/protocol.md` → Agent tools.
 
 Every task agent (not a delegated one) also gets the command surface as tools: every `shinsa` command-line action but
-the few that need you at the keyboard, one tool each (Agents manage Shinsa, below). A run the context optimizer left
-servers or skills out of also gets `load_mcp_server`, `call_mcp_tool` and `load_skill` (MCP servers, plugins and
-skills → Loading what was left out). No step starts a `shipper` run any more (pull
-request fixes are fixer runs); the role stays for older logs and keeps the fixer's model. A run
+the few that need you at the keyboard and `tasks create`, one tool each (Agents manage Shinsa, below). A run the
+context optimizer left servers or skills out of also gets `load_mcp_server`, `call_mcp_tool` and `load_skill` (MCP
+servers, plugins and skills → Loading what was left out). Pull request fixes are fixer runs. Which agent role's
+settings each run role uses is one table, `RUN_AGENT_ROLE` (`packages/core/src/agent-models/index.ts`). A run
 woken by a monitor (Waits and monitors, below) resumes the session of the run that waited.
 
 A role runs on `settings.agentProviders[role]`, else `settings.defaultProvider` (`resolveAgentProvider`). Its model
@@ -59,25 +60,65 @@ serves the default provider's list for the setup chat.
 the configured commands, otherwise `lint`, `check-types`, `typecheck` and `test` from
 `package.json`), so a green build is a fact, never an agent's claim.
 
+### Who is who
+
+Shinsa is a control plane for coding agents. It does not think or write code itself: it runs the harnesses (Claude
+Code through the Agent SDK, and Codex) as role agents, one per step, and keeps the gates, the commits, the pushes and
+the merges for itself. In one task:
+
+```
+Shinsa                       triage, gates, checks, commits, pushes, merges
+├── Classifier · Writer      one-shot calls with no tools; never in a task's chat
+└── task SW-14
+    └── round 1, round 2 …   each round its own steps
+        ├── Planner          plans the round, or composes its steps
+        ├── Builder          one per phase
+        │   └── delegated agents (Planner, Builder, Reviewer, Fixer), up to three deep
+        ├── Reviewer         fresh and read-only
+        ├── Fixer            resumes the builder's session
+        └── Answerer · Investigator · Researcher · Operator   the other kinds of task
+```
+
+The human is in the chat with them. Every agent talks to you directly and hands its work over through a Shinsa tool,
+whose result the chat shows as a card; the house rules (`prompts/rules.ts`) tell it never to narrate that hand-over
+or announce that its turn is over. A delegated agent talks to the agent that delegated it.
+
+**Agents speak as themselves.** Every agent writes in the first person ("I found…", "I know of one project…", "I
+have not worked in that repository yet"); Shinsa stays in the background as the control plane it works in.
+`VOICE_RULE` in `prompts/rules.ts`, in every working role's house rules and every delegate's prompt, forbids
+writing that Shinsa knows, has or did what the agent itself knows or did, and allows naming Shinsa only where the
+reader has to act in it (a setting, a command, a gate). The hand-over is the reply: the answer, diagnosis, report
+and outcome tool descriptions (`agents/tools/shapes.ts`) say to write it to the human in the first person, the
+tool's reply (`HANDED_OVER` in `agents/handover.ts`) says the human reads it as the agent's reply and to stop and
+write nothing more, and the house rules forbid announcing, pointing at, repeating or summarising it ("My answer is
+above"). Text the agent writes in that turn anyway folds into the chat's work, under the card
+(`docs/design.md`, 7). The tool texts an agent reads avoid the third person too: `find_tasks` and `read_task`,
+`repos list` ("the repositories agents have worked in") and the delegation errors ("There is no repository…").
+`test/prompts/rules.test.ts` pins the rule and fails on any prompt that speaks of the agent as Shinsa or invites a
+closing summary. On screen, each run in the
+chat is headed by its role's name and icon, a delegated agent sits inside the turn of the agent that delegated it,
+and the task's "Who worked on this" lists the same tree (`docs/design.md`, 12).
+
 ## A task's path
 
 Every task follows its own pipeline (Task shapes, below). The longest one, a change, is:
 
 ```
-create → classify → (wait for the task it depends on) → worktree → plan → phase 1 … phase n
+create → classify → (wait for the tasks it waits on) → worktree → plan → phase 1 … phase n
        → checks → agent review → YOUR REVIEW → pull request → CI and bots → YOUR MERGE → merged
           checks, review, CI and your messages all loop through a fixer
 ```
 
 1. **Classify.** One Sonnet call picks the title, repository, size, branch and, given every open
-   task, the tasks this one depends on (`depends_on`, a list, usually empty). Then the task either
-   waits for them (Scheduling, below) or has its setup checked (`config.verify`, The setup check,
-   below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
+   task, the tasks this one waits on (`waits_on`, a list, usually empty). Then the task either
+   waits for them (Scheduling, below) or has its setup verified (`config.verify`, Setup
+   verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
    default branch.
 2. **Plan.** The planner reads the code and calls `propose_plan`. A task created plan first
-   (`specFirst`: `shinsa do --spec`, `shinsa import`) always waits at a plan gate; otherwise, with
+   (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise, with
    Settings → Agents → Engine, Approve plans on (`approvePlans`, off by default), a large task's plan or a revised
-   plan waits there (`needsPlanApproval`), and building starts at once when it does not. A decision
+   plan waits there (`PLAN_GATE_RULE`, evaluated by `needsPlanApproval`; Gates, below), and building starts at once
+   when it does not. A decision
    only the human can make is asked with `ask` before planning finishes.
 3. **Build.** Each phase is a new builder run with a fresh session. It sees the plan, its own
    phase and the summaries of the phases before it. Phases run in order in one worktree.
@@ -92,9 +133,9 @@ create → classify → (wait for the task it depends on) → worktree → plan 
 7. **Pull request.** Shinsa pushes and opens the PR, then watches it (The pull request watch,
    below). A check that newly fails, a new comment from anyone but Shinsa's own GitHub user, a new
    conflict, or a problem that is still there after the last fix starts a fixer, told exactly
-   what is new; `complete_fix` pushes the fix. While a push is on its way
-   (`pull_request.push_requested` until `pull_request.pushed`), and until GitHub reports the
-   pushed commit, a sync is stored but not judged, so a stale result never starts a second fixer.
+   what is new; `complete_fix` pushes the fix. While a push is on its way (`pull_request.push_requested` until
+   `pull_request.pushed`, which `pull_request.record_push` records), and until GitHub reports the pushed commit, a
+   sync is stored but not judged, so a stale result never starts a second fixer.
 8. **Your merge.** The merge gate opens only on a clean PR with no comment left unread, and only
    after every task it waits on has finished. A task that starts waiting on another while its
    merge gate is open loses the gate until that task merges. Approving starts the merge; syncs
@@ -115,21 +156,56 @@ with its own steps composed by the planner from the step schema exactly as for a
 round. The rules live in `packages/core/src/decide/rounds.ts` (decisions), `domain/rounds.ts` (the record and the
 predicates) and `state/rounds.ts` (the folds); the classifier is `apps/server/src/triage/message.ts`.
 
-- **Round 1 is the task's request.** `task.created` folds into round 1, so every task has one, and a log from before
-  rounds replays into a single round with nothing to migrate. The task's own fields (plan, phases, report, checks,
-  findings, fix budget, answer, result, proposal, pull request) are the current round's.
-- **Feedback or new work: the classifier decides.** A message you write goes through the server's classifier before it
-  reaches `decide` (`routeUserCommand` on the socket and `POST /api/commands`): one quick call on the classifier model
-  with a typed decision (`choice` of `feedback`, `new_round` or `separate_task`, each with what it means), plus a
-  title, a why and, for new work, the kind of work (the six shapes). The answer travels on the command (`task.message`
-  `kind`, `title`, `why`, `shape`) and is recorded with it, so replay never asks the model. `feedback` keeps the
-  behaviour of What a message does (below): it steers, revises, sends back or fixes. `new_round` queues the next
-  round. `separate_task` becomes a split-off suggestion (below). When the model is off or fails, the message is
-  feedback, and a resting task's message is a new round. A message sent with `kind` already set (the command line's
-  `--as`, an agent's `tasks_message` with `as`) skips the classifier; an agent's message without one is classified
-  like yours. The receipt is taken over the command as you sent it, so the same command id resent after a reconnect is
-  answered from its receipt and never classified twice.
-- **One active round, and when the next one starts.** A new round is queued (`round.queued`, at most five waiting) and
+- **Round 1 is the task's request.** `task.created` folds into round 1, so every task has one. The task's own fields (plan, phases, report, checks,
+  findings, fix budget, result, proposal, pull request) are the current round's.
+- **How a new round is decided.** The classifier decides, not the agent, for every message, the task resting or not:
+  one quick call on the classifier model reads your message against the task's rounds (each with its kind of work, its
+  status and what it did: the result, the report's headline or the plan's goal) and whether a round is in progress, and
+  answers `acknowledge`, `feedback`, `new_round` or `separate_task`. Most messages are no new work: thanks, "ok" or
+  small talk is `acknowledge`, and a question about what a round did is `feedback`; only a message that asks for
+  something to be done that has not been done is a new round (on a resting task a correction to finished work is one).
+  You override it by saying what the message is (`shinsa tasks message --as new_round`, an agent's `tasks_message`
+  with `as`), which skips the classifier. A new round sent that way without a `shape`, and a suggestion kept as the
+  next round (`suggestion.keep` without one), still gets its kind of task: the server asks the classifier the same
+  shape question (`resolveRoundShape` in `triage/message.ts`, the task's rounds as context) before it dispatches, and
+  the answer travels on the command like a classified message's, so replay never asks again. Only when the model is
+  off or gives no usable answer does the round fall back to `change`.
+- **A message that needs no new work stays in its round.** `acknowledge` is recorded in the chat (`task.messaged`,
+  "Sent a message") and nothing else happens: no run, no round, wherever the task is, except that it answers an agent's
+  open question. A pure acknowledgement starts no agent on purpose: a reply would resume a session that has gone cold
+  since the round ended, at the cost of reading its whole context again, to say "you're welcome"; the next agent of
+  the round reads it among your messages anyway. `feedback` to a resting task is a follow-up in the same round
+  (`follow_up`): a finished answer, investigation or report goes to the same agent as before; any other finished round
+  (a merged change, an operation that ran) gets an answerer that resumes the round's last agent session (the reviewer's
+  excepted; `answerFollowUp`, `resolveFollowUpPrompt`), runs in the repository like any answerer and answers with
+  `answer`, proposing no change (`follow_up_proposal`). The round reopens while it answers (stage `answering`,
+  `isFollowUpOnWork`) and rests again as it was, merged or done, with its result untouched. A message on a resting task
+  with no kind (the model off or failed) is such a follow-up, never a new round; only a schedule's message to a
+  resting task still starts the next round.
+- **A new round is shaped like a new task.** The same call answers, for new work, the kind of work from triage's shape
+  question (`SHAPE_QUESTION`), read as the request of a new task with the earlier rounds as its context, and the round
+  takes that preset's steps: "how many ended up in Archive?" is an answer round, "open a pull request for it" a change,
+  "move the old checkout under Archive instead" an operation. Only a round with no shape (`--as new_round` with none, or a
+  suggested task kept as the next round) starts as a change, which its planner may reshape.
+- **Accepted at once, routed after.** A message you write is accepted before anything is classified
+  (`routeUserCommand` on the socket and `POST /api/commands`): it becomes `message.receive`, which core checks and keeps
+  in the task's `inbox`, and the acknowledgement and the state push carry it straight away, so the chat shows it as
+  sent while the classifier still reads it (the web also shows it from the moment you press send, until the state has
+  it: `lib/tasks/outbox.ts`). `MessageInbox` (`triage/inbox.ts`) then asks the classifier for every message in an
+  inbox at once and routes them in the order they were sent (`message.route`, command id `message.route:<message>`).
+  The classifier's answer is a typed decision (`choice` of `acknowledge`, `feedback`, `new_round` or `separate_task`,
+  each with what it means where the task is), plus a why (asked first), a title and, for new work, the kind of work (the
+  six shapes); it travels on `message.route` and is recorded with it, so replay never asks the model. `feedback` keeps
+  the behaviour of What a message does (below): it steers, revises, sends back, fixes or follows up. `acknowledge` is
+  only recorded. `new_round` queues the next round. `separate_task` becomes a split-off suggestion (below). When the
+  model is off or fails, the message is feedback. A message the task can no
+  longer take by the time it is routed (it was closed meanwhile) is dropped with core's reason (`message.drop`), which
+  the activity shows. A message still in an inbox at shutdown is routed on the next start. An agent's
+  `tasks_message` without `as` is classified before it is dispatched, since the agent waits for the result. The
+  receipt is taken over the command as you sent it, so the same command id resent after a reconnect is answered from
+  its receipt and never accepted twice.
+- **One active round, and when the next one starts.** A new round waits (`round.queued`, round status `waiting`, at
+  most five waiting) and
   starts by itself once the current round rests (`startQueuedRounds`, after every command, like `releaseWaiting`):
   - the round finished on its own: its pull request merged, or its inquiry or operation ended (the task rests);
   - or the round's pull request is clean and waiting at the merge gate, for a next round that ships through a pull
@@ -168,14 +244,15 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/server/sr
   main on a new branch; with a stacked pull request still open (one merged on GitHub outside Shinsa), it continues on
   the stack.
 - **Splitting off.** When an idea does not belong in the task, it is suggested as a separate task through the existing
-  suggestion mechanism: the classifier's `separate_task` records one (`splitOff`, from Shinsa), and a working agent can
+  suggested tasks: the classifier's `separate_task` records one (`splitOff`, from Shinsa), and a working agent can
   mark its own `suggest_tasks` entry `split_off`. You make it a task (`suggestion.accept`) or decline and keep it in the
-  chat (`suggestion.keep`), which queues it as the next round.
+  chat (`suggestion.keep`, with an optional `shape`), which queues it as the next round of that kind (asked of the
+  classifier when it is left out, above).
 - **When a task is done.** After a merge the task stays open: it rests, with no run, gate or worktree, and its chat
   takes the next round. You mark it done (`task.complete`, which closes it: `closedAt`), or an agent does when the work
   is complete and nothing is open. Core refuses `task.complete` while an earlier round's pull request is still open
   (`task_open`), and one sent on your behalf also while a round waits, the task's pull request is open (`task_open`)
-  or a human-only gate is open (`human_only`). A closed task takes no message. The human-only gates are unchanged.
+  or any gate is open (`human_only`: Who can change Shinsa, below). A closed task takes no message.
 - **Long sessions.** A round resumes the same provider sessions, and Shinsa's eunoe keys its thread on the session id
   and its first turn, so the folds a session built in earlier rounds carry over into later ones and every compaction
   is a notice in the run's chat. The session id lives in the log, so a restart between or inside rounds resumes the same
@@ -187,7 +264,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/server/sr
 ## Task shapes
 
 Not every request is a pull request. A debug question, a support question or a comparison needs an answer, a report or
-findings, and maybe a change later. The rules are core (`packages/core/src/domain/shapes.ts`, `decide/shapes.ts`, the
+a diagnosis, and maybe a change later. The rules are core (`packages/core/src/domain/shapes.ts`, `decide/shapes.ts`, the
 folds in `state/shapes.ts`).
 
 - **Steps are building blocks, never free-form.** A task's `pipeline` is an ordered subset of fixed steps: `answer`,
@@ -205,8 +282,7 @@ folds in `state/shapes.ts`).
   inside a change ("An operation runs right after the plan, or last, after the merge."); `your_ok` sits after an
   answer, research or an investigation and before a plan. On top of the guards, the verification rules (Steps and gates)
   make `checks` and `agent_review` part of every code change: a composition without them is refused. A task may both
-  build and operate. `startAfterBuild` and `startAfterChecks` still skip a missing step, for tasks an older version
-  composed without them.
+  build and operate.
 - **A change and an operation together.** `resolveOperationTiming` says where the operation runs: `alone`,
   `before_build` or `after_merge`. The plan gate always opens when a task operates, so you approve the operation with
   the plan, and the plan states the operation's `impact` (what it changes and how much, its dry run or why there is
@@ -218,25 +294,26 @@ folds in `state/shapes.ts`).
   work (`finishMerge`), withdraws any gate and asks you again (`awaiting_operation`, the operation gate: "The change
   merged. Run the operation now?", with the merged commit, the operation's steps and its impact), because the code
   that merged can differ from the code you approved the plan for. Run it, and the operator starts on the merged code in
-  the task's worktree (with your words as guidance when you write some); finish without it, and the task is done
-  ("merged without running the operation"). A message while the gate is open becomes notes for the operator: they are
-  added to the open gate's notes in place (`gate.noted`, the same gate, so nothing notifies you again), Run passes
-  them to the operator with your words, and nothing runs until you choose. A retry leaves the gate for you. The
+  the task's worktree with the gate's notes as its guidance; finish without it, and the task is done ("merged without
+  running the operation"). The notes live only on the gate (`Gate.notes`): a message while the gate is open replaces
+  them in place (`gate.noted`, the same gate, so nothing notifies you again; an empty message clears them) and nothing
+  runs until you choose. `approve` runs with the notes on the gate; `reply` replaces them with its words (empty clears
+  them) and runs. A retry leaves the gate for you. The
   operator's `report_outcome` finishes the task as done ("the operation finished"); a retry or a message while it runs
   restarts the operator, never the merge, and a pull request read that arrives after the merge changes nothing. An
   operation that runs before any code ships keeps "approve with the plan": nothing has changed since you read it.
 - **Shapes are the named pipelines** (`SHAPE_PIPELINES`): **answer** `[answer]` (the answerer reads the repository itself, no
-  worktree); **investigate** `[investigate]` (an investigator in a scratch worktree reproduces the problem and reports findings
-  with `report_findings`); **research** `[research]` (a read-only researcher writes a report with `submit_report`); **change**
+  worktree); **investigate** `[investigate]` (an investigator in a scratch worktree reproduces the problem and reports its
+  diagnosis with `report_diagnosis`); **research** `[research]` (a read-only researcher writes a report with `submit_report`); **change**
   (plan to merge, as above); **fix** `[investigate, …change]` (investigate first, then the worktree is reset onto the default
-  branch, so nothing the investigator tried ships, and the planner plans the fix from the findings without asking again);
+  branch, so nothing the investigator tried ships, and the planner plans the fix from the diagnosis without asking again);
   **operation** `[plan, operate]` (something to run in the repository, a script, a migration or a cleanup: the plan always
   waits for you, then an operator runs it and reports with `report_outcome`; no pull request). `resolveTaskShape` names a
   pipeline back (an answer that became a change reads as a change).
 - **Who chooses.** Shinsa. The classifier picks one of the six presets from the request (`task.triage` `shape`, a
   typed choice with what each means) as the starting point; nothing lets you change the kind afterwards (the
   Overview's facts, the roadmap row and the activity show it; neither the composer nor ⌘K asks for it). `task.create`
-  still takes a `shape`, but only a raw command sends one (`shinsa command task.create`). The planner of a task Shinsa
+  takes no `shape`: only triage and the planner shape a task. The planner of a task Shinsa
   shaped then keeps that preset (it plans) or replaces it with `reshape_task` before planning: `shape` makes it an
   answer, an investigation or research, and `steps` composes the task from the building blocks (`agent.reshape` with
   `steps`). Never a kind you chose (`shape_chosen`), never once a plan exists (`plan_exists`), and only once per task:
@@ -248,59 +325,64 @@ folds in `state/shapes.ts`).
   `pipeline_invalid` with every problem in one message; the server returns it to the planner as the tool's error, its run
   carries on and it can try again. Steps the task already has change nothing, and the tool tells the planner to plan them.
   Otherwise the planner's run ends, `task.reshaped` records the steps (`by: agent`, its reason), and the first new step
-  starts: when the work step changed (a change became an operation, or the other way), the setup check runs again first,
-  so a change gets its checks checked and a fresh planner plans with the right prompt.
-- **Your OK** (`your_ok`) is the step where a composed task stops after its inquiry. The inquiry agent's prompt says the
-  human decides whether the task goes on and asks it to end with what the next step should do. When it hands over, Shinsa
-  records a proposal (the agent's own `propose_change`, or the planner's reason and what comes next: "Plan the operation.
-  You approve the plan before anything runs.") and opens the change gate ("Run an operation from these findings?", or "Turn
-  this investigation into a fix?" before a change). Approving records `task.change_approved` (the proposal is accepted)
-  and goes on to the plan on the reset worktree, with the result and what you approved in the planner's prompt. Your veto
-  (reject) declines the proposal, reshapes the task to just its inquiry (`by: you`, "kept as an investigation") and
-  finishes it, so it takes follow-ups like any investigation. A message instead declines the proposal and resumes the
-  inquiry agent with it; its next hand-over asks again.
+  starts: when the work step changed (a change became an operation, or the other way), the setup is verified again
+  first, so a change gets its checks verified and a fresh planner plans with the right prompt.
+- **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); an inquiry step has
+  no gate of its own, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
+  goes on and asks it to end with what the next step should do. When it hands over, Shinsa records a proposal (the agent's own `propose_change`, or the planner's reason and what comes next: "Plan the
+  operation. You approve the plan before anything runs.") and opens the proposal gate ("Run an operation from this
+  diagnosis?", or "Turn this investigation into a fix?" before a change). Approving records `task.change_approved` (the
+  proposal is accepted), verifies the setup again and goes on to the plan on the reset worktree, with the result and what
+  you approved in the planner's prompt. Your veto (reject) declines the proposal, reshapes the task to just its inquiry
+  (`by: you`, "kept as an investigation") and finishes it, so it takes follow-ups like any investigation. A message
+  instead declines the proposal (`decline_proposal`) and resumes the inquiry agent with it; its next hand-over asks
+  again.
 - **Changing shape mid-task.** An answerer, investigator or researcher can end with `propose_change` (`request` at most 2,000
-  characters, `why` at most 240). Unless the pipeline already goes on to a plan (a fix), the task stops at a **change gate**
-  (`awaiting_change`, a `question` gate with purpose `change`: "Turn this investigation into a fix?"). Approving turns the task
-  into the inquiry step plus a change (`task.reshaped` by the agent, the proposal marked accepted), checks the setup again and
-  plans with the findings, the answer or the report in the planner's prompt; rejecting finishes the task ("kept as an
-  investigation"); a message withdraws the gate and resumes the agent with it. Any step that would add `build` or `operate`
-  to a task that had neither is an upgrade and only happens through this gate. The planner only
+  characters, `why` at most 240). On a task without `your_ok` whose pipeline does not already go on to a plan (a fix
+  does), the agent's proposal reshapes the task to `[inquiry, your_ok, plan, build, checks, agent_review, your_review,
+  pull_request, merge]` (`resolveProposalUpgrade`, `task.reshaped` by the agent with its why) and it waits at `your_ok`
+  exactly as above ("Turn this investigation into a fix?"). Any step that would add `build` or `operate` to a task that
+  had neither only happens through that gate. The planner only
   composes a task that already plans work, so its composition can swap a change for an operation (whose plan always waits
   for you), add an operation before or after the change, or the other way (whose code always waits at your review), never
   turn an inquiry into either.
-- **Every change is an event.** `task.reshaped` (`pipeline`, `by`: you (from your veto at your OK, and in older logs your
-  own reshape), agent or Shinsa, `reason`) keeps the last 20 in
+- **Every change is an event.** `task.reshaped` (`pipeline`, `by`: you (from your veto at your OK), agent or Shinsa,
+  `reason`) keeps the last 20 in
   `shapeChanges` and writes an activity entry ("Turned into a find-and-fix change", "Made it an investigation", "Turned
   into an investigation, then an operation", "Turned into a change, then an operation" for a composition); `task.change_proposed`, `task.change_approved` (your OK in
-  composed steps) and `task.change_declined` record the proposal; `task.delivered` keeps the findings, report or outcome
-  on `task.result`.
+  composed steps) and `task.change_declined` record the proposal; `task.delivered` keeps the answer, diagnosis, report or
+  outcome on `task.result`.
 - **Follow-ups.** A finished answer, investigation or research takes a message as a follow-up on the same session
-  (`acceptsFollowUp`); a finished operation does not.
-- **Older tasks** have no `pipeline`: an Ask task (`mode: 'ask'`) reads as an answer and every other one as a change
-  (`resolveTaskPipeline`), so replay needs no migration step.
+  (`acceptsFollowUp`); a finished operation or a merged change takes one through an answerer that resumes the round's
+  last session (Rounds, above).
+- **Before triage** a task whose kind Shinsa picks has no `pipeline` yet: an Ask task (`mode: 'ask'`) reads as an
+  answer and every other one as a change (`resolveTaskPipeline`).
 - **Progress** (`resolveTaskProgress`) draws the pipeline: Find the repository (when it does not start with a plan), each step,
-  the plan's phases, and Your OK to change (Your OK to run before an operation) for a `your_ok` step or while the change gate
-  is open; the step is done once the proposal is accepted. The steps follow the pipeline's order, so an operation after
+  the plan's phases, and Your OK to change (Your OK to run before an operation) for a `your_ok` step or while the proposal
+  gate is open; the step is done once the proposal is accepted. The steps follow the pipeline's order, so an operation after
   the merge is the last step; Checks and agent review is named for what the task keeps (Checks, Agent review), and a fix
   in a change without either shows Build as current.
+  Until the steps are settled nothing draws them: `resolveShapeState` (`domain/shapes.ts`) is `triage` while an Auto
+  task has no pipeline yet, `planner` while the planner of a task Shinsa shaped can still reshape it (planning or
+  waiting, no plan, no composition, a pipeline that starts with a plan), and `settled` otherwise, so the web shows
+  "Working out the steps" instead of a guessed plan-to-merge strip.
 
 ### Automatic options
 
 The kind of task is always decided for you; when it starts and its priority are decided for you unless you pick
 them in the composer.
 
-- `task.create` records which were left to Shinsa (`auto: { shape, start, priority }`): a field you leave out is Auto, and
-  an explicit `blockedBy: []` is Start now. Schedules and accepted follow-ups keep their own choices; a split plan's tasks are
-  changes; a courier's task is Auto.
+- `task.create` records which were left to Shinsa (`auto: { shape, start, priority }`): the kind is Auto unless `mode` was
+  given, a field you leave out is Auto, and an explicit `waitsOn: []` is Start now. Schedules and accepted suggested tasks
+  keep their own choices; a split plan's tasks are changes; a courier's task is Auto.
 - Triage answers each Auto part as a typed decision question with a short why: `shape`, `priority` (urgent, high, normal or
-  low) and `depends_on` (the open tasks of the task's project, in any repository, listed with their repository and
+  low) and `waits_on` (the open tasks of the task's project, in any repository, listed with their repository and
   stage; a task with no project is offered every open task, and keeps only those in its repository or in none, a
   dropped one with no why). Core applies only the Auto parts
-  (`task.triaged` `pipeline`, `task.prioritized`, `task.blocked` by Shinsa) and keeps the decisions with their why on
+  (`task.triaged` `pipeline`, `task.prioritized`, `task.waits_on_changed` by Shinsa) and keeps the decisions with their why on
   `task.triageDecisions`, so each fact can say why (the kind, the priority and when it starts, in their tooltips on the
   Overview: "Shinsa chose this: …"). The start and the priority each
-  change in one command (`task.block`, `task.prioritize`); a part you changed is yours, not Auto, from then on; the
+  change in one command (`task.wait_on`, `task.prioritize`); a part you changed is yours, not Auto, from then on; the
   kind does not change after triage except through the planner and your OK. Without a
   model (off, failed or unreadable) the task stays a change at its priority, starting now, and the why says so.
 
@@ -315,8 +397,12 @@ Each step kind declares its class (inquiry, consent, planning, code, operation, 
 does it, what it reads and must hand over, when it is done, its gate (`hard` needs you, `soft` is an automatic check,
 `none` hands straight on), where it may sit and what it needs before or after it. Each hard gate declares the decisions
 it takes and what each does, the refusal for any other decision and whether it pauses the task; each soft gate its
-pass, fail and escalate outcomes. `gate.answer` reads the allowed decisions and the refusal from the schema
-(`resolveGateDefinition`) and `isPausingGate` reads `pauses`, so a gate's behaviour cannot drift from its definition.
+pass, fail and escalate outcomes and the hard gate it escalates to (`escalatesTo`: checks and CI to a failure gate, the
+agent review to your review). A gate stores one `type` (`GateType`; a soft gate is a `SoftGateType`). `gate.answer`
+reads the allowed decisions and the refusal from the schema (`resolveGateDefinition(gate)`, `GATE_SCHEMA[gate.type]`)
+and `isPausingGate` reads `pauses`, so a gate's behaviour cannot drift from its definition. The plan gate's rule is
+data too (`PLAN_GATE_RULE`): `describePlanGateRule()` writes the plan step's `when` from it and `needsPlanApproval`
+evaluates it.
 The tables (`STEP_SCHEMA`, `GATE_SCHEMA`, the `Gate` record) are `docs/protocol.md` → Steps and gates.
 
 ### Verification
@@ -327,9 +413,11 @@ changes nothing never meets one, and a change always meets all of them. So a cod
 plan in its plan → the build, with the evidence the plan asks for → Shinsa's checks (the repository's and the plan's)
 → an independent agent review → your review → the pull request → CI and bots → your merge. An operation runs only from
 a plan you approved that states its `impact` (and its steps in `operation` when it comes with code), and one after the
-merge asks you again on the merged commit. `validateComposition` adds `validateVerification` to the guards for every
-composition, `proposePlan` refuses a plan with `validatePlanRules`, and `completePhase` refuses the last phase while
-`listMissingEvidence` names a kind. The invariants that hold the shapes and the rules are `packages/core/CLAUDE.md`.
+merge asks you again on the merged commit. A plan may ask for `evidence` for an operation as for a change; an
+operation without a code change must attach it before `report_outcome` (`operation.evidence`), while `checks` stay for
+code changes. `validateComposition` adds `validateVerification` to the guards for every composition, `proposePlan`
+refuses a plan with `validatePlanRules`, and `completePhase` refuses the last phase, and `report_outcome` an operation
+on its own, while `listMissingEvidence` names a kind (`evidence_missing`). The invariants that hold the shapes and the rules are `packages/core/CLAUDE.md`.
 
 ### How the planner composes
 
@@ -353,11 +441,11 @@ in which finished work reaches you is managed.
   running: there is no cap. A run is created `queued` and `dispatchRuns` starts it in the same
   command, so `queued` only lasts until the end of that command (or across a restart, until the
   boot dispatch). An agent may start as many of its provider's own subagents as it needs; Shinsa's
-  delegated tasks have their own limits (Delegation, below).
+  delegations have their own limits (Delegation, below).
 - **No agent limit.** Work you asked for never waits for a slot: there is no cap, hidden or behind an environment
   switch, and a stored `maxConcurrentRuns` is ignored. If a machine ever needs one, it belongs in `dispatchRuns` and
   nowhere else.
-- **Waiting before the first agent.** The only way a task waits before its first agent is a dependency:
+- **Waiting before the first agent.** The only way a task waits before its first agent is a task it waits on:
   `listWaitsOn` (core) returns the unfinished tasks it waits on, and the task shows in Waiting on
   another task in Home's queue, the sidebar and All tasks.
 - **Priority decides what reaches you first, not what runs.** Low priority work is built just
@@ -367,18 +455,18 @@ in which finished work reaches you is managed.
   then the oldest first), and the guide never leads with a low priority decision while anything else waits
   (`parseBriefing` drops such an answer; low ones go to the end of next).
 - **No hold.** New work is never parked while decisions pile up: holding the compute only delays work you asked
-  for, and priority already keeps finished work out of your way. A stored `holdNewWorkAt` is ignored, and `queued`
-  tasks an older version parked are released by the same loop that releases dependents.
+  for, and priority already keeps finished work out of your way.
 
 ### Dependencies
 
-A task can wait on other tasks (`task.blockedBy`, a list). They come from three places: the
-classifier (`depends_on`, only when the request needs that work to exist first, and only when you
+A task can wait on other tasks (`task.waitsOn`, a list). They come from three places: the
+classifier (`waits_on`, only when the request needs that work to exist first, and only when you
 left When to start on Auto), you when creating the task (the composer's When to start: "After ‹task›"), or
 later (the Waits on menu on the task page, the task's `•••` and context menus, All tasks' chain
-arrow, ⌘K's Wait for another task… and Stop waiting, all `task.block` with the whole new list).
+arrow, ⌘K's Wait for another task… and Stop waiting, all `task.wait_on` with the whole new list, recorded as
+`task.waits_on_changed`).
 
-- **Waiting.** A task with an unfinished dependency sits in stage `queued` ("waiting for ‹A›,
+- **Waiting.** A task with an unfinished dependency sits in stage `waiting_on_tasks` ("waiting for ‹A›,
   ‹B› to finish", kept current as each one finishes) with no worktree and no agent. Nothing runs
   on it, so it costs nothing. Its liveness is Shinsa itself, not a stuck agent.
 - **Several parents.** A task can wait on any number of tasks; it starts only when every one of
@@ -395,7 +483,7 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.block` with t
 - **Chains and diamonds.** MCP v2 → embedded chat → paywall editing in the chat: each link waits for
   the one before it, so they start one after another as each merges. A diamond (B and C wait on
   A, D waits on B and C) starts B and C together when A merges, and D only after both. Cycles
-  are refused (`task.block` throws "‹task› already waits on this task."; a new task cannot close one).
+  are refused (`task.wait_on` throws "‹task› already waits on this task."; a new task cannot close one).
 - **Cancelling a parent.** The work a dependent needed will never exist, so it is not started
   blind: each waiting dependent gets a failure gate, "“‹parent›” was cancelled", and shows as
   Paused. With other parents still pending, the gate says Retry keeps waiting on those only.
@@ -409,30 +497,39 @@ arrow, ⌘K's Wait for another task… and Stop waiting, all `task.block` with t
   is still planning cancels the planner and puts it back to waiting (it plans again after the
   release). Once building has started, a new dependency only holds the merge gate until every
   task it waits on merges: the work is not thrown away.
-- **No stacking for new work.** A dependent waits for its parents to finish instead of branching off an unmerged
-  branch. A task an older version stacked (`baseTaskId`) has its pull request retargeted to the default branch after
-  the base merges.
+- **No stacking across tasks.** A dependent waits for its parents to finish instead of branching off an unmerged
+  branch; only a task's own rounds stack (Rounds, above).
 
 ## Gates
 
-`review` and `merge` are your decisions. `question` is an agent waiting for an answer (or for a
-secret, `request_secret`), or, with purpose `change`, an agent proposing to turn the task into a change (Task shapes, above),
-or, with purpose `operation`, an operation after the merge waiting for your OK on the merged commit. `failure` means the engine ran out of automatic recovery, an agent's wait
-ran out of time or checks (`cause: monitor`) or the task reached its usage or cost limit (`cause: budget`). `configuration` means the setup check
-found something missing before any agent started. `sign_in` means a Claude account needs signing in again (Accounts
-and usage limits, below). The plan gate opens for a task created plan first, a task that runs an operation, a plan
-that asks for `approval`, or a large task or a revised plan with plan approval switched on. Nothing else waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+Every gate stores one `type` (`GateType`). `plan`, `review` and `merge` are your decisions (`isDecisionGate`).
+`question` is an agent waiting for an answer and `secret` an agent waiting for a secret (`request_secret`); both are an
+agent's question to you (`isAgentQuestion`). `proposal` is your OK on what an inquiry proposes next (Task shapes,
+above), and `operation` an operation after the merge waiting for your OK on the merged commit. `failure` means the
+engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`) or the task
+reached its usage or cost limit (`cause: budget`). `configuration` means setup verification found something missing
+before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
+(`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
+The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
+first or a plan that asks for `approval`; with Approve plans on, also for a large task or a revised plan. Nothing else
+waits on you. A failure, configuration or Sign in gate pauses the task (`isPausingGate`).
+
+Every gate is yours: only you close it. Core refuses a `gate.answer` sent on your behalf, and any command on your
+behalf after which an open gate is no longer open, with `human_only` (Who can change Shinsa, below).
 
 Each gate takes only the answers that mean something for it (`gate.answer` refuses the rest):
-a plan, review or merge takes approve, ask for changes or reject; an agent's question takes an
-answer with words in it; a proposed change takes approve or reject; an operation after the merge takes approve, an answer (run it with your words as guidance) or
-reject (finish without it); a failure takes retry (approve, or an answer used as guidance) or
-reject, which cancels the task. The table of what each gate takes and does is `GATE_SCHEMA` (`docs/protocol.md` → Steps and gates). A question belongs to the run that asked it: when that run ends
-for any reason the question is withdrawn and the waiting tool call is released. A failure gate
-is withdrawn as soon as a new agent step starts or the pull request turns clean, since the
-problem it reported no longer applies.
+a plan, review or merge takes approve, revise (ask for changes) or reject; an agent's question takes `reply` with
+words in it; a secret takes `reply` with a secret ref or reject; your OK takes approve or reject; an operation after the
+merge takes approve (run it with the notes on the gate), `reply` (replace the notes with your words, empty clears
+them, then run) or reject (finish without it); a failure or Sign in gate takes approve (retry), `reply` (retry with
+your words as guidance) or reject, which cancels the task; the setup gate takes approve (verify the setup again),
+`waive` (start without checks, only when checks are all that is missing) or reject. `reply` is the one decision that
+takes words. The table of what each gate takes and does is `GATE_SCHEMA` (`docs/protocol.md` → Steps and gates). A
+question belongs to the run that asked it: when that run ends for any reason the question is withdrawn and the
+waiting tool call is released. A failure gate is withdrawn as soon as a new agent step starts or the pull request
+turns clean, since the problem it reported no longer applies.
 
-**What a message does.** A message you write on a task (`task.message`) never answers a gate for you: at a gate it
+**What a message does.** A message you write on a task (`task.message`) never approves anything for you: at a gate it
 does what that gate's own words-taking reply does, and it withdraws the gate where an agent then works. One function
 decides it, `resolveMessageEffect` (`packages/core/src/decide/messages.ts`), and both `decide` and every composer's
 hint read it (`resolveMessageHint`, `apps/web/src/lib/tasks/messages.ts`), so the words under the box always say what
@@ -441,24 +538,29 @@ sending does:
 | Where the task is | Effect | What the message does |
 | --- | --- | --- |
 | an agent working, no gate | `steer` | reaches the running agent |
-| a step waiting on its delegated tasks | `wake` | is queued into the step's next wake |
-| a failure or Sign in gate | `retry` | retries the step with the message as guidance |
+| a step waiting on its delegations | `wake` | is queued into the step's next wake |
+| a failure or Sign in gate | `retry` | answers it with `reply`: the step retries with the message as guidance |
+| a setup gate | `verify_setup` | verifies the setup again (`approve`); the message is kept for the first agent |
 | an agent's question | `supersede_question` | withdraws the question; the agent gets the message instead |
 | plan gate, or planning with no planner | `revise_plan` | withdraws the plan gate; the planner revises |
 | review gate | `request_changes` | withdraws the gate; a fixer works on it, then the review comes back |
 | merge gate | `send_back` | withdraws the gate; a fixer works on it, then the merge comes back |
 | checks, agent review, fixing, shipping | `fix` | starts a fixer with it |
-| your OK (change gate) | `decline_change` | declines the proposal; the inquiry agent carries on with it |
-| operation gate | `operation_notes` | is added to the gate's notes for the operator; nothing runs |
+| your OK (the proposal gate) | `decline_proposal` | declines the proposal; the inquiry agent carries on with it |
+| operation gate | `operation_notes` | replaces the gate's notes for the operator (`gate.noted`); nothing runs |
 | a working stage with no agent | `restart_step` | starts the step again with it |
 | triage or waiting on another task | `kept` | is kept for the first agent's brief |
-| a finished answer, investigation or report | `follow_up` | goes to the same agent as a follow-up |
-| any other resting task (merged, an operation that ran) | `new_round` | starts the next round of the task |
+| a resting task (a finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
 | a closed task (marked done, cancelled) | `closed` | refused: "This task is finished." |
 
-That is what feedback does. A message the classifier reads as new work queues the next round wherever the task is,
-and one it reads as work for another task becomes a split-off suggestion (Rounds, above). A message an agent sends on
-your behalf that would retry a Sign in gate is refused (`human_only`; Who can change Shinsa, below).
+That is what feedback does. A message the classifier reads as needing nothing (`acknowledge`) is only recorded,
+wherever the task is, unless it answers an agent's open question. A message the classifier reads as new work queues
+the next round wherever the task is,
+and one it reads as work for another task becomes a split-off suggested task (Rounds, above). A message an agent sends
+on your behalf, or a schedule sends, to a task with any open gate is not delivered into the gate: core records it
+(`task.messaged`) and nothing else, the next agent's brief carries it (`resolveLaterMessages`: "Sent by an agent on
+the human’s behalf: …", or "Sent by a schedule: …"), and the on-your-behalf record reads "Left a message for the next agent on “‹title›”, which
+waits for you".
 
 ## Process and structure
 
@@ -471,8 +573,8 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 
 ### Plan versions
 
-- Every `spec.proposed` bumps `spec.version`. A revision keeps the previous version in
-  `specHistory` (the last ten), with the planner's `change_summary` (`propose_plan`, at most 240
+- Every `plan.proposed` bumps `plan.version`. A revision keeps the previous version in
+  `planHistory` (the last ten), with the planner's `change_summary` (`propose_plan`, at most 240
   characters), the feedback that asked for it and a computed list of changes
   (`resolvePlanChanges`: goal, approach, phases added, dropped, reworked or reordered, files).
 - The plan gate carries `planVersion`. A revision withdraws the open plan gate and opens a new one
@@ -480,8 +582,8 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
   `planVersion`, or on a plan gate the revision withdrew, is refused with `plan_changed` and says
   which version to read. Approval and the check happen in the same command, so nothing slips in
   between.
-- Approving records `spec.approved` (`approvedAt`). The builder's prompt names the approved
-  version and says to follow it exactly.
+- Approving records `plan.approved` (`approvedAt`), and your words with it `plan.answered` (`planAnswers`). The
+  builder's prompt names the approved version and says to follow it exactly.
 
 ### Review rounds escalate to you
 
@@ -508,15 +610,13 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
   reaches the agent once, through that tool call; when the session was released while it waited,
   the step resumes with the question and your message, as an answer would, and when the step can
   no longer resume the message goes to the task like any other. The chat marks the question Withdrawn.
-- An answer to a question whose run has ended restarts the step with the question and your answer
-  in its prompt ("You asked: … The human answered: …").
 
 ### Waits and monitors
 
 - `wait_for {check_in_minutes, notes, timeout_minutes?, max_attempts?}` (builder, fixer,
-  shipper, investigator, operator) ends the run and arms a monitor: `nextCheckAt`, a timeout (default a day, at most a
-  week) and an attempt budget (default 10, at most 100). A run that waits again continues the
-  same monitor, so its checks and timeout carry over. The house rules forbid sleeping or polling
+  investigator, operator) ends the run and arms a monitor: the next check-in (`nextCheckAt`), a timeout
+  (default a day, at most a week) and a budget of check-ins (default 10, at most 100). A run that waits again
+  continues the same monitor, so its check-ins and timeout carry over. The house rules forbid sleeping or polling
   in a shell.
 - `MonitorClock` (`apps/server/src/runtime/monitors.ts`) fires the earliest due monitor with
   `monitor.fire` (command id `monitor:<id>:<attempt>`, so a repeat is a receipt). A fire core
@@ -524,12 +624,13 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
   so the clock skips that entry until the monitor changes (`StateClock.refuse`; `ScheduleClock`
   does the same). A fire resumes
   the waiting run's session (same role and phase) with the notes; past its timeout it opens a
-  failure gate (`cause: monitor`, "The agent’s wait ran out") instead. A wait that runs out of checks
-  ends the same way: once the checks are used up the agent finishes the step with what it knows or
-  asks you (the last check's prompt says so), and a `wait_for` it calls anyway ends its run, marks the
+  failure gate (`cause: monitor`, "The agent’s wait ran out") instead. A wait that runs out of check-ins
+  ends the same way: once they are used up the agent finishes the step with what it knows or
+  asks you (the last check-in's prompt says so), and a `wait_for` it calls anyway ends its run, marks the
   monitor `exhausted` and opens the failure gate ("The agent’s wait ran out of checks"; the tool tells
-  the agent the human decides now). Retry starts the step again with a fresh set of checks. Check now
-  (`monitor.check_now`) fires it at once.
+  the agent the human decides now). Retry starts the step again with a fresh set of check-ins. Check in now
+  (`monitor.check_in_now`, `shinsa tasks check-in-now`) fires it at once; the web counts them as "Check-in 2 of
+  10" and shows a monitor between them as "Waiting to check in again".
   Any new step, message or retry clears an armed monitor.
 - A task waiting on other tasks names what holds the chain up: `traceStalledLeaf` (`queue/stalls.ts`) walks the
   chain depth first and returns the first task that needs you, is paused or was cancelled, with the path to it, so
@@ -574,8 +675,7 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
   task's steps used ("Reached its usage limit"); it is what a subscription has. Cost limit per task
   (`taskBudgetUsd`) counts dollars ("Reached its cost limit"), for API keys, where there is no weekly window, and
   for any provider whose cost Shinsa knows; Settings shows it only while it is set or when no account reports a
-  weekly window, so an older log's
-  cost limit stays visible and can be switched off. The usage limit is checked first. Continuing ("Allow another
+  weekly window, so a cost limit you set stays visible and can be switched off. The usage limit is checked first. Continuing ("Allow another
   10%" or "Allow another $5.00") acknowledges what was used of every limit it passed (`budget.acknowledged` with
   `spentPercent` and `spentUsd`, `task.usageAcknowledgedPercent` and `budgetAcknowledgedUsd`) and allows one more
   of each; raising or switching off a limit releases held tasks by itself.
@@ -595,33 +695,39 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 
 - Ask mode is the answer shape (Task shapes, above); `task.create` with `mode: 'ask'` still makes one. It is classified like
   any task (the repository; triage is told it is a question, so the title names what it asks about), has its repository
-  checked, then an answerer runs in the repository itself, read-only (no worktree, branch, plan, checks or pull request) and
-  hands over with `answer` (markdown, at most 8,000 characters, optionally `propose_change`). The task is done when it
-  answers, or waits at the change gate when it proposes a change; a message afterwards asks a follow-up on the same session.
+  verified, then an answerer runs in the repository itself, read-only (no worktree, branch, plan, checks or pull request) and
+  hands over with `answer` (markdown, at most 8,000 characters, optionally `propose_change`), which sends `agent.deliver`
+  with step `answer`: the answer lands on `task.result` through `task.delivered` like every other inquiry's result. The
+  task is done when it answers, or waits at your OK when it proposes a change; a message afterwards asks a follow-up on
+  the same session.
 - Its progress is two steps (Find the repository, Answer); the overview shows the answer.
 
-### Follow-ups
+### Suggested tasks
 
-- `suggest_tasks` (every working role) proposes up to five follow-up tasks: title, request, why
+- `suggest_tasks` (every working role) proposes up to five tasks: title, request, why
   and `after_this`. A title the task was already given (open, accepted or dismissed), the title of an
   open task, or one repeated in the call is dropped; a call that would leave more than ten open
   suggestions on the task is refused. Suggestions never start anything.
-- Accepting (`suggestion.accept`) creates the task in the same repository, waiting on this one
-  when `waitsOnThis` is set, and links it; dismissing keeps it out of the way. A settled task
-  keeps its suggestions so you can still accept them.
+- Accepting (`suggestion.accept`, `shinsa suggestions accept`) creates the task in the same repository, waiting on
+  this one when `waitsOnThis` is set, and links it; dismissing keeps it out of the way. A settled task keeps its
+  suggested tasks so you can still accept them. On screen they are "Suggested tasks" ("Add the suggested task
+  “‹title›”", "Dismiss the suggested task"). A follow-up is something else: a message to a finished answer,
+  investigation or report.
 
-### The setup check
+### Setup verification
 
-- Before a task's first agent, `config.verify` (`apps/server/src/repos/setup.ts`) checks that
+- Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
+  `config.verify` (`apps/server/src/repos/setup.ts`) checks that
   the repository folder exists and is a git repository, that the default branch exists (fetching
   it from origin before calling it missing) and that there are checks to run (configured, or
   found in `package.json`). A task whose pipeline needs no worktree (an answer, research) checks the repository only, and
   one without `build` (an investigation, an operation) skips the checks.
 - Problems open their own `configuration` gate, not a failure: nothing ran. Its title names the problem ("The
   repository is missing", "No checks to run", or "The setup has 2 problems") and its body lists what is wrong and
-  how to fix each; the web labels the task "Setup incomplete". Check again re-runs the check; Start without checks
-  (only when checks are all that is missing) sets `checksWaived` on the repository; Cancel ends
-  the task. The same problems twice record nothing new.
+  how to fix each; the web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again;
+  Start without checks (`waive`, only when checks are all that is missing) sets `checksWaived` on the repository;
+  Cancel ends the task. A message at the gate verifies the setup again too (`verify_setup`) and is kept for the first
+  agent. The same problems twice record nothing new.
 
 ### Schedules and webhooks
 
@@ -697,14 +803,14 @@ and `couriers.ts`, the projection in `state/delegations.ts`, the tools in
 `apps/server/src/agents/tools/orchestration.ts` and the delivery in `agents/delegations.ts`, `agents/deliveries.ts`
 and the run supervisor.
 
-- **A delegated task is a sub-run, not a sub-task.** It is a `Run` of the same task with a
+- **A delegation is a sub-run, not a sub-task.** It is a `Run` of the same task with a
   `delegation` (parent run, depth, title, brief, mode, wake policy, isolation, delivery, an open
   question). A sub-task would bring a worktree, a branch, triage, a plan, checks, gates and a pull
   request: everything a delegated review or survey must not have. A sub-run shares the task's
   worktree, budget, cost and transcript store, ends with a reply instead of a hand-over, and never
   moves the task's stage. Work that should become its own change is a new task (couriers, below).
-- **Tools.** Every working role gets `delegate_task`, `task_status`, `task_cancel` and
-  `task_answer`. `delegate_task` takes the brief (`task`), a title, a `role` (planner, builder,
+- **Tools.** Every working role gets `delegate_task`, `delegation_status`, `delegation_cancel` and
+  `delegation_answer`; the last three name a delegation by `delegation_id`. `delegate_task` takes the `brief`, a title, a `role` (planner, builder,
   reviewer or fixer; the step's own kind by default), `mode` (`async`, the default, returns at
   once; `wait` blocks until the result, a question or `timeout_minutes`, 10 by default and 60 at
   most), `isolation`, `client_request_id`, `provider` and `model`. A delegated agent gets `ask`,
@@ -715,12 +821,12 @@ and the run supervisor.
   and its role, then the brief; never the parent's conversation, plan or notes. The tool tells the
   agent to make each review round a fresh delegation with the earlier findings in its brief; nothing
   enforces it.
-- **Deterministic ids.** The same `client_request_id` under the same step returns the task already
-  delegated (`requestKey`) and never starts a second one or a second checkout. The tool names its
+- **Deterministic ids.** The same `client_request_id` under the same step returns the delegation already
+  started (`requestKey`) and never starts a second one or a second checkout. The tool names its
   command `agent:<run>:<attempt>:delegate:<id>`, so a repeat inside one attempt is answered by its
   command receipt, and a different brief under the same id is refused with `command_id_conflict`.
-- **Limits.** Delegation nests three deep (`DELEGATION_LIMITS.depth`) and at most eight delegated
-  tasks run at once under one step, at any depth (`live`). A refusal says what to do instead.
+- **Limits.** Delegation nests three deep (`DELEGATION_LIMITS.depth`) and at most eight delegations
+  run at once under one step, at any depth (`live`). A refusal says what to do instead.
 - **A child is never broader than its parent.** A planner, reviewer, answerer or researcher cannot
   change files, so it can only delegate to a planner or reviewer, checked again on every request. A
   read-only child runs only on a provider that keeps it read-only (`planning.readOnly`): Claude by
@@ -739,25 +845,26 @@ and the run supervisor.
   while a claim is in flight join it; a claim the session did not take is released and claimed
   again under the next generation, deferred until the turn ends when the session cannot be
   steered. A delivered report counts once (`delegation.delivered`), and reading a finished result
-  with `task_status` counts as receiving it, even while a report carrying it is on its way: a step
+  with `delegation_status` counts as receiving it, even while a report carrying it is on its way: a step
   that ends its turn waits only for what has not reached it yet (a live child, an unread result, a
   queued message), never for a claim whose items it already read. A question goes out at once; a
   `wait` call's own result is held back while the wait is still listening.
 - **A wait that times out wakes instead.** The call returns `wait_timed_out` and the child switches
   to waking the parent. Ending a turn releases every wait.
-- **A parent waiting on its children says so.** A step whose turn ends while its delegated tasks
+- **A parent waiting on its children says so.** A step whose turn ends while its delegations
   run does not finish: it becomes `waiting`, records what it waits on (`waitingOn`) and puts
-  "waiting for 2 delegated tasks" on the task, a typed wait that keeps the task live. Hand-over
+  "waiting for 2 delegations" on the task, a typed wait that keeps the task live. Hand-over
   tools refuse while a child still runs. The next result wakes it on its own session. A message
   you send to a waiting step is queued into that wake.
 - **Questions route to the parent agent.** A child's `ask` never opens a gate: the parent gets it,
-  answers with `task_answer` (asking you first with its own `ask` when only you can decide), and
-  the child carries on in the same session, or in a new turn if its own ended.
-- **Cancel cascades.** Stopping a delegated task (`task_cancel`, or Stop in the chat, the
+  answers with `delegation_answer` (asking you first with its own `ask` when only you can decide), and
+  the child carries on in the same session, or in a new turn if its own ended. That ceiling is intended: a
+  delegation never asks you directly.
+- **Cancel cascades.** Stopping a delegation (`delegation_cancel`, or Stop in the chat, the
   `delegation.cancel` command) stops everything it delegated. A step that ends, is stopped or the
   task settles stops its children.
 - **Adoption.** A step that fails and is restarted at once (a nudge or a fresh session) adopts its
-  predecessor's delegated tasks, running ones and finished results not yet delivered: they report
+  predecessor's delegations, running ones and finished results not yet delivered: they report
   to the new run, whose prompt lists the ones still running. A step that pauses instead (a usage
   limit, a sign-in, a failure gate) stops them, since they would run on the same spent account or
   unattended until you decide, and the step that resumes later starts without them.
@@ -765,13 +872,15 @@ and the run supervisor.
   wait (no process is listening any more), then claims again, so results reach a resumed parent by
   steer or wake exactly once.
 - **Couriers and decomposition (Paperclip).** `create_task` makes a self-contained task for work
-  that belongs elsewhere, optionally in another repository, with `this_task_waits` making this
-  task wait on it (a blocker, not just a parent link; only a building step, a builder, fixer or
-  shipper, may wait, others are refused with `cannot_wait`); it is exactly-once per `client_request_id`.
-  `split_task` (builder) turns the accepted plan into one to eight sub-tasks, exactly once per plan
-  version, recorded on the task (`splits`); a second call returns the same tasks.
+  that belongs elsewhere (its `request`), optionally in another repository, with `this_task_waits` making this
+  task wait on it (a blocker, not just a parent link; only a building step, a builder or fixer,
+  may wait, others are refused with `cannot_wait`); it is exactly-once per `client_request_id`.
+  `split_task` (builder) turns the accepted plan into one to eight tasks (`tasks[].request`), exactly once per plan
+  version, recorded on the task (`splits`, `planVersion`); a second call returns the same tasks. These are the only
+  ways a task agent files a task: its management tools leave out `tasks create`, which stays for you and the command
+  line.
 - **In the web.** Delegated runs show in their parent's turn (spawn, report, Stop, the child's own
-  conversation nested inside) and in the Overview's Delegated work panel (`docs/design.md`).
+  conversation nested inside) and in the Overview's Delegations panel (`docs/design.md`).
 
 ## The command surface
 
@@ -783,7 +892,8 @@ fails when the file and the specs differ.
 - **A spec** (`surface/spec.ts`) has a path (`['tasks', 'create']`, the words after `shinsa`), a summary, typed fields
   (`surface/fields.ts`: text, number, integer, boolean, choice, list, JSON; positional or a flag), whether it reads or
   writes, the user command it sends (`command`), whether it is yours alone (`humanOnly`: no agent gets it as a tool,
-  and an agent's shell may not run it; Agents manage Shinsa, below), and `run(client, values)`, which reads and sends
+  and an agent's shell may not run it; Agents manage Shinsa, below), the agent tool a task agent uses instead
+  (`agentTool`: `tasks create` names `create_task`, so it is not a management tool), and `run(client, values)`, which reads and sends
   through a `SurfaceClient` (`read`, `post`, `send`). The same fields give the command line's arguments and `--help`,
   and each agent tool's JSON schema (snake_case keys) with read-only, destructive and idempotent hints.
 - **Derived from core's parser.** `USER_COMMAND_TYPES` is the list `parseUserCommand` accepts. Every one of them has
@@ -797,8 +907,8 @@ fails when the file and the specs differ.
   `apps/server/src/http/reads.ts`, and `/api/repos/local`, in `projects/routes.ts`), Claude accounts and usage
   (`/api/accounts/*`), folders (`/api/onboarding/setup`), secrets and webhook signing secrets, the health check and
   the providers. `/api/tasks/<task>` takes an id, a handle, the start of an id or an exact title (more than one match
-  is `task_ambiguous`) and answers the task's view, plan, findings, open gates, what it waits on, runs, follow-ups,
-  recent activity and the same text `read_task` gives an agent. `/api/tasks/<task>/chat` pages the transcripts of the
+  is `task_ambiguous`) and answers the task's view, plan, findings, open gates, what it waits on, runs, suggested
+  tasks, recent activity and the same text `read_task` gives an agent. `/api/tasks/<task>/chat` pages the transcripts of the
   task's runs: the last `limit` entries (50), or the ones after the `after` index, filtered by `kinds` (`user`,
   `agent` and `error` unless you ask for `tool_call`, `tool_result`, `status` or `notice`) and `run`.
 - **The command line** (`apps/server/src/cli/surface.ts`): `shinsa <group> <action> [arguments]` against the server
@@ -813,23 +923,23 @@ fails when the file and the specs differ.
 
 There is no separate conversation with Shinsa. Every task agent can do what you can do in Shinsa, and a task is how
 you talk to it: an Answer task (no repository work) is a conversation, and any task's chat is a place to ask its
-agent to change a priority, file follow-ups, pause a schedule or finish. Ported from Kanna's delegator and orchestration
+agent to change a priority, suggest tasks, pause a schedule or finish. Ported from Kanna's delegator and orchestration
 tools and T3's MCP toolkits.
 
 - **The tools.** Every task run (not a delegated run, not an idle compaction) gets, besides its role's tools
-  (`listToolNames`), one tool per surface spec but the ones that are yours alone (`tasks_list`, `tasks_show`,
-  `tasks_done`, `tasks_prioritize`, `tasks_create`, `questions_answer`…;
-  `apps/server/src/agents/manage/tools.ts`), with read-only, destructive and idempotent hints. A call runs the spec with an
-  in-process client: reads go to the server's own HTTP API, commands go through the same router as yours
+  (`listToolNames`), one tool per surface spec but the ones that are yours alone and `tasks create`, whose
+  `agentTool` is `create_task` (`tasks_list`, `tasks_show`, `tasks_done`, `tasks_prioritize`, `tasks_message`…;
+  `apps/server/src/agents/manage/tools.ts`), with read-only, destructive and idempotent hints. A call runs the spec
+  with an in-process client: reads go to the server's own HTTP API, commands go through the same router as yours
   (`createCommandRouter`) to `Engine.dispatch` with `onBehalf` and `byTask` (the run's task), under the tool call's id
   (`agent:<run>:<attempt>:call:<request>:<n>`). Adding a repository or a folder to a project runs in process too, on
   your behalf (`createProjectChanges`, the work the project routes do). A message an agent sends to a task
   (`tasks_message`) goes through the message classifier like yours unless it sets `as` (Rounds, above). Every role's
   house rules carry `MANAGE_RULES` (`packages/core/src/prompts/manage.ts`).
 - **Its own task.** An agent may mark its own task done (`tasks_done`) when nothing is left to hand over and nothing
-  is open (core refuses it while a round waits to start, a pull request is open or a human-only gate is open: Rounds,
+  is open (core refuses it while a round waits to start, a pull request is open or any gate is open: Rounds,
   above), change its
-  priority and add follow-ups. Completing it settles the task, which ends the agent's run as cancelled; nothing
+  priority and suggest tasks. Completing it settles the task, which ends the agent's run as cancelled; nothing
   opens a gate. Both show on the task's own activity as yours, on your behalf ("Set the priority to high", "Marked
   done"): `task.prioritized` and `task.staged` carry `by: 'you'` when you (or an agent for you) sent them, and
   triage's own choice of priority records nothing.
@@ -840,7 +950,9 @@ tools and T3's MCP toolkits.
   100: `shinsa activity`. A command that changes nothing records nothing, and a system command sent for you
   (`repo.register` when an agent adds a repository to a project) is stamped but records no action.
 - **Decisions only you make** have no tool (the list is Who can change Shinsa, below). `MANAGE_RULES` tells an agent
-  that is asked in chat to merge or approve to reply that you do it at its gate in Shinsa, with a link to the task.
+  that is asked in chat to merge or approve to reply that you do it at its gate in Shinsa, with a link to the task. A
+  message it sends to a task with an open gate is kept for that task's next agent, never delivered into the gate
+  (Gates → What a message does, above).
 
 ## Who can change Shinsa
 
@@ -860,23 +972,31 @@ plainly what protects what.
   optional signature; the MCP sign-in callback (`GET /api/mcp/oauth/callback`) checks only the Host, since the
   provider's page sends you there.
 - **Decisions only you make.** These are human-only:
-  - answering a plan, review, merge or operation gate, your OK on a proposed change, a secret request or a Sign in
-    gate, in any way (`plans *`, `reviews *`, `merges *`, `operations *`, `gates answer`, `command`, which can send any
-    gate answer);
+  - closing any gate: a plan, review, merge or operation, your OK on a proposal, an agent's question or secret request,
+    a failure, setup or Sign in gate, in any way (`plans *`, `reviews *`, `merges *`, `operations *`, `questions
+    answer`, `gates answer`, `command`, which can send any gate answer);
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
+  - the settings that spend money, merge or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
+    `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
+    `accountSwitchAt`, `fastMode`, `agentFastModes`) and a repository's checks (`HUMAN_ONLY_REPO_FIELDS`:
+    `checkCommands`, `checksWaived`); agents keep the rest (models, providers, fix rounds, attention, compaction);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
+  - updating Claude Code or Codex (`versions update`, Versions and updates, below);
   - opening a worktree in an editor (`tasks open`).
 
   They are decisions only you make, need you at the keyboard, or would put a secret through a model. Their surface
   specs are `humanOnly`, so `listAgentSpecs` leaves them out of every agent's tools, the prompt says they wait for you
-  at their gate, and `agents/policy.ts` refuses `shinsa <path>` for each of them in an agent's shell (Claude through
-  its PreToolUse hook, Codex through its command approvals). Nothing checks words or keys: the first lock is that no
-  agent tool exists for them. Core is the second lock (`domain/gates.ts`, `isHumanOnlyGate`): a command sent on your
-  behalf is refused with `human_only` and records nothing when it is a `gate.answer` to one of those gates or a
-  message that would retry a Sign in gate (`assertAgentMayAnswer`), or a `task.retry` or `task.complete` while one is
-  open on the task (`assertNoHumanOnlyGate`). So even a tool that reached the command could not decide one or step
-  past it.
+  at their gate, and `agents/policy.ts` refuses in an agent's shell (Claude through its PreToolUse hook, Codex through
+  its command approvals) `shinsa <path>` for each of them, `shinsa settings set` naming a human-only setting and
+  `shinsa repos update` with `--checks`, `--no-checks`, `--waive-checks` or `--no-waive-checks`. Nothing checks words
+  or keys: the first lock is that no agent tool exists for them. Core is the second lock: a command sent on your
+  behalf is refused with `human_only` and records nothing when it is a `gate.answer` (`assertHumanDecides`), when a
+  gate that was open before it is no longer open after it (`assertGatesStayOpen`, run at the end of `decide`, so
+  retry, complete, cancel, wait-on, keeping a split-off and the rest cannot step past an open gate; both in
+  `decide/gates.ts`), or when a `settings.change` or `repo.update` touches a human-only field (`decide/settings.ts`).
+  A message sent on your behalf to a task with an open gate is kept for the next agent instead (Gates, above). So
+  even a tool that reached the command could not decide a gate or step past it.
 - **What a shell can still do.** Anything your account can. An agent that sets out to could post a command to
   `localhost:5180/api/commands` itself, or run `gh pr merge` or `git push` directly, and Shinsa would not know.
   `agents/policy.ts` refuses the obvious ones (`gh pr merge|create`, `git commit|push|rebase|reset --hard`, the
@@ -915,10 +1035,6 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
   the focus project's decisions and tasks, and every list built on it (Home, the queue button, the guide, ⌘K's
   decisions, the tab count and notifications) shows nothing from other projects. To see other work, you switch the
   focus.
-- **Migration.** None to run: the log is replayed. Older `area.written` and `area.removed` events fold into
-  `state.projects` (a key derived from the name, no description, no folders), and older repository, focus and
-  briefing events that name an `areaId` are read as `projectId`. New logs write `project.written` and
-  `project.removed`.
 
 **Task identity.** Every id Shinsa makes for the log (tasks, runs, gates, schedules, projects) is a UUIDv7 from the
 engine (`Bun.randomUUIDv7()` behind `DecideContext.newId`); accounts use 8 hex characters and webhook deliveries
@@ -931,7 +1047,7 @@ their own UUIDv7.
     or digits starting with a letter, derived from its name, editable; lower case is upper-cased), or `T` for a task
     with no project. It is given once and never changes: on `task.created` when the task has a project, else on
     `task.triaged` (the repository's project). The counters live in the log (`state.taskNumbers`, one per key), so
-    replay gives every task the same handle; tasks from older logs get theirs at their `task.triaged`, in log order.
+    replay gives every task the same handle.
     Changing a project's key keeps every old handle; new tasks count from the new key's own counter, and changing the
     key back carries on where it left off, so a handle is never handed out twice. A task that moves projects keeps its
     handle.
@@ -994,8 +1110,8 @@ changes costs one call.
   for the cheap pull request watch, one for the briefing, and separate lanes per run for its session, its cancel and
   its steers, so a cancel is never stuck behind the session it cancels. Effects in a lane run in order. A failed replay-safe effect retries
   after 100 ms × 2ⁿ (capped at 30 s), up to 5 attempts; a process-bound one fails on its first error.
-  An effect that gives up opens a failure gate on its task when its kind has one (triage, the setup
-  check, the worktree, checks, opening, pushing or merging the pull request); the others are logged.
+  An effect that gives up opens a failure gate on its task when its kind has one (triage, setup
+  verification, the worktree, checks, opening, pushing or merging the pull request); the others are logged.
   Effects report back only by dispatching commands.
 - **Stale output is dropped.** Agent commands carry their run id. A run that has ended, a
   finished task, or the wrong role is rejected with a message telling the agent to stop.
@@ -1084,22 +1200,22 @@ keeps beside its events (`store/event-log.ts`).
 - **Deterministic server ids.** Every command the server sends is named after what caused it: two different causes
   never share an id, and the same cause sent again gets the same id, so it is answered from its receipt instead of
   applied twice. An effect that reports back names its command after itself: `<effect key>:task.triage`,
-  `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.pushed:<sha>`, and
+  `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.record_push:<sha>`, and
   `<effect key>:effect.fail` when it gives up, and a repository triage registers `<effect key>:repo.register`. The
   clocks name theirs after what they fire (`monitor:<id>:<attempt>`, `schedule:<id>:<dueAt>` and
   `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`).
   - A run (`agents/supervisor.ts`): its attempt ids are `<run>:<n>`, and the attempt's commands are
     `run.attempt:<attempt>`, `run.link:<attempt>:<session>`, `run.meter:<attempt>` (and `run.meter:<attempt>:<session>`
     for each agent a Codex agent started) and `run.end:<attempt>`
-    (`run.end:<run>` when it ended before any attempt); `run.session_lost:<run>:<session>`; the messages it never
+    (`run.end:<run>` when it ended before any attempt); `run.record_lost_session:<run>:<session>`; the messages it never
     took, delivered after it ends, `message.deliver:<attempt>:<index>` (`<run>:0` before any attempt); a message too
     late to steer `<effect key>:message.deliver`. A shutdown marks a run under `run.interrupt:<attempt>`, or
     `run.interrupt:<run>:0:<continuations>` before its first attempt of this boot. A boot sends everything under the
     log position it started from: `boot:<seq>:run.continue:<run>`, `boot:<seq>:runs.dispatch`,
     `boot:<seq>:delegations.recover`. Idle compaction uses `idle-compact:<run>:<session>`, and its cost
     `idle-compact:<run>:<session>:run.meter`.
-  - Reports and questions: `delegation.delivered:<run>:<generation>`, `delegation.undelivered:<run>:<generation>`,
-    steered reports the session never took `delegation.undelivered:<attempt>:steered`; an answer that reaches the
+  - Reports and questions: `delegation.record_delivery:<run>:<generation>`, `delegation.release:<run>:<generation>`,
+    steered reports the session never took `delegation.release:<attempt>:steered`; an answer that reaches the
     task as a message `question:<gate>:message.deliver`; the silence watch `run.silence:<run>:<since>`, and
     `run.silence:<run>:<since>:heard` when output clears it.
   - Agent tool calls: `agent:<run>:<attempt>:call:<MCP request id>:<command type>` (`:<n>` added when one call sends a
@@ -1107,7 +1223,7 @@ keeps beside its events (`store/event-log.ts`).
     `agent:<run>:<attempt>:delegate:<id>` and `agent:<run>:<attempt>:create_task:<id>`. A call that comes without a
     request id (only tests) gets a fresh id.
   - The accounts service: `login:<sign-in>:account.signed_in`, `account.removed:<account>`, and
-    `provider-login:<provider>:<gates>` when a provider's own sign-in is back. A secret pasted or declined at its
+    `provider-login:<provider>:<gates>` for `provider.record_sign_in` when a provider's own sign-in is back. A secret pasted or declined at its
     gate: `secret:<gate>:saved`, `secret:<gate>:declined`. A repository added to a project (`POST
     /api/projects/<id>/repos` or `/folders`, or an agent's tool): `repo:<path>:<seq>` (the log position, so
     registering a path again after `repo.remove` is a new command); the project change it makes gets a fresh id.
@@ -1134,7 +1250,7 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
 - **Cancellable effects.** A decision can cancel open effects of a task by kind
   (`Decider.cancelEffects`; the `cancellations` of a `Decision`). They are cancelled in the same
   transaction, before the decision's own effects are added. Settling a task cancels its triage,
-  setup check, worktree setup, checks, pull request open, push and watch (and its merge when it was
+  setup verification, worktree setup, checks, pull request open, push and watch (and its merge when it was
   not merged); starting a round of checks cancels the round it replaces. A cancelled effect that is
   running is aborted at once: its `AbortSignal` fires (a running check command, push or `gh` call is
   killed; a merge that has not reached GitHub stops; an open or push that has not pushed yet pushes
@@ -1144,7 +1260,7 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
 - **A side lane for cheap work.** The pull request watch runs in `side:<taskId>`, so a read never
   waits behind a long merge or a push backing off in `task:<taskId>`. Every decision it feeds is
   guarded already (a push in flight, a merge running, a run active). It is the only per-task effect
-  that belongs there: the others in `task:<taskId>` (triage, the setup check, the worktree, checks,
+  that belongs there: the others in `task:<taskId>` (triage, setup verification, the worktree, checks,
   opening, pushing, merging, removing the worktree) must run in that order, and the briefing is not
   per task, so it keeps its own `briefing` lane.
 - **Nothing waits for one effect.** Shutdown waits for every running effect and its handler at once (`Engine.settle`)
@@ -1290,9 +1406,8 @@ recorder also writes the `notice` entries: compaction boundaries and summaries, 
 (once per change, not per repeat), and, at the end of each turn, the context window as
 `getContextUsage` measures it (5 s, falling back to the last main-thread step's usage).
 
-**Older transcripts** (the Claude-shaped `{ kind: 'prompt' | 'assistant' | 'tool' … }` lines) are
-migrated on read: `readChatEntries` in `agents/transcripts` hands them to `migrateLegacyEntries`
-(`agents/transcripts/legacy.ts`), through the same Claude mapping.
+A transcript line that is not a chat entry of the current protocol version reads as one unreadable-line error
+entry.
 
 **The Codex adapter** is `apps/server/src/agents/providers/codex/map.ts` (`createCodexRecorder`, used live by the
 session). It reads `item/started` and `item/completed` on the run's own
@@ -1404,6 +1519,46 @@ session is only ever resumed by the provider that owns it (`run.sessionProvider`
 to another provider while its run is paused or between turns hands the conversation over at the next execution,
 Claude to Codex and back alike (The agent loop, below).
 
+### Versions and updates
+
+Settings → Agents → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
+(`apps/server/src/versions/`, after Kanna's `provider-auth.ts`, its latest-version check at 539-586 and its install at
+592-668, and `claude-executable.ts:13-16`, 59-65). A newer Claude Code or Codex brings new features, and the Agent
+SDK is built against one Claude Code (`claudeCodeVersion`; SDK 0.3.N pairs with Claude Code 2.1.N), so the program
+must keep up with the SDK, never the other way round.
+
+- **The snapshot** (`GET /api/versions` → `VersionsSnapshot`, `packages/core/src/protocol/versions.ts`): per
+  program its path, the installed version (`--version`, read through the same mtime cache the providers use), the
+  latest, the minimum (the SDK's `claudeCodeVersion` for Claude Code, `CODEX_MINIMUM_VERSION` for Codex), the
+  updater it would run and whether an update is running, and a status: `outdated` below the minimum (runs refuse it,
+  so the web warns), `update_available` below the latest, `current`, `not_installed`, or `unknown` when the version
+  cannot be read or `CLAUDE_EXECUTABLE` / `CODEX_EXECUTABLE` names a wrapper (trusted as is: no version read and no
+  update, as for runs). Then the Agent SDK: its version, the latest published and its `claudeCodeVersion`.
+- **The latest versions** come from the `latest` dist-tag on the npm registry (`GET <package>/latest`:
+  `@anthropic-ai/claude-code`, `@openai/codex`, `@anthropic-ai/claude-agent-sdk`), all three at once, cached for 3
+  hours (`LATEST_TTL_MS`) and coalesced; `POST /api/versions/refresh` (Check for updates) reads them again. A lookup
+  that fails is logged and keeps the last known value.
+- **Updating** (`POST /api/versions/update {program}`, `shinsa versions update <program>`, human-only) runs the
+  program's own updater (`updaters.ts`): `claude update` for Claude Code; for Codex, from where the binary really
+  lives: `brew upgrade codex` under a Homebrew `Cellar` or `Caskroom`, `bun add -g @openai/codex@latest` under
+  `.bun`, `npm install -g @openai/codex@latest` under `node_modules` (the npm or bun beside the `codex` on the PATH
+  first, with its folder first on the PATH, so the update lands in the install that runs; Kanna
+  `provider-auth.ts:647-668`), and `codex update` otherwise, the standalone install included. It runs argv only,
+  with `NO_COLOR`, a 10 minute limit and the server's stop signal. With `Accept: application/x-ndjson` the answer is
+  a stream of `UpdateStreamLine`s: each non-blank output line as it arrives (escape codes stripped, secrets
+  redacted), then `done` with `{ ok, message, versions }`; without it, that outcome as JSON. A refusal comes before
+  anything runs: an unknown program, inspect mode, one already updating, one not installed, or one set by an
+  override. After a successful run Shinsa checks the provider sign-ins again (`syncProviderLogins`, so Codex's
+  `outdated` login clears) and reads the version: a new one is "Updated Claude Code to 2.1.310.", the same one at
+  the latest is "Claude Code is up to date.", and one still behind the latest is a failure ("The update finished, but
+  Claude Code still reports …"; Kanna `provider-auth.ts:618-624`). A failed updater's message is its last line.
+- **The Agent SDK is not updated at runtime.** `@anthropic-ai/claude-agent-sdk` is a dependency of
+  `apps/server`; Shinsa takes a newer one by bumping it in `package.json` (and the minimum Claude Code with it), so
+  the Versions row only says a newer one is published.
+- **Tests never run an updater.** The service takes `locate`, `readVersion`, `minimum`, `sdk`, `latest`, `updater`
+  and `run` (`VersionsOptions`, `startShinsa`'s `versions`); the one test of the default runner points it at the fake
+  `claude` in `test/helpers/bin`, whose `update` does nothing.
+
 ## MCP servers, plugins and skills
 
 Agents load what you have set up, the same for Claude and Codex, and Settings → Integrations shows all of it with
@@ -1459,10 +1614,11 @@ what it costs at the start of every run, so you can turn off what you do not use
   developer instructions (it loads `~/.codex/skills` itself, so turning a Codex skill off only keeps it from Claude). A
   Claude plugin does not load in Codex as a plugin, but its MCP servers and skills reach Codex like any other. Turning a server off changes only what Shinsa's agents load: Shinsa never
   writes `~/.claude.json`, `~/.codex/config.toml` or a plugin, so Claude Code and Codex keep their own settings.
-- **The context optimizer** (Settings → Integrations, off by default; `POST /api/extensions/optimizer {enabled?,
-  days?, skills?}`, days a whole number from 1 to 365, 14 by default). While it is on, a run leaves out every server
-  agents have not used for `days` (and, with `skills`, every skill but Shinsa's own), and gets tools to load what it
-  left out (below). Unused is core's `isUnused`: the last use is older than the window, or there is none and Shinsa
+- **The context optimizer** (Settings → Integrations, on by default; `POST /api/extensions/optimizer {enabled?,
+  days?, skills?}`, days a whole number from 1 to 365, 14 by default; `skills` on by default, so out of the box it
+  leaves out MCP servers and skills unused for 14 days; core's `createContextOptimizer`). While it is on, a run leaves out every server agents have not used for `days` (and,
+  with `skills`, every skill but Shinsa's own), and gets tools to load what it left out and instructions to use them
+  (below). Unused is core's `isUnused`: the last use is older than the window, or there is none and Shinsa
   has watched for at least the window. A server or skill present the first time Shinsa looked is counted from the
   start of the history it read (`seen` stores it as 0), one added later from when Shinsa first saw it, so a server
   you add today is never left out today. Until the history has been read once, nothing is left out.
@@ -1477,13 +1633,22 @@ what it costs at the start of every run, so you can turn off what you do not use
   snapshot row carries `lastUsedAt` and `deferred` (the optimizer would leave it out now), and the snapshot `usage`
   (`readAt`, and `since`, the start of the history read), which the web turns into "Not used in 30 days · ~4k
   tokens".
+- **The snapshot Settings reads is cached** (`Extensions.readSnapshot`). Building one reads every config, plugin
+  and skill file (15 to 100 ms with a few hundred skills), so `GET /api/extensions` answers the last snapshot at once
+  and builds it again on a zero-delay timer (`syncSnapshot`, one at a time), whose result the next read gets. Every
+  change (`/servers/*`, `/skills/choose`, `/plugins/choose`, `/optimizer`, `/check`) answers a fresh one, which
+  becomes the cache. Shinsa builds it once after it starts and again whenever a usage read finishes, and `stop()`
+  clears the timer, so the first visit to Settings is as fast as the next.
 - **Loading what was left out** (`loader.ts`, `ExtensionLoader`, made by `Extensions.createLoader` for a run that left
   something out; the supervisor adds its tool specs to the run's Shinsa tools and routes their calls to it). The
   tools exist only in such a run: `load_mcp_server {name}` (its description names each left-out server with its tool
   count), `call_mcp_tool {server, tool, arguments}` and, when skills were left out, `load_skill {name}` (answers the
-  skill's `SKILL.md` without its front matter). `load_mcp_server` takes the server's name in any form (`maple`,
-  `plugin:docs:context`, `mcp__maple`), refuses one already loaded or not left out (a server turned off stays off),
-  and then:
+  skill's `SKILL.md` without its front matter). `load_mcp_server`, `call_mcp_tool` and `load_skill` take a name in
+  any form: exactly (`maple`, `plugin:docs:context`, `mcp__maple`, any case), else loosely, the way the human said it
+  ("the Maple MCP", "Maple MCP server", "the release skill"): the words of the name, leaving out "the", "a", "an",
+  "mcp", "server", "skill", "plugin" and "tools", must all be in what was asked for, and exactly one entry must
+  match (two matches are refused, never guessed). `load_mcp_server` refuses one already loaded or not left out (a
+  server turned off stays off), and then:
   - **Claude** (the session has `loadMcpServers`): the Agent SDK's `Query.setMcpServers` replaces the session's
     dynamically added servers, so the session adds the server to the set it already handed over (Shinsa's own and the
     loaded ones) and calls it again on the live query. Claude Code connects it and its tools reach the model from the
@@ -1500,9 +1665,25 @@ what it costs at the start of every run, so you can turn off what you do not use
   A load is recorded in the transcript like any Shinsa tool call, so it counts as a use: every run reads the new
   usage before it chooses what to leave out (once the history has been read once), so the server is not left out of
   the next run. The tools work the same on Codex, which reaches them through Shinsa's own server.
-- **What a run loaded.** Each provider records an `extensions` notice at the start of every run (`LoadedExtensions`:
-  each server, skill and plugin by name with its token estimate, and in `deferred` what the optimizer left out; no
-  plugins for Codex), and the chat shows it as one quiet row ("Loaded 3 MCP servers · ~12k tokens · 2 left out").
+- **What the run is told** (`resolveDeferredInstructions` in `session.ts`). A run that left something out gets a
+  "Left out until needed" section in its instructions (Claude's appended system prompt, Codex's developer
+  instructions): the left-out servers by name with their tool counts, that the left-out skills are the ones
+  `load_skill` lists (not repeated, so hundreds of skills cost nothing), and the rule that when the human names a
+  server or a skill the agent does not have, in any form, it loads it with `load_mcp_server` or `load_skill` and uses
+  it, and never says it is not available before it tried. The tool descriptions say the same.
+- **What a run loaded.** Each provider records an `extensions` notice when a session starts with a set
+  (`LoadedExtensions`: each server, skill and plugin by name with its token estimate, and in `deferred` what the
+  optimizer left out; no plugins for Codex), and the chat shows it as one quiet row ("Loaded 3 MCPs · ~12k tokens · 2 left out"). It is said once
+  per session: a turn that resumes a session says it again only when the set changed (`announceExtensions`, decided
+  by the supervisor with `isSameExtensionSet`, which compares names only). A delegated run is a session of its own, so
+  its row is in its own conversation, nested under its card in the parent's turn.
+- **A resumed session keeps its set.** `resolveSession(place, pin)` takes the set the session last ran with (the
+  supervisor's `SessionExtensionSets`, `agents/extension-sets.ts`: remembered per session id, and read back from the
+  last `extensions` notice in the session's transcripts after a restart). With a pin, what the session loaded stays
+  loaded and what it left out stays left out, whatever the optimizer would choose now (time passing, a server used in
+  another task or loaded mid-run), so the system prompt and the tool list do not change between its turns. Only what
+  is new to the pin is chosen by the optimizer. Your own changes still apply at once: a server or skill you turned off
+  is gone, and turning the optimizer off loads everything (The agent loop → Sessions and the prompt cache).
 - **Token estimates** are characters over four (`resolveTokenEstimate`): a skill's listing line (name and description,
   the description cut at Claude Code's 1,536 characters), a plugin's agents and commands plus its skills that are on,
   and a server's tool definitions as it listed them at its last check (nothing until it was checked). Claude Code may
@@ -1583,10 +1764,41 @@ session. Steers the agent never answered come back in `undelivered` and are deli
 `run.end`. A run whose attempt is on an account another run just found spent is treated as too late to steer until
 its next attempt (Accounts and usage limits → Rotation on a rejection).
 
+**Sessions and the prompt cache.** Each turn is a new attempt, and for Claude a new `claude` process (the SDK
+session ends after the turn's result), but it resumes the provider session the step's earlier turns used whenever the
+role and provider allow it (Resume fallback, below; Agents, above, has which roles resume whose session). The
+Anthropic prompt cache is keyed on the exact prefix of every request (tools, then the system prompt, then the
+messages), so a resumed turn reads the whole conversation from the cache only while that prefix is byte-identical. What
+must stay stable between the turns of one session: Shinsa's appended system prompt (the house instructions, the skills
+it names and the "Left out until needed" list), the Shinsa tool specs in `listToolNames` order and their
+descriptions, the loader tools and the left-out names in them, and the MCP servers and skills the session loads, in
+catalog order. The pin (MCP servers, plugins and skills → A resumed session keeps its set) holds that set; nothing
+per attempt (ids, times, ports, tokens) goes into the system prompt or the tool specs. A new prefix is unavoidable
+when the session changes hands: a provider switch, a lost session restored on a fresh one, a context that
+overflowed, a different account (its Claude config folder has its own settings), a change of route (eunoe down) or of
+fast mode, or a server, skill or plugin you turned on or off. Measured on a three-turn answer task (Claude, eunoe on),
+each follow-up turn's first request reads the whole earlier conversation from the cache (106,288 tokens read and 2,889
+written on turn 2; 109,402 read and 2,983 written on turn 3); what is written is that turn's new brief.
+
+**The house rules go to a session once.** Every role's brief opens with its house rules (`resolveHouseRules`, about
+7,000 characters: the voice, the worktree rule, the tools, references, delegation and the command surface). A session
+that already has them does not need them again, so a resumed turn sends only the instruction after them
+(`resolveTurnPrompt` in `agents/turns.ts`, `splitHouseRules` in core). It sends the full brief whenever the session
+might not have these exact rules: a fresh session, a handoff (a provider switch, a lost session restored on a new one,
+an account whose session cannot be resumed, which the CLI reports as lost), a session whose earlier briefs never
+carried the same text (a follow-up answerer resuming a builder's session gets the answerer's rules), and a session
+compacted since it last got them (a compaction notice from Claude, Codex or eunoe after the brief, since a summary
+keeps no rules). The check reads the session's transcripts newest first, so it works the same for Claude and Codex and
+across a restart. Measured on a two-turn answer task (Claude, Sonnet, the e2e harness run live): the follow-up turn
+sent 8,989 characters and wrote 3,389 cache tokens with the full brief, and sends 1,277 characters and writes 709 with
+the instruction alone.
+
 **Executable discovery** (`executable.ts`). Runs use the user's `claude`, never the SDK's bundled copy:
 `CLAUDE_EXECUTABLE` (with `~` expanded) wins and is trusted as is; otherwise `claude` on the `PATH`, whose
 `--version` is read once per binary and again only when the file changes. A `claude` older than the SDK's
-`claudeCodeVersion` is refused with "Update it with `claude update`"; an unreadable version is let through.
+`claudeCodeVersion` is refused with "Update it from Settings → Agents, or run `claude update`" (the Update there
+is Versions and updates, below); an unreadable version is let through. Finding the binary (`locateClaude`, and
+`locateCodex` for Codex) is `locateProgram` in `providers/versions.ts`, which the updates read too.
 
 **Codex** (`agents/providers/codex/`; harness plan WS1 item 10 names the Kanna and T3 sources). A Codex run is one
 `codex app-server` process speaking JSON-RPC over NDJSON on stdin and stdout (`client.ts`), in its own process group
@@ -1609,7 +1821,7 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   rest, and accepts file changes. A read-only role (planner, reviewer, answerer, researcher) runs with `approvalPolicy: never` and
   `sandbox: read-only`: nothing it runs can write or reach the network, so a commit, a push or `gh pr merge` fails in
   the sandbox and a patch is rejected. Elicitations from Shinsa's own MCP server are accepted, others declined;
-  anything that needs a person (`item/tool/requestUserInput`, a permissions request) is refused, since nobody watches.
+  anything that needs a person (`item/tool/requestUserInput`, a permissions request) is refused, since no one is there to answer it mid-turn.
 - **Steering and stopping.** A message steers the running turn with `turn/steer` against its turn id. When Codex
   refuses (the turn just ended, or a kind of turn it cannot steer) the message runs as the next turn once this one
   ends; one sent before the first turn starts is queued the same way. A turn that fails leaves its queued messages
@@ -1647,8 +1859,8 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 - **Executable discovery** (`executable.ts`): `CODEX_EXECUTABLE` (with `~` expanded), else `codex` on the `PATH`; its
   `--version` (`codex-cli 0.153.4`) is read once per binary and again when the file changes. Older than
   `CODEX_MINIMUM_VERSION` (0.153.0, the version this adapter was built and checked against: `turn/steer`,
-  `outputSchema` and thread `config` overrides) is refused with the update command; a missing codex says how to
-  install it.
+  `outputSchema` and thread `config` overrides) is refused with "Update it from Settings → Agents, or run `codex
+  update`"; a missing codex says how to install it.
 - **One-shot calls** (`complete.ts`): an ephemeral read-only thread with `approvalPolicy: never`, the system prompt as
   its instructions, one turn at low effort with the schema as `outputSchema`, the last agent message as the answer.
 - **Models and sign-in.** `model/list` on a short-lived app server (paged, hidden models left out; the built-in list
@@ -1702,7 +1914,7 @@ one option) or `choices` (any subset of the options, empty allowed). One helper 
 string `enum` of the options, or an array of them with `uniqueItems`), the prompt line naming every option with what
 it means, and the parser, which refuses an answer with anything outside the options so the caller falls back. They
 are used for triage's `size` (`small` or `large`), `shape` (the six task shapes, each with what it means), `priority`
-and `depends_on` (the open tasks triage offers, Automatic options, each by its id with its title as its meaning;
+and `waits_on` (the open tasks triage offers, Automatic options, each by its id with its title as its meaning;
 refused whole, it waits on nothing), the last three asked only for what the task left on Auto and each with a short why (Task shapes → Automatic
 options), the briefing's `now.task` and every `next[].task` (a
 choice among the listed decisions' ids; `parseBriefing` still validates), and each setup question that takes one
@@ -1717,7 +1929,7 @@ started in the background (a Claude background task) pins the session for up to 
 wait, resets the timer; each arm carries a generation and the session it belongs to, so a stale timer never releases
 a newer session. A Claude session's prompt cache expires 1 hour or 5 minutes after the result that last wrote it, whichever
 bucket that result wrote (`resolveCacheExpiry` reads `cache_creation.ephemeral_1h/5m_input_tokens`; neither means
-the lifetime is unknown). When a builder, fixer, shipper, answerer, investigator,
+the lifetime is unknown). When a builder, fixer, answerer, investigator,
 researcher or operator finishes near its context limit (at least 80% of its window, `COMPACTION_NEAR_LIMIT`, from the
 context usage Claude reports at the end of the turn), `IdleCompaction` (`agents/compaction.ts`)
 sends `/compact` to that session 2 minutes before the cache expires (Settings → General → Context, Compact idle
@@ -1794,8 +2006,7 @@ budget fold. Claude Code's own compactions keep their `compact_boundary` notice.
 *Fast mode* (`settings.fastMode`, Settings → Agents, the speed select on each role, default Standard). Each
 role can differ from it: `settings.agentFastModes` holds a true or false per agent role, written whole by
 `settings.change` like `agentModels`, and core's `resolveAgentFastMode(settings, role)` reads the role's own value,
-else the global switch. The supervisor passes the run's role's value (`RUN_AGENT_ROLE`, so a shipper follows the
-fixer) to every session of a provider whose capabilities include `fastMode`, delegated children (their own role) and
+else the global switch. The supervisor passes the run's role's value (`RUN_AGENT_ROLE`) to every session of a provider whose capabilities include `fastMode`, delegated children (their own role) and
 idle compactions (the run's role) included (`resolveSessionOptions`, which also carries the compaction setting,
 takes the role, or none for the global value);
 and quick calls pass it per provider, the classifier's for triage and the setup chat, the writer's for the
@@ -1852,10 +2063,13 @@ sign-in is read by `codex login status` (exit 0 and "Logged in using ChatGPT" or
 "Not logged in" signed out; a missing or outdated codex says how to install or update it) and rides along in the
 accounts snapshot as `providers` (refreshed with the accounts, a failed read logged and the last one kept). Settings →
 Agent usage shows it under the Claude accounts with the sign-in command, and onboarding's tools check lists codex
-and its sign-in as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the account on
-the gate is the provider (`codex`, with the email the usage reading found), its title "Sign in to Codex as ‹email›",
-and every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
-Settings, on the card or in ⌘K) answers it with `account.signed_in` under `provider-login:codex:<gates>`. Rotation
+and its sign-in as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
+arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
+names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Sign in to Codex as ‹email›", and
+every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
+Settings, on the card or in ⌘K) sends `provider.record_sign_in { provider: 'codex' }` under
+`provider-login:codex:<gates>`, which answers every open Sign in gate of that provider and retries those tasks. The
+web reads the gate's provider (`resolveSignInProvider(gate)`: anything but `claude` is a provider's own login). Rotation
 across several Codex logins would need a `CODEX_HOME` per account, which Codex supports; it is left until someone
 runs Codex enough to hit its limits.
 
@@ -1916,13 +2130,12 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   the default account.
 - **Usage** (`accounts/usage.ts`, `accounts/limits.ts`). `GET https://api.anthropic.com/api/oauth/usage` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
-  `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "Current
-  session", `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
+  `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
+  limit" (Codex's label for the same window), `weekly_all` "Weekly · All models", a `weekly_scoped` entry with a model is "Weekly · ‹model›" (the Fable
   window); the keyed `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet` fill in, and rotating
   codenames are dropped. A model window has one id whatever reports it, `weekly:<model slug>` (the keyed
   `seven_day_opus` is `weekly:opus`, `seven_day_sonnet` `weekly:sonnet`), so one reading never holds two windows with
-  one id (the `limits` entry wins), a pushed notice naming `seven_day_opus` updates `weekly:opus`, and a cache an
-  older version wrote is read back under the same ids. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
+  one id (the `limits` entry wins), and a pushed notice naming `seven_day_opus` updates `weekly:opus`. Shinsa never refreshes a token itself (Claude Code does, under its own lock): an expired
   token keeps the last reading and says the login refreshes on the next run. Readings are cached for 60 s and kept
   in `data/usage-limits.json` (read back marked `source: 'cache'`); a failed read never erases a reading, only
   replaces its detail; a 429 backs off at least 5 minutes. Pushed rate-limit notices from a run land on the account
@@ -1976,12 +2189,12 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   no later than the one it waited for opens the failure gate. `usage_wait.change` (auto-resume on or off) replaces the
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
   cancelling or any new step end the wait.
-- **The Sign in gate.** An `auth` failure with a known account opens a `question` gate with purpose `sign_in`, the
-  account on the gate, "Sign in to Claude as ‹email›". Its body says what stopped (the classifier's reason when it is
+- **The Sign in gate.** An `auth` failure with a known account opens a `sign_in` gate naming its provider
+  (`Gate.provider`, `claude`) and the account (`Gate.account`), "Sign in to Claude as ‹email›". Its body says what stopped (the classifier's reason when it is
   more than signed out: on hold, verification, billing) and that signing in starts the step again; its activity
-  entry is Shinsa's, like a failure gate's. It is answered like a failure gate (retry anyway, or cancel; a message
-  retries with guidance), and `account.signed_in` (a successful sign-in) answers every open Sign in gate of that
-  account and retries those tasks. `account.removed` releases the tasks bound to a removed account and retries its
+  entry is Shinsa's, like a failure gate's. It is answered like a failure gate (approve retries anyway, `reply`
+  retries with your words as guidance, reject cancels; a message is a `reply`), only by you, and `account.signed_in` (a
+  successful sign-in) answers every open Sign in gate of that account and retries those tasks. `account.removed` releases the tasks bound to a removed account and retries its
   Sign in gates on the pool.
 - **The API** (`accounts/routes.ts`): `GET /api/accounts` → `AccountsSnapshot` (`{ accounts, login, imports, providers
   }`, `packages/core/src/protocol/accounts.ts`), also pushed on every socket as `{ type: 'accounts' }` on connect and
@@ -2009,8 +2222,8 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
 ├── accounts/<id>/   One Claude config folder per account Shinsa signed in or imported
 └── data/
     ├── shinsa.sqlite  The event log, the effect outbox and the command receipts
-    ├── worktrees/     One git worktree per task (`<repo>/<branch>-<id>`), and the checkouts of isolated delegated
-    │                  tasks (`delegations/<task>/<run>`)
+    ├── worktrees/     One git worktree per task (`<repo>/<branch>-<id>`), and the checkouts of isolated
+    │                  delegations (`delegations/<task>/<run>`)
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      Screenshots, logs and files agents attached
     ├── usage-limits.json  The last usage reading per account
@@ -2027,10 +2240,9 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
 One folder instead of XDG's config and data split on purpose: it is one thing to back up, move or delete, a seeded or
 scratch copy is one directory, and the event log, worktrees and config.json only make sense together.
 
-- **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` keeps the older flat layout:
+- **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
-  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. Neither override migrates
-  anything. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
+  directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
   command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say): no effect runs
   (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered. It lists the Claude accounts
@@ -2046,7 +2258,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   works in it (`repo.register`, `repos/index.ts`) and filed into a project by the rule in Projects and task identity,
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
-  (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal`, `onboardedAt` and `migratedFrom`.
+  (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal` and `onboardedAt`.
   The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds
   folders). Everything `decide` reads stays domain state, changed by `settings.change` events: the default model,
   the merge method, the model per role, plan approval, fix rounds. The rule: if replaying the log on another
@@ -2056,16 +2268,6 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   logged once. `shinsa do`, `import`, `status` and `open` only read the port and never copy the file. An unreadable
   `secrets.json` (or one without its salt) is kept aside the same way as `secrets.json.unreadable-<time>`, logged, and
   an empty store is used.
-- **Migration from `~/.shinsa`.** On a start with the default layout, when `~/.shinsa/shinsa.sqlite` exists and
-  `data/shinsa.sqlite` does not, Shinsa copies the old data into `data.migrating-*` beside the new folder: the
-  database through SQLite's `VACUUM INTO` (a consistent snapshot even while another process writes), then
-  `transcripts/` and `evidence/`. It verifies the copy (the same number of events and effects and the same last
-  sequence; every file present at the same size), then renames it into place and records `migratedFrom` in
-  `config.json`. The old folder is never changed or deleted. Worktrees are not copied: git and the event log know
-  them by absolute path, so tasks that already have one keep using it under `~/.shinsa/worktrees`, and new ones go
-  to `data/worktrees`. If the copy cannot be made or does not verify, it is thrown away, the error is logged and
-  this start uses `~/.shinsa` where it is; the next start tries again. A non-empty `data/` that has no database is
-  never overwritten.
 
 ## Onboarding API
 
@@ -2368,7 +2570,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   fetch, a `text/plain` post and a socket from another site or without an Origin are refused; no Origin or a
   loopback one is taken); `test/agents/providers/claude/guard.test.ts` the shell policy, human-only `shinsa`
   commands included.
-- **Configuration and setup.** `test/config/` covers the layout, `config.json` and the migration; `test/onboarding/`
+- **Configuration and setup.** `test/config/` covers the layout and `config.json`; `test/onboarding/`
   and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks and the setup chat.
 - **Real agents.** `bun run --cwd apps/server test:live` runs a change, an Ask task, an investigation and a support
   question through real Claude agents on a throwaway repository (GitHub stays faked). It costs real tokens, so it is not part of `bun test`. The real eunoe is

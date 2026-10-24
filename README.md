@@ -2,7 +2,7 @@
 
 審査: examination, judging.
 
-A human-assisted coding harness. You state what you want; agents plan it, build it, check it and get the pull request clean. You only make the calls: review the change, approve the merge, answer a question (and approve the plan, when you switch that on).
+A control plane for coding agents. You state what you want; agents plan it, build it, check it and get the pull request clean. You only make the calls: review the change, approve the merge, answer a question (and approve the plan, when you switch that on).
 
 ```sh
 bun install

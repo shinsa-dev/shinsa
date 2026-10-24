@@ -92,8 +92,8 @@ login PTY), Kanna's reactive retry (`claude-swap.ts`, `agent.ts:305-313`, `:3101
 7. **Recovery fingerprints**: budgets keyed to durable state, so prose never resets them.
 8. **Structured questions** and **per-finding verdicts**; a newer message makes an older question historical.
 9. **Ask mode**: a task that only answers.
-10. **Follow-up suggestions** (`suggest_tasks`).
-11. **Pre-dispatch config gate**: repository, default branch and checks verified before any agent.
+10. **Suggested tasks** (`suggest_tasks`).
+11. **Setup verification before dispatch**: repository, default branch and checks verified before any agent.
 
 ## WS4 Engine hardening (T3)
 
@@ -120,14 +120,14 @@ Sources: T3 `mcp/toolkits/orchestrator/tools.ts:68` `delegate_task`, `Orchestrat
 `MAX_LIVE_CHATS`, `:1131` adoption, `:1943` `maybeReport`; Paperclip `doc/execution-semantics.md:349` blockers,
 `:365` couriers, `:379` exact-once decomposition.
 
-1. `delegate_task` (async or wait), `task_status`, `task_cancel`; a child starts from its brief alone; deterministic
+1. `delegate_task` (async or wait), `delegation_status`, `delegation_cancel`; a child starts from its brief alone; deterministic
    ids; each review round a fresh delegation.
 2. Results pushed into the parent's turn (steered, else queued), cohorts with generations, priority delivery; a wait
    that times out switches to waking the parent.
 3. Child questions route to the parent; a child is never broader than its parent; worktree isolation from the
    parent's commit.
 4. Kanna's limits (depth 3, 8 live), batching, adoption, cancel cascades; Paperclip's couriers and blocker.
-5. Restart recovery for delegated work.
+5. Restart recovery for delegations.
 
 ## WS7 Triggers, idle sessions and notifications (Kanna + T3)
 
@@ -189,14 +189,14 @@ The last column says where the build differs from the plan on purpose, in one li
 | 1 Plan versions | Built | core `decide/agents.ts` (`proposePlan`), `decide/gates.ts`, `state/project.ts`, `report/plan-changes.ts` | |
 | 2 Review escalation | Built | core `decide/fixes.ts` (`reactToFindings`, escalation), `state/reviews.ts` | |
 | 3 Liveness | Built | core `decide/liveness.ts`, `queue/stalls.ts` (`traceStalledLeaf`) | |
-| 4 Monitors | Built | core `decide/monitors.ts` (a wait out of checks or time opens the failure gate, `cause: monitor`); server `runtime/monitors.ts` (`MonitorClock`), `agents/tools/process.ts` | A fire resumes the waiting run's session instead of a fresh one, so the agent keeps what it knew |
+| 4 Monitors | Built | core `decide/monitors.ts` (a wait out of check-ins or time opens the failure gate, `cause: monitor`); server `runtime/monitors.ts` (`MonitorClock`), `agents/tools/process.ts` | A fire resumes the waiting run's session instead of a fresh one, so the agent keeps what it knew |
 | 5 Cost | Built | core `costs/index.ts`, `decide/costs.ts` (`holdForBudget`); server `supervisor.ts` (`run.meter`); web task facts | Two per-task caps, a share of the weekly usage window (`taskUsageLimit`) and dollars (`taskBudgetUsd`), both off by default and checked when a step starts: a run is never stopped mid-turn |
 | 6 Silent runs | Built | server `agents/silence.ts`; core `decide/silence.ts`, `queue/silence.ts`; web `components/overview/silence-note.tsx` | |
 | 7 Fingerprints | Built | core `decide/fingerprints.ts` | |
 | 8 Questions and verdicts | Built | core `decide/gates.ts`, `decide/messages.ts` (`gate.superseded`); server `agents/questions.ts`; web `components/overview/question-choices.tsx`, `finding-verdicts.tsx` | |
-| 9 Ask mode | Built | core `decide/shapes.ts` (`recordAnswer`, the answer shape); server `supervisor.ts` (runs in the repository) | |
-| 10 Follow-ups | Built | core `decide/suggestions.ts`; web `components/overview/suggestions-panel.tsx` (When to start, the agent's pick first), `lib/tasks/suggestions.ts`, `lib/command/process.ts` | |
-| 11 Config gate | Built | core `decide/config.ts`; server `repos/setup.ts` | |
+| 9 Ask mode | Built | core `decide/shapes.ts` (`recordDelivery` with step `answer`, the answer shape); server `supervisor.ts` (runs in the repository) | |
+| 10 Suggested tasks | Built | core `decide/suggestions.ts`; web `components/overview/suggestions-panel.tsx` (When to start, the agent's pick first), `lib/tasks/suggestions.ts`, `lib/command/process.ts` | |
+| 11 Setup verification | Built | core `decide/config.ts`; server `repos/setup.ts` | |
 
 ### WS4 Engine hardening
 

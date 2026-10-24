@@ -29,10 +29,17 @@ A stage reason says what is happening to the task now. A gate says what is being
 
 - A **task** is one piece of work you asked for. Not job, ticket or issue.
 - A **gate** is the code's word; on screen it is the decision itself: "Review", "Merge", "Plan to approve", "Question", "Paused". **Needs you** is the list of them.
-- **Plan** on screen, `spec` only in code and in `shinsa status` labels.
+- **Plan** everywhere: on screen, in `shinsa status`, in prompts and in code (`Plan`, `planFirst`). "spec" means only a command-surface spec in `apps/server/src/surface`.
+- **Kind of task** on screen; shape is the code's word (`TaskShape`). No "shape" in any UI string.
+- **Request** for what you asked for, never intent.
+- **Suggested task** for what an agent suggests ("Suggested tasks", "Add the suggested task “‹title›”"). A **follow-up** is only a message to a finished answer, investigation or report.
+- **Delegation** for work a step hands to another agent ("waiting for 2 delegations", "Delegations"). Never "delegated task".
+- **Diagnosis** for what an investigation hands over; **findings** are only the reviewer's.
+- **Judgement calls** for the choices a builder made in a phase; a **decision** is only your answer at a gate.
+- **Check-in** for a waiting agent's next look ("Check in now", "Check-in 2 of 10", "Waiting to check in again"); **verify** the setup ("Verify again"); **CI** for the pull request's checks. Checks are the repository's.
 - **Pull request** in prose; "PR #42" only where space is tight (a chip, a status line).
 - **Agent** for whatever is working; the roles (planner, builder, reviewer, fixer) only where the role matters ("The fixer paused").
-- **Waiting on another task** for dependencies, "waiting for “Title” to finish" in a stage reason. Titles are quoted with curly quotes.
+- **Waiting on another task** for the tasks a task waits on ("Waits on"), "waiting for “Title” to finish" in a stage reason. Titles are quoted with curly quotes.
 - **You** for the human in product copy and activity; **the human** in agent prompts.
 - Never playful labels, never "magic", never exclamation marks. The two layout names (`LAYOUT_NAMES`: Desk and Shelf) are names chosen on purpose, each with a plain hint line.
 
@@ -45,7 +52,7 @@ A stage reason says what is happening to the task now. A gate says what is being
 **DomainError message**: what is wrong and, when it is not obvious, what to do: "“Base” was cancelled, so there is nothing to wait for." "This task is finished. Start a new one." The code (`task_settled`) is for programs; the message is for people and agents.
 **Failure gate**: the title says what stopped ("Out of automatic fix rounds"), the body says why and what Retry will do.
 **The Home guide** (`packages/core/src/briefing`): one plain sentence per item, a reason a person would say out loud; never a position ("item three"), an id, or a claim the gate does not support (a review is not "ready to merge").
-**Agent prompts** (`packages/core/src/prompts`): imperative, one instruction per sentence, the tool to call named in backticks, limits stated as numbers. Keep each fix prompt's first words stable: the web reads them to label the run ("The checks failed", "The agent review found", "The human looked at the work", "Pull request #").
+**Agent prompts** (`packages/core/src/prompts`): imperative, one instruction per sentence, the tool to call named in backticks, limits stated as numbers. Keep each fix prompt's first words stable: the web reads them to label the run ("The checks failed", "The agent review found", "The human looked at the work", "Pull request #"). Agents speak as themselves, in the first person, and the hand-over is their reply: no prompt or tool text may have an agent say "Shinsa knows…" about itself or invite a line after the hand-over (`VOICE_RULE` in `prompts/rules.ts`). Name Shinsa to the human only where they act in it.
 
 ## Style
 

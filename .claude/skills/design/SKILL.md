@@ -36,10 +36,19 @@ Checklist:
 - [ ] Every `hover:` has an `active:` on the same line, with the same value (lint checks only that one is there).
 - [ ] Fill or border for controls, both for panels.
 - [ ] A state change never changes weight: `data-[active=true]:faux-medium`.
-- [ ] An icon takes its text's colour at `--icon-alpha`, 85% (90% in menu rows), so the text reads
-      first; `Icon` applies it. Equal strength is a context (`icon-solid`: ghost and icon-only buttons,
-      errors), never a call-site `opacity-*` or a lighter step (docs/design.md → Where Shinsa differs, 19).
-- [ ] Icons are Central (`<Icon name='Icon…' />`), sized by their primitive; run
+- [ ] An icon draws in a solid icon ink a step under its text, never an opacity: `icon-N` beside
+      `fg-N`, the tone itself beside a tone. The text colour sets it (`text-*` utilities set
+      `--icon-color`), so put the icon inside its label's colour or give it the label's class; never
+      an ink brighter than its text, a call-site `opacity-*` other than a reveal (`opacity-0` →
+      `opacity-100`), `[&_svg]:` colour or opacity, or `[--icon-color:…]` (lint fails;
+      docs/design.md → Where Shinsa differs, 19, and Iconography → Icon colour).
+- [ ] Three icon sizes: `size='sm'` 14 (12–13px text, rows, 22/24 controls), `'md'` 16 (14px+ text,
+      26/30 controls), `'lg'` 20 (empty states, full-page waits). Inside a primitive pass nothing;
+      elsewhere pass `size`. Never `size-*`/`w-*`/`h-*` on an icon (lint fails). Every icon in one row
+      is the same size and ink, chevrons and spinners included.
+- [ ] Icons are Central (`<Icon name='Icon…' />`), never a hand-drawn `<svg>`; run
       `bun run --cwd packages/ui generate:icons` after using a new name.
 - [ ] Icon-only buttons name their action in an `aria-label` and the same tooltip.
+- [ ] A tooltip opens over its text and icon only: what a `Hint` or `TooltipTrigger` wraps is inline or
+      `w-fit`, never a block across a full-width row (lint fails; docs/design.md → Where Shinsa differs, 13).
 - [ ] Looked at it on `/ui` and in the app, light and dark, desktop and ~900px.

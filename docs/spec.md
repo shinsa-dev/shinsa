@@ -1,7 +1,7 @@
 # Shinsa: spec
 
 > 審査, *shinsa*: examination, judging.
-> **A human-assisted harness. The agents do the work; you make the calls.**
+> **A control plane for coding agents. The agents do the work; you make the calls.**
 
 ## 1. The problem
 
@@ -11,21 +11,22 @@ running, then gets buried when all three finish at once. Every finished chat bec
 to remember, re-read, nudge ("fix the review comments"), commit, PR, chase, merge. Most of that
 work does not need a human, but it is the human who does it, so the human is the bottleneck.
 
-Existing harnesses (Kanna, T3 Code, Claude Code, Codex) are tools a human *uses*: the human
-opens the chat, drives it, tracks it, closes it. Shinsa inverts that. **The harness runs the
-work and asks the human for small, specific pieces of judgment.** Nothing else reaches them.
+Agent harnesses (Claude Code, Codex) and the chat apps built on them (Kanna, T3 Code) are tools a
+human *uses*: the human opens the chat, drives it, tracks it, closes it. Shinsa inverts that. It is a
+control plane for coding agents: **Shinsa runs the work through those harnesses and asks the human for
+small, specific pieces of judgment.** Nothing else reaches them.
 
 ## 2. Principles
 
-1. **Gates, not chats.** The human appears at exactly three points: approving the spec (when
+1. **Gates, not chats.** The human appears at exactly three points: approving the plan (when
    asked for), reviewing the result, approving the merge. Plus answering a question when an agent
-   is genuinely blocked. Everything between gates is the harness's job.
+   is genuinely blocked. Everything between gates is Shinsa's job.
 2. **The human never manages.** No projects you must create (Shinsa files repositories into
    projects by their folder or GitHub owner; shaping a project is optional), no tabs to keep open,
-   no lists to groom. You state an intent; Shinsa works out the repo, the worktree, the branch, the
+   no lists to groom. You state a request; Shinsa works out the repo, the worktree, the branch, the
    order.
 3. **One thing at a time for the human, many for the agents.** The human sees one gate, then
-   the next. Parallelism is the harness's problem, not the human's.
+   the next. Parallelism is Shinsa's problem, not the human's.
 4. **Nothing reaches main without the human.** No commit to the default branch, no merge,
    ever, without an explicit approval. Everything short of that can be automated.
 5. **The AI is never the decider.** It prepares, checks, ranks and explains. If AI wrote the
@@ -37,9 +38,9 @@ work and asks the human for small, specific pieces of judgment.** Nothing else r
 
 ## 3. Core model
 
-### Intent → Task
+### Request → Task
 
-You write an **intent** ("block duplicating code-first paywalls", "the embedded chat should
+You write a **request** ("block duplicating code-first paywalls", "the embedded chat should
 use MCP v2"). Shinsa turns it into a **task**: the conversation about one goal, with one worktree and one branch at
 a time. A task is the only thing with a lifecycle. Chats, runs, agents, checks are
 parts of a task, never things the human manages.
@@ -54,13 +55,13 @@ own stacked one. The merge ends a round, not the task: the next round starts fro
 on a new branch, and the task is done when you mark it done, or when its agent does with
 nothing left open (`docs/engine.md` → Rounds).
 
-Triage infers the repository from the intent within the task's project (Projects, below); you
+Triage infers the repository from the request within the task's project (Projects, below); you
 never pick one, and a project is what you work on, never navigation.
 
 ### Lifecycle
 
 ```
-draft ─► spec ──[GATE: approve spec]──► build ─► self-check ─┐
+draft ─► plan ──[GATE: approve plan]──► build ─► self-check ─┐
                                                               │ loops until clean
                     ┌─────────────────────────────────────────┘
                     ▼
@@ -73,12 +74,13 @@ draft ─► spec ──[GATE: approve spec]──► build ─► self-check �
             mergeable ──[GATE: merge]──► merged ─► settled (worktree cleaned)
 ```
 
-- **Plan approval decides the spec gate.** It is off by default (Settings → Agents → Engine, Approve
-  plans): building starts as soon as the plan is written. With it on, a large task stops at spec
+- **Plan approval decides the plan gate.** It is off by default (Settings → Agents → Engine, Approve
+  plans): building starts as soon as the plan is written. With it on, a large task stops at the plan gate
   (triage sizes new features, changes across several areas, UI flows, the data model and anything
   ambiguous as large), and so does any plan the planner revised. A task you ask for plan first
-  (`shinsa do --spec`, or a session brought in with `shinsa import`) always stops at spec, whatever
-  the setting says (`docs/engine.md` → A task's path).
+  (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
+  that runs an operation or a plan that asks for your approval, whatever the setting says (`docs/engine.md` → A
+  task's path).
 - **Self-check** is everything an agent can verify alone: types, lint, tests, the repo's rules,
   a review pass against the rules skills, and for UI work the evidence capture (§5).
 - **After review**, the PR loop is automated: review-bot comments and CI failures go back to
@@ -89,7 +91,7 @@ draft ─► spec ──[GATE: approve spec]──► build ─► self-check �
 ### Task shapes
 
 Not every request ends in a pull request. A debug question, a support question or a comparison
-needs findings, an answer or a report first, and maybe a change later. Each task follows its own
+needs a diagnosis, an answer or a report first, and maybe a change later. Each task follows its own
 pipeline, composed from fixed building blocks (answer, research, investigate, your OK, plan,
 operate, build, checks, agent review, your review, pull request, merge) under guards that never
 change: anything that changes code goes through your review before a pull request, and merges
@@ -102,13 +104,13 @@ it). The six shapes below are presets:
 | Shape | Pipeline | Ends with |
 | --- | --- | --- |
 | Answer only | answer | an answer, in the repository itself, nothing changes |
-| Investigation | investigate | findings: the cause and how it was reproduced, from a scratch worktree |
+| Investigation | investigate | a diagnosis: the cause and how it was reproduced, from a scratch worktree |
 | Research | research | a report: a comparison or a recommendation |
 | Change | plan → build → checks → agent review → your review → pull request → merge | a merged change |
 | Find and fix | investigate, then the change | the cause, then a merged fix |
 | Operation | plan (always approved by you) → run | a one-off action in the repository, no pull request |
 
-The classifier picks a preset from the request unless you picked one. The planner then keeps it
+The classifier picks a preset from the request; you never pick one. The planner then keeps it
 or composes the task's own steps from the building blocks, before it plans: investigate, your
 OK, then an operation; research, your OK, then a change; a change, then an operation once it
 merged; or something smaller when the request needs no change at all. Every step and gate is
@@ -132,16 +134,18 @@ answered, when. Gates survive restarts. The decisions, as you see them (the sche
 
 | Gate | What you see | Your answers |
 | --- | --- | --- |
-| Spec | The proposed spec as a document, its version and what changed since the last one | Approve this version · Comment (agent revises) · Reject |
+| Plan | The proposed plan as a document, its version and what changed since the last one | Approve this version · Comment (agent revises) · Reject |
 | Review | The change running, evidence, diff ranked by risk, checks, each agent finding | Approve · Request changes · Fix or dismiss each finding |
 | Merge | Final diff summary, CI, bot verdicts, what changed since review | Merge (or write in the chat to send it back) |
 | Question | One question, the context it needs, choices to pick in one click | Answer |
-| Change | What an answer, investigation or report proposes to change, and why | Make it a change · Keep it as it is |
-| Operation | After a merge: the merged commit, the operation's steps and its impact | Run the operation (with notes, if you write some; a message in the chat adds notes and runs nothing) · Finish without it |
+| Your OK | What an answer, investigation or report proposes to change, and why | Make it a change · Keep it as it is |
+| Operation | After a merge: the merged commit, the operation's steps and its impact, and the notes for the operator in a box you can edit | Run the operation with the notes in the box (a message in the chat replaces them and runs nothing) · Finish without it |
 
-A paused task (out of recovery, an agent's wait that ran out of time or checks, its usage or cost limit reached), an incomplete
-setup (missing repository, default branch or checks, found before any agent starts) and a Claude
-account that needs signing in again are gates too: Retry, Check again or Sign in, and Cancel.
+A paused task (out of recovery, an agent's wait that ran out of time or check-ins, its usage or cost limit reached), an
+incomplete setup (missing repository, default branch or checks, found before any agent starts) and a provider that
+needs signing in again (a Claude account, or Codex's own login) are gates too: Retry, Verify again or Sign in, and
+Cancel. Every gate is yours: an agent can never close one, and a message it sends for you waits for the task's next
+agent.
 
 ### Keeping work moving
 
@@ -194,7 +198,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
 - **Home.** The briefing (the decision to take now and why, then the next two or three), the
   new-task box, then the queue: what else needs you, what is in progress, what waits on another
   task. No tabs, no project tree; a sidebar only if you pick that layout.
-- **Intent box.** Always one keystroke away (Home's composer, or ⌘K). Type, send, keep working. It
+- **Request box.** Always one keystroke away (Home's composer, or ⌘K). Type, send, keep working. It
   does not navigate. The project defaults to the focus project; When to start and Priority default
   to Auto, and picking one overrides what Shinsa would decide. The kind of task is not asked: the
   classifier and the planner decide it.
@@ -220,7 +224,8 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
 - **Every agent can manage Shinsa.** There is no separate conversation: the task chat is where you
   talk, and a question with no repository work (an Answer task) is how you just talk. Every task
   agent can do anything you can do in Shinsa: start, message, retry, prioritise and cancel tasks,
-  accept follow-ups, set up and change schedules, change settings, projects, the focus,
+  accept suggested tasks, set up and change schedules, change settings (all but the ones that spend money, merge or
+  decide for you), projects, the focus,
   repositories and folders, and read every task, chat, diff and the usage. It marks its own task
   done when it knows the work is over. What it does to another task is in that task's activity as
   "‹handle› agent (on your behalf)". The decisions at your gates are yours alone: no agent has a
@@ -264,7 +269,7 @@ Review is where Shinsa earns its name. It replaces "open GitHub, read the diff t
   shows only what changed since your last pass.)
 - **Local first, remote too.** Review runs on the local worktree before any PR exists. Planned
   (M6): any GitHub PR link opened in Shinsa for review, agent or not, the standalone review product
-  for people outside this harness.
+  for people who do not run their agents through Shinsa.
 
 ## 6. Architecture
 
@@ -292,21 +297,30 @@ dev-server and simulator previews per worktree.
   normalization into one chat protocol, quick-model calls, account handling. Two providers exist,
   Claude (the Agent SDK) and Codex (`codex app-server`), each role choosing its own in Settings →
   Agents; Kanna is MIT, and we take the engine, not the UI or its chat-first model.
+- **The agent programs stay current.** Settings → Agents → Versions shows the installed Claude Code and Codex,
+  the latest of each and the minimum Shinsa needs (Claude Code's is the one its Agent SDK pairs with), and updates
+  either with its own updater, its output streamed into a toast (⌘K: Update Claude Code). The Agent SDK's version
+  is shown too; Shinsa takes a newer one in its own release (`docs/engine.md` → Versions and updates).
 - **Worktrees are mandatory**, one per task, so parallel tasks never collide.
 - **Agents talk to Shinsa over MCP**: they hand over (a plan, a phase, a fix, a review, an
-  answer, findings, a report, an outcome), ask, attach evidence and everything else only through
+  answer, a diagnosis, a report, an outcome), ask, attach evidence and everything else only through
   Shinsa's tools (`docs/protocol.md` → Agent tools).
 - **Rules before review.** Every agent loads Shinsa's plugin (the review, evidence and handover
   skills), and its prompt carries the house rules and defers to the repository's own `CLAUDE.md`,
   so the rules are followed before review instead of found during it.
+- **Agents talk to you, not about themselves.** You read a task's chat as it is written, so every task agent
+  writes to you directly, like a colleague. A hand-over shows in the chat as it is, so the agent stops after it
+  without announcing it, summarising it or saying its turn is over. A delegated agent's final reply is its result
+  for the agent that delegated it, with no narration.
 - **Your tools come along, visibly.** Agents load the MCP servers, plugins and skills you already set up in Claude
   Code, Codex and your repositories, for Claude and Codex alike, and Settings → Integrations lists every one with
   its health, its tools and roughly what it costs at the start of a run, so you turn off what you do not use, add
   servers, sign in to remote ones inside Shinsa and never need `/mcp`. A server defined in several places is one
-  row, grouped by whether it is connected, failing, waiting for a sign-in or off, and turning one off changes only
-  Shinsa's agents, never Claude Code's or Codex's settings. The context optimizer, when you turn it on, leaves out the
-  servers (and optionally the skills) agents have not used for a number of days, read from your Claude Code sessions
-  and Shinsa's own transcripts; an agent that needs one later loads it mid-run (`load_mcp_server`). Each run's chat
+  row, grouped by whether it is connected, waiting for a sign-in, failing or off, and turning one off changes only
+  Shinsa's agents, never Claude Code's or Codex's settings. The context optimizer, on by default, leaves out the
+  servers and skills agents have not used for 30 days (configurable), read from your Claude Code sessions and
+  Shinsa's own transcripts; an agent that needs one later, or that you name one to ("use the Maple MCP"), loads it
+  mid-run (`load_mcp_server`, `load_skill`). Each run's chat
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
 - **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote
   access later through Tailscale.
@@ -344,8 +358,8 @@ spacing scale that the components and the lint enforce, so buttons can never dis
 | | Deliverable | Done when |
 | --- | --- | --- |
 | M0 | Repo skeleton, tooling, design system, daemon serving the web app | `bun dev` shows the empty queue in both themes; CI green |
-| M1 | Tasks, worktrees, one provider (Claude), intent box, task page | An intent becomes a task in its own worktree and the agent builds it |
-| M2 | Gates: spec, review (diff + preview), merge, questions; the queue | A small task goes intent → review → merge with only gate clicks |
+| M1 | Tasks, worktrees, one provider (Claude), request box, task page | A request becomes a task in its own worktree and the agent builds it |
+| M2 | Gates: plan, review (diff + preview), merge, questions; the queue | A small task goes request → review → merge with only gate clicks |
 | M3 | PR loop: open PR, watch CI and bots, auto-fix, merge gate | A PR with bot comments reaches the merge gate clean, untouched by you |
 | M4 | Ordering: ranking, dependencies, briefing, focus | Three parallel tasks arrive one gate at a time, in a sensible order |
 | M5 | Evidence: Shinsa captures screenshots and recordings itself, iOS simulator, previews | UI review opens with recordings and a running preview |
@@ -362,12 +376,12 @@ Built and verified end to end against a scratch repository:
 
 - **M0** done: the repo in the Polis/Buzzkit shape, Biome + Grit plugins, the conventions linter,
   knip, sherif, Husky, CI; the design system from Polis with the warm dark palette from the old Shinsa.
-- **M1** done: intents become tasks, triage picks title, repository, size and branch (Haiku, with a
+- **M1** done: requests become tasks, triage picks title, repository, size and branch (Haiku, with a
   heuristic floor), one worktree per task, Claude runs through the Agent SDK with the `shinsa` MCP
   tools and the agent plugin (review, evidence, handover skills), live transcripts, steering.
-- **M2** done: spec, review, merge, question and failure gates; the ranked queue; the agent review
+- **M2** done: plan, review, merge, question and failure gates; the ranked queue; the agent review
   loop with automatic fix rounds; review with evidence, a risk-ranked diff and line comments that go
-  back to the builder; plan first from `shinsa do --spec` and `shinsa import`.
+  back to the builder; plan first from `shinsa do --plan-first` and `shinsa import`.
 - **M3** built, unit-tested, not yet run against GitHub: PR opening, the 45 second PR watcher, CI and
   review-thread fix rounds, the merge gate, settlement and worktree cleanup.
 - **M4** partly: focus by project with an expiry, the briefing, dependencies (triage, the new-task
@@ -380,12 +394,12 @@ Built and verified end to end against a scratch repository:
 
 ### Second pass (2026-10-21, evening)
 
-- **The hand-over protocol.** Specs, work reports and review findings are fixed shapes with hard
+- **The hand-over protocol.** Plans, work reports and review findings are fixed shapes with hard
   length limits (`packages/core/src/report/validate.ts`), enforced on every tool call. The work report is
-  the review: phases in reading order, each pointing at line ranges ranked critical, high or normal,
+  the review: sections in reading order, one per phase, each pointing at line ranges ranked critical, high or normal,
   plus checks run and judgement calls.
 - **Code-first review.** A task page has three tabs: Overview, Code and Chat. Code's review view is a
-  split: the walkthrough on the left (phases, or every spot ranked by attention, then agent findings,
+  split: the walkthrough on the left (sections, or every spot ranked by attention, then agent findings,
   judgement calls, checks), the code on the right with the whole file as context, the spot spotlit,
   findings inline, line comments, Previous spot and Next spot to step. Its changes view is a file tree
   and the full diff.
@@ -432,7 +446,7 @@ Ported from Paperclip's execution semantics (`docs/engine.md` → Process and st
 - **Reviews escalate instead of failing.** When fix rounds run out or stop changing the code, the
   review comes to you with the last findings; you keep or dismiss each one.
 - **Waits are typed.** An agent waiting on something outside the repository calls `wait_for`, its
-  run ends and the same session checks again later; a task waiting on other tasks names the one
+  run ends and the same session checks in again later; a task waiting on other tasks names the one
   holding the chain up.
 - **Cost is counted** per run, task, step and phase, and so is the share of the account's weekly
   usage window each step used. Two optional per-task limits pause the task: a share of the weekly
@@ -443,8 +457,8 @@ Ported from Paperclip's execution semantics (`docs/engine.md` → Process and st
   never resets them.
 - **Questions offer choices**, and a newer message of yours makes an older question historical.
 - **Ask mode** answers a question about a repository without a worktree, plan or pull request.
-- **Agents suggest follow-ups** you add to the roadmap, optionally after the current task.
-- **The setup is checked before any agent starts**; missing pieces are their own gate.
+- **Agents suggest tasks** you add to the roadmap, optionally after the current task.
+- **The setup is verified before any agent starts**; missing pieces are their own gate.
 
 ### The harness plan, WS1–WS7 (2026-10-23)
 
@@ -476,8 +490,8 @@ lives; `docs/engine.md` has the behaviour.
 
 **WS3 Process and structure**: the fourth pass above, plus:
 
-- A wait that runs out of checks opens a gate, like one that runs out of time.
-- When you accept a follow-up you choose whether it waits for the current task.
+- A wait that runs out of check-ins opens a gate, like one that runs out of time.
+- When you accept a suggested task you choose whether it waits for the current task.
 
 **WS4 Engine hardening** (`docs/engine.md` → Command receipts, The effect outbox, The pull request
 watch, Merge queues, Health):
@@ -494,8 +508,8 @@ watch, Merge queues, Health):
 questions answered by a pick or in your own words, and the prerequisites checked.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
-other agents and gets the results pushed back into its turn; it can create follow-up tasks of its
-own and split a plan into tasks.
+other agents and gets the results pushed back into its turn; it can file tasks of its own
+(`create_task`) and split a plan into tasks.
 
 **WS7 Triggers, idle sessions and notifications** (`docs/engine.md` → Schedules and webhooks, The
 agent loop; `docs/design.md`, Where Shinsa differs, 27):
@@ -509,8 +523,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Secrets never touch the chat.** An agent asks for one (`request_secret`); you paste it into a
   password field, Shinsa keeps it on disk and the agent only ever sees a one-use reference.
 - **Some decisions are only yours.** The decisions at your gates (`docs/engine.md` → Who can
-  change Shinsa) happen there, by you: agents have no tool and no command for them, and an agent
-  asked in chat to merge points you to the gate. An agent's shell
+  change Shinsa) happen there, by you: agents have no tool and no command for them, core refuses one sent on
+  your behalf, and an agent asked in chat to merge points you to the gate. The settings that spend money, merge or
+  decide for you, and a repository's checks, are yours too. An agent's shell
   can still do whatever your account can (`gh pr merge`, `git push`), so turn on GitHub branch
   protection for the default branch; it is what really guards a merge. Shinsa itself answers only
   on this machine and refuses requests from other websites.
@@ -527,7 +542,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Tasks have shapes.** Answer only, Investigation, Research, Change, Find and fix and Operation,
   each a pipeline of fixed building blocks with guards in core; the stage strip on the Overview
   draws the task's own pipeline, and each All tasks row marks its kind, with its steps in the
-  tooltip. Ask mode is the answer shape; tasks from before are changes.
+  tooltip. Ask mode is the answer shape.
 - **Shapes change mid-task.** An answer, investigation or report can propose a change and waits
   for your OK at a gate; the planner can make a task smaller. Each change is recorded and shown in
   the activity.
@@ -539,7 +554,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   operation; research, your OK, then a change; build, ship and merge a change, then run an
   operation on it), and core's rules checker refuses a composition that skips your review, merges
   without a pull request or goes on from an inquiry without your OK.
-  Your OK is a step of its own on the strip and a gate with the findings, the report or the
+  Your OK is a step of its own on the strip and a gate with the diagnosis, the report or the
   answer: approve to plan what comes next, or keep the task as it is.
 - **Each fact once.** The Overview's line of decisions ("Auto: answer only · starts now · normal
   priority") is gone: the facts row shows the kind, the priority and when the task started, and
@@ -560,15 +575,14 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Compaction only near the limit.** By default nothing is compacted before a session nears its
   context limit: eunoe compaction folds at the limit, and compacting idle sessions is off.
 - **Fast mode when you want it.** Settings → Agents, each role's speed (Standard by default), runs
-  that role's Claude or Codex agents, their subagents and delegated tasks, and the quick calls at
+  that role's Claude or Codex agents, their subagents and delegations, and the quick calls at
   the faster speed. When a model or account
   cannot run fast, the chat says so and the run carries on at standard speed.
 
 ### Projects, task handles, and agents that manage Shinsa (2026-10-23)
 
 - **Areas became projects**: repositories and folders, a key and a description; tasks are scoped
-  to one and agents are told about it; triage picks the repository within it. Older logs replay
-  into projects with nothing to run.
+  to one and agents are told about it; triage picks the repository within it.
 - **Handles**: `SW-142` per project, given once and kept; task URLs, the command line and agents
   use it, while the UUIDv7 id stays the key of everything stored. Before, a task had no number:
   its URL was `/tasks/<uuid>` (which still opens) and the command line matched the start of an id
@@ -583,7 +597,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   tool for every task agent, generated from one list of specs; a test fails when core gains a command
   without one. `shinsa command <type>` sends any command by its type as a fallback.
 - **Task agents read and file across the roadmap.** Every working agent can read another task
-  (`read_task`), create tasks, schedule work and suggest follow-ups; the reviewer now files tasks
+  (`read_task`), create tasks, schedule work and suggest tasks; the reviewer now files tasks
   and schedules too.
 
 ### Rounds (2026-10-23)
@@ -592,8 +606,10 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   for weeks and one-task-per-thing both fit: a tiny task is one round, and new ideas become the
   next round on the same branch, worktree and sessions. Old tasks replay as one round.
 - **Feedback or new work.** The classifier reads each message as feedback (it steers, revises or
-  fixes as before), a new round (queued until the current round is at its merge gate or done), or
-  another task's work (a split-off you can keep here). One round works at a time.
+  fixes as before), a new round (waiting until the current round is at its merge gate or done), or
+  another task's work (a split-off you can keep here). One round works at a time. Your message shows
+  as sent the moment you send it; the classifier reads it afterwards and Shinsa delivers it when it
+  has.
 - **How each round ships.** Onto the open pull request by default, or as its own stacked pull
   request; the merge of the top one merges the stack. After a merge the task stays open and the
   next round starts from fresh `main`.
@@ -602,11 +618,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   never marked done while an earlier round's pull request is still open, and when that pull
   request merges on GitHub outside Shinsa, the round in flight opens its own pull request from
   the default branch.
-- **Notes for an operation.** A message at the operation gate adds notes for the operator to the
+- **Notes for an operation.** A message at the operation gate replaces the notes for the operator on the
   same gate: nothing runs and nothing notifies you again until you choose.
-- **On screen.** The chat shows each round as a section with its title, its progress and its pull
-  request; the Overview and the rows show the current round ("SW-14 · round 3") and keep earlier
-  rounds folded and readable.
+- **On screen.** The chat runs on as one conversation, a quiet divider with the round's title and status where
+  each round starts; the Overview and the rows show the current round ("SW-14 · round 3"), and the Overview's
+  Rounds panel keeps earlier rounds folded and readable with their pull requests.
 - **A second lock on your decisions.** Core now refuses an answer to one of your gates sent on an
   agent's behalf, beside the tool list that never offered one; while one is open an agent cannot
   retry the task or mark it done, and its message cannot retry a Sign in gate.
@@ -624,16 +640,24 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   asks for before your review. An operation states its impact. A broken composition or plan goes
   back to the planner with every problem named.
 - **An operation after a merge asks again.** When the change merges, the task stops at "The change
-  merged. Run the operation now?" with the merged commit and the operation's plan: run it, run it
-  with notes, or finish without it.
+  merged. Run the operation now?" with the merged commit and the operation's plan: run it with the notes in its
+  box, or finish without it.
 - **Changing the kind is gone.** `shinsa tasks reshape` and the reshape command no longer exist;
   the kind is decided for you.
 
+### Icons and the task's facts (2026-10-24)
+
+- **Every icon is 30% quieter than its text.** Ghost and icon-only buttons, destructive menu rows,
+  the error toast and the logo used to draw their icons at full strength; now every icon is 70% of
+  its text (75% in a menu row), with no exceptions in the app.
+- **The facts row shows the status with its own icon, and no kind.** Each status has one icon in
+  its tone; the kind of task is no longer a fact, since the task itself shows it.
+
 ## 11. Open questions
 
-1. **Spec gate threshold.** Today: `shinsa do --spec` and `shinsa import` always stop at spec, and
+1. **Plan gate threshold.** Today: `shinsa do --plan-first` and `shinsa import` always stop at the plan gate, and
    with Settings → Agents → Engine, Approve plans on (off by default), large tasks and revised plans stop too; triage
-   sizes new features, UI flows and data model changes as large. Should some of them stop at spec
+   sizes new features, UI flows and data model changes as large. Should some of them stop at the plan gate
    even with plan approval off?
 2. **Learning from you.** Your past corrections (in Kanna transcripts) could seed the rules skills
    and the ranking of decisions. Worth a dedicated pass once the PR loop has run against GitHub.
