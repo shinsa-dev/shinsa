@@ -88,6 +88,20 @@ function describeHolder(holder: LockHolder) {
   return `${holder.url} (pid ${holder.pid}, version ${describeVersion(holder)})`;
 }
 
+export class ServerRunningError extends DomainError {
+  readonly holder: LockHolder;
+  readonly dataDir: string;
+
+  constructor(dataDir: string, holder: LockHolder) {
+    super(
+      'server_running',
+      `Shinsa is already running on ${dataDir}: ${describeHolder(holder)}. Stop it first, or set SHINSA_HOME to another folder.`
+    );
+    this.holder = holder;
+    this.dataDir = dataDir;
+  }
+}
+
 function writeDraft(path: string, text: string) {
   const draft = `${path}.${process.pid}.${Bun.randomUUIDv7()}`;
   writeFileSync(draft, text);
@@ -153,12 +167,7 @@ export function acquireDataDirLock(
     if (writeExclusive(path, JSON.stringify(claim))) return new HeldLock(path, claim);
     const text = readText(path);
     const stale = text === null ? null : parseHolder(text);
-    if (stale && isLive(stale)) {
-      throw new DomainError(
-        'server_running',
-        `Shinsa is already running on ${dataDir}: ${describeHolder(stale)}. Stop it first, or set SHINSA_HOME to another folder.`
-      );
-    }
+    if (stale && isLive(stale)) throw new ServerRunningError(dataDir, stale);
     if (text !== null && readText(path) === text) {
       log.warn('[Serve] Took over the lock a stopped Shinsa left behind', { path, pid: stale?.pid ?? null });
       rmSync(path, { force: true });

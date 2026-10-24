@@ -43,9 +43,10 @@ So the floating, docked, tablet-sized window **already works** with Shinsa in Fl
 The plan keeps that path first-class and does not re-implement docking in Electron:
 
 - The daemon runs without the app, so Floaty keeps working when the Shinsa app is closed.
-- Notifications and sound are owned by one surface: when the desktop app is connected, browser and Floaty pages keep
-  the title and meta tags but stop OS notifications and sounds (the web sends `surface: 'desktop' | 'browser'` on
-  connect; the server tells every socket whether a desktop surface is connected). Otherwise a decision rings twice.
+- Notifications and sound are owned by one surface: when the desktop app is connected, browser and Floaty pages stay
+  quiet: no OS notification and no sound, while the title's count and Floaty's `floaty:badge` and `floaty:status`
+  stay, since Floaty reads them (the web sends `hello { surface: 'desktop' | 'browser' }` on connect; the server tells every socket whether a desktop
+  surface is connected). Otherwise a decision rings twice. Built in phase 2 (`docs/engine.md` → The socket).
 - Phase 4 offers an optional Float mode in the app (always on top, all Spaces, a tablet-sized frame), for the day
   the user wants one app instead of two. Docking to the focused window stays Floaty's (question 1).
 - Floaty is WebKit, so corners there are round, not superellipse; nothing to fix, worth knowing.
@@ -68,8 +69,9 @@ Server changes that come with it:
 - **Data-dir lock**: `serve` takes an exclusive lock on `data/serve.lock` (pid, port, version, executable path) and
   refuses to start if another live daemon holds it, printing where that one runs.
 - **Login environment**: launchd starts with a bare `PATH`; agents need git, gh, bun, claude, codex. `serve` reads
-  the login shell's environment once at start (`zsh -ilc env`, as Kanna's `server-agent.ts` does) when it was not
-  started from a terminal.
+  the login shell's environment once at start (`$SHELL -lic`, as Kanna's `server-agent.ts` does, then `-lc` when an
+  interactive shell prints nothing, as a `.zshrc` that execs fish does, plus `fish -lc` when the shell handed off to
+  fish) when it was not started from a terminal.
 - **`GET /api/health`** gains `version`, `pid`, `executable` and `startedAt`, so the app can tell which daemon it
   found.
 - `SHINSA_WEB_DIR` and `SHINSA_PLUGIN_DIR` overrides beside the `import.meta.dirname` defaults.
@@ -151,18 +153,43 @@ apps/desktop/                 @shinsa/desktop
 
 ## Phases and acceptance checks
 
-0. **Server prerequisites (1 day).** Data-dir lock, health fields, login environment, `SHINSA_WEB_DIR` /
+0. **Server prerequisites (1 day). Done.** Data-dir lock, health fields, login environment, `SHINSA_WEB_DIR` /
    `SHINSA_PLUGIN_DIR`, `shinsa service`. Pass: a second `serve` on the same data dir refuses with the first one's
    port; `shinsa service install` survives `kill -9` (back within 5 s) and a reboot; agents started by the service
    find `gh` and `claude`.
-1. **Shell (1-2 days).** `apps/desktop` from Kanna's `macos/`: window on the daemon's URL, hidden-inset title bar,
-   drag region, single instance, window state, hide on close, start-up order above. Pass: with `bun dev` running,
-   the app opens on it; ⌘Q leaves agents running; reopening restores size and position; a second launch focuses
-   the first.
-2. **Native integration (2 days).** Badge, notifications with click-through, `shinsa://` links (cold and warm
-   start), summon shortcut, menu, the notification handshake. Pass: 3 decisions → Dock shows 3, Floaty's badge
-   shows 3, only the app notifies; `open shinsa://task/LOC-4` opens that task from a closed app and from a hidden
-   window; the shortcut toggles the window from any app.
+   - Built: `apps/server/src/instance/lock.ts` (`serve.lock`; the refusal names the holder's address; a server the
+     service started that finds the lock held logs the holder and exits 0, so launchd does not restart it every 5 s;
+     inspect mode takes no lock and is read-only, so it can serve a running server's data beside it), health with
+     `version`, `pid`, `startedAt` and `installPath` (in place of `executable`; `docs/engine.md` → Health),
+     `shell/login.ts`, both directory overrides (`config/index.ts`), `service/launchd.ts` (`RunAtLoad`, `KeepAlive`
+     on an unsuccessful exit, `ThrottleInterval` 5).
+   - Checked: the refusal, by `test/instance/lock.test.ts`. Not checked on a machine: back within 5 s after
+     `kill -9` and after a reboot (the plist asks launchd for both), and agents finding `gh` and `claude` under
+     launchd. The login environment is unit-tested and was read once with the real zsh under a bare, TTY-less
+     environment (`-lic` printed nothing, `-lc` returned `PATH` with Homebrew, nvm and `~/.bun/bin`); it has not run
+     under a real service.
+1. **Shell (1-2 days). Done, with a smaller start-up.** `apps/desktop` (written fresh, Kanna's `bun build` to CJS):
+   window on the daemon's URL, hidden-inset title bar, drag region (`data-window-drag`), single instance, window
+   state, hide on close. Pass: with `bun dev` running, the app opens on it; ⌘Q leaves agents running; reopening
+   restores size and position; a second launch focuses the first.
+   - All four hold in code (`main/index.ts`, `main/window.ts`, `lib/bounds.ts`); quitting never touches the server.
+   - Start-up differs from the order above: health, then the "Shinsa is not running" page, which polls every 2 s;
+     the packaged app offers Start Shinsa once a launch (`shinsa service restart`, then `install`). Not built: the
+     first-run Install / Not now screen, the detached `serve` for Not now, and the 5 s health watch that kicks the
+     service while the window is open (the page's own reconnecting socket covers a server restart).
+2. **Native integration (2 days). Done, without the summon shortcut.** Badge, notifications with click-through,
+   `shinsa://` links (cold and warm start), menu, the notification handshake. Pass: 3 decisions → Dock shows 3,
+   only the app notifies, and Floaty's tab stays quiet (no sound, no notification, its badge kept) while the app is
+   connected;
+   `open shinsa://task/LOC-4` opens that task from a closed app and from a hidden window.
+   - Built: `lib/badge.ts`, `lib/notice.ts` with `main/notifications.ts`, `lib/deep-link.ts` (`open-url`,
+     `second-instance`, and a link held until the window exists), `main/menu.ts` (macOS's menu with Settings… ⌘,
+     and Reload ⌘R), and the handshake (`hello` and `surfaces` on the socket, `isPageQuiet` in the web).
+   - Changed by decision: no summon shortcut and no other key (`docs/design.md`, 31; Floaty's ⌃Space summons
+     Shinsa), so its check is dropped; the menu has no New task or Command menu items. Floaty's badge shows 3 as
+     well: only sound and notifications are the app's alone.
+   - Not built: main polling `/api/queue` for the badge while no page is loaded; the badge clears instead while the
+     server is unreachable.
 3. **Ship (2 days).** Staging, signing, notarizing, DMG, updates, the `shinsa` shim, Settings → Desktop. Pass: DMG
    installs on a fresh macOS user with no Gatekeeper prompt; version N updates to N+1 in place and the running
    agent resumes; `shinsa status` from a terminal answers from the same daemon.

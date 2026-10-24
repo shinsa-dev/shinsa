@@ -30,7 +30,6 @@ export interface QuestionContext {
   listModels: () => Promise<AgentModel[]>;
   listAccounts: AccountSource;
   accountActions: AccountActions;
-  inspect: boolean;
   checkPrerequisites: () => Promise<PrerequisiteReport>;
   save: (patch: SetupPatch, commandId?: string) => Promise<void>;
 }
@@ -240,26 +239,22 @@ function describeSignInAgain(account: ClaudeAccount) {
   return `Sign in again as ${account.label ?? 'Claude'}`;
 }
 
-const INSPECT_FIX = 'Shinsa is in inspect mode. Start it without SHINSA_INSPECT to sign in.';
-
-function describeAccountFix(account: ClaudeAccount, inspect: boolean) {
+function describeAccountFix(account: ClaudeAccount) {
   if (account.signedIn) return null;
-  if (inspect) return INSPECT_FIX;
   return `Choose “${describeSignInAgain(account)}” below.`;
 }
 
-function listAccountChecks(accounts: ClaudeAccount[], inspect: boolean) {
+function listAccountChecks(accounts: ClaudeAccount[]) {
   return accounts.map((account) => ({
     id: account.id,
     label: account.label ?? 'Claude',
     ok: account.signedIn,
     detail: account.detail,
-    fix: describeAccountFix(account, inspect),
+    fix: describeAccountFix(account),
   }));
 }
 
 async function listAccountChoices(context: QuestionContext, accounts: ClaudeAccount[]) {
-  if (context.inspect) return [];
   const imports = await context.accountActions.listImports();
   return [
     ...accounts
@@ -281,7 +276,7 @@ const SIGNING_IN = 'Claude opened a browser window to sign in. Finish there, the
 
 async function askAccounts(context: QuestionContext): Promise<Asked> {
   const accounts = await context.listAccounts();
-  const checks = listAccountChecks(accounts, context.inspect);
+  const checks = listAccountChecks(accounts);
   const extra = await listAccountChoices(context, accounts);
   const pending = context.accountActions.isSigningIn() ? `${SIGNING_IN} ` : '';
   if (accounts.some((account) => account.signedIn)) {

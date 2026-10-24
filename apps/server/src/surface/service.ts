@@ -65,7 +65,7 @@ function describeInstall(installed: ServiceInstall) {
     `Logs: ${installed.log}`,
     ...(installed.running
       ? [
-          `Shinsa is already running on this data directory at ${installed.running.url} (pid ${installed.running.pid}). The service starts once you stop it.`,
+          `Shinsa is already running on this data directory at ${installed.running.url} (pid ${installed.running.pid}). The service stays stopped while it runs: stop it, then run \`shinsa service restart\`.`,
         ]
       : []),
   ].join('\n');

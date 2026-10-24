@@ -11,6 +11,7 @@ import {
   type ShinsaEvent,
   type ShinsaState,
 } from '@shinsa/core';
+import { createReadOnlyError } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type {
   CancelledEffect,
@@ -96,8 +97,11 @@ export class Engine {
   #started = false;
   #stopped = false;
 
-  constructor(eventLog: EventLog) {
+  readonly readOnly: boolean;
+
+  constructor(eventLog: EventLog, options: { readOnly?: boolean } = {}) {
     this.#log = eventLog;
+    this.readOnly = options.readOnly ?? false;
     const read = eventLog.readEvents();
     const replay = replayEventLog(read.events);
     this.#state = replay.state;
@@ -162,6 +166,7 @@ export class Engine {
 
   dispatch(command: ShinsaCommand, options: DispatchOptions = {}): Promise<ShinsaEvent[]> {
     if (this.#stopped) return Promise.reject(new Error('Shinsa is shutting down.'));
+    if (this.readOnly) return Promise.reject(createReadOnlyError());
     const supplied = options.id !== undefined;
     const identity = resolveReceiptIdentity(
       options.receipt ?? command,

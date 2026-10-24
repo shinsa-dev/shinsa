@@ -73,6 +73,7 @@ export class Onboarding {
       interpret: context.interpret,
       clarify: context.clarify,
       isCompleted: () => context.store.config.onboardedAt !== null,
+      readOnly: context.config.inspect,
       complete: async () => {
         await this.complete();
       },
@@ -85,7 +86,6 @@ export class Onboarding {
           listModels: () => context.models.listModels(),
           listAccounts: context.accounts,
           accountActions: context.accountActions,
-          inspect: context.config.inspect,
           checkPrerequisites: () => this.resolvePrerequisites(),
           save: (patch, commandId) => this.#saveAnswer(patch, commandId),
         }),

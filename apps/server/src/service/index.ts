@@ -67,6 +67,8 @@ export interface ServiceControl {
   logs: (lines: number) => ServiceLogs;
 }
 
+export const SERVICE_MARKER = 'SHINSA_SERVICE';
+
 const LAUNCHCTL_TIMEOUT_MS = 30_000;
 
 const UNLOAD_TIMEOUT_MS = 5_000;
@@ -78,6 +80,10 @@ function listShinsaVariables(env: Env) {
     (entry): entry is [string, string] => entry[0].startsWith('SHINSA_') && Boolean(entry[1])
   );
   return Object.fromEntries(entries);
+}
+
+export function isStartedByService(env: Env) {
+  return env[SERVICE_MARKER] === '1';
 }
 
 function selectLiveHolder(dataDir: string) {
@@ -149,7 +155,7 @@ export function createServiceControl(options: ServiceOptions): ServiceControl {
           label: SERVICE_LABEL,
           program,
           workingDirectory: INSTALL_PATH,
-          environment: listShinsaVariables(env),
+          environment: { ...listShinsaVariables(env), [SERVICE_MARKER]: '1' },
           logPath: log,
         })
       );

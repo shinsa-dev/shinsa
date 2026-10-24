@@ -5,6 +5,7 @@ import {
   parseUserCommand,
   resolveQueueSummary,
   type ShinsaEvent,
+  selectTaskByReference,
 } from '@shinsa/core';
 import type { Accounts } from '../accounts/index.ts';
 import { createAccountRoutes } from '../accounts/routes.ts';
@@ -13,7 +14,12 @@ import type { Transcripts } from '../agents/transcripts/index.ts';
 import type { ServerConfig } from '../config/index.ts';
 import type { Extensions } from '../extensions/index.ts';
 import { createExtensionRoutes } from '../extensions/routes.ts';
-import { createServerInstance, resolveHealth, type ServerInstance } from '../instance/index.ts';
+import {
+  createReadOnlyError,
+  createServerInstance,
+  resolveHealth,
+  type ServerInstance,
+} from '../instance/index.ts';
 import { describeError } from '../log/index.ts';
 import type { Onboarding } from '../onboarding/index.ts';
 import { createProjectRoutes } from '../projects/routes.ts';
@@ -93,6 +99,7 @@ export async function dispatchUserCommand(
   clientId: string | null = null,
   classify: Classifier | null = null
 ) {
+  if (engine.readOnly) throw createReadOnlyError();
   const command = parseUserCommand(body);
   return selectCreatedTaskId(
     await routeUserCommand(engine, command, clientId ? `client:${clientId}` : null, classify)
@@ -121,8 +128,8 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
   const { engine, config } = context;
   const launch = context.launch ?? runCommand;
 
-  function selectWorktreeTask(taskId: string) {
-    const task = engine.state.tasks[taskId];
+  function selectWorktreeTask(reference: string) {
+    const task = selectTaskByReference(engine.state, reference);
     const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
     if (!task?.worktreePath || !repo) return null;
     return { task, repo, worktreePath: task.worktreePath };
@@ -151,7 +158,7 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
     {
       method: 'POST',
       pattern: /^\/api\/tasks\/([^/]+)\/open$/,
-      respond: ([, id = ''], request) => respondOpen(id, request),
+      respond: ([, id = ''], request) => respondOpen(decodeURIComponent(id), request),
     },
   ];
 }

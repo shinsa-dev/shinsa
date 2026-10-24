@@ -402,8 +402,8 @@ describe('the socket', () => {
     };
     const client = connect(base);
     await client.opened;
-    await until('the first state', () => client.messages.length === 1);
-    expect(client.messages[0]?.type).toBe('state');
+    await until('the first state', () => client.messages.length === 2);
+    expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces']);
     client.socket.send(
       JSON.stringify({
         type: 'command',
@@ -458,6 +458,35 @@ describe('the socket', () => {
     await engine.dispatch({ type: 'project.write', project: { name: 'After close', color: 'blue' } });
   });
 
+  test('every page learns on connect and on each change whether the desktop app is connected', async () => {
+    const { base } = await start();
+    const desktopNews = (messages: ServerMessage[]) =>
+      messages.flatMap((message) => (message.type === 'surfaces' ? [message.desktop] : []));
+    const page = connect(base);
+    await page.opened;
+    await until('the page to hear no app is connected', () => desktopNews(page.messages).length === 1);
+    page.socket.send(JSON.stringify({ type: 'hello', surface: 'browser' }));
+    page.socket.send(JSON.stringify({ type: 'hello', surface: 'floaty' }));
+
+    const app = connect(base);
+    await app.opened;
+    app.socket.send(JSON.stringify({ type: 'hello', surface: 'desktop' }));
+    await until('the page to hear the app arrive', () => desktopNews(page.messages).length === 2);
+    expect(desktopNews(app.messages)).toEqual([false, true]);
+
+    const late = connect(base);
+    await late.opened;
+    await until('a late page to hear the app is there', () => desktopNews(late.messages).length === 1);
+    expect(desktopNews(late.messages)).toEqual([true]);
+
+    app.socket.close();
+    await until('the pages to hear the app leave', () => desktopNews(late.messages).length === 2);
+    expect(desktopNews(page.messages)).toEqual([false, true, false]);
+    expect(desktopNews(late.messages)).toEqual([true, false]);
+    page.socket.close();
+    late.socket.close();
+  });
+
   test('a command resent on a new socket under the same id is applied once', async () => {
     const { base, engine } = await start();
     const message = JSON.stringify({
@@ -494,7 +523,7 @@ describe('the socket', () => {
       await until('the failure to be logged', () =>
         error.mock.calls.some(([message]) => message === '[Socket] Message failed')
       );
-      expect(client.messages.every((message) => message.type === 'state')).toBe(true);
+      expect(client.messages.map((message) => message.type)).toEqual(['state', 'surfaces']);
       client.socket.close();
     } finally {
       error.mockRestore();

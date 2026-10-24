@@ -1,10 +1,16 @@
 import { resolveConfig, resolveServerAddress } from '../config/index.ts';
 import { resolveServerUrl } from '../http/index.ts';
+import { describeVersion, ServerRunningError } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { type Shinsa, startShinsa } from '../serve.ts';
-import { createServiceControl, type ServiceControl } from '../service/index.ts';
+import {
+  createServiceControl,
+  isStartedByService,
+  SERVICE_MARKER,
+  type ServiceControl,
+} from '../service/index.ts';
 import { describeFailure, runCommand } from '../shell/index.ts';
-import { applyLoginEnv, createLoginEnvReader } from '../shell/login.ts';
+import { applyLoginEnv, createLoginEnvReader, isStartedFromTerminal } from '../shell/login.ts';
 import { describeSurface } from '../surface/index.ts';
 import { createApiClient } from './api.ts';
 import { type CommandIo, createTask, importSession, openInBrowser, printStatus } from './commands.ts';
@@ -61,20 +67,30 @@ function stopOnSignal(stop: () => Promise<void>) {
   }
 }
 
-async function serveWithLoginEnv(env: Record<string, string | undefined>) {
-  const added = await applyLoginEnv(Bun.env, createLoginEnvReader(Bun.env));
-  log.info('[Serve] Read the login shell environment', { added: added.length });
+interface ProcessOptions {
+  isTerminal?: () => boolean;
+}
+
+async function serveWithLoginEnv(env: Record<string, string | undefined>, isTerminal: () => boolean) {
+  delete Bun.env[SERVICE_MARKER];
+  if (isTerminal()) {
+    log.info('[Serve] Started from a terminal, so the login shell environment is not read');
+  } else {
+    const added = await applyLoginEnv(Bun.env, createLoginEnvReader(Bun.env));
+    log.info('[Serve] Read the login shell environment', { added: added.length });
+  }
   return startShinsa(resolveConfig(env));
 }
 
-export function createProcessIo(): CliIo {
+export function createProcessIo(options: ProcessOptions = {}): CliIo {
+  const isTerminal = options.isTerminal ?? isStartedFromTerminal;
   return {
     env: Bun.env,
     cwd: process.cwd(),
     write: (line = '') => process.stdout.write(`${line}\n`),
     writeError: (line) => process.stderr.write(`${line}\n`),
     openUrl,
-    serve: serveWithLoginEnv,
+    serve: (env) => serveWithLoginEnv(env, isTerminal),
     onShutdown: stopOnSignal,
     service: createServiceControl({ env: Bun.env }),
   };
@@ -95,13 +111,28 @@ function createCommandIo(io: CliIo): CommandIo {
   };
 }
 
+async function serve(io: CliIo) {
+  const byService = isStartedByService(io.env);
+  try {
+    const shinsa = await io.serve(io.env);
+    io.onShutdown(shinsa.stop);
+    return 0;
+  } catch (error) {
+    if (!byService || !(error instanceof ServerRunningError)) throw error;
+    log.warn('[Serve] Another Shinsa holds this data directory, so the service stays stopped', {
+      dataDir: error.dataDir,
+      pid: error.holder.pid,
+      url: error.holder.url,
+      version: describeVersion(error.holder),
+    });
+    return 0;
+  }
+}
+
 async function routeCommand(command: string, args: string[], io: CliIo) {
   switch (command) {
-    case 'serve': {
-      const shinsa = await io.serve(io.env);
-      io.onShutdown(shinsa.stop);
-      return 0;
-    }
+    case 'serve':
+      return serve(io);
     case 'help':
     case '--help':
     case '-h':

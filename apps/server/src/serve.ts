@@ -79,7 +79,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
   const store = new ConfigStore(config.configPath, config.machine);
   prepareDataDir(config);
   const eventLog = new EventLog(config.databasePath);
-  const engine = new Engine(eventLog);
+  const engine = new Engine(eventLog, { readOnly: config.inspect });
   const transcripts = new Transcripts(config.transcriptsDir);
   const evidence = new EvidenceStore(config.evidenceDir);
   const eunoe = new EunoeProxy({
@@ -161,6 +161,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
     models: options.models ?? providers.resolve(engine.state.settings.defaultProvider),
     clocks: [new MonitorClock(engine), new UsageResumeClock(engine), new SilenceWatch(engine, transcripts)],
     effects: new EffectRunner(engine, config, runs, briefings, {
+      workspaces: runs.workspaces,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       resolveLogin,
@@ -222,24 +223,29 @@ async function startWork(services: Services) {
   log.info('[Serve] Ready', { dataDir: services.config.dataDir, events: engine.state.seq });
 }
 
-export async function startShinsa(requested: ServerConfig, options: ShinsaOptions = {}): Promise<Shinsa> {
-  const instance = await resolveServerInstance();
-  mkdirSync(requested.dataDir, { recursive: true });
-  const lock = acquireDataDirLock(requested.dataDir, {
+function acquireServeLock(requested: ServerConfig, instance: ServerInstance) {
+  if (requested.inspect) return null;
+  return acquireDataDirLock(requested.dataDir, {
     ...instance,
     port: requested.port,
     url: resolveServerUrl(requested.hostname, requested.port),
   });
+}
+
+export async function startShinsa(requested: ServerConfig, options: ShinsaOptions = {}): Promise<Shinsa> {
+  const instance = await resolveServerInstance();
+  mkdirSync(requested.dataDir, { recursive: true });
+  const lock = acquireServeLock(requested, instance);
   let services: Services;
   let http: ReturnType<typeof startHttp>;
   try {
     services = createServices(requested, options);
     http = startHttp(services, options, instance);
   } catch (error) {
-    lock.release();
+    lock?.release();
     throw error;
   }
-  lock.update({ port: http.server.port ?? requested.port, url: http.url });
+  lock?.update({ port: http.server.port ?? requested.port, url: http.url });
   services.address.url = http.url;
   const { engine, config } = services;
   const shinsa: Shinsa = {
@@ -260,7 +266,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       await services.eunoe.stop();
       await http.stop();
       services.eventLog.close();
-      lock.release();
+      lock?.release();
     },
   };
   if (config.inspect) {

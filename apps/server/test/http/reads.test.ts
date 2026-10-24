@@ -170,7 +170,7 @@ describe('GET /api/tasks/:ref', () => {
       result: null,
       gates: [{ id: 'gate-colour', type: 'question' }],
       waitsOn: [],
-      runs: [{ id: runId, role: 'planner', outcome: null, account: null, delegation: null }],
+      runs: [{ id: runId, role: 'agent', outcome: null, account: null, delegation: null }],
       suggestions: [],
     });
     expect(body.text).toContain('Fix the tab scroll');
@@ -211,7 +211,7 @@ describe('GET /api/tasks/:ref/chat', () => {
   test('pages through what was said, oldest first after an index, the latest without one', async () => {
     const { read, fixId, runId } = await startChat();
     const latest = await read(`/api/tasks/${fixId}/chat`);
-    expect(latest.body).toMatchObject({ taskId: fixId, runs: [{ id: runId, role: 'planner' }], next: null });
+    expect(latest.body).toMatchObject({ taskId: fixId, runs: [{ id: runId, role: 'agent' }], next: null });
     expect(
       (latest.body.entries as { index: number; type: string; runId: string }[]).map((entry) => [
         entry.index,

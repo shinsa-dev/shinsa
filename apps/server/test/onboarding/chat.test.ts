@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type AgentModel,
@@ -522,22 +522,11 @@ describe('the setup chat', () => {
     expect(skipped.prompt?.questionId).toBe('prerequisites');
   });
 
-  test('in inspect mode the accounts step offers only to continue or check again', async () => {
-    const { onboarding } = setup({ accounts: [SIGNED_OUT, SIGNED_IN], inspect: true });
-    await onboarding.chat.resolve();
-    await say(onboarding, 'roots', '~/Developer');
-    await choose(onboarding, 'model', 'opus');
-    await choose(onboarding, 'merge', 'squash');
-    const signedOut = await choose(onboarding, 'plans', 'no');
-    expect(signedOut.messages.at(-1)).toMatchObject({
-      checks: [{ ok: false, fix: 'Shinsa is in inspect mode. Start it without SHINSA_INSPECT to sign in.' }],
-    });
-    expect(signedOut.prompt?.choices.map((choice) => choice.label)).toEqual(['Check again', 'Skip for now']);
-    const signedIn = await choose(onboarding, 'accounts', 'recheck');
-    expect(signedIn.prompt?.choices.map((choice) => choice.label)).toEqual([
-      'Use these accounts',
-      'Check again',
-    ]);
+  test('in inspect mode it shows the first question and writes nothing to the data directory', async () => {
+    const { onboarding, config } = setup({ inspect: true });
+    const chat = await onboarding.chat.resolve();
+    expect(chat.prompt?.questionId).toBe('roots');
+    expect(existsSync(join(config.dataDir, 'onboarding.json'))).toBe(false);
   });
 
   test('says how to fix a missing tool and lets you finish anyway', async () => {

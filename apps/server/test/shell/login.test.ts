@@ -1,13 +1,23 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { log } from '../../src/log/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
-import { applyLoginEnv, createLoginEnvReader, mergePathLists, parseLoginEnv } from '../../src/shell/login.ts';
+import {
+  applyLoginEnv,
+  createLoginEnvReader,
+  isStartedFromTerminal,
+  mergePathLists,
+  parseLoginEnv,
+} from '../../src/shell/login.ts';
 import { createTempDir, overrideEnv } from '../helpers/index.ts';
 
 const FAKE_SHELL = resolve(import.meta.dirname, '../helpers/bin/login-shell');
+
+const FAKE_FISH_DIR = resolve(import.meta.dirname, '../helpers/fish');
+
+const LOGIN_SCRIPT = "printf '%s' __SHINSA_LOGIN_ENV__; /usr/bin/env -0";
 
 const restores: (() => void)[] = [];
 
@@ -43,6 +53,15 @@ describe('reading the login shell’s output', () => {
   });
 });
 
+describe('whether the server was started from a terminal', () => {
+  test('a terminal on stdin or stdout counts; pipes and launchd’s files do not', () => {
+    expect(isStartedFromTerminal({ stdin: { isTTY: true }, stdout: {} })).toBe(true);
+    expect(isStartedFromTerminal({ stdin: {}, stdout: { isTTY: true } })).toBe(true);
+    expect(isStartedFromTerminal({ stdin: { isTTY: false }, stdout: {} })).toBe(false);
+    expect(isStartedFromTerminal()).toBe(Boolean(process.stdin.isTTY || process.stdout.isTTY));
+  });
+});
+
 describe('the login shell environment', () => {
   test('runs the user’s shell as an interactive login shell in their home folder, once', async () => {
     const home = createTempDir();
@@ -58,9 +77,104 @@ describe('the login shell environment', () => {
     });
     expect(first?.PATH?.split(':')[0]).toBe('/fake/login/bin');
     expect(first).not.toHaveProperty('DISABLE_AUTO_UPDATE');
-    expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual([
-      "-lic printf '%s' __SHINSA_LOGIN_ENV__; /usr/bin/env -0",
-    ]);
+    expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual([`-lic ${LOGIN_SCRIPT}`]);
+  });
+
+  test('reads it without -i when the interactive shell prints nothing, as a zshrc that execs fish does', async () => {
+    const home = createTempDir();
+    const calls = join(home, 'calls.log');
+    withShellEnv({
+      PATH: '/usr/bin:/bin',
+      FAKE_LOGIN_SHELL_EXPORT: '1',
+      FAKE_LOGIN_SHELL_EXEC_INTERACTIVE: '1',
+      FAKE_LOGIN_SHELL_LOG: calls,
+    });
+    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    try {
+      const env = await createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: home }).read();
+      expect(env).toMatchObject({ FAKE_LOGIN_VAR: 'from the login shell' });
+      expect(env).not.toHaveProperty('FAKE_FISH_VAR');
+      expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual([
+        `-lic ${LOGIN_SCRIPT}`,
+        `-lc ${LOGIN_SCRIPT}`,
+      ]);
+      expect(info).toHaveBeenCalledWith('[Serve] Read the login shell environment without -i', {
+        shell: FAKE_SHELL,
+        fish: null,
+        attempts: [
+          { shell: FAKE_SHELL, mode: '-lic', code: 0, timedOut: false },
+          { shell: FAKE_SHELL, mode: '-lc', code: 0, timedOut: false },
+        ],
+      });
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  test('also reads fish when the interactive shell handed off and fish is on the login PATH', async () => {
+    const home = createTempDir();
+    const calls = join(home, 'calls.log');
+    withShellEnv({
+      PATH: `${FAKE_FISH_DIR}:/usr/bin:/bin`,
+      FAKE_LOGIN_SHELL_EXPORT: '1',
+      FAKE_LOGIN_SHELL_EXEC_INTERACTIVE: '1',
+      FAKE_LOGIN_SHELL_LOG: calls,
+      FAKE_FISH_LOG: calls,
+    });
+    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    try {
+      const env = await createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: home }).read();
+      expect(env).toMatchObject({ FAKE_LOGIN_VAR: 'from the login shell', FAKE_FISH_VAR: 'from fish' });
+      expect(env?.PATH?.split(':')).toEqual([
+        '/fake/login/bin',
+        FAKE_FISH_DIR,
+        '/usr/bin',
+        '/bin',
+        '/fake/fish/bin',
+      ]);
+      expect(readFileSync(calls, 'utf8').trim().split('\n')).toEqual([
+        `-lic ${LOGIN_SCRIPT}`,
+        `-lc ${LOGIN_SCRIPT}`,
+        `fish -lc ${LOGIN_SCRIPT}`,
+      ]);
+      expect(info).toHaveBeenCalledWith(
+        '[Serve] Read the login shell environment without -i',
+        expect.objectContaining({ fish: join(FAKE_FISH_DIR, 'fish') })
+      );
+    } finally {
+      info.mockRestore();
+    }
+  });
+
+  test('finds fish through the zshrc that execs it, and keeps the login shell’s reading when fish fails', async () => {
+    const home = createTempDir();
+    withShellEnv({
+      PATH: '/usr/bin:/bin',
+      FAKE_LOGIN_SHELL_EXPORT: '1',
+      FAKE_LOGIN_SHELL_EXEC_INTERACTIVE: '1',
+    });
+    writeFileSync(join(home, '.zshrc'), `[[ -o interactive ]] && exec ${join(FAKE_FISH_DIR, 'fish')}\n`);
+    const reader = () => createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: home, PATH: '/usr/bin:/bin' });
+    expect(await reader().read()).toMatchObject({ FAKE_FISH_VAR: 'from fish' });
+    withShellEnv({ FAKE_FISH_SILENT: '1' });
+    const env = await reader().read();
+    expect(env).toMatchObject({ FAKE_LOGIN_VAR: 'from the login shell' });
+    expect(env).not.toHaveProperty('FAKE_FISH_VAR');
+    const zdotdir = createTempDir();
+    writeFileSync(join(zdotdir, '.zshrc'), 'exec fish-that-is-not-installed\n');
+    expect(
+      await createLoginEnvReader({ SHELL: FAKE_SHELL, HOME: home, ZDOTDIR: zdotdir }).read()
+    ).toMatchObject({ FAKE_LOGIN_VAR: 'from the login shell' });
+  });
+
+  test('fish alone is enough when the login shell cannot be read without -i', async () => {
+    withShellEnv({ PATH: '/usr/bin:/bin', FAKE_LOGIN_SHELL_SILENT: '1' });
+    const env = await createLoginEnvReader({
+      SHELL: FAKE_SHELL,
+      HOME: createTempDir(),
+      PATH: FAKE_FISH_DIR,
+    }).read();
+    expect(env).toMatchObject({ FAKE_FISH_VAR: 'from fish' });
   });
 
   test('defaults to zsh in the home folder of this machine', async () => {
@@ -86,8 +200,11 @@ describe('the login shell environment', () => {
       expect(await hung.read()).toBeNull();
       expect(warn).toHaveBeenLastCalledWith('[Serve] Could not read the login shell environment', {
         shell: FAKE_SHELL,
-        code: expect.any(Number),
-        timedOut: true,
+        fish: null,
+        attempts: [
+          { shell: FAKE_SHELL, mode: '-lic', code: expect.any(Number), timedOut: true },
+          { shell: FAKE_SHELL, mode: '-lc', code: expect.any(Number), timedOut: true },
+        ],
       });
       for (const restore of restores.splice(0)) restore();
       withShellEnv({ FAKE_LOGIN_SHELL_SILENT: '1' });

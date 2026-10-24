@@ -1,6 +1,7 @@
 #!/bin/sh
 if [ -n "$FAKE_LOGIN_SHELL_LOG" ]; then echo "$*" >> "$FAKE_LOGIN_SHELL_LOG"; fi
 if [ -n "$FAKE_LOGIN_SHELL_HANG" ]; then exec sleep 30; fi
+if [ -n "$FAKE_LOGIN_SHELL_EXEC_INTERACTIVE" ] && [ "$1" = "-lic" ]; then exit 0; fi
 echo "Welcome to the fake login shell"
 if [ -n "$FAKE_LOGIN_SHELL_EXPORT" ]; then
   export FAKE_LOGIN_VAR="from the login shell"

@@ -1,0 +1,9 @@
+#!/bin/sh
+if [ -n "$FAKE_FISH_LOG" ]; then echo "fish $*" >> "$FAKE_FISH_LOG"; fi
+if [ -n "$FAKE_FISH_SILENT" ]; then exit 1; fi
+echo "Welcome to the fake fish"
+export FAKE_FISH_VAR="from fish"
+export FAKE_LOGIN_VAR="fish's value"
+export PATH="/fake/fish/bin:/fake/login/bin:$PATH"
+shift
+eval "$1"

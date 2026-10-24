@@ -1,3 +1,4 @@
+export { createReadOnlyError, INSPECT_MESSAGE, INSPECT_READ_ONLY } from './inspect.ts';
 export {
   createServerInstance,
   describeVersion,
@@ -15,5 +16,6 @@ export {
   LOCK_FILE,
   type LockHolder,
   resolveBootedAt,
+  ServerRunningError,
   selectLockHolder,
 } from './lock.ts';

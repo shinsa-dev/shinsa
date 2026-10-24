@@ -1,6 +1,6 @@
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 import { log } from '../log/index.ts';
 import { type CommandResult, runCommand } from './index.ts';
 
@@ -15,6 +15,11 @@ export interface LoginEnvOptions {
   run?: ShellRunner;
 }
 
+interface TerminalStreams {
+  stdin: { isTTY?: boolean };
+  stdout: { isTTY?: boolean };
+}
+
 export interface LoginEnvReader {
   read: () => Promise<Record<string, string> | null>;
 }
@@ -24,6 +29,10 @@ const MARKER = '__SHINSA_LOGIN_ENV__';
 const LOGIN_TIMEOUT_MS = 5_000;
 
 const SKIPPED_KEYS = new Set(['PWD', 'OLDPWD', 'SHLVL', '_', 'DISABLE_AUTO_UPDATE']);
+
+export function isStartedFromTerminal(streams: TerminalStreams = process) {
+  return Boolean(streams.stdin.isTTY || streams.stdout.isTTY);
+}
 
 export function parseLoginEnv(output: string) {
   const start = output.indexOf(MARKER);
@@ -43,23 +52,76 @@ export function mergePathLists(current: string, extra: string) {
   return [...new Set(entries)].join(delimiter);
 }
 
+function isExecutable(path: string) {
+  try {
+    accessSync(path, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readText(path: string) {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+function resolveRcFile(shell: string, env: Env, home: string) {
+  if (basename(shell).includes('bash')) return join(home, '.bashrc');
+  return join(env.ZDOTDIR ?? home, '.zshrc');
+}
+
+function resolveFishHandOff(shell: string, path: string, env: Env, home: string) {
+  const onPath = path
+    .split(delimiter)
+    .filter(Boolean)
+    .map((dir) => join(dir, 'fish'))
+    .find(isExecutable);
+  if (onPath) return onPath;
+  return readText(resolveRcFile(shell, env, home)).match(/\bexec\s+(\S*\bfish)\b/)?.[1] ?? null;
+}
+
+function mergeLoginEnvs(shell: Record<string, string> | null, fish: Record<string, string> | null) {
+  if (!(shell && fish)) return shell ?? fish;
+  return { ...fish, ...shell, PATH: mergePathLists(shell.PATH ?? '', fish.PATH ?? '') };
+}
+
 export function createLoginEnvReader(env: Env = process.env, options: LoginEnvOptions = {}): LoginEnvReader {
   const shell = options.shell ?? env.SHELL ?? '/bin/zsh';
+  const home = options.home ?? env.HOME ?? homedir();
   const timeoutMs = options.timeoutMs ?? LOGIN_TIMEOUT_MS;
   const run: ShellRunner =
     options.run ??
     ((command, cwd) => runCommand(command, cwd, { timeoutMs, env: { DISABLE_AUTO_UPDATE: 'true' } }));
+  const readShell = async (program: string, mode: string) => {
+    const result = await run([program, mode, `printf '%s' ${MARKER}; /usr/bin/env -0`], home);
+    return {
+      env: parseLoginEnv(result.stdout),
+      attempt: { shell: program, mode, code: result.code, timedOut: result.timedOut },
+    };
+  };
   let cached: Promise<Record<string, string> | null> | null = null;
   const readOnce = async () => {
-    const command = [shell, '-lic', `printf '%s' ${MARKER}; /usr/bin/env -0`];
-    const result = await run(command, options.home ?? env.HOME ?? homedir());
-    const parsed = parseLoginEnv(result.stdout);
-    if (parsed) return parsed;
-    log.warn('[Serve] Could not read the login shell environment', {
-      shell,
-      code: result.code,
-      timedOut: result.timedOut,
-    });
+    const interactive = await readShell(shell, '-lic');
+    if (interactive.env) return interactive.env;
+    const plain = await readShell(shell, '-lc');
+    const fish = resolveFishHandOff(shell, plain.env?.PATH ?? env.PATH ?? '', env, home);
+    const attempts = [interactive.attempt, plain.attempt];
+    let fishEnv: Record<string, string> | null = null;
+    if (fish) {
+      const handedOff = await readShell(fish, '-lc');
+      attempts.push(handedOff.attempt);
+      fishEnv = handedOff.env;
+    }
+    const merged = mergeLoginEnvs(plain.env, fishEnv);
+    if (merged) {
+      log.info('[Serve] Read the login shell environment without -i', { shell, fish, attempts });
+      return merged;
+    }
+    log.warn('[Serve] Could not read the login shell environment', { shell, fish, attempts });
     return null;
   };
   return {

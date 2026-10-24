@@ -4,7 +4,7 @@ import { type MachineConfig, type MachineConfigRead, readMachineConfig } from '.
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
 export { ConfigStore, writeJsonFile } from './file.ts';
-export { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
+export { type Env, resolveScratchPath, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
 export interface ServerConfig {
   home: string;

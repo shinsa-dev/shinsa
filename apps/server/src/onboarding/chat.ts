@@ -52,6 +52,7 @@ interface ChatOptions {
   clarify: Interpreter;
   isCompleted: () => boolean;
   complete: () => Promise<void>;
+  readOnly?: boolean;
 }
 
 const MAX_MESSAGES = 300;
@@ -481,6 +482,7 @@ export class OnboardingConversation {
   }
 
   #write(draft: Draft) {
+    if (this.#options.readOnly) return;
     writeJsonFile(this.#options.path, draft);
   }
 

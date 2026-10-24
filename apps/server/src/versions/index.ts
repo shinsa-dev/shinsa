@@ -20,6 +20,7 @@ import {
   readCodexVersion,
 } from '../agents/providers/codex/executable.ts';
 import { compareVersions, type ProgramLocation } from '../agents/providers/versions.ts';
+import { createReadOnlyError } from '../instance/index.ts';
 import { describeError, log, redactSecrets } from '../log/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
 import { requestLatestVersion } from './registry.ts';
@@ -202,8 +203,7 @@ export class Versions {
     const id = readProgramId(program);
     const { label, overrideEnv } = PROGRAMS[id];
     if (this.#options.inspect) {
-      throw new DomainError(
-        'inspect_mode',
+      throw createReadOnlyError(
         `Shinsa is in inspect mode and only shows this data. Start it without SHINSA_INSPECT to update ${label}.`
       );
     }

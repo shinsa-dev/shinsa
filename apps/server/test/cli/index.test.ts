@@ -4,9 +4,11 @@ import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { type CliIo, createProcessIo, runCli, USAGE } from '../../src/cli/index.ts';
 import { startServer } from '../../src/http/index.ts';
+import { createServerInstance, ServerRunningError } from '../../src/instance/index.ts';
+import { log } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Shinsa } from '../../src/serve.ts';
-import type { ServiceControl } from '../../src/service/index.ts';
+import { SERVICE_MARKER, type ServiceControl } from '../../src/service/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import {
   createTempDir,
@@ -94,6 +96,46 @@ describe('shinsa serve', () => {
     expect(await runCli([], io)).toBe(0);
     await (registered as unknown as () => Promise<void>)();
     expect(stopped).toBe(true);
+  });
+
+  const holder = {
+    ...createServerInstance('a'.repeat(40), 1),
+    pid: 4242,
+    port: 5180,
+    url: 'http://127.0.0.1:5180',
+    bootedAt: 1,
+  };
+
+  test('started by the service onto a data folder another Shinsa holds, it says who and exits cleanly', async () => {
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    try {
+      const { io, errors } = createIo('1', {
+        env: { [SERVICE_MARKER]: '1' },
+        serve: () => Promise.reject(new ServerRunningError('/data', holder)),
+      });
+      expect(await runCli(['serve'], io)).toBe(0);
+      expect(errors).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(
+        '[Serve] Another Shinsa holds this data directory, so the service stays stopped',
+        { dataDir: '/data', pid: 4242, url: 'http://127.0.0.1:5180', version: '0.0.0 (aaaaaaa)' }
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('from a terminal the same lock is an error, and so is any other failure under the service', async () => {
+    const running = createIo('1', { serve: () => Promise.reject(new ServerRunningError('/data', holder)) });
+    expect(await runCli(['serve'], running.io)).toBe(1);
+    expect(running.errors).toEqual([
+      'shinsa serve: Shinsa is already running on /data: http://127.0.0.1:5180 (pid 4242, version 0.0.0 (aaaaaaa)). Stop it first, or set SHINSA_HOME to another folder.',
+    ]);
+    const broken = createIo('1', {
+      env: { [SERVICE_MARKER]: '1' },
+      serve: () => Promise.reject(new Error('port taken')),
+    });
+    expect(await runCli(['serve'], broken.io)).toBe(1);
+    expect(broken.errors).toEqual(['shinsa serve: port taken']);
   });
 });
 
@@ -283,7 +325,7 @@ describe('the process io', () => {
     const restore = overrideEnv({ FAKE_LOGIN_SHELL_EXPORT: '1', FAKE_LOGIN_VAR: undefined });
     const path = process.env.PATH;
     try {
-      const shinsa = await createProcessIo().serve({
+      const shinsa = await createProcessIo({ isTerminal: () => false }).serve({
         SHINSA_DATA_DIR: join(createTempDir(), 'data'),
         SHINSA_PORT: '0',
         SHINSA_INSPECT: '1',
@@ -294,6 +336,43 @@ describe('the process io', () => {
     } finally {
       restore();
       process.env.PATH = path;
+    }
+  });
+
+  test('serve started from a terminal keeps the terminal’s environment and reads no login shell', async () => {
+    const restore = overrideEnv({ FAKE_LOGIN_SHELL_EXPORT: '1', FAKE_LOGIN_VAR: undefined });
+    const path = process.env.PATH;
+    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    try {
+      const shinsa = await createProcessIo({ isTerminal: () => true }).serve({
+        SHINSA_DATA_DIR: join(createTempDir(), 'data'),
+        SHINSA_PORT: '0',
+        SHINSA_INSPECT: '1',
+      });
+      stops.push(shinsa.stop);
+      expect(process.env.FAKE_LOGIN_VAR).toBeUndefined();
+      expect(process.env.PATH).toBe(path);
+      expect(info).toHaveBeenCalledWith(
+        '[Serve] Started from a terminal, so the login shell environment is not read'
+      );
+    } finally {
+      info.mockRestore();
+      restore();
+    }
+  });
+
+  test('serve drops the service’s marker, so nothing it runs thinks launchd started it', async () => {
+    const restore = overrideEnv({ [SERVICE_MARKER]: '1' });
+    try {
+      const shinsa = await createProcessIo({ isTerminal: () => true }).serve({
+        SHINSA_DATA_DIR: join(createTempDir(), 'data'),
+        SHINSA_PORT: '0',
+        SHINSA_INSPECT: '1',
+      });
+      stops.push(shinsa.stop);
+      expect(process.env[SERVICE_MARKER]).toBeUndefined();
+    } finally {
+      restore();
     }
   });
 

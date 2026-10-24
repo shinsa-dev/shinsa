@@ -19,7 +19,7 @@ afterEach(async () => {
 
 function serve(home: string) {
   const child = Bun.spawn(['bun', MAIN, 'serve'], {
-    env: { ...process.env, SHINSA_HOME: home, SHINSA_PORT: '0', SHINSA_INSPECT: '1' },
+    env: { ...process.env, HOME: home, SHINSA_HOME: home, SHINSA_PORT: '0' },
     stdout: 'pipe',
     stderr: 'pipe',
   });

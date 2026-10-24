@@ -38,3 +38,7 @@ export function resolveShinsaPaths(env: Env): ShinsaPaths {
     dataDir: join(home, 'data'),
   };
 }
+
+export function resolveScratchPath(dataDir: string, taskId: string) {
+  return join(dataDir, 'scratch', taskId);
+}

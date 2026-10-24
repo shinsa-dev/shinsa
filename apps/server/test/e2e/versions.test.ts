@@ -67,7 +67,7 @@ describe('updating an agent program, end to end', () => {
   test('inspect mode refuses an update before it starts', async () => {
     const shinsa = await start(true);
     const refused = await post(shinsa, { program: 'claude' });
-    expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe('inspect_mode');
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe('inspect_read_only');
   });
 });

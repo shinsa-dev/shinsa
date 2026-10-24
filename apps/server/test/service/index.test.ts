@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createServerInstance, INSTALL_PATH, LOCK_FILE, SERVER_ENTRY } from '../../src/instance/index.ts';
-import { createServiceControl, SERVICE_LABEL } from '../../src/service/index.ts';
+import {
+  createServiceControl,
+  isStartedByService,
+  SERVICE_LABEL,
+  SERVICE_MARKER,
+} from '../../src/service/index.ts';
 import type { CommandResult } from '../../src/shell/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 
@@ -100,11 +105,23 @@ describe('installing the background service', () => {
     expect(written).toContain('<key>SHINSA_PORT</key>\n    <string>5190</string>');
     expect(written).not.toContain('SHINSA_EMPTY');
     expect(written).not.toContain('OTHER');
+    expect(written).toContain(`<key>${SERVICE_MARKER}</key>\n    <string>1</string>`);
     expect(written).toContain(`<string>${log}</string>`);
     expect(launchd.calls).toEqual([
       ['print', TARGET],
       ['bootstrap', 'gui/501', plist],
     ]);
+  });
+
+  test('the plist marks the server it starts as the service’s, whatever the installing shell had', async () => {
+    const { service, plist } = createControl({ env: { [SERVICE_MARKER]: '0' } });
+    await service.install();
+    const written = readFileSync(plist, 'utf8');
+    expect(written).toContain(`<key>${SERVICE_MARKER}</key>\n    <string>1</string>`);
+    expect(written).not.toContain('<string>0</string>');
+    expect(isStartedByService({ [SERVICE_MARKER]: '1' })).toBe(true);
+    expect(isStartedByService({ [SERVICE_MARKER]: '0' })).toBe(false);
+    expect(isStartedByService({})).toBe(false);
   });
 
   test('replaces a loaded service, and names a server already running on the data folder', async () => {

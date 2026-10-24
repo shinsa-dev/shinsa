@@ -86,7 +86,7 @@ describe('shinsa service', () => {
     const text = (await runSpec(busy, ['service', 'install'])).text.split('\n');
     expect(text[0]).toStartWith('Reinstalled the background service');
     expect(text.at(-1)).toBe(
-      'Shinsa is already running on this data directory at http://127.0.0.1:5180 (pid 4242). The service starts once you stop it.'
+      'Shinsa is already running on this data directory at http://127.0.0.1:5180 (pid 4242). The service stays stopped while it runs: stop it, then run `shinsa service restart`.'
     );
   });
 

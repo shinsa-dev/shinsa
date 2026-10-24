@@ -10,6 +10,7 @@ import {
   ProviderRegistry,
 } from '../src/agents/providers/index.ts';
 import { resolveConfig } from '../src/config/index.ts';
+import { SIGN_IN_CALLBACK_PATH } from '../src/extensions/sign-in.ts';
 import { inspectRepo } from '../src/git/index.ts';
 import {
   createServerInstance,
@@ -35,42 +36,62 @@ afterEach(async () => {
 const models = { listModels: () => Promise.resolve([]) } as unknown as ModelSource;
 
 describe('startShinsa', () => {
-  test('inspect mode serves the data without starting agents', async () => {
-    const shinsa = await startShinsa(createTestConfig(createTempDir(), { inspect: true }), { models });
+  test('inspect mode serves the data of a running server beside it and refuses every command', async () => {
+    const root = createTempDir();
+    const live = await startShinsa(createTestConfig(root), {
+      models,
+      triage: () => Promise.resolve(null),
+      resolveLogin: () => Promise.resolve(null),
+    });
+    started.push(live);
+    await live.engine.dispatch({ type: 'task.create', request: 'Look only', repoId: null });
+    const shinsa = await startShinsa(createTestConfig(root, { inspect: true }), { models });
     started.push(shinsa);
-    await shinsa.engine.dispatch({ type: 'task.create', request: 'Look only', repoId: null });
-    await shinsa.engine.settle();
-    expect(Object.values(shinsa.engine.state.tasks)[0]?.stage).toBe('triage');
+    expect(Object.values(shinsa.engine.state.tasks).map((task) => task.request)).toEqual(['Look only']);
     expect(await (await fetch(`${shinsa.url}/api/queue`)).json()).toMatchObject({ decisions: [] });
-  });
-
-  test('inspect mode lists the accounts but refuses to sign in, import or remove one', async () => {
-    const config = createTestConfig(createTempDir(), { inspect: true });
-    const shinsa = await startShinsa(config, { models });
-    started.push(shinsa);
-    expect((await fetch(`${shinsa.url}/api/accounts`)).status).toBe(200);
-    for (const [path, body] of [
-      ['login', {}],
-      ['import', { origin: 'claude', email: 'me@example.com' }],
-      ['remove', { accountId: 'acc-1' }],
-    ] as const) {
-      const refused = await fetch(`${shinsa.url}/api/accounts/${path}`, {
+    const readOnly = {
+      error: {
+        code: 'inspect_read_only',
+        message:
+          'Shinsa is in inspect mode and only shows this data. Start it without SHINSA_INSPECT to change anything.',
+      },
+    };
+    await expect(
+      shinsa.engine.dispatch({ type: 'task.create', request: 'Another', repoId: null })
+    ).rejects.toMatchObject({ code: 'inspect_read_only' });
+    for (const path of [
+      '/api/commands',
+      '/api/accounts/login',
+      '/api/onboarding/chat',
+      '/api/schedules/s-1/webhook',
+    ]) {
+      const refused = await fetch(`${shinsa.url}${path}`, {
         method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          origin: shinsa.url,
-        },
-        body: JSON.stringify(body),
+        headers: { 'content-type': 'application/json', origin: shinsa.url },
+        body: JSON.stringify({ type: 'task.create', request: 'Another', repoId: null }),
       });
-      expect(refused.status).toBe(400);
-      expect(await refused.json()).toEqual({
-        error: {
-          code: 'inspect_mode',
-          message:
-            'Shinsa is in inspect mode and only shows this data. Start it without SHINSA_INSPECT to sign in, refresh or change accounts.',
-        },
-      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual(readOnly);
     }
+    const webhook = await fetch(`${shinsa.url}/api/hooks/s-1`, { method: 'POST', body: '{}' });
+    expect(webhook.status).toBe(403);
+    expect(await webhook.json()).toEqual(readOnly);
+    const callback = await fetch(`${shinsa.url}${SIGN_IN_CALLBACK_PATH}?state=s&code=c`);
+    expect(callback.status).toBe(403);
+    const socket = new WebSocket(`${shinsa.url.replace('http', 'ws')}/ws`, {
+      headers: { origin: shinsa.url },
+    });
+    const acks: { type: string; id?: string; error?: { code: string } | null }[] = [];
+    socket.addEventListener('message', (event) => acks.push(JSON.parse(String(event.data))));
+    await new Promise((resolve) => socket.addEventListener('open', resolve, { once: true }));
+    socket.send(
+      JSON.stringify({ type: 'command', id: 'c-1', command: { type: 'task.cancel', taskId: 'x' } })
+    );
+    await until('the refusal', () => acks.some((message) => message.id === 'c-1'));
+    expect(acks.find((message) => message.id === 'c-1')?.error?.code).toBe('inspect_read_only');
+    socket.close();
+    expect(Object.keys(shinsa.engine.state.tasks)).toHaveLength(1);
+    expect(Object.keys(live.engine.state.tasks)).toHaveLength(1);
   });
 
   test('stopping aborts the running effects and pull request syncs and waits for them before closing the log', async () => {
@@ -248,7 +269,7 @@ describe('startShinsa', () => {
 
 describe('one Shinsa per data directory', () => {
   test('a second Shinsa on the same data folder is refused with the first one’s address, until it stops', async () => {
-    const config = createTestConfig(createTempDir(), { inspect: true });
+    const config = createTestConfig(createTempDir());
     const first = await startShinsa(config, { models });
     expect(selectLockHolder(config.dataDir)).toMatchObject({
       pid: process.pid,
@@ -266,7 +287,7 @@ describe('one Shinsa per data directory', () => {
   });
 
   test('the lock a crashed Shinsa left behind is taken over', async () => {
-    const config = createTestConfig(createTempDir(), { inspect: true });
+    const config = createTestConfig(createTempDir());
     const crashed = Bun.spawn(['true']);
     await crashed.exited;
     writeFileSync(
@@ -296,12 +317,25 @@ describe('one Shinsa per data directory', () => {
   test('a Shinsa that cannot listen gives the lock back', async () => {
     const taken = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('taken') });
     try {
-      const config = createTestConfig(createTempDir(), { inspect: true, port: taken.port ?? 0 });
+      const config = createTestConfig(createTempDir(), { port: taken.port ?? 0 });
       await expect(startShinsa(config, { models })).rejects.toThrow();
       expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
     } finally {
       await taken.stop(true);
     }
+  });
+
+  test('inspect mode takes no lock, so it reads the data of a Shinsa that is running', async () => {
+    const config = createTestConfig(createTempDir());
+    const live = await startShinsa(config, { models });
+    started.push(live);
+    const inspect = await startShinsa({ ...config, inspect: true }, { models });
+    expect(selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: live.url });
+    await inspect.stop();
+    expect(selectLockHolder(config.dataDir)?.url).toBe(live.url);
+    const alone = createTestConfig(createTempDir(), { inspect: true });
+    started.push(await startShinsa(alone, { models }));
+    expect(existsSync(join(alone.dataDir, LOCK_FILE))).toBe(false);
   });
 
   test('health names the version, commit, install path, data folder, pid and uptime', async () => {
