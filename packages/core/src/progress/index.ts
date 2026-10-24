@@ -101,7 +101,7 @@ const FINISHED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>(['merged', 'd
 
 function hasSetupStep(task: Task, pipeline: readonly PipelineStep[]) {
   if (pipeline[0] === 'plan') return false;
-  return task.repoId !== null || task.size === null || needsRepository(pipeline);
+  return task.repoId !== null || needsRepository(pipeline);
 }
 
 function listDisplayKeys(task: Task): DisplayKey[] {

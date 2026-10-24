@@ -93,6 +93,13 @@ describe('projects', () => {
       )
     );
 
+    w.classify = <T>() =>
+      Promise.resolve({
+        title: 'Add the greeting files',
+        repo: 'app',
+        size: 'small',
+        branch: 'feat/greeting',
+      } as T);
     const before = new Set(Object.keys(w.state.tasks));
     expect((await shinsa('tasks', 'create', 'Add the greeting files', '--project', 'Greeter')).code).toBe(0);
     const taskId = newTaskId(w, before);

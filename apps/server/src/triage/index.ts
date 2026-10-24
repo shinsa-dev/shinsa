@@ -27,7 +27,7 @@ import { parseAnswerText, SHAPE_QUESTION } from './decisions.ts';
 
 export interface TriageResult {
   title: string;
-  repoPath: string;
+  repoPath: string | null;
   size: TaskSize;
   branch: string;
   waitsOn: Task[];
@@ -73,11 +73,17 @@ const TITLE_LIMIT = 60;
 
 const BRANCH_PATTERN = /^[a-z]+\/[a-z0-9-]+$/;
 
+export const NO_REPOSITORY = 'none';
+
+export const REPOSITORY_RULE = `Never pick a repository only because it is the only one listed; pick one when the request names it or clearly needs its code. A request that names a repository that is not listed gets "${NO_REPOSITORY}".`;
+
 const TRIAGE_SYSTEM = [
-  'You route a coding request to a repository on the developer’s machine and size it.',
+  'You route a request to a repository on the developer’s machine, or to none, and size it.',
   'Return {"title": string, "repo": string, "branch": string} and one field for each decision listed after the request.',
   `title: what will be done, imperative, sentence case, at most ${TITLE_LIMIT} characters, no trailing period.`,
-  'repo: the exact name of the repository the work belongs in. Prefer repositories with recent Shinsa work.',
+  `repo: the exact name of the repository the work belongs in, or "${NO_REPOSITORY}". Prefer repositories with recent Shinsa work.`,
+  `Answer "${NO_REPOSITORY}" when the request needs no repository: a greeting, small talk, a general question, a question about the state Shinsa keeps (its tasks, projects or settings, or what it knows) rather than code, or planning that names no code.`,
+  REPOSITORY_RULE,
   'branch: <type>/<short-kebab-slug>, type one of feat, fix, chore, refactor, docs.',
   'The decisions: answer each only with its options.',
   `Each field ending in _why says in one plain sentence of at most ${WHY_LIMIT} characters why you answered its decision that way.`,
@@ -144,20 +150,38 @@ function listWhyKeys(asks: TriageAsks) {
   ];
 }
 
-function resolveTriageSchema(
-  candidates: LocalRepo[],
-  waitsOn: ChoicesQuestion,
-  asks: TriageAsks
-): JsonSchema {
+export function resolveRepoProperty(candidates: LocalRepo[], optional: boolean) {
+  return {
+    type: 'string',
+    enum: [...candidates.map((candidate) => candidate.name), ...(optional ? [NO_REPOSITORY] : [])],
+  };
+}
+
+export function describeRepoCandidates(candidates: LocalRepo[]) {
+  return [
+    'Repositories, most recently worked on first:',
+    ...(candidates.length > 0
+      ? candidates.map((candidate) => `- ${candidate.name}: ${candidate.path}`)
+      : ['(none)']),
+  ];
+}
+
+export function parseRepoAnswer(candidates: LocalRepo[], value: unknown, optional: boolean) {
+  if (optional && value === NO_REPOSITORY) return null;
+  return candidates.find((candidate) => candidate.name === value)?.path;
+}
+
+function resolveTriageSchema(plan: TriagePlan): JsonSchema {
+  const { asks } = plan;
   const properties: Record<string, unknown> = {
     title: { type: 'string', maxLength: TITLE_LIMIT },
-    repo: { type: 'string', enum: candidates.map((candidate) => candidate.name) },
+    repo: resolveRepoProperty(plan.candidates, plan.optional),
     size: resolveDecisionProperty(SIZE_QUESTION),
     branch: { type: 'string', pattern: BRANCH_PATTERN.source },
   };
   if (asks.shape) properties.shape = resolveDecisionProperty(SHAPE_QUESTION);
   if (asks.priority) properties.priority = resolveDecisionProperty(PRIORITY_QUESTION);
-  if (asks.start) properties.waits_on = resolveDecisionProperty(waitsOn);
+  if (asks.start) properties.waits_on = resolveDecisionProperty(plan.waitsOnQuestion);
   for (const key of listWhyKeys(asks)) properties[key] = { type: 'string', maxLength: WHY_LIMIT };
   return {
     type: 'object',
@@ -221,6 +245,7 @@ interface CandidatePool {
   project: Project | null;
   candidates: LocalRepo[];
   empty: boolean;
+  outside: string[];
 }
 
 function listCandidates(state: ShinsaState, local: LocalRepo[], registered = Object.values(state.repos)) {
@@ -238,20 +263,25 @@ function listCandidates(state: ShinsaState, local: LocalRepo[], registered = Obj
   );
 }
 
-function resolveCandidatePool(state: ShinsaState, task: Task, local: LocalRepo[]): CandidatePool {
+export function resolveCandidatePool(state: ShinsaState, task: Task, local: LocalRepo[]): CandidatePool {
   const projectId = resolveTaskProject(state, task);
   const project = projectId ? (state.projects[projectId] ?? null) : null;
-  if (!project) return { project: null, candidates: listCandidates(state, local), empty: false };
+  const everywhere = listCandidates(state, local);
+  if (!project) return { project: null, candidates: everywhere, empty: false, outside: [] };
   const candidates = listCandidates(
     state,
     listLocalRepos(project.folders),
     listProjectRepos(state, project.id)
   );
-  if (candidates.length > 0) return { project, candidates, empty: false };
-  return { project, candidates: listCandidates(state, local), empty: true };
+  if (candidates.length === 0) return { project, candidates: everywhere, empty: true, outside: [] };
+  const inside = new Set(candidates.map((candidate) => candidate.path));
+  const outside = everywhere
+    .filter((candidate) => !inside.has(candidate.path))
+    .map((candidate) => candidate.name);
+  return { project, candidates, empty: false, outside: [...new Set(outside)] };
 }
 
-function describeProject(pool: CandidatePool) {
+export function describeProject(pool: CandidatePool) {
   if (!pool.project) return [];
   return [
     'Project:',
@@ -260,6 +290,11 @@ function describeProject(pool: CandidatePool) {
     ...(pool.project.description ? [`- description: ${pool.project.description}`] : []),
     ...(pool.empty
       ? ['The project has no repository yet, so every repository on the machine is offered.']
+      : []),
+    ...(pool.outside.length > 0
+      ? [
+          `Repositories on the machine outside this project, never offered: ${pool.outside.join(', ')}. A request that names one of them gets "${NO_REPOSITORY}".`,
+        ]
       : []),
     '',
   ];
@@ -309,6 +344,7 @@ interface TriagePlan {
   asks: TriageAsks;
   pool: CandidatePool;
   candidates: LocalRepo[];
+  optional: boolean;
   open: Task[];
   waitsOnQuestion: ChoicesQuestion;
   fallback: TriageResult;
@@ -323,17 +359,13 @@ function listOpenTasks(state: ShinsaState, task: Task, project: Project | null) 
   );
 }
 
-function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): TriagePlan | null {
+function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): TriagePlan {
   const pinned = task.repoId ? state.repos[task.repoId] : undefined;
   const pool = resolveCandidatePool(state, task, local);
-  const origin = resolveContainingRepo(task.origin, pool.candidates);
-  const candidates = pinned
-    ? [{ path: pinned.path, name: pinned.name, touchedAt: 0 }]
-    : origin
-      ? [origin]
-      : pool.candidates;
-  const first = candidates[0];
-  if (!first) return null;
+  const bound = pinned
+    ? { path: pinned.path, name: pinned.name, touchedAt: 0 }
+    : resolveContainingRepo(task.origin, pool.candidates);
+  const candidates = bound ? [bound] : pool.candidates;
   const asks = resolveAsks(task);
   const size = resolveFallbackSize(task);
   const title = task.request.split('\n')[0]?.slice(0, TITLE_LIMIT).trim() || 'Untitled task';
@@ -343,11 +375,12 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
     asks,
     pool,
     candidates,
+    optional: !pinned,
     open,
     waitsOnQuestion: resolveWaitsOnQuestion(open),
     fallback: {
       title,
-      repoPath: first.path,
+      repoPath: bound?.path ?? null,
       size,
       branch: `${size === 'large' ? 'feat' : 'fix'}/${slugify(title)}`,
       waitsOn: [],
@@ -366,8 +399,7 @@ function describeTriagePrompt(state: ShinsaState, plan: TriagePlan) {
     open.length === 0 ? '(none)' : '',
     '',
     ...describeProject(plan.pool),
-    'Repositories, most recently worked on first:',
-    ...plan.candidates.map((candidate) => `- ${candidate.name}: ${candidate.path}`),
+    ...describeRepoCandidates(plan.candidates),
     '',
     'Request:',
     task.request,
@@ -379,12 +411,12 @@ function describeTriagePrompt(state: ShinsaState, plan: TriagePlan) {
   ].join('\n');
 }
 
-function isDependencyAllowed(state: ShinsaState, plan: TriagePlan, candidate: Task, repoPath: string) {
+function isDependencyAllowed(state: ShinsaState, plan: TriagePlan, candidate: Task, repoPath: string | null) {
   if (plan.pool.project || candidate.repoId === null) return true;
   return state.repos[candidate.repoId]?.path === repoPath;
 }
 
-function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string) {
+function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string | null) {
   if (!plan.asks.start) return { waitsOn: [], kept: null };
   const named = parseDecisionAnswer(plan.waitsOnQuestion, answer.waits_on);
   if (named === null) return { waitsOn: [], kept: null };
@@ -396,8 +428,8 @@ function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer
 
 function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer): TriageResult {
   const { asks, fallback } = plan;
-  const repo = plan.candidates.find((candidate) => candidate.name === answer.repo);
-  const repoPath = repo?.path ?? fallback.repoPath;
+  const answered = parseRepoAnswer(plan.candidates, answer.repo, plan.optional);
+  const repoPath = answered === undefined ? fallback.repoPath : answered;
   const branch =
     typeof answer.branch === 'string' && BRANCH_PATTERN.test(answer.branch) ? answer.branch : null;
   const { waitsOn, kept } = parseWaitsOn(state, plan, answer, repoPath);
@@ -423,13 +455,12 @@ export async function resolveTriage(
   task: Task,
   local: LocalRepo[],
   ask: QuickJson
-): Promise<TriageResult | null> {
+): Promise<TriageResult> {
   const plan = resolveTriagePlan(state, task, local);
-  if (!plan) return null;
   const answer = await ask<TriageAnswer>(
     TRIAGE_SYSTEM,
     describeTriagePrompt(state, plan),
-    resolveTriageSchema(plan.candidates, plan.waitsOnQuestion, plan.asks)
+    resolveTriageSchema(plan)
   );
   if (!answer) return plan.fallback;
   return parseTriageAnswer(state, plan, answer);

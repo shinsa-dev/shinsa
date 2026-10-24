@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  createState,
   listActiveRuns,
   type PlanDocument,
   type Round,
@@ -24,12 +25,13 @@ import {
   type MessageClassifier,
   resolveMessageClass,
   resolveMessageRoute,
+  resolveRoundRepository,
   resolveRoundShape,
   routeUserCommand,
   type ShapeClassifier,
 } from '../../src/triage/message.ts';
 import { until } from '../helpers/index.ts';
-import { createTask } from '../helpers/state.ts';
+import { createRepo, createTask } from '../helpers/state.ts';
 
 const dirs: string[] = [];
 
@@ -583,5 +585,99 @@ describe('routing a message to a resting task', () => {
       status: 'active',
     });
     expect(task.pipeline).toEqual(['answer']);
+  });
+});
+
+describe('finding the repository a round needs', () => {
+  const LOCAL = [
+    { path: '/code/shinsa', name: 'shinsa', touchedAt: 2 },
+    { path: '/code/kanna', name: 'kanna', touchedAt: 1 },
+  ];
+
+  function unbound() {
+    return createTask({
+      repoId: null,
+      worktreePath: null,
+      branch: null,
+      title: 'Hey',
+      request: 'Hey',
+      stage: 'triage',
+      stageReason: 'verifying the setup',
+      pipeline: [...SHAPE_PIPELINES.change],
+      rounds: [
+        createRound({ title: 'Hey', request: 'Hey', pipeline: ['answer'], outcome: null }),
+        createRound({
+          number: 2,
+          title: 'Fix the button in kanna',
+          request: 'Fix the button in kanna',
+          status: 'active',
+          pipeline: [...SHAPE_PIPELINES.change],
+          outcome: null,
+        }),
+      ],
+      activity: [
+        {
+          at: 1,
+          actor: 'you',
+          kind: 'message',
+          text: 'Sent instructions',
+          detail: 'Earlier',
+          evidenceId: null,
+        },
+        {
+          at: 2,
+          actor: 'you',
+          kind: 'message',
+          text: 'Sent instructions',
+          detail: 'It is the web one',
+          evidenceId: null,
+          round: 2,
+        },
+      ],
+      proposal: {
+        request: 'Make the button blue',
+        why: 'It is grey.',
+        status: 'accepted',
+        runId: null,
+        at: 1,
+      },
+    });
+  }
+
+  test('reads the round’s request, the change agreed to and the messages, and binds the repository it names', async () => {
+    const calls: { system: string; prompt: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, prompt, schema });
+      return Promise.resolve({ repo: 'kanna' } as T);
+    };
+    expect(await resolveRoundRepository(createState(), unbound(), LOCAL, ask)).toBe('/code/kanna');
+    const [call] = calls;
+    expect(call?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'kanna', 'none'] });
+    expect(call?.system).toContain('Never pick a repository only because it is the only one listed');
+    expect(call?.prompt).toContain('- Round 2: Fix the button in kanna (change, in progress).');
+    expect(call?.prompt).toContain('Repositories, most recently worked on first:\n- shinsa: /code/shinsa');
+    expect(call?.prompt).toContain('What this round asks for:\nFix the button in kanna');
+    expect(call?.prompt).toContain('The change the human agreed to:\nMake the button blue');
+    expect(call?.prompt).toContain('The human added since:\n- It is the web one');
+    expect(call?.prompt).not.toContain('Earlier');
+  });
+
+  test('none, an unknown name or no answer binds nothing, and with nothing to offer the model is not asked', async () => {
+    for (const value of [{ repo: 'none' }, { repo: 'elsewhere' }, null]) {
+      expect(await resolveRoundRepository(createState(), unbound(), LOCAL, answer(value))).toBeNull();
+    }
+    const plain = createTask({ repoId: null, request: 'Fix it', activity: [], proposal: null });
+    expect(await resolveRoundRepository(createState(), plain, [], notAsked)).toBeNull();
+    const state = createState();
+    state.repos.r1 = createRepo({ id: 'r1', name: 'kanna', path: '/code/kanna' });
+    const prompts: string[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string) => {
+      prompts.push(prompt);
+      return Promise.resolve({ repo: 'kanna' } as T);
+    };
+    expect(await resolveRoundRepository(state, plain, [], ask)).toBe('/code/kanna');
+    expect(prompts[0]).toContain('What this round asks for:\nFix it');
+    expect(prompts[0]).not.toContain('agreed to');
+    expect(prompts[0]).not.toContain('added since');
   });
 });

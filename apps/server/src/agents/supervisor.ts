@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   type ChatEvent,
   type ChatNotice,
@@ -95,6 +97,12 @@ export interface SupervisorOptions {
   manage?: ManageAccess;
 }
 
+interface Workspace {
+  cwd: string;
+  repo: Repo | null;
+  defaultBranch: string;
+}
+
 interface Turn {
   run: Run;
   cwd: string;
@@ -105,6 +113,8 @@ interface Turn {
 }
 
 const MAX_RUN_MS = 2 * 60 * 60 * 1000;
+
+const SCRATCH_BRANCH = 'main';
 
 const QUIESCE_MS = 60_000;
 
@@ -131,8 +141,9 @@ function resolveRoleCwd(role: RunRole, task: Task, repo: Repo) {
   return task.worktreePath;
 }
 
-function isSharedCheckout(run: Run, cwd: string, repo: Repo) {
-  return cwd === repo.path || run.delegation?.isolation === 'shared';
+function isSharedCheckout(run: Run, workspace: Workspace) {
+  if (!workspace.repo) return true;
+  return workspace.cwd === workspace.repo.path || run.delegation?.isolation === 'shared';
 }
 
 export class RunSupervisor {
@@ -215,9 +226,8 @@ export class RunSupervisor {
     const run = state.runs[runId];
     if (this.#shuttingDown || !run || run.endedAt !== null || this.#active.has(runId)) return;
     const task = state.tasks[run.taskId];
-    const repo = task?.repoId ? state.repos[task.repoId] : undefined;
-    const cwd = task && repo ? this.#resolveCwd(run, task, repo) : null;
-    if (!task || !cwd || !repo) {
+    const workspace = task ? this.#resolveWorkspace(run, task) : null;
+    if (!task || !workspace) {
       await this.#end(runId, { outcome: 'failed', summary: 'The task has no worktree to run in.' }, null);
       return;
     }
@@ -239,9 +249,10 @@ export class RunSupervisor {
       const current = this.#engine.state.runs[runId];
       if (!current || current.endedAt !== null || this.#shuttingDown) return;
       const prompt = override ?? run.prompt ?? '';
-      const turn = { run: current, cwd, defaultBranch: repo.defaultBranch, prompt, provider, active };
-      result = await this.#prepareAndDrive(turn, repo);
-      if (isReadOnlyRole(run.role) && !isSharedCheckout(run, cwd, repo))
+      const { cwd, defaultBranch } = this.#prepareWorkspace(workspace);
+      const turn = { run: current, cwd, defaultBranch, prompt, provider, active };
+      result = await this.#prepareAndDrive(turn, workspace.repo);
+      if (isReadOnlyRole(run.role) && !isSharedCheckout(run, workspace))
         await this.#discardEdits(cwd, run.role);
       if (isDelegatedRun(current)) result = await this.#resolveDelegatedResult(current, cwd, result);
     } finally {
@@ -272,6 +283,24 @@ export class RunSupervisor {
     ]);
   }
 
+  #resolveWorkspace(run: Run, task: Task): Workspace | null {
+    if (task.repoId === null) {
+      return {
+        cwd: join(this.#config.dataDir, 'scratch', task.id),
+        repo: null,
+        defaultBranch: SCRATCH_BRANCH,
+      };
+    }
+    const repo = this.#engine.state.repos[task.repoId];
+    const cwd = repo ? this.#resolveCwd(run, task, repo) : null;
+    return repo && cwd ? { cwd, repo, defaultBranch: repo.defaultBranch } : null;
+  }
+
+  #prepareWorkspace(workspace: Workspace) {
+    if (!workspace.repo) mkdirSync(workspace.cwd, { recursive: true });
+    return workspace;
+  }
+
   #resolveCwd(run: Run, task: Task, repo: Repo) {
     if (!isDelegatedRun(run)) return resolveRoleCwd(run.role, task, repo);
     if (run.delegation.isolation === 'worktree') {
@@ -280,7 +309,7 @@ export class RunSupervisor {
     return task.worktreePath ?? repo.path;
   }
 
-  async #prepareAndDrive(turn: Turn, repo: Repo): Promise<AgentSessionResult> {
+  async #prepareAndDrive(turn: Turn, repo: Repo | null): Promise<AgentSessionResult> {
     const { run, provider } = turn;
     if (isReadOnlyRole(run.role) && !resolveCapabilities(provider).planning.readOnly) {
       return {
@@ -291,7 +320,7 @@ export class RunSupervisor {
     }
     if (!isDelegatedRun(run)) return this.#drive(turn);
     const baseCommit = run.delegation.baseCommit;
-    if (run.delegation.isolation === 'worktree' && baseCommit) {
+    if (repo && run.delegation.isolation === 'worktree' && baseCommit) {
       try {
         await createIsolatedWorktree(repo, this.#config.worktreesDir, run.taskId, run.id, baseCommit);
       } catch (error) {
@@ -797,11 +826,9 @@ export class RunSupervisor {
     const state = this.#engine.state;
     const run = state.runs[runId];
     const task = run ? state.tasks[run.taskId] : undefined;
-    const repo = task?.repoId ? state.repos[task.repoId] : undefined;
     const provider = run ? this.#providers.select(run.sessionProvider ?? run.provider) : null;
-    const cwd = run && task && repo ? this.#resolveCwd(run, task, repo) : null;
-    if (!run || !repo || !cwd || !provider?.compactSession || !resolveCapabilities(provider).compaction)
-      return;
+    const workspace = run && task ? this.#resolveWorkspace(run, task) : null;
+    if (!run || !workspace || !provider?.compactSession || !resolveCapabilities(provider).compaction) return;
     const id = `idle-compact:${runId}:${sessionId}`;
     const events = await this.#engine.dispatch({ type: 'run.compact', runId, sessionId }, { id });
     if (!events.some((event) => event.type === 'run.compacted')) return;
@@ -810,10 +837,10 @@ export class RunSupervisor {
     log.info('[Runs] Compacting an idle session before its prompt cache expires', { runId, sessionId });
     const session = provider.compactSession({
       role: run.role,
-      cwd,
+      cwd: this.#prepareWorkspace(workspace).cwd,
       model: run.attempts?.at(-1)?.model ?? run.model,
       resume: sessionId,
-      defaultBranch: repo.defaultBranch,
+      defaultBranch: workspace.defaultBranch,
       pluginDir: this.#config.pluginDir,
       tools: createShinsaTools(run.role, () => Promise.reject(new Error('This turn only compacts. End it.'))),
       ...(await this.#resolveSpeed(run, provider, lease, false)),

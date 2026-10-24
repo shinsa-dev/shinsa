@@ -13,7 +13,7 @@ import {
 import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
-import { createWorktree } from '../../src/git/index.ts';
+import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
 import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtime/index.ts';
@@ -264,14 +264,42 @@ describe('triage', () => {
     expect(dispatched).toEqual([]);
   });
 
-  test('no repository at all is an error that says where Shinsa looked', async () => {
+  test('a triage that gives no answer is an error', async () => {
     const { runner } = setup(withTask({ branch: null, size: null, stage: 'triage', repoId: null }), {
       config: { roots: [createTempDir()] },
       triage: () => Promise.resolve(null),
     });
     await expect(runner.apply({ kind: 'task.triage', taskId: 'task-1' }, createContext())).rejects.toThrow(
-      'found no git repositories'
+      'Shinsa could not read the request'
     );
+  });
+
+  test('a request that needs no repository registers none and is triaged without one', async () => {
+    const { root } = await createGitRepo();
+    const config = createTestConfig(createTempDir(), { roots: [root] });
+    const eventLog = new EventLog(config.databasePath);
+    const engine = new Engine(eventLog);
+    await engine.dispatch({ type: 'task.create', request: 'Hey', repoId: null, mode: 'ask' });
+    const [task] = Object.values(engine.state.tasks);
+    const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
+      resolveLogin: () => Promise.resolve(null),
+      triage: (state, current, local) =>
+        resolveTriage(state, current, local, <T>() =>
+          Promise.resolve({ title: 'Hey', repo: 'none', size: 'small', branch: 'chore/hey' } as T)
+        ),
+    });
+    const context = createContext();
+    await runner.apply({ kind: 'task.triage', taskId: task?.id ?? '' }, context);
+    expect(eventLog.selectReceipt(`${context.key}:repo.register`)).toBeNull();
+    expect(engine.state.repos).toEqual({});
+    expect(engine.state.tasks[task?.id ?? '']).toMatchObject({
+      repoId: null,
+      worktreePath: null,
+      stage: 'answering',
+    });
+    await runner.stop();
+    engine.stop();
+    await engine.settle();
   });
 
   test('the repository is registered and the task triaged with its dependencies, each under the effect’s key', async () => {
@@ -373,6 +401,63 @@ describe('the setup check', () => {
     const started = setup(withTask({ stage: 'building' }, broken));
     await started.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
     expect(started.dispatched).toEqual([]);
+  });
+
+  test('a task with no repository finds one when its work needs it, and binds it with what its check found', async () => {
+    const { repo, root } = await createGitRepo({ remote: false });
+    const { path } = await inspectRepo(repo.path);
+    const asked: string[] = [];
+    const change = withTask(
+      { stage: 'triage', repoId: null, pipeline: ['plan', 'operate'] },
+      { ...repo, path }
+    );
+    const found = setup(change, {
+      config: { roots: [root] },
+      findRepository: (_state, task, local) => {
+        asked.push(`${task.id}:${local.map((candidate) => candidate.name).join(',')}`);
+        return Promise.resolve(repo.path);
+      },
+    });
+    const context = createContext();
+    await found.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, context);
+    expect(asked).toEqual(['task-1:app']);
+    expect(found.commandIds).toEqual([`${context.key}:config.record`]);
+    expect(found.dispatched).toEqual([
+      { type: 'config.record', taskId: 'task-1', problems: [], repoId: 'repo-1' },
+    ]);
+
+    const none = setup(change, { findRepository: () => Promise.resolve(null) });
+    await none.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    expect(none.dispatched).toEqual([{ type: 'config.record', taskId: 'task-1', problems: [] }]);
+  });
+
+  test('a question with no repository asks for none, and a moved-on or cancelled check records nothing', async () => {
+    const asked: string[] = [];
+    const findRepository = () => {
+      asked.push('asked');
+      return Promise.resolve(null);
+    };
+    const question = setup(withTask({ stage: 'triage', repoId: null, pipeline: ['answer'] }), {
+      findRepository,
+    });
+    await question.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    expect(question.dispatched).toEqual([{ type: 'config.record', taskId: 'task-1', problems: [] }]);
+    const defaults = setup(withTask({ stage: 'triage', repoId: null, pipeline: ['plan', 'operate'] }));
+    await defaults.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    expect(defaults.dispatched).toHaveLength(1);
+    const moved = setup(withTask({ stage: 'answering', repoId: null }), { findRepository });
+    await moved.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    const controller = new AbortController();
+    controller.abort();
+    const cancelled = setup(withTask({ stage: 'triage', repoId: null, pipeline: ['plan', 'operate'] }), {
+      findRepository,
+    });
+    await cancelled.runner.apply(
+      { kind: 'config.verify', taskId: 'task-1' },
+      createContext(controller.signal)
+    );
+    expect([...moved.dispatched, ...cancelled.dispatched]).toEqual([]);
+    expect(asked).toEqual(['asked']);
   });
 
   test('a cancelled setup check stops the fetch it runs and records nothing', async () => {

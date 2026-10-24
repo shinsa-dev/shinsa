@@ -33,6 +33,7 @@ import { EffectRunner, Engine } from '../../src/runtime/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
+import { resolveRoundRepository } from '../../src/triage/message.ts';
 import { createConfigAt } from '../helpers/config.ts';
 
 export const PLAN: PlanDocument = {
@@ -516,6 +517,8 @@ export class World {
         if (!result || !shape) return result ? { ...result, waitsOn } : result;
         return { ...result, waitsOn, shape, reasons: { ...result.reasons, shape: 'The test chose it.' } };
       },
+      findRepository: (state, task, local) =>
+        resolveRoundRepository(state, task, local, this.classify ?? quick.classify),
     });
     engine.onEffect((effect, context) => effects.apply(effect, context));
     engine.onEffectExhausted((effect, error, key) => effects.reportExhausted(effect, error, key));

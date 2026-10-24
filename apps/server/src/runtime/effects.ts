@@ -6,6 +6,7 @@ import {
   isSamePullRequestWatch,
   isTaskSettled,
   listStackedPullRequests,
+  needsRepository,
   needsWorktree,
   type PullRequest,
   type Repo,
@@ -48,10 +49,12 @@ import {
   verifySetup,
 } from '../repos/index.ts';
 import type { TriageResolver } from '../triage/index.ts';
+import type { RepositoryFinder } from '../triage/message.ts';
 import type { EffectContext, Engine } from './engine.ts';
 
 export interface EffectRunnerOptions {
   triage: TriageResolver;
+  findRepository?: RepositoryFinder;
   resolveLogin?: LoginResolver;
   roots?: RootSource;
   watchIntervalMs?: number;
@@ -69,8 +72,7 @@ const FAILURE_TITLE: Partial<Record<ShinsaEffect['kind'], string>> = {
   'pull_request.merge': 'Could not merge the pull request',
 };
 
-const NO_REPOSITORIES =
-  'Shinsa found no git repositories in the folders it searches. Choose the folders that hold them in setup, or set SHINSA_ROOTS.';
+const NO_TRIAGE = 'Shinsa could not read the request, so the task has no title or kind of work yet.';
 
 const RATE_LIMITED = /rate limit|HTTP 429/i;
 
@@ -100,6 +102,7 @@ export class EffectRunner {
   readonly #runs: RunSupervisor;
   readonly #briefings: Briefings;
   readonly #triageTask: TriageResolver;
+  readonly #findRepository: RepositoryFinder;
   readonly #resolveLogin: LoginResolver;
   readonly #roots: RootSource;
   readonly #watchIntervalMs: number;
@@ -122,6 +125,7 @@ export class EffectRunner {
     this.#runs = runs;
     this.#briefings = briefings;
     this.#triageTask = options.triage;
+    this.#findRepository = options.findRepository ?? (() => Promise.resolve(null));
     this.#resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
@@ -295,22 +299,15 @@ export class EffectRunner {
   async #triage(taskId: string, context: EffectContext) {
     const task = this.#engine.state.tasks[taskId];
     if (!task || isTaskSettled(task) || task.size !== null) return;
-    const candidates = await listCandidateRepos(await this.#roots.listRoots(), task.origin);
-    const triage = await this.#triageTask(this.#engine.state, task, candidates);
-    if (!triage) throw new Error(NO_REPOSITORIES);
-    const repo = await upsertRepo(
-      this.#engine,
-      triage.repoPath,
-      this.#resolveLogin,
-      this.#resolveTriageProject(task, triage.repoPath),
-      { id: `${context.key}:repo.register` }
-    );
+    const triage = await this.#triageTask(this.#engine.state, task, await this.#listCandidates(task));
+    if (!triage) throw new Error(NO_TRIAGE);
+    const repo = await this.#registerRepo(task, triage.repoPath, context);
     await this.#engine.dispatch(
       {
         type: 'task.triage',
         taskId,
         title: triage.title,
-        repoId: repo.id,
+        repoId: repo?.id ?? null,
         size: triage.size,
         branch: triage.branch,
         waitsOn: triage.waitsOn.map((dependency) => dependency.id),
@@ -322,14 +319,51 @@ export class EffectRunner {
     );
   }
 
-  #resolveTriageProject(task: Task, path: string) {
+  async #listCandidates(task: Task) {
+    return listCandidateRepos(await this.#roots.listRoots(), task.origin);
+  }
+
+  #registerRepo(task: Task, path: string | null, context: EffectContext) {
+    if (!path) return Promise.resolve(null);
     const state = this.#engine.state;
-    return selectFolderProject(Object.values(state.projects), path)?.id ?? resolveTaskProject(state, task);
+    const projectId =
+      selectFolderProject(Object.values(state.projects), path)?.id ?? resolveTaskProject(state, task);
+    return upsertRepo(this.#engine, path, this.#resolveLogin, projectId, {
+      id: `${context.key}:repo.register`,
+    });
   }
 
   async #verifySetup(taskId: string, context: EffectContext) {
+    const unbound = this.#engine.state.tasks[taskId];
+    if (unbound && unbound.repoId === null) {
+      await this.#verifyUnbound(unbound, context);
+      return;
+    }
     const { task, repo } = this.#requireTask(taskId);
     if (task.stage !== 'triage') return;
+    await this.#recordSetup(task, repo, context, false);
+  }
+
+  async #verifyUnbound(task: Task, context: EffectContext) {
+    if (task.stage !== 'triage') return;
+    const repo = await this.#registerRepo(task, await this.#findRepoPath(task), context);
+    if (context.signal.aborted) return;
+    if (!repo) {
+      await this.#engine.dispatch(
+        { type: 'config.record', taskId: task.id, problems: [] },
+        { id: `${context.key}:config.record` }
+      );
+      return;
+    }
+    await this.#recordSetup(task, repo, context, true);
+  }
+
+  async #findRepoPath(task: Task) {
+    if (!needsRepository(resolveTaskPipeline(task))) return null;
+    return this.#findRepository(this.#engine.state, task, await this.#listCandidates(task));
+  }
+
+  async #recordSetup(task: Task, repo: Repo, context: EffectContext, bind: boolean) {
     const pipeline = resolveTaskPipeline(task);
     const problems = await verifySetup(
       repo,
@@ -338,7 +372,7 @@ export class EffectRunner {
     );
     if (context.signal.aborted) return;
     await this.#engine.dispatch(
-      { type: 'config.record', taskId, problems },
+      { type: 'config.record', taskId: task.id, problems, ...(bind ? { repoId: repo.id } : {}) },
       { id: `${context.key}:config.record` }
     );
   }

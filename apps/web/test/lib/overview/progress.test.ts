@@ -36,6 +36,21 @@ function describeSteps(steps: Step[]) {
 }
 
 describe('resolveSteps', () => {
+  it('shows no repository step for a question that has no repository, and one for work that needs it', () => {
+    const question = createTask({ id: 'hey', stage: 'answering', size: 'small', pipeline: ['answer'] });
+    expect(describeSteps(resolveSteps(resolveTaskProgress(question)))).toEqual(['Answer: current']);
+    const investigation = createTask({
+      id: 'why',
+      stage: 'triage',
+      size: 'small',
+      pipeline: ['investigate'],
+    });
+    expect(resolveSteps(resolveTaskProgress(investigation)).map((step) => step.label)).toEqual([
+      'Repository',
+      'Investigate',
+    ]);
+  });
+
   it('checks a skipped phase in the Build tooltip, as the count already counts it', () => {
     const task = withPlan({ id: 'task-1', stage: 'building' }, ['Model', 'Endpoint'], ['skipped', 'active']);
     const build = resolveSteps(resolveTaskProgress(task)).find((step) => step.key === 'build');
@@ -193,7 +208,9 @@ describe('STEP_STATUS_LABEL', () => {
 
 describe('the stage strip for each kind of task', () => {
   function stripOf(task: Partial<Task>) {
-    return describeSteps(resolveSteps(resolveTaskProgress(createTask({ id: 't', ...task }))));
+    return describeSteps(
+      resolveSteps(resolveTaskProgress(createTask({ id: 't', repoId: 'repo-1', ...task })))
+    );
   }
 
   it('shows an answer as finding the repository, then answering', () => {

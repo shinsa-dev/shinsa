@@ -37,14 +37,14 @@ function newTask(overrides: Partial<Task> = {}) {
 }
 
 describe('resolveTriage without the model', () => {
-  test('there is nothing to do without a repository', async () => {
-    expect(await resolveTriage(stateWith(), newTask(), [], silent)).toBeNull();
+  test('with no repository anywhere the task is triaged with none', async () => {
+    expect(await resolveTriage(stateWith(), newTask(), [], silent)).toMatchObject({ repoPath: null });
   });
 
-  test('a small change goes to the most recent repository on a fix branch', async () => {
+  test('a small change binds no repository without the model, and gets a fix branch', async () => {
     expect(await resolveTriage(stateWith(), newTask(), LOCAL, silent)).toEqual({
       title: 'Fix the login button',
-      repoPath: '/code/web',
+      repoPath: null,
       size: 'small',
       branch: 'fix/fix-the-login-button',
       waitsOn: [],
@@ -94,7 +94,7 @@ describe('resolveTriage without the model', () => {
       prompts.push(prompt);
       return Promise.resolve(null as T);
     };
-    expect((await resolveTriage(state, newTask(), LOCAL, recording))?.repoPath).toBe('/code/api');
+    expect((await resolveTriage(state, newTask(), LOCAL, recording))?.repoPath).toBeNull();
     expect(prompts[0]).toContain(
       'Repositories, most recently worked on first:\n- api: /code/api\n- web: /code/web\n- tool: /elsewhere/tool'
     );
@@ -156,7 +156,7 @@ describe('resolveTriage with the model', () => {
     );
     expect(triage).toMatchObject({
       title: 'Fix the login button',
-      repoPath: '/code/api',
+      repoPath: null,
       size: 'small',
       branch: 'fix/fix-the-login-button',
       waitsOn: [],
@@ -186,7 +186,7 @@ describe('resolveTriage with structured output', () => {
     expect(triage).toMatchObject({ size: 'large', repoPath: '/code/api' });
     expect(triage?.waitsOn.map((task) => task.id)).toEqual(['same']);
     const schema = calls[0]?.schema;
-    expect(schema?.properties.repo).toEqual({ type: 'string', enum: ['api', 'web'] });
+    expect(schema?.properties.repo).toEqual({ type: 'string', enum: ['api', 'web', 'none'] });
     expect(schema?.properties.size).toEqual({ type: 'string', enum: ['small', 'large'] });
     expect(schema?.properties.waits_on).toEqual({
       type: 'array',
@@ -460,9 +460,9 @@ describe('triage in a project', () => {
     });
     const { prompts, ask } = recording();
     const result = await resolveTriage(state, newTask({ projectId: 'p1' }), LOCAL, ask);
-    expect(result?.repoPath).toBe('/basket/server');
+    expect(result?.repoPath).toBeNull();
     expect(prompts[0]).toContain(
-      'Project:\n- name: Basket\n- key: BAS\n- description: Shopping app\n\nRepositories, most recently worked on first:\n- server: /basket/server\n\n'
+      'Project:\n- name: Basket\n- key: BAS\n- description: Shopping app\nRepositories on the machine outside this project, never offered: web, api, elsewhere. A request that names one of them gets "none".\n\nRepositories, most recently worked on first:\n- server: /basket/server\n\n'
     );
   });
 
@@ -472,7 +472,7 @@ describe('triage in a project', () => {
     });
     const { prompts, ask } = recording();
     const result = await resolveTriage(state, newTask({ projectId: 'p1' }), LOCAL, ask);
-    expect(result?.repoPath).toBe('/code/web');
+    expect(result?.repoPath).toBeNull();
     expect(prompts[0]).toContain(
       'Project:\n- name: Basket\n- key: BAS\nThe project has no repository yet, so every repository on the machine is offered.\n'
     );
@@ -529,5 +529,87 @@ describe('triage in a project', () => {
     const { prompts, ask } = recording();
     await resolveTriage(stateWith(), newTask({ projectId: 'gone' }), LOCAL, ask);
     expect(prompts[0]).not.toContain('Project:');
+  });
+});
+
+describe('triage may choose no repository', () => {
+  const KANNA: LocalRepo[] = [
+    { path: '/code/shinsa', name: 'shinsa', touchedAt: 2 },
+    { path: '/code/kanna', name: 'kanna', touchedAt: 1 },
+  ];
+
+  function recordAnswer(repo: string) {
+    const calls: { system: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(system: string, _prompt: string, schema?: JsonSchema) => {
+      calls.push({ system, schema });
+      return Promise.resolve({ title: 'Hey', repo, size: 'small', branch: 'chore/hey' } as T);
+    };
+    return { calls, ask };
+  }
+
+  test('a greeting binds no repository, even when the project has only one', async () => {
+    const { calls, ask } = recordAnswer('none');
+    const triage = await resolveTriage(stateWith(), newTask({ request: 'Hey' }), KANNA.slice(0, 1), ask);
+    expect(triage.repoPath).toBeNull();
+    expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'none'] });
+    expect(calls[0]?.system).toContain('Answer "none" when the request needs no repository: a greeting');
+    expect(calls[0]?.system).toContain('Never pick a repository only because it is the only one listed');
+  });
+
+  test('a request that names a repository binds it', async () => {
+    const triage = await resolveTriage(
+      stateWith(),
+      newTask({ request: 'Fix the button in kanna' }),
+      KANNA,
+      recordAnswer('kanna').ask
+    );
+    expect(triage.repoPath).toBe('/code/kanna');
+  });
+
+  test('a repository outside the task’s project is named as never offered, so naming it binds none', async () => {
+    const state = stateWith((draft) => {
+      draft.projects.p1 = {
+        id: 'p1',
+        name: 'Shinsa',
+        color: 'blue',
+        key: 'SW',
+        description: '',
+        folders: [],
+      } as ShinsaState['projects'][string];
+      draft.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'p1' });
+    });
+    const prompts: string[] = [];
+    const systems: string[] = [];
+    const ask: QuickJson = <T>(system: string, prompt: string) => {
+      systems.push(system);
+      prompts.push(prompt);
+      return Promise.resolve({
+        title: 'Fix the button',
+        repo: 'none',
+        size: 'small',
+        branch: 'fix/button',
+      } as T);
+    };
+    const triage = await resolveTriage(
+      state,
+      newTask({ projectId: 'p1', request: 'Fix the button in kanna' }),
+      KANNA,
+      ask
+    );
+    expect(triage.repoPath).toBeNull();
+    expect(prompts[0]).toContain('Repositories on the machine outside this project, never offered: kanna.');
+    expect(systems[0]).toContain('A request that names a repository that is not listed gets "none".');
+  });
+
+  test('a pinned repository is never dropped, and the directory a task started in can be', async () => {
+    const pinned = stateWith((draft) => {
+      draft.repos.r = createRepo({ id: 'r', path: '/code/kanna', name: 'kanna' });
+    });
+    const { calls, ask } = recordAnswer('none');
+    expect((await resolveTriage(pinned, newTask({ repoId: 'r' }), KANNA, ask)).repoPath).toBe('/code/kanna');
+    expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['kanna'] });
+    const origin = newTask({ origin: '/code/kanna/src' });
+    expect((await resolveTriage(stateWith(), origin, KANNA, ask)).repoPath).toBeNull();
+    expect(calls[1]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['kanna', 'none'] });
   });
 });

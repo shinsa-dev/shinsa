@@ -14,7 +14,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { createRepo, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const DECIDED: TriageDecisions = {
   shape: { value: 'answer', why: 'It asks how something works.' },
@@ -52,6 +52,27 @@ function renderFacts(task: Task = createTask({ id: 't', handle: 'SW-7' }), other
     </TooltipProvider>
   );
 }
+
+describe('a task with no repository', () => {
+  it('shows no repository fact, where a task with one names it', () => {
+    const question = createTask({ id: 'hey', handle: 'T-1', stage: 'answering', pipeline: ['answer'] });
+    const state = createShinsaState({
+      tasks: [question, { ...question, id: 'bound', repoId: 'kanna' }],
+      repos: [createRepo({ id: 'kanna' })],
+    });
+    pushState(state);
+    const view = render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={question} />
+        <hr />
+        <TaskFacts state={state} task={state.tasks.bound as Task} />
+      </TooltipProvider>
+    );
+    const [unbound, bound] = view.container.querySelectorAll('div.flex-wrap');
+    expect(unbound?.textContent).not.toMatch(/kanna|repositor/i);
+    expect(bound?.textContent).toContain('kanna');
+  });
+});
 
 describe('the handle fact', () => {
   it('copies the handle and says “Copied” in a toast', async () => {

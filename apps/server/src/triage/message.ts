@@ -10,6 +10,7 @@ import {
   resolveShapeOf,
   resolveTaskPipeline,
   resolveTaskRounds,
+  type ShinsaState,
   type Task,
   type TaskShape,
   type UserCommand,
@@ -23,8 +24,18 @@ import {
   resolveDecisionProperty,
 } from '../agents/quick/decide.ts';
 import type { QuickJson } from '../agents/quick/index.ts';
+import type { LocalRepo } from '../repos/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
 import { parseAnswerText, SHAPE_QUESTION } from './decisions.ts';
+import {
+  describeProject,
+  describeRepoCandidates,
+  NO_REPOSITORY,
+  parseRepoAnswer,
+  REPOSITORY_RULE,
+  resolveCandidatePool,
+  resolveRepoProperty,
+} from './index.ts';
 
 export interface MessageClass {
   kind: MessageKind;
@@ -36,6 +47,8 @@ export interface MessageClass {
 export type MessageClassifier = (task: Task, text: string) => Promise<MessageClass | null>;
 
 export type ShapeClassifier = (task: Task, request: string) => Promise<TaskShape | null>;
+
+export type RepositoryFinder = (state: ShinsaState, task: Task, local: LocalRepo[]) => Promise<string | null>;
 
 export interface Classifier {
   message: MessageClassifier;
@@ -114,6 +127,14 @@ const ROUND_SHAPE_SCHEMA: JsonSchema = {
   required: ['shape'],
   additionalProperties: false,
 };
+
+const REPOSITORY_SYSTEM = [
+  'You read what the current round of a coding task asks for and decide which repository on the developer’s machine its work happens in.',
+  'The task has no repository yet, and this round’s work needs one: it changes code, investigates a problem or runs an operation.',
+  `Return {"repo": string}: the exact name of one repository listed, or "${NO_REPOSITORY}".`,
+  `Answer "${NO_REPOSITORY}" when nothing in the request, the change agreed to or the messages names a repository or clearly needs the code of one listed; the human is then asked which one.`,
+  REPOSITORY_RULE,
+].join('\n');
 
 const ROUND_STATE: Record<RoundStatus, string> = {
   waiting: 'waiting',
@@ -212,6 +233,47 @@ export async function resolveRoundShape(
   ].join('\n');
   const answer = await ask<{ shape?: unknown }>(ROUND_SHAPE_SYSTEM, prompt, ROUND_SHAPE_SCHEMA);
   return parseDecisionAnswer(ROUND_SHAPE_QUESTION, answer?.shape) as TaskShape | null;
+}
+
+function describeRoundWork(task: Task) {
+  const round = resolveCurrentRound(task);
+  const messages = task.activity.flatMap((entry) =>
+    entry.kind === 'message' && entry.detail && (entry.round ?? 1) === round.number
+      ? [`- ${entry.detail}`]
+      : []
+  );
+  const agreed = task.proposal?.status === 'accepted' ? task.proposal.request : null;
+  return [
+    'What this round asks for:',
+    round.request,
+    ...(agreed ? ['', 'The change the human agreed to:', agreed] : []),
+    ...(messages.length > 0 ? ['', 'The human added since:', ...messages] : []),
+  ];
+}
+
+export async function resolveRoundRepository(
+  state: ShinsaState,
+  task: Task,
+  local: LocalRepo[],
+  ask: QuickJson
+): Promise<string | null> {
+  const pool = resolveCandidatePool(state, task, local);
+  if (pool.candidates.length === 0) return null;
+  const prompt = [
+    ...describeTask(task),
+    '',
+    ...describeProject(pool),
+    ...describeRepoCandidates(pool.candidates),
+    '',
+    ...describeRoundWork(task),
+  ].join('\n');
+  const answer = await ask<{ repo?: unknown }>(REPOSITORY_SYSTEM, prompt, {
+    type: 'object',
+    properties: { repo: resolveRepoProperty(pool.candidates, true) },
+    required: ['repo'],
+    additionalProperties: false,
+  });
+  return parseRepoAnswer(pool.candidates, answer?.repo, true) ?? null;
 }
 
 export function createClassifier(ask: QuickJson): Classifier {

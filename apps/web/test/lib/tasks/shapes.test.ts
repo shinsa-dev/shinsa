@@ -77,8 +77,11 @@ const PLAN = {
 
 describe('describeTaskSteps', () => {
   it('names the kind and every step it takes in order, a plan’s phases as one build', () => {
+    expect(
+      describeTaskSteps(createTask({ id: 't', repoId: 'r', pipeline: ['answer'], stage: 'answering' }))
+    ).toBe('Answer only: find the repository, then answer.');
     expect(describeTaskSteps(createTask({ id: 't', pipeline: ['answer'], stage: 'answering' }))).toBe(
-      'Answer only: find the repository, then answer.'
+      'Answer only: answer.'
     );
     expect(
       describeTaskSteps(createTask({ id: 't', pipeline: ['investigate'], stage: 'awaiting_proposal' }))

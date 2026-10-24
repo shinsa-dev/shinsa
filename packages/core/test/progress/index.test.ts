@@ -118,10 +118,7 @@ describe('resolveTaskProgress', () => {
     const task = harness.task(Object.keys(harness.state.tasks).at(-1) ?? '');
     expect(statuses({ ...task, pipeline: ['plan', 'operate'] })).toEqual(['plan:pending', 'operate:pending']);
     const research = { ...task, pipeline: ['research' as const] };
-    expect(resolveTaskProgress(research).phases.map((phase) => phase.title)).toEqual([
-      'Find the repository',
-      'Research',
-    ]);
+    expect(resolveTaskProgress(research).phases.map((phase) => phase.title)).toEqual(['Research']);
     expect(
       statuses({
         ...research,

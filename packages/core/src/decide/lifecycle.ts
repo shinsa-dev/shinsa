@@ -1,10 +1,12 @@
 import {
   hasStep,
   isTaskSettled,
+  needsRepository,
   PLAN_GATE_RULE,
   type PlanGateReason,
   type ReviewEscalation,
   type Run,
+  resolveTaskPipeline,
   type Task,
 } from '../domain/index.ts';
 import type { ShinsaEffectKind } from '../effects/index.ts';
@@ -13,6 +15,7 @@ import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
+import { proceedAfterSetup } from './shapes.ts';
 
 type SettledStage = 'merged' | 'done' | 'cancelled';
 
@@ -44,12 +47,20 @@ export function isLastPhase(task: Task, index: number) {
   return index + 1 >= countPhases(task);
 }
 
+function needsSetup(task: Task) {
+  return task.repoId !== null || needsRepository(resolveTaskPipeline(task));
+}
+
 export function startWork(decider: Decider, taskId: string) {
   const pending = listPendingDependencies(decider.state, decider.task(taskId));
   if (pending.length > 0) {
     decider.cancelRuns(taskId);
     decider.clearWaits(taskId);
     decider.stage(taskId, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
+    return;
+  }
+  if (!needsSetup(decider.task(taskId))) {
+    proceedAfterSetup(decider, taskId);
     return;
   }
   decider.stage(taskId, 'triage', VERIFYING_SETUP);

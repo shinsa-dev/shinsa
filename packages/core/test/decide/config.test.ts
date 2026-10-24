@@ -182,10 +182,16 @@ describe('a task without a repository', () => {
   test('a greeting is answered in no repository, with no worktree and no setup step', () => {
     const { harness, taskId } = triagedWithout('answer');
     expect(harness.task(taskId)).toMatchObject({ repoId: null, projectId: null, handle: 'T-1' });
-    expect(harness.task(taskId).activity.at(-1)?.text).toBe('Set up as a question');
-    verifySetup(harness, taskId);
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain('Set up as a question');
     expect(harness.task(taskId).stage).toBe('answering');
+    expect(harness.effectsOf('config.verify')).toHaveLength(0);
     expect(harness.effectsOf('worktree.create')).toHaveLength(0);
+    expect(
+      harness
+        .task(taskId)
+        .activity.map((entry) => entry.text)
+        .join(' ')
+    ).not.toContain('setup');
     const prompt = harness.activeRun(taskId).prompt ?? '';
     expect(prompt).toContain('The human asked a question or wrote to you.');
     expect(prompt).toContain('This task works in no repository.');
@@ -195,7 +201,7 @@ describe('a task without a repository', () => {
 
   test('research reads no repository either, and other kinds say what they are without one', () => {
     const research = triagedWithout('research', 'Compare queue libraries');
-    verifySetup(research.harness, research.taskId);
+    expect(research.harness.task(research.taskId).stage).toBe('researching');
     expect(research.harness.activeRun(research.taskId).prompt).toContain('This task works in no repository.');
     const investigation = triagedWithout('investigate', 'Why is it slow?');
     expect(investigation.harness.task(investigation.taskId).activity.at(-1)?.text).toBe(
@@ -266,7 +272,6 @@ describe('a task without a repository', () => {
 
   test('a later round that asks for a change binds a repository when it starts', () => {
     const { harness, taskId } = triagedWithout('answer');
-    verifySetup(harness, taskId);
     harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step: 'answer', body: 'Hi.' });
     harness.send({
       type: 'task.message',

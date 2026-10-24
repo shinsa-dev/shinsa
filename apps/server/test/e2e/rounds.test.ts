@@ -323,3 +323,45 @@ describe('a task that runs in rounds', () => {
     expect(resolveCurrentRound(w.task(taskId))).toMatchObject({ number: 2, status: 'active' });
   });
 });
+
+describe('a task with no repository', () => {
+  test('a greeting is answered in a scratch folder, and a later round that asks for a change binds a repository then', async () => {
+    const w = await open();
+    const systems: string[] = [];
+    w.classify = <T>(system: string) => {
+      systems.push(system);
+      if (system.startsWith('You route a request')) {
+        return Promise.resolve({
+          title: 'Hey',
+          repo: 'none',
+          size: 'small',
+          branch: 'chore/hey',
+          shape: 'answer',
+        } as T);
+      }
+      return Promise.resolve({ repo: 'app' } as T);
+    };
+    await w.engine.dispatch({ type: 'task.create', request: 'Hey', repoId: null });
+    const taskId = Object.keys(w.state.tasks)[0] ?? '';
+    await w.untilStage(taskId, 'done');
+    expect(w.task(taskId)).toMatchObject({ repoId: null, worktreePath: null, pipeline: ['answer'] });
+    const [answerer] = w.agents.of('answerer');
+    expect(answerer?.cwd).toBe(join(w.config.dataDir, 'scratch', taskId));
+    expect(answerer?.prompt).toContain('This task works in no repository.');
+    expect(Object.keys(w.state.repos)).toEqual([w.repoId]);
+
+    await send(
+      w,
+      taskId,
+      'Fix the greeting in app',
+      createClassifier(answerAs('new_round', 'Fix the greeting in app'))
+    );
+    await w.until('the planner', () => w.agents.of('planner').length === 1);
+    const task = w.task(taskId);
+    expect(task.repoId).toBe(w.repoId);
+    expect(task.worktreePath).not.toBeNull();
+    expect(w.agents.of('planner')[0]?.cwd).toBe(task.worktreePath ?? '');
+    expect(task.activity.map((entry) => entry.text)).toContain('Chose the repository app');
+    expect(systems.filter((system) => system.startsWith('You read what the current round'))).toHaveLength(1);
+  });
+});

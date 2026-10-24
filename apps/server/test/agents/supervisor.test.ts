@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
@@ -1778,6 +1778,48 @@ describe('the process tools and what a run cost', () => {
       step: 'answer',
       body: 'In `a.ts`.',
     });
+  });
+
+  test('an answerer with no repository runs read-only in a scratch folder of its own, never a worktree', async () => {
+    const sessions = createSessions();
+    const { supervisor, config, dispatched } = setup(
+      (state) => {
+        state.tasks['task-1'] = createTask({ repoId: null, worktreePath: null, mode: 'ask', branch: null });
+        state.runs['run-1'] = createRun({ role: 'answerer' });
+      },
+      { startSession: sessions.startSession }
+    );
+    const running = supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    const fake = sessions.started[0] as FakeSession;
+    const scratch = join(config.dataDir, 'scratch', 'task-1');
+    expect(fake.input).toMatchObject({ role: 'answerer', cwd: scratch, defaultBranch: 'main' });
+    expect(existsSync(scratch)).toBe(true);
+    fake.finish();
+    await running;
+    expect(endedRuns(dispatched)).toEqual([
+      expect.objectContaining({ runId: 'run-1', outcome: 'completed' }),
+    ]);
+  });
+
+  test('a task whose repository is gone has nowhere to run', async () => {
+    const sessions = createSessions();
+    const { supervisor, dispatched } = setup(
+      (state) => {
+        state.tasks['task-1'] = createTask({ repoId: 'gone', worktreePath: null, branch: null });
+        state.runs['run-1'] = createRun({ role: 'answerer' });
+      },
+      { startSession: sessions.startSession }
+    );
+    await supervisor.execute('run-1');
+    expect(sessions.started).toHaveLength(0);
+    expect(endedRuns(dispatched)).toEqual([
+      expect.objectContaining({
+        runId: 'run-1',
+        outcome: 'failed',
+        summary: 'The task has no worktree to run in.',
+      }),
+    ]);
   });
 
   test('every task agent also gets the surface tools; a delegated run and a server without an address do not', async () => {
