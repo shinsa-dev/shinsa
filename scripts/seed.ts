@@ -25,6 +25,8 @@ import {
   SHAPE_PIPELINES,
   serializePlanMarkdown,
 } from '../packages/core/src/index.ts';
+import { createCodeSample, listCodeTasks } from './seed-code.ts';
+import { writeCodeTranscripts } from './seed-code-transcripts.ts';
 import { listDelegationTasks, writeDelegationTranscripts } from './seed-delegation.ts';
 import {
   CHOSEN_BY_YOU,
@@ -1979,12 +1981,13 @@ function listTasks(repos: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
 function seed() {
   rmSync(ROOT, { recursive: true, force: true });
   mkdirSync(WORKTREES, { recursive: true });
-  const projects = createProjects();
   const repos = createRepos();
-  const tasks = listTasks(repos, createWorktrees(repos));
+  const sample = createCodeSample(REPOS, WORKTREES);
+  const projects = [...createProjects(), sample.project];
+  const tasks = [...listTasks(repos, createWorktrees(repos)), ...listCodeTasks(sample)];
 
   const log = new EventLog(join(DATA, 'shinsa.sqlite'));
-  const timeline = buildEvents(tasks, projects, Object.values(repos));
+  const timeline = buildEvents(tasks, projects, [...Object.values(repos), sample.repo]);
   let seq = 0;
   for (const { at, event } of timeline) {
     log.commitCommand({ events: [event], effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
@@ -2005,6 +2008,7 @@ function seed() {
     writeTranscript(transcripts, runId, spreadEvents(events, times.startedAt, times.endedAt ?? NOW - MINUTE));
   }
   writeDelegationTranscripts(transcripts);
+  writeCodeTranscripts(transcripts, timeline, sample);
   writeEvidenceFiles();
   writeAccountTranscripts(transcripts);
   const session = Bun.env.SHINSA_SEED_SESSION;
