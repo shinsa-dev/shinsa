@@ -43,6 +43,11 @@ web ──WebSocket──► shinsa serve
   pull request; a new idea in the chat starts the next round on the same branch, worktree and agent sessions, shipped
   onto the open pull request or stacked on it. Merge ends a round, not the task; you (or an agent, once nothing is open)
   mark the task done (`docs/engine.md` → Rounds).
+- **One root agent per round; a separate agent only for isolated context** (the engine's first rule,
+  `docs/engine.md` → Agents). A round's Agent (`RunRole` `agent`) is one provider session that plans read-only, builds
+  every phase, takes every fix and runs the operation; its runs differ only by `purpose`. The reviewer stays fresh,
+  checks stay commands, and delegation is only for work whose context must stay apart or that runs truly in parallel.
+  Never add a role per step or per problem type.
 - **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → setup verification → planning → building → checking → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets ("kind of task" on screen, shape in code) and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
 - **The hand-over protocol** (`packages/core/src/report/`): plans, phase hand-overs, fixes, review findings and
   inquiry results have fixed fields with hard length limits. The tools publish the limits in their schemas;
@@ -77,7 +82,7 @@ web ──WebSocket──► shinsa serve
 | `bun lint` | Biome (with the Grit plugins), `bun lint:conventions` (`scripts/lint-conventions.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
 | `bun format` | Biome's formatter only (`bun format:fix` writes) |
 | `bun check-types` | TypeScript in every workspace and `scripts/` |
-| `bun run test` | Unit tests (Bun); `apps/server`, `packages/core`, `packages/ui` and `apps/web` fail below 100% line and function coverage |
+| `bun run test` | Unit tests (Bun) in every workspace plus `scripts/*.test.ts` (`bun run test:scripts`, the root `bunfig.toml`); each workspace and `scripts/` fails below 100% line and function coverage |
 | `bunx knip` / `bun deps` | Dead code / workspace dependency drift |
 | `bun run seed` | Seeded state to look at: writes `~/.shinsa-seed` (`SHINSA_SEED_DIR` overrides it) and prints the command that serves it under `SHINSA_INSPECT`; `SHINSA_SEED_SESSION` (a Claude session `.jsonl`) replaces one task's synthetic transcript |
 

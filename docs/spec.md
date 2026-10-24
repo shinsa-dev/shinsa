@@ -56,7 +56,11 @@ on a new branch, and the task is done when you mark it done, or when its agent d
 nothing left open (`docs/engine.md` → Rounds).
 
 Triage infers the repository from the request within the task's project (Projects, below); you
-never pick one, and a project is what you work on, never navigation.
+never pick one, and a project is what you work on, never navigation. A request that names a
+repository outside the project ("fix the button in kanna") works there and stays in its project.
+A request that does not make the repository clear ("make the answer a doc in the repo") binds none
+and asks you which one when its work needs code, instead of guessing the one used last
+(`docs/engine.md` → A task without a repository).
 
 ### Lifecycle
 
@@ -77,14 +81,15 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
 - **Plan approval decides the plan gate.** It is off by default (Settings → Agents → Engine, Approve
   plans): building starts as soon as the plan is written. With it on, a large task stops at the plan gate
   (triage sizes new features, changes across several areas, UI flows, the data model and anything
-  ambiguous as large), and so does any plan the planner revised. A task you ask for plan first
+  ambiguous as large), and so does any plan the agent revised. A task you ask for plan first
   (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
   that runs an operation or a plan that asks for your approval, whatever the setting says (`docs/engine.md` → A
   task's path).
 - **Self-check** is everything an agent can verify alone: types, lint, tests, the repo's rules,
   a review pass against the rules skills, and for UI work the evidence capture (§5).
 - **After review**, the PR loop is automated: review-bot comments and CI failures go back to
-  a fixer (resuming the builder's session), and Shinsa pushes each fix until the PR is clean. You are not asked again
+  the round's agent, in the session that planned and built the work, and Shinsa pushes each fix until the PR is
+  clean. You are not asked again
   until the merge gate, unless something needs your judgment.
 - **Questions** can interrupt any stage. They are gates too: one question, one answer.
 
@@ -97,7 +102,7 @@ operate, build, checks, agent review, your review, pull request, merge) under gu
 change: anything that changes code goes through your review before a pull request, and merges
 only after one; an operation's plan always waits for you; an answer, research or investigation
 goes on to a change or an operation only with your OK, which you can refuse; every change runs
-Shinsa's checks and an independent agent review. Everything else is the planner's to compose: a
+Shinsa's checks and an independent agent review. Everything else is the agent's to compose while it plans: a
 task can run an operation before its change or after its merge (ship a column, then backfill
 it). The six shapes below are presets:
 
@@ -110,7 +115,7 @@ it). The six shapes below are presets:
 | Find and fix | investigate, then the change | the cause, then a merged fix |
 | Operation | plan (always approved by you) → run | a one-off action in the repository, no pull request |
 
-The classifier picks a preset from the request; you never pick one. The planner then keeps it
+The classifier picks a preset from the request; you never pick one. The agent then keeps it
 or composes the task's own steps from the building blocks, before it plans: investigate, your
 OK, then an operation; research, your OK, then a change; a change, then an operation once it
 merged; or something smaller when the request needs no change at all. Every step and gate is
@@ -120,11 +125,11 @@ Shinsa's checks, an independent agent review, your review, the pull request, CI 
 an operation needs a plan you approved and states its impact, and one that runs after a merge
 asks you again on the merged commit before it runs. A question, research or an investigation
 gets none of it. Core checks every composition and every plan against the schema and the rules
-and hands a broken one back to the planner to fix (`docs/engine.md` → Steps and gates). The roadmap, the stage strip and the kind of task on the Overview show
+and hands a broken one back to the agent to fix (`docs/engine.md` → Steps and gates). The roadmap, the stage strip and the kind of task on the Overview show
 the composed steps. An answer, investigation or report can propose a
 change; it becomes one only with your OK (a gate: Make it a change, or keep it as it is). Every
 shape change is an event in the task's activity. The kind is Shinsa's: nothing changes it after
-triage but the planner and your OK (`docs/engine.md` → Task shapes).
+triage but the agent while it plans and your OK (`docs/engine.md` → Task shapes).
 
 ### Gates
 
@@ -139,7 +144,7 @@ answered, when. Gates survive restarts. The decisions, as you see them (the sche
 | Merge | Final diff summary, CI, bot verdicts, what changed since review | Merge (or write in the chat to send it back) |
 | Question | One question, the context it needs, choices to pick in one click | Answer |
 | Your OK | What an answer, investigation or report proposes to change, and why | Make it a change · Keep it as it is |
-| Operation | After a merge: the merged commit, the operation's steps and its impact, and the notes for the operator in a box you can edit | Run the operation with the notes in the box (a message in the chat replaces them and runs nothing) · Finish without it |
+| Operation | After a merge: the merged commit, the operation's steps and its impact, and the notes for the agent in a box you can edit | Run the operation with the notes in the box (a message in the chat replaces them and runs nothing) · Finish without it |
 
 A paused task (out of recovery, an agent's wait that ran out of time or check-ins, its usage or cost limit reached), an
 incomplete setup (missing repository, default branch or checks, found before any agent starts) and a provider that
@@ -159,13 +164,13 @@ not chat text.
   branch) and decides the kind of task, plus what you left on Auto: when it starts (now, or after
   the open tasks it needs) and its priority, each with a one-line why in the tooltip of that fact
   on the task's Overview. The kind is always Shinsa's; when it starts and the priority are
-  changeable in one click. The planner keeps the kind or composes the task's steps, then writes
-  its plan (`docs/engine.md` → Agents, Task shapes).
+  changeable in one click. The round's agent keeps the kind or composes the task's steps, then writes
+  its plan and builds it in the same conversation (`docs/engine.md` → Agents, Task shapes).
 - **Ordering.** A task that depends on nothing starts at once, on its own agent, however many
   others are running; one that depends on others waits, costing nothing, until they have merged.
   Priority and what a decision unblocks only decide how high it sits in Needs you (`docs/engine.md`
   → Scheduling).
-- **The pull request loop.** CI failures, review-bot comments and conflicts go to a fixer until
+- **The pull request loop.** CI failures, review-bot comments and conflicts go back to the round's agent until
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
   request watch, Merge queues).
 - **The briefing** says which decision to take now and why, the two or three after it, what agents
@@ -201,7 +206,7 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
 - **Request box.** Always one keystroke away (Home's composer, or ⌘K). Type, send, keep working. It
   does not navigate. The project defaults to the focus project; When to start and Priority default
   to Auto, and picking one overrides what Shinsa would decide. The kind of task is not asked: the
-  classifier and the planner decide it.
+  classifier and the agent decide it.
 - **Gate views.** Each decision is the first card of the task's Overview: the plan (approve it, or
   say in the chat what to change), Review (§5), Merge, Question, a proposed change.
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
@@ -286,8 +291,10 @@ Browser ──WebSocket──► shinsa serve (Bun, on your machine)
                          └─ MCP server for agents (hand-overs, questions, evidence, delegation)
 ```
 
-Planned, not built: a desktop app around `shinsa serve`, other providers (Cursor), and
-dev-server and simulator previews per worktree.
+The Mac app (`apps/desktop`) is a window around `shinsa serve` with the Dock badge, notifications and `shinsa://`
+links; while it is connected it is the one surface that notifies (`docs/plans/desktop-plan.md`, phases 0 to 2).
+Planned, not built: shipping it signed with updates, other providers (Cursor), and dev-server and simulator
+previews per worktree.
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -381,7 +388,7 @@ Built and verified end to end against a scratch repository:
   tools and the agent plugin (review, evidence, handover skills), live transcripts, steering.
 - **M2** done: plan, review, merge, question and failure gates; the ranked queue; the agent review
   loop with automatic fix rounds; review with evidence, a risk-ranked diff and line comments that go
-  back to the builder; plan first from `shinsa do --plan-first` and `shinsa import`.
+  back to the agent; plan first from `shinsa do --plan-first` and `shinsa import`.
 - **M3** built, unit-tested, not yet run against GitHub: PR opening, the 45 second PR watcher, CI and
   review-thread fix rounds, the merge gate, settlement and worktree cleanup.
 - **M4** partly: focus by project with an expiry, the briefing, dependencies (triage, the new-task
@@ -416,8 +423,8 @@ Built and verified end to end against a scratch repository:
   Settings section; the All tasks filters), then jumps to any task, switches focus, layout and
   theme, and starts a task from whatever you typed.
 - **No repositories to manage.** Shinsa finds git repositories on the machine, registers one the
-  first time it works there and files it into a project: the task's, the one whose folder holds it,
-  or one named after its GitHub owner.
+  first time it works there and files it into a project: the one whose folder holds it, the task's
+  while that project has no repository yet, or one named after its GitHub owner.
 - **`shinsa` CLI.** The server is `shinsa serve`; `shinsa do "<request>"`, `shinsa import` (bring a
   Claude Code session in as a task), `shinsa status` and `shinsa open` let people and agents hand work
   over from any project.
@@ -445,7 +452,7 @@ Built and verified end to end against a scratch repository:
 Ported from Paperclip's execution semantics (`docs/engine.md` → Process and structure):
 
 - **Plans are versioned.** Approving binds to the version you read; a revision withdraws the gate,
-  keeps the old version with a change summary, and the builder follows the approved version.
+  keeps the old version with a change summary, and the agent builds the approved version.
 - **Reviews escalate instead of failing.** When fix rounds run out or stop changing the code, the
   review comes to you with the last findings; you keep or dismiss each one.
 - **Waits are typed.** An agent waiting on something outside the repository calls `wait_for`, its
@@ -547,12 +554,12 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   draws the task's own pipeline, and each All tasks row marks its kind, with its steps in the
   tooltip. Ask mode is the answer shape.
 - **Shapes change mid-task.** An answer, investigation or report can propose a change and waits
-  for your OK at a gate; the planner can make a task smaller. Each change is recorded and shown in
+  for your OK at a gate; the agent can make a task smaller while it plans. Each change is recorded and shown in
   the activity.
 - **The kind, the start and the priority are automatic.** The composer's three controls default to
   Auto; triage decides them from the request and the open tasks and says why, and each part
   changes in one click from the task's Overview and from ⌘K.
-- **The planner composes the steps.** The six kinds are presets: before it plans, the planner
+- **The agent composes the steps.** The six kinds are presets: before it plans, the round's agent
   keeps one or composes the task from the building blocks (investigate, your OK, then an
   operation; research, your OK, then a change; build, ship and merge a change, then run an
   operation on it), and core's rules checker refuses a composition that skips your review, merges
@@ -621,7 +628,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   never marked done while an earlier round's pull request is still open, and when that pull
   request merges on GitHub outside Shinsa, the round in flight opens its own pull request from
   the default branch.
-- **Notes for an operation.** A message at the operation gate replaces the notes for the operator on the
+- **Notes for an operation.** A message at the operation gate replaces the notes for the operation on the
   same gate: nothing runs and nothing notifies you again until you choose.
 - **On screen.** The chat runs on as one conversation, a quiet divider with the round's title and status where
   each round starts; the Overview and the rows show the current round ("SW-14 · round 3"), and the Overview's
@@ -635,13 +642,13 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **One schema for every step and gate.** Each step declares who does it, what it reads, what it
   must hand over, when it is done, whether it is a hard gate (you), a soft gate (an automatic
   check) or no gate, and what it must follow or precede; each gate declares who decides, what they
-  see, which decisions it takes and what each does. The planner composes from it and sets plan
+  see, which decisions it takes and what each does. The agent composes from it while it plans and sets plan
   parameters (the verification plan, evidence, extra checks, the impact, asking for approval); it
   cannot invent a step or a gate.
 - **Strict verification for work, none for questions.** Any change now always runs its checks and
   an independent agent review, needs a verification plan in its plan and the evidence the plan
   asks for before your review. An operation states its impact. A broken composition or plan goes
-  back to the planner with every problem named.
+  back to the agent with every problem named.
 - **An operation after a merge asks again.** When the change merges, the task stops at "The change
   merged. Run the operation now?" with the merged commit and the operation's plan: run it with the notes in its
   box, or finish without it.
@@ -655,6 +662,35 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   its text (75% in a menu row), with no exceptions in the app.
 - **The facts row shows the status with its own icon, and no kind.** Each status has one icon in
   its tone; the kind of task is no longer a fact, since the task itself shows it.
+
+### Where agents work (2026-10-24)
+
+- **A repository chooses where its agents work**: Worktrees (the default: a worktree and a fresh branch per task),
+  GitButler (a branch per task in your GitButler workspace, all applied together in your checkout so you can
+  test them at once, each still its own pull request) or Main checkout (agents work in your checkout on a branch
+  Shinsa makes, one task at a time; the next waits). Settings → Projects on each repository, or ⌘K. GitButler is
+  offered only once `but` is installed and the repository is a GitButler workspace, and the setup check stops a task
+  whose repository is not ready for its mode. Your own uncommitted work is never committed: in GitButler one agent
+  that changes files works at a time and only what it changed goes on its branch (`docs/engine.md` → Where agents
+  work; what is left is `docs/plans/gitbutler-plan.md`).
+
+### One root agent per round (2026-10-24)
+
+- **One agent holds a round.** A round that plans has one agent, the Agent: one conversation that plans the round
+  without changing files, then builds every phase in order, takes every fix (failed checks, the agent review's
+  blocking findings, your messages and line comments, CI and review comments on the pull request) and runs the
+  round's operation. Each phase is still committed when the agent hands it over, but the next phase is the same
+  conversation's next turn with a short instruction, so what it learned while planning and in earlier phases stays
+  with it. There is no fixer and no separate operator any more.
+- **A separate agent only where context must stay apart.** The reviewer starts fresh and read-only, so it never judges
+  the work from inside the head that wrote it; checks stay commands; the agent delegates only work whose context
+  should stay apart (a review or a test of its own work) or that is truly independent and runs in parallel, never one
+  agent per phase. Answers, investigations and research stay single agents (`docs/engine.md` → Agents, which has the
+  why).
+- **It survives restarts and lost sessions.** A restart resumes the round's conversation; one that cannot go on starts
+  fresh with a brief of the round so far: the plan, every finished phase with its summary and the step it is on.
+- **Settings follow.** One conversation needs one provider and one model, so Settings → Agents → Models has an Agent
+  row (plans, builds and fixes) instead of separate Planner, Builder and Fixer rows.
 
 ## 11. Open questions
 

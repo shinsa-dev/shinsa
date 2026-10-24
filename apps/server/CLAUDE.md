@@ -11,17 +11,21 @@ restarts) is `docs/engine.md`; this file is where things live and the rules for 
 ```
 src/
 ├── main.ts              The `shinsa` binary: argv → cli/ (the only file outside coverage; test/main.test.ts runs it)
-├── serve.ts             startShinsa: takes the data directory's lock, wires the pieces, recovers in-flight work,
-│                        returns { url, engine, stop }
-├── cli/                 index.ts routes the commands (`serve` reads the login shell's environment first); commands.ts
+├── serve.ts             startShinsa: takes the data directory's lock (not in inspect mode, which is read-only and
+│                        starts nothing), wires the pieces, recovers in-flight work, returns { url, engine, stop }
+├── cli/                 index.ts routes the commands (`serve` reads the login shell's environment first unless
+│                        started from a terminal, and exits 0 when the service finds the lock held); commands.ts
 │                        do / import / status / open; surface.ts every `shinsa <group> <action>` (help, --json, the
 │                        idempotency key, the service control for `shinsa service`); api.ts the HTTP client and
 │                        the surface client; session.ts reads a Claude Code session for `shinsa import`
 ├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
 │                        install.ts (version, commit, install path, the server entry, resolveHealth for
-│                        /api/health), lock.ts (data/serve.lock: atomic create, the live-holder check, takeover)
+│                        /api/health), lock.ts (data/serve.lock: atomic create, the live-holder check, takeover,
+│                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
+│                        command gets under SHINSA_INSPECT)
 ├── service/             `shinsa service`: the macOS LaunchAgent (launchd.ts: the plist, reading `launchctl print`)
-│                        and ServiceControl (index.ts: install, uninstall, status, restart, logs over `launchctl`)
+│                        and ServiceControl (index.ts: install, uninstall, status, restart, logs over `launchctl`;
+│                        SERVICE_MARKER, the `SHINSA_SERVICE=1` the plist sets, and isStartedByService)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
@@ -33,12 +37,15 @@ src/
 │                        reference)
 ├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
 │                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json; every SHINSA_*
-│                        variable is read here, except SHINSA_QUICK; prepareDataDir)
+│                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (service/); prepareDataDir)
 ├── log/                 One JSON line per entry; describeError and redactSecrets (URL credentials, GitHub and
 │                        Anthropic tokens never reach a log, a failure gate or the event log)
 ├── shell/               runCommand: argv only (never a shell string), its own process group, a timeout that kills
 │                        the whole group, and a failed result (not a throw) when the program is missing; login.ts
-│                        reads the login shell's environment once and merges it into the server's
+│                        reads the login shell's environment once (`-lic`, then `-lc` when that prints nothing, plus
+│                        `fish -lc` when the interactive shell handed off to fish) and
+│                        merges it into the server's, and
+│                        isStartedFromTerminal (a TTY on stdin or stdout) decides whether `serve` needs it
 ├── store/               EventLog (event-log.ts: the SQLite events, effects and receipts tables; readEvents reports a
 │                        damaged row instead of throwing) and EvidenceStore (evidence.ts: files under /api/evidence)
 ├── runtime/             Engine (engine.ts: serialised dispatch → receipt → decide → commit → apply → broadcast, the
@@ -46,8 +53,10 @@ src/
 │                        ShinsaEffect, the pull request watcher), StateClock (clock.ts: the
 │                        base of every timer that fires from state) and MonitorClock (monitors.ts)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
-│   │                    repository, or data/scratch/<task> for a task with no repository), the live state of a run (active.ts), resume or
-│   │                    hand over per turn, and the house rules only to a session without them (turns.ts), the
+│   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
+│   │                    config/paths.ts, removed by the scratch.remove effect once the task settles), the live state of a run (active.ts), resume or
+│   │                    hand over per turn, the house rules only to a session without them and the round's
+│   │                    whole brief to an agent session that may not hold the round (turns.ts), the
 │   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts), idle release
 │   │                    (idle.ts), delegated reports in and out of a turn (deliveries.ts, delegations.ts), the
 │   │                    account seam: leases and rejections (accounts.ts), idle
@@ -127,6 +136,13 @@ src/
 │                        the working copy, `git grep`), task-refs.ts (a task's head, base and commits, also once its
 │                        worktree is gone), objects.ts (ObjectCache, the 64 MB cache of what a commit addresses),
 │                        diff.ts (commit to commit, and the working copy against a base)
+├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
+│                        (types.ts: prepare, claim, commit, push, remove), worktrees.ts, main-checkout.ts and
+│                        gitbutler.ts (a branch per task through `but`, one writing agent at a time, stacked on
+│                        another task's branch when its commit needs that branch's lines), but.ts (the
+│                        `but` runner, isGitButlerWorkspace), ledger.ts (which uncommitted paths are whose, in
+│                        data/workspaces/), lock.ts (WorkspaceLock), index.ts (Workspaces.resolve, the setup check's
+│                        describeWorkspaceProblem, listWorkspaceSupport for GET /api/repos/workspaces)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create, retarget, merge
 ├── checks/              The repository's check commands, then the plan's own `checks`, each run the same way
@@ -147,7 +163,9 @@ src/
 │                        (resolving a folder you add)
 ├── triage/              Title, repository (or none), size, branch and dependencies for a new task, and the parts the human left
 │                        to Shinsa (Auto): its shape, priority and dependencies, each with a reason. A task in a
-│                        project chooses among that project's repositories, each named with its path. message.ts:
+│                        project chooses among that project's repositories, each named with its path, plus any outside
+│                        it the request names (resolveCandidatePool); repositories are listed by name, never by recent
+│                        use; resolveRepoProject files a repository triage registers. message.ts:
 │                        the message classifier (nothing to do, feedback or a follow-up, a new round with its kind of
 │                        work, or another task, as a typed decision read against each round's outcome) and
 │                        routeUserCommand, which the socket and POST /api/commands send every command through: your
@@ -215,15 +233,29 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   plugin in `plugin/`, the MCP servers, skills and plugins Settings → Integrations has on (`extensions/`; a provider
   never reads MCP config on its own, Claude runs with `strictMcpConfig`), and the PreToolUse guard in
   `agents/providers/claude/guard.ts`. The rules themselves are in
-  `agents/policy.ts`, so every provider enforces the same ones; read-only roles come from core's `isReadOnlyRole`.
+  `agents/policy.ts`, so every provider enforces the same ones; a run is read-only by core's `isReadOnlyRun` (a
+  read-only role, or the round agent while it plans), which reaches the provider as `AgentSessionInput.readOnly`.
+- **One session, two kinds of access.** The round agent plans, builds every phase, fixes and runs the operation as
+  separate runs on one resumed session, so its access changes between turns without changing its prompt-cache
+  prefix: Claude keeps the same tools for every turn of an `agent` session and, while it plans, denies `Edit`,
+  `Write`, `NotebookEdit` and `MultiEdit` through a PreToolUse hook (`listPlanningHooks` in `guard.ts`, one matcher
+  per tool), never through `permissionMode: 'plan'` or `disallowedTools`, which only a role that is always read-only
+  gets; Codex resumes the same thread in the `read-only` sandbox (`approvalPolicy: never`) to plan and with
+  `danger-full-access` and `untrusted` to build.
 - **Where a run works follows its role** (`#resolveCwd` in `agents/supervisor.ts`): the answerer in the repository
   itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
-  task's worktree. Edits a read-only agent leaves are set aside, never in the repository itself: that is the
-  human's own checkout. Setup verification asks for a default branch only when the pipeline needs a worktree and for
-  check commands only when it builds (`runtime/effects.ts`); a worktree reused before any phase report is reset, which
-  is how an investigation's scratch edits are dropped before its fix is planned.
+  task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the
+  repository itself: that is the human's own checkout. Setup verification asks for a default branch only when the
+  pipeline needs a worktree and for check commands only when it builds (`runtime/effects.ts`); a worktree reused
+  before any phase report is reset, which is how an investigation's scratch edits are dropped before its fix is
+  planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
   runs of its task that registered before it (60 s, then they are cancelled). Checks and pushes wait for all of them.
+- **Workspaces go through their strategy.** Making, committing in, pushing and removing a task's checkout goes through
+  `Workspaces.resolve(task)` (`workspaces/`), never through `git/` directly, and every place shares the one
+  `Workspaces` the supervisor owns (`runs.workspaces`), since the GitButler claim and ledger live in it. A run that
+  can write claims its task's checkout before its session starts (`#claimWorkspace`); only GitButler makes it wait.
+  Nothing Shinsa runs in a GitButler workspace may `git commit` or switch its branch: that takes it out of GitButler.
 - **The two-hour clock stops while a question is open**, counted per question, so parallel `ask` calls cannot
   double-count the pause or leave a stray timer.
 - **Shutdown order.** `stop()` interrupts every live run first (`RunSupervisor.interruptForShutdown`), then stops
@@ -244,10 +276,10 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   diff request cannot collide with an agent's own git commands. The copy keeps the index's modification time: git
   only re-reads a file whose size and time match the index when the entry is as new as the index itself ("racy git"),
   and a copy with a fresh time would hide an edit of the same size made in the same second.
-- **A plan's rules come back to the planner as the tool error.** `propose_plan`, `reshape_task` and the last
+- **A plan's rules come back to the agent as the tool error.** `propose_plan`, `reshape_task` and the last
   `complete_phase` dispatch straight to the engine, so a `plan_invalid`, `pipeline_invalid` or `evidence_missing`
   refusal from core reaches the agent as the tool's error with every problem in it, and the run carries on. The
-  planner composes steps and sets plan parameters; there is no command, for an agent or for you, that adds a step
+  agent composes steps and sets plan parameters; there is no command, for an agent or for you, that adds a step
   or a gate, and no user command reshapes a task.
 - Agents already hand work over through MCP tools; `shinsa do` exists for an agent working outside Shinsa (in the
   user's own Claude Code session) to hand work in. A CLI that marks steps complete would bypass the run binding and
@@ -277,8 +309,12 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Tests need no network and no real agents.** `test/helpers/preload.ts` gives every test a clean git identity, the
   fake `gh`, `open` and `launchctl` on `PATH`, `SHINSA_QUICK=off`, a scratch `CLAUDE_CONFIG_DIR` and `SHELL` set to
   the fake login shell (`test/helpers/bin/login-shell`: `FAKE_LOGIN_SHELL_EXPORT` adds variables and a `PATH` entry,
-  `FAKE_LOGIN_SHELL_HANG`, `FAKE_LOGIN_SHELL_SILENT` and `FAKE_LOGIN_SHELL_LOG` hang, fail or record the call);
-  `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` (every config's `eunoe.command`,
+  `FAKE_LOGIN_SHELL_HANG`, `FAKE_LOGIN_SHELL_SILENT` and `FAKE_LOGIN_SHELL_LOG` hang, fail or record the call,
+  `FAKE_LOGIN_SHELL_EXEC_INTERACTIVE` prints nothing for `-lic`, as a `.zshrc` that execs fish does; a fake fish
+  in `test/helpers/fish`, off the `PATH`, that `FAKE_FISH_SILENT` fails and `FAKE_FISH_LOG` records);
+  `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` and a `but` that runs the real GitButler CLI
+  with its own `HOME` (`FAKE_BUT_HOME`, so tests never touch your GitButler projects; `FAKE_BUT_MISSING` makes it
+  missing; the GitButler tests need `but` installed) (every config's `eunoe.command`,
   `createConfigAt`), so no test runs the real ones, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
   `resolveExecutable`; `createFakeRuntime` in `test/helpers/query.ts`). Inject fakes through the optional last
   parameters (`startSession`, `providers`, `triage`, `resolveLogin`, `ask`, `runQuery`, `launch`, `discover`,
@@ -295,6 +331,10 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   logged. A `Bun.sleep` that decides whether a line runs makes the coverage floor fail on a busy machine.
 - **A test file that starts the whole server** (`test/e2e/`) sets `setDefaultTimeout(30_000)`: alone it takes a
   second, but `bun run test` runs every workspace at once and Bun's own 5 s limit then fails it at random.
+- **Scripted agents are keyed by what a run does**: `FakeAgents.queue` and `of` take the round agent's purpose
+  (`plan`, `build`, `fix`, `operate`, read from the live run through `agents.state`, or from the prompt and the
+  session's last step when no state is wired, as in the soak child) or any other role (`reviewer`, a delegated
+  `planner` or `builder`); the fake `codex` picks its script the same way, `plan` by the read-only sandbox.
 - `SHINSA_SETTLE_DELAY_MS` sets how long the watch waits before it reads a pull request Shinsa just pushed to or
   opened (15 s); tests set it low.
 - `bun run test` fails below 100% line and function coverage (`bunfig.toml`).

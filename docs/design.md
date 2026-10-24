@@ -36,8 +36,10 @@ Only these, and they win over anything below:
    overview's now cards on `NowFrame` (setup, sign-in, usage wait, wait, secret, paused for a failure, a cost
    limit and a wait out of checks, a question with choices, an escalated review's verdicts, a revised plan),
    the quiet-agent note, the suggested tasks and delegations panels, the chat's delegation cards and report rows,
-   notice rows and context meter, the schedule and notification rows, and the MCP, plugin and skill
-   rows in every state (29). A piece that reads live state has a
+   notice rows and context meter, the schedule and notification rows, the MCP, plugin and skill
+   rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
+   chat fence beside the editor, a diff unified with a spot, a blocking finding, a suggestion finding and a comment
+   with its suggested change inline, the same diff side by side, and Go to file on `QuickOpenDialog`, 32). A piece that reads live state has a
    presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
    `AccountChoiceList`, `ContextGauge`, `HealthCard`, `NotificationGroup`, `ScheduleRow`), and every action
    there takes a callback, so `/ui` never opens the connection or sends anything: an action only shows a
@@ -54,10 +56,17 @@ Only these, and they win over anything below:
    (`components/layout/page/page-scroll.tsx`, a `ScrollArea` with the fade): Home, Settings and the task's
    Overview. The task chat and the setup chat keep their own `ScrollArea` with the fade on, so
    their content fades under the header at the top and into the composer at the bottom; the composer draws no
-   gradient of its own.
+   gradient of its own. **A fade is right on the first painted frame.** The scroll position drives it through a
+   scroll timeline (`animation-timeline: scroll(self)`, globals.css → Scroll edge fades): each edge's fade grows
+   over the first 24px of travel toward it, decided by style alone, never by a measure, an observer or a
+   transition after the content renders. `ScrollFade` puts `scroll-fade` on its scroller in the markup and decorates
+   a `targetRef` in a layout effect (render it after its target). A browser without scroll timelines, and a
+   clipping element that is not a scroll container (`CardAction`), fall back to the `data-overflow-*` attributes
+   `ScrollArea` and `ScrollFade` set.
 7. **The task chat follows Kanna's transcript.** One centred column the composer's width; every
    item is a row box (`py-2 mb-1`, 20px from item to item) on the column's left edge. Agent text is full-width
-   `prose-chat` markdown (13px, 1.625 leading, 20/12px paragraph margins, highlighted code fences).
+   `prose-chat` markdown (13px, 1.625 leading, 20/12px paragraph margins, highlighted code fences in the Code tab's
+   `--code-*` colours, 32).
    - **One line anatomy.** Every one-line row in a run is the same chat line (`components/chat/chat-line.tsx`):
      a 20px row (`h-5`), a 20px icon slot (`IconSlot`, `components/layout/surface/icon-slot.tsx`) holding a `sm`
      (14px) icon in its text's ink, 8px from the glyph to the label (the slot's 3px plus `me-1` and `gap-px`), the
@@ -87,10 +96,14 @@ Only these, and they win over anything below:
      same 12px inset (judgement calls, a delegation's question, the live feed), and a 20px tile (`StatusTile`
      `md`, `StepNumber`) is that slot: so the header's icon and every row icon under it share one centre.
    - **The role header** introduces a run as a chat line: the role's icon and its name in plain words as the
-     label (from `RUN_ROLE` in `lib/chat/run-role.ts`: Planner `IconMap`, Builder `IconHammer`, Reviewer
-     `IconShieldCheck`, Fixer `IconBandage`, Answerer `IconBubbleText`, Investigator `IconMagnifyingGlass`,
-     Researcher `IconBook`, Operator `IconConsole`), then as its meta what it did ("Phase 1 of 2: …", "Answered
-     your question") and the account the run used, "· a@b.com" (26). Elsewhere (the now card, a message link, a
+     label (from `RUN_ROLE` in `lib/chat/run-role.ts`: Agent `IconAgent`, Reviewer `IconShieldCheck`, Answerer
+     `IconBubbleText`, Investigator `IconMagnifyingGlass`, Researcher `IconBook`, and for delegated helpers Planner
+     `IconMap` and Builder `IconHammer`), then as its meta what it did ("Phase 1 of 2: …", "Answered your
+     question") and the account the run used, "· a@b.com" (26). A round has one agent, so the chat reads as that
+     agent working through it: every run of the round is headed "Agent", once per run, and its meta says what that
+     run did from its `purpose` (`resolveRunHeadline`): "Planning the work" / "Planned 3 phases", "Phase 2 of 3: …"
+     (`phaseIndex`), a fix named by the first words of its instruction after the house rules ("Fixing the failing
+     checks", "Making your changes"…), "Running the operation" / "Reported the outcome". Elsewhere (the now card, a message link, a
      delegation) the role shows as `RoleMark`. No hairline and no model or time: runs are set apart by space
      alone. When your message started the run, your bubble sits above its header, so you speak, then the agent
      answers. A delegated agent never gets a header of its own: it is a card inside the turn of the agent that
@@ -133,8 +146,8 @@ Only these, and they win over anything below:
    - **Your answer** under an answered question is the answer alone ("Your answer  Shinsa’s projects"): the
      words the agent reads around it ("The human answered: ") come off with core's `readAnsweredReply`, the
      reader of `resolveAnsweredReply`, which writes them. Commands, reads, writes and
-     edits render highlighted (language from the file extension), edits as a diff, long output
-     capped with "Show N more lines"; images from tool results and evidence show as thumbnails
+     edits render highlighted (language from the file extension), an edit and a write as a diff (`CodeDiff`, 33),
+     long output capped with "Show N more lines"; images from tool results and evidence show as thumbnails
      that open in the image viewer.
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
      the chat and in evidence: attachments, tool results, evidence. A `black/85` backdrop, the image
@@ -147,7 +160,9 @@ Only these, and they win over anything below:
      caption (attachment name, evidence title or file name), "2 of 5" and the zoom level.
    - The user's own message is just its bubble (`rounded-3xl`, `border border-border`, `bg-muted`, `px-3.5 py-1.5`);
      attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
-     `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`.
+     `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`, with a 2px `primary-a1` outline
+     outside its box so the wash wraps the full-width content instead of sitting flush with it; a delegation card
+     opened from a link takes the same wash (`SELECTED_WASH` in `chat-line.tsx`). It fades with the wash.
    - **A task in rounds stays one chat**: a quiet divider with a hairline marks where each round starts
      (`RoundDivider`, 30); nothing folds, so a run of any round is always on the page.
 8. **One queue, two sizes.** `components/queue/queue.tsx` is the only list of tasks by what they
@@ -246,8 +261,9 @@ Only these, and they win over anything below:
 9. **Acting never moves you.** There is no previous/next stepper on the task page; the queue
    button and ⌘K are how you move between tasks. Approving,
    merging, answering, replying or cancelling stays on the task and confirms with a toast. A chat message you
-   send shows as your bubble at once, with "Delivering" in `text-2xs` `fg-2` under it while Shinsa decides what it
-   is (`UserMessage`'s `pending`); the line goes when it is delivered.
+   send shows as your bubble at once, with "Delivering" in `text-2xs` under it while Shinsa decides what it
+   is (`UserMessage`'s `pending`), shimmering for as long as it shows, the same `ShimmeringText` and `SHIMMER_LINE`
+   as the live card's "Starting"; the line goes when it is delivered.
 10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
     constant, `LAYOUT_NAMES` (`lib/preferences/layout.ts`: label, a one-line hint and the icon, read by Settings
     → Appearance, where each layout's choice shows its hint as a tooltip, and by ⌘K's Switch layout): **Desk** for
@@ -283,7 +299,8 @@ Only these, and they win over anything below:
       (`components/overview/now-card.tsx`), and a gate's actions sit at its top right, each named
       for what it decides: a review gate has Review (outline, opens Code) then **Approve
       changes** (primary; its tooltip says it opens the pull request, and it is disabled while
-      line comments are drafted); a merge gate has Review then **Merge #N**; a plan gate has
+      line comments are drafted; **Fix N findings** in its place sends the drafted comments with the
+      findings you kept and clears them); a merge gate has Review then **Merge #N**; a plan gate has
       **Approve plan** over the plan itself (a change with an operation lists it under its phases, headed
       "First, the operation" or "After the merge, the operation"); an operation after the merge has **Run the
       operation**; a paused task has Retry; a question has its answer
@@ -318,7 +335,10 @@ Only these, and they win over anything below:
       a pulse while one runs), and under it, indented with `IconArrowCornerDownRight`, every agent it delegated to
       (its role, the delegation's title, Working now, Finished, Failed or Stopped), nested as deep as they go. A row
       opens the chat at that run. The same role names lead each run in the chat and the work card's eyebrow
-      ("Builder · started 2m ago"), so you always know who is speaking.
+      ("Agent · started 2m ago"), so you always know who is speaking. The tree's top level is the round's agent
+      (every planning, phase, fix and operation run counted under it, with what it delegated nested below), the
+      reviewers, and the answerer, investigator or researcher of an inquiry; Planner and Builder appear only as
+      delegated helpers.
     - **Cards.** The column is centred on the window, the same centre as Home, with nothing in
       the gutters. The queue is the "3 need you" `sm` secondary button at the top left of the top
       bar (see 10), one step brighter than a secondary button's rest: `fg-3` (secondary), not `fg-2` (muted), opening the compact queue (current task highlighted, every section: Needs you,
@@ -342,7 +362,7 @@ Only these, and they win over anything below:
       `IconCheckCircle2`…; an `awaiting_*` stage the icon of its gate). The icon is the status's tone
       (`TONE_TEXT`) at 70%; the label stays `fg-2`, and a working agent adds the pulse after it.
     - **No kind of task in the facts.** The task itself shows what kind it is (its steps, its Overview, the
-      composer's hint), so the facts row does not name it. The kind is still Shinsa's and the planner's to decide:
+      composer's hint), so the facts row does not name it. The kind is still Shinsa's and the agent's to decide:
       no menu, composer select or ⌘K command changes it, and the roadmap row keeps its label and steps.
     - **Each fact says why, once.** What triage decided has no line of its own: the facts row shows each value once and
       its tooltip says why (`resolveTriageWhy` in `lib/tasks/triage.ts`): "Shinsa chose this: …" while it is Shinsa's
@@ -421,14 +441,15 @@ Only these, and they win over anything below:
       Merge the pull request, Answer the question, Retry / Retry with guidance, or Allow another $N for a cost
       limit; Sign in / Retry anyway for a Sign in gate; Give the ‹label› / Don’t give the secret for a secret;
       Resume now and the auto-resume toggle for a usage wait), then View (Overview, Code, Chat), then Code while the Code tab is open (Review, Changes, Files, Go to file…,
-      Search in files, Find in this file, Go to line and the diff layout, each with its key; 32), then
+      Search in files, Hide viewed files or Show viewed files while the task has changes, Find in this file, Go to
+      line and the diff layout, each with its key; 32), then
       This task (Wait for another task…, a choice that ticks every task it waits on and toggles
       the one you pick, and Stop waiting, Set priority with the priority icons,
       Message the agent, Open the pull request
       on GitHub, Copy branch name, Open in editor, Open a terminal, Show in Finder, Restart the
       current step, Mark as done, Cancel task behind a confirm page), then Next and Previous
-      task that needs you (`resolveQueueStep`). Request changes carries the review's draft line
-      comments and Approve the changes is disabled while there are any, as on the page.
+      task that needs you (`resolveQueueStep`). Request changes and Fix N findings carry the review's
+      draft line comments and Approve the changes is disabled while there are any, as on the page.
     - **On Home** it is about getting to tasks: Needs you lists the tasks waiting on a decision
       (the briefing's Now task first, then queue order, up to eight), each row opening its task;
       their decisions stay out of the root and match only while typing. **Settings** offers Jump to (each section,
@@ -535,7 +556,10 @@ Only these, and they win over anything below:
       project are named SW-1, SW-2…"), then a secondary `xs` Add and the `•••` (Rename…, Change key…, Edit or Add
       description…, Colour, Remove project). The shelf is one list of what the project holds: each repository
       (GitHub or local icon) and each folder (`IconFolders`, the folder's name), all as `PathRow`s (a 14px icon 8px
-      from the name, the path after it in `text-2xs fg-2`, a remove ×), and "No repositories or folders yet." when
+      from the name, the path after it in `text-2xs fg-2`, a ghost `sm` select of where agents work (Worktrees,
+      GitButler, Main checkout, each with its one-line hint; GitButler is disabled with the reason until `but` is
+      installed and the repository is a GitButler workspace, `components/settings/workspace-select.tsx`), a remove ×;
+      repositories without a project have the select alone), and "No repositories or folders yet." when
       empty. Add is a menu of the repositories found on disk ("In your folders", "In other projects") and Folder
       by its path…, which puts a path field with Add folder and Cancel (Escape) at the end of the shelf. The
       description lives only in its dialog.
@@ -663,7 +687,8 @@ Only these, and they win over anything below:
     pre-rendered into `components/icon/paths.ts` from the names the workspace uses: run
     `bun run --cwd packages/ui generate:icons` after using a new name (`--check` fails when the
     file is stale, and the kit's tests check it too). Marks Central lacks (the priority bars, brand
-    marks) are drawn into `components/icon/custom.ts`. Chevrons draw square-cornered and all at one size: `Icon` always
+    marks, the search toggles, the Python, Go, Docker and database marks) are drawn into `components/icon/custom.ts`;
+    `TONED_ICON_SOURCES` there names the file and folder marks the Code tab draws in a pastel file tint (32). Chevrons draw square-cornered and all at one size: `Icon` always
     draws a chevron in a 14px box, and the generator scales `IconChevron…Small` 1.4× and `…Medium` 0.9333× so every
     chevron is 6.5px long, dividing the stroke by the scale so the weight matches (Iconography → Icon sizes). `Icon`,
     `Spinner` and `Logo` are the only things that draw an svg.
@@ -740,7 +765,7 @@ Only these, and they win over anything below:
       missing) at the top right, and Cancel task as the footer's quiet link.
     - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
       plan a `bg-bg-a1` `rounded-lg` block shows "You asked" with your words, then "What changed"
-      with the planner's summary and the computed changes as a quiet `·` list. Approve plan sends
+      with the agent's summary and the computed changes as a quiet `·` list. Approve plan sends
       the version on screen.
     - **Questions with choices** (`question-choices.tsx`): `outline` `sm` buttons in a wrapping
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
@@ -749,7 +774,9 @@ Only these, and they win over anything below:
     - **Review verdicts** (`finding-verdicts.tsx`): each finding is a row (severity in
       `red-text` or `fg-2`, the file as a mono chip, the message) with a Fix / Dismiss `Choice`
       at the right; blocking findings start on Fix. The primary action follows the verdicts:
-      "Fix 2 findings" while any is kept, Approve changes when all are dismissed. An escalated
+      "Fix 2 findings" while any is kept (it also sends your drafted line comments, and its tooltip
+      says so), Approve changes when all are dismissed. The activity lists the comments a decision
+      sent under it, each with its place (`activity-row.tsx`). An escalated
       review titles the card "The agents could not settle the review", or "The fix changed nothing and
       the same findings came back" when a round left the code as it was, and says why
       (`lib/overview/verdicts.ts`).
@@ -759,8 +786,10 @@ Only these, and they win over anything below:
     - **The live feed** (`live-feed.tsx`, `listFeedLines`): the run's last four messages and tool
       calls as 24px `text-2xs` rows, so the card holds its height once four have arrived and a new
       step swaps in at the bottom. The newest row carries the pulse and names its step in the
-      words the chat's live line uses ("Reading app.tsx"), the earlier ones in the past tense;
-      "Starting" before the agent has done anything.
+      words the chat's live line uses ("Reading app.tsx"), shimmering like that line (`ShimmeringText`,
+      `SHIMMER_LINE`) while the run is live; the earlier ones stay still, in the past tense with the verb in medium.
+      "Starting" before the agent has done anything shimmers too. A parked run (waiting for its delegations, or
+      on an answer from the agent that delegated it) holds still, as the chat's live card does.
     - **A quiet agent** (`silence-note.tsx`): a `bg-bg-a1` `rounded-lg` strip above the live
       feed, "No output for 23 minutes" (`fg-3`, orange from 15 minutes; the thresholds are
       `docs/engine.md` → Silent runs) with Snooze and Dismiss as quiet links. It never changes the
@@ -783,12 +812,18 @@ Only these, and they win over anything below:
       shows the result inside its card too, above the why. There is never a second card for the same result:
       `ResultPanel` (`RESULT_PANEL` in `lib/tasks/shapes.ts`: Answer, Diagnosis, Report, Outcome) shows only while
       the now card shows other work, such as a find and fix's diagnosis kept under its build
-      (`isResultInNowCard`). A kind of task without a build step (answer, investigation,
+      (`resolveResultPlace`: `now_card`, `panel` or `hidden`). A result belongs to the round that produced it and
+      shows only while it is that round's latest word. While a later round works, core has cleared it when the round
+      started (`round.started`), and it lives in that round's summary in the Rounds panel, never as a card of its
+      own. While the round's own step runs again (a follow-up that re-runs the answer, research, investigation or
+      operation, so the task is answering, researching, investigating or operating), the next hand-over replaces the
+      result, so it shows nowhere on the Overview until then; the chat still has it, right above the follow-up. Only
+      the round carrying on to its next step (the diagnosis while the fix builds) keeps it as a `ResultPanel`. A kind of task without a build step (answer, investigation,
       research, operation) has no Summary, What changed or Judgement calls panels, and its Code tab is Files alone (the
       repository at its default branch, 32); find and fix gets Review and Changes once it builds. A finished answer, investigation or report keeps the composer, for a follow-up the
       same agent answers.
-    - **No strip until the steps are settled.** While triage has not chosen the kind of task, or the planner of a
-      task Shinsa shaped can still change its steps (core `resolveShapeState`: `triage` or `planner`), the card's
+    - **No strip until the steps are settled.** While triage has not chosen the kind of task, or the agent of a
+      task Shinsa shaped can still change its steps (core `resolveShapeState`: `triage` or `agent`), the card's
       footer is one neutral line, a `Spinner` and "Working out the steps", with why in its tooltip
       (`TaskTrack` in `progress-track.tsx`), and the facts row names no kind yet (the roadmap row shows the dotted
       circle, "Kind not chosen yet"). A task that becomes a plain answer never flashes the plan-to-merge strip.
@@ -814,7 +849,7 @@ Only these, and they win over anything below:
       chip with the short sha whose click copies the whole one (its tooltip shows it), then the rest of the gate's
       body as markdown: the caution, "Operation" with the numbered steps and "Impact" (`resolveOperationBody` in
       `lib/overview/operation.ts` drops the body's own merge sentence, which the line above already says). **Run the
-      operation** (primary) at the top right; under the body one editable notes box ("Notes for the operator"), filled
+      operation** (primary) at the top right; under the body one editable notes box ("Notes for the agent"), filled
       with the notes saved on the gate (`Gate.notes`, the only place they live); and the footer's quiet **Finish
       without it**, behind a `ConfirmDialog` since it ends the task ("Finish without running the operation?"). Run
       sends `approve` when the box still holds the saved notes, else `reply` with the text, which replaces them (an
@@ -823,7 +858,7 @@ Only these, and they win over anything below:
       operation without notes.", "Finished without running the operation." (`GATE_REPLY` in `lib/tasks/gates.ts`);
       ⌘K offers Run the operation and Finish without it (a confirm page), and a notification reads the reason and the
       merge sentence, without the steps. A message in the task's composer while the gate is open replaces the notes
-      and runs nothing (its placeholder says so: "Write the notes for the operator. They replace the saved notes and
+      and runs nothing (its placeholder says so: "Write the notes for the agent. They replace the saved notes and
       go with the operation.", toast "Notes saved."), so the box shows them.
     - **What a message does** is the composer's placeholder at every gate and the toast after it, from one place
       (`resolveMessageHint` in `lib/tasks/messages.ts`, over core's `resolveMessageEffect`; `docs/engine.md` → Gates →
@@ -831,9 +866,9 @@ Only these, and they win over anything below:
       that takes no message (finished, not a follow-up) shows no composer.
     - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
       (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
-      each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the builders must attach, as a
+      each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the agent must attach, as a
       `·` list: Screenshot, Recording, Test output, Note, Preview link), **Extra checks** (each command a mono chip)
-      and, when the planner asked for your approval, the quiet line "The planner asked for your approval."
+      and, when the agent asked for your approval, the quiet line "The agent asked for your approval."
     - **Cost** is a task fact (`IconCoins`, the icon orange past a limit, the total beside it) whose `InfoPopover`
       breaks it down by step and by phase; its header reads "$1.75 · 12% of the weekly limit" once a step was
       measured against an account's weekly window, or against a limit "12% of the weekly limit, 10% allowed" (the
@@ -886,8 +921,8 @@ Only these, and they win over anything below:
     - **Settings → Agents → Models** (`components/settings/agents.tsx`, `ModelsGroup`; the card is Models so it does
       not repeat the tab's name, and the old `#agents` link lands on it) has two groups (`AGENT_GROUPS` in
       `lib/settings.ts`), 6px apart, by the rule of thumb Opus for anything that needs real reasoning and Sonnet for
-      quick one-shot jobs: **Task agents** (the planner, builder, reviewer, fixer and answerer, and through them the
-      investigator, researcher and operator; Opus by default), "They plan, build, review and fix the work, answer
+      quick one-shot jobs: **Task agents** (the agent, reviewer and answerer, and through the answerer the investigator and
+      researcher; Opus by default), "They plan, build, review and fix the work, answer
       questions, investigate problems, do research and run operations.", and **Quick jobs** (the classifier and the
       writer; Sonnet by default), "They sort new tasks and your messages, and write the guide on Home." A group's
       row has its title (`fg-4`) with a quiet "Per role" disclosure (`text-2xs` `fg-2` with the section chevron)
@@ -905,14 +940,16 @@ Only these, and they win over anything below:
       only: the agents run at standard speed whatever was stored, and Fast comes back by itself once credits are
       there. No default model is Haiku. When the roles differ the selects read "Set per role". Per role is
       secondary and starts folded, unless the roles differ; it opens the group's `SETTINGS_SHELF` straight under
-      the row, one row per role you can see working, its name over one sentence of what it does, with the same two
-      selects, `ghost` (no fill on the shelf's fill) and at the same widths. The investigator, researcher and
-      operator have no settings of their own (core's `RUN_AGENT_ROLE`): they are listed last, each with its
-      sentence and, in place of the selects, "Follows the answerer" or "Follows the builder" in `fg-2`
-      (`describeFollowedRole`). The agents stay separate underneath (`agentProviders`, `agentModels` and
+      the row, one row per role core's `AGENT_ROLES` has (Agent, "Plans, builds and fixes each round in one
+      conversation, and runs its operation."; Reviewer; Answerer; and Classifier and Writer under Quick jobs), its
+      name over one sentence of what it does, with the same two selects, `ghost` (no fill on the shelf's fill) and
+      at the same widths. There is no Planner, Builder or Fixer row: one round is one session, on one provider and
+      one model, and a delegated planner or builder runs on the agent's settings. The investigator and researcher
+      have no settings of their own (core's `RUN_AGENT_ROLE`): they are listed last, each with its sentence and, in
+      place of the selects, "Follows the answerer" in `fg-2` (`describeFollowedRole`). The agents stay separate underneath (`agentProviders`, `agentModels` and
       `agentFastModes` per role). ⌘K has the group choices ("Model for task agents", every provider's models in
-      one list, and "Speed for task agents") and, while typing, the per-role ones ("Builder model", "Builder
-      speed"). /ui shows the card folded on the defaults and opened with the roles set apart.
+      one list, and "Speed for task agents") and, while typing, the per-role ones ("Agent model", "Agent
+      speed", "Reviewer model"…). /ui shows the card folded on the defaults and opened with the roles set apart.
     - **Settings → Agents → Versions** (`components/settings/versions.tsx`, `lib/versions.ts` for the rows and
       labels, `lib/connection/versions.ts` reads `GET /api/versions` while the tab is open and runs the updates;
       `docs/engine.md` → Versions and updates) is the last group of the Agents tab. Its header has a secondary icon
@@ -965,11 +1002,11 @@ Only these, and they win over anything below:
       the sentence under it still reads as something to act on (`fg-3`, not the muted `fg-2` of a footnote). A
       link inside it turns `fg-4` on hover.
     - **The usage menu, Agent usage** (`usage-menu.tsx`, `aria-label` "Agent usage"): an `sm` secondary button with
-      `IconGauge` and the figure of what the next run uses, in the usage tone from 75%: when the builder runs on a
+      `IconGauge` and the figure of what the next run uses, in the usage tone from 75%: when the agent runs on a
       provider with a reading of its own (Codex) its 5-hour window, otherwise the Claude account picked by the same
       core picker the server leases with (`selectNextAccount` over `pickAccount`, `docs/engine.md` → Accounts and
       usage limits) and its 5-hour window (`resolveUsageGlance`, `selectGlanceRow`; the fullest window that applies
-      to the builder's model only when there is no 5-hour one). A weekly window that applies to the builder's model
+      to the agent's model only when there is no 5-hour one). A weekly window that applies to the agent's model
       and is at 100% takes the 5-hour one's place, so a spent account never reads low while it is blocked; otherwise
       the weekly windows stay in Settings → Agent usage.
       Claude's and Codex's 5-hour window are both labelled "5-hour limit", everywhere. It reads "Agent usage" without a figure. It sits
@@ -1102,6 +1139,7 @@ Only these, and they win over anything below:
     - **The tab**: the title is "[n] Shinsa" while n decisions are up (Needs you within the focus project), "Shinsa"
       otherwise, with the task on screen before the name on its page ("[2] SW-142 Fix login · Shinsa"), and `<meta name="floaty:status">` (`failed` while a task is paused, its setup incomplete or a sign-in
       needed, else `waiting` with a decision up, `working` while a task moves, `idle`) and `floaty:badge` (n) tell a floating window what to show.
+      While the desktop app is connected, a browser page drops the count and the decision states and stays quiet (31).
     - **The health banner** (`components/status/health-banner.tsx`, `lib/connection/health.ts`): `Root` mounts it
       once at the top of the page in both layouts (never on `/ui`, which shows its card, `HealthCard`, with two
       sample problems). It reads `GET /api/health` on start and after
@@ -1223,7 +1261,7 @@ Only these, and they win over anything below:
       now", "Finished 2h ago", "Stopped 1d ago"; `describeRoundTime`, `resolveRoundFact`). The handle itself stays per
       task and still copies alone. Roadmap, queue and Home rows, a task link's preview card and ⌘K read "SW-14 ·
       round 3" (`resolveHandleText`). The now card's eyebrow is one sentence-case fact per segment: "Building · Round
-      2 of 3 · Builder · Started just now".
+      2 of 3 · Agent · Started just now".
     - **The chat is one conversation; a round only marks where it starts.** Nothing folds and nothing boxes a
       round: the chat runs on from the first message to the last, and a divider (`RoundDivider`) stands where each
       round begins, on the chat line anatomy (7): the round icon in the 20px slot and one `text-xs` `fg-2` line,
@@ -1277,6 +1315,13 @@ Only these, and they win over anything below:
       notification (the page plays its own sound) whose click shows and focuses the window and opens the task.
       Show a notification defaults to When Shinsa is in the background there, Never in a browser; the browser's
       permission is never asked. The test notification goes the same way.
+    - **One surface notifies.** Every page says on connect which surface it is (`desktop` or `browser`; Floaty
+      is a browser), and the server tells every page whether the app is connected. While it is, a browser tab or
+      Floaty stays quiet (`isPageQuiet`, checked by `AttentionWatcher`): no sound and no notification. The count in
+      the title, `floaty:badge` and `floaty:status` stay as they are, since Floaty reads them to show what waits.
+      Settings → Notifications there shows one line instead of its rows: "The Shinsa app is open and handles
+      notifications, so this page stays quiet." The app keeps all of it, the Dock badge included. When the app
+      quits, the next decision rings in the browser again; the ones that came up while it was open never do.
     - **The Dock badge** is the tab's count: `writePageAttention` sends `floaty:badge`'s n to the app with the title
       and the meta tags, and the badge clears at 0 and while the server is unreachable.
     - **`shinsa://` links** open in the window, from any app or from inside the page: `shinsa://task/LOC-4` (a
@@ -1290,14 +1335,40 @@ Only these, and they win over anything below:
       Dock icon or Window → Shinsa brings it back, ⌘Q quits the app and never stops the server. Its size and place
       are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own (Settings… ⌘,
       opens `/settings`; View has Reload ⌘R, zoom, full screen); no other shortcut and no menu bar icon.
+    - **It is called Shinsa** in the menu bar, its first menu (About Shinsa, Hide Shinsa, Quit Shinsa), the About
+      panel, the Dock and notifications, packaged and in development alike. The menu bar and the Dock read the
+      bundle's `CFBundleName`, so `bun run dev` runs a copy of Electron.app renamed to `.electron/Shinsa.app`
+      (`scripts/dev.ts`, under the bundle id `studio.overclock.shinsa.dev`, with Shinsa's icon) rather than
+      Electron.app itself.
+    - **No pointer hand.** A Mac app shows the arrow over buttons, links, tabs and rows, so inside the app
+      (`html[data-desktop]`) every element and pseudo-element takes the default cursor (`src/desktop.css`, imported
+      by `app.css`, `!important` so it beats Tailwind's `cursor-pointer`, the kit's base rule, inline styles and
+      CodeMirror's). Only these keep their own: text fields, text areas, `contenteditable` and the code editor
+      (`.cm-content`) show the text cursor unless disabled; a resize handle (`cursor-col-resize`), and the whole
+      page while a pane is dragged, the resize cursor; what drags (`cursor-grab`, a dragged slider) grab and
+      grabbing. Disabled controls and `zoom-in` images get the arrow too. A browser and Floaty keep the pointer
+      (Component checklist → State). `test/desktop-css.test.tsx` renders the clickable controls under a
+      sheet that sets the pointer on everything and fails if any computes `pointer` in the app.
 
 32. **The Code tab is a small workbench** (`components/code/`, `lib/code/`, `routes/task/code.tsx`, lazily loaded with
     its editor). Every task with a repository has one (`listTaskTabs`); a task with changes opens it on Review,
     one without on Files, reading the repository at its default branch.
+    - **It opens at once** (`routes/task/load-code.tsx`, `lib/code/prefetch.ts`). A task page that has a Code tab
+      prefetches it when the browser is idle (`requestIdleCallback`, 2 s at most), and at once when the Code tab is
+      hovered or focused, or open on load: the tab's and CodeMirror's chunks, and in parallel the refs, the diff, the
+      root folder, the file the review opens first (both sides of it) and that file's language. Reads go through the
+      one cache by commit (`lib/connection/code.ts`), and a read already answered renders in the same frame, with no
+      "Reading…" frame between; the paths list for ⌘P is read when the tab opens, not when ⌘P is pressed. Neither
+      the tab nor the editor is a `React.lazy` behind Suspense: React 19 holds a revealed Suspense boundary for
+      300ms, which was most of the wait. Measured on the seed (SMP-2, production build, a click on Code): 790ms to
+      the first line of code before, 170ms on a cold click now and about 45ms once the page has been idle a moment or
+      the tab was hovered.
     - **Shape.** An explorer column on the left (280px by default, resizable from 200 to 480 by the same handle as the
       rail, the width kept in `shinsa.code-explorer-width`; below `md` it is a sheet opened from the toolbar's
       Show the files, closed by picking a file, Escape or a click outside). Below `xl` the toolbar's Unified / Side by
-      side, Suggest a change and Open in editor become icon buttons with their names as tooltips) and the editor on the right: a 36px strip of tabs, the 36px `Toolbar`, then the code. The
+      side, Suggest a change and Open in editor become icon buttons with their names as tooltips) and the editor on
+      the right: the 36px `Toolbar` (the file's icon, its path and diff counts), then the code. There are no editor
+      tabs: one file is open at a time, and you switch from the file list, the review, a search result or ⌘P. The
       column's header is the mode `Choice` (Review, Changes, Files; one mode shows as its plain label), the
       search button (`icon-sm`, pressed while Search is open) and the ref picker under them: a `SelectField`
       (`sm`, full width) with Head of the branch (or the default branch's name), Working copy (while the worktree
@@ -1306,31 +1377,69 @@ Only these, and they win over anything below:
       the diffs (base against it).
     - **Review** is the walkthrough: the report's headline, Walkthrough or By attention, the phases with their
       spots (a 2px bar in the spot's attention tone), the agent review's findings, judgement calls (each a link to
-      its file and line), the checks the agent ran and your comments (each a link to its place). Picking a spot
-      opens its file as a diff tab, or as the file when the change does not touch it, at the spot's lines; the
+      its file and line), the checks the agent ran and your comments (each a link to its place). Each spot is a
+      compact row (`py-1`, the file's icon, its path and lines, the reason in `text-2xs`), hovered `bg-bg-a2`,
+      selected `primary-a1` like a tree row. Picking a spot
+      opens its file as a diff, or as the file when the change does not touch it, at the spot's lines; the
       toolbar then carries the spot's attention, "3 of 13" and Previous spot / Next spot. Without a report the spots
       come from the riskiest changes and the summary says so.
     - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
-      each file with its status letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip),
-      a red risk dot with its reason, your comment count, the diff counts (or Binary) and a viewed box (a
-      `CheckMark` when ticked; viewed files dim, "2 files · 1 viewed" heads the tree; kept per task and commit).
+      each file with a red risk dot with its reason, your comment count, the diff counts (or Binary), its status
+      letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
+      kit's `Checkbox` at `sm` (14px, an `fg-1` edge, `rounded-checkbox`; ticked, filled `primary-4` with a white
+      check). A viewed row reads as done, greyed to the disabled step: its name, status letter, counts, comment
+      count and risk dot all `fg-1`, its icon in `icon-1` even when the language mark is coloured
+      (`file-icons-muted`); the open file keeps its selected look whether viewed or not. "2 files · 1 viewed"
+      heads the tree beside the total counts and the Hide viewed files toggle (`icon-xs`, an eye; remembered in
+      `shinsa.code-hide-viewed`; ⌘K has the same toggle), which drops viewed files from the tree but the open one and then reads "2 files ·
+      1 viewed hidden" ("Every file is viewed." when nothing is left). Viewed files are kept per task and commit.
       **Files** is the repository as a lazy tree, a folder read when you open it (`/tree`), the open file's folders
-      opened for you; changed files carry their status letter where the others have the file icon. **Search** (the
-      button or ⇧⌘F) is a field with Match case (`Aa`) and regular expression (`.*`) toggles, a Files to include
-      pattern, a one-line summary ("12 results in 4 files." and whether it stopped early) and the matches grouped by
-      file, the match marked in `amber-a2`; a result opens its file at its line. Tree, search and tab rows are 24px,
-      `text-2xs`, indented 12px a level, with a 14px leading slot (chevron, status letter or icon), the open row
-      `bg-bg-a3`.
-    - **Tabs** follow VS Code: a click opens a preview tab (its name `fg-2`) that the next click replaces, a double
-      click or an edit pins it, eight at most (the oldest goes). A tab shows the status letter of a changed file and
-      its name, the folder when two tabs share a name, and a close button (`icon-xs`, shown on hover and on the open
-      tab). ⌘P (Go to file) opens any file of the repository by name: Buzzkit's command dialog over every path at the
+      opened for you; changed files carry their status letter at the right. **Search** (the button or ⇧⌘F) is a
+      field with the three search toggles inside it, a Files to include pattern, a one-line summary ("12 results in
+      4 files." and whether it stopped early) and the matches grouped under a collapsible row per file, the match
+      marked in `amber-a2`; a result opens its file at its line.
+    - **Tree rows are compact, like VS Code** (`components/code/tree-row.tsx`, `TREE_LIST`): 22px, `text-2xs`,
+      indented 8px a level, then a 14px chevron slot (empty for a file, so a level's icons share one column), the
+      14px file or folder icon and the name, 6px after it. Hover is `bg-bg-a2`, the open file `primary-a1` with
+      `fg-4` text, so the two never read as the same. The Changes, Files and Search trees all use it; the list sits
+      4px in from the column (`px-1 py-1`). **Indent guides** are VS Code's on hover: a 1px line under each
+      ancestor's chevron, hidden until the pointer is over the explorer column (`TREE_HOVER_GROUP`, faded in over
+      150ms), then `bg-a4`; the guide of the folder holding the open file is `fg-1`, a step stronger, over that
+      folder's rows only (`findActiveGuide`, `resolveActiveGuide`, `pickGuideLevel` in `lib/code/tree.ts`).
+    - **File and folder icons** (`lib/code/file-icons.ts`: `resolveFileIcon(path)`, `resolveFolderIcon(path,
+      open)`) mark every file in the trees, the review's spots, search results, ⌘P, the editor's toolbar and every
+      `FileLink`. Well-known names win over the extension (package.json, the lockfiles, tsconfig, Dockerfile and
+      compose files, `.gitignore`, README, LICENSE, CHANGELOG, CLAUDE.md and AGENTS.md, `.env*`, tool configs, test
+      files), then the extension, then a plain page (`IconFileText`). They are `Icon`s like any other, drawn at
+      `sm`: Central's own language marks (TypeScript, JavaScript, React, Markdown, Rust, Swift, Java, PHP, C++, Vue,
+      Svelte, npm, Git) and Central glyphs for the rest (`{}` JSON, `#` CSS, `</>` HTML, a console for shell, a key
+      for `.env`, a lock for lockfiles, a test tube for tests, a gear for configs), plus our own marks for Python,
+      Go, Docker and a database (`components/icon/custom.ts`). A mark that helps you tell a language apart carries
+      a soft pastel tint (`TONED_ICON_SOURCES`: the base icon drawn in `--file-<tint>`, fifteen tints set apart
+      from the tone ramps in globals.css, mid-light in light and lifted and a little drained in dark, so a tree of
+      them reads as gentle colour and each language as its own hue): TypeScript and tsconfig blue, JavaScript and
+      `.env` gold, React and Docker azure, Python yellow, Go cyan, Rust orange, JSON and SVG amber, CSS purple,
+      HTML, Swift, Svelte and Git coral, Markdown slate, YAML pink, shell and tests green, Vue and databases teal,
+      PHP and C indigo, Java, npm and PDF red. The rest draw in the row's icon ink. A row that sets
+      `file-icons-muted` (a viewed file) draws even the tinted marks in its ink: the generator writes each mark's
+      colour as `var(--file-icon-ink, var(--file-<tint>))`. Folders open and close (`IconFolder1`,
+      `IconFolderOpen`), and the folders that say what they hold are tinted (`IconFolderSource`…): `src`/`lib`
+      blue, tests green, docs azure, `scripts`/`bin` gold, assets purple, `.git`/`.github`/`.husky` coral.
+    - ⌘P (Go to file) opens any file of the repository by name: Buzzkit's command dialog over every path at the
       ref, ranked by `rankPaths` (a name that contains what you typed first, then word starts and consecutive
-      letters), the matched letters in `primary-text`, the folder as the hint, the open tabs first with no query.
+      letters), the matched letters in `primary-text`, the folder as the hint, the open file first with no query.
+    - **Search toggles** (`components/code/search-field.tsx`, `SEARCH_OPTIONS`): Match case (`IconTitleCase`),
+      Match whole word (`IconWholeWord`) and Use a regular expression (`IconRegex`), the last two our own marks,
+      `icon-xs` buttons with 14px glyphs inside the right end of the field. Off they are the field's quiet ink, on
+      they are `primary-text` on a `primary-a2` fill, so the state reads without hovering. The file search and the
+      editor's find bar share the field.
     - **The editor is CodeMirror 6**, read-only, coloured from the `--code-*` tokens (`globals.css`: keyword purple,
       string green, number orange, comment `fg-2`, function `primary-text`, type amber, property blue, tag red,
       punctuation `fg-3`; the diff washes `--code-added`/`--code-removed` and their strong steps for changed words),
-      12px ABC Areal Mono on an 18px line, so both themes need no override. A diff tab is unified by default: removed
+      12px ABC Areal Mono on an 18px line, so both themes need no override. Every other highlighted code (chat code
+      fences, tool output and snippets) runs Shiki on one theme of its own (`lib/code/highlight.ts`,
+      TextMate scopes mapped to the same `--code-*` variables, no GitHub themes), so a fence and the editor read the
+      same colours in both themes; the two parsers can still disagree on a token's kind. A diff tab is unified by default: removed
       lines sit above where they were, highlighted from a parse of the whole old file (so a removed line inside a
       block comment reads as a comment), numbered in red in the gutter; changed words are washed, unchanged stretches
       of four lines or more fold into "N unchanged lines" (a click opens them). Unified or Side by side (the
@@ -1343,18 +1452,53 @@ Only these, and they win over anything below:
       selection); a removed line's number does the same for the removed line, and its comment sits under the removed
       block. A comment is `primary-a1` with Remove; it is kept per gate in localStorage, anchored to the commit it was
       made at, and goes with Request changes. Suggest a change makes the file editable at the head; Add the suggestion
-      keeps the edit as a comment with the changed lines (removed and added, as a small diff) and puts the file back.
+      keeps the edit as a comment with the changed lines (removed and added, as a small `CodeDiff`, 33) and puts the
+      file back.
+      A suggestion always replaces whole lines (an added line takes the line before it along), and it reaches the
+      agent with its path, lines, the original text and the replacement (`docs/protocol.md` → Line comments).
       Nothing is written to the worktree: Shinsa owns every commit.
     - **Keys.** While the Code tab is open, and only then, it binds ⌘P (Go to file), ⇧⌘F (Search in files), ⌘F
-      (find in the open file, CodeMirror's search panel) and ⌘G (go to line), Ctrl elsewhere (`hooks/use-code-keys.ts`,
+      (find in the open file) and ⌘G (go to line), Ctrl elsewhere (`hooks/use-code-keys.ts`,
       `lib/code/keys.ts`). Each is also a ⌘K command with its key at the right, so the menu stays the one complete
       place. This is the one exception to ⌘K being the only shortcut, and `bun lint:conventions` rejects a global key
       listener anywhere else.
-    - **Every position is in the URL** (`lib/code/location.ts`): the mode, the open tabs, the open file and whether it
-      is a diff, the preview tab, the line and range, the ref, the spot, the order and the search, so a reload or Back
+    - **Find in the open file** (⌘F) is our find bar in CodeMirror's top panel (`components/code/editor/find-bar.tsx`
+      on `lib/code/editor/find.ts`, which hands the panel's element to React): the shared search field, "3 of 12"
+      (or "No results", counted up to 999), Previous match / Next match and Close; Enter and ⇧Enter step, Escape
+      closes and puts you back in the code. CodeMirror's own panel, with its text buttons and checkboxes, is gone.
+    - **Every position is in the URL** (`lib/code/location.ts`): the mode, the open file and whether it
+      is a diff, the line and range, the ref, the spot, the order and the search, so a reload or Back
       puts you where you were. Files are read by commit and cached by commit (`docs/engine.md` → The Code tab's
       reads), so a merged task whose worktree is gone keeps its code, a review never shifts while an agent types, and
       nothing is read again because the task changed in some other way.
+33. **Two ways to show code: the Code tab is an editor, every other diff is `@pierre/diffs`.** The Code tab (32)
+    stays CodeMirror 6, its merge view included: it edits (suggested changes), finds, goes to a line, folds and
+    holds a 10k-line file, which a diff renderer does not. Every small diff anywhere else goes through one wrapper,
+    `CodeDiff` (`components/text/code-diff.tsx`), on `@pierre/diffs` (diffs.com): the chat's Edit and Write rows
+    (a write is a new file, every line added), the spots in a phase hand-over card and on the Overview's What
+    changed, a review finding's code (in the chat's review card and the fix gate's findings), and a suggested change
+    in a Code tab comment. Never hand-build `+`/`−` rows or a second diff renderer.
+    - **Lazy.** `CodeDiff` itself is a few lines in the entry bundle; the library loads with
+      `components/text/code-diff-view.tsx` the first time a diff is shown (its own chunk, about 81 KB gzipped, and
+      the Shiki grammars it shares with the code fences), and the language's grammar is loaded before the first
+      paint, so a diff never shows without its colours. "Loading the changes…" (`fg-2`) holds its place meanwhile.
+    - **Looks like the rest of the code.** The syntax colours are `lib/code/highlight.ts`'s theme on the `--code-*`
+      tokens; changed lines wash `--code-added` / `--code-removed`, changed words their strong steps, line numbers
+      `fg-2` (green or red on a changed line), on a transparent background in ABC Areal Mono at `text-2xs` on an
+      18px line (`lib/code/diff-theme.ts`). It follows the page's light or dark class (`useColorScheme`). No file
+      header, no border and no background of its own: the card it sits in (the chat's detail block, the change
+      snippet's frame, the comment) is the chrome.
+    - **Unified, folded at 14 lines.** Always unified. A diff over 16 rows shows 14 and "Show N more lines"
+      (`resolveDiffClamp`, the chat's own button). A snippet (an edit's old and new text, a suggestion) has no line
+      numbers and marks lines `+`/`−`, since its numbers would not be the file's; a whole file or a slice of the
+      task's diff is numbered with a 2px bar on changed lines. A binary file says "A binary file, not shown as
+      text.", a renamed one "Renamed from ‹path›." above its lines, identical text "No line changed."
+    - **A change snippet** (`components/text/change-snippet.tsx`) is a file and its lines in a frame, folded until
+      you open it: open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
+      two lines of context (`narrowHunks`), the lines themselves washed `primary-a1`; when the change does not reach
+      them, the file at the head around them as unchanged lines (`createContextHunk`). A finding's place is its
+      header, so a finding with a snippet drops its place chip. A blocking finding's snippet starts open
+      (`startsOpen`); a suggestion's and every spot's stay folded.
 
 , a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
@@ -1782,6 +1926,7 @@ The radii are tokens derived from each other with `calc()` in `globals.css`
 | `rounded-item` | 6px | a row inside a popup |
 | `rounded-popup` | 10px = item + 4 (`p-1`) | menus, selects, comboboxes, command, popovers |
 | `rounded-segment` | 5px = control − 2 (`p-0.5`) | a tab or segment inside a track, and its sliding indicator |
+| `rounded-checkbox` | 4px = sm − 1 | the `Checkbox` box, 14px (`sm`) and 16px |
 
 Cards, dialogs and sheets keep the larger `rounded-2xl` / `rounded-3xl`.
 `rounded-full` is for circles only (avatars, switches, dots, spinners).
@@ -2558,7 +2703,7 @@ size="sm" variant="secondary"`. `ListToolbarLabel` is a 14px medium title on the
 - **Anything that scrolls inside a component fades at its edges** — shadcn's
   `scroll-fade` (vertical) / `scroll-fade-x` (horizontal) from
   `src/scroll-fade.css` (vendored verbatim from shadcn 4.21): the edge you can scroll toward fades out, driven by a
-  scroll timeline. It's on menus, select and context-menu lists, popovers,
+  scroll timeline, so it is right on the first painted frame (Where Shinsa differs, 6). It's on menus, select and context-menu lists, popovers,
   `ScrollArea` (and so dialog/sheet panels, sidebar, combobox, autocomplete),
   tables, code blocks, list toolbars, the segmented control, tab strips and JSON
   / markdown blocks. Page-level scrolling doesn't fade.
@@ -4305,7 +4450,9 @@ italic; clipped single lines use `Truncate`.
   `:disabled`, `[aria-disabled=true]` and `[data-disabled]`, which get
   `not-allowed` instead (a pending button: `progress`); `Label` itself sets
   `cursor-not-allowed` around a disabled control. Never write
-  `cursor-default` on something that responds to a click.
+  `cursor-default` on something that responds to a click. In the Mac app none
+  of this applies: everything takes the arrow (Where Shinsa differs, 31, No
+  pointer hand).
 - Disabled: `opacity-50` and the `not-allowed` cursor, no separate colours. A disabled control keeps its pointer events — so the cursor shows and a tooltip can explain it — and never reacts: the app's `hover:` variant excludes `:disabled`, `[aria-disabled=true]` and `[data-disabled]`, and a base rule in `styles.css` sets the cursor. Never `pointer-events-none` or `cursor-default` for disabled.
 - Every colour change — fill, text, border, separator, icon fade, overlay —
   is `transition-colors duration-hover` (icons get the filter from the base

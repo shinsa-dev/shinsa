@@ -28,17 +28,18 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | run | One agent working one step of a task (or a delegation of it), from start to end | `Run` | a run, "the agent" |
 | attempt | One execution of a run; a resume, a retry on another account or a restart is a new attempt | `RunAttempt`, `attemptId` (`<run>:<n>`) | not shown |
 | session | The provider's own conversation a run executes in; several runs and attempts can share one | `Run.sessionId` | not shown |
-| role | What an agent run does (planner, builder…); picks its prompt, tools, model and where it works | `RunRole` (runs), `AgentRole` (settings), `RUN_AGENT_ROLE` (which settings a run role uses) | planner, builder… |
+| role | Which agent a run is (the round's agent, a reviewer, an answerer…); picks its prompt, tools, model and where it works | `RunRole` (runs), `AgentRole` (settings), `RUN_AGENT_ROLE` (which settings a run role uses) | Agent, Reviewer… |
+| purpose | What one run of the round's agent does: plan, build a phase, fix or run the operation; picks its instruction, its hand-over and whether it may edit | `RunPurpose`, `Run.purpose`, `PURPOSE_HAND_OVERS` | planning, phase 2 of 3, fixing… |
 | step | One fixed building block of a task's path (`answer` … `merge`); a task's pipeline is a list of steps | `PipelineStep` | step |
 | pipeline | The ordered steps one task takes | `Task.pipeline` | "the steps a task takes" |
-| phase | One part of an approved plan's build, built by its own builder run and committed on its own | `PlanDocument.phases[i]` (`PlanPhase`), `PhaseProgress` | phase |
+| phase | One part of an approved plan's build, built by its own run of the round's agent, on the session that planned it, and committed on its own | `PlanDocument.phases[i]` (`PlanPhase`), `PhaseProgress` | phase |
 | stage | Where a task is right now, one value of 20; each working stage belongs to a step | `TaskStage` | the status line |
 | shape | A named pipeline preset (answer, investigate, research, change, fix, operation), or the shape a pipeline reads as | `TaskShape` | kind of task |
-| plan | What the planner hands over: goal, phases, approach, files, verification plan, and for an operation its steps and impact | `Plan`, `PlanDocument` | plan |
-| operation | One-off work run in the repository (a backfill, a migration, a cleanup) by an operator from an approved plan, opening no pull request | step `operate`, role `operator` | operation |
+| plan | What the round's agent hands over while it plans: goal, phases, approach, files, verification plan, and for an operation its steps and impact | `Plan`, `PlanDocument` | plan |
+| operation | One-off work run in the repository (a backfill, a migration, a cleanup) by the round's agent from an approved plan, opening no pull request | step `operate`, purpose `operate` | operation |
 | gate | A durable decision record that holds a task until it is decided | `Gate` | the decision ("Review", "Merge"…) |
 | hard gate | A gate only you decide (plan, review, merge, question, secret, proposal, operation, failure, setup, sign-in) | `GateType`, `HardGateDefinition` | Needs you |
-| soft gate | An automatic check a step must pass (checks, agent review, CI); it passes, fails to a fixer, or escalates to the hard gate it names | `SoftGateType`, `SoftGateDefinition` | not a gate on screen |
+| soft gate | An automatic check a step must pass (checks, agent review, CI); it passes, fails back to the round's agent, or escalates to the hard gate it names | `SoftGateType`, `SoftGateDefinition` | not a gate on screen |
 | decision | Your answer to a hard gate: approve, revise, reject, reply (with words) or waive (start without checks) | `GateDecision` | Approve, Ask for changes, Reject… |
 | evidence | A file or link an agent attached to prove something (screenshot, recording, test, check, note, preview) | `Evidence`, `EvidenceKind` | Evidence |
 | check | A command Shinsa runs in the worktree (the repository's and the plan's own), recorded pass or fail | `ReportCheck`, step `checks` | Checks |
@@ -48,11 +49,11 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | review | Reading a change: the agent review (a fresh reviewer, soft gate) or your review (hard gate) | steps `agent_review`, `your_review` | Agent review, Review |
 | finding | One problem the reviewer reports, blocking or a suggestion, at a file and line | `ReviewFinding` | finding |
 | diagnosis | What an investigation hands over: what it found and why | `report_diagnosis`, `TaskResult` step `investigate` | Diagnosis |
-| judgement call | A choice a builder made in a phase, with its reason | `JudgementCall` | Judgement calls |
+| judgement call | A choice the agent made in a phase, with its reason | `JudgementCall` | Judgement calls |
 | spot | A line range the work report points you at, ranked critical, high or normal | `CodeSpot` | spot |
 | ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
-| line comment | A comment you leave on a line or range of the new or the removed side, sent with Request changes | `LineComment` (web, `lib/review/draft.ts`) | Your comments |
-| suggested change | An edit you make in the Code tab, kept in your review as a line comment with the replacement text and sent with Request changes; it is never written to the worktree | `LineComment.suggestion`, `Suggestion` | "Suggest a change", "Suggested change" |
+| line comment | A comment you leave on a line or range of the new or the removed side, sent with Request changes | `ReviewComment` (`gate.answer`'s `comments`), `LineComment` in the web's draft (`lib/review/draft.ts`, adds its id and commit) | Your comments |
+| suggested change | An edit you make in the Code tab, kept in your review as a line comment that carries the original lines and their replacement, and sent with Request changes; it is never written to the worktree | `ReviewComment.suggestion`, `SuggestedChange` | "Suggest a change", "Suggested change" |
 | proposal | An inquiry's request to turn the task into a change or an operation, decided at your OK | `ChangeProposal`, gate type `proposal` | "Your OK", "What it would change" |
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
@@ -99,7 +100,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | answer | the step, the tool and the result step `answer`; the command `gate.answer`, which takes every decision (the words-taking one is `reply`); CLI `questions answer`; the delegation tool `delegation_answer` |
 | decision | `GateDecision` (any answer to a hard gate); `isDecisionGate` (only plan, review and merge); `Task.triageDecisions` (triage's choices); "decisions" in Needs you |
 | change | the change shape; the proposal (`ChangeProposal`, `task.change_*`, `propose_change`, "Change to approve", even when it proposes an operation); "Changes to review" |
-| fix | the fix shape (investigate, then a change); a fixer run; a fix round; the review verdict `fix` |
+| fix | the fix shape (investigate, then a change); an agent run with purpose `fix`; a fix round; the review verdict `fix` |
 | review | the agent review; your review; the gate type `review`; the Code tab's review view |
 | spec | a command-surface spec (`apps/server/src/surface`, `humanOnly`) |
 
@@ -129,8 +130,9 @@ command, stored shape and route uses the current one, and a log written before a
     verification (`VERIFYING_SETUP`, "Verify again").
 11. **Waits on**: `waitsOn`, `task.wait_on`, `task.waits_on_changed`, triage's `waits_on`, `releaseWaiting`, stage
     `waiting_on_tasks`, `RoundStatus 'waiting'`, `tasks wait-on` and `tasks stop-waiting`.
-12. **One role list**: `RunRole` has no `triage` and no `shipper` (pull request fixes are fixer runs); `RUN_AGENT_ROLE`
-    is the one table.
+12. **One role list**: `RunRole` has no `triage` and no `shipper`; `RUN_AGENT_ROLE` is the one table. A round has one
+    agent (`agent`, "Agent"), whose runs differ by `purpose`; there is no `fixer` or `operator` role, and `planner`
+    and `builder` name delegated agents only (`docs/engine.md` → Agents).
 13. **Judgement calls**: `JudgementCall { call, reason, file, line }`, `judgementCalls`, `complete_phase`
     `judgement_calls`.
 14. **Reply**: `GateDecision` is `approve | revise | reject | reply | waive`; the command stays `gate.answer`.
@@ -189,7 +191,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
-| `activity` | `Activity[]` | what happened, newest last; a gate's entry names its `gateType` |
+| `activity` | `Activity[]` | what happened, newest last; a gate's entry names its `gateType`, and a decision sent with line comments keeps them (`comments`) |
 
 **Plan and build**
 
@@ -197,12 +199,15 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | --- | --- | --- |
 | `plan` | `Plan` \| null | the current plan: version, body, document, change summary, changes, feedback, `approvedAt` |
 | `planHistory?` | `PlanRevision[]` (last 10) | earlier versions |
-| `planAnswers` | string \| null | your words when you approved the plan, for the builders |
+| `planAnswers` | string \| null | your words when you approved the plan, for the agent as it builds |
 | `phases` | `PhaseProgress[]` | per plan phase: `pending`, `active`, `done`, `skipped` |
 | `phaseReports` | `PhaseReport[]` | per finished phase: summary, code spots, judgement calls (`judgementCalls`) |
 | `summary` | string \| null | the work's summary |
 | `report` | `WorkReport` \| null | the review walkthrough built from every phase: headline, sections, checks, judgement calls |
-| `worktreePath` | string \| null | the task's worktree |
+| `worktreePath` | string \| null | the task's worktree; for a GitButler or main-checkout task, the repository itself |
+| `workspace?` | `WorkspaceMode` | where the task works, taken from its repository when it set up (`worktree.requested`) and kept |
+| `returnBranch?` | string | main checkout: the branch the checkout was on when the task took it, where it goes back when the task settles |
+| `stackedOn?` | `TaskStack` (`taskId`, `branch`) | GitButler: the other task whose branch this task's branch is stacked on (`task.stack`); its pull request targets that branch while that task's pull request is open (`resolvePullRequestBase`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
 
 **Checks, review and fixes**
@@ -330,13 +335,13 @@ holds an active run; Shinsa's own stages hold an effect.
 | `researching` | research | researcher | `done`, `awaiting_proposal` |
 | `investigating` | investigate | investigator | `done`, `awaiting_proposal`, `triage` (the worktree reset, fix shape) then `planning` |
 | `awaiting_proposal` | your OK | you | `triage` (setup verified again) then `planning`; `done` (reject); the inquiry again (message) |
-| `planning` | plan | planner | `awaiting_plan`, `building`, `operating` |
+| `planning` | plan | the agent, read-only (`purpose: plan`) | `awaiting_plan`, `building`, `operating` |
 | `awaiting_plan` | plan | you | `building`, `operating`, `planning` (revise), `cancelled` |
-| `operating` | operate | operator | `done`, `building` (operation before the build) |
-| `building` | build | builder, one run per phase | `checking` |
+| `operating` | operate | the agent (`purpose: operate`) | `done`, `building` (operation before the build) |
+| `building` | build | the agent, one run per phase on one session (`purpose: build`) | `checking` |
 | `checking` | checks | Shinsa | `reviewing`, `fixing`, a failure gate |
 | `reviewing` | agent review | reviewer | `awaiting_review`, `fixing` |
-| `fixing` | build | fixer | `checking`, `shipping` (a pull request fix) |
+| `fixing` | build | the agent (`purpose: fix`) | `checking`, `shipping` (a pull request fix) |
 | `awaiting_review` | your review | you | `shipping`, `fixing`, `cancelled` |
 | `shipping` | pull request | Shinsa and the watch | `awaiting_merge`, `fixing` |
 | `awaiting_merge` | merge | you, then the merge effect | `merged`, `awaiting_operation`, `shipping`, `fixing` |
@@ -383,6 +388,7 @@ the merge gate, so an open pull request is never left without one.
 | `projectId` | string \| null | its project |
 | `checkCommands` | string[] | configured checks; empty means read from `package.json`; only you change it |
 | `checksWaived?` | boolean | "Start without checks"; only you change it |
+| `workspace?` | `WorkspaceMode` | where agents work: `worktrees` (the default), `gitbutler` or `main_checkout`; only you change it (`docs/engine.md` → Where agents work) |
 
 - **Handle**: `<key>-<n>`; `T-<n>` for a task with no project (`NO_PROJECT_KEY`). Counters per key live in the log
   (`state.taskNumbers`); a key change starts the new key's counter and never reuses a handle. Parsed by
@@ -396,8 +402,9 @@ the merge gate, so an open pull request is never left without one.
 | --- | --- | --- |
 | `id`, `taskId`, `role` | | |
 | `status?` | `queued` \| `running` \| `waiting` | `waiting`: its turn ended while its delegations work |
-| `phaseIndex?` | number \| null | the plan phase a builder builds |
-| `prompt?`, `rolePrompt?`, `resume?` | | the brief; the brief before Shinsa appended the project and any adoption note, which a recovery or a usage resume starts from; whether it resumes an earlier session |
+| `purpose?` | `plan` \| `build` \| `fix` \| `operate` | set on every run of the round's agent (`agent`) and no other: what this run does, which hand-over it may call (`PURPOSE_HAND_OVERS`) and whether it may edit (`plan` is read-only, `isReadOnlyRun`) |
+| `phaseIndex?` | number \| null | the plan phase a build run builds |
+| `prompt?`, `rolePrompt?`, `resume?` | | the brief; the brief before Shinsa appended the project and any adoption note, or before it put the round brief in front of an agent run that has no session to resume (its short instruction), which a recovery or a usage resume starts from; whether it resumes an earlier session. `resolveRunBrief(state, run)` gives the full brief of a resumed agent run for a session that cannot hold the round |
 | `provider`, `model` | string, string \| null | where it started |
 | `sessionId`, `sessionProvider?`, `sessionLost?` | | the provider session, who owns it, whether it is gone |
 | `startedAt`, `endedAt`, `outcome`, `summary` | | `completed`, `failed`, `cancelled` |
@@ -421,17 +428,18 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 
 | Run role | Settings role (`RUN_AGENT_ROLE`) | Read-only | Works in | Hands over with |
 | --- | --- | --- | --- | --- |
-| `planner` | planner | yes | worktree | `propose_plan`, or `reshape_task` |
-| `builder` | builder | no | worktree | `complete_phase` |
+| `agent` | agent | while it plans (`purpose: plan`) | worktree | by purpose: `propose_plan` or `reshape_task` (plan), `complete_phase` (build), `complete_fix` (fix), `report_outcome` (operate) |
 | `reviewer` | reviewer | yes | worktree | `report_review` |
-| `fixer` | fixer | no | worktree | `complete_fix` |
 | `answerer` | answerer | yes | the repository itself | `answer` |
 | `investigator` | answerer | no (scratch) | worktree | `report_diagnosis` |
 | `researcher` | answerer | yes | worktree when there is one, else the repository | `submit_report` |
-| `operator` | builder | no | worktree | `report_outcome` |
+| `planner` (delegated) | agent | yes | its parent's checkout, or its own | its final reply |
+| `builder` (delegated) | agent | no | its parent's checkout, or its own | its final reply |
 
-The classifier (triage) and the writer (the Home guide) are agent roles with quick calls and no tools, never runs. A
-delegated run takes `planner`, `builder`, `reviewer` or `fixer` (`DelegateRole`) and no hand-over tool.
+Every run of a round's agent resumes the task's last agent session (`Decider.agentRun`), so one session plans,
+builds, fixes and operates; `AgentRole` has no planner, builder or fixer, since one session runs on one provider and
+one model. The classifier (triage) and the writer (the Home guide) are agent roles with quick calls and no tools,
+never runs. A delegated run takes `planner`, `builder` or `reviewer` (`DelegateRole`) and no hand-over tool.
 
 ## Steps and gates
 
@@ -446,7 +454,7 @@ delegated run takes `planner`, `builder`, `reviewer` or `fixer` (`DelegateRole`)
 | `actor` | `{ by: 'agent', role }`, `{ by: 'shinsa' }` or `{ by: 'you' }` |
 | `inputs` | what it reads (the request, the inquiry's result, the approved plan, the diff, the merged code) |
 | `outputs` | what it hands over: `{ name, tool, evidence }`, `tool` null when Shinsa records it |
-| `exit` | when the step is done, one sentence; `reshape_task` shows it to the planner |
+| `exit` | when the step is done, one sentence; `reshape_task` shows it to the agent while it plans |
 | `gate` | `{ strength: hard \| soft \| none, types, when }`: the gate types it opens (`StepGateType`), and when a conditional one opens |
 | `placement` | `canonical` (the order of `PIPELINE_ORDER`) or `after_plan_or_last` (`operate`) |
 | `needs` | `{ steps, match: any \| all, where: before \| anywhere, rule }`; `validatePipeline` reports `rule` word for word |
@@ -461,10 +469,10 @@ pull_request, merge. `operate` is placed right after `plan` or last, after `merg
 | `answer` | inquiry | answerer | the answer (`answer`) | none | | no | answering |
 | `research` | inquiry | researcher | the report (`submit_report`) | none | | no | researching |
 | `investigate` | inquiry | investigator | the diagnosis (`report_diagnosis`), evidence | none | | yes | investigating |
-| `your_ok` | consent | you | your decision | hard: `proposal`, when the inquiry hands over and proposes what comes next, or the planner composed this step | an inquiry; a plan | no | awaiting_proposal |
-| `plan` | planning | planner | the plan (`propose_plan`) | hard: `plan`, by `PLAN_GATE_RULE` (below) | build or operate | yes | planning, awaiting_plan |
-| `operate` | operation | operator | the outcome (`report_outcome`), evidence | hard: `plan`, `operation` | plan | yes | operating, awaiting_operation |
-| `build` | code | builder | phase reports (`complete_phase`), evidence | none | plan; your review, pull request and merge | yes | building, fixing |
+| `your_ok` | consent | you | your decision | hard: `proposal`, when the inquiry hands over and proposes what comes next, or the agent composed this step | an inquiry; a plan | no | awaiting_proposal |
+| `plan` | planning | agent | the plan (`propose_plan`) | hard: `plan`, by `PLAN_GATE_RULE` (below) | build or operate | yes | planning, awaiting_plan |
+| `operate` | operation | agent | the outcome (`report_outcome`), evidence | hard: `plan`, `operation` | plan | yes | operating, awaiting_operation |
+| `build` | code | agent | phase reports (`complete_phase`), evidence | none | plan; your review, pull request and merge | yes | building, fixing |
 | `checks` | verification | Shinsa | check results (evidence) | soft: `checks` | build | no | checking |
 | `agent_review` | verification | reviewer | findings (`report_review`, evidence) | soft: `agent_review` | build | no | reviewing |
 | `your_review` | review | you | your decision | hard: `review` | build | no | awaiting_review |
@@ -502,8 +510,8 @@ secret.
 | Type | Title | Shows | Decisions | Refusal | Pauses |
 | --- | --- | --- | --- | --- | --- |
 | `plan` | Plan to approve | the plan, its version and changes, the operation and impact | approve (records the version, starts work) · revise · reject (cancels) | "Approve it, ask for changes or reject it." | no |
-| `review` | Review | the report, the diff by risk, evidence and checks, findings | approve (push, open the pull request) · revise (a fixer) · reject | same | no |
-| `merge` | Merge | the final diff, CI and bots, what changed since review | approve (merge) · revise (a fixer) · reject | same | no |
+| `review` | Review | the report, the diff by risk, evidence and checks, findings | approve (push, open the pull request) · revise (the agent) · reject | same | no |
+| `merge` | Merge | the final diff, CI and bots, what changed since review | approve (merge) · revise (the agent) · reject | same | no |
 | `question` | Question | the question, context, choices, recommendation | reply | "Answer the question." | no |
 | `secret` | Secret | what it is for, why | reply (a secret ref only) · reject | "Paste the secret into the secret field." | no |
 | `proposal` | Your OK | the answer, report or diagnosis, the proposal and why | approve (setup verified again, then planned) · reject (keeps the inquiry, finishes) | "Approve the proposal or keep the task as it is." | no |
@@ -518,9 +526,9 @@ Soft gates, decided by Shinsa or the reviewer:
 
 | Type | Decided by | Pass | Fail | Escalate (`escalatesTo`) |
 | --- | --- | --- | --- | --- |
-| `checks` | Shinsa | agent review | a fixer with the output, then checks again | `failure` (out of rounds or stalled) |
-| `agent_review` | reviewer | your review | a fixer on the blocking findings, then checks and a new reviewer | `review`, with the findings (3 rounds, a stall, the budget) |
-| `ci` | Shinsa | the merge gate | a fixer told exactly what is new | `failure` (the watch stopped or ran out) |
+| `checks` | Shinsa | agent review | the agent with the output, then checks again | `failure` (out of rounds or stalled) |
+| `agent_review` | reviewer | your review | the agent on the blocking findings, then checks and a new reviewer | `review`, with the findings (3 rounds, a stall, the budget) |
+| `ci` | Shinsa | the merge gate | the agent told exactly what is new | `failure` (the watch stopped or ran out) |
 
 | `Gate` field | Type | Meaning |
 | --- | --- | --- |
@@ -539,7 +547,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `account?` | `RunAccount` \| null | the Claude account a Sign in gate names, or null for a provider with its own login |
 | `secret?` | `{ label }` | what a secret gate asks for |
 | `commit?` | string \| null | the merged commit an operation gate shows |
-| `notes?` | string \| null | the operator's notes, kept only here: a message at the operation gate replaces them (`gate.noted`, null clears them), `reply` replaces them with its words, and the operator starts with them |
+| `notes?` | string \| null | the notes for the operation, kept only here: a message at the operation gate replaces them (`gate.noted`, null clears them), `reply` replaces them with its words, and the agent runs the operation with them |
 | `round?` | number | the round it belongs to (Rounds, above) |
 
 ## Verification
@@ -568,7 +576,7 @@ rules + "`checks` are for a code change". A plan may ask for `evidence` for an o
 
 ## Composing
 
-The planner composes steps and sets plan parameters; it cannot add a step kind or a gate.
+The agent composes steps and sets plan parameters while it plans; it cannot add a step kind or a gate.
 
 - **Steps**: `reshape_task` with `shape` (answer, investigate, research) or `steps` (an enum of `PIPELINE_ORDER`),
   before it plans, once per task, never for a kind you chose. A refusal is `pipeline_invalid` with every problem;
@@ -642,7 +650,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.cancel` | cancels it | `tasks cancel` | agent |
 | `task.complete` | marks it done without merging | `tasks done` | agent |
 | `task.bind_account` | binds it to an account, or any | `tasks bind` | agent |
-| `gate.answer` | decides a gate, any gate | `gates answer`, `plans *`, `reviews *`, `merges *`, `operations *`, `questions answer`, `command` | **human** |
+| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below) | `gates answer`, `plans *`, `reviews *`, `merges *`, `operations *`, `questions answer`, `command` | **human** |
 | `suggestion.accept` | adds a suggested task, optionally waiting on this one | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
 | `suggestion.keep` | keeps a split-off in this task as its next round (`shape` optional; the server asks the classifier when it is left out) | `suggestions keep` | agent |
@@ -657,7 +665,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `schedule.remove` | deletes one | `schedules delete` | agent |
 | `project.write` | creates or changes a project | `projects write` | agent |
 | `project.remove` | removes one | `projects remove` | agent |
-| `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `checksWaived` (`HUMAN_ONLY_REPO_FIELDS`) |
+| `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `checksWaived`, `workspace` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus | `focus set`, `focus clear` | agent |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes` (`HUMAN_ONLY_SETTINGS`) |
@@ -671,6 +679,26 @@ cannot step past an open gate), or when a `settings.change` or `repo.update` tou
 Not commands, human-only all the same: `gates secret` and `gates decline-secret` (`/api/secrets`), `schedules
 webhook-secret`, `accounts sign-in`, `sign-in-code`, `import` and `remove`, `mcp check|add|remove|on|off|sign-in|sign-out`,
 `skills on|off`, `plugins on|off`, `tasks open`, `versions update`.
+
+#### Line comments
+
+`gate.answer`'s optional `comments` is a list of `ReviewComment` (`domain/types.ts`), at most 100:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `path` | string | the file, relative to the repository |
+| `side` | `new` \| `old` | the head's lines, or the removed lines of the base |
+| `line`, `endLine` | number, number \| null | the first line and, for a range, the last (after `line`) |
+| `text` | string | your words; may be empty only with a suggestion |
+| `suggestion` | `{ original, replacement }` \| null | a suggested change: the exact text of lines `line`…`endLine` and what replaces them, always whole lines (an added line is anchored to the line before it), only on the `new` side |
+
+`parseUserCommand` checks the shape; `decide` refuses comments anywhere but a `revise` at a review or merge gate
+(`comments_invalid`, `comments_conflict`) and a comment whose range, words or quoted lines do not hold together. The
+agent's fix prompt (`resolveHumanFixPrompt`, `resolveVerdictFixPrompt`) lists each comment with its path and lines, and
+quotes a suggested change's original and replacement verbatim, each in a fence longer than any backtick run in it.
+A `revise` with verdicts (Fix N findings at a review with findings) carries them too. The comments are kept on the
+`gate.answered` event (`comments`, left out when there are none) and on its decision's `Activity` entry
+(`Activity.comments`), so the task's activity lists them under the decision.
 
 ### Agent commands
 
@@ -712,7 +740,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
-| `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists, or is gone |
+| `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
+| `task.stack` | the hand-over commit (`agents/tool-calls.ts`) | GitButler stacked the task's branch on another task's (`branch`): records it and makes the task wait on that task |
 | `checks.record` | `checks.run` effect | records a round of checks |
 | `pull_request.record` | open, merge and watch effects | records a pull request read |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
@@ -772,7 +801,9 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.split` | `split_task` made tasks |
 | `config.verified` | setup verification ran |
 | `budget.acknowledged` | you allowed more past a usage or cost limit |
-| `worktree.created`, `worktree.removed` | the worktree was made, removed |
+| `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
+| `worktree.created`, `worktree.removed` | the worktree, branch or checkout was made (with its `workspace`, and `returnBranch` for a main checkout), given back |
+| `task.stacked` | the task's branch was stacked on another task's (`onTaskId`, `branch`) |
 | `plan.proposed`, `plan.answered`, `plan.approved` | a plan version was proposed; you answered it; approved |
 | `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`) |
 | `work.submitted` | the work report was assembled (`sections`, `judgementCalls`) |
@@ -816,6 +847,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `config.verify` | replay_safe | `task:<id>` | `config.record` |
 | `worktree.create` | replay_safe | `task:<id>` | `worktree.ready` |
 | `worktree.remove` | replay_safe | `task:<id>` | `worktree.gone` |
+| `scratch.remove` | replay_safe | `task:<id>` | none: deletes `data/scratch/<id>` once the task's runs stop, if it is still settled |
 | `checks.run` | replay_safe | `task:<id>` | `checks.record` |
 | `pull_request.open` | replay_safe | `task:<id>` | `pull_request.record_push`, `pull_request.record` |
 | `pull_request.push` | replay_safe | `task:<id>` | `pull_request.record_push` |
@@ -839,30 +871,32 @@ non-delegated task run also gets one management tool per surface spec that is no
 `tasks_message`, `settings_set`…; `agents/manage/tools.ts`), except `tasks_create`: a task agent files a task with
 `create_task`.
 
-| Tool | planner | builder | reviewer | fixer | answerer | investigator | researcher | operator | delegated, depth 1–2 | depth 3 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `propose_plan` | ✓ | | | | | | | | | |
-| `reshape_task` | ✓ | | | | | | | | | |
-| `complete_phase` | | ✓ | | | | | | | | |
-| `complete_fix` | | | | ✓ | | | | | | |
-| `report_review` | | | ✓ | | | | | | | |
-| `answer` | | | | | ✓ | | | | | |
-| `report_diagnosis` | | | | | | ✓ | | | | |
-| `submit_report` | | | | | | | ✓ | | | |
-| `report_outcome` | | | | | | | | ✓ | | |
-| `ask` | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `attach_evidence` | | ✓ | ✓ | ✓ | | ✓ | | ✓ | ✓ | ✓ |
-| `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `wait_for` | | ✓ | | ✓ | | ✓ | | ✓ | | |
-| `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
-| `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| `create_task` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
-| `split_task` | | ✓ | | | | | | | | |
-| `set_schedule`, `list_schedules`, `delete_schedule` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | | |
-| `request_secret` | ✓ | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| Tool | agent | reviewer | answerer | investigator | researcher | delegated, depth 1–2 | depth 3 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `propose_plan` | ✓ plan | | | | | | |
+| `reshape_task` | ✓ plan | | | | | | |
+| `complete_phase` | ✓ build | | | | | | |
+| `complete_fix` | ✓ fix | | | | | | |
+| `report_review` | | ✓ | | | | | |
+| `answer` | | | ✓ | | | | |
+| `report_diagnosis` | | | | ✓ | | | |
+| `submit_report` | | | | | ✓ | | |
+| `report_outcome` | ✓ operate | | | | | | |
+| `ask` | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `attach_evidence` | ✓ | ✓ | | ✓ | | ✓ | ✓ |
+| `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `wait_for` | ✓ | | | ✓ | | | |
+| `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| `create_task` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| `split_task` | ✓ | | | | | | |
+| `set_schedule`, `list_schedules`, `delete_schedule` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
+| `request_secret` | ✓ | | ✓ | ✓ | ✓ | | |
 
-Hand-over tools (the first nine rows,
-`isHandOverTool`) end the step. The reviewer cannot ask you anything.
+Hand-over tools (the first nine rows, `isHandOverTool`) end the step. The agent has every one of its tools in every
+run, since its session's tool list must not change between turns (the prompt cache), and may call only the hand-over
+its purpose names (`PURPOSE_HAND_OVERS`, the word after ✓); another is refused with `wrong_step`. A delegated
+`planner` or `builder` has only the delegated tools. The reviewer cannot ask you anything.
 
 Three more tools come from the server, not from `listToolNames`, and only in a run the context optimizer left
 something out of (`apps/server/src/extensions/loader.ts`), any role, delegated runs too:
@@ -894,6 +928,29 @@ Shinsa assembles the work report you review (`WorkReport`: headline, sections, c
 goal, every `complete_phase` and the checks it ran (`assembleReport`); no agent hands over a whole report. The other
 tools' limits are `PROTOCOL_LIMITS` (`ask`, `wait_for`, `suggest_tasks`), `DELEGATION_LIMITS` and `SCHEDULE_LIMITS`.
 
+## The socket
+
+The web and the server talk over `/ws` in JSON messages (`packages/core/src/protocol/messages.ts`; how they flow is
+`docs/engine.md` → The socket). A **surface** (`Surface`, `SURFACES`) is what a page runs in: `desktop` (the Mac app)
+or `browser` (a tab, Floaty).
+
+| Page → server (`ClientMessage`) | What it does |
+| --- | --- |
+| `hello { surface }` | Names the page's surface; the first message on every socket |
+| `command { id, command }` | A `UserCommand`; answered by `ack` with the same id |
+| `transcript.subscribe { runId }` / `transcript.unsubscribe { runId }` | Follow a run's transcript, or stop |
+
+| Server → page (`ServerMessage`) | When |
+| --- | --- |
+| `state { state }` | On connect and after every change |
+| `ack { id, error }` | After a command; `error` is `{ code, message }` or null |
+| `transcript { runId, entries, reset }` | On subscribing (`reset: true`, every entry so far) and for each new entry |
+| `accounts { accounts }` | On connect and after every change to the accounts |
+| `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
+
+`isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
+sound, shows no notification and puts no count in its title or Floaty's tags.
+
 ## Where it lives
 
 | What | Code |
@@ -918,6 +975,7 @@ tools' limits are `PROTOCOL_LIMITS` (`ask`, `wait_for`, `suggest_tasks`), `DELEG
 | Decisions | `packages/core/src/decide/` (`messages.ts` for `resolveMessageEffect`) |
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
+| Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/server/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Event log, receipts, outbox | `apps/server/src/store/event-log.ts`, `apps/server/src/runtime/engine.ts` |
 | Effect handlers | `apps/server/src/runtime/effects.ts` |
 | Agent tools (MCP) | `apps/server/src/agents/tools/`; the loader tools `apps/server/src/extensions/loader.ts` |
@@ -951,7 +1009,7 @@ Tests are in `packages/core/test/`.
 5. **Operation notes live only on the gate.** `Gate.notes` is the one place: a message replaces them (`gate.noted`,
    null clears them), approve runs with them, reply replaces them with its words and runs (`answerOperation` and
    `noteOperation` in `decide/shapes.ts`). Test: `decide/shapes.test.ts`.
-6. **`task.create` takes no `shape`.** Only triage and the planner shape a task; `TaskAuto.shape` is true unless `mode`
+6. **`task.create` takes no `shape`.** Only triage and the agent, while it plans, shape a task; `TaskAuto.shape` is true unless `mode`
    was given (`decide/tasks.ts`, `commands/parse.ts`). Tests: `decide/tasks.test.ts`, `commands/`.
 7. **The proposal gate has one owner.** Inquiry steps have no gate; `your_ok` owns the hard `proposal` gate and the
    `awaiting_proposal` stage, and an inquiry that proposes on a task without `your_ok` is reshaped to wait at one
