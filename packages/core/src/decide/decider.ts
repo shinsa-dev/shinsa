@@ -89,10 +89,6 @@ function resolveInheritedSession(from: Run): Partial<Run> {
   };
 }
 
-export function resolveStepKey(role: RunRole): RunRole {
-  return role === 'shipper' ? 'fixer' : role;
-}
-
 export class Decider {
   readonly #held = new Set<string>();
   readonly #runAccounts = new Map<string, RunAccount>();
@@ -126,13 +122,11 @@ export class Decider {
     return findTask(this.state, taskId);
   }
 
-  repoOf(task: Task) {
+  repoOf(task: Pick<Task, 'repoId'>) {
     return task.repoId ? (this.state.repos[task.repoId] ?? null) : null;
   }
 
   basesOf(task: Task) {
-    const stacked = task.baseTaskId ? this.state.tasks[task.baseTaskId] : undefined;
-    if (stacked) return [stacked];
     return task.waitsOn
       .map((id) => this.state.tasks[id])
       .filter((dependency): dependency is Task => dependency !== undefined && isTaskComplete(dependency));
@@ -186,7 +180,6 @@ export class Decider {
   }
 
   #listAdoptable(taskId: string, role: RunRole, phaseIndex: number | null) {
-    const key = resolveStepKey(role);
     const predecessors = [
       ...[...this.#held].map((id) => this.state.runs[id]),
       ...listActiveRuns(this.state, taskId),
@@ -194,7 +187,7 @@ export class Decider {
       (run): run is Run =>
         run !== undefined &&
         run.taskId === taskId &&
-        resolveStepKey(run.role) === key &&
+        run.role === role &&
         (run.phaseIndex ?? null) === phaseIndex
     );
     return predecessors.flatMap((run) =>

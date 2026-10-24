@@ -1,7 +1,9 @@
 import { expect } from 'bun:test';
 import {
   type Gate,
+  isDecisionGate,
   isDelegatedRun,
+  isFollowUpOnWork,
   isInquiryDone,
   isOfCurrentRound,
   isTaskSettled,
@@ -27,7 +29,7 @@ import {
   validatePlanRules,
   validateVerification,
 } from '../../src/index.ts';
-import { IMPACT, SPEC } from '../harness.ts';
+import { IMPACT, PLAN } from '../harness.ts';
 
 function resolveStageStep(stage: TaskStage): PipelineStep | null {
   return PIPELINE_ORDER.find((step) => STEP_SCHEMA[step].stages.includes(stage)) ?? null;
@@ -102,7 +104,7 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
     if (isDelegatedRun(run)) return [];
     const proposal = chance(random, 0.5) ? PROPOSAL : null;
     if (run.role === 'answerer')
-      return [{ type: 'agent.answer', runId: run.id, answer: 'Because.', proposal }];
+      return [{ type: 'agent.deliver', runId: run.id, step: 'answer', body: 'Because.', proposal }];
     if (run.role === 'planner' && (combined || chance(random, 0.5))) {
       return [
         {
@@ -133,7 +135,7 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
 }
 
 const OPERATION_PLAN = {
-  ...SPEC,
+  ...PLAN,
   impact: IMPACT,
   operation: ['Run the backfill and check every row has a plan.'],
 };
@@ -152,7 +154,9 @@ function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand
     if (run.role === 'planner')
       return [{ type: 'agent.propose_plan', runId: run.id, document: OPERATION_PLAN }];
     if (run.role === 'builder') {
-      return [{ type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] }];
+      return [
+        { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },
+      ];
     }
     if (run.role === 'reviewer') return [{ type: 'agent.report_review', runId: run.id, findings: [] }];
     return [];
@@ -187,7 +191,7 @@ export function listShapeCommands(state: ShinsaState, random: Random, combined =
             type: 'task.create' as const,
             request: 'Look into the retry',
             repoId: 'repo',
-            ...(chance(random, 0.5) ? { shape: pick(random, TASK_SHAPES) ?? 'investigate' } : {}),
+            ...(chance(random, 0.2) ? { mode: 'ask' as const } : {}),
           },
         ]),
     ...listAgentCommands(state, random, combined),
@@ -207,13 +211,13 @@ export function listShapeCommands(state: ShinsaState, random: Random, combined =
         reasons: { shape: 'Read the request.' },
       });
     }
-    const change = Object.values(state.gates).find(
+    const proposal = Object.values(state.gates).find(
       (gate) => gate.taskId === task.id && gate.type === 'proposal' && gate.status === 'open'
     );
-    if (change && resolveTaskPipeline(task).includes('your_ok')) {
+    if (proposal) {
       commands.push({
         type: 'gate.answer',
-        gateId: change.id,
+        gateId: proposal.id,
         decision: chance(random, 0.7) ? 'approve' : 'reject',
         response: null,
       });
@@ -225,9 +229,7 @@ export function listShapeCommands(state: ShinsaState, random: Random, combined =
       commands.push({
         type: 'gate.answer',
         gateId: operation.id,
-        decision: chance(random, 0.5)
-          ? 'reject'
-          : (pick(random, ['approve', 'answer'] as const) ?? 'approve'),
+        decision: chance(random, 0.5) ? 'reject' : (pick(random, ['approve', 'reply'] as const) ?? 'approve'),
         response: 'Run it on the merged code.',
       });
     }
@@ -235,7 +237,15 @@ export function listShapeCommands(state: ShinsaState, random: Random, combined =
   return commands;
 }
 
+function isWorkFinished(task: Task) {
+  return task.pullRequest?.state === 'merged' || task.result?.step === 'operate';
+}
+
 function assertStageFitsPipeline(task: Task, pipeline: readonly PipelineStep[], context: string) {
+  if (isFollowUpOnWork(task)) {
+    expect(isWorkFinished(task), `${context}: a follow-up on work that has not finished`).toBe(true);
+    return;
+  }
   const step = resolveStageStep(task.stage);
   if (step) expect(pipeline, `${context}: the stage needs ${step}`).toContain(step);
 }
@@ -245,7 +255,7 @@ function isConfirmed(gates: Gate[]) {
     (gate) =>
       gate.type === 'operation' &&
       gate.status === 'answered' &&
-      (gate.decision === 'approve' || gate.decision === 'answer')
+      (gate.decision === 'approve' || gate.decision === 'reply')
   );
 }
 
@@ -274,7 +284,7 @@ function assertOperationInvariants(
   }
   if (timing === 'after_merge')
     expect(task.stage, `${context}: merged before its operation`).not.toBe('merged');
-  if (task.pullRequest?.state === 'merged' && !isTaskSettled(task)) {
+  if (task.pullRequest?.state === 'merged' && !isTaskSettled(task) && !isFollowUpOnWork(task)) {
     expect(
       ['operating', 'awaiting_operation'],
       `${context}: a merged pull request on an open task`
@@ -287,7 +297,52 @@ function isAllBuilt(task: Task) {
   return phases > 0 && new Set(task.phaseReports.map((report) => report.index)).size >= phases;
 }
 
+function assertProposalInvariants(
+  task: Task,
+  pipeline: readonly PipelineStep[],
+  gates: Gate[],
+  context: string
+) {
+  const proposals = gates.filter((gate) => gate.type === 'proposal');
+  expect(proposals.length, context).toBeLessThanOrEqual(1);
+  if (!isTaskSettled(task)) {
+    expect(proposals.length === 1, `${context}: a proposal gate exactly while awaiting a proposal`).toBe(
+      task.stage === 'awaiting_proposal'
+    );
+    if (task.proposal?.status === 'open') expect(task.stage, context).toBe('awaiting_proposal');
+  }
+  if (task.stage === 'awaiting_proposal') {
+    expect(pipeline, `${context}: waiting at a proposal without your OK in the steps`).toContain('your_ok');
+  }
+  const inquiry = resolveInquiryStep(pipeline);
+  if (pipeline.includes('your_ok') && AFTER_YOUR_OK.has(task.stage)) {
+    expect(task.proposal?.status, `${context}: past your OK without it`).toBe('accepted');
+  }
+  if (pipeline.includes('your_ok') && task.stage === 'awaiting_proposal' && inquiry) {
+    expect(isInquiryDone(task, inquiry), `${context}: your OK before the inquiry ran`).toBe(true);
+  }
+}
+
+const REPOSITORY_FREE_ROLES: ReadonlySet<string> = new Set(['answerer', 'researcher']);
+
+function assertRepositoryInvariants(task: Task, state: ShinsaState, context: string) {
+  if (task.repoId !== null) return;
+  expect(task.worktreePath, `${context}: a worktree without a repository`).toBeNull();
+  const runs = Object.values(state.runs).filter(
+    (run) =>
+      run.taskId === task.id &&
+      run.endedAt === null &&
+      !run.delegation &&
+      !REPOSITORY_FREE_ROLES.has(run.role)
+  );
+  expect(
+    runs.map((run) => run.role),
+    `${context}: an agent that needs a repository runs without one`
+  ).toEqual([]);
+}
+
 export function assertShapeInvariants(task: Task, gates: Gate[], state: ShinsaState, context: string) {
+  assertRepositoryInvariants(task, state, context);
   const pipeline = resolveTaskPipeline(task);
   expect(validatePipeline(pipeline), `${context}: pipeline ${pipeline.join(',')}`).toEqual([]);
   expect(validateVerification(pipeline), `${context}: verification of ${pipeline.join(',')}`).toEqual([]);
@@ -304,21 +359,7 @@ export function assertShapeInvariants(task: Task, gates: Gate[], state: ShinsaSt
     ).toEqual([]);
   }
   assertStageFitsPipeline(task, pipeline, context);
-  const change = gates.filter((gate) => gate.type === 'proposal');
-  expect(change.length, context).toBeLessThanOrEqual(1);
-  if (!isTaskSettled(task)) {
-    expect(change.length === 1, `${context}: a change gate exactly while awaiting a change`).toBe(
-      task.stage === 'awaiting_proposal'
-    );
-    if (task.proposal?.status === 'open') expect(task.stage, context).toBe('awaiting_proposal');
-  }
-  const inquiry = resolveInquiryStep(pipeline);
-  if (pipeline.includes('your_ok') && AFTER_YOUR_OK.has(task.stage)) {
-    expect(task.proposal?.status, `${context}: past your OK without it`).toBe('accepted');
-  }
-  if (pipeline.includes('your_ok') && task.stage === 'awaiting_proposal' && inquiry) {
-    expect(isInquiryDone(task, inquiry), `${context}: your OK before the inquiry ran`).toBe(true);
-  }
+  assertProposalInvariants(task, pipeline, gates, context);
   const history = Object.values(state.gates).filter((gate) => gate.taskId === task.id);
   assertOperationInvariants(task, pipeline, gates, history, context);
   if (!pipeline.includes('pull_request')) expect(task.pullRequest, context).toBeNull();
@@ -343,13 +384,18 @@ function listCompositionMarks(task: Task) {
   ];
 }
 
+const RESULT_MARK = {
+  answer: 'answered question',
+  research: 'written report',
+  investigate: 'reported diagnosis',
+  operate: 'finished operation',
+} as const;
+
 export function listShapeMarks(state: ShinsaState) {
   return Object.values(state.tasks).flatMap((task) => [
-    task.proposal?.status === 'accepted' ? 'accepted change' : null,
-    task.proposal?.status === 'declined' ? 'declined change' : null,
-    task.result?.step === 'operate' ? 'finished operation' : null,
-    task.result?.step === 'research' ? 'written report' : null,
-    task.result?.step === 'investigate' ? 'reported findings' : null,
+    task.proposal?.status === 'accepted' ? 'accepted proposal' : null,
+    task.proposal?.status === 'declined' ? 'declined proposal' : null,
+    task.result ? RESULT_MARK[task.result.step] : null,
     task.shapeChanges?.some((change) => change.by === 'you') ? 'reshaped by you' : null,
     task.shapeChanges?.some((change) => change.by === 'agent') ? 'reshaped by an agent' : null,
     resolveTaskShape(task) === 'fix' && task.phaseReports.length > 0 ? 'built fix' : null,

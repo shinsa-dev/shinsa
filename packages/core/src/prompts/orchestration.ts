@@ -11,10 +11,10 @@ import {
   type Task,
 } from '../domain/index.ts';
 import { resolveOrchestrationRules } from './orchestration-rules.ts';
-import { REFERENCE_RULES } from './rules.ts';
+import { REFERENCE_RULES, VOICE_RULE } from './rules.ts';
 
 const DELEGATE_INTRO =
-  'You work inside Shinsa, a harness where agents do the work and a human only steps in at gates. Another agent delegated one piece of its work to you.';
+  'You work inside Shinsa, a control plane for coding agents: agents do the work, and a human only steps in at gates. Another agent delegated one piece of its work to you.';
 
 const STATUS_WORDS: Record<DelegationStatus, string> = {
   queued: 'is waiting to start',
@@ -52,8 +52,10 @@ export function resolveDelegatePrompt(input: DelegatePromptInput) {
     `The work is part of the task "${input.task.title}"${input.repo ? ` in ${input.repo.name}` : ''}.`,
     describeDelegateCheckout(input.isolation, readOnly),
     'You work for the agent that delegated this, not for the human. Your final reply is your result and goes back to that agent, so make it complete on its own: what you did or found, with file paths and line numbers, and anything left open.',
+    'Write that reply to the agent and make it the result itself: never narrate your tool calls, and never say that you are done or that your turn is over.',
+    VOICE_RULE,
     'You have no hand-over tools: never commit, push or open a pull request, and do not wait for anyone to approve your work.',
-    'Call `ask` only when you cannot go on without a decision. It goes to the agent that delegated this task, which answers or asks the human.',
+    'Call `ask` only when you cannot go on without a decision. It goes to the agent that delegated this, which answers or asks the human.',
     "Follow the repository's own rules: its CLAUDE.md and AGENTS.md files, its lint and conventions.",
     'Never sleep, poll or loop in a shell to wait for something. Say what is still pending in your reply instead.',
     tools.includes('delegate_task')
@@ -95,7 +97,7 @@ const DELIVERY_NOTICE = [
 ].join('\n');
 
 function describeResult(result: DeliveredResult, budget: { left: number }) {
-  const header = `Delegated task ${STATUS_WORDS[result.status]}: "${result.title}" (task id ${result.runId}, ${result.role})`;
+  const header = `Delegation ${STATUS_WORDS[result.status]}: "${result.title}" (delegation id ${result.runId}, ${result.role})`;
   const text = result.result?.trim();
   if (!text) return `${header}. It left no reply.`;
   if (text.length > budget.left) {
@@ -108,13 +110,13 @@ function describeResult(result: DeliveredResult, budget: { left: number }) {
 function describeEscalation(parent: Run) {
   if (!hasTool(parent, 'ask')) return 'You cannot ask the human, so decide it from what you know.';
   if (parent.delegation)
-    return 'If you cannot decide it, ask the agent that delegated your task with `ask` first.';
+    return 'If you cannot decide it, ask the agent that delegated this to you with `ask` first.';
   return 'If only the human can decide, ask them with `ask` first.';
 }
 
 function describeQuestion(question: DeliveredQuestion, parent: Run) {
   return [
-    `Delegated task "${question.title}" (task id ${question.runId}) is waiting for your answer:`,
+    `Delegation "${question.title}" (delegation id ${question.runId}) is waiting for your answer:`,
     question.question,
     question.context ?? '',
     question.choices.length > 0 ? `Options: ${question.choices.join(' / ')}` : '',
@@ -136,7 +138,7 @@ export function resolveDeliveryPrompt(content: DeliveryContent, parent: Run) {
 
 export function resolveDelegationAnswerPrompt(question: string, answer: string) {
   return [
-    `You asked the agent that delegated this task: ${question}`,
+    `You asked the agent that delegated this: ${question}`,
     '',
     `Its answer: ${answer}`,
     '',
@@ -149,7 +151,7 @@ export function resolveAdoptionNote(titles: { runId: string; title: string }[]) 
   return [
     '',
     '',
-    'These tasks you delegated earlier are still running, and their results arrive here when they finish:',
-    ...titles.map((entry) => `- "${entry.title}" (task id ${entry.runId})`),
+    'These delegations you started earlier are still running, and their results arrive here when they finish:',
+    ...titles.map((entry) => `- "${entry.title}" (delegation id ${entry.runId})`),
   ].join('\n');
 }

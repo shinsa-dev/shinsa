@@ -5,6 +5,7 @@ export {
   resolveReviewFixPrompt,
   resolveVerdictFixPrompt,
 } from './fixes.ts';
+export { resolveFollowUpPrompt } from './follow-up.ts';
 export {
   type Handoff,
   type HandoffRequest,
@@ -32,9 +33,11 @@ export {
   resolveResearcherPrompt,
   resolveReviewerPrompt,
 } from './roles.ts';
-export { REFERENCE_RULES } from './rules.ts';
+export { REFERENCE_RULES, resolveHouseRules, splitHouseRules } from './rules.ts';
 export {
   QUESTION_WITHDRAWN,
+  readAnsweredReply,
+  resolveAnsweredReply,
   resolveAnswerPrompt,
   resolveContinuePrompt,
   resolveQuestionResumePrompt,

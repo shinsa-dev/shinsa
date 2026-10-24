@@ -141,7 +141,7 @@ export function keepSuggestion(decider: Decider, command: CommandOf<'suggestion.
     request: suggestion.request,
     title: suggestion.title,
     why: suggestion.why,
-    shape: null,
+    shape: command.shape ?? null,
   });
   decider.emit({
     type: 'suggestion.settled',

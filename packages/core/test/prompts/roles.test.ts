@@ -11,11 +11,11 @@ import {
   completePhase,
   createHarness,
   createTask,
+  PLAN,
   proposePlan,
   pullRequest,
   reachShipping,
   readyWorktree,
-  SPEC,
   shipAndMerge,
 } from '../harness.ts';
 
@@ -105,7 +105,7 @@ describe('a later phase', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId, {
-      ...SPEC,
+      ...PLAN,
       outOfScope: ['Mobile', 'Dark mode'],
       phases: [
         { title: 'One', detail: 'First.' },

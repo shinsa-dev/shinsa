@@ -66,17 +66,17 @@ function listParentCommands(state: ShinsaState, run: Run, random: Random): Shins
   if (claim) {
     const items = claim.items.filter(() => chance(random, 0.7));
     commands.push(
-      { type: 'delegation.delivered', runId, generation: claim.generation, items },
-      { type: 'delegation.delivered', runId, generation: claim.generation, items: claim.items },
-      { type: 'delegation.delivered', runId, generation: claim.generation - 1, items },
-      { type: 'delegation.undelivered', runId, generation: claim.generation, items: [] }
+      { type: 'delegation.record_delivery', runId, generation: claim.generation, items },
+      { type: 'delegation.record_delivery', runId, generation: claim.generation, items: claim.items },
+      { type: 'delegation.record_delivery', runId, generation: claim.generation - 1, items },
+      { type: 'delegation.release', runId, generation: claim.generation, items: [] }
     );
   }
   const delivered = listChildRuns(state, runId)
     .filter((child) => child.delegation.delivery === 'delivered')
     .map((child) => `result:${child.id}`);
   if (delivered.length > 0)
-    commands.push({ type: 'delegation.undelivered', runId, generation: null, items: delivered });
+    commands.push({ type: 'delegation.release', runId, generation: null, items: delivered });
   return commands;
 }
 

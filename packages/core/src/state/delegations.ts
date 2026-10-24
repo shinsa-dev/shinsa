@@ -18,12 +18,10 @@ export type DeliveryItem =
   | { kind: 'message'; messageId: string };
 
 const ROLE_NAME: Record<Run['role'], string> = {
-  triage: 'classifier',
   planner: 'planner',
   builder: 'builder',
   reviewer: 'reviewer',
   fixer: 'fixer',
-  shipper: 'fixer',
   answerer: 'answerer',
   investigator: 'investigator',
   researcher: 'researcher',

@@ -61,3 +61,12 @@ export type {
   RootSuggestions,
 } from './onboarding.ts';
 export { resolveDisplayPath } from './onboarding.ts';
+export type {
+  ProgramId,
+  ProgramVersion,
+  ProgramVersionStatus,
+  SdkVersion,
+  UpdateOutcome,
+  UpdateStreamLine,
+  VersionsSnapshot,
+} from './versions.ts';

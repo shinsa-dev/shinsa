@@ -5,6 +5,7 @@ import {
   listOpenGates,
   type RunAccount,
   type RunFailure,
+  resolveMessageEffect,
   resolveQueue,
 } from '../../src/index.ts';
 import {
@@ -322,7 +323,7 @@ describe('usage-limit waits', () => {
     harness.advance(resetAtOf(harness, taskId));
     fire(harness, taskId);
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', title: 'The usage limit has reset' });
+    expect(gate).toMatchObject({ type: 'failure', title: 'The usage limit has reset' });
     expect(gate.body).toBe(
       'The agent stopped at the Claude usage limit on work@example.com. The limit has reset. Retry to carry on, or cancel the task.'
     );
@@ -472,7 +473,7 @@ describe('usage-limit waits', () => {
     const other = createTask(harness, { request: 'Other work' });
     const { taskId, wait } = waitingTask(harness);
     harness.send({ type: 'task.wait_on', taskId, waitsOn: [other] });
-    expect(harness.task(taskId).stage).toBe('queued');
+    expect(harness.task(taskId).stage).toBe('waiting_on_tasks');
     expect(harness.task(taskId).usageWait).toBeNull();
     harness.advance(resetAtOf(harness, taskId) + 2 * HOUR);
     const resume = harness.send({ type: 'usage_wait.resume', taskId, waitId: wait?.id ?? '' });
@@ -488,9 +489,9 @@ describe('the sign-in gate', () => {
     const run = fail(harness, taskId, signedOut());
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({
-      purpose: 'sign_in',
-      kind: 'question',
+      type: 'sign_in',
       title: 'Sign in to Claude as work@example.com',
+      provider: 'claude',
       account: WORK,
       runId: run.id,
     });
@@ -502,7 +503,7 @@ describe('the sign-in gate', () => {
       kind: 'failure',
       text: 'Sign in to Claude as work@example.com',
       runId: run.id,
-      purpose: 'sign_in',
+      gateType: 'sign_in',
     });
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     const queue = resolveQueue(harness.state, harness.state.seq);
@@ -582,7 +583,14 @@ describe('the sign-in gate', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     fail(harness, taskId, signedOut());
+    const gate = harness.openGate(taskId);
+    expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('retry');
     harness.send({ type: 'task.message', taskId, text: 'I signed in on the other account.' });
+    expect(harness.state.gates[gate.id]).toMatchObject({
+      status: 'answered',
+      decision: 'reply',
+      response: 'I signed in on the other account.',
+    });
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(harness.activeRun(taskId).prompt).toContain('I signed in on the other account.');
   });
@@ -600,8 +608,52 @@ describe('the sign-in gate', () => {
     const taskId = createTask(harness);
     fail(harness, taskId, signedOut(null));
     expect(harness.openGate(taskId)).toMatchObject({
-      purpose: 'failure',
+      type: 'failure',
       title: 'The agent needs you to sign in',
     });
+  });
+
+  test('a provider with a login of its own opens a Sign in gate that names the provider and no account', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const run = fail(harness, taskId, {
+      ...signedOut(null),
+      message: 'Codex is signed out.',
+      login: { provider: 'codex', email: 'me@example.com' },
+    });
+    expect(harness.openGate(taskId)).toMatchObject({
+      type: 'sign_in',
+      title: 'Sign in to Codex as me@example.com',
+      body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
+      provider: 'codex',
+      account: null,
+      runId: run.id,
+    });
+    const other = createTask(harness, { request: 'Other' });
+    fail(harness, other, { ...signedOut(null), login: { provider: 'codex', email: null } });
+    expect(harness.openGate(other).title).toBe('Sign in to Codex');
+  });
+
+  test('a provider’s sign-in answers only that provider’s gates, and an account’s only its own', () => {
+    const harness = createHarness();
+    const codex = createTask(harness, { request: 'Codex' });
+    const cursor = createTask(harness, { request: 'Cursor' });
+    const claude = createTask(harness, { request: 'Claude' });
+    fail(harness, codex, { ...signedOut(null), login: { provider: 'codex', email: null } });
+    fail(harness, cursor, { ...signedOut(null), login: { provider: 'cursor', email: null } });
+    fail(harness, claude, signedOut());
+    harness.send({ type: 'account.signed_in', account: { id: 'codex', email: null } });
+    expect(
+      listOpenGates(harness.state)
+        .map((gate) => gate.taskId)
+        .sort()
+    ).toEqual([codex, cursor, claude].sort());
+    harness.send({ type: 'provider.record_sign_in', provider: 'claude' });
+    expect(harness.openGate(claude).account).toEqual(WORK);
+    harness.send({ type: 'provider.record_sign_in', provider: 'codex' });
+    expect(harness.activeRun(codex).role).toBe('planner');
+    expect(harness.openGate(cursor).provider).toBe('cursor');
+    expect(harness.openGate(claude).provider).toBe('claude');
+    expect(harness.send({ type: 'provider.record_sign_in', provider: 'codex' }).events).toEqual([]);
   });
 });

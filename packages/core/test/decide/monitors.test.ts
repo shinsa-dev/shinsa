@@ -64,7 +64,12 @@ describe('waiting with wait_for', () => {
 
   test('a due check wakes the waiting agent on the same step by resuming its session', () => {
     const { harness, taskId } = building();
-    harness.send({ type: 'run.link', runId: harness.activeRun(taskId).id, sessionId: 'builder-1' });
+    harness.send({
+      type: 'run.link',
+      runId: harness.activeRun(taskId).id,
+      sessionId: 'builder-1',
+      provider: 'claude',
+    });
     waitFor(harness, taskId);
     fire(harness, taskId);
     const run = harness.activeRun(taskId);
@@ -114,7 +119,7 @@ describe('waiting with wait_for', () => {
     expect(harness.task(taskId).monitor?.status).toBe('exhausted');
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({
-      purpose: 'failure',
+      type: 'failure',
       cause: 'monitor',
       title: 'The agent’s wait ran out of checks',
     });
@@ -155,7 +160,7 @@ describe('when the wait ends', () => {
     harness.advance(3 * MINUTE);
     fire(harness, taskId);
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', cause: 'monitor', title: 'The agent’s wait ran out' });
+    expect(gate).toMatchObject({ type: 'failure', cause: 'monitor', title: 'The agent’s wait ran out' });
     expect(gate.body).toContain('The agent was waiting for: Check that the staging deploy finished.');
     expect(gate.body).toContain('The wait ran out of time after 0 checks.');
     expect(harness.task(taskId).monitor?.status).toBe('exhausted');

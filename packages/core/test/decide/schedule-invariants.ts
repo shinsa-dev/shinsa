@@ -21,7 +21,7 @@ function chance(random: Random, odds: number) {
   return random() < odds;
 }
 
-const SCHEDULING_ROLES = new Set<RunRole>(['planner', 'builder', 'fixer', 'shipper', 'answerer']);
+const SCHEDULING_ROLES = new Set<RunRole>(['planner', 'builder', 'fixer', 'answerer']);
 
 const TRIGGERS: ScheduleTrigger[] = [
   { kind: 'interval', everyMinutes: 1 },
@@ -99,7 +99,7 @@ function listAnswerCommands(state: ShinsaState, random: Random): ShinsaCommand[]
       (gate): ShinsaCommand => ({
         type: 'gate.answer',
         gateId: gate.id,
-        decision: chance(random, 0.7) ? 'answer' : 'reject',
+        decision: chance(random, 0.7) ? 'reply' : 'reject',
         response: REF,
       })
     );

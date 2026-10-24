@@ -22,7 +22,7 @@ function describeFixClosing(next: string) {
   return [
     '',
     'Fix it, re-run the checks yourself, then call `complete_fix` with a one or two sentence summary of what you changed.',
-    `${next} Then end your turn.`,
+    `${next} Then stop.`,
   ].join('\n');
 }
 

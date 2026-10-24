@@ -1,12 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  describePlanGateRule,
   GATE_SCHEMA,
   type Gate,
+  type GateType,
+  isAgentQuestion,
+  isDecisionGate,
   isPausingGate,
   needsWorktree,
   PIPELINE_ORDER,
+  PLAN_GATE_RULE,
   resolveGateDefinition,
-  resolveGateType,
   SHAPE_PIPELINES,
   STEP_SCHEMA,
   TASK_SHAPES,
@@ -17,8 +21,7 @@ function gate(overrides: Partial<Gate>): Gate {
   return {
     id: 'g',
     taskId: 't',
-    kind: 'question',
-    purpose: 'agent_question',
+    type: 'question',
     status: 'open',
     title: 'Which one?',
     body: '',
@@ -69,22 +72,67 @@ describe('the step schema', () => {
     expect(needsWorktree(SHAPE_PIPELINES.operation)).toBe(true);
   });
 
-  test('a gate reads as its type: plan, review and merge by kind, the rest by purpose, a secret by itself', () => {
-    expect(resolveGateType(gate({ kind: 'plan', purpose: 'decision' }))).toBe('plan');
-    expect(resolveGateType(gate({ kind: 'merge', purpose: 'decision' }))).toBe('merge');
-    expect(resolveGateType(gate({ kind: 'question', purpose: 'decision' }))).toBe('question');
-    expect(resolveGateType(gate({ purpose: 'operation' }))).toBe('operation');
-    expect(resolveGateType(gate({ secret: { label: 'Key' } }))).toBe('secret');
+  test('a gate’s definition is the hard gate of its type', () => {
+    const types: GateType[] = [
+      'plan',
+      'review',
+      'merge',
+      'question',
+      'secret',
+      'proposal',
+      'operation',
+      'failure',
+      'configuration',
+      'sign_in',
+    ];
+    for (const type of types) expect(resolveGateDefinition(gate({ type }))).toBe(GATE_SCHEMA[type]);
     expect(
-      resolveGateDefinition(gate({ purpose: 'change' })).decisions.map((choice) => choice.decision)
+      resolveGateDefinition(gate({ type: 'proposal' })).decisions.map((choice) => choice.decision)
     ).toEqual(['approve', 'reject']);
+    expect(
+      resolveGateDefinition(gate({ type: 'operation' })).decisions.map((choice) => choice.decision)
+    ).toEqual(['approve', 'reply', 'reject']);
+    expect(
+      resolveGateDefinition(gate({ type: 'configuration' })).decisions.map((choice) => choice.decision)
+    ).toEqual(['approve', 'waive', 'reject']);
+  });
+
+  test('plan, review and merge are the decision gates; a question and a secret are an agent’s questions', () => {
+    expect(['plan', 'review', 'merge'].every((type) => isDecisionGate({ type: type as GateType }))).toBe(
+      true
+    );
+    expect(isDecisionGate(gate({ type: 'question' }))).toBe(false);
+    expect(isDecisionGate(gate({ type: 'proposal' }))).toBe(false);
+    expect(isAgentQuestion(gate({ type: 'question' }))).toBe(true);
+    expect(isAgentQuestion(gate({ type: 'secret' }))).toBe(true);
+    expect(isAgentQuestion(gate({ type: 'sign_in' }))).toBe(false);
+  });
+
+  test('each soft gate escalates to a hard gate: checks and CI to a failure, the agent review to yours', () => {
+    expect(GATE_SCHEMA.checks.escalatesTo).toBe('failure');
+    expect(GATE_SCHEMA.ci.escalatesTo).toBe('failure');
+    expect(GATE_SCHEMA.agent_review.escalatesTo).toBe('review');
+  });
+
+  test('the plan gate rule is data, and the plan step describes it', () => {
+    expect(PLAN_GATE_RULE).toEqual({
+      always: ['operates', 'plan_first', 'asks_approval'],
+      withApprovePlans: ['large', 'revised'],
+    });
+    expect(describePlanGateRule()).toBe(
+      'Always when the task runs an operation, it was created plan first or the plan asks for approval; with Approve plans on, also when the task is large or the plan is a revision.'
+    );
+    expect(describePlanGateRule({ always: ['large'], withApprovePlans: ['revised'] })).toBe(
+      'Always when the task is large; with Approve plans on, also when the plan is a revision.'
+    );
+    expect(STEP_SCHEMA.plan.gate.when).toBe(describePlanGateRule());
   });
 
   test('a gate pauses the task exactly when its type says so', () => {
-    expect(isPausingGate(gate({ purpose: 'failure' }))).toBe(true);
-    expect(isPausingGate(gate({ purpose: 'sign_in' }))).toBe(true);
-    expect(isPausingGate(gate({ purpose: 'configuration' }))).toBe(true);
-    expect(isPausingGate(gate({ purpose: 'operation' }))).toBe(false);
-    expect(isPausingGate(gate({ kind: 'review', purpose: 'decision' }))).toBe(false);
+    expect(isPausingGate(gate({ type: 'failure' }))).toBe(true);
+    expect(isPausingGate(gate({ type: 'sign_in' }))).toBe(true);
+    expect(isPausingGate(gate({ type: 'configuration' }))).toBe(true);
+    expect(isPausingGate(gate({ type: 'operation' }))).toBe(false);
+    expect(isPausingGate(gate({ type: 'review' }))).toBe(false);
   });
 });

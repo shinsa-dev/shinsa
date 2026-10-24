@@ -5,10 +5,19 @@ import { createHarness, registerRepo } from '../harness.ts';
 function createShaped(shape: TaskShape) {
   const harness = createHarness();
   const repoId = registerRepo(harness);
-  harness.send({ type: 'task.create', request: 'Look at the retry', repoId, shape });
-  const task = Object.values(harness.state.tasks)[0];
-  if (!task) throw new Error('The task was not created.');
-  return task;
+  harness.send({ type: 'task.create', request: 'Look at the retry', repoId });
+  const taskId = Object.keys(harness.state.tasks)[0] ?? '';
+  harness.send({
+    type: 'task.triage',
+    taskId,
+    title: 'Retry',
+    repoId,
+    size: 'small',
+    branch: 'b',
+    waitsOn: [],
+    shape,
+  });
+  return harness.task(taskId);
 }
 
 describe('stages', () => {

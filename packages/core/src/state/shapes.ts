@@ -1,7 +1,6 @@
 import {
   type DeliveringStep,
   type InquiryStep,
-  isUpgrade,
   needsWorktree,
   type PipelineStep,
   resolveInquiryStep,
@@ -40,7 +39,8 @@ const WORK_PHRASE: Record<WorkStep, string> = {
 };
 
 const DELIVERY_TEXT: Record<DeliveringStep, string> = {
-  investigate: 'Reported what the investigation found',
+  answer: 'Answered the question',
+  investigate: 'Reported the diagnosis',
   research: 'Wrote the report',
   operate: 'Reported how the operation went',
 };
@@ -72,13 +72,11 @@ function applyReshaped(state: ShinsaState, event: EventOf<'task.reshaped'>) {
   const from = [...resolveTaskPipeline(task)];
   const change = { from, to: event.pipeline, by: event.by, reason: event.reason, at: event.at };
   const branch = task.branch ?? (needsWorktree(event.pipeline) ? (task.proposedBranch ?? null) : null);
-  const accepted = task.proposal?.status === 'open' && isUpgrade(from, event.pipeline);
   updateTask(state, task.id, event.at, {
     pipeline: event.pipeline,
     shapeChanges: [...(task.shapeChanges ?? []), change].slice(-SHAPE_CHANGE_LIMIT),
     branch,
-    ...(accepted && task.proposal ? { proposal: { ...task.proposal, status: 'accepted' as const } } : {}),
-    ...(event.by === 'you' && task.auto ? { auto: { ...task.auto, shape: false } } : {}),
+    ...(event.by === 'you' ? { auto: { ...task.auto, shape: false } } : {}),
   });
   record(state, task.id, event.at, {
     actor: event.by,
@@ -127,21 +125,10 @@ function applyChangeApproved(state: ShinsaState, event: EventOf<'task.change_app
   updateTask(state, event.taskId, event.at, { proposal: { ...proposal, status: 'accepted' } });
 }
 
-function applyTaskAnswered(state: ShinsaState, event: EventOf<'task.answered'>) {
-  updateTask(state, event.taskId, event.at, { answer: event.answer });
-  record(state, event.taskId, event.at, {
-    actor: 'agent',
-    kind: 'answer',
-    text: 'Answered the question',
-    runId: event.runId,
-  });
-}
-
 type ShapeEvent = Extract<
   ShinsaEvent,
   {
     type:
-      | 'task.answered'
       | 'task.reshaped'
       | 'task.delivered'
       | 'task.change_proposed'
@@ -152,9 +139,6 @@ type ShapeEvent = Extract<
 
 export function applyShapeEvent(state: ShinsaState, event: ShapeEvent) {
   switch (event.type) {
-    case 'task.answered':
-      applyTaskAnswered(state, event);
-      return;
     case 'task.reshaped':
       applyReshaped(state, event);
       return;

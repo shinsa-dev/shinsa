@@ -1,4 +1,4 @@
-import type { GateKind, Queue, QueuedGate, ShinsaState, Task } from '../../src/index.ts';
+import type { GateType, Queue, QueuedGate, ShinsaState, Task } from '../../src/index.ts';
 
 export const NOW = 10 * 24 * 60 * 60 * 1000;
 
@@ -8,15 +8,14 @@ export function task(id: string, title: string, extra: Partial<Task> = {}) {
 
 export function entry(
   taskValue: Task,
-  kind: GateKind,
-  extra: { purpose?: string; unblocks?: number; openedAt?: number; title?: string } = {}
+  type: GateType,
+  extra: { unblocks?: number; openedAt?: number; title?: string } = {}
 ) {
   return {
     task: taskValue,
     gate: {
-      id: `g-${taskValue.id}-${kind}`,
-      kind,
-      purpose: extra.purpose ?? 'decision',
+      id: `g-${taskValue.id}-${type}`,
+      type,
       title: extra.title ?? 'Decide',
       openedAt: extra.openedAt ?? NOW - 60_000,
     },

@@ -292,7 +292,7 @@ export function recordPullRequestReadFailure(
   );
 }
 
-export function recordPush(decider: Decider, command: CommandOf<'pull_request.pushed'>) {
+export function recordPush(decider: Decider, command: CommandOf<'pull_request.record_push'>) {
   const task = decider.task(command.taskId);
   if (isTaskSettled(task) || (task.pushedSha === command.sha && !task.pushPending)) return;
   decider.emit({ type: 'pull_request.pushed', taskId: command.taskId, sha: command.sha });

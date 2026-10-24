@@ -569,7 +569,12 @@ describe('firing a schedule', () => {
       waitsOn: [],
     });
     harness.send({ type: 'config.record', taskId: askId, problems: [] });
-    harness.send({ type: 'agent.answer', runId: harness.activeRun(askId).id, answer: 'Like this.' });
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(askId).id,
+      step: 'answer',
+      body: 'Like this.',
+    });
     expect(harness.task(askId).stage).toBe('done');
     schedule(harness, taskId, { target: { kind: 'task', taskId: askId } });
     const created = only(harness);

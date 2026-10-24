@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
   QUESTION_WITHDRAWN,
+  readAnsweredReply,
+  resolveAnsweredReply,
   resolveAnswerPrompt,
   resolveContinuePrompt,
   resolveQuestionResumePrompt,
@@ -81,5 +83,15 @@ describe('session prompts', () => {
     expect(resolveWithdrawnReply()).toBe('The question was withdrawn. Continue with your best judgement.');
     expect(resolveWithdrawnReply().startsWith(QUESTION_WITHDRAWN)).toBe(true);
     expect(resolveSupersededReply('x').startsWith(QUESTION_WITHDRAWN)).toBe(true);
+  });
+
+  test('an answer reaches the agent with who answered, and reads back as the answer alone', () => {
+    expect(resolveAnsweredReply('Blue', false)).toBe('The human answered: Blue');
+    expect(resolveAnsweredReply('Blue', true)).toBe(
+      'The agent that delegated this work to you answered: Blue'
+    );
+    expect(readAnsweredReply(resolveAnsweredReply('Blue', false))).toBe('Blue');
+    expect(readAnsweredReply(resolveAnsweredReply('Blue', true))).toBe('Blue');
+    expect(readAnsweredReply('Blue')).toBe('Blue');
   });
 });

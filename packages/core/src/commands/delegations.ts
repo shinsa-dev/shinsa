@@ -30,7 +30,7 @@ export type DelegationAgentCommand =
   | { type: 'agent.split_task'; runId: string; requests: string[]; thisWaits: boolean };
 
 export type DelegationSystemCommand =
-  | { type: 'delegation.delivered'; runId: string; generation: number; items: string[] }
-  | { type: 'delegation.undelivered'; runId: string; generation: number | null; items: string[] }
+  | { type: 'delegation.record_delivery'; runId: string; generation: number; items: string[] }
+  | { type: 'delegation.release'; runId: string; generation: number | null; items: string[] }
   | { type: 'delegation.wake_policy'; runId: string; wake: DelegationWake }
   | { type: 'delegations.recover' };

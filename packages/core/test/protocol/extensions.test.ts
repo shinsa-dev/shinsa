@@ -63,8 +63,8 @@ describe('the context optimizer', () => {
   const day = 86_400_000;
   const now = 100 * day;
 
-  test('starts off, skipping servers unused for two weeks once turned on, and leaving skills alone', () => {
-    expect(createContextOptimizer()).toEqual({ enabled: false, days: 14, skills: false });
+  test('starts on, leaving out MCPs and skills unused for 14 days', () => {
+    expect(createContextOptimizer()).toEqual({ enabled: true, days: 14, skills: true });
     expect(OPTIMIZER_LIMITS.defaultDays).toBe(14);
   });
 

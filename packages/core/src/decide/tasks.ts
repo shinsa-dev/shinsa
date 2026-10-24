@@ -12,6 +12,7 @@ import {
   type Task,
   type TaskAuto,
   type TaskCreator,
+  type TaskShape,
   type TriageDecisions,
 } from '../domain/index.ts';
 import { resolveFocusProject } from '../queue/rank.ts';
@@ -46,6 +47,7 @@ interface TaskLineage {
   parentTaskId?: string;
   createdBy?: TaskCreator;
   scheduleId?: string;
+  shape?: TaskShape;
 }
 
 export function createTask(decider: Decider, command: CommandOf<'task.create'>, lineage: TaskLineage = {}) {
@@ -56,7 +58,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   const projectId = resolveCreatedProject(decider, command);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
-    shape: command.mode === undefined,
+    shape: command.mode === undefined && lineage.shape === undefined,
     start: command.waitsOn === undefined,
     priority: command.priority === undefined,
   };
@@ -91,17 +93,12 @@ function inferDependencies(decider: Decider, taskId: string, ids: string[]) {
   });
 }
 
-function isAutoStart(task: Task) {
-  return task.auto ? task.auto.start : task.waitsOn.length === 0;
-}
-
 function resolveDecisions(
   task: Task,
   command: CommandOf<'task.triage'>,
   inferred: string[],
   reasons: TriageReasons
-): TriageDecisions | null {
-  if (!task.auto) return null;
+): TriageDecisions {
   const shape = command.shape ?? resolveShapeOf(resolveTaskPipeline(task));
   return {
     shape: task.auto.shape ? { value: shape, why: reasons.shape ?? '' } : null,
@@ -116,10 +113,10 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
   const task = decider.task(command.taskId);
   if (isTaskSettled(task) || isTriaged(task)) return;
   assertRepo(decider, command.repoId);
-  const inferred = isAutoStart(task) ? inferDependencies(decider, task.id, command.waitsOn) : [];
+  const inferred = task.auto.start ? inferDependencies(decider, task.id, command.waitsOn) : [];
   const decisions = resolveDecisions(task, command, inferred, command.reasons ?? {});
-  const shape = task.auto?.shape && !isShapeLocked(task) ? command.shape : undefined;
-  const projectId = task.projectId ?? decider.state.repos[command.repoId]?.projectId ?? null;
+  const shape = task.auto.shape && !isShapeLocked(task) ? command.shape : undefined;
+  const projectId = task.projectId ?? decider.repoOf(command)?.projectId ?? null;
   decider.emit({
     type: 'task.triaged',
     taskId: task.id,
@@ -130,9 +127,9 @@ export function triageTask(decider: Decider, command: CommandOf<'task.triage'>) 
     size: command.size,
     branch: command.branch,
     ...(shape ? { pipeline: [...SHAPE_PIPELINES[shape]] } : {}),
-    ...(decisions ? { decisions } : {}),
+    decisions,
   });
-  if (task.auto?.priority && command.priority && command.priority !== task.priority) {
+  if (task.auto.priority && command.priority && command.priority !== task.priority) {
     decider.emit({ type: 'task.prioritized', taskId: task.id, priority: command.priority });
   }
   if (inferred.length > 0) {
@@ -212,6 +209,7 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
 
 export function readyWorktree(decider: Decider, command: CommandOf<'worktree.ready'>) {
   const current = decider.task(command.taskId);
+  if (current.repoId === null) return;
   const unchanged = current.worktreePath === command.path && current.branch === command.branch;
   if (!unchanged) {
     decider.emit({

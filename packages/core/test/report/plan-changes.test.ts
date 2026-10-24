@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { describePlanChange, resolvePlanChanges, type PlanDocument } from '../../src/report/index.ts';
-import { SPEC } from '../harness.ts';
+import { describePlanChange, type PlanDocument, resolvePlanChanges } from '../../src/report/index.ts';
+import { PLAN } from '../harness.ts';
 
 function revise(patch: Partial<PlanDocument>): PlanDocument {
-  return { ...SPEC, ...patch };
+  return { ...PLAN, ...patch };
 }
 
 describe('resolvePlanChanges', () => {
   test('has nothing to say about a first plan or an unchanged one', () => {
-    expect(resolvePlanChanges(null, SPEC)).toEqual([]);
-    expect(resolvePlanChanges(SPEC, null)).toEqual([]);
-    expect(resolvePlanChanges(SPEC, revise({ goal: '  ship IT. ' }))).toEqual([]);
+    expect(resolvePlanChanges(null, PLAN)).toEqual([]);
+    expect(resolvePlanChanges(PLAN, null)).toEqual([]);
+    expect(resolvePlanChanges(PLAN, revise({ goal: '  ship IT. ' }))).toEqual([]);
   });
 
   test('names the goal, the approach and every phase that came, went or changed', () => {
@@ -22,7 +22,7 @@ describe('resolvePlanChanges', () => {
         { title: 'Add a test', detail: 'Cover the overflow.' },
       ],
     });
-    expect(resolvePlanChanges(SPEC, after)).toEqual([
+    expect(resolvePlanChanges(PLAN, after)).toEqual([
       { kind: 'goal' },
       { kind: 'phase_changed', title: 'Fix and verify' },
       { kind: 'phase_added', title: 'Add a test' },
@@ -32,8 +32,8 @@ describe('resolvePlanChanges', () => {
   });
 
   test('notices phases that only moved', () => {
-    const after = revise({ plan: [SPEC.plan[1], SPEC.plan[0]].filter((step) => step !== undefined) });
-    expect(resolvePlanChanges(SPEC, after)).toEqual([{ kind: 'phases_reordered' }]);
+    const after = revise({ phases: [PLAN.phases[1], PLAN.phases[0]].filter((phase) => phase !== undefined) });
+    expect(resolvePlanChanges(PLAN, after)).toEqual([{ kind: 'phases_reordered' }]);
   });
 
   test('counts files added and dropped', () => {

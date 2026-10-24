@@ -8,8 +8,9 @@ import {
   decide,
   type Gate,
   type GateDecision,
+  isAgentQuestion,
+  isDecisionGate,
   isDependencyOf,
-  isHumanOnlyGate,
   isOverBudget,
   isTaskSettled,
   listActiveRuns,
@@ -17,6 +18,7 @@ import {
   listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
+  type PlanDocument,
   type PullRequest,
   type ReportCheck,
   type ReviewFinding,
@@ -30,10 +32,9 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
-  type PlanDocument,
   type Task,
 } from '../../src/index.ts';
-import { IMPACT, SPEC } from '../harness.ts';
+import { IMPACT, PLAN } from '../harness.ts';
 import {
   assertDelegationInvariants,
   assertDelegationProgress,
@@ -85,6 +86,8 @@ function sample<T>(random: Random, items: readonly T[]) {
 
 const SEEDS = Number(process.env.SHINSA_SEEDS ?? 30);
 
+const RARE_SEEDS = Math.max(SEEDS, 60);
+
 const DELEGATION_ODDS = 0.12;
 
 const SCHEDULE_ODDS = 0.06;
@@ -98,7 +101,16 @@ const COMPOSITION_ODDS = 0.25;
 
 const STEPS = 400;
 
-const DECISIONS: GateDecision[] = ['approve', 'approve', 'approve', 'approve', 'revise', 'answer', 'reject'];
+const DECISIONS: GateDecision[] = [
+  'approve',
+  'approve',
+  'approve',
+  'approve',
+  'revise',
+  'reply',
+  'waive',
+  'reject',
+];
 
 function randomChecks(random: Random): ReportCheck[] {
   return [
@@ -137,10 +149,10 @@ function randomPullRequest(random: Random): PullRequest {
 }
 
 function resolvePlanDocument(state: ShinsaState): PlanDocument {
-  if (state.seq % 11 === 0) return { ...SPEC, verification: [] };
-  if (state.seq % 13 === 0) return { ...SPEC, evidence: ['screenshot'], approval: true };
-  if (state.seq % 4 === 0) return SPEC;
-  return { ...SPEC, impact: IMPACT, operation: ['Run the backfill and check every row has a plan.'] };
+  if (state.seq % 11 === 0) return { ...PLAN, verification: [] };
+  if (state.seq % 13 === 0) return { ...PLAN, evidence: ['screenshot'], approval: true };
+  if (state.seq % 4 === 0) return PLAN;
+  return { ...PLAN, impact: IMPACT, operation: ['Run the backfill and check every row has a plan.'] };
 }
 
 function needsEvidence(state: ShinsaState, taskId: string) {
@@ -162,7 +174,13 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         commands.push({ type: 'agent.propose_plan', runId, document: resolvePlanDocument(state) });
         break;
       case 'builder':
-        commands.push({ type: 'agent.complete_phase', runId, summary: 'Done.', spots: [], judgementCalls: [] });
+        commands.push({
+          type: 'agent.complete_phase',
+          runId,
+          summary: 'Done.',
+          spots: [],
+          judgementCalls: [],
+        });
         if (needsEvidence(state, run.taskId) && chance(random, 0.5)) {
           commands.push({
             type: 'agent.attach_evidence',
@@ -199,7 +217,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         outcome: pick(random, ['completed', 'failed', 'cancelled']) ?? 'failed',
         summary: null,
       },
-      { type: 'run.link', runId, sessionId: `s-${runId}` }
+      { type: 'run.link', runId, sessionId: `s-${runId}`, provider: 'claude' }
     );
     if (chance(random, 0.2)) commands.push(...listAttemptCommands(runId, state.seq, random));
   }
@@ -218,6 +236,8 @@ const FAILURE_CLASSES: RunFailureClass[] = [
   'setup_failed',
   'session_lost',
 ];
+
+const LOGIN_PROVIDERS = ['codex', 'cursor'];
 
 const ACCOUNTS: RunAccount[] = [
   { id: 'acc-1', email: 'one@example.com' },
@@ -241,6 +261,20 @@ function listAccountEndings(runId: string, seq: number, random: Random): ShinsaC
       outcome: 'failed',
       summary: 'Signed out.',
       failure: { class: 'auth', message: 'Signed out.', code: null, retryable: null, resetAt: null, account },
+    },
+    {
+      type: 'run.end',
+      runId,
+      outcome: 'failed',
+      summary: 'Signed out of Codex.',
+      failure: {
+        class: 'auth',
+        message: 'Signed out.',
+        code: null,
+        retryable: null,
+        resetAt: null,
+        login: { provider: pick(random, LOGIN_PROVIDERS) ?? 'codex', email: null },
+      },
     },
   ];
 }
@@ -270,7 +304,7 @@ function listAttemptCommands(runId: string, seq: number, random: Random): Shinsa
     },
     { type: 'run.interrupt', runId },
     { type: 'run.continue', runId },
-    { type: 'run.session_lost', runId, sessionId: `s-${runId}` },
+    { type: 'run.record_lost_session', runId, sessionId: `s-${runId}` },
     { type: 'agent.note', runId, note: 'Stale.', attemptId: 'stale' },
     { type: 'run.end', runId, outcome: 'failed', summary: null, attemptId: 'stale' },
     {
@@ -316,7 +350,7 @@ function listSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[]
         type: 'task.triage',
         taskId,
         title: `Task ${taskId}`,
-        repoId: 'repo',
+        repoId: chance(random, 0.15) ? null : 'repo',
         size: chance(random, 0.5) ? 'large' : 'small',
         branch: `b-${taskId}`,
         waitsOn: sample(random, taskIds),
@@ -327,7 +361,8 @@ function listSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[]
     }
     if (task.stage === 'checking')
       commands.push({ type: 'checks.record', taskId, results: randomChecks(random) });
-    if (task.pushPending) commands.push({ type: 'pull_request.pushed', taskId, sha: `sha-${state.seq}` });
+    if (task.pushPending)
+      commands.push({ type: 'pull_request.record_push', taskId, sha: `sha-${state.seq}` });
     commands.push(...listPullRequestReads(state, task, random));
     if (chance(random, 0.03))
       commands.push({ type: 'effect.fail', taskId, title: 'Effect failed', detail: 'x' });
@@ -444,8 +479,8 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       { type: 'run.silence', runId, since: chance(random, 0.7) ? state.seq : null },
     ];
     if (run.role === 'answerer')
-      commands.push({ type: 'agent.answer', runId, answer: 'It works like this.' });
-    if (run.role === 'fixer' || run.role === 'shipper') {
+      commands.push({ type: 'agent.deliver', runId, step: 'answer', body: 'It works like this.' });
+    if (run.role === 'fixer') {
       const fix: ShinsaCommand = {
         type: 'agent.complete_fix',
         runId,
@@ -463,7 +498,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       commands.push(review, review, review);
     }
     if (run.role === 'planner') {
-      commands.push({ type: 'agent.propose_plan', runId, document: SPEC, changeSummary: 'Tightened it.' });
+      commands.push({ type: 'agent.propose_plan', runId, document: PLAN, changeSummary: 'Tightened it.' });
     }
     return commands;
   });
@@ -477,6 +512,7 @@ function listProcessSystemCommands(state: ShinsaState, random: Random): ShinsaCo
         type: 'config.record',
         taskId: task.id,
         problems: pick(random, VERIFIED_PROBLEMS) ?? [],
+        ...(task.repoId === null && chance(random, 0.5) ? { repoId: 'repo' } : {}),
       });
     }
     const monitor = task.monitor;
@@ -495,6 +531,9 @@ function listProcessSystemCommands(state: ShinsaState, random: Random): ShinsaCo
     for (const account of ACCOUNTS) {
       if (chance(random, 0.3)) commands.push({ type: 'account.signed_in', account });
       if (chance(random, 0.05)) commands.push({ type: 'account.removed', accountId: account.id });
+    }
+    for (const provider of LOGIN_PROVIDERS) {
+      if (chance(random, 0.3)) commands.push({ type: 'provider.record_sign_in', provider });
     }
     return commands;
   });
@@ -625,7 +664,7 @@ function nextCommand(
 
 function assertProcessInvariants(state: ShinsaState, task: Task, gates: Gate[], context: string) {
   const runs = listActiveRuns(state, task.id);
-  for (const gate of gates.filter((open) => open.kind === 'plan' && open.purpose === 'decision')) {
+  for (const gate of gates.filter((open) => open.type === 'plan')) {
     expect(gate.planVersion ?? task.plan?.version, context).toBe(task.plan?.version);
   }
   if (task.monitor?.status === 'armed') {
@@ -646,7 +685,12 @@ function assertProcessInvariants(state: ShinsaState, task: Task, gates: Gate[], 
   }
   const signIn = gates.filter((gate) => gate.type === 'sign_in');
   expect(signIn.length, context).toBeLessThanOrEqual(1);
-  for (const gate of signIn) expect(gate.account, context).toBeTruthy();
+  for (const gate of signIn) {
+    expect(gate.provider, `${context}: a Sign in gate without its provider`).toBeTruthy();
+    if (gate.provider === 'claude')
+      expect(gate.account, `${context}: a Claude Sign in gate without its account`).toBeTruthy();
+    else expect(gate.account ?? null, `${context}: a provider login names an account`).toBeNull();
+  }
   const configuration = gates.filter((gate) => gate.type === 'configuration');
   expect(configuration.length, context).toBeLessThanOrEqual(1);
   if (configuration.length > 0) expect(task.stage, context).toBe('triage');
@@ -675,7 +719,7 @@ function assertInvariants(state: ShinsaState, now: number) {
   for (const task of Object.values(state.tasks)) {
     const runs = listActiveRuns(state, task.id);
     const gates = listOpenGates(state, task.id);
-    const kinds = (kind: string) => gates.filter((gate) => gate.kind === kind && isDecisionGate(gate));
+    const kinds = (kind: string) => gates.filter((gate) => gate.type === kind && isDecisionGate(gate));
     const context = `${task.id} at ${task.stage} (${task.stageReason})`;
 
     expect(runs.length, context).toBeLessThanOrEqual(1);
@@ -705,7 +749,7 @@ function assertInvariants(state: ShinsaState, now: number) {
         context
       ).toBe(true);
     }
-    for (const gate of gates.filter((open) => open.purpose === 'agent_question')) {
+    for (const gate of gates.filter(isAgentQuestion)) {
       expect(
         runs.some((run) => run.id === gate.runId),
         context
@@ -721,7 +765,7 @@ function assertInvariants(state: ShinsaState, now: number) {
       expect(task.stage, context).toBe('awaiting_merge');
       expect(listOpenBlockers(state, task), context).toHaveLength(0);
     }
-    if (task.stage === 'queued') {
+    if (task.stage === 'waiting_on_tasks') {
       expect(listPendingDependencies(state, task).length > 0 || gates.length > 0, context).toBe(true);
     }
     assertProcessInvariants(state, task, gates, context);
@@ -753,19 +797,21 @@ function selectOnBehalfCommand(state: ShinsaState, random: Random): ShinsaComman
 
 const FINISHED_STAGES = new Set(['merged', 'done']);
 
+const CLOSING_EVENTS = new Set(['gate.answered', 'gate.withdrawn', 'gate.superseded']);
+
 function assertHumanGatesKept(
   prior: ShinsaState,
   events: ReturnType<typeof decide>['events'],
   command: ShinsaCommand
 ) {
+  const open = new Set(listOpenGates(prior).map((gate) => gate.id));
   for (const event of events) {
-    if (event.type !== 'gate.answered') continue;
-    const gate = prior.gates[event.gateId];
-    expect(gate && isHumanOnlyGate(gate), `${command.type} on your behalf answered a human-only gate`).toBe(
+    if (!CLOSING_EVENTS.has(event.type) || !('gateId' in event)) continue;
+    expect(open.has(event.gateId), `${command.type} on your behalf closed an open gate (${event.type})`).toBe(
       false
     );
   }
-  for (const gate of listOpenGates(prior).filter(isHumanOnlyGate)) {
+  for (const gate of listOpenGates(prior)) {
     const before = prior.tasks[gate.taskId]?.stage ?? 'triage';
     const staged = events.flatMap((event) =>
       event.type === 'task.staged' && event.taskId === gate.taskId ? [event.stage] : []
@@ -927,11 +973,13 @@ function listReachedStates(state: ShinsaState) {
     (gate.planVersion ?? 0) > 1 ? 'revised plan gate' : null,
   ]);
   const tasks = Object.values(state.tasks).flatMap((task) => [
-    task.answer ? 'answered question' : null,
+    task.result?.step === 'answer' ? 'answered question' : null,
     task.monitor ? 'monitor' : null,
     task.usageWait ? 'usage wait' : null,
     task.pullRequestWatch?.stopped === 'unreadable' ? 'unreadable pull request' : null,
-    task.suggestions?.some((suggestion) => suggestion.status === 'accepted') ? 'accepted follow-up' : null,
+    task.suggestions?.some((suggestion) => suggestion.status === 'accepted')
+      ? 'accepted suggested task'
+      : null,
   ]);
   return [...gates, ...tasks].filter((mark) => mark !== null);
 }
@@ -942,7 +990,7 @@ describe('decide under random command sequences', () => {
     () => {
       let settled = 0;
       const reached = new Set<string>();
-      for (let seed = 1; seed <= SEEDS; seed += 1) {
+      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) {
         const state = simulate(seed, STEPS);
         settled += Object.values(state.tasks).filter((task) => task.stage === 'merged').length;
         for (const mark of listReachedStates(state)) reached.add(mark);
@@ -956,7 +1004,7 @@ describe('decide under random command sequences', () => {
       }
       expect(settled).toBeGreaterThan(0);
       expect([...reached].sort()).toEqual([
-        'accepted follow-up',
+        'accepted suggested task',
         'answered delegation',
         'answered question',
         'answered secret',
@@ -979,19 +1027,19 @@ describe('decide under random command sequences', () => {
         'waiting parent',
       ]);
     },
-    SEEDS * 2_000
+    RARE_SEEDS * 2_000
   );
 
   test(
     'keeps every invariant while GitHub fails to read pull requests, and stops a watch that cannot read',
     () => {
       const reached = new Set<string>();
-      for (let seed = 1; seed <= SEEDS; seed += 1) {
+      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) {
         for (const mark of listReachedStates(simulate(seed, STEPS, 'outages'))) reached.add(mark);
       }
       expect(reached).toContain('unreadable pull request');
     },
-    SEEDS * 2_000
+    RARE_SEEDS * 2_000
   );
 
   test(
@@ -1003,13 +1051,14 @@ describe('decide under random command sequences', () => {
       };
       for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'shapes', collect);
       expect([...reached].sort()).toEqual([
-        'accepted change',
+        'accepted proposal',
+        'answered question',
         'built fix',
         'composed steps',
         'composition vetoed',
-        'declined change',
+        'declined proposal',
         'finished operation',
-        'reported findings',
+        'reported diagnosis',
         'reshaped by an agent',
         'reshaped by you',
         'written report',
@@ -1077,7 +1126,7 @@ describe('decide under random command sequences', () => {
   );
 
   test(
-    'never lets a command sent on your behalf answer or settle a decision only you make',
+    'never lets a command sent on your behalf close a gate or finish a task that waits at one',
     () => {
       let actions = 0;
       for (let seed = 1; seed <= SEEDS; seed += 1) {
@@ -1108,20 +1157,20 @@ describe('decide under random command sequences', () => {
       const collect = (state: ShinsaState) => {
         for (const mark of listRoundMarks(state)) if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'rounds', collect);
+      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) simulate(seed, STEPS, 'rounds', collect);
       expect([...reached].sort()).toEqual([
         'closed task',
         'kept split-off',
         'merged later round',
-        'queued round',
         'round from the default branch',
         'rounds onto one pull request',
         'shipped round',
         'stacked round',
         'three rounds',
+        'waiting round',
       ]);
     },
-    SEEDS * 3_000
+    RARE_SEEDS * 3_000
   );
 
   test(
@@ -1131,14 +1180,14 @@ describe('decide under random command sequences', () => {
       const collect = (state: ShinsaState) => {
         for (const mark of listComposedRoundMarks(state)) if (mark) reached.add(mark);
       };
-      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'composed_rounds', collect);
+      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) simulate(seed, STEPS, 'composed_rounds', collect);
       expect([...reached].sort()).toEqual([
         'composed later round',
         'composed onto an open pull request',
         'later round vetoed',
       ]);
     },
-    SEEDS * 3_000
+    RARE_SEEDS * 3_000
   );
 
   test('is deterministic for the same state, command, clock and ids', () => {

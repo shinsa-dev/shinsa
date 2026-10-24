@@ -6,12 +6,10 @@ import { resolveHouseRules } from '../../src/prompts/rules.ts';
 import { createHarness, createTask } from '../harness.ts';
 
 const ROLES: RunRole[] = [
-  'triage',
   'planner',
   'builder',
   'reviewer',
   'fixer',
-  'shipper',
   'answerer',
   'investigator',
   'researcher',

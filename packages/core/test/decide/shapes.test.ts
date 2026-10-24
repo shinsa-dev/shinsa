@@ -21,16 +21,17 @@ import {
   type Harness,
   IMPACT,
   PASSING,
+  PLAN,
   proposePlan,
   pullRequest,
   pushed,
   registerRepo,
-  SPEC,
   verifySetup,
 } from '../harness.ts';
 
 interface StartOptions {
   shape?: TaskShape;
+  mode?: 'ask';
   priority?: 'urgent' | 'high' | 'normal' | 'low';
   waitsOn?: string[];
   triage?: { shape?: TaskShape; priority?: 'urgent' | 'high' | 'normal' | 'low'; waitsOn?: string[] };
@@ -44,7 +45,7 @@ function start(harness: Harness, options: StartOptions = {}) {
     type: 'task.create',
     request: options.request ?? 'Why does the export hang on large files?',
     repoId: null,
-    ...(options.shape ? { shape: options.shape } : {}),
+    ...(options.mode ? { mode: options.mode } : {}),
     ...(options.priority ? { priority: options.priority } : {}),
     ...(options.waitsOn ? { waitsOn: options.waitsOn } : {}),
   });
@@ -57,7 +58,7 @@ function start(harness: Harness, options: StartOptions = {}) {
     size: 'small',
     branch: `fix/${taskId}`,
     waitsOn: options.triage?.waitsOn ?? [],
-    ...(options.triage?.shape ? { shape: options.triage.shape } : {}),
+    ...(options.shape || options.triage?.shape ? { shape: options.shape ?? options.triage?.shape } : {}),
     ...(options.triage?.priority ? { priority: options.triage.priority } : {}),
     reasons: { shape: 'It asks why something happens.', priority: 'Nothing urgent.', start: 'Independent.' },
   });
@@ -109,23 +110,35 @@ describe('choosing the shape', () => {
     expect(task.proposedBranch).toBe(`fix/${taskId}`);
   });
 
-  test('what you picked yourself stays, and triage records no decision for it', () => {
+  test('the priority and the start you picked stay, and triage records no decision for them', () => {
     const harness = createHarness();
     const other = createTask(harness, { request: 'Rework the exporter' });
     const taskId = start(harness, {
-      shape: 'research',
       priority: 'low',
       waitsOn: [],
-      triage: { shape: 'answer', priority: 'urgent', waitsOn: [other] },
+      triage: { shape: 'research', priority: 'urgent', waitsOn: [other] },
     });
     const task = harness.task(taskId);
     expect(resolveTaskShape(task)).toBe('research');
     expect(task.priority).toBe('low');
     expect(task.waitsOn).toEqual([]);
-    expect(task.triageDecisions).toEqual({ shape: null, start: null, priority: null });
+    expect(task.auto).toEqual({ shape: true, start: false, priority: false });
+    expect(task.triageDecisions).toEqual({
+      shape: { value: 'research', why: 'It asks why something happens.' },
+      start: null,
+      priority: null,
+    });
     expect(task.activity.find((entry) => entry.kind === 'set_up')?.text).toBe(
       'Set up as research for a report in paywall-next'
     );
+  });
+
+  test('a new task takes no shape: only triage shapes it, unless you asked a question', () => {
+    const harness = createHarness();
+    const asked = start(harness, { mode: 'ask', triage: { shape: 'research' } });
+    expect(harness.task(asked).auto?.shape).toBe(false);
+    expect(resolveTaskShape(harness.task(asked))).toBe('answer');
+    expect(harness.task(asked).triageDecisions?.shape).toBeNull();
   });
 
   test('a triage without a shape keeps the default change, and a missing why stays empty', () => {
@@ -148,7 +161,7 @@ describe('choosing the shape', () => {
 });
 
 describe('an investigation', () => {
-  test('runs in a worktree, reports its findings and finishes without a plan or a pull request', () => {
+  test('runs in a worktree, reports its diagnosis and finishes without a plan or a pull request', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'investigate' });
     passSetup(harness, taskId);
@@ -161,12 +174,12 @@ describe('an investigation', () => {
     const task = harness.task(taskId);
     expect(task).toMatchObject({
       stage: 'done',
-      stageReason: 'reported its findings',
+      stageReason: 'reported its diagnosis',
       plan: null,
       pullRequest: null,
     });
     expect(task.result).toMatchObject({ step: 'investigate', body: 'The investigate result.' });
-    expect(task.activity.map((entry) => entry.text)).toContain('Reported what the investigation found');
+    expect(task.activity.map((entry) => entry.text)).toContain('Reported the diagnosis');
     expect(acceptsFollowUp(task)).toBe(true);
     expect(resolveTaskProgress(task).phases.map((phase) => `${phase.key}:${phase.status}`)).toEqual([
       'setup:done',
@@ -180,11 +193,8 @@ describe('an investigation', () => {
     passSetup(harness, taskId);
     deliver(harness, taskId, 'investigate', PROPOSAL);
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({
-      kind: 'question',
-      purpose: 'change',
-      title: 'Turn this investigation into a fix?',
-    });
+    expect(gate).toMatchObject({ type: 'proposal', title: 'Turn this investigation into a fix?' });
+    expect(harness.task(taskId).pipeline).toEqual(['investigate', 'your_ok', ...SHAPE_PIPELINES.change]);
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_proposal', proposal: { status: 'open' } });
     expect(resolveTaskProgress(harness.task(taskId)).current).toMatchObject({
       key: 'proposal',
@@ -195,15 +205,15 @@ describe('an investigation', () => {
     expect(resolveTaskShape(task)).toBe('fix');
     expect(task.proposal?.status).toBe('accepted');
     expect(task.shapeChanges?.at(-1)).toMatchObject({ by: 'agent', from: ['investigate'] });
-    expect(task.activity.map((entry) => entry.text)).toContain('Turned into a find-and-fix change');
+    expect(task.activity.map((entry) => entry.text)).toContain('Turned into an investigation, then a change');
     expect(task.stage).toBe('triage');
+    expect(task.stageReason).toBe('verifying the setup');
+    expect(harness.lastEffect('config.verify').taskId).toBe(taskId);
     passSetup(harness, taskId);
     const planner = harness.activeRun(taskId);
     expect(planner.role).toBe('planner');
-    expect(planner.prompt).toContain('What the investigation found:\nThe investigate result.');
-    expect(planner.prompt).toContain(
-      'The change the human approved after that:\nStream the export in chunks.'
-    );
+    expect(planner.prompt).toContain('The diagnosis from the investigation:\nThe investigate result.');
+    expect(planner.prompt).toContain('The human approved going on after that:\nStream the export in chunks.');
   });
 
   test('declining the fix finishes the task as an investigation', () => {
@@ -221,7 +231,9 @@ describe('an investigation', () => {
       stage: 'done',
       stageReason: 'kept as an investigation',
       proposal: { status: 'declined' },
+      pipeline: ['investigate'],
     });
+    expect(harness.task(taskId).shapeChanges?.at(-1)).toMatchObject({ by: 'you', to: ['investigate'] });
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: 'missing', decision: 'approve', response: null })
     ).toThrow('No gate missing');
@@ -231,9 +243,14 @@ describe('an investigation', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'investigate' });
     passSetup(harness, taskId);
-    harness.send({ type: 'run.link', runId: harness.activeRun(taskId).id, sessionId: 'inv-1' });
+    harness.send({
+      type: 'run.link',
+      runId: harness.activeRun(taskId).id,
+      sessionId: 'inv-1',
+      provider: 'claude',
+    });
     deliver(harness, taskId, 'investigate', PROPOSAL);
-    expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('decline_change');
+    expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('decline_proposal');
     harness.send({ type: 'task.message', taskId, text: 'Check the CSV path too.' });
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(harness.task(taskId)).toMatchObject({ stage: 'investigating', proposal: { status: 'declined' } });
@@ -247,15 +264,15 @@ describe('an investigation', () => {
     passSetup(harness, taskId);
     deliver(harness, taskId, 'investigate', PROPOSAL);
     const queue = resolveQueue(harness.state, harness.now);
-    expect(queue.ready[0]?.reason).toBe('An agent proposes turning this into a change');
+    expect(queue.ready[0]?.reason).toBe('An agent proposes what comes next and waits for your OK');
     expect(resolveFallbackBriefing(queue, harness.now).now?.why).toBe(
-      'An agent proposes turning this into a change, if you agree'
+      'An agent proposes what comes next, and it goes on only if you agree'
     );
-    expect(resolveQueueSummary(harness.state, harness.now, 'http://x').decisions[0]?.label).toBe('Change');
+    expect(resolveQueueSummary(harness.state, harness.now, 'http://x').decisions[0]?.label).toBe('Proposal');
     expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain('Investigation started');
   });
 
-  test('the change gate takes only approve or reject, and retry leaves it for you', () => {
+  test('the proposal gate takes only approve or reject, and retry leaves it for you', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'investigate' });
     passSetup(harness, taskId);
@@ -269,7 +286,7 @@ describe('an investigation', () => {
         decision: 'revise',
         response: 'x',
       })
-    ).toThrow('Approve the change or keep the task as it is.');
+    ).toThrow('Approve the proposal or keep the task as it is.');
   });
 });
 
@@ -297,7 +314,7 @@ describe('find and fix', () => {
     completePhase(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
-    expect(harness.openGate(taskId).kind).toBe('review');
+    expect(harness.openGate(taskId).type).toBe('review');
   });
 });
 
@@ -311,7 +328,7 @@ describe('research', () => {
     expect(run.role).toBe('researcher');
     expect(run.prompt).toContain('This task produces a report, not a change');
     expect(run.prompt).toContain('The repository is checked out at `/code/paywall-next`');
-    harness.send({ type: 'run.link', runId: run.id, sessionId: 'res-1' });
+    harness.send({ type: 'run.link', runId: run.id, sessionId: 'res-1', provider: 'claude' });
     deliver(harness, taskId, 'research');
     expect(harness.task(taskId)).toMatchObject({ stage: 'done', stageReason: 'wrote the report' });
     harness.send({ type: 'task.message', taskId, text: 'Add the licences.' });
@@ -345,9 +362,10 @@ describe('an answer', () => {
     const taskId = start(harness, { shape: 'answer' });
     verifySetup(harness, taskId);
     harness.send({
-      type: 'agent.answer',
+      type: 'agent.deliver',
       runId: harness.activeRun(taskId).id,
-      answer: 'It does.',
+      step: 'answer',
+      body: 'It does.',
       proposal: PROPOSAL,
     });
     expect(harness.openGate(taskId).title).toBe('Turn this answer into a change?');
@@ -368,9 +386,10 @@ describe('an answer', () => {
     const taskId = start(harness, { shape: 'answer' });
     verifySetup(harness, taskId);
     harness.send({
-      type: 'agent.answer',
+      type: 'agent.deliver',
       runId: harness.activeRun(taskId).id,
-      answer: 'It does.',
+      step: 'answer',
+      body: 'It does.',
       proposal: PROPOSAL,
     });
     approve(harness, taskId);
@@ -387,7 +406,7 @@ describe('an operation', () => {
     passSetup(harness, taskId);
     expect(harness.activeRun(taskId).prompt).toContain('This task is an operation');
     proposePlan(harness, taskId);
-    expect(harness.openGate(taskId).kind).toBe('plan');
+    expect(harness.openGate(taskId).type).toBe('plan');
     approve(harness, taskId);
     const run = harness.activeRun(taskId);
     expect(run.role).toBe('operator');
@@ -400,7 +419,13 @@ describe('an operation', () => {
     deliver(harness, taskId, 'operate');
     expect(harness.task(taskId)).toMatchObject({ stage: 'done', stageReason: 'the operation finished' });
     expect(acceptsFollowUp(harness.task(taskId))).toBe(false);
-    harness.send({ type: 'task.message', taskId, text: 'Run it on staging too.', shape: 'operation' });
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Run it on staging too.',
+      kind: 'new_round',
+      shape: 'operation',
+    });
     expect(harness.task(taskId)).toMatchObject({ stage: 'triage', pipeline: ['plan', 'operate'] });
     expect(harness.task(taskId).rounds?.map((round) => [round.number, round.status])).toEqual([
       [1, 'finished'],
@@ -421,6 +446,28 @@ describe('an operation', () => {
     harness.send({ type: 'message.deliver', taskId, text: 'Skip the cache.' });
     expect(harness.activeRun(taskId).prompt).toContain('Guidance from the human:\nSkip the cache.');
   });
+
+  test('an operation without a code change attaches the evidence its plan asks for before it reports', () => {
+    const harness = createHarness();
+    const taskId = start(harness, { shape: 'operation' });
+    passSetup(harness, taskId);
+    proposePlan(harness, taskId, { ...PLAN, evidence: ['note'] });
+    approve(harness, taskId);
+    const runId = harness.activeRun(taskId).id;
+    expect(() => deliver(harness, taskId, 'operate')).toThrow(
+      'The plan asks for a note (`note`) as evidence. Attach it with `attach_evidence` before you report the outcome.'
+    );
+    expect(harness.task(taskId).stage).toBe('operating');
+    harness.send({
+      type: 'agent.attach_evidence',
+      runId,
+      kind: 'note',
+      title: 'Rows changed',
+      uri: 'note.md',
+    });
+    deliver(harness, taskId, 'operate');
+    expect(harness.task(taskId)).toMatchObject({ stage: 'done', result: { step: 'operate' } });
+  });
 });
 
 describe('the planner reshapes', () => {
@@ -437,9 +484,29 @@ describe('the planner reshapes', () => {
     expect(listActiveRuns(harness.state, taskId).find((run) => run.id === planner.id)).toBeUndefined();
   });
 
-  test('never a shape you chose, and never once there is a plan', () => {
+  test('never a task whose kind was set when it was created, such as a split of a plan', () => {
     const harness = createHarness();
-    const taskId = start(harness, { shape: 'change' });
+    const parent = createTask(harness);
+    proposePlan(harness, parent);
+    harness.send({
+      type: 'agent.split_task',
+      runId: harness.activeRun(parent).id,
+      requests: ['Split one'],
+      thisWaits: false,
+    });
+    const taskId =
+      Object.values(harness.state.tasks).find((task) => task.createdBy?.kind === 'split')?.id ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId,
+      title: 'Split one',
+      repoId: harness.task(parent).repoId ?? '',
+      size: 'small',
+      branch: `fix/${taskId}`,
+      waitsOn: [],
+      shape: 'answer',
+    });
+    expect(resolveTaskShape(harness.task(taskId))).toBe('change');
     passSetup(harness, taskId);
     expect(harness.activeRun(taskId).prompt).not.toContain('`reshape_task`');
     const run = { type: 'agent.reshape' as const, shape: 'answer' as const, reason: 'Nothing to do.' };
@@ -519,16 +586,16 @@ describe('the inquiry steps', () => {
   });
 });
 
-describe('migration', () => {
-  test('a task created before shapes replays as a change, and an Ask task as an answer', () => {
+describe('a task without a chosen shape', () => {
+  test('reads as a change before triage picks its steps, and an Ask task as an answer', () => {
     const harness = createHarness();
     const repoId = registerRepo(harness);
     harness.send({ type: 'task.create', request: 'How?', repoId, mode: 'ask' });
     const ask = Object.keys(harness.state.tasks)[0] ?? '';
     expect(harness.task(ask).auto).toEqual({ shape: false, start: true, priority: true });
     expect(resolveTaskShape(harness.task(ask))).toBe('answer');
-    const legacy = { ...harness.task(ask), mode: undefined, pipeline: undefined, auto: undefined };
-    expect(resolveTaskShape(legacy)).toBe('change');
+    const unshaped = { ...harness.task(ask), mode: undefined, pipeline: undefined };
+    expect(resolveTaskShape(unshaped)).toBe('change');
   });
 
   test('a split plan files its sub-tasks as changes', () => {
@@ -560,7 +627,7 @@ function listSteps(harness: Harness, taskId: string) {
 }
 
 describe('the planner composes the steps', () => {
-  test('investigate, your OK, then an operation: the findings wait for your OK before the operation is planned', () => {
+  test('investigate, your OK, then an operation: the diagnosis waits for your OK before the operation is planned', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'The nightly export stalls. Clear whatever is stuck.' });
     expect(harness.activeRun(taskId).prompt).toContain('`steps`');
@@ -573,7 +640,7 @@ describe('the planner composes the steps', () => {
     expect(harness.task(taskId)).toMatchObject({
       pipeline: ['investigate', 'your_ok', 'plan', 'operate'],
       stage: 'triage',
-      stageReason: 'checking the setup',
+      stageReason: 'verifying the setup',
     });
     expect(harness.task(taskId).activity.find((entry) => entry.kind === 'shape')).toMatchObject({
       text: 'Turned into an investigation, then an operation',
@@ -592,8 +659,8 @@ describe('the planner composes the steps', () => {
     deliver(harness, taskId, 'investigate');
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({
-      purpose: 'change',
-      title: 'Run an operation from these findings?',
+      type: 'proposal',
+      title: 'Run an operation from this diagnosis?',
       body: 'Find what is stuck, then clear it.\n\nPlan the operation. You approve the plan before anything runs.',
     });
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_proposal', proposal: { status: 'open' } });
@@ -601,13 +668,14 @@ describe('the planner composes the steps', () => {
     expect(listSteps(harness, taskId)[2]).toBe('Your OK to run:waiting');
     approve(harness, taskId);
     expect(harness.task(taskId).proposal?.status).toBe('accepted');
-    ready(harness, taskId);
+    expect(harness.task(taskId).stageReason).toBe('verifying the setup');
+    passSetup(harness, taskId);
     const planner = harness.activeRun(taskId);
     expect(planner.role).toBe('planner');
     expect(planner.prompt).not.toContain('`reshape_task`');
     expect(planner.prompt).toContain('The human approved going on after that:');
     proposePlan(harness, taskId);
-    expect(harness.openGate(taskId).kind).toBe('plan');
+    expect(harness.openGate(taskId).type).toBe('plan');
     approve(harness, taskId);
     deliver(harness, taskId, 'operate');
     expect(harness.task(taskId)).toMatchObject({ stage: 'done', pullRequest: null });
@@ -623,7 +691,7 @@ describe('the planner composes the steps', () => {
     deliver(harness, taskId, 'research');
     expect(harness.openGate(taskId).title).toBe('Turn this report into a change?');
     approve(harness, taskId);
-    ready(harness, taskId);
+    passSetup(harness, taskId);
     expect(harness.activeRun(taskId).prompt).toContain('The report written for this task:');
     proposePlan(harness, taskId);
     completePhase(harness, taskId);
@@ -638,7 +706,7 @@ describe('the planner composes the steps', () => {
     ]);
   });
 
-  test('your veto keeps the findings and finishes the task as an investigation that takes follow-ups', () => {
+  test('your veto keeps the diagnosis and finishes the task as an investigation that takes follow-ups', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     compose(harness, taskId, ['investigate', 'your_ok', 'plan', 'build', ...REVIEW_TAIL]);
@@ -665,7 +733,7 @@ describe('the planner composes the steps', () => {
     expect(acceptsFollowUp(task)).toBe(true);
   });
 
-  test('a message at your OK goes back to the investigator, and its next findings ask again', () => {
+  test('a message at your OK goes back to the investigator, and its next diagnosis asks again', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     compose(harness, taskId, ['investigate', 'your_ok', 'plan', 'operate']);
@@ -715,7 +783,7 @@ describe('the planner composes the steps', () => {
       'An investigation already ran, so `investigate` stays in the steps.'
     );
     compose(harness, taskId, ['investigate', 'plan', 'operate'], 'The findings call for a cleanup script.');
-    expect(harness.task(taskId)).toMatchObject({ stage: 'triage', stageReason: 'checking the setup' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'triage', stageReason: 'verifying the setup' });
     passSetup(harness, taskId);
     const planner = harness.activeRun(taskId);
     expect(planner.prompt).not.toContain('`reshape_task`');
@@ -747,7 +815,12 @@ describe('the planner composes the steps', () => {
     const taskId = createTask(harness);
     compose(harness, taskId, ['answer', 'your_ok', 'plan', 'operate']);
     passSetup(harness, taskId);
-    harness.send({ type: 'agent.answer', runId: harness.activeRun(taskId).id, answer: 'It is stuck.' });
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'answer',
+      body: 'It is stuck.',
+    });
     expect(harness.openGate(taskId)).toMatchObject({
       title: 'Run an operation from this answer?',
       body: 'Find the cause first.\n\nPlan the operation. You approve the plan before anything runs.',
@@ -755,7 +828,7 @@ describe('the planner composes the steps', () => {
     const proposed = harness.events.filter((event) => event.type === 'task.change_proposed').length;
     approve(harness, taskId);
     expect(harness.events.filter((event) => event.type === 'task.change_proposed')).toHaveLength(proposed);
-    expect(harness.task(taskId)).toMatchObject({ stage: 'triage', stageReason: 'setting up the worktree' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'triage', stageReason: 'verifying the setup' });
   });
 });
 
@@ -765,7 +838,7 @@ const BACKFILL = [
 ];
 
 function planWithOperation(harness: Harness, taskId: string) {
-  proposePlan(harness, taskId, { ...SPEC, operation: BACKFILL });
+  proposePlan(harness, taskId, { ...PLAN, operation: BACKFILL });
 }
 
 function reachMergedPullRequest(harness: Harness, taskId: string) {
@@ -798,7 +871,7 @@ describe('a change, then an operation', () => {
     );
     expect(harness.activeRun(taskId).id).toBe(planner.id);
     planWithOperation(harness, taskId);
-    expect(harness.openGate(taskId)).toMatchObject({ kind: 'plan' });
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'plan' });
     expect(harness.openGate(taskId).body).toContain(`## Operation\n1. ${BACKFILL[0]}`);
     approve(harness, taskId);
     expect(harness.activeRun(taskId).role).toBe('builder');
@@ -809,7 +882,7 @@ describe('a change, then an operation', () => {
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_operation' });
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     expect(harness.openGate(taskId)).toMatchObject({
-      purpose: 'operation',
+      type: 'operation',
       title: 'The change merged. Run the operation now?',
       commit: 'f00dfacecafe',
     });
@@ -866,9 +939,9 @@ describe('a change, then an operation', () => {
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'x' });
-    expect(harness.openGate(taskId).purpose).toBe('failure');
+    expect(harness.openGate(taskId).type).toBe('failure');
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
-    expect(listOpenGates(harness.state, taskId).map((gate) => gate.purpose)).toEqual(['operation']);
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['operation']);
     expect(harness.openGate(taskId).body).toMatch(/^Pull request #42 merged\. The merged code/);
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
@@ -879,7 +952,7 @@ describe('a change, then an operation', () => {
     compose(harness, taskId, ['plan', 'operate', ...SHAPE_PIPELINES.change.slice(1)], 'Snapshot first.');
     passSetup(harness, taskId);
     expect(harness.activeRun(taskId).prompt).toContain('This task runs an operation first');
-    expect(() => proposePlan(harness, taskId, { ...SPEC, impact: IMPACT })).toThrow(
+    expect(() => proposePlan(harness, taskId, { ...PLAN, impact: IMPACT })).toThrow(
       'This task also runs an operation: list its steps in `operation`'
     );
     planWithOperation(harness, taskId);
@@ -892,41 +965,6 @@ describe('a change, then an operation', () => {
     expect(harness.activeRun(taskId).prompt).toContain('How the operation went:');
     reachMergedPullRequest(harness, taskId);
     expect(harness.task(taskId)).toMatchObject({ stage: 'merged', result: { step: 'operate' } });
-  });
-
-  test('a change an older version composed without checks or an agent review still reaches your review', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    harness.replay({
-      type: 'task.reshaped',
-      taskId,
-      pipeline: ['plan', 'build', 'your_review', 'pull_request', 'merge'],
-      by: 'agent',
-      reason: 'A copy change.',
-    });
-    proposePlan(harness, taskId);
-    completePhase(harness, taskId);
-    completePhase(harness, taskId);
-    expect(harness.task(taskId).stage).toBe('awaiting_review');
-    expect(harness.openGate(taskId).kind).toBe('review');
-  });
-
-  test('a change an older version composed without an agent review goes from passing checks to your review', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    harness.replay({
-      type: 'task.reshaped',
-      taskId,
-      pipeline: ['plan', 'build', 'checks', 'your_review', 'pull_request', 'merge'],
-      by: 'agent',
-      reason: 'A copy change.',
-    });
-    proposePlan(harness, taskId);
-    completePhase(harness, taskId);
-    completePhase(harness, taskId);
-    expect(harness.task(taskId).stage).toBe('checking');
-    harness.send({ type: 'checks.record', taskId, results: PASSING });
-    expect(harness.task(taskId).stage).toBe('awaiting_review');
   });
 });
 
@@ -962,7 +1000,7 @@ describe('the operation after the merge waits for your OK', () => {
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,
-      decision: 'answer',
+      decision: 'reply',
       response: 'Run it on staging first.',
     });
     expect(harness.activeRun(taskId).prompt).toContain('Guidance from the human:\nRun it on staging first.');
@@ -992,7 +1030,7 @@ describe('the operation after the merge waits for your OK', () => {
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
 
-  test('a message adds to the notes for the operator on the same gate, without asking again or running the operation', () => {
+  test('a message replaces the notes for the operator on the same gate, without asking again or running the operation', () => {
     const harness = createHarness();
     const taskId = reachOperationGate(harness);
     const gate = harness.openGate(taskId);
@@ -1001,30 +1039,50 @@ describe('the operation after the merge waits for your OK', () => {
     expect(harness.openGate(taskId)).toEqual({ ...gate, notes: 'Wait for the deploy.' });
     harness.send({ type: 'message.deliver', taskId, text: 'Skip the archived accounts.' });
     harness.send({ type: 'task.retry', taskId });
-    expect(harness.openGate(taskId)).toEqual({
-      ...gate,
-      notes: 'Wait for the deploy.\n\nSkip the archived accounts.',
-    });
+    expect(harness.openGate(taskId)).toEqual({ ...gate, notes: 'Skip the archived accounts.' });
+    const again = harness.send({ type: 'message.deliver', taskId, text: '  Skip the archived accounts. ' });
+    expect(again.events).toEqual([]);
     expect(harness.task(taskId).stage).toBe('awaiting_operation');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     approve(harness, taskId);
-    expect(harness.activeRun(taskId).prompt).toContain(
-      'Guidance from the human:\nWait for the deploy.\n\nSkip the archived accounts.'
-    );
+    const prompt = harness.activeRun(taskId).prompt;
+    expect(prompt).toContain('Guidance from the human:\nSkip the archived accounts.');
+    expect(prompt).not.toContain('Wait for the deploy.');
   });
 
-  test('running with your words adds them to the notes a message left', () => {
+  test('running with your words replaces the notes a message left', () => {
     const harness = createHarness();
     const taskId = reachOperationGate(harness);
     harness.send({ type: 'task.message', taskId, text: 'Wait for the deploy.' });
-    harness.send({
-      type: 'gate.answer',
-      gateId: harness.openGate(taskId).id,
-      decision: 'answer',
-      response: 'Run it on staging first.',
-    });
-    expect(harness.activeRun(taskId).prompt).toContain(
-      'Guidance from the human:\nWait for the deploy.\n\nRun it on staging first.'
+    const gateId = harness.openGate(taskId).id;
+    harness.send({ type: 'gate.answer', gateId, decision: 'reply', response: ' Run it on staging first. ' });
+    expect(harness.state.gates[gateId]?.notes).toBe('Run it on staging first.');
+    const prompt = harness.activeRun(taskId).prompt;
+    expect(prompt).toContain('Guidance from the human:\nRun it on staging first.');
+    expect(prompt).not.toContain('Wait for the deploy.');
+  });
+
+  test('running with no words clears the notes, and approving runs with none', () => {
+    const cleared = createHarness();
+    const taskId = reachOperationGate(cleared);
+    cleared.send({ type: 'task.message', taskId, text: 'Wait for the deploy.' });
+    const gateId = cleared.openGate(taskId).id;
+    const decision = cleared.send({ type: 'gate.answer', gateId, decision: 'reply', response: '  ' });
+    expect(decision.events).toContainEqual(
+      expect.objectContaining({ type: 'gate.noted', gateId, notes: null })
     );
+    expect(cleared.state.gates[gateId]?.notes).toBeNull();
+    expect(cleared.activeRun(taskId).prompt).not.toContain('Guidance from the human');
+
+    const bare = createHarness();
+    const other = reachOperationGate(bare);
+    const ran = bare.send({
+      type: 'gate.answer',
+      gateId: bare.openGate(other).id,
+      decision: 'approve',
+      response: null,
+    });
+    expect(ran.events.map((event) => event.type)).not.toContain('gate.noted');
+    expect(bare.activeRun(other).prompt).not.toContain('Guidance from the human');
   });
 });

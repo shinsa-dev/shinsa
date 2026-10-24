@@ -54,12 +54,4 @@ describe('recovery fingerprints', () => {
     expect(countUnchangedRounds({ ...tracked, treeHash: null }, 'checks')).toBe(0);
     expect(countReviewRounds(tracked)).toBe(1);
   });
-
-  test('a task from before fingerprints counts from its fix history', () => {
-    const task = { ...builtTask(), fixFingerprints: undefined, fixHistory: ['review:a.ts', 'checks:lint'] };
-    expect(countFixRepeats(task, 'review', 'a.ts')).toBe(1);
-    expect(countFixRepeats(task, 'review', null)).toBe(0);
-    expect(countReviewRounds(task)).toBe(1);
-    expect(countUnchangedRounds(task, 'review')).toBe(0);
-  });
 });

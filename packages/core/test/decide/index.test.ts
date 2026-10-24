@@ -17,15 +17,6 @@ describe('scheduling', () => {
     expect(resolveQueue(harness.state, 0).working).toHaveLength(tasks.length);
   });
 
-  test('a stored agent limit from an older version is ignored', () => {
-    const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { maxConcurrentRuns: 1 } as never });
-    const first = createTask(harness, { request: 'One' });
-    const second = createTask(harness, { request: 'Two' });
-    expect(harness.activeRun(first).status).toBe('running');
-    expect(harness.activeRun(second).status).toBe('running');
-  });
-
   test('every open task always has something moving it forward', () => {
     const harness = createHarness();
     const taskId = createTask(harness);

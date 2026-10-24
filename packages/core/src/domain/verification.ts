@@ -13,7 +13,7 @@ export type VerificationCheck =
   | { kind: 'evidence' }
   | { kind: 'gate'; gate: GateType };
 
-export type VerificationScope = 'always' | 'with_code' | 'after_merge';
+export type VerificationScope = 'always' | 'alone' | 'with_code' | 'after_merge';
 
 export interface VerificationRule {
   id: string;
@@ -87,6 +87,15 @@ export const VERIFICATION_RULES: readonly VerificationRule[] = [
     message: 'A merge waits for CI.',
   },
   {
+    id: 'operation.evidence',
+    applies: 'operation',
+    scope: 'alone',
+    check: { kind: 'evidence' },
+    requirement:
+      'An operation without a code change attaches the evidence its plan asks for before it reports.',
+    message: 'Attach it with `attach_evidence` before you report the outcome.',
+  },
+  {
     id: 'operation.plan_approved',
     applies: 'operation',
     scope: 'always',
@@ -111,7 +120,7 @@ export const VERIFICATION_RULES: readonly VerificationRule[] = [
     check: { kind: 'plan', field: 'operation' },
     requirement: 'With a code change, the operation’s steps are listed apart from the phases.',
     message:
-      'This task also runs an operation: list its steps in `operation`, in order, each with how to check it worked. The phases in `plan` are the code change only.',
+      'This task also runs an operation: list its steps in `operation`, in order, each with how to check it worked. The `phases` are the code change only.',
   },
   {
     id: 'operation.confirm_after_merge',
@@ -134,6 +143,7 @@ function listVerifiedClasses(steps: readonly PipelineStep[]): VerifiedClass[] {
 }
 
 function isInScope(steps: readonly PipelineStep[], scope: VerificationScope) {
+  if (scope === 'alone') return !steps.includes('build');
   if (scope === 'with_code') return steps.includes('build');
   if (scope === 'after_merge') return isAfterMerge(steps);
   return true;
@@ -162,11 +172,8 @@ export function validatePlanRules(steps: readonly PipelineStep[], document: Plan
     if (rule.check.kind !== 'plan' || PLAN_FIELD_FILLED[rule.check.field](document)) return [];
     return [rule.message];
   });
-  const parameters = (document.evidence ?? []).length > 0 || (document.checks ?? []).length > 0;
-  if (parameters && !steps.includes('build')) {
-    errors.push(
-      '`evidence` and `checks` are for a code change, and this task changes no code: leave them out.'
-    );
+  if ((document.checks ?? []).length > 0 && !steps.includes('build')) {
+    errors.push('`checks` are for a code change, and this task changes no code: leave them out.');
   }
   return errors;
 }

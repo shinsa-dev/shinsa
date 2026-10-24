@@ -7,7 +7,7 @@ export type TaskShape = 'answer' | 'investigate' | 'research' | 'change' | 'fix'
 
 export type InquiryStep = Extract<PipelineStep, 'answer' | 'research' | 'investigate'>;
 
-export type DeliveringStep = Extract<PipelineStep, 'research' | 'investigate' | 'operate'>;
+export type DeliveringStep = Extract<PipelineStep, 'answer' | 'research' | 'investigate' | 'operate'>;
 
 export type WorkStep = Extract<PipelineStep, 'build' | 'operate'>;
 
@@ -66,6 +66,8 @@ export const TASK_SHAPES: readonly TaskShape[] = [
 
 const INQUIRY_STEPS: readonly InquiryStep[] = ['answer', 'research', 'investigate'];
 
+const REPOSITORY_FREE_STEPS: ReadonlySet<PipelineStep> = new Set<PipelineStep>(['answer', 'research']);
+
 const CHANGE_TAIL: readonly PipelineStep[] = [
   'plan',
   'build',
@@ -89,7 +91,7 @@ export const SHAPE_PIPELINES: Record<TaskShape, readonly PipelineStep[]> = {
 
 export const SHAPE_LIMITS = {
   answer: 8_000,
-  findings: 12_000,
+  diagnosis: 12_000,
   report: 40_000,
   outcome: 8_000,
   request: 2_000,
@@ -110,13 +112,16 @@ const INQUIRY_NOUN: Record<InquiryStep, string> = {
   investigate: 'An investigation',
 };
 
-export function isInquiryDone(task: Pick<Task, 'answer' | 'result'>, step: InquiryStep) {
-  if (step === 'answer') return Boolean(task.answer);
+export function isInquiryDone(task: Pick<Task, 'result'>, step: InquiryStep) {
   return task.result?.step === step;
 }
 
+export function isFollowUpOnWork(task: Pick<Task, 'stage' | 'plan'>) {
+  return task.stage === 'answering' && task.plan !== null;
+}
+
 export function validateComposition(
-  task: Pick<Task, 'pipeline' | 'mode' | 'answer' | 'result'>,
+  task: Pick<Task, 'pipeline' | 'mode' | 'result'>,
   steps: readonly PipelineStep[]
 ): string[] {
   const errors = [...validatePipeline(steps), ...validateVerification(steps)];
@@ -135,6 +140,23 @@ export function validateComposition(
 
 export function isComposedByAgent(task: Pick<Task, 'shapeChanges'>) {
   return (task.shapeChanges ?? []).some((change) => change.by === 'agent');
+}
+
+export type ShapeState = 'triage' | 'planner' | 'settled';
+
+const SHAPING_STAGES: ReadonlySet<Task['stage']> = new Set<Task['stage']>([
+  'triage',
+  'waiting_on_tasks',
+  'planning',
+]);
+
+export function resolveShapeState(
+  task: Pick<Task, 'stage' | 'auto' | 'pipeline' | 'plan' | 'shapeChanges'>
+): ShapeState {
+  if (!task.auto.shape || !SHAPING_STAGES.has(task.stage)) return 'settled';
+  if (!task.pipeline || task.pipeline.length === 0) return 'triage';
+  if (task.plan !== null || isComposedByAgent(task) || task.pipeline[0] !== 'plan') return 'settled';
+  return 'planner';
 }
 
 export function isSamePipeline(a: readonly PipelineStep[], b: readonly PipelineStep[]) {
@@ -176,6 +198,10 @@ export function hasStep(task: Pick<Task, 'pipeline' | 'mode'>, step: PipelineSte
   return resolveTaskPipeline(task).includes(step);
 }
 
+export function needsRepository(steps: readonly PipelineStep[]) {
+  return steps.some((step) => !REPOSITORY_FREE_STEPS.has(step));
+}
+
 export function resolveInquiryStep(steps: readonly PipelineStep[]): InquiryStep | null {
   return INQUIRY_STEPS.find((step) => steps.includes(step)) ?? null;
 }
@@ -190,11 +216,6 @@ export function findInquiryStep(steps: readonly PipelineStep[]): InquiryStep {
   return step;
 }
 
-export function resolveChangeUpgrade(steps: readonly PipelineStep[]): PipelineStep[] {
-  const inquiry = resolveInquiryStep(steps);
-  return [...(inquiry ? [inquiry] : []), ...CHANGE_TAIL];
-}
-
-export function isUpgrade(from: readonly PipelineStep[], to: readonly PipelineStep[]) {
-  return (['build', 'operate'] as const).some((step) => to.includes(step) && !from.includes(step));
+export function resolveProposalUpgrade(steps: readonly PipelineStep[]): PipelineStep[] {
+  return [findInquiryStep(steps), 'your_ok', ...CHANGE_TAIL];
 }

@@ -15,8 +15,8 @@ function suggest(harness: Harness, taskId: string, suggestions: SuggestedTask[])
   return harness.send({ type: 'agent.suggest_tasks', runId: harness.activeRun(taskId).id, suggestions });
 }
 
-describe('follow-up suggestions', () => {
-  test('an agent proposes follow-ups that wait for you, without starting anything', () => {
+describe('suggested tasks', () => {
+  test('an agent suggests tasks that wait for you, without starting anything', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
@@ -29,7 +29,7 @@ describe('follow-up suggestions', () => {
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'agent',
       kind: 'suggestion',
-      text: 'Suggested a follow-up: Retry the export',
+      text: 'Suggested a task: Retry the export',
     });
   });
 
@@ -86,7 +86,7 @@ describe('follow-up suggestions', () => {
     expect(harness.lastEffect('task.triage').taskId).toBe(created);
     harness.send({ type: 'suggestion.accept', taskId, suggestionId: second.id, waitsOnThis: false });
     expect(harness.task(harness.task(taskId).suggestions?.[1]?.createdTaskId ?? '').waitsOn).toEqual([]);
-    expect(harness.task(taskId).activity.at(-1)?.text).toBe('Added the follow-up “Retry the export”');
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe('Added the suggested task “Retry the export”');
   });
 
   test('dismissing one closes it, and a closed suggestion cannot be decided again', () => {
@@ -96,7 +96,9 @@ describe('follow-up suggestions', () => {
     const id = harness.task(taskId).suggestions?.[0]?.id ?? '';
     harness.send({ type: 'suggestion.dismiss', taskId, suggestionId: id });
     expect(harness.task(taskId).suggestions?.[0]?.status).toBe('dismissed');
-    expect(harness.task(taskId).activity.at(-1)?.text).toBe('Dismissed the follow-up “Cache the session”');
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe(
+      'Dismissed the suggested task “Cache the session”'
+    );
     expect(() =>
       harness.send({ type: 'suggestion.accept', taskId, suggestionId: id, waitsOnThis: false })
     ).toThrow('This suggestion has already been added or dismissed.');
@@ -105,7 +107,7 @@ describe('follow-up suggestions', () => {
     );
   });
 
-  test('a follow-up of a merged task starts at once, and one of a cancelled task cannot wait on it', () => {
+  test('a suggested task of a merged task starts at once, and one of a cancelled task cannot wait on it', () => {
     const harness = createHarness();
     const merged = createTask(harness, { request: 'Merged' });
     suggest(harness, merged, [suggestion('After merge')]);

@@ -57,7 +57,7 @@ describe('a push reported twice', () => {
     const { harness, taskId } = shipping();
     const sha = harness.task(taskId).pushedSha ?? '';
     expect(sha).not.toBe('');
-    expect(harness.send({ type: 'pull_request.pushed', taskId, sha }).events).toEqual([]);
+    expect(harness.send({ type: 'pull_request.record_push', taskId, sha }).events).toEqual([]);
   });
 });
 
@@ -93,7 +93,7 @@ describe('reacting to the pull request', () => {
   test('a pull request without CI reaches the merge gate', () => {
     const { harness, taskId } = shipping();
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'none' }) });
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('conflicts and unresolved comments are fixed too', () => {
@@ -116,7 +116,7 @@ describe('reacting to the pull request', () => {
       pushFix(harness, taskId);
     }
     const gate = harness.openGate(taskId);
-    expect(gate.purpose).toBe('failure');
+    expect(gate.type).toBe('failure');
     expect(gate.body).toBe(
       'The same problems came back after 2 fix rounds. Steer the agent in the chat, or retry.'
     );
@@ -132,7 +132,7 @@ describe('reacting to the pull request', () => {
     expect(harness.task(taskId)).toMatchObject({ stageReason: 'pushing the fix', fixRounds: rounds });
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('a pull request that has not seen the pushed commit yet is not judged', () => {
@@ -152,14 +152,14 @@ describe('reacting to the pull request', () => {
     expect(harness.task(taskId).stageReason).toBe('waiting for GitHub to see the push');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ headSha: 'new' }) });
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('a commit someone else pushes while the merge gate is open takes the gate back until it is judged', () => {
     const { harness, taskId } = shipping();
     pushed(harness, taskId, 'ours');
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ headSha: 'ours' }) });
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
     harness.send({
       type: 'pull_request.record',
       taskId,
@@ -171,7 +171,7 @@ describe('reacting to the pull request', () => {
       'The branch moved to theirs1, a commit Shinsa did not push'
     );
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ headSha: 'theirs1' }) });
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('a first read that already shows someone else’s commit on top of the push is judged, not waited on', () => {
@@ -183,7 +183,7 @@ describe('reacting to the pull request', () => {
       pullRequest: pullRequest({ headSha: 'bot-commit' }),
     });
     expect(harness.task(taskId).pushedSha).toBe('bot-commit');
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('a sync while the merge runs does not open the merge gate again', () => {
@@ -200,7 +200,7 @@ describe('reacting to the pull request', () => {
     const { harness, taskId } = shipping();
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'gh' });
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
-    expect(listOpenGates(harness.state, taskId).map((gate) => gate.kind)).toEqual(['merge']);
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['merge']);
   });
 
   test('a closed pull request cancels the task, and later records are ignored', () => {
@@ -261,7 +261,7 @@ describe('retrying a pull request step', () => {
       stageReason: 'checking the pull request',
     });
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('retrying while the merge gate is open checks the pull request again', () => {
@@ -304,7 +304,7 @@ describe('waiting on other tasks after building started', () => {
     const top = createTask(harness, { request: 'Top' });
     reachShipping(harness, top);
     harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest() });
-    expect(harness.openGate(top).kind).toBe('merge');
+    expect(harness.openGate(top).type).toBe('merge');
     harness.send({ type: 'task.wait_on', taskId: top, waitsOn: [base] });
     expect(listOpenGates(harness.state, top)).toHaveLength(0);
     expect(harness.task(top)).toMatchObject({
@@ -314,7 +314,7 @@ describe('waiting on other tasks after building started', () => {
     harness.send({ type: 'task.wait_on', taskId: top, waitsOn: [] });
     expect(harness.lastEffect('pull_request.watch').taskId).toBe(top);
     harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest() });
-    expect(harness.openGate(top).kind).toBe('merge');
+    expect(harness.openGate(top).type).toBe('merge');
   });
 
   test('a dependency added while the merge runs leaves the merge alone', () => {
@@ -341,7 +341,7 @@ describe('waiting on other tasks after building started', () => {
     harness.send({ type: 'task.cancel', taskId: base });
     expect(harness.lastEffect('pull_request.watch').taskId).toBe(top);
     harness.send({ type: 'pull_request.record', taskId: top, pullRequest: pullRequest() });
-    expect(harness.openGate(top).kind).toBe('merge');
+    expect(harness.openGate(top).type).toBe('merge');
   });
 });
 
@@ -394,19 +394,19 @@ describe('watching the pull request', () => {
     );
     pushFix(harness, taskId);
     record(harness, taskId, {}, [REMARK]);
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('the reader’s own replies never start a fixer', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, {}, [{ ...REMARK, author: 'shinsa-user' }]);
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
   });
 
   test('a read that missed comments never moves the watermark past them', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, {}, null);
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
     expect(harness.task(taskId).pullRequestWatch?.remarksThrough).toBe('1970-01-01T00:00:00.000Z');
     record(harness, taskId, {}, [REMARK]);
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
@@ -424,10 +424,10 @@ describe('watching the pull request', () => {
       expect(harness.activeRun(taskId).prompt).toContain(`  - ${name} https://ci/${name}`);
       pushFix(harness, taskId);
     }
-    expect(harness.task(taskId).fixHistory).toEqual([
-      'pull_request:check:lint',
-      'pull_request:check:test',
-      'pull_request:check:build',
+    expect(harness.task(taskId).fixFingerprints?.map((fingerprint) => fingerprint.signature)).toEqual([
+      'check:lint',
+      'check:test',
+      'check:build',
     ]);
   });
 
@@ -441,7 +441,7 @@ describe('watching the pull request', () => {
       pushFix(harness, taskId);
     }
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', title: 'Stopped watching the pull request' });
+    expect(gate).toMatchObject({ type: 'failure', title: 'Stopped watching the pull request' });
     expect(gate.body).toContain('after 10 updates in a row that brought only new comments');
     expect(harness.task(taskId).pullRequestWatch).toMatchObject({ stopped: 'comment_limit', wakes: 10 });
     record(harness, taskId, { checks: 'failing' });
@@ -456,7 +456,7 @@ describe('watching the pull request', () => {
     failReads(harness, taskId, 8, 'HTTP 502.');
     expect(harness.task(taskId).pullRequestWatch?.stopped).toBe('unreadable');
     record(harness, taskId);
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
     expect(harness.task(taskId).pullRequestWatch?.stopped).toBeNull();
   });
 
@@ -489,7 +489,7 @@ describe('a pull request GitHub cannot read', () => {
     expect(listOpenGates(harness.state, taskId)).toEqual([]);
     failReads(harness, taskId, 1, 'HTTP 502.');
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', title: 'Could not read the pull request' });
+    expect(gate).toMatchObject({ type: 'failure', title: 'Could not read the pull request' });
     expect(gate.body).toBe(
       'Shinsa failed to read pull request #42 from GitHub 8 times in a row: HTTP 502. Check it on GitHub, then retry to watch it again.'
     );
@@ -533,9 +533,9 @@ describe('a pull request GitHub cannot read', () => {
     expect(listOpenGates(harness.state, taskId).filter((gate) => gate.type === 'failure')).toEqual([]);
     pushFix(harness, taskId);
     record(harness, taskId);
-    expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(harness.openGate(taskId).type).toBe('merge');
     failReads(harness, taskId, PULL_REQUEST_READ_FAILURE_LIMIT, 'x');
-    expect(listOpenGates(harness.state, taskId).map((gate) => gate.kind)).toEqual(['merge']);
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['merge']);
     expect(harness.task(taskId).pullRequestWatch?.stopped).toBeNull();
     const other = createHarness();
     const planning = createTask(other);
@@ -572,7 +572,7 @@ describe('merge queues', () => {
     record(harness, taskId, { mergeQueue: { state: 'queued', position: 1 } });
     record(harness, taskId, { mergeQueue: null, queueRemoval: 'failed checks' });
     const gate = harness.openGate(taskId);
-    expect(gate.kind).toBe('merge');
+    expect(gate.type).toBe('merge');
     expect(
       gate.body.startsWith(
         'GitHub’s merge queue took the pull request out without merging it: failed checks.'

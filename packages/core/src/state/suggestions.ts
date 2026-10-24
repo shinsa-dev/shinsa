@@ -5,14 +5,14 @@ import { record, updateTask } from './write.ts';
 
 export function applySuggested(state: ShinsaState, event: EventOf<'task.suggested'>) {
   updateTask(state, event.taskId, event.at, {
-    suggestions: [...(state.tasks[event.taskId]?.suggestions ?? []), event.suggestion],
+    suggestions: [...(state.tasks[event.taskId]?.suggestions ?? []), { ...event.suggestion }],
   });
   record(state, event.taskId, event.at, {
     actor: event.suggestion.runId ? 'agent' : 'shinsa',
     kind: 'suggestion',
     text: event.suggestion.splitOff
       ? `Suggested a separate task: ${event.suggestion.title}`
-      : `Suggested a follow-up: ${event.suggestion.title}`,
+      : `Suggested a task: ${event.suggestion.title}`,
     detail: event.suggestion.why,
     runId: event.suggestion.runId,
   });

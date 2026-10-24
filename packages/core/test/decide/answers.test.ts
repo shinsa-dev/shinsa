@@ -20,7 +20,7 @@ function ask(harness: Harness = createHarness()) {
 }
 
 function answer(harness: Harness, taskId: string, text = 'It retries three times in `retry()`.') {
-  harness.send({ type: 'agent.answer', runId: harness.activeRun(taskId).id, answer: text });
+  harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step: 'answer', body: text });
 }
 
 describe('ask mode', () => {
@@ -45,7 +45,7 @@ describe('ask mode', () => {
     answer(harness, taskId);
     const task = harness.task(taskId);
     expect(task).toMatchObject({ stage: 'done', stageReason: 'answered your question' });
-    expect(task.answer).toBe('It retries three times in `retry()`.');
+    expect(task.result).toMatchObject({ step: 'answer', body: 'It retries three times in `retry()`.' });
     expect(task.activity.map((entry) => entry.text)).toContain('Answered the question');
     expect(task.activity.map((entry) => entry.text)).not.toContain('Marked done');
     expect(isTaskSettled(task)).toBe(true);
@@ -54,7 +54,12 @@ describe('ask mode', () => {
 
   test('a follow-up reopens the question on the same session', () => {
     const { harness, taskId } = ask();
-    harness.send({ type: 'run.link', runId: harness.activeRun(taskId).id, sessionId: 'answerer-1' });
+    harness.send({
+      type: 'run.link',
+      runId: harness.activeRun(taskId).id,
+      sessionId: 'answerer-1',
+      provider: 'claude',
+    });
     answer(harness, taskId);
     harness.send({ type: 'task.message', taskId, text: 'And on a timeout?' });
     const run = harness.activeRun(taskId);

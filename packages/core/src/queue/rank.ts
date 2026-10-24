@@ -2,7 +2,6 @@ import { describeUnblocks } from '../briefing/text.ts';
 import { capitalise } from '../chat/text.ts';
 import {
   compareTasks,
-  type Gate,
   type GateType,
   hasArmedWait,
   isDecisionGate,

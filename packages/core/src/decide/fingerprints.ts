@@ -53,12 +53,7 @@ function isSameTree(fingerprint: FixFingerprint, tree: string | null) {
 }
 
 export function countFixRepeats(task: Task, reason: FixReason, signature: string | null) {
-  const fingerprints = task.fixFingerprints;
-  if (!fingerprints) {
-    if (signature === null) return 0;
-    const key = `${reason}:${signature}`;
-    return (task.fixHistory ?? []).filter((entry) => entry === key).length;
-  }
+  const fingerprints = task.fixFingerprints ?? [];
   const tree = task.treeHash ?? null;
   return fingerprints.filter(
     (fingerprint) =>
@@ -75,8 +70,5 @@ export function countUnchangedRounds(task: Task, reason: FixReason) {
 }
 
 export function countReviewRounds(task: Task) {
-  if (task.fixFingerprints) {
-    return task.fixFingerprints.filter((fingerprint) => fingerprint.reason === 'review').length;
-  }
-  return (task.fixHistory ?? []).filter((entry) => entry.startsWith('review:')).length;
+  return (task.fixFingerprints ?? []).filter((fingerprint) => fingerprint.reason === 'review').length;
 }

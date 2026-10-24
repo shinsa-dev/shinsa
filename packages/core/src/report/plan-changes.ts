@@ -1,4 +1,4 @@
-import type { PlanPhase, PlanDocument } from './types.ts';
+import type { PlanDocument, PlanPhase } from './types.ts';
 
 export type PlanChange =
   | { kind: 'goal' }

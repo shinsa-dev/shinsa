@@ -1,18 +1,29 @@
 import type { CommandOf } from '../commands/index.ts';
-import { type ConfigProblem, DomainError, type Gate, type GateDecision } from '../domain/index.ts';
+import {
+  type ConfigProblem,
+  DomainError,
+  type Gate,
+  type GateDecision,
+  needsRepository,
+  resolveTaskPipeline,
+  type Task,
+} from '../domain/index.ts';
 import type { Decider } from './decider.ts';
 import { isSameValue } from './equality.ts';
-import { CHECKING_SETUP, settleTask, startWork } from './lifecycle.ts';
+import { settleTask, startWork, VERIFYING_SETUP } from './lifecycle.ts';
 import { proceedAfterSetup } from './shapes.ts';
 
 const PROBLEM_FIX: Record<ConfigProblem['kind'], string> = {
-  repository: 'Point the task at a working repository, then check again.',
-  default_branch: 'Set the default branch in the repository settings, then check again.',
+  repository: 'Point the task at a working repository, then verify the setup again.',
+  no_repository:
+    'Say in a message which repository the task works in, and Shinsa verifies the setup again with it. A repository Shinsa does not know yet can be added to the project in Settings.',
+  default_branch: 'Set the default branch in the repository settings, then verify the setup again.',
   check_commands: 'Add check commands in the repository settings, or continue without checks.',
 };
 
 const PROBLEM_TITLE: Record<ConfigProblem['kind'], string> = {
   repository: 'The repository is missing',
+  no_repository: 'No repository for this task',
   default_branch: 'The default branch is missing',
   check_commands: 'No checks to run',
 };
@@ -34,23 +45,44 @@ function describeProblems(problems: ConfigProblem[]) {
   ].join('\n');
 }
 
+const NO_REPOSITORY: ConfigProblem = {
+  kind: 'no_repository',
+  detail: 'Shinsa could not tell which repository this task works in, and its work needs one.',
+};
+
+function resolveProblems(task: Task, problems: ConfigProblem[]) {
+  if (task.repoId !== null || !needsRepository(resolveTaskPipeline(task))) return problems;
+  return problems.some((problem) => problem.kind === 'no_repository')
+    ? problems
+    : [NO_REPOSITORY, ...problems];
+}
+
+function bindRepo(decider: Decider, task: Task, repoId: string) {
+  if (task.repoId !== null) return;
+  const repo = decider.repoOf({ repoId });
+  if (!repo) throw new DomainError('repo_not_found', `No repository ${repoId}`);
+  decider.emit({
+    type: 'task.repo_bound',
+    taskId: task.id,
+    repoId,
+    ...(task.projectId ? {} : { projectId: repo.projectId }),
+  });
+}
+
 export function recordConfig(decider: Decider, command: CommandOf<'config.record'>) {
   const task = decider.state.tasks[command.taskId];
-  if (task?.stage !== 'triage' || task.stageReason !== CHECKING_SETUP) return;
-  if (!isSameValue(task.configProblems ?? [], command.problems)) {
-    decider.emit({ type: 'config.verified', taskId: task.id, problems: command.problems });
+  if (task?.stage !== 'triage' || task.stageReason !== VERIFYING_SETUP) return;
+  if (command.repoId) bindRepo(decider, task, command.repoId);
+  const problems = resolveProblems(decider.task(task.id), command.problems);
+  if (!isSameValue(task.configProblems ?? [], problems)) {
+    decider.emit({ type: 'config.verified', taskId: task.id, problems });
   }
-  if (command.problems.length === 0) {
+  if (problems.length === 0) {
     proceedAfterSetup(decider, task.id);
     return;
   }
   decider.stage(task.id, 'triage', 'waiting for the setup to be fixed');
-  decider.openGate(
-    task.id,
-    'configuration',
-    describeTitle(command.problems),
-    describeProblems(command.problems)
-  );
+  decider.openGate(task.id, 'configuration', describeTitle(problems), describeProblems(problems));
 }
 
 function resolveWaivableRepo(decider: Decider, gate: Gate) {
@@ -60,7 +92,7 @@ function resolveWaivableRepo(decider: Decider, gate: Gate) {
   if (!repo || problems.some((problem) => problem.kind !== 'check_commands')) {
     throw new DomainError(
       'setup_incomplete',
-      'Only missing checks can be skipped. Fix the repository setup, then check again.'
+      'Only missing checks can be skipped. Fix the repository setup, then verify it again.'
     );
   }
   return repo;

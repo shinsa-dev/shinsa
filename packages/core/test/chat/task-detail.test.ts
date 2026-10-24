@@ -29,7 +29,7 @@ function createAskTask(harness: Harness, answer: string) {
     waitsOn: [],
   });
   harness.send({ type: 'config.record', taskId, problems: [] });
-  harness.send({ type: 'agent.answer', runId: harness.activeRun(taskId).id, answer });
+  harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step: 'answer', body: answer });
   return taskId;
 }
 
@@ -76,7 +76,7 @@ describe('a task described for an agent', () => {
   test('names the repository, branch and pull request, and what the task waits on', () => {
     const harness = createHarness();
     const blocker = createTask(harness, { request: 'First' });
-    const taskId = createTask(harness, { request: 'Second', waitsOn: blocker });
+    const taskId = createTask(harness, { request: 'Second', triageWaitsOn: blocker });
     const queued = serializeTaskDetail(harness.state, taskId);
     expect(queued).toContain(`Waits on: [First](shinsa://task/${blocker})`);
     const shipped = createTask(harness, { request: 'Third' });
@@ -92,7 +92,7 @@ describe('a task described for an agent', () => {
     const taskId = createAskTask(harness, 'a'.repeat(2_000));
     const detail = serializeTaskDetail(harness.state, taskId);
     expect(detail).toContain('· answers a question');
-    expect(detail).toContain(`Answer: ${'a'.repeat(1_500)}…`);
+    expect(detail).toContain(`Result (answer): ${'a'.repeat(1_500)}…`);
   });
 
   test('cuts a long request and a long decision, and lists a decision’s choices', () => {
@@ -110,7 +110,7 @@ describe('a task described for an agent', () => {
     const detail = serializeTaskDetail(harness.state, taskId);
     expect(detail).toContain(`Request: Fix it ${'x'.repeat(1_493)}…`);
     expect(detail).toContain('Open decisions:');
-    expect(detail).toContain(`- ${gate.title} (gate question-1, ${gate.kind}/agent_question): `);
+    expect(detail).toContain(`- ${gate.title} (gate question-1, ${gate.type}): `);
     expect(detail).toContain('… Choices: Redis | Postgres.');
   });
 
@@ -189,7 +189,7 @@ describe('a task described for an agent', () => {
   test('gives the result an inquiry delivered', () => {
     const harness = createHarness();
     const repoId = registerRepo(harness);
-    harness.send({ type: 'task.create', request: 'Why does it hang?', repoId, shape: 'investigate' });
+    harness.send({ type: 'task.create', request: 'Why does it hang?', repoId });
     const taskId = Object.keys(harness.state.tasks).at(-1) ?? '';
     harness.send({
       type: 'task.triage',
@@ -199,6 +199,7 @@ describe('a task described for an agent', () => {
       size: 'small',
       branch: `fix/${taskId}`,
       waitsOn: [],
+      shape: 'investigate',
     });
     verifySetup(harness, taskId);
     harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: `fix/${taskId}` });

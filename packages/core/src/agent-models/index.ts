@@ -73,12 +73,10 @@ const PROVIDER_DEFAULT_MODELS: Record<string, Record<AgentRole, string>> = {
 };
 
 export const RUN_AGENT_ROLE: Record<RunRole, AgentRole> = {
-  triage: 'classifier',
   planner: 'planner',
   builder: 'builder',
   reviewer: 'reviewer',
   fixer: 'fixer',
-  shipper: 'fixer',
   answerer: 'answerer',
   investigator: 'answerer',
   researcher: 'answerer',

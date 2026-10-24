@@ -9,7 +9,7 @@ import {
 
 describe('validateDelegationRequest', () => {
   test('fills in the defaults: async, shared, ten minutes, the title from the brief', () => {
-    expect(validateDelegationRequest({ task: 'Read src/a.ts and list the exports.\nThen stop.' })).toEqual({
+    expect(validateDelegationRequest({ brief: 'Read src/a.ts and list the exports.\nThen stop.' })).toEqual({
       ok: true,
       value: {
         brief: 'Read src/a.ts and list the exports.\nThen stop.',
@@ -28,7 +28,7 @@ describe('validateDelegationRequest', () => {
   test('takes every field it knows', () => {
     expect(
       validateDelegationRequest({
-        task: 'Review the diff.',
+        brief: 'Review the diff.',
         title: 'Review round 2',
         role: 'reviewer',
         mode: 'wait',
@@ -55,14 +55,14 @@ describe('validateDelegationRequest', () => {
   });
 
   test('shortens a long first line into a title', () => {
-    const result = validateDelegationRequest({ task: 'x'.repeat(200) });
+    const result = validateDelegationRequest({ brief: 'x'.repeat(200) });
     expect(result.ok && result.value.title).toBe(`${'x'.repeat(79)}…`);
   });
 
   test('says what is wrong with each field', () => {
     expect(
       validateDelegationRequest({
-        task: '',
+        brief: '',
         role: 'answerer',
         mode: 'later',
         isolation: 'vm',
@@ -71,7 +71,7 @@ describe('validateDelegationRequest', () => {
     ).toEqual({
       ok: false,
       errors: [
-        'task is required.',
+        'brief is required.',
         'role must be one of planner, builder, reviewer, fixer.',
         'mode must be one of async, wait.',
         'isolation must be one of shared, worktree.',
@@ -82,14 +82,17 @@ describe('validateDelegationRequest', () => {
 });
 
 describe('the other orchestration tools', () => {
-  test('a task id is required, and an answer needs words', () => {
-    expect(validateDelegationReference({ task_id: 'r1' })).toEqual({ ok: true, value: { taskId: 'r1' } });
-    expect(validateDelegationReference({})).toEqual({ ok: false, errors: ['task_id is required.'] });
-    expect(validateDelegationAnswer({ task_id: 'r1', answer: 'Yes.' })).toEqual({
+  test('a delegation id is required, and an answer needs words', () => {
+    expect(validateDelegationReference({ delegation_id: 'r1' })).toEqual({
       ok: true,
-      value: { taskId: 'r1', answer: 'Yes.' },
+      value: { delegationId: 'r1' },
     });
-    expect(validateDelegationAnswer({ task_id: 'r1' })).toEqual({
+    expect(validateDelegationReference({})).toEqual({ ok: false, errors: ['delegation_id is required.'] });
+    expect(validateDelegationAnswer({ delegation_id: 'r1', answer: 'Yes.' })).toEqual({
+      ok: true,
+      value: { delegationId: 'r1', answer: 'Yes.' },
+    });
+    expect(validateDelegationAnswer({ delegation_id: 'r1' })).toEqual({
       ok: false,
       errors: ['answer is required.'],
     });

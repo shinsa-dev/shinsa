@@ -9,12 +9,12 @@ import {
 import type {
   Attention,
   CodeSpot,
+  JudgementCall,
   PhaseHandOver,
+  PlanDocument,
   PlanHandOver,
   QuestionHandOver,
-  JudgementCall,
   ReviewFinding,
-  PlanDocument,
   SuggestedTask,
   WaitHandOver,
 } from './types.ts';
@@ -406,18 +406,9 @@ function readProposal(reader: Reader, value: unknown): ChangeProposalInput | nul
   };
 }
 
-export function validateAnswer(
-  input: Record<string, unknown>
-): Validation<{ answer: string; proposal: ChangeProposalInput | null }> {
-  const reader = new Reader();
-  return reader.result({
-    answer: reader.text(input.answer, 'answer', SHAPE_LIMITS.answer),
-    proposal: readProposal(reader, input.propose_change),
-  });
-}
-
 const DELIVERY_FIELD: Record<DeliveringStep, { field: string; limit: number; proposes: boolean }> = {
-  investigate: { field: 'findings', limit: SHAPE_LIMITS.findings, proposes: true },
+  answer: { field: 'answer', limit: SHAPE_LIMITS.answer, proposes: true },
+  investigate: { field: 'diagnosis', limit: SHAPE_LIMITS.diagnosis, proposes: true },
   research: { field: 'report', limit: SHAPE_LIMITS.report, proposes: true },
   operate: { field: 'outcome', limit: SHAPE_LIMITS.outcome, proposes: false },
 };

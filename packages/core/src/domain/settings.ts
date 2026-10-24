@@ -58,6 +58,20 @@ export const SETTINGS_KEYS = [
   'fastMode',
 ] as const satisfies readonly (keyof Settings)[];
 
+export const HUMAN_ONLY_SETTINGS = [
+  'approvePlans',
+  'mergeMethod',
+  'taskBudgetUsd',
+  'taskUsageLimit',
+  'autoResume',
+  'snoozeLimited',
+  'accountSwitchAt',
+  'fastMode',
+  'agentFastModes',
+] as const satisfies readonly (keyof Settings)[];
+
+export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'checksWaived'] as const;
+
 const DEFAULT_MODEL = 'opus';
 
 const DEFAULT_ATTENTION_LIMIT = 1;

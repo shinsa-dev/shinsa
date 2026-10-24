@@ -72,7 +72,7 @@ describe('the orchestration rules every step agent reads', () => {
       '`delegation_cancel`',
       'at most 3 deep, and at most 8 run at once',
       '`create_task`',
-      'Your hand-over tools wait for your delegated tasks',
+      'Your hand-over tools wait for your delegations',
       'ask them with `ask` first',
     ]) {
       expect(rules).toContain(phrase);
@@ -199,9 +199,11 @@ describe('a report to the agent that delegated', () => {
       parentRun()
     );
     expect(text.startsWith('<system-message>\nShinsa is reporting on work you delegated.')).toBe(true);
-    expect(text).toContain('Delegated task finished: "Check the copy" (task id r1, reviewer):\n\nAll good.');
-    expect(text).toContain('Delegated task failed: "Try the fix" (task id r2, builder):\n\nIt crashed.');
-    expect(text).toContain('Delegated task was stopped: "Silent" (task id r3, planner). It left no reply.');
+    expect(text).toContain(
+      'Delegation finished: "Check the copy" (delegation id r1, reviewer):\n\nAll good.'
+    );
+    expect(text).toContain('Delegation failed: "Try the fix" (delegation id r2, builder):\n\nIt crashed.');
+    expect(text).toContain('Delegation was stopped: "Silent" (delegation id r3, planner). It left no reply.');
     expect(text).toContain(
       'Keep the old API?\nTwo callers use it.\nOptions: Keep / Drop\nAnswer it with `delegation_answer`'
     );
@@ -227,10 +229,10 @@ describe('a report to the agent that delegated', () => {
     );
     expect(text).toContain('a'.repeat(15_000));
     expect(text).toContain(
-      'Delegated task is working: "Too long" (task id r2, planner). Its reply is 2000 characters, more than a report carries. Read it whole with `delegation_status`.'
+      'Delegation is working: "Too long" (delegation id r2, planner). Its reply is 2000 characters, more than a report carries. Read it whole with `delegation_status`.'
     );
-    expect(text).toContain('Delegated task is waiting to start: "Queued"');
-    expect(text).toContain('Delegated task is waiting for an answer: "Waiting"');
+    expect(text).toContain('Delegation is waiting to start: "Queued"');
+    expect(text).toContain('Delegation is waiting for an answer: "Waiting"');
   });
 
   test('a question is escalated the way the agent that delegated it can ask', () => {
@@ -257,20 +259,20 @@ describe('a report to the agent that delegated', () => {
       requestedAt: 0,
     };
     expect(deliver(parentRun({ delegation }))).toContain(
-      'Answer it with `delegation_answer`. If you cannot decide it, ask the agent that delegated your task with `ask` first.'
+      'Answer it with `delegation_answer`. If you cannot decide it, ask the agent that delegated this to you with `ask` first.'
     );
   });
 
   test('an answer goes back to the delegated agent as its own message', () => {
     expect(resolveDelegationAnswerPrompt('Keep it?', 'Yes.')).toBe(
-      'You asked the agent that delegated this task: Keep it?\n\nIts answer: Yes.\n\nCarry on.'
+      'You asked the agent that delegated this: Keep it?\n\nIts answer: Yes.\n\nCarry on.'
     );
   });
 
-  test('a run that adopted delegated tasks is told which ones still report to it', () => {
+  test('a run that adopted delegations is told which ones still report to it', () => {
     expect(resolveAdoptionNote([])).toBe('');
     expect(resolveAdoptionNote([{ runId: 'r1', title: 'Check' }])).toBe(
-      '\n\nThese tasks you delegated earlier are still running, and their results arrive here when they finish:\n- "Check" (task id r1)'
+      '\n\nThese delegations you started earlier are still running, and their results arrive here when they finish:\n- "Check" (delegation id r1)'
     );
   });
 });

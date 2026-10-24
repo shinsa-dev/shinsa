@@ -2,6 +2,8 @@ import { AGENT_ROLES, resolveAgentProvider } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
 import {
   DomainError,
+  HUMAN_ONLY_REPO_FIELDS,
+  HUMAN_ONLY_SETTINGS,
   isProjectKey,
   MAX_COMPACTION_LEAD_MINUTES,
   PROJECT_COLORS,
@@ -102,9 +104,20 @@ export function registerRepo(decider: Decider, command: CommandOf<'repo.register
   });
 }
 
+function assertHumanOnlyFields(decider: Decider, patch: object, fields: readonly string[], what: string) {
+  if (!decider.context.onBehalf) return;
+  const touched = fields.filter((field) => field in patch);
+  if (touched.length === 0) return;
+  throw new DomainError(
+    'human_only',
+    `Only the human changes ${what} ${touched.join(', ')}. Tell them what you would change and why.`
+  );
+}
+
 export function updateRepo(decider: Decider, command: CommandOf<'repo.update'>) {
   const repo = decider.state.repos[command.repoId];
   if (!repo) throw new DomainError('repo_not_found', `No repository ${command.repoId}`);
+  assertHumanOnlyFields(decider, command.patch, HUMAN_ONLY_REPO_FIELDS, 'the repository’s');
   assertProject(decider, command.patch.projectId);
   const updated = { ...repo, ...command.patch };
   if (isSameValue(updated, repo)) return;
@@ -234,6 +247,7 @@ function dropStaleModels(previous: Settings, patch: Partial<Settings>): Settings
 }
 
 export function changeSettings(decider: Decider, command: CommandOf<'settings.change'>) {
+  assertHumanOnlyFields(decider, command.patch, HUMAN_ONLY_SETTINGS, 'the settings');
   assertSettings(command.patch);
   const settings = dropStaleModels(decider.state.settings, command.patch);
   if (isSameValue(settings, decider.state.settings)) return;

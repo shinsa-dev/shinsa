@@ -33,9 +33,7 @@ export function listRunningRuns(state: ShinsaState, taskId?: string) {
 
 export function isWaitingOnAnswer(state: ShinsaState, run: Run) {
   if (isDelegatedRun(run) && run.delegation.question?.answer === null) return true;
-  return listOpenGates(state, run.taskId).some(
-    (gate) => isAgentQuestion(gate) && gate.runId === run.id
-  );
+  return listOpenGates(state, run.taskId).some((gate) => isAgentQuestion(gate) && gate.runId === run.id);
 }
 
 export function isRunWaiting(state: ShinsaState, run: Run) {

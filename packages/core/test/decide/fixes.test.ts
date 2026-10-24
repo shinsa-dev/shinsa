@@ -99,7 +99,7 @@ describe('checks and agent review', () => {
       harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Tried.' });
     }
     const gate = harness.openGate(taskId);
-    expect(gate.purpose).toBe('failure');
+    expect(gate.type).toBe('failure');
     expect(gate.title).toBe('Fixing is not making progress');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
@@ -263,8 +263,7 @@ describe('review rounds that escalate to you', () => {
     review(harness, taskId, blocking('Third.'));
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({
-      kind: 'review',
-      purpose: 'decision',
+      type: 'review',
       escalation: { reason: 'rounds', rounds: 2 },
     });
     expect(harness.task(taskId).stage).toBe('awaiting_review');
@@ -350,7 +349,7 @@ describe('review rounds that escalate to you', () => {
       runId: harness.activeRun(taskId).id,
       findings: blocking('Third.'),
     });
-    expect(harness.openGate(taskId)).toMatchObject({ kind: 'review' });
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'review' });
     expect(harness.openGate(taskId).escalation).toBeUndefined();
   });
 });

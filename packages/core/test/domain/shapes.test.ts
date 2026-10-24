@@ -6,13 +6,13 @@ import {
   isComposedByAgent,
   isInquiryDone,
   isSamePipeline,
-  isUpgrade,
   type PipelineStep,
-  resolveChangeUpgrade,
   resolveInquiryStep,
   resolveOperationTiming,
   resolvePresetOf,
+  resolveProposalUpgrade,
   resolveShapeOf,
+  resolveShapeState,
   resolveTaskPipeline,
   resolveTaskShape,
   resolveWorkStep,
@@ -119,20 +119,24 @@ describe('task shapes', () => {
     );
   });
 
-  test('an inquiry can grow into a change, which is an upgrade; dropping one is not', () => {
-    const upgraded = resolveChangeUpgrade(SHAPE_PIPELINES.investigate);
-    expect(upgraded).toEqual([...SHAPE_PIPELINES.fix]);
-    expect(validatePipeline(resolveChangeUpgrade(SHAPE_PIPELINES.answer))).toEqual([]);
-    expect(resolveShapeOf(resolveChangeUpgrade(SHAPE_PIPELINES.answer))).toBe('change');
-    expect(resolveChangeUpgrade(SHAPE_PIPELINES.change)).toEqual([...CHANGE]);
-    expect(isUpgrade(SHAPE_PIPELINES.investigate, upgraded)).toBe(true);
-    expect(isUpgrade(SHAPE_PIPELINES.change, SHAPE_PIPELINES.answer)).toBe(false);
-    expect(isUpgrade(SHAPE_PIPELINES.answer, SHAPE_PIPELINES.operation)).toBe(true);
+  test('a proposal grows an inquiry into the inquiry, your OK and a whole change', () => {
+    expect(resolveProposalUpgrade(SHAPE_PIPELINES.investigate)).toEqual([
+      'investigate',
+      'your_ok',
+      ...CHANGE,
+    ]);
+    expect(validatePipeline(resolveProposalUpgrade(SHAPE_PIPELINES.answer))).toEqual([]);
+    expect(resolveProposalUpgrade(['research', 'your_ok', 'plan', 'operate'])).toEqual([
+      'research',
+      'your_ok',
+      ...CHANGE,
+    ]);
+    expect(() => resolveProposalUpgrade(CHANGE)).toThrow('no step that answers');
     expect(resolveInquiryStep(CHANGE)).toBeNull();
     expect(resolveInquiryStep(SHAPE_PIPELINES.fix)).toBe('investigate');
   });
 
-  test('tasks from before shapes read as a change, and Ask tasks as an answer', () => {
+  test('a task without chosen steps reads as a change, and an Ask task as an answer', () => {
     expect(resolveTaskPipeline({ mode: 'ask' })).toEqual(['answer']);
     expect(resolveTaskShape({})).toBe('change');
     expect(resolveTaskShape({ pipeline: [] })).toBe('change');
@@ -207,9 +211,12 @@ describe('composed steps', () => {
     expect(validateComposition(investigated, ['plan', 'operate'])).toEqual([
       'An investigation already ran, so `investigate` stays in the steps.',
     ]);
-    expect(validateComposition({ answer: 'Yes.', pipeline: ['answer'] }, ['research'])).toEqual([
-      'An answer already ran, so `answer` stays in the steps.',
-    ]);
+    expect(
+      validateComposition(
+        { result: { step: 'answer', body: 'Yes.', runId: null, at: 1 }, pipeline: ['answer'] },
+        ['research']
+      )
+    ).toEqual(['An answer already ran, so `answer` stays in the steps.']);
   });
 
   test('your OK sits between an inquiry and a plan', () => {
@@ -234,7 +241,42 @@ describe('composed steps', () => {
         shapeChanges: [{ from: [...CHANGE], to: ['answer'], by: 'agent', reason: '', at: 0 }],
       })
     ).toBe(true);
-    expect(isInquiryDone({ answer: 'Yes.' }, 'answer')).toBe(true);
+    expect(isInquiryDone({ result: { step: 'answer', body: 'Yes.', runId: null, at: 1 } }, 'answer')).toBe(
+      true
+    );
     expect(isInquiryDone({ result: null }, 'research')).toBe(false);
+  });
+});
+
+describe('whether a task’s steps are settled', () => {
+  const AUTO = { shape: true, start: true, priority: true };
+
+  test('triage has not chosen the steps while an auto task has no pipeline in triage', () => {
+    expect(resolveShapeState({ stage: 'triage', auto: AUTO, plan: null })).toBe('triage');
+    expect(resolveShapeState({ stage: 'triage', auto: AUTO, pipeline: [], plan: null })).toBe('triage');
+  });
+
+  test('the planner may still change the steps of an auto task that plans first, until it plans or composes', () => {
+    const planning = { stage: 'planning' as const, auto: AUTO, pipeline: [...CHANGE], plan: null };
+    expect(resolveShapeState(planning)).toBe('planner');
+    expect(resolveShapeState({ ...planning, stage: 'waiting_on_tasks' })).toBe('planner');
+    expect(
+      resolveShapeState({
+        ...planning,
+        shapeChanges: [{ from: [...CHANGE], to: [...CHANGE], by: 'agent', reason: '', at: 0 }],
+      })
+    ).toBe('settled');
+  });
+
+  test('a task whose kind was chosen, an inquiry, or a task past planning has settled steps', () => {
+    expect(resolveShapeState({ stage: 'triage', auto: { ...AUTO, shape: false }, plan: null })).toBe(
+      'settled'
+    );
+    expect(resolveShapeState({ stage: 'triage', auto: AUTO, pipeline: ['answer'], plan: null })).toBe(
+      'settled'
+    );
+    expect(resolveShapeState({ stage: 'building', auto: AUTO, pipeline: [...CHANGE], plan: null })).toBe(
+      'settled'
+    );
   });
 });

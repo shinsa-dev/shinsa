@@ -1,15 +1,15 @@
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
   CodeSpot,
-  ReportCheck,
   JudgementCall,
-  ReviewFinding,
   PlanDocument,
+  ReportCheck,
+  ReviewFinding,
   WorkReport,
 } from '../report/types.ts';
 import type { RunAccount, UsageWait } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
-import type { MergeQueueEntry, CiRun, PullRequestWatch } from './pull-requests.ts';
+import type { CiRun, MergeQueueEntry, PullRequestWatch } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret } from './schedules.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
@@ -44,12 +44,10 @@ export type TaskMode = 'build' | 'ask';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 
 export type RunRole =
-  | 'triage'
   | 'planner'
   | 'builder'
   | 'reviewer'
   | 'fixer'
-  | 'shipper'
   | 'answerer'
   | 'investigator'
   | 'researcher'
@@ -85,6 +83,12 @@ export interface RunFailure {
   retryable: boolean | null;
   resetAt: number | null;
   account?: RunAccount | null;
+  login?: ProviderSignIn | null;
+}
+
+export interface ProviderSignIn {
+  provider: string;
+  email: string | null;
 }
 
 export type RunHandoffReason = 'provider_switch' | 'session_restore';
@@ -149,7 +153,7 @@ export interface ReviewEscalation {
   at: number;
 }
 
-export type ConfigProblemKind = 'repository' | 'default_branch' | 'check_commands';
+export type ConfigProblemKind = 'repository' | 'no_repository' | 'default_branch' | 'check_commands';
 
 export interface ConfigProblem {
   kind: ConfigProblemKind;
@@ -340,7 +344,6 @@ export interface Task {
   fixFor: FixReason | null;
   fixSignature: string | null;
   stalledFixes: number;
-  fixHistory?: string[];
   pushedSha?: string | null;
   pushedFrom?: string | null;
   pushPending?: boolean;
@@ -350,7 +353,6 @@ export interface Task {
   pullRequest: PullRequest | null;
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;
-  baseTaskId: string | null;
   waitsOn: string[];
   note: string | null;
   origin: string | null;
@@ -359,7 +361,6 @@ export interface Task {
   stageChangedAt: number;
   activity: Activity[];
   mode?: TaskMode;
-  answer?: string | null;
   planHistory?: PlanRevision[];
   dismissedFindings?: ReviewFinding[];
   monitor?: Monitor | null;
@@ -377,7 +378,7 @@ export interface Task {
   splits?: TaskSplit[];
   scheduleId?: string | null;
   pipeline?: PipelineStep[];
-  auto?: TaskAuto;
+  auto: TaskAuto;
   triageDecisions?: TriageDecisions | null;
   result?: TaskResult | null;
   proposal?: ChangeProposal | null;
@@ -385,6 +386,13 @@ export interface Task {
   proposedBranch?: string | null;
   rounds?: Round[];
   closedAt?: number | null;
+  inbox?: InboxMessage[];
+}
+
+export interface InboxMessage {
+  id: string;
+  text: string;
+  at: number;
 }
 
 export interface Run {

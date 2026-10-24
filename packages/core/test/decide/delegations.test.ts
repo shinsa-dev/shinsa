@@ -142,7 +142,7 @@ describe('delegating a task', () => {
     });
   });
 
-  test('the same client request id returns the delegated task it already started', () => {
+  test('the same client request id returns the delegation it already started', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const first = child(harness, parent.id, { key: 'round-1' });
@@ -172,7 +172,7 @@ describe('delegating a task', () => {
     expect(child(harness, researcher.id, { role: 'reviewer' }).delegation?.depth).toBe(2);
   });
 
-  test('delegated tasks nest at most three deep', () => {
+  test('delegations nest at most three deep', () => {
     const { harness, taskId } = building();
     const first = child(harness, harness.activeRun(taskId).id, { role: 'builder' });
     const second = child(harness, first.id, { role: 'builder' });
@@ -180,18 +180,18 @@ describe('delegating a task', () => {
     expect(third.delegation?.depth).toBe(DELEGATION_LIMITS.depth);
     expect(third.prompt).toContain('you cannot delegate it further');
     expect(() => child(harness, third.id)).toThrow(
-      'Delegated tasks nest at most 3 deep, and this agent is already at that depth.'
+      'Delegations nest at most 3 deep, and this agent is already at that depth.'
     );
   });
 
-  test('at most eight delegated tasks run at once under one step, counted across the whole tree', () => {
+  test('at most eight delegations run at once under one step, counted across the whole tree', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const nested = child(harness, parent.id, { role: 'builder' });
     for (let index = 0; index < 6; index += 1) child(harness, parent.id);
     child(harness, nested.id);
     expect(() => child(harness, nested.id)).toThrow(
-      '8 delegated tasks under this step are still running, which is the limit.'
+      '8 delegations under this step are still running, which is the limit.'
     );
     expect(() => child(harness, parent.id)).toThrow('which is the limit');
     finish(harness, listChildRuns(harness.state, parent.id).at(-1)?.id ?? '');
@@ -275,7 +275,7 @@ describe('delivering results', () => {
       generation: 1,
     });
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 1,
       items: claim?.items ?? [],
@@ -295,10 +295,15 @@ describe('delivering results', () => {
     finish(harness, second.id);
     expect(harness.effectsOf('delegation.steer')).toHaveLength(steers);
     expect(lastClaim(harness, parent.id)?.items).toEqual([`result:${first.id}`, `result:${second.id}`]);
-    const stale = harness.send({ type: 'delegation.delivered', runId: parent.id, generation: 7, items: [] });
+    const stale = harness.send({
+      type: 'delegation.record_delivery',
+      runId: parent.id,
+      generation: 7,
+      items: [],
+    });
     expect(stale.events).toEqual([]);
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 1,
       items: [`result:${first.id}`],
@@ -312,7 +317,7 @@ describe('delivering results', () => {
     });
   });
 
-  test('a parent that ends its turn while its delegated tasks run waits for them, and the next result wakes it', () => {
+  test('a parent that ends its turn while its delegations run waits for them, and the next result wakes it', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const reason = harness.task(taskId).stageReason;
@@ -324,7 +329,7 @@ describe('delivering results', () => {
       endedAt: null,
       waitingOn: { delegations: [first.id, second.id], reason },
     });
-    expect(harness.task(taskId).stageReason).toBe('waiting for 2 delegated tasks');
+    expect(harness.task(taskId).stageReason).toBe('waiting for 2 delegations');
     expect(isTaskLive(harness.state, harness.task(taskId))).toBe(true);
     expect(harness.task(taskId).recoveries).toBe(0);
     finish(harness, first.id);
@@ -335,7 +340,7 @@ describe('delivering results', () => {
     });
     expect(harness.lastEffect('run.wake')).toEqual({ kind: 'run.wake', runId: parent.id, generation: 1 });
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 1,
       items: [`result:${first.id}`],
@@ -344,12 +349,12 @@ describe('delivering results', () => {
     expect(harness.task(taskId).stageReason).toBe(reason);
   });
 
-  test('a parent with one task left waits for a single delegated task', () => {
+  test('a parent with one task left waits for a single delegation', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     child(harness, parent.id);
     finish(harness, parent.id);
-    expect(harness.task(taskId).stageReason).toBe('waiting for a delegated task');
+    expect(harness.task(taskId).stageReason).toBe('waiting for a delegation');
   });
 
   test('a parent that ends its turn with only undelivered results is woken with them at once', () => {
@@ -360,7 +365,7 @@ describe('delivering results', () => {
     finish(harness, parent.id);
     expect(current(harness, parent.id)).toMatchObject({ status: 'waiting' });
     expect(lastClaim(harness, parent.id)?.via).toBe('steer');
-    harness.send({ type: 'delegation.undelivered', runId: parent.id, generation: 1, items: [] });
+    harness.send({ type: 'delegation.release', runId: parent.id, generation: 1, items: [] });
     expect(lastClaim(harness, parent.id)).toEqual({
       generation: 2,
       items: [`result:${delegated.id}`],
@@ -374,7 +379,7 @@ describe('delivering results', () => {
     const first = child(harness, parent.id);
     const second = child(harness, parent.id);
     finish(harness, first.id);
-    harness.send({ type: 'delegation.undelivered', runId: parent.id, generation: 1, items: [] });
+    harness.send({ type: 'delegation.release', runId: parent.id, generation: 1, items: [] });
     expect(current(harness, parent.id).cohort).toMatchObject({ claim: null, deferred: true });
     const steers = harness.effectsOf('delegation.steer').length;
     finish(harness, second.id);
@@ -394,13 +399,13 @@ describe('delivering results', () => {
     const delegated = child(harness, parent.id);
     finish(harness, delegated.id);
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 1,
       items: [`result:${delegated.id}`],
     });
     harness.send({
-      type: 'delegation.undelivered',
+      type: 'delegation.release',
       runId: parent.id,
       generation: null,
       items: [`result:${delegated.id}`],
@@ -419,23 +424,23 @@ describe('delivering results', () => {
     const delegated = child(harness, parent.id);
     finish(harness, delegated.id);
     expect(
-      harness.send({ type: 'delegation.undelivered', runId: parent.id, generation: 5, items: [] }).events
+      harness.send({ type: 'delegation.release', runId: parent.id, generation: 5, items: [] }).events
     ).toEqual([]);
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 1,
       items: [`result:${delegated.id}`],
     });
     completePhase(harness, taskId);
     expect(
-      harness.send({ type: 'delegation.delivered', runId: parent.id, generation: 2, items: [] }).events
+      harness.send({ type: 'delegation.record_delivery', runId: parent.id, generation: 2, items: [] }).events
     ).toEqual([]);
     expect(
-      harness.send({ type: 'delegation.undelivered', runId: parent.id, generation: null, items: [] }).events
+      harness.send({ type: 'delegation.release', runId: parent.id, generation: null, items: [] }).events
     ).toEqual([]);
     expect(
-      harness.send({ type: 'delegation.delivered', runId: 'nope', generation: 1, items: [] }).events
+      harness.send({ type: 'delegation.record_delivery', runId: 'nope', generation: 1, items: [] }).events
     ).toEqual([]);
   });
 
@@ -511,7 +516,7 @@ describe('delivering results', () => {
     expect(current(harness, parent.id)).toMatchObject({ status: 'running', outcome: 'completed' });
     expect(harness.activeRun(taskId).id).not.toBe(parent.id);
     expect(
-      harness.send({ type: 'delegation.undelivered', runId: parent.id, generation: 1, items: [] }).events
+      harness.send({ type: 'delegation.release', runId: parent.id, generation: 1, items: [] }).events
     ).toEqual([]);
   });
 
@@ -533,7 +538,7 @@ describe('delivering results', () => {
     expect(harness.activeRun(taskId).id).not.toBe(parent.id);
   });
 
-  test('a failed delegated task reports its error as its result', () => {
+  test('a failed delegation reports its error as its result', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const failing = child(harness, parent.id);
@@ -582,7 +587,7 @@ describe('delivering results', () => {
       `result:${delegated.id}`,
     ]);
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 1,
       items: [`message:${message?.id}`, `result:${delegated.id}`],
@@ -634,7 +639,7 @@ describe('questions from a delegated agent', () => {
       '“Check the copy” asked the agent that delegated it: Should I include the legacy strings?'
     );
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 1,
       items: [`question:${delegated.id}:q-1`],
@@ -707,12 +712,12 @@ describe('questions from a delegated agent', () => {
     const delegated = child(harness, parent.id);
     const question = `question:${delegated.id}:q-1`;
     ask(harness, delegated.id);
-    harness.send({ type: 'delegation.delivered', runId: parent.id, generation: 1, items: [] });
+    harness.send({ type: 'delegation.record_delivery', runId: parent.id, generation: 1, items: [] });
     expect(lastClaim(harness, parent.id)).toEqual({ generation: 2, items: [question], via: 'steer' });
     harness.send({ type: 'delegation.cancel', runId: delegated.id });
     expect(lastClaim(harness, parent.id)?.items).toEqual([question, `result:${delegated.id}`]);
     harness.send({
-      type: 'delegation.delivered',
+      type: 'delegation.record_delivery',
       runId: parent.id,
       generation: 2,
       items: [`result:${delegated.id}`],
@@ -730,13 +735,13 @@ describe('questions from a delegated agent', () => {
   });
 });
 
-describe('the limits a delegated task works within', () => {
-  test('hand-overs wait for delegated tasks: refused while one runs, allowed once it ends', () => {
+describe('the limits a delegation works within', () => {
+  test('hand-overs wait for delegations: refused while one runs, allowed once it ends', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const delegated = child(harness, parent.id);
     expect(() => completePhase(harness, taskId)).toThrow(
-      '1 task you delegated is still running. End your turn and their results wake you, or stop them with `delegation_cancel`, before you hand over.'
+      '1 delegation is still running. End your turn and their results wake you, or stop them with `delegation_cancel`, before you hand over.'
     );
     child(harness, parent.id);
     expect(() =>
@@ -748,7 +753,7 @@ describe('the limits a delegated task works within', () => {
         timeoutMinutes: null,
         maxAttempts: null,
       })
-    ).toThrow('2 tasks you delegated are still running.');
+    ).toThrow('2 delegations are still running.');
     for (const live of listChildRuns(harness.state, parent.id)) {
       harness.send({ type: 'agent.cancel_delegation', runId: parent.id, childRunId: live.id });
     }
@@ -795,7 +800,7 @@ describe('the limits a delegated task works within', () => {
     expect(() => harness.send({ type: 'agent.note', runId: 'nope', note: 'x' })).toThrow('No run nope');
   });
 
-  test('unknown delegated tasks are refused by name', () => {
+  test('unknown delegations are refused by name', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const delegated = child(harness, parent.id);
@@ -811,11 +816,9 @@ describe('the limits a delegated task works within', () => {
       harness.send({ type: 'agent.cancel_delegation', runId: parent.id, childRunId: parent.id })
     ).toThrow(`No task ${parent.id}`);
     expect(() => harness.send({ type: 'delegation.cancel', runId: parent.id })).toThrow(
-      `No delegated task ${parent.id}`
+      `No delegation ${parent.id}`
     );
-    expect(() => harness.send({ type: 'delegation.cancel', runId: 'nope' })).toThrow(
-      'No delegated task nope'
-    );
+    expect(() => harness.send({ type: 'delegation.cancel', runId: 'nope' })).toThrow('No delegation nope');
   });
 });
 
@@ -860,7 +863,7 @@ describe('stopping delegated work', () => {
     expect(harness.send({ type: 'delegation.cancel', runId: delegated.id }).events).toEqual([]);
   });
 
-  test('when the task is cancelled every delegated task under its step stops, at any depth', () => {
+  test('when the task is cancelled every delegation under its step stops, at any depth', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const delegated = child(harness, parent.id, { role: 'builder' });
@@ -873,7 +876,7 @@ describe('stopping delegated work', () => {
     expect(listLiveRuns(harness.state, taskId)).toEqual([]);
   });
 
-  test('a delegated task that never started is stopped without a cancel for a process', () => {
+  test('a delegation that never started is stopped without a cancel for a process', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 1 } });
@@ -902,7 +905,7 @@ describe('stopping delegated work', () => {
     expect(listOpenGates(harness.state, taskId).map((gate) => gate.cause)).toEqual(['budget']);
   });
 
-  test('a delegated task that finishes after its parent’s step ended changes nothing', () => {
+  test('a delegation that finishes after its parent’s step ended changes nothing', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     const delegated = child(harness, parent.id);
@@ -940,7 +943,7 @@ describe('restarts and recovery', () => {
       wake: 'always',
     });
     expect(current(harness, awaited.id).endedAt).toBeNull();
-    expect(successor.prompt).toContain(`- "Run the slow suite" (task id ${awaited.id})`);
+    expect(successor.prompt).toContain(`- "Run the slow suite" (delegation id ${awaited.id})`);
     expect(successor.prompt).not.toContain(done.id);
     expect(current(harness, done.id).delegation?.parentRunId).toBe(successor.id);
     expect(lastClaim(harness, successor.id)?.items).toEqual([`result:${done.id}`]);
@@ -959,7 +962,7 @@ describe('restarts and recovery', () => {
       question: 'Which one?',
       context: null,
     });
-    harness.send({ type: 'delegation.undelivered', runId: parent.id, generation: 1, items: [] });
+    harness.send({ type: 'delegation.release', runId: parent.id, generation: 1, items: [] });
     harness.send({ type: 'run.end', runId: parent.id, outcome: 'failed', summary: 'crashed' });
     const successor = harness.activeRun(taskId);
     expect(lastClaim(harness, successor.id)).toEqual({
@@ -987,7 +990,7 @@ describe('restarts and recovery', () => {
       },
     });
     expect(current(harness, delegated.id).outcome).toBe('cancelled');
-    expect(listOpenGates(harness.state, taskId).map((gate) => gate.purpose)).toEqual(['failure']);
+    expect(listOpenGates(harness.state, taskId).map((gate) => gate.type)).toEqual(['failure']);
   });
 
   for (const failure of ['usage_limit', 'auth'] as const) {
@@ -1099,7 +1102,7 @@ describe('restarts and recovery', () => {
     });
   });
 
-  test('a run waiting on its delegated tasks is neither interrupted nor continued: their results wake it', () => {
+  test('a run waiting on its delegations is neither interrupted nor continued: their results wake it', () => {
     const { harness, taskId } = building();
     const parent = harness.activeRun(taskId);
     child(harness, parent.id);

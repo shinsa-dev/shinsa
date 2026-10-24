@@ -63,7 +63,7 @@ describe('triage', () => {
     const done = createTask(harness, { request: 'Done' });
     shipAndMerge(harness, done);
     const open = createTask(harness, { request: 'Open' });
-    const taskId = createTask(harness, { request: 'New', waitsOn: [done, open, 'unknown', open] });
+    const taskId = createTask(harness, { request: 'New', triageWaitsOn: [done, open, 'unknown', open] });
     expect(harness.task(taskId).waitsOn).toEqual([open]);
     expect(
       harness.task(taskId).activity.find((entry) => entry.actor === 'shinsa' && entry.kind === 'stage')
@@ -188,7 +188,7 @@ describe('a dependency added while the worktree is being made', () => {
     expect(harness.task(child).stage).toBe('triage');
     harness.send({ type: 'worktree.ready', taskId: child, path: '/wt/child', branch: 'fix/child' });
     expect(harness.task(child)).toMatchObject({
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       stageReason: 'waiting for “Parent” to finish',
     });
   });

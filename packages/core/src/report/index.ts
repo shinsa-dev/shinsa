@@ -1,5 +1,5 @@
 export { assembleReport } from './assemble.ts';
-export { listRankedSpots, serializeReportMarkdown, serializePlanMarkdown } from './markdown.ts';
+export { listRankedSpots, serializePlanMarkdown, serializeReportMarkdown } from './markdown.ts';
 export {
   type CourierRequest,
   DELEGATION_ISOLATIONS,
@@ -20,7 +20,6 @@ export {
   FINDING_SEVERITIES,
   PROTOCOL_LIMITS,
   type Validation,
-  validateAnswer,
   validateDelivery,
   validateFindings,
   validateFixHandOver,

@@ -114,20 +114,21 @@ describe('resolveTaskProgress', () => {
 
   test('the steps follow the task’s own pipeline: an operation, research and a proposed change', () => {
     const harness = createHarness();
-    harness.send({ type: 'task.create', request: 'Rotate the logs', repoId: null, shape: 'operation' });
-    const operation = Object.keys(harness.state.tasks).at(-1) ?? '';
-    expect(statuses(harness.task(operation))).toEqual(['plan:pending', 'operate:pending']);
-    harness.send({ type: 'task.create', request: 'Compare the libraries', repoId: null, shape: 'research' });
-    const research = Object.keys(harness.state.tasks).at(-1) ?? '';
-    expect(resolveTaskProgress(harness.task(research)).phases.map((phase) => phase.title)).toEqual([
+    harness.send({ type: 'task.create', request: 'Rotate the logs', repoId: null });
+    const task = harness.task(Object.keys(harness.state.tasks).at(-1) ?? '');
+    expect(statuses({ ...task, pipeline: ['plan', 'operate'] })).toEqual(['plan:pending', 'operate:pending']);
+    const research = { ...task, pipeline: ['research' as const] };
+    expect(resolveTaskProgress(research).phases.map((phase) => phase.title)).toEqual([
       'Find the repository',
       'Research',
     ]);
-    expect(statuses({ ...harness.task(research), stage: 'awaiting_proposal' })).toEqual([
-      'setup:done',
-      'research:done',
-      'proposal:waiting',
-    ]);
+    expect(
+      statuses({
+        ...research,
+        pipeline: ['research', 'your_ok', 'plan', 'operate'],
+        stage: 'awaiting_proposal',
+      })
+    ).toEqual(['setup:done', 'research:done', 'proposal:waiting', 'plan:pending', 'operate:pending']);
   });
 
   test('a composed change names the checks it keeps, and a fix without them shows the build as current', () => {

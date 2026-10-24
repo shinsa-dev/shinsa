@@ -30,7 +30,6 @@ export interface TaskBudget {
 }
 
 const ROLE_RANK: Record<RunRole, number> = {
-  triage: 0,
   planner: 1,
   answerer: 2,
   investigator: 3,
@@ -39,7 +38,6 @@ const ROLE_RANK: Record<RunRole, number> = {
   builder: 6,
   reviewer: 7,
   fixer: 8,
-  shipper: 9,
 };
 
 function createLine(): CostLine {

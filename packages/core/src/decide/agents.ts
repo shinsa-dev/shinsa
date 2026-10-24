@@ -13,13 +13,7 @@ import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument } from '../report/types.ts';
 import type { Decider } from './decider.ts';
 import { reactToFindings } from './fixes.ts';
-import {
-  isLastPhase,
-  needsPlanApproval,
-  resolveCurrentPhase,
-  startAfterBuild,
-  startPhase,
-} from './lifecycle.ts';
+import { isLastPhase, needsPlanApproval, resolveCurrentPhase, startChecks, startPhase } from './lifecycle.ts';
 import { requestPush } from './pull-requests.ts';
 import { findCurrentRun } from './runs.ts';
 import { startAfterPlan } from './shapes.ts';
@@ -42,8 +36,7 @@ const EVIDENCE_NOUN: Record<PlanEvidenceKind, string> = {
   preview: 'a preview link',
 };
 
-function assertEvidence(decider: Decider, task: Task, index: number) {
-  if (!isLastPhase(task, index)) return;
+export function assertEvidence(decider: Decider, task: Task, handOver: string) {
   const attached = Object.values(decider.state.evidence).filter(
     (evidence) => evidence.taskId === task.id && isOfCurrentRound(task, evidence)
   );
@@ -52,7 +45,7 @@ function assertEvidence(decider: Decider, task: Task, index: number) {
   const kinds = missing.map((kind) => `${EVIDENCE_NOUN[kind]} (\`${kind}\`)`).join(' and ');
   throw new DomainError(
     'evidence_missing',
-    `The plan asks for ${kinds} as evidence. Attach it with \`attach_evidence\` before you complete the last phase.`
+    `The plan asks for ${kinds} as evidence. Attach it with \`attach_evidence\` before you ${handOver}.`
   );
 }
 
@@ -84,7 +77,7 @@ export function proposePlan(decider: Decider, command: CommandOf<'agent.propose_
 export function completePhase(decider: Decider, command: CommandOf<'agent.complete_phase'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'complete_phase');
   const index = run.phaseIndex ?? resolveCurrentPhase(task);
-  assertEvidence(decider, task, index);
+  if (isLastPhase(task, index)) assertEvidence(decider, task, 'complete the last phase');
   recordTree(decider, task.id, command.treeHash);
   decider.emit({
     type: 'phase.completed',
@@ -104,7 +97,7 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
   decider.endRun(run, 'completed', command.summary);
   decider.progressed(task.id);
   if (isLastPhase(decider.task(task.id), index)) {
-    startAfterBuild(decider, task.id);
+    startChecks(decider, task.id);
     return;
   }
   startPhase(decider, task.id, index + 1);
@@ -117,7 +110,7 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
   decider.endRun(run, 'completed', command.summary);
   decider.progressed(task.id);
   if (task.fixFor !== 'pull_request') {
-    startAfterBuild(decider, task.id);
+    startChecks(decider, task.id);
     return;
   }
   decider.stage(task.id, 'shipping', 'pushing the fix');

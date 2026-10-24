@@ -5,6 +5,7 @@ import {
   decide,
   listActiveRuns,
   listOpenGates,
+  type PlanDocument,
   type PullRequest,
   type ReportCheck,
   type Run,
@@ -13,7 +14,6 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
-  type PlanDocument,
 } from '../src/index.ts';
 
 export type Harness = ReturnType<typeof createHarness>;
@@ -111,7 +111,7 @@ export function registerRepo(
   return Object.values(harness.state.repos).find((repo) => repo.name === name)?.id ?? '';
 }
 
-export const SPEC: PlanDocument = {
+export const PLAN: PlanDocument = {
   goal: 'Ship it.',
   phases: [
     { title: 'Find the overflow', detail: 'Trace which container scrolls.' },
@@ -160,8 +160,8 @@ export function createTask(
     size?: 'small' | 'large';
     repoId?: string;
     priority?: 'urgent' | 'high' | 'normal' | 'low';
-    waitsOn?: string | string[];
     waitsOn?: string[];
+    triageWaitsOn?: string | string[];
     planFirst?: boolean;
   } = {}
 ) {
@@ -183,7 +183,7 @@ export function createTask(
     repoId,
     size: options.size ?? 'small',
     branch: `fix/${taskId}`,
-    waitsOn: [options.waitsOn ?? []].flat(),
+    waitsOn: [options.triageWaitsOn ?? []].flat(),
   });
   readyWorktree(harness, taskId);
   return taskId;
@@ -204,7 +204,7 @@ export function approve(harness: Harness, taskId: string, response: string | nul
 }
 
 export function pushed(harness: Harness, taskId: string, sha = `sha-${harness.state.seq}`) {
-  harness.send({ type: 'pull_request.pushed', taskId, sha });
+  harness.send({ type: 'pull_request.record_push', taskId, sha });
 }
 
 export function reachShipping(harness: Harness, taskId: string) {
@@ -223,7 +223,7 @@ export function shipAndMerge(harness: Harness, taskId: string) {
   harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
 }
 
-export function proposePlan(harness: Harness, taskId: string, plan: PlanDocument = SPEC) {
+export function proposePlan(harness: Harness, taskId: string, plan: PlanDocument = PLAN) {
   const operates = harness.task(taskId).pipeline?.includes('operate') && plan.impact === undefined;
   const document = operates ? { ...plan, impact: IMPACT } : plan;
   harness.send({ type: 'agent.propose_plan', runId: harness.activeRun(taskId).id, document });
@@ -252,5 +252,5 @@ export function reachReviewGate(harness: Harness, taskId: string) {
 }
 
 export function linkSession(harness: Harness, taskId: string, sessionId = 'session-1') {
-  harness.send({ type: 'run.link', runId: harness.activeRun(taskId).id, sessionId });
+  harness.send({ type: 'run.link', runId: harness.activeRun(taskId).id, sessionId, provider: 'claude' });
 }

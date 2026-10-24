@@ -11,6 +11,7 @@ import {
   resolveRoundBase,
   resolveRoundProgress,
   resolveTaskRounds,
+  SHAPE_PIPELINES,
   type Task,
 } from '../../src/index.ts';
 import {
@@ -22,13 +23,13 @@ import {
   type Harness,
   linkSession,
   PASSING,
+  PLAN,
   proposePlan,
   pullRequest,
   pushed,
   reachReviewGate,
   reachShipping,
   registerRepo,
-  SPEC,
   shipAndMerge,
 } from '../harness.ts';
 
@@ -106,7 +107,7 @@ describe('a task is a conversation of rounds', () => {
     newIdea(harness, taskId, 'Also stream the tool results');
     expect(listStatuses(harness.task(taskId))).toEqual([
       [1, 'active'],
-      [2, 'queued'],
+      [2, 'waiting'],
     ]);
     expect(harness.activeRun(taskId).role).toBe('planner');
     reachMergeGate(harness, taskId);
@@ -217,8 +218,8 @@ describe('a task is a conversation of rounds', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'MCP v2' });
     shipAndMerge(harness, taskId);
-    expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('new_round');
-    harness.send({ type: 'task.message', taskId, text: 'Now add the settings page' });
+    expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('follow_up');
+    harness.send({ type: 'task.message', taskId, text: 'Now add the settings page', kind: 'new_round' });
     const task = harness.task(taskId);
     expect(task.stage).toBe('triage');
     expect(task.pullRequest).toBeNull();
@@ -236,7 +237,7 @@ describe('a task is a conversation of rounds', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     shipAndMerge(harness, taskId);
-    harness.send({ type: 'task.message', taskId, text: 'Another round' });
+    harness.send({ type: 'task.message', taskId, text: 'Another round', kind: 'new_round' });
     const before = harness.events.length;
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
     expect(harness.events).toHaveLength(before);
@@ -281,12 +282,33 @@ describe('feedback, new work and work that belongs elsewhere', () => {
     expect(task.suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 2 });
     expect(listStatuses(task)).toEqual([
       [1, 'active'],
-      [2, 'queued'],
+      [2, 'waiting'],
     ]);
     expect(task.activity.at(-1)?.text).toBe('Kept “Also redesign the billing page” in this task as round 2');
+    expect(resolveTaskRounds(task)[1]?.pipeline).toEqual([...SHAPE_PIPELINES.change]);
     expect(() =>
       harness.send({ type: 'suggestion.keep', taskId, suggestionId: suggestion?.id ?? '' })
     ).toThrow('already been added or dismissed');
+  });
+
+  test('a suggestion kept with a kind of task becomes a round of that kind', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Why is the import slow?',
+      kind: 'separate_task',
+      why: 'It is its own question.',
+    });
+    const [suggestion] = harness.task(taskId).suggestions ?? [];
+    harness.send({
+      type: 'suggestion.keep',
+      taskId,
+      suggestionId: suggestion?.id ?? '',
+      shape: 'investigate',
+    });
+    expect(resolveTaskRounds(harness.task(taskId))[1]?.pipeline).toEqual([...SHAPE_PIPELINES.investigate]);
   });
 
   test('a split-off with no room for another suggestion starts a round instead', () => {
@@ -307,7 +329,7 @@ describe('feedback, new work and work that belongs elsewhere', () => {
     harness.send({ type: 'task.message', taskId, text: 'One more thing', kind: 'separate_task' });
     expect(listStatuses(harness.task(taskId))).toEqual([
       [1, 'active'],
-      [2, 'queued'],
+      [2, 'waiting'],
     ]);
   });
 
@@ -321,11 +343,21 @@ describe('feedback, new work and work that belongs elsewhere', () => {
       reason: 'A question.',
     });
     readyRound(harness, taskId);
-    harness.send({ type: 'agent.answer', runId: harness.activeRun(taskId).id, answer: 'It uses Redis.' });
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'answer',
+      body: 'It uses Redis.',
+    });
     expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('follow_up');
     harness.send({ type: 'task.message', taskId, text: 'Which version?' });
     expect(harness.activeRun(taskId).role).toBe('answerer');
-    harness.send({ type: 'agent.answer', runId: harness.activeRun(taskId).id, answer: 'Seven.' });
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'answer',
+      body: 'Seven.',
+    });
     harness.send({ type: 'task.message', taskId, text: 'Move it to Valkey', kind: 'new_round' });
     expect(listStatuses(harness.task(taskId))).toEqual([
       [1, 'finished'],
@@ -349,7 +381,12 @@ describe('feedback, new work and work that belongs elsewhere', () => {
       waitsOn: [],
     });
     harness.send({ type: 'config.record', taskId, problems: [] });
-    harness.send({ type: 'agent.answer', runId: harness.activeRun(taskId).id, answer: 'With Redis.' });
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(taskId).id,
+      step: 'answer',
+      body: 'With Redis.',
+    });
     harness.send({ type: 'task.message', taskId, text: 'Write that down in the docs', kind: 'new_round' });
     expect(harness.task(taskId)).toMatchObject({ branch: 'docs/cache', stage: 'triage' });
   });
@@ -363,7 +400,7 @@ describe('feedback, new work and work that belongs elsewhere', () => {
 });
 
 describe('how a round ships', () => {
-  test('a queued round switches between onto the pull request and stacked, and repeats change nothing', () => {
+  test('a waiting round switches between onto the pull request and stacked, and repeats change nothing', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     newIdea(harness, taskId, 'Next');
@@ -407,7 +444,7 @@ describe('how a round ships', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     shipAndMerge(harness, taskId);
-    harness.send({ type: 'task.message', taskId, text: 'Next' });
+    harness.send({ type: 'task.message', taskId, text: 'Next', kind: 'new_round' });
     const branch = harness.task(taskId).branch;
     harness.send({ type: 'round.ship', taskId, number: 2, shipping: 'stacked' });
     expect(harness.task(taskId).branch).toBe(branch);
@@ -427,7 +464,7 @@ describe('how a round ships', () => {
     reachMergeGate(harness, taskId);
     expect(listStatuses(harness.task(taskId))).toEqual([
       [1, 'active'],
-      [2, 'queued'],
+      [2, 'waiting'],
     ]);
     merge(harness, taskId);
     expect(listStatuses(harness.task(taskId))).toEqual([
@@ -468,7 +505,7 @@ describe('how a round ships', () => {
       steps: ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge', 'operate'],
       reason: 'Backfill after the merge.',
     });
-    proposePlan(harness, taskId, { ...SPEC, operation: ['Run the backfill and check the count is 0.'] });
+    proposePlan(harness, taskId, { ...PLAN, operation: ['Run the backfill and check the count is 0.'] });
     approve(harness, taskId);
     completePhase(harness, taskId);
     completePhase(harness, taskId);
@@ -603,9 +640,11 @@ describe('ending a task', () => {
     );
     const shipped = createTask(harness, { request: 'Shipped' });
     reachMergeGate(harness, shipped);
+    const mergeGate = harness.openGate(shipped).id;
     expect(() => harness.send({ type: 'task.complete', taskId: shipped }, { onBehalf: true })).toThrow(
-      'This task waits for a decision only the human makes.'
+      'Pull request #42 of this task is still open.'
     );
+    expect(harness.state.gates[mergeGate]?.status).toBe('open');
     const checking = createTask(harness, { request: 'Checking' });
     reachShipping(harness, checking);
     harness.send({
@@ -673,7 +712,13 @@ describe('what each round keeps', () => {
     });
     const next = harness.activeRun(taskId).id;
     expect(() =>
-      harness.send({ type: 'agent.complete_phase', runId: next, summary: 'Done.', spots: [], judgementCalls: [] })
+      harness.send({
+        type: 'agent.complete_phase',
+        runId: next,
+        summary: 'Done.',
+        spots: [],
+        judgementCalls: [],
+      })
     ).toThrow('screenshot');
     harness.send({
       type: 'agent.attach_evidence',
@@ -683,7 +728,13 @@ describe('what each round keeps', () => {
       uri: 'b.png',
     });
     expect(Object.values(harness.state.evidence).map((item) => item.round)).toEqual([undefined, 2]);
-    harness.send({ type: 'agent.complete_phase', runId: next, summary: 'Done.', spots: [], judgementCalls: [] });
+    harness.send({
+      type: 'agent.complete_phase',
+      runId: next,
+      summary: 'Done.',
+      spots: [],
+      judgementCalls: [],
+    });
     expect(harness.task(taskId).stage).toBe('checking');
   });
 
@@ -699,7 +750,7 @@ describe('what each round keeps', () => {
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({ round: 2, text: 'Sent instructions' });
     harness.send({ type: 'run.end', runId: harness.activeRun(taskId).id, outcome: 'failed', summary: 'x' });
     harness.send({ type: 'run.end', runId: harness.activeRun(taskId).id, outcome: 'failed', summary: 'x' });
-    expect(harness.openGate(taskId)).toMatchObject({ purpose: 'failure', round: 2 });
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'failure', round: 2 });
     harness.send({ type: 'task.retry', taskId });
     expect(harness.activeRun(taskId).prompt).toContain('The human added since:\n- Round two note.');
     expect(harness.activeRun(taskId).prompt).not.toContain('Round one note.');
@@ -777,8 +828,13 @@ describe('the progress of a round', () => {
       ['Merge', 'waiting'],
     ]);
     expect(shipped.current?.title).toBe('Merge');
-    const queued = resolveRoundProgress({ ...round, pipeline: ['answer'], status: 'queued', outcome: null });
-    expect(queued.phases).toEqual([
+    const waiting = resolveRoundProgress({
+      ...round,
+      pipeline: ['answer'],
+      status: 'waiting',
+      outcome: null,
+    });
+    expect(waiting.phases).toEqual([
       { key: 'answer', title: 'Answer', detail: null, status: 'pending', planned: false },
     ]);
     const cancelled = resolveRoundProgress({

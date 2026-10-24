@@ -5,16 +5,20 @@ import {
   findWorkStep,
   type Gate,
   type GateDecision,
+  hasStep,
   type InquiryStep,
   isComposedByAgent,
+  isFollowUpOnWork,
   isInquiryDone,
   isLaterRound,
   isSamePipeline,
   isWorktreeStep,
   type PipelineStep,
-  resolveChangeUpgrade,
+  type Run,
+  type RunRole,
   resolveInquiryStep,
   resolveOperationTiming,
+  resolveProposalUpgrade,
   resolveTaskPipeline,
   resolveTaskRounds,
   resolveWorkStep,
@@ -28,11 +32,13 @@ import {
 } from '../domain/index.ts';
 import {
   resolveAnswererPrompt,
+  resolveFollowUpPrompt,
   resolveInvestigatorPrompt,
   resolveOperatorPrompt,
   resolveResearcherPrompt,
 } from '../prompts/index.ts';
 import { listOpenGates } from '../state/queries.ts';
+import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
@@ -52,7 +58,7 @@ const INQUIRY_REASON: Record<InquiryStep, string> = {
 const SETTLED_REASON: Record<InquiryStep, string> = {
   answer: 'answered your question',
   research: 'wrote the report',
-  investigate: 'reported its findings',
+  investigate: 'reported its diagnosis',
 };
 
 const DECLINED_REASON: Record<InquiryStep, string> = {
@@ -73,16 +79,16 @@ const LOCKED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_operation',
 ]);
 
-const CHANGE_GATE_TITLE: Record<InquiryStep, string> = {
+const CHANGE_PROPOSAL_TITLE: Record<InquiryStep, string> = {
   answer: 'Turn this answer into a change?',
   research: 'Turn this report into a change?',
   investigate: 'Turn this investigation into a fix?',
 };
 
-const OPERATION_GATE_TITLE: Record<InquiryStep, string> = {
+const OPERATION_PROPOSAL_TITLE: Record<InquiryStep, string> = {
   answer: 'Run an operation from this answer?',
   research: 'Run an operation from this report?',
-  investigate: 'Run an operation from these findings?',
+  investigate: 'Run an operation from this diagnosis?',
 };
 
 const NEXT_WORK: Record<WorkStep, string> = {
@@ -208,16 +214,16 @@ function openOperationGate(decider: Decider, task: Task) {
   );
 }
 
-function joinNotes(...notes: (string | null | undefined)[]) {
-  const kept = notes.filter((note): note is string => Boolean(note));
-  return kept.length > 0 ? kept.join('\n\n') : null;
+function replaceNotes(decider: Decider, gate: Gate, text: string) {
+  const notes = text.trim() || null;
+  if (notes === (gate.notes ?? null)) return notes;
+  decider.emit({ type: 'gate.noted', gateId: gate.id, notes });
+  return notes;
 }
 
 export function noteOperation(decider: Decider, taskId: string, text: string) {
   for (const gate of listOpenGates(decider.state, taskId)) {
-    if (gate.type !== 'operation') continue;
-    const notes = gate.notes ? `${gate.notes}\n\n${text}` : text;
-    decider.emit({ type: 'gate.noted', gateId: gate.id, notes });
+    if (gate.type === 'operation') replaceNotes(decider, gate, text);
   }
 }
 
@@ -231,7 +237,8 @@ export function answerOperation(
     settleTask(decider, gate.taskId, 'done', 'merged without running the operation');
     return;
   }
-  startOperation(decider, gate.taskId, joinNotes(gate.notes, decision === 'answer' ? response : null));
+  const notes = decision === 'reply' ? replaceNotes(decider, gate, response ?? '') : (gate.notes ?? null);
+  startOperation(decider, gate.taskId, notes);
 }
 
 function requestWorktree(decider: Decider, taskId: string) {
@@ -265,13 +272,13 @@ export function proceedAfterSetup(decider: Decider, taskId: string) {
   startStep(decider, taskId, step);
 }
 
-function openChangeGate(decider: Decider, task: Task, step: InquiryStep, proposal: ChangeProposalInput) {
+function openProposalGate(decider: Decider, task: Task, step: InquiryStep, proposal: ChangeProposalInput) {
   const operation = resolveWorkStep(resolveTaskPipeline(task)) === 'operate';
-  decider.stage(task.id, 'awaiting_proposal', 'a change is proposed for you to approve');
+  decider.stage(task.id, 'awaiting_proposal', 'a proposal waits for your OK');
   decider.openGate(
     task.id,
     'proposal',
-    operation ? OPERATION_GATE_TITLE[step] : CHANGE_GATE_TITLE[step],
+    operation ? OPERATION_PROPOSAL_TITLE[step] : CHANGE_PROPOSAL_TITLE[step],
     `${proposal.why}\n\n${proposal.request}`
   );
 }
@@ -295,7 +302,7 @@ function requestYourOk(
     why: resolveComposedReason(task),
   };
   decider.emit({ type: 'task.change_proposed', taskId, request: next.request, why: next.why, runId });
-  openChangeGate(decider, decider.task(taskId), step, next);
+  openProposalGate(decider, decider.task(taskId), step, next);
 }
 
 function finishInquiry(
@@ -316,27 +323,15 @@ function finishInquiry(
     return;
   }
   if (proposal) {
-    decider.emit({
-      type: 'task.change_proposed',
-      taskId,
-      request: proposal.request,
-      why: proposal.why,
-      runId,
-    });
-    openChangeGate(decider, decider.task(taskId), step, proposal);
+    reshapeTask(decider, taskId, resolveProposalUpgrade(pipeline), 'agent', proposal.why);
+    requestYourOk(decider, taskId, runId, proposal);
     return;
   }
   settleTask(decider, taskId, 'done', SETTLED_REASON[step]);
 }
 
-export function recordAnswer(decider: Decider, command: CommandOf<'agent.answer'>) {
-  const { run, task } = findCurrentRun(decider, command.runId, 'answer');
-  decider.emit({ type: 'task.answered', taskId: task.id, answer: command.answer, runId: run.id });
-  decider.endRun(run, 'completed', 'Answered the question.');
-  finishInquiry(decider, task.id, 'answer', run.id, command.proposal ?? null);
-}
-
 const DELIVER_TOOL = {
+  answer: 'answer',
   investigate: 'report_diagnosis',
   research: 'submit_report',
   operate: 'report_outcome',
@@ -344,6 +339,12 @@ const DELIVER_TOOL = {
 
 export function recordDelivery(decider: Decider, command: CommandOf<'agent.deliver'>) {
   const { run, task } = findCurrentRun(decider, command.runId, DELIVER_TOOL[command.step]);
+  if (isFollowUpOnWork(task)) {
+    finishFollowUp(decider, task, run, command.proposal ?? null);
+    return;
+  }
+  if (command.step === 'operate' && !hasStep(task, 'build'))
+    assertEvidence(decider, task, 'report the outcome');
   decider.emit({
     type: 'task.delivered',
     taskId: task.id,
@@ -351,7 +352,7 @@ export function recordDelivery(decider: Decider, command: CommandOf<'agent.deliv
     body: command.body,
     runId: run.id,
   });
-  decider.endRun(run, 'completed', null);
+  decider.endRun(run, 'completed', command.step === 'answer' ? 'Answered the question.' : null);
   decider.progressed(task.id);
   if (command.step === 'operate') {
     finishOperation(decider, task.id);
@@ -375,7 +376,7 @@ function resolveComposition(command: CommandOf<'agent.reshape'>): PipelineStep[]
 
 export function recordReshape(decider: Decider, command: CommandOf<'agent.reshape'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'reshape_task');
-  if (task.auto?.shape === false) {
+  if (!task.auto.shape) {
     throw new DomainError(
       'shape_chosen',
       'The kind of this task was set when it was created. Plan it, or ask the human with `ask` if it should be something else.'
@@ -438,28 +439,16 @@ function assertShipsOntoOpenPullRequest(task: Task, pipeline: PipelineStep[]) {
   }
 }
 
-export function answerChange(decider: Decider, gate: Gate, decision: GateDecision) {
+export function answerProposal(decider: Decider, gate: Gate, decision: GateDecision) {
   const task = decider.task(gate.taskId);
-  const pipeline = resolveTaskPipeline(task);
-  const step = findInquiryStep(pipeline);
+  const step = findInquiryStep(resolveTaskPipeline(task));
   if (decision === 'reject') {
     decider.emit({ type: 'task.change_declined', taskId: task.id });
-    if (pipeline.includes('your_ok')) reshapeTask(decider, task.id, [step], 'you', DECLINED_REASON[step]);
+    reshapeTask(decider, task.id, [step], 'you', DECLINED_REASON[step]);
     settleTask(decider, task.id, 'done', DECLINED_REASON[step]);
     return;
   }
-  if (pipeline.includes('your_ok')) {
-    decider.emit({ type: 'task.change_approved', taskId: task.id });
-    proceedAfterSetup(decider, task.id);
-    return;
-  }
-  reshapeTask(
-    decider,
-    task.id,
-    resolveChangeUpgrade(resolveTaskPipeline(task)),
-    'agent',
-    task.proposal?.why ?? ''
-  );
+  decider.emit({ type: 'task.change_approved', taskId: task.id });
   startWork(decider, task.id);
 }
 
@@ -469,6 +458,49 @@ export function followUpInquiry(decider: Decider, taskId: string, text: string) 
   decider.withdrawGates(taskId, (gate) => gate.type === 'proposal');
   if (task.proposal?.status === 'open') decider.emit({ type: 'task.change_declined', taskId });
   startInquiry(decider, taskId, step, text);
+}
+
+const FOLLOW_UP_ROLES: RunRole[] = [
+  'planner',
+  'builder',
+  'fixer',
+  'operator',
+  'answerer',
+  'researcher',
+  'investigator',
+];
+
+export function answerFollowUp(decider: Decider, taskId: string, question: string | null) {
+  decider.stage(taskId, 'answering', 'answering your follow-up');
+  const task = decider.task(taskId);
+  decider.startRun(task, 'answerer', resolveFollowUpPrompt(task, decider.repoOf(task), question), {
+    resumeFrom: decider.lastRun(taskId, FOLLOW_UP_ROLES),
+  });
+}
+
+export function restartAnswer(decider: Decider, task: Task, text: string | null) {
+  if (isFollowUpOnWork(task)) {
+    answerFollowUp(decider, task.id, text);
+    return;
+  }
+  startInquiry(decider, task.id, 'answer', text);
+}
+
+function resolveRestingStage(task: Task) {
+  const merged = task.pullRequest?.state === 'merged';
+  return merged && resolveOperationTiming(resolveTaskPipeline(task)) !== 'after_merge' ? 'merged' : 'done';
+}
+
+function finishFollowUp(decider: Decider, task: Task, run: Run, proposal: ChangeProposalInput | null) {
+  if (proposal) {
+    throw new DomainError(
+      'follow_up_proposal',
+      'This answers a follow-up on finished work, so it proposes no change. Call `answer` without `propose_change`; work worth doing outside this task goes to `suggest_tasks`.'
+    );
+  }
+  decider.endRun(run, 'completed', 'Answered your follow-up.');
+  decider.progressed(task.id);
+  settleTask(decider, task.id, resolveRestingStage(task), 'answered your follow-up');
 }
 
 export function acceptsFollowUp(task: Task) {

@@ -1,5 +1,5 @@
 import { addUsage } from '../costs/index.ts';
-import type { RunSilence } from '../domain/index.ts';
+import type { Run, RunSilence } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { applyDelegationStarted } from './delegations.ts';
 import type { ShinsaState } from './project.ts';
@@ -30,11 +30,10 @@ const QUIET: RunSilence = { since: null, snoozedUntil: null, dismissed: false };
 function applyRunLinked(state: ShinsaState, event: EventOf<'run.linked'>) {
   const run = state.runs[event.runId];
   if (!run) return;
-  const sessionProvider = event.provider ?? run.sessionProvider;
   state.runs[event.runId] = {
     ...run,
     sessionId: event.sessionId,
-    ...(sessionProvider ? { sessionProvider } : {}),
+    sessionProvider: event.provider,
     ...(run.sessionLost ? { sessionLost: false } : {}),
   };
 }
@@ -80,11 +79,16 @@ function updateSilence(state: ShinsaState, runId: string, patch: Partial<RunSile
   updateRun(state, runId, { silence: { ...QUIET, ...run.silence, ...patch } });
 }
 
+function applyRunStarted(state: ShinsaState, started: Run, at: number) {
+  const run: Run = { ...started };
+  state.runs[run.id] = run;
+  applyDelegationStarted(state, run, at);
+}
+
 export function applyRunEvent(state: ShinsaState, event: RunEvent) {
   switch (event.type) {
     case 'run.started':
-      state.runs[event.run.id] = event.run;
-      applyDelegationStarted(state, event.run, event.at);
+      applyRunStarted(state, event.run, event.at);
       return;
     case 'run.dispatched':
       updateRun(state, event.runId, { status: 'running' });

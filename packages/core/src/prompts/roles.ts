@@ -19,6 +19,7 @@ import {
   describeDismissedFindings,
   describeEarlierWork,
   describeGoal,
+  describeNoRepository,
   describePlan,
   describePreviousPhases,
   describeRepository,
@@ -52,7 +53,7 @@ function describeOperationNote(task: Task) {
   return [
     '',
     COMBINED_NOTE[timing],
-    '`plan` holds the code change only, as phases. List the operation in `operation`: its steps in order, each with how to check it worked. The human approves the plan, the operation included, before anything runs, so say exactly what the operation will change and how to undo it.',
+    '`phases` hold the code change only. List the operation in `operation`: its steps in order, each with how to check it worked. The human approves the plan, the operation included, before anything runs, so say exactly what the operation will change and how to undo it.',
   ].join('\n');
 }
 
@@ -70,14 +71,14 @@ function describeShapeChoice(task: Task) {
 function describeReshapeNote(task: Task) {
   return [
     `Shinsa guessed what kind of task this is from the request. Its steps now: ${resolveTaskPipeline(task).join(', ')}.`,
-    'Plan it when those steps fit the request; most tasks need no change. When they do not fit, call `reshape_task` instead of planning, then end your turn:',
+    'Plan it when those steps fit the request; most tasks need no change. When they do not fit, call `reshape_task` instead of planning, then stop:',
     describeShapeChoice(task),
     '- `steps` to compose the task from these building blocks, in this order (`operate` goes right after `plan`, or last, after `merge`). Each step, who does it and when it is done:',
     describeStepCatalog(),
     'The rules, which Shinsa checks. A question, research or an investigation that changes nothing takes none of the verification steps; anything that changes code or runs an operation takes all of them:',
     describeStepRules(),
     'You cannot add a step or a gate of your own. You set the parameters in the plan instead: the verification plan, the evidence, extra checks, the impact of an operation, and whether the human approves the plan first.',
-    'For example, find the cause and then run an operation from the findings: `investigate`, `your_ok`, `plan`, `operate`. Research the options, then change the code: `research`, `your_ok`, `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`. Ship a change, then backfill the data it needs: `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`, `operate`.',
+    'For example, find the cause and then run an operation from the diagnosis: `investigate`, `your_ok`, `plan`, `operate`. Research the options, then change the code: `research`, `your_ok`, `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`. Ship a change, then backfill the data it needs: `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`, `operate`.',
     `Shinsa checks the steps and tells you what to fix. \`reason\` says in one sentence why the task takes these steps, at most ${SHAPE_LIMITS.reason} characters.`,
   ].join('\n');
 }
@@ -98,7 +99,7 @@ export function resolvePlannerPrompt(task: Task, repo: Repo | null, bases: Task[
     describeEarlierWork(task),
     describeOperationNote(task),
     describePlanParameters(task),
-    task.auto?.shape && !feedback && !task.plan && !isComposedByAgent(task)
+    task.auto.shape && !feedback && !task.plan && !isComposedByAgent(task)
       ? ['', describeReshapeNote(task)].join('\n')
       : '',
     feedback ? ['', 'Feedback on the previous plan:', feedback, '', task.plan?.body ?? ''].join('\n') : '',
@@ -114,7 +115,7 @@ export function resolvePlannerPrompt(task: Task, repo: Repo | null, bases: Task[
     'Decide everything you can decide from the code and the request, and say so in the approach.',
     'If the human must decide something before work can start, ask it with `ask` first, then plan with the answer.',
     'Leave `questions` empty unless a decision can wait for the human to look at the finished work.',
-    'Then end your turn.',
+    'Then stop.',
   ].join('\n');
 }
 
@@ -166,7 +167,7 @@ export function resolvePhasePrompt(task: Task, repo: Repo | null, bases: Task[],
     '  critical = could break something or encodes a judgement call; high = worth a careful read; normal = context.',
     '  Leave boilerplate and mechanical edits out.',
     '- decisions: judgement calls the human might disagree with.',
-    'Then end your turn.',
+    'Then stop.',
   ].join('\n');
 }
 
@@ -206,7 +207,7 @@ export function resolveReviewerPrompt(task: Task, repo: Repo | null, bases: Task
     'A blocking finding is a bug, a missed requirement, a broken repository rule or a security problem. Everything optional is a suggestion.',
     'Anchor every finding to a file and line range. Reproduce a finding before you report it; one you cannot reproduce is a guess.',
     describeDismissedFindings(task),
-    'Call `report_review` with your findings (an empty list if there are none), then end your turn.',
+    'Call `report_review` with your findings (an empty list if there are none), then stop.',
     'You are a signal for the human, never the approval.',
   ].join('\n');
 }
@@ -226,6 +227,7 @@ export function resolveResearcherPrompt(task: Task, repo: Repo | null, followUp:
     describeRounds(task),
     describeRepository(repo),
     describeCheckout(task, repo),
+    describeNoRepository(repo),
     '',
     'The request:',
     resolveRequest(task),
@@ -235,7 +237,7 @@ export function resolveResearcherPrompt(task: Task, repo: Repo | null, followUp:
     `Read the code and anything else you need, then call \`submit_report\` with \`report\`: markdown, at most ${SHAPE_LIMITS.report} characters.`,
     'Lead with the conclusion or recommendation in one paragraph, then the comparison or findings, then the evidence (files and lines as shinsa:// links, sources as links).',
     describeWhatFollows(task) ?? PROPOSAL_RULE,
-    'Then end your turn.',
+    'Then stop.',
   ].join('\n');
 }
 
@@ -254,13 +256,13 @@ export function resolveInvestigatorPrompt(task: Task, repo: Repo | null, followU
     followUp ? ['', 'The human followed up:', followUp].join('\n') : '',
     '',
     'Reproduce the problem first. You may run anything, add logging or write a failing test to narrow it down: this worktree is scratch and nothing you change in it ships. Shinsa resets it before any fix is built.',
-    `When you know the cause, or have ruled out what you can, call \`report_diagnosis\` with \`findings\`: markdown, at most ${SHAPE_LIMITS.findings} characters.`,
+    `When you know the cause, or have ruled out what you can, call \`report_diagnosis\` with \`diagnosis\`: markdown, at most ${SHAPE_LIMITS.diagnosis} characters.`,
     'Lead with the cause in one or two sentences (or what is still unknown), then how you reproduced it and the evidence (files and lines as shinsa:// links).',
     describeWhatFollows(task) ??
       (continues
-        ? 'The human already asked for a fix: a planner plans it from your findings next, so end with what the fix should change.'
+        ? 'The human already asked for a fix: a planner plans it from your diagnosis next, so end with what the fix should change.'
         : PROPOSAL_RULE),
-    'Then end your turn.',
+    'Then stop.',
   ].join('\n');
 }
 
@@ -311,7 +313,7 @@ export function resolveOperatorPrompt(task: Task, repo: Repo | null, guidance: s
     '',
     'Run only what the plan says. Check each step before the next; stop and ask with `ask` when a step fails or would do more than the plan says.',
     `Then call \`report_outcome\` with \`outcome\`: markdown, at most ${SHAPE_LIMITS.outcome} characters: what ran, what changed, anything left to do or undo.`,
-    'Then end your turn.',
+    'Then stop.',
   ].join('\n');
 }
 
@@ -319,12 +321,15 @@ export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: s
   return [
     resolveHouseRules('answerer'),
     '',
-    'Your role: answerer. The human asked a question about this repository. Answer it directly.',
+    repo
+      ? 'Your role: answerer. The human asked a question about this repository. Answer it directly.'
+      : 'Your role: answerer. The human asked a question or wrote to you. Answer it directly.',
     'Do not write implementation code and do not produce an implementation plan. Use tools only to investigate; the deliverable is the answer.',
     describeTaskLink(task),
     describeRounds(task),
     describeRepository(repo),
     repo ? `The repository is checked out at \`${repo.path}\`. Read it; never change it.` : '',
+    describeNoRepository(repo),
     '',
     'The question:',
     resolveRequest(task),
@@ -332,6 +337,6 @@ export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: s
     '',
     `Call \`answer\` with your answer in markdown (at most ${SHAPE_LIMITS.answer} characters): lead with the answer itself, then the evidence (files and lines as shinsa:// links).`,
     describeWhatFollows(task) ?? PROPOSAL_RULE,
-    'For other work worth doing, propose it with `suggest_tasks`. Then end your turn.',
+    'For other work worth doing, propose it with `suggest_tasks`. Then stop.',
   ].join('\n');
 }

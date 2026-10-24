@@ -1,25 +1,13 @@
 import { type CommandOf, isUserCommand, type ShinsaCommand, type UserCommand } from '../commands/index.ts';
-import type { GateDecision, GateKind } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
-type Describe<T extends UserCommand['type']> = (state: ShinsaState, command: CommandOf<T>) => string;
+type OnBehalfCommand = Exclude<UserCommand, { type: 'gate.answer' }>;
 
-type Descriptions = { [T in Exclude<UserCommand['type'], 'task.create'>]: Describe<T> };
+type Describe<T extends OnBehalfCommand['type']> = (state: ShinsaState, command: CommandOf<T>) => string;
 
-const DECISION_WORDS: Record<GateDecision, string> = {
-  approve: 'Approved',
-  revise: 'Asked for changes to',
-  reject: 'Rejected',
-  answer: 'Answered',
-};
-
-const GATE_WORDS: Record<GateKind, string> = {
-  plan: 'the plan',
-  review: 'the changes',
-  merge: 'the merge',
-  question: 'the question',
-};
+type Descriptions = { [T in Exclude<OnBehalfCommand['type'], 'task.create'>]: Describe<T> };
 
 function quoteTask(state: ShinsaState, taskId: string | null) {
   const title = taskId ? state.tasks[taskId]?.title : undefined;
@@ -52,19 +40,18 @@ const DESCRIPTIONS: Descriptions = {
   'task.cancel': (state, command) => `Cancelled ${quoteTask(state, command.taskId)}`,
   'task.complete': (state, command) => `Marked ${quoteTask(state, command.taskId)} as done`,
   'task.retry': (state, command) => `Retried ${quoteTask(state, command.taskId)}`,
-  'task.message': (state, command) => `Messaged ${quoteTask(state, command.taskId)}`,
-  'gate.answer': (state, command) => {
-    const gate = state.gates[command.gateId];
-    const what = gate ? GATE_WORDS[gate.kind] : 'a decision';
-    return `${DECISION_WORDS[command.decision]} ${what} on ${quoteTask(state, gate?.taskId ?? null)}`;
-  },
+  'task.message': (state, command) =>
+    listOpenGates(state, command.taskId).length > 0
+      ? `Left a message for the next agent on ${quoteTask(state, command.taskId)}, which waits for you`
+      : `Messaged ${quoteTask(state, command.taskId)}`,
   'round.ship': (state, command) =>
     command.shipping === 'stacked'
       ? `Set round ${command.number} of ${quoteTask(state, command.taskId)} to ship as its own stacked pull request`
       : `Set round ${command.number} of ${quoteTask(state, command.taskId)} to ship onto the open pull request`,
   'suggestion.keep': (state, command) =>
     `Kept a split-off of ${quoteTask(state, command.taskId)} as its next round`,
-  'monitor.check_in_now': (state, command) => `Checked now what ${quoteTask(state, command.taskId)} waits for`,
+  'monitor.check_in_now': (state, command) =>
+    `Checked now what ${quoteTask(state, command.taskId)} waits for`,
   'run.snooze_silence': (state, command) =>
     `Snoozed the quiet agent on ${quoteRunTask(state, command.runId)}`,
   'run.dismiss_silence': (state, command) =>
@@ -75,10 +62,10 @@ const DESCRIPTIONS: Descriptions = {
       : `Set ${quoteTask(state, command.taskId)} to wait for you when the usage limit resets`,
   'usage_wait.resume_now': (state, command) =>
     `Resumed ${quoteTask(state, command.taskId)} without waiting for the usage limit`,
-  'delegation.cancel': (state, command) =>
-    `Stopped a delegated task on ${quoteRunTask(state, command.runId)}`,
-  'suggestion.accept': (state, command) => `Added a follow-up of ${quoteTask(state, command.taskId)}`,
-  'suggestion.dismiss': (state, command) => `Dismissed a follow-up of ${quoteTask(state, command.taskId)}`,
+  'delegation.cancel': (state, command) => `Stopped a delegation on ${quoteRunTask(state, command.runId)}`,
+  'suggestion.accept': (state, command) => `Added a suggested task of ${quoteTask(state, command.taskId)}`,
+  'suggestion.dismiss': (state, command) =>
+    `Dismissed a suggested task of ${quoteTask(state, command.taskId)}`,
   'task.bind_account': (state, command) =>
     command.account
       ? `Set ${quoteTask(state, command.taskId)} to run on ${command.account.email ?? command.account.id}`
@@ -95,21 +82,24 @@ function selectCreatedTask(decider: Decider) {
   return null;
 }
 
-function selectActionTask(decider: Decider, command: UserCommand) {
+function isOnBehalfCommand(command: ShinsaCommand): command is OnBehalfCommand {
+  return isUserCommand(command) && command.type !== 'gate.answer';
+}
+
+function selectActionTask(decider: Decider, command: OnBehalfCommand) {
   if ('taskId' in command) return command.taskId;
-  if ('gateId' in command) return decider.state.gates[command.gateId]?.taskId ?? null;
   if ('runId' in command) return decider.state.runs[command.runId]?.taskId ?? null;
   return selectCreatedTask(decider);
 }
 
-function describeAction(decider: Decider, command: UserCommand, taskId: string | null) {
+function describeAction(decider: Decider, command: OnBehalfCommand, taskId: string | null) {
   if (command.type === 'task.create') return `Created ${quoteTask(decider.state, taskId)}`;
   const describe = DESCRIPTIONS[command.type] as Describe<typeof command.type>;
   return describe(decider.state, command);
 }
 
 export function recordOnBehalfAction(decider: Decider, command: ShinsaCommand) {
-  if (decider.events.length === 0 || !isUserCommand(command)) return;
+  if (decider.events.length === 0 || !isOnBehalfCommand(command)) return;
   const taskId = selectActionTask(decider, command);
   decider.emit({
     type: 'on_behalf.acted',

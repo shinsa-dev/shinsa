@@ -4,6 +4,7 @@ import {
   bindAccount,
   changeUsageWait,
   recordAccountRemoved,
+  recordProviderSignIn,
   recordSignedIn,
   resumeUsageWait,
   resumeUsageWaitNow,
@@ -26,7 +27,7 @@ import { releaseWaiting } from './dependencies.ts';
 import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
-import { messageTask, redeliverMessage } from './messages.ts';
+import { dropMessage, messageTask, receiveMessage, redeliverMessage, routeMessage } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { applyOrchestration } from './orchestration.ts';
@@ -63,11 +64,10 @@ import {
   writeBriefing,
   writeProject,
 } from './settings.ts';
-import { recordAnswer, recordDelivery, recordReshape } from './shapes.ts';
+import { recordDelivery, recordReshape } from './shapes.ts';
 import { dismissSilence, recordSilence, snoozeSilence } from './silence.ts';
 import { acceptSuggestion, dismissSuggestion, keepSuggestion, suggestTasks } from './suggestions.ts';
 import {
-  waitOnTasks,
   cancelTask,
   completeTask,
   createTask,
@@ -77,6 +77,7 @@ import {
   removeWorktree,
   retryTaskCommand,
   triageTask,
+  waitOnTasks,
 } from './tasks.ts';
 
 export type { DecideContext, Decision } from './decider.ts';
@@ -124,6 +125,12 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return messageTask(decider, command);
     case 'message.deliver':
       return redeliverMessage(decider, command);
+    case 'message.receive':
+      return receiveMessage(decider, command);
+    case 'message.route':
+      return routeMessage(decider, command);
+    case 'message.drop':
+      return dropMessage(decider, command);
     case 'round.ship':
       return changeRoundShipping(decider, command);
     case 'gate.answer':
@@ -156,8 +163,6 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return waitFor(decider, command);
     case 'agent.suggest_tasks':
       return suggestTasks(decider, command);
-    case 'agent.answer':
-      return recordAnswer(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':
@@ -172,7 +177,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordChecks(decider, command);
     case 'pull_request.record':
       return recordPullRequest(decider, command);
-    case 'pull_request.pushed':
+    case 'pull_request.record_push':
       return recordPush(decider, command);
     case 'pull_request.read_failed':
       return recordPullRequestReadFailure(decider, command);
@@ -186,7 +191,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return interruptRun(decider, command);
     case 'run.continue':
       return continueRun(decider, command);
-    case 'run.session_lost':
+    case 'run.record_lost_session':
       return recordSessionLost(decider, command);
     case 'runs.dispatch':
       return;
@@ -216,6 +221,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordSignedIn(decider, command);
     case 'account.removed':
       return recordAccountRemoved(decider, command);
+    case 'provider.record_sign_in':
+      return recordProviderSignIn(decider, command);
     case 'agent.delegate':
     case 'agent.cancel_delegation':
     case 'agent.answer_delegation':
@@ -223,8 +230,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
     case 'agent.create_task':
     case 'agent.split_task':
     case 'delegation.cancel':
-    case 'delegation.delivered':
-    case 'delegation.undelivered':
+    case 'delegation.record_delivery':
+    case 'delegation.release':
     case 'delegation.wake_policy':
     case 'delegations.recover':
       return applyOrchestration(decider, command);

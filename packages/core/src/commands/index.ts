@@ -25,10 +25,10 @@ import type {
 import type { PullRequestRemark } from '../domain/pull-requests.ts';
 import type {
   CodeSpot,
-  ReportCheck,
   JudgementCall,
-  ReviewFinding,
   PlanDocument,
+  ReportCheck,
+  ReviewFinding,
   SuggestedTask,
 } from '../report/types.ts';
 import type {
@@ -46,6 +46,13 @@ export interface ChangeProposalInput {
 
 export type ProjectInput = Pick<Project, 'name' | 'color'> &
   Partial<Pick<Project, 'id' | 'key' | 'description' | 'folders'>>;
+
+export interface MessageRoute {
+  kind?: MessageKind;
+  title?: string;
+  why?: string;
+  shape?: TaskShape;
+}
 
 export type InquiryShape = Extract<TaskShape, 'answer' | 'investigate' | 'research'>;
 
@@ -79,15 +86,7 @@ export type UserCommand =
   | { type: 'task.cancel'; taskId: string }
   | { type: 'task.complete'; taskId: string }
   | { type: 'task.retry'; taskId: string; account?: RunAccount }
-  | {
-      type: 'task.message';
-      taskId: string;
-      text: string;
-      kind?: MessageKind;
-      title?: string;
-      why?: string;
-      shape?: TaskShape;
-    }
+  | ({ type: 'task.message'; taskId: string; text: string } & MessageRoute)
   | { type: 'round.ship'; taskId: string; number: number; shipping: RoundShipping }
   | {
       type: 'gate.answer';
@@ -99,7 +98,7 @@ export type UserCommand =
     }
   | { type: 'suggestion.accept'; taskId: string; suggestionId: string; waitsOnThis: boolean }
   | { type: 'suggestion.dismiss'; taskId: string; suggestionId: string }
-  | { type: 'suggestion.keep'; taskId: string; suggestionId: string }
+  | { type: 'suggestion.keep'; taskId: string; suggestionId: string; shape?: TaskShape }
   | { type: 'monitor.check_in_now'; taskId: string }
   | { type: 'run.snooze_silence'; runId: string; until: number }
   | { type: 'run.dismiss_silence'; runId: string }
@@ -141,7 +140,6 @@ type AgentCommand =
       maxAttempts: number | null;
     }
   | { type: 'agent.suggest_tasks'; runId: string; suggestions: SuggestedTask[] }
-  | { type: 'agent.answer'; runId: string; answer: string; proposal?: ChangeProposalInput | null }
   | {
       type: 'agent.deliver';
       runId: string;
@@ -168,7 +166,7 @@ type SystemCommand =
       type: 'task.triage';
       taskId: string;
       title: string;
-      repoId: string;
+      repoId: string | null;
       size: TaskSize;
       branch: string;
       waitsOn: string[];
@@ -178,7 +176,7 @@ type SystemCommand =
     }
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string }
   | { type: 'worktree.gone'; taskId: string }
-  | { type: 'run.link'; runId: string; sessionId: string; attemptId?: string | null; provider?: string }
+  | { type: 'run.link'; runId: string; sessionId: string; attemptId?: string | null; provider: string }
   | {
       type: 'run.end';
       runId: string;
@@ -199,7 +197,7 @@ type SystemCommand =
     }
   | { type: 'run.interrupt'; runId: string; attemptId?: string | null }
   | { type: 'run.continue'; runId: string }
-  | { type: 'run.session_lost'; runId: string; sessionId: string }
+  | { type: 'run.record_lost_session'; runId: string; sessionId: string }
   | { type: 'run.compact'; runId: string; sessionId: string }
   | {
       type: 'pull_request.record';
@@ -213,14 +211,18 @@ type SystemCommand =
   | { type: 'effect.fail'; taskId: string; title: string; detail: string }
   | { type: 'briefing.write'; projectId: string | null; text: string; briefing?: Briefing }
   | { type: 'message.deliver'; taskId: string; text: string }
+  | { type: 'message.receive'; taskId: string; text: string }
+  | ({ type: 'message.route'; taskId: string; messageId: string } & MessageRoute)
+  | { type: 'message.drop'; taskId: string; messageId: string; reason: string }
   | { type: 'runs.dispatch' }
   | { type: 'monitor.fire'; taskId: string; monitorId: string; attempt: number }
   | { type: 'run.meter'; runId: string; usage: RunUsage; sessionId?: string | null; weeklyPercent?: number }
   | { type: 'run.silence'; runId: string; since: number | null }
-  | { type: 'config.record'; taskId: string; problems: ConfigProblem[] }
-  | { type: 'pull_request.pushed'; taskId: string; sha: string }
+  | { type: 'config.record'; taskId: string; problems: ConfigProblem[]; repoId?: string }
+  | { type: 'pull_request.record_push'; taskId: string; sha: string }
   | { type: 'usage_wait.resume'; taskId: string; waitId: string }
   | { type: 'account.signed_in'; account: RunAccount }
+  | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
   | DelegationSystemCommand
   | ScheduleSystemCommand;

@@ -4,7 +4,7 @@ import {
   resolvePullRequestSignature,
   trimWatchChanges,
 } from '../../src/decide/watch.ts';
-import type { PullRequest, CiRun, PullRequestRemark, PullRequestWatch } from '../../src/index.ts';
+import type { CiRun, PullRequest, PullRequestRemark, PullRequestWatch } from '../../src/index.ts';
 import {
   createPullRequestWatch,
   evaluatePullRequestWatch,
@@ -21,11 +21,7 @@ const watch = (overrides: Partial<PullRequestWatch> = {}): PullRequestWatch => (
   ...overrides,
 });
 
-const check = (
-  name: string,
-  status: CiRun['status'],
-  required: boolean | null = null
-): CiRun => ({
+const check = (name: string, status: CiRun['status'], required: boolean | null = null): CiRun => ({
   name,
   status,
   required,

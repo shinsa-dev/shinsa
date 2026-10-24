@@ -1,5 +1,6 @@
 import { describeList } from '../chat/text.ts';
 import {
+  type Activity,
   type Repo,
   type Round,
   resolveCurrentRound,
@@ -14,6 +15,11 @@ import type { ReviewFinding } from '../report/types.ts';
 export function describeRepository(repo: Repo | null) {
   if (!repo) return '';
   return `Repository: ${repo.name} (default branch ${repo.defaultBranch}).`;
+}
+
+export function describeNoRepository(repo: Repo | null) {
+  if (repo) return '';
+  return 'This task works in no repository. Work from Shinsa itself, through `find_tasks`, `read_task` and the `projects_list` tool, and from any repository the project names, read by its path. When the request needs the code of one repository and you cannot tell which, ask the human with `ask`.';
 }
 
 export function describeTaskLink(task: Task) {
@@ -114,20 +120,17 @@ export function describeDismissedFindings(task: Task) {
 }
 
 const RESULT_HEADING = {
-  investigate: 'What the investigation found:',
+  answer: 'The answer given earlier on this task:',
+  investigate: 'The diagnosis from the investigation:',
   research: 'The report written for this task:',
   operate: 'How the operation went:',
 } as const;
 
 export function describeEarlierWork(task: Task) {
   const lines: string[] = [];
-  if (task.answer) lines.push('', 'The answer given earlier on this task:', task.answer);
   if (task.result) lines.push('', RESULT_HEADING[task.result.step], task.result.body);
   if (task.proposal?.status === 'accepted') {
-    const heading = resolveTaskPipeline(task).includes('your_ok')
-      ? 'The human approved going on after that:'
-      : 'The change the human approved after that:';
-    lines.push('', heading, task.proposal.request);
+    lines.push('', 'The human approved going on after that:', task.proposal.request);
   }
   return lines.join('\n');
 }
@@ -149,7 +152,7 @@ export const PROPOSAL_RULE = [
 ].join('\n');
 
 const ROUND_STATE: Record<Round['status'], string> = {
-  queued: 'waiting to start',
+  waiting: 'waiting to start',
   active: 'in progress',
   shipped: 'its pull request is open',
   merged: 'merged',
@@ -193,12 +196,17 @@ export function describeRounds(task: Task) {
   ].join('\n');
 }
 
+function describeSender(entry: Activity) {
+  if (entry.actor === 'shinsa') return 'Sent by a schedule: ';
+  return entry.onBehalf ? 'Sent by an agent on the human’s behalf: ' : '';
+}
+
 export function resolveLaterMessages(task: Task) {
   const round = resolveCurrentRound(task).number;
   const messages = task.activity
-    .filter((entry) => entry.actor === 'you' && entry.kind === 'message' && entry.detail)
+    .filter((entry) => entry.kind === 'message' && entry.detail)
     .filter((entry) => (entry.round ?? 1) === round)
-    .map((entry) => `- ${entry.detail}`);
+    .map((entry) => `- ${describeSender(entry)}${entry.detail}`);
   if (messages.length === 0) return '';
   return ['', 'The human added since:', ...messages].join('\n');
 }

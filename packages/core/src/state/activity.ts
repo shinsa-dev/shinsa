@@ -92,7 +92,9 @@ export function describeEscalation(escalation: ReviewEscalation) {
 }
 
 export function describeSuggestionSettled(status: 'accepted' | 'dismissed', title: string) {
-  return status === 'accepted' ? `Added the follow-up “${title}”` : `Dismissed the follow-up “${title}”`;
+  return status === 'accepted'
+    ? `Added the suggested task “${title}”`
+    : `Dismissed the suggested task “${title}”`;
 }
 
 function describePullRequestChange(change: PullRequestWatchChange) {

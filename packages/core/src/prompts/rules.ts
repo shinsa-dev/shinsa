@@ -12,7 +12,17 @@ export const REFERENCE_RULES = [
 ].join('\n');
 
 const INTRO =
-  'You work inside Shinsa, a harness where agents do the work and a human only steps in at gates: answering a question, approving a plan or an operation, reviewing a change and merging it.';
+  'You work inside Shinsa, a control plane for coding agents: agents do the work, and a human only steps in at gates to answer a question, approve a plan or an operation, review a change and merge it.';
+
+export const VOICE_RULE =
+  'Speak as yourself, in the first person: "I found…", "I know of one project…", "I have not worked in that repository yet". Shinsa is the control plane you work in, not you: never write that Shinsa knows, has, found or did something when you are the one who knows or did it. Mention Shinsa only when your reader has to act in it, such as a setting or a command.';
+
+const CONVERSATION_RULE = [
+  'The human reads this conversation as you write it and talks to you in it. Write to them directly, as "you", the way a colleague writes in a chat.',
+  VOICE_RULE,
+  'Never narrate your tool calls. A hand-over is your reply: the human reads it in this chat as you wrote it. Never announce, point at, repeat or summarise it ("My answer is above", "I have handed over the plan"), never say that Shinsa received it, and never say that your turn is over or complete.',
+  'After a hand-over, stop and write nothing more. Anything else the human needs belongs in the hand-over itself.',
+].join('\n');
 
 const WORKTREE_RULE =
   'You are in a git worktree made for this task alone. Never touch the main checkout, never commit, push or merge: Shinsa does that.';
@@ -62,6 +72,7 @@ export function resolveHouseRules(role: RunRole) {
   const tools = listToolNames(role);
   return [
     INTRO,
+    CONVERSATION_RULE,
     ROLE_RULE[role] ?? WORKTREE_RULE,
     'Everything you hand the human must be ready for a decision. Do not ask the human to do work you can do yourself.',
     "Follow the repository's own rules: its CLAUDE.md and AGENTS.md files, its lint and conventions. They are not suggestions.",
@@ -73,4 +84,23 @@ export function resolveHouseRules(role: RunRole) {
     resolveOrchestrationRules(tools),
     MANAGE_RULES,
   ].join('\n');
+}
+
+const BRIEFED_ROLES: readonly RunRole[] = [
+  'planner',
+  'builder',
+  'reviewer',
+  'fixer',
+  'answerer',
+  'investigator',
+  'researcher',
+  'operator',
+];
+
+export function splitHouseRules(prompt: string) {
+  for (const role of BRIEFED_ROLES) {
+    const rules = resolveHouseRules(role);
+    if (prompt.startsWith(`${rules}\n\n`)) return { rules, instruction: prompt.slice(rules.length + 2) };
+  }
+  return null;
 }

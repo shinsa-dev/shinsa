@@ -45,12 +45,10 @@ const HAND_OVER_TOOLS: ReadonlySet<ShinsaToolName> = new Set<ShinsaToolName>([
 ]);
 
 const ROLE_TOOLS: Record<RunRole, readonly ShinsaToolName[]> = {
-  triage: [],
   planner: ['propose_plan', 'reshape_task', 'ask', 'find_tasks', 'note', 'suggest_tasks'],
   builder: ['complete_phase', 'ask', 'attach_evidence', 'find_tasks', 'note', 'wait_for', 'suggest_tasks'],
   reviewer: ['report_review', 'attach_evidence', 'find_tasks', 'note', 'suggest_tasks'],
   fixer: ['complete_fix', 'ask', 'attach_evidence', 'find_tasks', 'note', 'wait_for', 'suggest_tasks'],
-  shipper: ['complete_fix', 'ask', 'find_tasks', 'note', 'wait_for', 'suggest_tasks'],
   answerer: ['answer', 'ask', 'find_tasks', 'note', 'suggest_tasks'],
   investigator: [
     'report_diagnosis',
@@ -87,7 +85,6 @@ const TASK_TOOLS: Partial<Record<RunRole, readonly ShinsaToolName[]>> = {
   reviewer: ['create_task'],
   builder: ['create_task', 'split_task'],
   fixer: ['create_task'],
-  shipper: ['create_task'],
   answerer: ['create_task'],
   investigator: ['create_task'],
   researcher: ['create_task'],
@@ -111,7 +108,6 @@ const SCHEDULING_ROLES: ReadonlySet<RunRole> = new Set<RunRole>([
   'planner',
   'builder',
   'fixer',
-  'shipper',
   'answerer',
   'investigator',
   'researcher',
@@ -128,7 +124,6 @@ export function isHandOverTool(name: ShinsaToolName) {
 
 export function listToolNames(role: RunRole, depth = 0): ShinsaToolName[] {
   if (depth > 0) return [...DELEGATE_TOOLS, ...(depth < DELEGATION_LIMITS.depth ? DELEGATION_TOOLS : [])];
-  if (role === 'triage') return [];
   return [
     ...ROLE_TOOLS[role],
     ...READ_TOOLS,

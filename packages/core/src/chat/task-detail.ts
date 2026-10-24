@@ -83,7 +83,6 @@ export function serializeTaskDetail(state: ShinsaState, taskId: string) {
     describeRequest(task),
     ...describePlan(task),
     ...(task.summary ? [`Summary: ${task.summary}`] : []),
-    ...(task.answer ? [`Answer: ${cut(task.answer, REQUEST_LIMIT)}`] : []),
     ...(task.result ? [`Result (${task.result.step}): ${cut(task.result.body, REQUEST_LIMIT)}`] : []),
     ...(waits.length > 0 ? [`Waits on: ${waits.map(describeLink).join(', ')}`] : []),
     ...(gates.length > 0 ? ['Open decisions:', ...gates.map(describeGate)] : ['No open decisions.']),

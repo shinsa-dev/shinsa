@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { EventOf } from '../../src/events/index.ts';
-import type { ShinsaCommand } from '../../src/index.ts';
 import {
+  HUMAN_ONLY_REPO_FIELDS,
+  HUMAN_ONLY_SETTINGS,
+  type Repo,
+  type Settings,
+  type ShinsaCommand,
+} from '../../src/index.ts';
+import {
+  buildAll,
   createHarness,
   createTask,
   type Harness,
@@ -173,7 +180,7 @@ describe('acting for the human', () => {
   test('marks only the human’s activity as done on their behalf, not what Shinsa did next', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    reachReviewGate(harness, taskId);
+    buildAll(harness, taskId);
     actOnBehalf(harness, { type: 'task.message', taskId, text: 'Smaller, please.' });
     const now = harness.task(taskId).activity.filter((entry) => entry.at === harness.now);
     expect(now.map((entry) => [entry.actor, entry.text, entry.onBehalf])).toEqual([
@@ -186,6 +193,90 @@ describe('acting for the human', () => {
         .activity.filter((entry) => entry.at < harness.now)
         .some((entry) => entry.onBehalf)
     ).toBe(false);
+  });
+
+  test('a message to a task that waits for you is left for its next agent, and closes no gate', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    const taskId = createTask(harness, { size: 'large' });
+    proposePlan(harness, taskId);
+    const gate = harness.openGate(taskId);
+    const decision = harness.send(
+      { type: 'task.message', taskId, text: 'Keep the old flag.' },
+      { onBehalf: true, byTask: 'agent-task' }
+    );
+    expect(decision.events.map((event) => event.type)).toEqual(['task.messaged', 'on_behalf.acted']);
+    expect(decision.effects).toEqual([]);
+    expect(harness.state.gates[gate.id]?.status).toBe('open');
+    expect(harness.task(taskId).stage).toBe('awaiting_plan');
+    expect(lastAction(harness).summary).toBe(
+      'Left a message for the next agent on “Fix tab group scroll”, which waits for you'
+    );
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'revise', response: 'Smaller.' });
+    expect(harness.activeRun(taskId).prompt).toContain(
+      'The human added since:\n- Sent by an agent on the human’s behalf: Keep the old flag.'
+    );
+  });
+
+  test('settings and repository fields only the human changes are refused on their behalf; the rest still change', () => {
+    const harness = createHarness();
+    const repoId = registerRepo(harness);
+    const settings: Required<Pick<Settings, (typeof HUMAN_ONLY_SETTINGS)[number]>> = {
+      approvePlans: true,
+      mergeMethod: 'rebase',
+      taskBudgetUsd: 5,
+      taskUsageLimit: 50,
+      autoResume: false,
+      snoozeLimited: false,
+      accountSwitchAt: 90,
+      fastMode: true,
+      agentFastModes: { builder: true },
+    };
+    const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
+      checkCommands: ['bun test'],
+      checksWaived: true,
+    };
+    const refused: ShinsaCommand[] = [
+      ...HUMAN_ONLY_SETTINGS.map(
+        (key): ShinsaCommand => ({
+          type: 'settings.change',
+          patch: { maxFixRounds: 4, [key]: settings[key] },
+        })
+      ),
+      ...HUMAN_ONLY_REPO_FIELDS.map(
+        (field): ShinsaCommand => ({
+          type: 'repo.update',
+          repoId,
+          patch: { name: 'renamed', [field]: fields[field] },
+        })
+      ),
+    ];
+    for (const command of refused) {
+      const before = harness.events.length;
+      expect(() => actOnBehalf(harness, command)).toThrow('Only the human changes');
+      expect(harness.events).toHaveLength(before);
+    }
+    expect(() => actOnBehalf(harness, { type: 'settings.change', patch: { approvePlans: true } })).toThrow(
+      'Only the human changes the settings approvePlans. Tell them what you would change and why.'
+    );
+    expect(() =>
+      actOnBehalf(harness, { type: 'repo.update', repoId, patch: { checkCommands: [], checksWaived: true } })
+    ).toThrow('Only the human changes the repository’s checkCommands, checksWaived.');
+    actOnBehalf(harness, {
+      type: 'settings.change',
+      patch: { maxFixRounds: 4, defaultModel: 'sonnet', attentionLimit: 2, idleCompaction: false },
+    });
+    expect(harness.state.settings).toMatchObject({
+      maxFixRounds: 4,
+      defaultModel: 'sonnet',
+      attentionLimit: 2,
+    });
+    actOnBehalf(harness, { type: 'repo.update', repoId, patch: { defaultBranch: 'develop' } });
+    expect(harness.state.repos[repoId]?.defaultBranch).toBe('develop');
+    harness.send({ type: 'settings.change', patch: { approvePlans: true, mergeMethod: 'rebase' } });
+    harness.send({ type: 'repo.update', repoId, patch: { checkCommands: ['bun test'] } });
+    expect(harness.state.settings).toMatchObject({ approvePlans: true, mergeMethod: 'rebase' });
+    expect(harness.state.repos[repoId]?.checkCommands).toEqual(['bun test']);
   });
 });
 
@@ -208,15 +299,15 @@ describe('the summary of each action', () => {
     const projectId = Object.keys(harness.state.projects)[0] ?? '';
     const summaries: [ShinsaCommand, string][] = [
       [
-        { type: 'repo.update', repoId, patch: { checkCommands: ['bun test'] } },
+        { type: 'repo.update', repoId, patch: { defaultBranch: 'develop' } },
         'Changed the repository paywall-next',
       ],
       [{ type: 'project.write', project: { name: 'Billing', color: 'blue' } }, 'Saved the project “Billing”'],
       [{ type: 'focus.change', projectId, until: null }, 'Focused on Superwall'],
       [{ type: 'focus.change', projectId: null, until: null }, 'Cleared the focus'],
       [
-        { type: 'settings.change', patch: { maxFixRounds: 2, approvePlans: true } },
-        'Changed settings: maxFixRounds, approvePlans',
+        { type: 'settings.change', patch: { maxFixRounds: 2, attentionLimit: 2 } },
+        'Changed settings: maxFixRounds, attentionLimit',
       ],
       [{ type: 'project.remove', projectId }, 'Removed a project'],
       [{ type: 'repo.remove', repoId }, 'Removed a repository'],
@@ -254,20 +345,10 @@ describe('the summary of each action', () => {
     }
   });
 
-  test('names the answer an agent gave for the human, and records nothing for a decision only the human makes', () => {
+  test('records nothing for a gate answered on its behalf, an agent’s question included', () => {
     const harness = createHarness();
     const reviewed = createTask(harness, { request: 'Reviewed' });
     reachReviewGate(harness, reviewed);
-    const before = harness.events.length;
-    expect(() =>
-      actOnBehalf(harness, {
-        type: 'gate.answer',
-        gateId: harness.openGate(reviewed).id,
-        decision: 'revise',
-        response: 'Smaller.',
-      })
-    ).toThrow('Only the human decides this.');
-    expect(harness.events).toHaveLength(before);
     const asked = createTask(harness, { request: 'Asked' });
     harness.send({
       type: 'agent.ask',
@@ -276,24 +357,28 @@ describe('the summary of each action', () => {
       question: 'Which store?',
       context: null,
     });
-    actOnBehalf(harness, {
-      type: 'gate.answer',
-      gateId: 'question-1',
-      decision: 'answer',
-      response: 'Redis.',
-    });
-    expect(lastAction(harness).summary).toBe('Answered the question on “Asked”');
+    const before = harness.events.length;
+    for (const [gateId, decision] of [
+      [harness.openGate(reviewed).id, 'revise'],
+      ['question-1', 'reply'],
+    ] as const) {
+      expect(() =>
+        actOnBehalf(harness, { type: 'gate.answer', gateId, decision, response: 'Smaller.' })
+      ).toThrow('Only the human decides this.');
+    }
+    expect(harness.events).toHaveLength(before);
+    expect(harness.state.onBehalfActions).toEqual([]);
   });
 
-  test('names the task of a follow-up it accepted or dismissed', () => {
+  test('names the task of a suggested task it accepted or dismissed', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const accepted = suggestFollowUp(harness, taskId, 'Cache the session');
     const dismissed = suggestFollowUp(harness, taskId, 'Retry the export');
     actOnBehalf(harness, { type: 'suggestion.accept', taskId, suggestionId: accepted, waitsOnThis: false });
-    expect(lastAction(harness).summary).toBe('Added a follow-up of “Fix tab group scroll”');
+    expect(lastAction(harness).summary).toBe('Added a suggested task of “Fix tab group scroll”');
     actOnBehalf(harness, { type: 'suggestion.dismiss', taskId, suggestionId: dismissed });
-    expect(lastAction(harness).summary).toBe('Dismissed a follow-up of “Fix tab group scroll”');
+    expect(lastAction(harness).summary).toBe('Dismissed a suggested task of “Fix tab group scroll”');
   });
 
   test('names schedules it saved, changed, paused, resumed and deleted', () => {
@@ -314,7 +399,7 @@ describe('the summary of each action', () => {
     expect(lastAction(harness)).toMatchObject({ taskId: null, summary: 'Deleted a schedule' });
   });
 
-  test('names what it did to a quiet agent, a round, a wait and a delegated task, finding the task through the run', () => {
+  test('names what it did to a quiet agent, a round, a wait and a delegation, finding the task through the run', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
@@ -342,7 +427,7 @@ describe('the summary of each action', () => {
     });
     const delegated = Object.values(harness.state.runs).find((run) => run.delegation)?.id ?? '';
     actOnBehalf(harness, { type: 'delegation.cancel', runId: delegated });
-    expect(lastAction(harness).summary).toBe('Stopped a delegated task on “Fix tab group scroll”');
+    expect(lastAction(harness).summary).toBe('Stopped a delegation on “Fix tab group scroll”');
     harness.send({
       type: 'agent.wait_for',
       runId,

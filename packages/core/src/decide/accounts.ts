@@ -124,9 +124,9 @@ export function changeUsageWait(decider: Decider, command: CommandOf<'usage_wait
   decider.stage(task.id, task.stage, command.autoResume ? WAITING : PAUSED_UNTIL_RESET);
 }
 
-function describeSignIn(account: RunAccount, provider: string) {
+function describeSignIn(provider: string, email: string | null) {
   const label = resolveProviderLabel(provider);
-  return account.email ? `Sign in to ${label} as ${account.email}` : `Sign in to ${label}`;
+  return email ? `Sign in to ${label} as ${email}` : `Sign in to ${label}`;
 }
 
 function describeSignInReason(failure: RunFailure, provider: string) {
@@ -136,25 +136,31 @@ function describeSignInReason(failure: RunFailure, provider: string) {
   return `${reason} Signing in starts the step again.`;
 }
 
+function resolveSignIn(run: Run, failure: RunFailure) {
+  if (failure.account) {
+    const provider = run.attempts?.at(-1)?.provider ?? run.provider;
+    return { provider, account: failure.account, email: failure.account.email };
+  }
+  if (failure.login) return { provider: failure.login.provider, account: null, email: failure.login.email };
+  return null;
+}
+
 export function requestSignIn(decider: Decider, run: Run, failure: RunFailure) {
-  const account = failure.account;
-  if (!account) return false;
+  const signIn = resolveSignIn(run, failure);
+  if (!signIn) return false;
   const task = decider.task(run.taskId);
-  const provider = run.attempts?.at(-1)?.provider ?? run.provider;
   decider.cancelRuns(task.id);
   decider.clearWaits(task.id);
-  const title = describeSignIn(account, provider);
-  decider.openGate(task.id, 'sign_in', title, describeSignInReason(failure, provider), {
+  const title = describeSignIn(signIn.provider, signIn.email);
+  decider.openGate(task.id, 'sign_in', title, describeSignInReason(failure, signIn.provider), {
     runId: run.id,
-    details: { account },
+    details: { provider: signIn.provider, account: signIn.account },
   });
   return true;
 }
 
-function listSignInGates(decider: Decider, accountId: string) {
-  return listOpenGates(decider.state).filter(
-    (gate): gate is Gate => gate.type === 'sign_in' && gate.account?.id === accountId
-  );
+function listSignInGates(decider: Decider, matches: (gate: Gate) => boolean) {
+  return listOpenGates(decider.state).filter((gate) => gate.type === 'sign_in' && matches(gate));
 }
 
 function retryAfterSignIn(decider: Decider, gate: Gate) {
@@ -165,7 +171,13 @@ function retryAfterSignIn(decider: Decider, gate: Gate) {
 }
 
 export function recordSignedIn(decider: Decider, command: CommandOf<'account.signed_in'>) {
-  for (const gate of listSignInGates(decider, command.account.id)) retryAfterSignIn(decider, gate);
+  const gates = listSignInGates(decider, (gate) => gate.account?.id === command.account.id);
+  for (const gate of gates) retryAfterSignIn(decider, gate);
+}
+
+export function recordProviderSignIn(decider: Decider, command: CommandOf<'provider.record_sign_in'>) {
+  const gates = listSignInGates(decider, (gate) => gate.provider === command.provider && !gate.account);
+  for (const gate of gates) retryAfterSignIn(decider, gate);
 }
 
 export function recordAccountRemoved(decider: Decider, command: CommandOf<'account.removed'>) {
@@ -173,5 +185,6 @@ export function recordAccountRemoved(decider: Decider, command: CommandOf<'accou
     if (task.account?.id !== command.accountId || isTaskClosed(task)) continue;
     decider.emit({ type: 'task.account_bound', taskId: task.id, account: null, by: 'shinsa' });
   }
-  for (const gate of listSignInGates(decider, command.accountId)) retryAfterSignIn(decider, gate);
+  const gates = listSignInGates(decider, (gate) => gate.account?.id === command.accountId);
+  for (const gate of gates) retryAfterSignIn(decider, gate);
 }

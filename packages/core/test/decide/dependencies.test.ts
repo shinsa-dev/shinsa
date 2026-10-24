@@ -17,30 +17,6 @@ import {
   shipAndMerge,
 } from '../harness.ts';
 
-describe('a stacked base from an older log', () => {
-  test('a task triaged onto a base task waits for it, then builds on it', () => {
-    const harness = createHarness();
-    const base = createTask(harness, { request: 'Base' });
-    const repoId = harness.task(base).repoId ?? '';
-    harness.send({ type: 'task.create', request: 'Child', repoId });
-    const child = Object.keys(harness.state.tasks).find((id) => id !== base) ?? '';
-    harness.replay({
-      type: 'task.triaged',
-      taskId: child,
-      title: 'Child',
-      repoId,
-      size: 'small',
-      branch: 'fix/child',
-      baseTaskId: base,
-    });
-    expect(harness.task(child).waitsOn).toEqual([base]);
-    shipAndMerge(harness, base);
-    harness.send({ type: 'config.record', taskId: child, problems: [] });
-    harness.send({ type: 'worktree.ready', taskId: child, path: '/wt/child', branch: 'fix/child' });
-    expect(harness.activeRun(child).prompt).toContain('This task builds on "Base", which has merged.');
-  });
-});
-
 describe('dependencies', () => {
   test('a task with no dependency starts at once, however many decisions are waiting', () => {
     const harness = createHarness();
@@ -64,7 +40,7 @@ describe('dependencies', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Run the chat on MCP v2' });
     const child = createTask(harness, { request: 'Embed the chat', waitsOn: [parent] });
-    expect(harness.task(child).stage).toBe('queued');
+    expect(harness.task(child).stage).toBe('waiting_on_tasks');
     expect(harness.task(child).stageReason).toBe('waiting for “Run the chat on MCP v2” to finish');
     expect(harness.effectsOf('worktree.create').map((effect) => effect.taskId)).not.toContain(child);
     expect(listActiveRuns(harness.state, child)).toHaveLength(0);
@@ -84,13 +60,13 @@ describe('dependencies', () => {
     const mcp = createTask(harness, { request: 'MCP v2' });
     const chat = createTask(harness, { request: 'Embedded chat', waitsOn: [mcp] });
     const paywalls = createTask(harness, { request: 'Paywall editing in the chat', waitsOn: [chat] });
-    expect(harness.task(chat).stage).toBe('queued');
-    expect(harness.task(paywalls).stage).toBe('queued');
+    expect(harness.task(chat).stage).toBe('waiting_on_tasks');
+    expect(harness.task(paywalls).stage).toBe('waiting_on_tasks');
 
     shipAndMerge(harness, mcp);
     readyWorktree(harness, chat);
     expect(harness.task(chat).stage).toBe('planning');
-    expect(harness.task(paywalls).stage).toBe('queued');
+    expect(harness.task(paywalls).stage).toBe('waiting_on_tasks');
 
     shipAndMerge(harness, chat);
     readyWorktree(harness, paywalls);
@@ -110,15 +86,15 @@ describe('dependencies', () => {
     const harness = createHarness();
     const parent = createTask(harness, { request: 'Parent' });
     const other = createTask(harness, { request: 'Other' });
-    const inferred = createTask(harness, { request: 'Inferred', waitsOn: parent });
+    const inferred = createTask(harness, { request: 'Inferred', triageWaitsOn: parent });
     expect(harness.task(inferred).waitsOn).toEqual([parent]);
     expect(harness.task(inferred).activity.at(-2)).toMatchObject({
       actor: 'shinsa',
       text: 'Waits on “Parent”',
     });
-    const chosen = createTask(harness, { request: 'Chosen', waitsOn: [other], waitsOn: parent });
+    const chosen = createTask(harness, { request: 'Chosen', waitsOn: [other], triageWaitsOn: parent });
     expect(harness.task(chosen).waitsOn).toEqual([other]);
-    const both = createTask(harness, { request: 'Both', waitsOn: [parent, other, parent] });
+    const both = createTask(harness, { request: 'Both', triageWaitsOn: [parent, other, parent] });
     expect(harness.task(both).waitsOn).toEqual([parent, other]);
   });
 
@@ -131,7 +107,7 @@ describe('dependencies', () => {
     expect(listWaitsOn(harness.state, harness.task(screen)).map((task) => task.id)).toEqual([api, design]);
 
     shipAndMerge(harness, api);
-    expect(harness.task(screen).stage).toBe('queued');
+    expect(harness.task(screen).stage).toBe('waiting_on_tasks');
     expect(harness.task(screen).stageReason).toBe('waiting for “Ship the design” to finish');
     expect(listWaitsOn(harness.state, harness.task(screen)).map((task) => task.id)).toEqual([design]);
 
@@ -185,10 +161,10 @@ describe('dependencies', () => {
     readyWorktree(harness, c);
     expect(harness.task(b).stage).toBe('planning');
     expect(harness.task(c).stage).toBe('planning');
-    expect(harness.task(d).stage).toBe('queued');
+    expect(harness.task(d).stage).toBe('waiting_on_tasks');
 
     shipAndMerge(harness, b);
-    expect(harness.task(d).stage).toBe('queued');
+    expect(harness.task(d).stage).toBe('waiting_on_tasks');
     expect(harness.task(d).stageReason).toBe('waiting for “C” to finish');
 
     shipAndMerge(harness, c);
@@ -207,7 +183,7 @@ describe('dependencies', () => {
 
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
     expect(harness.task(d).waitsOn).toEqual([c]);
-    expect(harness.task(d).stage).toBe('queued');
+    expect(harness.task(d).stage).toBe('waiting_on_tasks');
     expect(listOpenGates(harness.state, d)).toHaveLength(0);
 
     shipAndMerge(harness, c);
@@ -224,13 +200,13 @@ describe('dependencies', () => {
     expect(harness.task(child).waitsOn).toEqual([a, b]);
 
     harness.send({ type: 'task.cancel', taskId: a });
-    expect(harness.openGate(child).purpose).toBe('failure');
+    expect(harness.openGate(child).type).toBe('failure');
     harness.send({ type: 'task.wait_on', taskId: child, waitsOn: [a, b, c] });
     expect(harness.task(child).waitsOn).toEqual([a, b, c]);
     harness.send({ type: 'task.wait_on', taskId: child, waitsOn: [b, c] });
     expect(harness.task(child).waitsOn).toEqual([b, c]);
     expect(listOpenGates(harness.state, child)).toHaveLength(0);
-    expect(harness.task(child).stage).toBe('queued');
+    expect(harness.task(child).stage).toBe('waiting_on_tasks');
 
     shipAndMerge(harness, b);
     harness.send({ type: 'task.wait_on', taskId: child, waitsOn: [b] });
@@ -244,7 +220,7 @@ describe('dependencies', () => {
     const child = createTask(harness, { request: 'Child' });
     const planner = harness.activeRun(child);
     harness.send({ type: 'task.wait_on', taskId: child, waitsOn: [parent] });
-    expect(harness.task(child).stage).toBe('queued');
+    expect(harness.task(child).stage).toBe('waiting_on_tasks');
     expect(harness.state.runs[planner.id]?.outcome).toBe('cancelled');
 
     harness.send({ type: 'task.wait_on', taskId: child, waitsOn: [] });
@@ -272,15 +248,15 @@ describe('dependencies', () => {
     const grandchild = createTask(harness, { request: 'Grandchild', waitsOn: [child] });
     harness.send({ type: 'task.cancel', taskId: parent });
     const gate = harness.openGate(child);
-    expect(gate.purpose).toBe('failure');
+    expect(gate.type).toBe('failure');
     expect(gate.title).toBe('“Parent” was cancelled');
-    expect(harness.task(child).stage).toBe('queued');
+    expect(harness.task(child).stage).toBe('waiting_on_tasks');
     expect(listOpenGates(harness.state, grandchild)).toHaveLength(0);
 
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
     expect(harness.task(child).waitsOn).toEqual([]);
     expect(harness.task(child).stage).toBe('triage');
-    expect(harness.task(grandchild).stage).toBe('queued');
+    expect(harness.task(grandchild).stage).toBe('waiting_on_tasks');
   });
 
   test('low priority decisions sit below the rest and never lead the guide', () => {

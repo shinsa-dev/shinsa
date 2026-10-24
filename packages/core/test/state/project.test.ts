@@ -3,7 +3,6 @@ import {
   applyEvent,
   createSettings,
   createState,
-  decide,
   replayEventLog,
   resolveFallbackBriefing,
   type ShinsaEvent,
@@ -20,7 +19,7 @@ import {
 } from '../harness.ts';
 
 describe('briefing events', () => {
-  test('store the structured guide per project, and replay older text-only events written for an area', () => {
+  test('store the structured guide per project', () => {
     const guide = resolveFallbackBriefing(queueOf(ready), NOW);
     const withGuide = applyEvent(createState(), {
       type: 'briefing.written',
@@ -31,57 +30,19 @@ describe('briefing events', () => {
       at: NOW,
     });
     expect(withGuide.briefings['*']).toEqual({ text: 'Start with the chat.', at: NOW, briefing: guide });
-    const legacy = applyEvent(createState(), {
+    const plain = applyEvent(createState(), {
       type: 'briefing.written',
-      areaId: 'area-1',
+      projectId: 'project-1',
       text: 'Start with the chat.',
       seq: 1,
       at: NOW,
     });
-    expect(legacy.briefings['area-1']).toEqual({ text: 'Start with the chat.', at: NOW, briefing: null });
+    expect(plain.briefings['project-1']).toEqual({ text: 'Start with the chat.', at: NOW, briefing: null });
   });
 });
 
 describe('settings events', () => {
-  test('replay a settings event from an old log that carries retired settings, and drop them', () => {
-    const settings = {
-      ...createSettings(),
-      mergeMethod: 'rebase' as const,
-      worktreesDirectory: '~/wt',
-      maxConcurrentRuns: 1,
-      holdNewWorkAt: 80,
-      retiredSetting: true,
-    };
-    const state = applyEvent(createState(), { type: 'settings.changed', settings, seq: 1, at: NOW });
-    expect(state.settings).toEqual({ ...createSettings(), mergeMethod: 'rebase' });
-  });
-
-  test('an older log keeps idle compaction on only where you turned it back on, and gains the new defaults', () => {
-    const { compaction: _compaction, fastMode: _fastMode, ...older } = createSettings();
-    const written = (
-      idleCompaction: boolean,
-      seq: number
-    ): ShinsaEventInput & { seq: number; at: number } => ({
-      type: 'settings.changed',
-      settings: { ...older, idleCompaction },
-      seq,
-      at: NOW,
-    });
-    const untouched = applyEvent(createState(), written(true, 1));
-    expect(untouched.settings).toEqual({ ...createSettings(), idleCompaction: undefined });
-    expect('idleCompaction' in untouched.settings).toBe(false);
-    const turnedOff = applyEvent(untouched, written(false, 2));
-    expect(turnedOff.settings.idleCompaction).toBe(false);
-    const turnedOn = applyEvent(turnedOff, written(true, 3));
-    expect(turnedOn.settings).toMatchObject({
-      idleCompaction: true,
-      compaction: 'eunoe_compact',
-      fastMode: false,
-    });
-    expect(applyEvent(turnedOn, written(true, 4)).settings.idleCompaction).toBe(true);
-  });
-
-  test('a settings event that knows about compaction is taken as written', () => {
+  test('a settings event is taken as written', () => {
     const settings = {
       ...createSettings(),
       compaction: 'claude' as const,
@@ -90,6 +51,8 @@ describe('settings events', () => {
     };
     const state = applyEvent(createState(), { type: 'settings.changed', settings, seq: 1, at: NOW });
     expect(state.settings).toEqual(settings);
+    settings.fastMode = true;
+    expect(state.settings.fastMode).toBe(false);
   });
 });
 
@@ -146,7 +109,7 @@ describe('task activity', () => {
         report: { index: 0, summary: '', spots: [], judgementCalls: [], at },
       },
       { type: 'gate.answered', gateId: 'x', decision: 'approve', response: null },
-      { type: 'run.linked', runId: 'x', sessionId: 's' },
+      { type: 'run.linked', runId: 'x', sessionId: 's', provider: 'claude' },
     ];
     for (const event of events) {
       applyEvent(state, { ...event, seq: state.seq + 1, at });
@@ -159,16 +122,16 @@ describe('replayEventLog', () => {
   test('applies every event it can, reports the ones it cannot, and keeps the highest sequence', () => {
     const events = [
       { type: 'focus.changed', focus: { projectId: null, until: 5 }, seq: 1, at: 1 },
-      { type: 'task.created', seq: 2, at: 2 },
+      { type: 'task.suggested', seq: 2, at: 2 },
       { type: 'focus.changed', focus: { projectId: null, until: 9 }, seq: 3, at: 3 },
-      { type: 'task.created', seq: 4, at: 4 },
+      { type: 'task.suggested', seq: 4, at: 4 },
     ] as unknown as ShinsaEvent[];
     const { state, failures } = replayEventLog(events);
     expect(state.focus.until).toBe(9);
     expect(state.seq).toBe(4);
     expect(failures.map((failure) => [failure.seq, failure.type])).toEqual([
-      [2, 'task.created'],
-      [4, 'task.created'],
+      [2, 'task.suggested'],
+      [4, 'task.suggested'],
     ]);
     expect(failures[0]?.error).toContain('undefined');
   });
@@ -265,8 +228,7 @@ describe('applying the process events', () => {
         gate: {
           id: 'g',
           taskId: 'gone',
-          kind: 'review',
-          purpose: 'decision',
+          type: 'review',
           status: 'open',
           title: 'x',
           body: '',
@@ -286,157 +248,5 @@ describe('applying the process events', () => {
       },
     ]);
     expect(state.gates.g?.verdicts).toHaveLength(1);
-  });
-
-  test('a fix round from before fingerprints keeps the old shape', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    const state = applyEvent(structuredClone(harness.state), {
-      type: 'fix.started',
-      taskId,
-      round: 1,
-      reason: 'checks',
-      signature: 'lint',
-      seq: harness.state.seq + 1,
-      at: 1,
-    });
-    expect(state.tasks[taskId]?.fixFingerprints).toBeUndefined();
-    expect(state.tasks[taskId]?.fixHistory).toEqual(['checks:lint']);
-  });
-});
-
-describe('repositories from an older log', () => {
-  test('a repository registered with a preview command replays without it', () => {
-    const repo = {
-      id: 'r1',
-      name: 'app',
-      path: '/code/app',
-      defaultBranch: 'main',
-      remote: null,
-      projectId: null,
-      checkCommands: [],
-      previewCommand: 'bun dev',
-    };
-    const state = applyEvent(createState(), { type: 'repo.registered', repo, seq: 1, at: NOW });
-    expect(state.repos.r1).toEqual({
-      id: 'r1',
-      name: 'app',
-      path: '/code/app',
-      defaultBranch: 'main',
-      remote: null,
-      projectId: null,
-      checkCommands: [],
-    });
-  });
-});
-
-describe('logs written before projects', () => {
-  const repo = (id: string, areaId: string | null) => ({
-    id,
-    name: id,
-    path: `/code/${id}`,
-    defaultBranch: 'main',
-    remote: null,
-    checkCommands: [],
-    areaId,
-  });
-
-  function oldTask(taskId: string, repoId: string): ShinsaEventInput[] {
-    return [
-      { type: 'task.created', taskId, request: `Do ${taskId}`, repoId: null, priority: 'normal' },
-      { type: 'task.triaged', taskId, title: `Do ${taskId}`, repoId, size: 'small', branch: `fix/${taskId}` },
-    ] as ShinsaEventInput[];
-  }
-
-  test('an area becomes a project with a key from its name, no description or folders, and the same id', () => {
-    const state = apply([
-      { type: 'area.written', area: { id: 'area-1', name: 'Superwall', color: 'purple' } },
-      { type: 'area.written', area: { id: 'area-2', name: 'Superbase', color: 'green' } },
-    ] as ShinsaEventInput[]);
-    expect(state.projects).toEqual({
-      'area-1': {
-        id: 'area-1',
-        name: 'Superwall',
-        color: 'purple',
-        key: 'SUP',
-        description: '',
-        folders: [],
-      },
-      'area-2': { id: 'area-2', name: 'Superbase', color: 'green', key: 'SU', description: '', folders: [] },
-    });
-  });
-
-  test('writing an area again keeps the key it was given, even after a rename', () => {
-    const state = apply([
-      { type: 'area.written', area: { id: 'area-1', name: 'Superwall', color: 'purple' } },
-      { type: 'area.written', area: { id: 'area-1', name: 'Basket', color: 'blue' } },
-    ] as ShinsaEventInput[]);
-    expect(state.projects['area-1']).toMatchObject({ name: 'Basket', color: 'blue', key: 'SUP' });
-  });
-
-  test('removing an area removes the project', () => {
-    const state = apply([
-      { type: 'area.written', area: { id: 'area-1', name: 'Superwall', color: 'purple' } },
-      { type: 'area.removed', areaId: 'area-1' },
-    ] as ShinsaEventInput[]);
-    expect(state.projects).toEqual({});
-  });
-
-  test('a repository filed in an area is in that project, and no area id is kept', () => {
-    const state = apply([
-      { type: 'area.written', area: { id: 'area-1', name: 'Superwall', color: 'purple' } },
-      { type: 'repo.registered', repo: repo('app', 'area-1') },
-      { type: 'repo.registered', repo: repo('notes', null) },
-      { type: 'repo.updated', repo: { ...repo('notes', 'area-1'), name: 'notebook' } },
-    ] as ShinsaEventInput[]);
-    expect(state.repos.app?.projectId).toBe('area-1');
-    expect(state.repos.notes).toMatchObject({ name: 'notebook', projectId: 'area-1' });
-    expect(Object.values(state.repos).some((entry) => 'areaId' in entry)).toBe(false);
-  });
-
-  test('a focus on an area is a focus on its project', () => {
-    const state = apply([
-      { type: 'area.written', area: { id: 'area-1', name: 'Superwall', color: 'purple' } },
-      { type: 'focus.changed', focus: { areaId: 'area-1', until: 9_000 } },
-    ] as ShinsaEventInput[]);
-    expect(state.focus).toEqual({ projectId: 'area-1', until: 9_000 });
-  });
-
-  test('tasks get handles at their triage, in log order, from their repository’s project', () => {
-    const events = [
-      { type: 'area.written', area: { id: 'area-1', name: 'Superwall', color: 'purple' } },
-      { type: 'repo.registered', repo: repo('app', 'area-1') },
-      { type: 'repo.registered', repo: repo('scratch', null) },
-      ...oldTask('b', 'app'),
-      ...oldTask('a', 'app'),
-      ...oldTask('c', 'scratch'),
-    ] as ShinsaEventInput[];
-    const state = apply(events);
-    expect(Object.values(state.tasks).map((task) => [task.id, task.handle, task.projectId])).toEqual([
-      ['b', 'SUP-1', 'area-1'],
-      ['a', 'SUP-2', 'area-1'],
-      ['c', 'T-1', null],
-    ]);
-    expect(state.taskNumbers).toEqual({ SUP: 2, T: 1 });
-    expect(apply(events)).toEqual(state);
-  });
-
-  test('a task an older log never triaged has no handle, and the next new task continues the count', () => {
-    const stateBefore = apply([
-      { type: 'area.written', area: { id: 'area-1', name: 'Superwall', color: 'purple' } },
-      { type: 'repo.registered', repo: repo('app', 'area-1') },
-      ...oldTask('a', 'app'),
-      { type: 'task.created', taskId: 'b', request: 'Do b', repoId: null, priority: 'normal' },
-    ] as ShinsaEventInput[]);
-    expect(stateBefore.tasks.b?.handle).toBeNull();
-    const next = decide(
-      stateBefore,
-      { type: 'task.create', request: 'New', repoId: 'app' },
-      {
-        now: 100,
-        newId: () => 'new',
-      }
-    );
-    expect(next.events[0]).toMatchObject({ type: 'task.created', handle: 'SUP-2', projectId: 'area-1' });
   });
 });

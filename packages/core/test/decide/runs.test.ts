@@ -1,11 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { applyEvent, decide, listActiveRuns, listOpenGates, type RunFailure } from '../../src/index.ts';
+import { listActiveRuns, listOpenGates, type RunFailure } from '../../src/index.ts';
 import {
-  buildAll,
   completePhase,
   createHarness,
   createTask,
-  failing,
   type Harness,
   linkSession,
   proposePlan,
@@ -43,7 +41,7 @@ describe('recovery', () => {
       summary: 'Overloaded',
     });
     const gate = harness.openGate(taskId);
-    expect(gate.purpose).toBe('failure');
+    expect(gate.type).toBe('failure');
     expect(gate.title).toBe('The builder paused');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
 
@@ -283,7 +281,8 @@ describe('run attempts', () => {
         .events
     ).toEqual([]);
     expect(
-      harness.send({ type: 'run.link', runId: run.id, sessionId: 'old', attemptId: 'a1' }).events
+      harness.send({ type: 'run.link', runId: run.id, sessionId: 'old', attemptId: 'a1', provider: 'claude' })
+        .events
     ).toEqual([]);
     expect(harness.activeRun(taskId).id).toBe(run.id);
     harness.send({ type: 'run.link', runId: run.id, sessionId: 'new', attemptId: 'a2', provider: 'claude' });
@@ -331,7 +330,7 @@ describe('failure classes', () => {
     });
     expect(harness.state.runs[run.id]?.failure).toEqual(limit);
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', title: 'The agent hit its usage limit', runId: run.id });
+    expect(gate).toMatchObject({ type: 'failure', title: 'The agent hit its usage limit', runId: run.id });
     expect(gate.body).toBe(
       'Claude’s usage limit is reached. It resets at 14:00. Retry starts the step again.'
     );
@@ -430,7 +429,7 @@ describe('restart continuation', () => {
     harness.send({ type: 'run.continue', runId: run.id });
     expect(harness.state.runs[run.id]?.failure).toMatchObject({ class: 'aborted', code: 'crash_loop' });
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', title: 'The planner paused' });
+    expect(gate).toMatchObject({ type: 'failure', title: 'The planner paused' });
     expect(gate.body).toContain('Shinsa stopped unexpectedly while this step ran');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
@@ -524,15 +523,15 @@ describe('lost sessions', () => {
     const taskId = createTask(harness);
     linkSession(harness, taskId, 'plan-1');
     const first = harness.activeRun(taskId);
-    harness.send({ type: 'run.session_lost', runId: first.id, sessionId: 'plan-1' });
+    harness.send({ type: 'run.record_lost_session', runId: first.id, sessionId: 'plan-1' });
     expect(harness.state.runs[first.id]?.sessionLost).toBe(true);
-    expect(harness.send({ type: 'run.session_lost', runId: first.id, sessionId: 'plan-1' }).events).toEqual(
-      []
-    );
+    expect(
+      harness.send({ type: 'run.record_lost_session', runId: first.id, sessionId: 'plan-1' }).events
+    ).toEqual([]);
     harness.send({ type: 'run.end', runId: first.id, outcome: 'completed', summary: null });
     const second = harness.activeRun(taskId);
     expect(second).toMatchObject({ sessionId: 'plan-1', sessionLost: true, sessionProvider: 'claude' });
-    harness.send({ type: 'run.link', runId: second.id, sessionId: 'plan-2' });
+    harness.send({ type: 'run.link', runId: second.id, sessionId: 'plan-2', provider: 'claude' });
     expect(harness.state.runs[second.id]).toMatchObject({ sessionId: 'plan-2', sessionLost: false });
   });
 
@@ -540,53 +539,11 @@ describe('lost sessions', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
-    expect(harness.send({ type: 'run.session_lost', runId: run.id, sessionId: 'nope' }).events).toEqual([]);
-    expect(harness.send({ type: 'run.session_lost', runId: 'missing', sessionId: 'nope' }).events).toEqual(
-      []
-    );
-  });
-});
-
-describe('runs from an older log', () => {
-  test('a shipper run, which Shinsa no longer starts, is recovered as a fixer on the same session', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    buildAll(harness, taskId);
-    harness.send({ type: 'checks.record', taskId, results: failing() });
-    const fixer = harness.activeRun(taskId);
-    let state = applyEvent(structuredClone(harness.state), {
-      type: 'run.ended',
-      runId: fixer.id,
-      outcome: 'cancelled',
-      summary: null,
-      seq: harness.state.seq + 1,
-      at: harness.now,
-    });
-    state = applyEvent(state, {
-      type: 'run.started',
-      run: { ...fixer, id: 'old-shipper', role: 'shipper', status: 'running', sessionId: 'ship-1' },
-      seq: state.seq + 1,
-      at: harness.now,
-    });
-    const decision = decide(
-      state,
-      {
-        type: 'run.end',
-        runId: 'old-shipper',
-        outcome: 'failed',
-        summary: 'Dropped.',
-        failure: {
-          class: 'transport_error',
-          message: 'Dropped.',
-          code: null,
-          retryable: true,
-          resetAt: null,
-        },
-      },
-      { now: harness.now + 1, newId: () => 'next' }
-    );
-    expect(decision.events.find((event) => event.type === 'run.started')).toMatchObject({
-      run: { id: 'next', role: 'fixer', sessionId: 'ship-1' },
-    });
+    expect(
+      harness.send({ type: 'run.record_lost_session', runId: run.id, sessionId: 'nope' }).events
+    ).toEqual([]);
+    expect(
+      harness.send({ type: 'run.record_lost_session', runId: 'missing', sessionId: 'nope' }).events
+    ).toEqual([]);
   });
 });

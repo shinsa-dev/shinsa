@@ -12,6 +12,20 @@ export function resolveWithdrawnReply() {
   return `${QUESTION_WITHDRAWN} Continue with your best judgement.`;
 }
 
+const ANSWERED_BY = {
+  human: 'The human answered: ',
+  delegator: 'The agent that delegated this work to you answered: ',
+} as const;
+
+export function resolveAnsweredReply(text: string, delegated: boolean) {
+  return `${delegated ? ANSWERED_BY.delegator : ANSWERED_BY.human}${text}`;
+}
+
+export function readAnsweredReply(reply: string) {
+  const prefix = Object.values(ANSWERED_BY).find((candidate) => reply.startsWith(candidate));
+  return prefix ? reply.slice(prefix.length) : reply;
+}
+
 export function resolveSupersededReply(text: string) {
   return `${QUESTION_WITHDRAWN} The human wrote this instead: ${text}`;
 }

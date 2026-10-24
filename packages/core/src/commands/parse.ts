@@ -339,6 +339,7 @@ function readSuggestionKeep(fields: Fields): UserCommand {
     type: 'suggestion.keep',
     taskId: readId(fields, 'taskId'),
     suggestionId: readId(fields, 'suggestionId'),
+    ...(fields.shape === undefined ? {} : { shape: readChoice(fields, 'shape', SHAPES) }),
   };
 }
 

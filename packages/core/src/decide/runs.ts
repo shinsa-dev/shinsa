@@ -20,7 +20,7 @@ import { hasOutstandingDelegations, listLiveChildRuns } from '../state/delegatio
 import { findRun, isWaitingOnAnswer, listLiveRuns } from '../state/queries.ts';
 import { requestSignIn, waitForUsageReset } from './accounts.ts';
 import { holdForBudget } from './costs.ts';
-import { type Decider, resolveStepKey } from './decider.ts';
+import type { Decider } from './decider.ts';
 import { planDelivery, releaseWaits, settleDelegation, waitForDelegations } from './delegations.ts';
 import { resolveRecoveryFingerprint } from './fingerprints.ts';
 
@@ -57,7 +57,7 @@ function assertTool(run: Run, tool: ShinsaToolName) {
   if (tool === 'delegate_task' && (run.delegation?.depth ?? 0) >= DELEGATION_LIMITS.depth) {
     throw new DomainError(
       'delegation_depth',
-      `Delegated tasks nest at most ${DELEGATION_LIMITS.depth} deep, and this agent is already at that depth. Do the work yourself.`
+      `Delegations nest at most ${DELEGATION_LIMITS.depth} deep, and this agent is already at that depth. Do the work yourself.`
     );
   }
   throw new DomainError('wrong_role', `A ${run.role} cannot do that.`);
@@ -106,7 +106,7 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
     return;
   }
   spendRecovery(decider, task);
-  const role = resolveStepKey(run.role);
+  const role = run.role;
   const fresh = recovery.mode === 'fresh';
   const nudge = fresh ? resolveFreshSessionNudge(why) : resolveRecoveryNudge(why);
   decider.startRun(decider.task(task.id), role, `${run.rolePrompt ?? run.prompt ?? ''}${nudge}`, {
@@ -160,7 +160,7 @@ export function linkRun(decider: Decider, command: CommandOf<'run.link'>) {
     type: 'run.linked',
     runId: command.runId,
     sessionId: command.sessionId,
-    ...(command.provider ? { provider: command.provider } : {}),
+    provider: command.provider,
   });
 }
 
@@ -219,7 +219,7 @@ export function continueRun(decider: Decider, command: CommandOf<'run.continue'>
   releaseWaits(decider, run.id);
 }
 
-export function recordSessionLost(decider: Decider, command: CommandOf<'run.session_lost'>) {
+export function recordSessionLost(decider: Decider, command: CommandOf<'run.record_lost_session'>) {
   const run = decider.state.runs[command.runId];
   if (!run) return;
   const known = Object.values(decider.state.runs).some(

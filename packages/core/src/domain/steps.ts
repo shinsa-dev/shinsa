@@ -167,7 +167,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     actor: { by: 'agent', role: 'investigator' },
     inputs: ['the request', 'a scratch worktree; nothing it changes ships'],
     outputs: [
-      { name: 'the findings', tool: 'report_diagnosis', evidence: false },
+      { name: 'the diagnosis', tool: 'report_diagnosis', evidence: false },
       { name: 'what it reproduced', tool: 'attach_evidence', evidence: true },
     ],
     exit: INQUIRY_EXIT,
@@ -496,7 +496,10 @@ const HARD_GATES = {
     title: 'Your OK',
     shows: ['the answer, report or diagnosis', 'what the agent proposes and why'],
     decisions: [
-      { decision: 'approve', does: 'Goes on to the change or operation: the setup is verified again, then it is planned.' },
+      {
+        decision: 'approve',
+        does: 'Goes on to the change or operation: the setup is verified again, then it is planned.',
+      },
       { decision: 'reject', does: 'Keeps the task as its inquiry and finishes it.' },
     ],
     refusal: 'Approve the proposal or keep the task as it is.',

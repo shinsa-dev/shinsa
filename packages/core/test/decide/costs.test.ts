@@ -78,7 +78,7 @@ describe('the cost limit per task', () => {
     expect(harness.activeRun(taskId).role).toBe('planner');
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', cause: 'budget', title: 'Reached its cost limit' });
+    expect(gate).toMatchObject({ type: 'failure', cause: 'budget', title: 'Reached its cost limit' });
     expect(gate.body).toBe(
       'This task has used $6.00, past its $5.00 limit, so the next step did not start. Continue to allow another $5.00, or cancel the task.'
     );
@@ -215,7 +215,7 @@ describe('the usage limit per task', () => {
     meterWeekly(harness, taskId, 12.4);
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ purpose: 'failure', cause: 'budget', title: 'Reached its usage limit' });
+    expect(gate).toMatchObject({ type: 'failure', cause: 'budget', title: 'Reached its usage limit' });
     expect(gate.body).toBe(
       'This task has used 12% of the weekly usage limit, past its 10% limit, so the next step did not start. Continue to allow another 10%, or cancel the task.'
     );

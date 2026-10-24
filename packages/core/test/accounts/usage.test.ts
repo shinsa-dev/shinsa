@@ -14,7 +14,7 @@ function window(overrides: Partial<UsageWindow>): UsageWindow {
   return {
     id: 'five_hour',
     kind: 'session',
-    label: 'Current session',
+    label: '5-hour limit',
     model: null,
     usedPercent: 10,
     resetsAt: 5_000,

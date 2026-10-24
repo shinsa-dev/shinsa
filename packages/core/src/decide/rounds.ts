@@ -159,7 +159,7 @@ export function changeRoundShipping(decider: Decider, command: CommandOf<'round.
   const round = findChangingRound(task, command.number);
   if (round.shipping === command.shipping) return;
   const base = { type: 'round.shipping_changed' as const, taskId: task.id, number: round.number };
-  if (round.status === 'queued') {
+  if (round.status === 'waiting') {
     decider.emit({ ...base, shipping: command.shipping });
     return;
   }

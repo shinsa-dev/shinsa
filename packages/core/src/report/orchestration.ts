@@ -29,7 +29,7 @@ export interface DelegationRequest {
 }
 
 export interface DelegationReference {
-  taskId: string;
+  delegationId: string;
 }
 
 export interface CourierRequest {
@@ -52,7 +52,7 @@ function resolveTitle(title: string | null, brief: string) {
 
 export function validateDelegationRequest(input: Record<string, unknown>): Validation<DelegationRequest> {
   const reader = new Reader();
-  const brief = reader.text(input.task, 'task', DELEGATION_LIMITS.brief);
+  const brief = reader.text(input.brief, 'brief', DELEGATION_LIMITS.brief);
   const title = reader.optionalText(input.title, 'title', DELEGATION_LIMITS.title);
   return reader.result({
     brief,
@@ -75,7 +75,9 @@ export function validateDelegationRequest(input: Record<string, unknown>): Valid
 
 export function validateDelegationReference(input: Record<string, unknown>): Validation<DelegationReference> {
   const reader = new Reader();
-  return reader.result({ taskId: reader.text(input.task_id, 'task_id', DELEGATION_LIMITS.name) });
+  return reader.result({
+    delegationId: reader.text(input.delegation_id, 'delegation_id', DELEGATION_LIMITS.name),
+  });
 }
 
 export function validateDelegationAnswer(
@@ -83,7 +85,7 @@ export function validateDelegationAnswer(
 ): Validation<DelegationReference & { answer: string }> {
   const reader = new Reader();
   return reader.result({
-    taskId: reader.text(input.task_id, 'task_id', DELEGATION_LIMITS.name),
+    delegationId: reader.text(input.delegation_id, 'delegation_id', DELEGATION_LIMITS.name),
     answer: reader.text(input.answer, 'answer', DELEGATION_LIMITS.answer),
   });
 }

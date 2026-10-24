@@ -1,4 +1,12 @@
-import { hasStep, isTaskSettled, type ReviewEscalation, type Run, type Task } from '../domain/index.ts';
+import {
+  hasStep,
+  isTaskSettled,
+  PLAN_GATE_RULE,
+  type PlanGateReason,
+  type ReviewEscalation,
+  type Run,
+  type Task,
+} from '../domain/index.ts';
 import type { ShinsaEffectKind } from '../effects/index.ts';
 import { resolvePhasePrompt, resolvePlannerPrompt, resolveReviewerPrompt } from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
@@ -8,7 +16,7 @@ import { type Decider, quoteTitles } from './decider.ts';
 
 type SettledStage = 'merged' | 'done' | 'cancelled';
 
-export const CHECKING_SETUP = 'checking the setup';
+export const VERIFYING_SETUP = 'verifying the setup';
 
 const SETTLED_EFFECTS: ShinsaEffectKind[] = [
   'task.triage',
@@ -44,7 +52,7 @@ export function startWork(decider: Decider, taskId: string) {
     decider.stage(taskId, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
     return;
   }
-  decider.stage(taskId, 'triage', CHECKING_SETUP);
+  decider.stage(taskId, 'triage', VERIFYING_SETUP);
   decider.run({ kind: 'config.verify', taskId });
 }
 
@@ -62,10 +70,18 @@ export function startPlanning(decider: Decider, taskId: string, feedback: string
   );
 }
 
+const PLAN_GATE_TEST: Record<PlanGateReason, (task: Task) => boolean> = {
+  operates: (task) => hasStep(task, 'operate'),
+  plan_first: (task) => task.planFirst,
+  asks_approval: (task) => task.plan?.document?.approval === true,
+  large: (task) => task.size === 'large',
+  revised: (task) => (task.plan?.version ?? 0) > 1,
+};
+
 export function needsPlanApproval(decider: Decider, task: Task) {
-  if (task.planFirst || hasStep(task, 'operate') || task.plan?.document?.approval === true) return true;
-  if (!decider.state.settings.approvePlans) return false;
-  return task.size === 'large' || (task.plan?.version ?? 0) > 1;
+  const passes = (reason: PlanGateReason) => PLAN_GATE_TEST[reason](task);
+  if (PLAN_GATE_RULE.always.some(passes)) return true;
+  return decider.state.settings.approvePlans === true && PLAN_GATE_RULE.withApprovePlans.some(passes);
 }
 
 export function startPhase(
@@ -111,23 +127,6 @@ export function startReview(decider: Decider, taskId: string) {
   );
 }
 
-export function startAfterChecks(decider: Decider, taskId: string) {
-  if (hasStep(decider.task(taskId), 'agent_review')) {
-    startReview(decider, taskId);
-    return;
-  }
-  openReviewGate(decider, taskId);
-}
-
-export function startAfterBuild(decider: Decider, taskId: string) {
-  if (hasStep(decider.task(taskId), 'checks')) {
-    startChecks(decider, taskId);
-    return;
-  }
-  decider.cancelRuns(taskId);
-  startAfterChecks(decider, taskId);
-}
-
 export function openReviewGate(decider: Decider, taskId: string, escalation: ReviewEscalation | null = null) {
   const report = assembleReport(decider.task(taskId));
   decider.emit({ type: 'work.submitted', taskId, summary: report.headline, report });
@@ -136,15 +135,9 @@ export function openReviewGate(decider: Decider, taskId: string, escalation: Rev
     'awaiting_review',
     escalation ? 'the agents could not settle the review' : 'changes ready for your review'
   );
-  decider.openGate(
-    taskId,
-    'review',
-    decider.task(taskId).title,
-    serializeReportMarkdown(report),
-    {
-      ...(escalation ? { details: { escalation } } : {}),
-    }
-  );
+  decider.openGate(taskId, 'review', decider.task(taskId).title, serializeReportMarkdown(report), {
+    ...(escalation ? { details: { escalation } } : {}),
+  });
 }
 
 export function settleTask(

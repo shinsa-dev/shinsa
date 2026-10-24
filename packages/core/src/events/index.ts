@@ -40,35 +40,19 @@ import type {
   UsageWait,
 } from '../domain/index.ts';
 import type { PullRequestWatch, PullRequestWatchChange } from '../domain/pull-requests.ts';
-import type { ReportCheck, ReviewFinding, PlanDocument, WorkReport } from '../report/types.ts';
+import type { PlanDocument, ReportCheck, ReviewFinding, WorkReport } from '../report/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { ScheduleEventBody } from './schedules.ts';
 
-export interface LegacyArea {
-  id: string;
-  name: string;
-  color: string;
-}
-
-export type StoredRepo = Omit<Repo, 'projectId'> & {
-  projectId?: string | null;
-  areaId?: string | null;
-  previewCommand?: string | null;
-};
-
 type QueuedRound = Pick<Round, 'number' | 'title' | 'request' | 'why' | 'shipping' | 'pipeline'>;
 
-export type StoredFocus = Omit<Focus, 'projectId'> & { projectId?: string | null; areaId?: string | null };
-
 type EventBody =
-  | { type: 'repo.registered'; repo: StoredRepo }
-  | { type: 'repo.updated'; repo: StoredRepo }
+  | { type: 'repo.registered'; repo: Repo }
+  | { type: 'repo.updated'; repo: Repo }
   | { type: 'repo.removed'; repoId: string }
-  | { type: 'area.written'; area: LegacyArea }
-  | { type: 'area.removed'; areaId: string }
   | { type: 'project.written'; project: Project }
   | { type: 'project.removed'; projectId: string }
-  | { type: 'focus.changed'; focus: StoredFocus }
+  | { type: 'focus.changed'; focus: Focus }
   | { type: 'settings.changed'; settings: Settings }
   | {
       type: 'task.created';
@@ -78,11 +62,11 @@ type EventBody =
       projectId?: string | null;
       handle?: string;
       priority: TaskPriority;
-      planFirst?: boolean;
-      origin?: string | null;
+      planFirst: boolean;
+      origin: string | null;
       mode?: TaskMode;
       shape?: TaskShape;
-      auto?: TaskAuto;
+      auto: TaskAuto;
       account?: RunAccount | null;
       parentTaskId?: string | null;
       createdBy?: TaskCreator | null;
@@ -94,14 +78,13 @@ type EventBody =
       type: 'task.triaged';
       taskId: string;
       title: string;
-      repoId: string;
+      repoId: string | null;
       projectId?: string | null;
       handle?: string;
       size: TaskSize;
       branch: string;
-      baseTaskId?: string | null;
       pipeline?: PipelineStep[];
-      decisions?: TriageDecisions;
+      decisions: TriageDecisions;
     }
   | { type: 'task.reshaped'; taskId: string; pipeline: PipelineStep[]; by: ShapeActor; reason: string }
   | { type: 'task.delivered'; taskId: string; step: DeliveringStep; body: string; runId: string | null }
@@ -120,6 +103,9 @@ type EventBody =
       kind?: MessageKind;
       round?: number;
     }
+  | { type: 'task.message_received'; taskId: string; messageId: string; text: string }
+  | { type: 'task.message_routed'; taskId: string; messageId: string }
+  | { type: 'task.message_dropped'; taskId: string; messageId: string; reason: string }
   | { type: 'round.queued'; taskId: string; round: QueuedRound }
   | {
       type: 'round.started';
@@ -146,14 +132,14 @@ type EventBody =
       type: 'plan.proposed';
       taskId: string;
       body: string;
-      document?: PlanDocument | null;
+      document: PlanDocument | null;
       changeSummary?: string | null;
       feedback?: string | null;
     }
   | { type: 'plan.answered'; taskId: string; answers: string }
   | { type: 'phase.updated'; taskId: string; index: number; status: PhaseStatus }
   | { type: 'phase.completed'; taskId: string; report: PhaseReport }
-  | { type: 'work.submitted'; taskId: string; summary: string; report?: WorkReport | null }
+  | { type: 'work.submitted'; taskId: string; summary: string; report: WorkReport | null }
   | { type: 'review.reported'; taskId: string; findings: ReviewFinding[]; runId?: string | null }
   | {
       type: 'fix.started';
@@ -174,10 +160,10 @@ type EventBody =
       verdicts?: FindingVerdict[];
     }
   | { type: 'gate.withdrawn'; gateId: string }
-  | { type: 'gate.noted'; gateId: string; notes: string }
+  | { type: 'gate.noted'; gateId: string; notes: string | null }
   | { type: 'run.started'; run: Run }
   | { type: 'run.dispatched'; runId: string }
-  | { type: 'run.linked'; runId: string; sessionId: string; provider?: string }
+  | { type: 'run.linked'; runId: string; sessionId: string; provider: string }
   | {
       type: 'run.ended';
       runId: string;
@@ -215,12 +201,10 @@ type EventBody =
     }
   | {
       type: 'briefing.written';
-      projectId?: string | null;
-      areaId?: string | null;
+      projectId: string | null;
       text: string;
       briefing?: Briefing;
     }
-  | { type: 'task.answered'; taskId: string; answer: string; runId: string }
   | { type: 'plan.approved'; taskId: string; version: number }
   | { type: 'review.escalated'; taskId: string; escalation: ReviewEscalation }
   | { type: 'gate.superseded'; gateId: string; text: string }
@@ -249,6 +233,7 @@ type EventBody =
       keptRound?: number;
     }
   | { type: 'config.verified'; taskId: string; problems: ConfigProblem[] }
+  | { type: 'task.repo_bound'; taskId: string; repoId: string; projectId?: string | null }
   | { type: 'budget.acknowledged'; taskId: string; spentUsd?: number; spentPercent?: number }
   | { type: 'task.account_bound'; taskId: string; account: RunAccount | null; by?: 'you' | 'shinsa' }
   | {

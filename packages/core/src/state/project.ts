@@ -13,17 +13,15 @@ import {
   type Repo,
   type Run,
   type RunUsage,
-  resolveProjectKey,
   resolveShapeOf,
   resolveTaskPipeline,
   type Schedule,
-  SETTINGS_KEYS,
   type Settings,
   SHAPE_PIPELINES,
   type Task,
   type TaskShape,
 } from '../domain/index.ts';
-import type { EventOf, LegacyArea, ShinsaEvent, StoredFocus, StoredRepo } from '../events/index.ts';
+import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
 import { applyAccountBound } from './accounts.ts';
 import {
@@ -37,6 +35,7 @@ import {
 } from './activity.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { applyGateEvent } from './gates.ts';
+import { applyInboxEvent } from './inbox.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
 import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged } from './rounds.ts';
@@ -91,33 +90,6 @@ export function briefingKey(projectId: string | null) {
   return projectId ?? '*';
 }
 
-function readRepo(stored: StoredRepo): Repo {
-  const { areaId, projectId, previewCommand, ...repo } = stored;
-  return { ...repo, projectId: projectId ?? areaId ?? null };
-}
-
-function readFocus(stored: StoredFocus): Focus {
-  return { projectId: stored.projectId ?? stored.areaId ?? null, until: stored.until };
-}
-
-function listOtherKeys(state: ShinsaState, projectId: string) {
-  return Object.values(state.projects)
-    .filter((project) => project.id !== projectId)
-    .map((project) => project.key);
-}
-
-function applyAreaWritten(state: ShinsaState, area: LegacyArea) {
-  const existing = state.projects[area.id];
-  state.projects[area.id] = {
-    id: area.id,
-    name: area.name,
-    color: area.color,
-    key: existing?.key ?? resolveProjectKey(area.name, listOtherKeys(state, area.id)),
-    description: existing?.description ?? '',
-    folders: existing?.folders ?? [],
-  };
-}
-
 function recordHandle(state: ShinsaState, handle: string) {
   const parsed = parseTaskHandle(handle);
   if (!parsed) return;
@@ -136,7 +108,8 @@ function resolveCreatedShape(event: EventOf<'task.created'>): TaskShape {
 }
 
 function createTask(event: EventOf<'task.created'>): Task {
-  const title = event.request.split('\n', 1)[0]?.slice(0, UNTITLED_LENGTH) ?? '';
+  const request = event.request;
+  const title = request.split('\n', 1)[0]?.slice(0, UNTITLED_LENGTH) ?? '';
   const pipeline = [
     ...resolveTaskPipeline({
       ...(event.shape ? { pipeline: [...SHAPE_PIPELINES[event.shape]] } : {}),
@@ -147,11 +120,11 @@ function createTask(event: EventOf<'task.created'>): Task {
     id: event.taskId,
     handle: event.handle ?? null,
     projectId: event.projectId ?? null,
-    request: event.request,
+    request,
     title,
     repoId: event.repoId,
     size: null,
-    planFirst: event.planFirst ?? false,
+    planFirst: event.planFirst,
     stage: 'triage',
     stageReason: 'sizing up the work',
     priority: event.priority,
@@ -171,10 +144,9 @@ function createTask(event: EventOf<'task.created'>): Task {
     phaseReports: [],
     checkResults: null,
     pullRequest: null,
-    baseTaskId: null,
     waitsOn: [],
     note: null,
-    origin: event.origin ?? null,
+    origin: event.origin,
     createdAt: event.at,
     updatedAt: event.at,
     stageChangedAt: event.at,
@@ -184,7 +156,7 @@ function createTask(event: EventOf<'task.created'>): Task {
         actor: 'you',
         kind: 'asked',
         text: resolveCreatedShape(event) === 'answer' ? 'Asked a question' : 'Asked for this',
-        detail: event.request,
+        detail: request,
         evidenceId: null,
         ...(event.onBehalf ? { onBehalf: true } : {}),
         ...(event.byTask ? { byTask: event.byTask } : {}),
@@ -192,54 +164,28 @@ function createTask(event: EventOf<'task.created'>): Task {
     ],
     ...(event.mode === 'ask' ? { mode: 'ask' as const } : {}),
     ...(event.shape ? { pipeline: [...SHAPE_PIPELINES[event.shape]] } : {}),
-    ...(event.auto ? { auto: { ...event.auto } } : {}),
+    auto: { ...event.auto },
     ...(event.account ? { account: event.account } : {}),
-    rounds: [createFirstRound(title, event.request, pipeline, event.at)],
-  };
-}
-
-function resolveWrittenIdleCompaction(previous: boolean | undefined, written: boolean | undefined) {
-  return written === true && previous === undefined ? undefined : written;
-}
-
-function readSettings(stored: Settings): Settings {
-  const known = SETTINGS_KEYS.filter((key) => key in stored).map((key) => [key, stored[key]]);
-  return Object.fromEntries(known) as Settings;
-}
-
-function applySettingsChanged(state: ShinsaState, event: EventOf<'settings.changed'>) {
-  const settings = readSettings(event.settings);
-  if ('compaction' in settings) {
-    state.settings = settings;
-    return;
-  }
-  const { idleCompaction, ...rest } = settings;
-  const defaults = createSettings();
-  const kept = resolveWrittenIdleCompaction(state.settings.idleCompaction, idleCompaction);
-  state.settings = {
-    compaction: defaults.compaction,
-    fastMode: defaults.fastMode,
-    ...rest,
-    ...(kept === undefined ? {} : { idleCompaction: kept }),
+    rounds: [createFirstRound(title, request, pipeline, event.at)],
   };
 }
 
 function describeSetUp(state: ShinsaState, event: EventOf<'task.triaged'>, shape: TaskShape) {
-  const repo = state.repos[event.repoId]?.name ?? 'the repository';
   if (shape === 'change') return `Set up as a ${event.size} change on ${event.branch}`;
+  if (event.repoId === null)
+    return shape === 'answer' ? 'Set up as a question' : `Set up as ${describeShape(shape)}`;
+  const repo = state.repos[event.repoId]?.name ?? 'the repository';
   if (shape === 'answer') return `Set up as a question about ${repo}`;
   return `Set up as ${describeShape(shape)} in ${repo}`;
 }
 
 function applyTriaged(state: ShinsaState, event: EventOf<'task.triaged'>) {
   const task = state.tasks[event.taskId];
-  const baseTaskId = event.baseTaskId ?? null;
   const pipeline = event.pipeline ?? (task ? [...resolveTaskPipeline(task)] : []);
   const worktree = needsWorktree(pipeline);
-  const waitsOn = task?.waitsOn ?? [];
-  const projectId = task?.projectId ?? event.projectId ?? state.repos[event.repoId]?.projectId ?? null;
-  const handle = task?.handle ?? event.handle ?? resolveNextHandle(state, projectId);
-  if (task && !task.handle) recordHandle(state, handle);
+  const projectId = task?.projectId ?? event.projectId ?? null;
+  const handle = task?.handle ?? event.handle ?? null;
+  if (task && !task.handle && handle) recordHandle(state, handle);
   updateTask(state, event.taskId, event.at, {
     title: event.title,
     repoId: event.repoId,
@@ -247,11 +193,9 @@ function applyTriaged(state: ShinsaState, event: EventOf<'task.triaged'>) {
     handle,
     size: event.size,
     branch: worktree ? event.branch : null,
-    baseTaskId,
-    waitsOn: baseTaskId && !waitsOn.includes(baseTaskId) ? [...waitsOn, baseTaskId] : waitsOn,
     ...(event.pipeline ? { pipeline: event.pipeline } : {}),
     ...(worktree ? {} : { proposedBranch: event.branch }),
-    ...(event.decisions ? { triageDecisions: event.decisions } : {}),
+    triageDecisions: event.decisions,
     rounds: (task?.rounds ?? []).map((round) =>
       round.number === 1 ? { ...round, title: event.title, pipeline: [...pipeline] } : round
     ),
@@ -263,19 +207,32 @@ function applyTriaged(state: ShinsaState, event: EventOf<'task.triaged'>) {
   });
 }
 
+function applyRepoBound(state: ShinsaState, event: EventOf<'task.repo_bound'>) {
+  updateTask(state, event.taskId, event.at, {
+    repoId: event.repoId,
+    ...(event.projectId ? { projectId: event.projectId } : {}),
+  });
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'set_up',
+    text: `Chose the repository ${state.repos[event.repoId]?.name ?? ''}`.trim(),
+  });
+}
+
 function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
   const previous = state.tasks[event.taskId]?.stage;
+  const stage = event.stage;
   updateTask(state, event.taskId, event.at, {
-    stage: event.stage,
+    stage,
     stageReason: event.reason,
     stageChangedAt: event.at,
   });
-  const answered = previous === 'answering' && event.stage === 'done';
-  const text = answered ? null : describeStage(event.stage);
-  if (text && previous !== event.stage) {
+  const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');
+  const text = answered ? null : describeStage(stage);
+  if (text && previous !== stage) {
     record(state, event.taskId, event.at, { actor: event.by ?? 'shinsa', kind: 'stage', text });
   }
-  recordRoundStaged(state, event.taskId, event.stage, event.by, event.at);
+  recordRoundStaged(state, event.taskId, stage, event.by, event.at);
 }
 
 function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>) {
@@ -289,8 +246,9 @@ function applyPrioritized(state: ShinsaState, event: EventOf<'task.prioritized'>
 }
 
 function applyWaitsOnChanged(state: ShinsaState, event: EventOf<'task.waits_on_changed'>) {
-  updateTask(state, event.taskId, event.at, { waitsOn: event.waitsOn });
-  const titles = event.waitsOn.map((id) => state.tasks[id]?.title ?? 'another task');
+  const waitsOn = event.waitsOn;
+  updateTask(state, event.taskId, event.at, { waitsOn });
+  const titles = waitsOn.map((id) => state.tasks[id]?.title ?? 'another task');
   record(state, event.taskId, event.at, {
     actor: event.by ?? 'you',
     kind: 'stage',
@@ -309,7 +267,7 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
   const task = state.tasks[event.taskId];
   const previous = task?.plan ?? null;
   const version = (previous?.version ?? 0) + 1;
-  const document = event.document ?? null;
+  const document = event.document;
   const revision =
     previous === null
       ? {}
@@ -320,14 +278,14 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
         };
   updateTask(state, event.taskId, event.at, {
     plan: { version, body: event.body, document, proposedAt: event.at, ...revision },
-    phases: (event.document?.phases ?? []).map(() => ({ status: 'pending' as const, at: event.at })),
+    phases: (document?.phases ?? []).map(() => ({ status: 'pending' as const, at: event.at })),
     ...(previous === null ? {} : { planHistory: listPlanHistory(task) }),
   });
   record(state, event.taskId, event.at, {
     actor: 'agent',
     kind: 'plan',
     text: version === 1 ? 'Proposed a plan' : `Revised the plan (version ${version})`,
-    detail: (version > 1 ? event.changeSummary : null) ?? event.document?.goal ?? null,
+    detail: (version > 1 ? event.changeSummary : null) ?? document?.goal ?? null,
   });
 }
 
@@ -343,51 +301,46 @@ function applyPhaseUpdated(state: ShinsaState, event: EventOf<'phase.updated'>) 
 function applyPhaseCompleted(state: ShinsaState, event: EventOf<'phase.completed'>) {
   const task = state.tasks[event.taskId];
   if (!task) return;
-  const phaseReports = [
-    ...task.phaseReports.filter((report) => report.index !== event.report.index),
-    event.report,
-  ];
+  const report = event.report;
+  const phaseReports = [...task.phaseReports.filter((entry) => entry.index !== report.index), report];
   updateTask(state, event.taskId, event.at, { phaseReports });
-  const title = task.plan?.document?.phases[event.report.index]?.title ?? `phase ${event.report.index + 1}`;
+  const title = task.plan?.document?.phases[report.index]?.title ?? `phase ${report.index + 1}`;
   record(state, event.taskId, event.at, {
     actor: 'agent',
     kind: 'work',
     text: `Finished: ${title}`,
-    detail: event.report.summary,
-    runId: event.report.runId ?? null,
+    detail: report.summary,
+    runId: report.runId ?? null,
   });
 }
 
 function listFixFingerprints(task: Task | undefined, event: EventOf<'fix.started'>) {
   if (event.round === 0) return [];
-  const fingerprints = task?.fixFingerprints ?? [];
-  if (event.treeHash === undefined || !event.reason) return fingerprints;
   return [
-    ...fingerprints,
-    { reason: event.reason, signature: event.signature ?? null, treeHash: event.treeHash },
+    ...(task?.fixFingerprints ?? []),
+    {
+      reason: event.reason ?? 'review',
+      signature: event.signature ?? null,
+      treeHash: event.treeHash ?? null,
+    },
   ];
 }
 
 function applyFixStarted(state: ShinsaState, event: EventOf<'fix.started'>) {
   const task = state.tasks[event.taskId];
-  const history = task?.fixHistory ?? [];
-  const reason = event.reason ?? 'review';
   const signature = event.signature ?? null;
   updateTask(state, event.taskId, event.at, {
     fixRounds: event.round,
     fixFor: event.reason ?? null,
     fixSignature: signature,
     stalledFixes: event.stalled ?? 0,
-    fixHistory: event.round === 0 ? [] : signature ? [...history, `${reason}:${signature}`] : history,
-    ...(task?.fixFingerprints || event.treeHash !== undefined
-      ? { fixFingerprints: listFixFingerprints(task, event) }
-      : {}),
+    fixFingerprints: listFixFingerprints(task, event),
   });
   if (event.round > 0 || event.reason === 'you') {
     record(state, event.taskId, event.at, {
       actor: 'shinsa',
       kind: 'fix',
-      text: describeFixRound(event.round, reason),
+      text: describeFixRound(event.round, event.reason ?? 'review'),
     });
   }
 }
@@ -411,9 +364,15 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
   record(state, event.taskId, event.at, {
     actor: scheduleId ? 'shinsa' : 'you',
     kind: 'message',
-    text: scheduleId ? `Sent instructions from ${describeSchedule(state, scheduleId)}` : 'Sent instructions',
+    text: scheduleId
+      ? `Sent instructions from ${describeSchedule(state, scheduleId)}`
+      : describeMessage(event),
     detail: event.text,
   });
+}
+
+function describeMessage(event: EventOf<'task.messaged'>) {
+  return event.kind === 'acknowledge' ? 'Sent a message' : 'Sent instructions';
 }
 
 function applyPlanApproved(state: ShinsaState, event: EventOf<'plan.approved'>) {
@@ -433,12 +392,13 @@ function applyNoted(state: ShinsaState, event: EventOf<'task.noted'>) {
 }
 
 function applyWorkSubmitted(state: ShinsaState, event: EventOf<'work.submitted'>) {
-  updateTask(state, event.taskId, event.at, { summary: event.summary, report: event.report ?? null });
+  const report = event.report;
+  updateTask(state, event.taskId, event.at, { summary: event.summary, report });
   record(state, event.taskId, event.at, {
     actor: 'agent',
     kind: 'work',
     text: 'Handed over the work',
-    detail: event.report?.headline ?? event.summary,
+    detail: report?.headline ?? event.summary,
   });
 }
 
@@ -479,9 +439,7 @@ type WorkspaceEvent = Extract<
       | 'repo.registered'
       | 'repo.updated'
       | 'repo.removed'
-      | 'area.written'
       | 'project.written'
-      | 'area.removed'
       | 'project.removed'
       | 'focus.changed'
       | 'settings.changed'
@@ -493,31 +451,25 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
   switch (event.type) {
     case 'repo.registered':
     case 'repo.updated':
-      state.repos[event.repo.id] = readRepo(event.repo);
+      state.repos[event.repo.id] = { ...event.repo, checkCommands: [...event.repo.checkCommands] };
       return;
     case 'repo.removed':
       delete state.repos[event.repoId];
       return;
-    case 'area.written':
-      applyAreaWritten(state, event.area);
-      return;
     case 'project.written':
       state.projects[event.project.id] = { ...event.project, folders: [...event.project.folders] };
-      return;
-    case 'area.removed':
-      delete state.projects[event.areaId];
       return;
     case 'project.removed':
       delete state.projects[event.projectId];
       return;
     case 'focus.changed':
-      state.focus = readFocus(event.focus);
+      state.focus = { ...event.focus };
       return;
     case 'settings.changed':
-      applySettingsChanged(state, event);
+      state.settings = structuredClone(event.settings);
       return;
     case 'briefing.written':
-      state.briefings[briefingKey(event.projectId ?? event.areaId ?? null)] = {
+      state.briefings[briefingKey(event.projectId)] = {
         text: event.text,
         at: event.at,
         briefing: event.briefing ?? null,
@@ -544,9 +496,7 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'repo.registered':
     case 'repo.updated':
     case 'repo.removed':
-    case 'area.written':
     case 'project.written':
-    case 'area.removed':
     case 'project.removed':
     case 'focus.changed':
     case 'settings.changed':
@@ -558,6 +508,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.triaged':
       applyTriaged(state, event);
+      break;
+    case 'task.repo_bound':
+      applyRepoBound(state, event);
       break;
     case 'task.staged':
       applyStaged(state, event);
@@ -573,6 +526,11 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'task.messaged':
       applyMessaged(state, event);
+      break;
+    case 'task.message_received':
+    case 'task.message_routed':
+    case 'task.message_dropped':
+      applyInboxEvent(state, event);
       break;
     case 'task.recovered':
       updateTask(state, event.taskId, event.at, {
@@ -637,7 +595,6 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'round.pull_request_merged':
       applyRoundEvent(state, event);
       break;
-    case 'task.answered':
     case 'task.reshaped':
     case 'task.delivered':
     case 'task.change_proposed':

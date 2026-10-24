@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import {
   PROTOCOL_LIMITS,
   type Validation,
-  validateAnswer,
   validateDelivery,
   validateFindings,
   validateFixHandOver,
@@ -42,7 +41,7 @@ describe('validatePhaseHandOver', () => {
       validatePhaseHandOver({
         summary: '  Split the parser.  ',
         spots: [{ ...SPOT, end: undefined }],
-        judgementCalls: [{ call: 'Kept the cache', reason: 'It is hot.', file: '', line: null }],
+        judgement_calls: [{ call: 'Kept the cache', reason: 'It is hot.', file: '', line: null }],
       })
     );
     expect(value).toEqual({
@@ -52,7 +51,7 @@ describe('validatePhaseHandOver', () => {
     });
   });
 
-  test('spots and decisions are optional', () => {
+  test('spots and judgement calls are optional', () => {
     expect(readValue(validatePhaseHandOver({ summary: 'Done.' }))).toEqual({
       summary: 'Done.',
       spots: [],
@@ -70,7 +69,7 @@ describe('validatePhaseHandOver', () => {
             { file: 'a.ts', start: 9, end: 2, attention: 'high', why: 'x' },
             'not a spot',
           ],
-          decisions: { decision: 'x' },
+          judgement_calls: { call: 'x' },
         })
       )
     ).toEqual([
@@ -83,7 +82,7 @@ describe('validatePhaseHandOver', () => {
       'spots[2].file is required.',
       'spots[2].attention must be one of critical, high, normal.',
       'spots[2].why is required.',
-      'decisions must be a list.',
+      'judgement_calls must be a list.',
     ]);
   });
 
@@ -109,7 +108,7 @@ describe('validateFixHandOver', () => {
 });
 
 describe('validatePlanHandOver reads the plan document', () => {
-  const PLAN = [
+  const PHASES = [
     { title: 'Find it', detail: 'Trace the overflow.' },
     { title: 'Fix it', detail: 'Clamp and verify.' },
   ];
@@ -118,7 +117,7 @@ describe('validatePlanHandOver reads the plan document', () => {
     const value = readValue(
       validatePlanDocument({
         goal: 'Stop the tabs scrolling.',
-        plan: PLAN,
+        phases: PHASES,
         behaviour: ['Tabs stay put.'],
         approach: 'Clamp the width.',
         files: [{ path: 'src/tabs.tsx', change: 'Clamp' }],
@@ -135,7 +134,7 @@ describe('validatePlanHandOver reads the plan document', () => {
   });
 
   test('an operation is optional, and when given it is a list of steps', () => {
-    const base = { goal: 'x', approach: 'y', plan: PLAN };
+    const base = { goal: 'x', approach: 'y', phases: PHASES };
     expect(readValue(validatePlanDocument(base))).not.toHaveProperty('operation');
     expect(
       readValue(validatePlanDocument({ ...base, operation: ['Run the backfill.', 'Count the rows.'] }))
@@ -149,7 +148,7 @@ describe('validatePlanHandOver reads the plan document', () => {
     const errors = errorsOf(
       validatePlanDocument({ goal: 'x', approach: 'y', phases: [{ title: 'Only', detail: 'One.' }] })
     );
-    expect(errors).toEqual(['plan: at least 2 phases.']);
+    expect(errors).toEqual(['phases: at least 2 phases.']);
   });
 
   test('every nested field is checked', () => {
@@ -157,7 +156,7 @@ describe('validatePlanHandOver reads the plan document', () => {
       validatePlanDocument({
         goal: 'x',
         approach: 'y',
-        plan: [...PLAN, { title: '', detail: 'z' }],
+        phases: [...PHASES, { title: '', detail: 'z' }],
         files: [{ path: 'a.ts' }],
         questions: [{ question: 'Q?', options: [''] }],
         behaviour: 'all of it',
@@ -166,7 +165,7 @@ describe('validatePlanHandOver reads the plan document', () => {
     expect(errors).toEqual([
       'files[0].change is required.',
       'questions[0].options[0] is required.',
-      'plan[2].title is required.',
+      'phases[2].title is required.',
       'behaviour must be a list.',
     ]);
   });
@@ -376,40 +375,38 @@ describe('validateSuggestions', () => {
   });
 });
 
-describe('validateAnswer', () => {
-  test('needs an answer within the limit', () => {
-    expect(validateAnswer({ answer: ' It retries. ' })).toEqual({
+describe('the shape hand-overs', () => {
+  test('an answer is delivered with its field and limit, and can carry a proposed change', () => {
+    expect(validateDelivery('answer', { answer: ' It retries. ' })).toEqual({
       ok: true,
-      value: { answer: 'It retries.', proposal: null },
+      value: { body: 'It retries.', proposal: null },
     });
-    expect(validateAnswer({ answer: 'x'.repeat(8_001) })).toEqual({
+    expect(validateDelivery('answer', { answer: 'x'.repeat(8_001) })).toEqual({
       ok: false,
       errors: ['answer is 8001 characters; the limit is 8000.'],
     });
-  });
-});
-
-describe('the shape hand-overs', () => {
-  test('an answer can carry a proposed change, checked against its limits', () => {
     expect(
-      validateAnswer({ answer: 'Yes.', propose_change: { request: ' Stream it. ', why: 'Memory.' } })
+      validateDelivery('answer', {
+        answer: 'Yes.',
+        propose_change: { request: ' Stream it. ', why: 'Memory.' },
+      })
     ).toEqual({
       ok: true,
-      value: { answer: 'Yes.', proposal: { request: 'Stream it.', why: 'Memory.' } },
+      value: { body: 'Yes.', proposal: { request: 'Stream it.', why: 'Memory.' } },
     });
-    expect(validateAnswer({ answer: 'Yes.', propose_change: { request: '', why: 'x'.repeat(241) } })).toEqual(
-      {
-        ok: false,
-        errors: [
-          'propose_change.request is required.',
-          'propose_change.why is 241 characters; the limit is 240.',
-        ],
-      }
-    );
+    expect(
+      validateDelivery('answer', { answer: 'Yes.', propose_change: { request: '', why: 'x'.repeat(241) } })
+    ).toEqual({
+      ok: false,
+      errors: [
+        'propose_change.request is required.',
+        'propose_change.why is 241 characters; the limit is 240.',
+      ],
+    });
   });
 
-  test('findings, a report and an outcome each have their field and limit; an outcome proposes nothing', () => {
-    expect(validateDelivery('investigate', { findings: 'The cache.', propose_change: null })).toEqual({
+  test('a diagnosis, a report and an outcome each have their field and limit; an outcome proposes nothing', () => {
+    expect(validateDelivery('investigate', { diagnosis: 'The cache.', propose_change: null })).toEqual({
       ok: true,
       value: { body: 'The cache.', proposal: null },
     });

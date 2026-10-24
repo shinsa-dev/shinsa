@@ -22,8 +22,7 @@ describe('asking for a secret', () => {
     const { harness, taskId, runId } = asking();
     expect(harness.state.gates.g1).toMatchObject({
       taskId,
-      kind: 'question',
-      purpose: 'agent_question',
+      type: 'secret',
       title: 'Paste the signing secret GitHub shows for the webhook.',
       runId,
       secret: { label: 'GitHub webhook secret' },
@@ -77,7 +76,7 @@ describe('asking for a secret', () => {
 describe('answering a secret question', () => {
   test('takes a secret ref and hands the waiting agent its answer', () => {
     const { harness } = asking();
-    const decision = harness.send({ type: 'gate.answer', gateId: 'g1', decision: 'answer', response: REF });
+    const decision = harness.send({ type: 'gate.answer', gateId: 'g1', decision: 'reply', response: REF });
     expect(harness.state.gates.g1).toMatchObject({ status: 'answered', response: REF });
     expect(decision.effects).toContainEqual({ kind: 'question.resolve', gateId: 'g1' });
   });
@@ -91,13 +90,13 @@ describe('answering a secret question', () => {
   test('refuses the secret itself typed as an answer, so it never reaches the log', () => {
     const { harness } = asking();
     expect(() =>
-      harness.send({ type: 'gate.answer', gateId: 'g1', decision: 'answer', response: 'hunter2' })
+      harness.send({ type: 'gate.answer', gateId: 'g1', decision: 'reply', response: 'hunter2' })
     ).toThrow('secret field');
     expect(() =>
       harness.send({ type: 'gate.answer', gateId: 'g1', decision: 'approve', response: null })
     ).toThrow('secret field');
     expect(() =>
-      harness.send({ type: 'gate.answer', gateId: 'g1', decision: 'answer', response: null })
+      harness.send({ type: 'gate.answer', gateId: 'g1', decision: 'reply', response: null })
     ).toThrow('secret field');
     expect(harness.state.gates.g1?.status).toBe('open');
   });

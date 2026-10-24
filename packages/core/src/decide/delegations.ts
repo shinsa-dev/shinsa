@@ -31,7 +31,6 @@ const HAND_OVER_COMMANDS: ReadonlySet<ShinsaCommand['type']> = new Set<ShinsaCom
   'agent.complete_phase',
   'agent.complete_fix',
   'agent.report_review',
-  'agent.answer',
   'agent.wait_for',
 ]);
 
@@ -48,12 +47,12 @@ function withArticle(name: string) {
   return `${/^[aeiou]/.test(name) ? 'An' : 'A'} ${name}`;
 }
 
-function describeTasks(count: number) {
-  return count === 1 ? '1 task you delegated is' : `${count} tasks you delegated are`;
+function describeDelegations(count: number) {
+  return count === 1 ? '1 delegation is' : `${count} delegations are`;
 }
 
 function describeWaiting(count: number) {
-  return `waiting for ${count === 1 ? 'a delegated task' : `${count} delegated tasks`}`;
+  return `waiting for ${count === 1 ? 'a delegation' : `${count} delegations`}`;
 }
 
 export function assertDelegationScope(decider: Decider, command: ShinsaCommand & { runId: string }) {
@@ -70,7 +69,7 @@ export function assertDelegationScope(decider: Decider, command: ShinsaCommand &
   if (live === 0) return;
   throw new DomainError(
     'delegations_running',
-    `${describeTasks(live)} still running. End your turn and their results wake you, or stop them with \`delegation_cancel\`, before you hand over.`
+    `${describeDelegations(live)} still running. End your turn and their results wake you, or stop them with \`delegation_cancel\`, before you hand over.`
   );
 }
 
@@ -98,7 +97,7 @@ function assertDelegationRoom(decider: Decider, parent: Run) {
   if (live >= DELEGATION_LIMITS.live) {
     throw new DomainError(
       'delegation_limit',
-      `${live} delegated tasks under this step are still running, which is the limit. End your turn, and the next one to finish wakes you and frees a place, or stop one with \`delegation_cancel\`.`
+      `${live} delegations under this step are still running, which is the limit. End your turn, and the next one to finish wakes you and frees a place, or stop one with \`delegation_cancel\`.`
     );
   }
 }
@@ -180,7 +179,7 @@ export function cancelDelegation(decider: Decider, command: CommandOf<'agent.can
 export function cancelDelegationByUser(decider: Decider, command: CommandOf<'delegation.cancel'>) {
   const run = decider.state.runs[command.runId];
   if (!run || !isDelegatedRun(run)) {
-    throw new DomainError('delegation_not_found', `No delegated task ${command.runId}`);
+    throw new DomainError('delegation_not_found', `No delegation ${command.runId}`);
   }
   if (run.endedAt !== null) return;
   decider.stopRun(run, 'Stopped by you.');
@@ -258,7 +257,7 @@ export function changeWakePolicy(decider: Decider, command: CommandOf<'delegatio
   planDelivery(decider, run.delegation.parentRunId);
 }
 
-export function recordDelivered(decider: Decider, command: CommandOf<'delegation.delivered'>) {
+export function recordDelivered(decider: Decider, command: CommandOf<'delegation.record_delivery'>) {
   const parent = decider.state.runs[command.runId];
   const claim = parent ? resolveCohort(parent).claim : null;
   if (!parent || parent.endedAt !== null || !claim || claim.generation !== command.generation) return;
@@ -277,7 +276,7 @@ export function recordDelivered(decider: Decider, command: CommandOf<'delegation
   planDelivery(decider, parent.id);
 }
 
-export function recordUndelivered(decider: Decider, command: CommandOf<'delegation.undelivered'>) {
+export function recordUndelivered(decider: Decider, command: CommandOf<'delegation.release'>) {
   const parent = decider.state.runs[command.runId];
   if (!parent || parent.endedAt !== null) return;
   if (command.generation === null) {

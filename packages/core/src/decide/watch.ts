@@ -1,6 +1,6 @@
 import type {
-  PullRequest,
   CiRun,
+  PullRequest,
   PullRequestRemark,
   PullRequestWatch,
   PullRequestWatchChange,

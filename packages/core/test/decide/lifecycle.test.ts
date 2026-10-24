@@ -1,17 +1,25 @@
 import { describe, expect, test } from 'bun:test';
 import { isTaskLive } from '../../src/decide/liveness.ts';
-import { listActiveRuns, listOpenGates } from '../../src/index.ts';
+import { listActiveRuns, listOpenGates, PLAN_GATE_RULE, type PlanGateReason } from '../../src/index.ts';
 import {
   buildAll,
   completePhase,
   createHarness,
   createTask,
+  type Harness,
   linkSession,
   PASSING,
+  PLAN,
   proposePlan,
   reachReviewGate,
-  SPEC,
+  readyWorktree,
 } from '../harness.ts';
+
+function withApproval(approvePlans: boolean) {
+  const harness = createHarness();
+  harness.send({ type: 'settings.change', patch: { approvePlans } });
+  return harness;
+}
 
 describe('planning', () => {
   test('every task starts with a planner on the planner model', () => {
@@ -37,6 +45,64 @@ describe('planning', () => {
     expect(harness.activeRun(taskId).model).toBe('sonnet');
   });
 
+  test('the plan gate rule decides which plans wait for you, with Approve plans on and off', () => {
+    const reach: Record<PlanGateReason, (approvePlans: boolean) => { harness: Harness; taskId: string }> = {
+      operates: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness);
+        harness.send({
+          type: 'agent.reshape',
+          runId: harness.activeRun(taskId).id,
+          steps: ['plan', 'operate'],
+          reason: 'Run it.',
+        });
+        readyWorktree(harness, taskId);
+        proposePlan(harness, taskId);
+        return { harness, taskId };
+      },
+      plan_first: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness, { planFirst: true });
+        proposePlan(harness, taskId);
+        return { harness, taskId };
+      },
+      asks_approval: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness);
+        proposePlan(harness, taskId, { ...PLAN, approval: true });
+        return { harness, taskId };
+      },
+      large: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness, { size: 'large' });
+        proposePlan(harness, taskId);
+        return { harness, taskId };
+      },
+      revised: (approvePlans) => {
+        const harness = withApproval(approvePlans);
+        const taskId = createTask(harness);
+        proposePlan(harness, taskId, { ...PLAN, approval: true });
+        const gateId = harness.openGate(taskId).id;
+        harness.send({ type: 'gate.answer', gateId, decision: 'revise', response: 'Plan it again.' });
+        proposePlan(harness, taskId);
+        return { harness, taskId };
+      },
+    };
+    for (const reason of [...PLAN_GATE_RULE.always, ...PLAN_GATE_RULE.withApprovePlans]) {
+      for (const approvePlans of [true, false]) {
+        const { harness, taskId } = reach[reason](approvePlans);
+        const waits = PLAN_GATE_RULE.always.includes(reason) || approvePlans;
+        expect(harness.task(taskId).stage, `${reason} with Approve plans ${approvePlans}`).toBe(
+          waits ? 'awaiting_plan' : 'building'
+        );
+      }
+    }
+    const plain = withApproval(true);
+    const taskId = createTask(plain);
+    proposePlan(plain, taskId);
+    expect(plain.task(taskId).stage).toBe('building');
+  });
+
   test('a plan goes straight to phase one when plans need no approval', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { size: 'large' });
@@ -55,7 +121,7 @@ describe('planning', () => {
     proposePlan(harness, taskId);
     expect(harness.task(taskId).stage).toBe('awaiting_plan');
     const gate = harness.openGate(taskId);
-    expect(gate.kind).toBe('plan');
+    expect(gate.type).toBe('plan');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: 'Use option B.' });
     expect(harness.task(taskId).stage).toBe('building');
     expect(harness.task(taskId).planAnswers).toBe('Use option B.');
@@ -67,7 +133,7 @@ describe('planning', () => {
     const taskId = createTask(harness, { size: 'small', planFirst: true });
     proposePlan(harness, taskId);
     expect(harness.task(taskId).stage).toBe('awaiting_plan');
-    expect(harness.openGate(taskId).kind).toBe('plan');
+    expect(harness.openGate(taskId).type).toBe('plan');
   });
 
   test('a small plan never waits even with plan approval on', () => {
@@ -131,7 +197,7 @@ describe('phases', () => {
   test('a plan without phases is built as one phase', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    proposePlan(harness, taskId, { ...SPEC, plan: [] });
+    proposePlan(harness, taskId, { ...PLAN, phases: [] });
     completePhase(harness, taskId);
     expect(harness.task(taskId).stage).toBe('checking');
   });
@@ -142,9 +208,15 @@ describe('phases', () => {
     reachReviewGate(harness, taskId);
     const task = harness.task(taskId);
     expect(task.stage).toBe('awaiting_review');
-    expect(task.report?.phases.map((phase) => phase.title)).toEqual(['Find the overflow', 'Fix and verify']);
-    expect(task.report?.phases.map((phase) => phase.summary)).toEqual(['Phase 1 done.', 'Phase 2 done.']);
+    expect(task.report?.sections.map((section) => section.title)).toEqual([
+      'Find the overflow',
+      'Fix and verify',
+    ]);
+    expect(task.report?.sections.map((section) => section.summary)).toEqual([
+      'Phase 1 done.',
+      'Phase 2 done.',
+    ]);
     expect(task.report?.checks).toEqual(PASSING);
-    expect(harness.openGate(taskId).kind).toBe('review');
+    expect(harness.openGate(taskId).type).toBe('review');
   });
 });

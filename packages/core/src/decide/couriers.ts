@@ -11,7 +11,7 @@ import { changeDependencies } from './dependencies.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
 
-const BUILDING_ROLES: ReadonlySet<RunRole> = new Set<RunRole>(['builder', 'fixer', 'shipper']);
+const BUILDING_ROLES: ReadonlySet<RunRole> = new Set<RunRole>(['builder', 'fixer']);
 
 function selectCreated(decider: Decider, task: Task, requestKey: string) {
   return (
@@ -38,9 +38,8 @@ function spawnTask(decider: Decider, source: Task, request: string, creator: Tas
       repoId: source.repoId,
       priority: source.priority,
       origin: source.origin,
-      ...(parent ? { shape: 'change' as const } : {}),
     },
-    { createdBy: creator, ...(parent ? { parentTaskId: source.id } : {}) }
+    { createdBy: creator, ...(parent ? { parentTaskId: source.id, shape: 'change' as const } : {}) }
   );
 }
 

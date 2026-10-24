@@ -21,8 +21,8 @@ type OrchestrationCommand = CommandOf<
   | 'agent.create_task'
   | 'agent.split_task'
   | 'delegation.cancel'
-  | 'delegation.delivered'
-  | 'delegation.undelivered'
+  | 'delegation.record_delivery'
+  | 'delegation.release'
   | 'delegation.wake_policy'
   | 'delegations.recover'
 >;
@@ -43,9 +43,9 @@ export function applyOrchestration(decider: Decider, command: OrchestrationComma
       return splitTask(decider, command);
     case 'delegation.cancel':
       return cancelDelegationByUser(decider, command);
-    case 'delegation.delivered':
+    case 'delegation.record_delivery':
       return recordDelivered(decider, command);
-    case 'delegation.undelivered':
+    case 'delegation.release':
       return recordUndelivered(decider, command);
     case 'delegation.wake_policy':
       return changeWakePolicy(decider, command);

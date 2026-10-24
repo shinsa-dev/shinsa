@@ -100,7 +100,7 @@ describe('parseBriefing', () => {
   });
 
   test('drops a note that names a task in now or next and falls back to one that does not', () => {
-    const paused = entry(docs, 'question', { purpose: 'failure', title: 'Checks kept failing' });
+    const paused = entry(docs, 'failure', { title: 'Checks kept failing' });
     const withPaused = queueOf([entry(chat, 'review'), paused]);
     const briefing = parseBriefing(
       {

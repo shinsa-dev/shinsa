@@ -11,7 +11,7 @@ type GateEvent = Extract<
 >;
 
 function applyGateOpened(state: ShinsaState, event: EventOf<'gate.opened'>) {
-  const gate = event.gate;
+  const gate = { ...event.gate };
   state.gates[gate.id] = gate;
   if (isAgentQuestion(gate)) {
     record(state, gate.taskId, event.at, {

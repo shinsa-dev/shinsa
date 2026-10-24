@@ -1,5 +1,6 @@
 import { expect } from 'bun:test';
 import {
+  isDecisionGate,
   isTaskClosed,
   isTaskSettled,
   listActiveRuns,
@@ -71,7 +72,9 @@ function listLaterRoundCommands(state: ShinsaState): ShinsaCommand[] {
     if (!later.has(run.taskId) || run.delegation) return [];
     if (run.role === 'planner') return [{ type: 'agent.propose_plan', runId: run.id, document: PLAN }];
     if (run.role === 'builder') {
-      return [{ type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] }];
+      return [
+        { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },
+      ];
     }
     if (run.role === 'reviewer') return [{ type: 'agent.report_review', runId: run.id, findings: [] }];
     return [];
@@ -90,7 +93,7 @@ function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand
   const later = listLaterRoundCommands(state);
   if (later.length > 0 && chance(random, 0.5)) return later;
   return Object.values(state.tasks).flatMap((task): ShinsaCommand[] => {
-    if (task.stage === 'triage' && task.size !== null && task.stageReason === 'checking the setup') {
+    if (task.stage === 'triage' && task.size !== null && task.stageReason === 'verifying the setup') {
       return [{ type: 'config.record', taskId: task.id, problems: [] }];
     }
     if (task.stage === 'triage' && task.branch) {
@@ -125,7 +128,7 @@ function listMessageCommands(state: ShinsaState, random: Random): ShinsaCommand[
     },
   ];
   for (const round of resolveTaskRounds(task)) {
-    if (round.status !== 'queued' && round.status !== 'active') continue;
+    if (round.status !== 'waiting' && round.status !== 'active') continue;
     commands.push({
       type: 'round.ship',
       taskId: task.id,
@@ -218,7 +221,7 @@ function assertRoundShape(task: Task, context: string) {
   }
   if (isTaskClosed(task)) {
     expect(
-      rounds.filter((round) => round.status === 'queued'),
+      rounds.filter((round) => round.status === 'waiting'),
       `${context}: a closed task has no round waiting`
     ).toEqual([]);
   }
@@ -261,7 +264,7 @@ function assertPullRequests(task: Task, context: string) {
     if (round.status === 'merged' && round.pullRequest) {
       expect(round.pullRequest.state, `${context}: round ${round.number} merged`).toBe('merged');
     }
-    if (round.base && round.status !== 'queued') {
+    if (round.base && round.status !== 'waiting') {
       expect(
         rounds.some((earlier) => earlier.number < round.number && earlier.branch === round.base),
         `${context}: round ${round.number} stacks on a branch no earlier round had`
@@ -271,7 +274,7 @@ function assertPullRequests(task: Task, context: string) {
   const branches = new Map<number, string | null>();
   for (const round of rounds) {
     const pullRequest = round.pullRequest;
-    if (pullRequest?.state !== 'open' || round.status === 'queued') continue;
+    if (pullRequest?.state !== 'open' || round.status === 'waiting') continue;
     const known = branches.get(pullRequest.number);
     if (known !== undefined && round.status === 'shipped') {
       expect(round.branch, `${context}: pull request #${pullRequest.number} on two branches`).toBe(known);
@@ -299,17 +302,17 @@ export function listRoundMarks(state: ShinsaState) {
       rounds.length >= 3 ? 'three rounds' : null,
       rounds.some((round) => round.number > 1 && round.status === 'merged') ? 'merged later round' : null,
       rounds.some((round) => round.status === 'shipped') ? 'shipped round' : null,
-      rounds.some((round) => round.base !== null && round.status !== 'queued') ? 'stacked round' : null,
+      rounds.some((round) => round.base !== null && round.status !== 'waiting') ? 'stacked round' : null,
       rounds.filter((round) => round.pullRequest?.number !== undefined).length >= 2 &&
       new Set(rounds.map((round) => round.pullRequest?.number).filter(Boolean)).size === 1
         ? 'rounds onto one pull request'
         : null,
-      rounds.some((round) => round.number > 1 && round.status !== 'queued' && round.base === null)
+      rounds.some((round) => round.number > 1 && round.status !== 'waiting' && round.base === null)
         ? 'round from the default branch'
         : null,
       task.suggestions?.some((suggestion) => suggestion.keptRound !== undefined) ? 'kept split-off' : null,
       isTaskClosed(task) && task.stage === 'done' ? 'closed task' : null,
-      rounds.some((round) => round.status === 'queued') ? 'queued round' : null,
+      rounds.some((round) => round.status === 'waiting') ? 'waiting round' : null,
     ];
   });
 }

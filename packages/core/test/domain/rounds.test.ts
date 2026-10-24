@@ -93,11 +93,11 @@ describe('rounds', () => {
       mergeable: true,
       updatedAt: 0,
     };
-    expect(selectShippingTarget(taskOf([round(1)], open), { number: 2, status: 'queued' })?.number).toBe(20);
+    expect(selectShippingTarget(taskOf([round(1)], open), { number: 2, status: 'waiting' })?.number).toBe(20);
     expect(
-      selectShippingTarget(taskOf([round(1)], { ...open, state: 'merged' }), { number: 2, status: 'queued' })
+      selectShippingTarget(taskOf([round(1)], { ...open, state: 'merged' }), { number: 2, status: 'waiting' })
     ).toBeNull();
-    expect(selectShippingTarget(taskOf([round(1)]), { number: 2, status: 'queued' })).toBeNull();
+    expect(selectShippingTarget(taskOf([round(1)]), { number: 2, status: 'waiting' })).toBeNull();
     expect(
       selectShippingTarget(taskOf([round(1), round(2), round(3, { status: 'active' })]), {
         number: 3,

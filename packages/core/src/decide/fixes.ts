@@ -4,7 +4,7 @@ import { resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
 import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
-import { openReviewGate, startAfterChecks } from './lifecycle.ts';
+import { openReviewGate, startReview } from './lifecycle.ts';
 
 const MAX_STALLED_FIXES = 2;
 
@@ -26,7 +26,7 @@ function resolveSignature(parts: string[]) {
 }
 
 function isBudgetSpent(task: Task) {
-  return task.fixRounds > 0 || (task.fixHistory ?? []).length > 0 || (task.fixFingerprints ?? []).length > 0;
+  return task.fixRounds > 0 || (task.fixFingerprints ?? []).length > 0;
 }
 
 export function resetFixBudget(decider: Decider, taskId: string) {
@@ -104,7 +104,7 @@ export function startFix(
   });
   decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
   decider.startRun(decider.task(taskId), 'fixer', prompt, {
-    resumeFrom: decider.lastRun(taskId, ['fixer', 'builder', 'shipper']),
+    resumeFrom: decider.lastRun(taskId, ['fixer', 'builder']),
   });
 }
 
@@ -112,7 +112,7 @@ function reactToChecks(decider: Decider, taskId: string, results: ReportCheck[])
   const failed = results.filter((check) => check.outcome === 'fail');
   if (failed.length === 0) {
     decider.progressed(taskId);
-    startAfterChecks(decider, taskId);
+    startReview(decider, taskId);
     return;
   }
   startFix(

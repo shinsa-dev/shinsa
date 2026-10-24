@@ -29,7 +29,6 @@ describe('the tools each agent gets', () => {
     expect(listToolNames('planner')).not.toContain('split_task');
     expect(listToolNames('reviewer')).toContain('create_task');
     expect(listToolNames('reviewer')).not.toContain('split_task');
-    expect(listToolNames('triage')).toEqual([]);
   });
 
   test('each shape’s agent hands over with its own tool, and only the planner can reshape a task', () => {
@@ -42,7 +41,7 @@ describe('the tools each agent gets', () => {
   });
 
   test('every step agent can schedule work; every one but the reviewer can ask for a secret', () => {
-    for (const role of ['planner', 'builder', 'fixer', 'shipper', 'answerer'] as const) {
+    for (const role of ['planner', 'builder', 'fixer', 'answerer'] as const) {
       expect(listToolNames(role)).toContain('set_schedule');
       expect(listToolNames(role)).toContain('request_secret');
     }
@@ -53,11 +52,10 @@ describe('the tools each agent gets', () => {
   });
 
   test('every step agent and every delegated agent can read another task', () => {
-    for (const role of ['planner', 'builder', 'reviewer', 'fixer', 'shipper', 'answerer'] as const) {
+    for (const role of ['planner', 'builder', 'reviewer', 'fixer', 'answerer'] as const) {
       expect(listToolNames(role)).toContain('read_task');
       expect(listToolNames(role, 2)).toContain('read_task');
     }
-    expect(listToolNames('triage')).not.toContain('read_task');
   });
 
   test('names every tool the agents can be given, schedules and secrets included', () => {
@@ -68,7 +66,6 @@ describe('the tools each agent gets', () => {
           'builder',
           'reviewer',
           'fixer',
-          'shipper',
           'answerer',
           'investigator',
           'researcher',

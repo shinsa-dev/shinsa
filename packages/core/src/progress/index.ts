@@ -1,4 +1,5 @@
 import {
+  needsRepository,
   type PipelineStep,
   type Round,
   type RoundStatus,
@@ -98,9 +99,14 @@ const WAITING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
 
 const FINISHED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>(['merged', 'done']);
 
+function hasSetupStep(task: Task, pipeline: readonly PipelineStep[]) {
+  if (pipeline[0] === 'plan') return false;
+  return task.repoId !== null || task.size === null || needsRepository(pipeline);
+}
+
 function listDisplayKeys(task: Task): DisplayKey[] {
   const pipeline = resolveTaskPipeline(task);
-  const keys: DisplayKey[] = pipeline[0] === 'plan' ? [] : ['setup'];
+  const keys: DisplayKey[] = hasSetupStep(task, pipeline) ? ['setup'] : [];
   for (const step of pipeline) {
     const key = STEP_DISPLAY[step];
     if (!keys.includes(key)) keys.push(key);
@@ -110,12 +116,11 @@ function listDisplayKeys(task: Task): DisplayKey[] {
 }
 
 function hasStarted(task: Task) {
-  return Boolean(task.answer) || Boolean(task.result) || task.plan !== null;
+  return Boolean(task.result) || task.plan !== null;
 }
 
 function isKeyDone(task: Task, key: DisplayKey) {
   if (key === 'setup') return hasStarted(task);
-  if (key === 'answer') return Boolean(task.answer);
   if (key === 'proposal') return task.proposal?.status === 'accepted';
   return task.result?.step === key;
 }
@@ -203,7 +208,7 @@ export function resolveTaskProgress(task: Task): TaskProgress {
 }
 
 const ROUND_STEP_STATUS: Record<RoundStatus, (key: DisplayKey) => DisplayPhaseStatus> = {
-  queued: () => 'pending',
+  waiting: () => 'pending',
   active: () => 'pending',
   shipped: (key) => (key === 'merge' ? 'waiting' : 'done'),
   merged: () => 'done',

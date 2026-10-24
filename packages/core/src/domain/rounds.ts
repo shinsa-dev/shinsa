@@ -4,9 +4,9 @@ import type { PullRequest, Task } from './types.ts';
 
 export type RoundShipping = 'onto_pull_request' | 'stacked';
 
-export type RoundStatus = 'queued' | 'active' | 'shipped' | 'merged' | 'finished' | 'cancelled';
+export type RoundStatus = 'waiting' | 'active' | 'shipped' | 'merged' | 'finished' | 'cancelled';
 
-export type MessageKind = 'feedback' | 'new_round' | 'separate_task';
+export type MessageKind = 'feedback' | 'acknowledge' | 'new_round' | 'separate_task';
 
 export interface RoundPullRequest {
   number: number;
@@ -41,7 +41,12 @@ export interface Round {
 
 export const ROUND_SHIPPINGS: readonly RoundShipping[] = ['onto_pull_request', 'stacked'];
 
-export const MESSAGE_KINDS: readonly MessageKind[] = ['feedback', 'new_round', 'separate_task'];
+export const MESSAGE_KINDS: readonly MessageKind[] = [
+  'feedback',
+  'acknowledge',
+  'new_round',
+  'separate_task',
+];
 
 export const ROUND_LIMITS = { title: 80, why: 240, queued: 5 } as const;
 
@@ -123,7 +128,7 @@ export function isOfCurrentRound(task: RoundSource, item: { round?: number }) {
 }
 
 export function listQueuedRounds(task: RoundSource) {
-  return resolveTaskRounds(task).filter((round) => round.status === 'queued');
+  return resolveTaskRounds(task).filter((round) => round.status === 'waiting');
 }
 
 export function resolveNextRoundNumber(task: RoundSource) {
@@ -167,7 +172,7 @@ export function formatRoundLabel(round: Pick<Round, 'number'>) {
 }
 
 export function selectShippingTarget(task: RoundSource, round: Pick<Round, 'number' | 'status'>) {
-  if (round.status === 'queued')
+  if (round.status === 'waiting')
     return task.pullRequest?.state === 'open' ? toRoundPullRequest(task.pullRequest) : null;
   const shipped = resolveTaskRounds(task).filter(
     (candidate) =>
@@ -180,7 +185,7 @@ export function selectShippingTarget(task: RoundSource, round: Pick<Round, 'numb
 
 export function canChangeRoundShipping(task: ShippingSource, round: Pick<Round, 'status'>) {
   if (isTaskClosed(task)) return false;
-  if (round.status === 'queued') return true;
+  if (round.status === 'waiting') return true;
   return (
     round.status === 'active' &&
     !SHIPPED_STAGES.has(task.stage) &&

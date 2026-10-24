@@ -46,7 +46,7 @@ export function createFirstRound(
 
 function resolveOutcome(task: Task): RoundOutcome {
   const document = task.plan?.document ?? null;
-  const result = task.answer ?? task.result?.body ?? null;
+  const result = task.result?.body ?? null;
   return {
     goal: document?.goal ?? null,
     phases: (document?.phases ?? []).map((phase) => phase.title),
@@ -77,7 +77,7 @@ function applyRoundQueued(state: ShinsaState, event: EventOf<'round.queued'>) {
   const round: Round = {
     ...event.round,
     pipeline: [...event.round.pipeline],
-    status: 'queued',
+    status: 'waiting',
     branch: null,
     base: null,
     pullRequest: null,
@@ -136,7 +136,7 @@ function resolveBranchPatch(task: Task, choice: BranchChoice, worktree: boolean,
 function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: number): Partial<Task> {
   return {
     pipeline: [...next.pipeline],
-    auto: { shape: true, start: task.auto?.start ?? true, priority: task.auto?.priority ?? true },
+    auto: { ...task.auto, shape: true },
     plan: null,
     planHistory: [],
     planAnswers: null,
@@ -149,11 +149,9 @@ function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: nu
     fixFor: null,
     fixSignature: null,
     stalledFixes: 0,
-    fixHistory: [],
     fixFingerprints: [],
     recoveries: 0,
     checkResults: null,
-    answer: null,
     result: null,
     proposal: null,
     shapeChanges: [],
@@ -250,7 +248,7 @@ function resolveSettledRound(task: Task, round: Round, stage: TaskStage, at: num
       pullRequest: round.pullRequest ? { ...round.pullRequest, state: 'merged' } : null,
     };
   }
-  if ((round.status === 'shipped' && stage === 'cancelled') || round.status === 'queued') {
+  if ((round.status === 'shipped' && stage === 'cancelled') || round.status === 'waiting') {
     return stage === 'merged' ? round : { ...round, status: 'cancelled', endedAt: at };
   }
   return round;
@@ -285,7 +283,7 @@ export function recordRoundStaged(
   }
   const closing = stage === 'cancelled' || by === 'you';
   const rounds = resolveTaskRounds(task).map((round) => {
-    if (round.status === 'queued' && !closing) return round;
+    if (round.status === 'waiting' && !closing) return round;
     return resolveSettledRound(task, round, stage, at);
   });
   writeRounds(state, task, at, rounds, closing ? { closedAt: at } : {});

@@ -17,11 +17,7 @@ describe('resolveFallbackBriefing', () => {
 
   test('lists a task once even when it has two open gates', () => {
     const briefing = resolveFallbackBriefing(
-      queueOf([
-        entry(chat, 'question', { purpose: 'agent_question' }),
-        entry(chat, 'review'),
-        entry(dup, 'merge'),
-      ]),
+      queueOf([entry(chat, 'question'), entry(chat, 'review'), entry(dup, 'merge')]),
       NOW
     );
     expect(briefing.now?.taskId).toBe('t-chat');
@@ -50,7 +46,7 @@ describe('resolveFallbackBriefing', () => {
     ];
     const named = [entry(chat, 'review'), ...more.map((value) => entry(value, 'review'))];
     const paused = resolveFallbackBriefing(
-      queueOf([...named, entry(docs, 'question', { purpose: 'failure', title: 'Checks kept failing' })]),
+      queueOf([...named, entry(docs, 'failure', { title: 'Checks kept failing' })]),
       NOW
     );
     expect(paused.note).toBe('“Document the engine” is paused and needs a decision.');
@@ -65,17 +61,14 @@ describe('resolveFallbackBriefing', () => {
     const paused = resolveFallbackBriefing(
       queueOf([
         entry(chat, 'review'),
-        entry(docs, 'question', { purpose: 'failure', title: 'Checks kept failing' }),
+        entry(docs, 'failure', { title: 'Checks kept failing' }),
         entry(dup, 'merge', { openedAt: NOW - 3 * 24 * 60 * 60 * 1000 }),
       ]),
       NOW
     );
     expect(paused.next.map((item) => item.taskId)).toEqual(['t-docs', 't-dup']);
     expect(paused.note).toBeNull();
-    const pausedNext = resolveFallbackBriefing(
-      queueOf([entry(chat, 'review'), entry(docs, 'question', { purpose: 'failure' })]),
-      NOW
-    );
+    const pausedNext = resolveFallbackBriefing(queueOf([entry(chat, 'review'), entry(docs, 'failure')]), NOW);
     expect(pausedNext.note).toBeNull();
   });
 });
@@ -89,14 +82,14 @@ describe('resolveFallbackBriefing notes', () => {
   });
 
   test('cuts a long why at the limit', () => {
-    const long = entry(task('t-long', 'Long'), 'question', { purpose: 'failure', title: 'x'.repeat(200) });
+    const long = entry(task('t-long', 'Long'), 'failure', { title: 'x'.repeat(200) });
     const why = resolveFallbackBriefing(queueOf([long]), NOW).now?.why ?? '';
     expect(why).toHaveLength(140);
     expect(why.endsWith('…')).toBe(true);
   });
 
   test('says what an agent question and a merge without a pull request need', () => {
-    const asked = entry(task('t-ask', 'Ask'), 'question', { purpose: 'agent_question', title: 'Which tab?' });
+    const asked = entry(task('t-ask', 'Ask'), 'question', { title: 'Which tab?' });
     const merge = entry(task('t-merge', 'Merge'), 'merge');
     const briefing = resolveFallbackBriefing(queueOf([asked, merge]), NOW);
     expect(briefing.now?.why).toBe('An agent is waiting on your answer: Which tab?');
@@ -104,10 +97,7 @@ describe('resolveFallbackBriefing notes', () => {
   });
 
   test('a setup that needs fixing reads as paused, not as a question, and is flagged as one', () => {
-    const setup = entry(task('t-setup', 'Set up'), 'question', {
-      purpose: 'configuration',
-      title: 'No checks to run',
-    });
+    const setup = entry(task('t-setup', 'Set up'), 'configuration', { title: 'No checks to run' });
     const briefing = resolveFallbackBriefing(queueOf([setup]), NOW);
     expect(briefing.now?.why).toBe('Paused: No checks to run');
     const named = [
@@ -128,7 +118,7 @@ describe('resolveFallbackBriefing notes', () => {
   });
 
   test('a secret an agent asks for is named as a secret, not as an answer', () => {
-    const asking = entry(chat, 'question', { purpose: 'agent_question', title: 'GitHub webhook secret' });
+    const asking = entry(chat, 'secret', { title: 'GitHub webhook secret' });
     const secret = { ...asking, gate: { ...asking.gate, secret: { label: 'GitHub webhook secret' } } };
     expect(resolveFallbackBriefing(queueOf([secret]), NOW).now?.why).toBe(
       'An agent needs a secret from you: GitHub webhook secret'

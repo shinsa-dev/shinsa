@@ -36,7 +36,7 @@ describe('run events', () => {
   test('events for a run the log never started change nothing', () => {
     const state = stateWith();
     const events: ShinsaEventInput[] = [
-      { type: 'run.linked', runId: 'ghost', sessionId: 's' },
+      { type: 'run.linked', runId: 'ghost', sessionId: 's', provider: 'claude' },
       {
         type: 'run.attempted',
         runId: 'ghost',
@@ -51,18 +51,6 @@ describe('run events', () => {
     ];
     const next = events.reduce(apply, state);
     expect(next.runs).toEqual({});
-  });
-
-  test('a link from an older log keeps the session’s provider unknown until one is recorded', () => {
-    const linked = apply(stateWith({}), { type: 'run.linked', runId: 'run-1', sessionId: 's1' });
-    expect(linked.runs['run-1']).not.toHaveProperty('sessionProvider');
-    const withProvider = apply(linked, {
-      type: 'run.linked',
-      runId: 'run-1',
-      sessionId: 's2',
-      provider: 'codex',
-    });
-    expect(withProvider.runs['run-1']).toMatchObject({ sessionId: 's2', sessionProvider: 'codex' });
   });
 
   test('a lost session marks every run that used it and nothing else', () => {

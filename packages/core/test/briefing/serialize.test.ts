@@ -40,7 +40,7 @@ describe('serializeBriefing without decisions', () => {
 describe('selectBriefingGate', () => {
   test('finds the open decision of a task the guide names', () => {
     const queue = queueOf(ready);
-    expect(selectBriefingGate(queue, 't-dup')?.kind).toBe('merge');
+    expect(selectBriefingGate(queue, 't-dup')?.type).toBe('merge');
     expect(selectBriefingGate(queue, 't-gone')).toBeNull();
   });
 });

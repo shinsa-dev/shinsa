@@ -7,8 +7,8 @@ import {
   isTaskResting,
   isTaskSettled,
   type MessageKind,
-  resolveNextRoundNumber,
   type Run,
+  resolveNextRoundNumber,
   type Task,
   type TaskStage,
 } from '../domain/index.ts';
@@ -21,7 +21,15 @@ import { startFix } from './fixes.ts';
 import { answerGate } from './gates.ts';
 import { resolveCurrentPhase, startPhase, startPlanning } from './lifecycle.ts';
 import { queueRound } from './rounds.ts';
-import { acceptsFollowUp, followUpInquiry, noteOperation, startInquiry, startOperation } from './shapes.ts';
+import {
+  acceptsFollowUp,
+  answerFollowUp,
+  followUpInquiry,
+  noteOperation,
+  restartAnswer,
+  startInquiry,
+  startOperation,
+} from './shapes.ts';
 import { hasRoomForSuggestion, suggestSplitOff } from './suggestions.ts';
 
 type StageEffect =
@@ -38,7 +46,6 @@ export type MessageEffect =
   | StageEffect
   | 'closed'
   | 'follow_up'
-  | 'new_round'
   | 'steer'
   | 'wake'
   | 'retry'
@@ -90,12 +97,11 @@ function resolveDelivery(state: ShinsaState, task: Task): Delivery {
   return { effect: STAGE_EFFECT[task.stage] };
 }
 
-type MessageDelivery = Delivery | { effect: 'closed' } | { effect: 'new_round' };
+type MessageDelivery = Delivery | { effect: 'closed' };
 
 function resolveMessageDelivery(state: ShinsaState, task: Task): MessageDelivery {
   if (isTaskClosed(task)) return { effect: 'closed' };
-  if (acceptsFollowUp(task)) return { effect: 'follow_up' };
-  if (isTaskResting(task)) return { effect: 'new_round' };
+  if (isTaskResting(task)) return { effect: 'follow_up' };
   const [running] = listRunningRuns(state, task.id);
   if (running?.status === 'waiting') return { effect: 'wake', run: running };
   if (running && listOpenGates(state, task.id).length === 0) return { effect: 'steer', run: running };
@@ -113,7 +119,7 @@ export function needsMessageKind(state: ShinsaState, task: Task) {
 function restartStep(decider: Decider, task: Task, text: string) {
   switch (task.stage) {
     case 'answering':
-      startInquiry(decider, task.id, 'answer', text);
+      restartAnswer(decider, task, text);
       return;
     case 'researching':
       startInquiry(decider, task.id, 'research', text);
@@ -156,6 +162,9 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
       decider.run({ kind: 'question.resolve', gateId: delivery.gate.id });
       return;
     case 'follow_up':
+      if (acceptsFollowUp(task)) followUpInquiry(decider, task.id, text);
+      else answerFollowUp(decider, task.id, text);
+      return;
     case 'decline_proposal':
       followUpInquiry(decider, task.id, text);
       return;
@@ -177,10 +186,13 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
   }
 }
 
-function resolveMessageKind(command: CommandOf<'task.message'>, delivery: MessageDelivery): MessageKind {
-  if (command.kind === 'separate_task') return 'separate_task';
-  if (delivery.effect === 'new_round') return 'new_round';
-  return command.kind ?? 'feedback';
+function resolveMessageKind(command: CommandOf<'task.message'>, task: Task, scheduled: boolean): MessageKind {
+  if (command.kind) return command.kind;
+  return scheduled && isTaskResting(task) ? 'new_round' : 'feedback';
+}
+
+function isOnlyRecorded(kind: MessageKind, delivery: MessageDelivery) {
+  return kind === 'acknowledge' && delivery.effect !== 'supersede_question';
 }
 
 function startNewWork(decider: Decider, task: Task, command: CommandOf<'task.message'>, text: string) {
@@ -194,6 +206,15 @@ function startNewWork(decider: Decider, task: Task, command: CommandOf<'task.mes
   });
 }
 
+function assertMessageAccepted(state: ShinsaState, task: Task, text: string) {
+  if (text.length === 0) throw new DomainError('message_required', 'Write a message first.');
+  const delivery = resolveMessageDelivery(state, task);
+  if (delivery.effect === 'closed') {
+    throw new DomainError('task_settled', 'This task is finished. Start a new one.');
+  }
+  return delivery;
+}
+
 export function messageTask(
   decider: Decider,
   command: CommandOf<'task.message'>,
@@ -201,23 +222,24 @@ export function messageTask(
 ) {
   const task = decider.task(command.taskId);
   const text = command.text.trim();
-  if (text.length === 0) throw new DomainError('message_required', 'Write a message first.');
-  const delivery = resolveMessageDelivery(decider.state, task);
-  if (delivery.effect === 'closed') {
-    throw new DomainError('task_settled', 'This task is finished. Start a new one.');
-  }
-  if (decider.context.onBehalf && listOpenGates(decider.state, task.id).length > 0) {
-    decider.emit({ type: 'task.messaged', taskId: task.id, text });
+  const delivery = assertMessageAccepted(decider.state, task, text);
+  const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
+  if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
+    decider.emit({ type: 'task.messaged', taskId: task.id, text, ...(scheduleId ? { scheduleId } : {}) });
     return;
   }
-  const kind = resolveMessageKind(command, delivery);
+  const kind = resolveMessageKind(command, task, scheduleId !== null);
   if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
     decider.emit({ type: 'task.messaged', taskId: task.id, text, kind });
     suggestSplitOff(decider, task.id, text, command.title ?? null, command.why ?? null);
     return;
   }
-  if (delivery.effect === 'new_round' || kind !== 'feedback') {
+  if (kind === 'new_round' || kind === 'separate_task') {
     startNewWork(decider, task, command, text);
+    return;
+  }
+  if (isOnlyRecorded(kind, delivery)) {
+    decider.emit({ type: 'task.messaged', taskId: task.id, text, kind });
     return;
   }
   decider.emit({ type: 'task.messaged', taskId: task.id, text, ...(scheduleId ? { scheduleId } : {}) });
@@ -228,4 +250,25 @@ export function redeliverMessage(decider: Decider, command: CommandOf<'message.d
   const task = decider.state.tasks[command.taskId];
   if (!task || isTaskSettled(task)) return;
   deliverMessage(decider, task, resolveDelivery(decider.state, task), command.text);
+}
+
+export function receiveMessage(decider: Decider, command: CommandOf<'message.receive'>) {
+  const task = decider.task(command.taskId);
+  const text = command.text.trim();
+  assertMessageAccepted(decider.state, task, text);
+  decider.emit({ type: 'task.message_received', taskId: task.id, messageId: decider.context.newId(), text });
+}
+
+export function routeMessage(decider: Decider, command: CommandOf<'message.route'>) {
+  const { taskId, messageId, ...route } = command;
+  const message = decider.state.tasks[taskId]?.inbox?.find((candidate) => candidate.id === messageId);
+  if (!message) return;
+  decider.emit({ type: 'task.message_routed', taskId, messageId });
+  messageTask(decider, { ...route, type: 'task.message', taskId, text: message.text });
+}
+
+export function dropMessage(decider: Decider, command: CommandOf<'message.drop'>) {
+  const { taskId, messageId, reason } = command;
+  if (!decider.state.tasks[taskId]?.inbox?.some((candidate) => candidate.id === messageId)) return;
+  decider.emit({ type: 'task.message_dropped', taskId, messageId, reason });
 }

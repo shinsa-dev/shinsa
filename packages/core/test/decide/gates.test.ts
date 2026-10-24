@@ -1,15 +1,27 @@
 import { describe, expect, test } from 'bun:test';
-import { applyEvent, type Gate, isHumanOnlyGate, listOpenGates } from '../../src/index.ts';
+import {
+  GATE_SCHEMA,
+  type GateType,
+  listOpenGates,
+  SHAPE_PIPELINES,
+  type TaskShape,
+} from '../../src/index.ts';
 import {
   approve,
   buildAll,
+  completePhase,
   createHarness,
   createTask,
+  type Harness,
   PASSING,
+  PLAN,
   proposePlan,
   pullRequest,
+  pushed,
   reachReviewGate,
   reachShipping,
+  readyWorktree,
+  verifySetup,
 } from '../harness.ts';
 
 describe('answering a gate', () => {
@@ -33,7 +45,7 @@ describe('answering a gate', () => {
     reachReviewGate(harness, taskId);
     const review = harness.openGate(taskId).id;
     expect(() =>
-      harness.send({ type: 'gate.answer', gateId: review, decision: 'answer', response: 'ok' })
+      harness.send({ type: 'gate.answer', gateId: review, decision: 'reply', response: 'ok' })
     ).toThrow('Approve it, ask for changes or reject it.');
 
     const asking = createTask(harness, { request: 'Ask' });
@@ -43,7 +55,7 @@ describe('answering a gate', () => {
       harness.send({ type: 'gate.answer', gateId: 'q1', decision: 'approve', response: 'x' })
     ).toThrow('Answer the question.');
     expect(() =>
-      harness.send({ type: 'gate.answer', gateId: 'q1', decision: 'answer', response: ' ' })
+      harness.send({ type: 'gate.answer', gateId: 'q1', decision: 'reply', response: ' ' })
     ).toThrow('Write an answer first.');
 
     harness.send({ type: 'effect.fail', taskId: asking, title: 'Broke', detail: 'x' });
@@ -62,7 +74,7 @@ describe('answering a gate', () => {
     harness.send({
       type: 'gate.answer',
       gateId: harness.openGate(taskId).id,
-      decision: 'answer',
+      decision: 'reply',
       response: 'Use the grid.',
     });
     expect(harness.activeRun(taskId).prompt).toContain('Guidance from the human: Use the grid.');
@@ -136,46 +148,6 @@ describe('answering a gate', () => {
       response: null,
     });
     expect(harness.task(taskId)).toMatchObject({ stage: 'cancelled', stageReason: 'review rejected' });
-  });
-
-  test('a question left open by an older version, whose agent is gone, retries the step with the answer', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    proposePlan(harness, taskId);
-    const builder = harness.activeRun(taskId);
-    const state = harness.state;
-    applyEvent(state, {
-      type: 'run.ended',
-      runId: builder.id,
-      outcome: 'cancelled',
-      summary: null,
-      seq: state.seq + 1,
-      at: 0,
-    });
-    applyEvent(state, {
-      type: 'gate.opened',
-      gate: {
-        id: 'legacy',
-        taskId,
-        kind: 'question',
-        purpose: 'agent_question',
-        status: 'open',
-        title: 'Which tab?',
-        body: '',
-        runId: builder.id,
-        openedAt: 0,
-        answeredAt: null,
-        decision: null,
-        response: null,
-      },
-      seq: state.seq + 1,
-      at: 0,
-    });
-    harness.send({ type: 'gate.answer', gateId: 'legacy', decision: 'answer', response: 'The first.' });
-    expect(harness.activeRun(taskId).prompt).toContain(
-      'You asked: Which tab?\nThe human answered: The first.'
-    );
-    expect(harness.effectsOf('question.resolve').map((effect) => effect.gateId)).not.toContain('legacy');
   });
 });
 
@@ -335,74 +307,228 @@ describe('verdicts on review findings', () => {
   });
 });
 
+function refusalOf(send: () => unknown) {
+  try {
+    send();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 describe('decisions only the human makes', () => {
-  const GATES: [string, Pick<Gate, 'kind' | 'purpose'> & Partial<Pick<Gate, 'secret'>>, boolean][] = [
-    ['plan', { kind: 'plan', purpose: 'decision' }, true],
-    ['review', { kind: 'review', purpose: 'decision' }, true],
-    ['merge', { kind: 'merge', purpose: 'decision' }, true],
-    ['operation', { kind: 'question', purpose: 'operation' }, true],
-    ['your OK', { kind: 'question', purpose: 'change' }, true],
-    ['secret', { kind: 'question', purpose: 'agent_question', secret: { label: 'Token' } }, true],
-    ['sign-in', { kind: 'question', purpose: 'sign_in' }, true],
-    ['question', { kind: 'question', purpose: 'agent_question' }, false],
-    ['failure', { kind: 'question', purpose: 'failure' }, false],
-    ['setup', { kind: 'question', purpose: 'configuration' }, false],
-  ];
+  function triaged(harness: Harness, repoId: string, request: string, shape?: TaskShape) {
+    harness.send({ type: 'task.create', request, repoId });
+    const taskId = Object.keys(harness.state.tasks).at(-1) ?? '';
+    harness.send({
+      type: 'task.triage',
+      taskId,
+      title: request,
+      repoId,
+      size: 'small',
+      branch: `fix/${taskId}`,
+      waitsOn: [],
+      ...(shape ? { shape } : {}),
+    });
+    return taskId;
+  }
 
-  test('names exactly the gates an agent may never answer for the human', () => {
-    for (const [name, gate, human] of GATES) expect(isHumanOnlyGate(gate), name).toBe(human);
-  });
-
-  test('core refuses an answer to them sent on an agent’s behalf, whatever the decision, and records nothing', () => {
+  function openEveryGate() {
     const harness = createHarness();
-    const taskId = createTask(harness);
-    reachReviewGate(harness, taskId);
-    const gateId = harness.openGate(taskId).id;
-    for (const decision of ['approve', 'revise', 'reject', 'answer'] as const) {
-      const before = harness.events.length;
-      expect(() =>
-        harness.send(
-          { type: 'gate.answer', gateId, decision, response: 'Ship it.' },
-          { onBehalf: true, byTask: 'other' }
-        )
-      ).toThrow('Only the human decides this.');
-      expect(harness.events).toHaveLength(before);
-    }
-    expect(harness.openGate(taskId).id).toBe(gateId);
-    approve(harness, taskId);
-    expect(harness.task(taskId).stage).toBe('shipping');
-  });
-
-  test('a message or a retry on your behalf never signs in for you, and records nothing', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    const run = harness.activeRun(taskId);
+    harness.send({ type: 'settings.change', patch: { approvePlans: true } });
+    const gates = new Map<GateType, string>();
+    const remember = (taskId: string) => {
+      const gate = harness.openGate(taskId);
+      gates.set(gate.type, gate.id);
+    };
+    const plan = createTask(harness, { request: 'Plan', size: 'large' });
+    proposePlan(harness, plan);
+    remember(plan);
+    const review = createTask(harness, { request: 'Review' });
+    reachReviewGate(harness, review);
+    remember(review);
+    const merge = createTask(harness, { request: 'Merge' });
+    reachShipping(harness, merge);
+    harness.send({ type: 'pull_request.record', taskId: merge, pullRequest: pullRequest() });
+    remember(merge);
+    const question = createTask(harness, { request: 'Question' });
+    const asker = harness.activeRun(question).id;
+    harness.send({ type: 'agent.ask', runId: asker, gateId: 'q1', question: 'Which?', context: null });
+    remember(question);
+    const secret = createTask(harness, { request: 'Secret' });
+    harness.send({
+      type: 'agent.request_secret',
+      runId: harness.activeRun(secret).id,
+      gateId: 's1',
+      label: 'Token',
+      reason: 'To call the API.',
+    });
+    remember(secret);
+    const failure = createTask(harness, { request: 'Failure' });
+    harness.send({ type: 'effect.fail', taskId: failure, title: 'Broke', detail: 'x' });
+    remember(failure);
+    const signIn = createTask(harness, { request: 'Sign in' });
     harness.send({
       type: 'run.end',
-      runId: run.id,
+      runId: harness.activeRun(signIn).id,
       outcome: 'failed',
       summary: 'Signed out.',
       failure: {
         class: 'auth',
-        message: 'Claude is signed out.',
+        message: 'Signed out.',
         code: 'authentication_failed',
         retryable: null,
         resetAt: null,
         account: { id: 'acc-work', email: 'work@example.com' },
       },
     });
-    const gateId = harness.openGate(taskId).id;
-    const before = harness.events.length;
+    remember(signIn);
+    const repoId = Object.keys(harness.state.repos)[0] ?? '';
+    const setup = triaged(harness, repoId, 'Setup');
+    verifySetup(harness, setup, [{ kind: 'default_branch', detail: 'No main.' }]);
+    remember(setup);
+    const proposal = triaged(harness, repoId, 'Proposal', 'investigate');
+    readyWorktree(harness, proposal);
+    harness.send({
+      type: 'agent.deliver',
+      runId: harness.activeRun(proposal).id,
+      step: 'investigate',
+      body: 'The cache.',
+      proposal: { request: 'Clear the cache.', why: 'It is stale.' },
+    });
+    remember(proposal);
+    const operation = createTask(harness, { request: 'Operation' });
+    harness.send({
+      type: 'agent.reshape',
+      runId: harness.activeRun(operation).id,
+      steps: [...SHAPE_PIPELINES.change, 'operate'],
+      reason: 'Backfill after the merge.',
+    });
+    proposePlan(harness, operation, { ...PLAN, operation: ['Backfill the column.'] });
+    approve(harness, operation);
+    completePhase(harness, operation);
+    completePhase(harness, operation);
+    harness.send({ type: 'checks.record', taskId: operation, results: PASSING });
+    harness.send({ type: 'agent.report_review', runId: harness.activeRun(operation).id, findings: [] });
+    approve(harness, operation);
+    pushed(harness, operation);
+    harness.send({
+      type: 'pull_request.record',
+      taskId: operation,
+      pullRequest: pullRequest({ state: 'merged', mergeCommit: 'f00d' }),
+    });
+    remember(operation);
+    return { harness, gates };
+  }
+
+  test('core refuses every gate answered on an agent’s behalf, whatever the decision, and records nothing', () => {
+    const { harness, gates } = openEveryGate();
+    const types: GateType[] = [
+      'configuration',
+      'failure',
+      'merge',
+      'operation',
+      'plan',
+      'proposal',
+      'question',
+      'review',
+      'secret',
+      'sign_in',
+    ];
+    expect([...gates.keys()].sort()).toEqual(types.sort());
+    for (const gateId of gates.values()) {
+      for (const decision of ['approve', 'revise', 'reject', 'reply', 'waive'] as const) {
+        const before = harness.events.length;
+        expect(() =>
+          harness.send(
+            { type: 'gate.answer', gateId, decision, response: 'Ship it.' },
+            { onBehalf: true, byTask: 'other' }
+          )
+        ).toThrow('Only the human decides this.');
+        expect(harness.events).toHaveLength(before);
+        expect(harness.state.gates[gateId]?.status).toBe('open');
+      }
+    }
     expect(() =>
-      harness.send({ type: 'task.message', taskId, text: 'Carry on.' }, { onBehalf: true, byTask: 'other' })
+      harness.send(
+        { type: 'gate.answer', gateId: 'gone', decision: 'approve', response: null },
+        { onBehalf: true }
+      )
     ).toThrow('Only the human decides this.');
-    expect(() => harness.send({ type: 'task.retry', taskId }, { onBehalf: true, byTask: 'other' })).toThrow(
-      'This task waits for a decision only the human makes.'
+  });
+
+  test('reply and waive are taken only by the gates that list them, and refused with the gate’s own words', () => {
+    const { harness, gates } = openEveryGate();
+    for (const [type, gateId] of gates) {
+      const definition = GATE_SCHEMA[type];
+      for (const decision of ['reply', 'waive'] as const) {
+        if (definition.decisions.some((choice) => choice.decision === decision)) continue;
+        const refusal = type === 'secret' ? 'Paste the secret into the secret field.' : definition.refusal;
+        expect(
+          () => harness.send({ type: 'gate.answer', gateId, decision, response: 'Words.' }),
+          type
+        ).toThrow(refusal);
+      }
+    }
+    const takesReply = [...gates.keys()].filter((type) =>
+      GATE_SCHEMA[type].decisions.some((choice) => choice.decision === 'reply')
     );
-    expect(harness.events).toHaveLength(before);
-    expect(harness.openGate(taskId).id).toBe(gateId);
-    harness.send({ type: 'task.message', taskId, text: 'Carry on.' });
-    expect(harness.state.gates[gateId]?.status).toBe('answered');
+    expect(takesReply.sort()).toEqual(['failure', 'operation', 'question', 'secret', 'sign_in']);
+    expect(
+      [...gates.keys()].filter((type) =>
+        GATE_SCHEMA[type].decisions.some((choice) => choice.decision === 'waive')
+      )
+    ).toEqual(['configuration']);
+  });
+
+  test('a reply retries a failure or a Sign in gate with the words as guidance, and needs words', () => {
+    const { harness, gates } = openEveryGate();
+    for (const type of ['failure', 'sign_in'] as const) {
+      const gateId = gates.get(type) ?? '';
+      expect(() => harness.send({ type: 'gate.answer', gateId, decision: 'reply', response: ' ' })).toThrow(
+        'Write an answer first.'
+      );
+      harness.send({ type: 'gate.answer', gateId, decision: 'reply', response: 'Use the grid.' });
+      const taskId = harness.state.gates[gateId]?.taskId ?? '';
+      expect(harness.activeRun(taskId).prompt).toContain('Use the grid.');
+    }
+  });
+
+  test('a retry, a completion or a cancel on your behalf cannot step past an open gate, and records nothing', () => {
+    const { harness, gates } = openEveryGate();
+    const refused: string[] = [];
+    for (const gateId of gates.values()) {
+      const taskId = harness.state.gates[gateId]?.taskId ?? '';
+      for (const command of [
+        { type: 'task.retry', taskId },
+        { type: 'task.complete', taskId },
+        { type: 'task.cancel', taskId },
+      ] as const) {
+        const before = harness.events.length;
+        const refusal = refusalOf(() => harness.send(command, { onBehalf: true, byTask: 'other' }));
+        if (refusal?.startsWith('This task waits for a decision only the human makes.'))
+          refused.push(refusal);
+        expect(harness.events).toHaveLength(before);
+      }
+      expect(harness.state.gates[gateId]?.status).toBe('open');
+    }
+    expect(refused.length).toBeGreaterThanOrEqual(gates.size);
+  });
+
+  test('a message on your behalf to a task at a gate is kept for the next agent and closes nothing', () => {
+    const { harness, gates } = openEveryGate();
+    for (const gateId of gates.values()) {
+      const taskId = harness.state.gates[gateId]?.taskId ?? '';
+      const before = harness.events.length;
+      const decision = harness.send(
+        { type: 'task.message', taskId, text: 'Carry on.' },
+        { onBehalf: true, byTask: 'other' }
+      );
+      expect(decision.events.map((event) => event.type)).toEqual(['task.messaged', 'on_behalf.acted']);
+      expect(decision.effects).toEqual([]);
+      expect(harness.events.length).toBe(before + 2);
+      expect(harness.state.gates[gateId]?.status).toBe('open');
+    }
   });
 
   test('an agent cannot mark a task done for you while it waits on a decision only you make', () => {
@@ -417,33 +543,13 @@ describe('decisions only the human makes', () => {
     expect(harness.task(taskId).stage).toBe('done');
   });
 
-  test('an agent may still answer another agent’s question and retry a paused task for the human', () => {
-    const harness = createHarness();
-    const asking = createTask(harness);
-    harness.send({
-      type: 'agent.ask',
-      runId: harness.activeRun(asking).id,
-      gateId: 'q1',
-      question: 'Which store?',
-      context: null,
-    });
-    harness.send(
-      { type: 'gate.answer', gateId: 'q1', decision: 'answer', response: 'Redis.' },
-      { onBehalf: true }
-    );
-    expect(harness.state.gates.q1?.status).toBe('answered');
-    const paused = createTask(harness, { request: 'Paused' });
-    harness.send({ type: 'effect.fail', taskId: paused, title: 'Could not run the checks', detail: 'x' });
-    harness.send(
-      { type: 'gate.answer', gateId: harness.openGate(paused).id, decision: 'approve', response: null },
-      { onBehalf: true }
-    );
-    expect(listOpenGates(harness.state, paused)).toEqual([]);
-    expect(() =>
-      harness.send(
-        { type: 'gate.answer', gateId: 'gone', decision: 'approve', response: null },
-        { onBehalf: true }
-      )
-    ).toThrow('No gate gone');
+  test('the human answers the same gates after an agent was refused', () => {
+    const { harness, gates } = openEveryGate();
+    const question = gates.get('question') ?? '';
+    harness.send({ type: 'gate.answer', gateId: question, decision: 'reply', response: 'Redis.' });
+    expect(harness.state.gates[question]?.status).toBe('answered');
+    const failure = gates.get('failure') ?? '';
+    harness.send({ type: 'gate.answer', gateId: failure, decision: 'approve', response: null });
+    expect(harness.state.gates[failure]?.status).toBe('answered');
   });
 });

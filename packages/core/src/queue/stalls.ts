@@ -1,10 +1,4 @@
-import {
-  compareTasks,
-  type Gate,
-  isDecisionGate,
-  isPausingGate,
-  type Task,
-} from '../domain/index.ts';
+import { compareTasks, type Gate, isDecisionGate, isPausingGate, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { listWaitsOn } from './rank.ts';

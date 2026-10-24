@@ -196,6 +196,10 @@ describe('parseUserCommand', () => {
         { type: 'suggestion.keep', taskId: 't1', suggestionId: 's1' },
       ],
       [
+        { type: 'suggestion.keep', taskId: 't1', suggestionId: 's1', shape: 'research' },
+        { type: 'suggestion.keep', taskId: 't1', suggestionId: 's1', shape: 'research' },
+      ],
+      [
         { type: 'gate.answer', gateId: 'g1', decision: 'approve' },
         { type: 'gate.answer', gateId: 'g1', decision: 'approve', response: null },
       ],
@@ -262,7 +266,7 @@ describe('parseUserCommand', () => {
       ],
       [
         { type: 'gate.answer', gateId: 'g1', decision: 'maybe' },
-        'decision must be one of approve, revise, reject, answer.',
+        'decision must be one of approve, revise, reject, reply, waive.',
       ],
     ];
     for (const [input, message] of refused) {
@@ -279,6 +283,12 @@ describe('parseUserCommand', () => {
 });
 
 describe('parseUserCommand for the process commands', () => {
+  test('a new task takes no shape: only triage and the planner shape a task', () => {
+    expect(
+      parseUserCommand({ type: 'task.create', request: 'Why?', repoId: null, shape: 'investigate' })
+    ).toEqual({ type: 'task.create', request: 'Why?', repoId: null });
+  });
+
   test('reads plan versions, verdicts, modes, suggestions, monitors, silence and the cost limit', () => {
     expect(
       parseUserCommand({
@@ -309,18 +319,7 @@ describe('parseUserCommand for the process commands', () => {
       repoId: null,
       mode: 'ask',
     });
-    expect(
-      parseUserCommand({ type: 'task.create', request: 'Why?', repoId: null, shape: 'investigate' })
-    ).toEqual({
-      type: 'task.create',
-      request: 'Why?',
-      repoId: null,
-      shape: 'investigate',
-    });
     expect(() => parseUserCommand({ type: 'task.reshape', taskId: 't', shape: 'fix' })).toThrow(DomainError);
-    expect(() =>
-      parseUserCommand({ type: 'task.create', request: 'Why?', repoId: null, shape: 'deploy' })
-    ).toThrow(DomainError);
     expect(
       parseUserCommand({ type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true })
     ).toEqual({ type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: true });

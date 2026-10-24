@@ -102,13 +102,8 @@ function assertVerdicts(decider: Decider, gate: Gate, decision: GateDecision, ve
   }
 }
 
-function answerQuestion(decider: Decider, gate: Gate, response: string | null) {
-  const asker = gate.runId ? decider.state.runs[gate.runId] : undefined;
-  if (asker && asker.endedAt === null) {
-    decider.run({ kind: 'question.resolve', gateId: gate.id });
-    return;
-  }
-  retryTask(decider, gate.taskId, `You asked: ${gate.title}\nThe human answered: ${response ?? ''}`);
+function answerQuestion(decider: Decider, gate: Gate) {
+  decider.run({ kind: 'question.resolve', gateId: gate.id });
 }
 
 function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, response: string | null) {
@@ -186,7 +181,7 @@ export function answerGate(
   switch (gate.type) {
     case 'question':
     case 'secret':
-      answerQuestion(decider, gate, response);
+      answerQuestion(decider, gate);
       return;
     case 'failure':
     case 'sign_in':

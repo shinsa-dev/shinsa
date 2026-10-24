@@ -157,7 +157,7 @@ export function isScopeMatch(scope: ExtensionScope, place: ExtensionPlace) {
 export const OPTIMIZER_LIMITS = { minDays: 1, maxDays: 365, defaultDays: 14 } as const;
 
 export function createContextOptimizer(): ContextOptimizer {
-  return { enabled: false, days: OPTIMIZER_LIMITS.defaultDays, skills: false };
+  return { enabled: true, days: OPTIMIZER_LIMITS.defaultDays, skills: true };
 }
 
 export interface UsageFacts {

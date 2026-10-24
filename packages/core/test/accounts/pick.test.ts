@@ -21,7 +21,7 @@ function createUsage(windows: Partial<UsageWindow>[]): AccountUsage {
     windows: windows.map((window) => ({
       id: 'five_hour',
       kind: 'session',
-      label: 'Current session',
+      label: '5-hour limit',
       model: null,
       usedPercent: 0,
       resetsAt: NOW + 60_000,

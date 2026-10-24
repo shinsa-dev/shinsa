@@ -5,11 +5,11 @@ import {
   createHarness,
   createTask,
   failing,
+  PLAN,
   proposePlan,
   pullRequest,
   reachReviewGate,
   registerRepo,
-  SPEC,
 } from '../harness.ts';
 
 describe('stale and late commands', () => {
@@ -18,7 +18,7 @@ describe('stale and late commands', () => {
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);
     proposePlan(harness, taskId);
-    expect(() => harness.send({ type: 'agent.propose_plan', runId: planner.id, document: SPEC })).toThrow(
+    expect(() => harness.send({ type: 'agent.propose_plan', runId: planner.id, document: PLAN })).toThrow(
       'This step is already over'
     );
   });
@@ -194,7 +194,7 @@ describe('plan revisions', () => {
   test('the plan gate carries the version it shows', () => {
     const { harness, taskId } = approvingPlans();
     proposePlan(harness, taskId);
-    expect(harness.openGate(taskId)).toMatchObject({ kind: 'plan', planVersion: 1 });
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'plan', planVersion: 1 });
     expect(harness.task(taskId).plan?.changes).toBeUndefined();
   });
 
@@ -211,7 +211,7 @@ describe('plan revisions', () => {
     harness.send({
       type: 'agent.propose_plan',
       runId: harness.activeRun(taskId).id,
-      document: { ...SPEC, plan: [...SPEC.plan, { title: 'Add a test', detail: 'Cover the overflow.' }] },
+      document: { ...PLAN, phases: [...PLAN.phases, { title: 'Add a test', detail: 'Cover the overflow.' }] },
       changeSummary: '  Added a test phase, as asked.  ',
     });
     const task = harness.task(taskId);
@@ -235,7 +235,7 @@ describe('plan revisions', () => {
     harness.send({
       type: 'agent.propose_plan',
       runId: harness.activeRun(taskId).id,
-      document: { ...SPEC, goal: 'Something else.' },
+      document: { ...PLAN, goal: 'Something else.' },
       changeSummary: '   ',
     });
     expect(harness.task(taskId).plan).toMatchObject({ changeSummary: null, changes: [{ kind: 'goal' }] });
@@ -318,27 +318,27 @@ describe('the plan meets the verification rules', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);
-    expect(() => proposePlan(harness, taskId, { ...SPEC, verification: [] })).toThrow(
+    expect(() => proposePlan(harness, taskId, { ...PLAN, verification: [] })).toThrow(
       'This task changes code, so the plan needs a verification plan up front'
     );
     expect(harness.activeRun(taskId).id).toBe(planner.id);
     expect(harness.task(taskId).plan).toBeNull();
     proposePlan(harness, taskId);
-    expect(harness.task(taskId).plan?.document?.verification).toEqual(SPEC.verification);
+    expect(harness.task(taskId).plan?.document?.verification).toEqual(PLAN.verification);
   });
 
   test('a plan that asks for approval waits for you even with plan approval switched off', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    proposePlan(harness, taskId, { ...SPEC, approval: true });
+    proposePlan(harness, taskId, { ...PLAN, approval: true });
     expect(harness.task(taskId).stage).toBe('awaiting_plan');
-    expect(listOpenGates(harness.state, taskId)[0]?.kind).toBe('plan');
+    expect(listOpenGates(harness.state, taskId)[0]?.type).toBe('plan');
   });
 
   test('the last phase waits for the evidence the plan asks for, and only the last one', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    proposePlan(harness, taskId, { ...SPEC, evidence: ['screenshot', 'test'] });
+    proposePlan(harness, taskId, { ...PLAN, evidence: ['screenshot', 'test'] });
     const first = harness.activeRun(taskId);
     harness.send({
       type: 'agent.complete_phase',

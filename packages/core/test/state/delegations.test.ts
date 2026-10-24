@@ -107,8 +107,7 @@ describe('the tree of delegated runs', () => {
   });
 
   test('roles are named the way a person says them', () => {
-    expect(describeDelegateRole('shipper')).toBe('fixer');
-    expect(describeDelegateRole('triage')).toBe('classifier');
+    expect(describeDelegateRole('investigator')).toBe('investigator');
   });
 });
 
@@ -164,6 +163,9 @@ describe('projecting delegation events', () => {
       request: 'Do it.',
       repoId: null,
       priority: 'normal',
+      planFirst: false,
+      origin: null,
+      auto: { shape: true, start: true, priority: true },
       seq: 1,
       at: 0,
     });
@@ -174,6 +176,9 @@ describe('projecting delegation events', () => {
       request: 'Do it.',
       repoId: null,
       priority: 'normal',
+      planFirst: false,
+      origin: null,
+      auto: { shape: true, start: true, priority: true },
       createdBy: { kind: 'split', taskId: 't', runId: 'r', requestKey: 'plan:1' },
       parentTaskId: 't',
       seq: 2,

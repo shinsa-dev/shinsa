@@ -11,7 +11,7 @@ import {
   startWork,
 } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
-import { startInquiry, startOperation } from './shapes.ts';
+import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
 
 function dropCancelledDependencies(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
@@ -56,7 +56,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
         'fixer',
         `Continue the fix you were working on and finish with \`complete_fix\`.${hint}`,
         {
-          resumeFrom: decider.lastRun(taskId, ['fixer', 'builder', 'shipper']),
+          resumeFrom: decider.lastRun(taskId, ['fixer', 'builder']),
         }
       );
       return;
@@ -69,7 +69,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       recheckPullRequest(decider, taskId);
       return;
     case 'answering':
-      startInquiry(decider, taskId, 'answer', guidance);
+      restartAnswer(decider, task, guidance);
       return;
     case 'researching':
       startInquiry(decider, taskId, 'research', guidance);

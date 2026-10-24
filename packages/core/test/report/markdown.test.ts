@@ -2,12 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import {
   listRankedSpots,
   type PlanDocument,
-  serializeReportMarkdown,
   serializePlanMarkdown,
+  serializeReportMarkdown,
   type WorkReport,
 } from '../../src/index.ts';
 
-const SPEC: PlanDocument = {
+const PLAN: PlanDocument = {
   goal: 'Stop the tabs scrolling.',
   phases: [
     { title: 'Find it', detail: 'Trace the overflow.' },
@@ -26,7 +26,7 @@ const SPEC: PlanDocument = {
 
 describe('serializePlanMarkdown', () => {
   test('writes every section in reading order', () => {
-    expect(serializePlanMarkdown(SPEC)).toBe(
+    expect(serializePlanMarkdown(PLAN)).toBe(
       [
         '## Goal\nStop the tabs scrolling.',
         '## Plan\n1. **Find it**: Trace the overflow.\n2. **Fix it**: Clamp and verify.',
@@ -42,7 +42,7 @@ describe('serializePlanMarkdown', () => {
 
   test('writes the plan parameters: the evidence, the extra checks and the impact', () => {
     const markdown = serializePlanMarkdown({
-      ...SPEC,
+      ...PLAN,
       evidence: ['screenshot', 'test'],
       checks: ['bun test tabs'],
       operation: ['Backfill the widths.'],
@@ -55,8 +55,8 @@ describe('serializePlanMarkdown', () => {
 
   test('leaves out empty sections', () => {
     const bare = {
-      ...SPEC,
-      plan: [],
+      ...PLAN,
+      phases: [],
       behaviour: [],
       files: [],
       outOfScope: [],
@@ -71,7 +71,7 @@ describe('serializePlanMarkdown', () => {
 
 const REPORT: WorkReport = {
   headline: 'Clamp the tab width',
-  phases: [
+  sections: [
     {
       title: 'Find it',
       summary: 'Traced it.',
@@ -99,19 +99,21 @@ const REPORT: WorkReport = {
 };
 
 describe('serializeReportMarkdown', () => {
-  test('writes the headline, what changed, the checks and the decisions', () => {
+  test('writes the headline, what changed, the checks and the judgement calls', () => {
     expect(serializeReportMarkdown(REPORT)).toBe(
       [
         'Clamp the tab width',
         '### What changed\n- **Find it**: Traced it.\n- **Fix it**: Clamped it.',
         '### Checks\n- ✓ lint\n- ✗ test\n- – e2e',
-        '### Decisions\n- **No new prop** Not needed.',
+        '### Judgement calls\n- **No new prop** Not needed.',
       ].join('\n\n')
     );
   });
 
   test('a report with nothing else is just its headline', () => {
-    expect(serializeReportMarkdown({ headline: 'Done', phases: [], checks: [], judgementCalls: [] })).toBe('Done');
+    expect(serializeReportMarkdown({ headline: 'Done', sections: [], checks: [], judgementCalls: [] })).toBe(
+      'Done'
+    );
   });
 });
 
@@ -124,6 +126,6 @@ describe('listRankedSpots', () => {
       'e.ts',
       'a.ts',
     ]);
-    expect(listRankedSpots(REPORT)[0]).toMatchObject({ phaseIndex: 1, spotIndex: 1 });
+    expect(listRankedSpots(REPORT)[0]).toMatchObject({ sectionIndex: 1, spotIndex: 1 });
   });
 });
