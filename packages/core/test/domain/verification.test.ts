@@ -1,0 +1,89 @@
+import { describe, expect, test } from 'bun:test';
+import {
+  type Evidence,
+  listMissingEvidence,
+  listVerificationRules,
+  type PipelineStep,
+  SHAPE_PIPELINES,
+  type PlanDocument,
+  VERIFICATION_RULES,
+  validatePlanRules,
+  validateVerification,
+} from '../../src/index.ts';
+import { IMPACT, SPEC } from '../harness.ts';
+
+const AFTER_MERGE: PipelineStep[] = [...SHAPE_PIPELINES.change, 'operate'];
+
+const PLAN: PlanDocument = { ...SPEC, verification: [] };
+
+function evidence(kind: Evidence['kind']): Evidence {
+  return { id: kind, taskId: 't', runId: null, kind, title: kind, uri: `${kind}.png`, attachedAt: 0 };
+}
+
+describe('the verification rules', () => {
+  test('apply to work that changes code or runs an operation, never to an inquiry', () => {
+    for (const inquiry of [SHAPE_PIPELINES.answer, SHAPE_PIPELINES.research, SHAPE_PIPELINES.investigate]) {
+      expect(listVerificationRules(inquiry)).toEqual([]);
+      expect(validateVerification(inquiry)).toEqual([]);
+      expect(validatePlanRules(inquiry, PLAN)).toEqual([]);
+    }
+    const classes = (steps: readonly PipelineStep[]) => [
+      ...new Set(listVerificationRules(steps).map((rule) => rule.applies)),
+    ];
+    expect(classes(SHAPE_PIPELINES.fix)).toEqual(['code']);
+    expect(classes(AFTER_MERGE)).toEqual(['code', 'operation']);
+  });
+
+  test('every rule names its class, scope and check, and the scoped ones apply only in their scope', () => {
+    expect(new Set(VERIFICATION_RULES.map((rule) => rule.id)).size).toBe(VERIFICATION_RULES.length);
+    const ids = (steps: readonly PipelineStep[]) => listVerificationRules(steps).map((rule) => rule.id);
+    expect(ids(SHAPE_PIPELINES.operation)).not.toContain('operation.steps');
+    expect(ids(SHAPE_PIPELINES.operation)).not.toContain('operation.confirm_after_merge');
+    expect(ids(['plan', 'operate', ...SHAPE_PIPELINES.change.slice(1)])).toContain('operation.steps');
+    expect(ids(AFTER_MERGE)).toContain('operation.confirm_after_merge');
+  });
+
+  test('a code change needs its checks and an independent agent review, each named on its own', () => {
+    expect(
+      validateVerification(['plan', 'build', 'agent_review', 'your_review', 'pull_request', 'merge'])
+    ).toEqual([
+      "A code change is checked: put `checks` after `build`. Shinsa runs the repository's checks on every change; the plan's `checks` add to them.",
+    ]);
+    expect(validateVerification(['plan', 'build', 'checks', 'your_review', 'pull_request', 'merge'])).toEqual(
+      ['A code change gets an independent agent review: put `agent_review` after `checks`.']
+    );
+    expect(validateVerification(SHAPE_PIPELINES.change)).toEqual([]);
+    expect(validateVerification(SHAPE_PIPELINES.operation)).toEqual([]);
+  });
+
+  test('a plan for a change needs a verification plan, and one for an operation its impact', () => {
+    expect(validatePlanRules(SHAPE_PIPELINES.change, PLAN)).toEqual([
+      'This task changes code, so the plan needs a verification plan up front: list in `verification` how the change is proven (the tests, checks, runs or screenshots that show it works).',
+    ]);
+    expect(validatePlanRules(SHAPE_PIPELINES.change, SPEC)).toEqual([]);
+    expect(validatePlanRules(SHAPE_PIPELINES.operation, PLAN)).toEqual([
+      'This task runs an operation, so the plan needs `impact`: what the operation changes and how much, the result of a dry run (or why none is possible) and how to undo it.',
+    ]);
+    expect(validatePlanRules(SHAPE_PIPELINES.operation, { ...PLAN, impact: IMPACT })).toEqual([]);
+    expect(validatePlanRules(AFTER_MERGE, { ...SPEC, impact: IMPACT })).toEqual([
+      'This task also runs an operation: list its steps in `operation`, in order, each with how to check it worked. The phases in `plan` are the code change only.',
+    ]);
+  });
+
+  test('evidence and extra checks are parameters of a code change only', () => {
+    const asks = { ...SPEC, impact: IMPACT, evidence: ['screenshot' as const], checks: ['bun test x'] };
+    expect(validatePlanRules(SHAPE_PIPELINES.change, asks)).toEqual([]);
+    expect(validatePlanRules(SHAPE_PIPELINES.operation, asks)).toEqual([
+      '`evidence` and `checks` are for a code change, and this task changes no code: leave them out.',
+    ]);
+    expect(validatePlanRules(SHAPE_PIPELINES.operation, { ...asks, evidence: [] })).toHaveLength(1);
+  });
+
+  test('the evidence a plan asks for is missing until a piece of that kind is attached', () => {
+    const asks = { ...SPEC, evidence: ['screenshot' as const, 'test' as const] };
+    expect(listMissingEvidence(asks, [])).toEqual(['screenshot', 'test']);
+    expect(listMissingEvidence(asks, [evidence('screenshot'), evidence('note')])).toEqual(['test']);
+    expect(listMissingEvidence(SPEC, [])).toEqual([]);
+    expect(listMissingEvidence(null, [])).toEqual([]);
+  });
+});

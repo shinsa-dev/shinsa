@@ -1,7 +1,8 @@
-import type { Gate } from '../model/index.ts';
+import { describeList, lowerFirst } from '../chat/text.ts';
+import type { Gate } from '../domain/index.ts';
 import type { Queue } from '../queue/types.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { listTitles, lowerFirst, quote } from './text.ts';
+import { quote } from './text.ts';
 import type { Briefing } from './types.ts';
 
 function resolveTitle(state: ShinsaState, taskId: string) {
@@ -15,7 +16,7 @@ export function serializeBriefing(briefing: Briefing, state: ShinsaState) {
       : 'Nothing needs you right now.',
   ];
   if (briefing.next.length > 0) {
-    parts.push(`Then ${listTitles(briefing.next.map((item) => quote(resolveTitle(state, item.taskId))))}.`);
+    parts.push(`Then ${describeList(briefing.next.map((item) => quote(resolveTitle(state, item.taskId))))}.`);
   }
   parts.push(briefing.running);
   if (briefing.note) parts.push(briefing.note);

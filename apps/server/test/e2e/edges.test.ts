@@ -96,7 +96,9 @@ describe('the pull request loop', () => {
     const gate = await w.untilGate(taskId, 'question', 'failure');
     expect(gate.title).toBe('Could not open the pull request');
     const pushes = w.daemon.log.listEffectStatuses().filter((row) => row.kind === 'pull_request.open');
-    expect(pushes).toEqual([{ kind: 'pull_request.open', status: 'failed', attempts: 5 }]);
+    expect(pushes).toEqual([
+      expect.objectContaining({ kind: 'pull_request.open', status: 'failed', attempts: 5 }),
+    ]);
   });
 });
 
@@ -107,7 +109,7 @@ describe('waiting on another task', () => {
     w.dependOn = [parent];
     const child = await w.createTask('Build on it');
     await w.untilStage(child, 'queued');
-    expect(w.task(child).blockedBy).toEqual([parent]);
+    expect(w.task(child).waitsOn).toEqual([parent]);
     expect(w.task(child).worktreePath).toBeNull();
     expect(w.activeRuns(child)).toHaveLength(0);
 
@@ -155,14 +157,14 @@ describe('waiting on another task', () => {
   test('cancelling the parent pauses the waiting task until you decide', async () => {
     const w = await open();
     const parent = await w.createTask('Base work');
-    const child = await w.createTask('Build on it', { blockedBy: [parent] });
+    const child = await w.createTask('Build on it', { waitsOn: [parent] });
     await w.untilStage(child, 'queued');
     await w.engine.dispatch({ type: 'task.cancel', taskId: parent });
     const gate = await w.untilGate(child, 'question', 'failure');
     expect(gate.title).toBe('“Base work” was cancelled');
     await w.answer(gate, 'approve');
     await w.untilStage(child, 'awaiting_review');
-    expect(w.task(child).blockedBy).toEqual([]);
+    expect(w.task(child).waitsOn).toEqual([]);
   });
 
   test('a task that waits on two others starts after both finish, and a cancelled one pauses it', async () => {
@@ -170,17 +172,17 @@ describe('waiting on another task', () => {
     const first = await w.createTask('First base');
     const second = await w.createTask('Second base');
     const gone = await w.createTask('Dropped base');
-    const child = await w.createTask('Build on all of them', { blockedBy: [first, second, gone] });
+    const child = await w.createTask('Build on all of them', { waitsOn: [first, second, gone] });
     await w.untilStage(child, 'queued');
     await w.engine.dispatch({ type: 'task.cancel', taskId: gone });
     const gate = await w.untilGate(child, 'question', 'failure');
     expect(gate.title).toBe('“Dropped base” was cancelled');
     await w.answer(gate, 'approve');
-    await w.until('the cancelled task to be dropped', () => w.task(child).blockedBy.length === 2);
-    expect(w.task(child).blockedBy).toEqual([first, second]);
+    await w.until('the cancelled task to be dropped', () => w.task(child).waitsOn.length === 2);
+    expect(w.task(child).waitsOn).toEqual([first, second]);
 
     await w.engine.dispatch({ type: 'task.complete', taskId: first });
-    await Bun.sleep(150);
+    await w.engine.settle();
     expect(w.task(child).stage).toBe('queued');
     expect(w.activeRuns(child)).toHaveLength(0);
     await w.engine.dispatch({ type: 'task.complete', taskId: second });
@@ -260,7 +262,7 @@ describe('restarts', () => {
     const taskId = await w.createTask();
     const gate = await w.untilGate(taskId, 'question', 'agent_question');
     await w.restart();
-    await Bun.sleep(200);
+    await w.engine.settle();
     expect(w.agents.of('planner')).toHaveLength(1);
     expect(w.gates(taskId)).toHaveLength(1);
     await w.answer(gate, 'answer', 'Hello.');
@@ -309,26 +311,33 @@ describe('review fixes', () => {
 
   test('the next agent waits for the previous one to finish in the worktree', async () => {
     const w = await open();
-    let lateWrite = 0;
-    let secondStart = 0;
+    const order: string[] = [];
+    let taskId = '';
+    const isSecondWaiting = () => {
+      const second = Object.values(w.state.runs).find(
+        (run) => run.taskId === taskId && run.role === 'builder' && run.phaseIndex === 1
+      );
+      const key = `run.execute:${second?.id}`;
+      return w.daemon.log.listEffectStatuses().some((row) => row.key === key && row.status === 'running');
+    };
     w.agents.queue(
       'builder',
       async (agent) => {
         agent.write('a.txt', 'a\n');
         await agent.call('complete_phase', { summary: 'One.', spots: [], decisions: [] });
-        await Bun.sleep(300);
+        await w.until('the next builder to be waiting', isSecondWaiting);
         agent.write('late.txt', 'late\n');
-        lateWrite = Date.now();
+        order.push('first finished');
       },
       async (agent) => {
-        secondStart = Date.now();
+        order.push('second started');
         agent.write('b.txt', 'b\n');
         await agent.call('complete_phase', { summary: 'Two.', spots: [], decisions: [] });
       }
     );
-    const taskId = await w.createTask();
+    taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
-    expect(secondStart).toBeGreaterThanOrEqual(lateWrite);
+    expect(order).toEqual(['first finished', 'second started']);
   });
 
   test('files a reviewer changes are set aside, not committed', async () => {

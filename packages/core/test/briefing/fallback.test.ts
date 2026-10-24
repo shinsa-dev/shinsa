@@ -72,21 +72,11 @@ describe('resolveFallbackBriefing', () => {
     );
     expect(paused.next.map((item) => item.taskId)).toEqual(['t-docs', 't-dup']);
     expect(paused.note).toBeNull();
-    const held = resolveFallbackBriefing(
-      queueOf([entry(chat, 'review'), entry(docs, 'question', { purpose: 'failure' })], {
-        held: [entry(tools, 'review')],
-      }),
+    const pausedNext = resolveFallbackBriefing(
+      queueOf([entry(chat, 'review'), entry(docs, 'question', { purpose: 'failure' })]),
       NOW
     );
-    expect(held.note).toBeNull();
-  });
-
-  test('never mentions decisions outside the focus', () => {
-    const briefing = resolveFallbackBriefing(
-      queueOf([entry(chat, 'review')], { held: [entry(tools, 'review'), entry(docs, 'spec')] }),
-      NOW
-    );
-    expect(briefing.note).toBeNull();
+    expect(pausedNext.note).toBeNull();
   });
 });
 
@@ -113,10 +103,35 @@ describe('resolveFallbackBriefing notes', () => {
     expect(briefing.next[0]?.why).toBe('Clean and ready to merge');
   });
 
+  test('a setup that needs fixing reads as paused, not as a question, and is flagged as one', () => {
+    const setup = entry(task('t-setup', 'Set up'), 'question', {
+      purpose: 'configuration',
+      title: 'No checks to run',
+    });
+    const briefing = resolveFallbackBriefing(queueOf([setup]), NOW);
+    expect(briefing.now?.why).toBe('Paused: No checks to run');
+    const named = [
+      entry(chat, 'review'),
+      entry(dup, 'review'),
+      entry(docs, 'review'),
+      entry(tools, 'review'),
+    ];
+    const note = resolveFallbackBriefing(queueOf([...named, setup]), NOW).note;
+    expect(note).toBe('“Set up” is paused and needs a decision.');
+  });
+
   test('names one working task with what it is doing', () => {
     const briefing = resolveFallbackBriefing(queueOf([], { working: [tools] }), NOW);
     expect(briefing.running).toBe('An agent is building “Tool calls in chat”.');
     const other = resolveFallbackBriefing(queueOf([], { working: [{ ...tools, stage: 'fixing' }] }), NOW);
     expect(other.running).toBe('An agent is working on “Tool calls in chat”.');
+  });
+
+  test('a secret an agent asks for is named as a secret, not as an answer', () => {
+    const asking = entry(chat, 'question', { purpose: 'agent_question', title: 'GitHub webhook secret' });
+    const secret = { ...asking, gate: { ...asking.gate, secret: { label: 'GitHub webhook secret' } } };
+    expect(resolveFallbackBriefing(queueOf([secret]), NOW).now?.why).toBe(
+      'An agent needs a secret from you: GitHub webhook secret'
+    );
   });
 });

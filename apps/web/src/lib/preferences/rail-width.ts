@@ -2,19 +2,20 @@ import * as React from 'react';
 
 const STORAGE_KEY = 'shinsa.rail-width';
 
-export const RAIL_WIDTH = { min: 200, max: 420, initial: 240 } as const;
+const RAIL_WIDTH = { min: 200, max: 420, initial: 240 } as const;
 
-export function clampRailWidth(width: number) {
+function clampRailWidth(width: number) {
   return Math.min(RAIL_WIDTH.max, Math.max(RAIL_WIDTH.min, Math.round(width)));
 }
 
-export function readRailWidth() {
+function readRailWidth() {
   const stored = Number(localStorage.getItem(STORAGE_KEY));
   return Number.isFinite(stored) && stored > 0 ? clampRailWidth(stored) : RAIL_WIDTH.initial;
 }
 
 export function useRailWidth() {
   const [width, setWidth] = React.useState(readRailWidth);
+  const endDrag = React.useRef<(() => void) | null>(null);
 
   const startResize = (event: React.PointerEvent<HTMLElement>) => {
     event.preventDefault();
@@ -32,7 +33,10 @@ export function useRailWidth() {
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerup', onEnd);
       removeEventListener('pointercancel', onEnd);
+      endDrag.current = null;
     };
+    endDrag.current?.();
+    endDrag.current = onEnd;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     addEventListener('pointermove', onMove);
@@ -44,6 +48,8 @@ export function useRailWidth() {
     localStorage.removeItem(STORAGE_KEY);
     setWidth(RAIL_WIDTH.initial);
   };
+
+  React.useEffect(() => () => endDrag.current?.(), []);
 
   return { width, startResize, resetWidth };
 }

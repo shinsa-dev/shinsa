@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EVIDENCE_ROUTE, EvidenceStore } from '../../src/store/index.ts';
+import { EVIDENCE_ROUTE } from '../../src/store/evidence.ts';
+import { EvidenceStore } from '../../src/store/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 function nameOf(uri: string) {

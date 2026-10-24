@@ -1,8 +1,10 @@
-import { type ClientMessage, DomainError, type ServerMessage } from '@shinsa/core';
+import { type ClientMessage, DomainError, type ServerMessage, type UserCommand } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
+import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
+import type { MessageClassifier } from '../triage/message.ts';
 import { dispatchUserCommand } from './routes.ts';
 
 export interface SocketData {
@@ -15,20 +17,45 @@ function send(socket: Socket, message: ServerMessage) {
   socket.send(JSON.stringify(message));
 }
 
+const MAX_ID = 200;
+
+function isId(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_ID;
+}
+
 function parseClientMessage(raw: string | Buffer): ClientMessage | null {
+  let message: unknown;
   try {
-    const message = JSON.parse(String(raw)) as unknown;
-    if (!message || typeof message !== 'object' || typeof (message as { type?: unknown }).type !== 'string') {
-      return null;
-    }
-    return message as ClientMessage;
+    message = JSON.parse(String(raw));
   } catch {
     return null;
   }
+  if (!message || typeof message !== 'object') return null;
+  const fields = message as { type?: unknown; id?: unknown; runId?: unknown; command?: unknown };
+  if (fields.type === 'command' && isId(fields.id)) {
+    return { type: 'command', id: fields.id, command: fields.command as UserCommand };
+  }
+  if (
+    (fields.type === 'transcript.subscribe' || fields.type === 'transcript.unsubscribe') &&
+    isId(fields.runId)
+  ) {
+    return { type: fields.type, runId: fields.runId };
+  }
+  return null;
 }
 
-export function createSocketHub(engine: Engine, transcripts: Transcripts) {
+export function createSocketHub(
+  engine: Engine,
+  transcripts: Transcripts,
+  accounts?: Accounts,
+  classify: MessageClassifier | null = null
+) {
   const sockets = new Set<Socket>();
+
+  const unsubscribeAccounts = accounts?.subscribe((snapshot) => {
+    const payload = JSON.stringify({ type: 'accounts', accounts: snapshot } satisfies ServerMessage);
+    for (const socket of sockets) socket.send(payload);
+  });
 
   const unsubscribeState = engine.subscribe((state) => {
     const payload = JSON.stringify({ type: 'state', state } satisfies ServerMessage);
@@ -51,7 +78,7 @@ export function createSocketHub(engine: Engine, transcripts: Transcripts) {
     switch (message.type) {
       case 'command': {
         try {
-          await dispatchUserCommand(engine, message.command);
+          await dispatchUserCommand(engine, message.command, message.id, classify);
           send(socket, { type: 'ack', id: message.id, error: null });
         } catch (error) {
           const code = error instanceof DomainError ? error.code : 'command_failed';
@@ -81,6 +108,7 @@ export function createSocketHub(engine: Engine, transcripts: Transcripts) {
     open(socket: Socket) {
       sockets.add(socket);
       send(socket, { type: 'state', state: engine.state });
+      if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
     },
     close(socket: Socket) {
       sockets.delete(socket);
@@ -100,6 +128,7 @@ export function createSocketHub(engine: Engine, transcripts: Transcripts) {
     stop() {
       unsubscribeState();
       unsubscribeTranscripts();
+      unsubscribeAccounts?.();
     },
   };
 }

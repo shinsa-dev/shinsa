@@ -10,12 +10,21 @@ function markup(inner: string) {
 }
 
 describe('Icon', () => {
-  it('is decorative by default, at half strength', () => {
+  it('is decorative by default and draws in its text colour a step under the text', () => {
     const svg = render(<Icon name='IconBell' />).container.querySelector('svg') as SVGElement;
     expect(svg.getAttribute('aria-hidden')).toBe('true');
     expect(svg.getAttribute('role')).toBeNull();
-    expect(svg.getAttribute('class')).toContain('opacity-50');
+    expect(svg.classList.contains('opacity-(--icon-alpha)')).toBe(true);
+    expect(svg.innerHTML).toContain('currentColor');
     expect(svg.getAttribute('width')).toBe('24');
+  });
+
+  it('lets a reveal or a swap replace the icon alpha with its own opacity', () => {
+    const svg = render(<Icon name='IconBell' className='size-3 opacity-0' />).container.querySelector(
+      'svg'
+    ) as SVGElement;
+    expect(svg.classList.contains('opacity-0')).toBe(true);
+    expect(svg.classList.contains('opacity-(--icon-alpha)')).toBe(false);
   });
 
   it('becomes a named image with a label', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { inspectRepo, normalizeRemote, resolveRepoRoot } from '../../src/git/index.ts';
+import { inspectRepo, resolveRepoRoot } from '../../src/git/index.ts';
+import { normalizeRemote } from '../../src/git/repo.ts';
 import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
 
 describe('normalizeRemote', () => {

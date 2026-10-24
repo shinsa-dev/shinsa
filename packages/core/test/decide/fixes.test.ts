@@ -6,6 +6,7 @@ import {
   createHarness,
   createTask,
   failing,
+  type Harness,
   linkSession,
   PASSING,
   proposePlan,
@@ -229,5 +230,171 @@ describe('the automatic fix budget', () => {
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Renamed.' });
     harness.send({ type: 'checks.record', taskId, results: failing() });
     expect(harness.activeRun(taskId).role).toBe('fixer');
+  });
+});
+
+describe('review rounds that escalate to you', () => {
+  const blocking = (message = 'Off by one.') => [
+    { severity: 'blocking' as const, file: 'src/a.ts', line: 3, message },
+  ];
+
+  function review(harness: Harness, taskId: string, findings = blocking()) {
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings });
+  }
+
+  function fix(harness: Harness, taskId: string, treeHash: string | null = null) {
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Fixed.',
+      ...(treeHash ? { treeHash } : {}),
+    });
+  }
+
+  test('the third request for changes goes to you as a review, not a failure', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    review(harness, taskId, blocking('First.'));
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking('Second.'));
+    fix(harness, taskId, 'tree-2');
+    review(harness, taskId, blocking('Third.'));
+    const gate = harness.openGate(taskId);
+    expect(gate).toMatchObject({
+      kind: 'review',
+      purpose: 'decision',
+      escalation: { reason: 'rounds', rounds: 2 },
+    });
+    expect(harness.task(taskId).stage).toBe('awaiting_review');
+    expect(harness.task(taskId).stageReason).toBe('the agents could not settle the review');
+    expect(
+      harness.task(taskId).activity.some((entry) => entry.text.startsWith('Sent the review to you'))
+    ).toBe(true);
+  });
+
+  test('a fix that changed no code sends the review to you at once', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    for (let phase = 0; phase < 2; phase += 1) {
+      harness.send({
+        type: 'agent.complete_phase',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        spots: [],
+        judgementCalls: [],
+        treeHash: 'tree-0',
+      });
+    }
+    review(harness, taskId);
+    fix(harness, taskId, 'tree-0');
+    review(harness, taskId, blocking('Still off.'));
+    expect(harness.openGate(taskId).escalation).toMatchObject({ reason: 'stalled', rounds: 1 });
+  });
+
+  test('when the fix rounds run out during review, you decide', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { maxFixRounds: 1 } });
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    review(harness, taskId);
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking('Still off.'));
+    expect(harness.openGate(taskId).escalation?.reason).toBe('exhausted');
+  });
+
+  test('your decision resets the count', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    review(harness, taskId, blocking('First.'));
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking('Second.'));
+    fix(harness, taskId, 'tree-2');
+    review(harness, taskId, blocking('Third.'));
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'Do the first one only.',
+    });
+    expect(harness.task(taskId).fixFingerprints).toEqual([]);
+    fix(harness, taskId, 'tree-3');
+    review(harness, taskId, blocking('Fourth.'));
+    expect(harness.activeRun(taskId).role).toBe('fixer');
+  });
+
+  test('a finding you dismissed does not block when the reviewer raises it again', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    review(harness, taskId, blocking('First.'));
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking('Second.'));
+    fix(harness, taskId, 'tree-2');
+    review(harness, taskId, blocking('Third.'));
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: null,
+      verdicts: [{ index: 0, verdict: 'dismiss', note: 'Intended.' }],
+    });
+    fix(harness, taskId, 'tree-3');
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    expect(harness.activeRun(taskId).prompt).toContain('The human dismissed these findings');
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      findings: blocking('Third.'),
+    });
+    expect(harness.openGate(taskId)).toMatchObject({ kind: 'review' });
+    expect(harness.openGate(taskId).escalation).toBeUndefined();
+  });
+});
+
+describe('fix fingerprints', () => {
+  test('a round that changed no code counts as a repeat even when the failure differs', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: failing('a') });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'x',
+      treeHash: 't1',
+    });
+    harness.send({ type: 'checks.record', taskId, results: failing('b') });
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Same.' });
+    harness.send({ type: 'checks.record', taskId, results: failing('c') });
+    expect(harness.task(taskId).stalledFixes).toBe(1);
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Same again.' });
+    harness.send({ type: 'checks.record', taskId, results: failing('d') });
+    expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
+  });
+
+  test('a round that changed the code and moved the failure keeps going', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    for (const [round, check] of ['a', 'b', 'c', 'd'].entries()) {
+      harness.send({ type: 'checks.record', taskId, results: failing(check) });
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'x',
+        treeHash: `t${round}`,
+      });
+    }
+    expect(harness.task(taskId).fixRounds).toBe(4);
+    expect(harness.task(taskId).fixFingerprints?.map((fingerprint) => fingerprint.signature)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
   });
 });

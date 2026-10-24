@@ -27,8 +27,6 @@ const badgeVariants = cva(
       size: {
         sm: 'h-4.5 rounded-full px-1.5 text-2xs [&>svg]:size-3!',
         default: 'h-5 rounded-full px-2 text-2xs [&>svg]:size-3!',
-        mark: 'h-5 rounded-full px-2 text-2xs [&>svg]:size-3.5!',
-        'mark-sm': 'h-4.5 rounded-full px-1.5 text-2xs [&>svg]:size-3!',
       },
     },
     defaultVariants: {
@@ -43,8 +41,6 @@ const badgeVariants = cva(
 const ICON_PADDING = {
   sm: { 'inline-start': 'pl-1', 'inline-end': 'pr-1' },
   default: { 'inline-start': 'pl-1.5', 'inline-end': 'pr-1.5' },
-  mark: { 'inline-start': 'pl-1.5', 'inline-end': 'pr-1.5' },
-  'mark-sm': { 'inline-start': 'pl-1', 'inline-end': 'pr-1' },
 } as const;
 
 function Badge({

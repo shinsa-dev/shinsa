@@ -4,13 +4,11 @@ import { join } from 'node:path';
 import {
   commitWorktree,
   createWorktree,
-  prepareWorktree,
   refreshWorktree,
   removeWorktree,
-  resolveFreeBranch,
-  resolveStartPoint,
   resolveTaskDiff,
 } from '../../src/git/index.ts';
+import { prepareWorktree, resolveFreeBranch, resolveStartPoint } from '../../src/git/worktree.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 
 describe('worktrees', () => {
@@ -40,6 +38,29 @@ describe('worktrees', () => {
     await removeWorktree(repo, worktree.path);
     expect(await git(path, 'worktree', 'list')).not.toContain(worktree.path);
     await removeWorktree(repo, worktree.path);
+  });
+
+  test('creating the same task’s worktree again, after a crash, reuses it instead of making a second', async () => {
+    const { repo, path } = await createGitRepo({ remote: false });
+    const worktrees = createTempDir();
+    const first = await createWorktree(repo, worktrees, 'task-abcdef', 'fix/value', null);
+    writeFileSync(join(first.path, 'work.txt'), 'kept\n');
+    expect(await createWorktree(repo, worktrees, 'task-abcdef', 'fix/value', null)).toEqual(first);
+    expect(existsSync(join(first.path, 'work.txt'))).toBe(true);
+    expect(await git(path, 'branch', '--format=%(refname:short)')).toBe('fix/value\nmain');
+  });
+
+  test('a half-made worktree folder left by a crash is cleared and made again', async () => {
+    const { repo, path } = await createGitRepo({ remote: false });
+    const worktrees = createTempDir();
+    const first = await createWorktree(repo, worktrees, 'task-abcdef', 'fix/value', null);
+    await removeWorktree(repo, first.path);
+    await git(path, 'branch', '-D', 'fix/value');
+    writeFiles(first.path, { 'partial.txt': '' });
+    const again = await createWorktree(repo, worktrees, 'task-abcdef', 'fix/value', null);
+    expect(again).toEqual(first);
+    expect(existsSync(join(again.path, 'partial.txt'))).toBe(false);
+    expect(existsSync(join(again.path, 'README.md'))).toBe(true);
   });
 
   test('a branch name taken on origin is not reused', async () => {
@@ -78,10 +99,10 @@ describe('worktrees', () => {
 
   test('a default branch that looks like an option is refused before git sees it', async () => {
     const { repo } = await createGitRepo({ remote: false });
-    expect(
+    await expect(
       resolveStartPoint({ ...repo, defaultBranch: '--upload-pack=touch /tmp/pwned' }, null)
     ).rejects.toThrow('is not a branch name');
-    expect(createWorktree(repo, createTempDir(), 'task-x', '-b', null)).rejects.toThrow(
+    await expect(createWorktree(repo, createTempDir(), 'task-x', '-b', null)).rejects.toThrow(
       'is not a branch name'
     );
   });

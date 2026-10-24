@@ -1,4 +1,16 @@
-import type { ChecksState, PullRequest, Repo, Settings, Task } from '@shinsa/core';
+import {
+  type CiState,
+  MERGE_METHODS,
+  type MergeQueueEntry,
+  type MergeQueueState,
+  type PullRequest,
+  type CiRun,
+  type PullRequestCheckStatus,
+  type PullRequestRemark,
+  type Repo,
+  type Settings,
+  type Task,
+} from '@shinsa/core';
 import { assertRefName } from '../git/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 
@@ -16,7 +28,73 @@ interface PullRequestView {
   reviewDecision: string | null;
   baseRefName: string;
   headRefOid?: string;
+  mergeCommit?: { oid: string } | null;
   statusCheckRollup: CheckEntry[] | null;
+}
+
+interface Login {
+  login: string;
+}
+
+interface CommentNode {
+  id: string;
+  author: Login | null;
+  createdAt: string;
+  lastEditedAt: string | null;
+  body: string;
+  url: string | null;
+}
+
+interface ReviewNode {
+  id: string;
+  author: Login | null;
+  submittedAt: string | null;
+  lastEditedAt: string | null;
+  state: string;
+  body: string;
+  url: string | null;
+}
+
+interface ThreadNode {
+  id: string;
+  isResolved: boolean;
+  isOutdated: boolean;
+  path: string | null;
+  comments: { totalCount: number; nodes: CommentNode[] };
+}
+
+interface ContextNode {
+  __typename: string;
+  name?: string;
+  context?: string;
+  status?: string;
+  conclusion?: string | null;
+  state?: string;
+  detailsUrl?: string | null;
+  targetUrl?: string | null;
+  isRequired?: boolean;
+}
+
+export interface PullRequestDetails {
+  viewer: Login | null;
+  repository: {
+    pullRequest: {
+      author: Login | null;
+      mergeQueueEntry: { state: string; position: number | null } | null;
+      autoMergeRequest: { enabledAt: string } | null;
+      commits: { nodes: { commit: { statusCheckRollup: { contexts: { nodes: ContextNode[] } } | null } }[] };
+      comments: { totalCount: number; nodes: CommentNode[] };
+      reviews: { totalCount: number; nodes: ReviewNode[] };
+      reviewThreads: { totalCount: number; nodes: ThreadNode[] };
+      timelineItems: { nodes: { reason?: string | null }[] };
+    };
+  };
+}
+
+export interface PullRequestRead {
+  pullRequest: PullRequest;
+  remarks: PullRequestRemark[] | null;
+  viewer: string | null;
 }
 
 export const GITHUB_TIMEOUT_MS = 60_000;
@@ -25,23 +103,52 @@ const FAILED = new Set(['FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_RE
 
 const PENDING = new Set(['PENDING', 'QUEUED', 'IN_PROGRESS', 'WAITING', 'REQUESTED', 'EXPECTED']);
 
-const MERGE_METHODS = new Set<Settings['mergeMethod']>(['squash', 'merge', 'rebase']);
+const CHECK_STATUS: Record<string, PullRequestCheckStatus> = {
+  SUCCESS: 'success',
+  FAILURE: 'failure',
+  ERROR: 'failure',
+  TIMED_OUT: 'failure',
+  STARTUP_FAILURE: 'failure',
+  CANCELLED: 'cancelled',
+  ACTION_REQUIRED: 'action_required',
+  SKIPPED: 'skipped',
+  NEUTRAL: 'neutral',
+  STALE: 'neutral',
+};
 
-const UNRESOLVED_THREADS_QUERY =
-  'query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100){nodes{isResolved isOutdated}}}}}';
+const QUEUE_STATES = new Set<MergeQueueState>([
+  'queued',
+  'awaiting_checks',
+  'mergeable',
+  'unmergeable',
+  'locked',
+]);
+
+const MEANINGFUL_REVIEWS = new Set(['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED']);
+
+const COMMENT_FIELDS = 'totalCount nodes{id author{login} createdAt lastEditedAt body url}';
+
+const DETAILS_QUERY = `query($owner:String!,$name:String!,$number:Int!){viewer{login} repository(owner:$owner,name:$name){pullRequest(number:$number){author{login} mergeQueueEntry{state position} autoMergeRequest{enabledAt} commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){nodes{__typename ... on CheckRun{name status conclusion detailsUrl isRequired(pullRequestNumber:$number)} ... on StatusContext{context state targetUrl isRequired(pullRequestNumber:$number)}}}}}}} comments(last:100){${COMMENT_FIELDS}} reviews(last:100){totalCount nodes{id author{login} submittedAt lastEditedAt state body url}} reviewThreads(first:100){totalCount nodes{id isResolved isOutdated path comments(last:50){${COMMENT_FIELDS}}}} timelineItems(last:1,itemTypes:[REMOVED_FROM_MERGE_QUEUE_EVENT]){nodes{... on RemovedFromMergeQueueEvent{reason}}}}}}`;
 
 const PULL_REQUEST_FIELDS =
-  'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,statusCheckRollup';
+  'number,url,state,mergeable,reviewDecision,baseRefName,headRefOid,mergeCommit,statusCheckRollup';
 
-function runGh(args: string[], cwd: string, input?: string) {
-  return runCommand(['gh', ...args], cwd, { input, timeoutMs: GITHUB_TIMEOUT_MS });
+const NO_PULL_REQUEST = /no pull requests found/i;
+
+interface GhOptions {
+  input?: string;
+  signal?: AbortSignal;
 }
 
-function runGhOrThrow(args: string[], cwd: string, input?: string) {
-  return runCommandOrThrow(['gh', ...args], cwd, { input, timeoutMs: GITHUB_TIMEOUT_MS });
+function runGh(args: string[], cwd: string, options: GhOptions = {}) {
+  return runCommand(['gh', ...args], cwd, { ...options, timeoutMs: GITHUB_TIMEOUT_MS });
 }
 
-export function resolveChecks(entries: CheckEntry[] | null): ChecksState {
+function runGhOrThrow(args: string[], cwd: string, options: GhOptions = {}) {
+  return runCommandOrThrow(['gh', ...args], cwd, { ...options, timeoutMs: GITHUB_TIMEOUT_MS });
+}
+
+export function resolveChecks(entries: CheckEntry[] | null): CiState {
   if (!entries || entries.length === 0) return 'none';
   const outcomes = entries.map((entry) => entry.conclusion || entry.state || entry.status || '');
   if (outcomes.some((outcome) => FAILED.has(outcome))) return 'failing';
@@ -50,21 +157,153 @@ export function resolveChecks(entries: CheckEntry[] | null): ChecksState {
   return 'passing';
 }
 
+function resolveCheckStatus(node: ContextNode): PullRequestCheckStatus {
+  if (node.__typename === 'CheckRun') {
+    if (node.status !== 'COMPLETED') return 'pending';
+    return CHECK_STATUS[node.conclusion ?? ''] ?? 'neutral';
+  }
+  return CHECK_STATUS[node.state ?? ''] ?? 'pending';
+}
+
+export function resolveCheckRuns(nodes: ContextNode[]): CiRun[] {
+  return nodes.map((node) => ({
+    name: node.name ?? node.context ?? 'check',
+    status: resolveCheckStatus(node),
+    required: node.isRequired ?? null,
+    url: node.detailsUrl ?? node.targetUrl ?? null,
+  }));
+}
+
+export function resolveCheckRunsState(checks: CiRun[]): CiState {
+  if (checks.length === 0) return 'none';
+  if (checks.some((check) => ['failure', 'cancelled', 'action_required'].includes(check.status)))
+    return 'failing';
+  const required = checks.filter((check) => check.required === true);
+  const gate = required.length > 0 ? required : checks;
+  return gate.some((check) => check.status === 'pending') ? 'pending' : 'passing';
+}
+
 export function resolveRepoSlug(repo: Repo) {
   const [owner, name] = repo.remote?.split('/').slice(-2) ?? [];
   if (!owner || !name) return null;
   return { owner, name };
 }
 
-async function countUnresolvedThreads(repo: Repo, number: number) {
+function serializeComment(node: CommentNode, path: string | null): PullRequestRemark {
+  return {
+    id: node.id,
+    author: node.author?.login ?? null,
+    createdAt: node.createdAt,
+    editedAt: node.lastEditedAt,
+    body: node.body,
+    path,
+    url: node.url,
+    reviewState: null,
+  };
+}
+
+function listReviewRemarks(reviews: ReviewNode[]): PullRequestRemark[] {
+  return reviews.flatMap((review) => {
+    if (!review.submittedAt || (!review.body.trim() && !MEANINGFUL_REVIEWS.has(review.state))) return [];
+    return [
+      {
+        id: review.id,
+        author: review.author?.login ?? null,
+        createdAt: review.submittedAt,
+        editedAt: review.lastEditedAt,
+        body: review.body,
+        path: null,
+        url: review.url,
+        reviewState: review.state.toLowerCase().replaceAll('_', ' '),
+      },
+    ];
+  });
+}
+
+function isCompleteRead(pull: PullRequestDetails['repository']['pullRequest']) {
+  return (
+    pull.comments.totalCount <= pull.comments.nodes.length &&
+    pull.reviews.totalCount <= pull.reviews.nodes.length &&
+    pull.reviewThreads.totalCount <= pull.reviewThreads.nodes.length &&
+    pull.reviewThreads.nodes.every((thread) => thread.comments.totalCount <= thread.comments.nodes.length)
+  );
+}
+
+export function resolveRemarks(details: PullRequestDetails): PullRequestRemark[] | null {
+  const pull = details.repository.pullRequest;
+  if (!isCompleteRead(pull)) return null;
+  const remarks = [
+    ...pull.comments.nodes.map((node) => serializeComment(node, null)),
+    ...listReviewRemarks(pull.reviews.nodes),
+    ...pull.reviewThreads.nodes.flatMap((thread) =>
+      thread.comments.nodes.map((node) => serializeComment(node, thread.path))
+    ),
+  ];
+  return remarks.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+function resolveMergeQueue(pull: PullRequestDetails['repository']['pullRequest']): MergeQueueEntry | null {
+  const entry = pull.mergeQueueEntry;
+  const state = entry?.state.toLowerCase() as MergeQueueState | undefined;
+  if (entry && state && QUEUE_STATES.has(state)) return { state, position: entry.position };
+  if (pull.autoMergeRequest) return { state: 'auto_merge', position: null };
+  return null;
+}
+
+function resolveQueueRemoval(pull: PullRequestDetails['repository']['pullRequest']) {
+  const reason = pull.timelineItems.nodes.at(-1)?.reason?.trim();
+  if (!reason) return null;
+  return /^[A-Z_]+$/.test(reason) ? reason.toLowerCase().replaceAll('_', ' ') : reason;
+}
+
+export function serializePullRequest(
+  view: PullRequestView,
+  details: PullRequestDetails | null,
+  now: number
+): PullRequest {
+  const pull = details?.repository.pullRequest ?? null;
+  const threads = (pull?.reviewThreads.nodes ?? []).filter(
+    (thread) => !thread.isResolved && !thread.isOutdated
+  );
+  const unresolved = threads.length;
+  const contexts = pull?.commits.nodes.at(-1)?.commit.statusCheckRollup?.contexts.nodes ?? null;
+  const checkRuns = contexts ? resolveCheckRuns(contexts) : null;
+  return {
+    number: view.number,
+    url: view.url,
+    base: view.baseRefName,
+    state: view.state === 'MERGED' ? 'merged' : view.state === 'CLOSED' ? 'closed' : 'open',
+    checks: checkRuns ? resolveCheckRunsState(checkRuns) : resolveChecks(view.statusCheckRollup),
+    unresolvedComments:
+      unresolved + (view.reviewDecision === 'CHANGES_REQUESTED' && unresolved === 0 ? 1 : 0),
+    mergeable: view.mergeable === 'MERGEABLE' ? true : view.mergeable === 'CONFLICTING' ? false : null,
+    headSha: view.headRefOid ?? null,
+    mergeCommit: view.mergeCommit?.oid ?? null,
+    updatedAt: now,
+    ...(checkRuns ? { checkRuns } : {}),
+    ...(pull
+      ? {
+          unresolvedThreads: threads.map((thread) => thread.id),
+          mergeQueue: resolveMergeQueue(pull),
+          queueRemoval: resolveQueueRemoval(pull),
+        }
+      : {}),
+  };
+}
+
+async function readDetails(
+  repo: Repo,
+  number: number,
+  signal?: AbortSignal
+): Promise<PullRequestDetails | null> {
   const slug = resolveRepoSlug(repo);
-  if (!slug) return 0;
-  const result = await runGh(
+  if (!slug) return null;
+  const output = await runGhOrThrow(
     [
       'api',
       'graphql',
       '-f',
-      `query=${UNRESOLVED_THREADS_QUERY}`,
+      `query=${DETAILS_QUERY}`,
       '-f',
       `owner=${slug.owner}`,
       '-f',
@@ -72,36 +311,46 @@ async function countUnresolvedThreads(repo: Repo, number: number) {
       '-F',
       `number=${number}`,
       '--jq',
-      '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false and .isOutdated == false)] | length',
+      '.data',
     ],
-    repo.path
+    repo.path,
+    { signal }
   );
-  return result.ok ? Number(result.stdout) || 0 : 0;
+  return JSON.parse(output) as PullRequestDetails;
 }
 
-export function serializePullRequest(view: PullRequestView, unresolved: number, now: number): PullRequest {
+async function readView(repo: Repo, target: string, signal?: AbortSignal): Promise<PullRequestView | null> {
+  const result = await runGh(
+    ['pr', 'view', assertRefName(target), '--json', PULL_REQUEST_FIELDS],
+    repo.path,
+    {
+      signal,
+    }
+  );
+  if (!result.ok && NO_PULL_REQUEST.test(result.stderr)) return null;
+  if (!result.ok) throw new Error(`gh pr view failed: ${result.stderr || `exit ${result.code}`}`);
+  return JSON.parse(result.stdout) as PullRequestView;
+}
+
+async function readTarget(repo: Repo, target: string, signal?: AbortSignal): Promise<PullRequestRead | null> {
+  const view = await readView(repo, target, signal);
+  if (!view) return null;
+  const details = await readDetails(repo, view.number, signal);
   return {
-    number: view.number,
-    url: view.url,
-    base: view.baseRefName,
-    state: view.state === 'MERGED' ? 'merged' : view.state === 'CLOSED' ? 'closed' : 'open',
-    checks: resolveChecks(view.statusCheckRollup),
-    unresolvedComments:
-      unresolved + (view.reviewDecision === 'CHANGES_REQUESTED' && unresolved === 0 ? 1 : 0),
-    mergeable: view.mergeable === 'MERGEABLE' ? true : view.mergeable === 'CONFLICTING' ? false : null,
-    headSha: view.headRefOid ?? null,
-    updatedAt: now,
+    pullRequest: serializePullRequest(view, details, Date.now()),
+    remarks: details ? resolveRemarks(details) : null,
+    viewer: details?.viewer?.login ?? details?.repository.pullRequest.author?.login ?? null,
   };
 }
 
-export async function selectPullRequest(repo: Repo, task: Task): Promise<PullRequest | null> {
+export function readPullRequest(repo: Repo, task: Task, signal?: AbortSignal) {
   const target = task.pullRequest ? String(task.pullRequest.number) : task.branch;
-  if (!target) return null;
-  const result = await runGh(['pr', 'view', assertRefName(target), '--json', PULL_REQUEST_FIELDS], repo.path);
-  if (!result.ok) return null;
-  const view = JSON.parse(result.stdout) as PullRequestView;
-  const unresolved = await countUnresolvedThreads(repo, view.number);
-  return serializePullRequest(view, unresolved, Date.now());
+  if (!target) return Promise.resolve(null);
+  return readTarget(repo, target, signal);
+}
+
+export function readStackedPullRequest(repo: Repo, number: number, signal?: AbortSignal) {
+  return readTarget(repo, String(number), signal);
 }
 
 export function serializePullRequestBody(task: Task) {
@@ -113,11 +362,17 @@ export function serializePullRequestBody(task: Task) {
     .trim();
 }
 
-export async function createPullRequest(repo: Repo, task: Task, baseBranch: string | null) {
+export async function createPullRequest(
+  repo: Repo,
+  task: Task,
+  baseBranch: string | null,
+  signal?: AbortSignal
+) {
   if (!task.branch || !task.worktreePath)
     throw new Error('The task has no branch to open a pull request from.');
-  const existing = await selectPullRequest(repo, task);
-  if (existing?.state === 'open') return existing;
+  const existing = await readPullRequest(repo, task, signal);
+  if (existing?.pullRequest.state === 'open') return existing;
+  signal?.throwIfAborted();
   await runGhOrThrow(
     [
       'pr',
@@ -132,16 +387,21 @@ export async function createPullRequest(repo: Repo, task: Task, baseBranch: stri
       '-',
     ],
     task.worktreePath,
-    serializePullRequestBody(task)
+    { input: serializePullRequestBody(task), signal }
   );
-  return selectPullRequest(repo, task);
+  return readPullRequest(repo, task, signal);
 }
 
-export async function retargetPullRequest(repo: Repo, number: number, base: string) {
-  await runGhOrThrow(['pr', 'edit', String(number), '--base', assertRefName(base)], repo.path);
+export async function retargetPullRequest(repo: Repo, number: number, base: string, signal?: AbortSignal) {
+  await runGhOrThrow(['pr', 'edit', String(number), '--base', assertRefName(base)], repo.path, { signal });
 }
 
-export async function mergePullRequest(repo: Repo, number: number, method: Settings['mergeMethod']) {
+export async function mergePullRequest(
+  repo: Repo,
+  number: number,
+  method: Settings['mergeMethod'],
+  signal?: AbortSignal
+) {
   if (!MERGE_METHODS.has(method)) throw new Error(`"${method}" is not a merge method.`);
-  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`], repo.path);
+  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`], repo.path, { signal });
 }

@@ -1,8 +1,20 @@
-import { appendFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from 'node:fs';
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  type FSWatcher,
+  openSync,
+  watchFile as pollFile,
+  readFileSync,
+  readSync,
+  statSync,
+  unwatchFile,
+  watch,
+} from 'node:fs';
 import { join } from 'node:path';
 import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent, isChatEntry } from '@shinsa/core';
 import { describeError, log } from '../../log/index.ts';
-import { type LegacyTranscriptEntry, migrateLegacyEntries } from '../claude/import.ts';
+import { type LegacyTranscriptEntry, migrateLegacyEntries } from './legacy.ts';
 
 type TranscriptListener = (runId: string, entries: ChatEntry[]) => void;
 
@@ -10,19 +22,40 @@ interface Follower {
   count: number;
   offset: number;
   watcher: FSWatcher | null;
+  poll: (() => void) | null;
 }
 
-function parseLines(text: string): unknown[] {
-  return text
-    .split('\n')
-    .filter((line) => line.trim().length > 0)
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line) as unknown];
-      } catch {
-        return [];
-      }
-    });
+const POLL_MS = 1_000;
+
+export const UNREADABLE_LINE = 'Shinsa could not read one line of this transcript.';
+
+function createUnreadableEntry(id: string): ChatEntry {
+  return { v: CHAT_PROTOCOL_VERSION, id, at: 0, type: 'error', text: UNREADABLE_LINE };
+}
+
+function parseLines(text: string, offset = 0): unknown[] {
+  return text.split('\n').flatMap((line, index) => {
+    if (line.trim().length === 0) return [];
+    try {
+      return [JSON.parse(line) as unknown];
+    } catch {
+      return [createUnreadableEntry(`unreadable-${offset}-${index}`)];
+    }
+  });
+}
+
+function endsMidLine(path: string) {
+  if (!existsSync(path)) return false;
+  const size = statSync(path).size;
+  if (size === 0) return false;
+  const last = Buffer.alloc(1);
+  const handle = openSync(path, 'r');
+  try {
+    readSync(handle, last, 0, 1, size - 1);
+  } finally {
+    closeSync(handle);
+  }
+  return last[0] !== 0x0a;
 }
 
 export function readChatEntries(lines: unknown[]): ChatEntry[] {
@@ -43,7 +76,7 @@ export function readChatEntries(lines: unknown[]): ChatEntry[] {
   return entries;
 }
 
-export type FileWatcher = (path: string, onChange: () => void) => FSWatcher;
+type FileWatcher = (path: string, onChange: () => void) => FSWatcher;
 
 function watchFile(path: string, onChange: () => void) {
   return watch(path, onChange);
@@ -54,14 +87,21 @@ export class Transcripts {
   readonly #watch: FileWatcher;
   readonly #listeners = new Set<TranscriptListener>();
   readonly #followers = new Map<string, Follower>();
+  readonly #checked = new Set<string>();
+  readonly #pollMs: number;
 
-  constructor(dir: string, watchChanges: FileWatcher = watchFile) {
+  constructor(dir: string, watchChanges: FileWatcher = watchFile, pollMs = POLL_MS) {
     this.#dir = dir;
     this.#watch = watchChanges;
+    this.#pollMs = pollMs;
   }
 
   #pathOf(runId: string) {
     return join(this.#dir, `${runId.replace(/[^a-zA-Z0-9-]/g, '')}.jsonl`);
+  }
+
+  resolvePath(runId: string) {
+    return this.#pathOf(runId);
   }
 
   #emit(runId: string, entries: ChatEntry[]) {
@@ -77,8 +117,11 @@ export class Transcripts {
 
   record(runId: string, event: ChatEvent) {
     const entry = { ...event, v: CHAT_PROTOCOL_VERSION, id: Bun.randomUUIDv7(), at: Date.now() } as ChatEntry;
-    const line = `${JSON.stringify(entry)}\n`;
-    appendFileSync(this.#pathOf(runId), line);
+    const path = this.#pathOf(runId);
+    const torn = !this.#checked.has(runId) && endsMidLine(path);
+    this.#checked.add(runId);
+    const line = `${torn ? '\n' : ''}${JSON.stringify(entry)}\n`;
+    appendFileSync(path, line);
     const follower = this.#followers.get(runId);
     if (follower) follower.offset += Buffer.byteLength(line);
     this.#emit(runId, [entry]);
@@ -97,12 +140,18 @@ export class Transcripts {
       count: 1,
       offset: existsSync(path) ? statSync(path).size : 0,
       watcher: null,
+      poll: null,
     };
     this.#followers.set(runId, follower);
     if (!existsSync(path)) return;
+    follower.poll = () => this.#readAppended(runId, follower);
+    pollFile(path, { interval: this.#pollMs }, follower.poll);
     follower.watcher = this.#watch(path, () => this.#readAppended(runId, follower));
     follower.watcher.on('error', (error) => {
-      log.warn('[Transcripts] Stopped following a transcript', { runId, error: describeError(error) });
+      log.warn('[Transcripts] Watching a transcript failed; the check every second carries on', {
+        runId,
+        error: describeError(error),
+      });
       follower.watcher?.close();
       follower.watcher = null;
     });
@@ -119,8 +168,9 @@ export class Transcripts {
     const appended = readFileSync(path).subarray(follower.offset, size);
     const complete = appended.lastIndexOf(0x0a) + 1;
     if (complete === 0) return;
+    const start = follower.offset;
     follower.offset += complete;
-    this.#emit(runId, readChatEntries(parseLines(appended.subarray(0, complete).toString('utf8'))));
+    this.#emit(runId, readChatEntries(parseLines(appended.subarray(0, complete).toString('utf8'), start)));
   }
 
   #unfollow(runId: string) {
@@ -129,6 +179,7 @@ export class Transcripts {
     follower.count -= 1;
     if (follower.count > 0) return;
     follower.watcher?.close();
+    if (follower.poll) unwatchFile(this.#pathOf(runId), follower.poll);
     this.#followers.delete(runId);
   }
 

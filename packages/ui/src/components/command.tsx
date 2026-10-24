@@ -1,14 +1,10 @@
 'use client';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@shinsa/ui/components/dialog';
+import { DESTRUCTIVE_ITEM } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Kbd, KbdGroup } from '@shinsa/ui/components/kbd';
-import {
-  DESTRUCTIVE_ITEM,
-  type MenuItemIcon,
-  menuIconPosition,
-  renderMenuIcon,
-} from '@shinsa/ui/components/menu-icon';
+import { type MenuItemIcon, menuIconPosition, renderMenuIcon } from '@shinsa/ui/components/menu-icon';
 import { SizeAnimator } from '@shinsa/ui/components/size-animator';
 import { useAnimatedIndicator } from '@shinsa/ui/hooks/use-animated-indicator';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -228,7 +224,7 @@ function CommandItem({
       data-icon={position}
       data-variant={variant}
       className={cn(
-        "relative flex cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-2 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden data-[disabled=true]:pointer-events-none data-indicator-here:text-fg-4 data-[disabled=true]:opacity-50 [&[data-indicator-here]_svg]:opacity-100 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:transition-opacity [&_svg]:duration-150",
+        "icon-item relative flex cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-2 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden data-[disabled=true]:pointer-events-none data-indicator-here:text-fg-4 data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         DESTRUCTIVE_ITEM,
         className
       )}

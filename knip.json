@@ -5,13 +5,15 @@
       "entry": ["scripts/*.ts"]
     },
     "apps/web": {
+      "entry": ["test/**/*.test.{ts,tsx}"],
       "ignoreDependencies": ["tailwindcss"]
     },
     "packages/ui": {
       "entry": ["src/**/*.{ts,tsx}"]
     },
     "apps/server": {
-      "entry": ["test/**/*.test.ts"]
+      "entry": ["test/**/*.test.ts", "test/e2e/soak/child.ts", "test/helpers/mcp/stdio-server.ts"],
+      "ignoreDependencies": ["@chroxify/eunoe"]
     }
   }
 }

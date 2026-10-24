@@ -135,20 +135,24 @@ describe('linkReferences', () => {
 });
 
 describe('find_tasks', () => {
-  test('lists tasks as ready reference links and builds the catalog', () => {
+  test('lists tasks as ready reference links with their handles and builds the catalog', () => {
     const harness = createHarness();
-    const api = createTask(harness, { intent: 'Ship the API' });
-    createTask(harness, { intent: 'Polish the docs' });
+    const api = createTask(harness, { request: 'Ship the API' });
+    createTask(harness, { request: 'Polish the docs' });
     expect(serializeTaskReferences(harness.state, 'api')).toBe(
-      `- [Ship the API](shinsa://task/${api}) · planning · repository paywall-next · branch fix/${api}`
+      `- SUP-1 [Ship the API](shinsa://task/${api}) · planning · repository paywall-next · branch fix/${api}`
     );
+    expect(serializeTaskReferences(harness.state, 'sup-2')).toStartWith('- SUP-2 [Polish the docs](');
     expect(serializeTaskReferences(harness.state, '').split('\n')).toHaveLength(2);
     expect(serializeTaskReferences(harness.state, 'nothing like this')).toBe(
       'No task matches. Try fewer words.'
     );
+    harness.send({ type: 'task.create', request: 'No handle yet', repoId: null, projectId: null });
+    expect(serializeTaskReferences(harness.state, 'handle yet')).toStartWith('- [No handle yet](');
     expect(resolveReferenceCatalog(harness.state).tasks.map((task) => task.title)).toEqual([
       'Ship the API',
       'Polish the docs',
+      'No handle yet',
     ]);
   });
 });
@@ -156,17 +160,17 @@ describe('find_tasks', () => {
 describe('find_tasks with pull requests', () => {
   test('links the pull request of a shipped task, finds it by number, and leaves cancelled tasks out', () => {
     const harness = createHarness();
-    const api = createTask(harness, { intent: 'Ship the API' });
+    const api = createTask(harness, { request: 'Ship the API' });
     reachShipping(harness, api);
     harness.send({
       type: 'pull_request.record',
       taskId: api,
       pullRequest: pullRequest({ checks: 'pending' }),
     });
-    const gone = createTask(harness, { intent: 'Ship the old API' });
+    const gone = createTask(harness, { request: 'Ship the old API' });
     harness.send({ type: 'task.cancel', taskId: gone });
     expect(serializeTaskReferences(harness.state, '#42')).toBe(
-      `- [Ship the API](shinsa://task/${api}) · pull request open · repository paywall-next · branch fix/${api} · [#42](shinsa://pr/paywall-next#42) open`
+      `- SUP-1 [Ship the API](shinsa://task/${api}) · pull request open · repository paywall-next · branch fix/${api} · [#42](shinsa://pr/paywall-next#42) open`
     );
     expect(resolveReferenceCatalog(harness.state)).toEqual({
       tasks: [{ id: api, title: 'Ship the API' }],
@@ -176,7 +180,7 @@ describe('find_tasks with pull requests', () => {
 
   test('a task without a repository has no repository in its pull request link', () => {
     const harness = createHarness();
-    const api = createTask(harness, { intent: 'Ship the API' });
+    const api = createTask(harness, { request: 'Ship the API' });
     harness.send({ type: 'pull_request.record', taskId: api, pullRequest: pullRequest() });
     harness.send({ type: 'repo.remove', repoId: harness.task(api).repoId ?? '' });
     expect(resolveReferenceCatalog(harness.state).pullRequests).toEqual([

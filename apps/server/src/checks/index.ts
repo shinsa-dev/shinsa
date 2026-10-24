@@ -15,11 +15,23 @@ const SIGNAL_LINES = 60;
 
 const CHECK_ENV = { CI: '1', FORCE_COLOR: '0', NO_COLOR: '1' };
 
+const PACKAGE_MANAGERS: { lockfiles: string[]; run: string; install: string[] | null }[] = [
+  { lockfiles: ['bun.lock', 'bun.lockb'], run: 'bun run', install: ['bun', 'install'] },
+  { lockfiles: ['pnpm-lock.yaml'], run: 'pnpm run', install: ['pnpm', 'install', '--frozen-lockfile'] },
+  { lockfiles: ['yarn.lock'], run: 'yarn', install: null },
+  { lockfiles: ['package-lock.json'], run: 'npm run', install: ['npm', 'ci'] },
+];
+
+function listPackageManagers(path: string) {
+  return PACKAGE_MANAGERS.filter((manager) => manager.lockfiles.some((file) => existsSync(join(path, file))));
+}
+
 function resolveRunner(path: string) {
-  if (existsSync(join(path, 'bun.lock')) || existsSync(join(path, 'bun.lockb'))) return 'bun run';
-  if (existsSync(join(path, 'pnpm-lock.yaml'))) return 'pnpm run';
-  if (existsSync(join(path, 'yarn.lock'))) return 'yarn';
-  return 'npm run';
+  return listPackageManagers(path)[0]?.run ?? 'npm run';
+}
+
+export function resolveInstallCommand(path: string) {
+  return listPackageManagers(path).find((manager) => manager.install)?.install ?? null;
 }
 
 function readScripts(manifest: string) {
@@ -54,9 +66,10 @@ export function tailOutput(text: string) {
 export async function runCheck(
   command: string,
   cwd: string,
-  timeoutMs = CHECK_TIMEOUT_MS
+  timeoutMs: number,
+  signal?: AbortSignal
 ): Promise<ReportCheck> {
-  const result = await runCommand(['sh', '-c', command], cwd, { env: CHECK_ENV, timeoutMs });
+  const result = await runCommand(['sh', '-c', command], cwd, { env: CHECK_ENV, timeoutMs, signal });
   if (result.ok) return { name: command, outcome: 'pass', detail: null };
   const output = [result.stdout, result.stderr].filter((part) => part.length > 0).join('\n');
   const stopped = result.timedOut ? `Stopped after ${Math.round(timeoutMs / 60_000)} minutes.\n` : '';
@@ -67,8 +80,16 @@ export async function runCheck(
   };
 }
 
-export async function runChecks(repo: Repo, path: string) {
+export async function runChecks(
+  repo: Repo,
+  path: string,
+  planChecks: readonly string[],
+  signal?: AbortSignal
+) {
   const results: ReportCheck[] = [];
-  for (const command of resolveCheckCommands(repo, path)) results.push(await runCheck(command, path));
+  for (const command of new Set([...resolveCheckCommands(repo, path), ...planChecks])) {
+    if (signal?.aborted) break;
+    results.push(await runCheck(command, path, CHECK_TIMEOUT_MS, signal));
+  }
   return results;
 }

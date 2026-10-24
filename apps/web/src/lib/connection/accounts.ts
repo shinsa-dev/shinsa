@@ -1,0 +1,112 @@
+import type { AccountImport, AccountPatch, AccountsSnapshot, RunAccount } from '@shinsa/core';
+import { useSyncExternalStore } from 'react';
+import { describeBinding, describeImported, describeRerun } from '@/lib/accounts/account.ts';
+import { type SignInDialogState, selectDialogLogin } from '@/lib/accounts/sign-in.ts';
+import { describeUsageWaitToggled } from '@/lib/accounts/usage-wait.ts';
+import {
+  type Done,
+  describeFailure,
+  requestWithToast,
+  sendCommandWithToast,
+} from '@/lib/connection/commands.ts';
+import { requestJson } from '@/lib/connection/http.ts';
+import { connection } from '@/lib/connection/socket.ts';
+import { createSignal } from '@/lib/signal.ts';
+
+const CLOSED: SignInDialogState = { open: false, accountId: null, loginId: null, failure: null };
+
+const dialogSignal = createSignal();
+
+let dialog = CLOSED;
+
+function updateDialog(patch: Partial<SignInDialogState>) {
+  dialog = { ...dialog, ...patch };
+  dialogSignal.publish();
+}
+
+async function requestAccounts(path: string, body: unknown) {
+  const answer = await requestJson<AccountsSnapshot>(path, body);
+  connection.replaceAccounts(answer);
+  return answer;
+}
+
+function updateAccounts(path: string, body: unknown, done?: Done) {
+  return requestWithToast(() => requestAccounts(path, body), done);
+}
+
+export function useAccounts() {
+  return useSyncExternalStore(connection.subscribeAccounts, connection.selectAccounts);
+}
+
+export function refreshUsage() {
+  return updateAccounts('/api/accounts/refresh', {});
+}
+
+export function submitLoginCode(loginId: string, code: string) {
+  return updateAccounts('/api/accounts/login/code', { loginId, code });
+}
+
+function cancelLogin(loginId: string) {
+  return updateAccounts('/api/accounts/login/cancel', { loginId });
+}
+
+export function importAccount(entry: AccountImport) {
+  const { title, description } = describeImported(entry);
+  return updateAccounts(
+    '/api/accounts/import',
+    { origin: entry.origin, email: entry.email },
+    description ? { title, description } : title
+  );
+}
+
+export function updateAccount(accountId: string, patch: AccountPatch, done: string) {
+  return updateAccounts('/api/accounts/update', { accountId, patch }, done);
+}
+
+export function removeAccount(accountId: string) {
+  return updateAccounts('/api/accounts/remove', { accountId }, 'Account removed.');
+}
+
+export async function startSignIn(accountId: string | null = null) {
+  updateDialog({ open: true, accountId, loginId: null, failure: null });
+  try {
+    const answer = await requestAccounts('/api/accounts/login', accountId ? { accountId } : {});
+    updateDialog({ loginId: answer.login?.id ?? null });
+  } catch (error) {
+    updateDialog({ failure: describeFailure(error) });
+  }
+}
+
+export function retrySignIn() {
+  return startSignIn(dialog.accountId);
+}
+
+export function closeSignIn() {
+  const login = selectDialogLogin(dialog, connection.selectAccounts());
+  dialog = CLOSED;
+  dialogSignal.publish();
+  if (login) void cancelLogin(login.id);
+}
+
+export function useSignInDialog() {
+  return useSyncExternalStore(dialogSignal.subscribe, () => dialog);
+}
+
+export function bindTaskAccount(taskId: string, account: RunAccount | null) {
+  return sendCommandWithToast({ type: 'task.bind_account', taskId, account }, describeBinding(account));
+}
+
+export function rerunStep(taskId: string, account: RunAccount) {
+  return sendCommandWithToast({ type: 'task.retry', taskId, account }, describeRerun(account));
+}
+
+export function resumeUsageWaitNow(taskId: string) {
+  return sendCommandWithToast({ type: 'usage_wait.resume_now', taskId }, 'Resuming now.');
+}
+
+export function updateUsageWait(taskId: string, autoResume: boolean) {
+  return sendCommandWithToast(
+    { type: 'usage_wait.change', taskId, autoResume },
+    describeUsageWaitToggled(autoResume)
+  );
+}

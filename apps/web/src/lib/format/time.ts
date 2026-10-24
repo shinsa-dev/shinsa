@@ -1,7 +1,11 @@
-const MINUTE = 60_000;
+import { DAY_MS, MINUTE_MS } from '@shinsa/core';
 
-export function formatAge(at: number, now = Date.now()) {
-  const seconds = Math.max(0, Math.round((now - at) / 1000));
+const RELATIVE_AGE = /^\d+[mhd]$/;
+
+const WEEK_DAYS = 6;
+
+function formatGap(gap: number, at: number) {
+  const seconds = Math.max(0, Math.round(gap / 1000));
   if (seconds < 45) return 'just now';
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
@@ -12,9 +16,32 @@ export function formatAge(at: number, now = Date.now()) {
   return new Date(at).toLocaleDateString('en', { month: 'short', day: 'numeric' });
 }
 
+export function formatAge(at: number, now = Date.now()) {
+  return formatGap(now - at, at);
+}
+
+function describeAge(age: string) {
+  if (age === 'just now') return age;
+  return RELATIVE_AGE.test(age) ? `${age} ago` : `on ${age}`;
+}
+
+function describeAhead(gap: string) {
+  if (gap === 'just now') return 'in under a minute';
+  return RELATIVE_AGE.test(gap) ? `in ${gap}` : `on ${gap}`;
+}
+
 export function formatTimeAgo(at: number, now = Date.now()) {
   const age = formatAge(at, now);
-  return age === 'just now' ? 'Just now' : `${age} ago`;
+  if (age === 'just now') return 'Just now';
+  return RELATIVE_AGE.test(age) ? `${age} ago` : age;
+}
+
+export function formatSince(prefix: string, at: number, now = Date.now()) {
+  return `${prefix} ${describeAge(formatAge(at, now))}`;
+}
+
+export function formatUntil(prefix: string, at: number, now = Date.now()) {
+  return `${prefix} ${describeAhead(formatGap(at - now, at))}`;
 }
 
 export function formatDuration(ms: number) {
@@ -28,7 +55,7 @@ export function formatDuration(ms: number) {
 }
 
 export function formatSpan(at: number, now = Date.now()) {
-  const minutes = Math.max(0, Math.round((now - at) / MINUTE));
+  const minutes = Math.max(0, Math.round((now - at) / MINUTE_MS));
   if (minutes < 1) return null;
   if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
   const hours = Math.round(minutes / 60);
@@ -50,8 +77,21 @@ export function formatClock(at: number) {
   return new Date(at).toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
 }
 
+function resolveStartOfDay(at: number) {
+  return new Date(at).setHours(0, 0, 0, 0);
+}
+
+export function formatMoment(at: number, now = Date.now()) {
+  const days = Math.round((resolveStartOfDay(at) - resolveStartOfDay(now)) / DAY_MS);
+  if (days === 0) return formatClock(at);
+  if (days > 0 && days <= WEEK_DAYS) {
+    return `${new Date(at).toLocaleDateString('en', { weekday: 'short' })} ${formatClock(at)}`;
+  }
+  return `${new Date(at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}, ${formatClock(at)}`;
+}
+
 export function resolveMinute(now = Date.now()) {
-  return Math.floor(now / MINUTE);
+  return Math.floor(now / MINUTE_MS);
 }
 
 export function resolveEndOfDay(now = Date.now()) {

@@ -241,9 +241,11 @@ describe('recovery', () => {
 
   test('cancelling stops the agent and removes the worktree; a late hand-over changes nothing', async () => {
     const w = await open();
-    let late = '';
+    let late: string | null = null;
     w.agents.queue('planner', async (agent) => {
-      await Bun.sleep(150);
+      if (!agent.signal.aborted) {
+        await new Promise((resolve) => agent.signal.addEventListener('abort', resolve, { once: true }));
+      }
       late = await agent.call('propose_plan', toolPlan(PLAN)).catch((error: Error) => error.message);
     });
     const taskId = await w.createTask();
@@ -251,7 +253,8 @@ describe('recovery', () => {
     const worktree = w.task(taskId).worktreePath ?? '';
     await w.engine.dispatch({ type: 'task.cancel', taskId });
     await w.until('the worktree to be removed', () => w.task(taskId).worktreePath === null);
-    await Bun.sleep(250);
+    await w.until('the late hand-over', () => late !== null);
+    await w.engine.settle();
     expect(w.task(taskId).stage).toBe('cancelled');
     expect(w.agents.of('planner')[0]?.cancelled).toBe(true);
     expect(existsSync(worktree)).toBe(false);

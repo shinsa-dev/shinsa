@@ -30,24 +30,6 @@ describe('resolveQueueStep', () => {
     });
   });
 
-  test('after a decision, moves on to the task that followed it', () => {
-    expect(resolveQueueStep(['a', 'c', 'd'], 'b', ['a', 'b', 'c', 'd'])).toEqual({
-      position: null,
-      total: 3,
-      previousId: 'a',
-      nextId: 'c',
-    });
-  });
-
-  test('skips tasks that left the queue and wraps to the first', () => {
-    expect(resolveQueueStep(['a'], 'c', ['a', 'b', 'c', 'd'])).toEqual({
-      position: null,
-      total: 1,
-      previousId: 'a',
-      nextId: 'a',
-    });
-  });
-
   test('from a task outside the queue, next is the first that needs you', () => {
     expect(resolveQueueStep(['a', 'b'], 'x')).toEqual({
       position: null,

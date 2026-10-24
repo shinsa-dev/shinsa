@@ -1,0 +1,362 @@
+import { describe, expect, it } from 'bun:test';
+import type { Gate, Task } from '@shinsa/core';
+import {
+  describeRoadmapCounts,
+  describeWaitsOn,
+  listOpenTaskChoices,
+  listRoadmapSections,
+  orderChains,
+  ROADMAP_GROUP,
+  ROADMAP_GROUPS,
+  resolveRoadmapGroup,
+  selectRoadmapGroup,
+} from '@/lib/tasks/roadmap.ts';
+import { createGate, createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
+
+function waiting(id: string, waitsOn: string[], overrides: Partial<Task> = {}) {
+  return createTask({ id, stage: 'queued', waitsOn, ...overrides });
+}
+
+function chainOf(tasks: Task[], section: Task[] = tasks) {
+  return orderChains(createShinsaState({ tasks }), section).map(({ task, depth }) => `${task.id}:${depth}`);
+}
+
+describe('resolveRoadmapGroup', () => {
+  function groupFor(gate: Partial<Gate>, task: Partial<Task> = {}) {
+    const subject = createTask({ id: 't', ...task });
+    const state = createShinsaState({
+      tasks: [subject],
+      gates: [createGate({ id: 'g', taskId: 't', ...gate })],
+    });
+    return resolveRoadmapGroup(state, subject);
+  }
+
+  it('files each open decision under what you do at it', () => {
+    expect(groupFor({ kind: 'merge' })).toBe('merge');
+    expect(groupFor({ kind: 'review' })).toBe('review');
+    expect(groupFor({ kind: 'spec' })).toBe('plan');
+    expect(groupFor({ kind: 'question' })).toBe('answer');
+  });
+
+  it('files an agent question as an answer and a failure as paused, whatever the gate kind', () => {
+    expect(groupFor({ kind: 'review', purpose: 'agent_question' })).toBe('answer');
+    expect(groupFor({ kind: 'merge', purpose: 'failure' })).toBe('paused');
+    expect(groupFor({ kind: 'question', purpose: 'sign_in' })).toBe('paused');
+  });
+
+  it('lets a failure or a question lead over a decision on the same task', () => {
+    const subject = createTask({ id: 't' });
+    const state = createShinsaState({
+      tasks: [subject],
+      gates: [
+        createGate({ id: 'decision', taskId: 't', kind: 'review' }),
+        createGate({ id: 'failure', taskId: 't', kind: 'review', purpose: 'failure' }),
+      ],
+    });
+    expect(resolveRoadmapGroup(state, subject)).toBe('paused');
+  });
+
+  it('files a proposed change as a decision of its own, and an investigation at work as in progress', () => {
+    expect(groupFor({ kind: 'question', purpose: 'change' }, { stage: 'awaiting_proposal' })).toBe('change');
+    expect(groupFor({ kind: 'question', status: 'answered' }, { stage: 'investigating' })).toBe('working');
+  });
+
+  it('files an operation waiting for your OK after the merge as a decision of its own, not a question', () => {
+    expect(groupFor({ kind: 'question', purpose: 'operation' }, { stage: 'awaiting_operation' })).toBe(
+      'operation'
+    );
+  });
+
+  it('ignores answered gates', () => {
+    expect(groupFor({ kind: 'review', status: 'answered' })).toBe('working');
+  });
+
+  it('puts settled tasks in done or cancelled, even with a gate left open', () => {
+    expect(groupFor({ kind: 'merge' }, { stage: 'merged' })).toBe('done');
+    expect(groupFor({ kind: 'merge' }, { stage: 'done' })).toBe('done');
+    expect(groupFor({ kind: 'merge' }, { stage: 'cancelled' })).toBe('cancelled');
+  });
+
+  it('separates tasks waiting on another task from tasks agents are working on', () => {
+    const base = createTask({ id: 'base' });
+    const blocked = waiting('blocked', ['base']);
+    const merging = createTask({ id: 'merging', stage: 'shipping', waitsOn: ['base'] });
+    const released = waiting('released', ['gone']);
+    const state = createShinsaState({ tasks: [base, blocked, merging, released] });
+    expect(resolveRoadmapGroup(state, base)).toBe('working');
+    expect(resolveRoadmapGroup(state, blocked)).toBe('waiting');
+    expect(resolveRoadmapGroup(state, merging)).toBe('waiting');
+    expect(resolveRoadmapGroup(state, released)).toBe('working');
+  });
+});
+
+describe('ROADMAP_GROUPS', () => {
+  it('lists the sections in to-do order with Done and Cancelled collapsed', () => {
+    expect(ROADMAP_GROUPS.map((group) => group.title)).toEqual([
+      'Ready to merge',
+      'Changes to review',
+      'Plan to approve',
+      'Change to approve',
+      'Operation to confirm',
+      'Needs your answer',
+      'Paused',
+      'In progress',
+      'Waiting on another task',
+      'Done',
+      'Cancelled',
+    ]);
+    expect(ROADMAP_GROUPS.filter((group) => !group.defaultOpen).map((group) => group.key)).toEqual([
+      'done',
+      'cancelled',
+    ]);
+  });
+
+  it('carries the status tones', () => {
+    expect(ROADMAP_GROUP.answer.tone).toBe('blue');
+    expect(ROADMAP_GROUP.paused.tone).toBe('orange');
+    expect(ROADMAP_GROUP.review.tone).toBe('amber');
+    expect(ROADMAP_GROUP.plan.tone).toBe('purple');
+    expect(ROADMAP_GROUP.merge.tone).toBe('green');
+    expect(ROADMAP_GROUP.working.tone).toBe('blue');
+    expect(ROADMAP_GROUP.waiting.tone).toBe('neutral');
+  });
+});
+
+describe('selectRoadmapGroup', () => {
+  it('finds a section by key and returns null for anything else', () => {
+    expect(selectRoadmapGroup('done')?.title).toBe('Done');
+    expect(selectRoadmapGroup('later')).toBeNull();
+    expect(selectRoadmapGroup(null)).toBeNull();
+  });
+});
+
+describe('describeWaitsOn', () => {
+  const first = createTask({ id: 'a', title: 'Add login' });
+  const second = createTask({ id: 'b', title: 'Fix tabs' });
+  const third = createTask({ id: 'c', title: 'Ship docs' });
+  const fourth = createTask({ id: 'd', title: 'Tidy CSS' });
+
+  it('names one or two tasks it waits on', () => {
+    expect(describeWaitsOn([first])).toBe('Waits on “Add login”');
+    expect(describeWaitsOn([first, second])).toBe('Waits on “Add login” and “Fix tabs”');
+  });
+
+  it('names two and counts the rest', () => {
+    expect(describeWaitsOn([first, second, third])).toBe('Waits on “Add login”, “Fix tabs” and 1 more');
+    expect(describeWaitsOn([first, second, third, fourth])).toBe(
+      'Waits on “Add login”, “Fix tabs” and 2 more'
+    );
+  });
+
+  it('says when a task it waits on was cancelled', () => {
+    const cancelled = createTask({ id: 'x', title: 'Old idea', stage: 'cancelled' });
+    expect(describeWaitsOn([first, cancelled])).toBe('“Old idea” was cancelled');
+  });
+});
+
+describe('orderChains', () => {
+  const outside = createTask({ id: 'outside', stage: 'building' });
+
+  it('indents a single chain one level per link', () => {
+    const tasks = [outside, waiting('c', ['b']), waiting('b', ['a']), waiting('a', ['outside'])];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'b:1', 'c:2']);
+  });
+
+  it('places fan-out siblings side by side under their parent in priority order', () => {
+    const tasks = [
+      outside,
+      waiting('a', ['outside']),
+      waiting('b', ['a'], { createdAt: NOW - 50_000 }),
+      waiting('c', ['a'], { createdAt: NOW - 40_000, priority: 'urgent' }),
+      waiting('d', ['a'], { createdAt: NOW - 45_000 }),
+    ];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'c:1', 'b:1', 'd:1']);
+  });
+
+  it('shows the joining task of a diamond once, under whichever parent is shown second', () => {
+    const tasks = [
+      outside,
+      waiting('a', ['outside']),
+      waiting('b', ['a'], { createdAt: NOW - 50_000 }),
+      waiting('c', ['a'], { createdAt: NOW - 40_000 }),
+      waiting('d', ['b', 'c']),
+    ];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'b:1', 'c:1', 'd:2']);
+  });
+
+  it('follows screen order, not priority, when a diamond parent is shown second', () => {
+    const tasks = [
+      outside,
+      waiting('a', ['outside']),
+      waiting('b', ['a'], { createdAt: NOW - 50_000 }),
+      waiting('c', ['a'], { createdAt: NOW - 40_000, priority: 'urgent' }),
+      waiting('d', ['b', 'c']),
+    ];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'c:1', 'b:1', 'd:2']);
+  });
+
+  it('keeps the joining task after a parent whose subtree is shown first', () => {
+    const tasks = [
+      outside,
+      waiting('a', ['outside']),
+      waiting('b', ['a'], { createdAt: NOW - 50_000 }),
+      waiting('c', ['a'], { createdAt: NOW - 40_000 }),
+      waiting('e', ['b'], { createdAt: NOW - 30_000 }),
+      waiting('d', ['b', 'c'], { createdAt: NOW - 20_000 }),
+    ];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'b:1', 'e:2', 'c:1', 'd:2']);
+  });
+
+  it('anchors a diamond under the parent shown last even when its branch has lower priority', () => {
+    const tasks = [
+      outside,
+      waiting('x', ['outside'], { priority: 'high', createdAt: NOW - 90_000 }),
+      waiting('y', ['outside'], { createdAt: NOW - 80_000 }),
+      waiting('c', ['y'], { createdAt: NOW - 70_000 }),
+      waiting('b', ['x'], { createdAt: NOW - 60_000 }),
+      waiting('d', ['b', 'c'], { createdAt: NOW - 50_000 }),
+    ];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['x:0', 'b:1', 'y:0', 'c:1', 'd:2']);
+  });
+
+  it('measures depth by the longest path when parents sit at different depths', () => {
+    const tasks = [outside, waiting('a', ['outside']), waiting('b', ['a']), waiting('d', ['a', 'b'])];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'b:1', 'd:2']);
+  });
+
+  it('starts a chain at a task whose parents are all outside the section', () => {
+    const tasks = [outside, waiting('a', ['outside']), waiting('b', ['outside', 'a'])];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'b:1']);
+    expect(chainOf(tasks, [tasks[2] as Task])).toEqual(['b:0']);
+  });
+
+  it('starts a chain at a task whose parent was cancelled', () => {
+    const tasks = [
+      createTask({ id: 'gone', stage: 'cancelled' }),
+      waiting('a', ['gone']),
+      waiting('b', ['a']),
+    ];
+    expect(chainOf(tasks, tasks.slice(1))).toEqual(['a:0', 'b:1']);
+  });
+
+  it('shows every task of a dependency loop once', () => {
+    const tasks = [waiting('a', ['b']), waiting('b', ['a'])];
+    const ordered = chainOf(tasks);
+    expect(ordered).toHaveLength(2);
+    expect(new Set(ordered.map((entry) => entry.split(':')[0]))).toEqual(new Set(['a', 'b']));
+  });
+
+  it('returns nothing for an empty section', () => {
+    expect(chainOf([])).toEqual([]);
+  });
+});
+
+describe('listOpenTaskChoices', () => {
+  const tasks = [
+    createTask({ id: 'self' }),
+    createTask({ id: 'later', createdAt: NOW - 10_000 }),
+    createTask({ id: 'urgent', priority: 'urgent' }),
+    createTask({ id: 'child', waitsOn: ['self'], stage: 'queued' }),
+    createTask({ id: 'grandchild', waitsOn: ['child'], stage: 'queued' }),
+    createTask({ id: 'merged', stage: 'merged' }),
+    createTask({ id: 'cancelled', stage: 'cancelled' }),
+  ];
+  const state = createShinsaState({ tasks });
+
+  it('offers open tasks in priority order', () => {
+    expect(listOpenTaskChoices(state, null).map((task) => task.id)).toEqual([
+      'urgent',
+      'self',
+      'child',
+      'grandchild',
+      'later',
+    ]);
+  });
+
+  it('leaves out the task itself and every task that already waits on it', () => {
+    expect(listOpenTaskChoices(state, tasks[0] as Task).map((task) => task.id)).toEqual(['urgent', 'later']);
+  });
+});
+
+describe('listRoadmapSections', () => {
+  const tasks = [
+    createTask({ id: 'old', title: 'Old work', createdAt: NOW - 90_000 }),
+    createTask({ id: 'new', title: 'New work', createdAt: NOW - 10_000 }),
+    createTask({ id: 'high', title: 'High work', priority: 'high', createdAt: NOW - 5_000 }),
+    createTask({ id: 'merged', stage: 'merged', stageChangedAt: NOW - 50_000 }),
+    createTask({ id: 'done', stage: 'done', stageChangedAt: NOW - 1_000 }),
+    createTask({ id: 'gone', stage: 'cancelled', stageChangedAt: NOW - 1_000 }),
+    createTask({ id: 'waiter', stage: 'queued', waitsOn: ['old'], intent: 'After the OAuth change' }),
+    createTask({ id: 'next', stage: 'queued', waitsOn: ['waiter'], branch: 'feat/next-step' }),
+    createTask({ id: 'review', title: 'Review me' }),
+  ];
+  const state = createShinsaState({
+    tasks,
+    gates: [createGate({ id: 'g', taskId: 'review', kind: 'review' })],
+  });
+
+  function ids(status: Parameters<typeof listRoadmapSections>[2], search = '') {
+    return Object.fromEntries(
+      listRoadmapSections(state, search, status).map(({ group, entries }) => [
+        group.key,
+        entries.map(({ task, depth }) => (depth ? `${task.id}:${depth}` : task.id)),
+      ])
+    );
+  }
+
+  it('lists every section in order, sorting by priority then oldest and settled tasks newest first', () => {
+    expect(ids(null)).toEqual({
+      merge: [],
+      review: ['review'],
+      plan: [],
+      change: [],
+      operation: [],
+      answer: [],
+      paused: [],
+      working: ['high', 'old', 'new'],
+      waiting: ['waiter', 'next:1'],
+      done: ['done', 'merged'],
+      cancelled: ['gone'],
+    });
+  });
+
+  it('shows only the section picked as a status filter', () => {
+    expect(ids('done')).toEqual({ done: ['done', 'merged'] });
+  });
+
+  it('matches the search against title, intent and branch, ignoring case and spaces around it', () => {
+    expect(ids('working', '  WORK ')).toEqual({ working: ['high', 'old', 'new'] });
+    expect(ids('waiting', 'oauth')).toEqual({ waiting: ['waiter'] });
+    expect(ids('waiting', 'feat/next')).toEqual({ waiting: ['next'] });
+    expect(ids(null, 'nothing like this').working).toEqual([]);
+  });
+});
+
+describe('listRoadmapSections search by repository', () => {
+  it('finds a task by its repository name, so a repository chip’s Show its tasks lists them', () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'web', repoId: 'paywall-next' }), createTask({ id: 'other' })],
+      repos: [createRepo({ id: 'paywall-next' })],
+    });
+    const working = listRoadmapSections(state, 'paywall-next', 'working')[0]?.entries.map(
+      ({ task }) => task.id
+    );
+    expect(working).toEqual(['web']);
+  });
+});
+
+describe('describeRoadmapCounts', () => {
+  it('counts open tasks and finished ones, leaving cancelled out of both', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 'a' }),
+        createTask({ id: 'b', stage: 'queued' }),
+        createTask({ id: 'c', stage: 'merged' }),
+        createTask({ id: 'd', stage: 'done' }),
+        createTask({ id: 'e', stage: 'cancelled' }),
+      ],
+    });
+    expect(describeRoadmapCounts(state)).toBe('2 open · 2 done');
+    expect(describeRoadmapCounts(createShinsaState({}))).toBe('0 open · 0 done');
+  });
+});

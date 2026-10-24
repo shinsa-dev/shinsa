@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { resolveSharedConfigDir } from '../accounts/paths.ts';
 
 interface SessionLine {
   type?: string;
@@ -17,8 +18,6 @@ export interface ImportedSession {
   laterRequests: string[];
   lastReply: string | null;
 }
-
-const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
 
 const MAX_SECTION = 4_000;
 
@@ -62,7 +61,11 @@ function clip(text: string) {
   return trimmed.length > MAX_SECTION ? `${trimmed.slice(0, MAX_SECTION)}…` : trimmed;
 }
 
-export function readSession(target: string, projectsDir = CLAUDE_PROJECTS_DIR): ImportedSession {
+function resolveProjectsDir() {
+  return join(resolveSharedConfigDir(Bun.env, homedir()), 'projects');
+}
+
+export function readSession(target: string, projectsDir = resolveProjectsDir()): ImportedSession {
   const path = selectSessionPath(target, projectsDir);
   if (!path) throw new Error(`No Claude Code session at ${target}. Pass a .jsonl path or a session id.`);
   let cwd: string | null = null;

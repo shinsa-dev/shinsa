@@ -10,19 +10,35 @@ export interface CommandResult {
 
 export interface CommandOptions {
   input?: string;
-  env?: Record<string, string>;
+  env?: Record<string, string | undefined>;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 
 const QUIET_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GH_PROMPT_DISABLED: '1' };
 
-function killGroup(pid: number) {
+function readErrorCode(error: unknown) {
+  return error instanceof Error && 'code' in error ? error.code : null;
+}
+
+function isLeaderSignalled(pid: number) {
+  try {
+    process.kill(pid, 'SIGKILL');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function killProcessGroup(pid: number) {
   try {
     process.kill(-pid, 'SIGKILL');
   } catch (error) {
-    log.warn('[Shell] Could not stop a command that ran too long', { pid, error: describeError(error) });
+    const code = readErrorCode(error);
+    if (code === 'ESRCH' || (code === 'EPERM' && isLeaderSignalled(pid))) return;
+    log.warn('[Shell] Could not stop a command', { pid, error: describeError(error) });
   }
 }
 
@@ -46,13 +62,24 @@ export async function runCommand(
   cwd: string,
   options: CommandOptions = {}
 ): Promise<CommandResult> {
+  if (options.signal?.aborted) {
+    return {
+      ok: false,
+      code: 130,
+      stdout: '',
+      stderr: 'The command was cancelled before it started.',
+      timedOut: false,
+    };
+  }
   const child = spawn(command, cwd, options);
   if (typeof child === 'string') return { ok: false, code: 127, stdout: '', stderr: child, timedOut: false };
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
-    killGroup(child.pid);
+    killProcessGroup(child.pid);
   }, options.timeoutMs ?? COMMAND_TIMEOUT_MS);
+  const stop = () => killProcessGroup(child.pid);
+  options.signal?.addEventListener('abort', stop, { once: true });
   try {
     const [stdout, stderr, code] = await Promise.all([
       new Response(child.stdout).text(),
@@ -62,6 +89,7 @@ export async function runCommand(
     return { ok: code === 0 && !timedOut, code, stdout: stdout.trim(), stderr: stderr.trim(), timedOut };
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', stop);
   }
 }
 

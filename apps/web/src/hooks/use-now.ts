@@ -1,10 +1,6 @@
-import * as React from 'react';
+import { useSyncExternalStore } from 'react';
+import { resolveSecond, subscribeToSeconds } from '@/lib/format/clock.ts';
 
-export function useNow(intervalMs: number) {
-  const [now, setNow] = React.useState(Date.now);
-  React.useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-  return now;
+export function useNow() {
+  return useSyncExternalStore(subscribeToSeconds, () => resolveSecond());
 }

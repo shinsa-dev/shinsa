@@ -1,0 +1,500 @@
+import { describe, expect, it } from 'bun:test';
+import {
+  type AccountSummary,
+  type AgentProviderInfo,
+  createSettings,
+  type FastModeAvailability,
+  type Settings,
+} from '@shinsa/core';
+import {
+  AGENT_GROUPS,
+  AGENT_ROLES,
+  type AgentGroup,
+  COMPACTION_MODE_ITEMS,
+  changeAgentModel,
+  changeAgentSpeed,
+  changeGroupModel,
+  changeGroupSpeed,
+  describeGroupSelects,
+  describeRoleSelects,
+  FAST_MODE_ITEMS,
+  FAST_MODE_UNAVAILABLE,
+  FIX_ROUND_ITEMS,
+  listAgentModelItems,
+  listAttentionItems,
+  listBudgetItems,
+  listCompactionItems,
+  listGroupModelItems,
+  listGroupSpeedItems,
+  listSpeedItems,
+  listUsageLimitItems,
+  MERGE_ITEMS,
+  MIXED_VALUE,
+  needsCostLimit,
+  PLAN_ITEMS,
+  parseBudget,
+  parseCompaction,
+  parseFixRounds,
+  parseUsageLimit,
+  resolveAgentModelValue,
+  resolveAttentionValue,
+  resolveBudgetValue,
+  resolveCompactionValue,
+  resolveFixRoundValue,
+  resolveGroupModel,
+  resolveGroupSpeed,
+  resolveHashSectionId,
+  resolvePlanValue,
+  resolveProviderIcon,
+  resolveRootAdded,
+  resolveRootRemoved,
+  resolveRootToggled,
+  resolveSectionId,
+  resolveSpeedAvailability,
+  resolveSpeedValue,
+  resolveUsageLimitValue,
+  updateSettings,
+} from '@/lib/settings.ts';
+import { createAccount, createProviderLogin, createSnapshot } from '../support/accounts.ts';
+import { spyOnCommands } from '../support/commands.ts';
+
+function settings(overrides: Partial<Settings> = {}): Settings {
+  return { ...createSettings(), ...overrides };
+}
+
+describe('setting choices', () => {
+  it('adds a stored attention limit that is not one of the usual choices, so the select shows it', () => {
+    const items = listAttentionItems(settings({ attentionLimit: 4 }));
+    expect(items.map((item) => item.value)).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('labels attention limits and fix rounds agreeing with their number', () => {
+    expect(listAttentionItems(settings()).map((item) => item.label)).toEqual([
+      'One at a time',
+      '2 at a time',
+      '3 at a time',
+      '5 at a time',
+    ]);
+    expect(FIX_ROUND_ITEMS.map((item) => item.label)).toEqual([
+      'Until clean',
+      '1 round',
+      '2 rounds',
+      '3 rounds',
+      '5 rounds',
+      '10 rounds',
+    ]);
+  });
+
+  it('offers plan, merge and role choices', () => {
+    expect(PLAN_ITEMS.map((item) => item.value)).toEqual(['never', 'large']);
+    expect(MERGE_ITEMS.map((item) => item.value)).toEqual(['squash', 'merge', 'rebase']);
+    expect(AGENT_GROUPS.map((group) => [group.title, group.roles.map((entry) => entry.title)])).toEqual([
+      ['Doing the work', ['Planner', 'Builder', 'Fixer']],
+      ['Checking the work', ['Reviewer']],
+      ['Answering questions', ['Answerer']],
+      ['Quick jobs', ['Classifier', 'Writer']],
+    ]);
+    expect(AGENT_ROLES).toHaveLength(7);
+  });
+});
+
+describe('setting values', () => {
+  it('reads the attention limit as a choice', () => {
+    expect(resolveAttentionValue(settings({ attentionLimit: 3 }))).toBe('3');
+    expect(resolveAttentionValue(settings({ attentionLimit: 0 }))).toBe('1');
+  });
+
+  it('reads whether plans need approval', () => {
+    expect(resolvePlanValue(settings({ approvePlans: true }))).toBe('large');
+    expect(resolvePlanValue(settings({ approvePlans: false }))).toBe('never');
+  });
+
+  it('round-trips the fix round limit, with no limit as until clean', () => {
+    expect(resolveFixRoundValue(settings({ maxFixRounds: null }))).toBe('endless');
+    expect(resolveFixRoundValue(settings({ maxFixRounds: 5 }))).toBe('5');
+    expect(parseFixRounds('endless')).toBeNull();
+    expect(parseFixRounds('5')).toBe(5);
+  });
+
+  it('reads the provider and model chosen for a role as one value, falling back to the default', () => {
+    expect(resolveAgentModelValue(settings({ agentModels: { builder: 'sonnet' } }), 'builder')).toBe(
+      'claude:sonnet'
+    );
+    expect(resolveAgentModelValue(settings({ defaultModel: 'opus' }), 'planner')).toBe('claude:opus');
+  });
+});
+
+describe('changing a setting', () => {
+  it('sends the patch as one settings change, with the confirmation it is given', async () => {
+    const spies = spyOnCommands();
+    await updateSettings({ attentionLimit: 2 });
+    await updateSettings({ autoResume: false }, 'Saved.');
+    expect(spies.sent.mock.calls).toEqual([
+      [{ type: 'settings.change', patch: { attentionLimit: 2 } }, undefined],
+      [{ type: 'settings.change', patch: { autoResume: false } }, 'Saved.'],
+    ] as never);
+    spies.restore();
+  });
+});
+
+describe('the cost limit', () => {
+  it('offers no limit and a few amounts, keeping a stored amount the list does not have', () => {
+    expect(listBudgetItems(settings({ taskBudgetUsd: null })).map((item) => item.label)).toEqual([
+      'No limit',
+      '$1.00 per task',
+      '$2.00 per task',
+      '$5.00 per task',
+      '$10.00 per task',
+      '$20.00 per task',
+    ]);
+    expect(listBudgetItems(settings({ taskBudgetUsd: 5 }))).toHaveLength(6);
+    expect(listBudgetItems(settings({ taskBudgetUsd: 7 })).map((item) => item.value)).toEqual([
+      'off',
+      '1',
+      '2',
+      '5',
+      '7',
+      '10',
+      '20',
+    ]);
+  });
+
+  it('round-trips the limit, with no limit as off', () => {
+    expect(resolveBudgetValue(settings({ taskBudgetUsd: null }))).toBe('off');
+    expect(resolveBudgetValue(settings({}))).toBe('off');
+    expect(resolveBudgetValue(settings({ taskBudgetUsd: 5 }))).toBe('5');
+    expect(parseBudget('off')).toBeNull();
+    expect(parseBudget('5')).toBe(5);
+  });
+});
+
+describe('the usage limit', () => {
+  it('is off by default and offers shares of the weekly limit, keeping a stored share', () => {
+    expect(resolveUsageLimitValue(settings())).toBe('off');
+    expect(listUsageLimitItems(settings()).map((item) => item.label)).toEqual([
+      'No limit',
+      '5% of the weekly limit',
+      '10% of the weekly limit',
+      '20% of the weekly limit',
+      '30% of the weekly limit',
+      '50% of the weekly limit',
+    ]);
+    expect(listUsageLimitItems(settings({ taskUsageLimit: 10 }))).toHaveLength(6);
+    expect(listUsageLimitItems(settings({ taskUsageLimit: 15 })).map((item) => item.value)).toEqual([
+      'off',
+      '5',
+      '10',
+      '15',
+      '20',
+      '30',
+      '50',
+    ]);
+    expect(resolveUsageLimitValue(settings({ taskUsageLimit: 15 }))).toBe('15');
+    expect(parseUsageLimit('off')).toBeNull();
+    expect(parseUsageLimit('20')).toBe(20);
+  });
+
+  it('shows the cost limit only while it is on, or when no account reports a weekly limit', () => {
+    const weekly = createAccount({
+      id: 'weekly',
+      usage: {
+        status: 'ok',
+        windows: [
+          { id: 'seven_day', kind: 'weekly', label: 'Weekly', model: null, usedPercent: 10, resetsAt: null },
+        ],
+        detail: null,
+        checkedAt: 1,
+        source: 'read',
+      },
+    });
+    const keyed: AccountSummary = createAccount({ id: 'api' });
+    expect(needsCostLimit(settings(), [weekly, keyed])).toBe(false);
+    expect(needsCostLimit(settings({ taskBudgetUsd: 5 }), [weekly])).toBe(true);
+    expect(needsCostLimit(settings(), [keyed])).toBe(true);
+    expect(needsCostLimit(settings(), [])).toBe(true);
+    expect(needsCostLimit(settings(), null)).toBe(false);
+  });
+});
+
+describe('agents by what they do', () => {
+  const providers: AgentProviderInfo[] = [
+    {
+      id: 'claude',
+      label: 'Claude',
+      models: [
+        { id: 'opus', label: 'Opus 5.5', description: '' },
+        { id: 'sonnet', label: 'Sonnet 5', description: '' },
+      ],
+    },
+    { id: 'codex', label: 'Codex', models: [{ id: 'gpt-6-astra', label: 'GPT-6-Astra', description: '' }] },
+  ];
+  const [work, review] = AGENT_GROUPS as [(typeof AGENT_GROUPS)[number], (typeof AGENT_GROUPS)[number]];
+
+  it('shows one model for a group whose roles agree, every provider’s models grouped by provider', () => {
+    expect(resolveGroupModel(settings(), work)).toBe('claude:opus');
+    expect(
+      listGroupModelItems(providers, settings(), work).map((item) => [item.value, item.group, item.icon])
+    ).toEqual([
+      ['claude:opus', 'Claude', 'IconClaudeai'],
+      ['claude:sonnet', 'Claude', 'IconClaudeai'],
+      ['codex:gpt-6-astra', 'Codex', 'IconOpenaiCodex'],
+    ]);
+  });
+
+  it('reads a group whose roles differ, by model or by provider, as set per role', () => {
+    const models = settings({ agentModels: { builder: 'sonnet' } });
+    expect(resolveGroupModel(models, work)).toBe(MIXED_VALUE);
+    expect(listGroupModelItems(providers, models, work).map((item) => item.label)).toEqual([
+      'Set per role',
+      'Opus 5.5',
+      'Sonnet 5',
+      'GPT-6-Astra',
+    ]);
+    expect(resolveGroupModel(settings({ agentProviders: { fixer: 'codex' } }), work)).toBe(MIXED_VALUE);
+  });
+
+  it('saves a pick, provider and model together, for every role in the group, keeping the other roles', async () => {
+    const spies = spyOnCommands();
+    const current = settings({ agentModels: { reviewer: 'sonnet' } });
+    await changeGroupModel(current, work, 'codex:gpt-6-astra', 'Saved.');
+    await changeGroupModel(current, review, 'claude:opus');
+    expect(await changeGroupModel(current, work, MIXED_VALUE)).toBe(false);
+    expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
+      [
+        {
+          type: 'settings.change',
+          patch: {
+            agentProviders: { planner: 'codex', builder: 'codex', fixer: 'codex' },
+            agentModels: {
+              reviewer: 'sonnet',
+              planner: 'gpt-6-astra',
+              builder: 'gpt-6-astra',
+              fixer: 'gpt-6-astra',
+            },
+          },
+        },
+        'Saved.',
+      ],
+      [
+        {
+          type: 'settings.change',
+          patch: { agentProviders: { reviewer: 'claude' }, agentModels: { reviewer: 'opus' } },
+        },
+        undefined,
+      ],
+    ] as never);
+    spies.restore();
+  });
+});
+
+describe('models per role', () => {
+  const providers: AgentProviderInfo[] = [
+    {
+      id: 'claude',
+      label: 'Claude',
+      models: [
+        { id: 'opus', label: 'Opus 5.5', description: 'Most capable' },
+        { id: 'sonnet', label: 'Sonnet 5', description: 'Fast' },
+      ],
+    },
+    { id: 'codex', label: 'Codex', models: [{ id: 'gpt-6-astra', label: 'GPT-6-Astra', description: '' }] },
+  ];
+
+  it('lists every provider’s models, with the provider as the group and its icon', () => {
+    expect(listAgentModelItems(providers, 'codex:gpt-6-astra').at(-1)).toEqual({
+      value: 'codex:gpt-6-astra',
+      label: 'GPT-6-Astra',
+      icon: 'IconOpenaiCodex',
+      group: 'Codex',
+    });
+    expect(resolveProviderIcon('cursor')).toBe('IconRobot');
+  });
+
+  it('puts a current model the catalog does not know first in its provider’s group, by its display name', () => {
+    const items = listAgentModelItems(providers, 'codex:gpt-5.6-sol');
+    expect(items.map((item) => item.value)).toEqual([
+      'claude:opus',
+      'claude:sonnet',
+      'codex:gpt-5.6-sol',
+      'codex:gpt-6-astra',
+    ]);
+    expect(items[2]).toEqual({
+      value: 'codex:gpt-5.6-sol',
+      label: 'GPT-5.6-Sol',
+      icon: 'IconOpenaiCodex',
+      group: 'Codex',
+    });
+    expect(listAgentModelItems(providers, 'cursor:m')[0]).toEqual({
+      value: 'cursor:m',
+      label: 'M',
+      icon: 'IconRobot',
+      group: 'cursor',
+    });
+  });
+
+  it('saves a role’s provider and model together, and only that role', () => {
+    const spies = spyOnCommands();
+    const current = settings({ agentProviders: { planner: 'codex' }, agentModels: { builder: 'sonnet' } });
+    void changeAgentModel(current, 'reviewer', 'codex:gpt-5.6-sol', 'Saved.');
+    expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
+      [
+        {
+          type: 'settings.change',
+          patch: {
+            agentProviders: { planner: 'codex', reviewer: 'codex' },
+            agentModels: { builder: 'sonnet', reviewer: 'gpt-5.6-sol' },
+          },
+        },
+        'Saved.',
+      ],
+    ] as never);
+    spies.restore();
+  });
+});
+
+describe('resolveSectionId', () => {
+  it('turns a group title into an anchor id', () => {
+    expect(resolveSectionId('Appearance')).toBe('settings-appearance');
+  });
+
+  it('finds the section a link names after the hash', () => {
+    expect(resolveHashSectionId('#schedules')).toBe('settings-schedules');
+    expect(resolveHashSectionId('')).toBeNull();
+  });
+
+  it('turns a title of several words into one anchor, and the old Folders link finds it', () => {
+    expect(resolveSectionId('Repository folders')).toBe('settings-repository-folders');
+    expect(resolveHashSectionId('#folders')).toBe('settings-repository-folders');
+    expect(resolveHashSectionId('#repository-folders')).toBe('settings-repository-folders');
+  });
+
+  it('sends the old Usage and Codex links to the Accounts section that holds them now', () => {
+    expect(resolveHashSectionId('#usage')).toBe('settings-agent-usage');
+    expect(resolveHashSectionId('#Codex')).toBe('settings-agent-usage');
+    expect(resolveHashSectionId('#accounts')).toBe('settings-agent-usage');
+  });
+});
+
+describe('idle compaction', () => {
+  it('offers never or how long before the cache expires, keeping a stored value', () => {
+    const base = createSettings();
+    expect(listCompactionItems(base).map((item) => item.label)).toEqual([
+      'Never',
+      '1 minute before the cache expires',
+      '2 minutes before the cache expires',
+      '5 minutes before the cache expires',
+      '10 minutes before the cache expires',
+    ]);
+    expect(resolveCompactionValue(base)).toBe('off');
+    expect(resolveCompactionValue({ ...base, compaction: 'claude', idleCompaction: true })).toBe('2');
+    const odd = { ...base, compactionLeadMinutes: 7 };
+    expect(listCompactionItems(odd).map((item) => item.value)).toEqual(['off', '1', '2', '5', '7', '10']);
+    expect(resolveCompactionValue({ ...base, idleCompaction: false })).toBe('off');
+  });
+
+  it('turns a choice into a settings patch', () => {
+    expect(parseCompaction('off')).toEqual({ idleCompaction: false });
+    expect(parseCompaction('5')).toEqual({ idleCompaction: true, compactionLeadMinutes: 5 });
+  });
+});
+
+describe('compaction and fast mode', () => {
+  it('offers Eunoe’s two modes, Claude Code’s compaction and off', () => {
+    expect(COMPACTION_MODE_ITEMS.map((item) => [item.value, item.label])).toEqual([
+      ['eunoe_compact', 'Eunoe compaction'],
+      ['eunoe_default', 'Eunoe always fold'],
+      ['claude', 'Claude Code’s compaction'],
+      ['off', 'Off'],
+    ]);
+  });
+
+  it('holds fast mode back where it needs usage credits, and shows why', () => {
+    const work = AGENT_GROUPS[0] as AgentGroup;
+    const fast: Settings = { ...createSettings(), fastMode: true };
+    const credits = (fastMode: FastModeAvailability) => ({
+      ...createAccount({ id: fastMode }).usage,
+      fastMode,
+    });
+    const without = createSnapshot({
+      accounts: [createAccount({ id: 'a', usage: credits('needs_credits') })],
+    });
+    const withCredits = createSnapshot({
+      accounts: [createAccount({ id: 'b', usage: credits('available') })],
+    });
+    expect(resolveSpeedAvailability(without, fast, ['builder'])).toBe('needs_credits');
+    expect(resolveSpeedAvailability(withCredits, fast, ['builder'])).toBe('available');
+    expect(resolveSpeedAvailability(null, fast, ['builder'])).toBe('unknown');
+    expect(resolveSpeedAvailability(without, fast, [])).toBe('unknown');
+    const onCodex: Settings = { ...fast, agentProviders: { planner: 'codex' } };
+    const codexCredits = createSnapshot({
+      accounts: without.accounts,
+      providers: [createProviderLogin({ usage: credits('available') })],
+    });
+    expect(resolveSpeedAvailability(codexCredits, onCodex, ['planner', 'builder'])).toBe('available');
+    expect(listSpeedItems('needs_credits')).toEqual([
+      { value: 'off', label: 'Standard', icon: 'IconSpeedMiddle' },
+      { value: 'on', label: 'Fast', icon: 'IconSpeedHigh', hint: FAST_MODE_UNAVAILABLE, disabled: true },
+    ]);
+    expect(FAST_MODE_UNAVAILABLE).toBe('Unavailable: needs usage credits');
+    expect(listSpeedItems('unknown')).toBe(FAST_MODE_ITEMS);
+    expect(resolveSpeedValue(fast, 'builder', 'needs_credits')).toBe('off');
+    expect(resolveSpeedValue(fast, 'builder', 'available')).toBe('on');
+    expect(resolveGroupSpeed(fast, work, 'needs_credits')).toBe('off');
+    expect(listGroupSpeedItems(fast, work, 'needs_credits')).toEqual(listSpeedItems('needs_credits'));
+  });
+
+  it('runs every role at standard speed until you pick fast for a group or a role', async () => {
+    const spies = spyOnCommands();
+    const work = AGENT_GROUPS[0] as AgentGroup;
+    const quick = AGENT_GROUPS[3] as AgentGroup;
+    expect(FAST_MODE_ITEMS.map((item) => item.label)).toEqual(['Standard', 'Fast']);
+    const chosen: Settings = { ...createSettings(), agentFastModes: { builder: true } };
+    expect(resolveSpeedValue(createSettings(), 'builder')).toBe('off');
+    expect(resolveSpeedValue(chosen, 'builder')).toBe('on');
+    expect(resolveGroupSpeed(createSettings(), work)).toBe('off');
+    expect(resolveGroupSpeed(chosen, work)).toBe(MIXED_VALUE);
+    expect(listGroupSpeedItems(chosen, work).map((item) => item.label)).toEqual([
+      'Set per role',
+      'Standard',
+      'Fast',
+    ]);
+    expect(listGroupSpeedItems(createSettings(), quick)).toBe(FAST_MODE_ITEMS);
+    expect(await changeGroupSpeed(chosen, work, MIXED_VALUE)).toBe(false);
+    await changeGroupSpeed(chosen, quick, 'on');
+    await changeAgentSpeed(chosen, 'planner', 'off', 'Saved.');
+    expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
+      [
+        {
+          type: 'settings.change',
+          patch: { agentFastModes: { builder: true, classifier: true, writer: true } },
+        },
+        undefined,
+      ],
+      [{ type: 'settings.change', patch: { agentFastModes: { builder: true, planner: false } } }, 'Saved.'],
+    ] as never);
+    spies.restore();
+  });
+});
+
+describe('repository folders', () => {
+  it('adds, removes and toggles a folder, saying which it did', () => {
+    expect(resolveRootAdded(['/a'], ' /b ')).toEqual({ roots: ['/a', '/b'], done: 'Folder added.' });
+    expect(resolveRootRemoved(['/a', '/b'], '/a')).toEqual({ roots: ['/b'], done: 'Folder removed.' });
+    expect(resolveRootToggled(['/a'], '/a')).toEqual({ roots: [], done: 'Folder removed.' });
+    expect(resolveRootToggled(['/a'], '/b')).toEqual({ roots: ['/a', '/b'], done: 'Folder added.' });
+  });
+});
+
+describe('agent selects', () => {
+  it('names a group’s selects the way ⌘K does, and a role’s by the role', () => {
+    const doing = AGENT_GROUPS[0] as (typeof AGENT_GROUPS)[number];
+    expect(describeGroupSelects(doing)).toEqual({
+      model: 'Model for doing the work',
+      speed: 'Speed for doing the work',
+    });
+    expect(describeRoleSelects(doing.roles[0] as (typeof doing.roles)[number])).toEqual({
+      model: 'Planner model',
+      speed: 'Planner speed',
+    });
+  });
+});

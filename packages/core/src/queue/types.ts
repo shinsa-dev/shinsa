@@ -1,19 +1,18 @@
-import type { Gate, Task } from '../model/index.ts';
+import type { Gate, Task } from '../domain/index.ts';
 
 export interface QueuedGate {
   gate: Gate;
   task: Task;
-  areaId: string | null;
+  projectId: string | null;
   unblocks: number;
   reason: string;
 }
 
 export interface Queue {
-  focusAreaId: string | null;
+  focusProjectId: string | null;
   ready: QueuedGate[];
   upNow: QueuedGate[];
   later: QueuedGate[];
-  held: QueuedGate[];
   working: Task[];
   waiting: Task[];
 }

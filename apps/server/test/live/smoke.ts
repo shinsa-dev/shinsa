@@ -1,4 +1,4 @@
-import { listOpenGates } from '@shinsa/core';
+import { isTaskSettled, listOpenGates, resolveTaskShape } from '@shinsa/core';
 import { World } from '../e2e/harness.ts';
 
 const FILES = {
@@ -16,6 +16,37 @@ const FILES = {
 
 function print(...parts: unknown[]) {
   process.stdout.write(`${parts.map(String).join(' ')}\n`);
+}
+
+async function runShaped(label: string, intent: string) {
+  const taskId = await world.createTask(intent);
+  await world.until(
+    label,
+    () =>
+      isTaskSettled(world.task(taskId)) ||
+      listOpenGates(world.state, taskId).some((gate) => gate.purpose !== 'decision'),
+    15 * 60_000
+  );
+  const task = world.task(taskId);
+  print(`\n=== ${label} ===`);
+  print('shape', resolveTaskShape(task), JSON.stringify(task.triageDecisions));
+  print('stage', task.stage, task.stageReason);
+  print(
+    'runs',
+    JSON.stringify(
+      Object.values(world.state.runs).flatMap((run) => (run.taskId === taskId ? [run.role] : []))
+    )
+  );
+  print('result', task.result?.body ?? task.answer ?? '(none)');
+  print('proposal', JSON.stringify(task.proposal ?? null));
+  print('pull request', JSON.stringify(task.pullRequest));
+  const change = listOpenGates(world.state, taskId).find((gate) => gate.purpose === 'change');
+  if (change) {
+    await world.answer(change, 'reject');
+    await world.untilStage(taskId, 'done', 60_000);
+    print('kept as it is', world.task(taskId).stageReason);
+  }
+  if (!isTaskSettled(world.task(taskId))) await world.engine.dispatch({ type: 'task.cancel', taskId });
 }
 
 const started = Date.now();
@@ -80,6 +111,30 @@ try {
     await world.untilStage(taskId, 'merged', 60_000);
     print('merged; pulls', JSON.stringify(world.github.pulls));
   }
+  const before = new Set(Object.keys(world.state.tasks));
+  await world.engine.dispatch({
+    type: 'task.create',
+    intent: 'How does average() handle an empty list? Answer from the code.',
+    repoId: world.repoId,
+    mode: 'ask',
+  });
+  const askId = Object.keys(world.state.tasks).find((id) => !before.has(id)) ?? '';
+  await world.until(
+    'the answer',
+    () =>
+      world.state.tasks[askId]?.stage === 'done' ||
+      listOpenGates(world.state, askId).some((gate) => gate.purpose !== 'decision'),
+    10 * 60_000
+  );
+  const asked = world.task(askId);
+  print('\n=== ASK MODE ===');
+  print('stage', asked.stage, asked.stageReason);
+  print('answer', asked.answer ?? '(none)');
+  await runShaped(
+    'INVESTIGATE',
+    'average([]) returns NaN instead of 0. Find out why and report the cause; do not change the code yet.'
+  );
+  await runShaped('SUPPORT QUESTION', 'How do I run the tests in this repository?');
 } finally {
   clearInterval(timer);
   print(`total ${elapsed()}`);

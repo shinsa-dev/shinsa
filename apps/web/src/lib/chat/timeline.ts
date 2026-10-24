@@ -1,0 +1,381 @@
+import {
+  type AccountSwitchReason,
+  type ChatAttachment,
+  type ChatCompactionTrigger,
+  type ChatCompactor,
+  type ChatDelegationEvent,
+  type ChatEntry,
+  type ChatEntryOf,
+  type ChatFastModeStatus,
+  type ChatNotice,
+  type ChatTool,
+  isSubagentEvent,
+  type LoadedExtensions,
+  type Run,
+  type ShinsaToolName,
+  type Task,
+} from '@shinsa/core';
+import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-describe.ts';
+
+export interface HumanMessage {
+  at: number;
+  text: string;
+}
+
+export interface ToolCall {
+  key: string;
+  callId: string;
+  tool: ChatTool;
+  description: ToolDescription;
+  result: string | null;
+  images: string[];
+  failed: boolean;
+}
+
+export type TimelineItem =
+  | { kind: 'instructions'; key: string; at: number; text: string; first: boolean }
+  | { kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[] }
+  | { kind: 'agent'; key: string; at: number; text: string; phase: 'interim' | 'final' }
+  | { kind: 'tools'; key: string; at: number; calls: ToolCall[] }
+  | { kind: 'handover'; key: string; at: number; call: ToolCall }
+  | { kind: 'error'; key: string; at: number; text: string }
+  | { kind: 'account'; key: string; at: number; email: string | null; reason: AccountSwitchReason }
+  | { kind: 'compaction'; key: string; at: number; trigger: ChatCompactionTrigger; by: ChatCompactor }
+  | { kind: 'proxy'; key: string; at: number; detail: string | null }
+  | { kind: 'fast_mode'; key: string; at: number; status: ChatFastModeStatus; reason: string | null }
+  | ({ kind: 'extensions'; key: string; at: number } & LoadedExtensions)
+  | ({ kind: 'handoff'; key: string; at: number } & Omit<HandoffNotice, 'kind'>)
+  | { kind: 'delegation'; key: string; at: number; event: ChatDelegationEvent; runIds: string[] };
+
+type HandoffNotice = Extract<ChatNotice, { kind: 'handoff' }>;
+
+export type QuietNoticeKind = 'account' | 'compaction' | 'handoff' | 'proxy' | 'fast_mode' | 'extensions';
+
+type NoticeKind = QuietNoticeKind | 'delegation';
+
+export type WorkItem = TimelineItemOf<'instructions' | 'agent' | 'tools'>;
+
+export type TimelineItemOf<K extends TimelineItem['kind']> = Extract<TimelineItem, { kind: K }>;
+
+export interface RunTurn {
+  key: string;
+  human: TimelineItemOf<'human'> | null;
+  notices: TimelineItemOf<NoticeKind>[];
+  work: WorkItem[];
+  outcomes: TimelineItemOf<'handover'>[];
+  reply: TimelineItemOf<'agent'> | null;
+  errors: TimelineItemOf<'error'>[];
+  steps: number;
+  startedAt: number;
+  endedAt: number;
+  live: boolean;
+}
+
+export function listHumanMessages(task: Task): HumanMessage[] {
+  return task.activity
+    .filter((entry) => entry.actor === 'you' && (entry.kind === 'asked' || entry.kind === 'message'))
+    .flatMap((entry) => (entry.detail ? [{ at: entry.at, text: entry.detail }] : []));
+}
+
+export function resolveRunMessages(runs: Run[], messages: HumanMessage[]) {
+  const preamble: HumanMessage[] = [];
+  const byRun = new Map<string, HumanMessage[]>(runs.map((run) => [run.id, []]));
+  for (const message of messages) {
+    const owner = runs.filter((run) => run.startedAt <= message.at).at(-1);
+    if (owner) byRun.get(owner.id)?.push(message);
+    else preamble.push(message);
+  }
+  return { preamble, byRun };
+}
+
+function mergeByTime(entries: ChatEntry[], messages: HumanMessage[]) {
+  const stream: ({ type: 'entry'; entry: ChatEntry } | { type: 'human'; message: HumanMessage })[] = [];
+  let next = 0;
+  for (const entry of entries) {
+    while (next < messages.length && (messages[next]?.at ?? 0) <= entry.at) {
+      const message = messages[next];
+      if (message) stream.push({ type: 'human', message });
+      next += 1;
+    }
+    stream.push({ type: 'entry', entry });
+  }
+  for (const message of messages.slice(next)) stream.push({ type: 'human', message });
+  return stream;
+}
+
+function createToolCall(entry: ChatEntryOf<'tool_call'>): ToolCall {
+  return {
+    key: entry.id,
+    callId: entry.callId,
+    tool: entry.tool,
+    description: describeTool(entry.tool),
+    result: null,
+    images: [],
+    failed: false,
+  };
+}
+
+function attachEcho(items: TimelineItem[], entry: ChatEntryOf<'user'>) {
+  if (entry.attachments.length === 0) return;
+  const message = items
+    .filter(
+      (item): item is TimelineItemOf<'human'> =>
+        item.kind === 'human' && item.text.trim() === entry.text.trim()
+    )
+    .at(-1);
+  if (message && message.attachments.length === 0) message.attachments = entry.attachments;
+}
+
+function resolveNoticeItems(entry: ChatEntryOf<'notice'>): TimelineItem[] {
+  const { notice } = entry;
+  if (notice.kind === 'account_switched') {
+    return [{ kind: 'account', key: entry.id, at: entry.at, email: notice.email, reason: notice.reason }];
+  }
+  if (notice.kind === 'compaction') {
+    return [
+      { kind: 'compaction', key: entry.id, at: entry.at, trigger: notice.trigger, by: notice.by ?? 'claude' },
+    ];
+  }
+  if (notice.kind === 'proxy') return [{ kind: 'proxy', key: entry.id, at: entry.at, detail: notice.detail }];
+  if (notice.kind === 'fast_mode') {
+    return [{ kind: 'fast_mode', key: entry.id, at: entry.at, status: notice.status, reason: notice.reason }];
+  }
+  if (notice.kind === 'handoff') {
+    return [
+      {
+        kind: 'handoff',
+        key: entry.id,
+        at: entry.at,
+        reason: notice.reason,
+        fromProvider: notice.fromProvider,
+        toProvider: notice.toProvider,
+        totalEntries: notice.totalEntries,
+        includedEntries: notice.includedEntries,
+      },
+    ];
+  }
+  if (notice.kind === 'delegation') {
+    return [{ kind: 'delegation', key: entry.id, at: entry.at, event: notice.event, runIds: notice.runIds }];
+  }
+  if (notice.kind === 'extensions') {
+    const { servers, skills, plugins } = notice;
+    return [{ kind: 'extensions', key: entry.id, at: entry.at, servers, skills, plugins }];
+  }
+  return [];
+}
+
+interface TimelineBuilder {
+  items: TimelineItem[];
+  calls: ToolCall[];
+  echoes: Set<string>;
+  seenBrief: boolean;
+  group: TimelineItemOf<'tools'> | null;
+}
+
+function applyToolCall(builder: TimelineBuilder, entry: ChatEntryOf<'tool_call'>) {
+  const call = createToolCall(entry);
+  builder.calls.push(call);
+  if (isHandover(call.tool)) {
+    builder.group = null;
+    builder.items.push({ kind: 'handover', key: entry.id, at: entry.at, call });
+    return;
+  }
+  if (builder.group) {
+    builder.group.calls.push(call);
+    return;
+  }
+  builder.group = { kind: 'tools', key: entry.id, at: entry.at, calls: [call] };
+  builder.items.push(builder.group);
+}
+
+function applyToolResult(builder: TimelineBuilder, entry: ChatEntryOf<'tool_result'>) {
+  const { calls } = builder;
+  const call =
+    calls.find((candidate) => candidate.callId === entry.callId && candidate.result === null) ??
+    calls.find((candidate) => candidate.callId === entry.callId) ??
+    calls.find((candidate) => candidate.result === null);
+  if (!call) return;
+  Object.assign(call, { result: entry.output, images: entry.images, failed: entry.status === 'error' });
+}
+
+function applyUserEntry(builder: TimelineBuilder, entry: ChatEntryOf<'user'>) {
+  builder.group = null;
+  if (entry.from === 'shinsa') {
+    builder.items.push({
+      kind: 'instructions',
+      key: entry.id,
+      at: entry.at,
+      text: entry.text,
+      first: !builder.seenBrief,
+    });
+    builder.seenBrief = true;
+    return;
+  }
+  if (builder.echoes.has(entry.text.trim())) {
+    attachEcho(builder.items, entry);
+    return;
+  }
+  builder.items.push({
+    kind: 'human',
+    key: entry.id,
+    at: entry.at,
+    text: entry.text,
+    attachments: entry.attachments,
+  });
+}
+
+function applyEntry(builder: TimelineBuilder, entry: ChatEntry) {
+  switch (entry.type) {
+    case 'tool_call':
+      applyToolCall(builder, entry);
+      return;
+    case 'tool_result':
+      applyToolResult(builder, entry);
+      return;
+    case 'status':
+      return;
+    case 'notice':
+      builder.items.push(...resolveNoticeItems(entry));
+      return;
+    case 'user':
+      applyUserEntry(builder, entry);
+      return;
+    case 'agent':
+      builder.group = null;
+      builder.items.push({
+        kind: 'agent',
+        key: entry.id,
+        at: entry.at,
+        text: entry.text,
+        phase: entry.phase,
+      });
+      return;
+    case 'error':
+      builder.group = null;
+      builder.items.push({ kind: 'error', key: entry.id, at: entry.at, text: entry.text });
+      return;
+  }
+}
+
+export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]): TimelineItem[] {
+  const builder: TimelineBuilder = {
+    items: [],
+    calls: [],
+    echoes: new Set(messages.map((message) => message.text.trim())),
+    seenBrief: false,
+    group: null,
+  };
+  for (const [index, part] of mergeByTime(entries, messages).entries()) {
+    if (part.type === 'human') {
+      builder.group = null;
+      const { at, text } = part.message;
+      builder.items.push({ kind: 'human', key: `human-${at}-${index}`, at, text, attachments: [] });
+    } else if (!isSubagentEvent(part.entry)) {
+      applyEntry(builder, part.entry);
+    }
+  }
+  return builder.items;
+}
+
+function countSteps(items: TimelineItem[]) {
+  return items.reduce(
+    (total, item) => total + (item.kind === 'tools' ? item.calls.length : item.kind === 'handover' ? 1 : 0),
+    0
+  );
+}
+
+function isWork(item: TimelineItem): item is WorkItem {
+  return item.kind === 'instructions' || item.kind === 'agent' || item.kind === 'tools';
+}
+
+function isNotice(item: TimelineItem): item is TimelineItemOf<NoticeKind> {
+  return (
+    item.kind === 'account' ||
+    item.kind === 'compaction' ||
+    item.kind === 'proxy' ||
+    item.kind === 'fast_mode' ||
+    item.kind === 'extensions' ||
+    item.kind === 'handoff' ||
+    item.kind === 'delegation'
+  );
+}
+
+interface TurnGroup {
+  human: RunTurn['human'];
+  body: TimelineItem[];
+}
+
+interface TurnClose {
+  key: string;
+  live: boolean;
+  failed: boolean;
+  startedAt: number;
+  endedAt: number;
+}
+
+function closeTurn(
+  { human, body }: TurnGroup,
+  { key, live, failed, startedAt, endedAt }: TurnClose,
+  now: number
+): RunTurn {
+  const agents = body.filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
+  const errors = body.filter((item): item is TimelineItemOf<'error'> => item.kind === 'error');
+  const fallback = live || failed || errors.length > 0 ? null : (agents.at(-1) ?? null);
+  const reply = agents.filter((item) => item.phase === 'final').at(-1) ?? fallback;
+  return {
+    key,
+    human,
+    notices: body.filter(isNotice),
+    work: body.filter((item): item is WorkItem => item !== reply && isWork(item)),
+    outcomes: body.filter((item): item is TimelineItemOf<'handover'> => item.kind === 'handover'),
+    reply,
+    errors,
+    steps: countSteps(body),
+    startedAt: human?.at ?? body[0]?.at ?? startedAt,
+    endedAt: live ? now : Math.max(endedAt, body.at(-1)?.at ?? endedAt),
+    live,
+  };
+}
+
+export function resolveTurns(items: TimelineItem[], run: Run, now = Date.now()): RunTurn[] {
+  const groups: TurnGroup[] = [{ human: null, body: [] }];
+  for (const item of items) {
+    if (item.kind === 'human') groups.push({ human: item, body: [] });
+    else groups.at(-1)?.body.push(item);
+  }
+  const running = run.endedAt === null;
+  return groups
+    .filter((group, index) => group.human !== null || group.body.length > 0 || (index === 0 && running))
+    .map((group, index, all) => {
+      const last = index === all.length - 1;
+      const next = all[index + 1];
+      return closeTurn(
+        group,
+        {
+          key: group.human?.key ?? `turn-${index}`,
+          live: last && running,
+          failed: last && run.outcome !== null && run.outcome !== 'completed',
+          startedAt: run.startedAt,
+          endedAt: last ? (run.endedAt ?? now) : (next?.human?.at ?? run.startedAt),
+        },
+        now
+      );
+    });
+}
+
+export function resolveLastHandover(entries: ChatEntry[], name: ShinsaToolName) {
+  const entry = entries
+    .filter((candidate): candidate is ChatEntryOf<'tool_call'> => candidate.type === 'tool_call')
+    .filter((candidate) => candidate.tool.kind === 'shinsa' && candidate.tool.name === name)
+    .at(-1);
+  return entry?.tool.kind === 'shinsa' ? entry.tool.args : null;
+}
+
+export function resolveLastAgentText(entries: ChatEntry[]) {
+  const texts = entries.filter(
+    (entry): entry is ChatEntryOf<'agent'> | ChatEntryOf<'error'> =>
+      entry.type === 'agent' || entry.type === 'error'
+  );
+  const settled = texts.filter((entry) => entry.type === 'error' || entry.phase === 'final').at(-1);
+  return (settled ?? texts.at(-1))?.text ?? null;
+}

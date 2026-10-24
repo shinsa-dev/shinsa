@@ -1,14 +1,27 @@
-import { isTaskSettled, type Run, type Task } from '../model/index.ts';
+import { hasStep, isTaskSettled, type ReviewEscalation, type Run, type Task } from '../domain/index.ts';
+import type { ShinsaEffectKind } from '../effects/index.ts';
 import { resolvePhasePrompt, resolvePlannerPrompt, resolveReviewerPrompt } from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 
-export type SettledStage = 'merged' | 'done' | 'cancelled';
+type SettledStage = 'merged' | 'done' | 'cancelled';
+
+export const CHECKING_SETUP = 'checking the setup';
+
+const SETTLED_EFFECTS: ShinsaEffectKind[] = [
+  'task.triage',
+  'config.verify',
+  'worktree.create',
+  'checks.run',
+  'pull_request.open',
+  'pull_request.push',
+  'pull_request.watch',
+];
 
 function countPhases(task: Task) {
-  return Math.max(1, task.spec?.document?.plan.length ?? 0);
+  return Math.max(1, task.plan?.document?.phases.length ?? 0);
 }
 
 export function resolveCurrentPhase(task: Task) {
@@ -27,11 +40,12 @@ export function startWork(decider: Decider, taskId: string) {
   const pending = listPendingDependencies(decider.state, decider.task(taskId));
   if (pending.length > 0) {
     decider.cancelRuns(taskId);
-    decider.stage(taskId, 'queued', `waiting for ${quoteTitles(pending)} to finish`);
+    decider.clearWaits(taskId);
+    decider.stage(taskId, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
     return;
   }
-  decider.stage(taskId, 'triage', 'setting up the worktree');
-  decider.run({ kind: 'worktree.create', taskId });
+  decider.stage(taskId, 'triage', CHECKING_SETUP);
+  decider.run({ kind: 'config.verify', taskId });
 }
 
 export function startPlanning(decider: Decider, taskId: string, feedback: string | null) {
@@ -41,13 +55,17 @@ export function startPlanning(decider: Decider, taskId: string, feedback: string
     task,
     'planner',
     resolvePlannerPrompt(task, decider.repoOf(task), decider.basesOf(task), feedback),
-    { resumeFrom: feedback ? decider.lastRun(taskId, ['planner']) : null }
+    {
+      resumeFrom: feedback ? decider.lastRun(taskId, ['planner']) : decider.resumeRound(task, ['planner']),
+      feedback,
+    }
   );
 }
 
 export function needsPlanApproval(decider: Decider, task: Task) {
+  if (task.planFirst || hasStep(task, 'operate') || task.plan?.document?.approval === true) return true;
   if (!decider.state.settings.approvePlans) return false;
-  return task.size === 'large' || task.specFirst || (task.spec?.version ?? 0) > 1;
+  return task.size === 'large' || (task.plan?.version ?? 0) > 1;
 }
 
 export function startPhase(
@@ -57,7 +75,7 @@ export function startPhase(
   resumeFrom: Run | null = null,
   addition = ''
 ) {
-  const plan = decider.task(taskId).spec?.document?.plan ?? [];
+  const plan = decider.task(taskId).plan?.document?.phases ?? [];
   const step = plan[index];
   decider.stage(
     taskId,
@@ -69,11 +87,16 @@ export function startPhase(
   }
   const task = decider.task(taskId);
   const prompt = resolvePhasePrompt(task, decider.repoOf(task), decider.basesOf(task), index) + addition;
-  decider.startRun(task, 'builder', prompt, { phaseIndex: index, resumeFrom });
+  const opening = index === 0 && task.phaseReports.length === 0;
+  decider.startRun(task, 'builder', prompt, {
+    phaseIndex: index,
+    resumeFrom: resumeFrom ?? (opening ? decider.resumeRound(task, ['builder', 'fixer']) : null),
+  });
 }
 
 export function startChecks(decider: Decider, taskId: string) {
   decider.cancelRuns(taskId);
+  decider.cancelEffects(taskId, ['checks.run'], 'A new round of checks replaced it.');
   decider.stage(taskId, 'checking', 'running the checks');
   decider.run({ kind: 'checks.run', taskId, round: decider.task(taskId).fixRounds });
 }
@@ -88,23 +111,64 @@ export function startReview(decider: Decider, taskId: string) {
   );
 }
 
-export function openReviewGate(decider: Decider, taskId: string) {
-  const report = assembleReport(decider.task(taskId));
-  decider.emit({ type: 'work.submitted', taskId, summary: report.headline, report });
-  decider.stage(taskId, 'awaiting_review', 'changes ready for your review');
-  decider.openGate(taskId, 'review', 'decision', decider.task(taskId).title, serializeReportMarkdown(report));
+export function startAfterChecks(decider: Decider, taskId: string) {
+  if (hasStep(decider.task(taskId), 'agent_review')) {
+    startReview(decider, taskId);
+    return;
+  }
+  openReviewGate(decider, taskId);
 }
 
-export function settleTask(decider: Decider, taskId: string, stage: SettledStage, reason: string) {
+export function startAfterBuild(decider: Decider, taskId: string) {
+  if (hasStep(decider.task(taskId), 'checks')) {
+    startChecks(decider, taskId);
+    return;
+  }
+  decider.cancelRuns(taskId);
+  startAfterChecks(decider, taskId);
+}
+
+export function openReviewGate(decider: Decider, taskId: string, escalation: ReviewEscalation | null = null) {
+  const report = assembleReport(decider.task(taskId));
+  decider.emit({ type: 'work.submitted', taskId, summary: report.headline, report });
+  decider.stage(
+    taskId,
+    'awaiting_review',
+    escalation ? 'the agents could not settle the review' : 'changes ready for your review'
+  );
+  decider.openGate(
+    taskId,
+    'review',
+    decider.task(taskId).title,
+    serializeReportMarkdown(report),
+    {
+      ...(escalation ? { details: { escalation } } : {}),
+    }
+  );
+}
+
+export function settleTask(
+  decider: Decider,
+  taskId: string,
+  stage: SettledStage,
+  reason: string,
+  by: 'you' | null = null
+) {
   const task = decider.task(taskId);
   if (isTaskSettled(task)) return;
   decider.cancelRuns(taskId);
+  decider.cancelEffects(
+    taskId,
+    stage === 'merged' ? SETTLED_EFFECTS : [...SETTLED_EFFECTS, 'pull_request.merge'],
+    'The task is finished.'
+  );
   decider.withdrawGates(taskId, () => true);
-  decider.stage(taskId, stage, reason);
+  decider.clearWaits(taskId);
+  decider.stage(taskId, stage, reason, by);
   if (task.worktreePath) decider.run({ kind: 'worktree.remove', taskId });
   decider.requestBriefing(taskId);
   for (const dependent of Object.values(decider.state.tasks)) {
-    if (!dependent.blockedBy.includes(taskId)) continue;
+    if (!dependent.waitsOn.includes(taskId)) continue;
     if (dependent.stage === 'shipping' || dependent.stage === 'awaiting_merge') {
       decider.run({ kind: 'pull_request.watch', taskId: dependent.id });
     }

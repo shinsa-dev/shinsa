@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { reconcileBriefing } from '../../src/index.ts';
-import { dup, entry, NOW, queueOf, ready, task } from './fixtures.ts';
+import { dup, entry, NOW, queueOf, ready } from './fixtures.ts';
 
 describe('reconcileBriefing', () => {
   const queue = queueOf(ready);
@@ -42,14 +42,6 @@ describe('reconcileBriefing', () => {
     expect(briefing.note).toBeNull();
   });
 
-  test('drops a stored note about decisions outside the focus', () => {
-    const outside = {
-      ...stored,
-      briefing: { ...stored.briefing, note: '1 more decision waits outside your focus.' },
-    };
-    expect(reconcileBriefing(outside, queue, NOW).note).toBeNull();
-  });
-
   test('reads a briefing stored before guides had structure', () => {
     const briefing = reconcileBriefing({ text: 'Start with the chat.', at: NOW, briefing: null }, queue, NOW);
     expect(briefing.now?.taskId).toBe('t-chat');
@@ -72,20 +64,5 @@ describe('reconcileBriefing next', () => {
       't-dup',
       't-docs',
     ]);
-  });
-
-  test('drops a stored note that names a decision held outside the focus', () => {
-    const held = entry(task('t-held', 'Rework the billing page'), 'review');
-    const stored = {
-      text: '',
-      at: NOW,
-      briefing: {
-        now: { taskId: 't-chat', why: 'Kept' },
-        next: [],
-        running: '',
-        note: 'Rework the billing page is also waiting.',
-      },
-    };
-    expect(reconcileBriefing(stored, queueOf(ready, { held: [held] }), NOW).note).toBeNull();
   });
 });

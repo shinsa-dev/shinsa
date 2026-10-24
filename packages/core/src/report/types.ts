@@ -1,3 +1,5 @@
+import type { EvidenceKind } from '../domain/types.ts';
+
 export type Attention = 'critical' | 'high' | 'normal';
 
 export interface CodeSpot {
@@ -8,7 +10,7 @@ export interface CodeSpot {
   why: string;
 }
 
-export interface ReportPhase {
+export interface ReportSection {
   title: string;
   summary: string;
   spots: CodeSpot[];
@@ -20,8 +22,8 @@ export interface ReportCheck {
   detail: string | null;
 }
 
-export interface ReportDecision {
-  decision: string;
+export interface JudgementCall {
+  call: string;
   reason: string;
   file: string | null;
   line: number | null;
@@ -29,36 +31,41 @@ export interface ReportDecision {
 
 export interface WorkReport {
   headline: string;
-  phases: ReportPhase[];
+  sections: ReportSection[];
   checks: ReportCheck[];
-  decisions: ReportDecision[];
+  judgementCalls: JudgementCall[];
 }
 
-export interface SpecFile {
+export interface PlanFile {
   path: string;
   change: string;
 }
 
-export interface SpecQuestion {
+export interface PlanQuestion {
   question: string;
   options: string[];
   recommendation: string | null;
 }
 
-export interface PlanStep {
+export interface PlanPhase {
   title: string;
   detail: string;
 }
 
-export interface SpecDocument {
+export interface PlanDocument {
   goal: string;
-  plan: PlanStep[];
+  phases: PlanPhase[];
   behaviour: string[];
   approach: string;
-  files: SpecFile[];
+  files: PlanFile[];
   outOfScope: string[];
   verification: string[];
-  questions: SpecQuestion[];
+  questions: PlanQuestion[];
+  operation?: string[];
+  impact?: string;
+  evidence?: Exclude<EvidenceKind, 'check'>[];
+  checks?: string[];
+  approval?: boolean;
 }
 
 export interface ReviewFinding {
@@ -67,10 +74,39 @@ export interface ReviewFinding {
   line: number | null;
   end?: number | null;
   message: string;
+  verdict?: 'fix' | 'dismiss';
+  verdictNote?: string | null;
 }
 
 export interface PhaseHandOver {
   summary: string;
   spots: CodeSpot[];
-  decisions: ReportDecision[];
+  judgementCalls: JudgementCall[];
+}
+
+export interface PlanHandOver {
+  document: PlanDocument;
+  changeSummary: string | null;
+}
+
+export interface QuestionHandOver {
+  question: string;
+  context: string | null;
+  choices: string[];
+  recommendation: string | null;
+}
+
+export interface WaitHandOver {
+  checkInMinutes: number;
+  notes: string;
+  timeoutMinutes: number | null;
+  maxAttempts: number | null;
+}
+
+export interface SuggestedTask {
+  title: string;
+  request: string;
+  why: string;
+  waitsOnThis: boolean;
+  splitOff?: boolean;
 }

@@ -17,7 +17,7 @@ const FIX_COMMIT: Record<NonNullable<Task['fixFor']>, string> = {
 
 const SUBJECT_LIMIT = 72;
 
-export interface EvidenceHandOver {
+interface EvidenceHandOver {
   kind: EvidenceKind;
   title: string;
   uri: string;

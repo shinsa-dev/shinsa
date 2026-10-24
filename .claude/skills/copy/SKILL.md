@@ -34,7 +34,7 @@ A stage reason says what is happening to the task now. A gate says what is being
 - **Agent** for whatever is working; the roles (planner, builder, reviewer, fixer) only where the role matters ("The fixer paused").
 - **Waiting on another task** for dependencies, "waiting for “Title” to finish" in a stage reason. Titles are quoted with curly quotes.
 - **You** for the human in product copy and activity; **the human** in agent prompts.
-- Never playful labels, never "magic", never exclamation marks.
+- Never playful labels, never "magic", never exclamation marks. The two layout names (`LAYOUT_NAMES`: Desk and Shelf) are names chosen on purpose, each with a plain hint line.
 
 ## Per kind of string
 

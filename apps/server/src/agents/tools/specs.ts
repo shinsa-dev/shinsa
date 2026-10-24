@@ -1,32 +1,36 @@
-import { PROTOCOL_LIMITS } from '@shinsa/core';
-
-export interface ToolSpec {
-  name: string;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
+import {
+  ATTENTION_LEVELS,
+  FINDING_SEVERITIES,
+  PLAN_EVIDENCE_KINDS,
+  PROTOCOL_LIMITS,
+  type ShinsaToolName,
+  VERIFICATION_RULES,
+} from '@shinsa/core';
+import { ORCHESTRATION_TOOL_SPECS } from './orchestration.ts';
+import { CHANGE_SUMMARY_SPEC, CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process.ts';
+import { SCHEDULE_TOOL_SPECS } from './schedules.ts';
+import { limitedPath, limitedText, type ToolSpec, textList } from './schema.ts';
+import { SHAPE_TOOL_SPECS } from './shapes.ts';
 
 const L = PROTOCOL_LIMITS;
 
-function limitedText(description: string, maxLength: number) {
-  return { type: 'string', description: `${description} At most ${maxLength} characters.`, maxLength };
+function resolveRequirement(id: string) {
+  return VERIFICATION_RULES.find((rule) => rule.id === id)?.requirement ?? '';
 }
 
-function textList(description: string, maxItems: number, maxLength: number) {
-  return { type: 'array', description, maxItems, items: { type: 'string', maxLength } };
-}
+const CODE_ONLY = 'Only for a task that changes code; a plan for any other task that sets it is refused.';
 
 const LINE = { type: 'integer', minimum: 1 };
 
 const SPOT = {
   type: 'object',
   properties: {
-    file: { type: 'string', description: 'Path relative to the repository root.' },
+    file: limitedPath('Path relative to the repository root.'),
     start: { ...LINE, description: 'First line, numbered as in the new file.' },
     end: { ...LINE, description: 'Last line, numbered as in the new file.' },
     attention: {
       type: 'string',
-      enum: ['critical', 'high', 'normal'],
+      enum: [...ATTENTION_LEVELS],
       description:
         'critical: could break something or encodes a judgement call. high: worth a careful read. normal: context.',
     },
@@ -49,9 +53,8 @@ export const TOOL_SPECS = {
         goal: limitedText('The outcome in one or two sentences.', L.goal),
         plan: {
           type: 'array',
-          description:
-            'The work as 2 to 8 phases in the order they will be done. Each is one visible step of progress.',
-          minItems: 2,
+          description: `The work as ${L.minPlanSteps} to ${L.planSteps} phases in the order they will be done. Each is one visible step of progress.`,
+          minItems: L.minPlanSteps,
           maxItems: L.planSteps,
           items: {
             type: 'object',
@@ -74,14 +77,44 @@ export const TOOL_SPECS = {
           items: {
             type: 'object',
             properties: {
-              path: { type: 'string' },
+              path: limitedPath('Path relative to the repository root.'),
               change: limitedText('What changes in it.', L.fileChange),
             },
             required: ['path', 'change'],
           },
         },
         out_of_scope: textList('What this deliberately does not do.', L.listItems, L.listItem),
-        verification: textList('How it will be proven to work.', L.listItems, L.listItem),
+        verification: textList(
+          `The verification plan, required for any task that changes code: ${resolveRequirement('code.verification_plan')} One item per proof: the tests, checks, runs or screenshots that show it works.`,
+          L.listItems,
+          L.listItem
+        ),
+        impact: limitedText(
+          `Required for any task that runs an operation: ${resolveRequirement('operation.impact')} Leave it out otherwise.`,
+          L.impact
+        ),
+        evidence: {
+          type: 'array',
+          description: `The kinds of evidence the builders attach with \`attach_evidence\` before the human reviews, each named once. Shinsa refuses the last phase until each kind is attached. ${CODE_ONLY}`,
+          maxItems: PLAN_EVIDENCE_KINDS.length,
+          uniqueItems: true,
+          items: { type: 'string', enum: [...PLAN_EVIDENCE_KINDS] },
+        },
+        checks: textList(
+          `Commands Shinsa runs in the worktree after the repository's own checks. ${resolveRequirement('code.checks')} Leave it out when the repository's checks prove the change. At most ${L.planChecks} commands of ${L.checkCommand} characters each. ${CODE_ONLY}`,
+          L.planChecks,
+          L.checkCommand
+        ),
+        approval: {
+          type: 'boolean',
+          description:
+            'True asks the human to approve the plan before anything is built or run, even when Approve plans is off. Set it when the change is risky.',
+        },
+        operation: textList(
+          'Only for a task that both changes code and runs an operation: the operation’s steps in order, each with how to check it worked. Leave it out otherwise.',
+          L.planSteps,
+          L.listItem
+        ),
         questions: {
           type: 'array',
           description: 'Decisions only the human can make. Empty when there are none.',
@@ -90,7 +123,7 @@ export const TOOL_SPECS = {
             type: 'object',
             properties: {
               question: limitedText('One question.', L.question),
-              options: textList('2 to 4 concrete options.', L.options, L.option),
+              options: textList(`2 to ${L.options} concrete options.`, L.options, L.option),
               recommendation: limitedText(
                 'The option you recommend, worded exactly as in options.',
                 L.option
@@ -99,6 +132,7 @@ export const TOOL_SPECS = {
             required: ['question', 'options'],
           },
         },
+        change_summary: CHANGE_SUMMARY_SPEC,
       },
       required: [
         'goal',
@@ -139,7 +173,7 @@ export const TOOL_SPECS = {
             properties: {
               decision: limitedText('What you decided.', L.decision),
               reason: limitedText('Why, and the alternative.', L.reason),
-              file: { type: 'string' },
+              file: limitedPath('Path relative to the repository root.'),
               line: LINE,
             },
             required: ['decision', 'reason'],
@@ -173,12 +207,12 @@ export const TOOL_SPECS = {
       properties: {
         findings: {
           type: 'array',
-          maxItems: L.findings,
+          maxItems: L.findingCount,
           items: {
             type: 'object',
             properties: {
-              severity: { type: 'string', enum: ['blocking', 'suggestion'] },
-              file: { type: 'string' },
+              severity: { type: 'string', enum: [...FINDING_SEVERITIES] },
+              file: limitedPath('Path relative to the repository root.'),
               line: { ...LINE, description: 'First line, numbered as in the new file.' },
               end: { ...LINE, description: 'Last line.' },
               message: limitedText('What is wrong and what to do about it.', L.finding),
@@ -197,11 +231,9 @@ export const TOOL_SPECS = {
     inputSchema: {
       type: 'object',
       properties: {
-        question: { type: 'string', description: 'One clear question.' },
-        context: {
-          type: 'string',
-          description: 'What they need to know to answer, and the options you see.',
-        },
+        question: limitedText('One clear question.', L.question),
+        context: limitedText('What they need to know to answer, and the options you see.', L.questionContext),
+        ...CHOICES_SPEC,
       },
       required: ['question'],
     },
@@ -240,6 +272,21 @@ export const TOOL_SPECS = {
       },
     },
   },
+  read_task: {
+    name: 'read_task',
+    description:
+      "Read another task Shinsa tracks: its status, request, plan, open decisions, recent activity and its agents' latest replies. It only reads; it never changes the task.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: {
+          type: 'string',
+          description: 'The task id, from find_tasks or a shinsa://task/<id> link.',
+        },
+      },
+      required: ['task_id'],
+    },
+  },
   note: {
     name: 'note',
     description:
@@ -250,6 +297,8 @@ export const TOOL_SPECS = {
       required: ['note'],
     },
   },
-} satisfies Record<string, ToolSpec>;
-
-export type ShinsaToolName = keyof typeof TOOL_SPECS;
+  ...PROCESS_TOOL_SPECS,
+  ...SHAPE_TOOL_SPECS,
+  ...ORCHESTRATION_TOOL_SPECS,
+  ...SCHEDULE_TOOL_SPECS,
+} satisfies Record<ShinsaToolName, ToolSpec>;

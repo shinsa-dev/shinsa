@@ -1,4 +1,4 @@
-import { compareTasks, DomainError, isTaskComplete, type Task } from '../model/index.ts';
+import { compareTasks, DomainError, isTaskComplete, type Task } from '../domain/index.ts';
 import { isDependencyOf, listOpenGates, listPendingDependencies } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { startWork } from './lifecycle.ts';
@@ -9,7 +9,7 @@ export function resolveDependencies(decider: Decider, task: Task | null, ids: st
   for (const id of new Set(ids)) {
     if (id === task?.id) continue;
     const dependency = decider.task(id);
-    if (task?.blockedBy.includes(id)) {
+    if (task?.waitsOn.includes(id)) {
       kept.push(id);
       continue;
     }
@@ -35,15 +35,15 @@ function isSameList(a: string[], b: string[]) {
 export function changeDependencies(
   decider: Decider,
   taskId: string,
-  blockedBy: string[],
+  waitsOn: string[],
   by: 'you' | 'shinsa'
 ) {
   const task = decider.task(taskId);
-  if (isSameList(blockedBy, task.blockedBy)) return;
-  decider.emit({ type: 'task.blocked', taskId, blockedBy, by });
+  if (isSameList(waitsOn, task.waitsOn)) return;
+  decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by });
   switch (task.stage) {
-    case 'queued':
-      decider.withdrawGates(taskId, (gate) => gate.purpose === 'failure');
+    case 'waiting_on_tasks':
+      decider.withdrawGates(taskId, (gate) => gate.type === 'failure');
       startWork(decider, taskId);
       return;
     case 'planning':
@@ -53,7 +53,22 @@ export function changeDependencies(
     case 'awaiting_merge':
       reviewMergeHold(decider, taskId);
       return;
-    default:
+    case 'triage':
+    case 'awaiting_plan':
+    case 'building':
+    case 'checking':
+    case 'reviewing':
+    case 'fixing':
+    case 'awaiting_review':
+    case 'answering':
+    case 'investigating':
+    case 'researching':
+    case 'operating':
+    case 'awaiting_proposal':
+    case 'awaiting_operation':
+    case 'merged':
+    case 'done':
+    case 'cancelled':
       return;
   }
 }
@@ -67,16 +82,15 @@ function pauseForCancelled(decider: Decider, task: Task, cancelled: Task[], rema
       : 'Retry to start without that work, wait for another task instead, or cancel this one.';
   decider.openGate(
     task.id,
-    'question',
     'failure',
     `${quoteTitles(cancelled)} ${one ? 'was' : 'were'} cancelled`,
     `${waited} ${choices}`
   );
 }
 
-export function releaseQueued(decider: Decider) {
+export function releaseWaiting(decider: Decider) {
   const queued = Object.values(decider.state.tasks)
-    .filter((task) => task.stage === 'queued')
+    .filter((task) => task.stage === 'waiting_on_tasks')
     .sort(compareTasks);
   for (const task of queued) {
     if (listOpenGates(decider.state, task.id).length > 0) continue;
@@ -92,7 +106,7 @@ export function releaseQueued(decider: Decider) {
       continue;
     }
     if (pending.length > 0) {
-      decider.stage(task.id, 'queued', `waiting for ${quoteTitles(pending)} to finish`);
+      decider.stage(task.id, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
       continue;
     }
     startWork(decider, task.id);

@@ -1,10 +1,9 @@
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import { inspectRepo, resolveRepoRoot } from '../git/index.ts';
 import { GITHUB_TIMEOUT_MS } from '../github/index.ts';
-import type { Engine } from '../runtime/engine.ts';
+import type { DispatchOptions, Engine } from '../runtime/engine.ts';
 import { runCommand } from '../shell/index.ts';
 
 export interface LocalRepo {
@@ -46,13 +45,18 @@ export function listLocalRepos(roots: string[]): LocalRepo[] {
   return [...found.values()].sort((a, b) => b.touchedAt - a.touchedAt).slice(0, MAX_LOCAL_REPOS);
 }
 
-let githubLogin: Promise<string | null> | null = null;
-
-export function resolveGithubLogin() {
-  githubLogin ??= runCommand(['gh', 'api', 'user', '--jq', '.login'], homedir(), {
-    timeoutMs: GITHUB_TIMEOUT_MS,
-  }).then((result) => (result.ok ? result.stdout.toLowerCase() : null));
-  return githubLogin;
+export function createLoginResolver(cwd: string): LoginResolver {
+  let login: Promise<string | null> | null = null;
+  return () => {
+    login ??= runCommand(['gh', 'api', 'user', '--jq', '.login'], cwd, {
+      timeoutMs: GITHUB_TIMEOUT_MS,
+    }).then((result) => {
+      if (result.ok) return result.stdout.toLowerCase();
+      login = null;
+      return null;
+    });
+    return login;
+  };
 }
 
 function titleCase(text: string) {
@@ -63,11 +67,21 @@ function titleCase(text: string) {
     .join(' ');
 }
 
-export async function resolveAreaName(remote: string | null, resolveLogin: LoginResolver) {
+export async function resolveProjectName(remote: string | null, resolveLogin: LoginResolver) {
   const owner = remote?.split('/')[1]?.toLowerCase();
   if (!owner) return 'Local';
   if (owner === (await resolveLogin())) return 'Personal';
   return titleCase(owner);
+}
+
+async function resolveFallbackProjectName(
+  engine: Engine,
+  remote: string | null,
+  resolveLogin: LoginResolver,
+  projectId: string | null
+) {
+  if (projectId && engine.state.projects[projectId]) return null;
+  return await resolveProjectName(remote, resolveLogin);
 }
 
 function selectRepoByPath(engine: Engine, path: string) {
@@ -77,16 +91,23 @@ function selectRepoByPath(engine: Engine, path: string) {
 export async function upsertRepo(
   engine: Engine,
   path: string,
-  resolveLogin: LoginResolver = resolveGithubLogin
+  resolveLogin: LoginResolver,
+  projectId: string | null = null,
+  from: DispatchOptions = {}
 ): Promise<Repo> {
   const candidate = await inspectRepo(path);
   const known = selectRepoByPath(engine, candidate.path);
   if (known) return known;
-  await engine.dispatch({
-    type: 'repo.register',
-    repo: { ...candidate, checkCommands: [], previewCommand: null },
-    areaName: await resolveAreaName(candidate.remote, resolveLogin),
-  });
+  const projectName = await resolveFallbackProjectName(engine, candidate.remote, resolveLogin, projectId);
+  await engine.dispatch(
+    {
+      type: 'repo.register',
+      repo: { ...candidate, checkCommands: [] },
+      projectName,
+      projectId,
+    },
+    { ...from, id: from.id ?? `repo:${candidate.path}:${engine.state.seq}` }
+  );
   const registered = selectRepoByPath(engine, candidate.path);
   if (!registered) throw new Error(`Could not register ${candidate.name}.`);
   return registered;
@@ -104,3 +125,7 @@ export async function listCandidateRepos(roots: string[], origin: string | null)
   if (!root || local.some((repo) => repo.path === root)) return local;
   return [{ path: root, name: basename(root), touchedAt: Date.now() }, ...local];
 }
+
+export { discoverRoots } from './discover.ts';
+export { type Discoverer, type RootSource, Roots } from './roots.ts';
+export { verifySetup } from './setup.ts';

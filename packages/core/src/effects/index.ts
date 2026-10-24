@@ -11,16 +11,51 @@ export type ShinsaEffect =
   | { kind: 'pull_request.merge'; taskId: string }
   | { kind: 'pull_request.watch'; taskId: string }
   | { kind: 'worktree.remove'; taskId: string }
-  | { kind: 'briefing.request'; areaId: string | null };
+  | { kind: 'config.verify'; taskId: string }
+  | { kind: 'briefing.request'; projectId: string | null }
+  | { kind: 'run.wake'; runId: string; generation: number }
+  | { kind: 'delegation.steer'; runId: string; generation: number }
+  | { kind: 'delegation.reply'; runId: string; questionId: string };
 
 export type ShinsaEffectKind = ShinsaEffect['kind'];
 
-export const PROCESS_BOUND_EFFECTS: ReadonlySet<ShinsaEffectKind> = new Set<ShinsaEffectKind>([
-  'run.execute',
-  'run.cancel',
-  'run.steer',
-  'question.resolve',
-]);
+export type EffectRecovery = 'process_bound' | 'replay_safe';
+
+export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>> = {
+  'task.triage': 'replay_safe',
+  'worktree.create': 'replay_safe',
+  'run.execute': 'process_bound',
+  'run.cancel': 'process_bound',
+  'run.steer': 'process_bound',
+  'question.resolve': 'process_bound',
+  'checks.run': 'replay_safe',
+  'pull_request.open': 'replay_safe',
+  'pull_request.push': 'replay_safe',
+  'pull_request.merge': 'replay_safe',
+  'pull_request.watch': 'replay_safe',
+  'worktree.remove': 'replay_safe',
+  'config.verify': 'replay_safe',
+  'briefing.request': 'replay_safe',
+  'run.wake': 'process_bound',
+  'delegation.steer': 'process_bound',
+  'delegation.reply': 'process_bound',
+};
+
+function listEffectKinds(recovery: EffectRecovery) {
+  return (Object.keys(EFFECT_RECOVERY) as ShinsaEffectKind[]).filter(
+    (kind) => EFFECT_RECOVERY[kind] === recovery
+  );
+}
+
+export const PROCESS_BOUND_EFFECTS: ReadonlySet<ShinsaEffectKind> = new Set(listEffectKinds('process_bound'));
+
+export const REPLAY_SAFE_EFFECTS: ReadonlySet<ShinsaEffectKind> = new Set(listEffectKinds('replay_safe'));
+
+export interface EffectCancellation {
+  taskId: string;
+  kinds: ShinsaEffectKind[];
+  reason: string;
+}
 
 export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
   switch (effect.kind) {
@@ -31,13 +66,19 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
       return `${effect.kind}:${effect.runId}:${seq}`;
     case 'question.resolve':
       return `${effect.kind}:${effect.gateId}`;
+    case 'run.wake':
+    case 'delegation.steer':
+      return `${effect.kind}:${effect.runId}:${effect.generation}`;
+    case 'delegation.reply':
+      return `${effect.kind}:${effect.runId}:${effect.questionId}`;
     case 'checks.run':
       return `${effect.kind}:${effect.taskId}:${effect.round}:${seq}`;
     case 'briefing.request':
-      return `${effect.kind}:${effect.areaId ?? '*'}:${seq}`;
+      return `${effect.kind}:${effect.projectId ?? '*'}:${seq}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
+    case 'config.verify':
     case 'pull_request.open':
     case 'pull_request.push':
     case 'pull_request.merge':
@@ -51,21 +92,27 @@ export function resolveEffectLane(effect: ShinsaEffect) {
     case 'briefing.request':
       return 'briefing';
     case 'run.execute':
+    case 'run.wake':
       return `run:${effect.runId}`;
     case 'run.cancel':
       return `cancel:${effect.runId}`;
     case 'run.steer':
+    case 'delegation.steer':
       return `steer:${effect.runId}`;
     case 'question.resolve':
       return `gate:${effect.gateId}`;
+    case 'delegation.reply':
+      return `reply:${effect.runId}`;
+    case 'pull_request.watch':
+      return `side:${effect.taskId}`;
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
+    case 'config.verify':
     case 'checks.run':
     case 'pull_request.open':
     case 'pull_request.push':
     case 'pull_request.merge':
-    case 'pull_request.watch':
       return `task:${effect.taskId}`;
   }
 }

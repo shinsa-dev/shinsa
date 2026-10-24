@@ -1,0 +1,9 @@
+#!/bin/sh
+if [ -n "$FAKE_CLAUDE_LOG" ]; then printf '%s %s\n' "${CLAUDE_CONFIG_DIR:-default}" "$*" >> "$FAKE_CLAUDE_LOG"; fi
+if [ "$1" = "--version" ]; then echo "99.0.0 (Claude Code)"; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  if [ -n "$FAKE_CLAUDE_STATUS" ]; then cat "$FAKE_CLAUDE_STATUS"; exit 0; fi
+  echo '{"loggedIn": false, "authMethod": "none"}'
+  exit 1
+fi
+exit 0

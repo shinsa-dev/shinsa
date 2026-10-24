@@ -1,0 +1,41 @@
+import { TooltipLabel } from '@shinsa/ui/components/tooltip';
+import { cn } from '@shinsa/ui/lib/utils';
+import { Hint } from '@/components/overlays/hint.tsx';
+
+export function ProjectDot({
+  color,
+  label,
+  className,
+}: {
+  color: string;
+  label?: string;
+  className?: string;
+}) {
+  const dot = (
+    <span
+      aria-hidden
+      className={cn('size-2 shrink-0 rounded-full', className)}
+      style={{ background: color === 'gray' ? 'var(--fg-2)' : `var(--${color}-4, var(--fg-2))` }}
+    />
+  );
+  if (!label) return dot;
+  return (
+    <Hint
+      label={
+        <span className='whitespace-nowrap'>
+          {label} <TooltipLabel>project</TooltipLabel>
+        </span>
+      }
+    >
+      {dot}
+    </Hint>
+  );
+}
+
+export function ProjectDotIcon({ color }: { color: string }) {
+  return (
+    <span className='grid size-3.5 shrink-0 place-items-center'>
+      <ProjectDot color={color} />
+    </span>
+  );
+}

@@ -5,8 +5,6 @@ const QUOTED = /[“"]([^”"]+)[”"]/g;
 
 const MIN_QUOTED_MENTION = 12;
 
-const OUTSIDE_FOCUS = /\boutside (?:of )?(?:the |your )?focus\b/i;
-
 function normaliseMention(text: string) {
   return text
     .toLowerCase()
@@ -26,13 +24,11 @@ function mentionsTask(note: string, title: string) {
 }
 
 function listForbiddenTitles(queue: Queue, named: Set<string>) {
-  return [...queue.ready.filter((entry) => named.has(entry.task.id)), ...queue.held].map(
-    (entry) => entry.task.title
-  );
+  return queue.ready.filter((entry) => named.has(entry.task.id)).map((entry) => entry.task.title);
 }
 
 export function resolveNote(note: string | null, queue: Queue, named: Set<string>, now: number) {
   if (note === null) return null;
   const repeats = listForbiddenTitles(queue, named).some((title) => mentionsTask(note, title));
-  return repeats || OUTSIDE_FOCUS.test(note) ? resolveFallbackNote(queue, named, now) : note;
+  return repeats ? resolveFallbackNote(queue, named, now) : note;
 }

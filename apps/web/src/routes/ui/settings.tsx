@@ -1,0 +1,224 @@
+import { type AccountsSnapshot, createSettings, type ProviderLogin } from '@shinsa/core';
+import * as React from 'react';
+import { type AccountActions, AccountsGroup } from '@/components/settings/accounts.tsx';
+import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
+import { SettingsGroup } from '@/components/settings/group.tsx';
+import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
+import { NotificationGroup } from '@/components/settings/notifications.tsx';
+import { PluginsGroup } from '@/components/settings/plugins.tsx';
+import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
+import { SkillsGroup } from '@/components/settings/skills.tsx';
+import type { ExtensionActions } from '@/lib/connection/extensions.ts';
+import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
+import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
+import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
+import {
+  acknowledgeSample,
+  createSampleSchedule,
+  createSampleState,
+  createSampleTask,
+  HOUR,
+  MINUTE,
+} from './samples.ts';
+import { Specimen } from './section.tsx';
+
+const SAMPLE_ACTIONS: ScheduleActions = {
+  enable: acknowledgeSample,
+  copyWebhook: acknowledgeSample,
+  open: () => void acknowledgeSample(),
+  remove: acknowledgeSample,
+};
+
+const SAMPLE_ACCOUNT_ACTIONS: AccountActions = {
+  signIn: () => void acknowledgeSample(),
+  importLogin: () => void acknowledgeSample(),
+  update: acknowledgeSample,
+  remove: () => void acknowledgeSample(),
+  refresh: acknowledgeSample,
+};
+
+const SAMPLE_EXTENSION_ACTIONS: ExtensionActions = {
+  check: acknowledgeSample,
+  add: acknowledgeSample,
+  update: acknowledgeSample,
+  remove: acknowledgeSample,
+  choose: acknowledgeSample,
+  signIn: acknowledgeSample,
+  signOut: acknowledgeSample,
+  chooseSkill: acknowledgeSample,
+  choosePlugin: acknowledgeSample,
+  chooseOptimizer: acknowledgeSample,
+};
+
+function selectSampleLogin(logins: ProviderLogin[], status: ProviderLogin['status']) {
+  return logins.filter((login) => login.status === status);
+}
+
+function createAccountScenes(now: number): { label: string; snapshot: AccountsSnapshot }[] {
+  const logins = createSampleProviderLogins();
+  const full = createSampleAccounts(now);
+  const [first] = full.accounts;
+  const fresh = first && {
+    ...first,
+    id: 'fresh',
+    email: 'new@superwall.com',
+    isDefault: false,
+    usage: { status: 'unknown' as const, windows: [], detail: null, checkedAt: null, source: null },
+  };
+  return [
+    {
+      label:
+        'AccountsGroup · accounts with their windows, out of usage, paused, signed out, no readings yet · Codex signed in',
+      snapshot: {
+        ...full,
+        accounts: fresh ? [...full.accounts, fresh] : full.accounts,
+        imports: [{ origin: 'claude', email: 'christo@superwall.com', plan: 'max' }],
+        providers: selectSampleLogin(logins, 'signed_in'),
+      },
+    },
+    {
+      label: 'AccountsGroup · one account · Codex signed out',
+      snapshot: {
+        ...full,
+        accounts: full.accounts.slice(0, 1),
+        providers: selectSampleLogin(logins, 'signed_out'),
+      },
+    },
+    {
+      label: 'AccountsGroup · no account yet · Codex not installed',
+      snapshot: { ...full, accounts: [], providers: selectSampleLogin(logins, 'not_installed') },
+    },
+    {
+      label: 'AccountsGroup · Codex too old for Shinsa',
+      snapshot: {
+        ...full,
+        accounts: full.accounts.slice(1, 2),
+        providers: selectSampleLogin(logins, 'outdated'),
+      },
+    },
+  ];
+}
+
+function createScheduleScene(now: number) {
+  const task = createSampleTask(now, { id: 'standup', title: 'Write the daily standup notes' });
+  const schedules = [
+    createSampleSchedule(now, { id: 'nightly', name: 'Fix the nightly build' }),
+    createSampleSchedule(now, {
+      id: 'standup',
+      name: 'Standup notes',
+      trigger: { kind: 'daily', time: '09:00', weekdays: [1, 2, 3, 4, 5] },
+      target: { kind: 'task', taskId: 'standup' },
+      enabled: false,
+    }),
+    createSampleSchedule(now, {
+      id: 'release',
+      name: 'Tag the release',
+      trigger: { kind: 'once', at: now - 2 * HOUR },
+      nextRunAt: null,
+      stopped: 'finished',
+    }),
+    createSampleSchedule(now, {
+      id: 'deploys',
+      name: 'Check failed deploys',
+      trigger: { kind: 'webhook', signature: null, replayKey: null },
+      nextRunAt: null,
+      runs: [
+        {
+          at: now - 20 * MINUTE,
+          outcome: 'failed',
+          taskId: null,
+          deliveryId: null,
+          detail: 'The repository is gone.',
+        },
+      ],
+    }),
+    createSampleSchedule(now, {
+      id: 'gone',
+      name: 'Nudge the release checklist',
+      target: { kind: 'task', taskId: 'cancelled-task' },
+      enabled: false,
+      stopped: 'target_gone',
+    }),
+  ];
+  return { state: createSampleState({ tasks: [task], schedules }), schedules };
+}
+
+export function SettingsSpecimens() {
+  const [now] = React.useState(Date.now);
+  const [{ state, schedules }] = React.useState(() => createScheduleScene(now));
+  const [preferences, setPreferences] = React.useState(DEFAULT_PREFERENCES);
+  const [scenes] = React.useState(() => createAccountScenes(now));
+  const [extensions] = React.useState(() => createSampleExtensions(now));
+  const settings = createSettings();
+  return (
+    <>
+      {scenes.map((scene) => (
+        <Specimen key={scene.label} label={scene.label}>
+          <div className='w-full max-w-xl'>
+            <AccountsGroup snapshot={scene.snapshot} settings={settings} actions={SAMPLE_ACCOUNT_ACTIONS} />
+          </div>
+        </Specimen>
+      ))}
+      <Specimen label='Schedule rows · next run, paused, finished, last run failed, its task is gone'>
+        <div className='w-full max-w-xl'>
+          <SettingsGroup title='Schedules'>
+            {schedules.map((schedule) => (
+              <ScheduleRow key={schedule.id} state={state} schedule={schedule} actions={SAMPLE_ACTIONS} />
+            ))}
+          </SettingsGroup>
+        </div>
+      </Specimen>
+      <Specimen label='ContextOptimizerGroup · off, with what agents have not used lately'>
+        <div className='w-full max-w-xl'>
+          <ContextOptimizerGroup snapshot={extensions} actions={SAMPLE_EXTENSION_ACTIONS} now={now} />
+        </div>
+      </Specimen>
+      <Specimen label='ContextOptimizerGroup · on, also leaving out skills'>
+        <div className='w-full max-w-xl'>
+          <ContextOptimizerGroup
+            snapshot={{ ...extensions, optimizer: { enabled: true, days: 30, skills: true } }}
+            actions={SAMPLE_EXTENSION_ACTIONS}
+            now={now}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='McpServersGroup · grouped by status: connected (one defined in three places), failing, needs sign-in, not checked, off; a problem reading a config'>
+        <div className='w-full max-w-xl'>
+          <McpServersGroup
+            snapshot={extensions}
+            places={SAMPLE_PLACES}
+            actions={SAMPLE_EXTENSION_ACTIONS}
+            now={now}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='McpServersGroup · no server yet'>
+        <div className='w-full max-w-xl'>
+          <McpServersGroup
+            snapshot={{ ...extensions, servers: [], problems: [] }}
+            places={SAMPLE_PLACES}
+            actions={SAMPLE_EXTENSION_ACTIONS}
+          />
+        </div>
+      </Specimen>
+      <Specimen label='PluginsGroup · one on, one off (its skills and server turn off with it)'>
+        <div className='w-full max-w-xl'>
+          <PluginsGroup snapshot={extensions} actions={SAMPLE_EXTENSION_ACTIONS} />
+        </div>
+      </Specimen>
+      <Specimen label='SkillsGroup · one group per source, each collapsed until opened; Shinsa’s own skills are always on and not listed'>
+        <div className='w-full max-w-xl'>
+          <SkillsGroup snapshot={extensions} places={SAMPLE_PLACES} actions={SAMPLE_EXTENSION_ACTIONS} />
+        </div>
+      </Specimen>
+      <Specimen label='Notification rows · per browser; here they change nothing stored'>
+        <div className='w-full max-w-xl'>
+          <NotificationGroup
+            preferences={preferences}
+            onChange={(patch) => setPreferences((current) => ({ ...current, ...patch }))}
+          />
+        </div>
+      </Specimen>
+    </>
+  );
+}

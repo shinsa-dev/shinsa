@@ -33,6 +33,13 @@
      so every control presses the same whatever its width. */
   --press-inset-x: 1px;
   --press-inset-y: 0.5px;
+
+  /* Icon strength: an icon is its text's colour at 85%, a step under the
+     words, and a menu row's at 90%. `Icon` draws at `--icon-alpha`;
+     `icon-item` and `icon-solid` change it for everything inside. */
+  --icon-alpha-text: 0.85;
+  --icon-alpha-item: 0.9;
+  --icon-alpha: var(--icon-alpha-text);
   --background: oklch(1 0 0);
   --background-subtle: oklch(0.985 0 0);
 
@@ -194,28 +201,16 @@
   --popover-foreground: var(--fg-4);
   --primary: var(--primary-4);
   --primary-foreground: oklch(1 0 0);
-  --secondary: var(--bg-2);
-  --secondary-foreground: var(--fg-4);
   --muted: var(--bg-2);
   --muted-foreground: var(--fg-2);
-  --accent: var(--bg-a2);
-  --accent-foreground: var(--fg-4);
   --destructive: var(--red-4);
-  --destructive-foreground: oklch(1 0 0);
   --border: var(--bg-3);
   --input: var(--bg-2);
   --ring: var(--primary-2);
 
-  /* Sidebar aliases (shadcn sidebar) — reference tokens only, so they flip
-     with the theme and need no .dark override. */
+  /* The sidebar's surface references a token, so it flips with the theme
+     and needs no .dark override. */
   --sidebar: var(--background-subtle);
-  --sidebar-foreground: var(--fg-3);
-  --sidebar-primary: var(--primary-4);
-  --sidebar-primary-foreground: var(--background);
-  --sidebar-accent: var(--bg-a2);
-  --sidebar-accent-foreground: var(--fg-4);
-  --sidebar-border: var(--bg-3);
-  --sidebar-ring: var(--primary-2);
 }
 
 /* ── Dark ────────────────────────────────────────────────────────────────── */
@@ -348,7 +343,6 @@
 
   /* Semantic overrides — popovers sit a step above cards in dark */
   --popover: var(--bg-2);
-  --destructive-foreground: oklch(1 0 0);
 }
 
 /* ── Theme mapping ───────────────────────────────────────────────────────── */
@@ -357,7 +351,6 @@
   --font-mono: "ABC Areal Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --color-background: var(--background);
-  --color-background-subtle: var(--background-subtle);
   --color-foreground: var(--foreground);
 
   --color-bg-1: var(--bg-1);
@@ -474,25 +467,13 @@
   --color-primary-a2: var(--primary-a2);
   --color-primary-a3: var(--primary-a3);
   --color-primary-a4: var(--primary-a4);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 
   /* Corners. One law everywhere: a nested corner is concentric with its
      parent, inner = outer − the padding between them. The semantic radii
@@ -718,9 +699,7 @@
   :where(
     [data-slot="badge"],
     [data-slot="kbd"],
-    [data-slot="avatar"],
     [data-slot="tooltip-content"],
-    [data-slot="table-head"],
     .select-none,
     svg
   ) {
@@ -784,13 +763,6 @@
   textarea {
     cursor: text;
   }
-
-  /* Pressing a label should press its control. The label sits *after* the
-     control, and CSS can't select backwards, so match the shared parent and
-     reach back down to the control instead. */
-  :has(> label:active) > :is([data-slot="checkbox"], [data-slot="radio-group-item"]):not([data-disabled]) {
-    scale: 0.95;
-  }
 }
 
 /* ── Reduced motion ───────────────────────────────────────────────────────
@@ -812,13 +784,6 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
     /* biome-ignore-end lint/complexity/noImportantStyles: see above */
-  }
-
-  /* Press feedback and the sliding indicators become instant rather than
-     absent — the state is still visible, it just doesn't travel. */
-  [data-slot="skeleton"] {
-    /* biome-ignore lint/complexity/noImportantStyles: same reason as above */
-    animation: none !important;
   }
 }
 
@@ -901,7 +866,7 @@
 }
 
 /* Sonner's icon wrapper is sized for 16px icons with negative margins baked in.
- * Size it to our 18px icons explicitly — `auto` collapses to 0×0 for loading
+ * Size our 16px icons explicitly and drop the margins — `auto` collapses to 0×0 for loading
  * toasts, whose loader sonner absolutely-positions (see below). */
 [data-sonner-toast].bk-toast [data-icon] {
   width: 16px;
@@ -949,12 +914,12 @@
     transform: scale(0.85);
   }
   to {
-    opacity: 1;
+    opacity: var(--icon-alpha);
     transform: scale(1);
   }
 }
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
-  opacity: 1;
+  opacity: var(--icon-alpha);
   transform: none;
   transform-origin: center;
   animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -1017,18 +982,21 @@
   -webkit-text-stroke: var(--faux-medium-stroke, 0.011em) currentColor;
 }
 
-/* Muted icons fade as one layer: `filter: opacity()` rasterises first, so the
-   joints of a multi-path icon never double up, on any surface. A state that
-   brightens the icon lifts it with `filter-none`. */
-@utility icon-tertiary {
-  color: var(--foreground);
-  filter: opacity(0.55);
+/* Icon strength for a context: a menu, select or command row's icons sit at
+   90% of the row's text; `icon-solid` keeps them equal to it (an icon-only or
+   ghost button, an error). `Icon` reads the variable, so it inherits. */
+@utility icon-item {
+  --icon-alpha: var(--icon-alpha-item);
+}
+
+@utility icon-solid {
+  --icon-alpha: 1;
 }
 
 /* A disclosure chevron turns on the move clock and brightens on the hover
    clock, so it lands with its trigger's text and fill. */
 @utility transition-disclosure {
-  transition-property: rotate, transform, color, filter;
-  transition-duration: 200ms, 200ms, 150ms, 150ms;
+  transition-property: rotate, transform, color;
+  transition-duration: 200ms, 200ms, 150ms;
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }

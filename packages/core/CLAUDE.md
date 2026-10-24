@@ -9,62 +9,206 @@ caller. It runs in the browser too, so the web reads the same queue, progress an
 ```
 src/
 ├── index.ts         The public barrel. Everything it exports stays importable by the same name
-├── model/           Entity types, stage sets and priority order, settings and their defaults, DomainError
-├── models/          The agent model catalog, the default model per role, resolveAgentModel, model labels
-├── events/          ShinsaEvent: past-tense facts, the only way state changes
-├── commands/        UserCommand (from the web), AgentCommand (from Shinsa's MCP tools), SystemCommand (from effects)
-├── effects/         ShinsaEffect, effect keys (dedupe) and lanes (ordering)
-├── state/           project.ts (createState, applyEvent, replayEvents), activity.ts (the wording of a task's
-│                    activity), queries.ts (list*, find/select, isDependencyOf, resolveTaskArea)
-├── decide/          decide(): one exhaustive switch over the command, then releaseQueued, enforceLiveness and
-│   │                dispatchRuns, over a Decider (decider.ts) that works on a clone and emits events and effects
+├── domain/          Entity types (types.ts), stage sets and priority order (stages.ts), settings, their defaults and
+│                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one),
+│                    DomainError (errors.ts), the tools of each role (tools.ts: listToolNames, the one source for
+│                    server, decide and prompts, and isHandOverTool), the delegation limits and
+│                    isReadOnlyRole (delegations.ts), accounts, schedules (SCHEDULE_LIMITS), pull request watch
+│                    types, time units (time.ts), task shapes (shapes.ts: SHAPE_PIPELINES (the presets),
+│                    validateComposition (the rules checker for the steps a planner composes), the shape of a task,
+│                    findInquiryStep, findWorkStep, SHAPE_LIMITS), the step and gate schema (steps.ts: PipelineStep, STEP_SCHEMA, GATE_SCHEMA,
+│                    resolveGateDefinition, validatePipeline read from each step's needs), the verification rules
+│                    (verification.ts: VERIFICATION_RULES, validateVerification, validatePlanRules,
+│                    listMissingEvidence), projects (projects.ts: keys, task handles,
+│                    folders: resolveProjectKey, parseTaskHandle, selectFolderProject), rounds (rounds.ts: Round,
+│                    resolveTaskRounds, resolveCurrentRound, isTaskResting, isTaskClosed, resolveRoundStamp and
+│                    isOfCurrentRound, the stack and how a round ships: resolveRoundBase, listStackedPullRequests,
+│                    canChangeRoundShipping, selectShippingTarget), gates (gates.ts: isPausingGate, and
+│                    isHumanOnlyGate for the gates only the human decides), the on-your-behalf record
+│                    (on-behalf.ts: OnBehalfAction)
+├── agent-models/    The agent model catalog, the default model per role, resolveAgentModel, model labels
+├── events/          ShinsaEvent: past-tense facts, the only way state changes (delegations.ts, schedules.ts split
+│                    out)
+├── commands/        UserCommand (from the web), AgentCommand (from Shinsa's MCP tools), SystemCommand (from effects
+│                    and clocks), with delegations.ts and schedules.ts split out; parse.ts: parseUserCommand checks
+│                    the shape of untrusted input field by field before it reaches decide, which owns every range
+│                    (settings bounds included); USER_COMMAND_TYPES and SETTINGS_KEYS (domain) are the lists the
+│                    command line and the agents' management tools are generated against; isUserCommand (index.ts,
+│                    on isUserCommandType) tells a user command from an agent or system one
+├── effects/         ShinsaEffect, EFFECT_RECOVERY (process-bound or replay-safe), effect keys (dedupe) and lanes
+│                    (ordering)
+├── state/           project.ts (createState, applyEvent, replayEventLog: replay that skips and reports an event it
+│                    cannot apply), write.ts (the shared writes the folds use; applyOnBehalf: an event sent on your
+│                    behalf marks the activity it records), activity.ts (the wording of a task's activity),
+│                    queries.ts (list*, find/select, isDependencyOf, isWaitingOnAnswer, isRunWaiting,
+│                    resolveTaskProject, selectTaskByReference), and the folds by concern, each an apply*Event:
+│                    runs.ts (attempts, links, lost sessions, metering, silence, compaction), gates.ts (opened,
+│                    answered, withdrawn, noted, superseded), pull-requests.ts, waits.ts (monitors and usage waits),
+│                    delegations.ts, schedules.ts, suggestions.ts, reviews.ts (verdicts), accounts.ts (binding),
+│                    shapes.ts (reshapes, results, proposed changes), on-behalf.ts (what agents did on your behalf),
+│                    rounds.ts (round 1 on task.created, archiving a round and starting the next, a round's branch
+│                    and pull request, where a merged pull request marks every round still shipped on it merged,
+│                    rounds when a task rests, closes or reopens for a follow-up)
+├── decide/          decide() (index.ts): one exhaustive switch over the command, then releaseWaiting,
+│   │                startQueuedRounds, enforceLiveness and dispatchRuns, over a Decider (decider.ts) that works on a clone and emits
+│   │                events and effects; equality.ts (isSameValue)
 │   ├── lifecycle.ts Starting each step (work, planning, a phase, checks, review), the review gate, settling a task
-│   ├── fixes.ts     Fix loops: checks and review reactions, the automatic budget, stall detection
-│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate and merging
+│   ├── fixes.ts     Fix loops: checks and review reactions, the automatic budget, stall detection, review escalation
+│   ├── fingerprints.ts  Recovery and fix fingerprints, so prose never resets a budget
+│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues
+│   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
+│   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
 │   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks
-│   ├── gates.ts     Answering a gate: which decisions each kind takes, what each one does
-│   ├── messages.ts  A message from you: steer, answer, revise or fix, depending on where the task is
+│   ├── gates.ts     Answering a gate: which decisions each kind takes, what each one does, plan versions, verdicts;
+│   │                refusing a human-only gate answered on your behalf (assertAgentMayAnswer), and a retry,
+│   │                completion or message on your behalf while one is open (assertNoHumanOnlyGate)
+│   ├── messages.ts  A message from you: resolveMessageEffect says what it does where the task is (steer, retry,
+│   │                revise, fix, notes for the operator, a new round…; the web's composer hint reads it), then it is
+│   │                delivered, queued as a new round or suggested as a separate task by its kind; superseding an
+│   │                open question; needsMessageKind (the server classifies such a message first)
 │   ├── retry.ts     Retry: restart the current step with a fresh fix budget
-│   ├── runs.ts      Agent run ends, recovery with one nudge, dispatch
-│   ├── agents.ts    Agent hand-overs (propose_plan, complete_phase, complete_fix, report_review, ask, evidence, note)
+│   ├── runs.ts      Agent run ends, recovery by failure class (one nudge, a fresh session, or a gate at once),
+│   │                attempts and stale writes, restart continuation and its loop guards, lost sessions, dispatch
+│   ├── agents.ts    Agent hand-overs (propose_plan with the plan rules, complete_phase with the evidence the plan
+│   │                asks for, complete_fix, report_review, ask, evidence, note)
+│   ├── shapes.ts    Task shapes: the next step of a pipeline, the inquiry steps (answer, research, investigate)
+│   │                and the operation, results and proposed changes, the change gate and your OK, the planner's
+│   │                presets and composed steps, the operation gate after a merge, follow-ups
 │   ├── tasks.ts     Creating, triaging, prioritising, blocking, cancelling and completing tasks; worktrees
-│   ├── settings.ts  Repositories, areas, focus, settings, the stored guide
-│   └── liveness.ts  resolveLiveness and the stuck-task failure gate
-├── queue/           Needs you (rank.ts), stepping through decisions (step.ts), the `shinsa status` summary
-├── briefing/        The Home guide: fallback, parsing the writer's answer, reconciling a stored one, plain text
-├── report/          The hand-over protocol: types, PROTOCOL_LIMITS and validate*, Markdown, assembleReport
-├── chat/            The chat protocol (ChatEntry), shinsa:// references, inline code marking
-├── prompts/         House rules, each role's prompt, fix prompts, restart and answer prompts
-├── progress/        The steps a task shows on its page
-└── protocol/        WebSocket messages, diff parsing
+│   ├── suggestions.ts  Follow-ups an agent suggests, accepting and dismissing them, split-offs and keeping one
+│   │                as the next round
+│   ├── rounds.ts    Queuing a round, starting the next one when the current one rests (startQueuedRounds, after
+│   │                every command), its branch and pull request, switching how a round ships
+│   ├── config.ts    The setup check and its configuration gate
+│   ├── monitors.ts  wait_for: arming, waking and checking a monitor
+│   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits
+│   ├── silence.ts   Snoozing and dismissing a quiet run
+│   ├── settings.ts  Repositories, projects (keys, folders, moving repositories in), focus, settings, the guide
+│   ├── accounts.ts  Binding a task to an account, usage waits (arm, resume, change, resume now), the Sign in gate
+│   ├── compaction.ts  Recording an idle session's compaction
+│   ├── delegations.ts  Delegated tasks: requests, the ceiling and limits, delivery cohorts, questions, cascades,
+│   │                adoption, recovery
+│   ├── couriers.ts  create_task and split_task
+│   ├── orchestration.ts  Routing the delegation commands
+│   ├── schedules.ts Writing, firing, skipping, failing and stopping schedules; webhook deliveries
+│   ├── secrets.ts   request_secret and the secret gate (only a ref answers it)
+│   ├── on-behalf.ts What a user command sent on your behalf records (`on_behalf.acted`, its sentence, task and
+│   │                acting task, kept as `OnBehalfAction`); a system command records nothing here
+│   └── liveness.ts  isTaskLive and the stuck-task failure gate
+├── accounts/        usage.ts (which windows count for a model, used percent, headroom, spent-until, the weekly
+│                    window and what a run used of it), plan.ts (resolvePlanLabel), pick.ts
+│                    (pickAccount: the account picker the server leases with; selectNextAccount: the web's next-account
+│                    glance) and fast-mode.ts (resolveFastModeAvailability: whether a provider's accounts have the
+│                    usage credits fast mode needs)
+├── costs/           A run's usage delta per session, the cost rollup per task, role and phase, the usage and
+│                    cost limits (listTaskBudgets)
+├── schedules/       Schedule times (time.ts: next run, DST-safe daily, time zones), describing a schedule
+│                    (describe.ts), validating set_schedule and request_secret (validate.ts)
+├── queue/           Needs you (rank.ts), the one table of gate words (reasons.ts), stepping through decisions
+│                    (step.ts), the stalled leaf of a chain (stalls.ts), silent runs (silence.ts), the `shinsa status`
+│                    summary (summary.ts)
+├── briefing/        The Home guide: fallback, parsing the writer's answer, the note rule, reconciling a stored one,
+│                    plain text
+├── report/          The hand-over protocol: types, PROTOCOL_LIMITS (with minPlanSteps and findingCount), the enum
+│                    lists the tool schemas read (ATTENTION_LEVELS, FINDING_SEVERITIES, DELEGATION_MODES,
+│                    DELEGATION_ISOLATIONS) and validate*, the delegation and courier requests (orchestration.ts),
+│                    plan changes between versions, Markdown, assembleReport
+├── chat/            The chat protocol (ChatEntry), shinsa:// references, inline code marking, a task as text for
+│                    an agent (task-detail.ts: serializeTaskDetail, what `read_task` and `tasks_show` read), and
+│                    sentence helpers (text.ts: describeCount, describeList, capitalise, lowerFirst)
+├── prompts/         House rules (rules.ts) and the delegation rules (orchestration-rules.ts), the step catalog, rules
+│                    and plan parameters the planner reads (steps.ts, from the schema), each role's prompt
+│                    (roles.ts) and the context it describes (context.ts), fix prompts, session prompts (restart,
+│                    steer, answer, superseded, usage resume), monitor prompts (waits.ts), the delegated agent's and
+│                    the delivery prompts (orchestration.ts), the budgeted context handoff (handoff.ts), the
+│                    rules for managing Shinsa every role gets (manage.ts, MANAGE_RULES), the project a fresh
+│                    run is told about (project.ts, resolveProjectContext)
+├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
+└── protocol/        WebSocket messages, diff parsing, the accounts snapshot (accounts.ts), MCP servers, plugins and
+                     skills (extensions.ts: the snapshot, scopes, token estimates, what a run loaded, the context
+                     optimizer's settings and isUnused), the
+                     onboarding API types (onboarding.ts)
 ```
 
-`test/` mirrors `src/` file for file. `test/harness.ts` drives `decide` with a fixed clock and ids and has the steps
-a test needs (`createTask`, `reachReviewGate`, `reachShipping`, `pushFix`, `shipAndMerge`).
+Rounds keep the task's flat fields as the current round's work: a new round archives them into its `Round`
+(`outcome`) and starts them empty, so every rule above holds per round without knowing about rounds. A field a step
+reads across rounds (evidence, activity, runs, gates) carries `round` from round 2 on.
+
+`test/` follows `src/`: one folder per source folder and a test file per module with behaviour of its own
+(`decide/gates.ts` ↔ `test/decide/gates.test.ts`). Some modules are covered through the file that drives them
+instead (`decide/decider.ts`, `liveness.ts` and `retry.ts`, the folds in `state/` without a test file of their own
+(`rounds`, `waits`, `shapes`, `suggestions`, `reviews`, `accounts`, `gates`, `pull-requests`, `activity`) and
+`domain/gates.ts` through the `decide` tests, `state/queries.ts` and `write.ts` through the state tests,
+`prompts/context.ts` through the role prompts, `chat/text.ts` and `queue/reasons.ts` through their users). `test/harness.ts` drives `decide`
+with a fixed clock and ids and has the steps a test needs (`createTask`, `reachReviewGate`, `reachShipping`,
+`pushFix`, `shipAndMerge`).
 
 ## Rules
 
 - **Replay rebuilds state.** `applyEvent` reads only the event and the state before it; `decide` never mutates its
   input. Never store a shared constant into state by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
 - **Events are forever.** Never remove an event type or change its meaning; add optional fields and new events.
-- **Validate before emitting.** A command that is not allowed throws `DomainError` and leaves no events.
+- **Validate before emitting.** A command that is not allowed throws `DomainError` and leaves no events. Anything
+  that arrives from outside the server (`UserCommand` over HTTP or the socket) goes through `parseUserCommand` first,
+  so `decide` only ever sees well-typed fields: a wrong type, an unknown setting or repository field, a priority or
+  merge method outside its set is refused there, and the result carries only the fields the command defines. Ranges
+  (a fix round count of 1 or more, a switch percentage from 1 to 100) are `decide`'s, so a command from inside the
+  server meets the same bounds.
 - **Repeated commands are no-ops.** Effects retry and tools get called twice; a command that changes nothing emits
   nothing.
-- **The invariants**, checked after every random command in `test/decide/invariants.test.ts`:
+- **The invariants**, checked after every random command in `test/decide/invariants.test.ts` (and listed nowhere
+  else; `docs/engine.md` points here):
   - at most one active run per task, and none still `queued` once `decide` returns;
-  - every open task is live: a gate, an active run, or a step Shinsa runs itself;
+  - every open task is live (`isTaskLive`): a gate, an active run, an armed wait, or a stage Shinsa runs itself
+    (triage, waiting on other tasks, checks, the pull request);
   - settled tasks have no runs and no gates;
-  - an agent's question is open only while the run that asked it is active;
-  - no failure gate while an agent runs (starting a step withdraws it);
-  - a plan gate exactly when `awaiting_spec`, a review gate exactly when `awaiting_review`, a merge gate only in
-    `awaiting_merge` and never while the task waits on an unfinished task; `awaiting_merge` without a merge gate
-    means the merge is running;
+  - an agent's question is open only while the run that asked it is active, and a superseded question is withdrawn;
+  - no failure gate while an agent runs (starting a step withdraws it), and at most one failure gate per task;
+  - a task waiting for a usage limit to reset has no run, no failure or Sign in gate and is not settled; at most one
+    Sign in gate per task, and it names its account;
+  - a task has at most one armed wait (a monitor or a usage limit), and none while a run is active;
+  - a plan gate exactly when `awaiting_spec` (for the current plan version), a review gate exactly when
+    `awaiting_review`, a merge gate only in `awaiting_merge` and never while the task waits on an unfinished task;
+    `awaiting_merge` without a merge gate means the merge is running;
+  - a configuration gate only in triage, a budget gate only while the task is past its usage or cost limit, and a task
+    has at most ten open suggestions;
+  - shapes (`shape-invariants.ts`): every task's pipeline passes `validatePipeline` and the verification rules
+    (`validateVerification`), and its plan passes `validatePlanRules`; a task that reported every phase has the
+    evidence its plan asks for; its stage belongs to one of its steps (the test's `resolveStageStep`: answering needs `answer`,
+    building needs `build`, awaiting an operation needs `operate`…); a change gate exactly when
+    `awaiting_change`, and an open proposal only then; no pull request without a `pull_request` step, no phase report
+    without `build`; in its first round, a task that never had a step that needs a worktree has no worktree or
+    branch; a task with
+    `your_ok` plans or does its work only after your OK (its proposal accepted), and asks for it only after its inquiry
+    ran; an operation before the build runs before any phase report, one after the merge only once the pull request
+    merged and you answered its operation gate, and such a task never settles as merged; an operation gate is open
+    exactly while the task is `awaiting_operation`, which only happens after the merge; an open task with a merged
+    pull request is waiting for that gate or running its operation;
   - no dependency cycles;
   - every task sits in one place in the queue (deciding, working or waiting);
+  - delegation (`delegation-invariants.ts`): a delegated run's parent is on the same task, depth is its parent's plus
+    one and at most three, at most eight live under one step, a read-only parent has no child that writes, a step
+    waiting on its delegated work always has something on its way to it (a claim, or a running child), a running
+    one has no undelivered report outside a claim, and no gate is a delegated run's question (it goes to its parent);
+  - schedules (`schedule-invariants.ts`): a stopped schedule is off with no next run, a live timed one has one and a
+    webhook none, at most 20 runs and 500 replay keys kept, the run count within `max_runs`, at most 20 live schedules
+    per task;
+  - rounds (`round-invariants.ts`): rounds are numbered one by one, at most one is active and an open task works on
+    exactly one, a round waiting to start comes after every started one and a closed task has none waiting; every
+    live run (delegated runs included) and every open gate belongs to the current round; the task works on its active round's branch and through its
+    round's pull request; a shipped round's pull request is open and a merged round's merged; a stacked round stacks on
+    an earlier round's branch; a pull request open across rounds stays on one branch, and the stack never repeats the
+    task's own pull request;
+  - projects (`project-invariants.ts`, `assertHandleInvariants`): a triaged task has a handle, no two tasks share
+    one, each parses back to itself with a valid key, and its key's counter is at least its number;
+  - on your behalf (a walk of commands sent on your behalf): none answers a human-only gate, and none moves a task
+    waiting at one to merged or done;
   - replaying the log reproduces the state, and the same input gives the same decision.
 
 ## Tests
 
-`bun test` here enforces 100% line and function coverage (`bunfig.toml`). The property test runs 30 seeds of 400
-random commands in about five seconds; when it fails it names the seed, the step and the command. Raise `SEEDS`
-locally to sweep wider before landing a change to `decide`.
+`bun test` here enforces 100% line and function coverage (`bunfig.toml`). The property test runs each walk (the base
+one, outages, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
+seeds of 400 random commands, in about two minutes; when it fails it names the seed, the step and the command. Set
+`SHINSA_SEEDS` to sweep wider before landing a change to `decide` (`SHINSA_SEEDS=1000 bun test
+test/decide/invariants.test.ts` takes about an hour).

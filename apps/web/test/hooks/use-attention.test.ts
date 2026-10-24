@@ -1,0 +1,80 @@
+import { afterEach, describe, expect, it } from 'bun:test';
+import { renderHook } from '@testing-library/react';
+import { useAttention } from '@/hooks/use-attention.ts';
+import { writeNotificationPreferences } from '@/lib/preferences/notifications.ts';
+import { installAudio, installNotifications } from '../support/notifications.ts';
+import { createGate, createShinsaState, createTask } from '../support/state.ts';
+
+function meta(name: string) {
+  return document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content ?? null;
+}
+
+const restores: (() => void)[] = [];
+
+afterEach(() => {
+  for (const restore of restores.splice(0)) restore();
+  document.title = 'Shinsa';
+});
+
+function question(id: string) {
+  return createGate({
+    id,
+    taskId: 't-1',
+    kind: 'question',
+    purpose: 'agent_question',
+    title: `Question ${id}`,
+  });
+}
+
+function withGates(...gates: ReturnType<typeof question>[]) {
+  return createShinsaState({ tasks: [createTask({ id: 't-1', title: 'Paint it' })], gates });
+}
+
+describe('useAttention', () => {
+  it('puts what needs you in the title and in Floaty’s meta tags', () => {
+    const { rerender } = renderHook(({ state }) => useAttention(state), {
+      initialProps: { state: withGates() },
+    });
+    expect(document.title).toBe('Shinsa');
+    expect([meta('floaty:status'), meta('floaty:badge')]).toEqual(['working', '0']);
+    rerender({ state: withGates(question('g-1'), question('g-2')) });
+    expect(document.title).toBe('[2] Shinsa');
+    expect([meta('floaty:status'), meta('floaty:badge')]).toEqual(['waiting', '2']);
+    expect(document.head.querySelectorAll('meta[name="floaty:badge"]')).toHaveLength(1);
+  });
+
+  it('names the task on screen in the title, by its handle when it has one', () => {
+    const state = createShinsaState({
+      tasks: [
+        createTask({ id: 't-1', title: 'Paint it', handle: 'SW-142' }),
+        createTask({ id: 't-2', title: 'Sand it' }),
+      ],
+      gates: [question('g-1')],
+    });
+    const { rerender } = renderHook(({ reference }) => useAttention(state, reference), {
+      initialProps: { reference: 'sw-142' as string | null },
+    });
+    expect(document.title).toBe('[1] SW-142 Paint it · Shinsa');
+    rerender({ reference: 't-2' });
+    expect(document.title).toBe('[1] Sand it · Shinsa');
+    rerender({ reference: 'gone' });
+    expect(document.title).toBe('[1] Shinsa');
+  });
+
+  it('plays the sound and shows the notification the watcher asks for, and a click opens the task', () => {
+    const audio = installAudio();
+    const notifications = installNotifications('granted');
+    restores.push(audio.restore, notifications.restore);
+    writeNotificationPreferences({ sound: 'always', notify: 'always' });
+    const { rerender } = renderHook(({ state }) => useAttention(state), {
+      initialProps: { state: withGates() },
+    });
+    rerender({ state: withGates(question('g-1')) });
+    expect(notifications.shown.map((shown) => [shown.title, shown.options.body])).toEqual([
+      ['Paint it', 'Question g-1'],
+    ]);
+    expect(audio.created).toHaveLength(1);
+    notifications.shown[0]?.click();
+    expect(location.pathname).toBe('/tasks/t-1');
+  });
+});

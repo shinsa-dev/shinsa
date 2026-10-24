@@ -1,0 +1,236 @@
+import type { Gate, ShinsaState, Task } from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
+import * as React from 'react';
+import { ResultPanel } from '@/components/overview/answer-panel.tsx';
+import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
+import { FindingVerdicts } from '@/components/overview/finding-verdicts.tsx';
+import { ChangeCard, PausedCard, PlanCard, QuestionCard } from '@/components/overview/now-card.tsx';
+import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
+import { OperationCard } from '@/components/overview/operation-card.tsx';
+import { SecretCard } from '@/components/overview/secret-card.tsx';
+import { SetupCard } from '@/components/overview/setup-card.tsx';
+import { SignInCard } from '@/components/overview/sign-in-card.tsx';
+import { SilenceNote } from '@/components/overview/silence-note.tsx';
+import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
+import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
+import { WaitCard } from '@/components/overview/wait-card.tsx';
+import {
+  createVerdictDraft,
+  describeEscalationBody,
+  describeReviewTitle,
+  resolveVerdictAction,
+} from '@/lib/overview/verdicts.ts';
+import { createOverviewScene } from './sample-overview.ts';
+import { acknowledgeSample } from './samples.ts';
+import { Specimen } from './section.tsx';
+
+function Card({ children }: { children: React.ReactNode }) {
+  return <div className='flex w-full max-w-xl flex-col gap-2'>{children}</div>;
+}
+
+function EscalatedReview({ state, task, gate }: { state: ShinsaState; task: Task; gate: Gate }) {
+  const [verdicts, setVerdicts] = React.useState(() => createVerdictDraft(task.findings));
+  const action = resolveVerdictAction(task.findings, verdicts);
+  return (
+    <NowFrame
+      eyebrow={<Eyebrow state={state} task={task} />}
+      title={describeReviewTitle(gate)}
+      action={
+        <>
+          <Button variant='outline' size='sm' onClick={() => void acknowledgeSample()}>
+            Review
+          </Button>
+          <Button size='sm' onClick={() => void acknowledgeSample()}>
+            {action.label}
+          </Button>
+        </>
+      }
+    >
+      {gate.escalation && <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>}
+      <FindingVerdicts
+        findings={task.findings}
+        draft={verdicts}
+        onChange={(index, verdict) => setVerdicts((current) => ({ ...current, [index]: verdict }))}
+      />
+    </NowFrame>
+  );
+}
+
+export function OverviewSpecimens() {
+  const [now] = React.useState(Date.now);
+  const [{ state, tasks, gates, runs, usageWaits, monitor }] = React.useState(() => createOverviewScene(now));
+  const ignore = () => undefined;
+  return (
+    <>
+      <Specimen label='SetupCard · setup incomplete, only checks missing'>
+        <Card>
+          <SetupCard state={state} task={tasks.setup} gate={gates.setup} onReply={acknowledgeSample} />
+        </Card>
+      </Specimen>
+      <Specimen label='SignInCard · sign in needed'>
+        <Card>
+          <SignInCard
+            state={state}
+            task={tasks.signIn}
+            gate={gates.signIn}
+            onReply={acknowledgeSample}
+            onSignIn={() => void acknowledgeSample()}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='SignInCard · a provider with a sign-in of its own (Codex): check again, never sign in from Shinsa'>
+        <Card>
+          <SignInCard
+            state={state}
+            task={tasks.signIn}
+            gate={{
+              ...gates.signIn,
+              title: 'Sign in to Codex as christo@openai.example',
+              body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
+              account: { id: 'codex', email: 'christo@openai.example' },
+            }}
+            onReply={acknowledgeSample}
+            onCheck={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='UsageWaitCard · resumes automatically · waits for you'>
+        <Card>
+          {usageWaits.map(({ task, wait }) => (
+            <UsageWaitCard
+              key={task.id}
+              state={state}
+              task={task}
+              wait={wait}
+              onResume={acknowledgeSample}
+              onToggle={acknowledgeSample}
+            />
+          ))}
+        </Card>
+      </Specimen>
+      <Specimen label='WaitCard · waiting to check again'>
+        <Card>
+          <WaitCard state={state} task={tasks.monitor} monitor={monitor} onCheck={acknowledgeSample} />
+        </Card>
+      </Specimen>
+      <Specimen label='SecretCard · the agent asked for a secret'>
+        <Card>
+          <SecretCard
+            state={state}
+            task={tasks.secret}
+            gate={gates.secret}
+            onSave={acknowledgeSample}
+            onDecline={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='PausedCard · a failure · a usage limit · a wait that ran out of checks'>
+        <Card>
+          {(['failure', 'budget', 'ranOut'] as const).map((key) => (
+            <PausedCard
+              key={key}
+              state={state}
+              task={tasks[key]}
+              gate={gates[key]}
+              onOpen={ignore}
+              onReply={acknowledgeSample}
+            />
+          ))}
+        </Card>
+      </Specimen>
+      <Specimen label='SilenceNote · no output for 5 minutes · orange from 15'>
+        <Card>
+          <SilenceNote
+            state={state}
+            run={runs.quietShort}
+            onSnooze={acknowledgeSample}
+            onDismiss={acknowledgeSample}
+          />
+          <SilenceNote
+            state={state}
+            run={runs.quietLong}
+            onSnooze={acknowledgeSample}
+            onDismiss={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='QuestionCard · question choices, the recommended one marked'>
+        <Card>
+          <QuestionCard
+            state={state}
+            task={tasks.question}
+            gate={gates.question}
+            onReply={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='FindingVerdicts · an escalated review; the primary action follows the verdicts'>
+        <Card>
+          <EscalatedReview state={state} task={tasks.review} gate={gates.review} />
+        </Card>
+      </Specimen>
+      <Specimen label='PlanCard · a revised plan: what you asked, what changed, the plan'>
+        <Card>
+          <PlanCard
+            state={state}
+            task={tasks.plan}
+            gate={gates.plan}
+            onOpen={ignore}
+            onReply={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='PlanCard · evidence, extra checks, impact and the operation after the merge; the planner asked for your approval'>
+        <Card>
+          <PlanCard
+            state={state}
+            task={tasks.planned}
+            gate={gates.planned}
+            onOpen={ignore}
+            onReply={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='OperationCard · the change merged; confirm the operation on the merged commit'>
+        <Card>
+          <OperationCard
+            state={state}
+            task={tasks.operation}
+            gate={gates.operation}
+            onReply={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='ChangeCard · an investigation proposes a fix, then its findings'>
+        <Card>
+          <ChangeCard state={state} task={tasks.change} gate={gates.change} onReply={acknowledgeSample} />
+          <ResultPanel task={tasks.change} />
+        </Card>
+      </Specimen>
+      <Specimen label='ChangeCard · your OK in steps the planner composed, before an operation'>
+        <Card>
+          <ChangeCard state={state} task={tasks.composed} gate={gates.composed} onReply={acknowledgeSample} />
+        </Card>
+      </Specimen>
+      <Specimen label='SuggestionsPanel · follow-ups with When to start'>
+        <Card>
+          <SuggestionsPanel
+            task={tasks.followUps}
+            onAccept={acknowledgeSample}
+            onDismiss={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+      <Specimen label='DelegationsPanel · delegated work, nested under the task that delegated it'>
+        <Card>
+          <DelegationsPanel
+            state={state}
+            task={tasks.delegating}
+            onOpen={ignore}
+            onStop={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
+    </>
+  );
+}

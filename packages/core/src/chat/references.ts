@@ -1,4 +1,4 @@
-import type { Task, TaskStage } from '../model/index.ts';
+import type { Task, TaskStage } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 
 export type Reference =
@@ -31,7 +31,7 @@ export interface ReferenceOptions {
 
 export const REFERENCE_SCHEME = 'shinsa://';
 
-export const MIN_BARE_TITLE = 12;
+const MIN_BARE_TITLE = 12;
 
 const ID = /^[\w.-]+$/;
 const NAME = /^[\w.@-]+(?:\/[\w.@-]+)?$/;
@@ -262,11 +262,11 @@ export function linkReferences(text: string, catalog: ReferenceCatalog, options?
   return result + text.slice(cursor);
 }
 
-const STAGE_WORDS: Record<TaskStage, string> = {
+export const STAGE_WORDS: Record<TaskStage, string> = {
   triage: 'starting',
-  queued: 'not started',
+  waiting_on_tasks: 'waiting on another task',
   planning: 'planning',
-  awaiting_spec: 'plan to approve',
+  awaiting_plan: 'plan to approve',
   building: 'building',
   checking: 'checking',
   reviewing: 'agent review',
@@ -274,6 +274,12 @@ const STAGE_WORDS: Record<TaskStage, string> = {
   awaiting_review: 'changes to review',
   shipping: 'pull request open',
   awaiting_merge: 'ready to merge',
+  answering: 'answering',
+  investigating: 'investigating',
+  researching: 'researching',
+  operating: 'running the operation',
+  awaiting_proposal: 'change to approve',
+  awaiting_operation: 'operation to confirm',
   merged: 'merged',
   done: 'done',
   cancelled: 'cancelled',
@@ -301,8 +307,9 @@ function matchesQuery(state: ShinsaState, task: Task, words: string[]) {
   const repo = task.repoId ? state.repos[task.repoId]?.name : '';
   const haystack = [
     task.id,
+    task.handle ?? '',
     task.title,
-    task.intent,
+    task.request,
     task.branch ?? '',
     repo ?? '',
     task.pullRequest ? `#${task.pullRequest.number}` : '',
@@ -323,7 +330,7 @@ export function serializeTaskReferences(state: ShinsaState, query: string, limit
     .map((task) => {
       const repo = task.repoId ? state.repos[task.repoId] : undefined;
       const parts = [
-        `[${task.title}](${serializeReference({ kind: 'task', id: task.id })})`,
+        `${task.handle ? `${task.handle} ` : ''}[${task.title}](${serializeReference({ kind: 'task', id: task.id })})`,
         STAGE_WORDS[task.stage],
         repo ? `repository ${repo.name}` : '',
         task.branch ? `branch ${task.branch}` : '',

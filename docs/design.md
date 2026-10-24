@@ -4,8 +4,9 @@ Shinsa's UI follows **paywall-next's Application register**; the kit itself (tok
 in `packages/ui`) is Buzzkit's, which shares paywall-next's rules. The full paywall-next
 specification follows below, unchanged; where it names its own files (`components/ui/*.tsx`,
 `styles.css`), Shinsa's are `packages/ui/src/components/*.tsx` and
-`packages/ui/src/styles/globals.css` (18 below has the layout). `/ui` renders every token and
-component in both themes; when this file and the code disagree, fix one of them in the same change.
+`packages/ui/src/styles/globals.css` (18 below has the layout). `/ui` renders every token and kit
+component in both themes, and Shinsa's shared building blocks and feature pieces (5); when this file
+and the code disagree, fix one of them in the same change.
 
 ## Where Shinsa differs
 
@@ -25,19 +26,42 @@ Only these, and they win over anything below:
    surfaces `L 0.197 → 0.299`, text `L 0.946`, popovers a step up on `bg-2`.
 5. **No Superwall product pieces.** Sections below about campaigns, paywalls, integrations, the
    Superwall sidebar, app icons, superadmin markers and the date-range control describe paywall-next
-   and are kept as reference only. Shinsa's own composites (rail, list rows, gate glyphs, banners,
-   page header) live in `apps/web/src/components` and are on `/ui` under Shinsa.
+   and are kept as reference only. Shinsa's own composites live in `apps/web/src/components/<domain>`.
+   The shared building blocks (page heading, toolbar, section label, list row, card, panel, step number,
+   choice, select field, copy button, options trigger, info popover, status tiles and marks, times, code text,
+   the health banner's card, the setup chat's choice buttons and checks, the confirm dialog, Home's composer) are on
+   `/ui` under Shinsa composites (smart links are not), and so are the feature pieces, each in
+   every state from sample data: accounts (usage bars and figures, the usage menu, account status, the
+   percent and sign-in dialogs at each phase, the Run on account choices and the run label's account), the
+   overview's now cards on `NowFrame` (setup, sign-in, usage wait, wait, secret, paused for a failure, a cost
+   limit and a wait out of checks, a question with choices, an escalated review's verdicts, a revised plan),
+   the quiet-agent note, the follow-ups and delegated work panels, the chat's delegation cards and report rows,
+   notice rows and context meter, the schedule and notification rows, and the MCP server, plugin and skill
+   rows in every state (29). A piece that reads live state has a
+   presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
+   `AccountChoiceList`, `ContextGauge`, `HealthCard`, `NotificationGroup`, `ScheduleRow`), and every action
+   there takes a callback, so `/ui` never opens the connection or sends anything: an action only shows a
+   toast. Still checked only in the app, since they need the live state or a transcript: the rail and the
+   queue, the work card's live feed, the review and merge cards, the chat's run sections and live card, and ⌘K.
 6. **Long panes get an overlay scrollbar.** `ScrollArea` keeps native wheel, trackpad
    and keyboard scrolling and draws a thin thumb (`fg-a1`) that fades in on hover or scroll,
    lingers briefly, widens under the pointer and can be dragged; a press on the bare track centres
    the thumb there. The geometry is `lib/scroll.ts`, shared with `ScrollFade`. The task chat scrolls in one;
    other scrollers keep the hidden-scrollbar rule below.
+   **Content fades where it scrolls under something.** There is one fade: the kit's `scroll-fade` mask on the
+   scrolling element (`ScrollArea`'s `fade`, on by default, or `ScrollFade`), 24px at whichever edge still hides
+   content, never a gradient overlay. Every page whose body scrolls under a header uses `PageScroll`
+   (`components/layout/page/page-scroll.tsx`, a `ScrollArea` with the fade): Home, Settings and the task's
+   Overview. The task chat and the setup chat keep their own `ScrollArea` with the fade on, so
+   their content fades under the header at the top and into the composer at the bottom; the composer draws no
+   gradient of its own.
 7. **The task chat follows Kanna's transcript.** One centred column the composer's width; every
    item is a row box (`px-3 py-2 mb-1`, 20px from item to item) with the same inset left and
    right. Agent text is full-width `prose-chat` markdown (13px, 1.625 leading, 20/12px paragraph
    margins, highlighted code fences). A run is introduced by one quiet `text-2xs` label with a
-   hairline ("Phase 1 of 2: …"), never icons, agent names, models or times. It renders the chat
-   protocol (`docs/engine.md`), never a provider's tool names.
+   hairline ("Phase 1 of 2: …"), never icons, agent names, models or times; the one addition is the
+   account the run used, "· a@b.com", in the same tone (26). It renders the chat protocol
+   (`docs/engine.md`), never a provider's tool names.
    - **While a run works** it shows one live card (`rounded-xl`, `bg-card`): the agent's latest
      interim message (13px, four lines at most) over a quiet `text-2xs` line with a pulse, the
      current step ("Running bun test", shimmering), the time and the step count. A new message
@@ -55,7 +79,7 @@ Only these, and they win over anything below:
      edits render highlighted (language from the file extension), edits as a diff, long output
      capped with "Show N more lines"; images from tool results and evidence show as thumbnails
      that open in the image viewer.
-   - **The image viewer** (`components/image-viewer.tsx`, `useImageViewer`) opens every image in
+   - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
      the chat and in evidence: attachments, tool results, evidence. A `black/85` backdrop, the image
      fitted to the window (never upscaled) and morphing out of its thumbnail (a fade under reduced
      motion). Click toggles fit and 100% (2× for small images) around the pointer, and so does a
@@ -64,19 +88,41 @@ Only these, and they win over anything below:
      keys) step through the images of the same message or tool group. A close button, Esc or a
      click on the backdrop closes it, back into the thumbnail. A pill at the bottom carries the
      caption (attachment name, evidence title or file name), "2 of 5" and the zoom level.
-   - The user's own message is just its bubble (`rounded-3xl`, `bg-muted`, `px-3.5 py-1.5`);
+   - The user's own message is just its bubble (`rounded-3xl`, `border border-border`, `bg-muted`, `px-3.5 py-1.5`);
      attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
      `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`.
-8. **One queue, two sizes.** `features/queue/task-queue.tsx` is the only list of tasks by what they
-   need: Needs you (every open decision in focus, in `resolveQueue` order: priority first, then
-   ready to merge, changes to review, plan to approve, needs your answer, paused), In progress,
-   Waiting on another task (in chain order, collapsed) and Outside your focus (collapsed). The
-   middle two take their title, icon and
-   tone from the All tasks roadmap (`lib/roadmap.ts`, see 16), so the two never disagree. Home
+8. **One queue, two sizes.** `components/queue/queue.tsx` is the only list of tasks by what they
+   need: Needs you (every open decision in focus, in `resolveQueue` order, which `docs/engine.md` →
+   Scheduling owns: priority, then what it unblocks, then the kind of decision, then age), In progress,
+   and Waiting on another task (in chain order, collapsed). Every section holds only the focus project's
+   tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
+   title, icon and tone from the All tasks roadmap (`lib/tasks/roadmap.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
    20px gate or stage tile, title, status line and age. There Needs you becomes Also needs you
    and leaves out the tasks the guide above already names (hidden when none are left).
-   **The Home guide** (`features/home/home-guide.tsx`) sits right under the greeting, above the
+   **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
+   the greeting, the guide and the composer, then Also needs you, In progress, Recently finished
+   (merged or done in the last week, five at most), Recent conversations (the latest agent message
+   of five tasks, opening their chat) and Waiting on another task. Recently
+   finished is closure news, so it follows the work still moving; Recent conversations is how you
+   jump back into a chat, a step after the news; Waiting, the section that starts collapsed in the
+   compact queue, goes last, where a long list can never push the timely ones off screen
+   (`resolveHomeQueue` in `lib/home.ts` splits the queue around it). The rows of Recently finished and
+   Recent conversations start with the task's handle like the queue's (`TaskHandlePrefix`,
+   `components/task/handle.tsx`). **The focus filters all of Home**: the guide, every section, every
+   count and every row (Recently finished and Recent conversations through `isInFocus` in
+   `lib/focus.ts`, the rest through `resolveQueue`). Picking a project or All work in the Focus menu (the current focus checked)
+   redraws the whole page from the next state push. Nothing on Home or in the queue button's list shows
+   work from other projects, and ⌘K's decisions across tasks follow the focus too; only Jump to a task, a
+   search of every task, reaches past it. **Every Home section folds** from its `SectionLabel` header (a chevron, `aria-expanded`), is
+   open until you fold it, the long tail included, and Home remembers each choice in `localStorage`
+   (`shinsa.home-open.<section>`, `useStoredToggle`), apart from the compact queue's, where Waiting
+   still starts folded: folding Also needs you on Home never hides a decision in the queue button's
+   list. The sections stack in `WideSections` (`components/queue/queue.tsx`) with one `gap-6` between
+   them, open or folded alike: a folded section is just its header, and nothing pulls folded neighbours
+   together, so the rhythm never changes when you fold one.
+   The page scrolls in `PageScroll`, so content fades out as it passes under the top bar.
+   **The Home guide** (`components/home/guide.tsx`) sits right under the greeting, above the
    composer, and renders the briefing (`docs/engine.md` → The briefing) as editorial prose, not a
    card: no border, no tint. The greeting is the page's one heading (`text-base` medium `fg-4`);
    every guide line is a step quieter, `text-sm` `fg-3` with `leading-relaxed` and `fg-4` task
@@ -85,14 +131,14 @@ Only these, and they win over anything below:
    repository chips, pull request numbers or separate action links: the task's tile says the
    state, the link opens the place to act and its preview card holds the rest. Two `fg-2` asides
    follow: what agents are doing (a pulse, two named tasks with their verb, the rest as a dotted
-   "2 more" that opens an `InfoPopover` of task rows) and the note behind an info glyph, never about a
-   task the lines above already name and never about decisions outside the focus (the focus is
-   your choice; the queue's collapsed Outside your focus section is where those live). Every line
+   "2 more" that opens an `InfoPopover` of task rows; left out when nothing runs, since In progress
+   below says so) and the note behind an info glyph, never about a
+   task the lines above already name; the model is given only the focus project's decisions. Every line
    starts on the column's left edge, an aside's marker included. Inline tiles sit `align-middle`
    and 1px up, centred between the text's x-height and cap height; the aside markers centre on the
    same point. Nothing to
    decide reads "Nothing needs you right now." (`fg-4`) and one calm sentence.
-   **Smart links** (`components/smart/`) are one inline component per entity, shared by the Home
+   **Smart links** (`components/links/`) are one inline component per entity, shared by the Home
    guide, the chat, every rendered markdown block and the overview's facts. A task link
    (`TaskLink`) is a 16px state tile (gate or stage glyph) and the title, medium `fg-4`,
    underlined on hover; the tile and first word never part at a wrap. It goes where the work is
@@ -122,16 +168,31 @@ Only these, and they win over anything below:
    one vertical axis. Open and closed sections are shared by both through `localStorage`, and a
    section can always be collapsed, the one holding the task on screen included. Until you have
    toggled a section yourself it opens when it holds the task on screen; after that your choice
-   wins everywhere (`useSectionOpen`).
-9. **Moving through decisions.** The task page's tab row ends with `‹ 2 of 5 Next ›`, stepping
-   through Needs you in order (`resolveQueueStep` in core). Acting never moves you: approving,
+   wins everywhere (`useStoredToggle` with `resolveSectionDefault` from `lib/queue.ts`).
+   - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
+     gate (`purpose: 'change'`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since
+     it decides what gets built (`lib/tasks/status.ts`). Investigating, Researching and Running the operation are
+     working stages, blue, In progress, with their own tiles (`IconMagnifyingGlass`, `IconBook`, `IconConsole`).
+   - **An operation after the merge is a decision.** When a change's operation runs after its merge, the merged task
+     waits at the operation gate (`purpose: 'operation'`, stage `awaiting_operation`): Operation to confirm in Needs
+     you, purple with `IconConsole`, the reason core's ("The change merged and the operation waits for your OK").
+9. **Acting never moves you.** There is no previous/next stepper on the task page; the queue
+   button and ⌘K are how you move between tasks. Approving,
    merging, answering, replying or cancelling stays on the task and confirms with a toast.
-10. **Two layouts, picked in Settings → Appearance.** Cards (the default) has no rail: a top
+10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
+    constant, `LAYOUT_NAMES` (`lib/preferences/layout.ts`: label, a one-line hint and the icon, read by Settings
+    → Appearance, where each layout's choice shows its hint as a tooltip, and by ⌘K's Switch layout): **Desk** for
+    Cards ("Pages sit centred with nothing at the sides, and a button at the top opens what needs you.") and
+    **Shelf** for Sidebar ("A rail at the side lists every task and stays open, so each one is a click away.").
+    Desk is the default. Renaming them is that one constant; the code, the `?layout=` param and this file keep
+    `cards` and `sidebar`.
+    Cards (the default) has no rail: a top
     bar with a "3 need you" button that opens the compact queue, and task pages centred on the
     same axis as Home (see 12). The button sits at the top left, right after the Shinsa logo,
     because that corner is navigation and nothing on the right (Focus) moves when it comes and
-    goes; it shows on task pages wherever the gutter queue card does not (below `xl`, and on
-    Code). Sidebar is a permanent rail with the queue; it never hides. From
+    goes; it shows on every task page at every width, and it is the only place Cards lists the
+    queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
+    the queue; it never hides. From
     `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, and Enter sends in every input.
@@ -146,21 +207,24 @@ Only these, and they win over anything below:
     same left edge at every width and on every tab, so switching to Code never moves the heading:
     in Sidebar the header and 36px tab row compute their start padding from the centred
     `max-w-3xl` column; in Cards the heading and tab row sit in that column themselves. Shared
-    pieces (heading, task menu, `‹ 2 of 5 Next ›`, the code view) live in
-    `features/task/task-parts.tsx`.
+    pieces (heading, facts, task menu, the
+    code view) live in `components/task/` and `components/code/`; `routes/task/index.tsx` picks the
+    Cards or Sidebar frame.
     - **The decision card.** The Overview opens with the task's now card
-      (`features/overview/now-card.tsx`), and a gate's actions sit at its top right, each named
+      (`components/overview/now-card.tsx`), and a gate's actions sit at its top right, each named
       for what it decides: a review gate has Review (outline, opens Code) then **Approve
       changes** (primary; its tooltip says it opens the pull request, and it is disabled while
       line comments are drafted); a merge gate has Review then **Merge #N**; a plan gate has
-      **Approve plan** over the plan itself; a paused task has Retry; a question has its answer
+      **Approve plan** over the plan itself (a change with an operation lists it under its phases, headed
+      "First, the operation" or "After the merge, the operation"); an operation after the merge has **Run the
+      operation**; a paused task has Retry; a question has its answer
       box. Status labels say what waits on you the same way: Plan to approve, **Changes to
       review** (never the bare "Ready for review"), Ready to merge.
     - **Panels keep their action when collapsed.** An Overview panel's header action ("Review the
       code" on What changed) stays in the header whether the panel is open or closed
-      (`components/panel.tsx`).
-    - **Task facts.** What a details panel would hold is one quiet wrapped row at the top of the
-      Overview (`features/overview/task-facts.tsx`): state, repository, branch, pull request,
+      (`components/layout/surface/panel.tsx`).
+    - **Task facts.** What a details panel would hold is one quiet wrapped row under the heading on
+      every tab (`components/task/facts.tsx`, rendered by `TaskHeader`): state, repository, branch, pull request,
       priority, started (added, for a task that has not started), and, when they apply, the task
       it is stacked on (older tasks only), what it waits on and what it unblocks (or the checks,
       when there is no pull request yet). Waits on reads "Waits on ‹A›, ‹B›" and is a click menu,
@@ -172,17 +236,42 @@ Only these, and they win over anything below:
       the first icon sits on the column edge. Items with more to say open an `InfoPopover` on
       hover (see 15), never a tooltip: the pull request shows CI, unresolved comments, mergeable, each
       check with its state and a link to GitHub; the branch its full name and base; the
-      repository its path, area and default branch; several related tasks list as links.
-      Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/priority.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
-    - **Cards.** The column is centred on the window, the same centre as Home. The compact queue
-      (current task highlighted) is a card in the left gutter, hung off the column's outer edge
-      so it never pushes the column; from `xl` down, and on the Code tab where the diff takes the
-      full width, it becomes the "3 need you" `sm` secondary button at the top left of the top
-      bar (see 10), opening the same queue in a popover.
+      repository its path, project and default branch; several related tasks list as links.
+      Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/status/priority-icon.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
+    - **Cards.** The column is centred on the window, the same centre as Home, with nothing in
+      the gutters. The queue is the "3 need you" `sm` secondary button at the top left of the top
+      bar (see 10), one step brighter than a secondary button's rest: `fg-3` (secondary), not `fg-2` (muted), opening the compact queue (current task highlighted, every section: Needs you,
+      In progress and Waiting on another task, all within the focus project) in a popover.
+    - **The handle.** A task's handle (`SW-142`, its project's key and a number) is how people name it: the facts
+      row starts with it (a click copies it and toasts "Copied"), roadmap rows, queue rows, ⌘K rows and a task link's preview card show
+      it in `tabular-nums` `fg-2`, ⌘K finds a task by it, and the tab reads "SW-142 Fix login · Shinsa" on its page.
+      Task URLs use it (`/tasks/SW-142`), built only by `resolveTaskPath`; `/tasks/<id>` and a handle in any case
+      still open the task (core's `selectTaskByReference`) and are replaced by the canonical URL. Until triage gives
+      a task its handle, its URL and links use the id and nothing shows a handle.
+    - **The facts row is one colour.** Every fact under the title (the handle, the status, the kind, the
+      repository, the branch, priority, times, cost, account, related tasks) is `text-xs` `fg-2`, the muted
+      foreground the handle always had (`FACT` in `components/task/facts.tsx`), turning `fg-4` on hover when it opens
+      something. The status keeps its tone on its dot, and a state glyph or a warning note (failing checks, a
+      pull request's conflicts, a budget gone over) keeps its own colour; the words around them do not.
+    - **The kind of task.** Every task's facts name its kind (`lib/tasks/shapes.ts`, `resolveShapeLabel`: Answer only,
+      Investigation, Research, Change, Find and fix, Operation, or for steps the planner composed the work they do in
+      the order they do it, "Investigation, then operation", "Change, then operation" for a backfill after the merge,
+      "Operation, then change") with the icon of the work it does, right after the status. Its tooltip lists the steps
+      in pipeline order ("Change, then operation: plan, build, checks and agent review, your review, pull request,
+      merge, then run the operation.", `describeTaskSteps`) over a muted line of why. The kind is Shinsa's and the
+      planner's to decide: it is a read-only fact, and no menu, composer select or ⌘K command changes it.
+    - **Each fact says why, once.** What triage decided has no line of its own: the facts row shows each value once and
+      its tooltip says why (`resolveTriageWhy` in `lib/tasks/triage.ts`): "Shinsa chose this: …" while it is Shinsa's
+      pick, "You changed this. Shinsa chose “answer only”: …" once you changed it, and "An agent set these steps: …" once
+      the planner composed them. The kind's why is the muted line under its steps; the priority's is its tooltip; when
+      the task starts is the Waits on fact's tooltip while it waits (its menu changes it) and the muted line of the
+      Started time's tooltip once it runs. Each fact's menu is the override: the priority menu and the Waits on menu.
+      No "Auto" label is shown.
 
 13. **Anything you hover that has more to tell has a tooltip**, as in Buzzkit. Four kinds:
-    - **Every time** goes through `components/time-ago.tsx`: `TimeAgo` ("2h ago", or `compact`
-      for the bare "2h" a row ends with, or a `label` such as "Started 2h ago") and `Duration`
+    - **Every time** goes through `components/text/time-ago.tsx`: `TimeAgo` ("2h ago", or `compact`
+      for the bare "2h" a row ends with, or `text`, a function of now for a phrase around the age such
+      as "Started 2h ago", so it ticks with the minute) and `Duration`
       ("Worked for 3m", the live card's running clock). Each renders a `<time>` whose tooltip
       opens after 150ms with the exact moment: the date bright and the clock muted
       ("Wed, Oct 22, 2026 2:14 PM"); a duration shows "2:14 PM to 2:17 PM" ("Since 2:14 PM" while
@@ -191,11 +280,18 @@ Only these, and they win over anything below:
       Toasts are the only times without one. A bare `formatAge(…)` or `formatDuration(…)` in JSX
       is a bug, and the lint below rejects it.
     - **Icon-only buttons** name their action in a tooltip through `Hint`
-      (`components/hint.tsx`): copy ("Copy", then "Copied"), the task and area `•••` menus
-      ("Task actions", "Area options"), collapse and expand ("Collapse summary"), previous and
+      (`components/overlays/hint.tsx`): copy ("Copy", then "Copied"), the task and project `•••` menus
+      ("Task actions", "Project options"), collapse and expand ("Collapse summary"), previous and
       next spot, the image viewer's close, previous and next (with their key, `Esc`, `←`, `→`),
       send, comment on a line, the compact bar's queue and new-task buttons, the sidebar's resize
-      handle (following the pointer down the edge). The tooltip repeats the `aria-label`.
+      handle (following the pointer down the edge). The tooltip repeats the `aria-label`. A `Hint` with a `detail`
+      stacks a muted second line under its label, as a time's tooltip does (the kind of task's why, 12).
+    - **Every copy says "Copied" in a toast.** Copying anything (the task's handle, a commit, a branch name, a
+      command, a code block, a webhook URL) goes through one helper, `copyText` in `lib/connection/commands.ts`:
+      it writes the clipboard, toasts "Copied", or "Couldn’t copy to the clipboard" when the browser refuses, and
+      reports which. `useCopyText` (`components/controls/copy-button.tsx`) wraps it for a trigger that also swaps
+      to its "Copied" state; never call `navigator.clipboard` anywhere else. This replaces the "No success toast"
+      of Components → Copy below.
     - **Text from data that can be cut off** is `Truncate` (`@shinsa/ui/components/truncate`):
       task titles in every row, previews, repository names and paths, branch and file paths,
       check names and details, tool targets, run headlines, attachment names, the image
@@ -204,11 +300,11 @@ Only these, and they win over anything below:
       facts) keeps a plain `truncate`, so two overlays never stack.
     - **Small marks that carry meaning without a label** get a short tooltip: queue tiles
       (`GateGlyph`, `WorkingGlyph`: "Changes to review", "Building · Agent working"), the
-      finished tiles on Home ("Merged", "Done"), area dots ("Superwall area"), check and to-do
+      finished tiles on Home ("Merged", "Done"), project dots ("Superwall project"), check and to-do
       icons ("Passed", "Failed", "In progress"), the progress track's steps (step, count and
       state, then the plan's phases), the diff counts ("12 lines added · 3 lines removed"), a
       changed file's status letter ("Modified") and risk dot ("High risk" and the reason), its
-      comment count, a pull request badge ("Pull request #4531 · Checks passing"), a
+      comment count, a pull request badge in the pull request's tone ("Pull request #4531 · Checks passing"), a
       repository's GitHub or folder icon. The command menu's search button reads "Search and actions" with
       its `⌘K` key.
     Content follows Buzzkit's scanning rules: the value first in `fg-4`, the qualifier muted in
@@ -216,12 +312,12 @@ Only these, and they win over anything below:
     foreground, mixed bright and muted text inside one `whitespace-nowrap` span. Never a sentence
     where a value and its label will do.
 14. **The command menu (⌘K) reaches the whole app, and knows where you are.** It is Buzzkit's
-    menu (`features/command/command-menu.tsx`, rendered once by `App` on `CommandDialog` from
+    menu (`components/command/menu.tsx`, rendered once by `Root` on `CommandDialog` from
     `@shinsa/ui/components/command`), opened by ⌘K / Ctrl K from anywhere (inputs included) or
     by the magnifying-glass button in the sidebar header and the compact bar. Every action goes
     through the same `sendCommand` the buttons use; the menu adds no commands of its own.
     - **Pages contribute what they know.** `useRegisterCommands(sections)`
-      (`features/command/registry.ts`) registers ranked sections while a component is mounted
+      (`lib/command/registry.ts`) registers ranked sections while a component is mounted
       and drops them on unmount; the latest closures sit behind a ref and the menu re-renders
       only when the serialised sections change. A command is `run`, `go` (a path), `link`
       (opens a new tab), `page` (a nested list, or a `compose` page whose input becomes a
@@ -231,7 +327,9 @@ Only these, and they win over anything below:
     - **On a task page** (`TaskHeader` calls `useTaskPageCommands`, so Sidebar and Cards share
       it) the task leads: its decision first, each named for what it does (Approve the plan /
       Revise the plan, Approve the changes / Review the changes / Request changes, Merge #N or
-      Merge the pull request, Answer the question, Retry / Retry with guidance), then View (Overview, Code, Chat, and Guided review / All files on Code), then
+      Merge the pull request, Answer the question, Retry / Retry with guidance, or Allow another $N for a cost
+      limit; Sign in / Retry anyway for a Sign in gate; Give the ‹label› / Don’t give the secret for a secret;
+      Resume now and the auto-resume toggle for a usage wait), then View (Overview, Code, Chat, and Guided review / All files on Code), then
       This task (Wait for another task…, a choice that ticks every task it waits on and toggles
       the one you pick, and Stop waiting, Set priority with the priority icons,
       Message the agent, Open the pull request
@@ -241,16 +339,22 @@ Only these, and they win over anything below:
       comments and Approve the changes is disabled while there are any, as on the page.
     - **On Home** it is about getting to tasks: Needs you lists the tasks waiting on a decision
       (the briefing's Now task first, then queue order, up to eight), each row opening its task;
-      their decisions stay out of the root and match only while typing. **Settings** offers Jump to (each section scrolls into view) and
-      Change a setting (every select on the page as a choice). **All tasks** offers Filter by
+      their decisions stay out of the root and match only while typing. **Settings** offers Jump to (each section,
+      with the tab that holds it as its hint, from anywhere: it opens that tab and scrolls the section into view;
+      `openSettingsSection` in `lib/command/settings.ts`), Change a setting (every setting's select as a choice; a project's own controls stay on the
+      page) and Setup (Run setup again). **All tasks** offers Filter by
       status, Clear filters and "Search all tasks for …"; the filter and search live in the URL
       (`?status=&q=`), and an active status shows as a removable button beside the search.
-    - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, and
+    - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, as the rail's and the
+      compact bar's New task do, and
       Jump to a task, a page of every task), Go to (Home, All tasks, Settings), Focus (Switch
-      focus area; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
-      typing) and Appearance (Switch layout, Change theme). With an empty query, Recent lists the
-      last tasks visited (`shinsa.recent-tasks`) that no group above already shows.
-    - **Typing** matches by word (`score.ts`: whole label, label prefix, word prefix, then
+      focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
+      typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens
+      Settings → Agent usage, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
+      by name while typing; only while there is one; 27), and Integrations (Add an MCP server, MCP servers, Plugins
+      and Skills, and while typing each server, plugin and skill by name; 29). With an empty query, Recent lists the
+      last tasks visited (`shinsa.recent-tasks`) within the focus that no group above already shows.
+    - **Typing** matches by word (`lib/command/score.ts`: whole label, label prefix, word prefix, then
       substring; hints and keywords count at 0.7). Groups are ordered by their best match, since
       cmdk's own group sort does not work. Choices flatten into their options ("urgent", "dark",
       "cards"), every task matches by title, repository, branch and status, and the queue's
@@ -273,7 +377,7 @@ Only these, and they win over anything below:
 15. **Consistency comes from shared pieces, not from care at the call site.** Everything below
     has one owner; a hand-built copy is a bug. Measured in the browser at 900 and 1280, both
     themes.
-    - **Info popovers** (`components/info-popover.tsx`): anything that shows more on hover (task
+    - **Info popovers** (`components/overlays/info-popover.tsx`): anything that shows more on hover (task
       facts, smart-link preview cards, "2 more", related tasks) is an `InfoPopover`, built on
       `PreviewCard`. It opens on hover after 80ms, closes 120ms after the pointer leaves, sits
       8px from its trigger (bottom, start), and a click does nothing to it: it never toggles or
@@ -281,7 +385,7 @@ Only these, and they win over anything below:
       dropdowns. Inside: `InfoHeader` (title over a `text-2xs` description, `gap-px`,
       `px-3 py-2.5`), `InfoSection` (a hairline above, optional `text-2xs` title) and `InfoRow`
       (a 28px label/value row: icon and label left, value right, 16px minimum between them).
-      Task lists inside one are `TaskPopoverRows` (`components/smart/task-link.tsx`): glyph,
+      Task lists inside one are `TaskPopoverRows` (`components/links/task.tsx`): glyph,
       title over status line, `rounded-item` rows in a `p-1` frame.
     - **Label and value pairs** in popovers and tooltips sit apart: label left, value right
       (`justify-between`, `gap-4`), via `InfoRow` or `InfoLine` for tooltips. Never a value run on
@@ -291,27 +395,70 @@ Only these, and they win over anything below:
     - **Checkmarks are the accent**, everywhere: check and to-do glyphs, the current value in a
       menu, a select or ⌘K, copy confirmations, done tiles, settled tasks in ⌘K, the "decision"
       activity, toasts, popovers, tooltips, and GFM task-list checkboxes in agent markdown
-      (`accent-color`). They come from `components/check-mark.tsx` (`CheckMark`, `CHECK_TEXT`,
-      `SELECTION_CHECK_TEXT`, `CheckOutcomeIcon` for pass / fail / skipped). The one exception
+      (`accent-color`). They come from `components/status/check-mark.tsx` (`CheckMark`, `SelectedMark`, `CHECK_TEXT`,
+      `CheckOutcomeIcon` for pass / fail / skipped). The one exception
       is the progress track: its done steps (a 15px check on `green` at 29%) and the line
       between them are green, so done reads apart from the blue pulse of the current step.
-    - **Page headings** (`components/page-heading.tsx`): one `PageHeading` for Task, All tasks
+    - **Page headings** (`components/layout/page/heading.tsx`): one `PageHeading` for Task, All tasks
       and Settings (Home's greeting uses its `PAGE_TITLE`): a `text-base` medium `fg-4` title on a
       20px line (`leading-tight`), the description or count `text-xs` `fg-2` directly under it
       (`gap-px`), flush with the column's left edge.
-    - **Canvas sections** (`components/section-label.tsx`): a `SectionLabel` (`h-6`, `text-2xs`
-      medium `fg-2`, the count in normal weight, `px-1`) 4px over its card; with a description
-      the two lines stack `gap-px`. Home's queue sections and every Settings group use it.
-    - **Settings is titles only**: no section or row descriptions, just the group label and each
-      row's title with its control (a 40px row). Model selects show the display name ("Opus 5.5")
-      from the first paint (`KNOWN_AGENT_MODELS`, refined by the live catalog), never the raw
-      alias.
+    - **Canvas sections** (`components/layout/page/section-label.tsx`): a `SectionLabel` (`h-6`, `text-2xs`
+      medium `fg-2`, the count in normal weight, `px-1`) 4px over its card, with an optional action at
+      the right. Home's sections and every Settings group use it. The action's buttons sit 2px apart
+      (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns: Refresh beside Add account or Add
+      server), so callers pass them as a fragment. With `onToggle` it folds: the
+      label and count become one button with a 14px chevron (`SectionChevron`, turned when closed,
+      shared with the compact queue's headers) and `aria-expanded`; every Home section uses that
+      (`WideSection`), Settings keeps the plain label.
+    - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
+      Attention, Notifications, Context, Setup), Agents (Agents, Engine), Agent usage (Agent usage, Limits; the tab keeps `?tab=accounts`), Projects (Projects, Repository
+      folders), Integrations (Context optimizer, MCP servers, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
+      tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
+      floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
+      scroll-spy table of contents would have kept that page. The tab is in the URL (`?tab=agents`; General is
+      the bare `/settings`), and a link to a section (`/settings#limits`, the old `#accounts`, `#usage` and `#codex` too) opens
+      its tab and scrolls to it. Where the page is wide enough for a rail beside the centred column (a container
+      query, 74rem, so 1280 in Cards), the tabs are a left rail in the left gutter, the sidebar's `NavItem`s
+      (`components/layout/nav-item.tsx`) under one `HoverHighlight`, sticky, with the column still on Home's axis,
+      the active tab's icon the filled variant of its outline icon (`activeIcon`, `IconSettingsGear1Filled`…, as
+      the sidebar rail does); narrower, they are the segmented `Choice` under the heading, the task page's tab
+      control. The page heading is the open tab's name ("General", "Agents"), never "Settings".
+    - **Settings is titles only**: the group label and each row's title with its control (a 40px
+      row). There are no section or row descriptions (`SettingsGroup` and `SettingRow` take none), so a
+      title and its options must say what a setting does on their own ("Setup questions" with Run setup again).
+      A row may still show data under or beside its name (an account's reset time, a schedule's summary, a
+      path); the two layout names keep their hint lines as tooltips on Desk and Shelf (`Choice` items take a
+      `hint`). Model selects show
+      the display name ("Opus 5.5") from the first paint (`KNOWN_AGENT_MODELS`, refined by the live
+      catalog), never the raw alias.
       Section → section is 24px (`gap-6`) on every page.
-    - **Cards** (`components/surface.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
+    - **Settings → Projects** (`components/settings/projects.tsx`): one `SettingsBlock` per project, 6px apart. The
+      header holds the colour dot, the name (medium `fg-4`) and the key as a mono `Badge` (its tooltip: "Tasks in this
+      project are named SW-1, SW-2…"), then a secondary `xs` Add and the `•••` (Rename…, Change key…, Edit or Add
+      description…, Colour, Remove project). The shelf is one list of what the project holds: each repository
+      (GitHub or local icon) and each folder (`IconFolders`, the folder's name), all as `PathRow`s (a 14px icon 8px
+      from the name, the path after it in `text-2xs fg-2`, a remove ×), and "No repositories or folders yet." when
+      empty. Add is a menu of the repositories found on disk ("In your folders", "In other projects") and Folder
+      by its path…, which puts a path field with Add folder and Cancel (Escape) at the end of the shelf. The
+      description lives only in its dialog.
+    - **A project's dot lines up with menu icons**: in any menu or select the dot sits in a 14px box
+      (`ProjectDotIcon` in `components/status/project-dot.tsx`), the size of a menu icon, so the label after it
+      starts where every other item's label does (the focus menu, the new-task project picker, ⌘K's choices, a
+      project's Colour menu).
+    - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
       card surface. A card pads the same on all four sides; the shared `Card` slot carries no
       padding of its own, so nothing doubles up. Settings groups are `p-1.5` (6px on every side,
-      measured), rows inside `px-1.5`, so text sits 12px from the edge and an inner surface (an
-      area's repositories) sits 6px from it on three sides; `CARD_HEADER` is the one card header strip (36px, `bg-bg-a1`, 14px icon 8px
+      measured), rows inside `pl-2 pr-1.5` (`SETTING_ROW`, a 40px minimum with `py-1` only so a wrapped
+      line keeps 4px from the row's edge), so text sits 14px from the left edge and a control 12px
+      from the right, and an inner surface (a project's repositories) sits 6px from the card on three sides.
+      Settings has one grouped pattern, the projects card's (`SettingsBlock` and `SETTINGS_SHELF` in
+      `components/settings/group.tsx`): a 32px header row with no fill, then the rows that
+      belong to it on one `rounded-item` `bg-bg-a1` shelf with hairlines between them, blocks 6px apart (`gap-1.5`)
+      and no hairline between blocks. Projects, accounts and the agent groups' per-role rows use it. A control on the shelf
+      has no fill at rest, since the shelf is already the second surface: never a fill on a fill. A button there is the
+      kit's `secondary` (its ghost; `CopyButton` is always one), a select `ghost`; the one exception is an MCP server's
+      Connect, primary `xs`, the one thing to act on. `CARD_HEADER` is the one card header strip (36px, `bg-bg-a1`, 14px icon 8px
       from a `text-xs` medium `fg-4` title, `px-3`), used by `Panel`, the chat's hand-over cards
       and the live card's row; `CARD_FOOTER` the one footer (`px-3 py-2.5`, `bg-bg-a1`). Every
       card's inset is 12px (`p-3`): the Overview's now card included. Anything nested in a card
@@ -324,33 +471,37 @@ Only these, and they win over anything below:
       title, list rows, activity rows, plan and phase steps, check rows, popover headers and
       task rows, review findings, message links. A title next to its description on one line
       (⌘K rows, a section label and its count, "Waits on ‹task›") is 6px (`gap-1.5`).
-    - **Numbered steps** are `StepNumber` (`components/step-number.tsx`): a 20px `bg-bg-a2` tile,
+    - **Numbered steps** are `StepNumber` (`components/layout/surface/step-number.tsx`): a 20px `bg-bg-a2` tile,
       `rounded-control-sm`, in the plan, What changed, the chat's plan card and the review
       walkthrough.
-    - **Task actions** have one source, `features/task/task-actions.ts` (`TASK_ACTION`: label and
-      icon). The task page's `•••` menu, the All tasks context menu (`TaskActionItems`) and ⌘K's
+    - **Task actions** have one source, `lib/tasks/actions.ts` (`TASK_ACTION`: label and
+      icon). The task page's `•••` menu, the All tasks context menu (`TaskActionItems` in
+      `components/task/action-items.tsx`) and ⌘K's
       This task section all read it, so every action carries the same icon everywhere: copy
       branch, open the pull request, open in editor, open a terminal, show in Finder, restart the
       current step, mark as done, and Cancel task in the destructive style.
-    - **Dependencies** have one source, `features/task/dependency-menu.tsx`: `DependencyItems`
+    - **Dependencies** have one source, `lib/tasks/dependencies.ts`, drawn by
+      `components/task/dependency-items.tsx`: `DependencyItems`
       (the Wait for another task submenu and Stop waiting) sits in the task page's `•••` menu, the
       All tasks context menu, the Waits on fact and All tasks' chain arrow (`WaitsOnItems`);
-      `listDependencyCommands` gives ⌘K the same two ("Wait for another task…" as a multi-value
+      `listDependencyCommands` (`lib/command/task.ts`) gives ⌘K the same two ("Wait for another task…" as a multi-value
       choice, `value` a list, every current one checked, "Stop waiting"). Several at once is the
       normal case: every list adds or removes one task and never replaces the others. Before building
       starts the label is Wait for another task; once building has started it is Merge after
       another task, because that is all a new dependency can still do.
-    - **Status tones** come from `components/status.tsx` and `components/tone.ts`, nowhere else:
+    - **Status tones** come from `lib/tasks/status.ts` and `lib/format/tone.ts`, nowhere else:
       Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
-      Ready to merge green, working stages blue, Not started (waiting on another task) neutral. The All tasks section icons,
+      Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
+      needed are orange like Paused, and Waiting to check again, Waiting for the usage limit and Waiting for
+      delegated tasks are blue like working. The All tasks section icons,
       the queue's section icons, the gate tiles, ⌘K's task icons and the status labels all read
       them (`resolveTaskGlyph`, `resolveTaskStatus`).
     - **Hover is never the only feedback**: every `hover:` class has the same `active:` value on
       the same line (`group-hover:` pairs with `group-active:`, unless it only reveals something
-      from `opacity-0`).
+      from `opacity-0`). The lint checks that an `active:` is there, not that its value matches.
 
-16. **All tasks is the roadmap.** `features/tasks/task-list.tsx` lists every task in to-do order,
-    grouped by `resolveRoadmapGroup` (`lib/roadmap.ts`): Ready to merge, Changes to review, Plan to
+16. **All tasks is the roadmap.** `routes/tasks.tsx` (rows in `components/roadmap/`) lists every task in
+    to-do order, grouped by `resolveRoadmapGroup` (`lib/tasks/roadmap.ts`): Ready to merge, Changes to review, Plan to
     approve, Needs your answer, Paused, In progress, Waiting on another task, Done and Cancelled
     (both collapsed). Each section header is a sticky
     `h-8` row: its icon in the section's status tone (see 15), the title, the count, a chevron.
@@ -365,53 +516,540 @@ Only these, and they win over anything below:
     row's corner arrow sits under its parent's priority mark (26px per level) and is a 20px
     button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
     "Waits on" and the parents in its tooltip; it opens the Waits on menu. Every row starts with
-    its priority mark. Filter by status in
+    its priority mark, and its status column with its kind's icon in `fg-2` (`SHAPE_ICON`, named
+    for screen readers) whose tooltip lists the steps the task takes ("Investigation: find the
+    repository, investigate, then your OK to change.", composed steps included, `describeTaskSteps` in `lib/tasks/shapes.ts`,
+    from core's `resolveTaskProgress` with a plan's phases as one build). Filter by status in
     ⌘K offers the same sections with the same icons.
+    - **Change to approve** is its own section between Plan to approve and Needs your answer (`IconFileEdit`,
+      purple): a proposed change decides what gets built, like a plan, but it is not a plan yet.
+    - **Operation to confirm** follows it (`IconConsole`, purple): a merged change whose operation waits for your
+      OK on the merged code.
 17. **New tasks can wait.** Home's composer has a When to start select beside priority: Start now,
-    or "After ‹task›" for any open task. Picking one sends `blockedBy` with `task.create` and the
+    or "After ‹task›" for each open task of the project the composer shows. Picking one sends `blockedBy` with `task.create` and the
     button reads Add instead of Start.
+    - **Auto is the default.** The composer's selects, in order Project, When to start and Priority, start on what
+      Shinsa would pick. Project shows the focus project ("No project" without a focus) with its dot, then every
+      project by name and No project; picking one sends `projectId` (`null` for No project), leaving it sends
+      nothing, so the task joins its repository's project, else the focus. When to start and Priority start on an
+      Auto item ("Auto start" with `IconCalenderSparkle`, "Auto priority" with `IconChart3`), and Auto sends nothing
+      for that part, so triage decides it (`createNewTaskCommand` in `lib/new-task.ts`). Picking a value sends it;
+      Start now sends `blockedBy: []`. There is no kind select: the placeholder says Shinsa decides what kind of task
+      it is, and the button reads Start, or Add for a task that waits.
 18. **The kit (`packages/ui`).** Imported as `@shinsa/ui/components/<name>`, `@shinsa/ui/lib/<name>`,
     `@shinsa/ui/hooks/<name>` and `@shinsa/ui/styles/globals.css`:
-    - `src/components/` holds every primitive, one flat file each (`button.tsx`, `dialog.tsx`, …);
-      the icon set is the one folder, `components/icon/`.
+    - `src/components/` holds every primitive the app renders, one flat file each (`button.tsx`,
+      `dialog.tsx`, …); the icon set is the one folder, `components/icon/`. A primitive nothing but `/ui`
+      renders is deleted, with its tests, its `/ui` entry and any dependency only it used.
     - `src/lib/` is the logic the components share, pure and unit-tested: `cn` (with the theme's
       corner, shadow and leading tokens taught to tailwind-merge, so `cn('rounded-control',
       'rounded-popup')` keeps only the override), `scroll.ts` (edge fades, the overlay thumb, drag
       and track presses), `truncate.ts` (the middle cut), `pointer-intent.ts` (preview cards
-      holding while the pointer heads for them), `avatar.ts` (pastel palettes, generated faces) and
-      `icon-swap.ts`.
-    - `src/hooks/`: `useMediaQuery` (and `useIsMobile` on it), `useControllableOpen` (open state for
-      `Select` and `DropdownMenu`, controlled or not) and `useAnimatedIndicator` (the sliding
+      holding while the pointer heads for them) and `icon-swap.ts`.
+    - `src/hooks/`: `useMediaQuery`, `useControllableOpen` (open state for
+      `Select` and `DropdownMenu`, controlled or not), `useDialogState` and `useHeldValue` (a
+      dialog that closes without a visible change, 26) and `useAnimatedIndicator` (the sliding
       highlight behind menus, lists and tabs).
-    - `scripts/icons.ts` is the icon generator (below); `test/` mirrors `src/` and `scripts/` file
-      for file. `bun run --cwd packages/ui test` runs it (Bun with happy-dom and Testing Library)
-      and fails under 100% line and function coverage of `lib`, `hooks` and `scripts`; components
-      are tested for behaviour (states, roles, names), never for class strings.
+    - `scripts/generate-icons.ts` is the icon generator (below), with its logic in `scripts/icons.ts`.
+      `bun run --cwd packages/ui test` runs `test/` (Bun with happy-dom and Testing Library) and fails
+      under 100% line and function coverage of `lib`, `hooks` and `scripts` (the generator's entry point
+      excepted); the components that carry behaviour are tested for it (states, roles, names), never for
+      class strings.
 19. **Icons are Central Icons**, through `<Icon name='Icon…' />` from `@shinsa/ui/components/icon`.
     Read every mention of Lucide, `SIcon` or an owned `icons.tsx` below as this. The paths are
     pre-rendered into `components/icon/paths.ts` from the names the workspace uses: run
     `bun run --cwd packages/ui generate:icons` after using a new name (`--check` fails when the
     file is stale, and the kit's tests check it too). Marks Central lacks (the priority bars, brand
-    marks) are drawn into `components/icon/custom.ts`. Icons render at 50% opacity, a step quieter
-    than their text; chevrons draw square-cornered.
+    marks) are drawn into `components/icon/custom.ts`. Chevrons draw square-cornered. **An icon is its text's colour, about 15% quieter.** You read the
+    text; the icon is taken in passively, so the two are never equally strong. `Icon` draws in
+    `currentColor` at `--icon-alpha` (globals.css): 85% of its text (`--icon-alpha-text`) by default, 90%
+    in a menu, select or command row (`--icon-alpha-item`, set by the row's `icon-item`), so a
+    row's icon is the row's `fg-3` at 90%, turning `fg-4` with the label when highlighted. Tune the
+    strength there, in one place. Contexts that keep the icon equal to its text set `icon-solid`: a
+    secondary (ghost) button, whose ink is already the muted `fg-2` and would drop below a readable
+    contrast (the usage glance in the top bar is the reference), an icon-only button (the glyph is the
+    whole label), a destructive menu row and the error toast (an error may stay at full strength). Everything else follows the rule: a Button's icon is its ink at 85% (white on
+    `primary` and `destructive`), a Badge's its text's tone, a muted hint line's glyph the line's `fg-3` at
+    85%. Status glyphs are the status text's colour at 85%: `StatusTile` gives its icon `TONE_TEXT[tone]`,
+    the same class as the status label. An icon never takes a lighter `fg-*` step than its text, and a call
+    site never writes its own fade (`opacity-50`, `[&_svg]:opacity-*`, `icon-tertiary`): a reveal goes
+    `opacity-0` → `opacity-(--icon-alpha)`, the icon swap lands on `--icon-alpha`, and a disabled control's
+    `opacity-45` is not muting. `bun lint:conventions` rejects a faded or brightened icon, in `packages/ui` too.
+    Read every `icon-tertiary`, 80% or 55% icon rule below as this: there is no `icon-tertiary` in the kit.
 20. **The kit's control ramp is a step denser than paywall-next's.** Button `xs` 22 / `sm` 24 /
-    `default` 26 / `lg` 30 (icon sizes the same squares), `Input`, `SelectTrigger`, `ComboboxInput`
-    and the default tab list 26 (`sm` 24), menu, select and command rows 24, `Badge` 18 / 20, glyphs
+    `default` 26 / `lg` 30 (icon sizes the same squares), `Input` and `SelectTrigger` 26,
+    the tab lists 26 (`default` and `ghost`) and 32 (`underline`, no size prop), menu, select and command rows 24, `Badge` 18 / 20, glyphs
     14px in `xs` and `sm` controls and 16px from `default` up. Read the Sizing tables below with these heights.
-21. **Invalid** is a 1px `red-4` ring on `Input`, `Textarea` and `ComboboxInput`, and on a
-    `Checkbox` or `RadioGroupItem` only while it is unchecked. `FieldError` announces the message
+21. **Invalid** is a 1px `red-4` ring on `Input` and `Textarea`. `FieldError` announces the message
     (`role="alert"`), each distinct message once.
 22. **Busy buttons stay themselves.** `Button loading` keeps its colours and width, swaps its icon
     (or, without one, adds a leading spinner), sets `aria-busy` and ignores presses and keys, so a
     busy submit can't fire twice. It is never `disabled`.
 23. **The kit's icon-only buttons carry their tooltip**, as 13 requires: the dialog and sheet close
-    X ("Close") and `CodeBlock`'s copy ("Copy", then "Copied").
+    X ("Close").
+24. **Setup is a chat, built from the task chat's pieces.** `/onboarding` (`routes/onboarding.tsx`) is the
+    task chat's column: Shinsa's lines are `AgentText`, a problem with your answer is `ErrorLine`, your answers are
+    `UserMessage` bubbles, every item a `ROW`, and the `Composer` sits at the bottom. The heading is `PageHeading`
+    ("Set up Shinsa", "Question 2 of 6") inset to the rows' text. The options under the latest question are
+    `ChoiceButton`s (`controls/choice-buttons.tsx`): `outline` `sm` buttons in a wrapping row (`gap-1.5`), a
+    muted detail after the label ("12 repositories"). Selection is colour alone, never a mark: a selected option is
+    the same button in the `primary` variant (its detail at 70% opacity), so nothing moves when it changes. No
+    option of a one-answer question is selected when it is asked, a saved value included; where several can be
+    picked (folders) the folders already chosen start selected, a pick toggles `primary` with `aria-pressed`, and a
+    primary `sm` button below sends them. Check results (accounts,
+    tools) are one `CARD` list of `CheckOutcomeIcon` rows, label over detail (`gap-px`) and the fix in `fg-3`. An
+    optional check that fails (codex and its sign-in: Codex is a second provider, not a requirement) is a skipped
+    row, never a fail, and never holds setup back.
+    While an answer is read your text shows as a bubble with a shimmering "Reading your answer…" under it.
+    Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS`
+    ones marked as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts, checked when chosen);
+    Settings → Setup and ⌘K's Run setup again restart the chat on the server, then open `/onboarding`; opening
+    `/onboarding` while the server's chat is finished (setup done and not restarted) goes Home instead. The top bar
+    (and the Sidebar rail) hides the usage glance and Focus on `/onboarding`. No folder path is ever written into
+    the UI.
 
-`bun lint:conventions` checks the app for raw `text-[N]` sizes, raw corners, `font-bold`, any
-`shadow-*` or `ring-*`, any `focus:` / `focus-visible:` / `focus-within:` state, and
-`formatAge(…)` or `formatDuration(…)` rendered in JSX outside `components/time-ago.tsx` (pass the
-time to `TimeAgo` or `Duration` instead), a `hover:` without its `active:` pair, a hand-built card
-(`rounded-xl border border-border bg-card` instead of `CARD`) and a green check glyph.
+25. **Process states share the now card and the panels.** Every new waiting state is one of the
+    Overview's existing pieces, never a new surface (`components/overview/`, built on `NowFrame`
+    in `now-frame.tsx`, its actions at the top right, a `FooterNote` for the quiet links):
+    - **Paused** (the now card's `PausedCard`): the gate's title, then a link to the agent's last
+      message or the gate's body, Retry (primary) at the top right and Cancel task as the footer's quiet
+      link. Every failure gate uses it, an agent's wait that ran out ("The agent’s wait ran out", or "The agent’s
+      wait ran out of checks") included; a task
+      stopped at its usage or cost limit ("Reached its usage limit", "Reached its cost limit") names its Retry
+      for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too.
+    - **Setup incomplete** (`setup-card.tsx`): status orange in the Paused group with the
+      `IconToolbox` tile; the card renders the gate's body (each problem and its fix) as markdown, with Check
+      again (primary) and Start without checks (outline, only when checks are all that is missing) at the top
+      right, and Cancel task as the footer's quiet link.
+    - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
+      plan a `bg-bg-a1` `rounded-lg` block shows "You asked" with your words, then "What changed"
+      with the planner's summary and the computed changes as a quiet `·` list. Approve plan sends
+      the version on screen.
+    - **Questions with choices** (`question-choices.tsx`): `outline` `sm` buttons in a wrapping
+      row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
+      same pattern as the setup chat's options. One click answers; the box placeholder becomes
+      "Or write your own answer."
+    - **Review verdicts** (`finding-verdicts.tsx`): each finding is a row (severity in
+      `red-text` or `fg-2`, the file as a mono chip, the message) with a Fix / Dismiss `Choice`
+      at the right; blocking findings start on Fix. The primary action follows the verdicts:
+      "Fix 2 findings" while any is kept, Approve changes when all are dismissed. An escalated
+      review titles the card "The agents could not settle the review", or "The fix changed nothing and
+      the same findings came back" when a round left the code as it was, and says why
+      (`lib/overview/verdicts.ts`).
+    - **A wait** (`wait-card.tsx`): "The agent is waiting on something outside the repository",
+      the agent's notes, "Check 2 of 10 · gives up in 3 hours" under them and Check now (outline);
+      the eyebrow's `TimeAgo` counts down to the next check. Status "Waiting to check again", blue.
+    - **A quiet agent** (`silence-note.tsx`): a `bg-bg-a1` `rounded-lg` strip above the live
+      feed, "No output for 23 minutes" (`fg-3`, orange from 15 minutes; the thresholds are
+      `docs/engine.md` → Silent runs) with Snooze and Dismiss as quiet links. It never changes the
+      task's status.
+    - **Held up by another task**: under "Waits on ‹A›" the work card names the stalled leaf of
+      the chain with its `TaskLink`: "Held up because ‹C› is waiting on you."
+    - **Answer** and **Suggested follow-ups** are `Panel`s right under the now card; a follow-up
+      row is title over why (`gap-px`) with, at the right, a ghost `sm` When to start select, then
+      Dismiss (secondary) and Add (outline). The select offers Start now and After this task merges
+      (Home's When to start words, `lib/tasks/suggestions.ts`), the agent's pick first, preselected and
+      marked Suggested; Add sends `waitsOnThis` from what is chosen. An Ask task
+      has no Summary panel and no Code tab, and its progress track is Find the repository →
+      Answer.
+    - **Results.** An investigation's findings, a report and an operation's outcome are a `Panel` under the Answer
+      one (`ResultPanel`: Findings, Report, Outcome by `result.step`); a finished one's now card reads "Finished. The
+      findings are below." (or report, outcome). A kind of task without a build step (answer, investigation,
+      research, operation) has no Summary, What changed or Decisions panels and no Code tab; find and fix gets its
+      Code tab once it builds. A finished answer, investigation or report keeps the composer, for a follow-up the
+      same agent answers.
+    - **The stage strip follows the pipeline** (core `resolveTaskProgress`): Find the repository when it does not
+      start with a plan, then each step, Answer, Research, Investigate, Your OK to change (Your OK to run before an
+      operation), Plan, Run the operation, Build, Checks and agent review (Checks or Agent review when the task has
+      only one), Your review, Pull request, Merge; Your OK is a step of composed steps, and shows after an inquiry while a proposed change waits. A
+      strip longer than a change's folds the labels of finished steps below `lg`, and one longer than find and fix
+      (research, your OK, then a change) folds them at every width (`resolveLabelFold`), so both fit a 900px window
+      and a 1280px one; each folded step keeps its label in its tooltip.
+    - **A proposed change** (`ChangeCard` in `now-card.tsx`, on `NowFrame`): the eyebrow names who proposes it ("The
+      investigation proposes a fix", "The answer proposes a change", "The report proposes a change"), the title is
+      the gate's question, then the why and, on the inner `bg-bg-a1` block, "What it would change" with the request.
+      Make it a change (primary) at the top right, and the footer's quiet "Keep it as an investigation" (an answer,
+      a report). Both are gate replies in `lib/tasks/gates.ts` (`makeChange`, `keepAsIs`), and ⌘K offers the same two.
+      Your OK in composed steps is the same card (`describeChangeGate`): the eyebrow says the result is in ("The
+      findings are in", "The report is in", "The answer is in"), the block is "What comes next", and before an
+      operation the primary is Plan the operation (`planOperation`, "Approved. Planning the operation now.") with the
+      note "An operation gets a plan you approve before anything runs."; keeping it is your veto.
+    - **An operation after the merge** (`OperationCard` in `operation-card.tsx`, on `NowFrame`): the title is the
+      gate's ("The change merged. Run the operation now?"), then "Merged in ‹PrLink› as ‹commit›", the commit a mono
+      chip with the short sha whose click copies the whole one (its tooltip shows it), then the rest of the gate's
+      body as markdown: the caution, "Operation" with the numbered steps and "Impact" (`resolveOperationBody` in
+      `lib/overview/operation.ts` drops the body's own merge sentence, which the line above already says). **Run the
+      operation** (primary) at the top right; a notes box under the body whose outline button **Run with these notes**
+      sends the text as the operator's guidance; and the footer's quiet **Finish without it**, behind a
+      `ConfirmDialog` since it ends the task ("Finish without running the operation?"). Toasts: "Running the
+      operation.", "Running the operation with your notes.", "Finished without running the operation." The replies
+      are `runOperation`, `runOperationWithNotes` and `skipOperation` in `lib/tasks/gates.ts`; ⌘K offers Run the
+      operation, Run the operation with notes and Finish without it (a confirm page), and a notification reads the
+      reason and the merge sentence, without the steps. A message in the task's composer while the gate is open
+      becomes notes for the operator and runs nothing (its placeholder says so: "Add notes for the operator. They go
+      with the operation once you run it.", toast "Saved as notes for the operator."): the gate asks again with them,
+      and the card shows them as "Your notes for the operator" (`text-2xs` `fg-2` label over the markdown, `gap-px`)
+      above the notes box, whose placeholder becomes "More notes for the operator, added to yours."; both Run actions
+      send them.
+    - **What a message does** is the composer's placeholder at every gate and the toast after it, from one place
+      (`resolveMessageHint` in `lib/tasks/messages.ts`, over core's `resolveMessageEffect`; `docs/engine.md` → Gates →
+      What a message does): the Overview's and the chat's composers and ⌘K's Message the agent all read it, and a task
+      that takes no message (finished, not a follow-up) shows no composer.
+    - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
+      (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
+      each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the builders must attach, as a
+      `·` list: Screenshot, Recording, Test output, Note, Preview link), **Extra checks** (each command a mono chip)
+      and, when the planner asked for your approval, the quiet line "The planner asked for your approval."
+    - **Cost** is a task fact (`IconCoins`, the icon orange past a limit, the total beside it) whose `InfoPopover`
+      breaks it down by step and by phase; its header reads "$1.75 · 12% of the weekly limit" once a step was
+      measured against an account's weekly window, or against a limit "12% of the weekly limit, 10% allowed" (the
+      usage limit) or "$1.75 of $5.00" (the cost limit). The review card's facts line ends with "$3.56 so far".
+      Unknown prices read "Unknown" or "$0.30 + unknown", never $0.
+    - ⌘K adds, on the task: Answer "‹choice›" per choice (Recommended as its hint), Check the
+      setup again / Start without checks, Check now, Snooze / Dismiss the quiet-agent warning,
+      Add the follow-up "‹title›" (a page with the same two starts, the agent's pick first with
+      Suggested as its hint) / Dismiss the follow-up "‹title›"; at the bottom while typing, "Ask: ‹text›" next to
+      Create task. Settings → Limits has Usage limit per task (and Cost limit per task where it applies, 26);
+      Agents has Answering questions. Home's
+      composer has no kind select (17).
+26. **Agent usage: Claude accounts, Codex and their usage limits** (`lib/accounts/` for the labels, tones and choices, the
+    sign-in dialog's own sentences aside; the socket holds the `accounts` snapshot it pushes and every
+    POST to `/api/accounts/*` answers, and `lib/connection/accounts.ts` reads it (`useAccounts`) and
+    sends the changes; pieces in `components/accounts/`):
+    - **Settings → Agent usage** (it was "Accounts", and "Claude usage" in the top bar; one name everywhere now) is
+      one section for every login agents run on, whatever the provider (`components/settings/accounts.tsx`; the old
+      `#accounts`, `#usage` and `#codex` links land on it). Its header has a secondary icon button "Refresh usage" (it
+      refreshes every account) and Add account, a menu when Claude Code or claude-swap logins can be imported,
+      otherwise it signs in straight away; with no account the card holds one sentence and that button. Each
+      Claude account is a `SettingsBlock` (15, Cards), in order, 6px apart: a 32px header row with the email as a medium
+      `Truncate`, the plan (`fg-2`), a `Badge` "Default", and only when something is wrong a status in its tone
+      ("Needs sign-in" orange, "Paused" `fg-2`, "Out of usage until 3:40 PM" red through `TimeAgo` as soon as a
+      window is at 100%), then at the right "Updated 2m ago" (`text-2xs fg-2`, `TimeAgo`, from `sm` up) and a
+      `•••` click menu (`OptionsTrigger`, the one trigger every `•••` menu uses): Set as default, Sign in again,
+      Move up / Move down, Leave out of new work / Use for new work, Switch accounts at (a submenu: Use the
+      setting (90%), 80/90/95/98%, Other… which opens a dialog for any whole percentage) and Remove behind the
+      shared `ConfirmDialog` (Keep it / Remove account; Remove from Shinsa for your own Claude Code login, which
+      is never signed out). Under it, on the block's shelf, one 40px row per usage window: label over "Resets in 3h" (`ResetTime`, the
+      exact time on hover), a `h-1.5` `rounded-full` `bg-bg-a2` bar filled in the usage tone (`UsageBar`) and the
+      `UsagePercent` (`tabular-nums`, amber from 75%, red from 90%); without windows the server's detail is a
+      muted line, "No usage reported yet." before the first read. Importing from claude-swap confirms with a
+      toast that says to take the login out of claude-swap, since refresh tokens are single-use.
+      Every provider with a sign-in of its own (Codex today) follows as a `SettingsBlock` of the same shape
+      (`ProviderLoginBlock` in `providers.tsx`): the header row has the provider's name (medium), its state in
+      `fg-2` ("Signed in with ChatGPT", "Not signed in", "Not installed", "Too old for Shinsa", "Could not check
+      the sign-in") and only when something is wrong a status in its tone ("Needs sign-in" or "Update needed",
+      orange), then the version (`text-2xs fg-2 tabular-nums`) and a secondary icon refresh button ("Check the
+      Codex sign-in again", the same refresh) where an account has its `•••`. Below it, on its shelf, when there is
+      something to do, a row with the fix as inline markdown ("Run `codex login` in a terminal…") and a `CopyButton` for
+      its command. A signed-in provider that reports usage (Codex) has the same usage rows as an account ("5-hour
+      limit", "Weekly limit", a model's limit). Shinsa runs Codex on its one login, the one in `~/.codex`, and never
+      signs Codex in or out itself.
+    - **Settings → Agents** groups the roles by what they do (`AGENT_GROUPS` in `lib/settings.ts`), one block per
+      group, 6px apart: Doing the work (planner, builder, fixer), Checking the work (reviewer),
+      Answering questions (answerer) and Quick jobs (classifier, writer). A block is a `SettingRow` with the group's
+      title and two `SelectField`s, so nothing is cut off at 900px: one **model** select that holds every provider's
+      models under a label per provider (Claude, then Codex; `SelectField` items take a `group`), each with its
+      provider's icon, so picking a model picks its provider too (`listAgentModelItems`, the value
+      `provider:model`; `GET /api/providers`, the built-in names until it answers), and one **speed** (Standard,
+      `IconSpeedMiddle`, the default, or Fast, `IconSpeedHigh`; `agentFastModes`, `docs/engine.md` → Compaction and
+      fast mode) for every role in the group. Every agent select has a fixed width that fits its longest value
+      (model `w-40`, speed `w-30`), so values and chevrons line up in columns. Where fast mode needs usage credits
+      the provider's accounts do not have (`resolveSpeedAvailability` over core's `resolveFastModeAvailability`),
+      the select reads Standard and its Fast option is disabled with a muted "Unavailable: needs usage credits"
+      after the label (`SelectField` items take `disabled` and a `hint`), and ⌘K's speed choices offer Standard
+      only: the agents run at standard speed whatever was stored, and Fast comes back by itself once credits are
+      there. No default model is Haiku: Opus for the working roles, Sonnet for the quick jobs. When the roles
+      differ the selects read "Set per role". A group of several roles has a quiet "Per role" disclosure (`text-2xs`
+      `fg-2` with the section chevron) right after its title, which opens the group's `SETTINGS_SHELF` straight
+      under the row: one row per role, its name and the same two selects, `ghost` (no fill on the shelf's fill)
+      and at the same widths. It starts open when the roles differ. The agents stay separate underneath
+      (`agentProviders`, `agentModels` and `agentFastModes` per role). ⌘K has the group choices ("Model for doing
+      the work", every provider's models in one list, and "Speed for doing the work") and, while typing, the
+      per-role ones ("Builder model", "Builder speed").
+    - **Settings → Limits** is titles-only rows: Usage limit per task (No limit, the default, or 5, 10, 20, 30 or
+      50% of the weekly limit; `docs/engine.md` → Cost; Codex's weekly limit counts too), Cost limit per task (only
+      while one is set or when no account reports a weekly window: API keys), Switch accounts at (Other…
+      opens the same percentage dialog as an account's), After a usage limit (Resume automatically /
+      Wait for me) and, only while that is Wait for me, Ask me what to do (When the limit resets / Right
+      away: the task waits as "Paused until the usage limit resets" and its failure gate opens at the
+      reset, or the failure gate opens at once; nothing is hidden). ⌘K's Change a setting has the same
+      rows, without Other….
+    - **The sign-in dialog** (`sign-in-dialog.tsx`, one `Dialog` mounted by `Root`, opened by
+      `startSignIn`): Starting sign-in… with a spinner; "Sign in to Claude" with the browser note,
+      the sign-in page as a link and a code field, Submit code the form's primary button; Finishing
+      sign-in…; "Signed in as a@b.com." with Done; or the failure with Try again. Every dialog that
+      takes a typed value (sign-in code, a switch percentage) is one pattern: a left-aligned header,
+      the field in a `<form>` (Enter submits), and a right-aligned footer of secondary Cancel and a primary button
+      named for what it does. A percentage the dialog can check itself shows as the field's `FieldError`; a code
+      the server refuses comes back as an error toast and the code stays in the field. Cancel while a sign-in runs
+      cancels it.
+    - **A dialog closes without a visible change.** Nothing it shows changes while it animates out;
+      every change lands after the exit ends. A dialog a page opens is mounted from `useDialogState`
+      (`@shinsa/ui/hooks/use-dialog-state`): `show(value)` opens it, closing only flips `open`, the
+      value stays while it fades and is cleared on Base UI's `onOpenChangeComplete`, so the dialog
+      unmounts after its exit and opens fresh next time (`{dialog.value === 'remove' && <ConfirmDialog
+      control={dialog.control} … />}`). Text that comes from outside the dialog (a store, a server
+      push, a prop) goes through `useHeldValue(value, open)`, which keeps what it showed while open:
+      the sign-in dialog keeps its step after Cancel instead of falling back to Starting sign-in…,
+      `ConfirmDialog` and `PercentDialog` keep their text. A busy button stays busy until the dialog
+      is gone, `ConfirmDialog` runs its action once it has closed, and ⌘K resets to the root after it
+      has faded, not while.
+    - **A dialog's description is `fg-4`**, the title's colour, set once in the kit's `DialogDescription` and
+      `AlertDialogDescription`: the title still leads by size and weight, and the sentence under it reads as
+      something to act on, not a footnote.
+    - **The usage menu, Agent usage** (`usage-menu.tsx`, `aria-label` "Agent usage"): an `sm` secondary button with
+      `IconGauge` and the figure of what the next run uses, in the usage tone from 75%: when the builder runs on a
+      provider with a reading of its own (Codex) its highest window, otherwise the Claude account picked by the same
+      core picker the server leases with (`selectNextAccount` over `pickAccount`, `docs/engine.md` → Accounts and
+      usage limits) and its highest window (`resolveUsageGlance`). It reads "Agent usage" without a figure. It sits
+      in the Cards top bar before Focus and in the rail header before search, opens an `InfoPopover` on hover, titled
+      "Agent usage" over "The next run uses ‹account›", with every Claude account and then every connected provider
+      ("Codex · ‹email›", `listProviderGlances`), each with its highest window as a bar and its reset, or its status
+      when it is out of usage or signed out, and goes to Settings → Agent usage on click. Hidden without accounts
+      or a provider reading.
+    - **Sign in needed** (`sign-in-card.tsx`): a `sign_in` gate is orange with `IconUserKey`, in the
+      Paused group; the card shows the gate's title and body, Sign in (primary) opens the dialog for
+      that account, and Retry anyway / Cancel task are the footer's quiet links. A gate whose account is a provider
+      with a sign-in of its own (Codex, `resolveSignInProvider`) has no Sign in: Shinsa never signs Codex in. Its
+      primary is "Check the Codex sign-in again" (it refreshes the sign-ins, and one that finds Codex signed in
+      answers the gate), and under the body, on a `bg-bg-a1` `rounded-lg` strip, the fix with its `CopyButton`
+      ("Run `codex login` in a terminal, then refresh."); ⌘K offers the same check. **Waiting for the
+      usage limit** (`usage-wait-card.tsx`): an armed usage wait is blue and In progress, titled
+      "Resumes when the usage limit resets" or "Paused until the usage limit resets", the reset in
+      the eyebrow, Resume now (outline) and the quiet "Don’t resume automatically" / "Resume at the
+      reset".
+    - **Run on account**: a bound task has a "Runs on a@b.com" fact whose click menu, the task
+      `•••` menu's Run on account submenu and ⌘K's "Run on account…" offer Any account and every
+      signed-in account, the current one checked. ⌘K's Accounts group has Add a Claude account,
+      Agent usage and Default account.
+    - **Run this step again on an account**: the run label in the chat ends with the account the run used
+      (`RunAccount` in `account-items.tsx`, its latest attempt's account, else the one it is bound to). On the run
+      of the step an agent works on now it is a click menu (hover `fg-4`), "Run this step again on" over every
+      signed-in account with the current one checked; picking one restarts the step bound to that account, with
+      the toast "Running this step again on a@b.com." ⌘K's This task has the same as "Run this step again on…".
+      Earlier runs show the account as plain text.
+    - **In the chat** every notice kind (`lib/chat/timeline.ts`, rows from `lib/chat/notices.ts`) does one of
+      these. Six are one quiet row ahead of their turn's work (`NoticeLine`: a 14px icon and a `text-2xs`
+      `fg-2` line, the detail in its tooltip): `account_switched` (`IconArrowsRepeatRightLeft`, "Account
+      switched · a@b.com", the reason), `compaction` (Claude Code's or Codex's: `IconBubbleText`, "Conversation
+      compacted", why: the context filled up and the agent summarised it, or idle compaction; eunoe's: `IconMinimize`, "Conversation compacted by Eunoe"
+      at the limit, or `IconLayersTwo`, "Finished turns folded" for a fold, the tooltip saying nothing was
+      summarised), `proxy` (`IconCloudSimpleDisconnected`, "Eunoe unavailable · Claude Code compacts this run",
+      the reason and "Shinsa tries Eunoe again in a minute."), `fast_mode` (`IconSpeedMiddle`, "Fast mode
+      unavailable" or "Fast mode paused", why in a sentence, and that the run continues at standard speed; "Fast mode
+      needs usage credits on this account, and Shinsa never turns extra usage on." when the account has none),
+      `extensions` (`IconBlocks`, what the run loaded at its start, "Loaded 4 MCP servers, 23 skills, 3 plugins ·
+      ~38k tokens" without the kinds it had none of, or "Loaded only Shinsa’s tools"; the tooltip lists each group's
+      items one per line, biggest first, with their estimates, 8 per group then "and 12 more"; 29) and
+      `handoff` (`IconArrowsRepeat`, "Conversation handed over ·
+      Codex" for a provider switch, or `IconArrowRotateClockwise`, "Session restored from the transcript";
+      the tooltip names from and to and how many entries carried over). `delegation` is the spawn card and
+      report row below. `context` is no row: it feeds the context meter in the task chat's composer footer
+      (`components/chat/context-meter.tsx`, `lib/chat/context.ts`): a `w-10` `UsageBar` and the
+      `UsagePercent` of `maxTokens` used, from the latest top-level run of the task that reported one (none
+      after a `handoff`, until the new session reports; none when `maxTokens` is unknown), in the usage
+      tones (neutral, amber from 75%, red from 90%), "84k of 200k tokens" over a muted "Context 42% full" in
+      its tooltip. `rate_limit`, `account` and `interrupted` stay in the transcript and are not shown: the
+      usage menu and the `account_switched` row already say it.
+    - **Delegated work** (`components/chat/delegation-card.tsx`, `lib/chat/delegations.ts`) never
+      gets a run section of its own: it lives in the turn of the step that delegated it. A
+      `delegation` `started` notice is a spawn card (`CARD`, 36px row): a status mark (a pulse
+      in the status tone while it works or waits, amber while it waits for an answer; once it ends, the
+      shared `CheckOutcomeIcon` for finished, failed or stopped), the role in `fg-2` ("Reviewer"), the
+      title in medium `fg-4`, the status in its tone with the running `Duration` ("Waiting to start" neutral,
+      Working blue, "Waiting for its delegated tasks" blue while its own delegated work runs, "Asked the agent
+      that delegated it" amber while its question is open; `lib/chat/delegations.ts`), a chevron, and a secondary `icon-xs` Stop (×) while it is live, named
+      "Stop “‹title›” and what it delegated" in its tooltip and `aria-label` alike. An
+      open question sits under the row on a hairline; the chevron opens the delegated agent's own
+      conversation inside the card, its own delegated work nested the same way. A `reported`
+      notice is a quiet `text-2xs` row, "Reported back: ‹title›" (or its end state, "Failed: ‹title›",
+      "Stopped: ‹title›"), whose chevron opens the result.
+      A delegated agent's question card reads "Asked the agent that delegated it", never "Asked
+      you". A step that ended its turn to wait shows "Waiting for 2 delegated tasks" in its live
+      card, without the shimmer.
+    - **Delegated work on the Overview** is a `Panel` ("Delegated work", `IconAgents`, "2 working
+      · 1 done" in the header) right under the now card: one row per delegated task, children
+      indented under the task that delegated them with `IconArrowCornerDownRight`, the same mark,
+      role, title, status and Stop; the title opens the chat at its card, opened along with every
+      card it sits in. A task whose step waits for its delegated work is "Waiting for delegated
+      tasks" (blue) wherever its status shows, and ⌘K offers Stop ‹role› ‹title› per live one.
+
+27. **Schedules, secrets and notifications** (harness plan WS7; `lib/schedules.ts`, `lib/secrets.ts`,
+    `lib/notifications/`, `lib/preferences/notifications.ts`, `hooks/use-attention.ts`):
+    - **Settings → Automations → Schedules**: one 40px row per schedule, oldest first: the name as `Truncate` over one `text-2xs`
+      `fg-2` `Truncate` line of what it does and when ("Starts a new task · every hour", "Asks a new question ·
+      …", "Messages “‹task›” · weekdays at 9:00 AM", "… · when its webhook is called"; a daily time on the app's
+      clock), then its state: "Next at 4:03 PM"
+      through `TimeAgo` (a weekday this week, else the date), "Paused" and "Finished" in `fg-2`, "Last run failed"
+      red. A `•••` click menu: Pause / Resume, Copy webhook URL, Open the task (the one it messages, else the last it
+      started), then Delete schedule behind the shared `ConfirmDialog` (Keep it / Delete schedule; a webhook's warns
+      that its URL stops working). A schedule whose task is gone reads "Its task is gone" in `fg-2`.
+      Without schedules the card holds one sentence.
+    - **Fast mode** is the speed select of each agent group and role in Settings → Agents (26). **Settings →
+      General** holds the **Context** group (`components/settings/context.tsx`):
+      **Compaction** (Eunoe compaction, the default, `IconMinimize`; Eunoe always fold, `IconLayersTwo`; Claude
+      Code’s compaction, `IconBubbleText`; Off, `IconPause`), then **Compact idle sessions** (Never, the default,
+      or 1, 2, 5 or 10 minutes before the cache expires), shown only where a provider summarises itself: Claude
+      agents with Claude Code’s compaction, Codex agents with anything but Off (Eunoe sits in front of the
+      Anthropic API only). The
+      product is "Eunoe" with a capital E in every string on screen; `eunoe` stays for code, commands and paths.
+    - **⌘K**: a Schedules group, only while there is a schedule, with Schedules (scrolls to the section); each
+      schedule matches while typing, by name with when it runs as the hint ("Every hour") and its icon (hourglass
+      once, repeat interval, clock daily, globe webhook), and
+      opens a page of the same actions, Delete behind a confirm page. Change a setting adds Play a sound, Sound, Show
+      a notification, Compaction, the speed choices and, with Claude Code’s compaction, Compact idle sessions; Jump to
+      has Context.
+    - **A secret request** (`secret-card.tsx`) replaces the question card for a gate with `secret`: the eyebrow says
+      "The agent asked for the ‹label›", the title is the agent's reason, then a password `Input` ("Paste the
+      ‹label›") with Save, and the footer's note "It goes to Shinsa’s secret store. The agent and the chat never see
+      it." with the quiet link Don’t give it. The value posts to `/api/secrets/‹gate›`, never as a command, and ⌘K
+      offers Give the ‹label› (opens the task) and Don’t give the secret instead of a compose page.
+    - **Settings → Notifications**, per browser (`localStorage`): Play a sound (Never, When Shinsa is in the
+      background, Always; the default is in the background), Sound (Chime, Ping or Pop, with a secondary `sm`
+      Test button, `IconPlay`, that plays it and, while notifications are on or the browser already allows them,
+      also shows a "Test notification" ("Shinsa shows a decision that needs you like this."; its tooltip says
+      which: "Play the sound" or "Play the sound and show a test notification"; a blocked browser gets the same
+      toast as below) and Show a notification (Never by default; choosing another asks the browser first and stays off
+      with a toast when it is blocked). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
+      take the media keys.
+    - **What triggers them**: a gate that newly enters Needs you within the focus project. The first snapshot after a
+      load never chimes, a gate outside the focus project never does, and neither does one that comes into view when the
+      focus changes or lifts. One chime per burst (repeated up to three times for several), one notification per gate
+      (notes added to an open operation gate keep the same gate, so they notify nothing): the task's
+      title over the pending question (or the gate's reason and body; a secret request only names what it asks for),
+      on one line, cut at 180 characters with `…`. Clicking it focuses the window and opens the task.
+    - **The tab**: the title is "[n] Shinsa" while n decisions are up (Needs you within the focus project), "Shinsa"
+      otherwise, with the task on screen before the name on its page ("[2] SW-142 Fix login · Shinsa"), and `<meta name="floaty:status">` (`failed` while a task is paused, its setup incomplete or a sign-in
+      needed, else `waiting` with a decision up, `working` while a task moves, `idle`) and `floaty:badge` (n) tell a floating window what to show.
+    - **The health banner** (`components/status/health-banner.tsx`, `lib/connection/health.ts`): `Root` mounts it
+      once at the top of the page in both layouts (never on `/ui`, which shows its card, `HealthCard`, with two
+      sample problems). It reads `GET /api/health` on start and after
+      every reconnect and shows only while `ok` is false: a `CARD` in the page column (`PAGE_COLUMN`, 12px above the
+      page), a 14px orange `IconExclamationTriangle`, one `fg-3` sentence ("Shinsa skipped 2 damaged entries in its
+      log at start. Everything else loaded."), a quiet "Details" that opens an `InfoPopover` ("Damaged log entries",
+      then one `InfoRow` per problem: "Entry 41 · task.staged" over Unreadable or Not applied) and a `secondary`
+      `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it for the session, until the problems change.
+
+28. **The task chat is the one place to talk.** An Answer task is how you just talk (`docs/engine.md` → Agents
+    manage Shinsa); nothing in the top bar, the rail or ⌘K opens a conversation of its own.
+    - **What an agent did on your behalf** shows wherever activity does: an entry an agent's management tool caused
+      reads "‹handle› agent (on your behalf)" (the task’s quoted title until triage gives it a handle), a link to
+      the acting task (`resolveActivityActor`), and "Shinsa (on your behalf)" when no task is named.
+    - **An agent's Shinsa tools** show in its turn like any tool, as `mcp` rows of Shinsa's own server ("Tasks
+      done · Shinsa"), folded with the other Shinsa tools as "Used 2 Shinsa tools".
+
+29. **MCP servers, plugins and skills are visible, and cost what they say.** Settings → Integrations
+    (`components/settings/integrations.tsx` reads `GET /api/extensions` through `lib/connection/extensions.ts`, asks
+    the server to check every server once and reads the snapshot again whenever the window gets focus; labels,
+    groups, places, token text, search, the optimizer's rows and the form are `lib/extensions.ts`) is titles only,
+    like the rest of Settings: no section descriptions. Agents load everything turned on here, for Claude and Codex
+    alike (plugins for Claude only), and everything the user has configured starts on. Top to bottom:
+    - **Search** (full-width `Input type='search'`, "Search servers, plugins and skills", kept in `?q=`): every word
+      must appear in a server's name, sources, URL or command, a plugin's name, or a skill's name, description or
+      folder. While it holds text the optimizer is hidden, sections without a match are hidden, every group that
+      matches opens, and "Nothing matches." stands alone when nothing does.
+    - **Context optimizer** (`context-optimizer.tsx`): three rows, "Leave out servers agents haven’t used" (a
+      `Switch`; its title's tooltip says an agent loads a left-out server when its task needs one), "Not used for"
+      (a `SelectField` of 7, 14, 30, 60 and 90 days, plus the current value when it is another) and "Leave out
+      skills too", then a "Not used lately" block (a 32px `SettingsBlock` header, `text-2xs` medium `fg-2`) over a
+      shelf of at most five rows, costliest first: each measured server that is on and idle past the window ("maple" ·
+      "Not used in 30 days · ~4k tokens" · a secondary `sm` Turn off), and the idle skills as one row ("37 skills" · "Not used in 14 days · ~5k tokens"). While the
+      optimizer is on, a row ends in "Loads when needed" instead of Turn off. Before the history is read the shelf
+      says "Reading which servers and skills agents used…"; with nothing idle, "Agents used everything turned on
+      here."
+    - **MCP servers** (`mcp-servers.tsx`): the header has a secondary icon button "Check all servers" and Add server.
+      A config Shinsa could not read is a quiet warning row first. Servers are grouped by status, each group a quiet
+      folding block (`FoldingBlock` in `group.tsx`: a 32px header with the section chevron, the title and its count)
+      over its shelf: Connected, Failing, Needs sign-in, Not checked yet (only while a check is due) and Off (turned
+      off, or its plugin is). Connected and Needs sign-in start open; Failing, Not
+      checked yet and Off start open only with six servers or fewer. A server is one 40px row, whatever number of
+      places define it (`definedIn`): a chevron and the name (medium) as the details toggle, its sources in `fg-2`
+      ("Claude Code, Codex"; "Claude Code · ‹path›" for one per-project server; every file in its tooltip), then what
+      it costs or plainly why it cannot say (`text-2xs fg-2 tabular-nums`): "~4.2k tokens", "Sign in to measure",
+      "Can’t measure while failing", "Checking…", or for one that is off its last estimate or "Not measured while off";
+      "Loads when needed · ~4.2k tokens" while the optimizer leaves it out. Then a primary `xs` Connect when it needs
+      a sign-in (a Claude Code or plugin server's cost carries the tooltip that Claude runs can still use the sign-in
+      made in Claude Code), the `Switch` (tooltip: "Only for Shinsa’s agents. Claude Code and Codex keep their own
+      settings."; toast on off: "Turned off ‹name› for Shinsa’s agents. Claude Code and Codex keep their own
+      settings.") and the `•••` menu: Connect or Sign in again (web servers), Sign out, Check now, Show details /
+      Hide details, Use everywhere, Use in one project ▸, Use in one repository ▸ (radio items, the current place
+      checked), Edit… (Shinsa's own) or Copy to Shinsa and edit…, and Remove behind `ConfirmDialog` (Shinsa's own
+      only). The details shelf holds the command and its arguments or the URL (mono), a quiet line of notes ("Defined
+      in ‹files›", "Only in the ‹name› project", "Only in ‹repo›", "Overridden by Shinsa’s ‹name›", "Its plugin is
+      off", "Not used in 30 days"), a failing server's error in red, and its tools, name over description.
+    - **The server dialog** (`server-dialog.tsx`) is the dialog that takes a typed value (26): How Shinsa
+      reaches it (Command on this machine, HTTP, Server-sent events), Name, then Command, Arguments (one per line) and
+      Environment (`NAME=value` lines), or URL and Headers (`Name: value` lines), and Where agents use it
+      (Everywhere, one project, one repository). Editing shows the saved keys with empty values and "Leave a value
+      empty to keep the saved one."; the web never sees a secret. The primary button says what it does: Add server,
+      Save server, Save copy. A wrong field gets its `FieldError`; a refusal is the server's message in a toast.
+    - **Signing in** opens a blank tab on the click (so the browser allows it), points it at the server's
+      authorisation page, and watches until the server reads as signed in and checked: the callback page posts on
+      `BroadcastChannel('shinsa-mcp')` and to `window.opener`, the snapshot is read at once on either, whenever the
+      window gets focus or becomes visible, and every 2 seconds for up to 2 minutes; "Signed in to ‹name›." once it
+      is.
+    - **Plugins** (`plugins.tsx`): one 40px row per plugin, the name (medium; what it brings and its folder in the
+      tooltip), the estimate and a `Switch`. A plugin turned off turns off its skills, agents, hooks and servers.
+    - **Skills** (`skills.tsx`): one group per source (Claude Code on this machine, each plugin, each repository,
+      Codex), each the same `FoldingBlock` "‹source›" · "3 of 12 on · ~4k tokens", starting closed. Shinsa's own skills are
+      always on and not listed. An open group renders only the rows in view (`virtual-rows.tsx`: fixed 40px rows,
+      positioned in a spacer as tall as the list, measured against the page scroller, eight rows of margin), so a
+      group of hundreds stays fast. Each row is the name (medium, its folder in the tooltip), the description
+      (`text-2xs fg-2`, `Truncate`), the estimate ("Loads when needed · " before it while the optimizer leaves it out)
+      and a `Switch`.
+    - **Why rows are windowed and the switch knob is not a layer**: the knob had `will-change: transform`, so every
+      switch was a compositor layer. Inside a `Card` (`overflow-hidden` with a `corner-shape: superellipse` corner)
+      those layers are clipped with a mask the size of the card, and a card taller than the GPU's largest texture
+      (16,384px, about 400 skill rows) loses that mask: past that point rows and switches did not paint (black on a
+      GPU, blank headless) after "Show all". The knob no longer asks for a layer (`packages/ui` `Switch`), and the
+      lists are windowed, so no card grows that tall.
+    - **⌘K**: Jump to has MCP servers, Plugins and Skills; the global Integrations group has Add an MCP server (opens
+      Settings → Integrations with the dialog open through `?add=mcp`, dropped from the address once it opens), the
+      three sections, and while typing "Connect ‹name›", "Turn on ‹name› for agents" / "Turn off …", "Turn on the
+      ‹name› plugin", "Turn on the ‹name› skill" (or off; never one of Shinsa's own) and "Turn on the context
+      optimizer" (or off). The chat's `extensions` notice row (26) shows what a run loaded, with "· 2 left out" and a
+      "Left out until needed" group when the optimizer left something out.
+
+30. **A task runs in rounds** (`docs/engine.md` → Rounds; `lib/tasks/rounds.ts`, `components/chat/round-header.tsx`,
+    `components/overview/rounds-panel.tsx`). Nothing about rounds shows until a task has a second one, so a small task
+    looks exactly as before.
+    - **The handle names the round.** Once a task has more than one round its handle reads "SW-14 · round 3"
+      (`resolveHandleText`) in the facts row (the handle still copies alone; the round is a plain `fg-2` fact beside
+      it), roadmap, queue and Home rows, a task link's preview card and ⌘K; the now card's eyebrow adds "· round 3"
+      after the status. The handle itself stays per task.
+    - **The chat shows each round as a section.** A `RoundHeader` row opens it, on a hairline: "Round 3" (medium `fg-4`)
+      and its title (`fg-3`, `Truncate`), its status in its tone (`text-2xs`: In progress blue, On its pull request
+      green, Merged purple, Finished green, Waiting to start and Stopped neutral), the section chevron, then at the right its pull
+      request (a `PrLink`-style tile and `#N`, its state in the tooltip) and, while the choice is still open, how it
+      ships: a ghost `sm` `SelectField` "How round 4 ships" with "Onto #12" and "As a stacked pull request". Under an open
+      header sits the round's own small progress track (the current round's live one, an ended round's from what it
+      kept: done, or Merge waiting while it sits on its pull request), then the request that started it as your bubble,
+      then its runs. The current round and the ones waiting start open, earlier ones folded; `?run=` opens the round
+      that holds the run. A task with one round has no headers.
+    - **The Overview shows the current round**: every card is the current round's, and a Rounds `Panel` under the now
+      card lists the earlier rounds (folded rows, each the same `RoundHeader`; opened, "Asked for", "Goal", "What it
+      did" and "What it found" from the round's request and outcome) and the rounds waiting to start with their
+      shipping select.
+    - **A message can be new work.** The composer's hint still says what feedback does; Shinsa's classifier decides
+      whether a message is feedback, the next round or another task's work, so the chat shows a new round's section
+      (Waiting to start) as soon as one is queued. A merged task keeps its composer: "Ask for the next piece of work. It
+      starts as a new round of this task." A closed task (marked done, cancelled) has none.
+    - **A split-off is a follow-up row** in Suggested follow-ups with Make it a task (outline) and Keep it here
+      (secondary, in Dismiss's place); keeping it queues the next round ("Kept in this task. It starts as the next
+      round."). ⌘K offers "Keep “‹title›” in this task" and, per round whose shipping can change, "Ship round 4 as a
+      stacked pull request" or "Ship round 4 onto #12".
+    - **On `/ui`** (chat specimens): the round headers of a four-round task in every state and its Rounds panel.
+
+`bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
+weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
+shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
+and `shadow-control*` are allowed), a `hover:` with no `active:` on its line (a `group-hover:` with no
+`group-active:`, unless it reveals from `opacity-0`), a hand-built card (`rounded-xl border border-border bg-card`
+instead of `CARD`) and `formatAge(…)` or `formatDuration(…)` rendered in JSX outside `components/text/time-ago.tsx`
+(pass the time to `TimeAgo` or `Duration` instead; a time built another way is not caught). In the app and the kit
+(`packages/ui/src`) it also rejects raw corners, any `focus:` / `focus-visible:` / `focus-within:` state or
+`ring-offset-*`, an icon faded by hand (19) and a checkmark icon in green; the `/ui` catalog pages are checked for
+raw corners only. Besides that it bans comments (outside `packages/ui`) and enforces the verb catalog.
 
 ---
 
@@ -791,8 +1429,10 @@ customer's app.
 Shinsa draws no shadows. Every surface (card, table, popup, dialog, the
 outline button) is separated by its fill step and one 1px hairline in `bg-3`,
 drawn as an inset ring in dark mode. The `shadow-1…4` tokens are that ring and
-nothing else; `bun lint:conventions` rejects `shadow-xs…lg` and `shadow-1…4`
-in app code. The primary and destructive buttons keep their inner top
+nothing else, and `shadow-control*` the controls' edges; app code uses only
+those. `bun lint:conventions` rejects Tailwind's own shadows (`shadow-2xs` …
+`shadow-2xl`, `shadow-inner`) and a raw `shadow-[…]` or `ring-[…]` in
+`apps/web/src`. The primary and destructive buttons keep their inner top
 highlight, the one exception.
 
 A popup (popover, menu, select, combobox, preview card, dialog) draws its edge
@@ -802,8 +1442,9 @@ toasts are the inverse, a `border` and no shadow.
 
 ### Gaps
 
-A title over its description is `gap-px`. `gap-0.5` is banned (the lint
-rejects it): the next step up is `gap-1`.
+A title over its description is `gap-px`. `gap-0.5` is banned in `apps/web/src`
+(the lint rejects it): the next step up is `gap-1`. The one 2px gap is between
+the buttons of a section header, and `SectionLabel` owns it.
 
 ### Corners
 
@@ -834,12 +1475,11 @@ new derived token in `globals.css`, written as parent − padding.
 
 ### No shadows
 
-Every Tailwind shadow scale is pinned to `0 0 #0000` — **never `none`**:
-Tailwind composes shadows and rings into one `box-shadow`, and a `none` in that
-list invalidates the whole declaration. The pin doesn't reach arbitrary
-`shadow-[…]` values; don't write them, and don't write `shadow-*` utilities at
-all — they're dead code that misleads. Depth comes from the surface steps, the
-border and type. **Carve-out:** illustrative artwork (the dashboard-migration
+In Shinsa's kit `shadow-xs…lg` resolve to the same hairline as `shadow-1…4`
+(`globals.css`), never to `none`: Tailwind composes shadows and rings into one
+`box-shadow`, and a `none` in that list invalidates the whole declaration. App
+code writes only `shadow-1…4` and `shadow-control*`; the lint rejects the rest
+(above). Depth comes from the surface steps, the hairline and type. **Carve-out:** illustrative artwork (the dashboard-migration
 welcome artwork) and the `DotMatrixLoader` glow may use `drop-shadow` as part
 of the drawing — never on UI chrome.
 
@@ -1367,41 +2007,31 @@ the end of whatever row the label is in. `revealOnHover` hides it until its
 `group` is hovered (the stat card). Never hand-roll one from `InfoIcon` +
 `Tooltip`, and never box it as an icon button.
 
-### Muted icons — `icon-tertiary`
+### Icon colour — the text's own, a step quieter
 
-A multi-path icon in a translucent colour shows its joints: every overlapping
-stroke composites separately and crossings read darker. **`icon-tertiary`**
-sets `color: foreground` and fades the whole icon as one layer with
-`filter: opacity(0.55)` — tertiary strength, no visible joints, correct on
-every surface.
+An icon takes the colour of the text it sits with and draws it at
+`--icon-alpha`: 85% of the text, 90% in a menu row (Where Shinsa differs, 19).
+`opacity` applies to the whole SVG as one layer, so a multi-path icon shows
+no doubled joints.
 
-- Use it for every muted icon; never put a muted text colour on an SVG.
-- It is a filter, not `opacity`, so it stacks with hover-reveal `opacity-*`.
-  It does **not** stack with Button's 80% icon rule: Button skips the 80% for
-  an icon that carries `icon-tertiary`, so a muted icon in a button is 55%,
-  never 0.8 × 0.55 ≈ 44%. Put the class on the icon, not `[&_svg]:icon-tertiary`
-  on the button (Button can't see a class on its own element).
-- **A state that brightens the icon lifts the fade too:**
-  `group-hover:text-foreground group-hover:filter-none`,
-  `data-[active=true]:[&>svg]:text-primary data-[active=true]:[&>svg]:filter-none`.
+- **Quieter, never a different step.** A muted line's icon is the line's
+  colour at 85% (`fg-3` text, `fg-3` icon); an icon never takes a lighter
+  step than its label. Where the icon and its label are separate elements,
+  give the icon the label's classes, hover included (the chat rows share
+  `ROW_INK`).
 - Semantic colours (primary, destructive, success, warning) are plain text
-  colours.
-- **A destructive menu row's icon is its label's red**, at full opacity, not the
-  muted icon of a plain row. `DESTRUCTIVE_ITEM` (`menu-icon.tsx`) carries it for
-  `DropdownMenuItem` and `CommandItem` `variant='destructive'`, and the row's
-  highlight turns `red-a2`.
-- **Inherited ink counts too.** `text-fg-secondary`, `text-fg-tertiary`,
-  `text-muted-foreground`, `text-fg-muted`, `text-sidebar-foreground` and any
-  `text-*/NN` are translucent, so an icon that inherits them from its parent
-  shows its joints just the same. A primitive whose ink is one of these mutes
-  its uncoloured icons itself: ghost and plain Buttons, Badge `muted`, Kbd,
-  breadcrumb links, `CardFooterAction`, `TableHead`, `InputGroupText`, menu and
-  select labels. Anywhere else, the icon carries `icon-tertiary`.
-- Button, Toggle and Badge all skip their 80% icon rule for an `icon-tertiary`
-  icon. Put the class on the icon: a descendant `[&_svg]:icon-tertiary` on a
-  Button-based element loses to Button's own 80% rule.
-- `opacity-*` on an icon is a reveal (`opacity-0` → `group-hover:opacity-100`)
-  or disabled styling, never a way to mute it.
+  colours, on the icon and its text alike; the icon keeps its 85%.
+- **Equal strength is a context, not a call site.** `icon-solid` on a
+  container (or the icon) sets `--icon-alpha: 1` for everything inside: the
+  secondary button, icon-only buttons, `DESTRUCTIVE_ITEM` (`menu-icon.tsx`,
+  for `DropdownMenuItem` and `CommandItem` `variant='destructive'`, whose
+  highlight turns `red-a2`), the error toast and the checkbox's check.
+  `icon-item` sets the 90% of menu, select, command and combobox rows.
+- `opacity-*` on an icon is a reveal (`opacity-0` → `group-hover:opacity-(--icon-alpha)`)
+  or disabled styling on its control, never a way to mute it.
+- A glyph with no text (a status glyph, a tile's mark, a field affix such as
+  ⌘K's search glyph, which matches the placeholder) keeps the colour its
+  meaning gives it, at the same 85%.
 
 ### Sizes — one table, keyed by control height
 
@@ -1879,18 +2509,13 @@ Variants (Shinsa has exactly five):
   press.
 
 Visible horizontal spacing steps 2px per size — outer edge → text: `xs` 8 · `sm` 10 · `default` 12 · `lg` 14 · `xl` 16 (written `--spacing(n) - 1px` for the border). An icon sits **1px outside** the text inset (a glyph's own box carries empty space, so at the text's inset it reads indented): 7 / 9 / 11 / 13 / 15. Icon ↔ label gap: 6 / 8 / 8 / 10 / 10. The `-mx-px` icon margin eats 1px of each `gap-*`, so the classes are written 1px above these. **Icons sit 0.5px above the label's cap-height middle** — one device pixel at 2x. Centred exactly on the caps, a symmetric glyph like `+` reads low next to mostly-lowercase labels. Flex centring alone lands anywhere from 0 to 0.25px off that target depending on text size and line height, so each size corrects by its measured value. Icon-only sizes have no label and stay box-centred. Sizes are one value at every width: `xs` 24 · `sm` 28 · `default` 32 · `lg` 36 · `xl` 40. Type: `xs` 13px, `sm`/`default`/`lg` 14px, `xl`
-16px. Un-sized SVGs render at 80% opacity;
-an `icon-tertiary` icon skips that, so the two fades never stack.
-**Quiet trailing icons** (outline, secondary, ghost and link only — a filled
-button's icon keeps its fill's ink): a select-style trigger's trailing
-`ChevronsUpDown` / `ChevronDown` is muted to `icon-tertiary` automatically,
-matching SelectTrigger's chevron — never hand-add `icon-tertiary` or
-`opacity-*` to it; and any icon marked `data-icon="end"` takes the same
-tertiary strength — the arrow of a "view all" link ("All campaigns →",
-"Open legacy settings ↗"), so the label leads and the arrow only points. A
-ghost button's hover lifts both to full; on the bordered variants they stay
-quiet. Icons in a Button never take a size, colour or stroke override beyond
-these (a 16px glyph beside a `text-lg` label is the one sized case).
+16px. A Button's SVGs draw in its ink at `--icon-alpha`, leading and
+trailing alike (Iconography → Icon colour): a trailing chevron or a
+"view all" arrow is the label's colour at 85%. A secondary button and an
+icon-only button are `icon-solid`: on a secondary button icon and label both
+rest `fg-2` and turn `fg-4` together on hover. Icons in a Button never take a
+size, colour, opacity or stroke override (a 16px glyph beside a `text-lg`
+label is the one sized case).
 Icon sizes are square: `icon-xs` 24px (14/16px glyph), `icon-sm` 28px,
 `icon` 32px at every width, `icon-lg` 36px (16px glyph), `icon-xl` 40px
 (18px glyph), each at every width. `list-row` is a
@@ -1995,7 +2620,7 @@ pressed `bg-input/64`) and `outline` (`border-input` over a `bg-foreground/3`
 resting fill; hover `bg-accent`; pressed `bg-input`). A pressed toggle never
 hovers (`not-data-pressed:hover`). Sizes: `default` 32px at every width with
 8px sides, `sm` 28px with 6px sides, `lg` 36px with 10px
-sides; `min-w` equals the height. Text 500 foreground; glyphs 16px at 80% opacity. Disabled is `opacity-50`. Inside a `ToggleGroup` the
+sides; `min-w` equals the height. Text 500 foreground; glyphs 16px in the text's colour. Disabled is `opacity-50`. Inside a `ToggleGroup` the
 group's variant and size override the item's; the gapped `default` group sits
 2px apart. `tile` is a card that toggles — the card fill and the one border,
 16px inset, its content setting the height — with the option card's states:
@@ -2795,7 +3420,8 @@ anchor (`sideOffset` 4).
   Status icons are `text-destructive` / `text-info` / `text-success` /
   `text-warning`; the loading spinner is `icon-tertiary`. Title foreground
   500, description `text-fg-secondary`, action button `xs`. The viewport is
-  bottom-right, max 360px wide, inset 16px (32px from `sm`); the stack gaps and
+  top-centre in Shinsa (`Toaster` in `packages/ui`, 12px from the top, over the empty middle of the top bar),
+  max 360px wide; the stack gaps and
   peeks 12px; toasts enter and exit over 500ms `cubic-bezier(.22,1,.36,1)`.
   Anchored `tooltipStyle` toasts match the tooltip exactly.
 
@@ -3215,16 +3841,14 @@ Rules:
 
 - **Never `transition-all`.** Name the properties.
 - **One clock per state change.** Every property that changes when a control
-  changes state — fill, border, text, the icon's colour and `icon-tertiary`
-  filter, a group seam, a hover-revealed overlay — transitions together on
+  changes state — fill, border, text, the icon's colour, a group seam, a
+  hover-revealed overlay — transitions together on
   `duration-hover`. Nothing may snap beside something that eases.
-- **Children don't keep their own clock.** Icons inherit it: a base rule in
-  `styles.css` puts every `svg` and `.icon-tertiary` on the hover clock for
-  `filter` (the fade no `transition-colors` covers). Colour is _not_
-  re-transitioned on children — a child easing an inherited colour re-eases
+- **Children don't keep their own clock.** An icon that inherits its colour
+  is _not_ re-transitioned — a child easing an inherited colour re-eases
   every frame of its parent's transition and trails it. An icon that also
-  turns uses `transition-disclosure` (turn on the move clock, filter and
-  colour on the hover clock), never `transition-transform` alone. A
+  turns uses `transition-disclosure` (turn on the move clock, colour on the
+  hover clock), never `transition-transform` alone. A
   disclosure chevron is `DisclosureChevron`, never a hand-rotated icon.
 - **Washes over a fill ease too.** A hover wash laid over a fill (secondary
   button and picker, framed-table cells, interactive tiles) is a gradient on
@@ -3382,7 +4006,7 @@ this file once, at the end.
    hardcoded white borders, never doubled.
 4. **Fill or border for controls; both for panels.**
 5. **Tokens, not values.** No hex, no hand-picked greys, no raw opacities for
-   text (`text-fg-*`), no translucent colour on icons (`icon-tertiary`).
+   text (`text-fg-*`); an icon takes its text's colour at `--icon-alpha`, never an opacity of its own.
 6. **One accent.** Teal for the single most important beat. `bg-accent` is a
    hover wash, not the brand. One per view, not one per page: the same action
    repeated (a header button and a closing call to action on a long page)

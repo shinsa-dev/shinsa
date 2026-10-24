@@ -1,6 +1,6 @@
 ---
 name: evidence
-description: How to prove user-facing work before handing it over in Shinsa — screenshots and recordings for web UI, simulator captures for iOS, failing-then-passing tests for logic. Use whenever your change is visible to a user.
+description: How to prove user-facing work before handing it over in Shinsa: screenshots and recordings for web UI, simulator captures for iOS, failing-then-passing tests for logic. Use whenever your change is visible to a user.
 ---
 
 # Evidence

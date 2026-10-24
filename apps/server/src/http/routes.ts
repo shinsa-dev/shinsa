@@ -1,12 +1,32 @@
-import { DomainError, resolveQueueSummary, type ShinsaEvent, type UserCommand } from '@shinsa/core';
-import type { ModelCatalog } from '../agents/models/index.ts';
+import {
+  type AgentProviderInfo,
+  DomainError,
+  KNOWN_AGENT_PROVIDERS,
+  parseUserCommand,
+  resolveQueueSummary,
+  type ShinsaEvent,
+} from '@shinsa/core';
+import type { Accounts } from '../accounts/index.ts';
+import { createAccountRoutes } from '../accounts/routes.ts';
+import type { ModelSource } from '../agents/index.ts';
+import type { Transcripts } from '../agents/transcripts/index.ts';
 import type { ServerConfig } from '../config/index.ts';
+import type { Extensions } from '../extensions/index.ts';
+import { createExtensionRoutes } from '../extensions/routes.ts';
 import { resolveTaskDiff } from '../git/index.ts';
 import { describeError } from '../log/index.ts';
+import type { Onboarding } from '../onboarding/index.ts';
+import { createProjectRoutes } from '../projects/routes.ts';
+import { createLoginResolver, type LoginResolver, type RootSource } from '../repos/index.ts';
+import { resolveTaskBaseBranch } from '../runtime/base.ts';
 import type { Engine } from '../runtime/engine.ts';
+import type { Schedules } from '../schedules/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
+import { type MessageClassifier, routeUserCommand } from '../triage/message.ts';
+import { type JsonObject, readJson, readJsonObject } from './body.ts';
 import { resolveInside } from './paths.ts';
+import { createReadRoutes } from './reads.ts';
 
 export type Launcher = (command: string[], cwd: string) => Promise<CommandResult>;
 
@@ -14,11 +34,26 @@ export interface ApiContext {
   engine: Engine;
   config: ServerConfig;
   evidence: EvidenceStore;
-  models: ModelCatalog;
+  models: ModelSource;
+  providers?: ProviderCatalog;
+  onboarding: Onboarding;
   launch?: Launcher;
+  accounts?: Accounts;
+  schedules?: Schedules;
+  transcripts?: Transcripts;
+  extensions?: Extensions;
+  roots?: RootSource;
+  resolveLogin?: LoginResolver;
+  classify?: MessageClassifier;
 }
 
-interface ApiRoute {
+interface ProviderCatalog {
+  listProviders: () => Promise<AgentProviderInfo[]>;
+}
+
+const KNOWN_PROVIDERS: ProviderCatalog = { listProviders: () => Promise.resolve(KNOWN_AGENT_PROVIDERS) };
+
+export interface ApiRoute {
   method: 'GET' | 'POST';
   pattern: RegExp;
   respond: (match: RegExpExecArray, request: Request) => Promise<Response>;
@@ -28,21 +63,7 @@ type OpenTarget = 'editor' | 'finder' | 'terminal';
 
 export const MAX_FILE_BYTES = 2_000_000;
 
-const USER_COMMANDS = new Set<UserCommand['type']>([
-  'repo.update',
-  'area.write',
-  'area.remove',
-  'focus.change',
-  'settings.change',
-  'task.create',
-  'task.prioritize',
-  'task.block',
-  'task.cancel',
-  'task.complete',
-  'task.retry',
-  'task.message',
-  'gate.answer',
-]);
+const MAX_IDEMPOTENCY_KEY = 200;
 
 const OPEN_TARGETS = new Set<OpenTarget>(['editor', 'finder', 'terminal']);
 
@@ -59,32 +80,32 @@ export function respondFailure(error: unknown, status = 400) {
   return respondError(code, describeError(error), status);
 }
 
-function parseUserCommand(body: unknown): UserCommand {
-  const type = body && typeof body === 'object' ? (body as { type?: unknown }).type : undefined;
-  if (!USER_COMMANDS.has(type as UserCommand['type']))
-    throw new DomainError('command_forbidden', 'Unknown command.');
-  return body as UserCommand;
-}
-
 function selectCreatedTaskId(events: ShinsaEvent[]) {
   for (const event of events) if (event.type === 'task.created') return event.taskId;
   return null;
 }
 
-export async function dispatchUserCommand(engine: Engine, body: unknown) {
-  return selectCreatedTaskId(await engine.dispatch(parseUserCommand(body)));
+export async function dispatchUserCommand(
+  engine: Engine,
+  body: unknown,
+  clientId: string | null = null,
+  classify: MessageClassifier | null = null
+) {
+  const command = parseUserCommand(body);
+  return selectCreatedTaskId(
+    await routeUserCommand(engine, command, clientId ? `client:${clientId}` : null, classify)
+  );
 }
 
-async function readJson(request: Request): Promise<unknown> {
-  try {
-    return await request.json();
-  } catch {
-    throw new DomainError('body_invalid', 'The request body is not valid JSON.');
-  }
+function readIdempotencyKey(request: Request) {
+  const key = request.headers.get('idempotency-key')?.trim() ?? '';
+  if (key.length > MAX_IDEMPOTENCY_KEY)
+    throw new DomainError('idempotency_key_invalid', 'The Idempotency-Key header is too long.');
+  return key || null;
 }
 
-function readOpenRequest(body: unknown) {
-  const { target, path, line } = (body ?? {}) as { target?: unknown; path?: unknown; line?: unknown };
+function readOpenRequest(body: JsonObject) {
+  const { target, path, line } = body;
   if (!OPEN_TARGETS.has(target as OpenTarget))
     throw new DomainError('target_invalid', 'Open it in the editor, Finder or Terminal.');
   return {
@@ -94,8 +115,8 @@ function readOpenRequest(body: unknown) {
   };
 }
 
-export function createApiRoutes(context: ApiContext) {
-  const { engine, config, evidence, models } = context;
+function createTaskRoutes(context: ApiContext): ApiRoute[] {
+  const { engine, config } = context;
   const launch = context.launch ?? runCommand;
 
   function selectWorktreeTask(taskId: string) {
@@ -108,8 +129,7 @@ export function createApiRoutes(context: ApiContext) {
   async function respondDiff(taskId: string) {
     const found = selectWorktreeTask(taskId);
     if (!found) return respondError('diff_unavailable', 'No worktree.', 404);
-    const base = found.task.baseTaskId ? engine.state.tasks[found.task.baseTaskId] : undefined;
-    const baseBranch = base?.branch && base.stage !== 'merged' ? base.branch : null;
+    const baseBranch = resolveTaskBaseBranch(engine.state, found.task);
     return respondJson(await resolveTaskDiff(found.repo, found.worktreePath, baseBranch));
   }
 
@@ -124,7 +144,7 @@ export function createApiRoutes(context: ApiContext) {
   async function respondOpen(taskId: string, request: Request) {
     const found = selectWorktreeTask(taskId);
     if (!found) return respondError('worktree_missing', 'No worktree.', 404);
-    const { target, path, line } = readOpenRequest(await readJson(request));
+    const { target, path, line } = readOpenRequest(await readJsonObject(request));
     const file = path ? resolveInside(found.worktreePath, path) : null;
     const location = file && line ? `${file}:${line}` : file;
     const result = await launch(resolveOpenCommand(target, found.worktreePath, location), found.worktreePath);
@@ -144,18 +164,7 @@ export function createApiRoutes(context: ApiContext) {
     return respondJson({ path: requested, content: await file.text() });
   }
 
-  async function respondCommand(request: Request) {
-    const taskId = await dispatchUserCommand(engine, await readJson(request));
-    return respondJson({ ok: true, taskId });
-  }
-
-  function respondEvidence(name: string) {
-    const path = evidence.selectFile(name);
-    if (!path) return Promise.resolve(new Response('Not found', { status: 404 }));
-    return Promise.resolve(new Response(Bun.file(path)));
-  }
-
-  const routes: ApiRoute[] = [
+  return [
     { method: 'GET', pattern: /^\/api\/tasks\/([^/]+)\/diff$/, respond: ([, id = '']) => respondDiff(id) },
     {
       method: 'POST',
@@ -167,8 +176,47 @@ export function createApiRoutes(context: ApiContext) {
       pattern: /^\/api\/tasks\/([^/]+)\/file$/,
       respond: ([, id = ''], request) => respondFile(id, new URL(request.url)),
     },
-    { method: 'GET', pattern: /^\/api\/models$/, respond: async () => respondJson(await models.list()) },
-    { method: 'POST', pattern: /^\/api\/commands$/, respond: (_match, request) => respondCommand(request) },
+  ];
+}
+
+function createServerRoutes({ engine, evidence, models, providers, classify }: ApiContext): ApiRoute[] {
+  async function respondCommand(request: Request) {
+    const key = readIdempotencyKey(request);
+    const taskId = await dispatchUserCommand(engine, await readJson(request), key, classify ?? null);
+    const handle = taskId ? (engine.state.tasks[taskId]?.handle ?? null) : null;
+    return respondJson({ ok: true, taskId, handle });
+  }
+
+  function respondEvidence(name: string) {
+    const path = evidence.selectFile(name);
+    if (!path) return Promise.resolve(new Response('Not found', { status: 404 }));
+    return Promise.resolve(new Response(Bun.file(path)));
+  }
+
+  return [
+    {
+      method: 'GET',
+      pattern: /^\/api\/health$/,
+      respond: () =>
+        Promise.resolve(
+          respondJson({ ok: engine.problems.length === 0, seq: engine.state.seq, problems: engine.problems })
+        ),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/models$/,
+      respond: async () => respondJson(await models.listModels()),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/providers$/,
+      respond: async () => respondJson(await (providers ?? KNOWN_PROVIDERS).listProviders()),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/commands$/,
+      respond: (_match, request) => respondCommand(request),
+    },
     {
       method: 'GET',
       pattern: /^\/api\/queue$/,
@@ -183,11 +231,77 @@ export function createApiRoutes(context: ApiContext) {
       respond: ([, name = '']) => respondEvidence(name),
     },
   ];
+}
+
+function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
+  return [
+    {
+      method: 'GET',
+      pattern: /^\/api\/onboarding$/,
+      respond: async () => respondJson(await onboarding.resolveStatus()),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/onboarding\/roots$/,
+      respond: async (_match, request) =>
+        respondJson(
+          await onboarding.listSuggestions(new URL(request.url).searchParams.get('refresh') === '1')
+        ),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/onboarding\/setup$/,
+      respond: async (_match, request) =>
+        respondJson(await onboarding.applySetup(await readJsonObject(request))),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/onboarding\/prerequisites$/,
+      respond: async () => respondJson(await onboarding.resolvePrerequisites()),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/onboarding\/complete$/,
+      respond: async () => respondJson(await onboarding.complete()),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/onboarding\/chat$/,
+      respond: async () => respondJson(await onboarding.chat.resolve()),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/onboarding\/chat$/,
+      respond: async (_match, request) =>
+        respondJson(await onboarding.chat.reply(await readJsonObject(request))),
+    },
+  ];
+}
+
+export function createApiRoutes(context: ApiContext) {
+  const routes: ApiRoute[] = [
+    ...createTaskRoutes(context),
+    ...createServerRoutes(context),
+    ...createOnboardingRoutes(context.onboarding),
+    ...(context.accounts ? createAccountRoutes(context.accounts) : []),
+    ...(context.schedules ? context.schedules.routes() : []),
+    ...(context.transcripts ? createReadRoutes(context.engine, context.transcripts) : []),
+    ...(context.extensions ? createExtensionRoutes(context.extensions) : []),
+    ...(context.roots
+      ? createProjectRoutes({
+          engine: context.engine,
+          roots: context.roots,
+          resolveLogin: context.resolveLogin ?? createLoginResolver(context.config.userHome),
+          userHome: context.config.userHome,
+        })
+      : []),
+  ];
 
   return function handleApi(request: Request, url: URL): Promise<Response> {
     for (const route of routes) {
       const match = route.pattern.exec(url.pathname);
-      if (match && route.method === request.method) return route.respond(match, request);
+      if (!match || route.method !== request.method) continue;
+      return route.respond(match, request);
     }
     return Promise.resolve(respondError('not_found', 'No such endpoint.', 404));
   };

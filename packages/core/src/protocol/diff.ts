@@ -11,7 +11,7 @@ const HIGH_RISK: [RegExp, string][] = [
 
 const LOW_RISK: RegExp[] = [
   /(^|\/)(test|tests|__tests__|fixtures)\//i,
-  /\.(test|spec)\.[jt]sx?$/i,
+  /\.(test|plan)\.[jt]sx?$/i,
   /\.(md|mdx|txt)$/i,
   /(bun\.lock|package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/,
   /\.snap$/,

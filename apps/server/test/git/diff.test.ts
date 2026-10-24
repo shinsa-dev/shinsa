@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createWorktree, resolveTaskDiff } from '../../src/git/index.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 
@@ -10,6 +12,22 @@ describe('resolveTaskDiff', () => {
     const diff = await resolveTaskDiff(repo, worktree.path, null);
     expect(diff.files.map((file) => file.path).sort()).toEqual(['README.md', 'new.ts']);
     expect(await git(worktree.path, 'status', '--porcelain')).toBe('M README.md\n?? new.ts');
+  });
+
+  test('an edit that keeps the size, in the same second the index was written, still shows', async () => {
+    const { repo } = await createGitRepo({ remote: false, files: { 'app.ts': 'export const value = 1;\n' } });
+    const worktree = await createWorktree(repo, createTempDir(), 'task-ffffff', 'fix/racy', null);
+    await git(worktree.path, 'config', 'core.trustctime', 'false');
+    const file = join(worktree.path, 'app.ts');
+    const index = await git(worktree.path, 'rev-parse', '--path-format=absolute', '--git-path', 'index');
+    const second = new Date(1_700_000_000_000);
+    utimesSync(file, second, second);
+    await git(worktree.path, 'update-index', '--refresh');
+    utimesSync(index, second, second);
+    writeFileSync(file, 'export const value = 2;\n');
+    utimesSync(file, second, second);
+    const diff = await resolveTaskDiff(repo, worktree.path, null);
+    expect(diff.files.map((entry) => entry.path)).toEqual(['app.ts']);
   });
 
   test('a stacked task diffs against its base branch, and a repo without origin against its default', async () => {

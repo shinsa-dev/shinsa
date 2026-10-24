@@ -1,4 +1,4 @@
-import type { Attention, ReportCheck, SpecDocument, WorkReport } from './types.ts';
+import type { Attention, ReportCheck, PlanDocument, WorkReport } from './types.ts';
 
 const CHECK_MARK: Record<ReportCheck['outcome'], string> = { pass: '✓', fail: '✗', skipped: '–' };
 
@@ -12,22 +12,26 @@ function section(heading: string, body: string) {
   return body ? `${heading}\n${body}` : '';
 }
 
-export function serializeSpecMarkdown(spec: SpecDocument) {
+export function serializePlanMarkdown(plan: PlanDocument) {
   return [
-    `## Goal\n${spec.goal}`,
+    `## Goal\n${plan.goal}`,
     section(
       '## Plan',
-      spec.plan.map((step, index) => `${index + 1}. **${step.title}**: ${step.detail}`).join('\n')
+      plan.phases.map((phase, index) => `${index + 1}. **${phase.title}**: ${phase.detail}`).join('\n')
     ),
-    section('## Behaviour', bulletList(spec.behaviour)),
-    `## Approach\n${spec.approach}`,
-    section('## Files', bulletList(spec.files.map((file) => `\`${file.path}\`: ${file.change}`))),
-    section('## Out of scope', bulletList(spec.outOfScope)),
-    section('## Verification', bulletList(spec.verification)),
+    section('## Behaviour', bulletList(plan.behaviour)),
+    `## Approach\n${plan.approach}`,
+    section('## Files', bulletList(plan.files.map((file) => `\`${file.path}\`: ${file.change}`))),
+    section('## Out of scope', bulletList(plan.outOfScope)),
+    section('## Verification', bulletList(plan.verification)),
+    section('## Evidence', (plan.evidence ?? []).join(', ')),
+    section('## Extra checks', bulletList((plan.checks ?? []).map((command) => `\`${command}\``))),
+    section('## Operation', (plan.operation ?? []).map((step, index) => `${index + 1}. ${step}`).join('\n')),
+    section('## Impact', plan.impact ?? ''),
     section(
       '## Questions',
       bulletList(
-        spec.questions.map((question) =>
+        plan.questions.map((question) =>
           question.options.length > 0
             ? `${question.question} (${question.options.join(' / ')})`
             : question.question
@@ -44,15 +48,15 @@ export function serializeReportMarkdown(report: WorkReport) {
     report.headline,
     section(
       '### What changed',
-      bulletList(report.phases.map((phase) => `**${phase.title}**: ${phase.summary}`))
+      bulletList(report.sections.map((section) => `**${section.title}**: ${section.summary}`))
     ),
     section(
       '### Checks',
       bulletList(report.checks.map((check) => `${CHECK_MARK[check.outcome]} ${check.name}`))
     ),
     section(
-      '### Decisions',
-      bulletList(report.decisions.map((decision) => `**${decision.decision}** ${decision.reason}`))
+      '### Judgement calls',
+      bulletList(report.judgementCalls.map((call) => `**${call.call}** ${call.reason}`))
     ),
   ]
     .filter(Boolean)
@@ -60,12 +64,14 @@ export function serializeReportMarkdown(report: WorkReport) {
 }
 
 export function listRankedSpots(report: WorkReport) {
-  return report.phases
-    .flatMap((phase, phaseIndex) => phase.spots.map((spot, spotIndex) => ({ spot, phaseIndex, spotIndex })))
+  return report.sections
+    .flatMap((section, sectionIndex) =>
+      section.spots.map((spot, spotIndex) => ({ spot, sectionIndex, spotIndex }))
+    )
     .sort(
       (a, b) =>
         ATTENTION_RANK[a.spot.attention] - ATTENTION_RANK[b.spot.attention] ||
-        a.phaseIndex - b.phaseIndex ||
+        a.sectionIndex - b.sectionIndex ||
         a.spotIndex - b.spotIndex
     );
 }

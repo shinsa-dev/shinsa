@@ -1,8 +1,15 @@
-import type { FixReason, GateDecision, TaskStage } from '../model/index.ts';
+import type {
+  FixReason,
+  GateDecision,
+  ReviewEscalation,
+  ReviewEscalationReason,
+  TaskStage,
+} from '../domain/index.ts';
+import type { PullRequestWatchChange } from '../domain/pull-requests.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 
 const STAGE_ACTIVITY: Partial<Record<TaskStage, string>> = {
-  queued: 'Waiting on another task',
+  waiting_on_tasks: 'Waiting on another task',
   planning: 'Planning started',
   building: 'Building started',
   checking: 'Running the checks',
@@ -10,6 +17,11 @@ const STAGE_ACTIVITY: Partial<Record<TaskStage, string>> = {
   awaiting_review: 'Changes ready for your review',
   shipping: 'Opening the pull request',
   awaiting_merge: 'Ready to merge',
+  answering: 'Answering the question',
+  investigating: 'Investigation started',
+  researching: 'Research started',
+  operating: 'Running the operation',
+  awaiting_operation: 'Merged, ready to run the operation',
   merged: 'Merged',
   done: 'Marked done',
   cancelled: 'Cancelled',
@@ -25,7 +37,8 @@ const DECISION_TEXT: Record<GateDecision, string> = {
   approve: 'Approved',
   revise: 'Asked for changes',
   reject: 'Rejected',
-  answer: 'Answered',
+  reply: 'Answered',
+  waive: 'Started without checks',
 };
 
 export function describeStage(stage: TaskStage) {
@@ -65,4 +78,48 @@ export function describeFindings(findings: ReviewFinding[]) {
   const blocking = findings.filter((finding) => finding.severity === 'blocking').length;
   const found = `Agent review found ${findings.length} ${findings.length === 1 ? 'issue' : 'issues'}`;
   return blocking > 0 ? `${found}, ${blocking} blocking` : found;
+}
+
+const ESCALATION_TEXT: Record<ReviewEscalationReason, (rounds: string) => string> = {
+  rounds: (rounds) => `the reviewer still had blocking findings after ${rounds}`,
+  stalled: () => 'the same findings came back on unchanged code',
+  exhausted: (rounds) => `${rounds} used up the automatic budget`,
+};
+
+export function describeEscalation(escalation: ReviewEscalation) {
+  const rounds = `${escalation.rounds} fix ${escalation.rounds === 1 ? 'round' : 'rounds'}`;
+  return `Sent the review to you: ${ESCALATION_TEXT[escalation.reason](rounds)}`;
+}
+
+export function describeSuggestionSettled(status: 'accepted' | 'dismissed', title: string) {
+  return status === 'accepted' ? `Added the follow-up “${title}”` : `Dismissed the follow-up “${title}”`;
+}
+
+function describePullRequestChange(change: PullRequestWatchChange) {
+  switch (change.kind) {
+    case 'checks_failed':
+      return `Checks failed on GitHub: ${change.failed.map((check) => `\`${check.name}\``).join(', ')}`;
+    case 'checks_passed':
+      return `All ${change.count} ${change.required ? 'required ' : ''}${change.count === 1 ? 'check' : 'checks'} passed on GitHub`;
+    case 'remarks':
+      return `${change.total ?? change.remarks.length} new ${(change.total ?? change.remarks.length) === 1 ? 'comment' : 'comments'} on the pull request`;
+    case 'conflicting':
+      return 'The branch now conflicts with its base';
+  }
+}
+
+export function describePullRequestChanges(changes: PullRequestWatchChange[]) {
+  return changes.map(describePullRequestChange).join('. ');
+}
+
+export function describePullRequestRemarks(changes: PullRequestWatchChange[]) {
+  const lines = changes.flatMap((change) =>
+    change.kind === 'remarks'
+      ? change.remarks.map((remark) => {
+          const where = remark.path ? ` on ${remark.path}` : '';
+          return `${remark.author ?? 'someone'}${where}: ${remark.body || (remark.reviewState ?? 'reviewed')}`;
+        })
+      : []
+  );
+  return lines.length > 0 ? lines.join('\n') : null;
 }

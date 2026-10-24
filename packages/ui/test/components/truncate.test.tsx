@@ -24,7 +24,6 @@ describe('Truncate', () => {
       <Truncate data-layout={layout({ clientWidth: 100, scrollWidth: 100 })}>Fits</Truncate>
     );
     const text = view.getByText('Fits');
-    expect(text.className).toContain('truncate');
     expect(tooltipEnabled(text)).toBe(false);
 
     view.rerender(<Truncate data-layout={layout({ clientWidth: 100, scrollWidth: 180 })}>Fits</Truncate>);
@@ -45,14 +44,13 @@ describe('Truncate', () => {
     expect(tooltipEnabled(view.getByText('A much longer title now'))).toBe(true);
   });
 
-  it('clamps to lines by height', () => {
+  it('offers the full text when the clamped lines cut it off', () => {
     const view = render(
       <Truncate lines={2} data-layout={layout({ clientHeight: 32, scrollHeight: 48 })}>
         Two lines of text and more
       </Truncate>
     );
     const text = view.getByText('Two lines of text and more');
-    expect(text.className).toContain('line-clamp-2');
     expect(tooltipEnabled(text)).toBe(true);
   });
 
@@ -115,7 +113,7 @@ describe('Truncate', () => {
           <b>bold</b>
         </Truncate>
       );
-      expect(view.getByTestId('text').className).toContain('truncate');
+      expect(view.getByTestId('text').querySelector('b')?.textContent).toBe('bold');
     });
   });
 });

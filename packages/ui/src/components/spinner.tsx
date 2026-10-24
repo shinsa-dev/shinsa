@@ -14,7 +14,7 @@ function Spinner({ className, 'aria-label': ariaLabel = 'Loading', ...props }: S
       aria-label={ariaLabel}
       viewBox='0 0 16 16'
       fill='none'
-      className={cn('size-4 shrink-0 animate-spin', className)}
+      className={cn('size-4 shrink-0 animate-spin opacity-(--icon-alpha)', className)}
       {...props}
     >
       <circle cx='8' cy='8' r='6.25' stroke='currentColor' strokeOpacity='0.3' strokeWidth='1.5' />

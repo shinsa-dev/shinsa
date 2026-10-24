@@ -1,0 +1,149 @@
+import type { ShinsaState } from '@shinsa/core';
+import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
+import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
+import { Choice } from '@/components/controls/choice.tsx';
+import { NavItem } from '@/components/layout/nav-item.tsx';
+import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
+import { PageHeading } from '@/components/layout/page/heading.tsx';
+import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
+import { AccountSettings } from '@/components/settings/accounts.tsx';
+import { AgentSettings } from '@/components/settings/agents.tsx';
+import { AppearanceSettings } from '@/components/settings/appearance.tsx';
+import { AttentionSettings } from '@/components/settings/attention.tsx';
+import { ContextSettings } from '@/components/settings/context.tsx';
+import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
+import { IntegrationSettings } from '@/components/settings/integrations.tsx';
+import { NotificationSettings } from '@/components/settings/notifications.tsx';
+import { ProjectSettings } from '@/components/settings/projects.tsx';
+import { ScheduleSettings } from '@/components/settings/schedules.tsx';
+import { LimitSettings } from '@/components/settings/usage.tsx';
+import { useRegisterCommands } from '@/lib/command/registry.ts';
+import { listSettingsSections } from '@/lib/command/settings.ts';
+import { useAccounts } from '@/lib/connection/accounts.ts';
+import { useExtensions } from '@/lib/connection/extensions.ts';
+import { useAgentProviders } from '@/lib/connection/models.ts';
+import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
+import { useNotificationPreferences } from '@/lib/preferences/notifications.ts';
+import { resolveHashSectionId } from '@/lib/settings.ts';
+import {
+  findSettingsTab,
+  listSettingsTabs,
+  resolveSettingsTab,
+  resolveSettingsTabParam,
+  type SettingsTabId,
+} from '@/lib/settings-tabs.ts';
+import { updateSearchParams, useSearchParam } from '@/router.ts';
+
+function useSectionScroll(
+  scroller: React.RefObject<HTMLDivElement | null>,
+  tab: SettingsTabId,
+  ready: boolean
+) {
+  React.useEffect(() => {
+    if (!ready) return;
+    const id = resolveHashSectionId(location.hash);
+    const section = id ? document.getElementById(id) : null;
+    if (section) section.scrollIntoView({ block: 'start' });
+    else scroller.current?.scrollTo({ top: 0 });
+  }, [scroller, tab, ready]);
+}
+
+function isTabRead(tab: SettingsTabId, extensionsRead: boolean, foldersRead: boolean) {
+  if (tab === 'integrations') return extensionsRead;
+  if (tab === 'projects') return foldersRead;
+  return true;
+}
+
+function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId }) {
+  switch (tab) {
+    case 'general':
+      return (
+        <>
+          <AppearanceSettings />
+          <AttentionSettings settings={state.settings} />
+          <NotificationSettings />
+          <ContextSettings settings={state.settings} />
+          <SetupSettings />
+        </>
+      );
+    case 'agents':
+      return <AgentSettings settings={state.settings} />;
+    case 'accounts':
+      return (
+        <>
+          <AccountSettings settings={state.settings} />
+          <LimitSettings settings={state.settings} />
+        </>
+      );
+    case 'projects':
+      return (
+        <>
+          <ProjectSettings state={state} />
+          <FolderSettings />
+        </>
+      );
+    case 'integrations':
+      return <IntegrationSettings state={state} />;
+    case 'automations':
+      return <ScheduleSettings state={state} />;
+  }
+}
+
+export function SettingsPage({ state }: { state: ShinsaState }) {
+  const providers = useAgentProviders();
+  const notifications = useNotificationPreferences();
+  const accounts = useAccounts();
+  const tab = resolveSettingsTab(useSearchParam('tab'), location.hash);
+  const tabs = listSettingsTabs();
+  const current = findSettingsTab(tab);
+  const scroller = React.useRef<HTMLDivElement>(null);
+  useRegisterCommands(listSettingsSections(state.settings, providers, notifications, accounts));
+  const extensions = useExtensions(tab === 'integrations');
+  const extensionsRead = extensions.snapshot !== null || extensions.failure !== null;
+  const foldersRead = useOnboardingStatus() !== null;
+  useSectionScroll(scroller, tab, accounts !== null && isTabRead(tab, extensionsRead, foldersRead));
+  const openTab = (next: SettingsTabId) => updateSearchParams({ tab: resolveSettingsTabParam(next) });
+
+  return (
+    <div className='@container/settings flex min-h-0 flex-1 flex-col'>
+      <PageScroll viewportRef={scroller}>
+        <div className='grid @min-[74rem]/settings:grid-cols-[1fr_minmax(0,48rem)_1fr]'>
+          <nav
+            aria-label='Settings sections'
+            className={cn(
+              'sticky top-0 @min-[74rem]/settings:block hidden w-52 self-start justify-self-end pe-6',
+              PAGE_TOP
+            )}
+          >
+            <HoverHighlight className='flex flex-col gap-px'>
+              {tabs.map((entry) => (
+                <NavItem
+                  key={entry.id}
+                  label={entry.label}
+                  icon={entry.icon}
+                  activeIcon={entry.activeIcon}
+                  active={entry.id === tab}
+                  onClick={() => openTab(entry.id)}
+                />
+              ))}
+            </HoverHighlight>
+          </nav>
+          <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-12')}>
+            <div className='flex flex-col gap-3'>
+              <PageHeading title={current.label} />
+              <Choice<SettingsTabId>
+                label='Settings sections'
+                items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
+                value={tab}
+                onValueChange={openTab}
+                className='@min-[74rem]/settings:hidden'
+              />
+            </div>
+            <TabSections state={state} tab={tab} />
+          </div>
+        </div>
+      </PageScroll>
+    </div>
+  );
+}

@@ -1,13 +1,16 @@
 import type { CommandOf } from '../commands/index.ts';
-import type { FixReason, Task } from '../model/index.ts';
+import type { FixReason, ReviewEscalation, ReviewEscalationReason, Task } from '../domain/index.ts';
 import { resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
-import { openReviewGate, startReview } from './lifecycle.ts';
+import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
+import { openReviewGate, startAfterChecks } from './lifecycle.ts';
 
 const MAX_STALLED_FIXES = 2;
 
 const AUTO_FIX_CEILING = 12;
+
+const MAX_REVIEW_ROUNDS = 3;
 
 const FIX_STAGE_REASON: Record<FixReason, string> = {
   checks: 'fixing failing checks',
@@ -16,18 +19,14 @@ const FIX_STAGE_REASON: Record<FixReason, string> = {
   pull_request: 'fixing the pull request',
 };
 
+type FixStop = { reason: Exclude<ReviewEscalationReason, 'rounds'>; stalled: number; limit: number };
+
 function resolveSignature(parts: string[]) {
   return [...new Set(parts)].sort().join('\n');
 }
 
-function countRepeats(task: Task, reason: FixReason, signature: string | null) {
-  if (signature === null) return 0;
-  const key = `${reason}:${signature}`;
-  return (task.fixHistory ?? []).filter((entry) => entry === key).length;
-}
-
 function isBudgetSpent(task: Task) {
-  return task.fixRounds > 0 || (task.fixHistory ?? []).length > 0;
+  return task.fixRounds > 0 || (task.fixHistory ?? []).length > 0 || (task.fixFingerprints ?? []).length > 0;
 }
 
 export function resetFixBudget(decider: Decider, taskId: string) {
@@ -42,25 +41,37 @@ export function clearFixLoop(decider: Decider, taskId: string) {
   decider.emit({ type: 'fix.started', taskId, round: 0 });
 }
 
-function stopFixing(decider: Decider, task: Task, stalled: number) {
+function resolveFixStop(decider: Decider, task: Task, stalled: number): FixStop | null {
   const limit = decider.state.settings.maxFixRounds ?? AUTO_FIX_CEILING;
-  if (stalled >= MAX_STALLED_FIXES) {
+  if (stalled >= MAX_STALLED_FIXES) return { reason: 'stalled', stalled, limit };
+  if (task.fixRounds >= limit) return { reason: 'exhausted', stalled, limit };
+  return null;
+}
+
+function failFixing(decider: Decider, task: Task, stop: FixStop) {
+  if (stop.reason === 'stalled') {
     decider.fail(
       task.id,
       'Fixing is not making progress',
-      `The same problems came back after ${stalled} fix rounds. Steer the agent in the chat, or retry.`
+      `The same problems came back after ${stop.stalled} fix rounds. Steer the agent in the chat, or retry.`
     );
-    return true;
+    return;
   }
-  if (task.fixRounds >= limit) {
-    decider.fail(
-      task.id,
-      'Out of automatic fix rounds',
-      `${limit} fix rounds did not get it clean. Retry to give the agent more rounds, or steer it in the chat.`
-    );
-    return true;
-  }
-  return false;
+  decider.fail(
+    task.id,
+    'Out of automatic fix rounds',
+    `${stop.limit} fix rounds did not get it clean. Retry to give the agent more rounds, or steer it in the chat.`
+  );
+}
+
+function escalateReview(decider: Decider, taskId: string, reason: ReviewEscalationReason) {
+  const escalation: ReviewEscalation = {
+    reason,
+    rounds: countReviewRounds(decider.task(taskId)),
+    at: decider.context.now,
+  };
+  decider.emit({ type: 'review.escalated', taskId, escalation });
+  openReviewGate(decider, taskId, escalation);
 }
 
 export function startFix(
@@ -71,10 +82,26 @@ export function startFix(
   signature: string | null
 ) {
   const task = decider.task(taskId);
-  const stalled = countRepeats(task, reason, signature);
-  if (reason !== 'you' && stopFixing(decider, task, stalled)) return;
+  const stalled = countFixRepeats(task, reason, signature);
+  const stop = reason === 'you' ? null : resolveFixStop(decider, task, stalled);
+  if (stop && reason === 'review') {
+    escalateReview(decider, taskId, stop.reason);
+    return;
+  }
+  if (stop) {
+    failFixing(decider, task, stop);
+    return;
+  }
   const round = reason === 'you' ? 0 : task.fixRounds + 1;
-  decider.emit({ type: 'fix.started', taskId, round, reason, signature, stalled });
+  decider.emit({
+    type: 'fix.started',
+    taskId,
+    round,
+    reason,
+    signature,
+    stalled,
+    treeHash: task.treeHash ?? null,
+  });
   decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
   decider.startRun(decider.task(taskId), 'fixer', prompt, {
     resumeFrom: decider.lastRun(taskId, ['fixer', 'builder', 'shipper']),
@@ -85,7 +112,7 @@ function reactToChecks(decider: Decider, taskId: string, results: ReportCheck[])
   const failed = results.filter((check) => check.outcome === 'fail');
   if (failed.length === 0) {
     decider.progressed(taskId);
-    startReview(decider, taskId);
+    startAfterChecks(decider, taskId);
     return;
   }
   startFix(
@@ -97,10 +124,30 @@ function reactToChecks(decider: Decider, taskId: string, results: ReportCheck[])
   );
 }
 
+function isDismissed(task: Task, finding: ReviewFinding) {
+  return (task.dismissedFindings ?? []).some(
+    (dismissed) =>
+      dismissed.file === finding.file &&
+      dismissed.line === finding.line &&
+      dismissed.message === finding.message
+  );
+}
+
 export function reactToFindings(decider: Decider, taskId: string, findings: ReviewFinding[]) {
-  const blocking = findings.filter((finding) => finding.severity === 'blocking');
+  const task = decider.task(taskId);
+  const blocking = findings.filter(
+    (finding) => finding.severity === 'blocking' && !isDismissed(task, finding)
+  );
   if (blocking.length === 0) {
     openReviewGate(decider, taskId);
+    return;
+  }
+  if (countUnchangedRounds(task, 'review') > 0) {
+    escalateReview(decider, taskId, 'stalled');
+    return;
+  }
+  if (countReviewRounds(task) >= MAX_REVIEW_ROUNDS - 1) {
+    escalateReview(decider, taskId, 'rounds');
     return;
   }
   startFix(

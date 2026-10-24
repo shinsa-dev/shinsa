@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import {
   listRankedSpots,
-  type SpecDocument,
+  type PlanDocument,
   serializeReportMarkdown,
-  serializeSpecMarkdown,
+  serializePlanMarkdown,
   type WorkReport,
 } from '../../src/index.ts';
 
-const SPEC: SpecDocument = {
+const SPEC: PlanDocument = {
   goal: 'Stop the tabs scrolling.',
-  plan: [
+  phases: [
     { title: 'Find it', detail: 'Trace the overflow.' },
     { title: 'Fix it', detail: 'Clamp and verify.' },
   ],
@@ -24,9 +24,9 @@ const SPEC: SpecDocument = {
   ],
 };
 
-describe('serializeSpecMarkdown', () => {
+describe('serializePlanMarkdown', () => {
   test('writes every section in reading order', () => {
-    expect(serializeSpecMarkdown(SPEC)).toBe(
+    expect(serializePlanMarkdown(SPEC)).toBe(
       [
         '## Goal\nStop the tabs scrolling.',
         '## Plan\n1. **Find it**: Trace the overflow.\n2. **Fix it**: Clamp and verify.',
@@ -40,6 +40,19 @@ describe('serializeSpecMarkdown', () => {
     );
   });
 
+  test('writes the plan parameters: the evidence, the extra checks and the impact', () => {
+    const markdown = serializePlanMarkdown({
+      ...SPEC,
+      evidence: ['screenshot', 'test'],
+      checks: ['bun test tabs'],
+      operation: ['Backfill the widths.'],
+      impact: 'Touches 40 rows.',
+    });
+    expect(markdown).toContain('## Evidence\nscreenshot, test');
+    expect(markdown).toContain('## Extra checks\n- `bun test tabs`');
+    expect(markdown).toContain('## Operation\n1. Backfill the widths.\n\n## Impact\nTouches 40 rows.');
+  });
+
   test('leaves out empty sections', () => {
     const bare = {
       ...SPEC,
@@ -50,7 +63,7 @@ describe('serializeSpecMarkdown', () => {
       verification: [],
       questions: [],
     };
-    expect(serializeSpecMarkdown(bare)).toBe(
+    expect(serializePlanMarkdown(bare)).toBe(
       '## Goal\nStop the tabs scrolling.\n\n## Approach\nClamp the width.'
     );
   });
@@ -82,7 +95,7 @@ const REPORT: WorkReport = {
     { name: 'test', outcome: 'fail', detail: null },
     { name: 'e2e', outcome: 'skipped', detail: null },
   ],
-  decisions: [{ decision: 'No new prop', reason: 'Not needed.', file: null, line: null }],
+  judgementCalls: [{ call: 'No new prop', reason: 'Not needed.', file: null, line: null }],
 };
 
 describe('serializeReportMarkdown', () => {
@@ -98,7 +111,7 @@ describe('serializeReportMarkdown', () => {
   });
 
   test('a report with nothing else is just its headline', () => {
-    expect(serializeReportMarkdown({ headline: 'Done', phases: [], checks: [], decisions: [] })).toBe('Done');
+    expect(serializeReportMarkdown({ headline: 'Done', phases: [], checks: [], judgementCalls: [] })).toBe('Done');
   });
 });
 

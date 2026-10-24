@@ -23,9 +23,3 @@ export const CUSTOM_ICON_PATHS: Record<string, string> = {
   IconPriorityLow:
     '<g fill="currentColor"><rect x="4.5" y="13" width="3.5" height="6" rx="1"/><rect x="10.25" y="9" width="3.5" height="10" rx="1" opacity="0.3"/><rect x="16" y="5" width="3.5" height="14" rx="1" opacity="0.3"/></g>',
 };
-
-/**
- * Marks that carry their own brand colours. `Icon` leaves these alone instead of
- * tinting them with `currentColor`, so gradients and two-tone logos survive.
- */
-export const COLORFUL_ICON_NAMES: string[] = [];

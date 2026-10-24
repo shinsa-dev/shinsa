@@ -1,0 +1,744 @@
+#!/usr/bin/env bun
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+type Json = Record<string, unknown>;
+
+type Step =
+  | { say: string }
+  | { run: string; output?: string; exit?: number }
+  | { tool: string; args?: Json }
+  | { write: string; content: string }
+  | { usage: { input: number; cached?: number; written?: number; output: number; window?: number; last?: number; thread?: string } }
+  | { agent: { thread: string; say?: string; run?: string; fails?: boolean; early?: boolean; nested?: string; usage?: number } }
+  | { activity: { thread: string; path: string; say?: string; interrupted?: boolean } }
+  | { stray: { thread: string; count: number } }
+  | { reroute: string }
+  | { limits: Json }
+  | { fail: { info: unknown; message: string; details?: string } }
+  | { retry: { info: unknown; message: string } }
+  | { crash: string }
+  | { hang: true }
+  | { waitSteer: true }
+  | { compact: true }
+  | { plan: Json[] }
+  | { search: string }
+  | { image: string }
+  | { spawn: string }
+  | { other: string }
+  | { interrupted: true }
+  | { elicit: string }
+  | { ask: string }
+  | { default: true };
+
+interface FakeState {
+  threads: string[];
+  scripts: Record<string, Step[][]>;
+  quick?: string;
+  quickFails?: boolean;
+  models?: Json[];
+  modelPages?: boolean;
+  rateLimits?: Json;
+  rateLimitsByLimitId?: Json;
+  missing?: boolean;
+  refuse?: string[];
+  ignore?: string[];
+  noise?: boolean;
+  standardOnly?: boolean;
+  account?: Json | null;
+  compact?: 'fails' | 'noTurn';
+}
+
+interface Thread {
+  id: string;
+  cwd: string;
+  approvalPolicy: string;
+  sandbox: string;
+  mcp: { url: string; headers: Record<string, string> } | null;
+  ephemeral: boolean;
+  client: Client | null;
+  role: string | null;
+}
+
+interface Turn {
+  id: string;
+  thread: Thread;
+  prompt: string;
+  steers: string[];
+  steerWaiters: ((text: string) => void)[];
+  interrupted: Promise<'interrupted'>;
+  interrupt: () => void;
+  done: boolean;
+  items: number;
+}
+
+const PLAN = {
+  goal: 'Add the two greeting files.',
+  plan: [
+    { title: 'Write the first file', detail: 'Create a.txt.' },
+    { title: 'Write the second file', detail: 'Create b.txt.' },
+  ],
+  behaviour: ['Both files exist.'],
+  approach: 'Write them.',
+  files: [],
+  out_of_scope: [],
+  verification: ['The checks pass.'],
+  questions: [],
+};
+
+const ROLE_TOOLS: [string, string][] = [
+  ['propose_plan', 'planner'],
+  ['complete_phase', 'builder'],
+  ['report_review', 'reviewer'],
+  ['complete_fix', 'fixer'],
+  ['answer', 'answerer'],
+];
+
+const statePath = Bun.env.FAKE_CODEX_STATE;
+const args = Bun.argv.slice(2);
+
+function register() {
+  const registry = Bun.env.FAKE_CODEX_REGISTRY;
+  if (!registry) return;
+  const entry = join(registry, String(process.pid));
+  writeFileSync(entry, args.join(' '));
+  process.on('exit', () => rmSync(entry, { force: true }));
+}
+
+function readTier(params: Json) {
+  return readState().standardOnly ? null : (params.serviceTier ?? null);
+}
+
+function log(entry: Json) {
+  if (!statePath) return;
+  appendFileSync(`${statePath}.log`, `${JSON.stringify({ pid: process.pid, ...entry })}\n`);
+}
+
+function readState(): FakeState {
+  if (!statePath || !existsSync(statePath)) return { threads: [], scripts: {} };
+  return JSON.parse(readFileSync(statePath, 'utf8')) as FakeState;
+}
+
+function withState<T>(change: (state: FakeState) => T): T {
+  if (!statePath) return change({ threads: [], scripts: {} });
+  const lock = `${statePath}.lock`;
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch {
+      if (Date.now() > deadline) rmSync(lock, { recursive: true, force: true });
+      Bun.sleepSync(2);
+    }
+  }
+  try {
+    const state = readState();
+    const result = change(state);
+    writeFileSync(`${statePath}.tmp`, JSON.stringify(state));
+    renameSync(`${statePath}.tmp`, statePath);
+    return result;
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
+function send(message: Json) {
+  process.stdout.write(`${JSON.stringify(message)}\n`);
+}
+
+function notify(method: string, params: Json) {
+  send({ method, params });
+}
+
+let nextRequest = 1000;
+const waiting = new Map<number, (result: Json) => void>();
+
+function ask(method: string, params: Json) {
+  nextRequest += 1;
+  const id = nextRequest;
+  const { promise, resolve } = Promise.withResolvers<Json>();
+  waiting.set(id, resolve);
+  send({ id, method, params });
+  return promise;
+}
+
+const threads = new Map<string, Thread>();
+let active: Turn | null = null;
+let counter = 0;
+
+function newId(prefix: string) {
+  counter += 1;
+  return `${prefix}-${process.pid}-${counter}-${Bun.randomUUIDv7()}`;
+}
+
+function readConfig(params: Json) {
+  const config = (params.config ?? {}) as Json;
+  const shinsa = config['mcp_servers.shinsa'] as { url?: string; http_headers?: Record<string, string> } | undefined;
+  return shinsa?.url ? { url: shinsa.url, headers: shinsa.http_headers ?? {} } : null;
+}
+
+function openThread(id: string, params: Json): Thread {
+  const thread: Thread = {
+    id,
+    cwd: String(params.cwd ?? process.cwd()),
+    approvalPolicy: String(params.approvalPolicy ?? 'never'),
+    sandbox: String(params.sandbox ?? 'read-only'),
+    mcp: readConfig(params),
+    ephemeral: params.ephemeral === true,
+    client: null,
+    role: null,
+  };
+  threads.set(id, thread);
+  return thread;
+}
+
+async function connect(thread: Thread) {
+  if (thread.client || !thread.mcp) return thread.client;
+  const client = new Client({ name: 'fake-codex', version: '1.0.0' });
+  const transport = new StreamableHTTPClientTransport(new URL(thread.mcp.url), {
+    requestInit: { headers: thread.mcp.headers },
+  });
+  await client.connect(transport);
+  const tools = await client.listTools();
+  const names = new Set(tools.tools.map((tool) => tool.name));
+  thread.role = ROLE_TOOLS.find(([tool]) => names.has(tool))?.[1] ?? 'delegated';
+  thread.client = client;
+  return client;
+}
+
+function emitItem(turn: Turn, item: Json, started = true) {
+  if (started) notify('item/started', { threadId: turn.thread.id, turnId: turn.id, item });
+  notify('item/completed', { threadId: turn.thread.id, turnId: turn.id, item });
+}
+
+function nextItemId(turn: Turn) {
+  turn.items += 1;
+  return `${turn.id}-item-${turn.items}`;
+}
+
+async function callTool(turn: Turn, name: string, toolArgs: Json) {
+  const client = await connect(turn.thread);
+  const id = nextItemId(turn);
+  const base = { type: 'mcpToolCall', id, server: 'shinsa', tool: name, arguments: toolArgs };
+  notify('item/started', { threadId: turn.thread.id, turnId: turn.id, item: { ...base, status: 'inProgress' } });
+  if (!client) throw new Error('no tools configured');
+  const call = client.callTool({ name, arguments: toolArgs }, undefined, {
+    timeout: 24 * 60 * 60 * 1000,
+    resetTimeoutOnProgress: true,
+    onprogress: () => log({ progress: name }),
+  });
+  const outcome = await Promise.race([call, turn.interrupted]);
+  if (outcome === 'interrupted') return 'interrupted';
+  const isError = outcome.isError === true;
+  notify('item/completed', {
+    threadId: turn.thread.id,
+    turnId: turn.id,
+    item: {
+      ...base,
+      status: isError ? 'failed' : 'completed',
+      result: isError ? null : { content: outcome.content, structuredContent: null, _meta: null },
+      error: isError ? { message: JSON.stringify(outcome.content) } : null,
+    },
+  });
+  log({ tool: name, isError, content: outcome.content });
+  return null;
+}
+
+async function runCommand(turn: Turn, step: { run: string; output?: string; exit?: number }) {
+  const id = nextItemId(turn);
+  const base = { type: 'commandExecution', id, command: `/bin/zsh -lc '${step.run}'`, cwd: turn.thread.cwd };
+  notify('item/started', {
+    threadId: turn.thread.id,
+    turnId: turn.id,
+    item: { ...base, status: 'inProgress', aggregatedOutput: null, exitCode: null },
+  });
+  if (turn.thread.approvalPolicy === 'untrusted') {
+    const answer = await ask('item/commandExecution/requestApproval', {
+      threadId: turn.thread.id,
+      turnId: turn.id,
+      itemId: id,
+      command: step.run,
+      cwd: turn.thread.cwd,
+    });
+    log({ approval: step.run, decision: answer.decision });
+    if (answer.decision !== 'accept') {
+      emitItem(turn, { ...base, status: 'declined', aggregatedOutput: null, exitCode: null }, false);
+      return;
+    }
+  }
+  const exitCode = step.exit ?? 0;
+  emitItem(
+    turn,
+    { ...base, status: exitCode === 0 ? 'completed' : 'failed', aggregatedOutput: step.output ?? '', exitCode },
+    false
+  );
+}
+
+async function writeFile(turn: Turn, path: string, content: string) {
+  const id = nextItemId(turn);
+  const change = { path, kind: { type: 'add' }, diff: content.split('\n').map((line) => `+${line}`).join('\n') };
+  const base = { type: 'fileChange', id, changes: [change] };
+  notify('item/started', { threadId: turn.thread.id, turnId: turn.id, item: { ...base, status: 'inProgress' } });
+  if (turn.thread.approvalPolicy === 'untrusted') {
+    const answer = await ask('item/fileChange/requestApproval', { threadId: turn.thread.id, turnId: turn.id, itemId: id });
+    log({ patch: path, decision: answer.decision });
+    if (answer.decision !== 'accept') {
+      notify('item/completed', { threadId: turn.thread.id, turnId: turn.id, item: { ...base, status: 'declined' } });
+      return;
+    }
+  }
+  if (turn.thread.sandbox === 'read-only') {
+    log({ patch: path, decision: 'sandbox' });
+    notify('item/completed', { threadId: turn.thread.id, turnId: turn.id, item: { ...base, status: 'failed' } });
+    return;
+  }
+  const target = join(turn.thread.cwd, path);
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, content);
+  notify('item/completed', { threadId: turn.thread.id, turnId: turn.id, item: { ...base, status: 'completed' } });
+}
+
+function say(turn: Turn, text: string) {
+  emitItem(turn, { type: 'agentMessage', id: nextItemId(turn), text, phase: null }, true);
+}
+
+function usage(
+  turn: Turn,
+  step: { input: number; cached?: number; written?: number; output: number; window?: number; last?: number; thread?: string }
+) {
+  const total = {
+    totalTokens: step.input + step.output,
+    inputTokens: step.input,
+    cachedInputTokens: step.cached ?? 0,
+    cacheWriteInputTokens: step.written ?? 0,
+    outputTokens: step.output,
+    reasoningOutputTokens: 0,
+  };
+  notify('thread/tokenUsage/updated', {
+    threadId: step.thread ?? turn.thread.id,
+    turnId: turn.id,
+    tokenUsage: {
+      total,
+      last: { ...total, totalTokens: step.last ?? step.input + step.output },
+      modelContextWindow: step.window ?? null,
+    },
+  });
+}
+
+async function runDefault(turn: Turn) {
+  await connect(turn.thread);
+  say(turn, 'Working on it.');
+  usage(turn, { input: 1_000, cached: 200, output: 100, window: 200_000, last: 1_100 });
+  switch (turn.thread.role) {
+    case 'planner':
+      return callTool(turn, 'propose_plan', PLAN);
+    case 'builder': {
+      const phase = Number(/builder for phase (\d+)/.exec(turn.prompt)?.[1] ?? 1);
+      await writeFile(turn, phase === 1 ? 'a.txt' : `${String.fromCharCode(96 + phase)}.txt`, `phase ${phase}\n`);
+      return callTool(turn, 'complete_phase', {
+        summary: `Wrote the file for phase ${phase}.`,
+        spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
+        decisions: [],
+      });
+    }
+    case 'reviewer':
+      return callTool(turn, 'report_review', { findings: [] });
+    case 'fixer':
+      return callTool(turn, 'complete_fix', { summary: 'Fixed it.' });
+    case 'answerer':
+      return callTool(turn, 'answer', { answer: 'It lives in a.txt.' });
+    default:
+      say(turn, 'Done: the delegated work is finished.');
+      return null;
+  }
+}
+
+function claimScript(thread: Thread): Step[] | null {
+  return withState((state) => {
+    const role = thread.role ?? 'delegated';
+    const own = state.scripts[role];
+    if (own && own.length > 0) return own.shift() ?? null;
+    const any = state.scripts['*'];
+    if (any && any.length > 0) return any.shift() ?? null;
+    return null;
+  });
+}
+
+function endTurn(turn: Turn, status: string, error: Json | null = null) {
+  if (turn.done) return;
+  turn.done = true;
+  if (active === turn) active = null;
+  notify('turn/completed', {
+    threadId: turn.thread.id,
+    turn: { id: turn.id, items: [], status, error, startedAt: null, completedAt: null, durationMs: null },
+  });
+}
+
+async function runStep(turn: Turn, step: Step): Promise<'stop' | null> {
+  if ('say' in step) say(turn, step.say);
+  else if ('run' in step) await runCommand(turn, step);
+  else if ('tool' in step) return (await callTool(turn, step.tool, step.args ?? {})) ? 'stop' : null;
+  else if ('write' in step) await writeFile(turn, step.write, step.content);
+  else if ('usage' in step) usage(turn, step.usage);
+  else if ('limits' in step) notify('account/rateLimits/updated', { rateLimits: step.limits });
+  else if ('retry' in step) {
+    notify('error', {
+      error: { message: step.retry.message, codexErrorInfo: step.retry.info, additionalDetails: null },
+      willRetry: true,
+      threadId: turn.thread.id,
+      turnId: turn.id,
+    });
+  } else if ('fail' in step) {
+    const error = { message: step.fail.message, codexErrorInfo: step.fail.info, additionalDetails: step.fail.details ?? null };
+    notify('error', { error, willRetry: false, threadId: turn.thread.id, turnId: turn.id });
+    endTurn(turn, 'failed', error);
+    return 'stop';
+  } else if ('crash' in step) {
+    process.stderr.write(`${step.crash}\n`);
+    process.exit(1);
+  } else if ('hang' in step) {
+    await turn.interrupted;
+    return 'stop';
+  } else if ('waitSteer' in step) {
+    const steered = await Promise.race([
+      new Promise<string>((resolve) => {
+        const queued = turn.steers.shift();
+        if (queued !== undefined) resolve(queued);
+        else turn.steerWaiters.push(resolve);
+      }),
+      turn.interrupted,
+    ]);
+    if (steered === 'interrupted') return 'stop';
+    say(turn, `Read your message: ${steered}`);
+  } else if ('compact' in step) {
+    emitItem(turn, { type: 'contextCompaction', id: nextItemId(turn) }, true);
+    notify('thread/compacted', { threadId: turn.thread.id, turnId: turn.id });
+  } else if ('plan' in step) {
+    notify('turn/plan/updated', { threadId: turn.thread.id, turnId: turn.id, explanation: null, plan: step.plan });
+  } else if ('search' in step) {
+    emitItem(turn, { type: 'webSearch', id: nextItemId(turn), query: step.search, action: null }, true);
+  } else if ('image' in step) {
+    emitItem(turn, { type: 'imageView', id: nextItemId(turn), path: step.image }, true);
+  } else if ('agent' in step) {
+    runAgent(turn, step.agent);
+  } else if ('activity' in step) {
+    const { thread, path } = step.activity;
+    emitItem(turn, { type: 'subAgentActivity', id: `subagent-started-${thread}`, kind: 'started', agentThreadId: thread, agentPath: path }, false);
+    if (step.activity.say) {
+      notify('item/completed', { threadId: thread, turnId: `${thread}-turn`, item: { type: 'agentMessage', id: `${thread}-say`, text: step.activity.say, phase: null } });
+    }
+    const kind = step.activity.interrupted ? 'interrupted' : 'completed';
+    emitItem(turn, { type: 'subAgentActivity', id: `subagent-${kind}-${thread}-turn`, kind, agentThreadId: thread, agentPath: path }, false);
+  } else if ('stray' in step) {
+    for (let index = 0; index < step.stray.count; index += 1) {
+      notify('item/completed', { threadId: step.stray.thread, turnId: `${step.stray.thread}-turn`, item: { type: 'agentMessage', id: `stray-${index}`, text: 'Stray.', phase: null } });
+    }
+  } else if ('reroute' in step) {
+    notify('model/rerouted', { threadId: turn.thread.id, turnId: turn.id, fromModel: 'gpt-6-astra', toModel: step.reroute, reason: 'highRiskCyberActivity' });
+  } else if ('spawn' in step) {
+    emitItem(turn, { type: 'collabAgentToolCall', id: nextItemId(turn), tool: 'spawnAgent', status: 'completed', senderThreadId: turn.thread.id, receiverThreadIds: ['agent-thread'], prompt: step.spawn, model: 'gpt-5.6-luna', reasoningEffort: null, agentsStates: {} }, true);
+    notify('item/completed', { threadId: 'agent-thread', turnId: 'agent-turn', item: { type: 'agentMessage', id: 'agent-item', text: 'From the subagent.', phase: null } });
+  } else if ('other' in step) {
+    emitItem(turn, { type: 'dynamicToolCall', id: nextItemId(turn), namespace: null, tool: step.other, arguments: { a: 1 }, status: 'completed', contentItems: [{ type: 'inputText', text: 'ok' }], success: true, durationMs: 1 }, true);
+  } else if ('elicit' in step) {
+    const answer = await ask('mcpServer/elicitation/request', {
+      threadId: turn.thread.id,
+      turnId: turn.id,
+      serverName: step.elicit,
+      mode: 'form',
+      _meta: null,
+      message: 'Allow the call?',
+      requestedSchema: { type: 'object', properties: {} },
+    });
+    log({ elicited: step.elicit, action: answer.action });
+  } else if ('ask' in step) {
+    const answer = await ask(step.ask, { threadId: turn.thread.id, turnId: turn.id, itemId: nextItemId(turn) });
+    log({ asked: step.ask, answer });
+  } else if ('interrupted' in step) {
+    endTurn(turn, 'interrupted');
+    return 'stop';
+  } else if ('default' in step) {
+    return (await runDefault(turn)) ? 'stop' : null;
+  }
+  return null;
+}
+
+function agentTurn(thread: string, items: Json[], status: string) {
+  const turnId = `${thread}-turn`;
+  notify('turn/started', { threadId: thread, turn: { id: turnId, items: [], status: 'inProgress', error: null } });
+  for (const item of items) {
+    notify('item/started', { threadId: thread, turnId, item });
+    notify('item/completed', { threadId: thread, turnId, item });
+  }
+  return () =>
+    notify('turn/completed', { threadId: thread, turn: { id: turnId, items: [], status, error: null, startedAt: null, completedAt: null, durationMs: null } });
+}
+
+function runAgent(
+  turn: Turn,
+  agent: { thread: string; say?: string; run?: string; fails?: boolean; early?: boolean; nested?: string; usage?: number }
+) {
+  const spawn = () =>
+    emitItem(turn, { type: 'collabAgentToolCall', id: `spawn-${agent.thread}`, tool: 'spawnAgent', status: 'completed', senderThreadId: turn.thread.id, receiverThreadIds: [agent.thread], prompt: `Look into ${agent.thread}`, model: 'gpt-5.6-luna', reasoningEffort: null, agentsStates: {} }, true);
+  const items: Json[] = [];
+  if (agent.run) items.push({ type: 'commandExecution', id: `${agent.thread}-run`, command: `/bin/zsh -lc '${agent.run}'`, cwd: turn.thread.cwd, status: 'completed', aggregatedOutput: 'ok', exitCode: 0 });
+  if (agent.nested) items.push({ type: 'collabAgentToolCall', id: `spawn-${agent.nested}`, tool: 'spawnAgent', status: 'completed', senderThreadId: agent.thread, receiverThreadIds: [agent.nested], prompt: 'Go deeper', model: '', reasoningEffort: null, agentsStates: {} });
+  if (agent.say) items.push({ type: 'agentMessage', id: `${agent.thread}-say`, text: agent.say, phase: null });
+  if (!agent.early) spawn();
+  const end = agentTurn(agent.thread, items, agent.fails ? 'failed' : 'completed');
+  if (agent.nested) agentTurn(agent.nested, [{ type: 'agentMessage', id: `${agent.nested}-say`, text: 'Deeper.', phase: null }], 'completed')();
+  if (agent.usage) usage(turn, { input: agent.usage, output: 10, thread: agent.thread });
+  if (agent.early) spawn();
+  end();
+}
+
+async function runTurn(turn: Turn) {
+  try {
+    if (turn.thread.ephemeral) {
+      const state = readState();
+      if (state.quickFails) {
+        endTurn(turn, 'failed', { message: 'The quick model is down.', codexErrorInfo: 'other', additionalDetails: null });
+        return;
+      }
+      if (state.quick === '__crash__') {
+        process.stderr.write('the quick model crashed\n');
+        process.exit(1);
+      }
+      if (state.quick === '__ask__') {
+        const answer = await ask('item/tool/requestUserInput', { threadId: turn.thread.id, turnId: turn.id });
+        say(turn, JSON.stringify(answer));
+        endTurn(turn, 'completed');
+        return;
+      }
+      say(turn, state.quick ?? '{}');
+      endTurn(turn, 'completed');
+      return;
+    }
+    notify('turn/started', { threadId: turn.thread.id, turn: { id: turn.id, items: [], status: 'inProgress', error: null } });
+    await connect(turn.thread);
+    const script = claimScript(turn.thread);
+    log({ turn: turn.id, role: turn.thread.role, script: script ? 'scripted' : 'default' });
+    if (!script) {
+      const stopped = await runDefault(turn);
+      if (stopped) {
+        endTurn(turn, 'interrupted');
+        return;
+      }
+      say(turn, 'Handed over.');
+      endTurn(turn, 'completed');
+      return;
+    }
+    for (const step of script) {
+      if (turn.done) return;
+      if ((await runStep(turn, step)) === 'stop') {
+        endTurn(turn, 'interrupted');
+        return;
+      }
+    }
+    endTurn(turn, 'completed');
+  } catch (error) {
+    endTurn(turn, 'failed', { message: (error as Error).message, codexErrorInfo: 'other', additionalDetails: null });
+  }
+}
+
+function startTurn(thread: Thread, prompt: string): Turn {
+  const interrupted = Promise.withResolvers<'interrupted'>();
+  const turn: Turn = {
+    id: newId('turn'),
+    thread,
+    prompt,
+    steers: [],
+    steerWaiters: [],
+    interrupted: interrupted.promise,
+    interrupt: () => interrupted.resolve('interrupted'),
+    done: false,
+    items: 0,
+  };
+  active = turn;
+  return turn;
+}
+
+function readPrompt(params: Json) {
+  const input = Array.isArray(params.input) ? (params.input as Json[]) : [];
+  return input.map((part) => String(part.text ?? '')).join('\n');
+}
+
+function compact(thread: Thread, mode: FakeState['compact']) {
+  const turnId = newId('compact');
+  notify('turn/started', { threadId: thread.id, turn: { id: turnId, items: [], status: 'inProgress', error: null } });
+  const item = { type: 'contextCompaction', id: `${turnId}-item` };
+  notify('item/started', { threadId: thread.id, turnId, item });
+  notify('item/completed', { threadId: thread.id, turnId, item });
+  if (mode === 'noTurn') return;
+  const total = { totalTokens: 120, inputTokens: 100, cachedInputTokens: 0, cacheWriteInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0 };
+  notify('thread/tokenUsage/updated', { threadId: thread.id, turnId, tokenUsage: { total, last: total, modelContextWindow: 200_000 } });
+  const error = mode === 'fails' ? { message: 'Compaction failed.', codexErrorInfo: 'other', additionalDetails: null } : null;
+  notify('turn/completed', { threadId: thread.id, turn: { id: turnId, items: [], status: error ? 'failed' : 'completed', error, startedAt: null, completedAt: null, durationMs: null } });
+}
+
+function rememberThread(id: string) {
+  withState((state) => {
+    if (!state.threads.includes(id)) state.threads.push(id);
+  });
+}
+
+function respond(id: unknown, result: Json) {
+  send({ id, result });
+}
+
+function refuse(id: unknown, message: string) {
+  send({ id, error: { code: -32600, message } });
+}
+
+function handle(message: Json) {
+  const { id, method } = message;
+  const params = (message.params ?? {}) as Json;
+  if (method === undefined && typeof id === 'number') {
+    waiting.get(id)?.((message.result ?? { error: message.error }) as Json);
+    waiting.delete(id);
+    return;
+  }
+  if (typeof method !== 'string') return;
+  log({ method, params: method === 'turn/start' || method === 'turn/steer' ? { ...params, prompt: readPrompt(params) } : params });
+  const state = readState();
+  if (state.refuse?.includes(method)) {
+    refuse(id, `fake codex refuses ${method}`);
+    return;
+  }
+  if (state.ignore?.includes(method)) return;
+  switch (method) {
+    case 'initialize':
+      respond(id, { userAgent: 'fake-codex', codexHome: '/tmp', platformFamily: 'unix', platformOs: 'macos' });
+      return;
+    case 'initialized':
+      return;
+    case 'thread/start': {
+      const thread = openThread(newId('thread'), params);
+      if (!thread.ephemeral) rememberThread(thread.id);
+      respond(id, { thread: { id: thread.id }, model: params.model ?? 'gpt-6-astra', serviceTier: readTier(params) });
+      return;
+    }
+    case 'thread/resume': {
+      const threadId = String(params.threadId);
+      const state = readState();
+      if (state.missing || !state.threads.includes(threadId)) {
+        refuse(id, `no rollout found for thread id ${threadId}`);
+        return;
+      }
+      openThread(threadId, params);
+      respond(id, { thread: { id: threadId }, model: params.model ?? 'gpt-6-astra', serviceTier: readTier(params) });
+      return;
+    }
+    case 'turn/start': {
+      const thread = threads.get(String(params.threadId));
+      if (!thread) {
+        refuse(id, 'unknown thread');
+        return;
+      }
+      const turn = startTurn(thread, readPrompt(params));
+      respond(id, { turn: { id: turn.id, items: [], status: 'inProgress', error: null } });
+      void runTurn(turn);
+      return;
+    }
+    case 'turn/steer': {
+      if (!active || active.id !== params.expectedTurnId) {
+        refuse(id, 'no active turn to steer');
+        return;
+      }
+      const text = readPrompt(params);
+      const waiter = active.steerWaiters.shift();
+      if (waiter) waiter(text);
+      else active.steers.push(text);
+      respond(id, { turnId: active.id });
+      return;
+    }
+    case 'turn/interrupt': {
+      const turn = active;
+      respond(id, {});
+      if (turn && turn.id === params.turnId) {
+        turn.interrupt();
+        endTurn(turn, 'interrupted');
+      }
+      return;
+    }
+    case 'model/list': {
+      const state = readState();
+      const models = state.models ?? [
+        { id: 'gpt-6-astra', model: 'gpt-6-astra', displayName: 'GPT-6-Astra', description: 'Frontier', hidden: false },
+        { id: 'internal', model: 'internal', displayName: 'Internal', description: '', hidden: true },
+      ];
+      const page = state.modelPages && params.cursor === undefined;
+      respond(id, { data: page ? models.slice(0, 1) : state.modelPages ? models.slice(1) : models, nextCursor: page ? 'next' : null });
+      return;
+    }
+    case 'account/rateLimits/read': {
+      const state = readState();
+      const rateLimits = state.rateLimits ?? { primary: null, secondary: null };
+      respond(id, { rateLimits, rateLimitsByLimitId: state.rateLimitsByLimitId ?? null });
+      return;
+    }
+    case 'account/read': {
+      const account = readState().account;
+      respond(id, {
+        account: account === undefined ? { type: 'chatgpt', email: 'codex@example.com', planType: 'plus' } : account,
+        requiresOpenaiAuth: true,
+      });
+      return;
+    }
+    case 'thread/compact/start': {
+      const thread = threads.get(String(params.threadId));
+      if (!thread) {
+        refuse(id, 'unknown thread');
+        return;
+      }
+      respond(id, {});
+      compact(thread, readState().compact);
+      return;
+    }
+    default:
+      refuse(id, `fake codex does not know ${method}`);
+  }
+}
+
+async function serve() {
+  register();
+  process.on('unhandledRejection', (error) => log({ failure: String((error as Error)?.stack ?? error) }));
+  process.on('uncaughtException', (error) => log({ failure: String(error?.stack ?? error) }));
+  if (readState().noise) process.stdout.write('not json\n[1]\n');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for await (const chunk of Bun.stdin.stream()) {
+    buffer += decoder.decode(chunk, { stream: true });
+    let newline = buffer.indexOf('\n');
+    while (newline >= 0) {
+      const line = buffer.slice(0, newline);
+      buffer = buffer.slice(newline + 1);
+      if (line.trim()) handle(JSON.parse(line) as Json);
+      newline = buffer.indexOf('\n');
+    }
+  }
+  process.exit(0);
+}
+
+if (args[0] === '--version') {
+  console.log(`codex-cli ${Bun.env.FAKE_CODEX_VERSION ?? '0.200.0'}`);
+} else if (args[0] === 'login' && args[1] === 'status') {
+  const login = Bun.env.FAKE_CODEX_LOGIN ?? 'chatgpt';
+  if (login === 'signed_out') {
+    console.error('Not logged in');
+    process.exit(1);
+  }
+  if (login === 'old') {
+    console.error("error: unrecognized subcommand 'login'");
+    process.exit(2);
+  }
+  console.log(login === 'api' ? 'Logged in using an API key - sk-proj-***' : 'Logged in using ChatGPT');
+} else if (args[0] === 'app-server') {
+  await serve();
+} else {
+  console.error(`fake codex: unknown command ${args.join(' ')}`);
+  process.exit(2);
+}

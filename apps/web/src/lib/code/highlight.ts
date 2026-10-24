@@ -53,7 +53,9 @@ const EXTENSION_LANGUAGE: Record<string, string> = {
 export function resolveLanguage(path: string) {
   const name = path.split('/').at(-1)?.toLowerCase() ?? '';
   if (name === 'dockerfile') return 'docker';
-  return EXTENSION_LANGUAGE[name.split('.').at(-1) ?? ''] ?? null;
+  const dot = name.lastIndexOf('.');
+  if (dot < 0) return null;
+  return EXTENSION_LANGUAGE[name.slice(dot + 1)] ?? null;
 }
 
 const FENCE_ALIASES: Record<string, string> = {

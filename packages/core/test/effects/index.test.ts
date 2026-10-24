@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  EFFECT_RECOVERY,
   PROCESS_BOUND_EFFECTS,
+  REPLAY_SAFE_EFFECTS,
   resolveEffectKey,
   resolveEffectLane,
   type ShinsaEffect,
@@ -10,6 +12,7 @@ const TASK_EFFECTS: ShinsaEffect[] = [
   { kind: 'task.triage', taskId: 't' },
   { kind: 'worktree.create', taskId: 't' },
   { kind: 'worktree.remove', taskId: 't' },
+  { kind: 'config.verify', taskId: 't' },
   { kind: 'pull_request.open', taskId: 't' },
   { kind: 'pull_request.push', taskId: 't' },
   { kind: 'pull_request.merge', taskId: 't' },
@@ -27,8 +30,8 @@ describe('resolveEffectKey', () => {
   test('repeatable effects are keyed by the event that asked for them', () => {
     expect(resolveEffectKey({ kind: 'run.steer', runId: 'r', text: 'x' }, 4)).toBe('run.steer:r:4');
     expect(resolveEffectKey({ kind: 'checks.run', taskId: 't', round: 2 }, 4)).toBe('checks.run:t:2:4');
-    expect(resolveEffectKey({ kind: 'briefing.request', areaId: null }, 4)).toBe('briefing.request:*:4');
-    expect(resolveEffectKey({ kind: 'briefing.request', areaId: 'a' }, 4)).toBe('briefing.request:a:4');
+    expect(resolveEffectKey({ kind: 'briefing.request', projectId: null }, 4)).toBe('briefing.request:*:4');
+    expect(resolveEffectKey({ kind: 'briefing.request', projectId: 'a' }, 4)).toBe('briefing.request:a:4');
     for (const effect of TASK_EFFECTS) {
       expect(resolveEffectKey(effect, 4)).toBe(`${effect.kind}:t:4`);
     }
@@ -41,21 +44,47 @@ describe('resolveEffectLane', () => {
     expect(resolveEffectLane({ kind: 'run.cancel', runId: 'r' })).toBe('cancel:r');
     expect(resolveEffectLane({ kind: 'run.steer', runId: 'r', text: 'x' })).toBe('steer:r');
     expect(resolveEffectLane({ kind: 'question.resolve', gateId: 'g' })).toBe('gate:g');
-    expect(resolveEffectLane({ kind: 'briefing.request', areaId: 'a' })).toBe('briefing');
+    expect(resolveEffectLane({ kind: 'briefing.request', projectId: 'a' })).toBe('briefing');
   });
 
-  test('everything else about a task runs in order in the task lane', () => {
+  test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {
     for (const effect of [...TASK_EFFECTS, { kind: 'checks.run', taskId: 't', round: 0 } as const]) {
-      expect(resolveEffectLane(effect)).toBe('task:t');
+      expect(resolveEffectLane(effect)).toBe(effect.kind === 'pull_request.watch' ? 'side:t' : 'task:t');
     }
   });
 
-  test('only work tied to a live process is process bound', () => {
+  test('only work tied to a live process is process bound; everything else is safe to run again', () => {
     expect([...PROCESS_BOUND_EFFECTS].sort()).toEqual([
+      'delegation.reply',
+      'delegation.steer',
       'question.resolve',
       'run.cancel',
       'run.execute',
       'run.steer',
+      'run.wake',
     ]);
+    const kinds = Object.keys(EFFECT_RECOVERY) as ShinsaEffect['kind'][];
+    expect([...REPLAY_SAFE_EFFECTS].sort()).toEqual(
+      kinds.filter((kind) => !PROCESS_BOUND_EFFECTS.has(kind)).sort()
+    );
+    expect(PROCESS_BOUND_EFFECTS.size + REPLAY_SAFE_EFFECTS.size).toBe(kinds.length);
+  });
+});
+
+describe('delegation effects', () => {
+  test('a wake runs in the run lane after its session, a steered report in the steer lane, a reply in its own', () => {
+    expect(resolveEffectLane({ kind: 'run.wake', runId: 'r', generation: 2 })).toBe('run:r');
+    expect(resolveEffectLane({ kind: 'delegation.steer', runId: 'r', generation: 2 })).toBe('steer:r');
+    expect(resolveEffectLane({ kind: 'delegation.reply', runId: 'c', questionId: 'q' })).toBe('reply:c');
+  });
+
+  test('each delivery generation and each answered question is its own effect', () => {
+    expect(resolveEffectKey({ kind: 'run.wake', runId: 'r', generation: 2 }, 9)).toBe('run.wake:r:2');
+    expect(resolveEffectKey({ kind: 'delegation.steer', runId: 'r', generation: 3 }, 9)).toBe(
+      'delegation.steer:r:3'
+    );
+    expect(resolveEffectKey({ kind: 'delegation.reply', runId: 'c', questionId: 'q' }, 9)).toBe(
+      'delegation.reply:c:q'
+    );
   });
 });

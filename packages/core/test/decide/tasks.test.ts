@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { findTask, resolveCurrentPhase, selectTask } from '../../src/index.ts';
+import { resolveCurrentPhase } from '../../src/decide/lifecycle.ts';
+import { findTask } from '../../src/index.ts';
 import { buildAll, createHarness, createTask, registerRepo, shipAndMerge } from '../harness.ts';
 
 describe('creating a task', () => {
   test('a task needs words and, when one is named, a repository that exists', () => {
     const harness = createHarness();
-    expect(() => harness.send({ type: 'task.create', intent: '  ', repoId: null })).toThrow(
+    expect(() => harness.send({ type: 'task.create', request: '  ', repoId: null })).toThrow(
       'Describe what you want done.'
     );
-    expect(() => harness.send({ type: 'task.create', intent: 'Do it', repoId: 'nope' })).toThrow(
+    expect(() => harness.send({ type: 'task.create', request: 'Do it', repoId: 'nope' })).toThrow(
       'No repository nope'
     );
     expect(harness.state.tasks).toEqual({});
@@ -18,16 +19,16 @@ describe('creating a task', () => {
     const harness = createHarness();
     harness.send({
       type: 'task.create',
-      intent: '  Fix the tabs\nThey scroll.  ',
+      request: '  Fix the tabs\nThey scroll.  ',
       repoId: null,
       origin: '/code/x',
     });
     const [task] = Object.values(harness.state.tasks);
     expect(task).toMatchObject({
-      intent: 'Fix the tabs\nThey scroll.',
+      request: 'Fix the tabs\nThey scroll.',
       title: 'Fix the tabs',
       priority: 'normal',
-      specFirst: false,
+      planFirst: false,
       origin: '/code/x',
       stage: 'triage',
     });
@@ -38,7 +39,7 @@ describe('creating a task', () => {
 describe('triage', () => {
   test('triage names a repository that exists and runs only once', () => {
     const harness = createHarness();
-    harness.send({ type: 'task.create', intent: 'Fix it', repoId: null });
+    harness.send({ type: 'task.create', request: 'Fix it', repoId: null });
     const [taskId = ''] = Object.keys(harness.state.tasks);
     const triage = {
       type: 'task.triage' as const,
@@ -46,7 +47,7 @@ describe('triage', () => {
       title: 'Fix it',
       size: 'small' as const,
       branch: 'fix/it',
-      dependsOn: [],
+      waitsOn: [],
     };
     expect(() => harness.send({ ...triage, repoId: 'nope' })).toThrow('No repository nope');
     const repoId = registerRepo(harness);
@@ -59,11 +60,11 @@ describe('triage', () => {
 
   test('the classifier can only make a task wait on open tasks that do not wait on it', () => {
     const harness = createHarness();
-    const done = createTask(harness, { intent: 'Done' });
+    const done = createTask(harness, { request: 'Done' });
     shipAndMerge(harness, done);
-    const open = createTask(harness, { intent: 'Open' });
-    const taskId = createTask(harness, { intent: 'New', dependsOn: [done, open, 'unknown', open] });
-    expect(harness.task(taskId).blockedBy).toEqual([open]);
+    const open = createTask(harness, { request: 'Open' });
+    const taskId = createTask(harness, { request: 'New', waitsOn: [done, open, 'unknown', open] });
+    expect(harness.task(taskId).waitsOn).toEqual([open]);
     expect(
       harness.task(taskId).activity.find((entry) => entry.actor === 'shinsa' && entry.kind === 'stage')
     ).toMatchObject({ text: 'Waits on “Open”' });
@@ -106,15 +107,53 @@ describe('finished tasks', () => {
   test('a finished task takes no new dependencies and no failures', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    const other = createTask(harness, { intent: 'Other' });
+    const other = createTask(harness, { request: 'Other' });
     harness.send({ type: 'task.complete', taskId });
-    expect(() => harness.send({ type: 'task.block', taskId, blockedBy: [other] })).toThrow(
+    expect(() => harness.send({ type: 'task.wait_on', taskId, waitsOn: [other] })).toThrow(
       'This task is finished.'
     );
     const events = harness.state.seq;
     harness.send({ type: 'effect.fail', taskId, title: 'Late', detail: 'x' });
     harness.send({ type: 'task.retry', taskId });
     expect(harness.state.seq).toBe(events);
+  });
+});
+
+describe('system commands that arrive twice', () => {
+  test('the same failure reported again keeps the gate that is open', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const failure = {
+      type: 'effect.fail',
+      taskId,
+      title: 'Could not open the pull request',
+      detail: 'x',
+    } as const;
+    harness.send(failure);
+    const gate = harness.openGate(taskId);
+    expect(harness.send(failure).events).toEqual([]);
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+    harness.send({ ...failure, detail: 'GitHub is down.' });
+    expect(harness.openGate(taskId).body).toBe('GitHub is down.');
+  });
+
+  test('the same worktree reported ready again changes nothing, and is removed once for a finished task', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const task = harness.task(taskId);
+    const ready = {
+      type: 'worktree.ready',
+      taskId,
+      path: task.worktreePath ?? '',
+      branch: task.branch ?? '',
+    } as const;
+    expect(harness.send(ready).events).toEqual([]);
+    harness.send({ type: 'task.cancel', taskId });
+    const moved = { ...ready, path: '/wt/elsewhere' };
+    expect(harness.send(moved).effects).toContainEqual({ kind: 'worktree.remove', taskId });
+    const again = harness.send(moved);
+    expect(again.events).toEqual([]);
+    expect(again.effects).toEqual([]);
   });
 });
 
@@ -126,15 +165,15 @@ describe('resolveCurrentPhase', () => {
     const task = harness.task(taskId);
     expect(resolveCurrentPhase(task)).toBe(1);
     expect(resolveCurrentPhase({ ...task, phaseReports: task.phaseReports.slice(1) })).toBe(0);
-    expect(resolveCurrentPhase({ ...task, spec: null, phaseReports: [] })).toBe(0);
+    expect(resolveCurrentPhase({ ...task, plan: null, phaseReports: [] })).toBe(0);
   });
 });
 
 describe('a dependency added while the worktree is being made', () => {
   test('makes the task wait once its worktree is ready', () => {
     const harness = createHarness();
-    const parent = createTask(harness, { intent: 'Parent' });
-    harness.send({ type: 'task.create', intent: 'Child', repoId: harness.task(parent).repoId });
+    const parent = createTask(harness, { request: 'Parent' });
+    harness.send({ type: 'task.create', request: 'Child', repoId: harness.task(parent).repoId });
     const child = Object.keys(harness.state.tasks).find((id) => id !== parent) ?? '';
     harness.send({
       type: 'task.triage',
@@ -143,9 +182,9 @@ describe('a dependency added while the worktree is being made', () => {
       repoId: harness.task(parent).repoId ?? '',
       size: 'small',
       branch: 'fix/child',
-      dependsOn: [],
+      waitsOn: [],
     });
-    harness.send({ type: 'task.block', taskId: child, blockedBy: [parent] });
+    harness.send({ type: 'task.wait_on', taskId: child, waitsOn: [parent] });
     expect(harness.task(child).stage).toBe('triage');
     harness.send({ type: 'worktree.ready', taskId: child, path: '/wt/child', branch: 'fix/child' });
     expect(harness.task(child)).toMatchObject({
@@ -156,11 +195,10 @@ describe('a dependency added while the worktree is being made', () => {
 });
 
 describe('looking up tasks', () => {
-  test('select returns null for a task that does not exist, find throws', () => {
+  test('find returns a task that exists and throws for one that does not', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    expect(selectTask(harness.state, taskId)?.id).toBe(taskId);
-    expect(selectTask(harness.state, 'nope')).toBeNull();
+    expect(findTask(harness.state, taskId).id).toBe(taskId);
     expect(() => findTask(harness.state, 'nope')).toThrow('No task nope');
   });
 });

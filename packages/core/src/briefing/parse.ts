@@ -1,3 +1,4 @@
+import { capitalise } from '../chat/text.ts';
 import type { Queue, QueuedGate } from '../queue/types.ts';
 import {
   listBriefingEntries,
@@ -7,7 +8,6 @@ import {
   resolveFallbackNote,
 } from './fallback.ts';
 import { resolveNote } from './note.ts';
-import { capitalise } from './text.ts';
 import { BRIEFING_LIMITS, type Briefing, type BriefingItem } from './types.ts';
 
 const ORDINAL_REFERENCE =
@@ -19,7 +19,6 @@ const MERGE_CLAIM =
 function listQueueTaskIds(queue: Queue) {
   return [
     ...queue.ready.map((entry) => entry.task.id),
-    ...queue.held.map((entry) => entry.task.id),
     ...queue.working.map((task) => task.id),
     ...queue.waiting.map((task) => task.id),
   ].map((id) => id.toLowerCase());
@@ -42,7 +41,7 @@ function cleanSentence(value: unknown, limit: number, ids: string[]) {
 function cleanWhy(value: unknown, entry: QueuedGate, ids: string[]) {
   const text = cleanSentence(value, BRIEFING_LIMITS.why, ids)?.replace(/\.$/, '');
   if (!text) return null;
-  if (entry.gate.kind !== 'merge' && MERGE_CLAIM.test(text)) return null;
+  if (entry.gate.type !== 'merge' && MERGE_CLAIM.test(text)) return null;
   if (text.toLowerCase().startsWith(entry.task.title.toLowerCase())) return null;
   return text;
 }

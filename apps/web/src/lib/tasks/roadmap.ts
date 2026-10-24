@@ -1,19 +1,22 @@
 import {
   compareTasks,
   isDependencyOf,
+  isPausingGate,
   isTaskSettled,
   listWaitsOn,
   type ShinsaState,
+  selectLeadGate,
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
-import { selectLeadGate } from './task-status.ts';
 
 export type RoadmapGroupKey =
   | 'merge'
   | 'review'
   | 'plan'
+  | 'change'
+  | 'operation'
   | 'answer'
   | 'paused'
   | 'working'
@@ -38,6 +41,14 @@ export const ROADMAP_GROUPS: RoadmapGroup[] = [
   { key: 'merge', title: 'Ready to merge', icon: 'IconMerged', tone: 'green', defaultOpen: true },
   { key: 'review', title: 'Changes to review', icon: 'IconEyeOpen', tone: 'amber', defaultOpen: true },
   { key: 'plan', title: 'Plan to approve', icon: 'IconFileText', tone: 'purple', defaultOpen: true },
+  { key: 'change', title: 'Change to approve', icon: 'IconFileEdit', tone: 'purple', defaultOpen: true },
+  {
+    key: 'operation',
+    title: 'Operation to confirm',
+    icon: 'IconConsole',
+    tone: 'purple',
+    defaultOpen: true,
+  },
   { key: 'answer', title: 'Needs your answer', icon: 'IconBubbleQuestion', tone: 'blue', defaultOpen: true },
   { key: 'paused', title: 'Paused', icon: 'IconPause', tone: 'orange', defaultOpen: true },
   { key: 'working', title: 'In progress', icon: 'IconRobot', tone: 'blue', defaultOpen: true },
@@ -60,9 +71,11 @@ export const ROADMAP_GROUP = Object.fromEntries(ROADMAP_GROUPS.map((group) => [g
 export function resolveRoadmapGroup(state: ShinsaState, task: Task): RoadmapGroupKey {
   if (task.stage === 'cancelled') return 'cancelled';
   if (isTaskSettled(task)) return 'done';
-  const gate = selectLeadGate(state, task.id);
+  const gate = selectLeadGate(state, task);
   if (gate) {
-    if (gate.purpose === 'failure') return 'paused';
+    if (isPausingGate(gate)) return 'paused';
+    if (gate.purpose === 'change') return 'change';
+    if (gate.purpose === 'operation') return 'operation';
     if (gate.purpose === 'agent_question' || gate.kind === 'question') return 'answer';
     if (gate.kind === 'merge') return 'merge';
     if (gate.kind === 'review') return 'review';
@@ -73,9 +86,8 @@ export function resolveRoadmapGroup(state: ShinsaState, task: Task): RoadmapGrou
 
 export function describeWaitsOn(waitsOn: Task[]) {
   const cancelled = waitsOn.find((task) => task.stage === 'cancelled');
-  if (cancelled) return `${cancelled.title} was cancelled`;
-  const titles = waitsOn.map((task) => task.title);
-  if (titles.length === 0) return 'Waiting on another task';
+  if (cancelled) return `“${cancelled.title}” was cancelled`;
+  const titles = waitsOn.map((task) => `“${task.title}”`);
   if (titles.length <= 2) return `Waits on ${titles.join(' and ')}`;
   return `Waits on ${titles.slice(0, 2).join(', ')} and ${titles.length - 2} more`;
 }
@@ -134,4 +146,42 @@ export function listOpenTaskChoices(state: ShinsaState, task: Task | null) {
     .filter((candidate) => !isTaskSettled(candidate))
     .filter((candidate) => !task || !isDependencyOf(state, task.id, candidate.id))
     .sort(compareTasks);
+}
+
+export function selectRoadmapGroup(value: string | null) {
+  return ROADMAP_GROUPS.find((group) => group.key === value) ?? null;
+}
+
+function orderRoadmapGroup(state: ShinsaState, key: RoadmapGroupKey, tasks: Task[]): ChainEntry[] {
+  if (key === 'waiting') return orderChains(state, tasks);
+  const sorted =
+    key === 'done' || key === 'cancelled'
+      ? tasks.slice().sort((a, b) => b.stageChangedAt - a.stageChangedAt)
+      : tasks.slice().sort(compareTasks);
+  return sorted.map((task) => ({ task, depth: 0 }));
+}
+
+function matchesSearch(state: ShinsaState, task: Task, needle: string) {
+  const repo = task.repoId ? (state.repos[task.repoId]?.name ?? '') : '';
+  return `${task.title} ${task.intent} ${task.branch ?? ''} ${repo}`.toLowerCase().includes(needle);
+}
+
+export function listRoadmapSections(state: ShinsaState, search: string, status: RoadmapGroupKey | null) {
+  const needle = search.trim().toLowerCase();
+  const grouped = new Map<RoadmapGroupKey, Task[]>(ROADMAP_GROUPS.map((group) => [group.key, []]));
+  for (const task of Object.values(state.tasks)) {
+    if (!needle || matchesSearch(state, task, needle))
+      grouped.get(resolveRoadmapGroup(state, task))?.push(task);
+  }
+  return ROADMAP_GROUPS.filter((group) => status === null || group.key === status).map((group) => ({
+    group,
+    entries: orderRoadmapGroup(state, group.key, grouped.get(group.key) ?? []),
+  }));
+}
+
+export function describeRoadmapCounts(state: ShinsaState) {
+  const tasks = Object.values(state.tasks);
+  const open = tasks.filter((task) => !isTaskSettled(task)).length;
+  const done = tasks.filter((task) => task.stage === 'merged' || task.stage === 'done').length;
+  return `${open} open · ${done} done`;
 }

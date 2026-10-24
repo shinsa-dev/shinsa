@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { listActiveRuns, listOpenGates, resolveLiveness } from '../../src/index.ts';
+import { isTaskLive } from '../../src/decide/liveness.ts';
+import { listActiveRuns, listOpenGates } from '../../src/index.ts';
 import {
   buildAll,
   completePhase,
@@ -52,13 +53,21 @@ describe('planning', () => {
     harness.send({ type: 'settings.change', patch: { approvePlans: true } });
     const taskId = createTask(harness, { size: 'large' });
     proposePlan(harness, taskId);
-    expect(harness.task(taskId).stage).toBe('awaiting_spec');
+    expect(harness.task(taskId).stage).toBe('awaiting_plan');
     const gate = harness.openGate(taskId);
-    expect(gate.kind).toBe('spec');
+    expect(gate.kind).toBe('plan');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: 'Use option B.' });
     expect(harness.task(taskId).stage).toBe('building');
-    expect(harness.task(taskId).specAnswers).toBe('Use option B.');
+    expect(harness.task(taskId).planAnswers).toBe('Use option B.');
     expect(harness.activeRun(taskId).prompt).toContain('The human answered:\nUse option B.');
+  });
+
+  test('a task created plan first waits at the plan gate even with plan approval off', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness, { size: 'small', planFirst: true });
+    proposePlan(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('awaiting_plan');
+    expect(harness.openGate(taskId).kind).toBe('plan');
   });
 
   test('a small plan never waits even with plan approval on', () => {
@@ -116,7 +125,7 @@ describe('phases', () => {
     expect(task.stage).toBe('checking');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     expect(harness.lastEffect('checks.run')).toEqual({ kind: 'checks.run', taskId, round: 0 });
-    expect(resolveLiveness(harness.state, task)).toBe('system');
+    expect(isTaskLive(harness.state, task)).toBe(true);
   });
 
   test('a plan without phases is built as one phase', () => {

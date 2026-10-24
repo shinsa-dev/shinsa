@@ -1,9 +1,9 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { afterEach, describe, expect, it, jest, mock } from 'bun:test';
 import { act, fireEvent, render } from '@testing-library/react';
 import * as React from 'react';
 import { ScrollArea } from '../../src/components/scroll-area';
 import { resolveDragScrollTop, resolveThumb, resolveTrackScrollTop } from '../../src/lib/scroll';
-import { flush, place } from '../support/layout';
+import { place } from '../support/layout';
 
 function setup(props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) {
   const viewport = React.createRef<HTMLDivElement>();
@@ -16,6 +16,16 @@ function setup(props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) {
   const track = view.container.querySelector('[data-slot=scroll-area-scrollbar]') as HTMLElement;
   const thumb = view.container.querySelector('[data-slot=scroll-area-thumb]') as HTMLElement;
   return { view, viewport: element, track, thumb };
+}
+
+afterEach(() => {
+  jest.useRealTimers();
+});
+
+function advance(ms: number) {
+  act(() => {
+    jest.advanceTimersByTime(ms);
+  });
 }
 
 describe('ScrollArea', () => {
@@ -45,18 +55,19 @@ describe('ScrollArea', () => {
     place(viewport, { scrollTop: 50, scrollHeight: 1000, clientHeight: 208 });
     fireEvent.scroll(viewport);
     expect(viewport.hasAttribute('data-overflow-y-start')).toBe(false);
-    expect(viewport.className).not.toContain('scroll-fade');
   });
 
-  it('hides the scrollbar again a moment after scrolling stops', async () => {
+  it('hides the scrollbar again a moment after scrolling stops', () => {
+    jest.useFakeTimers();
     const { viewport, track } = setup();
     place(viewport, { scrollTop: 10, scrollHeight: 1000, clientHeight: 208 });
     fireEvent.scroll(viewport);
-    await act(() => flush(750));
+    advance(750);
     expect(track.hasAttribute('data-scrolling')).toBe(false);
   });
 
-  it('scrolls by dragging the thumb, and holds the scrollbar open while dragging', async () => {
+  it('scrolls by dragging the thumb, and holds the scrollbar open while dragging', () => {
+    jest.useFakeTimers();
     const { viewport, track, thumb } = setup();
     const metrics = { scrollTop: 0, scrollHeight: 1000, clientHeight: 208 };
     place(viewport, metrics);
@@ -78,7 +89,7 @@ describe('ScrollArea', () => {
     expect(scrollTop).toBeCloseTo(resolveDragScrollTop(metrics, 0, 20));
 
     fireEvent.scroll(viewport);
-    await act(() => flush(750));
+    advance(750);
     expect(track.hasAttribute('data-scrolling')).toBe(true);
 
     fireEvent.pointerUp(thumb, { pointerId: 1 });

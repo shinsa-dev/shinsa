@@ -52,7 +52,7 @@ function HighlightList({
 
 /**
  * The menu highlight for a plain list (a sidebar, a nav): one shared surface
- * that slides to the hovered or keyboard-focused `[data-highlight-item]` and
+ * that slides to the hovered `[data-highlight-item]` and
  * rests on the current one (`data-active="true"`) when the pointer leaves.
  * Items draw no hover or selected background of their own.
  */
@@ -91,13 +91,6 @@ function HoverHighlight({
       pointerInside = false;
       rest();
     };
-    const onFocusIn = (event: FocusEvent) => {
-      const item = itemFrom(event.target);
-      if (item && (event.target as HTMLElement).matches(':focus-visible')) mark(item);
-    };
-    const onFocusOut = () => {
-      if (!pointerInside) rest();
-    };
     const observer = new MutationObserver(() => {
       if (!pointerInside) rest();
     });
@@ -110,14 +103,10 @@ function HoverHighlight({
     rest();
     root.addEventListener('pointerover', onOver);
     root.addEventListener('pointerleave', onLeave);
-    root.addEventListener('focusin', onFocusIn);
-    root.addEventListener('focusout', onFocusOut);
     return () => {
       observer.disconnect();
       root.removeEventListener('pointerover', onOver);
       root.removeEventListener('pointerleave', onLeave);
-      root.removeEventListener('focusin', onFocusIn);
-      root.removeEventListener('focusout', onFocusOut);
     };
   }, []);
 

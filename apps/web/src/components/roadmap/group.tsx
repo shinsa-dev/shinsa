@@ -1,0 +1,49 @@
+import type { ShinsaState } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
+import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
+import { SectionChevron } from '@/components/layout/page/section-label.tsx';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
+import type { ChainEntry, RoadmapGroup } from '@/lib/tasks/roadmap.ts';
+import { RoadmapRow } from './row.tsx';
+
+export function RoadmapSection({
+  group,
+  entries,
+  state,
+  defaultOpen,
+}: {
+  group: RoadmapGroup;
+  entries: ChainEntry[];
+  state: ShinsaState;
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  if (entries.length === 0) return null;
+  return (
+    <section className='flex flex-col'>
+      <button
+        type='button'
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className='sticky top-0 z-10 flex h-8 w-full cursor-pointer items-center gap-2 border-border border-b bg-bg-1 px-3 text-left font-medium text-2xs text-fg-3 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+      >
+        <Icon name={group.icon} className={cn('size-3.5', TONE_TEXT[group.tone])} />
+        {group.title}
+        <span className='font-normal text-fg-2 tabular-nums'>{entries.length}</span>
+        <span className='flex-1' />
+        <SectionChevron open={open} className='size-4' />
+      </button>
+      {open &&
+        entries.map((entry) => (
+          <RoadmapRow
+            key={entry.task.id}
+            state={state}
+            task={entry.task}
+            group={group.key}
+            depth={entry.depth}
+          />
+        ))}
+    </section>
+  );
+}

@@ -2,6 +2,7 @@ import {
   createState,
   type Gate,
   type Repo,
+  type Round,
   type Run,
   type ShinsaCommand,
   type ShinsaEvent,
@@ -13,13 +14,12 @@ import type { Engine } from '../../src/runtime/index.ts';
 export function createRepo(overrides: Partial<Repo> = {}): Repo {
   return {
     id: 'repo-1',
-    areaId: null,
+    projectId: null,
     name: 'app',
     path: '/code/app',
     defaultBranch: 'main',
     remote: 'github.com/acme/app',
     checkCommands: [],
-    previewCommand: null,
     ...overrides,
   } as Repo;
 }
@@ -35,7 +35,7 @@ export function createTask(overrides: Partial<Task> = {}): Task {
     branch: 'fix/tab-scroll',
     worktreePath: '/wt/task-1',
     baseTaskId: null,
-    blockedBy: [],
+    waitsOn: [],
     pullRequest: null,
     phaseReports: [],
     spec: null,
@@ -43,11 +43,31 @@ export function createTask(overrides: Partial<Task> = {}): Task {
     priority: 'normal',
     summary: null,
     origin: null,
-    specFirst: false,
+    planFirst: false,
     updatedAt: 1,
     createdAt: 1,
     ...overrides,
   } as unknown as Task;
+}
+
+export function createRound(overrides: Partial<Round> = {}): Round {
+  return {
+    number: 1,
+    title: 'Fix the tab scroll',
+    request: 'Fix the tab scroll',
+    why: null,
+    shipping: 'stacked',
+    status: 'shipped',
+    pipeline: [],
+    branch: 'fix/tab-scroll',
+    base: null,
+    pullRequest: null,
+    queuedAt: 1,
+    startedAt: 1,
+    endedAt: null,
+    outcome: null,
+    ...overrides,
+  };
 }
 
 export function createRun(overrides: Partial<Run> = {}): Run {
@@ -57,6 +77,7 @@ export function createRun(overrides: Partial<Run> = {}): Run {
     role: 'builder',
     status: 'running',
     prompt: 'Build phase 1',
+    provider: 'claude',
     model: null,
     sessionId: null,
     phaseIndex: 0,
@@ -89,29 +110,48 @@ export interface StubEngine {
   engine: Engine;
   state: ShinsaState;
   dispatched: ShinsaCommand[];
+  commandIds: (string | null)[];
   reject: (predicate: (command: ShinsaCommand) => boolean, error?: Error) => void;
+  respond: (predicate: (command: ShinsaCommand) => boolean, events: ShinsaEvent[]) => void;
   update: (patch: (state: ShinsaState) => void) => void;
+  notify: () => void;
 }
 
 export function createStubEngine(patch: (state: ShinsaState) => void = () => undefined): StubEngine {
   const state = createState();
   patch(state);
   const dispatched: ShinsaCommand[] = [];
+  const commandIds: (string | null)[] = [];
   const rejections: { predicate: (command: ShinsaCommand) => boolean; error: Error }[] = [];
+  const responses: { predicate: (command: ShinsaCommand) => boolean; events: ShinsaEvent[] }[] = [];
+  const listeners = new Set<(state: ShinsaState) => void>();
   const stub = {
     state,
-    dispatch: (command: ShinsaCommand): Promise<ShinsaEvent[]> => {
+    subscribe: (listener: (state: ShinsaState) => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    dispatch: (command: ShinsaCommand, options: { id?: string } = {}): Promise<ShinsaEvent[]> => {
       dispatched.push(command);
+      commandIds.push(options.id ?? null);
       const rejection = rejections.find((candidate) => candidate.predicate(command));
       if (rejection) return Promise.reject(rejection.error);
-      return Promise.resolve([]);
+      const response = responses.find((candidate) => candidate.predicate(command));
+      return Promise.resolve(response?.events ?? []);
     },
   };
   return {
     engine: stub as unknown as Engine,
     state,
     dispatched,
+    commandIds,
     reject: (predicate, error = new Error('rejected')) => rejections.push({ predicate, error }),
+    respond: (predicate, events) => responses.push({ predicate, events }),
     update: (change) => change(state),
+    notify: () => {
+      for (const listener of listeners) listener(state);
+    },
   };
 }

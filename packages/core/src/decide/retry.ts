@@ -1,3 +1,5 @@
+import { isPausingGate } from '../domain/index.ts';
+import { isTriaged } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { resetFixBudget } from './fixes.ts';
 import {
@@ -9,32 +11,34 @@ import {
   startWork,
 } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
+import { startInquiry, startOperation } from './shapes.ts';
 
 function dropCancelledDependencies(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
-  const kept = task.blockedBy.filter((id) => decider.state.tasks[id]?.stage !== 'cancelled');
-  if (kept.length === task.blockedBy.length) return;
-  decider.emit({ type: 'task.blocked', taskId, blockedBy: kept, by: 'you' });
+  const kept = task.waitsOn.filter((id) => decider.state.tasks[id]?.stage !== 'cancelled');
+  if (kept.length === task.waitsOn.length) return;
+  decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn: kept, by: 'you' });
 }
 
 export function retryTask(decider: Decider, taskId: string, guidance: string | null) {
-  decider.withdrawGates(taskId, (gate) => gate.purpose === 'failure');
+  decider.withdrawGates(taskId, isPausingGate);
+  decider.clearWaits(taskId);
   resetFixBudget(decider, taskId);
   const hint = guidance ? `\n\nGuidance from the human: ${guidance}` : '';
   const task = decider.task(taskId);
   switch (task.stage) {
     case 'triage':
       decider.cancelRuns(taskId);
-      if (task.branch) startWork(decider, taskId);
+      if (isTriaged(task)) startWork(decider, taskId);
       else decider.run({ kind: 'task.triage', taskId });
       return;
-    case 'queued':
+    case 'waiting_on_tasks':
       dropCancelledDependencies(decider, taskId);
       startWork(decider, taskId);
       return;
     case 'planning':
-    case 'awaiting_spec':
-      decider.withdrawGates(taskId, (gate) => gate.kind === 'spec');
+    case 'awaiting_plan':
+      decider.withdrawGates(taskId, (gate) => gate.type === 'plan');
       startPlanning(decider, taskId, guidance);
       return;
     case 'building':
@@ -64,6 +68,20 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       decider.cancelRuns(taskId);
       recheckPullRequest(decider, taskId);
       return;
+    case 'answering':
+      startInquiry(decider, taskId, 'answer', guidance);
+      return;
+    case 'researching':
+      startInquiry(decider, taskId, 'research', guidance);
+      return;
+    case 'investigating':
+      startInquiry(decider, taskId, 'investigate', guidance);
+      return;
+    case 'operating':
+      startOperation(decider, taskId, guidance);
+      return;
+    case 'awaiting_proposal':
+    case 'awaiting_operation':
     case 'awaiting_review':
     case 'merged':
     case 'done':

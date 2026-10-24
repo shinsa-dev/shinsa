@@ -1,6 +1,7 @@
 import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/index.ts';
 import type { ShinsaState } from '../state/project.ts';
+import type { AccountsSnapshot } from './accounts.ts';
 
 export type ClientMessage =
   | { type: 'command'; id: string; command: UserCommand }
@@ -10,7 +11,8 @@ export type ClientMessage =
 export type ServerMessage =
   | { type: 'state'; state: ShinsaState }
   | { type: 'ack'; id: string; error: { code: string; message: string } | null }
-  | { type: 'transcript'; runId: string; entries: ChatEntry[]; reset: boolean };
+  | { type: 'transcript'; runId: string; entries: ChatEntry[]; reset: boolean }
+  | { type: 'accounts'; accounts: AccountsSnapshot };
 
 export interface DiffFile {
   path: string;

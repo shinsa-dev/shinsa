@@ -1,34 +1,54 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { convertClaudeSession } from '../apps/server/src/agents/index.ts';
 import { EventLog } from '../apps/server/src/store/index.ts';
 import type {
-  Area,
   CodeSpot,
   Gate,
-  GateKind,
-  GatePurpose,
+  PipelineStep,
+  Project,
   Repo,
-  ReviewFinding,
   RunRole,
   ShinsaEventInput,
-  SpecDocument,
-  TaskPriority,
-  TaskSize,
+  PlanDocument,
   TaskStage,
-  WorkReport,
 } from '../packages/core/src/index.ts';
-import { CHAT_PROTOCOL_VERSION, type ChatEvent, type ChatTool } from '../packages/core/src/index.ts';
+import {
+  type ChatEvent,
+  type ChatTool,
+  createSettings,
+  formatTaskHandle,
+  SHAPE_PIPELINES,
+  serializePlanMarkdown,
+} from '../packages/core/src/index.ts';
+import { listDelegationTasks, writeDelegationTranscripts } from './seed-delegation.ts';
+import {
+  callTool,
+  createSeedClock,
+  DAY,
+  HOUR,
+  MINUTE,
+  NOW,
+  type Push,
+  resolveToolOutput,
+  type SeedClock,
+  type SeedTask,
+  say,
+  spreadEvents,
+  type TimedSeedEvent,
+  writeTranscript,
+} from './seed-kit.ts';
+import { listProcessTasks } from './seed-process.ts';
+import { listRoundTasks } from './seed-rounds.ts';
+import { listShapeTasks, resolveShapeHandover } from './seed-shapes.ts';
+import { listTriggerTasks, writeAccountFiles, writeAccountTranscripts } from './seed-triggers.ts';
 
 const ROOT = Bun.env.SHINSA_SEED_DIR ?? join(homedir(), '.shinsa-seed');
 const DATA = join(ROOT, 'data');
 const REPOS = join(ROOT, 'repos');
 const WORKTREES = join(DATA, 'worktrees');
-const NOW = Date.now();
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
+const DEFAULTS_TEST_EVIDENCE = 'seed-usage-defaults-test.txt';
 
 type Files = Record<string, string>;
 
@@ -459,32 +479,12 @@ export function isExhausted(window: UsageWindow, now: number) {
 }
 `;
 
-interface SeedTask {
-  id: string;
-  intent: string;
-  title: string;
-  repo: Repo;
-  size: TaskSize;
-  stage: TaskStage;
-  reason: string;
-  priority?: TaskPriority;
-  branch: string;
-  ageHours: number;
-  specFirst?: boolean;
-  blockedBy?: string[];
-  worktreePath?: string;
-  spec?: SpecDocument;
-  report?: WorkReport;
-  summary?: string;
-  findings?: ReviewFinding[];
-  runs?: { role: RunRole; minutes: number; summary: string; reply?: string; failed?: boolean }[];
-  gate?: { kind: GateKind; purpose?: GatePurpose; title: string; body: string };
-  pullRequest?: { number: number; checks: 'passing' | 'failing' | 'pending'; comments?: number };
-  merged?: boolean;
-  note?: string;
+function resolveSeedPipeline(task: SeedTask): readonly PipelineStep[] | null {
+  if (task.composed) return task.composed.pipeline;
+  return task.shape ? SHAPE_PIPELINES[task.shape] : null;
 }
 
-type Push = (at: number, event: ShinsaEventInput) => void;
+type Timeline = TimedSeedEvent[];
 
 const SMALL_PLAN = [
   { title: 'Find the cause', detail: 'Reproduce it and trace where it goes wrong.' },
@@ -499,7 +499,15 @@ const LARGE_PLAN = [
   { title: 'Test and capture evidence', detail: 'Tests for the logic, recordings for anything visible.' },
 ];
 
-const LIVE_STAGES = new Set<TaskStage>(['planning', 'building', 'reviewing', 'fixing']);
+const LIVE_STAGES = new Set<TaskStage>([
+  'planning',
+  'building',
+  'reviewing',
+  'fixing',
+  'investigating',
+  'researching',
+  'operating',
+]);
 
 const SEED_CHECKS = [
   { name: 'bun run lint', outcome: 'pass' as const, detail: null },
@@ -513,9 +521,10 @@ const BUILT_STAGES = new Set<TaskStage>([
   'shipping',
   'awaiting_merge',
   'merged',
+  'awaiting_operation',
 ]);
 
-function resolveSeedSpec(task: SeedTask): SpecDocument {
+function resolveSeedPlan(task: SeedTask): PlanDocument {
   if (task.spec) return task.spec;
   return {
     goal: task.intent,
@@ -524,59 +533,103 @@ function resolveSeedSpec(task: SeedTask): SpecDocument {
     approach: 'Planned by the agent.',
     files: [],
     outOfScope: [],
-    verification: [],
+    verification: ['The tests that cover the change pass, and the change behaves as asked when run by hand.'],
     questions: [],
   };
 }
 
-function pushTask(task: SeedTask, push: Push) {
-  const created = NOW - task.ageHours * HOUR;
-  let at = created;
-  const step = (minutes: number) => {
-    at += minutes * MINUTE;
-    return at;
-  };
-  push(at, {
+function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
+  push(clock.at, {
     type: 'task.created',
     taskId: task.id,
     intent: task.intent,
     repoId: task.repo.id,
     priority: task.priority ?? 'normal',
-    specFirst: task.specFirst ?? false,
+    planFirst: task.planFirst ?? false,
+    ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
+    ...(task.auto ? { auto: task.auto } : {}),
   });
-  push(step(0.2), {
+  push(clock.step(0.2), {
     type: 'task.triaged',
     taskId: task.id,
     title: task.title,
     repoId: task.repo.id,
     size: task.size,
     branch: task.branch,
+    ...(task.shape ? { pipeline: [...SHAPE_PIPELINES[task.shape]] } : {}),
+    ...(task.decisions ? { decisions: task.decisions } : {}),
   });
-  if (task.blockedBy) {
-    push(step(0.05), { type: 'task.blocked', taskId: task.id, blockedBy: task.blockedBy, by: 'you' });
+  if (task.composed) {
+    push(clock.step(0.1), {
+      type: 'task.reshaped',
+      taskId: task.id,
+      pipeline: task.composed.pipeline,
+      by: 'agent',
+      reason: task.composed.why,
+    });
+  }
+  if (task.waitsOn) {
+    push(clock.step(0.05), { type: 'task.waits_on_changed', taskId: task.id, waitsOn: task.waitsOn, by: 'you' });
   }
   if (task.worktreePath) {
-    push(step(0.1), {
+    push(clock.step(0.1), {
       type: 'worktree.created',
       taskId: task.id,
       path: task.worktreePath,
       branch: task.branch,
     });
   }
+}
+
+function resolveRunModel(task: SeedTask, role: RunRole) {
+  if (task.provider === 'codex') return 'gpt-6-astra';
+  return role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
+}
+
+function pushTaskRevision(task: SeedTask, push: Push, clock: SeedClock) {
+  if (!task.revision) return;
+  const gateId = `${task.id}-review-1`;
+  push(clock.step(0.5), {
+    type: 'gate.opened',
+    gate: {
+      id: gateId,
+      taskId: task.id,
+      kind: 'review',
+      purpose: 'decision',
+      status: 'open',
+      title: `Review “${task.title}”`,
+      body: 'Built, checked and reviewed by the agents.',
+      runId: null,
+      openedAt: clock.at,
+      answeredAt: null,
+      decision: null,
+      response: null,
+    },
+  });
+  push(clock.step(20), {
+    type: 'gate.answered',
+    gateId,
+    decision: 'revise',
+    response: task.revision.response,
+  });
+  push(clock.step(0.1), { type: 'fix.started', taskId: task.id, round: 1, reason: 'you' });
+}
+
+function pushTaskRuns(task: SeedTask, push: Push, clock: SeedClock) {
   const runs = task.runs ?? [];
   for (const [index, run] of runs.entries()) {
     const runId = `${task.id}-run-${index}`;
     const live = index === runs.length - 1 && !run.failed && LIVE_STAGES.has(task.stage);
-    push(step(0.5), {
+    push(clock.step(0.5), {
       type: 'run.started',
       run: {
         id: runId,
         taskId: task.id,
         role: run.role,
-        provider: 'claude',
-        model: run.role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5',
+        provider: task.provider ?? 'claude',
+        model: resolveRunModel(task, run.role),
         sessionId: null,
-        startedAt: at,
+        startedAt: clock.at,
         endedAt: null,
         outcome: null,
         summary: null,
@@ -584,102 +637,142 @@ function pushTask(task: SeedTask, push: Push) {
       },
     });
     if (live) continue;
-    push(step(run.minutes), {
+    push(clock.step(run.minutes), {
       type: 'run.ended',
       runId,
       outcome: run.failed ? 'failed' : 'completed',
       summary: run.summary,
     });
+    if (index === task.revision?.afterRun) pushTaskRevision(task, push, clock);
   }
+}
+
+function resolveFinishedPhases(task: SeedTask, spec: PlanDocument) {
+  if (BUILT_STAGES.has(task.stage)) return spec.plan.length;
+  if (task.stage === 'building') return Math.floor(spec.plan.length / 2);
+  return 0;
+}
+
+function pushTaskPlan(task: SeedTask, push: Push, clock: SeedClock) {
   const planning = task.stage === 'triage' || task.stage === 'queued' || task.stage === 'planning';
-  if (!planning) {
-    const spec = resolveSeedSpec(task);
-    push(step(0.2), { type: 'spec.proposed', taskId: task.id, body: spec.goal, document: spec });
-    const finished = BUILT_STAGES.has(task.stage)
-      ? spec.plan.length
-      : task.stage === 'building'
-        ? Math.floor(spec.plan.length / 2)
-        : 0;
-    for (let index = 0; index < finished; index += 1) {
-      push(step(2), {
-        type: 'phase.completed',
-        taskId: task.id,
-        report: {
-          index,
-          summary: task.report?.phases[index]?.summary ?? spec.plan[index]?.detail ?? 'Done.',
-          spots: task.report?.phases[index]?.spots ?? [],
-          decisions: index === 0 ? (task.report?.decisions ?? []) : [],
-          at: 0,
-        },
-      });
-      push(step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
-    }
-    if (task.stage === 'building' && finished < spec.plan.length) {
-      push(step(1), { type: 'phase.updated', taskId: task.id, index: finished, status: 'active' });
-    }
+  const inquiring = ['answering', 'researching', 'investigating', 'awaiting_proposal'].includes(task.stage);
+  if (planning || inquiring) return;
+  const pipeline = resolveSeedPipeline(task);
+  if (pipeline && !pipeline.includes('plan')) return;
+  const spec = resolveSeedPlan(task);
+  push(clock.step(0.2), { type: 'spec.proposed', taskId: task.id, body: spec.goal, document: spec });
+  const finished = resolveFinishedPhases(task, spec);
+  for (let index = 0; index < finished; index += 1) {
+    push(clock.step(2), {
+      type: 'phase.completed',
+      taskId: task.id,
+      report: {
+        index,
+        summary: task.report?.phases[index]?.summary ?? spec.plan[index]?.detail ?? 'Done.',
+        spots: task.report?.phases[index]?.spots ?? [],
+        decisions: index === 0 ? (task.report?.decisions ?? []) : [],
+        at: 0,
+      },
+    });
+    push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
   }
+  if (task.stage === 'building' && finished < spec.plan.length) {
+    push(clock.step(1), { type: 'phase.updated', taskId: task.id, index: finished, status: 'active' });
+  }
+}
+
+function pushTaskPullRequest(task: SeedTask, push: Push, clock: SeedClock) {
+  if (!task.pullRequest) return;
+  const repository = task.repo.remote?.split(':').at(-1)?.replace('.git', '');
+  push(clock.step(1), {
+    type: 'pull_request.opened',
+    taskId: task.id,
+    pullRequest: {
+      number: task.pullRequest.number,
+      url: `https://github.com/${repository}/pull/${task.pullRequest.number}`,
+      state: task.merged ? 'merged' : 'open',
+      checks: task.pullRequest.checks,
+      unresolvedComments: task.pullRequest.comments ?? 0,
+      mergeable: task.pullRequest.checks === 'passing',
+      updatedAt: clock.at,
+      ...(task.pullRequest.mergeCommit ? { mergeCommit: task.pullRequest.mergeCommit } : {}),
+    },
+  });
+}
+
+function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
   if (BUILT_STAGES.has(task.stage) && task.stage !== 'checking') {
-    push(step(0.3), { type: 'checks.recorded', taskId: task.id, results: SEED_CHECKS });
+    push(clock.step(0.3), { type: 'checks.recorded', taskId: task.id, results: SEED_CHECKS });
   }
-  if (task.report || task.summary) {
-    push(step(0.2), {
+  const builds = resolveSeedPipeline(task)?.includes('build') ?? true;
+  if (builds && (task.report || task.summary)) {
+    push(clock.step(0.2), {
       type: 'work.submitted',
       taskId: task.id,
       summary: task.summary ?? task.report?.headline ?? '',
       report: task.report ?? null,
     });
   }
-  if (task.findings) push(step(0.2), { type: 'review.reported', taskId: task.id, findings: task.findings });
-  if (task.pullRequest) {
-    push(step(1), {
-      type: 'pull_request.opened',
-      taskId: task.id,
-      pullRequest: {
-        number: task.pullRequest.number,
-        url: `https://github.com/${task.repo.remote?.split(':').at(-1)?.replace('.git', '')}/pull/${task.pullRequest.number}`,
-        state: task.merged ? 'merged' : 'open',
-        checks: task.pullRequest.checks,
-        unresolvedComments: task.pullRequest.comments ?? 0,
-        mergeable: task.pullRequest.checks === 'passing',
-        updatedAt: at,
-      },
-    });
-  }
-  if (task.note) push(step(0.1), { type: 'task.noted', taskId: task.id, note: task.note });
-  push(step(0.1), { type: 'task.staged', taskId: task.id, stage: task.stage, reason: task.reason });
-  if (task.gate) {
-    const gate: Gate = {
-      id: `${task.id}-gate`,
-      taskId: task.id,
-      kind: task.gate.kind,
-      purpose: task.gate.purpose ?? 'decision',
-      status: 'open',
-      title: task.gate.title,
-      body: task.gate.body,
-      runId:
-        task.gate.purpose && task.gate.purpose !== 'decision' && (task.runs?.length ?? 0) > 0
-          ? `${task.id}-run-${(task.runs?.length ?? 1) - 1}`
-          : null,
-      openedAt: at,
-      answeredAt: null,
-      decision: null,
-      response: null,
-    };
-    push(at, { type: 'gate.opened', gate });
-  }
+  if (task.findings)
+    push(clock.step(0.2), { type: 'review.reported', taskId: task.id, findings: task.findings });
+  pushTaskPullRequest(task, push, clock);
 }
 
-function buildEvents(tasks: SeedTask[], areas: Area[], repos: Repo[]) {
-  const timeline: { at: number; event: ShinsaEventInput }[] = [];
+function resolveSeedGateRun(task: SeedTask) {
+  const runs = task.runs?.length ?? 0;
+  if (!task.gate?.purpose || task.gate.purpose === 'decision' || runs === 0) return null;
+  return `${task.id}-run-${runs - 1}`;
+}
+
+function pushTaskGate(task: SeedTask, push: Push, clock: SeedClock) {
+  if (!task.gate) return;
+  const gate: Gate = {
+    id: `${task.id}-gate`,
+    taskId: task.id,
+    kind: task.gate.kind,
+    purpose: task.gate.purpose ?? 'decision',
+    status: 'open',
+    title: task.gate.title,
+    body: task.gate.body,
+    runId: resolveSeedGateRun(task),
+    openedAt: clock.at,
+    answeredAt: null,
+    decision: null,
+    response: null,
+    ...task.gate.details,
+  };
+  push(clock.at, { type: 'gate.opened', gate });
+}
+
+function pushTask(task: SeedTask, push: Push) {
+  const clock = createSeedClock(NOW - task.ageHours * HOUR);
+  pushTaskStart(task, push, clock);
+  if (task.script) {
+    task.script(push, clock);
+    return;
+  }
+  pushTaskRuns(task, push, clock);
+  pushTaskPlan(task, push, clock);
+  pushTaskResults(task, push, clock);
+  if (task.note) push(clock.step(0.1), { type: 'task.noted', taskId: task.id, note: task.note });
+  for (const event of task.extra ?? []) push(clock.step(0.1), event);
+  for (const { at, event } of task.timed ?? []) push(at, event);
+  push(clock.step(0.1), { type: 'task.staged', taskId: task.id, stage: task.stage, reason: task.reason });
+  pushTaskGate(task, push, clock);
+}
+
+function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
+  const timeline: Timeline = [];
   const push = (at: number, event: ShinsaEventInput) => timeline.push({ at, event });
   const start = NOW - 10 * DAY;
-  for (const area of areas) push(start, { type: 'area.written', area });
+  for (const project of projects) push(start, { type: 'project.written', project });
   for (const repo of repos) push(start, { type: 'repo.registered', repo });
 
+  push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
   for (const task of tasks) pushTask(task, push);
   push(NOW - 3 * MINUTE, {
     type: 'briefing.written',
-    areaId: null,
+    projectId: null,
     text: 'Start with “Run the embedded chat on MCP v2”: it is ready for review, and the tool calls work waits on it. Then “Refuse to duplicate code-first paywalls” and “Rewrite the framework command registry”.',
     briefing: {
       now: {
@@ -694,7 +787,24 @@ function buildEvents(tasks: SeedTask[], areas: Area[], repos: Repo[]) {
       note: null,
     },
   });
-  return timeline.sort((a, b) => a.at - b.at);
+  return stampTaskHandles(
+    timeline.sort((a, b) => a.at - b.at),
+    projects,
+    repos
+  );
+}
+
+function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]): Timeline {
+  const counts = new Map<string, number>();
+  return timeline.map(({ at, event }) => {
+    if (event.type !== 'task.created') return { at, event };
+    const projectId = repos.find((repo) => repo.id === event.repoId)?.projectId ?? null;
+    const key = projects.find((project) => project.id === projectId)?.key;
+    if (!projectId || !key) return { at, event };
+    const number = (counts.get(key) ?? 0) + 1;
+    counts.set(key, number);
+    return { at, event: { ...event, projectId, handle: formatTaskHandle(key, number) } };
+  });
 }
 
 interface SeedRunTimes {
@@ -705,8 +815,6 @@ interface SeedRunTimes {
   endedAt: number | null;
   failed: boolean;
 }
-
-type TimedEvent = { at: number; event: ChatEvent };
 
 const SEED_FILES: Record<string, { read: string; edit: string; test: string }> = {
   'repo-paywall': {
@@ -734,30 +842,21 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
     text: `You are the ${role} for "${task.title}".\n\nThe request: ${task.intent}\n\nWork in the task's worktree and hand over through the Shinsa tools.`,
     attachments: [],
   };
-  const call = (callId: string, tool: ChatTool): ChatEvent => ({ type: 'tool_call', callId, tool });
-  const ok = (callId: string, output: string): ChatEvent => ({
-    type: 'tool_result',
-    callId,
-    status: 'ok',
-    output,
-    images: [],
-  });
-  const say = (text: string): ChatEvent => ({ type: 'agent', phase: 'interim', text });
   const work: ChatEvent[] = [
     { type: 'status', status: 'started', outcome: null },
     brief,
     say(`I'll start by reading how ${files.read.split('/').at(-1)} handles this today.`),
-    call('read-1', { kind: 'read', path: files.read, range: { start: 1, end: 40 } }),
-    ok(
+    callTool('read-1', { kind: 'read', path: files.read, range: { start: 1, end: 40 } }),
+    resolveToolOutput(
       'read-1',
       '1\texport async function runExport(app: App) {\n2\t  const chunks = planChunks(app);\n3\t  for (const chunk of chunks) await writeChunk(chunk);\n4\t}'
     ),
-    call('grep-1', { kind: 'search', mode: 'content', query: 'writeChunk', path: 'src' }),
-    ok('grep-1', 'src/export/clickhouse.ts:3\nsrc/export/chunks.ts:18'),
+    callTool('grep-1', { kind: 'search', mode: 'content', query: 'writeChunk', path: 'src' }),
+    resolveToolOutput('grep-1', 'src/export/clickhouse.ts:3\nsrc/export/chunks.ts:18'),
     say(
       'The chunk loop has no retry, so one slow chunk fails the whole export. I will wrap the write and keep the offset.'
     ),
-    call('edit-1', {
+    callTool('edit-1', {
       kind: 'edit',
       path: files.edit,
       hunks: [
@@ -767,9 +866,9 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
         },
       ],
     }),
-    ok('edit-1', 'The file has been updated.'),
+    resolveToolOutput('edit-1', 'The file has been updated.'),
     say('Running the tests for the export now.'),
-    call('test-1', {
+    callTool('test-1', {
       kind: 'command',
       action: 'run',
       command: files.test,
@@ -779,9 +878,9 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
   if (task.gate?.purpose === 'agent_question' && live) {
     return [
       ...work,
-      ok('test-1', ' 12 pass\n 0 fail'),
+      resolveToolOutput('test-1', ' 12 pass\n 0 fail'),
       say('The tests pass. One decision is yours before I go further.'),
-      call('ask-1', {
+      callTool('ask-1', {
         kind: 'shinsa',
         name: 'ask',
         args: { question: task.gate.title, context: task.gate.body },
@@ -791,19 +890,20 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
   }
   if (live) return work;
   const handover: ChatTool =
-    role === 'planner'
+    resolveShapeHandover(role, task.summary ?? task.title) ??
+    (role === 'planner'
       ? { kind: 'shinsa', name: 'propose_plan', args: { goal: task.intent, plan: SMALL_PLAN } }
       : role === 'reviewer'
         ? { kind: 'shinsa', name: 'report_review', args: { findings: task.findings ?? [] } }
-        : { kind: 'shinsa', name: 'complete_fix', args: { summary: task.summary ?? task.title } };
+        : { kind: 'shinsa', name: 'complete_fix', args: { summary: task.summary ?? task.title } });
   const seeded = task.runs?.[times.index];
   const summary = seeded?.summary ?? 'Done.';
   const ending: ChatEvent[] = times.failed
-    ? [ok('test-1', ' 11 pass\n 1 fail'), { type: 'error', text: summary }]
+    ? [resolveToolOutput('test-1', ' 11 pass\n 1 fail'), { type: 'error', text: summary }]
     : [
-        ok('test-1', ' 12 pass\n 0 fail'),
-        call('handover-1', handover),
-        ok('handover-1', 'Handed over.'),
+        resolveToolOutput('test-1', ' 12 pass\n 0 fail'),
+        callTool('handover-1', handover),
+        resolveToolOutput('handover-1', 'Handed over.'),
         { type: 'agent', phase: 'final', text: seeded?.reply ?? summary },
       ];
   return [
@@ -811,21 +911,6 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
     ...ending,
     { type: 'status', status: 'ended', outcome: times.failed ? 'failed' : 'completed' },
   ];
-}
-
-function spreadEvents(events: ChatEvent[], startedAt: number, endedAt: number): TimedEvent[] {
-  const span = Math.max(events.length, endedAt - startedAt);
-  return events.map((event, index) => ({
-    at: startedAt + Math.round((span * index) / Math.max(1, events.length - 1)),
-    event,
-  }));
-}
-
-function writeTranscript(dir: string, runId: string, timed: TimedEvent[]) {
-  const lines = timed.map(({ at, event }, index) =>
-    JSON.stringify({ ...event, v: CHAT_PROTOCOL_VERSION, id: `${runId}-${index}`, at })
-  );
-  writeFileSync(join(dir, `${runId}.jsonl`), `${lines.join('\n')}\n`);
 }
 
 function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: ShinsaEventInput }[]) {
@@ -853,15 +938,179 @@ function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: ShinsaEv
   return [...times.entries()];
 }
 
-function seed() {
-  rmSync(ROOT, { recursive: true, force: true });
-  mkdirSync(WORKTREES, { recursive: true });
+const PLAN_TIER_SPEC: PlanDocument = {
+  goal: 'Every list knows its owner’s plan tier, so the server can enforce the shared-list limit without asking Stripe on each request.',
+  plan: [
+    { title: 'Add the column', detail: 'A nullable `plan_tier` on `lists`, with a migration.' },
+    {
+      title: 'Write it on change',
+      detail: 'The Stripe webhook updates the tier of every list its owner has.',
+    },
+    { title: 'Enforce the limit', detail: 'Free owners get 3 shared lists; the API answers 402 past it.' },
+  ],
+  behaviour: [
+    'A new list gets its owner’s tier.',
+    'Upgrading in Stripe updates every list within a minute.',
+    'A free owner’s fourth shared list is refused with a clear message.',
+  ],
+  approach:
+    'The column stays nullable until the backfill has run, so the deploy never blocks on it. The limit check reads the column only.',
+  files: [
+    { path: 'src/db/schema.ts', change: 'The `plan_tier` column.' },
+    { path: 'src/billing/webhook.ts', change: 'Writes the tier on subscription changes.' },
+  ],
+  outOfScope: ['Changing the prices or the tiers themselves.'],
+  verification: ['A test per tier for the shared-list limit.'],
+  questions: [],
+  impact:
+    'Writes `plan_tier` on the 18,402 lists that have none, from their owner’s subscription. The dry run lists every list and the tier it would get. Undo by setting `plan_tier` back to null; the limit check treats null as the free tier.',
+  operation: [
+    'Run `bun scripts/backfill-plan-tier.ts --dry-run` against production and check it reports 18,402 lists to update.',
+    'Run it without `--dry-run` in batches of 1,000 and check `select count(*) from lists where plan_tier is null` is 0.',
+  ],
+};
 
-  const areas: Area[] = [
-    { id: 'area-superwall', name: 'Superwall', color: 'blue' },
-    { id: 'area-personal', name: 'Personal', color: 'purple' },
+function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; basketSdk: Repo }): SeedTask[] {
+  return [
+    {
+      id: 'task-basket-plan-tier',
+      intent:
+        'Store each list owner’s plan tier on the list and enforce the shared-list limit, then backfill the tier for existing lists once it ships.',
+      title: 'Plan tier on lists, then backfill it',
+      repo: basketServer,
+      size: 'small',
+      shape: 'change',
+      composed: {
+        pipeline: [...SHAPE_PIPELINES.change, 'operate'],
+        why: 'The column has to ship before the existing lists can be backfilled.',
+      },
+      stage: 'awaiting_plan',
+      reason: 'plan ready for you',
+      branch: 'feat/plan-tier-on-lists',
+      ageHours: 0.8,
+      spec: PLAN_TIER_SPEC,
+      runs: [{ role: 'planner', minutes: 4, summary: 'Proposed the plan.' }],
+      gate: {
+        kind: 'spec',
+        title: 'Plan tier on lists, then backfill it',
+        body: serializePlanMarkdown(PLAN_TIER_SPEC),
+      },
+    },
+    {
+      id: 'task-basket-sync',
+      intent: 'How does the SDK decide when to sync a list with the server?',
+      title: 'When the SDK syncs a list',
+      repo: basketSdk,
+      size: 'small',
+      shape: 'answer',
+      stage: 'done',
+      reason: 'answered your question',
+      branch: 'ask/sdk-sync',
+      ageHours: 3,
+      runs: [{ role: 'answerer', minutes: 2, summary: 'Answered the question.' }],
+      extra: [
+        {
+          type: 'task.answered',
+          taskId: 'task-basket-sync',
+          answer:
+            '`ListSync` pushes after every local edit, debounced by 2 seconds, and pulls when the app comes to the foreground.',
+          runId: 'task-basket-sync-run-0',
+        },
+      ],
+    },
   ];
+}
 
+function writeEvidenceFiles() {
+  const evidence = join(DATA, 'evidence');
+  mkdirSync(evidence, { recursive: true });
+  writeFileSync(
+    join(evidence, DEFAULTS_TEST_EVIDENCE),
+    'bun test v1.3.0\n\nsrc/shared/defaults.test.ts:\n✓ keeps the preferred model below 85%\n✓ falls back at 85% of the window\n✓ keeps the preferred model without usage data\n\n 3 pass\n 0 fail\n'
+  );
+}
+
+function writeSessionTranscript(session: string, runTimes: [string, SeedRunTimes][], transcripts: string) {
+  const evidence = join(DATA, 'evidence');
+  let images = 0;
+  const entries = convertClaudeSession(readFileSync(session, 'utf8'), (data, mediaType) => {
+    images += 1;
+    const file = `seed-image-${images}.${mediaType.split('/')[1] ?? 'png'}`;
+    writeFileSync(join(evidence, file), Buffer.from(data, 'base64'));
+    return `/api/evidence/${file}`;
+  });
+  const window = runTimes.find(([runId]) => runId === 'task-embedded-chat-run-2')?.[1];
+  const first = entries[0]?.at ?? 0;
+  const span = Math.max(1, (entries.at(-1)?.at ?? first) - first);
+  const fitted = window
+    ? entries.map((entry) => ({
+        ...entry,
+        at:
+          window.startedAt +
+          Math.round(((entry.at - first) / span) * ((window.endedAt ?? NOW) - window.startedAt)),
+      }))
+    : entries;
+  writeFileSync(
+    join(transcripts, 'task-embedded-chat-run-2.jsonl'),
+    `${fitted.map((entry) => JSON.stringify(entry)).join('\n')}\n`
+  );
+  console.info(`Seeded a crowded chat with ${entries.length} entries from ${session}`);
+}
+
+function createProjects(): Project[] {
+  return [
+    {
+      id: 'project-superwall',
+      name: 'Superwall',
+      color: 'blue',
+      key: 'SW',
+      description:
+        'Superwall’s paywall editor and its docs. paywall-next is the editor and the embedded chat; docs is the public documentation site.',
+      folders: [join(REPOS, 'superwall')],
+    },
+    {
+      id: 'project-basket',
+      name: 'Basket',
+      color: 'green',
+      key: 'BSK',
+      description:
+        'A grocery list app: the Swift SDK the app and partners use, the Bun API server with its Postgres schema, and the iOS app.',
+      folders: [join(REPOS, 'basket')],
+    },
+    {
+      id: 'project-personal',
+      name: 'Personal',
+      color: 'purple',
+      key: 'PER',
+      description: 'Side projects: Kanna, the coding agent UI, and prints, the print queue.',
+      folders: [],
+    },
+  ];
+}
+
+function createSeedRepo(id: string, name: string, path: string, remote: string, projectId: string): Repo {
+  return {
+    id,
+    name,
+    path,
+    defaultBranch: 'main',
+    remote,
+    projectId,
+    checkCommands: ['bun lint', 'bun check-types', 'bun test'],
+  };
+}
+
+interface SeedRepos {
+  paywall: Repo;
+  kanna: Repo;
+  docs: Repo;
+  prints: Repo;
+  basketSdk: Repo;
+  basketServer: Repo;
+  basketApp: Repo;
+}
+
+function createRepos(): SeedRepos {
   const paywallBase: Files = {
     'src/chat/embedded-chat.ts': EMBEDDED_CHAT_BASE,
     'src/chat/transport.ts': TRANSPORT_BASE,
@@ -870,43 +1119,91 @@ function seed() {
     'src/ui/tab-group.tsx': TAB_GROUP_BASE,
     'package.json': '{ "name": "paywall-next", "private": true }\n',
   };
-  const paywallPath = createRepo('paywall-next', paywallBase);
+  const paywallPath = createRepo('superwall/paywall-next', paywallBase);
   const kannaPath = createRepo('kanna', {
     'src/shared/defaults.ts': DEFAULTS_BASE,
     'package.json': '{ "name": "kanna-code" }\n',
   });
-  const docsPath = createRepo('docs', {
+  const docsPath = createRepo('superwall/docs', {
     'framework/access.mdx': '# Access\n\nRequest access from support.\n',
   });
   const printsPath = createRepo('prints', { 'src/queue.ts': 'export const queue: string[] = [];\n' });
-
-  const repo = (id: string, name: string, path: string, remote: string, areaId: string): Repo => ({
-    id,
-    name,
-    path,
-    defaultBranch: 'main',
-    remote,
-    areaId,
-    checkCommands: ['bun lint', 'bun check-types', 'bun test'],
-    previewCommand: null,
+  const basketSdkPath = createRepo('basket/basket-ios-sdk', {
+    'Sources/Basket/ListSync.swift': 'public struct ListSync {}\n',
+    'Package.swift': '// swift-tools-version:5.10\n',
   });
-  const paywall = repo(
+  const basketServerPath = createRepo('basket/basket-server', {
+    'src/db/schema.ts': 'export const lists = { id: "uuid", ownerId: "uuid", name: "text" };\n',
+    'package.json': '{ "name": "basket-server", "private": true }\n',
+  });
+  const basketAppPath = createRepo('basket/basket-app', {
+    'Basket/ListView.swift': 'struct ListView {}\n',
+  });
+
+  const paywall = createSeedRepo(
     'repo-paywall',
     'paywall-next',
     paywallPath,
     'git@github.com:superwall/paywall-next.git',
-    'area-superwall'
+    'project-superwall'
   );
-  const kanna = repo('repo-kanna', 'kanna', kannaPath, 'git@github.com:chroxify/kanna.git', 'area-personal');
-  const docs = repo('repo-docs', 'docs', docsPath, 'git@github.com:superwall/docs.git', 'area-superwall');
-  const prints = repo(
+  const kanna = createSeedRepo(
+    'repo-kanna',
+    'kanna',
+    kannaPath,
+    'git@github.com:chroxify/kanna.git',
+    'project-personal'
+  );
+  const docs = createSeedRepo(
+    'repo-docs',
+    'docs',
+    docsPath,
+    'git@github.com:superwall/docs.git',
+    'project-superwall'
+  );
+  const prints = createSeedRepo(
     'repo-prints',
     'prints',
     printsPath,
     'git@github.com:chroxify/prints.git',
-    'area-personal'
+    'project-personal'
   );
 
+  const basketSdk = createSeedRepo(
+    'repo-basket-sdk',
+    'basket-ios-sdk',
+    basketSdkPath,
+    'git@github.com:basket/basket-ios-sdk.git',
+    'project-basket'
+  );
+  const basketServer = createSeedRepo(
+    'repo-basket-server',
+    'basket-server',
+    basketServerPath,
+    'git@github.com:basket/basket-server.git',
+    'project-basket'
+  );
+  const basketApp = createSeedRepo(
+    'repo-basket-app',
+    'basket-app',
+    basketAppPath,
+    'git@github.com:basket/basket-app.git',
+    'project-basket'
+  );
+  return { paywall, kanna, docs, prints, basketSdk, basketServer, basketApp };
+}
+
+interface SeedWorktrees {
+  chat: string;
+  duplicate: string;
+  tabs: string;
+  rounds: string;
+  defaults: string;
+}
+
+function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
+  const paywallPath = paywall.path;
+  const kannaPath = kanna.path;
   const chatPath = createWorktree(paywallPath, 'task-embedded-chat', 'feat/embedded-chat-mcp', 'main', {
     'src/chat/embedded-chat.ts': EMBEDDED_CHAT_NEW,
     'src/chat/mcp-session.ts': MCP_SESSION_NEW,
@@ -922,14 +1219,34 @@ function seed() {
   const tabsPath = createWorktree(paywallPath, 'task-tab-scroll', 'fix/tab-group-scroll', 'main', {
     'src/ui/tab-group.tsx': TAB_GROUP_NEW,
   });
+  git(['branch', 'feat/mcp-v2-agent-4', 'main'], paywallPath);
+  const roundsPath = createWorktree(
+    paywallPath,
+    'task-mcp-rounds',
+    'feat/mcp-v2-agent-5',
+    'feat/mcp-v2-agent-4',
+    {
+      'src/agent/tool-cache.ts': 'export const TOOL_CACHE_TTL_MS = 60 * 60 * 1000;\n',
+    }
+  );
   const defaultsPath = createWorktree(kannaPath, 'task-usage-defaults', 'feat/usage-aware-defaults', 'main', {
     'src/shared/defaults.ts': DEFAULTS_NEW,
     'src/shared/usage.ts': USAGE_NEW,
   });
+  return {
+    chat: chatPath,
+    duplicate: duplicatePath,
+    tabs: tabsPath,
+    rounds: roundsPath,
+    defaults: defaultsPath,
+  };
+}
 
+function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
+  const chatPath = worktrees.chat;
   const chatFile = 'src/chat/embedded-chat.ts';
   const sessionFile = 'src/chat/mcp-session.ts';
-  const tasks: SeedTask[] = [
+  return [
     {
       id: 'task-embedded-chat',
       intent:
@@ -937,7 +1254,7 @@ function seed() {
       title: 'Run the embedded chat on MCP v2',
       repo: paywall,
       size: 'large',
-      specFirst: true,
+      planFirst: true,
       priority: 'high',
       stage: 'awaiting_review',
       reason: 'built, checked and ready for review',
@@ -1105,7 +1422,7 @@ function seed() {
       reason: 'waiting for “Run the embedded chat on MCP v2” to finish',
       branch: 'feat/embedded-chat-tools',
       ageHours: 20,
-      blockedBy: ['task-embedded-chat'],
+      waitsOn: ['task-embedded-chat'],
     },
     {
       id: 'task-chat-paywall-editing',
@@ -1117,7 +1434,7 @@ function seed() {
       reason: 'waiting for “Let the embedded chat call paywall tools” to finish',
       branch: 'feat/embedded-chat-paywall-editing',
       ageHours: 18,
-      blockedBy: ['task-chat-tools'],
+      waitsOn: ['task-chat-tools'],
     },
     {
       id: 'task-tool-progress',
@@ -1129,7 +1446,7 @@ function seed() {
       reason: 'waiting for “Stream MCP tool results” to finish',
       branch: 'feat/chat-tool-progress',
       ageHours: 0.9,
-      blockedBy: ['task-stream-tools'],
+      waitsOn: ['task-stream-tools'],
     },
     {
       id: 'task-tool-retry',
@@ -1142,7 +1459,16 @@ function seed() {
       reason: 'waiting for “Stream MCP tool results” to finish',
       branch: 'feat/chat-tool-retry',
       ageHours: 0.85,
-      blockedBy: ['task-stream-tools'],
+      waitsOn: ['task-stream-tools'],
+      extra: [
+        {
+          type: 'on_behalf.acted',
+          command: 'task.prioritize',
+          taskId: 'task-tool-retry',
+          summary: 'Set the priority of “Retry failed tool calls in the chat” to high',
+          byTaskId: 'task-stream-tools',
+        },
+      ],
     },
     {
       id: 'task-tool-summary',
@@ -1154,8 +1480,13 @@ function seed() {
       reason: 'waiting for “Show tool progress in the chat”, “Retry failed tool calls in the chat” to finish',
       branch: 'feat/chat-tool-summary',
       ageHours: 0.8,
-      blockedBy: ['task-tool-progress', 'task-tool-retry'],
+      waitsOn: ['task-tool-progress', 'task-tool-retry'],
     },
+  ];
+}
+
+function listBacklogTasks({ paywall, docs }: SeedRepos): SeedTask[] {
+  return [
     {
       id: 'task-webhook-docs',
       intent: 'Document signed webhooks and the export retry rules in the integration guide.',
@@ -1167,7 +1498,7 @@ function seed() {
       reason: 'waiting for “Sign outgoing webhooks”, “Retry ClickHouse exports that time out” to finish',
       branch: 'docs/webhooks-and-export-retries',
       ageHours: 0.35,
-      blockedBy: ['task-webhook-signing', 'task-export-retry'],
+      waitsOn: ['task-webhook-signing', 'task-export-retry'],
     },
     {
       id: 'task-retire-old-editor',
@@ -1180,7 +1511,7 @@ function seed() {
         'waiting for “Banner for the old editor”, “Move through the paywall gallery with arrow keys” to finish',
       branch: 'chore/retire-old-editor',
       ageHours: 0.7,
-      blockedBy: ['task-old-banner', 'task-gallery-shortcuts'],
+      waitsOn: ['task-old-banner', 'task-gallery-shortcuts'],
       gate: {
         kind: 'question',
         purpose: 'failure',
@@ -1214,6 +1545,13 @@ function seed() {
       ageHours: 0.4,
       runs: [{ role: 'planner', minutes: 0, summary: '' }],
     },
+  ];
+}
+
+function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
+  const duplicatePath = worktrees.duplicate;
+  const tabsPath = worktrees.tabs;
+  return [
     {
       id: 'task-duplicate',
       intent: 'Block duplicating code-first paywalls, they should be duplicated from the repo.',
@@ -1281,8 +1619,8 @@ function seed() {
       title: 'Rewrite the framework command registry',
       repo: paywall,
       size: 'large',
-      specFirst: true,
-      stage: 'awaiting_spec',
+      planFirst: true,
+      stage: 'awaiting_plan',
       reason: 'needs the spec approved before work starts',
       branch: 'refactor/command-registry',
       ageHours: 5,
@@ -1401,6 +1739,11 @@ function seed() {
         body: 'Small fix, one suggestion from the agent review.',
       },
     },
+  ];
+}
+
+function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
+  return [
     {
       id: 'task-export-retry',
       intent: 'ClickHouse export times out on big apps, retry it',
@@ -1484,6 +1827,12 @@ function seed() {
       pullRequest: { number: 339, checks: 'passing' },
       merged: true,
     },
+  ];
+}
+
+function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
+  const defaultsPath = worktrees.defaults;
+  return [
     {
       id: 'task-usage-defaults',
       intent: 'pick a cheaper default model when the usage window is almost used up',
@@ -1524,7 +1873,22 @@ function seed() {
           },
         ],
       },
+      provider: 'codex',
       runs: [{ role: 'builder', minutes: 11, summary: 'Added the fallback.' }],
+      extra: [
+        {
+          type: 'evidence.attached',
+          evidence: {
+            id: 'evidence-usage-defaults-test',
+            taskId: 'task-usage-defaults',
+            runId: 'task-usage-defaults-run-0',
+            kind: 'test',
+            title: 'bun test src/shared',
+            uri: `/api/evidence/${DEFAULTS_TEST_EVIDENCE}`,
+            attachedAt: NOW - 69 * HOUR,
+          },
+        },
+      ],
       gate: { kind: 'review', title: 'Review the usage-aware defaults', body: 'Ready for review.' },
     },
     {
@@ -1539,6 +1903,15 @@ function seed() {
       ageHours: 96,
       pullRequest: { number: 212, checks: 'passing' },
       merged: true,
+      runs: [
+        { role: 'builder', minutes: 6, summary: 'Raised the muted text and border tokens in dark mode.' },
+        { role: 'reviewer', minutes: 2, summary: 'No findings.' },
+        { role: 'fixer', minutes: 3, summary: 'Raised the disabled text too.' },
+      ],
+      revision: {
+        afterRun: 1,
+        response: 'The disabled labels are still too faint. Raise them with the rest.',
+      },
     },
     {
       id: 'task-print-retries',
@@ -1546,7 +1919,7 @@ function seed() {
       title: 'Retry print jobs when the printer is offline',
       repo: prints,
       size: 'large',
-      specFirst: true,
+      planFirst: true,
       stage: 'planning',
       reason: 'writing the spec',
       branch: 'feat/print-retries',
@@ -1565,15 +1938,45 @@ function seed() {
       ageHours: 120,
     },
   ];
+}
+
+function listTasks(repos: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
+  const { paywall, kanna, basketSdk, basketServer } = repos;
+  return [
+    ...listEmbeddedChatTasks(repos, worktrees),
+    ...listBacklogTasks(repos),
+    ...listReviewTasks(repos, worktrees),
+    ...listActiveTasks(repos),
+    ...listPersonalTasks(repos, worktrees),
+    ...listBasketTasks({ basketServer, basketSdk }),
+    ...listProcessTasks({ paywall, kanna }),
+    ...listShapeTasks({ paywall, kanna }),
+    ...listDelegationTasks({ paywall }),
+    ...listTriggerTasks({ paywall, kanna }),
+    ...listRoundTasks({ paywall }, worktrees.rounds),
+  ];
+}
+
+function seed() {
+  rmSync(ROOT, { recursive: true, force: true });
+  mkdirSync(WORKTREES, { recursive: true });
+  const projects = createProjects();
+  const repos = createRepos();
+  const tasks = listTasks(repos, createWorktrees(repos));
 
   const log = new EventLog(join(DATA, 'shinsa.sqlite'));
-  const timeline = buildEvents(tasks, areas, [paywall, kanna, docs, prints]);
+  const timeline = buildEvents(tasks, projects, Object.values(repos));
   let seq = 0;
   for (const { at, event } of timeline) {
-    log.commit([event], [], seq, at);
+    log.commitCommand({ events: [event], effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
     seq += 1;
   }
   log.close();
+  writeFileSync(
+    join(DATA, 'config.json'),
+    `${JSON.stringify({ version: 1, roots: [REPOS], onboardedAt: NOW }, null, 2)}\n`
+  );
+  writeAccountFiles(DATA);
   const transcripts = join(DATA, 'transcripts');
   mkdirSync(transcripts, { recursive: true });
   const runTimes = listRunTimes(tasks, timeline);
@@ -1583,39 +1986,11 @@ function seed() {
     const events = buildRunEvents(times, live);
     writeTranscript(transcripts, runId, spreadEvents(events, times.startedAt, times.endedAt ?? NOW - MINUTE));
   }
-  const session =
-    Bun.env.SHINSA_SEED_SESSION ??
-    join(
-      homedir(),
-      '.claude/projects/-Users-christo-Developer-Projects-kanna/b01ee811-357f-4a18-9fc5-329fe21c81fd.jsonl'
-    );
-  if (existsSync(session)) {
-    const evidence = join(DATA, 'evidence');
-    mkdirSync(evidence, { recursive: true });
-    let images = 0;
-    const entries = convertClaudeSession(readFileSync(session, 'utf8'), (data, mediaType) => {
-      images += 1;
-      const file = `seed-image-${images}.${mediaType.split('/')[1] ?? 'png'}`;
-      writeFileSync(join(evidence, file), Buffer.from(data, 'base64'));
-      return `/api/evidence/${file}`;
-    });
-    const window = runTimes.find(([runId]) => runId === 'task-embedded-chat-run-2')?.[1];
-    const first = entries[0]?.at ?? 0;
-    const span = Math.max(1, (entries.at(-1)?.at ?? first) - first);
-    const fitted = window
-      ? entries.map((entry) => ({
-          ...entry,
-          at:
-            window.startedAt +
-            Math.round(((entry.at - first) / span) * ((window.endedAt ?? NOW) - window.startedAt)),
-        }))
-      : entries;
-    writeFileSync(
-      join(transcripts, 'task-embedded-chat-run-2.jsonl'),
-      `${fitted.map((entry) => JSON.stringify(entry)).join('\n')}\n`
-    );
-    console.info(`Seeded a crowded chat with ${entries.length} entries from ${session}`);
-  }
+  writeDelegationTranscripts(transcripts);
+  writeEvidenceFiles();
+  writeAccountTranscripts(transcripts);
+  const session = Bun.env.SHINSA_SEED_SESSION;
+  if (session) writeSessionTranscript(session, runTimes, transcripts);
   console.info(`Seeded ${tasks.length} tasks into ${DATA}`);
   console.info(
     `Run: SHINSA_DATA_DIR=${DATA} SHINSA_INSPECT=1 SHINSA_PORT=5190 bun run --cwd apps/server start`

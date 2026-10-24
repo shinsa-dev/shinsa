@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { type ChatEvent, isChatEntry, isShinsaToolName, markFinalReplies } from '../../src/index.ts';
+import {
+  type ChatEvent,
+  isChatEntry,
+  isShinsaToolName,
+  isSubagentEvent,
+  markFinalReplies,
+} from '../../src/index.ts';
 
 function agent(text: string): ChatEvent {
   return { type: 'agent', phase: 'interim', text };
@@ -71,5 +77,18 @@ describe('chat entries', () => {
   test('knows Shinsa tools by name', () => {
     expect(isShinsaToolName('complete_phase')).toBe(true);
     expect(isShinsaToolName('Bash')).toBe(false);
+  });
+});
+
+describe('subagent events', () => {
+  test('a subagent’s text never becomes the final reply, and its events are told apart', () => {
+    const nested: ChatEvent = { type: 'agent', phase: 'interim', text: 'sub says', parentCallId: 'task-1' };
+    expect(
+      phases([user('go'), agent('delegating'), call('task-1'), nested, result('task-1'), agent('done')])
+    ).toEqual(['delegating:interim', 'sub says:interim', 'done:final']);
+    expect(phases([user('go'), agent('waiting'), nested])).toEqual(['waiting:final', 'sub says:interim']);
+    expect(isSubagentEvent(nested)).toBe(true);
+    expect(isSubagentEvent(agent('main'))).toBe(false);
+    expect(isSubagentEvent({ type: 'notice', notice: { kind: 'interrupted' } })).toBe(false);
   });
 });

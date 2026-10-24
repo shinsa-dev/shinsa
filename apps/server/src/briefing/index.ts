@@ -1,16 +1,26 @@
 import {
   BRIEFING_LIMITS,
   type Briefing,
+  type GATE_SCHEMA,
   type Gate,
+  type HardGateType,
+  isPausingGate,
   parseBriefing,
   type Queue,
   type QueuedGate,
   resolveFallbackBriefing,
+  resolveGateType,
   resolveQueue,
   type ShinsaState,
   serializeBriefing,
 } from '@shinsa/core';
-import { type QuickJson, requestQuickJson } from '../agents/quick/index.ts';
+import type { JsonSchema } from '../agents/providers/index.ts';
+import {
+  type ChoiceQuestion,
+  describeDecisionQuestion,
+  resolveDecisionProperty,
+} from '../agents/quick/decide.ts';
+import type { QuickJson } from '../agents/quick/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 
@@ -23,7 +33,7 @@ const BRIEFING_SYSTEM = [
   'Agents do all the work. The developer only decides at gates: approve a plan, review finished changes, merge a clean pull request, answer a question, or decide what to do with paused work.',
   'From the decisions listed, pick the one to do now and the ones that follow.',
   'Return {"now": {"task": string, "why": string}, "next": [{"task": string, "why": string}], "note": string | null}.',
-  'task: an id from the decisions list, copied exactly. next holds up to three other decisions in the order to take them, never the one in now.',
+  'task: one option of the task field at the end of the prompt, copied exactly. next holds up to three other decisions in the order to take them, never the one in now.',
   'Keep the listed order unless a decision clearly unblocks other tasks or an agent is waiting on an answer; then that one goes first.',
   'Low priority decisions always come after every other decision, and one is never now while anything else is listed: they are finished, not urgent.',
   `why: one plain sentence of at most ${BRIEFING_LIMITS.why} characters on why this decision, and why at this point. It sits under the task title, so do not repeat the title.`,
@@ -31,7 +41,6 @@ const BRIEFING_SYSTEM = [
   'Never cite a pull request number, a repository or a branch: the task link shows them on hover. Say "the pull request is ready" instead.',
   'Refer to other tasks by their titles in quotes. Never by number, position or id: no "item three", no "the first one", and never write an id outside the task field.',
   `note: one heads-up sentence of at most ${BRIEFING_LIMITS.note} characters, only when something needs attention beyond the order: a paused task, a decision that has waited for days, work blocked on another task. Otherwise null.`,
-  'Never mention decisions outside the focus: the developer chose the focus, and only its decisions are listed.',
   'The note must never name or describe a task that is in now or next: the guide already says why each of those matters, so put that in its why. If the only heads-up is about one of them, the note is null.',
   'Write whole sentences to the developer, not notes. Good why: "It has waited a day, and approving it lets the agent start on “Let the chat call tools”." Good note, about a decision not in now or next: "“Stop the preview flashing” is paused because the builder could not reproduce the flash."',
   'Plain, calm and specific. Sentence case, no greeting, no emoji, no em dashes, no exclamation marks.',
@@ -44,9 +53,23 @@ function describeAge(openedAt: number, now: number) {
   return `waiting ${Math.floor(hours / 24)} days`;
 }
 
+type PausingGateType = {
+  [T in HardGateType]: (typeof GATE_SCHEMA)[T] extends { pauses: true } ? T : never;
+}[HardGateType];
+
+const PAUSED_GATES: Record<PausingGateType, string> = {
+  failure: 'paused after a failure, needs a decision',
+  configuration: 'the setup needs fixing before any work starts',
+  sign_in: 'paused until the developer signs in again',
+};
+
 function describeGate(gate: Gate) {
-  if (gate.purpose === 'failure') return `paused after a failure, needs a decision: ${gate.title}`;
+  if (isPausingGate(gate)) return `${PAUSED_GATES[resolveGateType(gate) as PausingGateType]}: ${gate.title}`;
+  if (gate.escalation)
+    return 'review: the agents could not settle the review, the developer decides on the findings';
   if (gate.purpose === 'agent_question') return `an agent asks: ${gate.title}`;
+  if (gate.purpose === 'change')
+    return 'change: an agent proposes turning this task into a change; the human approves or keeps it as it is';
   switch (gate.kind) {
     case 'spec':
       return 'plan approval: the plan is written, nothing is built yet';
@@ -62,7 +85,7 @@ function describeGate(gate: Gate) {
 function listBlockedTitles(state: ShinsaState, taskId: string) {
   return Object.values(state.tasks)
     .filter(
-      (task) => task.blockedBy.includes(taskId) && task.stage !== 'merged' && task.stage !== 'cancelled'
+      (task) => task.waitsOn.includes(taskId) && task.stage !== 'merged' && task.stage !== 'cancelled'
     )
     .map((task) => `“${task.title}”`);
 }
@@ -76,27 +99,63 @@ function describeDecision(state: ShinsaState, entry: QueuedGate, now: number) {
   return `- id ${entry.task.id}: “${entry.task.title}”. ${facts.join('; ')}.`;
 }
 
-export function describeBriefingPrompt(state: ShinsaState, queue: Queue, now: number) {
+function listDecisions(queue: Queue) {
   const seen = new Set<string>();
-  const decisions = queue.ready.filter((entry) => {
+  return queue.ready.filter((entry) => {
     if (seen.has(entry.task.id)) return false;
     seen.add(entry.task.id);
     return true;
   });
+}
+
+function resolveTaskQuestion(queue: Queue): ChoiceQuestion {
+  return {
+    type: 'choice',
+    instructions: 'The decision an item of the guide is about, for now.task and every next[].task.',
+    criteria: Object.fromEntries(
+      listDecisions(queue).map((entry) => [entry.task.id, `“${entry.task.title}”`])
+    ),
+  };
+}
+
+function resolveBriefingSchema(question: ChoiceQuestion): JsonSchema {
+  const item = {
+    type: 'object',
+    properties: { task: resolveDecisionProperty(question), why: { type: 'string' } },
+    required: ['task', 'why'],
+    additionalProperties: false,
+  };
+  return {
+    type: 'object',
+    properties: {
+      now: item,
+      next: { type: 'array', items: item, maxItems: BRIEFING_LIMITS.next },
+      note: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+    },
+    required: ['now', 'next', 'note'],
+    additionalProperties: false,
+  };
+}
+
+export function describeBriefingPrompt(state: ShinsaState, queue: Queue, now: number) {
+  const decisions = listDecisions(queue);
   const working = queue.working.map((task) => `- “${task.title}” (${task.stage})`);
   const waiting = queue.waiting.map((task) => {
-    const blocker = task.blockedBy.map((id) => state.tasks[id]?.title).find(Boolean);
+    const blocker = task.waitsOn.map((id) => state.tasks[id]?.title).find(Boolean);
     return `- “${task.title}”, not started: waiting for “${blocker ?? 'another task'}” to finish`;
   });
-  const area = queue.focusAreaId ? state.areas[queue.focusAreaId]?.name : null;
+  const project = queue.focusProjectId ? state.projects[queue.focusProjectId]?.name : null;
   return [
-    area ? `Focus: ${area}.` : 'No focus set.',
+    project ? `Focus: ${project}.` : 'No focus set.',
     'Decisions that need the developer, in ranked order:',
     ...decisions.map((entry) => describeDecision(state, entry, now)),
     '',
     'Agents are working on:',
     ...(working.length > 0 ? working : ['(nothing)']),
     ...(waiting.length > 0 ? ['', 'Waiting:', ...waiting] : []),
+    '',
+    'The task field:',
+    describeDecisionQuestion('task', resolveTaskQuestion(queue)),
   ].join('\n');
 }
 
@@ -104,17 +163,21 @@ export async function resolveBriefing(
   state: ShinsaState,
   queue: Queue,
   now: number,
-  ask: QuickJson = requestQuickJson
+  ask: QuickJson
 ): Promise<Briefing> {
   const fallback = resolveFallbackBriefing(queue, now);
   if (queue.ready.length === 0) return fallback;
   const prompt = describeBriefingPrompt(state, queue, now);
-  const answer = await ask<unknown>(BRIEFING_SYSTEM, prompt);
+  const answer = await ask<unknown>(
+    BRIEFING_SYSTEM,
+    prompt,
+    resolveBriefingSchema(resolveTaskQuestion(queue))
+  );
   return parseBriefing(answer, queue, now) ?? fallback;
 }
 
 export interface BriefingOptions {
-  ask?: QuickJson;
+  ask: QuickJson;
   debounceMs?: number;
 }
 
@@ -125,9 +188,9 @@ export class Briefings {
   #timer: ReturnType<typeof setTimeout> | null = null;
   #stopped = false;
 
-  constructor(engine: Engine, options: BriefingOptions = {}) {
+  constructor(engine: Engine, options: BriefingOptions) {
     this.#engine = engine;
-    this.#ask = options.ask ?? requestQuickJson;
+    this.#ask = options.ask;
     this.#debounceMs = options.debounceMs ?? DEBOUNCE_MS;
   }
 
@@ -153,11 +216,18 @@ export class Briefings {
     const now = Date.now();
     const queue = resolveQueue(state, now);
     const briefing = await resolveBriefing(state, queue, now, this.#ask);
-    await this.#engine.dispatch({
-      type: 'briefing.write',
-      areaId: queue.focusAreaId,
-      text: serializeBriefing(briefing, this.#engine.state),
-      briefing,
-    });
+    if (this.#stopped) {
+      log.info('[Briefing] Dropped a briefing that was written after the server stopped', { seq: state.seq });
+      return;
+    }
+    await this.#engine.dispatch(
+      {
+        type: 'briefing.write',
+        projectId: queue.focusProjectId,
+        text: serializeBriefing(briefing, this.#engine.state),
+        briefing,
+      },
+      { id: `briefing:${queue.focusProjectId ?? '*'}:${state.seq}` }
+    );
   }
 }

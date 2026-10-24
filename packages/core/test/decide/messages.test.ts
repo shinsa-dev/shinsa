@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { listOpenGates } from '../../src/index.ts';
+import { listOpenGates, resolveMessageEffect } from '../../src/index.ts';
 import {
   completePhase,
   createHarness,
   createTask,
+  type Harness,
   linkSession,
   proposePlan,
   pullRequest,
@@ -12,6 +13,10 @@ import {
   readyWorktree,
   shipAndMerge,
 } from '../harness.ts';
+
+function effectOf(harness: Harness, taskId: string) {
+  return resolveMessageEffect(harness.state, harness.task(taskId));
+}
 
 describe('questions and messages', () => {
   test('an agent question waits for the answer and resolves the waiting tool call', () => {
@@ -29,6 +34,7 @@ describe('questions and messages', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
+    expect(effectOf(harness, taskId)).toBe('steer');
     harness.send({ type: 'task.message', taskId, text: 'Use the new API.' });
     expect(harness.lastEffect('run.steer')).toEqual({
       kind: 'run.steer',
@@ -37,20 +43,30 @@ describe('questions and messages', () => {
     });
   });
 
-  test('a message with an open question answers it', () => {
+  test('a message while a question is open makes the question historical and reaches the agent', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
     harness.send({ type: 'agent.ask', runId: run.id, gateId: 'q1', question: 'Which?', context: null });
-    harness.send({ type: 'task.message', taskId, text: 'The first.' });
-    expect(harness.state.gates.q1?.response).toBe('The first.');
+    expect(effectOf(harness, taskId)).toBe('supersede_question');
+    harness.send({ type: 'task.message', taskId, text: 'Use the cheaper one.' });
+    expect(harness.state.gates.q1).toMatchObject({
+      status: 'withdrawn',
+      supersededBy: 'Use the cheaper one.',
+    });
     expect(harness.lastEffect('question.resolve').gateId).toBe('q1');
+    expect(harness.activeRun(taskId).id).toBe(run.id);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe(
+      'Replied in the chat instead of answering: Which?'
+    );
   });
 
   test('a message at the review gate replaces the gate with a fix', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     reachReviewGate(harness, taskId);
+    expect(effectOf(harness, taskId)).toBe('request_changes');
     harness.send({ type: 'task.message', taskId, text: 'Rename the prop.' });
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(harness.task(taskId).stage).toBe('fixing');
@@ -63,6 +79,7 @@ describe('questions and messages', () => {
     reachShipping(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
     expect(harness.openGate(taskId).kind).toBe('merge');
+    expect(effectOf(harness, taskId)).toBe('send_back');
     harness.send({ type: 'task.message', taskId, text: 'One more thing.' });
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(harness.task(taskId).stage).toBe('fixing');
@@ -73,6 +90,7 @@ describe('questions and messages', () => {
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Broke', detail: 'x' });
+    expect(effectOf(harness, taskId)).toBe('retry');
     harness.send({ type: 'task.message', taskId, text: 'Try the other file.' });
     expect(harness.activeRun(taskId).prompt).toContain('Guidance from the human: Try the other file.');
   });
@@ -86,6 +104,27 @@ describe('questions and messages', () => {
     harness.send({ type: 'run.end', runId: builder.id, outcome: 'failed', summary: 'crash' });
     expect(harness.state.gates.q1?.status).toBe('withdrawn');
     expect(harness.activeRun(taskId).role).toBe('builder');
+  });
+});
+
+describe('what a message does', () => {
+  test('a merged task takes a message as a new round, a closed one takes none, and a plan gate or a check round reads it as revision or fix', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(effectOf(harness, taskId)).toBe('steer');
+    proposePlan(harness, taskId);
+    completePhase(harness, taskId);
+    completePhase(harness, taskId);
+    expect(harness.task(taskId).stage).toBe('checking');
+    expect(effectOf(harness, taskId)).toBe('fix');
+    const settled = createTask(harness, { request: 'Finished' });
+    shipAndMerge(harness, settled);
+    expect(effectOf(harness, settled)).toBe('new_round');
+    harness.send({ type: 'task.complete', taskId: settled });
+    expect(effectOf(harness, settled)).toBe('closed');
+    expect(() => harness.send({ type: 'task.message', taskId: settled, text: 'More?' })).toThrow(
+      'This task is finished. Start a new one.'
+    );
   });
 });
 
@@ -111,8 +150,9 @@ describe('messages before work starts', () => {
   test('a message sent before planning starts reaches the planner', () => {
     const harness = createHarness();
     const first = createTask(harness);
-    const second = createTask(harness, { intent: 'Second', blockedBy: [first] });
+    const second = createTask(harness, { request: 'Second', waitsOn: [first] });
     expect(harness.task(second).stage).toBe('queued');
+    expect(effectOf(harness, second)).toBe('kept');
     harness.send({ type: 'task.message', taskId: second, text: 'Use the blue variant.' });
     shipAndMerge(harness, first);
     readyWorktree(harness, second);
@@ -123,8 +163,8 @@ describe('messages before work starts', () => {
 describe('questions that lose their agent', () => {
   test('a question is withdrawn when its agent is stopped, so a waiting task can start later', () => {
     const harness = createHarness();
-    const parent = createTask(harness, { intent: 'Parent' });
-    const child = createTask(harness, { intent: 'Child' });
+    const parent = createTask(harness, { request: 'Parent' });
+    const child = createTask(harness, { request: 'Child' });
     harness.send({
       type: 'agent.ask',
       runId: harness.activeRun(child).id,
@@ -132,7 +172,7 @@ describe('questions that lose their agent', () => {
       question: 'Which?',
       context: null,
     });
-    harness.send({ type: 'task.block', taskId: child, blockedBy: [parent] });
+    harness.send({ type: 'task.wait_on', taskId: child, waitsOn: [parent] });
     expect(harness.state.gates.q1?.status).toBe('withdrawn');
     expect(harness.effectsOf('question.resolve').map((effect) => effect.gateId)).toContain('q1');
     shipAndMerge(harness, parent);

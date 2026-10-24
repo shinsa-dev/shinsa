@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 import { useMediaQuery } from '../../src/hooks/use-media-query';
-import { MOBILE_BREAKPOINT, useIsMobile } from '../../src/hooks/use-mobile';
 import { installMedia } from '../support/media';
 
 let media: ReturnType<typeof installMedia>;
@@ -33,17 +32,5 @@ describe('useMediaQuery', () => {
       return <span>{String(useMediaQuery('(hover: hover)', true))}</span>;
     }
     expect(renderToString(<Probe />)).toBe('<span>true</span>');
-  });
-});
-
-describe('useIsMobile', () => {
-  it('is true below the breakpoint', () => {
-    const query = `(max-width: ${MOBILE_BREAKPOINT - 1}px)`;
-    media = installMedia({ [query]: false });
-    const { result } = renderHook(() => useIsMobile());
-    expect(result.current).toBe(false);
-
-    act(() => media.flip(query, true));
-    expect(result.current).toBe(true);
   });
 });

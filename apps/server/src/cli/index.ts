@@ -1,9 +1,12 @@
-import { resolveConfig, resolvePort } from '../config/index.ts';
+import { resolveConfig, resolveServerAddress } from '../config/index.ts';
+import { resolveServerUrl } from '../http/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { type Shinsa, startShinsa } from '../serve.ts';
 import { describeFailure, runCommand } from '../shell/index.ts';
+import { describeSurface } from '../surface/index.ts';
 import { createApiClient } from './api.ts';
 import { type CommandIo, createTask, importSession, openInBrowser, printStatus } from './commands.ts';
+import { isSurfaceGroup, runSurface } from './surface.ts';
 
 export interface CliIo {
   env: Record<string, string | undefined>;
@@ -26,6 +29,9 @@ Usage
   shinsa status           What needs a decision, and what agents are working on
   shinsa open [task-id]   Open Shinsa, or one task, in the browser
   shinsa help             This text
+
+Managing Shinsa (the running server; add --help to any for its arguments, --json for JSON)
+${describeSurface()}
 
 Agents can call these too: \`shinsa do\` from inside any project hands work over to Shinsa.`;
 
@@ -64,9 +70,14 @@ export function createProcessIo(): CliIo {
   };
 }
 
+function resolveBase(io: CliIo) {
+  const address = resolveServerAddress(io.env);
+  return resolveServerUrl(address.hostname, address.port);
+}
+
 function createCommandIo(io: CliIo): CommandIo {
   return {
-    api: createApiClient(`http://127.0.0.1:${resolvePort(io.env)}`),
+    api: createApiClient(resolveBase(io)),
     cwd: io.cwd,
     write: io.write,
     openUrl: io.openUrl,
@@ -99,6 +110,9 @@ async function routeCommand(command: string, args: string[], io: CliIo) {
       await openInBrowser(args, createCommandIo(io));
       return 0;
     default:
+      if (isSurfaceGroup(command)) {
+        return runSurface([command, ...args], { base: resolveBase(io), write: io.write });
+      }
       io.write(USAGE);
       return 1;
   }

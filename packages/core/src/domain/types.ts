@@ -1,0 +1,463 @@
+import type { PlanChange } from '../report/plan-changes.ts';
+import type {
+  CodeSpot,
+  ReportCheck,
+  JudgementCall,
+  ReviewFinding,
+  PlanDocument,
+  WorkReport,
+} from '../report/types.ts';
+import type { RunAccount, UsageWait } from './accounts.ts';
+import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
+import type { MergeQueueEntry, CiRun, PullRequestWatch } from './pull-requests.ts';
+import type { Round } from './rounds.ts';
+import type { GateSecret } from './schedules.ts';
+import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
+import type { PipelineStep } from './steps.ts';
+
+export type TaskStage =
+  | 'triage'
+  | 'waiting_on_tasks'
+  | 'planning'
+  | 'awaiting_plan'
+  | 'building'
+  | 'checking'
+  | 'reviewing'
+  | 'fixing'
+  | 'awaiting_review'
+  | 'shipping'
+  | 'awaiting_merge'
+  | 'answering'
+  | 'investigating'
+  | 'researching'
+  | 'operating'
+  | 'awaiting_proposal'
+  | 'awaiting_operation'
+  | 'merged'
+  | 'done'
+  | 'cancelled';
+
+export type TaskSize = 'small' | 'large';
+
+export type TaskMode = 'build' | 'ask';
+
+export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
+
+export type RunRole =
+  | 'triage'
+  | 'planner'
+  | 'builder'
+  | 'reviewer'
+  | 'fixer'
+  | 'shipper'
+  | 'answerer'
+  | 'investigator'
+  | 'researcher'
+  | 'operator';
+
+export type AgentRole = 'classifier' | 'planner' | 'builder' | 'reviewer' | 'fixer' | 'answerer' | 'writer';
+
+export type FixReason = 'checks' | 'review' | 'you' | 'pull_request';
+
+export type RunStatus = 'queued' | 'running' | 'waiting';
+
+export type RunOutcome = 'completed' | 'failed' | 'cancelled';
+
+export type RunFailureClass =
+  | 'usage_limit'
+  | 'auth'
+  | 'context_window_full'
+  | 'overloaded'
+  | 'provider_error'
+  | 'transport_error'
+  | 'aborted'
+  | 'budget_exhausted'
+  | 'malformed_tool_use'
+  | 'image_error'
+  | 'model_error'
+  | 'setup_failed'
+  | 'session_lost';
+
+export interface RunFailure {
+  class: RunFailureClass;
+  message: string;
+  code: string | null;
+  retryable: boolean | null;
+  resetAt: number | null;
+  account?: RunAccount | null;
+}
+
+export type RunHandoffReason = 'provider_switch' | 'session_restore';
+
+export interface RunHandoff {
+  reason: RunHandoffReason;
+  fromProvider: string;
+  totalEntries: number;
+  includedEntries: number;
+  approxTokens: number;
+}
+
+export interface RunAttempt {
+  attemptId: string;
+  provider: string;
+  model: string | null;
+  resumed: boolean;
+  handoff: RunHandoff | null;
+  startedAt: number;
+  account?: RunAccount | null;
+}
+
+export type RunContinuationReason = 'shutdown' | 'crash';
+
+export type GateStatus = 'open' | 'answered' | 'withdrawn';
+
+export type GateDecision = 'approve' | 'revise' | 'reject' | 'reply' | 'waive';
+
+export type GateType =
+  | 'plan'
+  | 'review'
+  | 'merge'
+  | 'question'
+  | 'secret'
+  | 'proposal'
+  | 'operation'
+  | 'failure'
+  | 'configuration'
+  | 'sign_in';
+
+export type GateCause = 'budget' | 'monitor';
+
+export type FindingVerdictKind = 'fix' | 'dismiss';
+
+export interface FindingVerdict {
+  index: number;
+  verdict: FindingVerdictKind;
+  note: string | null;
+}
+
+export type ReviewEscalationReason = 'rounds' | 'stalled' | 'exhausted';
+
+export interface FixFingerprint {
+  reason: FixReason;
+  signature: string | null;
+  treeHash: string | null;
+}
+
+export interface ReviewEscalation {
+  reason: ReviewEscalationReason;
+  rounds: number;
+  at: number;
+}
+
+export type ConfigProblemKind = 'repository' | 'default_branch' | 'check_commands';
+
+export interface ConfigProblem {
+  kind: ConfigProblemKind;
+  detail: string;
+}
+
+export type EvidenceKind = 'screenshot' | 'recording' | 'test' | 'check' | 'note' | 'preview';
+
+export type CiState = 'passing' | 'failing' | 'pending' | 'none';
+
+export interface Repo {
+  id: string;
+  name: string;
+  path: string;
+  defaultBranch: string;
+  remote: string | null;
+  projectId: string | null;
+  checkCommands: string[];
+  checksWaived?: boolean;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  color: string;
+  key: string;
+  description: string;
+  folders: string[];
+}
+
+export interface Focus {
+  projectId: string | null;
+  until: number | null;
+}
+
+export interface PullRequest {
+  number: number;
+  url: string;
+  base?: string;
+  state: 'open' | 'merged' | 'closed';
+  checks: CiState;
+  unresolvedComments: number;
+  mergeable: boolean | null;
+  headSha?: string | null;
+  updatedAt: number;
+  checkRuns?: CiRun[];
+  unresolvedThreads?: string[];
+  mergeQueue?: MergeQueueEntry | null;
+  queueRemoval?: string | null;
+  mergeCommit?: string | null;
+}
+
+export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped';
+
+export interface PhaseProgress {
+  status: PhaseStatus;
+  at: number;
+}
+
+export interface PhaseReport {
+  index: number;
+  runId?: string | null;
+  summary: string;
+  spots: CodeSpot[];
+  judgementCalls: JudgementCall[];
+  at: number;
+}
+
+export interface Plan {
+  version: number;
+  body: string;
+  document: PlanDocument | null;
+  proposedAt: number;
+  changeSummary?: string | null;
+  changes?: PlanChange[];
+  feedback?: string | null;
+  approvedAt?: number | null;
+}
+
+export type PlanRevision = Omit<Plan, 'approvedAt'>;
+
+export type MonitorStatus = 'armed' | 'fired' | 'exhausted';
+
+export interface Monitor {
+  id: string;
+  runId: string;
+  role: RunRole;
+  phaseIndex: number | null;
+  notes: string;
+  armedAt: number;
+  nextCheckAt: number;
+  timeoutAt: number;
+  attempts: number;
+  maxAttempts: number;
+  status: MonitorStatus;
+}
+
+export interface RunUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd: number | null;
+}
+
+export interface RunSilence {
+  since: number | null;
+  snoozedUntil: number | null;
+  dismissed: boolean;
+}
+
+export type SuggestionStatus = 'open' | 'accepted' | 'dismissed';
+
+export interface TaskSuggestion {
+  id: string;
+  runId: string | null;
+  title: string;
+  request: string;
+  why: string;
+  waitsOnThis: boolean;
+  status: SuggestionStatus;
+  createdTaskId: string | null;
+  suggestedAt: number;
+  splitOff?: boolean;
+  keptRound?: number | null;
+}
+
+export type ActivityActor = 'you' | 'agent' | 'shinsa';
+
+export type ActivityKind =
+  | 'asked'
+  | 'set_up'
+  | 'stage'
+  | 'plan'
+  | 'decision'
+  | 'work'
+  | 'review'
+  | 'fix'
+  | 'pull_request'
+  | 'evidence'
+  | 'message'
+  | 'note'
+  | 'failure'
+  | 'question'
+  | 'monitor'
+  | 'suggestion'
+  | 'answer'
+  | 'account'
+  | 'delegation'
+  | 'shape'
+  | 'round';
+
+export interface Activity {
+  at: number;
+  actor: ActivityActor;
+  kind: ActivityKind;
+  text: string;
+  detail: string | null;
+  evidenceId: string | null;
+  runId?: string | null;
+  gateType?: GateType;
+  onBehalf?: boolean;
+  byTask?: string | null;
+  round?: number;
+}
+
+export interface Task {
+  id: string;
+  handle?: string | null;
+  projectId?: string | null;
+  request: string;
+  title: string;
+  repoId: string | null;
+  size: TaskSize | null;
+  planFirst: boolean;
+  stage: TaskStage;
+  stageReason: string;
+  priority: TaskPriority;
+  branch: string | null;
+  worktreePath: string | null;
+  plan: Plan | null;
+  phases: PhaseProgress[];
+  planAnswers: string | null;
+  summary: string | null;
+  report: WorkReport | null;
+  findings: ReviewFinding[];
+  fixRounds: number;
+  fixFor: FixReason | null;
+  fixSignature: string | null;
+  stalledFixes: number;
+  fixHistory?: string[];
+  pushedSha?: string | null;
+  pushedFrom?: string | null;
+  pushPending?: boolean;
+  recoveries: number;
+  phaseReports: PhaseReport[];
+  checkResults: ReportCheck[] | null;
+  pullRequest: PullRequest | null;
+  pullRequestWatch?: PullRequestWatch | null;
+  pullRequestReadFailures?: number;
+  baseTaskId: string | null;
+  waitsOn: string[];
+  note: string | null;
+  origin: string | null;
+  createdAt: number;
+  updatedAt: number;
+  stageChangedAt: number;
+  activity: Activity[];
+  mode?: TaskMode;
+  answer?: string | null;
+  planHistory?: PlanRevision[];
+  dismissedFindings?: ReviewFinding[];
+  monitor?: Monitor | null;
+  treeHash?: string | null;
+  fixFingerprints?: FixFingerprint[];
+  recoveryFingerprint?: string | null;
+  suggestions?: TaskSuggestion[];
+  budgetAcknowledgedUsd?: number;
+  usageAcknowledgedPercent?: number;
+  configProblems?: ConfigProblem[];
+  account?: RunAccount | null;
+  usageWait?: UsageWait | null;
+  parentTaskId?: string | null;
+  createdBy?: TaskCreator | null;
+  splits?: TaskSplit[];
+  scheduleId?: string | null;
+  pipeline?: PipelineStep[];
+  auto?: TaskAuto;
+  triageDecisions?: TriageDecisions | null;
+  result?: TaskResult | null;
+  proposal?: ChangeProposal | null;
+  shapeChanges?: ShapeChange[];
+  proposedBranch?: string | null;
+  rounds?: Round[];
+  closedAt?: number | null;
+}
+
+export interface Run {
+  id: string;
+  taskId: string;
+  role: RunRole;
+  status?: RunStatus;
+  phaseIndex?: number | null;
+  prompt?: string;
+  rolePrompt?: string;
+  resume?: boolean;
+  provider: string;
+  model: string | null;
+  sessionId: string | null;
+  startedAt: number;
+  endedAt: number | null;
+  outcome: RunOutcome | null;
+  summary: string | null;
+  attemptId?: string | null;
+  attempts?: RunAttempt[];
+  failure?: RunFailure | null;
+  sessionProvider?: string | null;
+  sessionLost?: boolean;
+  resumePending?: boolean;
+  continuations?: number[];
+  monitorId?: string | null;
+  feedback?: string | null;
+  usage?: RunUsage | null;
+  weeklyPercent?: number;
+  silence?: RunSilence | null;
+  usageWaitId?: string | null;
+  account?: RunAccount | null;
+  delegation?: RunDelegation | null;
+  cohort?: DeliveryCohort | null;
+  waitingOn?: RunWait | null;
+  compactions?: string[];
+  round?: number;
+}
+
+export interface Gate {
+  id: string;
+  taskId: string;
+  type: GateType;
+  status: GateStatus;
+  title: string;
+  body: string;
+  runId: string | null;
+  openedAt: number;
+  answeredAt: number | null;
+  decision: GateDecision | null;
+  response: string | null;
+  planVersion?: number;
+  choices?: string[];
+  recommendation?: string | null;
+  cause?: GateCause;
+  escalation?: ReviewEscalation;
+  verdicts?: FindingVerdict[];
+  supersededBy?: string | null;
+  provider?: string;
+  account?: RunAccount | null;
+  secret?: GateSecret | null;
+  commit?: string | null;
+  notes?: string | null;
+  round?: number;
+}
+
+export interface Evidence {
+  id: string;
+  taskId: string;
+  runId: string | null;
+  kind: EvidenceKind;
+  title: string;
+  uri: string;
+  attachedAt: number;
+  round?: number;
+}

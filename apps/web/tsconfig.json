@@ -14,11 +14,10 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "bun"],
     "paths": {
-      "@/*": ["./src/*"],
-      "@shinsa/ui/*": ["../../packages/ui/src/*"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "test", "vite.config.ts"]
 }

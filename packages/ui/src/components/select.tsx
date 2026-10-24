@@ -123,7 +123,7 @@ function SelectTrigger({
     >
       {children}
       <SelectPrimitive.Icon
-        render={<Icon name='IconChevronDownMedium' className='pointer-events-none size-4 text-fg-2' />}
+        render={<Icon name='IconChevronDownMedium' className='pointer-events-none size-4' />}
       />
     </SelectPrimitive.Trigger>
   );
@@ -215,7 +215,7 @@ function SelectItem({
         // The sliding indicator draws the highlight; items only shift text color.
         // pl-2 is load-bearing: list p-1 (4px) + pl-2 (8px) puts the item's
         // text 12px in, which is what the aligned popup is positioned from.
-        "relative flex w-full cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-7 pl-2 font-medium text-fg-3 text-xs outline-hidden data-disabled:pointer-events-none data-indicator-here:text-fg-4 data-disabled:opacity-50 [&[data-indicator-here]_span]:text-fg-4 [&[data-indicator-here]_svg]:opacity-100 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:transition-opacity [&_svg]:duration-150 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "icon-item relative flex w-full cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-7 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden data-disabled:pointer-events-none data-indicator-here:text-fg-4 data-disabled:opacity-50 [&[data-indicator-here]_span]:text-fg-4 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className
       )}
       {...props}
@@ -232,7 +232,7 @@ function SelectItem({
       >
         <Icon
           name='IconCheckmark1'
-          className='pointer-events-none size-3.5! rotate-[4deg] text-primary-text opacity-100!'
+          className='pointer-events-none size-3.5! rotate-[4deg] text-primary-text'
         />
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>

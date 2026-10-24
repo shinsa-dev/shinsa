@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Repo } from '@shinsa/core';
 import { resolveCheckCommands, runCheck, runChecks, tailOutput } from '../../src/checks/index.ts';
+
+const CHECK_TIMEOUT_MS = 60_000;
 
 const dirs: string[] = [];
 
@@ -20,13 +22,12 @@ afterEach(() => {
 function repoAt(path: string, checkCommands: string[] = []): Repo {
   return {
     id: 'r',
-    areaId: null,
+    projectId: null,
     name: 'r',
     path,
     defaultBranch: 'main',
     remote: null,
     checkCommands,
-    previewCommand: null,
   };
 }
 
@@ -46,19 +47,38 @@ describe('checks', () => {
 
   test('a failing command keeps the tail of its output', async () => {
     const dir = createDir();
-    const result = await runCheck("echo 'src/a.ts(3,1): error TS2322' >&2; exit 2", dir);
+    const result = await runCheck("echo 'src/a.ts(3,1): error TS2322' >&2; exit 2", dir, CHECK_TIMEOUT_MS);
     expect(result).toEqual({
       name: "echo 'src/a.ts(3,1): error TS2322' >&2; exit 2",
       outcome: 'fail',
       detail: 'src/a.ts(3,1): error TS2322',
     });
-    expect(await runCheck('true', dir)).toEqual({ name: 'true', outcome: 'pass', detail: null });
+    expect(await runCheck('true', dir, CHECK_TIMEOUT_MS)).toEqual({
+      name: 'true',
+      outcome: 'pass',
+      detail: null,
+    });
   });
 
   test('every command runs even after one fails', async () => {
     const dir = createDir();
-    const results = await runChecks(repoAt(dir, ['false', 'true']), dir);
+    const results = await runChecks(repoAt(dir, ['false', 'true']), dir, []);
     expect(results.map((check) => check.outcome)).toEqual(['fail', 'pass']);
+  });
+
+  test("the plan's checks run after the repository's own in the worktree, named by command, a repeated one once", async () => {
+    const dir = createDir();
+    const results = await runChecks(repoAt(dir, ['true']), dir, [
+      'echo plan > plan.txt',
+      'test -f missing.txt',
+      'true',
+    ]);
+    expect(results).toEqual([
+      { name: 'true', outcome: 'pass', detail: null },
+      { name: 'echo plan > plan.txt', outcome: 'pass', detail: null },
+      { name: 'test -f missing.txt', outcome: 'fail', detail: 'exit 1' },
+    ]);
+    expect(existsSync(join(dir, 'plan.txt'))).toBe(true);
   });
 
   test('long output is cut to its end', () => {
@@ -111,7 +131,7 @@ describe('runners and failures', () => {
     const slow = await runCheck('echo started; sleep 30', dir, 100);
     expect(slow.outcome).toBe('fail');
     expect(slow.detail).toBe('Stopped after 0 minutes.\nstarted');
-    expect((await runCheck('exit 7', dir)).detail).toBe('exit 7');
+    expect((await runCheck('exit 7', dir, CHECK_TIMEOUT_MS)).detail).toBe('exit 7');
   });
 
   test('short output is kept whole and output without a signal keeps its end', () => {

@@ -1,50 +1,84 @@
 ---
 name: handover
-description: The Shinsa hand-over protocol for specs, work reports and review findings. Use before propose_spec, submit_work or report_review.
+description: How to fill Shinsa's hand-over tools well (propose_plan, complete_phase, complete_fix, report_review, answer, report_findings, submit_report, report_outcome, reshape_task). Use before you call any of them.
 ---
 
 # Handing work over
 
-Every hand-over has the same shape, every time, so the human can read it without reading. The tools enforce the
-fields and limits and reject anything else; this page is how to fill them well.
+You hand work over only through Shinsa's tools, never in your final message. Each tool has fixed fields with hard
+limits, published in its schema; Shinsa rejects a hand-over that breaks one and lists every problem, so fix them and
+call the tool again. After a hand-over, end your turn. This page is how to fill the fields well.
 
-## Spec (`propose_spec`)
+## The plan (`propose_plan`, planner)
 
 | Field | Fill it with |
 |---|---|
 | goal | The outcome for the user, one or two sentences |
+| plan | The work as 2 to 8 phases in the order they will be done, each a `title` of a few words and a one-sentence `detail`. Each phase is built by its own agent and committed on its own |
 | behaviour | One observable behaviour per item, as true after the change |
-| approach | Modules and data, not code; the decisions you made and why |
+| approach | How it will be built and the decisions you made on the way: modules and data, not code |
 | files | Each file that changes and what changes in it |
 | out_of_scope | What this deliberately does not do |
-| verification | How the builder proves it: the failing test, the screenshots, the recording |
+| verification | How the change is proven: the failing test, the checks, the runs, the screenshots. Required for any code change |
 | questions | Only decisions the human must make, 2 to 4 concrete options each, your recommendation worded exactly as one option |
 
-## Work report (`submit_work`)
+Set these only when they apply:
 
-The report *is* the review screen. The human reads phases on the left and the code you point at on the right.
+- `impact`: for a task that runs an operation, what it changes and how much, the dry run or why there is none, and
+  how to undo it.
+- `operation`: for a task that both changes code and runs an operation, the operation's steps in order, each with how
+  to check it worked.
+- `evidence`: the kinds of evidence the builders must attach before the human reviews (`screenshot`, `recording`,
+  `test`, `note`, `preview`). A change the user sees asks for a screenshot. Shinsa refuses the last phase until each
+  kind is attached.
+- `checks`: up to 6 commands Shinsa runs in the worktree after the repository's own checks, when those do not prove
+  the change.
+- `approval`: true when the change is risky, so the human approves the plan before anything is built.
+- `change_summary`: only when revising a plan, what you changed since the last version and why.
 
-- **headline**: what the change does, one sentence.
-- **phases**: the change as 1 to 6 steps in the order a reader should understand it (data first, then logic, then UI,
-  then tests is a good default). Never file order.
-- **spots**: per phase, the exact line ranges in the new file the human must read. `why` says what could go wrong or
-  what was decided, never what the code does.
+When the steps Shinsa chose do not fit the request, call `reshape_task` instead of a plan: `shape` to make the task an
+answer, an investigation or research, or `steps` to compose it from the building blocks the tool lists, with a
+one-sentence `reason`. Shinsa checks the steps and returns every problem.
+
+## A phase (`complete_phase`, builder)
+
+The human reviews the work phase by phase: Shinsa builds the review from every phase you hand over, in plan order.
+
+- **summary**: what this phase changed, one or two sentences. Wrap identifiers in backticks.
+- **spots**: up to 6 exact line ranges in the new file the human must read. `why` says what could go wrong or what
+  was decided, never what the code does.
   - `critical`: could break something, touches data, money, auth or a public API, or encodes a judgement call.
   - `high`: worth a careful read.
   - `normal`: context for the spots around it.
-  Leave out boilerplate, renames, formatting and mechanical edits. Five well-chosen spots beat twenty.
-- **checks**: every command you ran and its outcome. Failing checks stay in; say why in `detail`.
-- **decisions**: judgement calls the human might reverse, each with the alternative you rejected.
+  Leave out boilerplate, renames, formatting and mechanical edits; pick the few ranges that matter.
+- **decisions**: up to 5 judgement calls the human might reverse, each with the alternative you rejected.
 
-## Review findings (`report_review`)
+Attach evidence with `attach_evidence` before the last phase (the `evidence` skill). Shinsa commits each phase; never
+commit yourself.
 
-One finding per problem, anchored to `file` and `line`/`end`. `blocking` is a bug, a missed requirement, a broken rule
-or a failing check; everything else is a `suggestion`. Say what is wrong and what to do.
+## A fix (`complete_fix`, fixer)
 
-## Commit message
+One `summary`: what you changed and, for anything you chose not to change, why. Shinsa commits it, then runs the checks
+and the agent review again, or pushes it to the pull request.
 
-Conventional commit subject, one line: `type(scope): summary`. No body, no trailers, no attribution.
+## Review findings (`report_review`, reviewer)
+
+Up to 12 findings, one per problem, anchored to `file` and `line`/`end`. `blocking` is a bug, a missed requirement, a
+broken rule or a failing check; everything else is a `suggestion`. Say what is wrong and what to do. An empty list
+means you found nothing wrong.
+
+## Inquiries and operations
+
+- **`answer`** (answerer): the answer in markdown, leading with the answer itself, then the evidence as shinsa://
+  links to files and lines.
+- **`report_findings`** (investigator): the cause, or what you ruled out, then the evidence. Your edits in the
+  worktree are thrown away; only the findings are kept.
+- **`submit_report`** (researcher): the conclusion or recommendation first, then the options and the evidence.
+- **`report_outcome`** (operator): what ran, what changed, and anything left to do or undo.
+
+`answer`, `report_findings` and `submit_report` take `propose_change` (`request`, `why`) only when what you found
+calls for a code change; the human decides whether the task becomes that change.
 
 ## Copy
 
-Sentence case, plain words, no em dashes, no exclamation marks, no filler, no markdown inside fields.
+Sentence case, plain words, no em dashes, no exclamation marks, no filler, no markdown inside short fields.

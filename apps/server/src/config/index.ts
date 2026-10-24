@@ -1,8 +1,17 @@
 import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { log } from '../log/index.ts';
+import { type ConfigStore, type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
+import { DATABASE_FILE, type MigrationResult, migrateLegacyData } from './migrate.ts';
+import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
+
+export { ConfigStore, writeJsonFile } from './file.ts';
+export { type Env, resolveShinsaPaths } from './paths.ts';
 
 export interface ServerConfig {
+  home: string;
+  configPath: string;
+  legacyDataDir: string | null;
   dataDir: string;
   databasePath: string;
   worktreesDir: string;
@@ -13,22 +22,26 @@ export interface ServerConfig {
   port: number;
   hostname: string;
   allowedHosts: string[];
+  userHome: string;
+  machine: MachineConfigRead;
   roots: string[];
   inspect: boolean;
   editor: string | null;
   terminal: string;
   settleDelayMs: number;
+  eunoe: EunoeConfig;
 }
 
-type Env = Record<string, string | undefined>;
+interface EunoeConfig {
+  command: string | null;
+  port: number | null;
+}
 
 export const DEFAULT_PORT = 5180;
 
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
 const WILDCARD_HOSTS = new Set(['0.0.0.0', '::', '[::]']);
-
-const DEFAULT_ROOTS = ['Developer/Projects', 'Developer', 'Projects', 'code', 'src', 'repos'];
 
 function readList(value: string | undefined, separator: string) {
   return (value ?? '')
@@ -45,38 +58,110 @@ function readNumber(env: Env, key: string, fallback: number) {
   return value;
 }
 
-export function resolvePort(env: Env) {
-  const port = readNumber(env, 'SHINSA_PORT', DEFAULT_PORT);
+function resolveEunoe(env: Env): EunoeConfig {
+  const port = env.SHINSA_EUNOE_PORT ? readNumber(env, 'SHINSA_EUNOE_PORT', 0) : null;
+  if (port !== null && (port === 0 || port > 65_535)) {
+    throw new Error(`SHINSA_EUNOE_PORT must be a port number, not "${port}".`);
+  }
+  return { command: env.SHINSA_EUNOE || null, port };
+}
+
+function resolvePortFrom(env: Env, machine: MachineConfig) {
+  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? DEFAULT_PORT);
   if (port > 65_535) throw new Error(`SHINSA_PORT must be a port number, not "${port}".`);
   return port;
 }
 
-export function resolveConfig(env: Env): ServerConfig {
-  const home = env.HOME || homedir();
-  const dataDir = env.SHINSA_DATA_DIR || join(home, '.shinsa');
-  const hostname = env.SHINSA_HOST || '127.0.0.1';
-  const configured = WILDCARD_HOSTS.has(hostname) ? [] : [hostname];
-  const config: ServerConfig = {
+function resolveHostname(env: Env, machine: MachineConfig) {
+  return env.SHINSA_HOST || machine.hostname || '127.0.0.1';
+}
+
+export function resolveServerAddress(env: Env) {
+  const machine = readMachineConfig(resolveShinsaPaths(env).configPath).config;
+  const hostname = resolveHostname(env, machine);
+  return {
+    hostname: WILDCARD_HOSTS.has(hostname) ? '127.0.0.1' : hostname,
+    port: resolvePortFrom(env, machine),
+  };
+}
+
+function resolveDataPaths(dataDir: string, env: Env) {
+  return {
     dataDir,
-    databasePath: join(dataDir, 'shinsa.sqlite'),
+    databasePath: join(dataDir, DATABASE_FILE),
     worktreesDir: env.SHINSA_WORKTREES_DIR || join(dataDir, 'worktrees'),
     evidenceDir: join(dataDir, 'evidence'),
     transcriptsDir: join(dataDir, 'transcripts'),
+  };
+}
+
+export function resolveConfig(env: Env): ServerConfig {
+  const paths = resolveShinsaPaths(env);
+  const read = readMachineConfig(paths.configPath);
+  const machine = read.config;
+  const hostname = resolveHostname(env, machine);
+  const configured = WILDCARD_HOSTS.has(hostname) ? [] : [hostname];
+  return {
+    home: paths.home,
+    configPath: paths.configPath,
+    legacyDataDir: paths.legacyDataDir,
+    ...resolveDataPaths(paths.dataDir, env),
     pluginDir: resolve(import.meta.dirname, '../../plugin'),
     webDir: resolve(import.meta.dirname, '../../../web/dist'),
-    port: resolvePort(env),
+    port: resolvePortFrom(env, machine),
     hostname,
     allowedHosts: [
       ...new Set([...LOOPBACK_HOSTS, ...configured, ...readList(env.SHINSA_ALLOWED_HOSTS, ',')]),
     ],
-    roots: [...readList(env.SHINSA_ROOTS, ':'), ...DEFAULT_ROOTS.map((path) => join(home, path))],
+    userHome: resolveUserHome(env),
+    machine: read,
+    roots: readList(env.SHINSA_ROOTS, ':'),
     inspect: env.SHINSA_INSPECT === '1',
-    editor: env.SHINSA_EDITOR || null,
-    terminal: env.SHINSA_TERMINAL || 'Terminal',
+    editor: env.SHINSA_EDITOR || machine.editor,
+    terminal: env.SHINSA_TERMINAL || machine.terminal || 'Terminal',
     settleDelayMs: readNumber(env, 'SHINSA_SETTLE_DELAY_MS', 15_000),
+    eunoe: resolveEunoe(env),
   };
-  for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {
-    mkdirSync(dir, { recursive: true });
+}
+
+function recordMigration(config: ServerConfig, store: ConfigStore, migration: MigrationResult) {
+  if (migration.status === 'migrated') {
+    log.info('[Config] Copied the data from the old location; it stays there untouched', {
+      from: migration.from,
+      to: migration.to,
+      events: migration.events,
+      files: migration.files,
+    });
+    store.update({ migratedFrom: { path: migration.from, at: Date.now() } });
+    return config;
+  }
+  if (migration.status === 'failed') {
+    log.error('[Config] Could not copy the data from the old location; using it where it is', {
+      from: migration.from,
+      to: migration.to,
+      reason: migration.reason,
+    });
+    const customWorktrees = config.worktreesDir !== join(config.dataDir, 'worktrees');
+    return {
+      ...config,
+      ...resolveDataPaths(
+        migration.from,
+        customWorktrees ? { SHINSA_WORKTREES_DIR: config.worktreesDir } : {}
+      ),
+    };
   }
   return config;
+}
+
+export function prepareDataDir(config: ServerConfig, store: ConfigStore): ServerConfig {
+  const prepared = recordMigration(config, store, migrateLegacyData(config.legacyDataDir, config.dataDir));
+  for (const dir of [
+    prepared.dataDir,
+    prepared.worktreesDir,
+    prepared.evidenceDir,
+    prepared.transcriptsDir,
+  ]) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return prepared;
 }

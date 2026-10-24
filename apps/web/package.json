@@ -7,12 +7,13 @@
   "scripts": {
     "build": "vite build",
     "check-types": "tsc --noEmit",
-    "dev": "vite --port 5181 --strictPort"
+    "dev": "vite --port 5181 --strictPort",
+    "test": "bun test"
   },
   "dependencies": {
+    "@base-ui/react": "^1.4.0",
     "@shinsa/core": "workspace:*",
     "@shinsa/ui": "workspace:*",
-    "lucide-react": "0.563.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",
@@ -20,7 +21,11 @@
     "shiki": "3.23.0"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^21.0.4",
     "@tailwindcss/vite": "^4.3.3",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/bun": "^1.4.2",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.0",

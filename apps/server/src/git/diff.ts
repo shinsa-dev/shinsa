@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseUnifiedDiff, type Repo, type TaskDiff } from '@shinsa/core';
@@ -26,7 +26,11 @@ export async function resolveTaskDiff(
   const scratch = mkdtempSync(join(tmpdir(), 'shinsa-diff-'));
   const env = { GIT_INDEX_FILE: join(scratch, 'index') };
   try {
-    if (existsSync(index)) copyFileSync(index, env.GIT_INDEX_FILE);
+    if (existsSync(index)) {
+      copyFileSync(index, env.GIT_INDEX_FILE);
+      const { atime, mtime } = statSync(index);
+      utimesSync(env.GIT_INDEX_FILE, atime, mtime);
+    }
     await runCommandOrThrow(['git', 'add', '-A', '--intent-to-add'], path, { env });
     const text = await runCommandOrThrow(['git', 'diff', '--no-color', '--find-renames', base], path, {
       env,

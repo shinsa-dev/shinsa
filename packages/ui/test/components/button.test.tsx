@@ -25,13 +25,6 @@ describe('Button', () => {
     expect(view.getByRole('button', { name: 'Alone' }).dataset.icon).toBeUndefined();
   });
 
-  it('tightens a chevron', () => {
-    const view = render(
-      <Button icon={{ name: 'IconChevronDownMedium', position: 'inline-end' }}>More</Button>
-    );
-    expect(view.getByRole('button', { name: 'More' }).hasAttribute('data-chevron')).toBe(true);
-  });
-
   describe('while loading', () => {
     it('stays enabled and announces itself busy with a spinner in place of the icon', () => {
       const view = render(
@@ -45,6 +38,17 @@ describe('Button', () => {
       expect(button.hasAttribute('data-loading')).toBe(true);
       expect(view.getByRole('status', { name: 'Loading' })).toBeTruthy();
       expect(button.querySelectorAll('svg')).toHaveLength(1);
+    });
+
+    it('draws the spinner a step under its text, like the icon it replaces', () => {
+      const view = render(
+        <Button loading icon='IconBell'>
+          Send
+        </Button>
+      );
+      expect(view.getByRole('status', { name: 'Loading' }).classList.contains('opacity-(--icon-alpha)')).toBe(
+        true
+      );
     });
 
     it('puts the spinner on the icon’s side, and leading when there is no icon', () => {

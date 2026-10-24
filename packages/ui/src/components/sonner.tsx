@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon } from '@shinsa/ui/components/icon';
+import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { type ExternalToast, Toaster as Sonner, toast as sonnerToast, type ToasterProps } from 'sonner';
@@ -29,6 +30,11 @@ function playAttentionCue(el: HTMLElement, kind: Kind) {
 function pingInstance(instance: number, kind: Kind) {
   const el = document.querySelector<HTMLElement>(`[data-sonner-toast].${instanceClass(instance)}`);
   if (el) playAttentionCue(el, kind);
+}
+
+/** Sonner renders a fired toast on a zero-delay timeout, so the cue waits for that render, then a frame. */
+function pingAfterRender(instance: number, kind: Kind) {
+  setTimeout(() => requestAnimationFrame(() => pingInstance(instance, kind)));
 }
 
 function isInstanceAtTop(instance: number): boolean {
@@ -71,15 +77,16 @@ function Toaster(props: ToasterProps) {
   return (
     <Sonner
       className='toaster group'
-      position='bottom-right'
-      offset={{ bottom: 16, right: 16 }}
+      position='top-center'
+      offset={{ top: 12 }}
+      mobileOffset={{ top: 12 }}
       gap={8}
       icons={{
-        success: <Icon name='IconCheckCircle2Filled' className='size-4 text-primary-4 opacity-100' />,
-        info: <Icon name='IconInfoSimple' className='size-4 text-primary-4 opacity-100' />,
-        warning: <Icon name='IconExclamationTriangleFilled' className='size-4 text-amber-4 opacity-100' />,
-        error: <Icon name='IconExclamationCircleFilled' className='size-4 text-red-4 opacity-100' />,
-        loading: <Icon name='IconLoadingCircle' className='size-4 animate-spin text-fg-2 opacity-100' />,
+        success: <Icon name='IconCheckCircle2Filled' className='size-4 text-primary-4' />,
+        info: <Icon name='IconInfoSimple' className='size-4 text-primary-4' />,
+        warning: <Icon name='IconExclamationTriangleFilled' className='size-4 text-amber-4' />,
+        error: <Icon name='IconExclamationCircleFilled' className='icon-solid size-4 text-red-4' />,
+        loading: <Spinner className='text-fg-2' />,
       }}
       style={
         {
@@ -185,7 +192,7 @@ function fire(kind: Kind, message: MessageArg, options: ExternalToast = {}): Toa
 
   if (previous && isInstanceAtTop(previous.instance)) {
     const id = callSonner(kind, message, track(signature, previous, options));
-    requestAnimationFrame(() => pingInstance(previous.instance, kind));
+    pingAfterRender(previous.instance, kind);
     return id;
   }
 
@@ -195,7 +202,7 @@ function fire(kind: Kind, message: MessageArg, options: ExternalToast = {}): Toa
   const entry = { id: `toast-${instances}`, instance: instances };
   live.set(signature, entry);
   const id = callSonner(kind, message, track(signature, entry, options));
-  if (previous) requestAnimationFrame(() => pingInstance(entry.instance, kind));
+  if (previous) pingAfterRender(entry.instance, kind);
   return id;
 }
 

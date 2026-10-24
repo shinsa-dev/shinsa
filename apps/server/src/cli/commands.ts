@@ -1,4 +1,5 @@
 import type { TaskPriority } from '@shinsa/core';
+import type { CommandReceipt } from '../surface/index.ts';
 import type { ApiClient } from './api.ts';
 import { describeSession, readSession } from './session.ts';
 
@@ -42,8 +43,9 @@ function resolvePriority(flags: Set<string>): TaskPriority {
   return 'normal';
 }
 
-function writeTaskLink(io: CommandIo, taskId: string | null) {
-  if (taskId) io.write(`${io.api.base}/tasks/${taskId}`);
+function writeTaskLink(io: CommandIo, receipt: CommandReceipt) {
+  const ref = receipt.handle ?? receipt.taskId;
+  if (ref) io.write(`${io.api.base}/tasks/${ref}`);
 }
 
 export async function createTask(args: string[], io: CommandIo) {
@@ -55,11 +57,11 @@ export async function createTask(args: string[], io: CommandIo) {
     intent,
     repoId: null,
     priority: resolvePriority(flags),
-    specFirst: flags.has('--spec'),
+    planFirst: flags.has('--spec'),
     origin: io.cwd,
   });
   io.write('Started. Shinsa brings it back when it needs a decision.');
-  writeTaskLink(io, result.taskId);
+  writeTaskLink(io, result);
 }
 
 export async function importSession(args: string[], io: CommandIo) {
@@ -72,12 +74,12 @@ export async function importSession(args: string[], io: CommandIo) {
     intent: describeSession(session),
     repoId: null,
     priority: resolvePriority(flags),
-    specFirst: true,
+    planFirst: true,
     origin: values.get('--in') ?? session.cwd ?? io.cwd,
   });
   io.write(`Imported ${session.path}`);
   io.write('It starts with a plan for you to approve, so nothing builds until you have looked.');
-  writeTaskLink(io, result.taskId);
+  writeTaskLink(io, result);
 }
 
 export async function printStatus(io: CommandIo) {
@@ -93,5 +95,6 @@ export async function printStatus(io: CommandIo) {
 
 export async function openInBrowser(args: string[], io: CommandIo) {
   const [taskId] = parseArgs(args).positional;
-  await io.openUrl(taskId ? `${io.api.base}/tasks/${encodeURIComponent(taskId)}` : io.api.base);
+  const page = taskId ? `${io.api.base}/tasks/${encodeURIComponent(taskId)}` : io.api.base;
+  await io.openUrl(page);
 }

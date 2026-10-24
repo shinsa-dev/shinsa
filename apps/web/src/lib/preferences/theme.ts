@@ -1,7 +1,14 @@
+import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
-import { createSignal } from '@/lib/state/signal.ts';
+import { createSignal } from '@/lib/signal.ts';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
+
+export const THEME_ITEMS: { value: ThemePreference; label: string; icon: IconName; keywords: string[] }[] = [
+  { value: 'system', label: 'System', icon: 'IconWindow', keywords: ['auto', 'theme'] },
+  { value: 'light', label: 'Light', icon: 'IconSun', keywords: ['theme', 'day'] },
+  { value: 'dark', label: 'Dark', icon: 'IconMoon', keywords: ['theme', 'night'] },
+];
 
 const STORAGE_KEY = 'shinsa.theme';
 
@@ -14,7 +21,7 @@ export function readThemePreference(): ThemePreference {
   return stored === 'light' || stored === 'dark' ? stored : 'system';
 }
 
-export function applyTheme(preference: ThemePreference) {
+function applyTheme(preference: ThemePreference) {
   const dark = preference === 'dark' || (preference === 'system' && matchMedia(DARK_QUERY).matches);
   document.documentElement.classList.toggle('dark', dark);
   document.documentElement.classList.toggle('light', !dark);

@@ -1,17 +1,29 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
+  type ChatNotice,
   type Gate,
   listActiveRuns,
   listOpenGates,
   type Run,
+  type RunFailure,
   type RunRole,
-  type SpecDocument,
+  type PlanDocument,
   type Task,
 } from '@shinsa/core';
-import { type ClaudeSession, type ClaudeSessionInput, mapClaudeTool } from '../../src/agents/claude/index.ts';
-import { RunSupervisor, Transcripts } from '../../src/agents/index.ts';
+import { RunSupervisor, type SupervisorOptions, Transcripts } from '../../src/agents/index.ts';
+import { CLAUDE_CAPABILITIES, mapClaudeTool } from '../../src/agents/providers/claude/index.ts';
+import {
+  type AgentProvider,
+  type AgentSession,
+  type AgentSessionInput,
+  ProviderRegistry,
+  type SessionArtifactStatus,
+} from '../../src/agents/providers/index.ts';
+import { createQuickCalls, type QuickJson } from '../../src/agents/quick/index.ts';
 import { Briefings } from '../../src/briefing/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { inspectRepo } from '../../src/git/index.ts';
@@ -19,8 +31,9 @@ import { EffectRunner, Engine } from '../../src/runtime/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
+import { createConfigAt } from '../helpers/config.ts';
 
-export const PLAN: SpecDocument = {
+export const PLAN: PlanDocument = {
   goal: 'Add the two greeting files.',
   plan: [
     { title: 'Write the first file', detail: 'Create a.txt.' },
@@ -34,18 +47,37 @@ export const PLAN: SpecDocument = {
   questions: [],
 };
 
-interface AgentContext {
+export const IMPACT =
+  'Removes the stale greeting files, two at most. The dry run lists them first; restoring them from git undoes it.';
+
+const IMPACT_REQUIRED = '`impact` is required';
+
+export interface AgentContext {
   role: RunRole;
   prompt: string;
+  brief: string;
   cwd: string;
   sessionId: string;
   resumed: boolean;
   signal: AbortSignal;
   steers: string[];
-  call: (name: string, input: Record<string, unknown>) => Promise<string>;
+  call: (name: string, input: Record<string, unknown>, requestId?: string) => Promise<string>;
   write: (file: string, content: string) => void;
   waitForSteer: () => Promise<string>;
   hang: () => Promise<never>;
+  account: string | null;
+  listTools: () => Promise<string[]>;
+  notice: (notice: ChatNotice) => void;
+  say: (text: string) => void;
+}
+
+export class AgentFailure extends Error {
+  readonly failure: RunFailure;
+
+  constructor(failure: RunFailure) {
+    super(failure.message);
+    this.failure = failure;
+  }
 }
 
 export type AgentScript = (agent: AgentContext) => Promise<void>;
@@ -59,15 +91,17 @@ interface SessionRecord {
   cwd: string;
   steers: string[];
   cancelled: boolean;
+  account: string | null;
 }
 
 const DEFAULT_SCRIPTS: Record<RunRole, AgentScript> = {
   triage: async () => undefined,
   planner: async (agent) => {
-    await agent.call('propose_plan', toolPlan(PLAN));
+    const operates = agent.prompt.includes(IMPACT_REQUIRED);
+    await agent.call('propose_plan', toolPlan(operates ? { ...PLAN, impact: IMPACT } : PLAN));
   },
   builder: async (agent) => {
-    const match = /builder for phase (\d+)/.exec(agent.prompt);
+    const match = /builder for phase (\d+)/.exec(agent.brief);
     const phase = Number(match?.[1] ?? 1);
     agent.write(phase === 1 ? 'a.txt' : `${String.fromCharCode(96 + phase)}.txt`, `phase ${phase}\n`);
     await agent.call('complete_phase', phaseReport(`Wrote the file for phase ${phase}.`));
@@ -81,9 +115,21 @@ const DEFAULT_SCRIPTS: Record<RunRole, AgentScript> = {
   shipper: async (agent) => {
     await agent.call('complete_fix', { summary: 'Fixed it.' });
   },
+  answerer: async (agent) => {
+    await agent.call('answer', { answer: 'It lives in a.txt.' });
+  },
+  investigator: async (agent) => {
+    await agent.call('report_diagnosis', { findings: 'The greeting files were never written.' });
+  },
+  researcher: async (agent) => {
+    await agent.call('submit_report', { report: 'Plain text files are the simplest option.' });
+  },
+  operator: async (agent) => {
+    await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
+  },
 };
 
-export function toolPlan(plan: SpecDocument) {
+export function toolPlan(plan: PlanDocument) {
   return {
     goal: plan.goal,
     plan: plan.plan,
@@ -93,6 +139,11 @@ export function toolPlan(plan: SpecDocument) {
     out_of_scope: plan.outOfScope,
     verification: plan.verification,
     questions: plan.questions,
+    ...(plan.impact === undefined ? {} : { impact: plan.impact }),
+    ...(plan.operation === undefined ? {} : { operation: plan.operation }),
+    ...(plan.evidence === undefined ? {} : { evidence: plan.evidence }),
+    ...(plan.checks === undefined ? {} : { checks: plan.checks }),
+    ...(plan.approval === undefined ? {} : { approval: plan.approval }),
   };
 }
 
@@ -104,11 +155,35 @@ function phaseReport(summary: string) {
   };
 }
 
-class FakeAgents {
+export class FakeAgents {
   readonly sessions: SessionRecord[] = [];
+  readonly lost = new Set<string>();
+  readonly #pause: () => number;
   readonly #controllers: AbortController[] = [];
   readonly #queued = new Map<RunRole, AgentScript[]>();
+  readonly #briefs: Map<string, string>;
+  readonly #memoryPath: string | null;
   #counter = 0;
+
+  constructor(pause: () => number = () => 0, memoryPath: string | null = null) {
+    this.#pause = pause;
+    this.#memoryPath = memoryPath;
+    const remembered =
+      memoryPath && existsSync(memoryPath) ? JSON.parse(readFileSync(memoryPath, 'utf8')) : {};
+    this.#briefs = new Map(Object.entries(remembered as Record<string, string>));
+  }
+
+  #remember(sessionId: string, brief: string) {
+    this.#briefs.set(sessionId, brief);
+    if (!this.#memoryPath) return;
+    writeFileSync(`${this.#memoryPath}.tmp`, JSON.stringify(Object.fromEntries(this.#briefs)));
+    renameSync(`${this.#memoryPath}.tmp`, this.#memoryPath);
+  }
+
+  async #wait() {
+    const ms = this.#pause();
+    if (ms > 0) await Bun.sleep(ms);
+  }
 
   queue(role: RunRole, ...scripts: AgentScript[]) {
     this.#queued.set(role, [...(this.#queued.get(role) ?? []), ...scripts]);
@@ -118,13 +193,30 @@ class FakeAgents {
     for (const controller of this.#controllers) controller.abort();
   }
 
+  inspect = (query: { sessionId: string }): Promise<SessionArtifactStatus> =>
+    Promise.resolve(this.lost.has(query.sessionId) ? 'missing' : 'present');
+
+  provider(id: string, label: string): AgentProvider {
+    return {
+      id,
+      label,
+      capabilities: CLAUDE_CAPABILITIES,
+      startSession: this.start,
+      inspectSession: this.inspect,
+      listModels: () => Promise.resolve([]),
+      complete: () => Promise.resolve(null),
+    };
+  }
+
   of(role: RunRole) {
     return this.sessions.filter((session) => session.role === role);
   }
 
-  start = (input: ClaudeSessionInput): ClaudeSession => {
+  start = (input: AgentSessionInput): AgentSession => {
     const script = this.#queued.get(input.role)?.shift() ?? DEFAULT_SCRIPTS[input.role];
-    const sessionId = input.resume ?? `session-${++this.#counter}`;
+    const sessionId = input.resume ?? `session-${++this.#counter}-${Bun.randomUUIDv7()}`;
+    const brief = this.#briefs.get(sessionId) ?? input.prompt;
+    this.#remember(sessionId, brief);
     const controller = new AbortController();
     this.#controllers.push(controller);
     const record: SessionRecord = {
@@ -136,32 +228,42 @@ class FakeAgents {
       cwd: input.cwd,
       steers: [],
       cancelled: false,
+      account: input.account?.id ?? null,
     };
     this.sessions.push(record);
     const steerWaiters: ((text: string) => void)[] = [];
     let finished = false;
     input.onSession(sessionId);
     input.onEntry({ type: 'user', from: 'shinsa', text: input.prompt, attachments: [] });
-    const cancelled = new Promise<never>((_, reject) => {
-      controller.signal.addEventListener('abort', () => reject(new Error('cancelled')));
-    });
-    cancelled.catch(() => undefined);
+    const whenCancelled = () =>
+      new Promise<never>((_, reject) => {
+        if (controller.signal.aborted) {
+          reject(new Error('cancelled'));
+          return;
+        }
+        controller.signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true });
+      });
     const agent: AgentContext = {
       role: input.role,
       prompt: input.prompt,
+      brief,
       cwd: input.cwd,
       sessionId,
       resumed: input.resume !== null,
       signal: controller.signal,
       steers: record.steers,
-      call: async (name, toolInput) => {
+      call: async (name, toolInput, requestId) => {
+        await this.#wait();
         if (controller.signal.aborted) throw new Error('cancelled');
         input.onEntry({
           type: 'tool_call',
           callId: `${sessionId}-${name}`,
           tool: mapClaudeTool(`mcp__shinsa__${name}`, toolInput),
         });
-        const result = await Promise.race([input.handleTool(name, toolInput, controller.signal), cancelled]);
+        const result = await Promise.race([
+          input.tools.handle(name, toolInput, controller.signal, requestId),
+          whenCancelled(),
+        ]);
         input.onEntry({
           type: 'tool_result',
           callId: `${sessionId}-${name}`,
@@ -181,12 +283,25 @@ class FakeAgents {
           new Promise<string>((resolveSteer) => {
             steerWaiters.push(resolveSteer);
           }),
-          cancelled,
+          whenCancelled(),
         ]),
-      hang: () => cancelled,
+      hang: whenCancelled,
+      account: input.account?.id ?? null,
+      listTools: async () => {
+        const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+        const client = new Client({ name: 'agent', version: '1.0.0' });
+        await input.tools.createServer().connect(serverSide);
+        await client.connect(clientSide);
+        const { tools } = await client.listTools();
+        await client.close();
+        return tools.map((tool) => tool.name);
+      },
+      notice: (notice) => input.onEntry({ type: 'notice', notice }),
+      say: (text) => input.onEntry({ type: 'agent', phase: 'final', text }),
     };
     const done = (async () => {
       try {
+        await this.#wait();
         await script(agent);
         return { outcome: 'completed' as const, summary: 'done' };
       } catch (error) {
@@ -194,6 +309,7 @@ class FakeAgents {
         return {
           outcome: 'failed' as const,
           summary: error instanceof Error ? error.message : String(error),
+          ...(error instanceof AgentFailure ? { failure: error.failure } : {}),
         };
       } finally {
         finished = true;
@@ -226,6 +342,7 @@ export interface FakePullRequest {
   mergeable: 'MERGEABLE' | 'CONFLICTING' | 'UNKNOWN';
   unresolved: number;
   mergedWith: string | null;
+  mergeCommit?: string | null;
 }
 
 interface GitHubState {
@@ -248,7 +365,8 @@ export class FakeGitHub {
   }
 
   #write(state: GitHubState) {
-    writeFileSync(this.path, JSON.stringify(state, null, 2));
+    writeFileSync(`${this.path}.tmp`, JSON.stringify(state, null, 2));
+    renameSync(`${this.path}.tmp`, this.path);
   }
 
   get pulls() {
@@ -272,11 +390,12 @@ async function git(cwd: string, ...args: string[]) {
   return runCommandOrThrow(['git', ...args], cwd);
 }
 
-export interface Daemon {
+interface Daemon {
   engine: Engine;
   runs: RunSupervisor;
   effects: EffectRunner;
   log: EventLog;
+  isStopped: () => boolean;
   stop: () => void;
   close: () => Promise<void>;
 }
@@ -290,7 +409,10 @@ export class World {
   readonly agents = new FakeAgents();
   readonly github: FakeGitHub;
   daemon!: Daemon;
+  providers: ProviderRegistry | null = null;
+  supervise: ((engine: Engine) => Partial<SupervisorOptions>) | null = null;
   dependOn: string[] = [];
+  classify: QuickJson | null = null;
   live = false;
   readonly #env: Record<string, string | undefined> = {};
   readonly #daemons: Daemon[] = [];
@@ -305,37 +427,30 @@ export class World {
     this.origin = join(this.root, 'origin.git');
     this.repoPath = join(this.root, 'app');
     this.dataDir = join(this.root, 'data');
-    for (const dir of ['data', 'data/worktrees', 'data/evidence', 'data/transcripts']) {
-      mkdirSync(join(this.root, dir), { recursive: true });
-    }
-    this.config = {
-      dataDir: this.dataDir,
-      databasePath: join(this.dataDir, 'shinsa.sqlite'),
-      worktreesDir: join(this.dataDir, 'worktrees'),
-      evidenceDir: join(this.dataDir, 'evidence'),
-      transcriptsDir: join(this.dataDir, 'transcripts'),
-      pluginDir: resolve(import.meta.dirname, '../../plugin'),
-      webDir: join(this.root, 'web'),
-      port: 0,
-      hostname: '127.0.0.1',
-      allowedHosts: ['localhost', '127.0.0.1', '[::1]'],
-      roots: [this.root],
-      inspect: false,
-      editor: null,
-      terminal: 'Terminal',
-      settleDelayMs: 3_600_000,
-    };
+    this.config = createConfigAt(this.root);
     this.github = new FakeGitHub(join(this.root, 'gh.json'));
   }
 
-  static async create(options: { checks?: string[]; live?: boolean; files?: Record<string, string> } = {}) {
+  static async create(
+    options: {
+      checks?: string[];
+      live?: boolean;
+      files?: Record<string, string>;
+      providers?: (world: World) => ProviderRegistry;
+      supervise?: (world: World, engine: Engine) => Partial<SupervisorOptions>;
+    } = {}
+  ) {
     const world = new World();
     world.live = options.live ?? false;
+    world.providers = options.providers?.(world) ?? null;
+    const supervise = options.supervise;
+    world.supervise = supervise ? (engine) => supervise(world, engine) : null;
     const gitConfig = join(world.root, 'gitconfig');
     writeFileSync(
       gitConfig,
       '[user]\n\tname = Shinsa Test\n\temail = test@shinsa.dev\n[init]\n\tdefaultBranch = main\n[commit]\n\tgpgsign = false\n'
     );
+    const claude = options.live ? Bun.which('claude') : null;
     world.#setEnv({
       GIT_CONFIG_GLOBAL: gitConfig,
       GIT_CONFIG_NOSYSTEM: '1',
@@ -343,6 +458,7 @@ export class World {
       FAKE_GH_STATE: world.github.path,
       FAKE_GH_ORIGIN: world.origin,
       SHINSA_QUICK: options.live ? 'on' : 'off',
+      ...(claude ? { CLAUDE_EXECUTABLE: claude } : {}),
     });
     await runCommandOrThrow(['git', 'init', '--bare', '-q', '-b', 'main', world.origin], world.root);
     mkdirSync(world.repoPath);
@@ -361,8 +477,8 @@ export class World {
     const candidate = await inspectRepo(world.repoPath);
     await world.engine.dispatch({
       type: 'repo.register',
-      repo: { ...candidate, checkCommands: [], previewCommand: null },
-      areaName: null,
+      repo: { ...candidate, checkCommands: [] },
+      projectName: null,
     });
     await world.engine.dispatch({
       type: 'repo.update',
@@ -385,32 +501,39 @@ export class World {
     const transcripts = new Transcripts(this.config.transcriptsDir);
     const evidence = new EvidenceStore(this.config.evidenceDir);
     const runs = new RunSupervisor(engine, this.config, transcripts, evidence, {
-      startSession: this.live ? undefined : this.agents.start,
+      startSession: this.live || this.providers ? undefined : this.agents.start,
+      providers: this.providers ?? undefined,
+      ...this.supervise?.(engine),
     });
-    const briefings = new Briefings(engine);
+    const quick = createQuickCalls(this.providers ?? new ProviderRegistry(), () => engine.state.settings);
+    const briefings = new Briefings(engine, { ask: quick.write });
     const effects = new EffectRunner(engine, this.config, runs, briefings, {
       resolveLogin: () => Promise.resolve(null),
       triage: async (state, task, local) => {
-        const dependsOn = this.dependOn.flatMap((id) => state.tasks[id] ?? []);
+        const waitsOn = this.dependOn.flatMap((id) => state.tasks[id] ?? []);
         this.dependOn = [];
-        const result = await resolveTriage(state, task, local);
-        return result ? { ...result, dependsOn } : result;
+        const result = await resolveTriage(state, task, local, this.classify ?? quick.classify);
+        return result ? { ...result, waitsOn } : result;
       },
     });
-    engine.onEffect((effect) => effects.apply(effect));
-    engine.onEffectExhausted((effect, error) => effects.reportExhausted(effect, error));
+    engine.onEffect((effect, context) => effects.apply(effect, context));
+    engine.onEffectExhausted((effect, error, key) => effects.reportExhausted(effect, error, key));
     engine.start();
+    let stopped = false;
     this.daemon = this.#track({
       engine,
       runs,
       effects,
       log,
+      isStopped: () => stopped,
       stop: () => {
+        stopped = true;
         briefings.stop();
         engine.stop();
       },
       close: async () => {
         briefings.stop();
+        await effects.stop();
         engine.stop();
         await engine.settle();
         log.close();
@@ -419,9 +542,19 @@ export class World {
     return this.daemon;
   }
 
+  async restartGracefully() {
+    await this.daemon.runs.interruptForShutdown();
+    this.daemon.stop();
+    await this.daemon.engine.settle();
+    this.boot();
+    await this.daemon.runs.recover();
+    await this.daemon.effects.recover();
+  }
+
   async restart() {
     this.daemon.stop();
-    await this.daemon.engine.idle();
+    await this.daemon.runs.interruptForShutdown();
+    await this.daemon.engine.settle();
     this.boot();
     await this.daemon.runs.recover();
     await this.daemon.effects.recover();
@@ -455,7 +588,7 @@ export class World {
 
   async createTask(
     intent = 'Add the greeting files',
-    options: { priority?: Task['priority']; blockedBy?: string[] } = {}
+    options: { priority?: Task['priority']; waitsOn?: string[] } = {}
   ) {
     const before = new Set(Object.keys(this.state.tasks));
     await this.engine.dispatch({
@@ -463,7 +596,7 @@ export class World {
       intent,
       repoId: this.repoId,
       priority: options.priority,
-      blockedBy: options.blockedBy,
+      waitsOn: options.waitsOn,
     });
     const taskId = Object.keys(this.state.tasks).find((id) => !before.has(id));
     if (!taskId) throw new Error('task was not created');
@@ -522,6 +655,8 @@ export class World {
   }
 
   async dispose() {
+    const live = this.#daemons.filter((daemon) => !daemon.isStopped());
+    await Promise.allSettled(live.map((daemon) => daemon.runs.interruptForShutdown()));
     for (const daemon of this.#daemons) daemon.stop();
     this.agents.abortAll();
     for (const daemon of this.#daemons) await daemon.close();

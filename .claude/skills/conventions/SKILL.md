@@ -11,14 +11,14 @@ description: Shinsa code conventions — load before writing or reviewing code a
 
 | Path | What it is |
 |---|---|
-| `packages/core` | Pure domain: one folder per concern under `src/` (`model`, `events`, `commands`, `effects`, `state`, `decide`, `queue`, `briefing`, `report`, `chat`, `prompts`, `progress`, `protocol`). No `node:*`, no Bun, no I/O. See `packages/core/CLAUDE.md` |
+| `packages/core` | Pure domain: one folder per concern under `src/` (`domain`, `agent-models`, `events`, `commands`, `effects`, `state`, `decide`, `accounts`, `costs`, `schedules`, `queue`, `briefing`, `report`, `chat`, `prompts`, `progress`, `protocol`). No `node:*`, no Bun, no I/O. See `packages/core/CLAUDE.md` |
 | `apps/server` | All I/O: event log, effect runner, agent runs, git, GitHub, HTTP. Folder per concern; see `apps/server/CLAUDE.md` |
-| `apps/web` | Renders server state, owns nothing. Every action is a `UserCommand` through `sendCommand` |
+| `apps/web` | Renders server state, owns nothing. Every action is a `UserCommand` through `sendCommand`. `routes/`, `components/<domain>/`, `hooks/`, `lib/` (all non-JSX logic, 100% covered); see `apps/web/CLAUDE.md` |
 | `packages/ui` | The design system. Reusable beyond Shinsa, imports nothing from the workspace |
 
 - **A folder is a concern with an `index.ts` barrel.** Importers outside the folder use the barrel (`../state/index.ts`) or, inside one package where a barrel would cycle, the concrete file (`../state/queries.ts`). Files inside a folder import each other directly, never their own barrel. Packages import each other only by package name (`@shinsa/core`), never by path.
 - **The package barrel is the contract.** Everything `packages/core/src/index.ts` exports stays importable by the same name. Moving a file is free; renaming or removing an export changes every consumer and needs their updates in the same change.
-- **Tests mirror `src/` file for file**: `packages/core/test/decide/gates.test.ts` ↔ `src/decide/gates.ts`. Shared helpers live beside them (`test/harness.ts`, `test/briefing/fixtures.ts`), never in `src/`.
+- **Tests follow `src/`**: one test folder per source folder and a test file per module with behaviour of its own (`packages/core/test/decide/gates.test.ts` ↔ `src/decide/gates.ts`); a module that only serves another is covered through it. Shared helpers live beside them (`test/harness.ts`, `test/briefing/fixtures.ts`), never in `src/`.
 - **No single-use constants.** A value gets a name when it is reused or is a tunable (`MAX_STALLED_FIXES`, `ACTIVITY_LIMIT`). A lookup table (`Record<GateKind, string>`) beats a `switch` that only returns strings.
 
 ## Function verbs — one catalog, no synonyms
@@ -75,7 +75,7 @@ export function blockTask(state: ShinsaState, command: CommandOf<'task.block'>) 
 
 ## Readability
 
-1. **No comments.** Names and structure carry the meaning; the reasons live in `CLAUDE.md` and `docs/`. Only functional directives (`biome-ignore`, `@ts-expect-error`) are allowed (lint-enforced).
+1. **No comments.** Names and structure carry the meaning; the reasons live in `CLAUDE.md` and `docs/`. Only functional directives (`biome-ignore`, `@ts-expect-error`) are allowed (lint-enforced everywhere but `packages/ui`, a reusable kit that keeps Buzzkit's comments).
 2. **Never wrap a call chain in a ternary.** Guards and early returns; ternaries are for small value picks.
 3. **Multi-line arrow bodies get a block and an explicit `return`.** One-liners stay expressions.
 4. **Blank lines separate phases in long functions only.** A guard and a return read as one unit.
@@ -86,14 +86,15 @@ export function blockTask(state: ShinsaState, command: CommandOf<'task.block'>) 
 
 - One JSON line per log entry: `log.info/warn/error('[Area] Sentence', fields)` with every id in scope and `error: describeError(error)`. Never `console` outside `scripts/`.
 - A `catch` rethrows, converts to a typed result, or logs with context. `.catch(() => undefined)` is a silent swallow and is not allowed.
-- An effect never writes state: it reports back with a command (`effect.fail`, `pull_request.record`). An effect that gives up becomes a failure gate, never just a log line.
+- An effect never writes state: it reports back with a command (`effect.fail`, `pull_request.record`). An effect a task depends on that gives up becomes a failure gate (give its kind a title in `FAILURE_TITLE`), never just a log line.
 
 ## Tests and coverage
 
-- `packages/core` and `apps/server` enforce 100% line and function coverage in their `bunfig.toml`; `bun test` fails below it. Coverage is the floor, not the goal: every test names a behaviour in its title and asserts what a person or an agent would see.
+- All four packages (`packages/core`, `apps/server`, `apps/web`, `packages/ui`) enforce 100% line and function coverage in their `bunfig.toml`; `bun test` fails below it. The web leaves `.tsx` components out of the count and `packages/ui` its `components/` (they are checked by rendering, not by coverage); everything in `lib/` and `hooks/` counts. Coverage is the floor, not the goal: every test names a behaviour in its title and asserts what a person or an agent would see.
 - A bug fix comes with the test that fails without it. Prove it: revert the fix, watch the test fail, restore.
 - `decide` tests go through `createHarness()` with real commands (`test/harness.ts`: `reachReviewGate`, `reachShipping`, `pushFix`, `shipAndMerge`), never by building state by hand, except for state an older version could have written.
 - When a test needs git, it creates a throwaway repository; in sandboxes set `GIT_CONFIG_GLOBAL` to a clean file.
+- A test waits on a condition, never on time, and leaves no process or timer running (`apps/server/CLAUDE.md` → Testing has the tools).
 
 ## Docs — in the same change
 

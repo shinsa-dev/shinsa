@@ -27,19 +27,19 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: [
-          'text-primary-foreground before:bg-primary [&_svg]:opacity-80',
+          'text-primary-foreground before:bg-primary',
           'before:shadow-control',
           'not-disabled:hover:before:bg-primary/80 not-disabled:active:before:bg-primary/80',
         ].join(' '),
         secondary:
-          'text-fg-2 not-disabled:hover:text-fg-4 not-disabled:hover:before:bg-bg-a2/70 not-disabled:active:text-fg-4 not-disabled:active:before:bg-bg-a2/70',
+          'icon-solid text-fg-2 not-disabled:hover:text-fg-4 not-disabled:hover:before:bg-bg-a2/70 not-disabled:active:text-fg-4 not-disabled:active:before:bg-bg-a2/70',
         outline: [
           'text-fg-4 before:bg-background dark:before:bg-bg-3',
           'before:shadow-control-elevated not-disabled:hover:before:shadow-control-elevated-hover not-disabled:active:before:shadow-control-elevated-hover',
           'not-disabled:active:before:bg-bg-1 not-disabled:data-[pressed]:before:bg-bg-1 dark:not-disabled:data-[pressed]:before:bg-bg-4 dark:not-disabled:active:before:bg-bg-4',
         ].join(' '),
         destructive: [
-          'text-white before:bg-red-4 [&_svg]:opacity-80',
+          'text-white before:bg-red-4',
           'before:shadow-control-destructive',
           'not-disabled:hover:before:bg-red-4/90 not-disabled:active:before:bg-red-4/90',
         ].join(' '),
@@ -57,12 +57,10 @@ const buttonVariants = cva(
         default:
           "h-6.5 gap-1.5 rounded-control px-2.5 text-xs data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-4",
         lg: "h-7.5 gap-1.5 rounded-control px-3 text-sm data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5 [&_svg:not([class*='size-'])]:size-4",
-        'icon-xs':
-          "size-5.5 rounded-control-sm px-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:opacity-100",
-        'icon-sm':
-          "size-6 rounded-control-sm px-0 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:opacity-100",
-        icon: "size-6.5 rounded-control px-0 [&_svg:not([class*='size-'])]:size-4 [&_svg]:opacity-100",
-        'icon-lg': "size-7.5 rounded-control px-0 [&_svg:not([class*='size-'])]:size-4 [&_svg]:opacity-100",
+        'icon-xs': "icon-solid size-5.5 rounded-control-sm px-0 [&_svg:not([class*='size-'])]:size-3.5",
+        'icon-sm': "icon-solid size-6 rounded-control-sm px-0 [&_svg:not([class*='size-'])]:size-3.5",
+        icon: "icon-solid size-6.5 rounded-control px-0 [&_svg:not([class*='size-'])]:size-4",
+        'icon-lg': "icon-solid size-7.5 rounded-control px-0 [&_svg:not([class*='size-'])]:size-4",
       },
     },
     defaultVariants: {

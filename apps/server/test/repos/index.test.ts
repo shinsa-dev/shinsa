@@ -2,11 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  createLoginResolver,
   listCandidateRepos,
   listLocalRepos,
-  resolveAreaName,
   resolveContainingRepo,
-  resolveGithubLogin,
+  resolveProjectName,
   upsertRepo,
 } from '../../src/repos/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
@@ -38,21 +38,25 @@ describe('listLocalRepos', () => {
   });
 });
 
-describe('area names', () => {
+describe('project names', () => {
   test('the user’s own repositories are Personal, others are named after their owner', async () => {
     const login = () => Promise.resolve('christo');
-    expect(await resolveAreaName(null, login)).toBe('Local');
-    expect(await resolveAreaName('github.com/Christo/app', login)).toBe('Personal');
-    expect(await resolveAreaName('github.com/superwall-me/paywall', login)).toBe('Superwall Me');
+    expect(await resolveProjectName(null, login)).toBe('Local');
+    expect(await resolveProjectName('github.com/Christo/app', login)).toBe('Personal');
+    expect(await resolveProjectName('github.com/superwall-me/paywall', login)).toBe('Superwall Me');
   });
 
-  test('the GitHub login is read once from gh', async () => {
-    const restore = overrideEnv({ FAKE_GH_LOGIN: 'Christo' });
+  test('the GitHub login is read from gh once it answers, and a failed read is tried again', async () => {
+    const resolveLogin = createLoginResolver(createTempDir());
+    const restores = [overrideEnv({ FAKE_GH_LOGIN: undefined })];
     try {
-      expect(await resolveGithubLogin()).toBe('christo');
-      expect(await resolveGithubLogin()).toBe('christo');
+      expect(await resolveLogin()).toBeNull();
+      restores.push(overrideEnv({ FAKE_GH_LOGIN: 'Christo' }));
+      expect(await resolveLogin()).toBe('christo');
+      restores.push(overrideEnv({ FAKE_GH_LOGIN: 'Someone' }));
+      expect(await resolveLogin()).toBe('christo');
     } finally {
-      restore();
+      for (const restore of restores.reverse()) restore();
     }
   });
 });
@@ -68,10 +72,30 @@ describe('upsertRepo', () => {
     expect(Object.keys(engine.state.repos)).toHaveLength(1);
   });
 
+  test('a registration is named after the folder and the log position, or after the effect that asks for it, so a resend lands once', async () => {
+    const { path } = await createGitRepo();
+    const stub = createStubEngine();
+    const login = () => Promise.resolve(null);
+    stub.state.seq = 12;
+    await expect(upsertRepo(stub.engine, path, login)).rejects.toThrow('Could not register app.');
+    expect(stub.commandIds).toEqual([`repo:${await git(path, 'rev-parse', '--show-toplevel')}:12`]);
+    await expect(
+      upsertRepo(stub.engine, path, login, null, { id: 'triage:t1:repo.register' })
+    ).rejects.toThrow('Could not register app.');
+    expect(stub.commandIds.at(-1)).toBe('triage:t1:repo.register');
+
+    const engine = new Engine(new EventLog(join(createTempDir(), 'db.sqlite')));
+    const concurrent = await Promise.all([upsertRepo(engine, path, login), upsertRepo(engine, path, login)]);
+    expect(concurrent[0].id).toBe(concurrent[1].id);
+    expect(Object.keys(engine.state.repos)).toHaveLength(1);
+  });
+
   test('a registration that does not land is an error', async () => {
     const { path } = await createGitRepo({ remote: false });
     const { engine } = createStubEngine();
-    expect(upsertRepo(engine, path, () => Promise.resolve(null))).rejects.toThrow('Could not register app.');
+    await expect(upsertRepo(engine, path, () => Promise.resolve(null))).rejects.toThrow(
+      'Could not register app.'
+    );
   });
 });
 

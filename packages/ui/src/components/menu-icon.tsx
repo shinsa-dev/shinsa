@@ -7,9 +7,6 @@ type IconProps = ComponentProps<typeof Icon>;
 /** Menu items accept either a bare icon name or full Icon props + a position. */
 export type MenuItemIcon = IconName | (IconProps & { position?: IconPosition });
 
-export const DESTRUCTIVE_ITEM =
-  'data-[variant=destructive]:text-red-4/90 data-[variant=destructive]:data-indicator-here:text-red-4 data-[variant=destructive]:[&_svg]:text-current data-[variant=destructive]:[&_svg]:opacity-100';
-
 export function renderMenuIcon(icon: MenuItemIcon | undefined, wantedPosition: IconPosition) {
   if (!icon) return null;
   const props = typeof icon === 'string' ? { name: icon } : icon;

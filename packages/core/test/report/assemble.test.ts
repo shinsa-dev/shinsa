@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { assembleReport } from '../../src/index.ts';
+import { assembleReport } from '../../src/report/index.ts';
 import { buildAll, completePhase, createHarness, createTask, PASSING, proposePlan } from '../harness.ts';
 
 describe('assembleReport', () => {
@@ -22,7 +22,7 @@ describe('assembleReport', () => {
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
     completePhase(harness, taskId, 'Found it.');
-    const task = { ...harness.task(taskId), spec: null };
+    const task = { ...harness.task(taskId), plan: null };
     expect(assembleReport(task)).toMatchObject({
       headline: task.title,
       phases: [{ title: 'Phase 1', summary: 'Found it.' }],

@@ -43,7 +43,7 @@ function Input({
         aria-hidden={!loading}
         className={cn(
           'pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-2 transition-opacity duration-150',
-          loading ? 'opacity-100' : 'opacity-0'
+          !loading && 'opacity-0'
         )}
       />
     </span>

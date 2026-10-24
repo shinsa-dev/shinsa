@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { listWaitsOn, resolveFocusArea, resolveQueue } from '../../src/index.ts';
+import { listWaitsOn, resolveFocusProject, resolveQueue } from '../../src/index.ts';
 import {
   approve,
   createHarness,
@@ -23,10 +23,12 @@ describe('attention', () => {
     expect(queue.later).toHaveLength(1);
   });
 
-  test('the queue holds gates outside the focused area', () => {
+  test('a focus on a project lists only its decisions, and names each gate’s project', () => {
     const harness = createHarness();
-    harness.send({ type: 'area.write', area: { id: 'side', name: 'Side projects', color: 'blue' } });
+    harness.send({ type: 'project.write', project: { name: 'Side projects', color: 'blue' } });
+    const side = Object.keys(harness.state.projects)[0] ?? '';
     const taskId = createTask(harness);
+    const superwall = harness.task(taskId).projectId ?? null;
     harness.send({
       type: 'agent.ask',
       runId: harness.activeRun(taskId).id,
@@ -34,26 +36,30 @@ describe('attention', () => {
       question: 'Which tab?',
       context: null,
     });
-    expect(resolveQueue(harness.state, 2_000).ready).toHaveLength(1);
-    harness.send({ type: 'focus.change', areaId: 'side', until: null });
+    const before = resolveQueue(harness.state, 2_000);
+    expect(before.focusProjectId).toBeNull();
+    expect(before.ready.map((entry) => entry.projectId)).toEqual([superwall]);
+    harness.send({ type: 'focus.change', projectId: side, until: null });
     const queue = resolveQueue(harness.state, 2_000);
+    expect(queue.focusProjectId).toBe(side);
     expect(queue.ready).toHaveLength(0);
-    expect(queue.held.map((entry) => entry.task.id)).toEqual([taskId]);
+    harness.send({ type: 'focus.change', projectId: superwall, until: null });
+    expect(resolveQueue(harness.state, 2_000).ready.map((entry) => entry.task.id)).toEqual([taskId]);
   });
 });
 
 describe('ranking decisions', () => {
   test('priority first, then what a decision unblocks, then the kind of gate, then age', () => {
     const harness = createHarness();
-    const review = createTask(harness, { intent: 'Review me' });
+    const review = createTask(harness, { request: 'Review me' });
     reachReviewGate(harness, review);
-    const shipped = createTask(harness, { intent: 'Merge me' });
+    const shipped = createTask(harness, { request: 'Merge me' });
     reachShipping(harness, shipped);
     harness.send({ type: 'pull_request.record', taskId: shipped, pullRequest: pullRequest() });
-    const parent = createTask(harness, { intent: 'Parent' });
+    const parent = createTask(harness, { request: 'Parent' });
     reachReviewGate(harness, parent);
-    createTask(harness, { intent: 'Child', blockedBy: [parent] });
-    const urgent = createTask(harness, { intent: 'Urgent', priority: 'urgent' });
+    createTask(harness, { request: 'Child', waitsOn: [parent] });
+    const urgent = createTask(harness, { request: 'Urgent', priority: 'urgent' });
     reachReviewGate(harness, urgent);
     const queue = resolveQueue(harness.state, 0);
     expect(queue.ready.map((entry) => `${entry.task.title}: ${entry.reason}`)).toEqual([
@@ -66,9 +72,9 @@ describe('ranking decisions', () => {
 
   test('a task marked done no longer counts as unblocked', () => {
     const harness = createHarness();
-    const parent = createTask(harness, { intent: 'Parent' });
+    const parent = createTask(harness, { request: 'Parent' });
     reachReviewGate(harness, parent);
-    const child = createTask(harness, { intent: 'Child', blockedBy: [parent] });
+    const child = createTask(harness, { request: 'Child', waitsOn: [parent] });
     harness.send({ type: 'task.complete', taskId: child });
     expect(resolveQueue(harness.state, 0).ready[0]?.unblocks).toBe(0);
   });
@@ -76,24 +82,41 @@ describe('ranking decisions', () => {
   test('a paused task and a plan to approve say why they need you', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: true } });
-    const planned = createTask(harness, { intent: 'Plan me', size: 'large' });
+    const planned = createTask(harness, { request: 'Plan me', size: 'large' });
     proposePlan(harness, planned);
-    const paused = createTask(harness, { intent: 'Pause me' });
+    const paused = createTask(harness, { request: 'Pause me' });
     harness.send({ type: 'effect.fail', taskId: paused, title: 'Broke', detail: 'x' });
     const reasons = resolveQueue(harness.state, 0).ready.map((entry) => entry.reason);
-    expect(reasons).toContain('Needs the plan approved before building starts');
-    expect(reasons).toContain('Paused and needs a decision');
+    expect(reasons).toEqual([
+      'Needs the plan approved before building starts',
+      'Paused and needs a decision',
+    ]);
+  });
+
+  test('an agent asking for a secret says so, not that it waits on an answer', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({
+      type: 'agent.request_secret',
+      runId: harness.activeRun(taskId).id,
+      gateId: 'g1',
+      label: 'GitHub webhook secret',
+      reason: 'Paste the signing secret.',
+    });
+    expect(resolveQueue(harness.state, 0).ready.map((entry) => entry.reason)).toEqual([
+      'An agent needs a secret from you',
+    ]);
   });
 });
 
 describe('what is working and what is waiting', () => {
   test('a task being merged still shows as working, a task waiting on another as waiting', () => {
     const harness = createHarness();
-    const parent = createTask(harness, { intent: 'Parent' });
+    const parent = createTask(harness, { request: 'Parent' });
     reachShipping(harness, parent);
     harness.send({ type: 'pull_request.record', taskId: parent, pullRequest: pullRequest() });
     approve(harness, parent);
-    const child = createTask(harness, { intent: 'Child', blockedBy: [parent] });
+    const child = createTask(harness, { request: 'Child', waitsOn: [parent] });
     const queue = resolveQueue(harness.state, 0);
     expect(queue.working.map((task) => task.id)).toEqual([parent]);
     expect(queue.waiting.map((task) => task.id)).toEqual([child]);
@@ -111,9 +134,10 @@ describe('what is working and what is waiting', () => {
 
   test('a focus with an end date stops focusing once it passes', () => {
     const harness = createHarness();
-    harness.send({ type: 'area.write', area: { id: 'side', name: 'Side', color: 'blue' } });
-    harness.send({ type: 'focus.change', areaId: 'side', until: 5_000 });
-    expect(resolveFocusArea(harness.state, 4_999)).toBe('side');
-    expect(resolveFocusArea(harness.state, 5_000)).toBeNull();
+    harness.send({ type: 'project.write', project: { name: 'Side', color: 'blue' } });
+    const side = Object.keys(harness.state.projects)[0] ?? '';
+    harness.send({ type: 'focus.change', projectId: side, until: 5_000 });
+    expect(resolveFocusProject(harness.state, 4_999)).toBe(side);
+    expect(resolveFocusProject(harness.state, 5_000)).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { describeSession, readSession } from '../../src/cli/session.ts';
-import { createTempDir, writeFiles } from '../helpers/index.ts';
+import { createTempDir, overrideEnv, writeFiles } from '../helpers/index.ts';
 
 function line(value: unknown) {
   return JSON.stringify(value);
@@ -47,6 +47,22 @@ describe('readSession', () => {
     expect(() => readSession('../proj/abc', projects)).toThrow('No Claude Code session');
     expect(() => readSession('abc', join(projects, 'none'))).toThrow('No Claude Code session');
     expect(() => readSession('empty', projects)).toThrow('has no user messages to import.');
+  });
+
+  test('looks for a session id in the Claude config folder CLAUDE_CONFIG_DIR names', () => {
+    const configDir = createTempDir();
+    writeFiles(configDir, {
+      'projects/proj/in-config.jsonl': line({
+        type: 'user',
+        message: { role: 'user', content: 'From there' },
+      }),
+    });
+    const restore = overrideEnv({ CLAUDE_CONFIG_DIR: configDir });
+    try {
+      expect(readSession('in-config').firstRequest).toBe('From there');
+    } finally {
+      restore();
+    }
   });
 });
 

@@ -16,20 +16,13 @@ export function formatLineRange(start: number, end: number) {
 
 export function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  const kilobytes = Math.round(size / 1024);
+  if (kilobytes < 1024) return `${kilobytes} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function capitalise(text: string) {
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-export function lowerFirst(text: string) {
-  return /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
-}
-
 export function endSentence(text: string) {
-  return /[.?!…]$/.test(text) ? text : `${text}.`;
+  return /[.?!…]["”’')\]]*$/.test(text) ? text : `${text}.`;
 }
 
 export function flattenWhitespace(text: string) {

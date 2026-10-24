@@ -27,6 +27,6 @@ describe('commits and pushes', () => {
     await commitWorktree(path, 'feat: a');
     await pushBranch(path, 'feat/a');
     expect(await git(origin, 'rev-parse', 'refs/heads/feat/a')).toBe(await resolveHead(path));
-    expect(pushBranch(path, '--force')).rejects.toThrow('is not a branch name');
+    await expect(pushBranch(path, '--force')).rejects.toThrow('is not a branch name');
   });
 });

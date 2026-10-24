@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { listWaitsOn, resolveLiveness, resolveQueue } from '../../src/index.ts';
+import { isTaskLive } from '../../src/decide/liveness.ts';
+import { listWaitsOn, resolveQueue } from '../../src/index.ts';
 import { buildAll, createHarness, createTask, PASSING } from '../harness.ts';
 
 describe('scheduling', () => {
   test('every independent task starts at once: there is no cap on agents', () => {
     const harness = createHarness();
-    const tasks = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'].map((intent) =>
-      createTask(harness, { intent })
+    const tasks = ['One', 'Two', 'Three', 'Four', 'Five', 'Six'].map((request) =>
+      createTask(harness, { request })
     );
     for (const taskId of tasks) {
       expect(harness.activeRun(taskId).status).toBe('running');
@@ -19,8 +20,8 @@ describe('scheduling', () => {
   test('a stored agent limit from an older version is ignored', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { maxConcurrentRuns: 1 } as never });
-    const first = createTask(harness, { intent: 'One' });
-    const second = createTask(harness, { intent: 'Two' });
+    const first = createTask(harness, { request: 'One' });
+    const second = createTask(harness, { request: 'Two' });
     expect(harness.activeRun(first).status).toBe('running');
     expect(harness.activeRun(second).status).toBe('running');
   });
@@ -31,7 +32,7 @@ describe('scheduling', () => {
     buildAll(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     for (const task of Object.values(harness.state.tasks)) {
-      expect(resolveLiveness(harness.state, task)).not.toBeNull();
+      expect(isTaskLive(harness.state, task)).toBe(true);
     }
   });
 });

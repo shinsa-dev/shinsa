@@ -3,12 +3,7 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import { HighlightList } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
-import {
-  DESTRUCTIVE_ITEM,
-  type MenuItemIcon,
-  menuIconPosition,
-  renderMenuIcon,
-} from '@shinsa/ui/components/menu-icon';
+import { type MenuItemIcon, menuIconPosition, renderMenuIcon } from '@shinsa/ui/components/menu-icon';
 import { useControllableOpen } from '@shinsa/ui/hooks/use-controllable-open';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -124,12 +119,13 @@ function DropdownMenuLabel({
 // The sliding indicator (HighlightList) draws the highlight background, so
 // items only shift their own text color while it sits on them.
 const ITEM_BASE =
-  // Icons run at 50% opacity by default; when the highlight sits on an item
-  // they rise to full so they darken in step with the text.
-  // leading-4 keeps item heights integral (12px padding + 18px line box);
-  // the type-scale default of 1.25 yields 29.5px items, whose half-pixel edges
+  // leading-4 keeps item heights integral (8px padding + 16px line box);
+  // text-xs's default of 1.2 yields 23.6px items, whose fractional edges
   // antialias the menu's bottom padding away at some popup positions.
-  "relative flex cursor-pointer items-center gap-1.5 rounded-item py-1 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden select-none data-indicator-here:text-fg-4 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5 [&[data-indicator-here]_svg]:opacity-100 [&_svg]:transition-opacity [&_svg]:duration-150";
+  "icon-item relative flex cursor-pointer items-center gap-1.5 rounded-item py-1 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden select-none data-indicator-here:text-fg-4 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5";
+
+const DESTRUCTIVE_ITEM =
+  'data-[variant=destructive]:text-red-4/90 data-[variant=destructive]:data-indicator-here:text-red-4 data-[variant=destructive]:[&_svg]:text-current data-[variant=destructive]:icon-solid';
 
 function DropdownMenuItem({
   className,
@@ -221,17 +217,16 @@ function DropdownMenuCheckboxItem({
     <MenuPrimitive.CheckboxItem
       data-slot='dropdown-menu-checkbox-item'
       data-inset={inset}
-      className={cn(ITEM_BASE, 'pr-7 [&[data-indicator-here]_span]:text-fg-4', className)}
+      className={cn(ITEM_BASE, 'pr-7', className)}
       checked={checked}
       {...props}
     >
-      {/* Pinned to fg-4 so the checkmark doesn't shift color when the hover highlight arrives. */}
       <span
-        className='pointer-events-none absolute right-2 flex items-center justify-center text-fg-4'
+        className='pointer-events-none absolute right-2 flex items-center justify-center'
         data-slot='dropdown-menu-checkbox-item-indicator'
       >
         <MenuPrimitive.CheckboxItemIndicator>
-          <Icon name='IconCheckmark1' className='size-3.5! rotate-[4deg] text-primary-text opacity-100!' />
+          <Icon name='IconCheckmark1' className='size-3.5! rotate-[4deg] text-primary-text' />
         </MenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}
@@ -255,16 +250,15 @@ function DropdownMenuRadioItem({
     <MenuPrimitive.RadioItem
       data-slot='dropdown-menu-radio-item'
       data-inset={inset}
-      className={cn(ITEM_BASE, 'pr-7 [&[data-indicator-here]_span]:text-fg-4', className)}
+      className={cn(ITEM_BASE, 'pr-7', className)}
       {...props}
     >
-      {/* Pinned to fg-4 so the checkmark doesn't shift color when the hover highlight arrives. */}
       <span
-        className='pointer-events-none absolute right-2 flex items-center justify-center text-fg-4'
+        className='pointer-events-none absolute right-2 flex items-center justify-center'
         data-slot='dropdown-menu-radio-item-indicator'
       >
         <MenuPrimitive.RadioItemIndicator>
-          <Icon name='IconCheckmark1' className='size-3.5! rotate-[4deg] text-primary-text opacity-100!' />
+          <Icon name='IconCheckmark1' className='size-3.5! rotate-[4deg] text-primary-text' />
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}
@@ -293,6 +287,7 @@ function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'spa
 }
 
 export {
+  DESTRUCTIVE_ITEM,
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,

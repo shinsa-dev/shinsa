@@ -20,7 +20,7 @@ export function entry(
       title: extra.title ?? 'Decide',
       openedAt: extra.openedAt ?? NOW - 60_000,
     },
-    areaId: null,
+    projectId: null,
     unblocks: extra.unblocks ?? 0,
     reason: '',
   } as unknown as QueuedGate;
@@ -28,11 +28,10 @@ export function entry(
 
 export function queueOf(entries: QueuedGate[], extra: Partial<Queue> = {}): Queue {
   return {
-    focusAreaId: null,
+    focusProjectId: null,
     ready: entries,
     upNow: entries,
     later: [],
-    held: [],
     working: [],
     waiting: [],
     ...extra,
@@ -46,7 +45,7 @@ export const dup = task('t-dup', 'Fix code-first duplicate', {
 export const docs = task('t-docs', 'Document the engine');
 export const tools = task('t-tools', 'Tool calls in chat', { stage: 'building' });
 
-export const ready = [entry(chat, 'review', { unblocks: 1 }), entry(dup, 'merge'), entry(docs, 'spec')];
+export const ready = [entry(chat, 'review', { unblocks: 1 }), entry(dup, 'merge'), entry(docs, 'plan')];
 
 export function stateOf(tasks: Task[]) {
   return { tasks: Object.fromEntries(tasks.map((value) => [value.id, value])) } as unknown as ShinsaState;

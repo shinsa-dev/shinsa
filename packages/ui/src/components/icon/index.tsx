@@ -1,9 +1,6 @@
 import { cn } from '@shinsa/ui/lib/utils';
 import type { SVGProps } from 'react';
-import { COLORFUL_ICON_NAMES } from './custom';
 import { DEFAULT_ICON_RADIUS, ICON_PATHS, type IconName, type IconRadius } from './paths';
-
-const COLORFUL = new Set<string>(COLORFUL_ICON_NAMES);
 
 // `name` and `radius` both exist on SVGProps with looser types — ours win.
 type IconProps = Omit<SVGProps<SVGSVGElement>, 'name' | 'radius'> & {
@@ -18,8 +15,8 @@ type IconProps = Omit<SVGProps<SVGSVGElement>, 'name' | 'radius'> & {
  *
  * Paths are pre-rendered into `paths.ts` by `scripts/generate-icons.ts`, which
  * scans the repo for `name='Icon…'` usages, so the bundle only ever carries
- * icons we actually reference. Add a new icon by using its name; the generator
- * picks it up on the next dev/build.
+ * icons we actually reference. Add a new icon by using its name, then run
+ * `bun run --cwd packages/ui generate:icons`.
  */
 export function Icon({
   name,
@@ -45,10 +42,9 @@ export function Icon({
       viewBox='0 0 24 24'
       fill='none'
       xmlns='http://www.w3.org/2000/svg'
-      // Icons run at half opacity so they sit a step quieter than text at the
-      // same color. Callers can override with any `opacity-*` class. Brand marks
-      // that carry their own colours keep them, so they are never dimmed.
-      className={cn(COLORFUL.has(name) ? 'opacity-100' : 'opacity-50', className)}
+      // An icon sits a step under its text: `--icon-alpha` (85%, a menu row's 90%,
+      // globals.css). A caller's own opacity (a reveal, a swap) wins.
+      className={cn('opacity-(--icon-alpha)', className)}
       {...props}
       // Paths are generated at build time from the icon package — never user input.
       dangerouslySetInnerHTML={{ __html: inner }}
@@ -56,6 +52,5 @@ export function Icon({
   );
 }
 
-export { COLORFUL_ICON_NAMES } from './custom';
 export { ICON_NAMES } from './paths';
 export type { IconName, IconRadius };

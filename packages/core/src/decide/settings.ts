@@ -1,54 +1,113 @@
+import { AGENT_ROLES, resolveAgentProvider } from '../agent-models/index.ts';
 import type { CommandOf } from '../commands/index.ts';
-import { DomainError, type Settings } from '../model/index.ts';
+import {
+  DomainError,
+  isProjectKey,
+  MAX_COMPACTION_LEAD_MINUTES,
+  PROJECT_COLORS,
+  PROJECT_LIMITS,
+  type Project,
+  resolveProjectKey,
+  type Settings,
+  selectFolderProject,
+} from '../domain/index.ts';
+import { releaseBudgetHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
+import { isSameValue } from './equality.ts';
 
-const AREA_COLORS = ['blue', 'purple', 'green', 'orange', 'pink', 'teal', 'amber', 'red'] as const;
-
-function isSame(a: unknown, b: unknown) {
-  return JSON.stringify(a) === JSON.stringify(b);
+function assertProject(decider: Decider, projectId: string | null | undefined) {
+  if (projectId && !decider.state.projects[projectId]) {
+    throw new DomainError('project_not_found', `No project ${projectId}`);
+  }
 }
 
-function assertArea(decider: Decider, areaId: string | null | undefined) {
-  if (areaId && !decider.state.areas[areaId]) throw new DomainError('area_not_found', `No area ${areaId}`);
-}
-
-function isCount(value: unknown) {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+function isWholeBetween(value: number, min: number, max: number) {
+  return Number.isInteger(value) && value >= min && value <= max;
 }
 
 function assertSettings(patch: Partial<Settings>) {
-  if (patch.maxFixRounds !== undefined && patch.maxFixRounds !== null && !isCount(patch.maxFixRounds)) {
+  const rounds = patch.maxFixRounds;
+  if (rounds !== undefined && rounds !== null && !isWholeBetween(rounds, 1, Number.MAX_SAFE_INTEGER)) {
     throw new DomainError('settings_invalid', 'Fix rounds must be a whole number of 1 or more.');
   }
-  if (patch.attentionLimit !== undefined && !isCount(patch.attentionLimit)) {
+  const attention = patch.attentionLimit;
+  if (attention !== undefined && !isWholeBetween(attention, 1, Number.MAX_SAFE_INTEGER)) {
     throw new DomainError('settings_invalid', 'The attention limit must be a whole number of 1 or more.');
+  }
+  const switchAt = patch.accountSwitchAt;
+  if (switchAt !== undefined && !isWholeBetween(switchAt, 1, 100)) {
+    throw new DomainError('settings_invalid', 'Switch accounts at a whole percentage from 1 to 100.');
+  }
+  const lead = patch.compactionLeadMinutes;
+  if (lead !== undefined && !isWholeBetween(lead, 1, MAX_COMPACTION_LEAD_MINUTES)) {
+    throw new DomainError(
+      'settings_invalid',
+      `Compact from 1 to ${MAX_COMPACTION_LEAD_MINUTES} minutes before the cache expires.`
+    );
+  }
+  const budget = patch.taskBudgetUsd;
+  if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
+    throw new DomainError('settings_invalid', 'The cost limit must be an amount above zero, or off.');
+  }
+  const usage = patch.taskUsageLimit;
+  if (usage !== undefined && usage !== null && !isWholeBetween(usage, 1, 100)) {
+    throw new DomainError(
+      'settings_invalid',
+      'The usage limit must be a whole percentage from 1 to 100, or off.'
+    );
   }
 }
 
-function upsertArea(decider: Decider, name: string) {
-  const existing = Object.values(decider.state.areas).find(
-    (area) => area.name.toLowerCase() === name.toLowerCase()
+function listKeys(decider: Decider, except: string | null) {
+  return Object.values(decider.state.projects)
+    .filter((project) => project.id !== except)
+    .map((project) => project.key);
+}
+
+function upsertProject(decider: Decider, name: string) {
+  const existing = Object.values(decider.state.projects).find(
+    (project) => project.name.toLowerCase() === name.toLowerCase()
   );
   if (existing) return existing.id;
   const id = decider.context.newId();
-  const color = AREA_COLORS[Object.keys(decider.state.areas).length % AREA_COLORS.length] ?? 'blue';
-  decider.emit({ type: 'area.written', area: { id, name, color } });
+  const color = PROJECT_COLORS[Object.keys(decider.state.projects).length % PROJECT_COLORS.length] ?? 'blue';
+  decider.emit({
+    type: 'project.written',
+    project: {
+      id,
+      name,
+      color,
+      key: resolveProjectKey(name, listKeys(decider, null)),
+      description: '',
+      folders: [],
+    },
+  });
   return id;
+}
+
+function resolveRegisteredProject(decider: Decider, command: CommandOf<'repo.register'>) {
+  if (command.projectId && decider.state.projects[command.projectId]) return command.projectId;
+  const byFolder = selectFolderProject(Object.values(decider.state.projects), command.repo.path);
+  if (byFolder) return byFolder.id;
+  const name = command.projectName?.trim();
+  return name ? upsertProject(decider, name) : null;
 }
 
 export function registerRepo(decider: Decider, command: CommandOf<'repo.register'>) {
   if (Object.values(decider.state.repos).some((repo) => repo.path === command.repo.path)) return;
-  const areaName = command.areaName?.trim();
-  const areaId = areaName ? upsertArea(decider, areaName) : null;
-  decider.emit({ type: 'repo.registered', repo: { ...command.repo, areaId, id: decider.context.newId() } });
+  const projectId = resolveRegisteredProject(decider, command);
+  decider.emit({
+    type: 'repo.registered',
+    repo: { ...command.repo, projectId, id: decider.context.newId() },
+  });
 }
 
 export function updateRepo(decider: Decider, command: CommandOf<'repo.update'>) {
   const repo = decider.state.repos[command.repoId];
   if (!repo) throw new DomainError('repo_not_found', `No repository ${command.repoId}`);
-  assertArea(decider, command.patch.areaId);
+  assertProject(decider, command.patch.projectId);
   const updated = { ...repo, ...command.patch };
-  if (isSame(updated, repo)) return;
+  if (isSameValue(updated, repo)) return;
   decider.emit({ type: 'repo.updated', repo: updated });
 }
 
@@ -57,49 +116,135 @@ export function removeRepo(decider: Decider, command: CommandOf<'repo.remove'>) 
   decider.emit({ type: 'repo.removed', repoId: command.repoId });
 }
 
-export function writeArea(decider: Decider, command: CommandOf<'area.write'>) {
-  const name = command.area.name.trim();
-  if (name.length === 0) throw new DomainError('area_name_required', 'Name the area.');
-  const existing = command.area.id ? decider.state.areas[command.area.id] : undefined;
-  if (existing && existing.name === name && existing.color === command.area.color) return;
-  decider.emit({
-    type: 'area.written',
-    area: { id: command.area.id ?? decider.context.newId(), name, color: command.area.color },
-  });
+function readFolders(folders: readonly string[]) {
+  const cleaned = [...new Set(folders.map((folder) => folder.trim().replace(/\/+$/, '')))].filter(Boolean);
+  if (cleaned.length > PROJECT_LIMITS.folders) {
+    throw new DomainError('project_invalid', `A project can have at most ${PROJECT_LIMITS.folders} folders.`);
+  }
+  for (const folder of cleaned) {
+    if (!folder.startsWith('/') || folder.length > PROJECT_LIMITS.folder) {
+      throw new DomainError('project_invalid', `“${folder}” is not a full folder path.`);
+    }
+  }
+  return cleaned;
 }
 
-export function removeArea(decider: Decider, command: CommandOf<'area.remove'>) {
-  if (!decider.state.areas[command.areaId]) return;
+function resolveKey(decider: Decider, command: CommandOf<'project.write'>, existing: Project | undefined) {
+  const others = listKeys(decider, existing?.id ?? null);
+  const asked = command.project.key?.trim().toUpperCase();
+  if (asked === undefined || asked === '') {
+    return existing?.key ?? resolveProjectKey(command.project.name, others);
+  }
+  if (!isProjectKey(asked)) {
+    throw new DomainError(
+      'project_invalid',
+      'A project key is 2 to 6 letters or digits and starts with a letter, like SW.'
+    );
+  }
+  if (others.includes(asked)) {
+    throw new DomainError('project_key_taken', `Another project already uses the key ${asked}.`);
+  }
+  return asked;
+}
+
+function assertFoldersFree(decider: Decider, projectId: string, folders: string[]) {
+  for (const project of Object.values(decider.state.projects)) {
+    if (project.id === projectId) continue;
+    const shared = folders.find((folder) => project.folders.includes(folder));
+    if (shared) {
+      throw new DomainError('folder_taken', `“${shared}” already belongs to the project ${project.name}.`);
+    }
+  }
+}
+
+function moveReposIntoFolders(decider: Decider, project: Project) {
+  const projects = Object.values(decider.state.projects);
   for (const repo of Object.values(decider.state.repos)) {
-    if (repo.areaId === command.areaId)
-      decider.emit({ type: 'repo.updated', repo: { ...repo, areaId: null } });
+    if (repo.projectId === project.id) continue;
+    if (selectFolderProject(projects, repo.path)?.id !== project.id) continue;
+    decider.emit({ type: 'repo.updated', repo: { ...repo, projectId: project.id } });
   }
-  if (decider.state.focus.areaId === command.areaId) {
-    decider.emit({ type: 'focus.changed', focus: { areaId: null, until: null } });
-    decider.run({ kind: 'briefing.request', areaId: null });
+}
+
+export function writeProject(decider: Decider, command: CommandOf<'project.write'>) {
+  const name = command.project.name.trim();
+  if (name.length === 0) throw new DomainError('project_name_required', 'Name the project.');
+  if (name.length > PROJECT_LIMITS.name) {
+    throw new DomainError('project_invalid', `A project name is at most ${PROJECT_LIMITS.name} characters.`);
   }
-  decider.emit({ type: 'area.removed', areaId: command.areaId });
+  const existing = command.project.id ? decider.state.projects[command.project.id] : undefined;
+  const description = (command.project.description ?? existing?.description ?? '').trim();
+  if (description.length > PROJECT_LIMITS.description) {
+    throw new DomainError(
+      'project_invalid',
+      `A project description is at most ${PROJECT_LIMITS.description} characters.`
+    );
+  }
+  const id = existing?.id ?? decider.context.newId();
+  const folders = readFolders(command.project.folders ?? existing?.folders ?? []);
+  assertFoldersFree(decider, id, folders);
+  const project: Project = {
+    id,
+    name,
+    color: command.project.color,
+    key: resolveKey(decider, command, existing),
+    description,
+    folders,
+  };
+  if (existing && isSameValue(project, existing)) return;
+  decider.emit({ type: 'project.written', project });
+  moveReposIntoFolders(decider, project);
+}
+
+export function removeProject(decider: Decider, command: CommandOf<'project.remove'>) {
+  if (!decider.state.projects[command.projectId]) return;
+  for (const repo of Object.values(decider.state.repos)) {
+    if (repo.projectId === command.projectId) {
+      decider.emit({ type: 'repo.updated', repo: { ...repo, projectId: null } });
+    }
+  }
+  if (decider.state.focus.projectId === command.projectId) {
+    decider.emit({ type: 'focus.changed', focus: { projectId: null, until: null } });
+    decider.run({ kind: 'briefing.request', projectId: null });
+  }
+  decider.emit({ type: 'project.removed', projectId: command.projectId });
 }
 
 export function changeFocus(decider: Decider, command: CommandOf<'focus.change'>) {
-  assertArea(decider, command.areaId);
-  const focus = { areaId: command.areaId, until: command.until };
-  if (isSame(focus, decider.state.focus)) return;
+  assertProject(decider, command.projectId);
+  const focus = { projectId: command.projectId, until: command.until };
+  if (isSameValue(focus, decider.state.focus)) return;
   decider.emit({ type: 'focus.changed', focus });
-  decider.run({ kind: 'briefing.request', areaId: command.areaId });
+  decider.run({ kind: 'briefing.request', projectId: command.projectId });
+}
+
+function dropStaleModels(previous: Settings, patch: Partial<Settings>): Settings {
+  const settings = { ...previous, ...patch };
+  const models = { ...settings.agentModels };
+  for (const role of AGENT_ROLES) {
+    const moved = resolveAgentProvider(settings, role) !== resolveAgentProvider(previous, role);
+    if (moved && patch.agentModels?.[role] === undefined) delete models[role];
+  }
+  const providerMoved = settings.defaultProvider !== previous.defaultProvider;
+  return {
+    ...settings,
+    agentModels: models,
+    defaultModel: providerMoved && !('defaultModel' in patch) ? null : settings.defaultModel,
+  };
 }
 
 export function changeSettings(decider: Decider, command: CommandOf<'settings.change'>) {
   assertSettings(command.patch);
-  const settings = { ...decider.state.settings, ...command.patch };
-  if (isSame(settings, decider.state.settings)) return;
+  const settings = dropStaleModels(decider.state.settings, command.patch);
+  if (isSameValue(settings, decider.state.settings)) return;
   decider.emit({ type: 'settings.changed', settings });
+  releaseBudgetHolds(decider);
 }
 
 export function writeBriefing(decider: Decider, command: CommandOf<'briefing.write'>) {
   decider.emit({
     type: 'briefing.written',
-    areaId: command.areaId,
+    projectId: command.projectId,
     text: command.text,
     ...(command.briefing ? { briefing: command.briefing } : {}),
   });

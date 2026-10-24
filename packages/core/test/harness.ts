@@ -1,5 +1,6 @@
 import {
   applyEvent,
+  type ConfigProblem,
   createState,
   decide,
   listActiveRuns,
@@ -9,8 +10,10 @@ import {
   type Run,
   type ShinsaCommand,
   type ShinsaEffect,
+  type ShinsaEvent,
+  type ShinsaEventInput,
   type ShinsaState,
-  type SpecDocument,
+  type PlanDocument,
 } from '../src/index.ts';
 
 export type Harness = ReturnType<typeof createHarness>;
@@ -20,12 +23,15 @@ export function createHarness() {
   let clock = 1_000;
   let counter = 0;
   const effects: ShinsaEffect[] = [];
+  const events: ShinsaEvent[] = [];
 
-  function send(command: ShinsaCommand) {
+  function send(command: ShinsaCommand, options: { onBehalf?: boolean; byTask?: string | null } = {}) {
     clock += 1;
-    const decision = decide(state, command, { now: clock, newId: () => `id${++counter}` });
+    const decision = decide(state, command, { now: clock, newId: () => `id${++counter}`, ...options });
     for (const event of decision.events) {
-      state = applyEvent(state, { ...event, seq: state.seq + 1, at: clock });
+      const applied = { ...event, seq: state.seq + 1, at: clock } as ShinsaEvent;
+      events.push(applied);
+      state = applyEvent(state, applied);
     }
     effects.push(...decision.effects);
     return decision;
@@ -53,9 +59,21 @@ export function createHarness() {
     return gate;
   }
 
+  function replay(event: ShinsaEventInput) {
+    clock += 1;
+    const applied = { ...event, seq: state.seq + 1, at: clock } as ShinsaEvent;
+    events.push(applied);
+    state = applyEvent(state, applied);
+  }
+
   return {
     send,
+    replay,
+    advance: (ms: number) => {
+      clock += ms;
+    },
     effects,
+    events,
     effectsOf,
     lastEffect,
     activeRun,
@@ -68,10 +86,17 @@ export function createHarness() {
     get state(): ShinsaState {
       return state;
     },
+    get now() {
+      return clock;
+    },
   };
 }
 
-export function registerRepo(harness: Harness, name = 'paywall-next', areaName: string | null = 'Superwall') {
+export function registerRepo(
+  harness: Harness,
+  name = 'paywall-next',
+  projectName: string | null = 'Superwall'
+) {
   harness.send({
     type: 'repo.register',
     repo: {
@@ -80,16 +105,15 @@ export function registerRepo(harness: Harness, name = 'paywall-next', areaName: 
       defaultBranch: 'main',
       remote: `github.com/superwall/${name}`,
       checkCommands: ['bun lint', 'bun check-types'],
-      previewCommand: null,
     },
-    areaName,
+    projectName,
   });
   return Object.values(harness.state.repos).find((repo) => repo.name === name)?.id ?? '';
 }
 
-export const SPEC: SpecDocument = {
+export const SPEC: PlanDocument = {
   goal: 'Ship it.',
-  plan: [
+  phases: [
     { title: 'Find the overflow', detail: 'Trace which container scrolls.' },
     { title: 'Fix and verify', detail: 'Clamp the width and check it in the browser.' },
   ],
@@ -97,9 +121,12 @@ export const SPEC: SpecDocument = {
   approach: 'Carefully.',
   files: [],
   outOfScope: [],
-  verification: [],
+  verification: ['A test renders the panel at 320 pixels and finds no horizontal scroll.'],
   questions: [],
 };
+
+export const IMPACT =
+  'Touches the 1,240 accounts without a plan; the dry run lists them. Undo by clearing the column.';
 
 export const PASSING: ReportCheck[] = [
   { name: 'bun lint', outcome: 'pass', detail: null },
@@ -129,39 +156,46 @@ export function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
 export function createTask(
   harness: Harness,
   options: {
-    intent?: string;
+    request?: string;
     size?: 'small' | 'large';
     repoId?: string;
     priority?: 'urgent' | 'high' | 'normal' | 'low';
-    dependsOn?: string | string[];
-    blockedBy?: string[];
+    waitsOn?: string | string[];
+    waitsOn?: string[];
+    planFirst?: boolean;
   } = {}
 ) {
   const repoId = options.repoId ?? (Object.keys(harness.state.repos)[0] || registerRepo(harness));
   const before = new Set(Object.keys(harness.state.tasks));
   harness.send({
     type: 'task.create',
-    intent: options.intent ?? 'Fix the scroll in tab groups',
+    request: options.request ?? 'Fix the scroll in tab groups',
     repoId,
     priority: options.priority,
-    blockedBy: options.blockedBy,
+    waitsOn: options.waitsOn,
+    planFirst: options.planFirst,
   });
   const taskId = Object.keys(harness.state.tasks).find((id) => !before.has(id)) ?? '';
   harness.send({
     type: 'task.triage',
     taskId,
-    title: options.intent ?? 'Fix tab group scroll',
+    title: options.request ?? 'Fix tab group scroll',
     repoId,
     size: options.size ?? 'small',
     branch: `fix/${taskId}`,
-    dependsOn: [options.dependsOn ?? []].flat(),
+    waitsOn: [options.waitsOn ?? []].flat(),
   });
   readyWorktree(harness, taskId);
   return taskId;
 }
 
+export function verifySetup(harness: Harness, taskId: string, problems: ConfigProblem[] = []) {
+  harness.send({ type: 'config.record', taskId, problems });
+}
+
 export function readyWorktree(harness: Harness, taskId: string) {
   if (harness.task(taskId).stage !== 'triage') return;
+  verifySetup(harness, taskId);
   harness.send({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: `fix/${taskId}` });
 }
 
@@ -189,8 +223,10 @@ export function shipAndMerge(harness: Harness, taskId: string) {
   harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
 }
 
-export function proposePlan(harness: Harness, taskId: string, spec: SpecDocument = SPEC) {
-  harness.send({ type: 'agent.propose_plan', runId: harness.activeRun(taskId).id, document: spec });
+export function proposePlan(harness: Harness, taskId: string, plan: PlanDocument = SPEC) {
+  const operates = harness.task(taskId).pipeline?.includes('operate') && plan.impact === undefined;
+  const document = operates ? { ...plan, impact: IMPACT } : plan;
+  harness.send({ type: 'agent.propose_plan', runId: harness.activeRun(taskId).id, document });
 }
 
 export function completePhase(harness: Harness, taskId: string, summary = 'Did the phase.') {
@@ -199,13 +235,13 @@ export function completePhase(harness: Harness, taskId: string, summary = 'Did t
     runId: harness.activeRun(taskId).id,
     summary,
     spots: [{ file: 'src/a.ts', start: 1, end: 3, attention: 'critical', why: 'The change.' }],
-    decisions: [],
+    judgementCalls: [],
   });
 }
 
 export function buildAll(harness: Harness, taskId: string) {
   proposePlan(harness, taskId);
-  const phases = harness.task(taskId).spec?.document?.plan.length ?? 1;
+  const phases = harness.task(taskId).plan?.document?.phases.length ?? 1;
   for (let index = 0; index < phases; index += 1) completePhase(harness, taskId, `Phase ${index + 1} done.`);
 }
 

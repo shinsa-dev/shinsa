@@ -1,10 +1,16 @@
 import { afterEach } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
-import type { Repo } from '@shinsa/core';
-import type { ServerConfig } from '../../src/config/index.ts';
+import { dirname, join } from 'node:path';
+import type { Repo, ShinsaEffect, ShinsaEventInput } from '@shinsa/core';
+import { ConfigStore, type ServerConfig } from '../../src/config/index.ts';
+import type { CommandRunner } from '../../src/onboarding/index.ts';
+import { Onboarding } from '../../src/onboarding/index.ts';
+import { Roots } from '../../src/repos/index.ts';
+import type { Engine } from '../../src/runtime/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
+import type { EventLog } from '../../src/store/index.ts';
+import { createConfigAt } from './config.ts';
 
 const created: string[] = [];
 
@@ -18,6 +24,16 @@ export function createTempDir(prefix = 'shinsa-test-') {
   return dir;
 }
 
+export function commitEvents(
+  log: EventLog,
+  events: ShinsaEventInput[],
+  effects: ShinsaEffect[],
+  fromSeq: number,
+  at: number
+) {
+  return log.commitCommand({ events, effects, cancellations: [], fromSeq, at, receipt: null }).events;
+}
+
 export function writeFiles(root: string, files: Record<string, string>) {
   for (const [file, content] of Object.entries(files)) {
     const path = join(root, file);
@@ -26,33 +42,8 @@ export function writeFiles(root: string, files: Record<string, string>) {
   }
 }
 
-export function createTestConfig(
-  root = createTempDir(),
-  overrides: Partial<ServerConfig> = {}
-): ServerConfig {
-  const dataDir = join(root, 'data');
-  const config: ServerConfig = {
-    dataDir,
-    databasePath: join(dataDir, 'shinsa.sqlite'),
-    worktreesDir: join(dataDir, 'worktrees'),
-    evidenceDir: join(dataDir, 'evidence'),
-    transcriptsDir: join(dataDir, 'transcripts'),
-    pluginDir: resolve(import.meta.dirname, '../../plugin'),
-    webDir: join(root, 'web'),
-    port: 0,
-    hostname: '127.0.0.1',
-    allowedHosts: ['localhost', '127.0.0.1', '[::1]'],
-    roots: [root],
-    inspect: false,
-    editor: null,
-    terminal: 'Terminal',
-    settleDelayMs: 3_600_000,
-    ...overrides,
-  };
-  for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {
-    mkdirSync(dir, { recursive: true });
-  }
-  return config;
+export function createTestConfig(root = createTempDir(), overrides: Partial<ServerConfig> = {}) {
+  return createConfigAt(root, overrides);
 }
 
 export function git(cwd: string, ...args: string[]) {
@@ -89,13 +80,12 @@ export async function createGitRepo(
     origin,
     repo: {
       id: 'repo-1',
-      areaId: null,
+      projectId: null,
       name: 'app',
       path,
       defaultBranch: 'main',
       remote: options.remote === false ? null : 'github.com/acme/app',
       checkCommands: [],
-      previewCommand: null,
     } as Repo,
   };
 }
@@ -106,6 +96,17 @@ export async function until(describe: string, predicate: () => boolean, timeoutM
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${describe}.`);
     await Bun.sleep(10);
   }
+}
+
+export function awaitEffect(log: Pick<EventLog, 'selectEffectStatus'>, key: string, timeoutMs = 5_000) {
+  return until(
+    `the effect ${key} to settle`,
+    () => {
+      const status = log.selectEffectStatus(key);
+      return status !== 'pending' && status !== 'running';
+    },
+    timeoutMs
+  );
 }
 
 export function overrideEnv(values: Record<string, string | undefined>) {
@@ -120,5 +121,37 @@ export function overrideEnv(values: Record<string, string | undefined>) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+  };
+}
+
+const FAKE_RUN: CommandRunner = (command) =>
+  Promise.resolve({ ok: true, code: 0, stdout: `${command[0]} 1.0`, stderr: '', timedOut: false });
+
+export function createTestOnboarding(engine: Engine, config: ServerConfig, run: CommandRunner = FAKE_RUN) {
+  const store = new ConfigStore(config.configPath);
+  const roots = new Roots(config.roots, store, config.userHome, () =>
+    Promise.resolve({ candidates: [], truncated: false })
+  );
+  const interpret = () => Promise.resolve(null);
+  return {
+    store,
+    roots,
+    onboarding: new Onboarding({
+      engine,
+      config,
+      store,
+      roots,
+      run,
+      models: { listModels: () => Promise.resolve([]) },
+      accounts: () => Promise.resolve([]),
+      accountActions: {
+        listImports: () => Promise.resolve([]),
+        importAccount: () => Promise.resolve(),
+        startLogin: () => Promise.resolve(),
+        isSigningIn: () => false,
+      },
+      interpret,
+      clarify: interpret,
+    }),
   };
 }

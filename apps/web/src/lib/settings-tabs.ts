@@ -1,0 +1,103 @@
+import type { IconName } from '@shinsa/ui/components/icon';
+import { FOLDERS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
+
+export type SettingsTabId = 'general' | 'agents' | 'accounts' | 'projects' | 'integrations' | 'automations';
+
+interface SettingsTab {
+  id: SettingsTabId;
+  label: string;
+  icon: IconName;
+  activeIcon: IconName;
+  sections: string[];
+}
+
+const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
+  general: {
+    id: 'general',
+    label: 'General',
+    icon: 'IconSettingsGear1',
+    activeIcon: 'IconSettingsGear1Filled',
+    sections: ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup'],
+  },
+  agents: {
+    id: 'agents',
+    label: 'Agents',
+    icon: 'IconAgents',
+    activeIcon: 'IconAgentsFilled',
+    sections: ['Agents', 'Engine'],
+  },
+  accounts: {
+    id: 'accounts',
+    label: 'Agent usage',
+    icon: 'IconGauge',
+    activeIcon: 'IconGaugeFilled',
+    sections: ['Agent usage', 'Limits'],
+  },
+  projects: {
+    id: 'projects',
+    label: 'Projects',
+    icon: 'IconFolder1',
+    activeIcon: 'IconFolder1Filled',
+    sections: ['Projects', FOLDERS_TITLE],
+  },
+  integrations: {
+    id: 'integrations',
+    label: 'Integrations',
+    icon: 'IconIntegrations',
+    activeIcon: 'IconIntegrationsFilled',
+    sections: ['Context optimizer', 'MCP servers', 'Plugins', 'Skills'],
+  },
+  automations: {
+    id: 'automations',
+    label: 'Automations',
+    icon: 'IconCalendarClock',
+    activeIcon: 'IconCalendarClockFilled',
+    sections: ['Schedules'],
+  },
+};
+
+const DEFAULT_TAB: SettingsTabId = 'general';
+
+export function listSettingsTabs() {
+  return Object.values(SETTINGS_TABS);
+}
+
+export function findSettingsTab(id: SettingsTabId) {
+  return SETTINGS_TABS[id];
+}
+
+function selectSectionTab(sectionId: string) {
+  return (
+    listSettingsTabs().find((tab) => tab.sections.some((title) => resolveSectionId(title) === sectionId)) ??
+    null
+  );
+}
+
+export function resolveSectionTab(title: string): SettingsTabId {
+  return selectSectionTab(resolveSectionId(title))?.id ?? DEFAULT_TAB;
+}
+
+export function resolveSettingsTab(param: string | null, hash = ''): SettingsTabId {
+  const named = listSettingsTabs().find((tab) => tab.id === param);
+  if (named) return named.id;
+  const sectionId = resolveHashSectionId(hash);
+  return (sectionId && selectSectionTab(sectionId)?.id) || DEFAULT_TAB;
+}
+
+export function resolveSettingsTabParam(tab: SettingsTabId) {
+  return tab === DEFAULT_TAB ? null : tab;
+}
+
+export function resolveSettingsPath(tab: SettingsTabId, title: string | null = null) {
+  const param = resolveSettingsTabParam(tab);
+  const query = param ? `?tab=${param}` : '';
+  const hash = title ? `#${resolveSectionId(title).replace(/^settings-/, '')}` : '';
+  return `/settings${query}${hash}`;
+}
+
+export function resolveSectionRank(title: string) {
+  const rank = listSettingsTabs()
+    .flatMap((tab) => tab.sections)
+    .findIndex((entry) => resolveSectionId(entry) === resolveSectionId(title));
+  return rank === -1 ? Number.POSITIVE_INFINITY : rank;
+}

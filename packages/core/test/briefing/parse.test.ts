@@ -101,7 +101,7 @@ describe('parseBriefing', () => {
 
   test('drops a note that names a task in now or next and falls back to one that does not', () => {
     const paused = entry(docs, 'question', { purpose: 'failure', title: 'Checks kept failing' });
-    const withPaused = queueOf([entry(chat, 'review'), paused], { held: [entry(tools, 'review')] });
+    const withPaused = queueOf([entry(chat, 'review'), paused]);
     const briefing = parseBriefing(
       {
         now: { task: 't-chat', why: 'It unblocks the tool calls work' },
@@ -132,19 +132,6 @@ describe('parseBriefing', () => {
       NOW
     );
     expect(shortened?.note).toBeNull();
-  });
-
-  test('drops a note about decisions outside the focus', () => {
-    const briefing = parseBriefing(
-      {
-        now: { task: 't-chat', why: 'It unblocks the tool calls work' },
-        next: [],
-        note: 'Two more decisions wait outside your focus.',
-      },
-      queueOf([entry(chat, 'review')], { held: [entry(tools, 'review'), entry(dup, 'merge')] }),
-      NOW
-    );
-    expect(briefing?.note).toBeNull();
   });
 
   test('keeps a note about a task the guide does not name', () => {
@@ -195,7 +182,7 @@ describe('parseBriefing order', () => {
   test('keeps a why that starts with something other than the title, and an explicit null note', () => {
     const briefing = parseBriefing(
       { now: { task: 't-chat', why: 'It unblocks the tool work.' }, note: null },
-      queueOf(ready, { held: [entry(task('t-held', 'Held'), 'review')], waiting: [tools] }),
+      queueOf(ready, { waiting: [tools] }),
       NOW
     );
     expect(briefing?.now?.why).toBe('It unblocks the tool work');

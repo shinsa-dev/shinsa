@@ -21,6 +21,7 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bunx biome ci .
       - run: bun lint:conventions
+      - run: bun lint:spelling
       - run: bunx sherif -i @types/node
       - run: bunx knip
 

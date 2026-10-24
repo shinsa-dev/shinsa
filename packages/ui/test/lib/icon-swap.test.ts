@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'bun:test';
-import { iconSwap, iconSwapIn, iconSwapMotion, iconSwapOut } from '../../src/lib/icon-swap';
+import { iconSwap, iconSwapIn, iconSwapOut } from '../../src/lib/icon-swap';
+
+const PROPERTY = { scale: 'scale', opacity: 'opacity', blur: 'filter' } as const;
+
+function listChangedProperties(state: string): string[] {
+  return state.split(' ').map((token) => PROPERTY[token.split('-')[0] as keyof typeof PROPERTY]);
+}
 
 describe('icon swap', () => {
-  it('transitions exactly the properties the two states change', () => {
-    expect(iconSwap).toContain('transition-[opacity,scale,filter]');
-    expect(iconSwapIn.split(' ')).toEqual(['scale-100', 'opacity-100', 'blur-none']);
-    expect(iconSwapOut.split(' ')).toEqual(['scale-[0.65]', 'opacity-0', 'blur-[2px]']);
+  it('lands the incoming icon a step under its text, like any icon, and hides the outgoing one', () => {
+    expect(iconSwapIn.split(' ')).toContain('opacity-(--icon-alpha)');
+    expect(iconSwapOut.split(' ')).toContain('opacity-0');
   });
 
-  it('is symmetric: an icon leaves the way the next one arrives', () => {
-    expect(iconSwapMotion.exit).toEqual(iconSwapMotion.initial);
-    expect(iconSwapMotion.initial.scale).toBe(0.65);
-    expect(iconSwapMotion.animate).toEqual({ opacity: 1, scale: 1, filter: 'blur(0px)' });
+  it('animates every property the two states change, so neither end jumps', () => {
+    const animated = /transition-\[([^\]]+)\]/.exec(iconSwap)?.[1]?.split(',');
+    expect(listChangedProperties(iconSwapIn).sort()).toEqual([...(animated ?? [])].sort());
+    expect(listChangedProperties(iconSwapOut).sort()).toEqual([...(animated ?? [])].sort());
   });
 });

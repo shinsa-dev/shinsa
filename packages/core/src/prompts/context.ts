@@ -1,12 +1,24 @@
-import type { Repo, Task } from '../model/index.ts';
+import { describeList } from '../chat/text.ts';
+import {
+  type Repo,
+  type Round,
+  resolveCurrentRound,
+  resolveTaskPipeline,
+  resolveTaskRounds,
+  resolveWorkStep,
+  SHAPE_LIMITS,
+  type Task,
+} from '../domain/index.ts';
+import type { ReviewFinding } from '../report/types.ts';
 
-export function repoLine(repo: Repo | null) {
+export function describeRepository(repo: Repo | null) {
   if (!repo) return '';
   return `Repository: ${repo.name} (default branch ${repo.defaultBranch}).`;
 }
 
-export function taskLine(task: Task) {
-  return `This task: [${task.title}](shinsa://task/${task.id}).`;
+export function describeTaskLink(task: Task) {
+  const handle = task.handle ? `${task.handle}, ` : '';
+  return `This task: ${handle}[${task.title}](shinsa://task/${task.id}).`;
 }
 
 export function isStacked(base: Task) {
@@ -14,10 +26,10 @@ export function isStacked(base: Task) {
 }
 
 function listQuotedTitles(tasks: Task[]) {
-  return tasks.map((task) => `"${task.title}"`).join(' and ');
+  return describeList(tasks.map((task) => `"${task.title}"`));
 }
 
-export function baseLine(bases: Task[]) {
+export function describeBases(bases: Task[]) {
   const built = bases.filter((base) => base.branch);
   const stacked = built.find(isStacked);
   if (stacked) {
@@ -37,23 +49,23 @@ export function baseLine(bases: Task[]) {
   return `This task builds on "${only.title}", which is finished. Build on what it left in the base branch.`;
 }
 
-export function checksLine(repo: Repo | null) {
+export function describeCheckCommands(repo: Repo | null) {
   if (!repo || repo.checkCommands.length === 0) {
     return 'Run whatever lint, type check and tests the repository defines (see its package.json, CLAUDE.md and CI config).';
   }
   return `The checks for this repository are: ${repo.checkCommands.map((command) => `\`${command}\``).join(', ')}. Shinsa runs them after you hand over; run them yourself first.`;
 }
 
-export function planBlock(task: Task) {
-  const plan = task.spec?.document?.plan ?? [];
+export function describePlan(task: Task) {
+  const plan = task.plan?.document?.phases ?? [];
   if (plan.length === 0) return '';
   return ['The plan:', ...plan.map((step, index) => `${index + 1}. ${step.title}: ${step.detail}`)].join(
     '\n'
   );
 }
 
-export function goalBlock(task: Task) {
-  const document = task.spec?.document;
+export function describeGoal(task: Task) {
+  const document = task.plan?.document;
   if (!document) return '';
   return [
     `Goal: ${document.goal}`,
@@ -64,12 +76,12 @@ export function goalBlock(task: Task) {
     .join('\n');
 }
 
-export function previousPhasesBlock(task: Task, before: number) {
+export function describePreviousPhases(task: Task, before: number) {
   const reports = task.phaseReports
     .filter((report) => report.index < before)
     .sort((a, b) => a.index - b.index);
   if (reports.length === 0) return '';
-  const plan = task.spec?.document?.plan ?? [];
+  const plan = task.plan?.document?.phases ?? [];
   return [
     'Already done by earlier phases (their changes are in your worktree):',
     ...reports.map(
@@ -78,9 +90,114 @@ export function previousPhasesBlock(task: Task, before: number) {
   ].join('\n');
 }
 
+export function describeApprovedPlan(task: Task) {
+  const plan = task.plan;
+  if (!plan?.approvedAt) return '';
+  return `This is plan version ${plan.version}, approved by the human. Follow this exact version, not an earlier or later draft.`;
+}
+
+export function describeFindingPlace(finding: ReviewFinding) {
+  if (!finding.file) return '';
+  return `${finding.file}${finding.line ? `:${finding.line}` : ''}: `;
+}
+
+export function describeDismissedFindings(task: Task) {
+  const dismissed = task.dismissedFindings ?? [];
+  if (dismissed.length === 0) return '';
+  return [
+    'The human dismissed these findings from an earlier review. Do not report them again unless the code around them changed:',
+    ...dismissed.map(
+      (finding) =>
+        `- ${describeFindingPlace(finding)}${finding.message}${finding.verdictNote ? ` (the human: ${finding.verdictNote})` : ''}`
+    ),
+  ].join('\n');
+}
+
+const RESULT_HEADING = {
+  investigate: 'What the investigation found:',
+  research: 'The report written for this task:',
+  operate: 'How the operation went:',
+} as const;
+
+export function describeEarlierWork(task: Task) {
+  const lines: string[] = [];
+  if (task.answer) lines.push('', 'The answer given earlier on this task:', task.answer);
+  if (task.result) lines.push('', RESULT_HEADING[task.result.step], task.result.body);
+  if (task.proposal?.status === 'accepted') {
+    const heading = resolveTaskPipeline(task).includes('your_ok')
+      ? 'The human approved going on after that:'
+      : 'The change the human approved after that:';
+    lines.push('', heading, task.proposal.request);
+  }
+  return lines.join('\n');
+}
+
+export function describeWhatFollows(task: Task) {
+  const pipeline = resolveTaskPipeline(task);
+  if (!pipeline.includes('your_ok')) return null;
+  const work = resolveWorkStep(pipeline) === 'operate' ? 'operation' : 'change';
+  return [
+    `After your hand-over the human decides whether this task goes on to the ${work}, which a planner then plans from what you hand over.`,
+    `End with what the ${work} should do.`,
+  ].join('\n');
+}
+
+export const PROPOSAL_RULE = [
+  'If what you found calls for a code change, add `propose_change` to your hand-over:',
+  `\`request\` says what to change in a few sentences (at most ${SHAPE_LIMITS.request} characters) and \`why\` says in one sentence why it is worth doing (at most ${SHAPE_LIMITS.why}).`,
+  'The human decides whether this task turns into that change, so propose one only when it is clearly worth doing. Leave it out otherwise.',
+].join('\n');
+
+const ROUND_STATE: Record<Round['status'], string> = {
+  queued: 'waiting to start',
+  active: 'in progress',
+  shipped: 'its pull request is open',
+  merged: 'merged',
+  finished: 'finished',
+  cancelled: 'stopped',
+};
+
+export function resolveRequest(task: Task) {
+  const round = resolveCurrentRound(task);
+  return round.number > 1 ? round.request : task.request;
+}
+
+function describeRoundPullRequest(round: Round) {
+  return round.pullRequest ? `, pull request #${round.pullRequest.number}` : '';
+}
+
+function describeShipping(task: Task, round: Round) {
+  const pullRequest = task.pullRequest;
+  if (pullRequest?.state === 'open') {
+    return `Its commits go onto pull request #${pullRequest.number}, which already holds the earlier rounds' work. Build on that work; do not redo or undo it.`;
+  }
+  if (round.base) {
+    return `It ships as its own pull request, stacked on branch ${round.base}, which holds the earlier rounds' work. Build on that work; do not redo or undo it.`;
+  }
+  return "It starts from the default branch, which holds the earlier rounds' merged work.";
+}
+
+export function describeRounds(task: Task) {
+  const round = resolveCurrentRound(task);
+  if (round.number === 1) return '';
+  const earlier = resolveTaskRounds(task).filter((candidate) => candidate.number < round.number);
+  return [
+    `This is round ${round.number} of the task. A round is one piece of work inside it; this round's request is below.`,
+    'The earlier rounds:',
+    ...earlier.map(
+      (candidate) =>
+        `- Round ${candidate.number}: ${candidate.title} (${ROUND_STATE[candidate.status]}${describeRoundPullRequest(candidate)})`
+    ),
+    describeShipping(task, round),
+    'Do what this round asks for, and only that.',
+  ].join('\n');
+}
+
 export function resolveLaterMessages(task: Task) {
+  const round = resolveCurrentRound(task).number;
   const messages = task.activity
     .filter((entry) => entry.actor === 'you' && entry.kind === 'message' && entry.detail)
+    .filter((entry) => (entry.round ?? 1) === round)
     .map((entry) => `- ${entry.detail}`);
   if (messages.length === 0) return '';
   return ['', 'The human added since:', ...messages].join('\n');

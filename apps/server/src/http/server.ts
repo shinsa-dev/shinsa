@@ -1,19 +1,38 @@
 import type { Transcripts } from '../agents/transcripts/index.ts';
+import { respondSignInPage } from '../extensions/routes.ts';
 import { describeError, log } from '../log/index.ts';
-import { resolveAllowedHosts, resolveBodyRefusal, resolveRefusal, resolveUpgradeRefusal } from './guard.ts';
+import {
+  resolveAllowedHosts,
+  resolveBodyRefusal,
+  resolveHostRefusal,
+  resolveRefusal,
+  resolveUpgradeRefusal,
+} from './guard.ts';
 import { type ApiContext, createApiRoutes, respondError, respondFailure } from './routes.ts';
 import { createSocketHub, type SocketData } from './socket.ts';
 import { serveStatic } from './static.ts';
 
+const MAX_BODY_BYTES = 8 * 1024 * 1024;
+
 export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
+}
+
+export function resolveServerUrl(hostname: string, port: number) {
+  const host = hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname;
+  return `http://${host}:${port}`;
 }
 
 export function startServer(context: HttpContext) {
   const { config } = context;
   const allowedHosts = resolveAllowedHosts(config.allowedHosts);
   const handleApi = createApiRoutes(context);
-  const hub = createSocketHub(context.engine, context.transcripts);
+  const hub = createSocketHub(
+    context.engine,
+    context.transcripts,
+    context.accounts,
+    context.classify ?? null
+  );
 
   async function respondApi(request: Request, url: URL) {
     const refusal = resolveBodyRefusal(request);
@@ -29,8 +48,15 @@ export function startServer(context: HttpContext) {
   const server = Bun.serve<SocketData>({
     port: config.port,
     hostname: config.hostname,
+    maxRequestBodySize: MAX_BODY_BYTES,
     fetch(request, bunServer) {
       const url = new URL(request.url);
+      if (context.schedules?.isWebhook(url.pathname)) return context.schedules.handleWebhook(request, url);
+      if (context.extensions?.isCallback(url.pathname) && request.method === 'GET') {
+        const hostRefusal = resolveHostRefusal(request, allowedHosts);
+        if (hostRefusal) return respondError('forbidden', hostRefusal, 403);
+        return respondSignInPage(context.extensions, request);
+      }
       const refusal = resolveRefusal(request, allowedHosts);
       if (refusal) return respondError('forbidden', refusal, 403);
       if (url.pathname === '/ws') {
@@ -42,11 +68,18 @@ export function startServer(context: HttpContext) {
       if (url.pathname.startsWith('/api/')) return respondApi(request, url);
       return serveStatic(config.webDir, url.pathname);
     },
-    websocket: { open: hub.open, close: hub.close, message: hub.message },
+    websocket: {
+      open: hub.open,
+      close: hub.close,
+      message: hub.message,
+      maxPayloadLength: MAX_BODY_BYTES,
+    },
   });
-  log.info('[Server] Listening', { url: `http://${config.hostname}:${server.port}` });
+  const address = resolveServerUrl(config.hostname, server.port ?? config.port);
+  log.info('[Server] Listening', { url: address });
   return {
     server,
+    url: address,
     stop: async () => {
       hub.stop();
       await server.stop(true);

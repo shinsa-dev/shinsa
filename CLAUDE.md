@@ -1,21 +1,28 @@
 # Shinsa
 
-A human-assisted coding harness. Agents do the work end to end; the human only appears at gates: reviewing a change, approving a merge, answering a question (and approving a plan, when switched on). Everything between gates is the harness's job. The product spec is `docs/spec.md`; the agent engine (roles, lifecycle, outbox, recovery) is `docs/engine.md`; the design system is `docs/design.md` and the `design` skill.
+A human-assisted coding harness. Agents do the work end to end; the human only appears at gates: reviewing a change, approving a merge, answering a question (and approving a plan, when switched on). Everything between gates is the harness's job. The product spec and its status are `docs/spec.md`; the agent engine (roles, lifecycle, outbox, recovery, accounts, delegation, schedules) is `docs/engine.md`; every object, its schema and its name (the glossary, commands, events, effects, open naming questions) is `docs/protocol.md`; the design system is `docs/design.md` and the `design` skill; where each harness feature comes from (T3 Code, Kanna, Paperclip) and how far it is built is `docs/harness-plan.md`.
 
 ## Project structure
 
 ```
 apps/server/      → @shinsa/server  The local server and the `shinsa` command. `shinsa serve` runs the event log
-                                    (SQLite), effect outbox, agent runs (Claude Agent SDK), git worktrees, GitHub,
-                                    HTTP + WebSocket and the built web app; `shinsa do|import|status|open` (src/cli)
-                                    talk to it over HTTP, so agents can hand work to Shinsa too. See apps/server/CLAUDE.md
+                                    (SQLite), effect outbox, agent runs (behind a provider interface: the Claude
+                                    Agent SDK and Codex), accounts, the MCP servers, plugins and skills agents load,
+                                    schedules and webhooks, git worktrees, GitHub, HTTP +
+                                    WebSocket, onboarding and the built web app;
+                                    `shinsa do|import|status|open` and `shinsa <group> <action>` (src/cli, generated
+                                    from src/surface; docs/cli.md) talk to it over HTTP, so agents can hand work to
+                                    and manage Shinsa too; every task agent gets the same surface as tools
+                                    (src/agents/manage: tools, client). See apps/server/CLAUDE.md
 apps/server/plugin/                 The Claude Code plugin every agent loads: review, evidence, handover skills
-apps/web/         → @shinsa/web     React 19 + Vite + Tailwind 4. Renders server state; owns nothing
-packages/core/    → @shinsa/core    Pure domain, one folder per concern under src/ (model, events, commands, effects,
-                                    state, decide, queue, briefing, report, chat, prompts, progress, protocol); tests
-                                    mirror it under test/ at 100% coverage. No I/O. See packages/core/CLAUDE.md
-packages/ui/      → @shinsa/ui      The design system (from Polis and Buzzkit): tokens, components, icons
-docs/                               spec.md, engine.md, design.md
+apps/web/         → @shinsa/web     React 19 + Vite + Tailwind 4, laid out like Buzzkit's app (routes/, components/
+                                    <domain>/, hooks/, lib/). Renders server state; owns nothing. See apps/web/CLAUDE.md
+packages/core/    → @shinsa/core    Pure domain, one folder per concern under src/ (domain, agent-models, events,
+                                    commands, effects, state, decide, accounts, costs, schedules, queue, briefing,
+                                    report, chat, prompts, progress, protocol); tests under test/ at 100% coverage.
+                                    No I/O. See packages/core/CLAUDE.md
+packages/ui/      → @shinsa/ui      The design system: Buzzkit's kit (tokens, components, icons), docs/design.md
+docs/                               spec.md, engine.md, protocol.md, design.md, cli.md, harness-plan.md
 ```
 
 ## How it works
@@ -30,16 +37,30 @@ web ──WebSocket──► shinsa serve
 ```
 
 - **State is the event log.** `decide` is pure and deterministic given `now` and `newId`; every state change is an event; replaying the log rebuilds state exactly. Never mutate state outside `applyEvent`.
-- **The task lifecycle** lives in `packages/core/src/decide/` (one file per area: `lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…): triage → (waiting on the tasks it depends on, until every one of them merges) → (planning → spec gate) → building → checking (agent review, automatic fix rounds) → review gate → shipping (PR opened, CI and review bots fixed automatically) → merge gate → merged. Failures open a `failure` gate; agent questions open a `question` gate.
-- **The hand-over protocol** (`packages/core/src/report/`): specs, work reports and review findings have fixed
-  fields with hard length limits. The tools publish the limits in their schemas; `validate*` rejects a hand-over that
-  breaks one and tells the agent what to fix. The work report *is* the review screen: phases in reading order, each
-  pointing at line ranges ranked `critical` / `high` / `normal`.
-- **No repositories to set up.** Triage picks a git repository from `~/Developer`, `~/Projects`, `~/code`, `~/src`
-  (plus `SHINSA_ROOTS`), or the directory `shinsa do` ran in. A repository is registered the first time Shinsa works
-  in it and filed into an area named after its GitHub owner (`Personal` for the user's own).
-- **Agents hand over only through Shinsa's MCP tools** (`propose_plan`, `complete_phase`, `complete_fix`, `report_review`, `ask`, `attach_evidence`, `find_tasks`, `note`), never through their final message. Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; a PreToolUse hook denies `git commit`, `git push`, `gh pr create|merge` inside agent runs.
-- **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge`.
+- **A task is a conversation of rounds.** Each round is one piece of work with its own steps, plan, build, review and
+  pull request; a new idea in the chat starts the next round on the same branch, worktree and agent sessions, shipped
+  onto the open pull request or stacked on it. Merge ends a round, not the task; you (or an agent, once nothing is open)
+  mark the task done (`docs/engine.md` → Rounds).
+- **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → the setup check → planning → building → checking → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
+- **The hand-over protocol** (`packages/core/src/report/`): plans, phase hand-overs, fixes, review findings and
+  inquiry results have fixed fields with hard length limits. The tools publish the limits in their schemas;
+  `validate*` rejects a hand-over that breaks one and tells the agent what to fix. Shinsa assembles the work report
+  you review from the phase hand-overs, in plan order, each pointing at line ranges ranked `critical` / `high` /
+  `normal` (`docs/protocol.md` → Hand-overs).
+- **Projects, not setup.** A task belongs to a project (repositories and folders, a key, a description; the focus
+  project by default). Triage finds the repository within it, or in the folders chosen at onboarding, and Shinsa
+  registers it the first time it works there. Agents are told the project. A task's handle (`SW-142`) is for people
+  and never changes; its UUIDv7 id is the key of everything stored (`docs/engine.md` → Projects and task identity).
+- **Agents hand over only through Shinsa's MCP tools** (`isHandOverTool`), never through their final message; which
+  role has which tool is `listToolNames` (`packages/core/src/domain/tools.ts`), tabled in `docs/protocol.md` → Agent
+  tools. Every task agent also has the command surface as tools (`tasks_done`, `tasks_prioritize`…) but the human-only
+  specs: what it does to another task is logged as on your behalf from its task (`docs/engine.md` → Agents manage
+  Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/server/src/agents/policy.ts` (no commit, push, rebase, `reset --hard`, `gh pr create|merge`, checkout of the default branch or a human-only `shinsa` command), through a PreToolUse hook for Claude.
+- **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge` Shinsa
+  takes; GitHub branch protection is what stops a shell from taking another (`docs/engine.md` → Who can change Shinsa).
+- **Some decisions are human-only**: their surface specs are `humanOnly`, so no agent has a tool or a shell command
+  for them, and core refuses them on your behalf (`docs/engine.md` → Who can change Shinsa has the list and the HTTP
+  guard).
 
 ## Commands
 
@@ -47,27 +68,32 @@ web ──WebSocket──► shinsa serve
 |---|---|
 | `bun dev` | `shinsa serve` on :5180 and the web app on :5181 (proxies `/api` and `/ws`) |
 | `bun run build` then `bun start` | Production: `shinsa serve` serves `apps/web/dist` on :5180 |
-| `bun lint` | Biome (with the Grit plugins) and `scripts/lint-conventions.ts` |
+| `bun lint` | Biome (with the Grit plugins), `bun lint:conventions` (`scripts/lint-conventions.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
+| `bun format` | Biome's formatter only (`bun format:fix` writes) |
 | `bun check-types` | TypeScript in every workspace and `scripts/` |
-| `bun run test` | Unit tests (Bun); `apps/server` fails below 100% line and function coverage |
+| `bun run test` | Unit tests (Bun); `apps/server`, `packages/core`, `packages/ui` and `apps/web` fail below 100% line and function coverage |
 | `bunx knip` / `bun deps` | Dead code / workspace dependency drift |
+| `bun run seed` | Seeded state to look at: writes `~/.shinsa-seed` (`SHINSA_SEED_DIR` overrides it) and prints the command that serves it under `SHINSA_INSPECT`; `SHINSA_SEED_SESSION` (a Claude session `.jsonl`) replaces one task's synthetic transcript |
 
-`SHINSA_DATA_DIR` (default `~/.shinsa`) holds the database, worktrees, transcripts and evidence. Use a scratch directory when testing: `SHINSA_DATA_DIR=/tmp/shinsa-dev bun --cwd apps/server start`. `SHINSA_INSPECT=1` serves a data directory without running agents, syncing pull requests or recovering runs, for looking at seeded state.
+Everything Shinsa keeps lives in `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa`): `config.json`, the Claude accounts
+and `data/`. `docs/engine.md` → Configuration and data has the layout, the overrides (`SHINSA_HOME`,
+`SHINSA_DATA_DIR`, `SHINSA_INSPECT` for looking at seeded state) and the split between `config.json` and the event
+log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cwd apps/server start`.
 
 ## Key conventions
 
-- **No comments.** Names and structure carry the meaning; the reasons live here and in `docs/`. `bun lint:conventions` enforces it (`biome-ignore` and `@ts-` are allowed).
+- **No comments.** Names and structure carry the meaning; the reasons live here and in `docs/`. `bun lint:conventions` enforces it (`biome-ignore` and `@ts-` are allowed; `packages/ui`, a reusable kit, is exempt).
 - **The verb catalog**: `find*` throws, `select*` returns null, `list*`, `count*`, `resolve*` derives, `create*`/`update*`, `upsert*`/`write*`/`replace*`, `remove*`, `assert*`, `serialize*`, `request*`/`sync*`/`apply*`/`record*`. No `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*` (lint-enforced). The `conventions` skill has the examples.
 - **Skills** (`.claude/skills`): `conventions` is the pattern catalog, load it before writing code; `review` is the method for a cleanup or review pass (scope the diff, prove every finding by reverting its fix); `copy` for any string a person or an agent reads; `design` for UI.
 - **`packages/core` stays pure**: no `node:*`, no Bun, no I/O (Biome bans the imports). New behaviour is a command, events and effects there, and the I/O for the effect in `apps/server`.
 - **Icons** are Central Icons through `<Icon name='Icon…' />` (`@shinsa/ui/components/icon`); run `bun run --cwd packages/ui generate:icons` after using a new name. Primitives size their icons; don't pass a size inside a Button, Badge, tab or menu row.
-- **UI copy** follows the `copy` skill: sentence case, full sentences, no em dashes, plain professional words (task, review, workspace), never playful labels.
+- **UI copy** follows the `copy` skill: sentence case, full sentences, no em dashes, plain professional words (task, review, workspace), never playful labels (the two layout names in `LAYOUT_NAMES`, Desk and Shelf, are names chosen on purpose, each with a plain hint line).
 - **Desktop first, responsive.** Screens are built for a full desktop window and must still work in an ~900px
-  floating window. Cards is the default layout (no rail, centred pages, a "3 need you" button opens the queue);
+  floating window. Cards is the default layout (no rail, centred pages, a "3 need you" button opens the queue;
+  on screen its name comes from `LAYOUT_NAMES`, Desk, and Sidebar's is Shelf);
   Sidebar, picked in Settings → Appearance, adds a permanent rail that moves into a sheet below `md`.
-- **One keyboard shortcut.** ⌘K (Ctrl K) opens the command menu (`apps/web/src/features/command`); nothing else
-  is bound to a key. Pages add their own actions with `useRegisterCommands` while mounted, and every action
-  dispatches through the same `sendCommand` as the buttons (`docs/design.md`, Where Shinsa differs, 14).
+- **One keyboard shortcut.** ⌘K (Ctrl K) opens the command menu; nothing else is bound to a key (`docs/design.md`,
+  Where Shinsa differs, 14).
 - **The design system is paywall-next's**, on Buzzkit's kit in `packages/ui` (`docs/design.md` → Where Shinsa
   differs, which wins). One blue accent (`primary`) for the primary button, links, selection and checkmarks; `success`,
   `warning`, `destructive` and `info` carry state only.

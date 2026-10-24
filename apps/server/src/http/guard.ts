@@ -12,10 +12,16 @@ export function resolveAllowedHosts(hosts: string[]): ReadonlySet<string> {
   return new Set(hosts.map((host) => readHostname(`http://${host}`) ?? host.toLowerCase()));
 }
 
-export function resolveRefusal(request: Request, allowedHosts: ReadonlySet<string>): string | null {
+export function resolveHostRefusal(request: Request, allowedHosts: ReadonlySet<string>): string | null {
   const host = request.headers.get('host');
   const hostname = host ? readHostname(`http://${host}`) : null;
   if (!hostname || !allowedHosts.has(hostname)) return 'Shinsa only answers on its own address.';
+  return null;
+}
+
+export function resolveRefusal(request: Request, allowedHosts: ReadonlySet<string>): string | null {
+  const hostRefusal = resolveHostRefusal(request, allowedHosts);
+  if (hostRefusal) return hostRefusal;
   const origin = request.headers.get('origin');
   if (origin !== null) {
     const originHostname = readHostname(origin);

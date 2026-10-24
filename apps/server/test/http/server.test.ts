@@ -1,15 +1,29 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AgentModel, ServerMessage, ShinsaState } from '@shinsa/core';
-import { type ModelCatalog, Transcripts } from '../../src/agents/index.ts';
+import {
+  type AgentModel,
+  KNOWN_AGENT_PROVIDERS,
+  type OnboardingChat,
+  type ServerMessage,
+  type ShinsaState,
+} from '@shinsa/core';
+import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { createWorktree } from '../../src/git/index.ts';
 import { type Launcher, startServer } from '../../src/http/index.ts';
 import { MAX_FILE_BYTES } from '../../src/http/routes.ts';
+import { log as logger } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
-import { createGitRepo, createTempDir, createTestConfig, until, writeFiles } from '../helpers/index.ts';
+import {
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  createTestOnboarding,
+  until,
+  writeFiles,
+} from '../helpers/index.ts';
 
 const running: (() => Promise<void>)[] = [];
 
@@ -18,7 +32,7 @@ afterEach(async () => {
 });
 
 function createModels(models: AgentModel[]) {
-  return { list: () => Promise.resolve(models) } as unknown as ModelCatalog;
+  return { listModels: () => Promise.resolve(models) } as unknown as ModelSource;
 }
 
 async function start(options: { config?: Partial<ServerConfig>; launch?: Launcher } = {}) {
@@ -32,15 +46,16 @@ async function start(options: { config?: Partial<ServerConfig>; launch?: Launche
     transcripts,
     evidence,
     models: createModels([{ id: 'opus', label: 'Opus', description: 'x' }]),
+    onboarding: createTestOnboarding(engine, config).onboarding,
     launch: options.launch,
   });
   running.push(http.stop);
   const base = `http://127.0.0.1:${http.server.port}`;
   const call = (path: string, init: RequestInit = {}) => fetch(`${base}${path}`, init);
-  const post = (path: string, body: unknown) =>
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
     call(path, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body),
     });
   return { config, engine, transcripts, evidence, base, call, post };
@@ -52,8 +67,8 @@ async function startWithWorktree(launch?: Launcher) {
   const worktree = await createWorktree(repo, server.config.worktreesDir, 'task-xyz123', 'fix/thing', null);
   await server.engine.dispatch({
     type: 'repo.register',
-    repo: { ...repo, checkCommands: [], previewCommand: null },
-    areaName: null,
+    repo: { ...repo, checkCommands: [] },
+    projectName: null,
   });
   const repoId = Object.keys(server.engine.state.repos)[0] ?? '';
   await server.engine.dispatch({ type: 'task.create', intent: 'Fix the thing', repoId });
@@ -65,7 +80,7 @@ async function startWithWorktree(launch?: Launcher) {
     repoId,
     size: 'small',
     branch: 'fix/thing',
-    dependsOn: [],
+    waitsOn: [],
   });
   await server.engine.dispatch({
     type: 'worktree.ready',
@@ -75,6 +90,76 @@ async function startWithWorktree(launch?: Launcher) {
   });
   return { ...server, taskId, worktree: worktree.path };
 }
+
+describe('request size', () => {
+  test('a body over 8 MB is refused before it is read', async () => {
+    const { post, engine } = await start();
+    const response = await post('/api/commands', { type: 'task.create', intent: 'x'.repeat(9_000_000) });
+    expect(response.status).toBe(413);
+    expect(Object.keys(engine.state.tasks)).toEqual([]);
+  });
+});
+
+describe('the health endpoint', () => {
+  test('says whether the event log replayed cleanly', async () => {
+    const { call, engine } = await start();
+    expect(await (await call('/api/health')).json()).toEqual({
+      ok: true,
+      seq: engine.state.seq,
+      problems: [],
+    });
+  });
+});
+
+describe('the onboarding endpoints', () => {
+  test('report the status, suggest folders, save the setup, check the tools and complete', async () => {
+    const { call, post, config, engine } = await start({ config: { roots: [] } });
+    expect(await (await call('/api/onboarding')).json()).toMatchObject({
+      completed: false,
+      roots: { source: 'discovered', effective: [] },
+    });
+    expect(await (await call('/api/onboarding/roots?refresh=1')).json()).toEqual({
+      suggestions: [],
+      truncated: false,
+    });
+    expect((await post('/api/onboarding/complete', {})).status).toBe(400);
+    const saved = await post('/api/onboarding/setup', { roots: [config.home], mergeMethod: 'merge' });
+    expect(await saved.json()).toMatchObject({ roots: { source: 'configured', configured: [config.home] } });
+    expect(engine.state.settings.mergeMethod).toBe('merge');
+    const refused = await post('/api/onboarding/setup', { roots: ['nope'] });
+    expect(await refused.json()).toEqual({
+      error: { code: 'roots_invalid', message: 'nope is not a full path.' },
+    });
+    for (const path of ['/api/onboarding/setup', '/api/onboarding/chat']) {
+      expect(await (await post(path, [])).json()).toEqual({
+        error: { code: 'body_invalid', message: 'The request body must be an object.' },
+      });
+    }
+    const tools = (await (await call('/api/onboarding/prerequisites')).json()) as { ready: boolean };
+    expect(tools.ready).toBe(true);
+    expect(await (await post('/api/onboarding/complete', {})).json()).toMatchObject({ completed: true });
+  });
+
+  test('run the setup chat: the first question, an answer, a fallback when the model is off, a stale reply', async () => {
+    const { call, post, config } = await start({ config: { roots: [] } });
+    const opened = (await (await call('/api/onboarding/chat')).json()) as OnboardingChat;
+    expect(opened.prompt).toMatchObject({ questionId: 'roots', step: 1, steps: 6, choices: [] });
+    const model = (await (
+      await post('/api/onboarding/chat', { type: 'say', questionId: 'roots', text: config.home })
+    ).json()) as OnboardingChat;
+    expect(model.prompt?.questionId).toBe('model');
+    const fallback = (await (
+      await post('/api/onboarding/chat', { type: 'say', questionId: 'model', text: 'the clever one' })
+    ).json()) as OnboardingChat;
+    expect(fallback.messages.at(-1)).toMatchObject({ problem: true });
+    expect(fallback.prompt?.questionId).toBe('model');
+    const stale = await post('/api/onboarding/chat', { type: 'choose', questionId: 'roots', values: ['x'] });
+    expect(stale.status).toBe(400);
+    expect(await stale.json()).toEqual({
+      error: { code: 'question_stale', message: 'That question was already answered.' },
+    });
+  });
+});
 
 describe('the request guard', () => {
   test('a foreign Host, a foreign Origin and a text/plain post are refused before anything runs', async () => {
@@ -93,6 +178,16 @@ describe('the request guard', () => {
     expect(simplePost.status).toBe(415);
     expect((await call('/', { headers: { host: 'attacker.example' } })).status).toBe(403);
   });
+
+  test('a request without an Origin, or from Shinsa’s own address, is taken without any key', async () => {
+    const { post, engine } = await start();
+    const task = { type: 'task.create', intent: 'Add search', repoId: null };
+    expect((await post('/api/commands', task)).status).toBe(200);
+    expect((await post('/api/commands', task, { origin: 'http://localhost:5181' })).status).toBe(200);
+    expect((await post('/api/commands', task, { origin: 'http://127.0.0.1:5180' })).status).toBe(200);
+    expect((await post('/api/commands', task, { 'sec-fetch-site': 'cross-site' })).status).toBe(403);
+    expect(Object.keys(engine.state.tasks)).toHaveLength(3);
+  });
 });
 
 describe('commands', () => {
@@ -103,20 +198,46 @@ describe('commands', () => {
     expect(body.ok).toBe(true);
     expect(engine.state.tasks[body.taskId]?.intent).toBe('Add search');
     expect(
-      await (await post('/api/commands', { type: 'area.write', area: { name: 'A', color: 'blue' } })).json()
+      await (
+        await post('/api/commands', { type: 'project.write', project: { name: 'A', color: 'blue' } })
+      ).json()
     ).toEqual({
       ok: true,
       taskId: null,
+      handle: null,
     });
+  });
+
+  test('every user command reaches the engine, including the ones only the task and settings pages send', async () => {
+    const { post } = await start();
+    const sent = [
+      { type: 'suggestion.accept', taskId: 't', suggestionId: 's', waitsOnThis: false },
+      { type: 'suggestion.dismiss', taskId: 't', suggestionId: 's' },
+      { type: 'monitor.check_in_now', taskId: 't' },
+      { type: 'run.snooze_silence', runId: 'r', until: 1 },
+      { type: 'run.dismiss_silence', runId: 'r' },
+      { type: 'schedule.enable', scheduleId: 's', enabled: false },
+      { type: 'schedule.remove', scheduleId: 's' },
+      { type: 'repo.remove', repoId: 'r' },
+    ];
+    for (const body of sent) {
+      const answer = (await (await post('/api/commands', body)).json()) as { error?: { code: string } };
+      expect(answer.error?.code ?? 'accepted').not.toBe('command_forbidden');
+    }
   });
 
   test('system commands, junk and bad JSON are refused with a reason', async () => {
     const { post, call } = await start();
-    for (const body of [{ type: 'run.end', runId: 'x' }, null, 'task.create', { type: 7 }]) {
+    for (const body of [{ type: 'run.end', runId: 'x' }, { type: 'repo.register' }, { type: 7 }]) {
       const response = await post('/api/commands', body);
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({
         error: { code: 'command_forbidden', message: 'Unknown command.' },
+      });
+    }
+    for (const body of [null, 'task.create']) {
+      expect(await (await post('/api/commands', body)).json()).toEqual({
+        error: { code: 'command_invalid', message: 'A command must be an object.' },
       });
     }
     const broken = await call('/api/commands', {
@@ -128,6 +249,25 @@ describe('commands', () => {
     const rejected = await post('/api/commands', { type: 'task.create', intent: ' ', repoId: null });
     expect(rejected.status).toBe(400);
   });
+
+  test('a command sent again under the same Idempotency-Key is applied once and answers the same task', async () => {
+    const { call, engine } = await start();
+    const send = (key: string) =>
+      call('/api/commands', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': key },
+        body: JSON.stringify({ type: 'task.create', intent: 'Add search', repoId: null }),
+      });
+    const first = (await (await send('k1')).json()) as { taskId: string };
+    const again = (await (await send('k1')).json()) as { taskId: string };
+    expect(again.taskId).toBe(first.taskId);
+    expect(Object.keys(engine.state.tasks)).toEqual([first.taskId]);
+    const tooLong = await send('k'.repeat(201));
+    expect(tooLong.status).toBe(400);
+    expect(await tooLong.json()).toEqual({
+      error: { code: 'idempotency_key_invalid', message: 'The Idempotency-Key header is too long.' },
+    });
+  });
 });
 
 describe('read endpoints', () => {
@@ -137,6 +277,7 @@ describe('read endpoints', () => {
     expect(await (await call('/api/models')).json()).toEqual([
       { id: 'opus', label: 'Opus', description: 'x' },
     ]);
+    expect(await (await call('/api/providers')).json()).toEqual(KNOWN_AGENT_PROVIDERS);
     const missing = await call('/api/nothing');
     expect(missing.status).toBe(404);
     expect(
@@ -268,10 +409,9 @@ describe('the web app', () => {
 
 describe('the socket', () => {
   function connect(base: string, origin: string | null = 'http://localhost:5181') {
-    const socket = new WebSocket(
-      base.replace('http', 'ws').concat('/ws'),
-      origin ? { headers: { origin } } : undefined
-    );
+    const socket = new WebSocket(base.replace('http', 'ws').concat('/ws'), {
+      headers: origin ? { origin } : {},
+    });
     const messages: ServerMessage[] = [];
     socket.addEventListener('message', (event) =>
       messages.push(JSON.parse(String(event.data)) as ServerMessage)
@@ -283,15 +423,24 @@ describe('the socket', () => {
     return { socket, messages, opened };
   }
 
-  test('a socket from another site, or without an Origin, is refused', async () => {
+  test('a socket from another site or without an Origin is refused', async () => {
     const { base, call } = await start();
-    expect(connect(base, 'https://attacker.example').opened).rejects.toThrow('socket refused');
-    expect(connect(base, null).opened).rejects.toThrow('socket refused');
+    await expect(connect(base, 'https://attacker.example').opened).rejects.toThrow('socket refused');
+    await expect(connect(base, null).opened).rejects.toThrow('socket refused');
     expect((await call('/ws', { headers: { origin: 'http://localhost:5181' } })).status).toBe(400);
   });
 
   test('state on connect and on every change, acks for commands, transcripts on subscription', async () => {
     const { base, engine, transcripts } = await start();
+    const unfollowed: string[] = [];
+    const follow = transcripts.follow.bind(transcripts);
+    transcripts.follow = (runId) => {
+      const unfollow = follow(runId);
+      return () => {
+        unfollowed.push(runId);
+        unfollow();
+      };
+    };
     const client = connect(base);
     await client.opened;
     await until('the first state', () => client.messages.length === 1);
@@ -346,8 +495,30 @@ describe('the socket', () => {
       client.messages.some((message) => message.type === 'transcript' && message.runId === 'run-2')
     ).toBe(false);
     client.socket.close();
-    await Bun.sleep(20);
-    await engine.dispatch({ type: 'area.write', area: { name: 'After close', color: 'blue' } });
+    await until('the server to let go of the transcripts', () => unfollowed.includes('run-3'));
+    await engine.dispatch({ type: 'project.write', project: { name: 'After close', color: 'blue' } });
+  });
+
+  test('a command resent on a new socket under the same id is applied once', async () => {
+    const { base, engine } = await start();
+    const message = JSON.stringify({
+      type: 'command',
+      id: 'resent',
+      command: { type: 'task.create', intent: 'Do it once', repoId: null },
+    });
+    for (const attempt of [1, 2]) {
+      const client = connect(base);
+      await client.opened;
+      client.socket.send(message);
+      await until(`ack ${attempt}`, () => client.messages.some((entry) => entry.type === 'ack'));
+      expect(client.messages.find((entry) => entry.type === 'ack')).toEqual({
+        type: 'ack',
+        id: 'resent',
+        error: null,
+      });
+      client.socket.close();
+    }
+    expect(Object.values(engine.state.tasks).map((task) => task.intent)).toEqual(['Do it once']);
   });
 
   test('a socket message that fails after parsing is logged', async () => {
@@ -356,12 +527,19 @@ describe('the socket', () => {
     transcripts.listEntries = () => {
       throw new Error('disk gone');
     };
-    const client = connect(base);
-    await client.opened;
-    client.socket.send(JSON.stringify({ type: 'transcript.subscribe', runId: 'run-1' }));
-    await Bun.sleep(30);
-    transcripts.listEntries = original;
-    expect(client.messages.every((message) => message.type === 'state')).toBe(true);
-    client.socket.close();
+    const error = spyOn(logger, 'error');
+    try {
+      const client = connect(base);
+      await client.opened;
+      client.socket.send(JSON.stringify({ type: 'transcript.subscribe', runId: 'run-1' }));
+      await until('the failure to be logged', () =>
+        error.mock.calls.some(([message]) => message === '[Socket] Message failed')
+      );
+      expect(client.messages.every((message) => message.type === 'state')).toBe(true);
+      client.socket.close();
+    } finally {
+      error.mockRestore();
+      transcripts.listEntries = original;
+    }
   });
 });

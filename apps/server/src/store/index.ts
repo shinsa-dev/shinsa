@@ -1,2 +1,8 @@
-export { EventLog, SETTLED_RETENTION_MS, type StoredEffect } from './event-log.ts';
-export { EVIDENCE_ROUTE, EvidenceStore } from './evidence.ts';
+export {
+  type CancelledEffect,
+  type CommandReceipt,
+  EventLog,
+  type StoredEffect,
+  type UnreadableEvent,
+} from './event-log.ts';
+export { EvidenceStore } from './evidence.ts';

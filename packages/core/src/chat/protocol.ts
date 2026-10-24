@@ -1,19 +1,7 @@
-import type { RunOutcome } from '../model/index.ts';
+import type { AccountSwitchReason, RunHandoffReason, RunOutcome, ShinsaToolName } from '../domain/index.ts';
+import type { LoadedExtensions } from '../protocol/extensions.ts';
 
 export const CHAT_PROTOCOL_VERSION = 2;
-
-export const SHINSA_TOOL_NAMES = [
-  'propose_plan',
-  'complete_phase',
-  'complete_fix',
-  'report_review',
-  'ask',
-  'attach_evidence',
-  'find_tasks',
-  'note',
-] as const;
-
-export type ShinsaToolName = (typeof SHINSA_TOOL_NAMES)[number];
 
 export type ChatToolArgs = Record<string, unknown>;
 
@@ -85,25 +73,74 @@ export type ChatTool =
   | { kind: 'shinsa'; name: ShinsaToolName; args: ChatToolArgs }
   | { kind: 'other'; name: string; args: ChatToolArgs };
 
-export type ChatToolKind = ChatTool['kind'];
-
 export type ChatRunStatus = 'started' | 'working' | 'waiting' | 'ended';
+
+export type ChatDelegationEvent = 'started' | 'reported';
+
+export type ChatRateLimitStatus = 'allowed' | 'allowed_warning' | 'rejected';
+
+export type ChatCompactionTrigger = 'auto' | 'manual' | 'fold' | null;
+
+export type ChatCompactor = 'claude' | 'eunoe';
+
+export type ChatFastModeStatus = 'unavailable' | 'cooldown';
+
+export type ChatNotice =
+  | { kind: 'interrupted' }
+  | {
+      kind: 'compaction';
+      trigger: ChatCompactionTrigger;
+      preTokens: number | null;
+      summary: string | null;
+      by?: ChatCompactor;
+    }
+  | { kind: 'context'; usedTokens: number; maxTokens: number | null; totalProcessedTokens: number | null }
+  | { kind: 'account'; email: string | null; organization: string | null; plan: string | null }
+  | {
+      kind: 'rate_limit';
+      status: ChatRateLimitStatus;
+      limit: string | null;
+      resetsAt: number | null;
+      utilization: number | null;
+    }
+  | {
+      kind: 'account_switched';
+      email: string | null;
+      previous: string | null;
+      reason: AccountSwitchReason;
+    }
+  | { kind: 'delegation'; event: ChatDelegationEvent; runIds: string[] }
+  | { kind: 'proxy'; proxy: 'eunoe'; status: 'unavailable'; detail: string | null }
+  | { kind: 'fast_mode'; status: ChatFastModeStatus; reason: string | null }
+  | ({ kind: 'extensions' } & LoadedExtensions)
+  | {
+      kind: 'handoff';
+      reason: RunHandoffReason;
+      fromProvider: string;
+      toProvider: string;
+      totalEntries: number;
+      includedEntries: number;
+    };
 
 export type ChatEvent =
   | { type: 'user'; from: 'you' | 'shinsa'; text: string; attachments: ChatAttachment[] }
-  | { type: 'agent'; phase: 'interim' | 'final'; text: string }
-  | { type: 'tool_call'; callId: string; tool: ChatTool }
-  | { type: 'tool_result'; callId: string; status: 'ok' | 'error'; output: string; images: string[] }
+  | { type: 'agent'; phase: 'interim' | 'final'; text: string; parentCallId?: string }
+  | { type: 'tool_call'; callId: string; tool: ChatTool; parentCallId?: string }
+  | {
+      type: 'tool_result';
+      callId: string;
+      status: 'ok' | 'error';
+      output: string;
+      images: string[];
+      parentCallId?: string;
+    }
   | { type: 'status'; status: ChatRunStatus; outcome: RunOutcome | null }
-  | { type: 'error'; text: string };
+  | { type: 'error'; text: string }
+  | { type: 'notice'; notice: ChatNotice };
 
 export type ChatEntry = ChatEvent & { v: typeof CHAT_PROTOCOL_VERSION; id: string; at: number };
 
 export type ChatEntryOf<T extends ChatEvent['type']> = Extract<ChatEntry, { type: T }>;
-
-export function isShinsaToolName(name: string): name is ShinsaToolName {
-  return (SHINSA_TOOL_NAMES as readonly string[]).includes(name);
-}
 
 export function isChatEntry(value: unknown): value is ChatEntry {
   return (
@@ -114,10 +151,15 @@ export function isChatEntry(value: unknown): value is ChatEntry {
   );
 }
 
+export function isSubagentEvent(event: ChatEvent) {
+  return 'parentCallId' in event && event.parentCallId !== undefined;
+}
+
 function listFinalReplies(events: ChatEvent[]) {
   const finals = new Set<number>();
   let candidate: number | null = null;
   for (const [index, event] of events.entries()) {
+    if (isSubagentEvent(event)) continue;
     if (event.type === 'user') {
       if (candidate !== null) finals.add(candidate);
       candidate = null;

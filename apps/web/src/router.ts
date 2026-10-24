@@ -1,0 +1,119 @@
+import { type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
+import { useSyncExternalStore } from 'react';
+import { createSignal } from '@/lib/signal.ts';
+
+export type Route =
+  | { name: 'home' }
+  | { name: 'tasks' }
+  | { name: 'task'; reference: string }
+  | { name: 'settings' }
+  | { name: 'onboarding' }
+  | { name: 'ui' };
+
+const signal = createSignal();
+
+function parseSegment(pattern: RegExp, pathname: string) {
+  const segment = pattern.exec(pathname)?.[1];
+  if (!segment) return null;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
+export function parseRoute(pathname: string): Route {
+  const reference = parseSegment(/^\/tasks\/([^/]+)$/, pathname);
+  if (reference) return { name: 'task', reference };
+  if (pathname === '/tasks') return { name: 'tasks' };
+  if (pathname === '/settings') return { name: 'settings' };
+  if (pathname === '/onboarding') return { name: 'onboarding' };
+  if (pathname === '/ui') return { name: 'ui' };
+  return { name: 'home' };
+}
+
+let current = parseRoute(location.pathname);
+
+let search = location.search;
+
+function syncRoute() {
+  const next = parseRoute(location.pathname);
+  const changed = JSON.stringify(next) !== JSON.stringify(current);
+  if (changed) current = next;
+  if (!changed && search === location.search) return;
+  search = location.search;
+  signal.publish();
+}
+
+addEventListener('popstate', syncRoute);
+
+export function replaceRoute(path: string) {
+  history.replaceState(null, '', path);
+  syncRoute();
+}
+
+export function navigate(path: string) {
+  if (path === `${location.pathname}${location.search}`) return;
+  history.pushState(null, '', path);
+  syncRoute();
+}
+
+export function updateSearchParams(
+  patch: Record<string, string | null>,
+  options: { replace?: boolean } = {}
+) {
+  const params = new URLSearchParams(location.search);
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) params.delete(key);
+    else params.set(key, value);
+  }
+  const query = params.toString();
+  const path = `${location.pathname}${query ? `?${query}` : ''}`;
+  if (options.replace) replaceRoute(path);
+  else navigate(path);
+}
+
+export function useSearchParam(name: string) {
+  return useSyncExternalStore(signal.subscribe, () => new URLSearchParams(search).get(name));
+}
+
+export function useRoute() {
+  return useSyncExternalStore(signal.subscribe, () => current);
+}
+
+export function resolveRouteTaskId(state: ShinsaState | null, route: Route) {
+  if (route.name !== 'task' || !state) return null;
+  return selectTaskByReference(state, route.reference)?.id ?? null;
+}
+
+export function useRouteTaskId(state: ShinsaState | null) {
+  return resolveRouteTaskId(state, useRoute());
+}
+
+export interface TaskPathOptions {
+  tab?: 'code' | 'chat';
+  run?: string | null;
+  view?: 'changes';
+  file?: string;
+}
+
+export type TaskPathTarget = Pick<Task, 'id'> & { handle?: string | null };
+
+export function resolveCanonicalTaskPath(task: TaskPathTarget, segment: string, query: string) {
+  if (!task.handle || segment === task.handle) return null;
+  return `${resolveTaskPath(task)}${query}`;
+}
+
+export function resolveTaskTarget(state: ShinsaState, taskId: string): TaskPathTarget {
+  return state.tasks[taskId] ?? { id: taskId };
+}
+
+export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions = {}) {
+  const params = new URLSearchParams();
+  if (options.tab) params.set('tab', options.tab);
+  if (options.view) params.set('view', options.view);
+  if (options.file) params.set('file', options.file);
+  if (options.run) params.set('run', options.run);
+  const query = params.toString();
+  return `/tasks/${encodeURIComponent(task.handle ?? task.id)}${query ? `?${query}` : ''}`;
+}

@@ -7,8 +7,9 @@ import {
   type ShinsaState,
   serializeReference,
 } from '@shinsa/core';
+import { defaultUrlTransform } from 'react-markdown';
 
-export type TextPart = { kind: 'text'; text: string } | { kind: 'reference'; span: ReferenceSpan };
+type TextPart = { kind: 'text'; text: string } | { kind: 'reference'; span: ReferenceSpan };
 
 const EMPTY_CATALOG: ReferenceCatalog = { tasks: [], pullRequests: [] };
 
@@ -86,4 +87,8 @@ export function splitReferenceText(text: string, spans: ReferenceSpan[]): TextPa
   }
   if (cursor < text.length) parts.push({ kind: 'text', text: text.slice(cursor) });
   return parts;
+}
+
+export function transformUrl(url: string) {
+  return isReferenceHref(url) ? url : defaultUrlTransform(url);
 }

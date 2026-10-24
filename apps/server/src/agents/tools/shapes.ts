@@ -1,0 +1,153 @@
+import {
+  type ChangeProposalInput,
+  type DeliveringStep,
+  PIPELINE_ORDER,
+  SHAPE_LIMITS,
+  type ShinsaEvent,
+  STEP_SCHEMA,
+  validateAnswer,
+  validateDelivery,
+  validateReshape,
+} from '@shinsa/core';
+import { assertProtocol, HANDED_OVER } from '../handover.ts';
+import type { ProcessToolCall } from './process.ts';
+import { limitedText, type ToolSpec } from './schema.ts';
+
+const L = SHAPE_LIMITS;
+
+const STEP_CATALOG = PIPELINE_ORDER.map(
+  (step) => `- \`${step}\` (${STEP_SCHEMA[step].title}): ${STEP_SCHEMA[step].exit}`
+).join('\n');
+
+const PROPOSE_CHANGE_SPEC = {
+  type: 'object',
+  description:
+    'Only when what you found calls for a code change. The human decides whether the task turns into that change; nothing changes until they approve.',
+  properties: {
+    request: limitedText(
+      'What to change and where, in a few sentences, as the human would ask for it.',
+      L.request
+    ),
+    why: limitedText('Why it is worth doing, in one sentence.', L.why),
+  },
+  required: ['request', 'why'],
+};
+
+export const SHAPE_TOOL_SPECS = {
+  answer: {
+    name: 'answer',
+    description:
+      'Hand the human your answer, then end your turn. Lead with the answer itself, then the evidence: files and lines as shinsa:// links.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        answer: limitedText('The answer in markdown.', L.answer),
+        propose_change: PROPOSE_CHANGE_SPEC,
+      },
+      required: ['answer'],
+    },
+  },
+  report_diagnosis: {
+    name: 'report_diagnosis',
+    description:
+      'Hand the human what you found, then end your turn. Lead with the cause, then the evidence: files and lines as shinsa:// links. Your edits in the worktree are thrown away; only the findings are kept.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        findings: limitedText('The cause, or what you ruled out, and the evidence, in markdown.', L.findings),
+        propose_change: PROPOSE_CHANGE_SPEC,
+      },
+      required: ['findings'],
+    },
+  },
+  submit_report: {
+    name: 'submit_report',
+    description:
+      'Hand the human your report, then end your turn. Lead with the conclusion, then the options and the evidence behind it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        report: limitedText('The report in markdown.', L.report),
+        propose_change: PROPOSE_CHANGE_SPEC,
+      },
+      required: ['report'],
+    },
+  },
+  report_outcome: {
+    name: 'report_outcome',
+    description:
+      'Hand the human the outcome of the operation, then end your turn. Shinsa finishes the task; nothing is pushed and no pull request is opened.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        outcome: limitedText(
+          'What ran, what changed, and anything left to do or undo, in markdown.',
+          L.outcome
+        ),
+      },
+      required: ['outcome'],
+    },
+  },
+  reshape_task: {
+    name: 'reshape_task',
+    description:
+      'Use this instead of a plan when the steps Shinsa guessed do not fit the request: give `shape` to make it an answer, an investigation or research, or `steps` to compose the task from the building blocks. Shinsa checks the steps and tells you what to fix; once they pass, end your turn and Shinsa starts the first new step.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        shape: {
+          type: 'string',
+          enum: ['answer', 'investigate', 'research'],
+          description:
+            'answer: a question answered from the code. investigate: find the cause of a problem and report it. research: compare options or research a topic and write a report.',
+        },
+        steps: {
+          type: 'array',
+          minItems: 1,
+          maxItems: PIPELINE_ORDER.length,
+          items: { type: 'string', enum: [...PIPELINE_ORDER] },
+          description: `The steps in order, from these building blocks, each with what ends it:\n${STEP_CATALOG}\nYou cannot add steps or gates: you compose these, and set the plan's parameters in \`propose_plan\`. Shinsa checks the steps against its rules and returns every problem.`,
+        },
+        reason: limitedText('Why the task takes these steps, in one sentence.', L.reason),
+      },
+      required: ['reason'],
+    },
+  },
+} satisfies Record<string, ToolSpec>;
+
+const DELIVERING_TOOLS = new Map<string, DeliveringStep>([
+  ['report_diagnosis', 'investigate'],
+  ['submit_report', 'research'],
+  ['report_outcome', 'operate'],
+]);
+
+const UNCHANGED = 'Those are the steps this task already has. Plan it with `propose_plan`.';
+
+function hasReshaped(events: ShinsaEvent[]) {
+  return events.some((event) => event.type === 'task.reshaped');
+}
+
+function withProposal(proposal: ChangeProposalInput | null) {
+  return proposal ? { proposal } : {};
+}
+
+export async function handleShapeTool(name: string, input: Record<string, unknown>, call: ProcessToolCall) {
+  const { runId, attemptId } = call;
+  const step = DELIVERING_TOOLS.get(name);
+  if (step) {
+    const { body, proposal } = assertProtocol(validateDelivery(step, input));
+    await call.dispatch({ type: 'agent.deliver', runId, attemptId, step, body, ...withProposal(proposal) });
+    return HANDED_OVER;
+  }
+  if (name === 'answer') {
+    const { answer, proposal } = assertProtocol(validateAnswer(input));
+    await call.dispatch({ type: 'agent.answer', runId, attemptId, answer, ...withProposal(proposal) });
+    return HANDED_OVER;
+  }
+  if (name === 'reshape_task') {
+    const reshape = assertProtocol(validateReshape(input));
+    const events = await call.dispatch({ type: 'agent.reshape', runId, attemptId, ...reshape });
+    return hasReshaped(events) ? HANDED_OVER : UNCHANGED;
+  }
+  return null;
+}

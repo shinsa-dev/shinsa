@@ -1,58 +1,169 @@
 import type { Briefing } from '../briefing/types.ts';
 import type {
-  Area,
+  ConfigProblem,
+  DeliveringStep,
   EvidenceKind,
+  FindingVerdict,
   GateDecision,
+  MessageKind,
+  PipelineStep,
+  Project,
   PullRequest,
   Repo,
+  RoundShipping,
+  RunAccount,
+  RunFailure,
+  RunHandoff,
   RunOutcome,
+  RunUsage,
   Settings,
+  TaskMode,
   TaskPriority,
+  TaskShape,
   TaskSize,
-} from '../model/index.ts';
-import type { CodeSpot, ReportCheck, ReportDecision, ReviewFinding, SpecDocument } from '../report/types.ts';
+} from '../domain/index.ts';
+import type { PullRequestRemark } from '../domain/pull-requests.ts';
+import type {
+  CodeSpot,
+  ReportCheck,
+  JudgementCall,
+  ReviewFinding,
+  PlanDocument,
+  SuggestedTask,
+} from '../report/types.ts';
+import type {
+  DelegationAgentCommand,
+  DelegationSystemCommand,
+  DelegationUserCommand,
+} from './delegations.ts';
+import { isUserCommandType } from './parse.ts';
+import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
+
+export interface ChangeProposalInput {
+  request: string;
+  why: string;
+}
+
+export type ProjectInput = Pick<Project, 'name' | 'color'> &
+  Partial<Pick<Project, 'id' | 'key' | 'description' | 'folders'>>;
+
+export type InquiryShape = Extract<TaskShape, 'answer' | 'investigate' | 'research'>;
+
+export interface TriageReasons {
+  shape?: string;
+  priority?: string;
+  start?: string;
+}
 
 export type UserCommand =
-  | { type: 'repo.register'; repo: Omit<Repo, 'id' | 'areaId'>; areaName: string | null }
   | { type: 'repo.update'; repoId: string; patch: Partial<Omit<Repo, 'id' | 'path'>> }
   | { type: 'repo.remove'; repoId: string }
-  | { type: 'area.write'; area: Omit<Area, 'id'> & { id?: string } }
-  | { type: 'area.remove'; areaId: string }
-  | { type: 'focus.change'; areaId: string | null; until: number | null }
+  | { type: 'project.write'; project: ProjectInput }
+  | { type: 'project.remove'; projectId: string }
+  | { type: 'focus.change'; projectId: string | null; until: number | null }
   | { type: 'settings.change'; patch: Partial<Settings> }
   | {
       type: 'task.create';
-      intent: string;
+      request: string;
       repoId: string | null;
+      projectId?: string | null;
       priority?: TaskPriority;
-      specFirst?: boolean;
+      planFirst?: boolean;
       origin?: string | null;
-      blockedBy?: string[];
+      waitsOn?: string[];
+      mode?: TaskMode;
+      account?: RunAccount | null;
     }
   | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
-  | { type: 'task.block'; taskId: string; blockedBy: string[] }
+  | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }
   | { type: 'task.cancel'; taskId: string }
   | { type: 'task.complete'; taskId: string }
-  | { type: 'task.retry'; taskId: string }
-  | { type: 'task.message'; taskId: string; text: string }
-  | { type: 'gate.answer'; gateId: string; decision: GateDecision; response: string | null };
+  | { type: 'task.retry'; taskId: string; account?: RunAccount }
+  | {
+      type: 'task.message';
+      taskId: string;
+      text: string;
+      kind?: MessageKind;
+      title?: string;
+      why?: string;
+      shape?: TaskShape;
+    }
+  | { type: 'round.ship'; taskId: string; number: number; shipping: RoundShipping }
+  | {
+      type: 'gate.answer';
+      gateId: string;
+      decision: GateDecision;
+      response: string | null;
+      planVersion?: number;
+      verdicts?: FindingVerdict[];
+    }
+  | { type: 'suggestion.accept'; taskId: string; suggestionId: string; waitsOnThis: boolean }
+  | { type: 'suggestion.dismiss'; taskId: string; suggestionId: string }
+  | { type: 'suggestion.keep'; taskId: string; suggestionId: string }
+  | { type: 'monitor.check_in_now'; taskId: string }
+  | { type: 'run.snooze_silence'; runId: string; until: number }
+  | { type: 'run.dismiss_silence'; runId: string }
+  | { type: 'task.bind_account'; taskId: string; account: RunAccount | null }
+  | { type: 'usage_wait.change'; taskId: string; autoResume: boolean }
+  | { type: 'usage_wait.resume_now'; taskId: string }
+  | DelegationUserCommand
+  | ScheduleUserCommand;
 
-export type AgentCommand =
-  | { type: 'agent.propose_plan'; runId: string; document: SpecDocument }
+type AgentCommand =
+  | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
   | {
       type: 'agent.complete_phase';
       runId: string;
       summary: string;
       spots: CodeSpot[];
-      decisions: ReportDecision[];
+      judgementCalls: JudgementCall[];
+      treeHash?: string | null;
     }
-  | { type: 'agent.complete_fix'; runId: string; summary: string }
+  | { type: 'agent.complete_fix'; runId: string; summary: string; treeHash?: string | null }
   | { type: 'agent.report_review'; runId: string; findings: ReviewFinding[] }
-  | { type: 'agent.ask'; runId: string; gateId: string; question: string; context: string | null }
+  | {
+      type: 'agent.ask';
+      runId: string;
+      gateId: string;
+      question: string;
+      context: string | null;
+      choices?: string[];
+      recommendation?: string | null;
+    }
   | { type: 'agent.attach_evidence'; runId: string; kind: EvidenceKind; title: string; uri: string }
-  | { type: 'agent.note'; runId: string; note: string };
+  | { type: 'agent.note'; runId: string; note: string }
+  | {
+      type: 'agent.wait_for';
+      runId: string;
+      checkInMinutes: number;
+      notes: string;
+      timeoutMinutes: number | null;
+      maxAttempts: number | null;
+    }
+  | { type: 'agent.suggest_tasks'; runId: string; suggestions: SuggestedTask[] }
+  | { type: 'agent.answer'; runId: string; answer: string; proposal?: ChangeProposalInput | null }
+  | {
+      type: 'agent.deliver';
+      runId: string;
+      step: DeliveringStep;
+      body: string;
+      proposal?: ChangeProposalInput | null;
+    }
+  | ({ type: 'agent.reshape'; runId: string; reason: string } & (
+      | { shape: InquiryShape }
+      | { steps: PipelineStep[] }
+    ))
+  | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
+  | DelegationAgentCommand
+  | ScheduleAgentCommand;
 
-export type SystemCommand =
+type SystemCommand =
+  | {
+      type: 'repo.register';
+      repo: Omit<Repo, 'id' | 'projectId'>;
+      projectName: string | null;
+      projectId?: string | null;
+    }
   | {
       type: 'task.triage';
       taskId: string;
@@ -60,20 +171,73 @@ export type SystemCommand =
       repoId: string;
       size: TaskSize;
       branch: string;
-      dependsOn: string[];
+      waitsOn: string[];
+      shape?: TaskShape;
+      priority?: TaskPriority;
+      reasons?: TriageReasons;
     }
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string }
   | { type: 'worktree.gone'; taskId: string }
-  | { type: 'run.link'; runId: string; sessionId: string }
-  | { type: 'run.end'; runId: string; outcome: RunOutcome; summary: string | null }
-  | { type: 'pull_request.record'; taskId: string; pullRequest: PullRequest }
+  | { type: 'run.link'; runId: string; sessionId: string; attemptId?: string | null; provider?: string }
+  | {
+      type: 'run.end';
+      runId: string;
+      outcome: RunOutcome;
+      summary: string | null;
+      attemptId?: string | null;
+      failure?: RunFailure | null;
+    }
+  | {
+      type: 'run.attempt';
+      runId: string;
+      attemptId: string;
+      provider: string;
+      model: string | null;
+      resumed: boolean;
+      handoff: RunHandoff | null;
+      account?: RunAccount | null;
+    }
+  | { type: 'run.interrupt'; runId: string; attemptId?: string | null }
+  | { type: 'run.continue'; runId: string }
+  | { type: 'run.session_lost'; runId: string; sessionId: string }
+  | { type: 'run.compact'; runId: string; sessionId: string }
+  | {
+      type: 'pull_request.record';
+      taskId: string;
+      pullRequest: PullRequest;
+      remarks?: PullRequestRemark[] | null;
+      viewer?: string | null;
+    }
+  | { type: 'pull_request.read_failed'; taskId: string; detail: string }
   | { type: 'checks.record'; taskId: string; results: ReportCheck[] }
   | { type: 'effect.fail'; taskId: string; title: string; detail: string }
-  | { type: 'briefing.write'; areaId: string | null; text: string; briefing?: Briefing }
+  | { type: 'briefing.write'; projectId: string | null; text: string; briefing?: Briefing }
   | { type: 'message.deliver'; taskId: string; text: string }
   | { type: 'runs.dispatch' }
-  | { type: 'pull_request.pushed'; taskId: string; sha: string };
+  | { type: 'monitor.fire'; taskId: string; monitorId: string; attempt: number }
+  | { type: 'run.meter'; runId: string; usage: RunUsage; sessionId?: string | null; weeklyPercent?: number }
+  | { type: 'run.silence'; runId: string; since: number | null }
+  | { type: 'config.record'; taskId: string; problems: ConfigProblem[] }
+  | { type: 'pull_request.pushed'; taskId: string; sha: string }
+  | { type: 'usage_wait.resume'; taskId: string; waitId: string }
+  | { type: 'account.signed_in'; account: RunAccount }
+  | { type: 'account.removed'; accountId: string }
+  | DelegationSystemCommand
+  | ScheduleSystemCommand;
 
-export type ShinsaCommand = UserCommand | AgentCommand | SystemCommand;
+type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };
+
+export type ShinsaCommand = UserCommand | ScopedAgentCommand | SystemCommand;
+
+export function isAgentCommand(command: ShinsaCommand): command is ScopedAgentCommand {
+  return command.type.startsWith('agent.');
+}
+
+export function isUserCommand(command: ShinsaCommand): command is UserCommand {
+  return isUserCommandType(command.type);
+}
 
 export type CommandOf<T extends ShinsaCommand['type']> = Extract<ShinsaCommand, { type: T }>;
+
+export { parseUserCommand, USER_COMMAND_TYPES } from './parse.ts';
+export type { ScheduleTargetInput } from './schedules.ts';

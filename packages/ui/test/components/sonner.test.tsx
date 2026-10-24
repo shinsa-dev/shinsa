@@ -1,249 +1,190 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import { act, render } from '@testing-library/react';
-import type * as React from 'react';
-import type { ExternalToast } from 'sonner';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { Toaster, toast } from '../../src/components/sonner';
 import { flush } from '../support/layout';
 
-type Call = { kind: string; message: unknown; options: ExternalToast };
-
-const calls: Call[] = [];
-const promised: { promise: Promise<unknown>; data: Record<string, unknown> }[] = [];
-let promiseHandle: unknown = null;
-
-function record(kind: string) {
-  return (text: unknown, options: ExternalToast = {}) => {
-    calls.push({ kind, message: text, options });
-    return options.id ?? 'sonner-id';
-  };
+function findToast(text: string) {
+  return screen
+    .findByText(text)
+    .then((node) => node.closest<HTMLElement>('[data-sonner-toast]') as HTMLElement);
 }
 
-const dismiss = mock((id?: string | number) => id);
-const custom = mock(() => 'custom-id');
-const message = mock(() => 'message-id');
-
-mock.module('sonner', () => ({
-  toast: Object.assign(record('default'), {
-    success: record('success'),
-    error: record('error'),
-    warning: record('warning'),
-    info: record('info'),
-    dismiss,
-    custom,
-    message,
-    promise: (promise: Promise<unknown>, data: Record<string, unknown>) => {
-      promised.push({ promise, data });
-      return promiseHandle;
-    },
-  }),
-  Toaster: (props: Record<string, unknown>) => (
-    <div data-testid='toaster' data-position={String(props.position)} />
-  ),
-}));
-
-const { Toaster, toast } = await import('../../src/components/sonner');
-
-function showToast(instance: string, { top = true }: { top?: boolean } = {}) {
-  const toaster = document.createElement('section');
-  toaster.setAttribute('data-sonner-toaster', '');
-  if (!top) {
-    const newer = document.createElement('li');
-    newer.setAttribute('data-sonner-toast', '');
-    toaster.append(newer);
-  }
-  const item = document.createElement('li');
-  item.setAttribute('data-sonner-toast', '');
-  item.className = instance;
-  toaster.append(item);
-  document.body.append(toaster);
-  return item;
+function show(fire: () => unknown) {
+  let result: unknown;
+  act(() => {
+    result = fire();
+  });
+  return result;
 }
 
-function instanceOf(call: Call) {
-  return String(call.options.className).split(' ')[0] as string;
+function waitForCue(element: HTMLElement, cue: 'bk-toast-bump' | 'bk-toast-shake') {
+  return waitFor(() => expect(element.classList.contains(cue)).toBe(true));
 }
 
 beforeEach(() => {
-  calls.length = 0;
-  promised.length = 0;
-  promiseHandle = null;
-  dismiss.mockClear();
+  render(<Toaster />);
 });
 
 afterEach(() => {
-  document.body.innerHTML = '';
-  toast.dismiss();
+  act(() => {
+    toast.dismiss();
+  });
 });
 
 describe('toast', () => {
-  it('fires each kind through sonner with its own id and instance class', () => {
-    const id = toast.success('Saved');
-    expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ kind: 'success', message: 'Saved' });
-    expect(id).toBe(calls[0]?.options.id as string);
-    expect(instanceOf(calls[0] as Call)).toMatch(/^bk-toast-i-\d+$/);
+  it('shows each kind as its own toast at the top centre', async () => {
+    show(() => toast.success('Saved'));
+    show(() => toast('Plain'));
+    show(() => toast.error('Broke'));
+    show(() => toast.warning('Careful'));
+    show(() => toast.info('Note'));
 
-    toast('Plain', { className: 'mine' });
-    toast.error('Broke');
-    toast.warning('Careful');
-    toast.info('Note');
-    expect(calls.map((call) => call.kind)).toEqual(['success', 'default', 'error', 'warning', 'info']);
-    expect(String(calls[1]?.options.className)).toContain('mine');
+    const kinds = await Promise.all(['Saved', 'Plain', 'Broke', 'Careful', 'Note'].map(findToast));
+    expect(kinds.map((element) => element.dataset.type)).toEqual([
+      'success',
+      undefined,
+      'error',
+      'warning',
+      'info',
+    ]);
+    expect(kinds[0]?.dataset.yPosition).toBe('top');
+    expect(kinds[0]?.dataset.xPosition).toBe('center');
   });
 
   it('updates a duplicate on top in place and bumps it instead of stacking a copy', async () => {
-    toast('Copied');
-    const first = calls[0] as Call;
-    const element = showToast(instanceOf(first));
+    const first = show(() => toast('Copied'));
+    const element = await findToast('Copied');
 
-    const id = toast('Copied');
-    expect(id).toBe(first.options.id as string);
-    await act(() => flush(20));
-    expect(element.classList.contains('bk-toast-bump')).toBe(true);
+    expect(show(() => toast('Copied'))).toBe(first);
+    await waitForCue(element, 'bk-toast-bump');
+    expect(screen.getAllByText('Copied')).toHaveLength(1);
   });
 
   it('shakes a repeated error', async () => {
-    toast.error('No connection');
-    const element = showToast(instanceOf(calls[0] as Call));
-    toast.error('No connection');
-    await act(() => flush(20));
-    expect(element.classList.contains('bk-toast-shake')).toBe(true);
+    show(() => toast.error('No connection'));
+    const element = await findToast('No connection');
+    show(() => toast.error('No connection'));
+    await waitForCue(element, 'bk-toast-shake');
   });
 
-  it('brings a buried duplicate back to the top as a new toast', async () => {
-    toast('Queued');
-    const first = calls[0] as Call;
-    showToast(instanceOf(first), { top: false });
+  it('brings a buried duplicate back to the top as a new toast, and bumps it', async () => {
+    const first = show(() => toast('Queued'));
+    await findToast('Queued');
+    show(() => toast('Later'));
+    await findToast('Later');
 
-    const id = toast('Queued');
-    expect(dismiss).toHaveBeenCalledWith(first.options.id);
-    expect(id).not.toBe(first.options.id as string);
-    const element = showToast(instanceOf(calls[1] as Call));
-    await act(() => flush(20));
-    expect(element.classList.contains('bk-toast-bump')).toBe(true);
+    const again = show(() => toast('Queued'));
+    expect(again).not.toBe(first);
+    await waitFor(() => {
+      const top = document.querySelector<HTMLElement>('[data-sonner-toast]');
+      expect(top?.textContent).toBe('Queued');
+      expect(top?.classList.contains('bk-toast-bump')).toBe(true);
+    });
   });
 
-  it('forgets a toast once it is dismissed or closes itself, and still tells the caller', () => {
+  it('forgets a toast once it is dismissed, and still tells the caller', async () => {
     const onDismiss = mock();
-    const onAutoClose = mock();
-    toast('Once', { onDismiss, onAutoClose });
-    const first = calls[0] as Call;
-    first.options.onDismiss?.({ id: first.options.id } as never);
-    expect(onDismiss).toHaveBeenCalledTimes(1);
+    const first = show(() => toast('Once', { onDismiss }));
+    await findToast('Once');
 
-    showToast(instanceOf(first));
-    expect(toast('Once', { onAutoClose })).not.toBe(first.options.id as string);
-
-    const second = calls[1] as Call;
-    second.options.onAutoClose?.({ id: second.options.id } as never);
-    expect(onAutoClose).toHaveBeenCalledTimes(1);
-    second.options.onDismiss?.({ id: second.options.id } as never);
+    act(() => {
+      toast.dismiss(first as string);
+    });
+    await waitFor(() => expect(onDismiss).toHaveBeenCalledTimes(1));
+    expect(show(() => toast('Once'))).not.toBe(first);
   });
 
-  it('never dedupes a message that is not a string, so it cannot choke on one', () => {
-    const node: Record<string, unknown> = { type: 'span' };
-    node.self = node;
-    expect(() => toast(node as unknown as React.ReactNode)).not.toThrow();
-    expect(calls[0]?.options.id).toBeUndefined();
+  it('forgets a toast once it closes itself, and still tells the caller', async () => {
+    const onAutoClose = mock();
+    const first = show(() => toast('Brief', { onAutoClose, duration: 1 }));
+    await waitFor(() => expect(onAutoClose).toHaveBeenCalledTimes(1));
+    expect(show(() => toast('Brief'))).not.toBe(first);
+  });
+
+  it('never dedupes a message that is not a string', async () => {
+    show(() => toast(<b>Node</b>));
+    show(() => toast(<b>Node</b>));
+    await waitFor(() => expect(screen.getAllByText('Node')).toHaveLength(2));
   });
 
   it('passes a caller id straight through', () => {
-    expect(toast('Mine', { id: 'fixed' })).toBe('fixed');
-    expect(calls[0]?.options).toEqual({ id: 'fixed' });
+    expect(show(() => toast('Mine', { id: 'fixed' }))).toBe('fixed');
   });
 
-  it('settles a loading toast with the result kind and keeps its id', async () => {
-    const id = toast.loading('Saving');
-    expect(typeof id).toBe('string');
-    const { promise, data } = promised[0] as (typeof promised)[number];
-    expect(data).toMatchObject({ id, loading: 'Saving' });
+  it('settles a loading toast in place with the result kind', async () => {
+    const id = show(() => toast.loading('Saving')) as string;
+    const loading = await findToast('Saving');
+    expect(loading.dataset.type).toBe('loading');
 
-    expect(toast.info('Saved', { id })).toBe(id);
-    expect(calls).toHaveLength(0);
-    const settled = await promise;
-    expect((data.success as (value: unknown) => unknown)(settled)).toEqual({
-      message: 'Saved',
-      type: 'info',
-    });
+    expect(show(() => toast.info('Saved', { id }))).toBe(id);
+    const settled = await findToast('Saved');
+    await waitFor(() => expect(settled.dataset.type).toBe('info'));
+    expect(screen.queryByText('Saving')).toBeNull();
+    await waitForCue(settled, 'bk-toast-bump');
   });
 
-  it('fails a loading toast with an error or a warning', async () => {
-    const id = toast.loading('Pushing', { id: 'push' });
+  it('fails a loading toast with a warning, and shakes it', async () => {
+    const id = show(() => toast.loading('Pushing', { id: 'push' }));
     expect(id).toBe('push');
-    toast.warning('Rejected', { id });
-    const { promise, data } = promised[0] as (typeof promised)[number];
-    const failure = await promise.then(
-      () => null,
-      (reason: unknown) => reason
-    );
-    expect((data.error as (value: unknown) => unknown)(failure)).toEqual({
-      message: 'Rejected',
-      type: 'warning',
+    await findToast('Pushing');
+    show(() => toast.warning('Rejected', { id: 'push' }));
+    const failed = await findToast('Rejected');
+    await waitFor(() => expect(failed.dataset.type).toBe('warning'));
+    await waitForCue(failed, 'bk-toast-shake');
+  });
+
+  it('lets a dismissed loading toast be followed by a fresh toast with the same id', async () => {
+    const id = show(() => toast.loading('Deploying')) as string;
+    await findToast('Deploying');
+    act(() => {
+      toast.dismiss(id);
     });
+    show(() => toast.success('Deployed', { id }));
+    expect((await findToast('Deployed')).dataset.type).toBe('success');
+
+    const other = show(() => toast.loading('Again')) as string;
+    act(() => {
+      toast.dismiss();
+    });
+    show(() => toast.error('Failed', { id: other }));
+    expect((await findToast('Failed')).dataset.type).toBe('error');
   });
 
-  it('lets a dismissed loading toast be followed by a fresh toast with the same id', () => {
-    const id = toast.loading('Deploying');
-    toast.dismiss(id);
-    expect(dismiss).toHaveBeenCalledWith(id);
-    toast.success('Deployed', { id });
-    expect(calls[0]).toMatchObject({ kind: 'success', options: { id } });
-
-    const other = toast.loading('Again');
-    toast.dismiss();
-    toast.error('Failed', { id: other });
-    expect(calls[1]).toMatchObject({ kind: 'error', options: { id: other } });
+  it('returns a plain id from a promise toast, and none when it shows nothing', () => {
+    const id = show(() => toast.promise(Promise.resolve(1), { loading: 'Working', id: 'work' }));
+    expect(id).toBe('work');
+    const counted = show(() => toast.promise(Promise.resolve(1), { loading: 'Counting', id: 7 }));
+    expect(counted).toBe(7);
+    expect(show(() => toast.promise(() => Promise.resolve(1), {}))).toBeUndefined();
   });
 
-  it('returns a plain id from a promise toast', () => {
-    promiseHandle = Object.assign(new String('promise-id'), { unwrap: () => undefined });
-    expect(toast.promise(Promise.resolve(1), { loading: 'Working' })).toBe('promise-id');
-    promiseHandle = Object.assign(new Number(7), { unwrap: () => undefined });
-    expect(toast.promise(Promise.resolve(1), { loading: 'Working' })).toBe(7);
-    promiseHandle = { unwrap: () => undefined };
-    expect(toast.promise(() => Promise.resolve(1), {})).toBeUndefined();
-  });
-
-  it('passes custom and message toasts through', () => {
-    const jsx = () => <div />;
-    expect(toast.custom(jsx)).toBe('custom-id');
-    expect(toast.message('Hello')).toBe('message-id');
-    expect(custom).toHaveBeenCalledWith(jsx, undefined);
+  it('passes custom and message toasts through', async () => {
+    show(() => toast.custom(() => <div>Custom body</div>));
+    show(() => toast.message('Hello'));
+    expect(await screen.findByText('Custom body')).toBeTruthy();
+    expect(await screen.findByText('Hello')).toBeTruthy();
   });
 });
 
 describe('Toaster', () => {
-  it('renders sonner bottom right and cues a toast when its promise settles', async () => {
-    const view = render(<Toaster />);
-    expect(view.getByTestId('toaster').dataset.position).toBe('bottom-right');
-
-    const element = showToast('bk-toast');
+  it('cues only its own toasts when their type settles', async () => {
+    const element = document.createElement('li');
+    element.setAttribute('data-sonner-toast', '');
+    element.className = 'bk-toast';
     element.setAttribute('data-type', 'loading');
+    const other = document.createElement('li');
+    other.setAttribute('data-type', 'loading');
+    document.body.append(element, other);
+
     await act(async () => {
       await flush();
-      element.setAttribute('data-type', 'success');
-      await flush();
-      expect(element.classList.contains('bk-toast-bump')).toBe(true);
-
-      element.setAttribute('data-type', 'loading');
-      await flush();
-      element.setAttribute('data-type', 'error');
-      await flush();
-      expect(element.classList.contains('bk-toast-shake')).toBe(true);
-
-      element.setAttribute('data-type', 'loading');
-      await flush();
       element.setAttribute('data-type', 'custom');
-      await flush();
-      expect(element.classList.contains('bk-toast-bump')).toBe(true);
-
-      const other = document.createElement('li');
-      other.setAttribute('data-type', 'loading');
-      document.body.append(other);
-      await flush();
       other.setAttribute('data-type', 'success');
-      element.setAttribute('data-type', 'error');
       await flush();
-      expect(other.classList.length).toBe(0);
     });
+    expect(element.classList.contains('bk-toast-bump')).toBe(true);
+    expect(other.classList.length).toBe(0);
+    element.remove();
+    other.remove();
   });
 });

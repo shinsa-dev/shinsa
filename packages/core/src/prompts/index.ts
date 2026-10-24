@@ -3,7 +3,43 @@ export {
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
   resolveReviewFixPrompt,
+  resolveVerdictFixPrompt,
 } from './fixes.ts';
-export { resolvePhasePrompt, resolvePlannerPrompt, resolveReviewerPrompt } from './roles.ts';
+export {
+  type Handoff,
+  type HandoffRequest,
+  type HandoffSource,
+  resolveHandoff,
+  resolveHandoffPrompt,
+} from './handoff.ts';
+export { MANAGE_RULES } from './manage.ts';
+export {
+  type DeliveredQuestion,
+  type DeliveredResult,
+  type DeliveryContent,
+  resolveAdoptionNote,
+  resolveDelegatePrompt,
+  resolveDelegationAnswerPrompt,
+  resolveDeliveryPrompt,
+} from './orchestration.ts';
+export { resolveProjectContext } from './project.ts';
+export {
+  resolveAnswererPrompt,
+  resolveInvestigatorPrompt,
+  resolveOperatorPrompt,
+  resolvePhasePrompt,
+  resolvePlannerPrompt,
+  resolveResearcherPrompt,
+  resolveReviewerPrompt,
+} from './roles.ts';
 export { REFERENCE_RULES } from './rules.ts';
-export { resolveAnswerPrompt, resolveContinuePrompt } from './session.ts';
+export {
+  QUESTION_WITHDRAWN,
+  resolveAnswerPrompt,
+  resolveContinuePrompt,
+  resolveQuestionResumePrompt,
+  resolveSteerPrompt,
+  resolveSupersededReply,
+  resolveWithdrawnReply,
+} from './session.ts';
+export { resolveMonitorPrompt } from './waits.ts';

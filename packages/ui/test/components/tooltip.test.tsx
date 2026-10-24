@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   Tooltip,
   TooltipContent,
@@ -45,8 +45,7 @@ describe('Tooltip without hover', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
 
     await tap();
-    await act(() => flush(250));
-    expect(screen.queryByText('2h ago')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('2h ago')).toBeNull());
   });
 
   it('leaves a controlled tooltip to its owner', async () => {

@@ -1,0 +1,36 @@
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { readMachineConfig } from '../../src/config/file.ts';
+import type { ServerConfig } from '../../src/config/index.ts';
+
+export function createConfigAt(root: string, overrides: Partial<ServerConfig> = {}): ServerConfig {
+  const dataDir = join(root, 'data');
+  const config: ServerConfig = {
+    home: root,
+    configPath: join(root, 'config.json'),
+    legacyDataDir: null,
+    userHome: root,
+    machine: readMachineConfig(join(root, 'config.json')),
+    dataDir,
+    databasePath: join(dataDir, 'shinsa.sqlite'),
+    worktreesDir: join(dataDir, 'worktrees'),
+    evidenceDir: join(dataDir, 'evidence'),
+    transcriptsDir: join(dataDir, 'transcripts'),
+    pluginDir: resolve(import.meta.dirname, '../../plugin'),
+    webDir: join(root, 'web'),
+    port: 0,
+    hostname: '127.0.0.1',
+    allowedHosts: ['localhost', '127.0.0.1', '[::1]'],
+    roots: [root],
+    inspect: false,
+    editor: null,
+    terminal: 'Terminal',
+    settleDelayMs: 3_600_000,
+    eunoe: { command: resolve(import.meta.dirname, 'bin/eunoe'), port: null },
+    ...overrides,
+  };
+  for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return config;
+}

@@ -114,7 +114,7 @@
       }
     },
     {
-      "includes": ["packages/core/src/**", "packages/contracts/src/**"],
+      "includes": ["packages/core/src/**"],
       "linter": {
         "rules": {
           "style": {
@@ -122,10 +122,10 @@
               "level": "error",
               "options": {
                 "paths": {
-                  "node:fs": "The core is pure: the daemon does I/O and hands the core events.",
-                  "node:child_process": "The core is pure: side effects run in the daemon's effect workers.",
-                  "node:path": "The core is pure: paths are the daemon's concern.",
-                  "bun": "The core runs in the browser too; Bun belongs to the daemon."
+                  "node:fs": "The core is pure: the server does I/O and hands the core events.",
+                  "node:child_process": "The core is pure: side effects run in the server's effect workers.",
+                  "node:path": "The core is pure: paths are the server's concern.",
+                  "bun": "The core runs in the browser too; Bun belongs to the server."
                 }
               }
             }
@@ -187,7 +187,7 @@
       }
     },
     {
-      "includes": ["packages/ui/src/**", "apps/web/src/features/ui/**"],
+      "includes": ["packages/ui/src/**"],
       "linter": {
         "rules": {
           "suspicious": {
@@ -228,5 +228,5 @@
       "attributePosition": "auto"
     }
   },
-  "plugins": ["./.biome/plugins/no-await-in-ternary.grit", "./.biome/plugins/no-span-name-interpolation.grit"]
+  "plugins": ["./.biome/plugins/no-await-in-ternary.grit"]
 }
