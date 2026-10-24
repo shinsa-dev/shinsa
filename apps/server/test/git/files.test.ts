@@ -150,7 +150,7 @@ describe('reading a file', () => {
 describe('searchFiles', () => {
   test('finds text at a commit, ignoring case unless asked', async () => {
     const { path, sha } = await createSampleRepo();
-    const search = { query: 'hello', regex: false, caseSensitive: false, glob: null };
+    const search = { query: 'hello', regex: false, caseSensitive: false, wholeWord: false, glob: null };
     const loose = await searchFiles(path, sha, search);
     expect(loose.ref).toBe(sha);
     expect(loose.matches.map((match) => `${match.path}:${match.line}:${match.column}`)).toEqual([
@@ -161,6 +161,10 @@ describe('searchFiles', () => {
     ]);
     const strict = await searchFiles(path, sha, { ...search, query: 'Hello', caseSensitive: true });
     expect(strict.matches.map((match) => match.text)).toEqual(['export const other = "Hello";']);
+    const part = await searchFiles(path, sha, { ...search, query: 'hell' });
+    expect(part.matches.length).toBeGreaterThan(0);
+    const word = await searchFiles(path, sha, { ...search, query: 'hell', wholeWord: true });
+    expect(word.matches).toEqual([]);
   });
 
   test('takes a regular expression and limits the files by a pattern', async () => {
@@ -169,6 +173,7 @@ describe('searchFiles', () => {
       query: 'hel+o\\(',
       regex: true,
       caseSensitive: true,
+      wholeWord: false,
       glob: null,
     });
     expect(regex.matches.map((match) => match.path)).toEqual(['src/lib/util.ts']);
@@ -176,6 +181,7 @@ describe('searchFiles', () => {
       query: 'hel+o',
       regex: false,
       caseSensitive: false,
+      wholeWord: false,
       glob: null,
     });
     expect(literal.matches).toEqual([]);
@@ -183,6 +189,7 @@ describe('searchFiles', () => {
       query: 'hello',
       regex: false,
       caseSensitive: false,
+      wholeWord: false,
       glob: '*.md',
     });
     expect(typed.matches.map((match) => match.path)).toEqual(['docs/guide.md']);
@@ -190,6 +197,7 @@ describe('searchFiles', () => {
       query: 'hello',
       regex: false,
       caseSensitive: false,
+      wholeWord: false,
       glob: 'src/lib/*',
     });
     expect(nested.matches.map((match) => match.path)).toEqual(['src/lib/util.ts']);
@@ -202,6 +210,7 @@ describe('searchFiles', () => {
       query: 'from the agent',
       regex: false,
       caseSensitive: true,
+      wholeWord: false,
       glob: null,
     });
     expect(found).toMatchObject({ ref: WORKING_REF, truncated: false, timedOut: false });
@@ -218,6 +227,7 @@ describe('searchFiles', () => {
       query: 'needle',
       regex: false,
       caseSensitive: true,
+      wholeWord: false,
       glob: null,
     });
     expect(found.matches).toHaveLength(CODE_LIMITS.matches);
@@ -227,7 +237,7 @@ describe('searchFiles', () => {
   test('a pattern git cannot read is a refusal', async () => {
     const { path, sha } = await createSampleRepo();
     await expect(
-      searchFiles(path, sha, { query: '(', regex: true, caseSensitive: true, glob: null })
+      searchFiles(path, sha, { query: '(', regex: true, caseSensitive: true, wholeWord: false, glob: null })
     ).rejects.toMatchObject({ code: 'read_failed' });
   });
 });

@@ -1,21 +1,22 @@
 import type { DiffFile, RepoEntry, Task } from '@shinsa/core';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { StatusLetter } from '@/components/code/changes-tree.tsx';
-import { TreeRow } from '@/components/code/tree-row.tsx';
-import { listAncestors } from '@/lib/code/tree.ts';
+import { TREE_LIST, TreeRow } from '@/components/code/tree-row.tsx';
+import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
+import { type ActiveGuide, listAncestors, pickGuideLevel, resolveActiveGuide } from '@/lib/code/tree.ts';
 import { useRepoTree } from '@/lib/connection/code.ts';
 
 interface FileTreeContext {
   task: Task;
   gitRef: string;
   activePath: string | null;
+  guide: ActiveGuide | null;
   changed: ReadonlyMap<string, DiffFile>;
   expanded: ReadonlySet<string>;
   onToggle: (path: string) => void;
-  onOpen: (path: string, pin: boolean) => void;
+  onOpen: (path: string) => void;
 }
 
 function EntryRow({ entry, depth, context }: { entry: RepoEntry; depth: number; context: FileTreeContext }) {
@@ -23,7 +24,14 @@ function EntryRow({ entry, depth, context }: { entry: RepoEntry; depth: number; 
     const open = context.expanded.has(entry.path);
     return (
       <>
-        <TreeRow depth={depth} expanded={open} label={entry.path} onOpen={() => context.onToggle(entry.path)}>
+        <TreeRow
+          depth={depth}
+          guide={pickGuideLevel(context.guide, entry.path)}
+          expanded={open}
+          icon={resolveFolderIcon(entry.path, open)}
+          label={entry.path}
+          onOpen={() => context.onToggle(entry.path)}
+        >
           <Truncate className='flex-1'>{entry.name}</Truncate>
         </TreeRow>
         {open && <Folder dir={entry.path} depth={depth + 1} context={context} />}
@@ -34,17 +42,12 @@ function EntryRow({ entry, depth, context }: { entry: RepoEntry; depth: number; 
   return (
     <TreeRow
       depth={depth}
+      guide={pickGuideLevel(context.guide, entry.path)}
       selected={entry.path === context.activePath}
       label={entry.path}
-      lead={
-        change ? (
-          <StatusLetter status={change.status} />
-        ) : (
-          <Icon size='sm' name={entry.kind === 'submodule' ? 'IconFolder1' : 'IconFileText'} />
-        )
-      }
-      onOpen={() => context.onOpen(entry.path, false)}
-      onPin={() => context.onOpen(entry.path, true)}
+      icon={entry.kind === 'submodule' ? 'IconFolders' : resolveFileIcon(entry.path)}
+      end={change && <StatusLetter status={change.status} />}
+      onOpen={() => context.onOpen(entry.path)}
     >
       <Truncate className='flex-1'>{entry.name}</Truncate>
     </TreeRow>
@@ -55,14 +58,14 @@ function Folder({ dir, depth, context }: { dir: string; depth: number; context: 
   const loaded = useRepoTree(context.task, context.gitRef, dir);
   if (loaded.status === 'error') {
     return (
-      <p className='py-1 text-2xs text-fg-2' style={{ paddingInlineStart: 26 + depth * 12 }}>
+      <p className='py-1 text-2xs text-fg-2' style={{ paddingInlineStart: 24 + depth * 8 }}>
         {loaded.message}
       </p>
     );
   }
   if (loaded.status !== 'ready') {
     return (
-      <div className='flex h-6 items-center' style={{ paddingInlineStart: 6 + depth * 12 }}>
+      <div className='flex h-5.5 items-center' style={{ paddingInlineStart: 22 + depth * 8 }}>
         <Spinner size='sm' />
       </div>
     );
@@ -83,7 +86,7 @@ export function FileTree({
   gitRef: string;
   activePath: string | null;
   changes: readonly DiffFile[];
-  onOpen: (path: string, pin: boolean) => void;
+  onOpen: (path: string) => void;
 }) {
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(
     () => new Set(listAncestors(activePath ?? ''))
@@ -100,6 +103,7 @@ export function FileTree({
     task,
     gitRef,
     activePath,
+    guide: resolveActiveGuide(activePath),
     changed,
     expanded,
     onOpen,
@@ -112,7 +116,7 @@ export function FileTree({
       }),
   };
   return (
-    <div role='tree' aria-label='Files' className='flex flex-col p-1.5'>
+    <div role='tree' aria-label='Files' className={TREE_LIST}>
       <Folder dir='' depth={0} context={context} />
     </div>
   );

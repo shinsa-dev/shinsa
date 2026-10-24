@@ -22,6 +22,7 @@ export interface CodeSearch {
   query: string;
   regex: boolean;
   caseSensitive: boolean;
+  wholeWord: boolean;
   glob: string;
 }
 
@@ -33,15 +34,26 @@ const LOADING = { status: 'loading' } as const;
 
 const reads = new Map<string, Promise<unknown>>();
 
+const settled = new Map<string, Loaded<unknown>>();
+
 function remember<T>(key: string, create: () => Promise<T>): Promise<T> {
   const known = reads.get(key);
   if (known) return known as Promise<T>;
   const pending = create();
   reads.set(key, pending);
-  pending.catch(() => {
-    if (reads.get(key) === pending) reads.delete(key);
-  });
-  if (reads.size > CACHE_LIMIT) reads.delete(reads.keys().next().value ?? '');
+  pending.then(
+    (value) => {
+      if (reads.get(key) === pending) settled.set(key, { status: 'ready', value });
+    },
+    () => {
+      if (reads.get(key) === pending) reads.delete(key);
+    }
+  );
+  if (reads.size > CACHE_LIMIT) {
+    const oldest = reads.keys().next().value ?? '';
+    reads.delete(oldest);
+    settled.delete(oldest);
+  }
   return pending;
 }
 
@@ -58,29 +70,40 @@ function resolveVersionedUrl(url: string, version: string) {
   return `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}`;
 }
 
+function requestCodeRead<T>(url: string, version = ''): Promise<T> {
+  const key = resolveVersionedUrl(url, version);
+  return remember(key, () => requestJson<T>(key));
+}
+
+function selectSettled<T>(url: string | null, version: string): Loaded<T> {
+  if (url === null) return IDLE;
+  return (settled.get(resolveVersionedUrl(url, version)) as Loaded<T> | undefined) ?? LOADING;
+}
+
 export function useCodeRead<T>(url: string | null, version = ''): Loaded<T> {
   const key = url === null ? null : resolveVersionedUrl(url, version);
-  const [loaded, setLoaded] = React.useState<{ url: string | null; value: Loaded<T> }>({
-    url,
-    value: url === null ? IDLE : LOADING,
-  });
+  const [loaded, setLoaded] = React.useState<{ url: string | null; key: string | null; value: Loaded<T> }>(
+    () => ({ url, key, value: selectSettled<T>(url, version) })
+  );
   React.useEffect(() => {
-    if (key === null) return;
+    if (key === null || url === null) return;
     let alive = true;
-    remember(key, () => requestJson<T>(key)).then(
+    requestCodeRead<T>(url, version).then(
       (value) => {
-        if (alive) setLoaded({ url, value: { status: 'ready', value } });
+        if (alive) setLoaded({ url, key, value: { status: 'ready', value } });
       },
       (error: unknown) => {
-        if (alive) setLoaded({ url, value: { status: 'error', message: describeFailure(error) } });
+        if (alive) setLoaded({ url, key, value: { status: 'error', message: describeFailure(error) } });
       }
     );
     return () => {
       alive = false;
     };
-  }, [key, url]);
-  if (loaded.url === url) return loaded.value;
-  return url === null ? IDLE : LOADING;
+  }, [key, url, version]);
+  if (loaded.key === key) return loaded.value;
+  const known = selectSettled<T>(url, version);
+  if (known.status === 'loading' && loaded.url === url) return loaded.value;
+  return known;
 }
 
 export function resolveRefsVersion(task: Task) {
@@ -102,6 +125,31 @@ export function resolveReadVersion(task: Task, ref: string) {
 
 export function useTaskRefs(task: Task) {
   return useCodeRead<TaskRefs>(resolveCodeUrl(task.id, 'refs'), resolveRefsVersion(task));
+}
+
+export function requestTaskRefs(task: Task) {
+  return requestCodeRead<TaskRefs>(resolveCodeUrl(task.id, 'refs'), resolveRefsVersion(task));
+}
+
+export function requestRepoTree(task: Task, ref: string, dir: string) {
+  return requestCodeRead<RepoTree>(
+    resolveCodeUrl(task.id, 'tree', { ref, dir }),
+    resolveReadVersion(task, ref)
+  );
+}
+
+export function requestFileContent(task: Task, ref: string, path: string) {
+  return requestCodeRead<FileContent>(
+    resolveCodeUrl(task.id, 'blob', { ref, path }),
+    resolveReadVersion(task, ref)
+  );
+}
+
+export function requestTaskDiff(task: Task, base: string, head: string) {
+  return requestCodeRead<TaskDiff>(
+    resolveCodeUrl(task.id, 'diff', { base, head }),
+    resolveReadVersion(task, head)
+  );
 }
 
 export function useRepoPaths(task: Task, ref: string | null) {
@@ -132,6 +180,7 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
           q: search.query,
           regex: search.regex ? '1' : null,
           case: search.caseSensitive ? '1' : null,
+          word: search.wholeWord ? '1' : null,
           glob: search.glob.trim() || null,
         });
   return useCodeRead<SearchResult>(url, ref === null ? '' : resolveReadVersion(task, ref));

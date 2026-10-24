@@ -115,8 +115,7 @@ const codeTheme = EditorView.theme({
   '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border)' },
   '.cm-panels.cm-panels-bottom': { borderTop: '1px solid var(--border)' },
   '.cm-panel': { fontSize: 'var(--text-2xs)', padding: '6px 8px' },
-  '.cm-panel input[type=checkbox]': { accentColor: 'var(--primary-4)' },
-  '.cm-panel label': { fontSize: 'var(--text-2xs)', color: 'var(--fg-3)' },
+  '.cm-panel.cm-find': { padding: '0' },
   '.cm-textfield': {
     backgroundColor: 'var(--bg-2)',
     border: 'none',
@@ -140,7 +139,6 @@ const codeTheme = EditorView.theme({
     backgroundImage: 'none',
     color: 'var(--fg-4)',
   },
-  '.cm-panel button[name=close]': { color: 'var(--fg-2)', fontSize: '16px', cursor: 'pointer' },
   '.cm-note-slot': { padding: '6px 8px', fontFamily: 'var(--font-sans)', whiteSpace: 'normal' },
 });
 

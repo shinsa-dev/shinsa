@@ -2,11 +2,13 @@ import type { Task, TaskDiff, TaskRefs, WorkReport } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { ScrollArea } from '@shinsa/ui/components/scroll-area';
 import { Spinner } from '@shinsa/ui/components/spinner';
+import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { ChangesTree } from '@/components/code/changes-tree.tsx';
 import { FileTree } from '@/components/code/file-tree.tsx';
 import { ReviewExplorer } from '@/components/code/review.tsx';
 import { SearchPanel } from '@/components/code/search-panel.tsx';
+import { TREE_HOVER_GROUP } from '@/components/code/tree-row.tsx';
 import { Choice } from '@/components/controls/choice.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -33,8 +35,8 @@ export interface ExplorerProps {
   onOrder: (order: ReviewOrder) => void;
   onTarget: (target: ReviewTarget) => void;
   onLine: (path: string, line: number, side: 'old' | 'new') => void;
-  onChange: (path: string, pin: boolean) => void;
-  onFile: (path: string, pin: boolean) => void;
+  onChange: (path: string) => void;
+  onFile: (path: string) => void;
   onMatch: (path: string, line: number) => void;
   onSearch: (search: CodeSearch) => void;
   onToggleViewed: (path: string) => void;
@@ -107,7 +109,7 @@ export function Explorer(props: ExplorerProps) {
   const { location, modes, refs } = props;
   const searching = location.mode === 'search';
   return (
-    <div className='flex min-h-0 flex-1 flex-col'>
+    <div className={cn('flex min-h-0 flex-1 flex-col', TREE_HOVER_GROUP)}>
       <div className='flex shrink-0 flex-col gap-1.5 border-border border-b p-1.5'>
         <div className='flex items-center gap-1.5'>
           {modes.length > 1 ? (

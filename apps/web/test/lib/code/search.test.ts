@@ -39,30 +39,46 @@ describe('describeSearchResult', () => {
 
 describe('splitMatchText', () => {
   it('marks every match, literally or as a pattern, in or out of case', () => {
-    expect(splitMatchText('Hello hello', 'hello', { regex: false, caseSensitive: true })).toEqual([
+    expect(
+      splitMatchText('Hello hello', 'hello', { regex: false, caseSensitive: true, wholeWord: false })
+    ).toEqual([
       { text: 'Hello ', hit: false },
       { text: 'hello', hit: true },
     ]);
-    expect(splitMatchText('a.b axb', 'a.b', { regex: false, caseSensitive: false })).toEqual([
+    expect(
+      splitMatchText('a.b axb', 'a.b', { regex: false, caseSensitive: false, wholeWord: false })
+    ).toEqual([
       { text: 'a.b', hit: true },
       { text: ' axb', hit: false },
     ]);
-    expect(splitMatchText('a1 b22', '\\d+', { regex: true, caseSensitive: false })).toEqual([
-      { text: 'a', hit: false },
-      { text: '1', hit: true },
-      { text: ' b', hit: false },
-      { text: '22', hit: true },
+    expect(splitMatchText('a1 b22', '\\d+', { regex: true, caseSensitive: false, wholeWord: false })).toEqual(
+      [
+        { text: 'a', hit: false },
+        { text: '1', hit: true },
+        { text: ' b', hit: false },
+        { text: '22', hit: true },
+      ]
+    );
+  });
+
+  it('marks only whole words when asked', () => {
+    expect(
+      splitMatchText('cat concat cat', 'cat', { regex: false, caseSensitive: true, wholeWord: true })
+    ).toEqual([
+      { text: 'cat', hit: true },
+      { text: ' concat ', hit: false },
+      { text: 'cat', hit: true },
     ]);
   });
 
   it('shows the text plain when the pattern is broken, empty or matches nothing visible', () => {
-    expect(splitMatchText('abc', '(', { regex: true, caseSensitive: false })).toEqual([
+    expect(splitMatchText('abc', '(', { regex: true, caseSensitive: false, wholeWord: false })).toEqual([
       { text: 'abc', hit: false },
     ]);
-    expect(splitMatchText('abc', '', { regex: false, caseSensitive: false })).toEqual([
+    expect(splitMatchText('abc', '', { regex: false, caseSensitive: false, wholeWord: false })).toEqual([
       { text: 'abc', hit: false },
     ]);
-    expect(splitMatchText('abc', 'x*', { regex: true, caseSensitive: false })).toEqual([
+    expect(splitMatchText('abc', 'x*', { regex: true, caseSensitive: false, wholeWord: false })).toEqual([
       { text: 'abc', hit: false },
     ]);
   });

@@ -16,41 +16,17 @@ function comment(
 }
 
 describe('serializeComments', () => {
-  it('sends the note first, then every line comment with its place', () => {
-    const text = serializeComments(
-      [
-        comment({ id: '1', path: 'src/a.ts', line: 12, text: 'Use the shared helper.' }),
-        comment({ id: '2', path: 'src/b.ts', line: 3, endLine: 5, text: 'Rename these.' }),
-        comment({ id: '3', path: 'src/c.ts', side: 'old', line: 8, text: 'Keep this check.' }),
-      ],
-      'Close, a few small things.'
-    );
-    expect(text).toBe(
-      [
-        'Close, a few small things.',
-        '',
-        'Line comments:',
-        '- src/a.ts:12: Use the shared helper.',
-        '- src/b.ts:3-5: Rename these.',
-        '- src/c.ts, removed line 8: Keep this check.',
-      ].join('\n')
-    );
-  });
-
-  it('sends a suggested change verbatim, with how to apply it', () => {
-    const suggestion = { line: 4, endLine: 5, text: 'const a = 1;\nconst b = 2;' };
-    const text = serializeComments(
-      [comment({ id: '1', path: 'a.ts', line: 4, endLine: 5, text: '', suggestion })],
-      ''
-    );
-    expect(text).toBe(
-      'Line comments:\n- a.ts:4-5:\n  Suggested change for lines 4–5, apply it as written unless that breaks something:\n  ```\nconst a = 1;\nconst b = 2;\n  ```'
-    );
-  });
-
-  it('sends only the note when there are no line comments', () => {
-    expect(serializeComments([], 'Looks good.')).toBe('Looks good.');
-    expect(serializeComments([], '')).toBe('');
+  it('sends each comment with its place, words and suggested change, and nothing kept only in the browser', () => {
+    const suggestion = { original: 'let a;\nlet b;', replacement: 'const a = 1;' };
+    expect(
+      serializeComments([
+        comment({ id: '1', path: 'src/a.ts', line: 4, endLine: 5, ref: 'abc', text: '', suggestion }),
+        comment({ id: '2', path: 'src/c.ts', side: 'old', line: 8, text: 'Keep this check.' }),
+      ])
+    ).toEqual([
+      { path: 'src/a.ts', side: 'new', line: 4, endLine: 5, text: '', suggestion },
+      { path: 'src/c.ts', side: 'old', line: 8, endLine: null, text: 'Keep this check.', suggestion: null },
+    ]);
   });
 });
 
@@ -75,8 +51,13 @@ describe('describing a comment', () => {
     expect(describeCommentLines({ side: 'new', line: 2, endLine: 4 })).toBe('Lines 2–4');
     expect(describeCommentLines({ side: 'old', line: 2, endLine: null })).toBe('Removed line 2');
     expect(describeCommentPlace({ path: 'a.ts', side: 'old', line: 2, endLine: 3 })).toBe(
-      'a.ts, removed line 2-3'
+      'a.ts, removed lines 2-3'
     );
+    expect(describeCommentPlace({ path: 'a.ts', side: 'old', line: 2, endLine: null })).toBe(
+      'a.ts, removed line 2'
+    );
+    expect(describeCommentPlace({ path: 'a.ts', side: 'new', line: 2, endLine: 3 })).toBe('a.ts:2-3');
+    expect(describeCommentPlace({ path: 'a.ts', side: 'new', line: 2, endLine: null })).toBe('a.ts:2');
   });
 });
 
@@ -85,7 +66,8 @@ describe('the stored draft', () => {
     const first = comment({ id: '1', path: 'a.ts', line: 1, text: 'x' });
     writeStoredComments('gate-1', [first]);
     expect(readStoredComments('gate-1')).toEqual([first]);
-    localStorage.setItem('shinsa.review-draft.gate-2', JSON.stringify([first, { id: 2 }, null]));
+    const malformed = { ...first, id: '3', suggestion: { text: 'x' } };
+    localStorage.setItem('shinsa.review-draft.gate-2', JSON.stringify([first, { id: 2 }, null, malformed]));
     expect(readStoredComments('gate-2')).toEqual([first]);
     localStorage.setItem('shinsa.review-draft.gate-3', '{not json');
     expect(readStoredComments('gate-3')).toEqual([]);

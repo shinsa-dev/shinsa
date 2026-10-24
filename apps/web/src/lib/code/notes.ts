@@ -1,6 +1,6 @@
-import type { ReviewFinding } from '@shinsa/core';
+import type { CommentSide, ReviewFinding } from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
-import type { CommentSide, LineComment } from '@/lib/review/draft.ts';
+import type { LineComment } from '@/lib/review/draft.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
 import { ATTENTION } from '@/lib/tasks/status.ts';
 
@@ -60,10 +60,7 @@ export function listCommentNotes(
       kind: 'comment' as const,
       key: `comment:${comment.id}`,
       side: comment.side,
-      line:
-        comment.suggestion?.endLine && comment.suggestion.endLine >= comment.line
-          ? comment.suggestion.endLine
-          : (comment.endLine ?? comment.line),
+      line: comment.endLine ?? comment.line,
       comment,
     }));
 }

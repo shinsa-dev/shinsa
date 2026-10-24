@@ -6,6 +6,7 @@ import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { navigate } from '@/router.ts';
 import { CodeTab } from '@/routes/task/code.tsx';
 import { createTask } from '../../support/state.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 const HEAD = 'a'.repeat(40);
 const BASE = 'b'.repeat(40);
@@ -258,21 +259,36 @@ describe('the review', () => {
     renderCode(task);
     expect(await screen.findByText('Your comments')).toBeDefined();
     fireEvent.click((await screen.findAllByRole('button', { name: 'Remove' }))[0] as HTMLElement);
-    await waitFor(() => expect(screen.queryByText('Your comments')).toBeNull());
+    await waitForGone(() => screen.queryByText('Your comments'));
   });
 });
 
 describe('changes and files', () => {
-  it('lists the changed files as a tree and opens one as a preview tab, double-click pins it', async () => {
+  it('lists the changed files as a tree and opens one in place, with no tabs', async () => {
     renderCode(nextTask(), '&mode=changes');
     const tree = await screen.findByRole('tree', { name: 'Changed files' });
     expect(screen.getByText('2 files · 0 viewed')).toBeDefined();
     fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs/beta.txt' }));
-    expect(params().get('preview')).toBe('d:docs/beta.txt');
-    fireEvent.doubleClick(within(tree).getByRole('treeitem', { name: 'docs/beta.txt' }));
-    await waitFor(() => expect(params().get('preview')).toBeNull());
-    fireEvent.click(within(tree).getAllByRole('button', { name: 'Mark as viewed' })[0] as HTMLElement);
+    expect(params().get('file')).toBe('docs/beta.txt');
+    expect(params().get('diff')).toBe('1');
+    fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs/alpha.txt' }));
+    expect(params().get('file')).toBe('docs/alpha.txt');
+    expect(screen.queryByRole('tablist', { name: 'Open files' })).toBeNull();
+    fireEvent.click(within(tree).getAllByRole('checkbox', { name: 'Viewed' })[0] as HTMLElement);
     expect(screen.getByText('2 files · 1 viewed')).toBeDefined();
+    expect(params().get('file')).toBe('docs/alpha.txt');
+    expect(
+      within(tree)
+        .getAllByRole('checkbox', { name: 'Viewed' })
+        .map((box) => box.getAttribute('aria-checked'))
+    ).toEqual(['true', 'false']);
+    fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs/beta.txt' }));
+    expect(within(tree).getByRole('treeitem', { name: 'docs/alpha.txt' }).className).toContain('text-fg-1');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide viewed files' }));
+    expect(screen.getByText('2 files · 1 viewed hidden')).toBeDefined();
+    expect(within(tree).queryByRole('treeitem', { name: 'docs/alpha.txt' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide viewed files' }));
+    expect(within(tree).getByRole('treeitem', { name: 'docs/alpha.txt' })).toBeDefined();
     fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs' }));
     expect(within(tree).queryByRole('treeitem', { name: 'docs/alpha.txt' })).toBeNull();
     fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs' }));
@@ -297,14 +313,32 @@ describe('changes and files', () => {
     expect(screen.getByText('Open a file')).toBeDefined();
   });
 
-  it('closes tabs and reopens what is left', async () => {
-    renderCode(nextTask(), `&mode=files&open=f%3AREADME.md,f%3Adocs%2Falpha.txt&file=docs%2Falpha.txt`);
+  it('finds in the open file from ⌘F, with its options, and closes the find bar', async () => {
+    renderCode(nextTask(), '&mode=files&file=docs%2Falpha.txt');
     await findLine('two');
-    fireEvent.click(screen.getByRole('button', { name: 'Close alpha.txt' }));
-    await waitFor(() => expect(params().get('file')).toBe('README.md'));
-    fireEvent.click(screen.getByRole('button', { name: 'Close README.md' }));
-    await waitFor(() => expect(params().get('file')).toBeNull());
-    expect(screen.getByText('Open a file')).toBeDefined();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ...MOD }));
+    });
+    const input = await screen.findByRole('textbox', { name: 'Find in this file' });
+    fireEvent.change(input, { target: { value: 'tw' } });
+    expect(await screen.findByText('1 found')).toBeDefined();
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByText('1 of 1')).toBeDefined();
+    fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Next match' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Previous match' }));
+    const word = screen.getAllByRole('button', { name: 'Match whole word' }).at(-1) as HTMLElement;
+    fireEvent.click(word);
+    expect(await screen.findByText('No results')).toBeDefined();
+    expect(word.getAttribute('aria-pressed')).toBe('true');
+    fireEvent.keyDown(input, { key: 'Escape' });
+    await waitForGone(() => screen.queryByRole('textbox', { name: 'Find in this file' }));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ...MOD }));
+    });
+    await screen.findByRole('textbox', { name: 'Find in this file' });
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitForGone(() => screen.queryByRole('textbox', { name: 'Find in this file' }));
   });
 });
 
@@ -318,8 +352,10 @@ describe('search and quick open', () => {
     const input = await screen.findByRole('textbox', { name: 'Search in files' });
     fireEvent.change(input, { target: { value: 'two' } });
     fireEvent.click(screen.getByRole('button', { name: 'Match case' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Match whole word' }));
     await waitFor(() => expect(params().get('q')).toBe('two'), { timeout: 2000 });
     expect(params().get('case')).toBe('1');
+    expect(params().get('word')).toBe('1');
     expect(await screen.findByText('1 result in 1 file.')).toBeDefined();
     fireEvent.click(screen.getByRole('treeitem', { name: 'docs/alpha.txt line 2' }));
     expect(params().get('line')).toBe('2');
@@ -341,7 +377,6 @@ describe('search and quick open', () => {
     });
     fireEvent.click(item);
     await waitFor(() => expect(params().get('file')).toBe('README.md'));
-    expect(params().get('preview')).toBeNull();
   });
 
   it('switches to another commit from the ref picker', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { FILE_TINTS, TONED_ICON_SOURCES } from '../../src/components/icon/custom';
 
 const css = readFileSync(new URL('../../src/styles/globals.css', import.meta.url), 'utf8');
 
@@ -42,5 +43,23 @@ describe('globals.css', () => {
     expect(readBlock('[data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg')).not.toContain(
       'opacity'
     );
+  });
+
+  it('drives the scroll fades from scroll timelines, so style alone sets them on the first frame', () => {
+    const fade = css.slice(css.indexOf('@utility scroll-fade {'), css.indexOf('@keyframes scroll-fade-t'));
+    expect(fade).toContain('@supports (animation-timeline: scroll())');
+    expect(fade).toContain('animation-timeline: scroll(self block), scroll(self block);');
+    expect(fade).toContain('&[data-fade-orientation="horizontal"]');
+    expect(fade).toContain('&[data-fade-orientation="both"]');
+    expect(fade).toContain('transition: none;');
+    for (const edge of ['t', 'b', 'l', 'r']) expect(css).toContain(`@keyframes scroll-fade-${edge} {`);
+  });
+
+  it('sets every file tint in both themes and lets a row mute its marks', () => {
+    for (const block of [readBlock(':root'), readBlock('.dark')]) {
+      for (const tint of FILE_TINTS) expect(block).toContain(`--file-${tint}: oklch(`);
+    }
+    for (const { tone } of Object.values(TONED_ICON_SOURCES)) expect(FILE_TINTS).toContain(tone);
+    expect(css).toContain('@utility file-icons-muted {\n  --file-icon-ink: currentColor;');
   });
 });

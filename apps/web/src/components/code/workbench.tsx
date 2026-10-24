@@ -6,7 +6,6 @@ import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
 import * as React from 'react';
 import type { EditorHandle } from '@/components/code/editor/code-editor.tsx';
 import { EditorPane } from '@/components/code/editor-pane.tsx';
-import { EditorTabs } from '@/components/code/editor-tabs.tsx';
 import { Explorer, type ExplorerProps } from '@/components/code/explorer.tsx';
 import { QuickOpen } from '@/components/code/quick-open.tsx';
 import { ResizeHandle } from '@/components/layout/sidebar/resize-handle.tsx';
@@ -17,22 +16,26 @@ import { useCodeLocation } from '@/hooks/use-code-location.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { type CodeKey, describeCodeKey } from '@/lib/code/keys.ts';
 import {
+  type CodeFileRef,
   type CodeMode,
-  type CodeTabRef,
   type OpenOptions,
-  resolveClosePatch,
+  resolveFileKey,
   resolveModePatch,
   resolveOpenPatch,
-  resolvePinPatch,
   resolveSearchPatch,
-  resolveTabKey,
 } from '@/lib/code/location.ts';
 import { resolveViewRef } from '@/lib/code/refs.ts';
-import { resolveTabSource } from '@/lib/code/tabs.ts';
+import { resolveFileSource } from '@/lib/code/source.ts';
 import { listCodeCommands } from '@/lib/command/code.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { useTaskDiff } from '@/lib/connection/code.ts';
-import { toggleViewedFile, useExplorerWidth, useSplitDiff, useViewedFiles } from '@/lib/preferences/code.ts';
+import {
+  toggleViewedFile,
+  useExplorerWidth,
+  useHideViewed,
+  useSplitDiff,
+  useViewedFiles,
+} from '@/lib/preferences/code.ts';
 import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
 import {
   listFindingTargets,
@@ -89,6 +92,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const mac = useCodeKeyLabel();
   const width = useExplorerWidth();
   const [split, toggleSplit] = useSplitDiff();
+  const [hideViewed, toggleHideViewed] = useHideViewed();
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const searchInput = React.useRef<HTMLInputElement>(null);
@@ -113,12 +117,11 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     for (const comment of draft.comments) counts.set(comment.path, (counts.get(comment.path) ?? 0) + 1);
     return counts;
   }, [draft.comments]);
-  const sources = location.tabs.map((tab) => resolveTabSource(tab, diffValue));
-  const active = location.active ? resolveTabSource(location.active, diffValue) : null;
+  const active = location.active ? resolveFileSource(location.active, diffValue) : null;
   const changed = React.useMemo(() => new Set(diffValue?.files.map((file) => file.path) ?? []), [diffValue]);
 
-  function open(tab: CodeTabRef, options: OpenOptions = {}) {
-    apply(resolveOpenPatch(location, tab, options));
+  function open(file: CodeFileRef, options: OpenOptions = {}) {
+    apply(resolveOpenPatch(file, options));
     setSheetOpen(false);
   }
 
@@ -132,16 +135,12 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   }
 
   React.useEffect(() => {
-    if (location.active || location.tabs.length > 0 || (reviewing && !diffValue)) return;
+    if (location.active || (reviewing && !diffValue)) return;
     const first = location.mode === 'review' ? targets[0] : undefined;
     if (first) {
       const kind = changed.has(first.file) ? 'diff' : 'file';
       apply(
-        resolveOpenPatch(
-          location,
-          { kind, path: first.file },
-          { line: first.start, end: first.end, spot: first.key }
-        ),
+        resolveOpenPatch({ kind, path: first.file }, { line: first.start, end: first.end, spot: first.key }),
         {
           replace: true,
         }
@@ -149,7 +148,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       return;
     }
     const file = location.mode === 'changes' ? diffValue?.files[0] : undefined;
-    if (file) apply(resolveOpenPatch(location, { kind: 'diff', path: file.path }), { replace: true });
+    if (file) apply(resolveOpenPatch({ kind: 'diff', path: file.path }), { replace: true });
   }, [location, targets, changed, diffValue, reviewing, apply]);
 
   function applyMode(mode: CodeMode) {
@@ -174,10 +173,12 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       mode: location.mode,
       mac,
       split,
+      hideViewed,
       hasEditor: active !== null,
       applyMode,
       run: (key) => run[key](),
       toggleSplit,
+      toggleHideViewed,
     }),
   ]);
 
@@ -198,8 +199,8 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     onOrder: (order) => apply({ order: order === 'walkthrough' ? null : order }, { replace: true }),
     onTarget: openTarget,
     onLine: (path, line, side) => openLine(path, side === 'new' ? line : 0),
-    onChange: (path, pin) => open({ kind: 'diff', path }, { pin }),
-    onFile: (path, pin) => open({ kind: 'file', path }, { pin }),
+    onChange: (path) => open({ kind: 'diff', path }),
+    onFile: (path) => open({ kind: 'file', path }),
     onMatch: openLine,
     onSearch: (search) => apply(resolveSearchPatch(search), { replace: true }),
     onToggleViewed: (path) => toggleViewedFile(task.id, gitRef, path),
@@ -240,17 +241,9 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
         </aside>
       )}
       <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
-        <EditorTabs
-          sources={sources}
-          active={location.active}
-          preview={location.preview}
-          onSelect={(tab) => apply(resolveOpenPatch(location, tab))}
-          onPin={(tab) => apply(resolvePinPatch(location, tab))}
-          onClose={(tab) => apply(resolveClosePatch(location, tab))}
-        />
         {active ? (
           <EditorPane
-            key={resolveTabKey(active.tab)}
+            key={resolveFileKey(active.file)}
             task={task}
             refs={refs}
             gitRef={gitRef}
@@ -295,11 +288,11 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
         task={task}
         gitRef={gitRef}
         open={quickOpen}
-        recent={location.tabs.map((tab) => tab.path)}
+        recent={location.active ? [location.active.path] : []}
         onOpenChange={setQuickOpen}
         onPick={(path) => {
           setQuickOpen(false);
-          open({ kind: changed.has(path) ? 'diff' : 'file', path }, { pin: true });
+          open({ kind: changed.has(path) ? 'diff' : 'file', path });
         }}
       />
     </div>

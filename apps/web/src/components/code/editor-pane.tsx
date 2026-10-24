@@ -1,7 +1,7 @@
 import type { FileContent, Task, TaskRefs } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import type { IconName } from '@shinsa/ui/components/icon';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -14,17 +14,37 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
+import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import { type CodeNote, type Composer, listFileNotes, listSpotMarks } from '@/lib/code/notes.ts';
 import { listKeptLines, resolvePaneContent } from '@/lib/code/pane.ts';
+import type { FileSource } from '@/lib/code/source.ts';
 import { resolveSuggestion } from '@/lib/code/suggestion.ts';
-import type { TabSource } from '@/lib/code/tabs.ts';
 import { resolveRawUrl, useFileContent } from '@/lib/connection/code.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
 
-const CodeEditor = React.lazy(() => import('@/components/code/editor/code-editor.tsx'));
+type EditorModule = typeof import('@/components/code/editor/code-editor.tsx');
+
+let loadedEditor: EditorModule | null = null;
+
+export async function requestCodeEditor() {
+  loadedEditor = await import('@/components/code/editor/code-editor.tsx');
+  return loadedEditor;
+}
+
+function CodeEditor(props: React.ComponentProps<EditorModule['default']>) {
+  const [module, setModule] = React.useState<EditorModule | 'failed' | null>(loadedEditor);
+  React.useEffect(() => {
+    if (module) return;
+    requestCodeEditor().then(setModule, () => setModule('failed'));
+  }, [module]);
+  if (module === 'failed')
+    return <p className='p-3 text-fg-2 text-xs'>The editor did not load. Reload the page to try again.</p>;
+  if (!module) return <Waiting path={props.path} />;
+  return <module.default {...props} />;
+}
 
 const LAYOUTS = [
   { value: 'unified', label: 'Unified' },
@@ -78,15 +98,15 @@ function NoText({
   task: Task;
   refs: TaskRefs;
   gitRef: string;
-  source: TabSource;
+  source: FileSource;
   head: FileContent | null;
 }) {
   const images = [
-    source.basePath && source.file?.binary && refs.base
+    source.basePath && source.change?.binary && refs.base
       ? { ref: refs.base, path: source.basePath, label: 'Before' }
       : null,
     head?.image && source.headPath
-      ? { ref: gitRef, path: source.headPath, label: source.file ? 'After' : head.path }
+      ? { ref: gitRef, path: source.headPath, label: source.change ? 'After' : head.path }
       : null,
   ].filter((image) => image !== null);
   if (images.length > 0) {
@@ -103,7 +123,7 @@ function NoText({
       size='sm'
       icon='IconFileText'
       title='Nothing to show as text'
-      description={head ? describeAbsence(head, source.tab.path) : `${source.tab.path} was deleted.`}
+      description={head ? describeAbsence(head, source.file.path) : `${source.file.path} was deleted.`}
     />
   );
 }
@@ -146,7 +166,7 @@ function PaneToolbar({
 }: {
   task: Task;
   refs: TaskRefs;
-  source: TabSource;
+  source: FileSource;
   line: number | null;
   split: boolean;
   showLayout: boolean;
@@ -159,18 +179,19 @@ function PaneToolbar({
   onDiscard: () => void;
   onSuggest: () => void;
 }) {
-  const path = source.tab.path;
+  const path = source.file.path;
   return (
     <Toolbar className='gap-1.5'>
       {toolbar}
+      <Icon name={resolveFileIcon(path)} size='sm' />
       <FilePath path={path} className='min-w-0' />
-      {source.file?.previousPath && (
+      {source.change?.previousPath && (
         <Truncate className='text-2xs text-fg-2 max-lg:hidden'>
-          renamed from {source.file.previousPath}
+          renamed from {source.change.previousPath}
         </Truncate>
       )}
-      {source.file && !source.file.binary && (
-        <DiffStats added={source.file.additions} removed={source.file.deletions} />
+      {source.change && !source.change.binary && (
+        <DiffStats added={source.change.additions} removed={source.change.deletions} />
       )}
       <span className='flex-1' />
       {showLayout && (
@@ -236,7 +257,7 @@ export function EditorPane({
   task: Task;
   refs: TaskRefs;
   gitRef: string;
-  source: TabSource;
+  source: FileSource;
   location: CodeLocation;
   targets: ReviewTarget[];
   split: boolean;
@@ -245,12 +266,12 @@ export function EditorPane({
   toolbar: React.ReactNode;
 }) {
   const draft = useReviewDraft();
-  const path = source.tab.path;
+  const path = source.file.path;
   const head = useFileContent(task, gitRef, source.headPath);
   const base = useFileContent(task, refs.base, source.basePath);
   const [composer, setComposer] = React.useState<Composer | null>(null);
   const [editing, setEditing] = React.useState<{ changed: boolean } | null>(null);
-  const diffing = source.file !== null;
+  const diffing = source.change !== null;
   const content = resolvePaneContent({
     headPath: source.headPath,
     basePath: source.basePath,
@@ -276,7 +297,6 @@ export function EditorPane({
     return (
       <CodeNoteView
         note={note}
-        original={headText}
         onRemove={draft.enabled ? draft.removeComment : null}
         onCancel={() => setComposer(null)}
         onSave={(text) => {
@@ -297,17 +317,8 @@ export function EditorPane({
 
   function suggest() {
     const original = headText ?? '';
-    const suggestion = resolveSuggestion(original, handle.current?.readText() ?? original);
-    if (suggestion) {
-      draft.addComment({
-        path,
-        line: suggestion.line,
-        endLine: suggestion.endLine > suggestion.line ? suggestion.endLine : null,
-        ref: gitRef,
-        text: '',
-        suggestion,
-      });
-    }
+    const resolved = resolveSuggestion(original, handle.current?.readText() ?? original);
+    if (resolved) draft.addComment({ path, ref: gitRef, text: '', ...resolved });
     handle.current?.resetText();
     setEditing(null);
   }
@@ -339,27 +350,25 @@ export function EditorPane({
         <NoText task={task} refs={refs} gitRef={gitRef} source={source} head={content.head} />
       )}
       {content.kind === 'text' && (
-        <React.Suspense fallback={<Waiting path={path} />}>
-          <CodeEditor
-            path={path}
-            content={content.content}
-            original={content.original}
-            split={diffing && split && editing === null}
-            editable={editing !== null}
-            notes={notes}
-            spots={spots}
-            keep={listKeptLines(notes, spots, location.line, location.end)}
-            reveal={reveal}
-            onComment={
-              draft.enabled && editing === null
-                ? (side, line, endLine) => setComposer({ side, line, endLine })
-                : null
-            }
-            onEdit={(changed) => setEditing((current) => (current ? { changed } : current))}
-            renderNote={renderNote}
-            handle={handle}
-          />
-        </React.Suspense>
+        <CodeEditor
+          path={path}
+          content={content.content}
+          original={content.original}
+          split={diffing && split && editing === null}
+          editable={editing !== null}
+          notes={notes}
+          spots={spots}
+          keep={listKeptLines(notes, spots, location.line, location.end)}
+          reveal={reveal}
+          onComment={
+            draft.enabled && editing === null
+              ? (side, line, endLine) => setComposer({ side, line, endLine })
+              : null
+          }
+          onEdit={(changed) => setEditing((current) => (current ? { changed } : current))}
+          renderNote={renderNote}
+          handle={handle}
+        />
       )}
     </section>
   );

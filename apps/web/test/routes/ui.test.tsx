@@ -19,9 +19,11 @@ afterEach(() => {
   stopFakeServer();
 });
 
-function renderGallery() {
+async function renderGallery() {
   act(() => navigate('/ui'));
-  return render(<Root />);
+  const view = render(<Root />);
+  await screen.findByRole('button', { name: 'Toggle theme' });
+  return view;
 }
 
 function findSection(id: string) {
@@ -37,8 +39,8 @@ async function expectNothingSent() {
 }
 
 describe('the /ui gallery', () => {
-  it('shows every overview card from sample data', () => {
-    renderGallery();
+  it('shows every overview card from sample data', async () => {
+    await renderGallery();
     const overview = findSection('shinsa-overview');
     for (const text of [
       'No checks to run',
@@ -51,7 +53,7 @@ describe('the /ui gallery', () => {
       'The agent’s wait ran out of checks',
       'Should the v1 endpoint stay for one more release?',
       'The agents could not settle the review',
-      'The planner wants your go-ahead on this plan',
+      'The agent wants your go-ahead on this plan',
       'Suggested tasks',
       'Delegations',
       'Answered your question',
@@ -62,7 +64,7 @@ describe('the /ui gallery', () => {
       'Working out the steps',
       'The change merged. Run the operation now?',
       'Extra checks',
-      'The planner asked for your approval.',
+      'The agent asked for your approval.',
     ]) {
       expect(overview.getAllByText(text).length).toBeGreaterThan(0);
     }
@@ -74,8 +76,8 @@ describe('the /ui gallery', () => {
     expect(overview.getAllByText(/^No output for/)).toHaveLength(2);
   });
 
-  it('shows the chat, settings and account pieces in each of their states', () => {
-    renderGallery();
+  it('shows the chat, settings and account pieces in each of their states', async () => {
+    await renderGallery();
     const chat = findSection('shinsa-chat');
     for (const text of [
       'Working',
@@ -115,8 +117,8 @@ describe('the /ui gallery', () => {
     expect(findSection('shinsa').getByText(/^Shinsa skipped 2 damaged entries/)).toBeTruthy();
   });
 
-  it('shows the setup and composer pieces, and lists its sections in the order they appear', () => {
-    renderGallery();
+  it('shows the setup and composer pieces, and lists its sections in the order they appear', async () => {
+    await renderGallery();
     const shinsa = findSection('shinsa');
     expect(shinsa.getByRole('button', { name: 'Rebase' }).getAttribute('aria-pressed')).toBeNull();
     expect(shinsa.getByText('gh is not signed in.')).toBeTruthy();
@@ -132,7 +134,7 @@ describe('the /ui gallery', () => {
   });
 
   it('answers every action with a toast and sends nothing, even with the connection open', async () => {
-    renderGallery();
+    await renderGallery();
     const overview = findSection('shinsa-overview');
     fireEvent.click(overview.getByRole('button', { name: 'Verify again' }));
     fireEvent.click(overview.getByRole('button', { name: 'Allow another 10%' }));
@@ -149,7 +151,7 @@ describe('the /ui gallery', () => {
   });
 
   it('opens the sign-in dialog at its code step without starting a sign-in', async () => {
-    renderGallery();
+    await renderGallery();
     fireEvent.click(findSection('shinsa-accounts').getByRole('button', { name: 'Sign in to Claude' }));
     const dialog = within(await screen.findByRole('dialog'));
     fireEvent.change(dialog.getByRole('textbox', { name: 'Sign-in code' }), { target: { value: 'abc-123' } });

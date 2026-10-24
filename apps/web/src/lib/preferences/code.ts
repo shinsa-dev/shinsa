@@ -17,6 +17,10 @@ export function useSplitDiff() {
   return useStoredToggle('shinsa.code-split', false);
 }
 
+export function useHideViewed() {
+  return useStoredToggle('shinsa.code-hide-viewed', false);
+}
+
 function resolveViewedKey(taskId: string, head: string) {
   return `${VIEWED_PREFIX}${taskId}.${head}`;
 }

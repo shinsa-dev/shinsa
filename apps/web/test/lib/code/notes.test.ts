@@ -77,8 +77,8 @@ describe('listCommentNotes', () => {
         comment({ id: '2', ref: 'other' }),
         comment({ id: '3', ref: null, side: 'old' }),
         comment({ id: '4', path: 'b.ts' }),
-        comment({ id: '5', line: 7, suggestion: { line: 7, endLine: 9, text: '' } }),
-        comment({ id: '6', line: 7, suggestion: { line: 7, endLine: 6, text: 'x' } }),
+        comment({ id: '5', line: 7, endLine: 9, suggestion: { original: 'a\nb\nc', replacement: '' } }),
+        comment({ id: '6', line: 7, suggestion: { original: 'a', replacement: 'b' } }),
       ],
       'a.ts',
       'h'

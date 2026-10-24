@@ -174,7 +174,13 @@ describe('the code reads', () => {
     renderHook(() => useFileContent(task, SHA, 'src/a.ts'));
     renderHook(() => useTaskDiff(task, SHA, 'working'));
     renderHook(() =>
-      useRepoSearch(task, SHA, { query: 'needle', regex: true, caseSensitive: true, glob: ' *.ts ' })
+      useRepoSearch(task, SHA, {
+        query: 'needle',
+        regex: true,
+        caseSensitive: true,
+        wholeWord: true,
+        glob: ' *.ts ',
+      })
     );
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(6));
     expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual(
@@ -184,7 +190,7 @@ describe('the code reads', () => {
         '/api/tasks/reads/tree?ref=working&dir=src&v=9',
         `/api/tasks/reads/blob?ref=${SHA}&path=src%2Fa.ts`,
         `/api/tasks/reads/diff?base=${SHA}&head=working&v=9`,
-        `/api/tasks/reads/search?ref=${SHA}&q=needle&regex=1&case=1&glob=*.ts`,
+        `/api/tasks/reads/search?ref=${SHA}&q=needle&regex=1&case=1&word=1&glob=*.ts`,
       ].sort()
     );
   });
@@ -197,7 +203,7 @@ describe('the code reads', () => {
     expect(renderHook(() => useFileContent(task, null, 'a.ts')).result.current.status).toBe('idle');
     expect(renderHook(() => useTaskDiff(task, null, SHA)).result.current.status).toBe('idle');
     expect(renderHook(() => useTaskDiff(task, SHA, null)).result.current.status).toBe('idle');
-    const search = { query: '', regex: false, caseSensitive: false, glob: '' };
+    const search = { query: '', regex: false, caseSensitive: false, wholeWord: false, glob: '' };
     expect(renderHook(() => useRepoSearch(task, SHA, search)).result.current.status).toBe('idle');
     expect(renderHook(() => useRepoSearch(task, null, { ...search, query: 'x' })).result.current.status).toBe(
       'idle'

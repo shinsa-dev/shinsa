@@ -63,6 +63,40 @@ export function listChangeRows(files: DiffFile[], collapsed: ReadonlySet<string>
   return listRows(buildFolders(files), '', 0, collapsed);
 }
 
+export interface ActiveGuide {
+  dir: string;
+  level: number;
+}
+
+export function findActiveGuide(rows: readonly TreeRow[], activePath: string | null): ActiveGuide | null {
+  const index = rows.findIndex((each) => each.kind === 'file' && each.path === activePath);
+  const open = rows[index];
+  if (!open || open.depth === 0) return null;
+  const parent = rows
+    .slice(0, index)
+    .reverse()
+    .find((each) => each.kind === 'directory' && each.depth === open.depth - 1);
+  return parent ? { dir: parent.path, level: parent.depth } : null;
+}
+
+export function resolveActiveGuide(activePath: string | null): ActiveGuide | null {
+  const dir = resolveDirectory(activePath ?? '');
+  return dir ? { dir, level: dir.split('/').length - 1 } : null;
+}
+
+export function pickGuideLevel(guide: ActiveGuide | null, path: string) {
+  return guide && path.startsWith(`${guide.dir}/`) ? guide.level : undefined;
+}
+
+export function listShownChanges(
+  files: DiffFile[],
+  viewed: ReadonlySet<string>,
+  hideViewed: boolean,
+  activePath: string | null
+) {
+  return hideViewed ? files.filter((file) => file.path === activePath || !viewed.has(file.path)) : files;
+}
+
 export function listAncestors(path: string) {
   const parts = path.split('/').slice(0, -1);
   return parts.map((_, index) => parts.slice(0, index + 1).join('/'));

@@ -10,7 +10,7 @@ import {
   search,
 } from '@codemirror/search';
 import { type Compartment, EditorState, type Extension } from '@codemirror/state';
-import { drawSelection, EditorView, highlightSpecialChars, keymap } from '@codemirror/view';
+import { drawSelection, EditorView, highlightSpecialChars, keymap, type Panel } from '@codemirror/view';
 import { commentGutter } from './annotations.ts';
 import { CODE_THEME } from './theme.ts';
 
@@ -25,6 +25,7 @@ export interface EditorSetup {
   language: LanguageSupport | null;
   editable: Compartment;
   onLine: (line: number, view: EditorView) => boolean;
+  findPanel: (view: EditorView) => Panel;
 }
 
 export function resolveEditable(editable: boolean): Extension {
@@ -38,7 +39,7 @@ export function createEditorExtensions(setup: EditorSetup): Extension[] {
     highlightSpecialChars(),
     drawSelection(),
     history(),
-    search({ top: true }),
+    search({ top: true, createPanel: setup.findPanel }),
     highlightSelectionMatches(),
     keymap.of([...CODE_KEYMAP, ...historyKeymap, ...defaultKeymap]),
     commentGutter(setup.onLine),
@@ -46,4 +47,4 @@ export function createEditorExtensions(setup: EditorSetup): Extension[] {
   ];
 }
 
-export { gotoLine, openSearchPanel };
+export { closeSearchPanel, findNext, findPrevious, gotoLine, openSearchPanel };

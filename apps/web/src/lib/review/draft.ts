@@ -1,17 +1,9 @@
+import type { ReviewComment, SuggestedChange } from '@shinsa/core';
 import * as React from 'react';
-import { describeSuggestionLines, type Suggestion } from '@/lib/code/suggestion.ts';
 
-export type CommentSide = 'old' | 'new';
-
-export interface LineComment {
+export interface LineComment extends ReviewComment {
   id: string;
-  path: string;
-  side: CommentSide;
-  line: number;
-  endLine: number | null;
   ref: string | null;
-  text: string;
-  suggestion: Suggestion | null;
 }
 
 export type DraftComment = Omit<LineComment, 'id' | 'side' | 'endLine' | 'ref' | 'suggestion'> &
@@ -50,10 +42,18 @@ export function createLineComment(comment: DraftComment, id: string): LineCommen
   };
 }
 
+function isSuggestedChange(value: unknown) {
+  const change = value as Partial<SuggestedChange> | null;
+  return value === null || (typeof change?.original === 'string' && typeof change.replacement === 'string');
+}
+
 function isComment(value: unknown): value is LineComment {
   const comment = value as Partial<LineComment> | null;
   return (
-    typeof comment?.id === 'string' && typeof comment.path === 'string' && typeof comment.line === 'number'
+    typeof comment?.id === 'string' &&
+    typeof comment.path === 'string' &&
+    typeof comment.line === 'number' &&
+    isSuggestedChange(comment.suggestion ?? null)
   );
 }
 
@@ -72,8 +72,11 @@ export function writeStoredComments(key: string, comments: LineComment[]) {
 }
 
 export function describeCommentPlace(comment: Pick<LineComment, 'path' | 'side' | 'line' | 'endLine'>) {
-  const lines = comment.endLine ? `${comment.line}-${comment.endLine}` : String(comment.line);
-  return comment.side === 'old' ? `${comment.path}, removed line ${lines}` : `${comment.path}:${lines}`;
+  if (comment.side === 'new') {
+    return `${comment.path}:${comment.endLine ? `${comment.line}-${comment.endLine}` : comment.line}`;
+  }
+  const lines = comment.endLine ? `lines ${comment.line}-${comment.endLine}` : `line ${comment.line}`;
+  return `${comment.path}, removed ${lines}`;
 }
 
 export function describeCommentLines(comment: Pick<LineComment, 'side' | 'line' | 'endLine'>) {
@@ -81,14 +84,13 @@ export function describeCommentLines(comment: Pick<LineComment, 'side' | 'line' 
   return comment.side === 'old' ? `Removed ${lines}` : `${lines.charAt(0).toUpperCase()}${lines.slice(1)}`;
 }
 
-function serializeComment(comment: LineComment) {
-  const head = `- ${describeCommentPlace(comment)}:${comment.text ? ` ${comment.text}` : ''}`;
-  if (!comment.suggestion) return head;
-  const place = describeSuggestionLines(comment.suggestion);
-  return `${head}\n  Suggested change for ${place}, apply it as written unless that breaks something:\n  \`\`\`\n${comment.suggestion.text}\n  \`\`\``;
-}
-
-export function serializeComments(comments: LineComment[], note: string) {
-  const lines = comments.map(serializeComment);
-  return [note, lines.length > 0 ? `Line comments:\n${lines.join('\n')}` : ''].filter(Boolean).join('\n\n');
+export function serializeComments(comments: readonly LineComment[]): ReviewComment[] {
+  return comments.map(({ path, side, line, endLine, text, suggestion }) => ({
+    path,
+    side,
+    line,
+    endLine,
+    text,
+    suggestion,
+  }));
 }

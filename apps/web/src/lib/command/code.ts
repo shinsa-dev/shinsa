@@ -9,10 +9,12 @@ export interface CodeCommandContext {
   mode: CodeMode;
   mac: boolean;
   split: boolean;
+  hideViewed: boolean;
   hasEditor: boolean;
   applyMode: (mode: CodeMode) => void;
   run: (key: CodeKey) => void;
   toggleSplit: () => void;
+  toggleHideViewed: () => void;
 }
 
 export function listCodeCommands(context: CodeCommandContext): CommandSection {
@@ -46,6 +48,16 @@ export function listCodeCommands(context: CodeCommandContext): CommandSection {
       run: () => context.run('search'),
     },
   ];
+  if (context.modes.includes('changes')) {
+    keys.push({
+      kind: 'run',
+      id: `${id}.hide-viewed`,
+      label: context.hideViewed ? 'Show viewed files' : 'Hide viewed files',
+      icon: context.hideViewed ? 'IconEyeSlash' : 'IconEyeOpen',
+      keywords: ['viewed', 'hide', 'show', 'changes', 'reviewed'],
+      run: context.toggleHideViewed,
+    });
+  }
   if (context.hasEditor) {
     keys.push(
       {

@@ -1,4 +1,5 @@
 import type { Task, WorkReport } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -8,6 +9,7 @@ import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
+import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import { TONE_FILL } from '@/lib/format/tone.ts';
 import { describeCommentPlace } from '@/lib/review/draft.ts';
 import { describeFindingPlace } from '@/lib/review/findings.ts';
@@ -43,21 +45,22 @@ function SpotButton({
       onClick={onSelect}
       aria-current={selected || undefined}
       className={cn(
-        'corner-superellipse/1.125 relative flex w-full cursor-pointer flex-col gap-px rounded-control py-1.5 pr-2 pl-4 text-left outline-none transition-colors duration-150',
-        selected ? 'bg-bg-a3' : 'hover:bg-bg-a2 active:bg-bg-a2'
+        'corner-superellipse/1.125 relative flex w-full cursor-pointer flex-col gap-px rounded-control-sm py-1 pr-1.5 pl-3.5 text-left outline-none transition-colors duration-100',
+        selected ? 'bg-primary-a1' : 'hover:bg-bg-a2 active:bg-bg-a2'
       )}
     >
       <span
         className={cn(
-          'absolute inset-y-2 left-1.5 w-0.5 rounded-full',
+          'absolute inset-y-1.5 left-1.5 w-0.5 rounded-full',
           TONE_FILL[ATTENTION[target.attention].tone]
         )}
       />
-      <span className='flex min-w-0 items-center gap-1.5'>
+      <span className='flex h-4 min-w-0 items-center gap-1.5'>
+        <Icon name={resolveFileIcon(target.file)} size='sm' />
         <FilePath path={target.file} />
         <span className='shrink-0 text-2xs text-fg-2'>{formatTargetLines(target)}</span>
       </span>
-      {target.why && <span className='text-fg-3 text-xs'>{target.why}</span>}
+      {target.why && <span className='text-2xs text-fg-3'>{target.why}</span>}
       {showSection && <span className='text-2xs text-fg-2'>{target.section}</span>}
     </button>
   );
@@ -87,7 +90,7 @@ function Walkthrough({
   return (
     <>
       {order === 'walkthrough' ? (
-        <ol className='flex flex-col gap-3'>
+        <ol className='flex flex-col gap-2.5'>
           {report.sections.map((section, sectionIndex) => (
             <li key={section.title} className='flex flex-col gap-1'>
               <div className='flex gap-2 px-2'>
@@ -97,7 +100,7 @@ function Walkthrough({
                   <p className='text-2xs text-fg-2'>{section.summary}</p>
                 </div>
               </div>
-              <div className='flex flex-col gap-px pl-4.5'>
+              <div className='flex flex-col pl-4.5'>
                 {section.spots.map((spot, spotIndex) => {
                   const target = toReviewTarget(spot, section.title, `${sectionIndex}:${spotIndex}`);
                   return (
@@ -115,7 +118,7 @@ function Walkthrough({
           ))}
         </ol>
       ) : (
-        <div className='flex flex-col gap-px'>
+        <div className='flex flex-col'>
           {listReviewTargets(report, 'attention').map((target) => (
             <SpotButton
               key={target.key}
@@ -130,7 +133,7 @@ function Walkthrough({
       {findings.length > 0 && (
         <>
           <SideHeading count={findings.length}>Agent review · a signal, not an approval</SideHeading>
-          <div className='flex flex-col gap-px'>
+          <div className='flex flex-col'>
             {findings.map((target) => (
               <SpotButton
                 key={target.key}
@@ -270,7 +273,7 @@ export function ReviewExplorer({
   return (
     <div className='flex flex-col'>
       <ReviewSummary task={task} headline={report.headline} order={order} onOrder={onOrder} />
-      <div className='px-1.5 pt-2 pb-6'>
+      <div className='px-1 pt-2 pb-6'>
         <Walkthrough
           report={report}
           order={order}

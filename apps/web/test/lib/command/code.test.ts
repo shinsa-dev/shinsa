@@ -8,16 +8,18 @@ function context(overrides: Partial<CodeCommandContext> = {}): CodeCommandContex
     mode: 'changes',
     mac: true,
     split: false,
+    hideViewed: false,
     hasEditor: true,
     applyMode: mock(() => {}),
     run: mock(() => {}),
     toggleSplit: mock(() => {}),
+    toggleHideViewed: mock(() => {}),
     ...overrides,
   };
 }
 
 describe('listCodeCommands', () => {
-  it('offers the modes, then going to a file, searching, finding, a line and the diff layout', () => {
+  it('offers the modes, then going to a file, searching, hiding viewed files, finding, a line and the diff layout', () => {
     const section = listCodeCommands(context());
     expect(section.heading).toBe('Code');
     expect(
@@ -28,6 +30,7 @@ describe('listCodeCommands', () => {
       ['Files', null, false],
       ['Go to file…', '⌘P', null],
       ['Search in files', '⇧⌘F', null],
+      ['Hide viewed files', null, null],
       ['Find in this file', '⌘F', null],
       ['Go to line', '⌘G', null],
       ['Show diffs side by side', null, null],
@@ -35,7 +38,7 @@ describe('listCodeCommands', () => {
   });
 
   it('runs what it names', () => {
-    const value = context({ split: true, mac: false });
+    const value = context({ split: true, hideViewed: true, mac: false });
     const section = listCodeCommands(value);
     for (const command of section.commands) if (command.kind === 'run') command.run();
     expect((value.applyMode as ReturnType<typeof mock>).mock.calls).toEqual([
@@ -50,6 +53,11 @@ describe('listCodeCommands', () => {
       ['goto-line'],
     ]);
     expect(value.toggleSplit).toHaveBeenCalledTimes(1);
+    expect(value.toggleHideViewed).toHaveBeenCalledTimes(1);
+    expect(section.commands.find((command) => command.id.endsWith('.hide-viewed'))).toMatchObject({
+      label: 'Show viewed files',
+      icon: 'IconEyeSlash',
+    });
     expect(section.commands.at(-1)?.label).toBe('Show diffs unified');
     expect(section.commands.find((command) => command.label === 'Go to file…')?.trailing).toBe('Ctrl+P');
   });

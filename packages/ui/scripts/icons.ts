@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { CentralIcon } from '@central-icons-react/all';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CUSTOM_ICON_PATHS } from '../src/components/icon/custom';
+import { CUSTOM_ICON_PATHS, TONED_ICON_SOURCES } from '../src/components/icon/custom';
 
 export type IconRadius = '0' | '1' | '2' | '3';
 
@@ -93,6 +93,7 @@ export function listKnownIcons(): Set<string> {
   return new Set([
     ...Object.values(index.categories).flatMap((category) => category.icons),
     ...Object.keys(CUSTOM_ICON_PATHS),
+    ...Object.keys(TONED_ICON_SOURCES),
   ]);
 }
 
@@ -144,6 +145,9 @@ function withOffset(name: string, inner: string): string {
 
 /** One icon's inner SVG markup at one radius, with the per-icon optical corrections applied. */
 export function renderIconMarkup(name: string, radius: IconRadius): string {
+  const toned = TONED_ICON_SOURCES[name];
+  if (toned)
+    return `<g style="color:var(--file-icon-ink,var(--file-${toned.tone}))">${renderIconMarkup(toned.icon, radius)}</g>`;
   const custom = CUSTOM_ICON_PATHS[name];
   if (custom) return withOffset(name, custom);
   const filled = name.endsWith('Filled');

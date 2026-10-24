@@ -54,6 +54,9 @@ describe('the catalog', () => {
     expect(isKnownIcon(known, 'IconCheckmark1')).toBe(true);
     expect(isKnownIcon(known, 'IconBellFilled')).toBe(true);
     expect(isKnownIcon(known, 'IconPriorityHigh')).toBe(true);
+    expect(isKnownIcon(known, 'IconRegex')).toBe(true);
+    expect(isKnownIcon(known, 'IconFileTypeTypescript')).toBe(true);
+    expect(isKnownIcon(known, 'IconFolderOpenSource')).toBe(true);
     expect(isKnownIcon(known, 'IconNotARealIcon')).toBe(false);
   });
 });
@@ -122,6 +125,19 @@ describe('renderIconMarkup', () => {
 
   it('uses our own artwork for custom marks', () => {
     expect(renderIconMarkup('IconPriorityHigh', '0')).toStartWith('<g fill="currentColor"><rect');
+    expect(renderIconMarkup('IconWholeWord', '3')).toContain('stroke="currentColor"');
+  });
+
+  it('draws a file or folder mark as its base icon in its tint, unless its row mutes it', () => {
+    expect(renderIconMarkup('IconFileTypeTypescript', '3')).toBe(
+      `<g style="color:var(--file-icon-ink,var(--file-blue))">${renderIconMarkup('IconTypescript', '3')}</g>`
+    );
+    expect(renderIconMarkup('IconFileTypePython', '3')).toBe(
+      `<g style="color:var(--file-icon-ink,var(--file-yellow))">${renderIconMarkup('IconPython', '3')}</g>`
+    );
+    expect(renderIconMarkup('IconFolderOpenTest', '3')).toStartWith(
+      '<g style="color:var(--file-icon-ink,var(--file-green))">'
+    );
   });
 
   it('fails loudly for a name Central does not have', () => {

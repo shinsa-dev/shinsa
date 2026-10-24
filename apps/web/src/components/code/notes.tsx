@@ -2,9 +2,8 @@ import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { CodeDiff } from '@/components/text/code-diff.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
-import { listKeyedParts } from '@/lib/code/search.ts';
-import { describeSuggestionLines, listSuggestionLines } from '@/lib/code/suggestion.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
 
@@ -13,44 +12,30 @@ const NOTE =
 
 const FINDING_SURFACE = { red: 'bg-red-a1', amber: 'bg-amber-a1' } as const;
 
-function SuggestionLines({ comment, original }: { comment: LineComment; original: string | null }) {
-  if (!comment.suggestion) return null;
-  const lines =
-    original === null
-      ? { removed: [], added: comment.suggestion.text.split('\n') }
-      : listSuggestionLines(original, comment.suggestion);
+function SuggestionLines({ comment }: { comment: LineComment }) {
+  const { suggestion, path } = comment;
+  const source = React.useMemo(
+    () =>
+      suggestion && {
+        kind: 'files' as const,
+        path,
+        before: suggestion.original,
+        after: suggestion.replacement,
+      },
+    [suggestion, path]
+  );
+  if (!source) return null;
   return (
     <div className='flex flex-col gap-px'>
-      <span className='text-2xs text-fg-2'>
-        Suggested change · {describeSuggestionLines(comment.suggestion)}
-      </span>
-      <pre className='overflow-x-auto rounded-md bg-background py-1 font-mono text-2xs leading-[18px]'>
-        {listKeyedParts(lines.removed.map((line) => ({ text: `${line}\n` }))).map((line) => (
-          <div key={`r${line.key}`} className='bg-red-a1 px-2 text-fg-4'>
-            <span className='select-none pe-2 text-red-text'>−</span>
-            {line.text.slice(0, -1) || ' '}
-          </div>
-        ))}
-        {listKeyedParts(lines.added.map((line) => ({ text: `${line}\n` }))).map((line) => (
-          <div key={`a${line.key}`} className='bg-green-a1 px-2 text-fg-4'>
-            <span className='select-none pe-2 text-green-text'>+</span>
-            {line.text.slice(0, -1) || ' '}
-          </div>
-        ))}
-      </pre>
+      <span className='text-2xs text-fg-2'>Suggested change</span>
+      <div className='overflow-hidden rounded-md bg-background py-1'>
+        <CodeDiff source={source} />
+      </div>
     </div>
   );
 }
 
-function CommentNote({
-  comment,
-  original,
-  onRemove,
-}: {
-  comment: LineComment;
-  original: string | null;
-  onRemove: (() => void) | null;
-}) {
+function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: (() => void) | null }) {
   return (
     <div className={cn(NOTE, 'bg-primary-a1')}>
       <div className='flex items-center gap-2'>
@@ -69,7 +54,7 @@ function CommentNote({
         )}
       </div>
       {comment.text && <p className='whitespace-pre-wrap text-fg-4'>{comment.text}</p>}
-      <SuggestionLines comment={comment} original={original} />
+      <SuggestionLines comment={comment} />
     </div>
   );
 }
@@ -116,13 +101,11 @@ function CommentComposer({
 
 export function CodeNoteView({
   note,
-  original,
   onRemove,
   onSave,
   onCancel,
 }: {
   note: CodeNote;
-  original: string | null;
   onRemove: ((id: string) => void) | null;
   onSave: (text: string) => void;
   onCancel: () => void;
@@ -137,11 +120,7 @@ export function CodeNoteView({
   }
   if (note.kind === 'comment') {
     return (
-      <CommentNote
-        comment={note.comment}
-        original={note.side === 'new' ? original : null}
-        onRemove={onRemove ? () => onRemove(note.comment.id) : null}
-      />
+      <CommentNote comment={note.comment} onRemove={onRemove ? () => onRemove(note.comment.id) : null} />
     );
   }
   return (

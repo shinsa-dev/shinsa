@@ -223,6 +223,29 @@
   --code-removed: var(--red-a1);
   --code-removed-strong: var(--red-a2);
 
+  /* File icons: the Code tab's language and folder marks (icon/custom.ts,
+     TONED_ICON_SOURCES) draw in one of these. Softer than the tone ramps, so
+     a tree of fifty files reads as gentle colour, not a row of warning
+     lights, yet each language stays its own hue at a glance. Light holds
+     them mid-light and mid-chroma; .dark lifts them and drains a little
+     chroma. A row that mutes its marks (`file-icons-muted`) draws them in
+     its icon ink instead. */
+  --file-red: oklch(0.64 0.13 20);
+  --file-coral: oklch(0.66 0.13 36);
+  --file-orange: oklch(0.68 0.13 54);
+  --file-amber: oklch(0.7 0.13 66);
+  --file-gold: oklch(0.72 0.135 80);
+  --file-yellow: oklch(0.77 0.14 104);
+  --file-green: oklch(0.67 0.12 150);
+  --file-teal: oklch(0.67 0.1 178);
+  --file-cyan: oklch(0.68 0.1 208);
+  --file-azure: oklch(0.67 0.11 234);
+  --file-blue: oklch(0.63 0.13 260);
+  --file-indigo: oklch(0.62 0.12 282);
+  --file-purple: oklch(0.64 0.13 306);
+  --file-pink: oklch(0.67 0.12 348);
+  --file-slate: oklch(0.6 0.035 255);
+
   /* Semantic (shadcn) mapping */
   --foreground: var(--fg-4);
   --card: var(--bg-1);
@@ -359,6 +382,22 @@
   --red-text: var(--red-4);
   --pink-text: var(--pink-4);
   --yellow-text: var(--yellow-4);
+
+  --file-red: oklch(0.78 0.1 20);
+  --file-coral: oklch(0.79 0.1 38);
+  --file-orange: oklch(0.8 0.1 56);
+  --file-amber: oklch(0.8 0.11 64);
+  --file-gold: oklch(0.83 0.115 80);
+  --file-yellow: oklch(0.9 0.12 106);
+  --file-green: oklch(0.81 0.1 150);
+  --file-teal: oklch(0.81 0.085 178);
+  --file-cyan: oklch(0.81 0.085 208);
+  --file-azure: oklch(0.79 0.09 234);
+  --file-blue: oklch(0.76 0.1 262);
+  --file-indigo: oklch(0.75 0.1 284);
+  --file-purple: oklch(0.77 0.105 306);
+  --file-pink: oklch(0.79 0.095 348);
+  --file-slate: oklch(0.74 0.03 255);
 
   /* Elevated chrome inverts: a drop shadow reads as nothing on a dark page, so
      the border becomes an inner hairline of light instead. */
@@ -533,12 +572,14 @@
        control-sm  22/24px controls, one step down
        popup       menus, selects, comboboxes, command: item + p-1 (4px)
        item        rows inside a popup = popup − 4px
-       segment     tab / segment inside a p-0.5 track = control − 2px */
+       segment     tab / segment inside a p-0.5 track = control − 2px
+       checkbox    the 14/16px check box, sm − 1px */
   --radius-control-sm: 0.375rem;
   --radius-control: calc(var(--radius-control-sm) + 1px);
   --radius-item: var(--radius-control-sm);
   --radius-popup: calc(var(--radius-item) + 4px);
   --radius-segment: calc(var(--radius-control) - 2px);
+  --radius-checkbox: calc(var(--radius-sm) - 1px);
   --radius-sm: 0.3125rem;
   --radius-md: var(--radius-control-sm);
   --radius-lg: var(--radius-control);
@@ -584,6 +625,14 @@
   --shadow-sm: var(--surface-shadow-2);
   --shadow-md: var(--surface-shadow-3);
   --shadow-lg: var(--surface-shadow-4);
+}
+
+/* A row that is done with (a viewed file in the Code tab) draws its file
+   marks in its own icon ink instead of their language colour: the toned
+   marks read `--file-icon-ink` first (scripts/icons.ts), and `currentColor`
+   there is the colour the mark inherits from the row's text. */
+@utility file-icons-muted {
+  --file-icon-ink: currentColor;
 }
 
 @utility scrollbar-hide {
@@ -680,6 +729,88 @@
   }
   &[data-overflow-x-end] {
     --fade-r: var(--fade-size);
+  }
+
+  /* Where the browser has scroll timelines, the scroll position itself drives
+     the fades: each edge's fade grows over the first `--fade-size` of travel
+     toward it. Style alone decides them, so they are right on the first
+     painted frame and never wait for a measure, an observer or a transition.
+     The vertical axis by default; `data-fade-orientation` (ScrollFade sets it)
+     picks `horizontal` or `both`, so content that only overflows a clipped
+     axis never fades there. An axis that does not scroll has an inactive
+     timeline, so its animation does nothing and the attributes above still
+     apply (ScrollArea and ScrollFade set them, also on a clipping element
+     that is not a scroll container); browsers without scroll timelines use
+     only those. */
+  @supports (animation-timeline: scroll()) {
+    transition: none;
+    animation:
+      scroll-fade-t linear both,
+      scroll-fade-b linear both;
+    animation-timeline: scroll(self block), scroll(self block);
+    animation-range:
+      0 var(--fade-size),
+      calc(100% - var(--fade-size)) 100%;
+
+    &[data-fade-orientation="horizontal"] {
+      animation:
+        scroll-fade-l linear both,
+        scroll-fade-r linear both;
+      animation-timeline: scroll(self inline), scroll(self inline);
+      animation-range:
+        0 var(--fade-size),
+        calc(100% - var(--fade-size)) 100%;
+    }
+
+    &[data-fade-orientation="both"] {
+      animation:
+        scroll-fade-t linear both,
+        scroll-fade-b linear both,
+        scroll-fade-l linear both,
+        scroll-fade-r linear both;
+      animation-timeline: scroll(self block), scroll(self block), scroll(self inline), scroll(self inline);
+      animation-range:
+        0 var(--fade-size),
+        calc(100% - var(--fade-size)) 100%,
+        0 var(--fade-size),
+        calc(100% - var(--fade-size)) 100%;
+    }
+  }
+}
+
+@keyframes scroll-fade-t {
+  from {
+    --fade-t: 0px;
+  }
+  to {
+    --fade-t: var(--fade-size);
+  }
+}
+
+@keyframes scroll-fade-b {
+  from {
+    --fade-b: var(--fade-size);
+  }
+  to {
+    --fade-b: 0px;
+  }
+}
+
+@keyframes scroll-fade-l {
+  from {
+    --fade-l: 0px;
+  }
+  to {
+    --fade-l: var(--fade-size);
+  }
+}
+
+@keyframes scroll-fade-r {
+  from {
+    --fade-r: var(--fade-size);
+  }
+  to {
+    --fade-r: 0px;
   }
 }
 

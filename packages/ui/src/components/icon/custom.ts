@@ -3,7 +3,9 @@
  * through `Icon` like everything else. Foreign marks come with their own
  * padding, so each one is scaled so its glyph spans about 17 of the 24 units,
  * the optical size of a Central icon. Brand marks keep the brand's own artwork;
- * the priority glyphs are drawn here because Central has no signal bars. Referenced names are emitted into `paths.ts` by the generator.
+ * the priority glyphs, the search toggles (whole word, regular expression) and the
+ * language marks Central lacks (Python, Go, Docker, a database) are drawn here.
+ * Referenced names are emitted into `paths.ts` by the generator.
  */
 export const CUSTOM_ICON_PATHS: Record<string, string> = {
   IconBuzzkit:
@@ -22,4 +24,111 @@ export const CUSTOM_ICON_PATHS: Record<string, string> = {
     '<g fill="currentColor"><rect x="4.5" y="13" width="3.5" height="6" rx="1"/><rect x="10.25" y="9" width="3.5" height="10" rx="1"/><rect x="16" y="5" width="3.5" height="14" rx="1" opacity="0.3"/></g>',
   IconPriorityLow:
     '<g fill="currentColor"><rect x="4.5" y="13" width="3.5" height="6" rx="1"/><rect x="10.25" y="9" width="3.5" height="10" rx="1" opacity="0.3"/><rect x="16" y="5" width="3.5" height="14" rx="1" opacity="0.3"/></g>',
+  IconRegex:
+    '<path d="M15 4v9M11.1 6.25l7.8 4.5M11.1 10.75l7.8-4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="4.75" y="15.75" width="3.5" height="3.5" rx="1" fill="currentColor"/>',
+  IconWholeWord:
+    '<g stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="10" r="2.5"/><path d="M10.5 7.5v5M13.5 4.5v8"/><circle cx="16" cy="10" r="2.5"/><path d="M3.5 16v3.5h17V16"/></g>',
+  IconGo:
+    '<g stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 9.2A4 4 0 1 0 11 12.5H8"/><circle cx="17" cy="12" r="4"/></g>',
+  IconPython:
+    '<path d="M8.5 8.5v-2a3 3 0 0 1 3-3h1a3 3 0 0 1 3 3V10a2 2 0 0 1-2 2h-3a2 2 0 0 0-2 2v3.5a3 3 0 0 0 3 3h1a3 3 0 0 0 3-3v-2M8.5 8.5h7M8.5 15.5h-2a3 3 0 0 1-3-3v-1a3 3 0 0 1 3-3h2M15.5 15.5h2a3 3 0 0 0 3-3v-1a3 3 0 0 0-3-3h-2M8.5 15.5h7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="11" cy="6" r="1" fill="currentColor"/><circle cx="13" cy="18" r="1" fill="currentColor"/>',
+  IconDocker:
+    '<path d="M2.75 12.25h17.6c.35-1.3 1.3-2.05 2.4-2-.3 4.9-4.2 9.25-10.6 9.25-5.1 0-8.4-2.9-9.4-7.25Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><g fill="currentColor"><rect x="4.5" y="8" width="2.6" height="2.6" rx=".5"/><rect x="8" y="8" width="2.6" height="2.6" rx=".5"/><rect x="11.5" y="8" width="2.6" height="2.6" rx=".5"/><rect x="15" y="8" width="2.6" height="2.6" rx=".5"/><rect x="8" y="4.5" width="2.6" height="2.6" rx=".5"/><rect x="11.5" y="4.5" width="2.6" height="2.6" rx=".5"/></g>',
+  IconDatabase:
+    '<g stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.25" rx="7" ry="2.75"/><path d="M5 6.25v11.5c0 1.52 3.13 2.75 7 2.75s7-1.23 7-2.75V6.25M5 12c0 1.52 3.13 2.75 7 2.75s7-1.23 7-2.75"/></g>',
+};
+
+/**
+ * Tint of a file or folder mark: the `--file-<tint>` colour of globals.css, a
+ * soft pastel each theme sets for itself.
+ */
+export type FileTint =
+  | 'red'
+  | 'coral'
+  | 'orange'
+  | 'amber'
+  | 'gold'
+  | 'yellow'
+  | 'green'
+  | 'teal'
+  | 'cyan'
+  | 'azure'
+  | 'blue'
+  | 'indigo'
+  | 'purple'
+  | 'pink'
+  | 'slate';
+
+export const FILE_TINTS: readonly FileTint[] = [
+  'red',
+  'coral',
+  'orange',
+  'amber',
+  'gold',
+  'yellow',
+  'green',
+  'teal',
+  'cyan',
+  'azure',
+  'blue',
+  'indigo',
+  'purple',
+  'pink',
+  'slate',
+];
+
+/**
+ * File and folder marks: a Central icon or a custom mark drawn in a tint, so a
+ * language reads at a glance in the Code tab's trees. The generator wraps the
+ * base artwork in the tint; everything else about it is the base icon's.
+ */
+export const TONED_ICON_SOURCES: Record<string, { icon: string; tone: FileTint }> = {
+  IconFileTypeTypescript: { icon: 'IconTypescript', tone: 'blue' },
+  IconFileTypeJavascript: { icon: 'IconJavascript', tone: 'gold' },
+  IconFileTypeReact: { icon: 'IconReact', tone: 'azure' },
+  IconFileTypeJson: { icon: 'IconBrackets2', tone: 'amber' },
+  IconFileTypeMarkdown: { icon: 'IconMarkdown', tone: 'slate' },
+  IconFileTypeCss: { icon: 'IconHashtag', tone: 'purple' },
+  IconFileTypeHtml: { icon: 'IconCodeBrackets', tone: 'coral' },
+  IconFileTypeXml: { icon: 'IconCodeMedium', tone: 'orange' },
+  IconFileTypeSvg: { icon: 'IconBezier', tone: 'amber' },
+  IconFileTypeYaml: { icon: 'IconCodeLines', tone: 'pink' },
+  IconFileTypeShell: { icon: 'IconConsole', tone: 'green' },
+  IconFileTypePython: { icon: 'IconPython', tone: 'yellow' },
+  IconFileTypeGo: { icon: 'IconGo', tone: 'cyan' },
+  IconFileTypeRust: { icon: 'IconRust', tone: 'orange' },
+  IconFileTypeSwift: { icon: 'IconSwift', tone: 'coral' },
+  IconFileTypeJava: { icon: 'IconJava', tone: 'red' },
+  IconFileTypePhp: { icon: 'IconPhp', tone: 'indigo' },
+  IconFileTypeC: { icon: 'IconCpp', tone: 'indigo' },
+  IconFileTypeVue: { icon: 'IconVue', tone: 'teal' },
+  IconFileTypeSvelte: { icon: 'IconSvelte', tone: 'coral' },
+  IconFileTypeDatabase: { icon: 'IconDatabase', tone: 'teal' },
+  IconFileTypeDocker: { icon: 'IconDocker', tone: 'azure' },
+  IconFileTypeGit: { icon: 'IconGit', tone: 'coral' },
+  IconFileTypeNpm: { icon: 'IconNpm', tone: 'red' },
+  IconFileTypeTsconfig: { icon: 'IconSettingsGear1', tone: 'blue' },
+  IconFileTypeReadme: { icon: 'IconCircleInfo', tone: 'azure' },
+  IconFileTypeLicense: { icon: 'IconLaw', tone: 'amber' },
+  IconFileTypeAgents: { icon: 'IconClaudeai', tone: 'orange' },
+  IconFileTypeEnv: { icon: 'IconKey1', tone: 'gold' },
+  IconFileTypeTest: { icon: 'IconTestTube', tone: 'green' },
+  IconFileTypeImage: { icon: 'IconImages1', tone: 'purple' },
+  IconFileTypeMedia: { icon: 'IconVideo', tone: 'pink' },
+  IconFileTypeAudio: { icon: 'IconAudio', tone: 'pink' },
+  IconFileTypeArchive: { icon: 'IconFileZip', tone: 'amber' },
+  IconFileTypePdf: { icon: 'IconFilePdf', tone: 'red' },
+  IconFileTypeTable: { icon: 'IconTable', tone: 'green' },
+  IconFolderSource: { icon: 'IconFolder1', tone: 'blue' },
+  IconFolderOpenSource: { icon: 'IconFolderOpen', tone: 'blue' },
+  IconFolderTest: { icon: 'IconFolder1', tone: 'green' },
+  IconFolderOpenTest: { icon: 'IconFolderOpen', tone: 'green' },
+  IconFolderDocs: { icon: 'IconFolder1', tone: 'azure' },
+  IconFolderOpenDocs: { icon: 'IconFolderOpen', tone: 'azure' },
+  IconFolderScripts: { icon: 'IconFolder1', tone: 'gold' },
+  IconFolderOpenScripts: { icon: 'IconFolderOpen', tone: 'gold' },
+  IconFolderAssets: { icon: 'IconFolder1', tone: 'purple' },
+  IconFolderOpenAssets: { icon: 'IconFolderOpen', tone: 'purple' },
+  IconFolderGit: { icon: 'IconFolder1', tone: 'coral' },
+  IconFolderOpenGit: { icon: 'IconFolderOpen', tone: 'coral' },
 };

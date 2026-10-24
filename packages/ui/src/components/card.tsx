@@ -62,13 +62,13 @@ function CardAction({ className, ...props }: React.ComponentProps<'div'>) {
   const ref = React.useRef<HTMLDivElement>(null);
   return (
     <>
-      <ScrollFade orientation='horizontal' size={16} targetRef={ref} />
       <div
         ref={ref}
         data-slot='card-action'
         className={cn('flex min-w-0 items-center', className)}
         {...props}
       />
+      <ScrollFade orientation='horizontal' size={16} targetRef={ref} />
     </>
   );
 }

@@ -4,6 +4,7 @@ import {
   readViewedFiles,
   toggleViewedFile,
   useExplorerWidth,
+  useHideViewed,
   useSplitDiff,
   useViewedFiles,
 } from '@/lib/preferences/code.ts';
@@ -15,6 +16,14 @@ describe('code preferences', () => {
     act(() => result.current[1]());
     expect(result.current[0]).toBe(true);
     expect(localStorage.getItem('shinsa.code-split')).toBe('true');
+  });
+
+  it('remembers whether viewed files are hidden', () => {
+    const { result } = renderHook(() => useHideViewed());
+    expect(result.current[0]).toBe(false);
+    act(() => result.current[1]());
+    expect(result.current[0]).toBe(true);
+    expect(localStorage.getItem('shinsa.code-hide-viewed')).toBe('true');
   });
 
   it('starts the file list at its default width', () => {

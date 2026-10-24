@@ -14,7 +14,7 @@ describe('the editor setup', () => {
     expect(CODE_KEYMAP.map((binding) => binding.key)).toEqual(['Mod-f', 'Mod-g', 'F3', 'Escape']);
     const view = createView('a\nb', []);
     expect(openSearchPanel(view)).toBe(true);
-    expect(view.dom.querySelector('.cm-search')).not.toBeNull();
+    expect(view.dom.querySelector('.cm-find')).not.toBeNull();
     gotoLine(view);
     expect(view.dom.querySelector('.cm-panel')).not.toBeNull();
   });

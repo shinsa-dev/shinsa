@@ -1,6 +1,7 @@
 import type { Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Spinner } from '@shinsa/ui/components/spinner';
+import { requestCodeEditor } from '@/components/code/editor-pane.tsx';
 import { Workbench } from '@/components/code/workbench.tsx';
 import { useTaskRefs } from '@/lib/connection/code.ts';
 import type { ExplorerMode } from '@/lib/tasks/tabs.ts';
@@ -20,4 +21,9 @@ export function CodeTab({ task, modes }: { task: Task; modes: ExplorerMode[] }) 
     );
   }
   return <Workbench task={task} refs={refs.value} modes={modes} />;
+}
+
+export async function prefetchCodeEditor(path: string | null) {
+  const editor = await requestCodeEditor();
+  if (path) await editor.requestLanguage(path);
 }

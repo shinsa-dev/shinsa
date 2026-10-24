@@ -18,7 +18,8 @@ import { OnboardingPage } from '@/routes/onboarding.tsx';
 import { SettingsPage } from '@/routes/settings.tsx';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
-import { UiPage } from '@/routes/ui/index.tsx';
+
+const UiPage = React.lazy(async () => ({ default: (await import('@/routes/ui/index.tsx')).UiPage }));
 
 function Page({ state, route }: { state: ShinsaState; route: Exclude<Route, { name: 'ui' }> }) {
   const onboarding = useOnboardingStatus();
@@ -87,7 +88,13 @@ export function Root() {
   const route = useRoute();
   return (
     <TooltipProvider>
-      {route.name === 'ui' ? <UiPage /> : <App route={route} />}
+      {route.name === 'ui' ? (
+        <React.Suspense fallback={<Loading />}>
+          <UiPage />
+        </React.Suspense>
+      ) : (
+        <App route={route} />
+      )}
       <Toaster />
     </TooltipProvider>
   );

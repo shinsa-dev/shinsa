@@ -20,6 +20,7 @@ export interface SearchQuery {
   query: string;
   regex: boolean;
   caseSensitive: boolean;
+  wholeWord: boolean;
   glob: string | null;
 }
 
@@ -280,6 +281,7 @@ export async function searchFiles(
     '--full-name',
     search.caseSensitive ? '--no-ignore-case' : '-i',
     search.regex ? '-E' : '-F',
+    ...(search.wholeWord ? ['-w'] : []),
     '-e',
     search.query,
     ...(sha ? [sha] : ['--untracked']),

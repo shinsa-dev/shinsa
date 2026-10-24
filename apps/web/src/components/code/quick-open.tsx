@@ -10,10 +10,11 @@ import {
 } from '@shinsa/ui/components/command';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import * as React from 'react';
+import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import { rankPaths, splitHits } from '@/lib/code/rank.ts';
 import { listKeyedParts } from '@/lib/code/search.ts';
 import { resolveDirectory, resolveFileName } from '@/lib/code/tree.ts';
-import { useRepoPaths } from '@/lib/connection/code.ts';
+import { type Loaded, useRepoPaths } from '@/lib/connection/code.ts';
 
 const QUICK_OPEN_LIMIT = 50;
 
@@ -29,23 +30,20 @@ function HitText({ text, hits, offset }: { text: string; hits: readonly number[]
   );
 }
 
-export function QuickOpen({
-  task,
-  gitRef,
+export function QuickOpenDialog({
+  loaded,
   open,
   recent,
   onOpenChange,
   onPick,
 }: {
-  task: Task;
-  gitRef: string;
+  loaded: Loaded<{ paths: readonly string[] }>;
   open: boolean;
   recent: readonly string[];
   onOpenChange: (open: boolean) => void;
   onPick: (path: string) => void;
 }) {
   const [query, setQuery] = React.useState('');
-  const loaded = useRepoPaths(task, open ? gitRef : null);
   const paths = loaded.status === 'ready' ? loaded.value.paths : [];
   const ranked = React.useMemo(
     () => rankPaths(paths, query, QUICK_OPEN_LIMIT, recent),
@@ -83,7 +81,7 @@ export function QuickOpen({
               <CommandItem
                 key={entry.path}
                 value={entry.path}
-                icon='IconFileText'
+                icon={resolveFileIcon(entry.path)}
                 onSelect={() => onPick(entry.path)}
               >
                 <span className='shrink-0'>
@@ -100,5 +98,32 @@ export function QuickOpen({
         </CommandList>
       </Command>
     </CommandDialog>
+  );
+}
+
+export function QuickOpen({
+  task,
+  gitRef,
+  open,
+  recent,
+  onOpenChange,
+  onPick,
+}: {
+  task: Task;
+  gitRef: string;
+  open: boolean;
+  recent: readonly string[];
+  onOpenChange: (open: boolean) => void;
+  onPick: (path: string) => void;
+}) {
+  const loaded = useRepoPaths(task, gitRef);
+  return (
+    <QuickOpenDialog
+      loaded={loaded}
+      open={open}
+      recent={recent}
+      onOpenChange={onOpenChange}
+      onPick={onPick}
+    />
   );
 }

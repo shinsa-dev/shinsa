@@ -6,6 +6,8 @@ import * as React from 'react';
 
 type Orientation = 'vertical' | 'horizontal' | 'both';
 
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect;
+
 type ScrollFadeProps = Omit<React.ComponentProps<'div'>, 'ref'> & {
   orientation?: Orientation;
   /** Fade size in px (or any CSS length). */
@@ -13,8 +15,9 @@ type ScrollFadeProps = Omit<React.ComponentProps<'div'>, 'ref'> & {
   /**
    * Ref of an existing scroll container to decorate. The fade is applied to
    * that element directly, so it needs no wrapper and nothing renders here.
-   * Omit it to have this component render its own scroll container from
-   * `children`.
+   * Render this after the target, so its ref is attached when the fade is
+   * applied. Omit it to have this component render its own scroll container
+   * from `children`.
    */
   targetRef?: React.RefObject<HTMLElement | null>;
 };
@@ -39,13 +42,11 @@ function ScrollFade({
   const ref = (targetRef ?? internalRef) as React.RefObject<HTMLElement | null>;
   const dim = typeof size === 'number' ? `${size}px` : size;
 
-  // Passive on purpose: a caller's `targetRef` may point at a sibling rendered
-  // after this component, and React attaches refs in tree order during the same
-  // pass that runs layout effects — a layout effect here could still see null
-  // and silently never decorate the target. Passive effects run after every ref
-  // is attached; the fades are cosmetic and transition in, so settling a frame
-  // after paint is fine (and SSR on Workers stays warning-free).
-  React.useEffect(() => {
+  // A layout effect, so the fades are set before the first paint. React
+  // attaches refs in tree order during the same pass, which is why a caller's
+  // target must come before this component. The fallback avoids the SSR
+  // warning about layout effects on the server.
+  useIsomorphicLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
 
@@ -53,6 +54,7 @@ function ScrollFade({
     const horizontal = orientation === 'horizontal' || orientation === 'both';
     // A caller-supplied target doesn't get our className, so opt it in here.
     el.classList.add('scroll-fade');
+    el.setAttribute('data-fade-orientation', orientation);
     el.style.setProperty('--fade-size', dim);
 
     const update = () => {
@@ -86,7 +88,8 @@ function ScrollFade({
       el.removeEventListener('scroll', update);
       mutations.disconnect();
       observer.disconnect();
-      el.classList.remove('scroll-fade');
+      if (targetRef) el.classList.remove('scroll-fade');
+      el.removeAttribute('data-fade-orientation');
       el.style.removeProperty('--fade-size');
       for (const attr of ['y-start', 'y-end', 'x-start', 'x-end']) {
         el.removeAttribute(`data-overflow-${attr}`);
@@ -108,7 +111,9 @@ function ScrollFade({
       <div
         ref={internalRef}
         data-slot='scroll-fade-viewport'
-        className={cn('scrollbar-hide size-full rounded-[inherit]', overflow)}
+        data-fade-orientation={orientation}
+        style={{ '--fade-size': dim } as React.CSSProperties}
+        className={cn('scroll-fade scrollbar-hide size-full rounded-[inherit]', overflow)}
       >
         {children}
       </div>

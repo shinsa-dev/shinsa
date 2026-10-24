@@ -12,6 +12,18 @@ a review never shifts under you while an agent keeps typing. Search runs on the 
 binary). Editing is in scope only as **suggested changes**: you edit in place, the edit becomes a suggestion in your
 review draft and goes to the agent with Request changes. Direct commits by you come later, behind a question below.
 
+## Done since the plan
+
+- **Suggested changes reach the agent whole.** `gate.answer` carries line comments as data (`comments`,
+  `ReviewComment` with `suggestion: { original, replacement }`); core writes the fixer's prompt with the path, the
+  lines, the original text and the replacement, verbatim (`docs/protocol.md` → Line comments). A suggestion always
+  replaces whole lines.
+- **One set of code colours.** Chat code fences, tool output and snippets run Shiki on a theme of TextMate scopes
+  mapped to the `--code-*` tokens the CodeMirror editor reads (`lib/code/highlight.ts`); the GitHub themes and
+  `.code-token` are gone.
+- **`/ui` specimens for the editor** (`routes/ui/code.tsx`): the code tokens, a chat fence beside the editor, a diff
+  unified with a finding, a comment and its suggested change inline, the same diff side by side, and Go to file.
+
 ## What is weak today (the user has not reviewed this UI)
 
 `apps/web/src/routes/task/code.tsx` (45 lines) picks between `components/code/review.tsx` (395) and
@@ -70,6 +82,10 @@ existing tokens, and it holds up on 10k-line files. Monaco's weight and hex-only
 read-mostly, 900px-window app. `@pierre/diffs` is the strong runner-up for the diff panes only (T3 Code's `DiffPanel`,
 `components/diffs/*` in `/tmp/refs/t3code/apps/web/src`), but it does not edit and would leave the file viewer on a
 second stack. Phase 0 spikes both on the seed's large diff before committing.
+
+Settled since: the Code tab, its merge view included, stays CodeMirror, and `@pierre/diffs` took every small diff
+outside it (chat edits and writes, change snippets for spots and findings, suggested changes), through one lazily
+loaded wrapper, `CodeDiff` (`docs/design.md`, Where Shinsa differs, 33).
 
 Highlighting: CodeMirror's Lezer grammars (lazy per language via `@codemirror/language-data`), coloured by one
 `HighlightStyle` mapped to new `--code-*` tokens in `packages/ui`. Chat code fences keep Shiki but switch to
@@ -190,8 +206,8 @@ and a rounds stack (`seed-rounds.ts`). Missing for the code views: a repository 
 and search; a large file; a rename with edits; a binary; a lockfile; a mix of committed phases and uncommitted edits;
 several findings of different severities; a spot outside the diff; and a merged task whose worktree is gone.
 
-Add one repository, `shinsa-sample`, built offline from this checkout: `git archive HEAD packages/core packages/ui
-apps/web/src docs` unpacked into `~/.shinsa-seed/repos/shinsa-sample` and committed (about a thousand real files in
+Add one repository, `shinsa-sample`, built offline from this checkout at the pinned commit `3590252` (never `HEAD`,
+so later renames cannot break it): `git archive` of that commit unpacked into `~/.shinsa-seed/repos/shinsa-sample` and committed (about a thousand real files in
 TS, TSX, CSS, Markdown and JSON). On it:
 
 - **"Rename review targets to review spots"**, at the review gate: three phase commits plus one uncommitted edit;

@@ -2,9 +2,11 @@ import type { LanguageSupport } from '@codemirror/language';
 import { MergeView } from '@codemirror/merge';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import type { CommentSide } from '@shinsa/core';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { FindBar } from '@/components/code/editor/find-bar.tsx';
 import { COLLAPSE } from '@/lib/code/collapse.ts';
 import {
   annotationsField,
@@ -13,6 +15,7 @@ import {
   resolveSelectedLines,
   setAnnotations,
 } from '@/lib/code/editor/annotations.ts';
+import { FindHost } from '@/lib/code/editor/find.ts';
 import { requestLanguage } from '@/lib/code/editor/language.ts';
 import {
   createEditorExtensions,
@@ -25,7 +28,6 @@ import { codeHighlight } from '@/lib/code/editor/theme.ts';
 import { revealLine, unifiedDiff } from '@/lib/code/editor/unified.ts';
 import type { CodeNote, CodeSpotMark } from '@/lib/code/notes.ts';
 import { resolveCommentRange } from '@/lib/code/notes.ts';
-import type { CommentSide } from '@/lib/review/draft.ts';
 
 export interface EditorHandle {
   openFind: () => void;
@@ -104,6 +106,8 @@ export default function CodeEditor(props: CodeEditorProps) {
   const views = React.useRef<Views | null>(null);
   const registry = React.useMemo(() => new SlotRegistry(), []);
   const slots = React.useSyncExternalStore(registry.subscribe, registry.read);
+  const findHost = React.useMemo(() => new FindHost(), []);
+  const find = React.useSyncExternalStore(findHost.subscribe, findHost.read);
   const editableSlot = React.useMemo(() => new Compartment(), []);
   const latest = React.useRef(props);
   latest.current = props;
@@ -133,6 +137,7 @@ export default function CodeEditor(props: CodeEditorProps) {
         language: support,
         editable: side === 'new' ? editableSlot : new Compartment(),
         onLine: comment(side),
+        findPanel: findHost.createPanel,
       }).concat(extra);
     const initial = latestAnnotations.current;
     if (diffing && split) {
@@ -171,7 +176,7 @@ export default function CodeEditor(props: CodeEditorProps) {
       views.current?.destroy();
       views.current = null;
     };
-  }, [ready, support, content, original, split, diffing, registry, editableSlot]);
+  }, [ready, support, content, original, split, diffing, registry, editableSlot, findHost]);
 
   React.useEffect(() => {
     const current = views.current;
@@ -231,6 +236,7 @@ export default function CodeEditor(props: CodeEditorProps) {
         </div>
       )}
       <div ref={parent} className='@container min-h-0 flex-1' />
+      {find.panel && createPortal(<FindBar view={find.panel.view} />, find.panel.dom)}
       {notes.map((note) => {
         const slot = slots.get(note.key);
         return slot ? (
@@ -240,3 +246,5 @@ export default function CodeEditor(props: CodeEditorProps) {
     </div>
   );
 }
+
+export { requestLanguage };

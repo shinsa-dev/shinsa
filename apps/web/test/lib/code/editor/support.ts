@@ -1,6 +1,7 @@
 import { afterEach } from 'bun:test';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { FindHost } from '@/lib/code/editor/find.ts';
 import { createEditorExtensions } from '@/lib/code/editor/setup.ts';
 
 const views: EditorView[] = [];
@@ -12,7 +13,8 @@ afterEach(() => {
 export function createView(
   doc: string,
   extensions: Extension[],
-  onLine: (line: number) => boolean = () => true
+  onLine: (line: number) => boolean = () => true,
+  find = new FindHost()
 ) {
   const parent = document.createElement('div');
   document.body.appendChild(parent);
@@ -20,7 +22,12 @@ export function createView(
     state: EditorState.create({
       doc,
       extensions: [
-        ...createEditorExtensions({ language: null, editable: new Compartment(), onLine }),
+        ...createEditorExtensions({
+          language: null,
+          editable: new Compartment(),
+          onLine,
+          findPanel: find.createPanel,
+        }),
         ...extensions,
       ],
     }),
