@@ -1,9 +1,10 @@
-import type { ChatTool, Repo, RunRole, PlanDocument, TriageDecisions } from '../packages/core/src/index.ts';
+import type { ChatTool, PlanDocument, Repo, RunRole, TriageDecisions } from '../packages/core/src/index.ts';
+import { resolveProposalUpgrade, SHAPE_PIPELINES } from '../packages/core/src/index.ts';
 import type { SeedTask } from './seed-kit.ts';
 
 const AUTO = { shape: true, start: true, priority: true };
 
-const LEAK_FINDINGS = [
+const LEAK_DIAGNOSIS = [
   'The nightly export opens one ClickHouse connection per chunk in `exportChunk` and only releases it on success.',
   'When a chunk times out the connection stays checked out, so after about 40 slow chunks the pool is empty and every later chunk waits forever.',
   'It only shows at night because that is when the large apps export and chunks time out.',
@@ -17,7 +18,7 @@ const LEAK_PROPOSAL = {
 
 const ROTATE_PLAN: PlanDocument = {
   goal: 'Rotate the webhook signing secret for every app without dropping a delivery.',
-  plan: [
+  phases: [
     { title: 'Issue the new secrets', detail: 'Create a second secret per app and accept both for a day.' },
     { title: 'Switch the signer', detail: 'Sign with the new secret once every app has it.' },
     { title: 'Retire the old secrets', detail: 'Remove the old secret after a day without failures.' },
@@ -42,7 +43,7 @@ const BACKFILL_IMPACT =
 
 const TIER_PLAN: PlanDocument = {
   goal: 'Store each account’s plan tier, then backfill it for the accounts that have none.',
-  plan: [
+  phases: [
     { title: 'Add the column', detail: 'A nullable `plan_tier` column, written on every invoice.' },
     {
       title: 'Read it in billing',
@@ -64,7 +65,7 @@ const TIER_PLAN: PlanDocument = {
 
 const TRIAL_BACKFILL_PLAN: PlanDocument = {
   goal: 'Every April trial has a start date, read from its first purchase event.',
-  plan: [
+  phases: [
     { title: 'Dry run', detail: 'List the trials without a start date and the date each would get.' },
     { title: 'Backfill', detail: 'Write the dates in batches of 500.' },
   ],
@@ -96,7 +97,7 @@ const TIER_GATE_BODY = [
 
 const RISKY_PLAN: PlanDocument = {
   goal: 'Move session tokens from local storage to an http-only cookie.',
-  plan: [
+  phases: [
     { title: 'Issue the cookie', detail: 'Sign in sets an http-only, same-site cookie next to the token.' },
     { title: 'Read the cookie', detail: 'The API accepts the cookie and the header for a week.' },
     { title: 'Drop the token', detail: 'Stop writing the token to local storage.' },
@@ -127,7 +128,7 @@ const CHANGE_DECISIONS: TriageDecisions = {
   priority: { value: 'normal', why: 'No other task waits on it.' },
 };
 
-const STUCK_FINDINGS = [
+const STUCK_DIAGNOSIS = [
   'Two exports from last night still hold the export lock in `export_locks`, so every later run waits on them.',
   'Both belong to workers that were killed during the 02:10 deploy; nothing else holds the lock.',
 ].join('\n\n');
@@ -138,7 +139,7 @@ const OPERATE_NEXT = 'Plan the operation. You approve the plan before anything r
 
 const SHAPE_HANDOVER: Partial<Record<RunRole, (body: string) => ChatTool>> = {
   answerer: (body) => ({ kind: 'shinsa', name: 'answer', args: { answer: body } }),
-  investigator: (body) => ({ kind: 'shinsa', name: 'report_diagnosis', args: { findings: body } }),
+  investigator: (body) => ({ kind: 'shinsa', name: 'report_diagnosis', args: { diagnosis: body } }),
   researcher: (body) => ({ kind: 'shinsa', name: 'submit_report', args: { report: body } }),
   operator: (body) => ({ kind: 'shinsa', name: 'report_outcome', args: { outcome: body } }),
 };
@@ -156,7 +157,7 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
   return [
     {
       id: 'task-shape-investigating',
-      intent: 'Find out why the paywall preview flickers on Safari',
+      request: 'Find out why the paywall preview flickers on Safari',
       title: 'Why the preview flickers on Safari',
       repo: paywall,
       size: 'small',
@@ -168,14 +169,14 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       runs: [{ role: 'investigator', minutes: 6, summary: 'Reproducing the flicker.' }],
     },
     {
-      id: 'task-shape-findings',
-      intent: 'Investigate why webhook retries double-send on deploys',
+      id: 'task-shape-diagnosis',
+      request: 'Investigate why webhook retries double-send on deploys',
       title: 'Why webhook retries double-send',
       repo: paywall,
       size: 'small',
       shape: 'investigate',
       stage: 'done',
-      reason: 'reported its findings',
+      reason: 'reported its diagnosis',
       branch: 'investigate/webhook-double-send',
       ageHours: 7,
       summary:
@@ -190,33 +191,40 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       extra: [
         {
           type: 'task.delivered',
-          taskId: 'task-shape-findings',
+          taskId: 'task-shape-diagnosis',
           step: 'investigate',
           body: 'The retry worker and the deploy drain both pick up in-flight deliveries, because the lock is released before the drain finishes.\n\nOnly deliveries in flight during a deploy are affected, about 30 a deploy.',
-          runId: 'task-shape-findings-run-0',
+          runId: 'task-shape-diagnosis-run-0',
         },
       ],
     },
     {
       id: 'task-shape-change-gate',
-      intent: 'Investigate why exports stall at night',
+      request: 'Investigate why exports stall at night',
       title: 'Why exports stall at night',
       repo: paywall,
       size: 'small',
       shape: 'investigate',
       stage: 'awaiting_proposal',
-      reason: 'a change is proposed for you to approve',
+      reason: 'a proposal waits for your OK',
       branch: 'investigate/export-stall',
       ageHours: 2,
-      summary: LEAK_FINDINGS,
+      summary: LEAK_DIAGNOSIS,
       runs: [{ role: 'investigator', minutes: 14, summary: 'Found leaked ClickHouse connections.' }],
       extra: [
         {
           type: 'task.delivered',
           taskId: 'task-shape-change-gate',
           step: 'investigate',
-          body: LEAK_FINDINGS,
+          body: LEAK_DIAGNOSIS,
           runId: 'task-shape-change-gate-run-0',
+        },
+        {
+          type: 'task.reshaped',
+          taskId: 'task-shape-change-gate',
+          pipeline: resolveProposalUpgrade(SHAPE_PIPELINES.investigate),
+          by: 'agent',
+          reason: LEAK_PROPOSAL.why,
         },
         {
           type: 'task.change_proposed',
@@ -227,15 +235,14 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'question',
-        purpose: 'change',
+        type: 'proposal',
         title: 'Turn this investigation into a fix?',
         body: `${LEAK_PROPOSAL.why}\n\n${LEAK_PROPOSAL.request}`,
       },
     },
     {
       id: 'task-shape-fix',
-      intent: 'Checkout sometimes shows the old price after a plan change. Find the cause and fix it.',
+      request: 'Checkout sometimes shows the old price after a plan change. Find the cause and fix it.',
       title: 'Find and fix the stale checkout price',
       repo: paywall,
       size: 'small',
@@ -261,7 +268,7 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-shape-report',
-      intent: 'Research how other paywall tools handle trial extensions',
+      request: 'Research how other paywall tools handle trial extensions',
       title: 'How other tools handle trial extensions',
       repo: kanna,
       size: 'small',
@@ -297,7 +304,7 @@ function listOperationShapeTasks({ paywall }: SeedRepoPair): SeedTask[] {
   return [
     {
       id: 'task-shape-operation-plan',
-      intent: 'Rotate the webhook signing secret for every app',
+      request: 'Rotate the webhook signing secret for every app',
       title: 'Rotate the webhook signing secret',
       repo: paywall,
       size: 'small',
@@ -306,13 +313,13 @@ function listOperationShapeTasks({ paywall }: SeedRepoPair): SeedTask[] {
       reason: 'needs the plan approved',
       branch: 'ops/rotate-webhook-secret',
       ageHours: 1,
-      spec: ROTATE_PLAN,
+      plan: ROTATE_PLAN,
       runs: [{ role: 'planner', minutes: 5, summary: 'Planned a rotation with a day of overlap.' }],
-      gate: { kind: 'spec', title: 'Approve the rotation plan', body: ROTATE_PLAN.goal },
+      gate: { type: 'plan', title: 'Approve the rotation plan', body: ROTATE_PLAN.goal },
     },
     {
       id: 'task-shape-operation-done',
-      intent: 'Backfill the missing trial start dates for April',
+      request: 'Backfill the missing trial start dates for April',
       title: 'Backfill April trial start dates',
       repo: paywall,
       size: 'small',
@@ -321,7 +328,7 @@ function listOperationShapeTasks({ paywall }: SeedRepoPair): SeedTask[] {
       reason: 'the operation finished',
       branch: 'ops/backfill-trial-dates',
       ageHours: 30,
-      spec: TRIAL_BACKFILL_PLAN,
+      plan: TRIAL_BACKFILL_PLAN,
       summary: 'Backfilled 1,284 trial start dates from the purchase events.',
       runs: [
         { role: 'planner', minutes: 4, summary: 'Planned the backfill in batches of 500.' },
@@ -344,7 +351,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
   return [
     {
       id: 'task-shape-auto-answer',
-      intent: 'How many times does a failed webhook delivery retry?',
+      request: 'How many times does a failed webhook delivery retry?',
       title: 'How webhook retries back off',
       repo: paywall,
       size: 'small',
@@ -358,16 +365,17 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       runs: [{ role: 'answerer', minutes: 3, summary: 'Answered the question.' }],
       extra: [
         {
-          type: 'task.answered',
+          type: 'task.delivered',
           taskId: 'task-shape-auto-answer',
-          answer: 'A failed delivery retries **5 times**, backing off 1, 5, 15, 60 and 240 minutes.',
+          step: 'answer',
+          body: 'A failed delivery retries **5 times**, backing off 1, 5, 15, 60 and 240 minutes.',
           runId: 'task-shape-auto-answer-run-0',
         },
       ],
     },
     {
       id: 'task-shape-composed-ok',
-      intent: 'The nightly exports are stuck again. Clear them so tonight’s run goes through.',
+      request: 'The nightly exports are stuck again. Clear them so tonight’s run goes through.',
       title: 'Clear the stuck nightly exports',
       repo: paywall,
       size: 'small',
@@ -376,10 +384,10 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       decisions: CHANGE_DECISIONS,
       composed: { pipeline: ['investigate', 'your_ok', 'plan', 'operate'], why: COMPOSED_WHY },
       stage: 'awaiting_proposal',
-      reason: 'a change is proposed for you to approve',
+      reason: 'a proposal waits for your OK',
       branch: 'ops/clear-stuck-exports',
       ageHours: 1.5,
-      summary: STUCK_FINDINGS,
+      summary: STUCK_DIAGNOSIS,
       runs: [
         { role: 'planner', minutes: 2, summary: COMPOSED_WHY },
         { role: 'investigator', minutes: 9, summary: 'Found two locks left by killed workers.' },
@@ -389,7 +397,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
           type: 'task.delivered',
           taskId: 'task-shape-composed-ok',
           step: 'investigate',
-          body: STUCK_FINDINGS,
+          body: STUCK_DIAGNOSIS,
           runId: 'task-shape-composed-ok-run-1',
         },
         {
@@ -401,15 +409,14 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'question',
-        purpose: 'change',
-        title: 'Run an operation from these findings?',
+        type: 'proposal',
+        title: 'Run an operation from this diagnosis?',
         body: `${COMPOSED_WHY}\n\n${OPERATE_NEXT}`,
       },
     },
     {
       id: 'task-shape-composed-research',
-      intent: 'Pick a better date picker for the paywall editor and switch to it',
+      request: 'Pick a better date picker for the paywall editor and switch to it',
       title: 'Switch the editor’s date picker',
       repo: kanna,
       size: 'small',
@@ -441,7 +448,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-shape-operation-confirm',
-      intent: 'Store the plan tier on each account and backfill it for the old ones',
+      request: 'Store the plan tier on each account and backfill it for the old ones',
       title: 'Store and backfill the plan tier',
       repo: paywall,
       size: 'small',
@@ -465,7 +472,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       reason: 'waiting for your OK to run the operation',
       branch: 'feat/plan-tier',
       ageHours: 0.8,
-      spec: TIER_PLAN,
+      plan: TIER_PLAN,
       merged: true,
       pullRequest: { number: 4618, checks: 'passing', mergeCommit: TIER_MERGE_COMMIT },
       runs: [
@@ -475,8 +482,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
         { role: 'reviewer', minutes: 3, summary: 'No blocking findings.' },
       ],
       gate: {
-        kind: 'question',
-        purpose: 'operation',
+        type: 'operation',
         title: 'The change merged. Run the operation now?',
         body: TIER_GATE_BODY,
         details: {
@@ -487,7 +493,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-shape-plan-parameters',
-      intent: 'Keep the session in an http-only cookie instead of local storage',
+      request: 'Keep the session in an http-only cookie instead of local storage',
       title: 'Move the session to a cookie',
       repo: paywall,
       size: 'small',
@@ -498,13 +504,13 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       reason: 'plan ready for you',
       branch: 'feat/session-cookie',
       ageHours: 0.5,
-      spec: RISKY_PLAN,
+      plan: RISKY_PLAN,
       runs: [{ role: 'planner', minutes: 6, summary: 'Planned the switch and asked for approval first.' }],
-      gate: { kind: 'spec', title: 'Move the session to a cookie', body: RISKY_PLAN.goal },
+      gate: { type: 'plan', title: 'Move the session to a cookie', body: RISKY_PLAN.goal },
     },
     {
       id: 'task-shape-auto-change',
-      intent: 'Add a setting for the default paywall font in the editor',
+      request: 'Add a setting for the default paywall font in the editor',
       title: 'Default paywall font setting',
       repo: kanna,
       size: 'small',

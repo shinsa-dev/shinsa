@@ -45,7 +45,34 @@ const CATALOG = ['index', 'tokens', 'inputs', 'overlays', 'surfaces'].map(
 );
 
 const ICON_FADE_MESSAGE =
-  "An icon's strength set at the call site. It is --icon-alpha: a reveal goes opacity-0 → opacity-(--icon-alpha), and equal strength is icon-solid (docs/design.md → Where Shinsa differs, 19)";
+  'An icon faded with opacity. Icons draw in a solid icon ink (icon-1…4) that their text colour sets; the only opacity on an icon is a reveal, opacity-0 → opacity-100 (docs/design.md → Where Shinsa differs, 19)';
+
+const ICON_SIZE_MESSAGE =
+  'An icon sized with a class. Pass size: sm (14), md (16) or lg (20), or leave it to the primitive it sits in (docs/design.md → Iconography → Sizes)';
+
+const ICON_BRIGHTER_MESSAGE =
+  'An icon brighter than its text. An icon takes its text’s ink (icon-N beside fg-N) or a quieter one, never a higher step (docs/design.md → Where Shinsa differs, 19)';
+
+const RAW_SVG_MESSAGE =
+  'A hand-drawn svg. Draw glyphs with Icon (add a mark Central lacks to components/icon/custom.ts), so they take the icon size and ink (docs/design.md → Where Shinsa differs, 19)';
+
+const SVG_DRAWERS = ['icon/index.tsx', 'spinner.tsx', 'logo.tsx'].map(
+  (name) => `packages/ui/src/components/${name}`
+);
+
+const ICON_ELEMENTS = new Set(['Icon', 'Spinner', 'Logo', 'PriorityIcon', 'CheckMark', 'SelectedMark']);
+
+const ICON_SIZE_CLASS = /(?:^|\s)(?:[\w/-]+:)*(?:size|w|h)-[\w.()-]+(?=\s|$)/;
+
+const TEXT_STEP: Record<string, number> = {
+  foreground: 4,
+  'card-foreground': 4,
+  'popover-foreground': 4,
+  'muted-foreground': 2,
+};
+
+const OWN_TEXT_STEP =
+  /(?:^|\s)text-(?:fg|icon)-([1-4])(?=\s|$)|(?:^|\s)text-((?:card-|popover-|muted-)?foreground)(?=\s|$)/;
 
 const CLASS_RULES: ClassRule[] = [
   {
@@ -79,10 +106,20 @@ const CLASS_RULES: ClassRule[] = [
     roots: APP,
   },
   {
-    pattern: /svg[^\s'"`]*\]:opacity-|(?:^|[\s:'"`])icon-tertiary\b|\[--icon-alpha:/,
-    message:
-      'An icon faded by hand. Icon draws at --icon-alpha (85% of its text, 90% in menu rows); change a context with icon-solid or icon-item (docs/design.md → Where Shinsa differs, 19)',
+    pattern: /svg[^\s'"`]*\]:(?:[\w-]+:)*(?:opacity|text|fill|stroke)-/,
+    message: ICON_FADE_MESSAGE,
     roots: APP_AND_KIT,
+  },
+  {
+    pattern: /svg[^\s'"`]*\]:(?:[\w-]+:)*(?:size|w|h)-/,
+    message: ICON_SIZE_MESSAGE,
+    roots: APP_AND_KIT,
+  },
+  {
+    pattern: /\[--icon-(?:color|size)[\w-]*:/,
+    message:
+      'An icon ink or size set by hand. The text colour sets the ink and the Icon size prop (or the primitive) the size (docs/design.md → Where Shinsa differs, 19)',
+    roots: APP,
   },
   {
     pattern: /(?:^|[\s'"`])hover:/,
@@ -120,7 +157,7 @@ const CLASS_RULES: ClassRule[] = [
   },
 ];
 
-const FADED_ICON = /(?:^|\s)(?:[\w/-]+:)*opacity-(?!0(?:\s|$)|\(--icon-alpha\)(?:\s|$))\S+/;
+const FADED_ICON = /(?:^|\s)(?:[\w/-]+:)*opacity-(?!(?:0|100)(?:\s|$))\S+/;
 
 const CHECKMARK_ICON = /^IconCheck(?:mark|Circle)/;
 
@@ -128,6 +165,18 @@ const GREEN_CLASS = /(?:^|\s)(?:\S+:)?[a-z]+-(?:green(?:-\d+)?|success)(?:\/\d+)
 
 const GREEN_MESSAGE =
   "A green checkmark. Checkmarks are the accent (only the progress track's done steps are green): CheckMark / CHECK_TEXT from components/status/check-mark.tsx";
+
+const TOOLTIP_WRAPPERS = new Set(['Hint', 'TooltipTrigger']);
+
+const BLOCK_TAG = /^(?:div|p|section|article|header|footer|nav|form|label|li|ul|ol|h[1-6])$/;
+
+const BLOCK_DISPLAY = /(?:^|\s)(?:flex|grid|block|table)(?=\s|$)/;
+
+const FITTED_WIDTH =
+  /(?:^|\s)(?:w-fit|w-max|w-\d[\w.]*|size-[\w.]+|inline|inline-flex|inline-grid|inline-block)(?=\s|$)/;
+
+const STRETCHED_TRIGGER_MESSAGE =
+  'A tooltip trigger that can stretch past its text. The element a Hint or TooltipTrigger wraps is inline or w-fit, so the empty rest of a row never opens the tooltip (docs/design.md → Where Shinsa differs, 13)';
 
 const TIME_CHECK_ROOTS = ['apps/web/src'];
 
@@ -291,15 +340,84 @@ function isGreenCheckmark(node: BabelNode, ancestors: BabelNode[]) {
   return node.type === 'JSXOpeningElement' && isGreen(readParentProps(ancestors));
 }
 
+function readTagName(node: BabelNode) {
+  return (node.name as BabelNode & { name?: string }).name ?? '';
+}
+
 function isIconElement(node: BabelNode) {
   if (node.type !== 'JSXOpeningElement') return false;
-  const name = (node.name as BabelNode & { name?: string }).name ?? '';
-  return name === 'Icon' || name.endsWith('Chevron');
+  const name = readTagName(node);
+  return ICON_ELEMENTS.has(name) || name.endsWith('Chevron');
 }
 
 function isFadedIcon(node: BabelNode) {
   if (!isIconElement(node)) return false;
   return hasValue(readProps(node), 'className', (value) => FADED_ICON.test(value));
+}
+
+function isClassSizedIcon(node: BabelNode) {
+  if (!isIconElement(node) || readTagName(node) === 'Logo') return false;
+  return hasValue(readProps(node), 'className', (value) => ICON_SIZE_CLASS.test(value));
+}
+
+function readTextStep(classes: string[]) {
+  for (const value of classes) {
+    const match = OWN_TEXT_STEP.exec(value);
+    if (match) return match[1] ? Number(match[1]) : (TEXT_STEP[match[2] ?? ''] ?? null);
+  }
+  return null;
+}
+
+function readElementStep(element: BabelNode) {
+  return readTextStep(readProps(element.openingElement as BabelNode).get('className') ?? []);
+}
+
+function readRowStep(row: BabelNode, icon: BabelNode) {
+  let step = readElementStep(row) ?? 0;
+  walk(row, (child) => {
+    if (child.type !== 'JSXElement' || child.openingElement === icon) return;
+    step = Math.max(step, readElementStep(child) ?? 0);
+  });
+  return step;
+}
+
+function isBrighterIcon(node: BabelNode, ancestors: BabelNode[]) {
+  if (!isIconElement(node)) return false;
+  const own = readTextStep(readProps(node).get('className') ?? []);
+  if (own === null) return false;
+  const elements = ancestors
+    .filter((ancestor) => ancestor.type === 'JSXElement')
+    .slice(0, -1)
+    .reverse();
+  const row = elements.find((element) => readElementStep(element) !== null);
+  return row !== undefined && own > readRowStep(row, node);
+}
+
+function isRawSvg(file: string, node: BabelNode) {
+  if (node.type !== 'JSXOpeningElement' || SVG_DRAWERS.includes(file)) return false;
+  return (node.name as BabelNode & { name?: string }).name === 'svg';
+}
+
+function selectTriggerElement(node: BabelNode): BabelNode | null {
+  if (node.type !== 'JSXElement') return null;
+  const wrapper = readElementName(node);
+  if (!wrapper || !TOOLTIP_WRAPPERS.has(wrapper)) return null;
+  if (wrapper === 'Hint') {
+    return (node.children as BabelNode[]).find((child) => child.type === 'JSXElement') ?? null;
+  }
+  const attributes = (node.openingElement as BabelNode).attributes as BabelNode[];
+  const render = attributes.find((attribute) => readKey(attribute) === 'render');
+  const expression = (render?.value as BabelNode | undefined)?.expression as BabelNode | undefined;
+  return expression?.type === 'JSXElement' ? expression : null;
+}
+
+function isStretchedTrigger(node: BabelNode) {
+  const element = selectTriggerElement(node);
+  const tag = element ? readElementName(element) : null;
+  if (!element || !tag || tag !== tag.toLowerCase()) return false;
+  const classes = (readProps(element.openingElement as BabelNode).get('className') ?? []).join(' ');
+  if (!BLOCK_TAG.test(tag) && !BLOCK_DISPLAY.test(classes)) return false;
+  return !FITTED_WIDTH.test(classes);
 }
 
 function collectSyntaxViolations(file: string, program: BabelNode, violations: Violation[]): void {
@@ -308,8 +426,13 @@ function collectSyntaxViolations(file: string, program: BabelNode, violations: V
   walk(program, (node, ancestors) => {
     const line = node.loc?.start.line ?? 0;
     if (timed && isUntimedFormatter(node, ancestors)) violations.push({ file, line, message: TIME_MESSAGE });
+    if (timed && isStretchedTrigger(node))
+      violations.push({ file, line, message: STRETCHED_TRIGGER_MESSAGE });
     if (!styled) return;
     if (isFadedIcon(node)) violations.push({ file, line, message: ICON_FADE_MESSAGE });
+    if (isClassSizedIcon(node)) violations.push({ file, line, message: ICON_SIZE_MESSAGE });
+    if (isBrighterIcon(node, ancestors)) violations.push({ file, line, message: ICON_BRIGHTER_MESSAGE });
+    if (isRawSvg(file, node)) violations.push({ file, line, message: RAW_SVG_MESSAGE });
     if (isGreenCheckmark(node, ancestors)) violations.push({ file, line, message: GREEN_MESSAGE });
   });
 }

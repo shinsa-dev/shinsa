@@ -52,16 +52,16 @@ export function writeAccountFiles(data: string) {
     version: 1,
     accounts: {
       [PERSONAL.id]: createAccountUsage([
-        window('session', 'session', 'Current session', 64, 2 * HOUR),
+        window('session', 'session', '5-hour limit', 64, 2 * HOUR),
         window('weekly_all', 'weekly', 'Weekly · All models', 41, 3 * 24 * HOUR),
         window('weekly_fable', 'model', 'Weekly · Fable', 72, 3 * 24 * HOUR),
       ]),
       [OPS.id]: createAccountUsage([
-        window('session', 'session', 'Current session', 100, 40 * MINUTE),
+        window('session', 'session', '5-hour limit', 100, 40 * MINUTE),
         window('weekly_all', 'weekly', 'Weekly · All models', 93, 2 * 24 * HOUR),
       ]),
       [SPARE.id]: createAccountUsage([
-        window('session', 'session', 'Current session', 3, 4 * HOUR),
+        window('session', 'session', '5-hour limit', 3, 4 * HOUR),
         window('weekly_all', 'weekly', 'Weekly · All models', 12, 6 * 24 * HOUR),
       ]),
     },
@@ -192,7 +192,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
   return [
     {
       id: 'task-account-move',
-      intent: 'Stream large paywall exports to the browser instead of building them in memory',
+      request: 'Stream large paywall exports to the browser instead of building them in memory',
       title: 'Stream large paywall exports',
       repo: paywall,
       size: 'large',
@@ -212,7 +212,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
     },
     {
       id: 'task-sign-in',
-      intent: 'Retry the paywall preview build when the CDN times out',
+      request: 'Retry the paywall preview build when the CDN times out',
       title: 'Retry preview builds on CDN timeouts',
       repo: paywall,
       size: 'small',
@@ -223,16 +223,34 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       runs: [{ role: 'builder', minutes: 6, summary: 'Signed out.', failed: true }],
       extra: [{ type: 'task.account_bound', taskId: 'task-sign-in', account: OPS }],
       gate: {
-        kind: 'question',
-        purpose: 'sign_in',
+        type: 'sign_in',
         title: `Sign in to Claude as ${OPS.email}`,
         body: 'Claude signed this account out, so the agent stopped. Signing in starts the step again.',
-        details: { account: OPS },
+        details: { provider: 'claude', account: OPS },
+      },
+    },
+    {
+      id: 'task-codex-sign-in',
+      request: 'Log the export id with every ClickHouse timeout',
+      title: 'Log the export id on ClickHouse timeouts',
+      repo: paywall,
+      size: 'small',
+      stage: 'building',
+      reason: 'paused',
+      branch: 'fix/log-export-timeouts',
+      ageHours: 1.2,
+      provider: 'codex',
+      runs: [{ role: 'builder', minutes: 3, summary: 'Signed out.', failed: true }],
+      gate: {
+        type: 'sign_in',
+        title: `Sign in to Codex as ${PERSONAL.email}`,
+        body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
+        details: { provider: 'codex', account: null },
       },
     },
     {
       id: 'task-usage-wait',
-      intent: 'Batch the analytics writes so the ingest worker stops timing out',
+      request: 'Batch the analytics writes so the ingest worker stops timing out',
       title: 'Batch analytics writes in the ingest worker',
       repo: kanna,
       size: 'small',
@@ -262,7 +280,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
     },
     {
       id: 'task-secret',
-      intent: 'Verify Stripe webhook signatures before handling disputes',
+      request: 'Verify Stripe webhook signatures before handling disputes',
       title: 'Verify Stripe webhook signatures',
       repo: paywall,
       size: 'small',
@@ -272,8 +290,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       ageHours: 0.5,
       runs: [{ role: 'builder', minutes: 4, summary: 'Asked for the signing secret.' }],
       gate: {
-        kind: 'question',
-        purpose: 'agent_question',
+        type: 'secret',
         title:
           'The dispute handler checks Stripe’s signature on every webhook; it needs the endpoint’s signing secret.',
         body: '',

@@ -1,4 +1,4 @@
-import type { PipelineStep, Repo, RoundShipping, RunRole, PlanDocument } from '../packages/core/src/index.ts';
+import type { PipelineStep, PlanDocument, Repo, RoundShipping, RunRole } from '../packages/core/src/index.ts';
 import type { Push, SeedClock, SeedTask } from './seed-kit.ts';
 
 const TASK = 'task-mcp-rounds';
@@ -16,14 +16,14 @@ const PIPELINE: PipelineStep[] = [
 interface RoundScript {
   title: string;
   request: string;
-  spec: PlanDocument;
+  plan: PlanDocument;
   shipping?: RoundShipping;
 }
 
-function spec(goal: string, phases: [string, string][]): PlanDocument {
+function createPlan(goal: string, phases: [string, string][]): PlanDocument {
   return {
     goal,
-    plan: phases.map(([title, detail]) => ({ title, detail })),
+    phases: phases.map(([title, detail]) => ({ title, detail })),
     behaviour: [],
     approach: goal,
     files: [],
@@ -37,15 +37,18 @@ const ROUNDS: RoundScript[] = [
   {
     title: 'Move the dashboard agent to MCP v2',
     request: 'the dashboard agent should talk MCP v2 instead of the old tool bridge',
-    spec: spec('The dashboard agent runs every tool through an MCP v2 session instead of the old bridge.', [
-      ['Open an MCP v2 session', 'One session per chat, opened on the first message.'],
-      ['Route tool calls through it', 'The bridge stays only for the paywall preview.'],
-    ]),
+    plan: createPlan(
+      'The dashboard agent runs every tool through an MCP v2 session instead of the old bridge.',
+      [
+        ['Open an MCP v2 session', 'One session per chat, opened on the first message.'],
+        ['Route tool calls through it', 'The bridge stays only for the paywall preview.'],
+      ]
+    ),
   },
   {
     title: 'Stream tool results into the chat',
     request: 'Also stream tool results into the chat as they arrive, not at the end.',
-    spec: spec('Tool results appear in the chat while the tool runs.', [
+    plan: createPlan('Tool results appear in the chat while the tool runs.', [
       ['Stream partial results', 'Forward each MCP progress notification to the chat.'],
       ['Show them as they arrive', 'The chat appends each part under the tool row.'],
     ]),
@@ -54,7 +57,7 @@ const ROUNDS: RoundScript[] = [
     title: 'Reconnect a dropped MCP session',
     request:
       'When the MCP session drops, reconnect and replay the last tool call instead of failing the chat.',
-    spec: spec('A dropped session reconnects up to three times and replays the call it lost.', [
+    plan: createPlan('A dropped session reconnects up to three times and replays the call it lost.', [
       ['Reconnect with backoff', 'Three attempts, one, two and four seconds apart.'],
       ['Replay the lost call', 'The call in flight is sent again once the session is back.'],
     ]),
@@ -62,7 +65,7 @@ const ROUNDS: RoundScript[] = [
   {
     title: 'Record tool call telemetry',
     request: 'Next: record how long each tool call takes and whether it failed, per app.',
-    spec: spec('Every tool call is timed and recorded per app, with its outcome.', [
+    plan: createPlan('Every tool call is timed and recorded per app, with its outcome.', [
       ['Time each call', 'Wrap the session’s call in a timer.'],
       ['Write the events', 'One telemetry event per call, keyed by app.'],
     ]),
@@ -71,7 +74,7 @@ const ROUNDS: RoundScript[] = [
     title: 'Cache tool schemas between chats',
     request: 'Cache the tool list between chats so a new chat does not wait for it.',
     shipping: 'stacked',
-    spec: spec('A new chat reuses the tool list the last one fetched, for up to an hour.', [
+    plan: createPlan('A new chat reuses the tool list the last one fetched, for up to an hour.', [
       ['Cache the tool list', 'Keyed by server URL, kept for an hour.'],
       ['Refresh it in the background', 'A stale list is used at once and refreshed behind it.'],
     ]),
@@ -96,6 +99,7 @@ function run(
       provider: 'claude',
       model: role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5',
       sessionId: `session-${role}`,
+      sessionProvider: 'claude',
       startedAt: clock.at,
       endedAt: null,
       outcome: null,
@@ -146,12 +150,12 @@ function planRound(
     `Planned: ${script.title}.`
   );
   push(clock.step(0.2), {
-    type: 'spec.proposed',
+    type: 'plan.proposed',
     taskId: TASK,
-    body: script.spec.goal,
-    document: script.spec,
+    body: script.plan.goal,
+    document: script.plan,
   });
-  push(clock.step(4), { type: 'spec.approved', taskId: TASK, version });
+  push(clock.step(4), { type: 'plan.approved', taskId: TASK, version });
 }
 
 function buildPhases(
@@ -168,16 +172,16 @@ function buildPhases(
       [counter.runs++, counter.round] as [number, number],
       'builder',
       9,
-      `${script.spec.plan[index]?.title ?? 'Phase'}: done.`
+      `${script.plan.phases[index]?.title ?? 'Phase'}: done.`
     );
     push(clock.step(0.1), {
       type: 'phase.completed',
       taskId: TASK,
       report: {
         index,
-        summary: script.spec.plan[index]?.detail ?? 'Done.',
+        summary: script.plan.phases[index]?.detail ?? 'Done.',
         spots: [],
-        decisions: [],
+        judgementCalls: [],
         at: 0,
       },
     });
@@ -186,7 +190,7 @@ function buildPhases(
 }
 
 function finishRound(push: Push, clock: SeedClock, script: RoundScript, counter: RoundCounter) {
-  buildPhases(push, clock, script, counter, script.spec.plan.length);
+  buildPhases(push, clock, script, counter, script.plan.phases.length);
   push(clock.step(0.3), {
     type: 'checks.recorded',
     taskId: TASK,
@@ -347,7 +351,7 @@ function scriptRounds(push: Push, clock: SeedClock, worktree: string) {
       id: 'suggestion-undo-stack',
       runId: `${TASK}-run-${counter.runs - 1}`,
       title: 'Rewrite the paywall editor’s undo stack',
-      intent: 'Rewrite the paywall editor’s undo stack.',
+      request: 'Rewrite the paywall editor’s undo stack.',
       why: 'The editor’s undo stack has nothing to do with the agent’s MCP session.',
       waitsOnThis: false,
       status: 'open',
@@ -362,7 +366,7 @@ export function listRoundTasks(repos: { paywall: Repo }, worktree: string): Seed
   return [
     {
       id: TASK,
-      intent: ROUNDS[0]?.request ?? '',
+      request: ROUNDS[0]?.request ?? '',
       title: ROUNDS[0]?.title ?? '',
       repo: repos.paywall,
       size: 'large',

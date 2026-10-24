@@ -8,8 +8,10 @@ import type {
 } from '../packages/core/src/index.ts';
 import { resolveDeliveryPrompt } from '../packages/core/src/index.ts';
 import {
+  CHOSEN_BY_YOU,
   callTool,
   MINUTE,
+  NO_TRIAGE_DECISIONS,
   NOW,
   resolveToolOutput,
   type SeedTask,
@@ -202,7 +204,7 @@ export function listDelegationTasks({ paywall }: { paywall: Repo }): SeedTask[] 
   return [
     {
       id: RETRY,
-      intent: 'Retry ClickHouse export chunks with backoff, and only on errors worth retrying',
+      request: 'Retry ClickHouse export chunks with backoff, and only on errors worth retrying',
       title: 'Retry export chunks with backoff',
       repo: paywall,
       size: 'large',
@@ -222,11 +224,13 @@ export function listDelegationTasks({ paywall }: { paywall: Repo }): SeedTask[] 
         atMinutesAgo(10, {
           type: 'task.created',
           taskId: 'task-courier-client-timeouts',
-          intent:
+          request:
             'Raise the ClickHouse client request timeout in the admin app from 10 s to 60 s, so long exports stop failing there too.',
           repoId: paywall.id,
           priority: 'normal',
           planFirst: false,
+          origin: null,
+          auto: CHOSEN_BY_YOU,
           createdBy: { kind: 'courier', taskId: RETRY, runId: RETRY_STEP, requestKey: 'client-timeouts' },
         }),
         atMinutesAgo(9.9, {
@@ -236,12 +240,13 @@ export function listDelegationTasks({ paywall }: { paywall: Repo }): SeedTask[] 
           repoId: paywall.id,
           size: 'small',
           branch: 'fix/admin-clickhouse-timeout',
+          decisions: NO_TRIAGE_DECISIONS,
         }),
       ],
     },
     {
       id: SUITE,
-      intent: 'Move the export tests onto the shared ClickHouse fixture',
+      request: 'Move the export tests onto the shared ClickHouse fixture',
       title: 'Share the ClickHouse test fixture',
       repo: paywall,
       size: 'small',
@@ -280,13 +285,16 @@ function delegateCall(delegate: Delegate): ChatEvent[] {
       kind: 'shinsa',
       name: 'delegate_task',
       args: {
-        task: delegate.brief,
+        brief: delegate.brief,
         title: delegate.title,
         role: delegate.role,
         isolation: delegate.isolation,
       },
     }),
-    resolveToolOutput(`delegate-${delegate.id}`, JSON.stringify({ task_id: delegate.id, status: 'queued' })),
+    resolveToolOutput(
+      `delegate-${delegate.id}`,
+      JSON.stringify({ delegation_id: delegate.id, status: 'queued' })
+    ),
     notice('started', [delegate.id]),
   ];
 }
@@ -357,6 +365,20 @@ function writeRetryStep(dir: string) {
     ...spreadEvents(
       [
         ...delegateCall(streaming),
+        callTool('status-1', {
+          kind: 'shinsa',
+          name: 'delegation_status',
+          args: { delegation_id: callers.id },
+        }),
+        resolveToolOutput(
+          'status-1',
+          JSON.stringify({
+            delegation_id: callers.id,
+            status: 'running',
+            has_pending_question: false,
+            result: null,
+          })
+        ),
         callTool('edit-1', {
           kind: 'edit',
           path: 'src/export/clickhouse.ts',

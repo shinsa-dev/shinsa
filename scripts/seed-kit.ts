@@ -4,14 +4,13 @@ import type {
   ChatEvent,
   ChatTool,
   Gate,
-  GateKind,
-  GatePurpose,
+  GateType,
   PipelineStep,
+  PlanDocument,
   Repo,
   ReviewFinding,
   RunRole,
   ShinsaEventInput,
-  PlanDocument,
   TaskAuto,
   TaskPriority,
   TaskShape,
@@ -29,6 +28,10 @@ export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;
 
 export const DAY = 24 * HOUR;
+
+export const CHOSEN_BY_YOU: TaskAuto = { shape: false, start: false, priority: false };
+
+export const NO_TRIAGE_DECISIONS: TriageDecisions = { shape: null, start: null, priority: null };
 
 export type Push = (at: number, event: ShinsaEventInput) => void;
 
@@ -52,7 +55,7 @@ export function createSeedClock(start: number): SeedClock {
 
 export interface SeedTask {
   id: string;
-  intent: string;
+  request: string;
   title: string;
   repo: Repo;
   size: TaskSize;
@@ -64,12 +67,12 @@ export interface SeedTask {
   planFirst?: boolean;
   waitsOn?: string[];
   worktreePath?: string;
-  spec?: PlanDocument;
+  plan?: PlanDocument;
   report?: WorkReport;
   summary?: string;
   findings?: ReviewFinding[];
   runs?: { role: RunRole; minutes: number; summary: string; reply?: string; failed?: boolean }[];
-  gate?: { kind: GateKind; purpose?: GatePurpose; title: string; body: string; details?: Partial<Gate> };
+  gate?: { type: GateType; title: string; body: string; details?: Partial<Gate> };
   pullRequest?: {
     number: number;
     checks: 'passing' | 'failing' | 'pending';

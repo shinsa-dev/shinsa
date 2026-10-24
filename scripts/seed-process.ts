@@ -1,4 +1,4 @@
-import type { Repo, ReviewFinding, RunUsage, PlanDocument } from '../packages/core/src/index.ts';
+import type { PlanDocument, Repo, ReviewFinding, RunUsage } from '../packages/core/src/index.ts';
 import { MINUTE, NOW, type SeedTask } from './seed-kit.ts';
 
 function createRunUsage(costUsd: number | null, tokens: number): RunUsage {
@@ -13,7 +13,7 @@ function createRunUsage(costUsd: number | null, tokens: number): RunUsage {
 
 const RATE_LIMIT_PLAN: PlanDocument = {
   goal: 'Rate-limit the public paywall API per app, so one noisy app cannot starve the others.',
-  plan: [
+  phases: [
     { title: 'Add a token bucket', detail: 'One bucket per app key, in Redis, refilled every second.' },
     { title: 'Apply it to the routes', detail: 'Every public route checks the bucket before it runs.' },
     { title: 'Answer with 429', detail: 'Over the limit returns 429 with a Retry-After header.' },
@@ -28,11 +28,11 @@ const RATE_LIMIT_PLAN: PlanDocument = {
 
 const RATE_LIMIT_REVISED: PlanDocument = {
   ...RATE_LIMIT_PLAN,
-  plan: [
-    RATE_LIMIT_PLAN.plan[0] as PlanDocument['plan'][number],
+  phases: [
+    RATE_LIMIT_PLAN.phases[0] as PlanDocument['phases'][number],
     { title: 'Read limits from the plan', detail: 'Each billing plan sets its own requests per second.' },
-    RATE_LIMIT_PLAN.plan[1] as PlanDocument['plan'][number],
-    RATE_LIMIT_PLAN.plan[2] as PlanDocument['plan'][number],
+    RATE_LIMIT_PLAN.phases[1] as PlanDocument['phases'][number],
+    RATE_LIMIT_PLAN.phases[2] as PlanDocument['phases'][number],
   ],
   approach:
     'A sliding token bucket in Redis keyed by app id, sized from the app’s billing plan, checked in the API middleware.',
@@ -69,7 +69,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
   return [
     {
       id: 'task-rate-limit',
-      intent: 'Rate-limit the public paywall API per app',
+      request: 'Rate-limit the public paywall API per app',
       title: 'Rate-limit the public API per app',
       repo: paywall,
       size: 'large',
@@ -78,14 +78,14 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       reason: 'needs the revised plan approved',
       branch: 'feat/api-rate-limit',
       ageHours: 3,
-      spec: RATE_LIMIT_PLAN,
+      plan: RATE_LIMIT_PLAN,
       runs: [
         { role: 'planner', minutes: 6, summary: 'Proposed a token bucket per app.' },
         { role: 'planner', minutes: 4, summary: 'Revised the plan to read limits from the billing plan.' },
       ],
       extra: [
         {
-          type: 'spec.proposed',
+          type: 'plan.proposed',
           taskId: 'task-rate-limit',
           body: RATE_LIMIT_REVISED.goal,
           document: RATE_LIMIT_REVISED,
@@ -94,7 +94,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'spec',
+        type: 'plan',
         title: 'Approve the rate-limit plan',
         body: 'Version 2 reads limits from the billing plan.',
         details: { planVersion: 2 },
@@ -102,7 +102,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-export-backoff',
-      intent: 'ClickHouse export retries need to survive a restart',
+      request: 'ClickHouse export retries need to survive a restart',
       title: 'Make export retries survive a restart',
       repo: paywall,
       size: 'small',
@@ -135,7 +135,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
             id: 'suggestion-export-metrics',
             runId: 'task-export-backoff-run-1',
             title: 'Chart export durations per app',
-            intent:
+            request:
               'Add a dashboard panel with ClickHouse export durations per app, so slow exports show up early.',
             why: 'The review found slow exports only by reading logs.',
             waitsOnThis: true,
@@ -146,7 +146,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'review',
+        type: 'review',
         title: 'Decide on the review findings',
         body: 'The reviewer still had blocking findings after 2 fix rounds.',
         details: { escalation: { reason: 'rounds', rounds: 2, at: NOW - 20 * MINUTE } },
@@ -154,7 +154,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-kanna-setup',
-      intent: 'add keyboard shortcuts to the kanna sidebar',
+      request: 'add keyboard shortcuts to the kanna sidebar',
       title: 'Keyboard shortcuts in the sidebar',
       repo: kanna,
       size: 'small',
@@ -176,8 +176,7 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'question',
-        purpose: 'configuration',
+        type: 'configuration',
         title: 'No checks to run',
         body: 'Checks: no check commands are set.',
       },
@@ -189,7 +188,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
   return [
     {
       id: 'task-staging-deploy',
-      intent: 'verify the paywall CDN purge on staging after the deploy',
+      request: 'verify the paywall CDN purge on staging after the deploy',
       title: 'Verify the CDN purge on staging',
       repo: paywall,
       size: 'small',
@@ -226,7 +225,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-wait-ran-out',
-      intent: 'confirm the new pricing page renders on the production CDN after the release',
+      request: 'confirm the new pricing page renders on the production CDN after the release',
       title: 'Confirm the pricing page on the CDN',
       repo: paywall,
       size: 'small',
@@ -267,8 +266,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'question',
-        purpose: 'failure',
+        type: 'failure',
         title: 'The agent’s wait ran out of checks',
         body: 'The agent was waiting for: The 2.14 release on the production CDN. Ready when /pricing serves the new hero.\n\nThe agent used all 10 checks and still needed to wait. Retry to wake an agent with a fresh set of checks, or cancel the task.',
         details: { cause: 'monitor', runId: null },
@@ -276,7 +274,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-quiet-build',
-      intent: 'regenerate the paywall template thumbnails',
+      request: 'regenerate the paywall template thumbnails',
       title: 'Regenerate the template thumbnails',
       repo: paywall,
       size: 'small',
@@ -294,7 +292,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
   return [
     {
       id: 'task-budget-cap',
-      intent: 'migrate the paywall analytics to the new event schema',
+      request: 'migrate the paywall analytics to the new event schema',
       title: 'Migrate analytics to the new event schema',
       repo: paywall,
       size: 'large',
@@ -327,8 +325,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'question',
-        purpose: 'failure',
+        type: 'failure',
         title: 'Reached its usage limit',
         body: 'This task has used 12% of the weekly usage limit, past its 10% limit, so the next step did not start. Continue to allow another 10%, or cancel the task.',
         details: { cause: 'budget', runId: null },
@@ -336,7 +333,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-retry-question',
-      intent: 'retry webhook deliveries that fail',
+      request: 'retry webhook deliveries that fail',
       title: 'Retry failed webhook deliveries',
       repo: paywall,
       size: 'small',
@@ -346,8 +343,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
       ageHours: 0.5,
       runs: [{ role: 'builder', minutes: 4, summary: 'Asked how long to keep retrying.' }],
       gate: {
-        kind: 'question',
-        purpose: 'agent_question',
+        type: 'question',
         title: 'How long should a failing webhook keep retrying?',
         body: 'Stripe retries for 3 days with exponential backoff. Shorter keeps the queue small; longer survives a customer outage.',
         details: { choices: ['1 hour', '24 hours', '3 days'], recommendation: '24 hours' },
@@ -355,7 +351,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
     },
     {
       id: 'task-ask-export',
-      intent: 'How does the ClickHouse export decide how big a chunk is?',
+      request: 'How does the ClickHouse export decide how big a chunk is?',
       title: 'How the export sizes its chunks',
       repo: paywall,
       size: 'small',
@@ -368,10 +364,11 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
       extra: [
         { type: 'run.metered', runId: 'task-ask-export-run-0', usage: createRunUsage(0.18, 140_000) },
         {
-          type: 'task.answered',
+          type: 'task.delivered',
           taskId: 'task-ask-export',
+          step: 'answer',
           runId: 'task-ask-export-run-0',
-          answer: [
+          body: [
             'Chunks are a fixed **50,000 rows**, set by `CHUNK_ROWS` in [chunks.ts](shinsa://file/src/export/chunks.ts#L4).',
             '',
             '`planChunks` counts the rows once, then walks them in steps of that size; nothing adapts to the app’s size or to how slow ClickHouse is.',
@@ -384,7 +381,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
             id: 'suggestion-adaptive-chunks',
             runId: 'task-ask-export-run-0',
             title: 'Size export chunks by response time',
-            intent:
+            request:
               'Make the ClickHouse export shrink its chunk size when a chunk takes longer than 10 seconds.',
             why: 'Fixed 50k-row chunks time out on the largest apps.',
             waitsOnThis: false,

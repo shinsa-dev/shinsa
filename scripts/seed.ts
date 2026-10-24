@@ -7,11 +7,11 @@ import type {
   CodeSpot,
   Gate,
   PipelineStep,
+  PlanDocument,
   Project,
   Repo,
   RunRole,
   ShinsaEventInput,
-  PlanDocument,
   TaskStage,
 } from '../packages/core/src/index.ts';
 import {
@@ -19,16 +19,21 @@ import {
   type ChatTool,
   createSettings,
   formatTaskHandle,
+  isDecisionGate,
+  NO_PROJECT_KEY,
+  RUN_AGENT_ROLE,
   SHAPE_PIPELINES,
   serializePlanMarkdown,
 } from '../packages/core/src/index.ts';
 import { listDelegationTasks, writeDelegationTranscripts } from './seed-delegation.ts';
 import {
+  CHOSEN_BY_YOU,
   callTool,
   createSeedClock,
   DAY,
   HOUR,
   MINUTE,
+  NO_TRIAGE_DECISIONS,
   NOW,
   type Push,
   resolveToolOutput,
@@ -525,10 +530,10 @@ const BUILT_STAGES = new Set<TaskStage>([
 ]);
 
 function resolveSeedPlan(task: SeedTask): PlanDocument {
-  if (task.spec) return task.spec;
+  if (task.plan) return task.plan;
   return {
-    goal: task.intent,
-    plan: task.size === 'large' ? LARGE_PLAN : SMALL_PLAN,
+    goal: task.request,
+    phases: task.size === 'large' ? LARGE_PLAN : SMALL_PLAN,
     behaviour: [],
     approach: 'Planned by the agent.',
     files: [],
@@ -542,12 +547,13 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
   push(clock.at, {
     type: 'task.created',
     taskId: task.id,
-    intent: task.intent,
+    request: task.request,
     repoId: task.repo.id,
     priority: task.priority ?? 'normal',
     planFirst: task.planFirst ?? false,
+    origin: null,
     ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
-    ...(task.auto ? { auto: task.auto } : {}),
+    auto: task.auto ?? CHOSEN_BY_YOU,
   });
   push(clock.step(0.2), {
     type: 'task.triaged',
@@ -557,7 +563,7 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
     size: task.size,
     branch: task.branch,
     ...(task.shape ? { pipeline: [...SHAPE_PIPELINES[task.shape]] } : {}),
-    ...(task.decisions ? { decisions: task.decisions } : {}),
+    decisions: task.decisions ?? NO_TRIAGE_DECISIONS,
   });
   if (task.composed) {
     push(clock.step(0.1), {
@@ -569,7 +575,12 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
     });
   }
   if (task.waitsOn) {
-    push(clock.step(0.05), { type: 'task.waits_on_changed', taskId: task.id, waitsOn: task.waitsOn, by: 'you' });
+    push(clock.step(0.05), {
+      type: 'task.waits_on_changed',
+      taskId: task.id,
+      waitsOn: task.waitsOn,
+      by: 'you',
+    });
   }
   if (task.worktreePath) {
     push(clock.step(0.1), {
@@ -594,8 +605,7 @@ function pushTaskRevision(task: SeedTask, push: Push, clock: SeedClock) {
     gate: {
       id: gateId,
       taskId: task.id,
-      kind: 'review',
-      purpose: 'decision',
+      type: 'review',
       status: 'open',
       title: `Review “${task.title}”`,
       body: 'Built, checked and reviewed by the agents.',
@@ -647,36 +657,36 @@ function pushTaskRuns(task: SeedTask, push: Push, clock: SeedClock) {
   }
 }
 
-function resolveFinishedPhases(task: SeedTask, spec: PlanDocument) {
-  if (BUILT_STAGES.has(task.stage)) return spec.plan.length;
-  if (task.stage === 'building') return Math.floor(spec.plan.length / 2);
+function resolveFinishedPhases(task: SeedTask, plan: PlanDocument) {
+  if (BUILT_STAGES.has(task.stage)) return plan.phases.length;
+  if (task.stage === 'building') return Math.floor(plan.phases.length / 2);
   return 0;
 }
 
 function pushTaskPlan(task: SeedTask, push: Push, clock: SeedClock) {
-  const planning = task.stage === 'triage' || task.stage === 'queued' || task.stage === 'planning';
+  const planning = task.stage === 'triage' || task.stage === 'waiting_on_tasks' || task.stage === 'planning';
   const inquiring = ['answering', 'researching', 'investigating', 'awaiting_proposal'].includes(task.stage);
   if (planning || inquiring) return;
   const pipeline = resolveSeedPipeline(task);
   if (pipeline && !pipeline.includes('plan')) return;
-  const spec = resolveSeedPlan(task);
-  push(clock.step(0.2), { type: 'spec.proposed', taskId: task.id, body: spec.goal, document: spec });
-  const finished = resolveFinishedPhases(task, spec);
+  const plan = resolveSeedPlan(task);
+  push(clock.step(0.2), { type: 'plan.proposed', taskId: task.id, body: plan.goal, document: plan });
+  const finished = resolveFinishedPhases(task, plan);
   for (let index = 0; index < finished; index += 1) {
     push(clock.step(2), {
       type: 'phase.completed',
       taskId: task.id,
       report: {
         index,
-        summary: task.report?.phases[index]?.summary ?? spec.plan[index]?.detail ?? 'Done.',
-        spots: task.report?.phases[index]?.spots ?? [],
-        decisions: index === 0 ? (task.report?.decisions ?? []) : [],
+        summary: task.report?.sections[index]?.summary ?? plan.phases[index]?.detail ?? 'Done.',
+        spots: task.report?.sections[index]?.spots ?? [],
+        judgementCalls: index === 0 ? (task.report?.judgementCalls ?? []) : [],
         at: 0,
       },
     });
     push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
   }
-  if (task.stage === 'building' && finished < spec.plan.length) {
+  if (task.stage === 'building' && finished < plan.phases.length) {
     push(clock.step(1), { type: 'phase.updated', taskId: task.id, index: finished, status: 'active' });
   }
 }
@@ -720,7 +730,7 @@ function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
 
 function resolveSeedGateRun(task: SeedTask) {
   const runs = task.runs?.length ?? 0;
-  if (!task.gate?.purpose || task.gate.purpose === 'decision' || runs === 0) return null;
+  if (!task.gate || isDecisionGate(task.gate) || runs === 0) return null;
   return `${task.id}-run-${runs - 1}`;
 }
 
@@ -729,8 +739,7 @@ function pushTaskGate(task: SeedTask, push: Push, clock: SeedClock) {
   const gate: Gate = {
     id: `${task.id}-gate`,
     taskId: task.id,
-    kind: task.gate.kind,
-    purpose: task.gate.purpose ?? 'decision',
+    type: task.gate.type,
     status: 'open',
     title: task.gate.title,
     body: task.gate.body,
@@ -796,14 +805,25 @@ function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
 
 function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]): Timeline {
   const counts = new Map<string, number>();
-  return timeline.map(({ at, event }) => {
-    if (event.type !== 'task.created') return { at, event };
-    const projectId = repos.find((repo) => repo.id === event.repoId)?.projectId ?? null;
+  const stamped = new Set<string>();
+  const resolveHandle = (repoId: string | null) => {
+    const projectId = repos.find((repo) => repo.id === repoId)?.projectId ?? null;
     const key = projects.find((project) => project.id === projectId)?.key;
-    if (!projectId || !key) return { at, event };
-    const number = (counts.get(key) ?? 0) + 1;
-    counts.set(key, number);
-    return { at, event: { ...event, projectId, handle: formatTaskHandle(key, number) } };
+    const counted = projectId && key ? key : NO_PROJECT_KEY;
+    const number = (counts.get(counted) ?? 0) + 1;
+    counts.set(counted, number);
+    return { projectId: projectId && key ? projectId : null, handle: formatTaskHandle(counted, number) };
+  };
+  return timeline.map(({ at, event }) => {
+    if (event.type === 'task.created') {
+      const projectId = repos.find((repo) => repo.id === event.repoId)?.projectId ?? null;
+      if (!projectId || !projects.some((project) => project.id === projectId)) return { at, event };
+      stamped.add(event.taskId);
+      return { at, event: { ...event, ...resolveHandle(event.repoId) } };
+    }
+    if (event.type !== 'task.triaged' || stamped.has(event.taskId)) return { at, event };
+    stamped.add(event.taskId);
+    return { at, event: { ...event, ...resolveHandle(event.repoId) } };
   });
 }
 
@@ -839,7 +859,7 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
   const brief: ChatEvent = {
     type: 'user',
     from: 'shinsa',
-    text: `You are the ${role} for "${task.title}".\n\nThe request: ${task.intent}\n\nWork in the task's worktree and hand over through the Shinsa tools.`,
+    text: `You are the ${role} for "${task.title}".\n\nThe request: ${task.request}\n\nWork in the task's worktree and hand over through the Shinsa tools.`,
     attachments: [],
   };
   const work: ChatEvent[] = [
@@ -875,7 +895,7 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
       description: 'Run the export tests',
     }),
   ];
-  if (task.gate?.purpose === 'agent_question' && live) {
+  if (task.gate?.type === 'question' && live) {
     return [
       ...work,
       resolveToolOutput('test-1', ' 12 pass\n 0 fail'),
@@ -892,7 +912,7 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
   const handover: ChatTool =
     resolveShapeHandover(role, task.summary ?? task.title) ??
     (role === 'planner'
-      ? { kind: 'shinsa', name: 'propose_plan', args: { goal: task.intent, plan: SMALL_PLAN } }
+      ? { kind: 'shinsa', name: 'propose_plan', args: { goal: task.request, phases: SMALL_PLAN } }
       : role === 'reviewer'
         ? { kind: 'shinsa', name: 'report_review', args: { findings: task.findings ?? [] } }
         : { kind: 'shinsa', name: 'complete_fix', args: { summary: task.summary ?? task.title } });
@@ -913,6 +933,10 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
   ];
 }
 
+function isRunRole(role: string): role is RunRole {
+  return role in RUN_AGENT_ROLE;
+}
+
 function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: ShinsaEventInput }[]) {
   const byTask = new Map(tasks.map((task) => [task.id, task]));
   const times = new Map<string, SeedRunTimes>();
@@ -920,10 +944,11 @@ function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: ShinsaEv
     if (event.type === 'run.started') {
       const task = byTask.get(event.run.taskId);
       const index = Number(event.run.id.split('-run-').at(-1));
-      if (task)
+      const { role } = event.run;
+      if (task && isRunRole(role))
         times.set(event.run.id, {
           task,
-          role: event.run.role,
+          role,
           index,
           startedAt: at,
           endedAt: null,
@@ -938,9 +963,9 @@ function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: ShinsaEv
   return [...times.entries()];
 }
 
-const PLAN_TIER_SPEC: PlanDocument = {
+const PLAN_TIER_PLAN: PlanDocument = {
   goal: 'Every list knows its owner’s plan tier, so the server can enforce the shared-list limit without asking Stripe on each request.',
-  plan: [
+  phases: [
     { title: 'Add the column', detail: 'A nullable `plan_tier` on `lists`, with a migration.' },
     {
       title: 'Write it on change',
@@ -974,7 +999,7 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
   return [
     {
       id: 'task-basket-plan-tier',
-      intent:
+      request:
         'Store each list owner’s plan tier on the list and enforce the shared-list limit, then backfill the tier for existing lists once it ships.',
       title: 'Plan tier on lists, then backfill it',
       repo: basketServer,
@@ -988,17 +1013,17 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
       reason: 'plan ready for you',
       branch: 'feat/plan-tier-on-lists',
       ageHours: 0.8,
-      spec: PLAN_TIER_SPEC,
+      plan: PLAN_TIER_PLAN,
       runs: [{ role: 'planner', minutes: 4, summary: 'Proposed the plan.' }],
       gate: {
-        kind: 'spec',
+        type: 'plan',
         title: 'Plan tier on lists, then backfill it',
-        body: serializePlanMarkdown(PLAN_TIER_SPEC),
+        body: serializePlanMarkdown(PLAN_TIER_PLAN),
       },
     },
     {
       id: 'task-basket-sync',
-      intent: 'How does the SDK decide when to sync a list with the server?',
+      request: 'How does the SDK decide when to sync a list with the server?',
       title: 'When the SDK syncs a list',
       repo: basketSdk,
       size: 'small',
@@ -1010,10 +1035,10 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
       runs: [{ role: 'answerer', minutes: 2, summary: 'Answered the question.' }],
       extra: [
         {
-          type: 'task.answered',
+          type: 'task.delivered',
           taskId: 'task-basket-sync',
-          answer:
-            '`ListSync` pushes after every local edit, debounced by 2 seconds, and pulls when the app comes to the foreground.',
+          step: 'answer',
+          body: '`ListSync` pushes after every local edit, debounced by 2 seconds, and pulls when the app comes to the foreground.',
           runId: 'task-basket-sync-run-0',
         },
       ],
@@ -1039,7 +1064,7 @@ function writeSessionTranscript(session: string, runTimes: [string, SeedRunTimes
     writeFileSync(join(evidence, file), Buffer.from(data, 'base64'));
     return `/api/evidence/${file}`;
   });
-  const window = runTimes.find(([runId]) => runId === 'task-embedded-chat-run-2')?.[1];
+  const window = runTimes.find(([runId]) => runId === 'task-embedded-chat-run-1')?.[1];
   const first = entries[0]?.at ?? 0;
   const span = Math.max(1, (entries.at(-1)?.at ?? first) - first);
   const fitted = window
@@ -1051,7 +1076,7 @@ function writeSessionTranscript(session: string, runTimes: [string, SeedRunTimes
       }))
     : entries;
   writeFileSync(
-    join(transcripts, 'task-embedded-chat-run-2.jsonl'),
+    join(transcripts, 'task-embedded-chat-run-1.jsonl'),
     `${fitted.map((entry) => JSON.stringify(entry)).join('\n')}\n`
   );
   console.info(`Seeded a crowded chat with ${entries.length} entries from ${session}`);
@@ -1249,7 +1274,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
   return [
     {
       id: 'task-embedded-chat',
-      intent:
+      request:
         'Rework the embedded chat so it talks to MCP v2 instead of the old /chat endpoint. Tool results should show up in the conversation.',
       title: 'Run the embedded chat on MCP v2',
       repo: paywall,
@@ -1261,9 +1286,9 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
       branch: 'feat/embedded-chat-mcp',
       ageHours: 28,
       worktreePath: chatPath,
-      spec: {
+      plan: {
         goal: 'The embedded chat sends every message through an MCP v2 session and shows tool results inline, so the chat can act on the paywall it is embedded in.',
-        plan: [
+        phases: [
           {
             title: 'Open an MCP v2 session',
             detail: 'One session per embedded chat, reconnecting with backoff.',
@@ -1302,7 +1327,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
       },
       report: {
         headline: 'The embedded chat now runs on an MCP v2 session and renders tool results inline.',
-        phases: [
+        sections: [
           {
             title: 'Open an MCP session per chat',
             summary:
@@ -1369,15 +1394,15 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
           { name: 'bun check-types', outcome: 'pass', detail: null },
           { name: 'bun test', outcome: 'pass', detail: '48 tests, 3 new' },
         ],
-        decisions: [
+        judgementCalls: [
           {
-            decision: 'Kept the public EmbeddedChat API',
+            call: 'Kept the public EmbeddedChat API',
             reason: 'Only the constructor option was renamed, so the editor change stays small.',
             file: chatFile,
             line: 10,
           },
           {
-            decision: 'Reconnect limit of 3',
+            call: 'Reconnect limit of 3',
             reason:
               'Matches the editor’s other network retries; past that the user sees an error instead of a spinner.',
             file: sessionFile,
@@ -1395,8 +1420,7 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         },
       ],
       runs: [
-        { role: 'triage', minutes: 0.2, summary: 'Large: new transport and a behaviour change.' },
-        { role: 'planner', minutes: 6, summary: 'Proposed the MCP session spec.' },
+        { role: 'planner', minutes: 6, summary: 'Proposed the MCP session plan.' },
         { role: 'builder', minutes: 34, summary: 'Built the session and rewired the chat.' },
         {
           role: 'reviewer',
@@ -1407,18 +1431,18 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         },
       ],
       gate: {
-        kind: 'review',
+        type: 'review',
         title: 'Review the embedded chat on MCP v2',
         body: 'Built, checked and reviewed by an agent. One suggestion left for you to judge.',
       },
     },
     {
       id: 'task-chat-tools',
-      intent: 'Let the embedded chat call paywall.read and paywall.update through MCP.',
+      request: 'Let the embedded chat call paywall.read and paywall.update through MCP.',
       title: 'Let the embedded chat call paywall tools',
       repo: paywall,
       size: 'large',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       reason: 'waiting for “Run the embedded chat on MCP v2” to finish',
       branch: 'feat/embedded-chat-tools',
       ageHours: 20,
@@ -1426,11 +1450,12 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
     },
     {
       id: 'task-chat-paywall-editing',
-      intent: 'Edit a paywall from inside the embedded chat: the chat proposes the change and shows it live.',
+      request:
+        'Edit a paywall from inside the embedded chat: the chat proposes the change and shows it live.',
       title: 'Edit paywalls from the embedded chat',
       repo: paywall,
       size: 'large',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       reason: 'waiting for “Let the embedded chat call paywall tools” to finish',
       branch: 'feat/embedded-chat-paywall-editing',
       ageHours: 18,
@@ -1438,11 +1463,11 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
     },
     {
       id: 'task-tool-progress',
-      intent: 'Show a progress line in the chat while a streamed MCP tool is still running.',
+      request: 'Show a progress line in the chat while a streamed MCP tool is still running.',
       title: 'Show tool progress in the chat',
       repo: paywall,
       size: 'small',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       reason: 'waiting for “Stream MCP tool results” to finish',
       branch: 'feat/chat-tool-progress',
       ageHours: 0.9,
@@ -1450,12 +1475,12 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
     },
     {
       id: 'task-tool-retry',
-      intent: 'Retry a streamed MCP tool call from the chat when it fails halfway.',
+      request: 'Retry a streamed MCP tool call from the chat when it fails halfway.',
       title: 'Retry failed tool calls in the chat',
       repo: paywall,
       size: 'small',
       priority: 'high',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       reason: 'waiting for “Stream MCP tool results” to finish',
       branch: 'feat/chat-tool-retry',
       ageHours: 0.85,
@@ -1472,11 +1497,11 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
     },
     {
       id: 'task-tool-summary',
-      intent: 'At the end of a chat, summarise which tools ran, how long they took and which were retried.',
+      request: 'At the end of a chat, summarise which tools ran, how long they took and which were retried.',
       title: 'Summarise tool runs at the end of a chat',
       repo: paywall,
       size: 'large',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       reason: 'waiting for “Show tool progress in the chat”, “Retry failed tool calls in the chat” to finish',
       branch: 'feat/chat-tool-summary',
       ageHours: 0.8,
@@ -1489,12 +1514,12 @@ function listBacklogTasks({ paywall, docs }: SeedRepos): SeedTask[] {
   return [
     {
       id: 'task-webhook-docs',
-      intent: 'Document signed webhooks and the export retry rules in the integration guide.',
+      request: 'Document signed webhooks and the export retry rules in the integration guide.',
       title: 'Document signed webhooks and export retries',
       repo: docs,
       size: 'small',
       priority: 'low',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       reason: 'waiting for “Sign outgoing webhooks”, “Retry ClickHouse exports that time out” to finish',
       branch: 'docs/webhooks-and-export-retries',
       ageHours: 0.35,
@@ -1502,26 +1527,25 @@ function listBacklogTasks({ paywall, docs }: SeedRepos): SeedTask[] {
     },
     {
       id: 'task-retire-old-editor',
-      intent: 'Retire the old editor route once the banner has pointed people to the new one.',
+      request: 'Retire the old editor route once the banner has pointed people to the new one.',
       title: 'Retire the old editor route',
       repo: paywall,
       size: 'small',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       reason:
         'waiting for “Banner for the old editor”, “Move through the paywall gallery with arrow keys” to finish',
       branch: 'chore/retire-old-editor',
       ageHours: 0.7,
       waitsOn: ['task-old-banner', 'task-gallery-shortcuts'],
       gate: {
-        kind: 'question',
-        purpose: 'failure',
+        type: 'failure',
         title: '“Banner for the old editor” was cancelled',
         body: 'This task was waiting for it to finish. Retry to keep waiting on “Move through the paywall gallery with arrow keys” only, wait for another task instead, or cancel this one.',
       },
     },
     {
       id: 'task-gallery-shortcuts',
-      intent: 'Arrow keys should move between paywalls in the gallery.',
+      request: 'Arrow keys should move between paywalls in the gallery.',
       title: 'Move through the paywall gallery with arrow keys',
       repo: paywall,
       size: 'small',
@@ -1534,7 +1558,7 @@ function listBacklogTasks({ paywall, docs }: SeedRepos): SeedTask[] {
     },
     {
       id: 'task-webhook-signing',
-      intent: 'Sign outgoing webhooks so customers can verify them.',
+      request: 'Sign outgoing webhooks so customers can verify them.',
       title: 'Sign outgoing webhooks',
       repo: paywall,
       size: 'small',
@@ -1554,7 +1578,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
   return [
     {
       id: 'task-duplicate',
-      intent: 'Block duplicating code-first paywalls, they should be duplicated from the repo.',
+      request: 'Block duplicating code-first paywalls, they should be duplicated from the repo.',
       title: 'Refuse to duplicate code-first paywalls',
       repo: paywall,
       size: 'small',
@@ -1565,7 +1589,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
       worktreePath: duplicatePath,
       report: {
         headline: 'Duplicating a code-first paywall now fails with a clear error.',
-        phases: [
+        sections: [
           {
             title: 'Guard the duplicate path',
             summary: 'duplicatePaywall throws a typed error for code-first paywalls.',
@@ -1599,34 +1623,34 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           { name: 'bun test', outcome: 'pass', detail: '2 new' },
           { name: 'CI', outcome: 'pass', detail: 'All 9 checks green' },
         ],
-        decisions: [],
+        judgementCalls: [],
       },
       runs: [
         { role: 'builder', minutes: 9, summary: 'Added the guard and tests.' },
         { role: 'reviewer', minutes: 2, summary: 'No findings.' },
-        { role: 'shipper', minutes: 3, summary: 'Opened #4531, fixed one bot comment.' },
+        { role: 'fixer', minutes: 3, summary: 'Fixed the review-bot comment on #4531.' },
       ],
       pullRequest: { number: 4531, checks: 'passing' },
       gate: {
-        kind: 'merge',
+        type: 'merge',
         title: 'Merge #4531',
         body: 'Checks are green and the review-bot comment is resolved.',
       },
     },
     {
       id: 'task-command-registry',
-      intent: 'Rewrite the framework command registry so commands declare their own args and help text.',
+      request: 'Rewrite the framework command registry so commands declare their own args and help text.',
       title: 'Rewrite the framework command registry',
       repo: paywall,
       size: 'large',
       planFirst: true,
       stage: 'awaiting_plan',
-      reason: 'needs the spec approved before work starts',
+      reason: 'needs the plan approved before work starts',
       branch: 'refactor/command-registry',
       ageHours: 5,
-      spec: {
+      plan: {
         goal: 'Every framework command declares its arguments and help text in one place, so the CLI, the docs and the agents read the same definition.',
-        plan: [
+        phases: [
           {
             title: 'Define the command schema',
             detail: 'One declaration for arguments, flags and help text.',
@@ -1668,16 +1692,16 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           },
         ],
       },
-      runs: [{ role: 'planner', minutes: 8, summary: 'Proposed the registry spec with two open questions.' }],
+      runs: [{ role: 'planner', minutes: 8, summary: 'Proposed the registry plan with two open questions.' }],
       gate: {
-        kind: 'spec',
-        title: 'Approve the command registry spec',
+        type: 'plan',
+        title: 'Approve the command registry plan',
         body: 'Two questions need your answer before building.',
       },
     },
     {
       id: 'task-tab-scroll',
-      intent: 'tab groups dont scroll horizontally when there are too many tabs',
+      request: 'tab groups dont scroll horizontally when there are too many tabs',
       title: 'Scroll tab groups horizontally',
       repo: paywall,
       size: 'small',
@@ -1688,7 +1712,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
       worktreePath: tabsPath,
       report: {
         headline: 'Tab groups scroll sideways and keep the active tab in view.',
-        phases: [
+        sections: [
           {
             title: 'Make the list scrollable',
             summary: 'The row scrolls horizontally with the scrollbar hidden; tabs no longer shrink.',
@@ -1719,7 +1743,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           },
         ],
         checks: [{ name: 'bun lint', outcome: 'pass', detail: null }],
-        decisions: [],
+        judgementCalls: [],
       },
       findings: [
         {
@@ -1734,7 +1758,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         { role: 'reviewer', minutes: 2, summary: 'One suggestion.' },
       ],
       gate: {
-        kind: 'review',
+        type: 'review',
         title: 'Review the tab group scroll fix',
         body: 'Small fix, one suggestion from the agent review.',
       },
@@ -1746,7 +1770,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
   return [
     {
       id: 'task-export-retry',
-      intent: 'ClickHouse export times out on big apps, retry it',
+      request: 'ClickHouse export times out on big apps, retry it',
       title: 'Retry ClickHouse exports that time out',
       repo: paywall,
       size: 'small',
@@ -1756,15 +1780,14 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       ageHours: 2,
       runs: [{ role: 'builder', minutes: 5, summary: 'Asked how many retries.' }],
       gate: {
-        kind: 'question',
-        purpose: 'agent_question',
+        type: 'question',
         title: 'Retry the whole export or only the failed chunk?',
         body: 'Exports run in 50k-row chunks. Retrying only the failed chunk is faster but needs the chunk offset persisted. Retrying the whole export is simpler and takes up to 4 minutes for the largest app.',
       },
     },
     {
       id: 'task-preview-flash',
-      intent: 'paywall preview flashes white on load in dark mode',
+      request: 'paywall preview flashes white on load in dark mode',
       title: 'Stop the paywall preview flashing on load',
       repo: paywall,
       size: 'small',
@@ -1781,15 +1804,14 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
         },
       ],
       gate: {
-        kind: 'question',
-        purpose: 'failure',
+        type: 'failure',
         title: 'The builder could not reproduce the flash',
         body: 'The preview renders dark from the first frame in headless Chromium. It may only happen in Safari or with a cold cache. Try again with Safari, or close the task?',
       },
     },
     {
       id: 'task-stream-tools',
-      intent: 'MCP v2: stream tool results instead of buffering them',
+      request: 'MCP v2: stream tool results instead of buffering them',
       title: 'Stream MCP tool results',
       repo: paywall,
       size: 'small',
@@ -1797,14 +1819,11 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       reason: 'building',
       branch: 'feat/mcp-stream-tools',
       ageHours: 1,
-      runs: [
-        { role: 'triage', minutes: 0.2, summary: 'Small.' },
-        { role: 'builder', minutes: 4, summary: 'Streaming the tool results.' },
-      ],
+      runs: [{ role: 'builder', minutes: 4, summary: 'Streaming the tool results.' }],
     },
     {
       id: 'task-effect-orm',
-      intent: 'bump @maple-dev/effect-orm to 0.7.1',
+      request: 'bump @maple-dev/effect-orm to 0.7.1',
       title: 'Bump effect-orm to 0.7.1',
       repo: paywall,
       size: 'small',
@@ -1816,7 +1835,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
     },
     {
       id: 'task-docs-gate',
-      intent: 'Drop the Superwall for Agents access gate from the framework docs',
+      request: 'Drop the Superwall for Agents access gate from the framework docs',
       title: 'Remove the access gate from the framework docs',
       repo: docs,
       size: 'small',
@@ -1835,7 +1854,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
   return [
     {
       id: 'task-usage-defaults',
-      intent: 'pick a cheaper default model when the usage window is almost used up',
+      request: 'pick a cheaper default model when the usage window is almost used up',
       title: 'Fall back to a cheaper model near the usage limit',
       repo: kanna,
       size: 'small',
@@ -1847,7 +1866,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       worktreePath: defaultsPath,
       report: {
         headline: 'New chats default to a cheaper model once 85% of the usage window is spent.',
-        phases: [
+        sections: [
           {
             title: 'Choose the model from usage',
             summary: 'resolveDefaultModel takes the usage window and falls back above 85%.',
@@ -1864,9 +1883,9 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
           },
         ],
         checks: [{ name: 'bun test', outcome: 'pass', detail: null }],
-        decisions: [
+        judgementCalls: [
           {
-            decision: 'Threshold at 85%',
+            call: 'Threshold at 85%',
             reason: 'Leaves room to finish a long turn on the preferred model.',
             file: 'src/shared/defaults.ts',
             line: 4,
@@ -1889,11 +1908,11 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
           },
         },
       ],
-      gate: { kind: 'review', title: 'Review the usage-aware defaults', body: 'Ready for review.' },
+      gate: { type: 'review', title: 'Review the usage-aware defaults', body: 'Ready for review.' },
     },
     {
       id: 'task-dark-contrast',
-      intent: 'settings dark mode contrast is too low',
+      request: 'settings dark mode contrast is too low',
       title: 'Raise contrast in dark settings',
       repo: kanna,
       size: 'small',
@@ -1915,20 +1934,20 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
     },
     {
       id: 'task-print-retries',
-      intent: 'print jobs should retry when the printer is offline',
+      request: 'print jobs should retry when the printer is offline',
       title: 'Retry print jobs when the printer is offline',
       repo: prints,
       size: 'large',
       planFirst: true,
       stage: 'planning',
-      reason: 'writing the spec',
+      reason: 'writing the plan',
       branch: 'feat/print-retries',
       ageHours: 0.3,
-      runs: [{ role: 'triage', minutes: 0.2, summary: 'Large: needs a spec.' }],
+      runs: [{ role: 'planner', minutes: 0, summary: '' }],
     },
     {
       id: 'task-old-banner',
-      intent: 'add a banner for the old editor',
+      request: 'add a banner for the old editor',
       title: 'Banner for the old editor',
       repo: paywall,
       size: 'small',
@@ -1981,7 +2000,6 @@ function seed() {
   mkdirSync(transcripts, { recursive: true });
   const runTimes = listRunTimes(tasks, timeline);
   for (const [runId, times] of runTimes) {
-    if (times.role === 'triage') continue;
     const live = times.endedAt === null;
     const events = buildRunEvents(times, live);
     writeTranscript(transcripts, runId, spreadEvents(events, times.startedAt, times.endedAt ?? NOW - MINUTE));
