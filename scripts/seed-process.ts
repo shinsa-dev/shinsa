@@ -80,8 +80,13 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       ageHours: 3,
       plan: RATE_LIMIT_PLAN,
       runs: [
-        { role: 'planner', minutes: 6, summary: 'Proposed a token bucket per app.' },
-        { role: 'planner', minutes: 4, summary: 'Revised the plan to read limits from the billing plan.' },
+        { role: 'agent', purpose: 'plan', minutes: 6, summary: 'Proposed a token bucket per app.' },
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 4,
+          summary: 'Revised the plan to read limits from the billing plan.',
+        },
       ],
       extra: [
         {
@@ -113,9 +118,15 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       summary: 'Retries now resume from the last written chunk.',
       findings: ESCALATED_FINDINGS,
       runs: [
-        { role: 'builder', minutes: 9, summary: 'Persisted the chunk offset.' },
+        { role: 'agent', purpose: 'build', minutes: 9, summary: 'Persisted the chunk offset.' },
         { role: 'reviewer', minutes: 3, summary: 'Two blocking findings.' },
-        { role: 'fixer', minutes: 6, summary: 'Moved the offset into the export row.' },
+        {
+          role: 'agent',
+          purpose: 'fix',
+          fix: 'review',
+          minutes: 6,
+          summary: 'Moved the offset into the export row.',
+        },
         { role: 'reviewer', minutes: 3, summary: 'The same two findings again.' },
       ],
       extra: [
@@ -196,7 +207,14 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
       reason: 'waiting for the staging deploy',
       branch: 'fix/cdn-purge',
       ageHours: 1.5,
-      runs: [{ role: 'builder', minutes: 7, summary: 'Purged the CDN; waiting for the deploy to verify.' }],
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'build',
+          minutes: 7,
+          summary: 'Purged the CDN; waiting for the deploy to verify.',
+        },
+      ],
       extra: [
         {
           type: 'run.ended',
@@ -210,7 +228,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
           monitor: {
             id: 'monitor-staging',
             runId: 'task-staging-deploy-run-0',
-            role: 'builder',
+            role: 'agent',
             phaseIndex: 1,
             notes: 'The staging deploy of `main@4f2c1e9`. Ready when /healthz reports that sha.',
             armedAt: NOW - 18 * MINUTE,
@@ -233,7 +251,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
       reason: 'paused',
       branch: 'fix/pricing-cdn-check',
       ageHours: 6,
-      runs: [{ role: 'builder', minutes: 5, summary: 'The wait ran out.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 5, summary: 'The wait ran out.' }],
       extra: [
         {
           type: 'run.ended',
@@ -247,7 +265,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
           monitor: {
             id: 'monitor-pricing',
             runId: 'task-wait-ran-out-run-0',
-            role: 'builder',
+            role: 'agent',
             phaseIndex: 1,
             notes: 'The 2.14 release on the production CDN. Ready when /pricing serves the new hero.',
             armedAt: NOW - 5 * 60 * MINUTE,
@@ -282,7 +300,7 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
       reason: 'building',
       branch: 'chore/template-thumbnails',
       ageHours: 0.8,
-      runs: [{ role: 'builder', minutes: 30, summary: 'Rendering every template.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 30, summary: 'Rendering every template.' }],
       extra: [{ type: 'run.silenced', runId: 'task-quiet-build-run-0', since: NOW - 22 * MINUTE }],
     },
   ];
@@ -301,8 +319,8 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
       branch: 'refactor/analytics-schema',
       ageHours: 7,
       runs: [
-        { role: 'planner', minutes: 6, summary: 'Planned four phases.' },
-        { role: 'builder', minutes: 40, summary: 'Ported the first two event families.' },
+        { role: 'agent', purpose: 'plan', minutes: 6, summary: 'Planned four phases.' },
+        { role: 'agent', purpose: 'build', minutes: 40, summary: 'Ported the first two event families.' },
       ],
       extra: [
         {
@@ -341,7 +359,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
       reason: 'waiting on your answer',
       branch: 'fix/webhook-retries',
       ageHours: 0.5,
-      runs: [{ role: 'builder', minutes: 4, summary: 'Asked how long to keep retrying.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 4, summary: 'Asked how long to keep retrying.' }],
       gate: {
         type: 'question',
         title: 'How long should a failing webhook keep retrying?',

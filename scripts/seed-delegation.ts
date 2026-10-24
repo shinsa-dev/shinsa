@@ -1,6 +1,7 @@
 import type {
   ChatEvent,
   DelegateRole,
+  PlanDocument,
   Repo,
   Run,
   RunDelegation,
@@ -20,6 +21,7 @@ import {
   type TimedSeedEvent,
   writeTranscript,
 } from './seed-kit.ts';
+import { listRunOpenings } from './seed-prompts.ts';
 
 const RETRY = 'task-delegated-retry';
 
@@ -121,10 +123,32 @@ const QUESTION = {
   answeredAt: null,
 };
 
-const RETRY_BUILDER: Run = {
+const RETRY_PLAN: PlanDocument = {
+  goal: 'A slow or failed ClickHouse chunk is retried with backoff, and only when a retry can help.',
+  phases: [
+    {
+      title: 'Back off between attempts',
+      detail: 'A retry helper that waits 250 ms, doubling, for up to three attempts.',
+    },
+    {
+      title: 'Retry only transient errors',
+      detail: 'Wrap the chunk write in the helper and retry timeouts and 5xx, never a 400.',
+    },
+  ],
+  behaviour: ['A timed-out chunk is written on a later attempt.', 'A malformed chunk fails at once.'],
+  approach: 'One helper in the export module, so the nightly job and the admin button share it.',
+  files: [{ path: 'src/export/clickhouse.ts', change: 'The chunk write goes through the retry helper.' }],
+  outOfScope: ['The ClickHouse client timeouts.'],
+  verification: ['bun test src/export'],
+  questions: [],
+};
+
+const RETRY_AGENT: Run = {
   id: RETRY_STEP,
   taskId: RETRY,
-  role: 'builder',
+  role: 'agent',
+  purpose: 'build',
+  phaseIndex: 1,
   status: 'running',
   provider: 'claude',
   model: 'claude-opus-5-5',
@@ -212,9 +236,10 @@ export function listDelegationTasks({ paywall }: { paywall: Repo }): SeedTask[] 
       reason: 'building the change',
       branch: 'fix/export-chunk-backoff',
       ageHours: 0.6,
+      plan: RETRY_PLAN,
       runs: [
-        { role: 'planner', minutes: 4, summary: 'Planned the backoff in two phases.' },
-        { role: 'builder', minutes: 25, summary: 'Building.' },
+        { role: 'agent', purpose: 'plan', minutes: 4, summary: 'Planned the backoff in two phases.' },
+        { role: 'agent', purpose: 'build', minutes: 25, summary: 'Building.' },
       ],
       timed: [
         ...listDelegateEvents(RETRY),
@@ -255,8 +280,8 @@ export function listDelegationTasks({ paywall }: { paywall: Repo }): SeedTask[] 
       branch: 'chore/shared-clickhouse-fixture',
       ageHours: 0.4,
       runs: [
-        { role: 'planner', minutes: 3, summary: 'Planned the move.' },
-        { role: 'builder', minutes: 15, summary: 'Building.' },
+        { role: 'agent', purpose: 'plan', minutes: 3, summary: 'Planned the move.' },
+        { role: 'agent', purpose: 'build', minutes: 15, summary: 'Building.' },
       ],
       timed: [
         ...listDelegateEvents(SUITE),
@@ -314,7 +339,7 @@ function brief(delegate: Delegate): ChatEvent {
   };
 }
 
-function writeRetryStep(dir: string) {
+function writeRetryStep(dir: string, openings: ReadonlyMap<string, string>) {
   const review = findDelegate(`${RETRY}-review`);
   const callers = findDelegate(`${RETRY}-callers`);
   const streaming = findDelegate(`${RETRY}-streaming`);
@@ -332,18 +357,13 @@ function writeRetryStep(dir: string) {
       questions: [],
       messages: [],
     },
-    RETRY_BUILDER
+    RETRY_AGENT
   );
   writeTranscript(dir, RETRY_STEP, [
     ...spreadEvents(
       [
         { type: 'status', status: 'started', outcome: null },
-        {
-          type: 'user',
-          from: 'shinsa',
-          text: 'You are the builder for phase 1: wrap the chunk write in a retry.',
-          attachments: [],
-        },
+        { type: 'user', from: 'shinsa', text: findOpening(openings, RETRY_STEP), attachments: [] },
         say('I will wrap the write first, and ask a reviewer to check which errors deserve a retry.'),
         callTool('read-1', { kind: 'read', path: 'src/export/clickhouse.ts', range: { start: 1, end: 40 } }),
         resolveToolOutput('read-1', '1\texport async function runExport(app: App) {'),
@@ -400,7 +420,7 @@ function writeRetryStep(dir: string) {
   ]);
 }
 
-function writeDelegates(dir: string) {
+function writeDelegates(dir: string, openings: ReadonlyMap<string, string>) {
   writeTranscript(
     dir,
     `${RETRY}-review`,
@@ -490,12 +510,7 @@ function writeDelegates(dir: string) {
     spreadEvents(
       [
         { type: 'status', status: 'started', outcome: null },
-        {
-          type: 'user',
-          from: 'shinsa',
-          text: 'You are the builder for phase 1: move the export tests onto the shared fixture.',
-          attachments: [],
-        },
+        { type: 'user', from: 'shinsa', text: findOpening(openings, SUITE_STEP), attachments: [] },
         callTool('e-1', {
           kind: 'edit',
           path: 'test/export/setup.ts',
@@ -511,7 +526,14 @@ function writeDelegates(dir: string) {
   );
 }
 
-export function writeDelegationTranscripts(dir: string) {
-  writeRetryStep(dir);
-  writeDelegates(dir);
+function findOpening(openings: ReadonlyMap<string, string>, runId: string) {
+  const opening = openings.get(runId);
+  if (!opening) throw new Error(`The seed has no prompt for run ${runId}.`);
+  return opening;
+}
+
+export function writeDelegationTranscripts(dir: string, timeline: TimedSeedEvent[]) {
+  const openings = listRunOpenings(timeline);
+  writeRetryStep(dir, openings);
+  writeDelegates(dir, openings);
 }

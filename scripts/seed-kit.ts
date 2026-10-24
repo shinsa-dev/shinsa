@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import type {
   ChatEvent,
   ChatTool,
+  FixReason,
   Gate,
   GateType,
   PipelineStep,
   PlanDocument,
   Repo,
   ReviewFinding,
+  RunPurpose,
   RunRole,
   ShinsaEventInput,
   TaskAuto,
@@ -53,6 +55,20 @@ export function createSeedClock(start: number): SeedClock {
   return clock;
 }
 
+export interface SeedRun {
+  role: RunRole;
+  purpose?: RunPurpose;
+  fix?: FixReason;
+  minutes: number;
+  summary: string;
+  reply?: string;
+  failed?: boolean;
+}
+
+export function resolveAgentSession(taskId: string) {
+  return `session-${taskId}-agent`;
+}
+
 export interface SeedTask {
   id: string;
   request: string;
@@ -71,7 +87,7 @@ export interface SeedTask {
   report?: WorkReport;
   summary?: string;
   findings?: ReviewFinding[];
-  runs?: { role: RunRole; minutes: number; summary: string; reply?: string; failed?: boolean }[];
+  runs?: SeedRun[];
   gate?: { type: GateType; title: string; body: string; details?: Partial<Gate> };
   pullRequest?: {
     number: number;

@@ -17,3 +17,4 @@ worker-configuration.d.ts
 .pilot
 coverage
 apps/desktop/release
+apps/desktop/.electron

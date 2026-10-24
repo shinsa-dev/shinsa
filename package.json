@@ -16,7 +16,8 @@
     "prepare": "husky",
     "seed": "bun scripts/seed.ts",
     "start": "bun run --cwd apps/server start",
-    "test": "turbo run test"
+    "test": "turbo run test test:scripts",
+    "test:scripts": "bun test"
   },
   "devDependencies": {
     "@babel/parser": "^8.0.5",

@@ -11,6 +11,7 @@ import type {
   Repo,
   ReportCheck,
   ReviewFinding,
+  RunPurpose,
   RunRole,
   WorkReport,
 } from '../packages/core/src/index.ts';
@@ -31,9 +32,10 @@ import {
   serializeRectsPng,
   serializeReviewFixture,
 } from './seed-code-kit.ts';
-import { DAY, HOUR, MINUTE, NOW, type Push, type SeedTask } from './seed-kit.ts';
+import { DAY, HOUR, MINUTE, NOW, type Push, resolveAgentSession, type SeedTask } from './seed-kit.ts';
 
 const SOURCE = join(import.meta.dir, '..');
+const SOURCE_COMMIT = '359025295bdde05bff64cbdd711ee9bb1aee7956';
 const PROJECT_ID = 'project-sample';
 const REPO_ID = 'repo-shinsa-sample';
 const REMOTE = 'git@github.com:shinsa-dev/shinsa-sample.git';
@@ -81,7 +83,7 @@ export const REVIEW_MARKS = {
     [33.5, 40],
   ],
   failedChecks: 43,
-  fixer: [43.5, 48],
+  fix: [43.5, 48],
   passedChecks: 51,
   reviewer: [51.5, 58],
 } as const;
@@ -412,11 +414,11 @@ const HISTORY: { message: string; areas: string[] }[] = [
 const SEED_AUTHOR = 'Shinsa seed <seed@shinsa.dev>';
 
 function extractSource(path: string) {
-  const archive = Bun.spawnSync(['git', 'archive', '--format=tar', 'HEAD'], { cwd: SOURCE });
+  const archive = Bun.spawnSync(['git', 'archive', '--format=tar', SOURCE_COMMIT], { cwd: SOURCE });
   if (archive.exitCode !== 0) throw new Error(`git archive: ${archive.stderr.toString()}`);
   const tar = Bun.spawnSync(['tar', '-x', '-C', path], { stdin: archive.stdout });
   if (tar.exitCode !== 0) throw new Error(`tar: ${tar.stderr.toString()}`);
-  return git(['ls-tree', '-r', '-z', 'HEAD'], SOURCE)
+  return git(['ls-tree', '-r', '-z', SOURCE_COMMIT], SOURCE)
     .split('\0')
     .filter(Boolean)
     .map((entry) => {
@@ -644,8 +646,7 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
   };
   writeText(worktree, SAMPLE_PATHS.spotKeys, spotKeys.after);
   trees.push(
-    commit(worktree, 'fix: make the checks pass', at(REVIEW_MARKS.fixer[1] - 0.2), [SAMPLE_PATHS.spotKeys])
-      .tree
+    commit(worktree, 'fix: make the checks pass', at(REVIEW_MARKS.fix[1] - 0.2), [SAMPLE_PATHS.spotKeys]).tree
   );
   const diffStat = git(['diff', '--stat', '--find-renames', 'main'], worktree);
 
@@ -756,6 +757,7 @@ interface SampleRun {
   taskId: string;
   index: number;
   role: RunRole;
+  purpose?: RunPurpose;
   from: number;
   to: number | null;
   summary: string;
@@ -770,10 +772,12 @@ function pushRun(push: Push, run: SampleRun) {
       id,
       taskId: run.taskId,
       role: run.role,
+      ...(run.purpose ? { purpose: run.purpose } : {}),
       provider: 'claude',
       model: run.role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5',
-      sessionId: `session-${run.taskId}-${run.role}${run.phaseIndex === undefined ? '' : `-${run.phaseIndex}`}`,
+      sessionId: run.role === 'agent' ? resolveAgentSession(run.taskId) : `session-${run.taskId}-${run.role}`,
       sessionProvider: 'claude',
+      ...(run.role === 'agent' && run.index > 0 ? { resume: true } : {}),
       startedAt: run.from,
       endedAt: null,
       outcome: null,
@@ -1071,7 +1075,8 @@ function scriptReview(sample: CodeSample, push: Push) {
   pushRun(push, {
     taskId: task,
     index: 0,
-    role: 'planner',
+    role: 'agent',
+    purpose: 'plan',
     from: at(plannerFrom),
     to: at(plannerTo),
     summary: 'Proposed a three-phase rename.',
@@ -1089,7 +1094,8 @@ function scriptReview(sample: CodeSample, push: Push) {
     pushRun(push, {
       taskId: task,
       index: index + 1,
-      role: 'builder',
+      role: 'agent',
+      purpose: 'build',
       from: at(marks[0]),
       to: at(marks[1]),
       summary: `${REVIEW_PLAN.phases[index]?.title}: done.`,
@@ -1112,17 +1118,18 @@ function scriptReview(sample: CodeSample, push: Push) {
   pushRun(push, {
     taskId: task,
     index: 4,
-    role: 'fixer',
-    from: at(REVIEW_MARKS.fixer[0]),
-    to: at(REVIEW_MARKS.fixer[1]),
+    role: 'agent',
+    purpose: 'fix',
+    from: at(REVIEW_MARKS.fix[0]),
+    to: at(REVIEW_MARKS.fix[1]),
     summary: 'SpotKey is no longer exported; knip passes.',
   });
-  push(at(REVIEW_MARKS.fixer[1] - 0.2), {
+  push(at(REVIEW_MARKS.fix[1] - 0.2), {
     type: 'work.committed',
     taskId: task,
     treeHash: sample.review.trees[3] ?? '',
   });
-  stage(push, task, at(REVIEW_MARKS.fixer[1] + 0.2), 'checking', 'running the checks');
+  stage(push, task, at(REVIEW_MARKS.fix[1] + 0.2), 'checking', 'running the checks');
   push(at(REVIEW_MARKS.passedChecks), { type: 'checks.recorded', taskId: task, results: PASSED_CHECKS });
   stage(push, task, at(REVIEW_MARKS.passedChecks + 0.2), 'reviewing', 'agent review');
   const reviewer = runId(task, 5);
@@ -1235,7 +1242,8 @@ function scriptMerged(sample: CodeSample, push: Push) {
   pushRun(push, {
     taskId: task,
     index: 0,
-    role: 'planner',
+    role: 'agent',
+    purpose: 'plan',
     from: at(MERGED_MARKS.planner[0]),
     to: at(MERGED_MARKS.planner[1]),
     summary: 'Proposed a two-phase plan.',
@@ -1253,7 +1261,8 @@ function scriptMerged(sample: CodeSample, push: Push) {
     pushRun(push, {
       taskId: task,
       index: index + 1,
-      role: 'builder',
+      role: 'agent',
+      purpose: 'build',
       from: at(marks[0]),
       to: at(marks[1]),
       summary: `${MERGED_PLAN.phases[index]?.title}: done.`,
@@ -1377,7 +1386,8 @@ function scriptLive(sample: CodeSample, push: Push) {
   pushRun(push, {
     taskId: task,
     index: 0,
-    role: 'planner',
+    role: 'agent',
+    purpose: 'plan',
     from: at(LIVE_MARKS.planner[0]),
     to: at(LIVE_MARKS.planner[1]),
     summary: 'Proposed a three-phase plan.',
@@ -1392,7 +1402,8 @@ function scriptLive(sample: CodeSample, push: Push) {
   pushRun(push, {
     taskId: task,
     index: 1,
-    role: 'builder',
+    role: 'agent',
+    purpose: 'build',
     from: at(LIVE_MARKS.builder[0]),
     to: at(LIVE_MARKS.builder[1]),
     summary: 'Add the code tokens: done.',
@@ -1422,7 +1433,8 @@ function scriptLive(sample: CodeSample, push: Push) {
   pushRun(push, {
     taskId: task,
     index: 2,
-    role: 'builder',
+    role: 'agent',
+    purpose: 'build',
     from: at(LIVE_MARKS.working),
     to: null,
     summary: '',
@@ -1435,7 +1447,7 @@ function describeAnswer(ranking: string) {
   return [
     `Core ranks them in \`listRankedSpots\` ([markdown.ts](shinsa://file/${SAMPLE_PATHS.ranking}#L${line})): critical first, then high, then normal, from the \`ATTENTION_RANK\` table at the top of the same file.`,
     '',
-    'Inside one rank the agents’ order wins: the section a spot came from, then its place in that section. Nothing looks at the file or the line, so two critical spots in one phase stay in the order the builder wrote them.',
+    'Inside one rank the agents’ order wins: the section a spot came from, then its place in that section. Nothing looks at the file or the line, so two critical spots in one phase stay in the order the agent wrote them.',
     '',
     `The web asks for that order when you pick “By attention”: \`listReviewTargets(report, 'attention')\` in [targets.ts](shinsa://file/${SAMPLE_PATHS.targets}) maps each ranked spot to a row and keys it by section and spot.`,
   ].join('\n');

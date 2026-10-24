@@ -106,7 +106,7 @@ A behaviour change updates `docs/engine.md` (core and server rules), `docs/spec.
 bunx biome check --write .     # lint, format, Grit plugins
 bun lint                       # + comments ban, verb catalog, class checks
 bun check-types
-bun run test                   # every workspace, with the coverage floor
+bun run test                   # every workspace and scripts/, with the coverage floor
 bunx knip                      # dead exports: run it after exporting anything
 bun deps                       # dependency drift (sherif)
 ```

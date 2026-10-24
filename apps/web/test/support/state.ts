@@ -66,7 +66,7 @@ export function createGate(overrides: Partial<Gate> & { id: string; taskId: stri
 
 export function createRun(overrides: Partial<Run> & { id: string; taskId: string }): Run {
   return {
-    role: 'builder',
+    role: 'agent',
     provider: 'claude',
     model: null,
     sessionId: null,

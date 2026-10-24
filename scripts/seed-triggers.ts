@@ -201,8 +201,8 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       branch: 'feat/stream-exports',
       ageHours: 3,
       runs: [
-        { role: 'builder', minutes: 25, summary: 'Streamed the CSV writer.' },
-        { role: 'builder', minutes: 18, summary: 'Wiring the download route.' },
+        { role: 'agent', purpose: 'build', minutes: 25, summary: 'Streamed the CSV writer.' },
+        { role: 'agent', purpose: 'build', minutes: 18, summary: 'Wiring the download route.' },
       ],
       extra: [
         attempted('task-account-move-run-0', 1, PERSONAL),
@@ -220,7 +220,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       reason: 'paused',
       branch: 'fix/preview-cdn-retry',
       ageHours: 2,
-      runs: [{ role: 'builder', minutes: 6, summary: 'Signed out.', failed: true }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 6, summary: 'Signed out.', failed: true }],
       extra: [{ type: 'task.account_bound', taskId: 'task-sign-in', account: OPS }],
       gate: {
         type: 'sign_in',
@@ -240,7 +240,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       branch: 'fix/log-export-timeouts',
       ageHours: 1.2,
       provider: 'codex',
-      runs: [{ role: 'builder', minutes: 3, summary: 'Signed out.', failed: true }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 3, summary: 'Signed out.', failed: true }],
       gate: {
         type: 'sign_in',
         title: `Sign in to Codex as ${PERSONAL.email}`,
@@ -258,7 +258,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       reason: 'waiting for the usage limit to reset',
       branch: 'fix/batch-analytics-writes',
       ageHours: 1,
-      runs: [{ role: 'builder', minutes: 12, summary: 'Hit the usage limit.', failed: true }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 12, summary: 'Hit the usage limit.', failed: true }],
       extra: [
         {
           type: 'usage_wait.armed',
@@ -266,7 +266,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
           wait: {
             id: 'wait-usage',
             runId: 'task-usage-wait-run-0',
-            role: 'builder',
+            role: 'agent',
             phaseIndex: null,
             account: PERSONAL,
             resetAt: NOW + 38 * MINUTE,
@@ -288,7 +288,7 @@ export function listTriggerTasks({ paywall, kanna }: { paywall: Repo; kanna: Rep
       reason: 'waiting for your answer',
       branch: 'fix/stripe-webhook-signature',
       ageHours: 0.5,
-      runs: [{ role: 'builder', minutes: 4, summary: 'Asked for the signing secret.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 4, summary: 'Asked for the signing secret.' }],
       gate: {
         type: 'secret',
         title:

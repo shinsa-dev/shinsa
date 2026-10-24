@@ -125,6 +125,12 @@ export function pushTranscript(runId: string, entries: ChatEntry[], reset = true
   });
 }
 
+export function pushSurfaces(desktop: boolean) {
+  act(() => {
+    push({ type: 'surfaces', desktop });
+  });
+}
+
 export function listSentCommands() {
   return server.commands;
 }

@@ -35,10 +35,10 @@ A stage reason says what is happening to the task now. A gate says what is being
 - **Suggested task** for what an agent suggests ("Suggested tasks", "Add the suggested task “‹title›”"). A **follow-up** is only a message to a finished answer, investigation or report.
 - **Delegation** for work a step hands to another agent ("waiting for 2 delegations", "Delegations"). Never "delegated task".
 - **Diagnosis** for what an investigation hands over; **findings** are only the reviewer's.
-- **Judgement calls** for the choices a builder made in a phase; a **decision** is only your answer at a gate.
+- **Judgement calls** for the choices the agent made in a phase; a **decision** is only your answer at a gate.
 - **Check-in** for a waiting agent's next look ("Check in now", "Check-in 2 of 10", "Waiting to check in again"); **verify** the setup ("Verify again"); **CI** for the pull request's checks. Checks are the repository's.
 - **Pull request** in prose; "PR #42" only where space is tight (a chip, a status line).
-- **Agent** for whatever is working; the roles (planner, builder, reviewer, fixer) only where the role matters ("The fixer paused").
+- **Agent** for whatever is working, and the name of a round's own agent, which plans, builds, fixes and runs the operation in one conversation; the other roles (reviewer, answerer, investigator, researcher, and planner or builder for a delegated agent) only where the role matters ("The reviewer paused").
 - **Waiting on another task** for the tasks a task waits on ("Waits on"), "waiting for “Title” to finish" in a stage reason. Titles are quoted with curly quotes.
 - **You** for the human in product copy and activity; **the human** in agent prompts.
 - Never playful labels, never "magic", never exclamation marks. The two layout names (`LAYOUT_NAMES`: Desk and Shelf) are names chosen on purpose, each with a plain hint line.

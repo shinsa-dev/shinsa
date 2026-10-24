@@ -50,7 +50,7 @@ Copy the command out of `.github/workflows/*.yml`. Approximations hide failures.
 |---|---|
 | `bun lint` | Biome, the Grit plugins, the comments ban, the verb catalog, the class checks, spelling |
 | `bun check-types` | every workspace and `scripts/`; one broken package hides the rest, so also run `tsc --noEmit` in the ones you touched |
-| `bun run test` | every suite with its coverage floor (`bunfig.toml` in all four packages) |
+| `bun run test` | every suite with its coverage floor (`bunfig.toml` in each workspace, and the root one for `scripts/*.test.ts`) |
 | `bunx knip` | dead exports, files and dependencies — **run it after exporting anything** |
 | `bun deps` | dependency version drift |
 | `bun dev` + a browser | the web app actually rendering the state |
@@ -59,7 +59,7 @@ Copy the command out of `.github/workflows/*.yml`. Approximations hide failures.
 
 - **A test that asserts the old behaviour encodes the bug.** When a fix breaks a test, read it before editing. If it pinned the defect, rewrite it to the corrected contract and say so in the report.
 - **A test that passes either way.** "Retry gives the agent another go" asserted only the stage after retry, which was right even while the retry immediately failed again. Assert the outcome the user cares about.
-- **Turbo's cache.** `turbo.json` turns the cache off for `test`, so `bun run test` always runs every suite; `check-types` and `build` are still cached, so a type check that looks too fast replayed. Run `tsc --noEmit` in the package, or `turbo run check-types --force`.
+- **Turbo's cache.** `turbo.json` turns the cache off for `test` and `//#test:scripts`, so `bun run test` always runs every suite; `check-types` and `build` are still cached, so a type check that looks too fast replayed. Run `tsc --noEmit` in the package, or `turbo run check-types --force`.
 - **Coverage counts arrow functions.** An uncovered function on a covered line is usually a callback that never runs (a `withdrawGates` predicate when no gate can be open). Ask whether the branch is dead before writing a test to touch it; dead code is deleted, not covered.
 - **Coverage only sees loaded files.** A source file no test imports does not appear in the report at all. Check the file list, not just the total.
 - **A green type check with a broken app.** Open the page with the console visible.

@@ -10,6 +10,7 @@ import type {
   PlanDocument,
   Project,
   Repo,
+  RunPurpose,
   RunRole,
   ShinsaEventInput,
   TaskStage,
@@ -20,6 +21,7 @@ import {
   createSettings,
   formatTaskHandle,
   isDecisionGate,
+  isReadOnlyRun,
   NO_PROJECT_KEY,
   RUN_AGENT_ROLE,
   SHAPE_PIPELINES,
@@ -38,8 +40,10 @@ import {
   NO_TRIAGE_DECISIONS,
   NOW,
   type Push,
+  resolveAgentSession,
   resolveToolOutput,
   type SeedClock,
+  type SeedRun,
   type SeedTask,
   say,
   spreadEvents,
@@ -47,6 +51,7 @@ import {
   writeTranscript,
 } from './seed-kit.ts';
 import { listProcessTasks } from './seed-process.ts';
+import { resolveRunOpening, stampRunPrompts } from './seed-prompts.ts';
 import { listRoundTasks } from './seed-rounds.ts';
 import { listShapeTasks, resolveShapeHandover } from './seed-shapes.ts';
 import { listTriggerTasks, writeAccountFiles, writeAccountTranscripts } from './seed-triggers.ts';
@@ -590,6 +595,7 @@ function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
       taskId: task.id,
       path: task.worktreePath,
       branch: task.branch,
+      workspace: 'worktrees',
     });
   }
 }
@@ -627,36 +633,22 @@ function pushTaskRevision(task: SeedTask, push: Push, clock: SeedClock) {
   push(clock.step(0.1), { type: 'fix.started', taskId: task.id, round: 1, reason: 'you' });
 }
 
-function pushTaskRuns(task: SeedTask, push: Push, clock: SeedClock) {
-  const runs = task.runs ?? [];
-  for (const [index, run] of runs.entries()) {
-    const runId = `${task.id}-run-${index}`;
-    const live = index === runs.length - 1 && !run.failed && LIVE_STAGES.has(task.stage);
-    push(clock.step(0.5), {
-      type: 'run.started',
-      run: {
-        id: runId,
-        taskId: task.id,
-        role: run.role,
-        provider: task.provider ?? 'claude',
-        model: resolveRunModel(task, run.role),
-        sessionId: null,
-        startedAt: clock.at,
-        endedAt: null,
-        outcome: null,
-        summary: null,
-        status: 'running',
-      },
-    });
-    if (live) continue;
-    push(clock.step(run.minutes), {
-      type: 'run.ended',
-      runId,
-      outcome: run.failed ? 'failed' : 'completed',
-      summary: run.summary,
-    });
-    if (index === task.revision?.afterRun) pushTaskRevision(task, push, clock);
-  }
+interface SeedProgress {
+  plan: PlanDocument | null;
+  finished: number;
+  proposed: boolean;
+  built: number;
+  fixes: number;
+  agentRuns: number;
+}
+
+function resolveProposedPlan(task: SeedTask) {
+  const planning = task.stage === 'triage' || task.stage === 'waiting_on_tasks' || task.stage === 'planning';
+  const inquiring = ['answering', 'researching', 'investigating', 'awaiting_proposal'].includes(task.stage);
+  if (planning || inquiring) return null;
+  const pipeline = resolveSeedPipeline(task);
+  if (pipeline && !pipeline.includes('plan')) return null;
+  return resolveSeedPlan(task);
 }
 
 function resolveFinishedPhases(task: SeedTask, plan: PlanDocument) {
@@ -665,31 +657,124 @@ function resolveFinishedPhases(task: SeedTask, plan: PlanDocument) {
   return 0;
 }
 
-function pushTaskPlan(task: SeedTask, push: Push, clock: SeedClock) {
-  const planning = task.stage === 'triage' || task.stage === 'waiting_on_tasks' || task.stage === 'planning';
-  const inquiring = ['answering', 'researching', 'investigating', 'awaiting_proposal'].includes(task.stage);
-  if (planning || inquiring) return;
-  const pipeline = resolveSeedPipeline(task);
-  if (pipeline && !pipeline.includes('plan')) return;
-  const plan = resolveSeedPlan(task);
+function pushPlanProposal(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
+  if (!progress.plan || progress.proposed) return;
+  const { plan } = progress;
   push(clock.step(0.2), { type: 'plan.proposed', taskId: task.id, body: plan.goal, document: plan });
-  const finished = resolveFinishedPhases(task, plan);
-  for (let index = 0; index < finished; index += 1) {
-    push(clock.step(2), {
-      type: 'phase.completed',
+  progress.proposed = true;
+}
+
+function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
+  const index = progress.built;
+  const phase = progress.plan?.phases[index];
+  push(clock.step(2), {
+    type: 'phase.completed',
+    taskId: task.id,
+    report: {
+      index,
+      summary: task.report?.sections[index]?.summary ?? phase?.detail ?? 'Done.',
+      spots: task.report?.sections[index]?.spots ?? [],
+      judgementCalls: index === 0 ? (task.report?.judgementCalls ?? []) : [],
+      at: 0,
+    },
+  });
+  push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
+  progress.built += 1;
+}
+
+function resolveRunPhase(progress: SeedProgress, run: SeedRun) {
+  if (run.purpose !== 'build') return {};
+  const last = (progress.plan?.phases.length ?? 1) - 1;
+  return { phaseIndex: Math.min(progress.built, last) };
+}
+
+function pushFixStart(task: SeedTask, index: number, progress: SeedProgress, push: Push, clock: SeedClock) {
+  const run = task.runs?.[index];
+  if (run?.purpose !== 'fix') return;
+  progress.fixes += 1;
+  if (index - 1 === task.revision?.afterRun) return;
+  push(clock.step(0.1), {
+    type: 'fix.started',
+    taskId: task.id,
+    round: progress.fixes,
+    reason: run.fix ?? 'checks',
+  });
+}
+
+function pushTaskRun(task: SeedTask, index: number, progress: SeedProgress, push: Push, clock: SeedClock) {
+  const run = task.runs?.[index];
+  if (!run) return;
+  const runId = `${task.id}-run-${index}`;
+  const agent = run.role === 'agent';
+  pushFixStart(task, index, progress, push, clock);
+  push(clock.step(0.5), {
+    type: 'run.started',
+    run: {
+      id: runId,
       taskId: task.id,
-      report: {
-        index,
-        summary: task.report?.sections[index]?.summary ?? plan.phases[index]?.detail ?? 'Done.',
-        spots: task.report?.sections[index]?.spots ?? [],
-        judgementCalls: index === 0 ? (task.report?.judgementCalls ?? []) : [],
-        at: 0,
-      },
+      role: run.role,
+      ...(run.purpose ? { purpose: run.purpose } : {}),
+      ...resolveRunPhase(progress, run),
+      provider: task.provider ?? 'claude',
+      model: resolveRunModel(task, run.role),
+      sessionId: agent ? resolveAgentSession(task.id) : `session-${runId}`,
+      sessionProvider: task.provider ?? 'claude',
+      ...(agent && progress.agentRuns > 0 ? { resume: true } : {}),
+      startedAt: clock.at,
+      endedAt: null,
+      outcome: null,
+      summary: null,
+      status: 'running',
+    },
+  });
+  if (agent) progress.agentRuns += 1;
+}
+
+function pushTaskRuns(task: SeedTask, push: Push, clock: SeedClock) {
+  const runs = task.runs ?? [];
+  const plan = resolveProposedPlan(task);
+  const progress: SeedProgress = {
+    plan,
+    finished: plan ? resolveFinishedPhases(task, plan) : 0,
+    proposed: false,
+    built: 0,
+    fixes: 0,
+    agentRuns: 0,
+  };
+  if (!runs.some((run) => run.purpose === 'plan')) pushPlanProposal(task, progress, push, clock);
+  for (const [index, run] of runs.entries()) {
+    const live = index === runs.length - 1 && !run.failed && LIVE_STAGES.has(task.stage);
+    if (live && run.purpose === 'build') {
+      while (progress.built < progress.finished) pushPhaseDone(task, progress, push, clock);
+    }
+    pushTaskRun(task, index, progress, push, clock);
+    if (live) continue;
+    push(clock.step(run.minutes), {
+      type: 'run.ended',
+      runId: `${task.id}-run-${index}`,
+      outcome: run.failed ? 'failed' : 'completed',
+      summary: run.summary,
     });
-    push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
+    if (run.purpose === 'plan' && !run.failed) pushPlanProposal(task, progress, push, clock);
+    if (run.purpose === 'build' && !run.failed && progress.built < progress.finished) {
+      pushPhaseDone(task, progress, push, clock);
+    }
+    if (index === task.revision?.afterRun) pushTaskRevision(task, push, clock);
   }
-  if (task.stage === 'building' && finished < plan.phases.length) {
-    push(clock.step(1), { type: 'phase.updated', taskId: task.id, index: finished, status: 'active' });
+  pushTaskPlan(task, progress, push, clock);
+}
+
+function pushTaskPlan(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
+  pushPlanProposal(task, progress, push, clock);
+  while (progress.built < progress.finished) pushPhaseDone(task, progress, push, clock);
+  const phases = progress.plan?.phases.length ?? 0;
+  if (task.stage === 'building' && progress.finished < phases) {
+    push(clock.step(1), {
+      type: 'phase.updated',
+      taskId: task.id,
+      index: progress.finished,
+      status: 'active',
+    });
   }
 }
 
@@ -763,7 +848,6 @@ function pushTask(task: SeedTask, push: Push) {
     return;
   }
   pushTaskRuns(task, push, clock);
-  pushTaskPlan(task, push, clock);
   pushTaskResults(task, push, clock);
   if (task.note) push(clock.step(0.1), { type: 'task.noted', taskId: task.id, note: task.note });
   for (const event of task.extra ?? []) push(clock.step(0.1), event);
@@ -832,6 +916,8 @@ function stampTaskHandles(timeline: Timeline, projects: Project[], repos: Repo[]
 interface SeedRunTimes {
   task: SeedTask;
   role: RunRole;
+  purpose: RunPurpose | null;
+  opening: string | null;
   index: number;
   startedAt: number;
   endedAt: number | null;
@@ -855,15 +941,54 @@ function seedFiles(task: SeedTask) {
   return SEED_FILES[task.repo.id] ?? { read: 'src/index.ts', edit: 'src/index.ts', test: 'bun test' };
 }
 
+function resolveHandover({ task, role, purpose }: SeedRunTimes): ChatTool {
+  const body = task.summary ?? task.title;
+  if (purpose === 'plan') {
+    return { kind: 'shinsa', name: 'propose_plan', args: { goal: task.request, phases: SMALL_PLAN } };
+  }
+  if (purpose === 'build') return { kind: 'shinsa', name: 'complete_phase', args: { summary: body } };
+  if (purpose === 'operate') return { kind: 'shinsa', name: 'report_outcome', args: { outcome: body } };
+  if (role === 'reviewer') {
+    return { kind: 'shinsa', name: 'report_review', args: { findings: task.findings ?? [] } };
+  }
+  return (
+    resolveShapeHandover(role, body) ?? { kind: 'shinsa', name: 'complete_fix', args: { summary: body } }
+  );
+}
+
 function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
   const { task, role } = times;
   const files = seedFiles(task);
   const brief: ChatEvent = {
     type: 'user',
     from: 'shinsa',
-    text: `You are the ${role} for "${task.title}".\n\nThe request: ${task.request}\n\nWork in the task's worktree and hand over through the Shinsa tools.`,
+    text:
+      times.opening ??
+      `You are the ${role} for "${task.title}".\n\nThe request: ${task.request}\n\nWork in the task's worktree and hand over through the Shinsa tools.`,
     attachments: [],
   };
+  const edits: ChatEvent[] = isReadOnlyRun({ role, purpose: times.purpose ?? undefined })
+    ? [
+        say(
+          'The chunk loop has no retry, so one slow chunk fails the whole export. The tests show where it breaks.'
+        ),
+      ]
+    : [
+        say(
+          'The chunk loop has no retry, so one slow chunk fails the whole export. I will wrap the write and keep the offset.'
+        ),
+        callTool('edit-1', {
+          kind: 'edit',
+          path: files.edit,
+          hunks: [
+            {
+              before: '  for (const chunk of chunks) await writeChunk(chunk);',
+              after: '  for (const chunk of chunks) await retry(() => writeChunk(chunk), { attempts: 3 });',
+            },
+          ],
+        }),
+        resolveToolOutput('edit-1', 'The file has been updated.'),
+      ];
   const work: ChatEvent[] = [
     { type: 'status', status: 'started', outcome: null },
     brief,
@@ -875,20 +1000,7 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
     ),
     callTool('grep-1', { kind: 'search', mode: 'content', query: 'writeChunk', path: 'src' }),
     resolveToolOutput('grep-1', 'src/export/clickhouse.ts:3\nsrc/export/chunks.ts:18'),
-    say(
-      'The chunk loop has no retry, so one slow chunk fails the whole export. I will wrap the write and keep the offset.'
-    ),
-    callTool('edit-1', {
-      kind: 'edit',
-      path: files.edit,
-      hunks: [
-        {
-          before: '  for (const chunk of chunks) await writeChunk(chunk);',
-          after: '  for (const chunk of chunks) await retry(() => writeChunk(chunk), { attempts: 3 });',
-        },
-      ],
-    }),
-    resolveToolOutput('edit-1', 'The file has been updated.'),
+    ...edits,
     say('Running the tests for the export now.'),
     callTool('test-1', {
       kind: 'command',
@@ -911,13 +1023,7 @@ function buildRunEvents(times: SeedRunTimes, live: boolean): ChatEvent[] {
     ];
   }
   if (live) return work;
-  const handover: ChatTool =
-    resolveShapeHandover(role, task.summary ?? task.title) ??
-    (role === 'planner'
-      ? { kind: 'shinsa', name: 'propose_plan', args: { goal: task.request, phases: SMALL_PLAN } }
-      : role === 'reviewer'
-        ? { kind: 'shinsa', name: 'report_review', args: { findings: task.findings ?? [] } }
-        : { kind: 'shinsa', name: 'complete_fix', args: { summary: task.summary ?? task.title } });
+  const handover = resolveHandover(times);
   const seeded = task.runs?.[times.index];
   const summary = seeded?.summary ?? 'Done.';
   const ending: ChatEvent[] = times.failed
@@ -951,6 +1057,8 @@ function listRunTimes(tasks: SeedTask[], timeline: { at: number; event: ShinsaEv
         times.set(event.run.id, {
           task,
           role,
+          purpose: event.run.purpose ?? null,
+          opening: resolveRunOpening(event.run),
           index,
           startedAt: at,
           endedAt: null,
@@ -1016,7 +1124,7 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
       branch: 'feat/plan-tier-on-lists',
       ageHours: 0.8,
       plan: PLAN_TIER_PLAN,
-      runs: [{ role: 'planner', minutes: 4, summary: 'Proposed the plan.' }],
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 4, summary: 'Proposed the plan.' }],
       gate: {
         type: 'plan',
         title: 'Plan tier on lists, then backfill it',
@@ -1422,8 +1530,8 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         },
       ],
       runs: [
-        { role: 'planner', minutes: 6, summary: 'Proposed the MCP session plan.' },
-        { role: 'builder', minutes: 34, summary: 'Built the session and rewired the chat.' },
+        { role: 'agent', purpose: 'plan', minutes: 6, summary: 'Proposed the MCP session plan.' },
+        { role: 'agent', purpose: 'build', minutes: 34, summary: 'Built the session and rewired the chat.' },
         {
           role: 'reviewer',
           minutes: 4,
@@ -1556,7 +1664,7 @@ function listBacklogTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       reason: 'planning the phases',
       branch: 'feat/gallery-arrow-keys',
       ageHours: 0.8,
-      runs: [{ role: 'planner', minutes: 0, summary: '' }],
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
     },
     {
       id: 'task-webhook-signing',
@@ -1569,7 +1677,7 @@ function listBacklogTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       reason: 'planning the phases',
       branch: 'feat/webhook-signing',
       ageHours: 0.4,
-      runs: [{ role: 'planner', minutes: 0, summary: '' }],
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
     },
   ];
 }
@@ -1628,9 +1736,15 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         judgementCalls: [],
       },
       runs: [
-        { role: 'builder', minutes: 9, summary: 'Added the guard and tests.' },
+        { role: 'agent', purpose: 'build', minutes: 9, summary: 'Added the guard and tests.' },
         { role: 'reviewer', minutes: 2, summary: 'No findings.' },
-        { role: 'fixer', minutes: 3, summary: 'Fixed the review-bot comment on #4531.' },
+        {
+          role: 'agent',
+          purpose: 'fix',
+          fix: 'pull_request',
+          minutes: 3,
+          summary: 'Fixed the review-bot comment on #4531.',
+        },
       ],
       pullRequest: { number: 4531, checks: 'passing' },
       gate: {
@@ -1694,7 +1808,14 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           },
         ],
       },
-      runs: [{ role: 'planner', minutes: 8, summary: 'Proposed the registry plan with two open questions.' }],
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 8,
+          summary: 'Proposed the registry plan with two open questions.',
+        },
+      ],
       gate: {
         type: 'plan',
         title: 'Approve the command registry plan',
@@ -1756,7 +1877,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         },
       ],
       runs: [
-        { role: 'builder', minutes: 7, summary: 'Made the row scrollable.' },
+        { role: 'agent', purpose: 'build', minutes: 7, summary: 'Made the row scrollable.' },
         { role: 'reviewer', minutes: 2, summary: 'One suggestion.' },
       ],
       gate: {
@@ -1780,7 +1901,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       reason: 'waiting on your answer',
       branch: 'fix/clickhouse-export-retry',
       ageHours: 2,
-      runs: [{ role: 'builder', minutes: 5, summary: 'Asked how many retries.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 5, summary: 'Asked how many retries.' }],
       gate: {
         type: 'question',
         title: 'Retry the whole export or only the failed chunk?',
@@ -1799,7 +1920,8 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       ageHours: 6,
       runs: [
         {
-          role: 'builder',
+          role: 'agent',
+          purpose: 'build',
           minutes: 12,
           summary: 'Could not reproduce in the headless browser.',
           failed: true,
@@ -1807,7 +1929,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       ],
       gate: {
         type: 'failure',
-        title: 'The builder could not reproduce the flash',
+        title: 'The agent could not reproduce the flash',
         body: 'The preview renders dark from the first frame in headless Chromium. It may only happen in Safari or with a cold cache. Try again with Safari, or close the task?',
       },
     },
@@ -1821,7 +1943,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       reason: 'building',
       branch: 'feat/mcp-stream-tools',
       ageHours: 1,
-      runs: [{ role: 'builder', minutes: 4, summary: 'Streaming the tool results.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 4, summary: 'Streaming the tool results.' }],
     },
     {
       id: 'task-effect-orm',
@@ -1833,7 +1955,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       reason: 'running checks',
       branch: 'chore/effect-orm-0-7-1',
       ageHours: 0.5,
-      runs: [{ role: 'builder', minutes: 3, summary: 'Bumped and fixed one type.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 3, summary: 'Bumped and fixed one type.' }],
     },
     {
       id: 'task-docs-gate',
@@ -1895,7 +2017,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
         ],
       },
       provider: 'codex',
-      runs: [{ role: 'builder', minutes: 11, summary: 'Added the fallback.' }],
+      runs: [{ role: 'agent', purpose: 'build', minutes: 11, summary: 'Added the fallback.' }],
       extra: [
         {
           type: 'evidence.attached',
@@ -1925,9 +2047,14 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       pullRequest: { number: 212, checks: 'passing' },
       merged: true,
       runs: [
-        { role: 'builder', minutes: 6, summary: 'Raised the muted text and border tokens in dark mode.' },
+        {
+          role: 'agent',
+          purpose: 'build',
+          minutes: 6,
+          summary: 'Raised the muted text and border tokens in dark mode.',
+        },
         { role: 'reviewer', minutes: 2, summary: 'No findings.' },
-        { role: 'fixer', minutes: 3, summary: 'Raised the disabled text too.' },
+        { role: 'agent', purpose: 'fix', fix: 'you', minutes: 3, summary: 'Raised the disabled text too.' },
       ],
       revision: {
         afterRun: 1,
@@ -1945,7 +2072,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       reason: 'writing the plan',
       branch: 'feat/print-retries',
       ageHours: 0.3,
-      runs: [{ role: 'planner', minutes: 0, summary: '' }],
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 0, summary: '' }],
     },
     {
       id: 'task-old-banner',
@@ -1987,7 +2114,7 @@ function seed() {
   const tasks = [...listTasks(repos, createWorktrees(repos)), ...listCodeTasks(sample)];
 
   const log = new EventLog(join(DATA, 'shinsa.sqlite'));
-  const timeline = buildEvents(tasks, projects, [...Object.values(repos), sample.repo]);
+  const timeline = stampRunPrompts(buildEvents(tasks, projects, [...Object.values(repos), sample.repo]));
   let seq = 0;
   for (const { at, event } of timeline) {
     log.commitCommand({ events: [event], effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
@@ -2007,7 +2134,7 @@ function seed() {
     const events = buildRunEvents(times, live);
     writeTranscript(transcripts, runId, spreadEvents(events, times.startedAt, times.endedAt ?? NOW - MINUTE));
   }
-  writeDelegationTranscripts(transcripts);
+  writeDelegationTranscripts(transcripts, timeline);
   writeCodeTranscripts(transcripts, timeline, sample);
   writeEvidenceFiles();
   writeAccountTranscripts(transcripts);

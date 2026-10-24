@@ -25,6 +25,7 @@ import {
   type TimedSeedEvent,
   writeTranscript,
 } from './seed-kit.ts';
+import { listRunOpenings } from './seed-prompts.ts';
 
 interface Step {
   call: ChatTool;
@@ -38,6 +39,12 @@ function brief(role: string, title: string, task: string): ChatEvent {
     text: `You are the ${role} for “${title}”.\n\n${task}\n\nWork in the task's worktree and hand over through the Shinsa tools.`,
     attachments: [],
   };
+}
+
+function resolveOpening(openings: ReadonlyMap<string, string>, runId: string): ChatEvent {
+  const text = openings.get(runId);
+  if (!text) throw new Error(`The seed has no prompt for run ${runId}.`);
+  return { type: 'user', from: 'shinsa', text, attachments: [] };
 }
 
 function read(
@@ -117,7 +124,7 @@ function serializeFinding(finding: ReviewFinding) {
   };
 }
 
-function listReviewRuns(sample: CodeSample) {
+function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string>) {
   const { review } = sample;
   const title = 'Rename review targets to review spots';
   const { phases } = resolveReviewReport(sample, []);
@@ -136,7 +143,7 @@ function listReviewRuns(sample: CodeSample) {
   return {
     0: serializeRun(
       `${SAMPLE_REVIEW}-run-0`,
-      [brief('planner', title, request)],
+      [resolveOpening(openings, `${SAMPLE_REVIEW}-run-0`)],
       [
         say('I’ll find every place the web still says target, then check what core calls the same thing.'),
         search('lib/review/targets.ts', review.importers, 'apps'),
@@ -161,13 +168,7 @@ function listReviewRuns(sample: CodeSample) {
     ),
     1: serializeRun(
       `${SAMPLE_REVIEW}-run-1`,
-      [
-        brief(
-          'builder',
-          title,
-          `Build phase 1 of 3, “${REVIEW_PLAN.phases[0]?.title}”: ${REVIEW_PLAN.phases[0]?.detail}`
-        ),
-      ],
+      [resolveOpening(openings, `${SAMPLE_REVIEW}-run-1`)],
       [
         read(SAMPLE_PATHS.targets, review.spots.before, 1, 60),
         run(`git mv ${SAMPLE_PATHS.targets} ${SAMPLE_PATHS.spots}`, 'Rename the module', ''),
@@ -197,13 +198,7 @@ function listReviewRuns(sample: CodeSample) {
     ),
     2: serializeRun(
       `${SAMPLE_REVIEW}-run-2`,
-      [
-        brief(
-          'builder',
-          title,
-          `Build phase 2 of 3, “${REVIEW_PLAN.phases[1]?.title}”: ${REVIEW_PLAN.phases[1]?.detail}`
-        ),
-      ],
+      [resolveOpening(openings, `${SAMPLE_REVIEW}-run-2`)],
       [
         search('lib/review/targets.ts', review.importers, 'apps'),
         edit(SAMPLE_PATHS.review, review.review.before, review.review.after),
@@ -235,13 +230,7 @@ function listReviewRuns(sample: CodeSample) {
     ),
     3: serializeRun(
       `${SAMPLE_REVIEW}-run-3`,
-      [
-        brief(
-          'builder',
-          title,
-          `Build phase 3 of 3, “${REVIEW_PLAN.phases[2]?.title}”: ${REVIEW_PLAN.phases[2]?.detail}`
-        ),
-      ],
+      [resolveOpening(openings, `${SAMPLE_REVIEW}-run-3`)],
       [
         read(SAMPLE_PATHS.design, review.design.before, Math.max(1, designLine - 8), designLine),
         edit(SAMPLE_PATHS.design, review.design.before, review.design.after),
@@ -274,13 +263,7 @@ function listReviewRuns(sample: CodeSample) {
     ),
     4: serializeRun(
       `${SAMPLE_REVIEW}-run-4`,
-      [
-        brief(
-          'fixer',
-          title,
-          `The checks failed.\n\nbunx knip:\nUnused exported types (1)\nSpotKey  interface  ${SAMPLE_PATHS.spotKeys}:1:18\n\nMake the checks pass without changing behaviour.`
-        ),
-      ],
+      [resolveOpening(openings, `${SAMPLE_REVIEW}-run-4`)],
       [
         search('SpotKey', listMatches(SAMPLE_PATHS.spotKeys, review.spotKeys.before, 'SpotKey'), 'apps/web'),
         say('Nothing outside spot-keys.ts uses the type, so it does not need to be exported.'),
@@ -331,14 +314,14 @@ function listReviewRuns(sample: CodeSample) {
   };
 }
 
-function listMergedRuns(sample: CodeSample) {
+function listMergedRuns(sample: CodeSample, openings: ReadonlyMap<string, string>) {
   const title = 'Stack the queue by priority';
   const request = 'The request: Stack the queue by priority: urgent work should sit on top inside each gate.';
   const { index } = sample.merged;
   return {
     0: serializeRun(
       `${SAMPLE_MERGED}-run-0`,
-      [brief('planner', title, request)],
+      [resolveOpening(openings, `${SAMPLE_MERGED}-run-0`)],
       [
         search(
           'resolveQueue',
@@ -352,7 +335,7 @@ function listMergedRuns(sample: CodeSample) {
     ),
     1: serializeRun(
       `${SAMPLE_MERGED}-run-1`,
-      [brief('builder', title, `Build phase 1 of 2, “${MERGED_PLAN.phases[0]?.title}”.`)],
+      [resolveOpening(openings, `${SAMPLE_MERGED}-run-1`)],
       [
         write(SAMPLE_PATHS.queueStack, sample.merged.stack),
         edit(SAMPLE_PATHS.queueIndex, index.before, index.after),
@@ -367,7 +350,7 @@ function listMergedRuns(sample: CodeSample) {
     ),
     2: serializeRun(
       `${SAMPLE_MERGED}-run-2`,
-      [brief('builder', title, `Build phase 2 of 2, “${MERGED_PLAN.phases[1]?.title}”.`)],
+      [resolveOpening(openings, `${SAMPLE_MERGED}-run-2`)],
       [
         write(SAMPLE_PATHS.queueTest, sample.merged.test),
         run(
@@ -395,16 +378,13 @@ function listMergedRuns(sample: CodeSample) {
   };
 }
 
-function listLiveRuns(sample: CodeSample) {
-  const title = 'Add a dark theme to the code view';
-  const request =
-    'The request: Give the code view a proper dark theme from our own tokens instead of the GitHub colours.';
+function listLiveRuns(sample: CodeSample, openings: ReadonlyMap<string, string>) {
   const { live } = sample;
   const tokensLine = resolveLine(live.tokens.after, '--code-keyword');
   return {
     0: serializeRun(
       `${SAMPLE_LIVE}-run-0`,
-      [brief('planner', title, request)],
+      [resolveOpening(openings, `${SAMPLE_LIVE}-run-0`)],
       [
         read(SAMPLE_PATHS.highlight, live.highlight.before),
         search('--shiki', listGrepMatches(sample.repo.path, '--shiki', 'main'), 'apps/web'),
@@ -414,7 +394,7 @@ function listLiveRuns(sample: CodeSample) {
     ),
     1: serializeRun(
       `${SAMPLE_LIVE}-run-1`,
-      [brief('builder', title, `Build phase 1 of 3, “${LIVE_PLAN.phases[0]?.title}”.`)],
+      [resolveOpening(openings, `${SAMPLE_LIVE}-run-1`)],
       [
         edit(SAMPLE_PATHS.tokens, live.tokens.before, live.tokens.after),
         handOver(
@@ -427,13 +407,7 @@ function listLiveRuns(sample: CodeSample) {
     ),
     2: serializeRun(
       `${SAMPLE_LIVE}-run-2`,
-      [
-        brief(
-          'builder',
-          title,
-          `Build phase 2 of 3, “${LIVE_PLAN.phases[1]?.title}”: ${LIVE_PLAN.phases[1]?.detail}`
-        ),
-      ],
+      [resolveOpening(openings, `${SAMPLE_LIVE}-run-2`)],
       [
         read(SAMPLE_PATHS.highlight, live.highlight.before),
         say(
@@ -499,10 +473,11 @@ function resolveWindow(timeline: TimedSeedEvent[], runId: string) {
 }
 
 export function writeCodeTranscripts(dir: string, timeline: TimedSeedEvent[], sample: CodeSample) {
+  const openings = listRunOpenings(timeline);
   const runs: [string, Record<number, ChatEvent[]>][] = [
-    [SAMPLE_REVIEW, listReviewRuns(sample)],
-    [SAMPLE_MERGED, listMergedRuns(sample)],
-    [SAMPLE_LIVE, listLiveRuns(sample)],
+    [SAMPLE_REVIEW, listReviewRuns(sample, openings)],
+    [SAMPLE_MERGED, listMergedRuns(sample, openings)],
+    [SAMPLE_LIVE, listLiveRuns(sample, openings)],
     [SAMPLE_ANSWER, listAnswerRuns(sample)],
   ];
   for (const [taskId, events] of runs) {

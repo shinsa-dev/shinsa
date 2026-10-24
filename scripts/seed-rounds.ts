@@ -1,5 +1,11 @@
-import type { PipelineStep, PlanDocument, Repo, RoundShipping, RunRole } from '../packages/core/src/index.ts';
-import type { Push, SeedClock, SeedTask } from './seed-kit.ts';
+import type {
+  PipelineStep,
+  PlanDocument,
+  Repo,
+  RoundShipping,
+  RunPurpose,
+} from '../packages/core/src/index.ts';
+import { type Push, resolveAgentSession, type SeedClock, type SeedTask } from './seed-kit.ts';
 
 const TASK = 'task-mcp-rounds';
 const BRANCH = 'feat/mcp-v2-agent';
@@ -85,33 +91,37 @@ function run(
   push: Push,
   clock: SeedClock,
   [index, round]: [number, number],
-  role: RunRole,
+  purpose: RunPurpose | null,
   minutes: number,
-  summary: string | null
+  summary: string | null,
+  phaseIndex: number | null = null
 ) {
   const runId = `${TASK}-run-${index}`;
+  const sessionId = purpose ? resolveAgentSession(TASK) : `session-${runId}`;
   push(clock.step(0.5), {
     type: 'run.started',
     run: {
       id: runId,
       taskId: TASK,
-      role,
+      role: purpose ? 'agent' : 'reviewer',
+      ...(purpose ? { purpose } : {}),
+      ...(purpose === 'build' ? { phaseIndex } : {}),
       provider: 'claude',
-      model: role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5',
-      sessionId: `session-${role}`,
+      model: purpose ? 'claude-opus-5-5' : 'claude-sonnet-5-5',
+      sessionId,
       sessionProvider: 'claude',
       startedAt: clock.at,
       endedAt: null,
       outcome: null,
       summary: null,
       status: 'running',
-      ...(index > 2 && role !== 'reviewer' ? { resume: true } : {}),
+      ...(index > 0 && purpose ? { resume: true } : {}),
       ...(round > 1 ? { round } : {}),
     },
   });
   if (summary === null) return;
   if (index % 4 === 3) {
-    push(clock.step(minutes / 2), { type: 'run.compacted', runId, sessionId: `session-${role}` });
+    push(clock.step(minutes / 2), { type: 'run.compacted', runId, sessionId });
   }
   push(clock.step(minutes), { type: 'run.ended', runId, outcome: 'completed', summary });
 }
@@ -145,7 +155,7 @@ function planRound(
     push,
     clock,
     [counter.runs++, counter.round] as [number, number],
-    'planner',
+    'plan',
     3,
     `Planned: ${script.title}.`
   );
@@ -170,9 +180,10 @@ function buildPhases(
       push,
       clock,
       [counter.runs++, counter.round] as [number, number],
-      'builder',
+      'build',
       9,
-      `${script.plan.phases[index]?.title ?? 'Phase'}: done.`
+      `${script.plan.phases[index]?.title ?? 'Phase'}: done.`,
+      index
     );
     push(clock.step(0.1), {
       type: 'phase.completed',
@@ -197,7 +208,7 @@ function finishRound(push: Push, clock: SeedClock, script: RoundScript, counter:
     results: [{ name: 'bun test', outcome: 'pass', detail: null }],
   });
   push(clock.step(0.1), { type: 'work.submitted', taskId: TASK, summary: `${script.title}.`, report: null });
-  run(push, clock, [counter.runs++, counter.round] as [number, number], 'reviewer', 4, 'No findings.');
+  run(push, clock, [counter.runs++, counter.round] as [number, number], null, 4, 'No findings.');
   push(clock.step(0.1), { type: 'review.reported', taskId: TASK, findings: [] });
 }
 
@@ -247,7 +258,13 @@ function scriptRounds(push: Push, clock: SeedClock, worktree: string) {
     RoundScript,
     RoundScript,
   ];
-  push(clock.step(0.1), { type: 'worktree.created', taskId: TASK, path: worktree, branch: BRANCH });
+  push(clock.step(0.1), {
+    type: 'worktree.created',
+    taskId: TASK,
+    path: worktree,
+    branch: BRANCH,
+    workspace: 'worktrees',
+  });
   planRound(push, clock, first, counter, 1);
   finishRound(push, clock, first, counter);
   push(clock.step(1), {
@@ -317,7 +334,7 @@ function scriptRounds(push: Push, clock: SeedClock, worktree: string) {
     stage: 'building',
     reason: 'building phase 2 of 2',
   });
-  run(push, clock, [counter.runs++, counter.round] as [number, number], 'builder', 0, null);
+  run(push, clock, [counter.runs++, counter.round] as [number, number], 'build', 0, null, 1);
 
   push(clock.step(1), {
     type: 'task.messaged',

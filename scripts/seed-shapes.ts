@@ -141,7 +141,6 @@ const SHAPE_HANDOVER: Partial<Record<RunRole, (body: string) => ChatTool>> = {
   answerer: (body) => ({ kind: 'shinsa', name: 'answer', args: { answer: body } }),
   investigator: (body) => ({ kind: 'shinsa', name: 'report_diagnosis', args: { diagnosis: body } }),
   researcher: (body) => ({ kind: 'shinsa', name: 'submit_report', args: { report: body } }),
-  operator: (body) => ({ kind: 'shinsa', name: 'report_outcome', args: { outcome: body } }),
 };
 
 export function resolveShapeHandover(role: RunRole, body: string) {
@@ -253,8 +252,8 @@ function listInquiryShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       ageHours: 3,
       runs: [
         { role: 'investigator', minutes: 9, summary: 'The price cache is keyed by product, not by plan.' },
-        { role: 'planner', minutes: 4, summary: 'Planned keying the cache by plan.' },
-        { role: 'builder', minutes: 6, summary: 'Keying the cache by plan.' },
+        { role: 'agent', purpose: 'plan', minutes: 4, summary: 'Planned keying the cache by plan.' },
+        { role: 'agent', purpose: 'build', minutes: 6, summary: 'Keying the cache by plan.' },
       ],
       extra: [
         {
@@ -314,7 +313,9 @@ function listOperationShapeTasks({ paywall }: SeedRepoPair): SeedTask[] {
       branch: 'ops/rotate-webhook-secret',
       ageHours: 1,
       plan: ROTATE_PLAN,
-      runs: [{ role: 'planner', minutes: 5, summary: 'Planned a rotation with a day of overlap.' }],
+      runs: [
+        { role: 'agent', purpose: 'plan', minutes: 5, summary: 'Planned a rotation with a day of overlap.' },
+      ],
       gate: { type: 'plan', title: 'Approve the rotation plan', body: ROTATE_PLAN.goal },
     },
     {
@@ -331,8 +332,8 @@ function listOperationShapeTasks({ paywall }: SeedRepoPair): SeedTask[] {
       plan: TRIAL_BACKFILL_PLAN,
       summary: 'Backfilled 1,284 trial start dates from the purchase events.',
       runs: [
-        { role: 'planner', minutes: 4, summary: 'Planned the backfill in batches of 500.' },
-        { role: 'operator', minutes: 12, summary: 'Backfilled 1,284 rows.' },
+        { role: 'agent', purpose: 'plan', minutes: 4, summary: 'Planned the backfill in batches of 500.' },
+        { role: 'agent', purpose: 'operate', minutes: 12, summary: 'Backfilled 1,284 rows.' },
       ],
       extra: [
         {
@@ -389,7 +390,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       ageHours: 1.5,
       summary: STUCK_DIAGNOSIS,
       runs: [
-        { role: 'planner', minutes: 2, summary: COMPOSED_WHY },
+        { role: 'agent', purpose: 'plan', minutes: 2, summary: COMPOSED_WHY },
         { role: 'investigator', minutes: 9, summary: 'Found two locks left by killed workers.' },
       ],
       extra: [
@@ -442,7 +443,12 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       branch: 'feat/editor-date-picker',
       ageHours: 0.3,
       runs: [
-        { role: 'planner', minutes: 2, summary: 'Set the steps: research, your OK, then the change.' },
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 2,
+          summary: 'Set the steps: research, your OK, then the change.',
+        },
         { role: 'researcher', minutes: 5, summary: 'Comparing three date pickers.' },
       ],
     },
@@ -476,9 +482,14 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       merged: true,
       pullRequest: { number: 4618, checks: 'passing', mergeCommit: TIER_MERGE_COMMIT },
       runs: [
-        { role: 'planner', minutes: 5, summary: 'Planned the column, then the backfill after the merge.' },
-        { role: 'builder', minutes: 9, summary: 'Added the column and the writer.' },
-        { role: 'builder', minutes: 6, summary: 'Billing reads the tier.' },
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 5,
+          summary: 'Planned the column, then the backfill after the merge.',
+        },
+        { role: 'agent', purpose: 'build', minutes: 9, summary: 'Added the column and the writer.' },
+        { role: 'agent', purpose: 'build', minutes: 6, summary: 'Billing reads the tier.' },
         { role: 'reviewer', minutes: 3, summary: 'No blocking findings.' },
       ],
       gate: {
@@ -505,7 +516,14 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       branch: 'feat/session-cookie',
       ageHours: 0.5,
       plan: RISKY_PLAN,
-      runs: [{ role: 'planner', minutes: 6, summary: 'Planned the switch and asked for approval first.' }],
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'plan',
+          minutes: 6,
+          summary: 'Planned the switch and asked for approval first.',
+        },
+      ],
       gate: { type: 'plan', title: 'Move the session to a cookie', body: RISKY_PLAN.goal },
     },
     {
@@ -521,7 +539,7 @@ function listComposedShapeTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       reason: 'planning the work',
       branch: 'feat/default-font-setting',
       ageHours: 0.6,
-      runs: [{ role: 'planner', minutes: 4, summary: 'Planning the setting.' }],
+      runs: [{ role: 'agent', purpose: 'plan', minutes: 4, summary: 'Planning the setting.' }],
       extra: [{ type: 'task.prioritized', taskId: 'task-shape-auto-change', priority: 'high' }],
     },
   ];
