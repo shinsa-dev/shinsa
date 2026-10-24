@@ -175,9 +175,9 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
   const [calls] = React.useState(createSampleChatCalls);
   const [run] = React.useState(() =>
     createSampleRun(now, {
-      id: 'planner',
+      id: 'agent',
       taskId: 'sample',
-      role: 'planner',
+      purpose: 'plan',
       endedAt: now,
       outcome: 'completed',
     })
@@ -188,7 +188,7 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
     <>
       <Specimen label='Chat lines · one anatomy for every one-line row in a run: the role header, a notice, the worked-for fold, the brief, tool rows, a hand-over Shinsa handed back and the agent retried'>
         <div className='flex w-full max-w-xl flex-col gap-4'>
-          <ChatLine icon='IconMap' label='Planner' meta='Planned 4 phases · christo@example.com' />
+          <ChatLine icon='IconAgent' label='Agent' meta='Planned 4 phases · christo@example.com' />
           {loaded && <NoticeLine item={loaded} />}
           <div className='flex min-w-0 flex-col'>
             <FoldLine open={open} onToggle={() => setOpen(!open)} label='Worked for 58s' meta='8 steps' />

@@ -24,7 +24,7 @@ function run(command: Command | undefined) {
 const MONITOR: Monitor = {
   id: 'm',
   runId: 'r',
-  role: 'builder',
+  role: 'agent',
   phaseIndex: 0,
   notes: 'The deploy.',
   armedAt: 0,
@@ -60,8 +60,8 @@ describe('process commands', () => {
     const commands = listProcessCommands(state, task, NOW);
     expect(commands.map((command) => command.label)).toEqual([
       'Check in now',
-      'Snooze the quiet-agent warning on the builder',
-      'Dismiss the quiet-agent warning on the builder',
+      'Snooze the quiet-agent warning on the agent',
+      'Dismiss the quiet-agent warning on the agent',
       'Add the suggested task “Cache it”',
       'Dismiss the suggested task “Cache it”',
     ]);
@@ -83,8 +83,8 @@ describe('process commands', () => {
     ];
     const commands = listProcessCommands(createShinsaState({ tasks: [task], runs }), task, NOW);
     expect(commands.map((command) => command.label)).toEqual([
-      'Snooze the quiet-agent warning on the builder',
-      'Dismiss the quiet-agent warning on the builder',
+      'Snooze the quiet-agent warning on the agent',
+      'Dismiss the quiet-agent warning on the agent',
       'Snooze the quiet-agent warning on the reviewer',
       'Dismiss the quiet-agent warning on the reviewer',
     ]);

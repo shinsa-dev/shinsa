@@ -1,16 +1,9 @@
 @import "@shinsa/ui/styles/globals.css";
+@import "./desktop.css";
 
 @source "./";
 
 @custom-variant desktop (&:where([data-desktop="window"] *));
-
-.code-token {
-  color: var(--shiki-light);
-}
-
-.dark .code-token {
-  color: var(--shiki-dark);
-}
 
 .prose-shinsa {
   font-size: var(--text-xs);

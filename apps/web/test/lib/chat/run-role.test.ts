@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { PlanDocument, Run, Task } from '@shinsa/core';
+import { type PlanDocument, type Run, resolveHouseRules, type Task } from '@shinsa/core';
 import { RUN_ROLE, resolveRunHeadline } from '@/lib/chat/run-role.ts';
 import { createCallEntry, shinsaTool } from '../../support/chat.ts';
 import { createRun, createTask, NOW } from '../../support/state.ts';
@@ -23,6 +23,10 @@ function withPlan(titles: string[]): Task {
 
 const task = createTask({ id: 't' });
 
+function resolveAgentPrompt(instruction: string) {
+  return `${resolveHouseRules('agent')}\n\n${instruction}`;
+}
+
 function live(overrides: Partial<Run>) {
   return createRun({ id: 'r', taskId: 't', ...overrides });
 }
@@ -34,15 +38,15 @@ function done(overrides: Partial<Run>) {
 describe('RUN_ROLE', () => {
   it('names each role in plain words with one icon', () => {
     expect(Object.fromEntries(Object.entries(RUN_ROLE).map(([role, mark]) => [role, mark.name]))).toEqual({
+      agent: 'Agent',
       planner: 'Planner',
       builder: 'Builder',
       reviewer: 'Reviewer',
-      fixer: 'Fixer',
       answerer: 'Answerer',
       investigator: 'Investigator',
       researcher: 'Researcher',
-      operator: 'Operator',
     });
+    expect(RUN_ROLE.agent.icon).toBe('IconAgent');
   });
 });
 
@@ -52,25 +56,32 @@ describe('resolveRunHeadline', () => {
     expect(resolveRunHeadline(done({ role: 'answerer' }), task, [])).toBe('Answered your question');
   });
 
-  it('describes an investigation, research and an operation while they work and once they hand over', () => {
+  it('describes an investigation and research while they work and once they hand over', () => {
     expect(resolveRunHeadline(live({ role: 'investigator' }), task, [])).toBe('Investigating');
     expect(resolveRunHeadline(done({ role: 'investigator' }), task, [])).toBe('Reported the diagnosis');
     expect(resolveRunHeadline(live({ role: 'researcher' }), task, [])).toBe('Researching');
     expect(resolveRunHeadline(done({ role: 'researcher' }), task, [])).toBe('Wrote the report');
-    expect(resolveRunHeadline(live({ role: 'operator' }), task, [])).toBe('Running the operation');
-    expect(resolveRunHeadline(done({ role: 'operator' }), task, [])).toBe('Reported the outcome');
+  });
+
+  it('describes the agent running the operation and once it reported the outcome', () => {
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'operate' }), task, [])).toBe(
+      'Running the operation'
+    );
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'operate' }), task, [])).toBe(
+      'Reported the outcome'
+    );
   });
 
   it('keeps the present tense for a run that failed or was stopped', () => {
-    expect(resolveRunHeadline(done({ role: 'builder', outcome: 'failed' }), task, [])).toBe(
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'build', outcome: 'failed' }), task, [])).toBe(
       'Building the change'
     );
-    expect(resolveRunHeadline(done({ role: 'planner', outcome: 'cancelled' }), task, [])).toBe(
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'plan', outcome: 'cancelled' }), task, [])).toBe(
       'Planning the work'
     );
   });
 
-  it('counts the phases of the plan the planner proposed last', () => {
+  it('counts the phases of the plan the agent proposed last', () => {
     const entries = [
       createCallEntry('1', shinsaTool('propose_plan', { phases: [{ title: 'a' }] }), 1),
       createCallEntry(
@@ -79,34 +90,50 @@ describe('resolveRunHeadline', () => {
         2
       ),
     ];
-    expect(resolveRunHeadline(live({ role: 'planner' }), task, entries)).toBe('Planning the work');
-    expect(resolveRunHeadline(done({ role: 'planner' }), task, entries)).toBe('Planned 3 phases');
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'plan' }), task, entries)).toBe(
+      'Planning the work'
+    );
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'plan' }), task, entries)).toBe(
+      'Planned 3 phases'
+    );
   });
 
   it('falls back to the plan on the task, then to a plain headline', () => {
-    expect(resolveRunHeadline(done({ role: 'planner' }), withPlan(['Only']), [])).toBe('Planned 1 phase');
-    expect(resolveRunHeadline(done({ role: 'planner' }), task, [])).toBe('Planned the work');
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'plan' }), withPlan(['Only']), [])).toBe(
+      'Planned 1 phase'
+    );
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'plan' }), task, [])).toBe('Planned the work');
   });
 
-  it('names the phase a builder works on', () => {
+  it('names the phase the agent builds', () => {
     const planned = withPlan(['Add the form', 'Wire the API']);
-    expect(resolveRunHeadline(live({ role: 'builder', phaseIndex: 1 }), planned, [])).toBe(
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'build', phaseIndex: 1 }), planned, [])).toBe(
       'Phase 2 of 2: Wire the API'
     );
-    expect(resolveRunHeadline(done({ role: 'builder', phaseIndex: 0 }), planned, [])).toBe(
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'build', phaseIndex: 0 }), planned, [])).toBe(
       'Phase 1 of 2: Add the form'
     );
   });
 
-  it('describes a builder without a phase in the plan as building the change', () => {
+  it('describes a build without a phase in the plan as building the change', () => {
     const planned = withPlan(['Add the form']);
-    expect(resolveRunHeadline(live({ role: 'builder' }), planned, [])).toBe('Building the change');
-    expect(resolveRunHeadline(done({ role: 'builder', phaseIndex: null }), task, [])).toBe(
-      'Built the change'
-    );
-    expect(resolveRunHeadline(live({ role: 'builder', phaseIndex: 4 }), planned, [])).toBe(
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'build' }), planned, [])).toBe(
       'Building the change'
     );
+    expect(resolveRunHeadline(done({ role: 'agent', phaseIndex: null }), task, [])).toBe('Built the change');
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'build', phaseIndex: 4 }), planned, [])).toBe(
+      'Building the change'
+    );
+  });
+
+  it('describes a delegated planner and builder by their role, not by the round', () => {
+    const planned = withPlan(['Add the form']);
+    expect(resolveRunHeadline(live({ role: 'planner' }), planned, [])).toBe('Planning the work');
+    expect(resolveRunHeadline(done({ role: 'planner' }), planned, [])).toBe('Planned the work');
+    expect(resolveRunHeadline(live({ role: 'builder', phaseIndex: 0 }), planned, [])).toBe(
+      'Building the change'
+    );
+    expect(resolveRunHeadline(done({ role: 'builder' }), planned, [])).toBe('Built the change');
   });
 
   it('sums up the review the reviewer reported', () => {
@@ -130,23 +157,34 @@ describe('resolveRunHeadline', () => {
     ).toBe('Reviewed the change, 3 findings (2 blocking)');
   });
 
-  it('names what a fix is for from its prompt', () => {
+  it('names what a fix is for from the first words of its instruction, after the house rules', () => {
     const cases: [string, string, string][] = [
       ['The checks failed after the last change:', 'Fixing the failing checks', 'Fixed the failing checks'],
       ['The agent review found problems.', 'Fixing the review findings', 'Fixed the review findings'],
       ['The human looked at the work and wrote:', 'Making your changes', 'Made your changes'],
       ['Pull request #12 needs work', 'Fixing the pull request', 'Fixed the pull request'],
     ];
-    for (const [prompt, present, past] of cases) {
-      expect(resolveRunHeadline(live({ role: 'fixer', prompt }), task, [])).toBe(present);
-      expect(resolveRunHeadline(done({ role: 'fixer', prompt }), task, [])).toBe(past);
+    for (const [instruction, present, past] of cases) {
+      const prompt = resolveAgentPrompt(instruction);
+      expect(resolveRunHeadline(live({ role: 'agent', purpose: 'fix', prompt }), task, [])).toBe(present);
+      expect(resolveRunHeadline(done({ role: 'agent', purpose: 'fix', prompt }), task, [])).toBe(past);
     }
   });
 
-  it('falls back to the role when the fix prompt is unknown or missing', () => {
-    expect(resolveRunHeadline(live({ role: 'fixer', prompt: 'Something else' }), task, [])).toBe(
-      'Fixing the change'
-    );
-    expect(resolveRunHeadline(done({ role: 'fixer' }), task, [])).toBe('Fixed the change');
+  it('reads the short instruction of a fix that carries the round brief', () => {
+    const run = live({
+      role: 'agent',
+      purpose: 'fix',
+      prompt: resolveAgentPrompt('Your conversation may no longer hold this round.\n\nThe checks failed:'),
+      rolePrompt: resolveAgentPrompt('The checks failed after the last change:'),
+    });
+    expect(resolveRunHeadline(run, task, [])).toBe('Fixing the failing checks');
+  });
+
+  it('falls back to fixing the change when the fix instruction is unknown or missing', () => {
+    expect(
+      resolveRunHeadline(live({ role: 'agent', purpose: 'fix', prompt: 'Something else' }), task, [])
+    ).toBe('Fixing the change');
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'fix' }), task, [])).toBe('Fixed the change');
   });
 });

@@ -8,6 +8,7 @@ import { OverviewTab } from '@/routes/task/overview.tsx';
 import { createPullRequest } from '../../support/pull-request.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createGate, createShinsaState, createTask } from '../../support/state.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 const SHA = '9f2c4e1b7a3d5e60c8f1a2b3c4d5e6f708192a3b';
 
@@ -109,7 +110,7 @@ describe('the operation gate after the merge', () => {
 
   it('shows the saved notes in the box, and runs with them as they are', async () => {
     const view = renderOverview(waiting({}, { notes: 'Wait for the deploy.' }));
-    const box = view.getByRole('textbox', { name: 'Notes for the operator' }) as HTMLTextAreaElement;
+    const box = view.getByRole('textbox', { name: 'Notes for the agent' }) as HTMLTextAreaElement;
     expect(box.value).toBe('Wait for the deploy.');
     expect(view.queryByRole('button', { name: 'Run with these notes' })).toBeNull();
     fireEvent.click(view.getByRole('button', { name: 'Run the operation' }));
@@ -121,7 +122,7 @@ describe('the operation gate after the merge', () => {
 
   it('replaces the notes with the box’s text when you changed it', async () => {
     const view = renderOverview(waiting({}, { notes: 'Wait for the deploy.' }));
-    fireEvent.change(view.getByRole('textbox', { name: 'Notes for the operator' }), {
+    fireEvent.change(view.getByRole('textbox', { name: 'Notes for the agent' }), {
       target: { value: '  Skip the archived stores.  ' },
     });
     fireEvent.click(view.getByRole('button', { name: 'Run the operation' }));
@@ -133,7 +134,7 @@ describe('the operation gate after the merge', () => {
 
   it('clears the notes when you emptied the box', async () => {
     const view = renderOverview(waiting({}, { notes: 'Wait for the deploy.' }));
-    fireEvent.change(view.getByRole('textbox', { name: 'Notes for the operator' }), {
+    fireEvent.change(view.getByRole('textbox', { name: 'Notes for the agent' }), {
       target: { value: '' },
     });
     fireEvent.click(view.getByRole('button', { name: 'Run the operation' }));
@@ -143,10 +144,10 @@ describe('the operation gate after the merge', () => {
     expect(await view.findByText('Running the operation without notes.')).toBeTruthy();
   });
 
-  it('says a message in the composer replaces the notes for the operator, and runs nothing', async () => {
+  it('says a message in the composer replaces the notes for the agent, and runs nothing', async () => {
     const view = renderOverview(waiting());
     const composer = view.getByRole('textbox', {
-      name: 'Write the notes for the operator. They replace the saved notes and go with the operation.',
+      name: 'Write the notes for the agent. They replace the saved notes and go with the operation.',
     });
     fireEvent.change(composer, { target: { value: 'Wait for the deploy.' } });
     fireEvent.click(view.getByRole('button', { name: 'Send message' }));
@@ -156,7 +157,7 @@ describe('the operation gate after the merge', () => {
 
   it('refills the box when the saved notes change', () => {
     const view = renderOverview(waiting());
-    const box = view.getByRole('textbox', { name: 'Notes for the operator' }) as HTMLTextAreaElement;
+    const box = view.getByRole('textbox', { name: 'Notes for the agent' }) as HTMLTextAreaElement;
     expect(box.value).toBe('');
     fireEvent.change(box, { target: { value: 'A draft.' } });
     const { task, gate, state } = waiting({}, { notes: 'Wait for the deploy.' });
@@ -176,7 +177,7 @@ describe('the operation gate after the merge', () => {
     fireEvent.click(view.getByRole('button', { name: 'Finish without it' }));
     expect(view.getByText('Finish without running the operation?')).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: 'Keep it' }));
-    await waitFor(() => expect(view.queryByText('Finish without running the operation?')).toBeNull());
+    await waitForGone(() => view.queryByText('Finish without running the operation?'));
     expect(listSentCommands()).toEqual([]);
     fireEvent.click(view.getByRole('button', { name: 'Finish without it' }));
     const dialog = within(await view.findByRole('alertdialog'));

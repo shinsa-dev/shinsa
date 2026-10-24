@@ -1,4 +1,4 @@
-import { type ChatToolArgs, capitalise, type Run } from '@shinsa/core';
+import { type ChatToolArgs, capitalise, type Run, type Task } from '@shinsa/core';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -8,9 +8,11 @@ import { CARD, CHAT_INSET, CHIP } from '@/components/layout/surface/card.ts';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
+import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import {
+  readHandOverSpots,
   readPlanParameters,
   readProposedChange,
   resolveAskAnswer,
@@ -84,16 +86,38 @@ function PlanCard({ args }: { args: ChatToolArgs }) {
   );
 }
 
+function SpotList({ task, args }: { task: Task | null; args: ChatToolArgs }) {
+  const spots = readHandOverSpots(args);
+  if (!task?.repoId || spots.length === 0) return null;
+  return (
+    <div className='flex flex-col gap-1.5'>
+      <span className='text-2xs text-fg-2'>Spots to review</span>
+      {spots.map((spot) => (
+        <ChangeSnippet
+          key={`${spot.file}:${spot.start}`}
+          task={task}
+          path={spot.file}
+          start={spot.start}
+          end={spot.end}
+          why={spot.why}
+        />
+      ))}
+    </div>
+  );
+}
+
 function SummaryCard({
   icon,
   title,
   args,
   meta,
+  task = null,
 }: {
   icon: IconName;
   title: string;
   args: ChatToolArgs;
   meta?: React.ReactNode;
+  task?: Task | null;
 }) {
   const summary = readString(args, 'summary');
   const calls = readList(args, 'judgement_calls');
@@ -125,11 +149,12 @@ function SummaryCard({
           </ul>
         </div>
       )}
+      <SpotList task={task} args={args} />
     </Card>
   );
 }
 
-function ReviewCard({ args }: { args: ChatToolArgs }) {
+function ReviewCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
   const findings = readReportedFindings(args);
   const { title, meta } = describeReportedFindings(findings);
   if (findings.length === 0) return <Card icon='IconShieldCheck' title={title} />;
@@ -139,7 +164,7 @@ function ReviewCard({ args }: { args: ChatToolArgs }) {
         {findings.map((finding, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: findings are positional
           <li key={index} className='flex'>
-            <FindingText severity={finding.severity} place={finding} message={finding.message} />
+            <FindingText severity={finding.severity} place={finding} message={finding.message} task={task} />
           </li>
         ))}
       </ul>
@@ -239,7 +264,17 @@ function InsetToolRow({ call, live }: { call: ToolCall; live: boolean }) {
   );
 }
 
-export function HandoverCard({ call, run, live }: { call: ToolCall; run: Run; live: boolean }) {
+export function HandoverCard({
+  call,
+  run,
+  live,
+  task = null,
+}: {
+  call: ToolCall;
+  run: Run;
+  live: boolean;
+  task?: Task | null;
+}) {
   const { tool } = call;
   if (tool.kind !== 'shinsa') return <InsetToolRow call={call} live={live} />;
   if (call.failed && tool.name !== 'ask') {
@@ -266,12 +301,13 @@ export function HandoverCard({ call, run, live }: { call: ToolCall; run: Run; li
           }
           args={tool.args}
           meta={resolveSpotsMeta(tool.args)}
+          task={task}
         />
       );
     case 'complete_fix':
       return <SummaryCard icon='IconSend' title='Handed over the fix' args={tool.args} />;
     case 'report_review':
-      return <ReviewCard args={tool.args} />;
+      return <ReviewCard args={tool.args} task={task} />;
     case 'ask':
       return <AskCard call={call} args={tool.args} delegated={Boolean(run.delegation)} />;
     case 'suggest_tasks':

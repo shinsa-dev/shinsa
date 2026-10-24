@@ -73,7 +73,7 @@ describe('usage rows', () => {
   });
 
   it('glances at the 5-hour window, not the fuller weekly one', () => {
-    const settings: Settings = { ...SETTINGS, agentModels: { builder: 'claude-fable-1' } };
+    const settings: Settings = { ...SETTINGS, agentModels: { agent: 'claude-fable-1' } };
     expect(resolveUsageModel(settings)).toBe('claude-fable-1');
     const account = createAccount({
       id: 'a',
@@ -111,7 +111,7 @@ describe('usage rows', () => {
     expect(selectGlanceRow(model, 'claude-fable-1')).toMatchObject({ id: 'f', label: 'Weekly · Fable' });
   });
 
-  it('falls back to the fullest window that applies to the builder model when there is no 5-hour one', () => {
+  it('falls back to the fullest window that applies to the agent’s model when there is no 5-hour one', () => {
     const account = createAccount({
       id: 'a',
       usage: usage(

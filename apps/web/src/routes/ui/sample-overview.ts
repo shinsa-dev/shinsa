@@ -13,7 +13,7 @@ function createUsageWaitTask(now: number, id: string, autoResume: boolean) {
   const wait: UsageWait = {
     id: `${id}-wait`,
     runId: `${id}-run`,
-    role: 'builder',
+    role: 'agent',
     phaseIndex: 0,
     account: { id: 'team', email: 'agents@superwall.com' },
     resetAt: now + 2 * HOUR,
@@ -147,7 +147,7 @@ export function createOverviewScene(now: number) {
   const monitor: Monitor = {
     id: 'monitor-1',
     runId: 'monitor-run',
-    role: 'builder',
+    role: 'agent',
     phaseIndex: 0,
     notes: 'The staging deploy of `paywall-next` to finish, so the preview link loads.',
     armedAt: now - 30 * MINUTE,

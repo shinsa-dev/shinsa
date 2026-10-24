@@ -60,7 +60,7 @@ describe('gate commands', () => {
     const decide = commandsFor(task, gate)[0];
     expect([decide?.label, decide?.hint]).toEqual([
       'Fix 1 finding',
-      'Sends the findings you kept to the fixer',
+      'Sends the findings you kept to the agent',
     ]);
     run(decide);
     expect(spies.sent).toHaveBeenCalledWith(
@@ -74,8 +74,75 @@ describe('gate commands', () => {
           { index: 1, verdict: 'dismiss', note: null },
         ],
       },
-      'Sent. The fixer works on what you kept.'
+      'Sent. The agent works on what you kept.'
     );
+  });
+
+  it('Fix 1 finding from the menu sends the drafted line comments too and clears them once sent', async () => {
+    const task = createTask({
+      id: 't',
+      stage: 'awaiting_review',
+      findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
+    });
+    const gate = createGate({
+      id: 'g',
+      taskId: 't',
+      type: 'review',
+      escalation: { reason: 'rounds', rounds: 2, at: 1 },
+    });
+    let cleared = 0;
+    const context = {
+      comments: [
+        {
+          id: 'c1',
+          ref: null,
+          path: 'src/a.ts',
+          side: 'new' as const,
+          line: 4,
+          endLine: null,
+          text: 'Keep the guard.',
+          suggestion: null,
+        },
+      ],
+      clearComments: () => {
+        cleared += 1;
+      },
+      tab: null,
+    };
+    const decide = listOpenGateCommands(
+      createShinsaState({ tasks: [task], gates: [gate] }),
+      task,
+      context
+    )[0];
+    expect([decide?.label, decide?.hint, decide?.disabled]).toEqual([
+      'Fix 1 finding',
+      'Sends the findings you kept and your line comments to the agent',
+      false,
+    ]);
+    run(decide);
+    expect(spies.sent).toHaveBeenCalledWith(
+      {
+        type: 'gate.answer',
+        gateId: 'g',
+        decision: 'revise',
+        response: null,
+        verdicts: [{ index: 0, verdict: 'fix', note: null }],
+        comments: [
+          {
+            path: 'src/a.ts',
+            side: 'new',
+            line: 4,
+            endLine: null,
+            text: 'Keep the guard.',
+            suggestion: null,
+          },
+        ],
+      },
+      'Sent. The agent works on what you kept.'
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(cleared).toBe(1);
   });
 
   it('answers each choice of a question in one step, the recommended one marked', () => {

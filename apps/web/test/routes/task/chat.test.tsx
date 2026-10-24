@@ -309,6 +309,46 @@ describe('ChatTab', () => {
     expect(within(section).getByText(/Failed/)).toBeTruthy();
   });
 
+  it('reads as one agent working through the round: each run headed Agent with what it did', () => {
+    const document = {
+      goal: 'Goal',
+      phases: [
+        { title: 'Add the form', detail: 'a' },
+        { title: 'Wire the API', detail: 'b' },
+      ],
+      behaviour: [],
+      approach: '',
+      files: [],
+      outOfScope: [],
+      verification: [],
+      questions: [],
+    };
+    const task = createTask({
+      id: 'task-1',
+      plan: { version: 1, body: '', document, proposedAt: STARTED },
+    });
+    const run = (id: string, seconds: number, overrides: Partial<Run>) =>
+      finishedRun({ id, startedAt: at(seconds), endedAt: at(seconds + 1), ...overrides });
+    const runs = [
+      run('plan', 0, { purpose: 'plan' }),
+      run('phase-1', 10, { purpose: 'build', phaseIndex: 0 }),
+      run('phase-2', 20, { purpose: 'build', phaseIndex: 1 }),
+      run('fix', 30, { purpose: 'fix', prompt: 'The checks failed after the last change:' }),
+      run('review', 40, { role: 'reviewer' }),
+    ];
+    const view = renderChat(createShinsaState({ tasks: [task], runs }), task);
+    const headers = [...view.container.querySelectorAll('section[id^="run-"] > [data-chat-line]')].map(
+      (header) => header.textContent ?? ''
+    );
+    expect(headers.map((header) => header.trim())).toEqual([
+      'Agent · Planned 2 phases',
+      'Agent · Phase 1 of 2: Add the form',
+      'Agent · Phase 2 of 2: Wire the API',
+      'Agent · Fixed the failing checks',
+      'Reviewer · Reviewed the change',
+    ]);
+  });
+
   it('shows a run headline the role header cuts short in full in its tooltip', async () => {
     const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth');
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
@@ -427,10 +467,10 @@ describe('a task that runs in rounds', () => {
 
   function roundRuns() {
     return [
-      finishedRun({ id: 'run-1', role: 'planner' }),
+      finishedRun({ id: 'run-1', purpose: 'plan' }),
       finishedRun({
         id: 'run-2',
-        role: 'planner',
+        purpose: 'plan',
         round: 2,
         startedAt: at(200),
         endedAt: null,

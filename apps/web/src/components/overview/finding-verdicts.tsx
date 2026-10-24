@@ -1,4 +1,4 @@
-import type { FindingVerdictKind, ReviewFinding } from '@shinsa/core';
+import type { FindingVerdictKind, ReviewFinding, Task } from '@shinsa/core';
 import { Choice } from '@/components/controls/choice.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { resolveVerdict, VERDICT_ITEMS, type VerdictDraft } from '@/lib/overview/verdicts.ts';
@@ -7,8 +7,10 @@ export function FindingVerdicts({
   findings,
   draft,
   onChange,
+  task = null,
 }: {
   findings: ReviewFinding[];
+  task?: Task | null;
   draft: VerdictDraft;
   onChange: (index: number, verdict: FindingVerdictKind) => void;
 }) {
@@ -20,7 +22,7 @@ export function FindingVerdicts({
           key={index}
           className='flex items-start gap-3 py-2 first:pt-0 last:pb-0'
         >
-          <FindingText severity={finding.severity} place={finding} message={finding.message} />
+          <FindingText severity={finding.severity} place={finding} message={finding.message} task={task} />
           <Choice
             label='Verdict'
             items={VERDICT_ITEMS}

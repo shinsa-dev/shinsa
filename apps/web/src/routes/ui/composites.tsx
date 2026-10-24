@@ -26,10 +26,12 @@ import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
+import { CodeDiff } from '@/components/text/code-diff.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
 import { Duration, TimeAgo } from '@/components/text/time-ago.tsx';
+import type { DiffSource } from '@/lib/code/diff-view.ts';
 import { resolveHealthBanner } from '@/lib/connection/health.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
@@ -38,6 +40,31 @@ import { MERGE_ITEMS } from '@/lib/settings.ts';
 import { ROADMAP_GROUPS } from '@/lib/tasks/roadmap.ts';
 import { acknowledgeSample, createSampleState, createSampleTask, HOUR } from './samples.ts';
 import { Specimen } from './section.tsx';
+
+const DIFF_SAMPLES: DiffSource[] = [
+  {
+    kind: 'files',
+    path: 'src/session.ts',
+    before: 'export function openSession(chat: Chat) {\n  return connect(chat.id);\n}',
+    after:
+      'export function openSession(chat: Chat, server: McpServer) {\n  return connect(chat.id, server.url);\n}',
+  },
+  {
+    kind: 'files',
+    path: 'src/limits.ts',
+    before: null,
+    after: 'export const MAX_SESSIONS = 4;\nexport const IDLE_MS = 60_000;',
+  },
+  {
+    kind: 'patch',
+    path: 'src/mcp/session.ts',
+    previousPath: 'src/session.ts',
+    hunks:
+      '@@ -1,2 +1,2 @@\n-import { connect } from "./net";\n+import { connect } from "../net";\n export { connect };',
+    binary: false,
+  },
+  { kind: 'patch', path: 'docs/session.png', previousPath: null, hunks: '', binary: true },
+];
 
 const TONES: Tone[] = ['neutral', 'blue', 'amber', 'orange', 'green', 'red', 'purple'];
 
@@ -288,6 +315,15 @@ export function CompositeSpecimens() {
               </div>
             </div>
           </Panel>
+        </div>
+      </Specimen>
+      <Specimen label='CodeDiff · an edit, a new file, a renamed file and a binary file, each in the card it sits in'>
+        <div className='grid w-full max-w-xl gap-2'>
+          {DIFF_SAMPLES.map((source) => (
+            <div key={source.path} className='overflow-hidden rounded-lg border border-border bg-bg-a1'>
+              <CodeDiff source={source} numbered={source.kind === 'patch'} />
+            </div>
+          ))}
         </div>
       </Specimen>
       <SetupSpecimens />

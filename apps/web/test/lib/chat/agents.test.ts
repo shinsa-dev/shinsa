@@ -28,35 +28,42 @@ function delegated(id: string, parentRunId: string, depth: number, overrides: Pa
 }
 
 describe('who worked on a task', () => {
-  it('lists each role once in the order it first worked, with its delegated agents nested under it', () => {
+  it('lists the round agent once with every delegation of its runs, then the reviewer and the answerer', () => {
     const task = createTask({ id: 't' });
     const state = createShinsaState({
       tasks: [task],
       runs: [
-        createRun({ id: 'p', taskId: 't', role: 'planner', startedAt: 1, endedAt: 2, outcome: 'completed' }),
-        createRun({ id: 'b1', taskId: 't', role: 'builder', startedAt: 3, endedAt: 4, outcome: 'completed' }),
-        createRun({ id: 'b2', taskId: 't', role: 'builder', startedAt: 5 }),
-        createRun({ id: 'f', taskId: 't', role: 'fixer', startedAt: 6, endedAt: 7, outcome: 'completed' }),
-        createRun({ id: 's', taskId: 't', role: 'fixer', startedAt: 8, endedAt: 9, outcome: 'completed' }),
-        delegated('d1', 'b2', 1),
+        createRun({ id: 'p', taskId: 't', purpose: 'plan', startedAt: 1, endedAt: 2, outcome: 'completed' }),
+        createRun({
+          id: 'b1',
+          taskId: 't',
+          purpose: 'build',
+          startedAt: 3,
+          endedAt: 4,
+          outcome: 'completed',
+        }),
+        createRun({ id: 'r', taskId: 't', role: 'reviewer', startedAt: 5, endedAt: 6, outcome: 'completed' }),
+        createRun({ id: 'b2', taskId: 't', purpose: 'fix', startedAt: 7 }),
+        createRun({ id: 'q', taskId: 't', role: 'answerer', startedAt: 8, endedAt: 9, outcome: 'completed' }),
+        delegated('d1', 'b2', 1, { role: 'builder' }),
         delegated('d2', 'd1', 2, { endedAt: 60, outcome: 'failed' }),
         delegated('d3', 'b1', 1, { endedAt: 60, outcome: 'cancelled' }),
-        delegated('d4', 'b1', 1, { endedAt: 60, outcome: 'completed' }),
+        delegated('d4', 'b1', 1, { role: 'planner', endedAt: 60, outcome: 'completed' }),
         createRun({ id: 'other', taskId: 'x', role: 'answerer', startedAt: 1 }),
       ],
     });
     const agents = listTaskAgents(state, task);
     expect(agents.map((agent) => [agent.name, agent.label, agent.detail, agent.depth, agent.runId])).toEqual([
-      ['Planner', null, '1 run', 0, 'p'],
-      ['Builder', null, '2 runs · working now', 0, 'b2'],
+      ['Agent', null, '3 runs · working now', 0, 'b2'],
       ['Reviewer', 'Check d3', 'Stopped', 1, 'd3'],
-      ['Reviewer', 'Check d4', 'Finished', 1, 'd4'],
-      ['Reviewer', 'Check d1', 'Working now', 1, 'd1'],
+      ['Planner', 'Check d4', 'Finished', 1, 'd4'],
+      ['Builder', 'Check d1', 'Working now', 1, 'd1'],
       ['Reviewer', 'Check d2', 'Failed', 2, 'd2'],
-      ['Fixer', null, '2 runs', 0, 's'],
+      ['Reviewer', null, '1 run', 0, 'r'],
+      ['Answerer', null, '1 run', 0, 'q'],
     ]);
-    expect(agents[1]?.live).toBe(true);
-    expect(agents[1]?.icon).toBe('IconHammer');
+    expect(agents[0]?.live).toBe(true);
+    expect(agents[0]?.icon).toBe('IconAgent');
     expect(describeAgentCount(agents)).toBe('7 agents');
   });
 

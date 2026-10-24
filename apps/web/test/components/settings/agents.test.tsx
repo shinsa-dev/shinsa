@@ -62,7 +62,7 @@ describe('Settings → Agents → Models', () => {
     expect(screen.getByRole('combobox', { name: 'Model for task agents' }).textContent).toBe('Opus 5.5');
     expect(screen.getByRole('combobox', { name: 'Model for quick jobs' }).textContent).toBe('Sonnet 5.5');
     expect(screen.getByRole('combobox', { name: 'Speed for quick jobs' }).textContent).toBe('Standard');
-    expect(screen.queryByRole('combobox', { name: 'Builder model' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Agent model' })).toBeNull();
     expect(screen.queryByText('Investigator')).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Per role' })).toHaveLength(2);
   });
@@ -88,68 +88,60 @@ describe('Settings → Agents → Models', () => {
     ]);
   });
 
-  it('opens every role under Per role, the investigator, researcher and operator following theirs', async () => {
+  it('opens every role under Per role, the investigator and researcher following the answerer', async () => {
     renderAgents();
     const [task] = screen.getAllByRole('button', { name: 'Per role' });
     fireEvent.click(task as HTMLElement);
     expect(task?.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByText('Makes the changes, one phase at a time.')).toBeTruthy();
+    expect(
+      screen.getByText('Plans, builds and fixes each round in one conversation, and runs its operation.')
+    ).toBeTruthy();
     expect(screen.getByText('Finds the cause of a problem.')).toBeTruthy();
     expect(screen.getAllByText('Follows the answerer')).toHaveLength(2);
-    expect(screen.getByText('Follows the builder')).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Investigator model' })).toBeNull();
-    await choose('Builder model', 'Sonnet 5.5');
+    for (const name of ['Planner model', 'Builder model', 'Fixer model', 'Operator model']) {
+      expect(screen.queryByRole('combobox', { name })).toBeNull();
+    }
+    await choose('Agent model', 'Sonnet 5.5');
     expect(listSentCommands()).toEqual([
       {
         type: 'settings.change',
-        patch: { agentProviders: { builder: 'claude' }, agentModels: { builder: 'sonnet' } },
+        patch: { agentProviders: { agent: 'claude' }, agentModels: { agent: 'sonnet' } },
       },
     ]);
     fireEvent.click(task as HTMLElement);
-    expect(screen.queryByRole('combobox', { name: 'Builder model' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Agent model' })).toBeNull();
   });
 
   it('a pick for the group sets every role in it, and roles that differ start open as set per role', async () => {
-    renderAgents({ ...createSettings(), agentModels: { fixer: 'sonnet' } });
+    renderAgents({ ...createSettings(), agentModels: { answerer: 'sonnet' } });
     expect(screen.getByRole('combobox', { name: 'Model for task agents' }).textContent).toBe('Set per role');
-    expect(screen.getByRole('combobox', { name: 'Fixer model' }).textContent).toBe('Sonnet 5.5');
+    expect(screen.getByRole('combobox', { name: 'Answerer model' }).textContent).toBe('Sonnet 5.5');
     await choose('Model for task agents', 'Set per role');
     await choose('Model for task agents', 'Opus 5.5');
     expect(listSentCommands()).toEqual([
       {
         type: 'settings.change',
         patch: {
-          agentProviders: {
-            planner: 'claude',
-            builder: 'claude',
-            reviewer: 'claude',
-            fixer: 'claude',
-            answerer: 'claude',
-          },
-          agentModels: {
-            fixer: 'opus',
-            planner: 'opus',
-            builder: 'opus',
-            reviewer: 'opus',
-            answerer: 'opus',
-          },
+          agentProviders: { agent: 'claude', reviewer: 'claude', answerer: 'claude' },
+          agentModels: { answerer: 'opus', agent: 'opus', reviewer: 'opus' },
         },
       },
     ]);
   });
 
   it('sets the speed for a whole group or for one role, and roles at different speeds start open', async () => {
-    renderAgents({ ...createSettings(), agentFastModes: { builder: true } });
+    renderAgents({ ...createSettings(), agentFastModes: { agent: true } });
     expect(screen.getByRole('combobox', { name: 'Speed for task agents' }).textContent).toBe('Set per role');
-    expect(screen.getByRole('combobox', { name: 'Builder speed' }).textContent).toBe('Fast');
-    await choose('Planner speed', 'Fast');
+    expect(screen.getByRole('combobox', { name: 'Agent speed' }).textContent).toBe('Fast');
+    await choose('Reviewer speed', 'Fast');
     await choose('Speed for task agents', 'Set per role');
     await choose('Speed for quick jobs', 'Fast');
     expect(listSentCommands()).toEqual([
-      { type: 'settings.change', patch: { agentFastModes: { builder: true, planner: true } } },
+      { type: 'settings.change', patch: { agentFastModes: { agent: true, reviewer: true } } },
       {
         type: 'settings.change',
-        patch: { agentFastModes: { builder: true, classifier: true, writer: true } },
+        patch: { agentFastModes: { agent: true, classifier: true, writer: true } },
       },
     ]);
   });

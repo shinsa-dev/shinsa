@@ -79,8 +79,10 @@ export function createSampleGate(
 }
 
 export function createSampleRun(now: number, overrides: Partial<Run> & { id: string; taskId: string }): Run {
+  const role = overrides.role ?? 'agent';
   return {
-    role: 'builder',
+    role,
+    ...(role === 'agent' ? { purpose: 'build' as const, phaseIndex: 0 } : {}),
     status: 'running',
     provider: 'claude',
     model: null,

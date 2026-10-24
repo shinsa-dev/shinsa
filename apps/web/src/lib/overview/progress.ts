@@ -103,5 +103,5 @@ export const SHAPING_LABEL = 'Working out the steps';
 
 export const SHAPING_NOTE: Record<Exclude<ShapeState, 'settled'>, string> = {
   triage: 'Shinsa is reading the request to choose what kind of task it is.',
-  planner: 'The planner can still change the steps before it plans.',
+  agent: 'The agent can still change the steps before it plans.',
 };

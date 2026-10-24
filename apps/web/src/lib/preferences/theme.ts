@@ -44,3 +44,17 @@ export function followSystemTheme() {
   media.addEventListener('change', onChange);
   return () => media.removeEventListener('change', onChange);
 }
+
+function subscribeColorScheme(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+  return () => observer.disconnect();
+}
+
+export function readColorScheme(): 'light' | 'dark' {
+  return document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+}
+
+export function useColorScheme() {
+  return useSyncExternalStore(subscribeColorScheme, readColorScheme);
+}

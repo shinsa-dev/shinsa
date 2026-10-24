@@ -2,6 +2,7 @@ import {
   type FindingVerdict,
   type Gate,
   type GateDecision,
+  type ReviewComment,
   resolveTaskPipeline,
   resolveWorkStep,
   type ShinsaState,
@@ -13,6 +14,7 @@ import { describeBudgetRetry } from '@/lib/tasks/cost.ts';
 export interface AnswerExtras {
   planVersion?: number;
   verdicts?: FindingVerdict[];
+  comments?: ReviewComment[];
 }
 
 const GATE_REPLY = {
@@ -24,10 +26,10 @@ const GATE_REPLY = {
   skipChecks: { decision: 'waive', done: 'Starting without checks for this repository.' },
   approvePlan: { decision: 'approve', done: 'Approved. Building now.' },
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
-  revisePlan: { decision: 'revise', done: 'Sent back to the planner.' },
+  revisePlan: { decision: 'revise', done: 'Sent back to the agent.' },
   approveChanges: { decision: 'approve', done: 'Approved. Opening the pull request.' },
   requestChanges: { decision: 'revise', done: 'Sent back to the agent.' },
-  fixFindings: { decision: 'revise', done: 'Sent. The fixer works on what you kept.' },
+  fixFindings: { decision: 'revise', done: 'Sent. The agent works on what you kept.' },
   merge: { decision: 'approve', done: 'Merging.' },
   makeChange: { decision: 'approve', done: 'Approved. Planning the change now.' },
   planOperation: { decision: 'approve', done: 'Approved. Planning the operation now.' },

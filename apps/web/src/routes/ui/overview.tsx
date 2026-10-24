@@ -190,7 +190,7 @@ export function OverviewSpecimens() {
           />
         </Card>
       </Specimen>
-      <Specimen label='PlanCard · evidence, extra checks, impact and the operation after the merge; the planner asked for your approval'>
+      <Specimen label='PlanCard · evidence, extra checks, impact and the operation after the merge; the agent asked for your approval'>
         <Card>
           <PlanCard
             state={state}
@@ -216,7 +216,7 @@ export function OverviewSpecimens() {
           <ChangeCard state={state} task={tasks.change} gate={gates.change} onReply={acknowledgeSample} />
         </Card>
       </Specimen>
-      <Specimen label='ChangeCard · your OK in steps the planner composed, before an operation'>
+      <Specimen label='ChangeCard · your OK in steps the agent composed, before an operation'>
         <Card>
           <ChangeCard state={state} task={tasks.composed} gate={gates.composed} onReply={acknowledgeSample} />
         </Card>
@@ -233,7 +233,7 @@ export function OverviewSpecimens() {
           <ResultPanel task={tasks.change} />
         </Card>
       </Specimen>
-      <Specimen label='TaskTrack · while triage or the planner works out the steps'>
+      <Specimen label='TaskTrack · while triage or the agent works out the steps'>
         <Card>
           <TaskTrack task={tasks.shaping} />
         </Card>

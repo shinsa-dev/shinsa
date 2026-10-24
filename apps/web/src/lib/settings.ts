@@ -61,14 +61,12 @@ export interface AgentGroup {
 }
 
 const TASK_ROLES: AgentRoleEntry[] = [
-  { role: 'planner', title: 'Planner', description: 'Plans the work and the steps a task takes.' },
-  { role: 'builder', title: 'Builder', description: 'Makes the changes, one phase at a time.' },
-  { role: 'reviewer', title: 'Reviewer', description: 'Checks the changes before you see them.' },
   {
-    role: 'fixer',
-    title: 'Fixer',
-    description: 'Fixes failing checks, review findings and the changes you ask for.',
+    role: 'agent',
+    title: 'Agent',
+    description: 'Plans, builds and fixes each round in one conversation, and runs its operation.',
   },
+  { role: 'reviewer', title: 'Reviewer', description: 'Checks the changes before you see them.' },
   { role: 'answerer', title: 'Answerer', description: 'Answers questions about your code.' },
 ];
 
@@ -87,7 +85,6 @@ export const AGENT_GROUPS: AgentGroup[] = [
     following: [
       followRole('investigator', 'Investigator', 'Finds the cause of a problem.'),
       followRole('researcher', 'Researcher', 'Looks into a question and writes a report.'),
-      followRole('operator', 'Operator', 'Runs an operation you approved, such as a deploy.'),
     ],
   },
   {

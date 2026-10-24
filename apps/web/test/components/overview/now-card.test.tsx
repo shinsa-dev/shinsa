@@ -60,7 +60,7 @@ function wait(overrides: Partial<UsageWait> = {}): UsageWait {
   return {
     id: 'w',
     runId: 'r',
-    role: 'builder',
+    role: 'agent',
     phaseIndex: 0,
     account: { id: 'a', email: 'a@example.com' },
     resetAt: Date.now() + 3 * HOUR + 60_000,
@@ -104,10 +104,10 @@ describe('NowCard on the Overview', () => {
         createRound({ number: 2, status: 'active', endedAt: null, outcome: null }),
       ],
     });
-    const run = createRun({ id: 'r', taskId: 'task-1', role: 'builder', startedAt: Date.now() });
+    const run = createRun({ id: 'r', taskId: 'task-1', role: 'agent', startedAt: Date.now() });
     const { view } = renderOverview(createShinsaState({ tasks: [task], runs: [run] }), task, undefined);
     const eyebrow = view.getByText('Round 2 of 2').parentElement as HTMLElement;
-    expect(eyebrow.textContent).toMatch(/·Round 2 of 2·.*Builder.*·Started just now$/);
+    expect(eyebrow.textContent).toMatch(/·Round 2 of 2·.*Agent.*·Started just now$/);
     expect(eyebrow.textContent).not.toMatch(/round 2|started/);
   });
 
@@ -270,7 +270,7 @@ describe('NowCard on the Overview', () => {
     expect(card.getByText('Screenshot · Recording')).toBeTruthy();
     expect(card.getByText('Extra checks')).toBeTruthy();
     expect(card.getByText('bun scripts/backfill.ts --dry-run')).toBeTruthy();
-    expect(card.getByText('The planner asked for your approval.')).toBeTruthy();
+    expect(card.getByText('The agent asked for your approval.')).toBeTruthy();
   });
 
   it('offers Retry and Cancel task on a paused task', async () => {
@@ -409,7 +409,7 @@ describe('NowCard on the Overview', () => {
     expect(await view.findByText('Answered. The agent carries on.')).toBeTruthy();
   });
 
-  it('lets you decide each review finding: kept ones go to the fixer, dismissing all approves', async () => {
+  it('lets you decide each review finding: kept ones go to the agent, dismissing all approves', async () => {
     const { gate } = reviewing();
     const task = createTask({
       id: 'task-1',
@@ -455,6 +455,44 @@ describe('NowCard on the Overview', () => {
         ],
       },
     ]);
+  });
+
+  it('Fix 1 finding also sends your drafted line comments, then clears them', async () => {
+    const { gate } = reviewing();
+    const task = createTask({
+      id: 'task-1',
+      stage: 'awaiting_review',
+      findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
+    });
+    const escalated = { ...gate, escalation: { reason: 'rounds' as const, rounds: 2, at: 1 } };
+    const { view } = renderOverview(
+      createShinsaState({ tasks: [task], gates: [escalated] }),
+      task,
+      escalated
+    );
+    fireEvent.click(view.getByRole('button', { name: 'Add a line comment' }));
+    const fix = view.getByRole('button', { name: 'Fix 1 finding' }) as HTMLButtonElement;
+    expect(fix.disabled).toBe(false);
+    expect(await findTooltipText(fix.parentElement as HTMLElement)).toBe(
+      'Sends the findings you kept and your line comments to the agent'
+    );
+    fireEvent.click(fix);
+    await waitFor(() => expect(listSentCommands()).toHaveLength(1));
+    expect(listSentCommands()).toEqual([
+      {
+        type: 'gate.answer',
+        gateId: 'gate-1',
+        decision: 'revise',
+        response: null,
+        verdicts: [{ index: 0, verdict: 'fix', note: null }],
+        comments: [
+          { path: 'src/a.ts', side: 'new', line: 3, endLine: null, text: 'Rename this.', suggestion: null },
+        ],
+      },
+    ]);
+    await waitFor(() => expect(findButton(view, 'Fix 1 finding').hasAttribute('aria-busy')).toBe(false));
+    fireEvent.click(view.getAllByRole('tab', { name: 'Dismiss' })[0] as HTMLElement);
+    expect((view.getByRole('button', { name: 'Approve changes' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows what the setup is missing, verifies it again, waives the checks or cancels', async () => {
@@ -530,7 +568,7 @@ describe('NowCard on the Overview', () => {
       monitor: {
         id: 'm',
         runId: 'r',
-        role: 'builder',
+        role: 'agent',
         phaseIndex: 0,
         notes: 'The staging deploy.',
         armedAt: now,

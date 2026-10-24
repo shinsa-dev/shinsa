@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { act, renderHook } from '@testing-library/react';
-import { followSystemTheme, useThemePreference, writeThemePreference } from '@/lib/preferences/theme.ts';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import {
+  followSystemTheme,
+  readColorScheme,
+  useColorScheme,
+  useThemePreference,
+  writeThemePreference,
+} from '@/lib/preferences/theme.ts';
 
 let systemDark = false;
 const listeners = new Set<() => void>();
@@ -84,5 +90,16 @@ describe('followSystemTheme', () => {
     changeSystem(true);
     expect(classes()).toEqual(['light']);
     stop();
+  });
+});
+
+describe('useColorScheme', () => {
+  it('reads the scheme the page shows and follows a change of theme', async () => {
+    expect(readColorScheme()).toBe('light');
+    const view = renderHook(() => useColorScheme());
+    expect(view.result.current).toBe('light');
+    act(() => writeThemePreference('dark'));
+    await waitFor(() => expect(view.result.current).toBe('dark'));
+    view.unmount();
   });
 });

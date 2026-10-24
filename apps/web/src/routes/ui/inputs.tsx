@@ -1,5 +1,6 @@
 import { Badge } from '@shinsa/ui/components/badge';
 import { Button } from '@shinsa/ui/components/button';
+import { Checkbox } from '@shinsa/ui/components/checkbox';
 import {
   Field,
   FieldContent,
@@ -37,7 +38,7 @@ export const INPUT_SECTIONS = [
   { id: 'input', label: 'Input & Textarea' },
   { id: 'field', label: 'Field' },
   { id: 'select', label: 'Select' },
-  { id: 'controls', label: 'Switch' },
+  { id: 'controls', label: 'Switch & Checkbox' },
   { id: 'tabs', label: 'Tabs' },
 ];
 
@@ -427,8 +428,8 @@ export function InputSpecimens() {
       </Section>
       <Section
         id='controls'
-        title='Switch'
-        description='Contentless controls scale fully on press; they have no label that could shift.'
+        title='Switch & Checkbox'
+        description='Contentless controls scale fully on press; they have no label that could shift. A checkbox is an fg-1 edge until ticked, then the accent with a white check; sm (14px) sits in a dense row.'
         className='flex-col items-start gap-6'
       >
         <Specimen label='switch'>
@@ -443,6 +444,25 @@ export function InputSpecimens() {
           <div className='flex items-center gap-2'>
             <Switch id='ds-s3' disabled defaultChecked />
             <Label htmlFor='ds-s3'>Disabled</Label>
+          </div>
+        </Specimen>
+        <Specimen label='checkbox · md and sm'>
+          <div className='flex items-center gap-2'>
+            <Checkbox id='ds-c1' defaultChecked />
+            <Label htmlFor='ds-c1'>Checked</Label>
+          </div>
+          <div className='flex items-center gap-2'>
+            <Checkbox id='ds-c2' />
+            <Label htmlFor='ds-c2'>Unchecked</Label>
+          </div>
+          <div className='flex items-center gap-2'>
+            <Checkbox id='ds-c3' size='sm' defaultChecked />
+            <Checkbox id='ds-c4' size='sm' />
+            <Label htmlFor='ds-c4'>Compact</Label>
+          </div>
+          <div className='flex items-center gap-2'>
+            <Checkbox id='ds-c5' disabled />
+            <Label htmlFor='ds-c5'>Disabled</Label>
           </div>
         </Specimen>
       </Section>

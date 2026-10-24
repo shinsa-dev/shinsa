@@ -53,7 +53,7 @@ export function PlanParameterList({
           </ul>
         </Parameter>
       )}
-      {view.approval && <p className='text-2xs text-fg-2'>The planner asked for your approval.</p>}
+      {view.approval && <p className='text-2xs text-fg-2'>The agent asked for your approval.</p>}
     </div>
   );
 }

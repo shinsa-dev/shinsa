@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { readThemePreference, type ThemePreference, writeThemePreference } from '@/lib/preferences/theme.ts';
 import { AccountSpecimens } from './accounts.tsx';
 import { ChatSpecimens } from './chat.tsx';
+import { CodeSpecimens } from './code.tsx';
 import { CompositeSpecimens } from './composites.tsx';
 import { INPUT_SECTIONS, InputSpecimens } from './inputs.tsx';
 import { OVERLAY_SECTIONS, OverlaySpecimens } from './overlays.tsx';
@@ -32,6 +33,7 @@ const SECTIONS = [
   { id: 'shinsa-accounts', label: 'Accounts' },
   { id: 'shinsa-overview', label: 'Overview cards' },
   { id: 'shinsa-chat', label: 'Chat' },
+  { id: 'shinsa-code', label: 'Code' },
   { id: 'shinsa-settings', label: 'Settings rows' },
 ];
 
@@ -187,6 +189,14 @@ export function UiPage() {
           className='flex-col items-start gap-8'
         >
           <ChatSpecimens />
+        </Section>
+        <Section
+          id='shinsa-code'
+          title='Shinsa composites · code'
+          description='The Code tab’s editor and Go to file, and the code tokens every highlighter reads, from apps/web/src/components/code. Sample files; nothing is read from a repository.'
+          className='flex-col items-start gap-8'
+        >
+          <CodeSpecimens />
         </Section>
         <Section
           id='shinsa-settings'

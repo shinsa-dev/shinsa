@@ -8,7 +8,7 @@ import { OverviewTab } from '@/routes/task/overview.tsx';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 import { createRound } from '../../support/rounds.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createEvidence, createGate, createShinsaState, createTask } from '../../support/state.ts';
+import { createEvidence, createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const FIX: PipelineStep[] = [
   'investigate',
@@ -198,7 +198,7 @@ describe('what Shinsa decided, on the Overview', () => {
   });
 });
 
-describe('steps the planner composed, on the Overview', () => {
+describe('steps the agent composed, on the Overview', () => {
   const COMPOSED: PipelineStep[] = ['investigate', 'your_ok', 'plan', 'operate'];
 
   function composed(overrides: Partial<Task> = {}) {
@@ -289,7 +289,7 @@ describe('the evidence on the Overview', () => {
 describe('the Overview while the steps are still being worked out', () => {
   const AUTO = { shape: true, start: true, priority: true };
 
-  it('shows no step strip until triage and the planner settle the steps', () => {
+  it('shows no step strip until triage and the agent settle the steps', () => {
     const triage = createTask({ id: 't', stage: 'triage', stageReason: 'choosing the kind', auto: AUTO });
     const view = renderOverview(createShinsaState({ tasks: [triage] }), triage);
     expect(view.getByLabelText('Progress').textContent).toBe('Working out the steps');
@@ -305,6 +305,50 @@ describe('the Overview while the steps are still being worked out', () => {
 });
 
 describe('the rounds of a task on its Overview', () => {
+  const REPORT = { step: 'research' as const, body: 'Shinsa runs the agents itself.', runId: 'r1', at: 1 };
+
+  it('keeps an earlier round’s report in the Rounds panel, not in a card, while a new round works', () => {
+    const task = createTask({
+      id: 't',
+      stage: 'researching',
+      pipeline: ['research'],
+      result: null,
+      rounds: [
+        createRound({
+          number: 1,
+          title: 'Compare Shinsa with T3 Code',
+          status: 'finished',
+          pipeline: ['research'],
+          pullRequest: null,
+          outcome: { goal: null, phases: [], headline: null, result: REPORT.body },
+        }),
+        createRound({ number: 2, title: 'Say which is better', status: 'active', pipeline: ['research'] }),
+      ],
+    });
+    const state = createShinsaState({
+      tasks: [task],
+      runs: [createRun({ id: 'r2', taskId: 't', role: 'researcher', round: 2 })],
+    });
+    const view = renderOverview(state, task);
+    expect(view.queryByRole('heading', { name: 'Report' })).toBeNull();
+    const earlier = view.getByRole('list', { name: 'Earlier rounds' });
+    fireEvent.click(within(earlier).getByRole('button', { name: /Round 1/ }));
+    expect(
+      within(earlier).getByText('Compare Shinsa with T3 Code. Shinsa runs the agents itself.')
+    ).toBeTruthy();
+  });
+
+  it('shows no card for a report a follow-up in the same round is about to replace', () => {
+    const task = createTask({ id: 't', stage: 'researching', pipeline: ['research'], result: REPORT });
+    const state = createShinsaState({
+      tasks: [task],
+      runs: [createRun({ id: 'r2', taskId: 't', role: 'researcher' })],
+    });
+    const view = renderOverview(state, task);
+    expect(view.queryByRole('heading', { name: 'Report' })).toBeNull();
+    expect(view.queryByText(REPORT.body)).toBeNull();
+  });
+
   it('puts the earlier rounds under the current round’s answer, never above it', () => {
     const task = createTask({
       id: 't',

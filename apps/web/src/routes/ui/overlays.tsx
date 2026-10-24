@@ -289,7 +289,7 @@ export function OverlaySpecimens() {
                 {ACTIVITY_ROWS.map((row) => (
                   <div key={row.id} className='flex flex-col'>
                     <span className='font-medium text-fg-4 text-sm'>{row.title}</span>
-                    <span className='text-fg-2 text-xs'>Builder · finished in 4 min</span>
+                    <span className='text-fg-2 text-xs'>Agent · finished in 4 min</span>
                   </div>
                 ))}
               </SheetBody>

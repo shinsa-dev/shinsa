@@ -8,7 +8,6 @@ import { CHIP } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
-import { CodeSnippet } from '@/components/overview/code-snippet.tsx';
 import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
 import { EvidenceItem } from '@/components/overview/evidence-item.tsx';
 import { NowCard } from '@/components/overview/now-card.tsx';
@@ -16,10 +15,11 @@ import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { Composer } from '@/components/task/composer.tsx';
+import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { isVisualEvidence, listRoundEvidence } from '@/lib/overview/evidence.ts';
-import { isResultInNowCard, type NowTarget } from '@/lib/overview/now.ts';
+import { type NowTarget, resolveResultPlace } from '@/lib/overview/now.ts';
 import { describeFindingPlace } from '@/lib/review/findings.ts';
 import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { isCodeTask } from '@/lib/tasks/shapes.ts';
@@ -70,7 +70,14 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
                 <Markdown text={section.summary} className='text-fg-3 text-xs' />
               </div>
               {section.spots.slice(0, SPOTS_SHOWN).map((spot) => (
-                <CodeSnippet key={`${spot.file}:${spot.start}`} task={task} spot={spot} />
+                <ChangeSnippet
+                  key={`${spot.file}:${spot.start}`}
+                  task={task}
+                  path={spot.file}
+                  start={spot.start}
+                  end={spot.end}
+                  why={spot.why}
+                />
               ))}
             </div>
           </li>
@@ -122,7 +129,7 @@ export function OverviewTab({
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
-          {!isResultInNowCard(state, task, gate) && <ResultPanel task={task} />}
+          {resolveResultPlace(state, task, gate) === 'panel' && <ResultPanel task={task} />}
           <DelegationsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
           <SuggestionsPanel task={task} />
           {code && (

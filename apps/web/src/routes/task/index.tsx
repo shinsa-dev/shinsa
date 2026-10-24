@@ -1,6 +1,5 @@
 import { type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CARDS_FRAME, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
@@ -11,28 +10,15 @@ import { type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { replaceRoute, resolveCanonicalTaskPath } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
+import { CodeTab, prefetchCode, usePrefetchCode } from './lazy-code.tsx';
 import { OverviewTab } from './overview.tsx';
-
-const CodeTab = React.lazy(() => import('./code.tsx').then((module) => ({ default: module.CodeTab })));
-
-function OpeningCode() {
-  return (
-    <div className='flex items-center gap-2 p-3 text-fg-2 text-xs'>
-      <Spinner size='sm' /> Opening the code
-    </div>
-  );
-}
 
 function TaskTabContent({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
   switch (view.tab) {
     case 'overview':
       return <OverviewTab state={state} task={task} gate={view.lead} onOpen={view.applyNowTarget} />;
     case 'code':
-      return (
-        <React.Suspense fallback={<OpeningCode />}>
-          <CodeTab task={task} modes={view.codeModes} />
-        </React.Suspense>
-      );
+      return <CodeTab task={task} modes={view.codeModes} />;
     case 'chat':
       return <ChatTab state={state} task={task} focusRunId={view.chatRunId} />;
   }
@@ -47,6 +33,9 @@ function SidebarTaskPage({ state, task, view }: { state: ShinsaState; task: Task
           state={state}
           task={task}
           view={view}
+          onTabIntent={(tab) => {
+            if (tab === 'code') void prefetchCode(task);
+          }}
           className={cn(PAGE_COLUMN, PAGE_TOP, coding ? 'pb-3' : 'pb-1')}
         />
       </div>
@@ -63,6 +52,9 @@ function CardsTaskPage({ state, task, view }: { state: ShinsaState; task: Task; 
         state={state}
         task={task}
         view={view}
+        onTabIntent={(tab) => {
+          if (tab === 'code') void prefetchCode(task);
+        }}
         className={cn(PAGE_COLUMN, PAGE_TOP, coding ? 'pb-3' : 'pb-1')}
       />
       {coding ? (
@@ -89,6 +81,7 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   const layout = useLayoutPreference();
   const { task } = view;
   useCanonicalPath(task, taskId);
+  usePrefetchCode(task, view.tabs, view.tab);
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }

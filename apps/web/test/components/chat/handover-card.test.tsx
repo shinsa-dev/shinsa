@@ -63,10 +63,10 @@ describe('HandoverCard for the process tools', () => {
     expect(view.getByText('Test output · Preview link')).toBeTruthy();
     expect(view.getByText('Extra checks')).toBeTruthy();
     expect(view.getByText('bun test currency')).toBeTruthy();
-    expect(view.getByText('The planner asked for your approval.')).toBeTruthy();
+    expect(view.getByText('The agent asked for your approval.')).toBeTruthy();
   });
 
-  it('shows the steps a planner composed with its reason, and a plain change of kind without them', () => {
+  it('shows the steps the agent composed with its reason, and a plain change of kind without them', () => {
     const composed = renderCard(
       call('reshape_task', { steps: ['research', 'your_ok', 'plan', 'operate'], reason: 'Compare first.' })
     );

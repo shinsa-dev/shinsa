@@ -19,13 +19,13 @@ const DOCUMENT = {
 };
 
 describe('the cost of a task', () => {
-  it('rolls runs up into a total, by step and by phase, against the limit', () => {
+  it('rolls runs up into a total, by role and by phase, the agent’s planning and building as one role, against the limit', () => {
     const task = createTask({ id: 't', plan: { version: 1, body: '', document: DOCUMENT, proposedAt: 1 } });
     const state = createShinsaState({
       tasks: [task],
       runs: [
-        createRun({ id: 'p', taskId: 't', role: 'planner', usage: usage(0.5, 2_500) }),
-        createRun({ id: 'b', taskId: 't', role: 'builder', phaseIndex: 0, usage: usage(1.25, 1_200_000) }),
+        createRun({ id: 'p', taskId: 't', purpose: 'plan', usage: usage(0.5, 2_500) }),
+        createRun({ id: 'b', taskId: 't', purpose: 'build', phaseIndex: 0, usage: usage(1.25, 1_200_000) }),
       ],
       patch: { settings: { ...createShinsaState({}).settings, taskBudgetUsd: 1 } },
     });
@@ -34,10 +34,7 @@ describe('the cost of a task', () => {
       heading: '$1.75 of $1.00',
       detail: '1.2M tokens, as estimated by the agent provider.',
       budget: { share: 1, over: true },
-      byRole: [
-        { key: 'planner', label: 'Planner', cost: '$0.50', tokens: '3k tokens' },
-        { key: 'builder', label: 'Builder', cost: '$1.25', tokens: '1.2M tokens' },
-      ],
+      byRole: [{ key: 'agent', label: 'Agent', cost: '$1.75', tokens: '1.2M tokens' }],
       byPhase: [{ key: 'phase-0', label: 'Write a', cost: '$1.25', tokens: '1.2M tokens' }],
     });
     expect(describeSpent(state, task)).toBe('$1.75 so far');
@@ -65,8 +62,8 @@ describe('the cost of a task', () => {
   it('counts the weekly usage a task used, against the usage limit before the cost limit', () => {
     const task = createTask({ id: 't' });
     const runs = [
-      createRun({ id: 'p', taskId: 't', role: 'planner', usage: usage(0.5, 2_500), weeklyPercent: 2.4 }),
-      createRun({ id: 'b', taskId: 't', role: 'builder', usage: usage(0.5, 2_500), weeklyPercent: 9.8 }),
+      createRun({ id: 'p', taskId: 't', purpose: 'plan', usage: usage(0.5, 2_500), weeklyPercent: 2.4 }),
+      createRun({ id: 'b', taskId: 't', role: 'reviewer', usage: usage(0.5, 2_500), weeklyPercent: 9.8 }),
     ];
     const measured = createShinsaState({ tasks: [task], runs });
     expect(resolveCostFacts(measured, task)?.heading).toBe('$1.00 · 12% of the weekly limit');

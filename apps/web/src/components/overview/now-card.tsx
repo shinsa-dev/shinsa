@@ -51,8 +51,9 @@ import {
   describeApproveHint,
   describeEscalationBody,
   describeReviewTitle,
-  listVerdicts,
+  isVerdictActionBlocked,
   resolveVerdictAction,
+  resolveVerdictAnswer,
 } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { describeSpent } from '@/lib/tasks/cost.ts';
@@ -198,7 +199,7 @@ export function PlanCard({
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={describePlanEyebrow(task)} />}
-      title='The planner wants your go-ahead on this plan'
+      title='The agent wants your go-ahead on this plan'
       action={
         <Button
           size='sm'
@@ -209,7 +210,7 @@ export function PlanCard({
         </Button>
       }
       footer={
-        <FooterNote note='Want something different? Say it in the chat and the planner revises it.'>
+        <FooterNote note='Want something different? Say it in the chat and the agent revises it.'>
           <QuietLink busy={busy !== null} onClick={() => onOpen('agent')}>
             Open the chat
           </QuietLink>
@@ -287,7 +288,6 @@ function ReviewCard({
   const findings = merge ? [] : task.findings;
   const [verdicts, setVerdicts] = React.useState(() => createVerdictDraft(findings));
   const action = resolveVerdictAction(findings, verdicts);
-  const judged = findings.length > 0 ? { verdicts: listVerdicts(findings, verdicts) } : {};
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -313,8 +313,15 @@ function ReviewCard({
                 <Button
                   size='sm'
                   loading={busy === 'decide'}
-                  disabled={commented}
-                  onClick={() => void run('decide', () => replyToGate(gate, action.reply, null, judged))}
+                  disabled={isVerdictActionBlocked(commented, action)}
+                  onClick={() =>
+                    void run('decide', async () => {
+                      const extras = resolveVerdictAnswer(findings, verdicts, draft.comments);
+                      const sent = await replyToGate(gate, action.reply, null, extras);
+                      if (sent && extras.comments) draft.clearComments();
+                      return sent;
+                    })
+                  }
                 >
                   {action.label}
                 </Button>
@@ -332,6 +339,7 @@ function ReviewCard({
       </p>
       {findings.length > 0 && (
         <FindingVerdicts
+          task={task}
           findings={findings}
           draft={verdicts}
           onChange={(index, verdict) => setVerdicts((current) => ({ ...current, [index]: verdict }))}
@@ -389,7 +397,7 @@ function WorkCard({
       )}
       {current?.planned && current.detail && <Markdown text={current.detail} className='text-fg-3 text-xs' />}
       {run && <SilenceNote state={state} run={run} />}
-      {run && <LiveFeed runId={run.id} />}
+      {run && <LiveFeed run={run} />}
     </NowFrame>
   );
 }

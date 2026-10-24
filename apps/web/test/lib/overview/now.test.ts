@@ -6,12 +6,12 @@ import {
   describeReviewFacts,
   hasFailingCheck,
   isAgentWorking,
-  isResultInNowCard,
   isTaskWatchable,
   listFeedLines,
   RESULT_TITLE,
   resolveNowKind,
   resolveNowTitle,
+  resolveResultPlace,
 } from '@/lib/overview/now.ts';
 import { createAgentEntry, createBrief, createCallEntry, createResultEntry } from '../../support/chat.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
@@ -229,15 +229,31 @@ describe('what the now card shows', () => {
   it('puts the result in the now card when it is finished or waits for your OK, and leaves it to its panel otherwise', () => {
     const state = createShinsaState({});
     const done = createTask({ id: 't', stage: 'done', result: RESULT });
-    expect(isResultInNowCard(state, done, undefined)).toBe(true);
-    expect(isResultInNowCard(state, done, createGate({ id: 'g', taskId: 't', type: 'proposal' }))).toBe(true);
-    expect(isResultInNowCard(state, done, createGate({ id: 'g', taskId: 't', type: 'question' }))).toBe(
-      false
+    expect(resolveResultPlace(state, done, undefined)).toBe('now_card');
+    expect(resolveResultPlace(state, done, createGate({ id: 'g', taskId: 't', type: 'proposal' }))).toBe(
+      'now_card'
+    );
+    expect(resolveResultPlace(state, done, createGate({ id: 'g', taskId: 't', type: 'question' }))).toBe(
+      'panel'
     );
     expect(
-      isResultInNowCard(state, createTask({ id: 't', stage: 'building', result: RESULT }), undefined)
-    ).toBe(false);
-    expect(isResultInNowCard(state, createTask({ id: 't', stage: 'done' }), undefined)).toBe(false);
+      resolveResultPlace(state, createTask({ id: 't', stage: 'building', result: RESULT }), undefined)
+    ).toBe('panel');
+    expect(resolveResultPlace(state, createTask({ id: 't', stage: 'done' }), undefined)).toBe('hidden');
+  });
+
+  it('hides a result while an agent delivers the next one, since its hand-over replaces it', () => {
+    const report = { ...RESULT, step: 'research' as const };
+    const followUp = createTask({ id: 't', stage: 'researching', result: report });
+    const state = createShinsaState({ tasks: [followUp], runs: [createRun({ id: 'r', taskId: 't' })] });
+    expect(resolveResultPlace(state, followUp, undefined)).toBe('hidden');
+    expect(resolveResultPlace(state, followUp, createGate({ id: 'g', taskId: 't', type: 'question' }))).toBe(
+      'hidden'
+    );
+    const answering = createTask({ id: 't', stage: 'answering', result: report });
+    expect(resolveResultPlace(state, answering, undefined)).toBe('hidden');
+    const building = createTask({ id: 't', stage: 'building', result: { ...RESULT, step: 'investigate' } });
+    expect(resolveResultPlace(state, building, undefined)).toBe('panel');
   });
 
   it('says who answers a follow-up, and that an operation takes the next piece of work instead', () => {
@@ -247,7 +263,7 @@ describe('what the now card shows', () => {
     expect(describeFollowUpNote('research', null)).toBe(
       'Ask a follow-up in the chat and the agent answers in the same conversation.'
     );
-    expect(describeFollowUpNote('operate', 'operator')).toBe(
+    expect(describeFollowUpNote('operate', 'agent')).toBe(
       'Ask a follow-up or for more work in the chat. The agent answers a follow-up; more work starts a new round.'
     );
   });

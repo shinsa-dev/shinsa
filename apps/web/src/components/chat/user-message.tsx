@@ -1,8 +1,10 @@
 import type { ChatAttachment } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
+import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { SHIMMER_LINE } from '@/components/chat/chat-line.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { describeAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
@@ -82,7 +84,11 @@ export function UserMessage({
           {expanded ? 'Show less' : 'Show more'}
         </button>
       )}
-      {pending && <span className='px-1 text-2xs text-fg-2'>Delivering</span>}
+      {pending && (
+        <span className='px-1 text-2xs'>
+          <ShimmeringText text='Delivering' className={SHIMMER_LINE} />
+        </span>
+      )}
     </div>
   );
 }

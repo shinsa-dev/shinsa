@@ -6,17 +6,19 @@ import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
 import { useTaskPageCommands } from '@/hooks/use-task-page-commands.ts';
 import type { TaskView } from '@/hooks/use-task-view.ts';
-import { TASK_TAB } from '@/lib/tasks/tabs.ts';
+import { TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
 
 export function TaskHeader({
   state,
   task,
   view,
+  onTabIntent,
   className,
 }: {
   state: ShinsaState;
   task: Task;
   view: TaskView;
+  onTabIntent?: (tab: TaskTab) => void;
   className?: string;
 }) {
   useTaskPageCommands(state, task, view);
@@ -29,6 +31,7 @@ export function TaskHeader({
           items={view.tabs.map((tab) => ({ value: tab, label: TASK_TAB[tab].label }))}
           value={view.tab}
           onValueChange={view.applyTab}
+          onItemIntent={onTabIntent}
           className='shrink-0'
         />
       </div>

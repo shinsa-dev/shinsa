@@ -8,6 +8,7 @@ import {
   listOpenGates,
   type Run,
   type ShinsaState,
+  STEP_SCHEMA,
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
@@ -66,10 +67,18 @@ export function resolveNowKind(state: ShinsaState, task: Task, gate: Gate | unde
   return task.stage === 'done' && task.result ? 'result' : 'work';
 }
 
-export function isResultInNowCard(state: ShinsaState, task: Task, gate: Gate | undefined) {
-  if (!task.result) return false;
-  if (gate) return gate.type === 'proposal';
-  return resolveNowKind(state, task, gate) === 'result';
+type ResultPlace = 'now_card' | 'panel' | 'hidden';
+
+const DELIVERING_STAGES: ReadonlySet<Task['stage']> = new Set(
+  (Object.keys(RESULT_TITLE) as DeliveringStep[]).flatMap((step) => STEP_SCHEMA[step].stages)
+);
+
+export function resolveResultPlace(state: ShinsaState, task: Task, gate: Gate | undefined): ResultPlace {
+  if (!task.result) return 'hidden';
+  if (gate?.type === 'proposal') return 'now_card';
+  if (DELIVERING_STAGES.has(task.stage)) return 'hidden';
+  if (gate) return 'panel';
+  return resolveNowKind(state, task, gate) === 'result' ? 'now_card' : 'panel';
 }
 
 export function describeChecksPassed(checks: Check[]) {

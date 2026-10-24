@@ -6,6 +6,7 @@ import { TaskHandle, TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { createRound } from '../../support/rounds.ts';
 import { startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 const OPEN = {
   number: 12,
@@ -58,8 +59,8 @@ describe('the rounds of a task on its Overview', () => {
     const state = createShinsaState({
       tasks: [task],
       runs: [
-        createRun({ id: 'r1', taskId: 't', role: 'planner', startedAt: 1 }),
-        createRun({ id: 'r2', taskId: 't', role: 'planner', startedAt: 2, round: 2 }),
+        createRun({ id: 'r1', taskId: 't', purpose: 'plan', startedAt: 1 }),
+        createRun({ id: 'r2', taskId: 't', purpose: 'plan', startedAt: 2, round: 2 }),
       ],
     });
     render(
@@ -88,7 +89,7 @@ describe('the rounds of a task on its Overview', () => {
     await waitFor(() =>
       expect(changed.mock.calls[0]).toEqual([expect.objectContaining({ number: 3 }), 'stacked'] as never)
     );
-    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    await waitForGone(() => screen.queryByRole('listbox'));
   });
 
   it('shows nothing for a task with one round', () => {

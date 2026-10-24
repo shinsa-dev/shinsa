@@ -13,7 +13,7 @@ const MINUTE = 60_000;
 const MONITOR: Monitor = {
   id: 'm',
   runId: 'r',
-  role: 'builder',
+  role: 'agent',
   phaseIndex: 0,
   notes: 'The deploy.',
   armedAt: 0,

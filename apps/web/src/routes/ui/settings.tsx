@@ -188,8 +188,8 @@ export function SettingsSpecimens() {
         initial={settings}
       />
       <ModelsSpecimen
-        label='ModelsGroup · the builder on Sonnet: Task agents read Set per role and open on every role, the investigator, researcher and operator following theirs'
-        initial={{ ...settings, agentModels: { builder: 'sonnet' } }}
+        label='ModelsGroup · the agent on Sonnet: Task agents read Set per role and open on every role, the investigator and researcher following theirs'
+        initial={{ ...settings, agentModels: { agent: 'sonnet' } }}
       />
       {scenes.map((scene) => (
         <Specimen key={scene.label} label={scene.label}>
@@ -268,6 +268,11 @@ export function SettingsSpecimens() {
             preferences={preferences}
             onChange={(patch) => setPreferences((current) => ({ ...current, ...patch }))}
           />
+        </div>
+      </Specimen>
+      <Specimen label='Notification rows · in a browser tab or Floaty while the Shinsa app is connected'>
+        <div className='w-full max-w-xl'>
+          <NotificationGroup preferences={preferences} quiet onChange={() => undefined} />
         </div>
       </Specimen>
     </>

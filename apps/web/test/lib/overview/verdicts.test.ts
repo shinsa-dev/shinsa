@@ -5,9 +5,11 @@ import {
   describeApproveHint,
   describeEscalationBody,
   describeReviewTitle,
+  isVerdictActionBlocked,
   listVerdicts,
   resolveVerdict,
   resolveVerdictAction,
+  resolveVerdictAnswer,
   VERDICT_ITEMS,
 } from '@/lib/overview/verdicts.ts';
 import { createGate } from '../../support/state.ts';
@@ -54,7 +56,42 @@ describe('finding verdicts', () => {
       'Send your line comments to the agent or remove them first'
     );
     expect(describeApproveHint(false, approve)).toBe('Opens the pull request');
-    expect(describeApproveHint(false, fix)).toBe('Sends the findings you kept to the fixer');
+    expect(describeApproveHint(false, fix)).toBe('Sends the findings you kept to the agent');
+    expect(describeApproveHint(true, fix)).toBe(
+      'Sends the findings you kept and your line comments to the agent'
+    );
+  });
+
+  it('blocks approving while comments are drafted, and sends them with the findings you kept', () => {
+    const approve = resolveVerdictAction(FINDINGS, {});
+    const fix = resolveVerdictAction(FINDINGS, { 0: 'fix' });
+    expect(isVerdictActionBlocked(true, approve)).toBe(true);
+    expect(isVerdictActionBlocked(false, approve)).toBe(false);
+    expect(isVerdictActionBlocked(true, fix)).toBe(false);
+    const comment = {
+      id: 'c-1',
+      ref: null,
+      path: 'a.ts',
+      side: 'new' as const,
+      line: 2,
+      endLine: null,
+      text: 'Here.',
+      suggestion: null,
+    };
+    expect(resolveVerdictAnswer(FINDINGS, { 0: 'fix' }, [comment])).toEqual({
+      verdicts: [
+        { index: 0, verdict: 'fix', note: null },
+        { index: 1, verdict: 'dismiss', note: null },
+      ],
+      comments: [{ path: 'a.ts', side: 'new', line: 2, endLine: null, text: 'Here.', suggestion: null }],
+    });
+    expect(resolveVerdictAnswer(FINDINGS, {}, [comment])).toEqual({
+      verdicts: [
+        { index: 0, verdict: 'dismiss', note: null },
+        { index: 1, verdict: 'dismiss', note: null },
+      ],
+    });
+    expect(resolveVerdictAnswer([], {}, [])).toEqual({});
   });
 
   it('says why the review came to you', () => {

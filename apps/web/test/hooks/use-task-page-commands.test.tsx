@@ -77,7 +77,10 @@ describe('useTaskPageCommands', () => {
       type: 'gate.answer',
       gateId: 'g1',
       decision: 'revise',
-      response: 'Small things\n\nLine comments:\n- src/a.ts:1: Rename this',
+      response: 'Small things',
+      comments: [
+        { path: 'src/a.ts', side: 'new', line: 1, endLine: null, text: 'Rename this', suggestion: null },
+      ],
     });
     expect(result.current.draft.comments).toEqual([]);
     expect(find(result.current.sections, 'task.t1.gate.g1.approve').disabled).toBe(false);

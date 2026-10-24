@@ -3,7 +3,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { RunAccount } from '@/components/accounts/account-items.tsx';
-import { ChatLine, DetailRail, FoldLine } from '@/components/chat/chat-line.tsx';
+import { ChatLine, DetailRail, FoldLine, SELECTED_WASH } from '@/components/chat/chat-line.tsx';
 import { DelegationNotice } from '@/components/chat/delegation-card.tsx';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { LiveCard } from '@/components/chat/live-card.tsx';
@@ -107,7 +107,7 @@ function TurnView({
       )}
       {turn.outcomes.map((item) => (
         <div key={item.key} className={ROW}>
-          <HandoverCard call={item.call} run={run} live={turn.live} />
+          <HandoverCard call={item.call} run={run} live={turn.live} task={task} />
         </div>
       ))}
       {turn.reply && (
@@ -201,7 +201,7 @@ export function RunSection({
     <RunEvidenceScope runId={run.id}>
       <section
         id={`run-${run.id}`}
-        className='corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl transition-colors duration-500 data-focused:bg-primary-a1'
+        className={cn('corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl', SELECTED_WASH)}
       >
         {opening && (
           <div className={cn(ROW, !first && 'mt-4')}>

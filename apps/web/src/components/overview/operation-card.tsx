@@ -141,8 +141,8 @@ export function OperationCard({
         value={notes.text}
         onChange={(event) => notes.change(event.target.value)}
         rows={2}
-        aria-label='Notes for the operator'
-        placeholder='Notes for the operator, such as what to watch or skip.'
+        aria-label='Notes for the agent'
+        placeholder='Notes for the agent, such as what to watch or skip.'
         className={cn(
           COMPOSER_FIELD,
           'corner-superellipse/1.125 max-h-48 min-h-14 rounded-lg border border-border bg-bg-a1 pb-2.5'

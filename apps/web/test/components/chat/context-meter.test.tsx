@@ -35,15 +35,16 @@ function context(usedTokens: number, id: string, at: number) {
 
 const task = createTask({ id: 'task-1' });
 
-const builder = createRun({
+const build = createRun({
   id: 'run-1',
+  purpose: 'build',
   taskId: 'task-1',
   startedAt: NOW - 60_000,
   endedAt: NOW - 30_000,
   outcome: 'completed',
 });
 
-const fixer = createRun({ id: 'run-2', taskId: 'task-1', startedAt: NOW - 20_000 });
+const fix = createRun({ id: 'run-2', taskId: 'task-1', purpose: 'fix', startedAt: NOW - 20_000 });
 
 beforeEach(() => {
   startFakeServer();
@@ -59,7 +60,7 @@ describe('the context meter in the task chat', () => {
     pushTranscript('run-2', [
       createEntry({ type: 'agent', phase: 'interim', text: 'Fixing.' }, 'a1', NOW - 10_000),
     ]);
-    renderChat(createShinsaState({ tasks: [task], runs: [builder, fixer] }), task);
+    renderChat(createShinsaState({ tasks: [task], runs: [build, fix] }), task);
     const meter = screen.getByRole('img', { name: 'Context 80% full' });
     expect(meter.textContent).toBe('80%');
     expect(await findTooltipText(meter)).toBe('160k of 200k tokens · Context 80% full');
@@ -68,14 +69,14 @@ describe('the context meter in the task chat', () => {
   it('follows the newest run once it reports', () => {
     pushTranscript('run-1', [context(160_000, 'c2', NOW - 40_000)]);
     pushTranscript('run-2', [context(20_000, 'c3', NOW - 5_000)]);
-    renderChat(createShinsaState({ tasks: [task], runs: [builder, fixer] }), task);
+    renderChat(createShinsaState({ tasks: [task], runs: [build, fix] }), task);
     expect(screen.getByRole('img', { name: 'Context 10% full' })).toBeTruthy();
   });
 
   it('shows nothing before any run reports its context', () => {
     pushTranscript('run-1', []);
     pushTranscript('run-2', []);
-    renderChat(createShinsaState({ tasks: [task], runs: [builder, fixer] }), task);
+    renderChat(createShinsaState({ tasks: [task], runs: [build, fix] }), task);
     expect(screen.queryByRole('img', { name: /^Context/ })).toBeNull();
   });
 });

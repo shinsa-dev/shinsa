@@ -1,6 +1,7 @@
 import type { FindingVerdict, FindingVerdictKind, Gate, ReviewEscalation, ReviewFinding } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
-import type { GateReply } from '@/lib/tasks/gates.ts';
+import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
+import type { AnswerExtras, GateReply } from '@/lib/tasks/gates.ts';
 
 export type VerdictDraft = Record<number, FindingVerdictKind>;
 
@@ -36,6 +37,21 @@ export function resolveVerdictAction(findings: ReviewFinding[], draft: VerdictDr
   return { reply: 'fixFindings', label: `Fix ${formatCount(fixes, 'finding', 'findings')}` };
 }
 
+export function isVerdictActionBlocked(commented: boolean, action: VerdictAction) {
+  return commented && action.reply === 'approveChanges';
+}
+
+export function resolveVerdictAnswer(
+  findings: ReviewFinding[],
+  draft: VerdictDraft,
+  comments: readonly LineComment[]
+): AnswerExtras {
+  const verdicts = findings.length > 0 ? { verdicts: listVerdicts(findings, draft) } : {};
+  const fixing = resolveVerdictAction(findings, draft).reply === 'fixFindings';
+  if (!fixing || comments.length === 0) return verdicts;
+  return { ...verdicts, comments: serializeComments(comments) };
+}
+
 function describeEscalationTitle(escalation: ReviewEscalation) {
   return escalation.reason === 'stalled'
     ? 'The fix changed nothing and the same findings came back'
@@ -58,8 +74,10 @@ export function describeReviewTitle(gate: Gate) {
 }
 
 export function describeApproveHint(commented: boolean, action: VerdictAction) {
-  if (commented) return 'Send your line comments to the agent or remove them first';
-  return action.reply === 'approveChanges'
-    ? 'Opens the pull request'
-    : 'Sends the findings you kept to the fixer';
+  if (action.reply === 'fixFindings') {
+    return commented
+      ? 'Sends the findings you kept and your line comments to the agent'
+      : 'Sends the findings you kept to the agent';
+  }
+  return commented ? 'Send your line comments to the agent or remove them first' : 'Opens the pull request';
 }

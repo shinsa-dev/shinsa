@@ -12,6 +12,14 @@ describe('UserMessage', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('shimmers Delivering under a message on its way to the server', () => {
+    const view = render(<UserMessage text='Ship it' pending />);
+    expect(view.container.querySelector('.sr-only')?.textContent).toBe('Delivering');
+    view.unmount();
+    const delivered = render(<UserMessage text='Ship it' />);
+    expect(delivered.container.textContent).toBe('Ship it');
+  });
+
   it('renders nothing for an empty message', () => {
     const view = render(<UserMessage text='   ' />);
     expect(view.container.textContent).toBe('');

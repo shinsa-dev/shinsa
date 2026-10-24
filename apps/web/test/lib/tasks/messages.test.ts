@@ -18,16 +18,16 @@ describe('resolveMessageHint', () => {
     const gate = (type: 'operation' | 'proposal' | 'failure' | 'sign_in') =>
       createGate({ id: 'g', taskId: 't', type });
     expect(hintFor({ id: 't', stage: 'awaiting_plan' })).toBe(
-      'Say what to change in the plan. The planner revises it and asks you again.'
+      'Say what to change in the plan. The agent revises it and asks you again.'
     );
     expect(hintFor({ id: 't', stage: 'awaiting_review' })).toBe(
-      'Ask for changes. A fixer makes them and the review comes back to you.'
+      'Ask for changes. The agent makes them and the review comes back to you.'
     );
     expect(hintFor({ id: 't', stage: 'awaiting_merge' })).toBe(
-      'Ask for a change before the merge. A fixer makes it and the merge comes back to you.'
+      'Ask for a change before the merge. The agent makes it and the merge comes back to you.'
     );
     expect(hintFor({ id: 't', stage: 'awaiting_operation' }, { gates: [gate('operation')] })).toBe(
-      'Write the notes for the operator. They replace the saved notes and go with the operation.'
+      'Write the notes for the agent. They replace the saved notes and go with the operation.'
     );
     expect(hintFor({ id: 't', stage: 'awaiting_proposal' }, { gates: [gate('proposal')] })).toBe(
       'Reply instead of deciding. The proposal is declined and the agent carries on with your message.'

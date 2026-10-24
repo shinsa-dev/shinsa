@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveAnsweredReply, resolveSupersededReply, resolveWithdrawnReply } from '@shinsa/core';
 import {
+  readHandOverSpots,
   readPlanParameters,
   readProposedChange,
   resolveAskAnswer,
@@ -81,7 +82,7 @@ describe('readProposedChange', () => {
 });
 
 describe('readPlanParameters', () => {
-  it('reads the plan’s evidence, checks, impact and approval from the planner’s call', () => {
+  it('reads the plan’s evidence, checks, impact and approval from the agent’s call', () => {
     expect(
       readPlanParameters({
         impact: 'About 400 rows.',
@@ -104,5 +105,30 @@ describe('readPlanParameters', () => {
       checks: [],
       approval: false,
     });
+  });
+});
+
+describe('readHandOverSpots', () => {
+  it('reads each spot with its file, lines and reason', () => {
+    expect(
+      readHandOverSpots({
+        spots: [
+          { file: 'a.ts', start: 3, end: 5, why: 'The order.' },
+          { file: 'b.ts', start: 7 },
+          { file: 'c.ts', start: 9, end: 2 },
+        ],
+      })
+    ).toEqual([
+      { file: 'a.ts', start: 3, end: 5, why: 'The order.' },
+      { file: 'b.ts', start: 7, end: 7, why: null },
+      { file: 'c.ts', start: 9, end: 9, why: null },
+    ]);
+  });
+
+  it('leaves out a spot without a file or a first line', () => {
+    expect(
+      readHandOverSpots({ spots: [{ start: 1 }, { file: 'a.ts' }, { file: 'a.ts', start: 0 }] })
+    ).toEqual([]);
+    expect(readHandOverSpots({})).toEqual([]);
   });
 });

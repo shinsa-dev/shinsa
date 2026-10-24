@@ -2,6 +2,7 @@ import { describe, expect, it, mock } from 'bun:test';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { waitForGone } from '../../support/wait.ts';
 
 function Harness({ title, onConfirm }: { title: string; onConfirm: () => void }) {
   const dialog = useDialogState<'remove'>();
@@ -40,7 +41,7 @@ describe('the confirm dialog', () => {
     expect(screen.getByText('Remove a@example.com?')).toBeTruthy();
     expect(screen.queryByText('Remove b@example.com?')).toBeNull();
 
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await waitForGone(() => screen.queryByRole('alertdialog'));
     expect(onConfirm).not.toHaveBeenCalled();
   });
 

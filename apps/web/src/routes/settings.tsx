@@ -25,6 +25,7 @@ import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
 import { useAgentProviders } from '@/lib/connection/models.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
+import { useWorkspaceSupport } from '@/lib/connection/workspaces.ts';
 import { useNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { resolveHashSectionId } from '@/lib/settings.ts';
 import {
@@ -34,6 +35,7 @@ import {
   resolveSettingsTabParam,
   type SettingsTabId,
 } from '@/lib/settings-tabs.ts';
+import { resolveRepoKey } from '@/lib/workspaces.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 function useSectionScroll(
@@ -104,7 +106,11 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const tabs = listSettingsTabs();
   const current = findSettingsTab(tab);
   const scroller = React.useRef<HTMLDivElement>(null);
-  useRegisterCommands(listSettingsSections(state.settings, providers, notifications, accounts));
+  const repos = Object.values(state.repos);
+  const support = useWorkspaceSupport(resolveRepoKey(repos));
+  useRegisterCommands(
+    listSettingsSections(state.settings, providers, notifications, accounts, { repos, support })
+  );
   const extensions = useExtensions();
   const extensionsRead = extensions.snapshot !== null || extensions.failure !== null;
   const foldersRead = useOnboardingStatus() !== null;

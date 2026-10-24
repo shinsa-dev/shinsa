@@ -8,6 +8,7 @@ import { createLogin, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 import { pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 let fake: ReturnType<typeof startFakeOnboarding> | null = null;
 
@@ -125,7 +126,7 @@ describe('the sign-in dialog', () => {
     expect(screen.queryByText('Starting sign-in…')).toBeNull();
     expect(field.value).toBe('abc');
     await settle();
-    await waitFor(() => expect(screen.queryByText('Sign in to Claude')).toBeNull());
+    await waitForGone(() => screen.queryByText('Sign in to Claude'));
     expect(screen.queryByText('Starting sign-in…')).toBeNull();
   });
 

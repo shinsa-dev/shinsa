@@ -1,4 +1,4 @@
-import type { ChatEntry, Run, Task } from '@shinsa/core';
+import { type ChatEntry, type Run, type RunPurpose, splitHouseRules, type Task } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { resolveLastHandover } from '@/lib/chat/timeline.ts';
 import { readList } from '@/lib/chat/tool-describe.ts';
@@ -10,14 +10,13 @@ export interface RoleMark {
 }
 
 export const RUN_ROLE: Record<Run['role'], RoleMark> = {
+  agent: { name: 'Agent', icon: 'IconAgent' },
   planner: { name: 'Planner', icon: 'IconMap' },
   builder: { name: 'Builder', icon: 'IconHammer' },
   reviewer: { name: 'Reviewer', icon: 'IconShieldCheck' },
-  fixer: { name: 'Fixer', icon: 'IconBandage' },
   answerer: { name: 'Answerer', icon: 'IconBubbleText' },
   investigator: { name: 'Investigator', icon: 'IconMagnifyingGlass' },
   researcher: { name: 'Researcher', icon: 'IconBook' },
-  operator: { name: 'Operator', icon: 'IconConsole' },
 };
 
 const FIX_FOCUS: { prefix: string; live: string; done: string }[] = [
@@ -27,14 +26,14 @@ const FIX_FOCUS: { prefix: string; live: string; done: string }[] = [
   { prefix: 'Pull request #', live: 'Fixing the pull request', done: 'Fixed the pull request' },
 ];
 
-function resolvePlannerHeadline(done: boolean, task: Task, entries: ChatEntry[]) {
+function resolvePlanHeadline(done: boolean, task: Task, entries: ChatEntry[]) {
   if (!done) return 'Planning the work';
   const proposed = readList(resolveLastHandover(entries, 'propose_plan'), 'phases').length;
   const phases = proposed || (task.plan?.document?.phases.length ?? 0);
   return phases > 0 ? `Planned ${formatCount(phases, 'phase', 'phases')}` : 'Planned the work';
 }
 
-function resolveBuilderHeadline(done: boolean, run: Run, task: Task) {
+function resolveBuildHeadline(done: boolean, run: Run, task: Task) {
   const phases = task.plan?.document?.phases ?? [];
   const index = run.phaseIndex ?? null;
   const phase = index === null ? undefined : phases[index];
@@ -55,30 +54,53 @@ function resolveReviewerHeadline(done: boolean, entries: ChatEntry[]) {
     : `Reviewed the change, ${count}`;
 }
 
+function resolveInstruction(run: Run) {
+  const prompt = run.rolePrompt ?? run.prompt ?? '';
+  return splitHouseRules(prompt)?.instruction ?? prompt;
+}
+
 function resolveFixHeadline(done: boolean, run: Run) {
-  const focus = FIX_FOCUS.find((candidate) => run.prompt?.startsWith(candidate.prefix));
+  const instruction = resolveInstruction(run);
+  const focus = FIX_FOCUS.find((candidate) => instruction.startsWith(candidate.prefix));
   if (focus) return done ? focus.done : focus.live;
   return done ? 'Fixed the change' : 'Fixing the change';
+}
+
+function resolveAgentHeadline(
+  purpose: RunPurpose,
+  done: boolean,
+  run: Run,
+  task: Task,
+  entries: ChatEntry[]
+) {
+  switch (purpose) {
+    case 'plan':
+      return resolvePlanHeadline(done, task, entries);
+    case 'build':
+      return resolveBuildHeadline(done, run, task);
+    case 'fix':
+      return resolveFixHeadline(done, run);
+    case 'operate':
+      return done ? 'Reported the outcome' : 'Running the operation';
+  }
 }
 
 export function resolveRunHeadline(run: Run, task: Task, entries: ChatEntry[]) {
   const done = run.endedAt !== null && run.outcome === 'completed';
   switch (run.role) {
+    case 'agent':
+      return resolveAgentHeadline(run.purpose ?? 'build', done, run, task, entries);
     case 'planner':
-      return resolvePlannerHeadline(done, task, entries);
+      return done ? 'Planned the work' : 'Planning the work';
     case 'builder':
-      return resolveBuilderHeadline(done, run, task);
+      return done ? 'Built the change' : 'Building the change';
     case 'reviewer':
       return resolveReviewerHeadline(done, entries);
-    case 'fixer':
-      return resolveFixHeadline(done, run);
     case 'answerer':
       return done ? 'Answered your question' : 'Answering your question';
     case 'investigator':
       return done ? 'Reported the diagnosis' : 'Investigating';
     case 'researcher':
       return done ? 'Wrote the report' : 'Researching';
-    case 'operator':
-      return done ? 'Reported the outcome' : 'Running the operation';
   }
 }

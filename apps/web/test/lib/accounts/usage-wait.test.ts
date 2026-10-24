@@ -14,7 +14,7 @@ function wait(overrides: Partial<UsageWait> = {}): UsageWait {
   return {
     id: 'w1',
     runId: 'r1',
-    role: 'builder',
+    role: 'agent',
     phaseIndex: 0,
     account: { id: 'a', email: 'a@example.com' },
     resetAt: NOW + 3_600_000,

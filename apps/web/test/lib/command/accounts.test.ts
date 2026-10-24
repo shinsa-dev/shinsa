@@ -25,7 +25,7 @@ function pick(command: Command | undefined, value: string) {
 const WAIT: UsageWait = {
   id: 'w1',
   runId: 'r1',
-  role: 'builder',
+  role: 'agent',
   phaseIndex: 0,
   account: null,
   resetAt: NOW + 60_000,

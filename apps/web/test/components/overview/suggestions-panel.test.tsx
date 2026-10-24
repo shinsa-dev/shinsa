@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { listSentCommands, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createTask } from '../../support/state.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 function suggestion(id: string, waitsOnThis: boolean): TaskSuggestion {
   return {
@@ -32,7 +33,7 @@ async function choose(row: HTMLElement, option: string) {
   fireEvent.pointerDown(item, { pointerType: 'mouse' });
   fireEvent.click(item);
   await waitFor(() => expect(box.textContent).toBe(option));
-  await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+  await waitForGone(() => screen.queryByRole('listbox'));
 }
 
 beforeEach(() => {

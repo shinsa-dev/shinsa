@@ -41,8 +41,8 @@ const MESSAGE_HINTS: Record<Exclude<MessageEffect, 'closed'>, MessageHint> = {
     sent: 'Sent instead of an answer.',
   },
   revise_plan: {
-    placeholder: 'Say what to change in the plan. The planner revises it and asks you again.',
-    sent: 'Sent to the planner.',
+    placeholder: 'Say what to change in the plan. The agent revises it and asks you again.',
+    sent: 'Sent to the agent.',
   },
   decline_proposal: {
     placeholder:
@@ -50,20 +50,20 @@ const MESSAGE_HINTS: Record<Exclude<MessageEffect, 'closed'>, MessageHint> = {
     sent: 'Proposal declined.',
   },
   operation_notes: {
-    placeholder: 'Write the notes for the operator. They replace the saved notes and go with the operation.',
+    placeholder: 'Write the notes for the agent. They replace the saved notes and go with the operation.',
     sent: 'Notes saved.',
   },
   request_changes: {
-    placeholder: 'Ask for changes. A fixer makes them and the review comes back to you.',
+    placeholder: 'Ask for changes. The agent makes them and the review comes back to you.',
     sent: 'Changes requested.',
   },
   send_back: {
-    placeholder: 'Ask for a change before the merge. A fixer makes it and the merge comes back to you.',
+    placeholder: 'Ask for a change before the merge. The agent makes it and the merge comes back to you.',
     sent: 'Sent back for a fix.',
   },
   fix: {
-    placeholder: 'Ask for a change. A fixer makes it.',
-    sent: 'Sent to a fixer.',
+    placeholder: 'Ask for a change. The agent makes it.',
+    sent: 'Sent to the agent.',
   },
 };
 

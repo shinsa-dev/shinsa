@@ -8,12 +8,14 @@ import { canSkipChecks } from '@/lib/overview/setup.ts';
 import {
   createVerdictDraft,
   describeApproveHint,
-  listVerdicts,
+  isVerdictActionBlocked,
   resolveVerdictAction,
+  resolveVerdictAnswer,
+  type VerdictAction,
 } from '@/lib/overview/verdicts.ts';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
 import { declineSecret, resolveSecretLabel } from '@/lib/secrets.ts';
-import { replyToGate, resolvePlanReply, resolveRetryLabel } from '@/lib/tasks/gates.ts';
+import { type AnswerExtras, replyToGate, resolvePlanReply, resolveRetryLabel } from '@/lib/tasks/gates.ts';
 import { describeChangeGate } from '@/lib/tasks/shapes.ts';
 import { resolveGateGlyph } from '@/lib/tasks/status.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
@@ -201,7 +203,7 @@ function listPlanCommands(task: Task, gate: Gate): Command[] {
       page: compose(
         'Revise the plan',
         'Say what the plan should do differently.',
-        'Send to the planner',
+        'Send to the agent',
         (text) => replyToGate(gate, 'revisePlan', text)
       ),
     },
@@ -222,7 +224,8 @@ function createReviseCommand(gate: Gate, context: GateContext): Command {
       'Say what should change. The agent fixes it.',
       'Send the changes',
       async (text) => {
-        const sent = await replyToGate(gate, 'requestChanges', serializeComments(context.comments, text));
+        const extras = count > 0 ? { comments: serializeComments(context.comments) } : {};
+        const sent = await replyToGate(gate, 'requestChanges', text, extras);
         if (sent) context.clearComments();
         return sent;
       }
@@ -230,33 +233,39 @@ function createReviseCommand(gate: Gate, context: GateContext): Command {
   };
 }
 
-function resolveDecision(task: Task, gate: Gate, commented: boolean) {
+async function sendVerdicts(gate: Gate, action: VerdictAction, extras: AnswerExtras, context: GateContext) {
+  const sent = await replyToGate(gate, action.reply, null, extras);
+  if (sent && extras.comments) context.clearComments();
+}
+
+function resolveDecision(task: Task, gate: Gate, context: GateContext) {
+  const commented = context.comments.length > 0;
   if (task.findings.length === 0) {
     return {
       label: 'Approve the changes',
       hint: commented ? 'Send or clear your comments first' : 'Opens the pull request',
+      disabled: commented,
       run: () => void replyToGate(gate, 'approveChanges'),
     };
   }
   const draft = createVerdictDraft(task.findings);
   const action = resolveVerdictAction(task.findings, draft);
-  const verdicts = listVerdicts(task.findings, draft);
+  const extras = resolveVerdictAnswer(task.findings, draft, context.comments);
   return {
     label: action.label,
     hint: describeApproveHint(commented, action),
-    run: () => void replyToGate(gate, action.reply, null, { verdicts }),
+    disabled: isVerdictActionBlocked(commented, action),
+    run: () => void sendVerdicts(gate, action, extras, context),
   };
 }
 
 function createDecideCommand(task: Task, gate: Gate, context: GateContext): Command {
-  const commented = context.comments.length > 0;
   return {
     kind: 'run',
     id: `${resolveGateId(gate)}.approve`,
     icon: 'IconCheckmark1',
-    disabled: commented,
     keywords: ['review', 'accept', 'ship', 'pull request', 'lgtm', 'findings', 'fix'],
-    ...resolveDecision(task, gate, commented),
+    ...resolveDecision(task, gate, context),
   };
 }
 

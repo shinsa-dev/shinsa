@@ -24,6 +24,22 @@ export function resolveSpotsMeta(args: ChatToolArgs) {
   return spots > 0 ? `${formatCount(spots, 'spot', 'spots')} to review` : null;
 }
 
+function readLine(args: ChatToolArgs, key: string) {
+  const value = args[key];
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
+}
+
+export function readHandOverSpots(args: ChatToolArgs) {
+  return readList(args, 'spots').flatMap((spot) => {
+    const file = readString(spot, 'file');
+    const start = readLine(spot, 'start');
+    if (!file || start === null) return [];
+    return [
+      { file, start, end: Math.max(start, readLine(spot, 'end') ?? start), why: readString(spot, 'why') },
+    ];
+  });
+}
+
 export function readProposedChange(args: ChatToolArgs) {
   const proposal = args.propose_change;
   if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) return null;

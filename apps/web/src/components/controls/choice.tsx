@@ -12,12 +12,14 @@ export function Choice<V extends string>({
   value,
   onValueChange,
   label,
+  onItemIntent,
   className,
 }: {
   items: ChoiceItem<V>[];
   value: V;
   onValueChange: (value: V) => void;
   label: string;
+  onItemIntent?: (value: V) => void;
   className?: string;
 }) {
   return (
@@ -25,7 +27,12 @@ export function Choice<V extends string>({
       <TabsList aria-label={label}>
         {items.map((item) => {
           const trigger = (
-            <TabsTrigger key={item.value} value={item.value}>
+            <TabsTrigger
+              key={item.value}
+              value={item.value}
+              onPointerEnter={onItemIntent && (() => onItemIntent(item.value))}
+              onFocus={onItemIntent && (() => onItemIntent(item.value))}
+            >
               {item.label}
             </TabsTrigger>
           );

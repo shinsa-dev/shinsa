@@ -97,7 +97,7 @@ describe('resolveTaskStatus', () => {
       monitor: {
         id: 'm',
         runId: 'r',
-        role: 'builder',
+        role: 'agent',
         phaseIndex: 0,
         notes: 'n',
         armedAt: 0,
@@ -147,7 +147,7 @@ describe('resolveTaskStatus', () => {
       usageWait: {
         id: 'w',
         runId: 'r',
-        role: 'builder',
+        role: 'agent',
         phaseIndex: 0,
         account: null,
         resetAt: 2,
@@ -197,7 +197,7 @@ describe('resolveTaskStatus', () => {
 });
 
 describe('resolveTaskStatusIcon', () => {
-  const ARMED = { runId: 'r', role: 'builder' as const, phaseIndex: 0, armedAt: 0, status: 'armed' as const };
+  const ARMED = { runId: 'r', role: 'agent' as const, phaseIndex: 0, armedAt: 0, status: 'armed' as const };
 
   function iconOf(overrides: Partial<Task>) {
     const task = createTask({ id: 't', ...overrides });

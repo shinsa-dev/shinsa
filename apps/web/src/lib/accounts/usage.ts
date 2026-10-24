@@ -89,7 +89,7 @@ export function listUsageRows(account: { usage: AccountUsage }) {
 }
 
 export function resolveUsageModel(settings: Settings) {
-  return resolveAgentModel(settings, 'builder', CLAUDE_PROVIDER);
+  return resolveAgentModel(settings, 'agent', CLAUDE_PROVIDER);
 }
 
 function selectGlanceWindow(usage: AccountUsage, model: string | null) {
@@ -145,7 +145,7 @@ export function resolveUsageGlance(
 ): UsageGlance | null {
   if (!snapshot) return null;
   const providers = listProviderGlances(snapshot, now);
-  const preferred = resolveAgentProvider(settings, 'builder');
+  const preferred = resolveAgentProvider(settings, 'agent');
   const own = providers.find((glance) => glance.login.provider === preferred);
   if (own) return createProviderGlance(own);
   const model = resolveUsageModel(settings);

@@ -3,7 +3,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { CARD_LINE, ChatLine, ExpandRow, RowChevron } from '@/components/chat/chat-line.tsx';
+import { CARD_LINE, ChatLine, ExpandRow, RowChevron, SELECTED_WASH } from '@/components/chat/chat-line.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
 import { CARD, CHAT_INSET, CHAT_NESTED } from '@/components/layout/surface/card.ts';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
@@ -118,10 +118,7 @@ export function DelegationSpawnCard({
     <div
       data-message
       data-delegation={view.run.id}
-      className={cn(
-        CARD,
-        'flex min-w-0 scroll-mt-4 flex-col overflow-hidden transition-colors duration-500 data-focused:bg-primary-a1'
-      )}
+      className={cn(CARD, 'flex min-w-0 scroll-mt-4 flex-col overflow-hidden', SELECTED_WASH)}
     >
       <div className={cn(CARD_LINE, 'gap-1 pe-1.5')}>
         <button

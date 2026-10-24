@@ -4,6 +4,7 @@ import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { PercentDialog } from '@/components/accounts/percent-dialog.tsx';
 import { createAccount } from '../../support/accounts.ts';
+import { waitForGone } from '../../support/wait.ts';
 
 function Harness({ account, onSave }: { account: AccountSummary; onSave: () => Promise<boolean> }) {
   const dialog = useDialogState<'other'>();
@@ -20,7 +21,7 @@ function Harness({ account, onSave }: { account: AccountSummary; onSave: () => P
 }
 
 async function waitForClosed() {
-  await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Percentage' })).toBeNull());
+  await waitForGone(() => screen.queryByRole('textbox', { name: 'Percentage' }));
 }
 
 function field() {

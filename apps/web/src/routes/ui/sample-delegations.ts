@@ -79,7 +79,7 @@ export function createSampleDelegations(now: number) {
       ),
       delegated(
         'lint',
-        'fixer',
+        'builder',
         { title: 'Fix the lint errors in mcp-session.ts' },
         {
           endedAt: now - 5 * MINUTE,

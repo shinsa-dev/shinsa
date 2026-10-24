@@ -121,7 +121,7 @@ describe('the decision on a task page', () => {
     await send(find(all, 'task.t1.gate.g1.revise'), 'Split it in two');
     expect(spies.sent.mock.calls).toEqual([
       answered('g1', 'approve', null, 'Approved. Building now.'),
-      answered('g1', 'revise', 'Split it in two', 'Sent back to the planner.'),
+      answered('g1', 'revise', 'Split it in two', 'Sent back to the agent.'),
     ] as never);
   });
 
@@ -187,12 +187,19 @@ describe('the decision on a task page', () => {
     const context = createContext({ comments: COMMENTS });
     await send(find(sections(state, task, context), 'task.t1.gate.g1.revise'), 'A few things');
     expect(spies.sent.mock.calls).toEqual([
-      answered(
-        'g1',
-        'revise',
-        'A few things\n\nLine comments:\n- src/a.ts:3: Rename this\n- src/b.ts:9: Drop the log',
-        'Sent back to the agent.'
-      ),
+      [
+        {
+          type: 'gate.answer',
+          gateId: 'g1',
+          decision: 'revise',
+          response: 'A few things',
+          comments: [
+            { path: 'src/a.ts', side: 'new', line: 3, endLine: null, text: 'Rename this', suggestion: null },
+            { path: 'src/b.ts', side: 'new', line: 9, endLine: null, text: 'Drop the log', suggestion: null },
+          ],
+        },
+        'Sent back to the agent.',
+      ],
     ] as never);
     expect(context.clearComments).toHaveBeenCalledTimes(1);
   });
@@ -380,7 +387,7 @@ describe('the This task section', () => {
       usageWait: {
         id: 'w',
         runId: 'r',
-        role: 'builder',
+        role: 'agent',
         phaseIndex: 0,
         account: null,
         resetAt: 2,
@@ -439,7 +446,7 @@ describe('the This task section', () => {
     ] as never);
   });
 
-  it('turns a message at the operation gate into notes for the operator', async () => {
+  it('turns a message at the operation gate into notes for the agent', async () => {
     const gate = createGate({ id: 'g1', taskId: 't1', type: 'operation' });
     const { state, task } = setup(createTask({ id: 't1', stage: 'awaiting_operation' }), [gate]);
     await send(find(sections(state, task), 'task.t1.message'), 'Wait for the deploy');
@@ -646,7 +653,7 @@ describe('resolveTaskPage', () => {
     const monitor = {
       id: 'm',
       runId: 'r',
-      role: 'builder' as const,
+      role: 'agent' as const,
       phaseIndex: 0,
       notes: 'The deploy.',
       armedAt: 0,
@@ -659,7 +666,7 @@ describe('resolveTaskPage', () => {
     const usageWait = {
       id: 'w',
       runId: 'r',
-      role: 'builder' as const,
+      role: 'agent' as const,
       phaseIndex: 0,
       account: null,
       resetAt: Date.now() + 60_000,
@@ -700,7 +707,7 @@ describe('resolveTaskPage', () => {
     expect(labels(page.sections.find((entry) => entry.id === 'task'))).toEqual(
       expect.arrayContaining([
         'Check in now',
-        'Snooze the quiet-agent warning on the builder',
+        'Snooze the quiet-agent warning on the agent',
         'Stop “Survey the tests” and what it delegated',
         'Resume now',
       ])
