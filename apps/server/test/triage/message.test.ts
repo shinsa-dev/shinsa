@@ -652,10 +652,10 @@ describe('finding the repository a round needs', () => {
     };
     expect(await resolveRoundRepository(createState(), unbound(), LOCAL, ask)).toBe('/code/kanna');
     const [call] = calls;
-    expect(call?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'kanna', 'none'] });
+    expect(call?.schema?.properties.repo).toEqual({ type: 'string', enum: ['kanna', 'shinsa', 'none'] });
     expect(call?.system).toContain('Never pick a repository only because it is the only one listed');
     expect(call?.prompt).toContain('- Round 2: Fix the button in kanna (change, in progress).');
-    expect(call?.prompt).toContain('Repositories, most recently worked on first:\n- shinsa: /code/shinsa');
+    expect(call?.prompt).toContain('Repositories:\n- kanna: /code/kanna\n- shinsa: /code/shinsa');
     expect(call?.prompt).toContain('What this round asks for:\nFix the button in kanna');
     expect(call?.prompt).toContain('The change the human agreed to:\nMake the button blue');
     expect(call?.prompt).toContain('The human added since:\n- It is the web one');
@@ -679,5 +679,41 @@ describe('finding the repository a round needs', () => {
     expect(prompts[0]).toContain('What this round asks for:\nFix it');
     expect(prompts[0]).not.toContain('agreed to');
     expect(prompts[0]).not.toContain('added since');
+  });
+
+  test('a repository outside the task’s project is offered once the round or a message names it', async () => {
+    const state = createState();
+    state.projects.p1 = {
+      id: 'p1',
+      name: 'Shinsa',
+      color: 'blue',
+      key: 'SW',
+      description: '',
+      folders: [],
+    } as (typeof state.projects)[string];
+    state.repos.r1 = createRepo({ id: 'r1', name: 'shinsa', path: '/code/shinsa', projectId: 'p1' });
+    const calls: { prompt: string; schema: JsonSchema | undefined }[] = [];
+    const ask: QuickJson = <T>(_system: string, prompt: string, schema?: JsonSchema) => {
+      calls.push({ prompt, schema });
+      return Promise.resolve({ repo: 'kanna' } as T);
+    };
+    const named = { ...unbound(), projectId: 'p1' };
+    expect(await resolveRoundRepository(state, named, LOCAL, ask)).toBe('/code/kanna');
+    expect(calls[0]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'kanna', 'none'] });
+    expect(calls[0]?.prompt).toContain(
+      'Repositories outside this project, offered because the request names them: kanna.'
+    );
+    const vague = createTask({
+      repoId: null,
+      projectId: 'p1',
+      request: 'Make the answer a doc in the repo',
+      activity: [],
+      proposal: null,
+    });
+    expect(await resolveRoundRepository(state, vague, LOCAL, ask)).toBeNull();
+    expect(calls[1]?.schema?.properties.repo).toEqual({ type: 'string', enum: ['shinsa', 'none'] });
+    expect(calls[1]?.prompt).toContain(
+      'Other repositories on the machine outside this project, never offered: kanna.'
+    );
   });
 });

@@ -30,6 +30,7 @@ import { parseAnswerText, SHAPE_QUESTION } from './decisions.ts';
 import {
   describeProject,
   describeRepoCandidates,
+  listOfferedRepos,
   NO_REPOSITORY,
   parseRepoAnswer,
   REPOSITORY_RULE,
@@ -257,23 +258,25 @@ export async function resolveRoundRepository(
   local: LocalRepo[],
   ask: QuickJson
 ): Promise<string | null> {
-  const pool = resolveCandidatePool(state, task, local);
-  if (pool.candidates.length === 0) return null;
+  const work = describeRoundWork(task);
+  const pool = resolveCandidatePool(state, task, local, work.join('\n'));
+  const offered = listOfferedRepos(pool);
+  if (offered.length === 0) return null;
   const prompt = [
     ...describeTask(task),
     '',
     ...describeProject(pool),
-    ...describeRepoCandidates(pool.candidates),
+    ...describeRepoCandidates(offered),
     '',
-    ...describeRoundWork(task),
+    ...work,
   ].join('\n');
   const answer = await ask<{ repo?: unknown }>(REPOSITORY_SYSTEM, prompt, {
     type: 'object',
-    properties: { repo: resolveRepoProperty(pool.candidates, true) },
+    properties: { repo: resolveRepoProperty(offered, true) },
     required: ['repo'],
     additionalProperties: false,
   });
-  return parseRepoAnswer(pool.candidates, answer?.repo, true) ?? null;
+  return parseRepoAnswer(offered, answer?.repo, true) ?? null;
 }
 
 export function createClassifier(ask: QuickJson): Classifier {
