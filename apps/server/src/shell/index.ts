@@ -13,6 +13,7 @@ export interface CommandOptions {
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  onLine?: (line: string) => void;
 }
 
 const COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
@@ -57,6 +58,23 @@ function spawn(command: string[], cwd: string, options: CommandOptions) {
   }
 }
 
+async function readOutput(stream: ReadableStream<Uint8Array>, onLine: ((line: string) => void) | undefined) {
+  if (!onLine) return new Response(stream).text();
+  const decoder = new TextDecoder();
+  let text = '';
+  let pending = '';
+  const take = (part: string) => {
+    text += part;
+    const lines = `${pending}${part}`.split(/\r\n|\r|\n/);
+    pending = lines.pop() ?? '';
+    for (const line of lines) if (line.trim()) onLine(line);
+  };
+  for await (const chunk of stream) take(decoder.decode(chunk, { stream: true }));
+  take(decoder.decode());
+  if (pending.trim()) onLine(pending);
+  return text;
+}
+
 export async function runCommand(
   command: string[],
   cwd: string,
@@ -82,8 +100,8 @@ export async function runCommand(
   options.signal?.addEventListener('abort', stop, { once: true });
   try {
     const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
+      readOutput(child.stdout, options.onLine),
+      readOutput(child.stderr, options.onLine),
       child.exited,
     ]);
     return { ok: code === 0 && !timedOut, code, stdout: stdout.trim(), stderr: stderr.trim(), timedOut };

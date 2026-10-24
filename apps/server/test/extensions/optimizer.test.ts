@@ -1,10 +1,16 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { join } from 'node:path';
 import { createState, type McpServerSummary, type ShinsaState } from '@shinsa/core';
-import { Extensions, type ServerCheck } from '../../src/extensions/index.ts';
+import {
+  Extensions,
+  isSameExtensionSet,
+  resolveDeferredInstructions,
+  type ServerCheck,
+} from '../../src/extensions/index.ts';
 import { UsageIndex } from '../../src/extensions/usage.ts';
 import { log } from '../../src/log/index.ts';
 import { SecretStore } from '../../src/secrets/store.ts';
+import { until } from '../helpers/index.ts';
 import { createFakeMachine, serializeClaudeToolUse, writeFile, writeSkill } from './fixtures.ts';
 
 const DAY = 86_400_000;
@@ -126,10 +132,15 @@ describe('one server defined in several places', () => {
 });
 
 describe('the context optimizer', () => {
-  test('starts off, so a run loads every server it has', async () => {
+  test('starts on for MCPs and skills unused for 14 days, and once off a run loads every server it has', async () => {
     const { extensions, usage } = createWorld();
+    extensions.snapshot();
     await usage.refresh();
-    expect(extensions.snapshot().optimizer).toEqual({ enabled: false, days: 14, skills: false });
+    expect(extensions.snapshot().optimizer).toEqual({ enabled: true, days: 14, skills: true });
+    const optimized = await extensions.resolveSession({ repoPath: null, project: null });
+    expect(optimized.deferred.map((server) => server.name)).toContain('kampala');
+    expect(optimized.deferredSkills.map((skill) => skill.name)).toContain('stale');
+    extensions.updateOptimizer({ enabled: false });
     const session = await extensions.resolveSession({ repoPath: null, project: null });
     expect(session.servers.map((server) => server.name).sort()).toEqual([
       'kampala',
@@ -141,7 +152,7 @@ describe('the context optimizer', () => {
     expect(extensions.createLoader(session)).toBeNull();
   });
 
-  test('once on, leaves out what agents have not used in its window and offers to load it', async () => {
+  test('leaves out what agents have not used in its window and offers to load it', async () => {
     const { extensions, usage } = createWorld();
     extensions.snapshot();
     await usage.refresh();
@@ -179,6 +190,13 @@ describe('the context optimizer', () => {
       'release',
     ]);
     expect(session.loaded.deferred?.map((item) => item.name)).toContain('kampala');
+    expect(resolveDeferredInstructions(session)?.split('\n').slice(0, 4)).toEqual([
+      '## Left out until needed',
+      'Shinsa left out what agents have not used lately, to keep your context small. You can still use all of it.',
+      '- MCP servers: maple (1 tool), kampala (1 tool), plugin_docs_context (1 tool). Load one with `load_mcp_server`.',
+      '- Skills: the ones `load_skill` lists. Read one with `load_skill`.',
+    ]);
+    expect(resolveDeferredInstructions({ deferred: [], deferredSkills: [] })).toBeNull();
     const loader = extensions.createLoader(session);
     expect(loader?.listSpecs().map((spec) => spec.name)).toEqual([
       'load_mcp_server',
@@ -200,6 +218,46 @@ describe('the context optimizer', () => {
     const session = await extensions.resolveSession({ repoPath: null, project: null });
     expect(session.servers.map((server) => server.name)).toContain('kampala');
     expect(session.deferred.map((server) => server.name)).not.toContain('kampala');
+  });
+
+  test('a resumed session keeps what it loaded and left out, so its prompt does not change between turns', async () => {
+    const { extensions, usage, machine, advance } = createWorld();
+    extensions.snapshot();
+    const place = { repoPath: null, project: null };
+    const pin = {
+      servers: [{ name: 'maple', tokens: 4000 }],
+      skills: [{ name: 'stale', tokens: 10 }],
+      plugins: [],
+      deferred: [
+        { name: 'kampala', tokens: 4000 },
+        { name: 'animate', tokens: 10 },
+      ],
+    };
+    const early = await extensions.resolveSession(place, pin);
+    expect(early.deferred.map((server) => server.name)).toEqual(['kampala']);
+    expect(early.servers.map((server) => server.name)).toContain('maple');
+    expect(early.deferredSkills.map((skill) => skill.name)).toEqual(['animate']);
+
+    await usage.refresh();
+    extensions.updateOptimizer({ enabled: true, days: 30 });
+    const first = await extensions.resolveSession(place);
+    expect(first.deferred.map((server) => server.name)).toContain('kampala');
+    writeFile(
+      join(machine.claudeDir, 'projects', '-code-app', 'later.jsonl'),
+      `${serializeClaudeToolUse('mcp__kampala__flows', NOW)}\n`
+    );
+    advance(60_000);
+    const resumed = await extensions.resolveSession(place, first.loaded);
+    expect(isSameExtensionSet(resumed.loaded, first.loaded)).toBe(true);
+    expect(resumed.deferred.map((server) => server.name)).toContain('kampala');
+    expect(isSameExtensionSet((await extensions.resolveSession(place)).loaded, first.loaded)).toBe(false);
+
+    const pinned = await extensions.resolveSession(place, pin);
+    expect(pinned.servers.map((server) => server.name)).toContain('maple');
+    expect(pinned.skills.map((skill) => skill.name)).toContain('stale');
+    expect(pinned.deferredSkills.map((skill) => skill.name)).toContain('animate');
+    extensions.updateOptimizer({ enabled: false });
+    expect((await extensions.resolveSession(place, pin)).deferred).toEqual([]);
   });
 
   test('never leaves out something added since Shinsa started watching until its window has passed', async () => {
@@ -225,7 +283,7 @@ describe('the context optimizer', () => {
     expect(() => extensions.updateOptimizer({ skills: 1 })).toThrow('also leaves out skills');
     expect(() => extensions.updateOptimizer({ days: 0 })).toThrow('from 1 to 365');
     expect(() => extensions.updateOptimizer({ days: 2.5 })).toThrow('from 1 to 365');
-    expect(extensions.updateOptimizer({}).optimizer).toEqual({ enabled: true, days: 14, skills: false });
+    expect(extensions.updateOptimizer({}).optimizer).toEqual({ enabled: true, days: 14, skills: true });
   });
 });
 
@@ -250,5 +308,56 @@ describe('reading usage in the background', () => {
     refresh.mockRestore();
     warn.mockRestore();
     expect(await extensions.stop()).toBeUndefined();
+  });
+});
+
+describe('the snapshot Settings reads', () => {
+  test('answers the last snapshot at once and reads the files again in the background', async () => {
+    const { extensions, machine } = createWorld();
+    const first = extensions.readSnapshot();
+    writeFile(
+      machine.claudeConfig,
+      JSON.stringify({ mcpServers: { fresh: { type: 'http', url: 'https://fresh.example/mcp' } } })
+    );
+    expect(extensions.readSnapshot()).toBe(first);
+    await until('the snapshot is read again', () => extensions.readSnapshot() !== first);
+    expect(extensions.readSnapshot().servers.map((server) => server.name)).toContain('fresh');
+    await extensions.stop();
+  });
+
+  test('is read again once the usage is, and a refresh that fails is logged', async () => {
+    const state: { fail: boolean } = { fail: false };
+    const { extensions, usage } = createWorld();
+    const before = extensions.snapshot();
+    await usage.refresh();
+    await extensions.syncUsage();
+    await until('the snapshot carries the usage', () => extensions.readSnapshot().usage.readAt !== null);
+    expect(before.usage.readAt).toBeNull();
+    const warn = spyOn(log, 'warn');
+    const catalog = spyOn(extensions, 'snapshot').mockImplementation(() => {
+      state.fail = true;
+      throw new Error('disk gone');
+    });
+    extensions.syncSnapshot();
+    await until('the refresh ran', () => state.fail);
+    expect(warn).toHaveBeenCalledWith('[Extensions] Could not refresh the MCPs, plugins and skills', {
+      error: 'disk gone',
+    });
+    catalog.mockRestore();
+    warn.mockRestore();
+    await extensions.stop();
+    extensions.syncSnapshot();
+  });
+
+  test('is ready before anyone asks once Shinsa warms it', async () => {
+    const { extensions } = createWorld();
+    const read = spyOn(extensions, 'snapshot');
+    extensions.syncSnapshot();
+    extensions.syncSnapshot();
+    await until('the snapshot is warm', () => read.mock.calls.length > 0);
+    read.mockRestore();
+    const warm = extensions.readSnapshot();
+    expect(extensions.readSnapshot()).toBe(warm);
+    await extensions.stop();
   });
 });

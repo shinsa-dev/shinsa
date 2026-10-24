@@ -91,12 +91,14 @@ describe('finding a spec', () => {
     expect(listGroup('nothing')).toEqual([]);
   });
 
-  test('tool names join the path with underscores, and task agents never see the human-only specs', () => {
-    expect(resolveToolName(findSpec(['tasks', 'check-now']))).toBe('tasks_check_now');
+  test('tool names join the path with underscores, and task agents never see the human-only specs or tasks create', () => {
+    expect(resolveToolName(findSpec(['tasks', 'check-in-now']))).toBe('tasks_check_in_now');
     expect(resolveToolName(findSpec(['usage']))).toBe('usage');
     const names = listAgentSpecs().map((spec) => spec.path.join(' '));
-    expect(names).toContain('tasks create');
+    expect(names).toContain('tasks wait-on');
     for (const hidden of [
+      'tasks create',
+      'questions answer',
       'tasks open',
       'gates secret',
       'gates answer',
@@ -114,7 +116,8 @@ describe('finding a spec', () => {
     ]) {
       expect(names).not.toContain(hidden);
     }
-    expect(listAgentSpecs().length).toBe(SURFACE.filter((spec) => !spec.humanOnly).length);
+    expect(listAgentSpecs().length).toBe(SURFACE.filter((spec) => !spec.humanOnly).length - 1);
+    expect(findSpec(['tasks', 'create'])).toMatchObject({ agentTool: 'create_task' });
   });
 });
 

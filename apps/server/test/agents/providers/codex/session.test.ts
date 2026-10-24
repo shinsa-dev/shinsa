@@ -127,7 +127,7 @@ describe('a Codex turn', () => {
       { run: 'bun test', output: '3 pass' },
       { run: 'git commit -m wip' },
       { write: 'notes.md', content: 'hello' },
-      { tool: 'complete_phase', args: { summary: 'Done.', spots: [], decisions: [] } },
+      { tool: 'complete_phase', args: { summary: 'Done.', spots: [], judgement_calls: [] } },
       { say: 'Finished.' },
     ]);
     const started = createInput('builder');

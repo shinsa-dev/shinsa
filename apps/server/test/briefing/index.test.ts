@@ -1,5 +1,5 @@
 import { describe, expect, jest, spyOn, test } from 'bun:test';
-import type { Queue, QueuedGate, ShinsaState, Task } from '@shinsa/core';
+import type { GateType, Queue, QueuedGate, ShinsaState, Task } from '@shinsa/core';
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { Briefings, describeBriefingPrompt, resolveBriefing } from '../../src/briefing/index.ts';
@@ -45,13 +45,12 @@ const state = {
   projects: {},
 } as unknown as ShinsaState;
 
-function entry(task: Task, kind: string, unblocks = 0, purpose = 'decision', ageHours = 3) {
+function entry(task: Task, type: GateType, unblocks = 0, ageHours = 3) {
   return {
     task,
     gate: {
       id: `g-${task.id}`,
-      kind,
-      purpose,
+      type,
       title: 'Decide',
       openedAt: NOW - ageHours * 60 * 60 * 1000,
     },
@@ -92,7 +91,7 @@ describe('resolveBriefing', () => {
   });
 
   test('leaves a paused task the guide already lists out of the note', async () => {
-    const paused = entry(dup, 'question', 0, 'failure');
+    const paused = entry(dup, 'failure');
     const briefing = await resolveBriefing(
       state,
       { ...queue, ready: [entry(chat, 'review', 1), paused] },
@@ -114,11 +113,11 @@ describe('what the model is told', () => {
         ...queue,
         focusProjectId: 'a1',
         ready: [
-          entry(chat, 'spec', 0, 'decision', 0),
+          entry(chat, 'plan', 0, 0),
           entry(chat, 'review'),
-          entry(dup, 'question', 0, 'agent_question', 1),
-          entry(tools, 'question', 0, 'decision', 72),
-          entry({ ...tools, id: 't-q2', repoId: null } as Task, 'merge', 0, 'failure'),
+          entry(dup, 'question', 0, 1),
+          entry(tools, 'operation', 0, 72),
+          entry({ ...tools, id: 't-q2', repoId: null } as Task, 'failure'),
         ],
         working: [],
         waiting: [waiting, orphan],
@@ -131,7 +130,9 @@ describe('what the model is told', () => {
     );
     expect(prompt).not.toContain('review: built');
     expect(prompt).toContain('an agent asks: Decide; waiting 1 hour;');
-    expect(prompt).toContain('question: Decide; waiting 3 days');
+    expect(prompt).toContain(
+      'operation: merged, waiting for the developer to run it: Decide; waiting 3 days'
+    );
     expect(prompt).toContain('paused after a failure, needs a decision: Decide; waiting 3 hours.');
     expect(prompt).toContain('(nothing)');
     expect(prompt).toContain('- “Later work”, not started: waiting for “Embedded chat rework” to finish');
@@ -147,7 +148,7 @@ describe('process gates in the prompt', () => {
       {
         ...queue,
         ready: [
-          entry(chat, 'question', 0, 'configuration'),
+          entry(chat, 'configuration'),
           { ...escalated, gate: { ...escalated.gate, escalation: { reason: 'rounds', rounds: 2, at: NOW } } },
         ],
         working: [],
@@ -158,7 +159,7 @@ describe('process gates in the prompt', () => {
     expect(prompt).toContain('the setup needs fixing before any work starts: Decide;');
     const signIn = describeBriefingPrompt(
       state,
-      { ...queue, ready: [entry(chat, 'question', 0, 'sign_in')], working: [], waiting: [] },
+      { ...queue, ready: [entry(chat, 'sign_in')], working: [], waiting: [] },
       NOW
     );
     expect(signIn).toContain('paused until the developer signs in again: Decide;');
@@ -169,16 +170,16 @@ describe('process gates in the prompt', () => {
     );
   });
 
-  test('a proposed change says the human approves it or keeps the task as it is', () => {
+  test('a proposed change says the developer approves it or keeps the task as it is, and a secret is an agent asking', () => {
     const prompt = describeBriefingPrompt(
       state,
-      { ...queue, ready: [entry(chat, 'question', 0, 'change')], working: [], waiting: [] },
+      { ...queue, ready: [entry(chat, 'proposal'), entry(dup, 'secret')], working: [], waiting: [] },
       NOW
     );
     expect(prompt).toContain(
-      'change: an agent proposes turning this task into a change; the human approves or keeps it as it is;'
+      'proposal: an agent proposes turning this task into a change; the developer approves or keeps it as it is;'
     );
-    expect(prompt).not.toContain('question: Decide');
+    expect(prompt).toContain('- id t-dup: “Fix code-first duplicate”. an agent asks: Decide;');
   });
 });
 
@@ -208,7 +209,7 @@ describe('the model answer', () => {
       schemas.push(schema);
       return Promise.resolve(null as T);
     };
-    await resolveBriefing(state, { ...queue, ready: [...queue.ready, entry(chat, 'spec')] }, NOW, ask);
+    await resolveBriefing(state, { ...queue, ready: [...queue.ready, entry(chat, 'plan')] }, NOW, ask);
     const task = { type: 'string', enum: ['t-chat', 't-dup'] };
     const item = {
       type: 'object',

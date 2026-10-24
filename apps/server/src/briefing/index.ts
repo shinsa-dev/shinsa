@@ -1,15 +1,12 @@
 import {
   BRIEFING_LIMITS,
   type Briefing,
-  type GATE_SCHEMA,
   type Gate,
-  type HardGateType,
-  isPausingGate,
+  type GateType,
   parseBriefing,
   type Queue,
   type QueuedGate,
   resolveFallbackBriefing,
-  resolveGateType,
   resolveQueue,
   type ShinsaState,
   serializeBriefing,
@@ -40,7 +37,7 @@ const BRIEFING_SYSTEM = [
   'Use only the facts given. Each decision says what it is: a review is built and checked and ready for review, not ready to merge. Say ready to merge only for a merge decision. A plan is not built yet.',
   'Never cite a pull request number, a repository or a branch: the task link shows them on hover. Say "the pull request is ready" instead.',
   'Refer to other tasks by their titles in quotes. Never by number, position or id: no "item three", no "the first one", and never write an id outside the task field.',
-  `note: one heads-up sentence of at most ${BRIEFING_LIMITS.note} characters, only when something needs attention beyond the order: a paused task, a decision that has waited for days, work blocked on another task. Otherwise null.`,
+  `note: one heads-up sentence of at most ${BRIEFING_LIMITS.note} characters, only when something needs attention beyond the order: a paused task, a decision that has waited for days, work waiting on another task. Otherwise null.`,
   'The note must never name or describe a task that is in now or next: the guide already says why each of those matters, so put that in its why. If the only heads-up is about one of them, the note is null.',
   'Write whole sentences to the developer, not notes. Good why: "It has waited a day, and approving it lets the agent start on “Let the chat call tools”." Good note, about a decision not in now or next: "“Stop the preview flashing” is paused because the builder could not reproduce the flash."',
   'Plain, calm and specific. Sentence case, no greeting, no emoji, no em dashes, no exclamation marks.',
@@ -53,46 +50,40 @@ function describeAge(openedAt: number, now: number) {
   return `waiting ${Math.floor(hours / 24)} days`;
 }
 
-type PausingGateType = {
-  [T in HardGateType]: (typeof GATE_SCHEMA)[T] extends { pauses: true } ? T : never;
-}[HardGateType];
+function describeAsked(gate: Gate) {
+  return `an agent asks: ${gate.title}`;
+}
 
-const PAUSED_GATES: Record<PausingGateType, string> = {
-  failure: 'paused after a failure, needs a decision',
-  configuration: 'the setup needs fixing before any work starts',
-  sign_in: 'paused until the developer signs in again',
+const GATE_FACTS: Record<GateType, (gate: Gate) => string> = {
+  plan: () => 'plan approval: the plan is written, nothing is built yet',
+  review: () =>
+    'review: built, checks passed and agent review clean, waiting for the developer to review the changes. Not merged, no pull request yet',
+  merge: () => 'merge: the pull request is open, CI and review clean, ready to merge',
+  question: describeAsked,
+  secret: describeAsked,
+  proposal: () =>
+    'proposal: an agent proposes turning this task into a change; the developer approves or keeps it as it is',
+  operation: (gate) => `operation: merged, waiting for the developer to run it: ${gate.title}`,
+  failure: (gate) => `paused after a failure, needs a decision: ${gate.title}`,
+  configuration: (gate) => `the setup needs fixing before any work starts: ${gate.title}`,
+  sign_in: (gate) => `paused until the developer signs in again: ${gate.title}`,
 };
 
 function describeGate(gate: Gate) {
-  if (isPausingGate(gate)) return `${PAUSED_GATES[resolveGateType(gate) as PausingGateType]}: ${gate.title}`;
   if (gate.escalation)
     return 'review: the agents could not settle the review, the developer decides on the findings';
-  if (gate.purpose === 'agent_question') return `an agent asks: ${gate.title}`;
-  if (gate.purpose === 'change')
-    return 'change: an agent proposes turning this task into a change; the human approves or keeps it as it is';
-  switch (gate.kind) {
-    case 'spec':
-      return 'plan approval: the plan is written, nothing is built yet';
-    case 'review':
-      return 'review: built, checks passed and agent review clean, waiting for the developer to review the changes. Not merged, no pull request yet';
-    case 'merge':
-      return 'merge: the pull request is open, CI and review clean, ready to merge';
-    case 'question':
-      return `question: ${gate.title}`;
-  }
+  return GATE_FACTS[gate.type](gate);
 }
 
-function listBlockedTitles(state: ShinsaState, taskId: string) {
+function listWaitingTitles(state: ShinsaState, taskId: string) {
   return Object.values(state.tasks)
-    .filter(
-      (task) => task.waitsOn.includes(taskId) && task.stage !== 'merged' && task.stage !== 'cancelled'
-    )
+    .filter((task) => task.waitsOn.includes(taskId) && task.stage !== 'merged' && task.stage !== 'cancelled')
     .map((task) => `“${task.title}”`);
 }
 
 function describeDecision(state: ShinsaState, entry: QueuedGate, now: number) {
   const facts = [describeGate(entry.gate), describeAge(entry.gate.openedAt, now)];
-  if (entry.unblocks > 0) facts.push(`unblocks ${listBlockedTitles(state, entry.task.id).join(', ')}`);
+  if (entry.unblocks > 0) facts.push(`unblocks ${listWaitingTitles(state, entry.task.id).join(', ')}`);
   if (entry.task.priority !== 'normal') facts.push(`${entry.task.priority} priority`);
   const repo = entry.task.repoId ? state.repos[entry.task.repoId]?.name : undefined;
   if (repo) facts.push(`in ${repo}`);

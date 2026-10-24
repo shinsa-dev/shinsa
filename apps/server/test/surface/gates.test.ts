@@ -1,22 +1,24 @@
 import { describe, expect, test } from 'bun:test';
+import { GATE_SPECS } from '../../src/surface/gates.ts';
+import { listAgentSpecs } from '../../src/surface/index.ts';
 import { createFakeClient, createTaskDetail, runSpec } from './fixtures.ts';
 
-function gate(id: string, kind: string, purpose: string, extra: Record<string, unknown> = {}) {
-  return { id, taskId: 'task-123', kind, purpose, status: 'open', title: id, ...extra };
+function gate(id: string, type: string, extra: Record<string, unknown> = {}) {
+  return { id, taskId: 'task-123', type, status: 'open', title: id, ...extra };
 }
 
 const OPEN = createTaskDetail({
   gates: [
-    gate('gate-plan', 'spec', 'decision', { planVersion: 2 }),
-    gate('gate-review', 'review', 'decision'),
-    gate('gate-merge', 'merge', 'decision'),
-    gate('gate-secret', 'question', 'agent_question', { secret: { name: 'TOKEN' } }),
-    gate('gate-question', 'question', 'agent_question'),
-    gate('gate-operation', 'question', 'operation'),
+    gate('gate-plan', 'plan', { planVersion: 2 }),
+    gate('gate-review', 'review'),
+    gate('gate-merge', 'merge'),
+    gate('gate-secret', 'secret', { secret: { name: 'TOKEN' } }),
+    gate('gate-question', 'question'),
+    gate('gate-operation', 'operation'),
   ],
 });
 
-const NONE = createTaskDetail({ gates: [gate('gate-other', 'failure', 'decision')] });
+const NONE = createTaskDetail({ gates: [gate('gate-other', 'failure')] });
 
 function createClient(detail = OPEN) {
   return createFakeClient({
@@ -52,6 +54,30 @@ describe('answering a gate by id', () => {
       },
     ]);
     expect(result.text).toBe('Asked for changes. A fixer picks it up.');
+  });
+
+  test('waive starts a task without checks at its setup gate', async () => {
+    const fake = createClient();
+    expect((await runSpec(fake, ['gates', 'answer', 'gate-setup', '--decision', 'waive'])).text).toBe(
+      'Starting without checks.'
+    );
+    expect(fake.sent).toEqual([
+      { type: 'gate.answer', gateId: 'gate-setup', decision: 'waive', response: null },
+    ]);
+  });
+
+  test('an answer to a question or a failure is a reply', async () => {
+    const fake = createClient();
+    expect(
+      (await runSpec(fake, ['gates', 'answer', 'gate-question', '--decision', 'reply', '--response', 'Blue']))
+        .text
+    ).toBe('Answered. The agent carries on.');
+    expect(fake.sent).toEqual([
+      { type: 'gate.answer', gateId: 'gate-question', decision: 'reply', response: 'Blue' },
+    ]);
+    expect(() => runSpec(fake, ['gates', 'answer', 'gate-question', '--decision', 'answer'])).toThrow(
+      '--decision must be one of approve, revise, reject, reply, waive.'
+    );
   });
 
   test('without a response it sends none', async () => {
@@ -110,7 +136,7 @@ describe('the gate shortcuts', () => {
     ],
     [
       ['operations', 'run', 'fix', 'staging', 'first'],
-      { gateId: 'gate-operation', decision: 'answer', response: 'staging first' },
+      { gateId: 'gate-operation', decision: 'reply', response: 'staging first' },
       'Running the operation with your notes.',
     ],
     [
@@ -120,7 +146,7 @@ describe('the gate shortcuts', () => {
     ],
     [
       ['questions', 'answer', 'fix', 'blue'],
-      { gateId: 'gate-question', decision: 'answer', response: 'blue' },
+      { gateId: 'gate-question', decision: 'reply', response: 'blue' },
       'Answered. The agent carries on.',
     ],
   ];
@@ -145,6 +171,15 @@ describe('the gate shortcuts', () => {
       '“Fix the tab scroll” has no operation to confirm waiting.'
     );
     expect(fake.sent).toEqual([]);
+  });
+});
+
+describe('who decides at a gate', () => {
+  test('every gate command is yours alone: answering an agent’s question included, no agent has a tool for one', () => {
+    expect(GATE_SPECS.filter((spec) => !spec.humanOnly).map((spec) => spec.path.join(' '))).toEqual([]);
+    const agentPaths = listAgentSpecs().map((spec) => spec.path.join(' '));
+    expect(agentPaths).not.toContain('questions answer');
+    expect(agentPaths.some((path) => GATE_SPECS.some((spec) => spec.path.join(' ') === path))).toBe(false);
   });
 });
 

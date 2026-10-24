@@ -1,7 +1,13 @@
 import type { ExtensionPlace, LoadedExtensions, SkillSource } from '@shinsa/core';
 import type { Catalog, CatalogSkill } from './catalog.ts';
 import type { McpDefinition } from './definitions.ts';
-import { type DeferredServer, type DeferredSkill, ExtensionLoader, type OpenClient } from './loader.ts';
+import {
+  type DeferredServer,
+  type DeferredSkill,
+  describeServerChoice,
+  ExtensionLoader,
+  type OpenClient,
+} from './loader.ts';
 
 interface SessionMcpServer {
   name: string;
@@ -29,7 +35,7 @@ export interface SessionExtensions {
 }
 
 export interface SessionExtensionSource {
-  resolveSession: (place: ExtensionPlace) => Promise<SessionExtensions>;
+  resolveSession: (place: ExtensionPlace, pin?: LoadedExtensions | null) => Promise<SessionExtensions>;
   createLoader?: (extensions: SessionExtensions) => ExtensionLoader | null;
 }
 
@@ -87,6 +93,55 @@ export function serializeSession(parts: SessionParts): SessionExtensions {
       ],
     },
   };
+}
+
+export function resolvePinnedDeferral(
+  pin: LoadedExtensions | null,
+  kind: 'servers' | 'skills',
+  name: string
+): boolean | null {
+  if (!pin) return null;
+  if (pin[kind].some((entry) => entry.name === name)) return false;
+  if ((pin.deferred ?? []).some((entry) => entry.name === name)) return true;
+  return null;
+}
+
+function listExtensionNames(loaded: LoadedExtensions) {
+  const { servers, skills, plugins, deferred = [] } = loaded;
+  return [servers, skills, plugins, deferred].map((entries) =>
+    entries
+      .map((entry) => entry.name)
+      .sort()
+      .join('\n')
+  );
+}
+
+export function isSameExtensionSet(left: LoadedExtensions, right: LoadedExtensions) {
+  const before = listExtensionNames(left);
+  return listExtensionNames(right).every((names, index) => names === before[index]);
+}
+
+export function resolveDeferredInstructions(
+  extensions: Pick<SessionExtensions, 'deferred' | 'deferredSkills'>
+) {
+  const { deferred, deferredSkills } = extensions;
+  if (deferred.length === 0 && deferredSkills.length === 0) return null;
+  const lines = [
+    '## Left out until needed',
+    'Shinsa left out what agents have not used lately, to keep your context small. You can still use all of it.',
+  ];
+  if (deferred.length > 0) {
+    lines.push(
+      `- MCP servers: ${deferred.map(describeServerChoice).join(', ')}. Load one with \`load_mcp_server\`.`
+    );
+  }
+  if (deferredSkills.length > 0) {
+    lines.push('- Skills: the ones `load_skill` lists. Read one with `load_skill`.');
+  }
+  lines.push(
+    'When the human names a server or a skill you do not have, in any form (`maple`, “the Maple MCP”), load it with `load_mcp_server` or `load_skill` and use it. Never say it is not available before you tried to load it.'
+  );
+  return lines.join('\n');
 }
 
 export function createSessionLoader(extensions: SessionExtensions, open: OpenClient | undefined) {

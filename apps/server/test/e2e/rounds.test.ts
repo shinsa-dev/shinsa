@@ -5,11 +5,8 @@ import { type MessageKind, resolveCurrentRound, resolveTaskRounds, type TaskShap
 import type { JsonSchema } from '../../src/agents/providers/index.ts';
 import type { QuickJson } from '../../src/agents/quick/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
-import {
-  createMessageClassifier,
-  type MessageClassifier,
-  routeUserCommand,
-} from '../../src/triage/message.ts';
+import { MessageInbox } from '../../src/triage/inbox.ts';
+import { type Classifier, createClassifier, routeUserCommand } from '../../src/triage/message.ts';
 import { type AgentScript, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -36,7 +33,7 @@ const BUILD: AgentScript = async (agent) => {
     spots: [
       { file: `round-${round}-phase-${phase}.txt`, start: 1, end: 1, attention: 'normal', why: 'New.' },
     ],
-    decisions: [],
+    judgement_calls: [],
   });
 };
 
@@ -50,8 +47,12 @@ function answerAs(kind: MessageKind, title: string, shape: TaskShape = 'change')
   return <T>() => Promise.resolve({ kind, shape, title, why: `The message reads as ${kind}.` } as T);
 }
 
-async function send(w: World, taskId: string, text: string, classify: MessageClassifier | null) {
+async function send(w: World, taskId: string, text: string, classify: Classifier | null) {
+  const inbox = classify ? new MessageInbox(w.engine, classify.message) : null;
+  inbox?.start();
   await routeUserCommand(w.engine, { type: 'task.message', taskId, text }, null, classify);
+  await inbox?.settle();
+  inbox?.stop();
 }
 
 async function shipRound(w: World, taskId: string) {
@@ -69,7 +70,7 @@ async function shipRound(w: World, taskId: string) {
     'the merge gate or the next round',
     () =>
       resolveCurrentRound(w.task(taskId)).number > round ||
-      w.gates(taskId).some((gate) => gate.kind === 'merge')
+      w.gates(taskId).some((gate) => gate.type === 'merge')
   );
 }
 
@@ -95,11 +96,11 @@ describe('a task that runs in rounds', () => {
       w,
       taskId,
       'Also stream the tool results',
-      createMessageClassifier(answerAs('new_round', 'Stream the tool results'))
+      createClassifier(answerAs('new_round', 'Stream the tool results'))
     );
     expect(statuses(w, taskId)).toEqual([
       [1, 'active'],
-      [2, 'queued'],
+      [2, 'waiting'],
     ]);
     await shipRound(w, taskId);
     await w.until('round 2 to start', () => resolveCurrentRound(w.task(taskId)).number === 2);
@@ -107,7 +108,7 @@ describe('a task that runs in rounds', () => {
       w,
       taskId,
       'And cache the server list',
-      createMessageClassifier(answerAs('new_round', 'Cache the server list'))
+      createClassifier(answerAs('new_round', 'Cache the server list'))
     );
     await shipRound(w, taskId);
     await w.until('round 3 to start', () => resolveCurrentRound(w.task(taskId)).number === 3);
@@ -149,7 +150,7 @@ describe('a task that runs in rounds', () => {
       w,
       taskId,
       'Then add the settings screen',
-      createMessageClassifier(answerAs('new_round', 'Add the settings screen'))
+      createClassifier(answerAs('new_round', 'Add the settings screen'))
     );
     await w.engine.dispatch({ type: 'round.ship', taskId, number: 2, shipping: 'stacked' });
     await shipRound(w, taskId);
@@ -189,7 +190,12 @@ describe('a task that runs in rounds', () => {
     const first = w.task(taskId).branch ?? '';
     await git(w.repoPath, 'push', '-q', 'origin', `${first}:refs/heads/main`);
     await w.until('the old worktree to go', () => w.task(taskId).worktreePath === null);
-    await send(w, taskId, 'Now add the settings screen', null);
+    await send(
+      w,
+      taskId,
+      'Now add the settings screen',
+      createClassifier(answerAs('new_round', 'Add the settings screen'))
+    );
     expect(statuses(w, taskId)).toEqual([
       [1, 'merged'],
       [2, 'active'],
@@ -221,7 +227,7 @@ describe('a task that runs in rounds', () => {
         why: idea ? 'It is new work for the same goal.' : 'It corrects the work in progress.',
       } as T);
     };
-    const classify = createMessageClassifier(ask);
+    const classify = createClassifier(ask);
     let release: (() => void) | null = null;
     w.agents.queue('planner', async (agent) => {
       await new Promise<void>((resolve) => {
@@ -230,7 +236,7 @@ describe('a task that runs in rounds', () => {
       expect(agent.steers.some((text) => text.includes('Use tabs instead of spaces'))).toBe(true);
       await agent.call('propose_plan', {
         goal: 'Add MCP v2.',
-        plan: [{ title: 'Build it', detail: 'All of it.' }],
+        phases: [{ title: 'Build it', detail: 'All of it.' }],
         behaviour: [],
         approach: 'Directly.',
         files: [],
@@ -245,13 +251,15 @@ describe('a task that runs in rounds', () => {
     await w.until('the steer', () => (w.agents.of('planner')[0]?.steers.length ?? 0) > 0);
     await send(w, taskId, 'Also add a dark mode toggle', classify);
     expect(asked[0]?.schema?.properties).toMatchObject({
-      kind: { type: 'string', enum: ['feedback', 'new_round', 'separate_task'] },
+      kind: { type: 'string', enum: ['acknowledge', 'feedback', 'new_round', 'separate_task'] },
     });
     expect(asked[0]?.prompt).toContain('Message:\nUse tabs instead of spaces');
-    expect(asked[0]?.prompt).toContain('- kind (choice): What is this message?');
+    expect(asked[0]?.prompt).toContain(
+      '- kind (choice): A round of this task is in progress. What is this message?'
+    );
     expect(statuses(w, taskId)).toEqual([
       [1, 'active'],
-      [2, 'queued'],
+      [2, 'waiting'],
     ]);
     expect(resolveTaskRounds(w.task(taskId))[1]).toMatchObject({
       title: 'Add a dark mode toggle',
@@ -273,7 +281,7 @@ describe('a task that runs in rounds', () => {
       w,
       taskId,
       'Can you also redo the billing page?',
-      createMessageClassifier(answerAs('separate_task', 'Redo the billing page'))
+      createClassifier(answerAs('separate_task', 'Redo the billing page'))
     );
     const suggestion = w.task(taskId).suggestions?.[0];
     expect(suggestion).toMatchObject({ splitOff: true, title: 'Redo the billing page', status: 'open' });
@@ -282,7 +290,7 @@ describe('a task that runs in rounds', () => {
     expect(w.task(taskId).suggestions?.[0]).toMatchObject({ status: 'dismissed', keptRound: 2 });
     expect(statuses(w, taskId)).toEqual([
       [1, 'active'],
-      [2, 'queued'],
+      [2, 'waiting'],
     ]);
     await shipRound(w, taskId);
     await w.until('round 2 to start', () => resolveCurrentRound(w.task(taskId)).number === 2);
@@ -295,7 +303,7 @@ describe('a task that runs in rounds', () => {
     let hold: Promise<void> | null = null;
     const taskId = await w.createTask('Add MCP v2');
     await w.until('the planner', () => w.agents.of('planner').length === 1);
-    await send(w, taskId, 'Then add search', createMessageClassifier(answerAs('new_round', 'Add search')));
+    await send(w, taskId, 'Then add search', createClassifier(answerAs('new_round', 'Add search')));
     w.agents.queue('planner', async (agent) => {
       hold = agent.hang();
       await hold;

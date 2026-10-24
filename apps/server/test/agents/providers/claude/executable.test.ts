@@ -7,6 +7,7 @@ import {
   readClaudeVersion,
   resolveClaudeExecutable,
   resolveSdkClaudeVersion,
+  resolveSdkPackage,
 } from '../../../../src/agents/providers/claude/executable.ts';
 import { compareVersions } from '../../../../src/agents/providers/versions.ts';
 import { createTempDir } from '../../../helpers/index.ts';
@@ -35,6 +36,8 @@ describe('versions', () => {
     const bare = join(dir, 'package.json');
     writeFileSync(bare, '{}');
     expect(resolveSdkClaudeVersion(bare)).toBe('0.0.0');
+    expect(resolveSdkPackage(bare)).toEqual({ version: '0.0.0', claudeCodeVersion: '0.0.0' });
+    expect(resolveSdkPackage().version).toMatch(/^0\.\d+\.\d+$/);
   });
 
   test('asks the binary once and again only after it changes on disk', async () => {
@@ -75,7 +78,7 @@ describe('resolveClaudeExecutable', () => {
       ok: false,
       reason: 'outdated',
       message:
-        'Claude Code 2.1.100 is older than Shinsa needs (2.1.280 or newer). Update it with `claude update`.',
+        'Claude Code 2.1.100 is older than Shinsa needs (2.1.280 or newer). Update it from Settings → Agents, or run `claude update`.',
     });
   });
 

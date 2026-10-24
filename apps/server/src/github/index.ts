@@ -1,10 +1,10 @@
 import {
+  type CiRun,
   type CiState,
   MERGE_METHODS,
   type MergeQueueEntry,
   type MergeQueueState,
   type PullRequest,
-  type CiRun,
   type PullRequestCheckStatus,
   type PullRequestRemark,
   type Repo,
@@ -356,7 +356,7 @@ export function readStackedPullRequest(repo: Repo, number: number, signal?: Abor
 export function serializePullRequestBody(task: Task) {
   return [
     task.summary ?? '',
-    task.spec ? `\n<details><summary>Spec</summary>\n\n${task.spec.body}\n</details>` : '',
+    task.plan ? `\n<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
   ]
     .join('\n')
     .trim();

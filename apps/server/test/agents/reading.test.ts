@@ -23,7 +23,7 @@ async function startPlanning() {
     projectName: null,
   });
   const repoId = Object.keys(engine.state.repos)[0] ?? '';
-  await engine.dispatch({ type: 'task.create', intent: 'Fix the tab scroll', repoId });
+  await engine.dispatch({ type: 'task.create', request: 'Fix the tab scroll', repoId });
   const taskId = Object.keys(engine.state.tasks)[0] ?? '';
   await engine.dispatch({
     type: 'task.triage',

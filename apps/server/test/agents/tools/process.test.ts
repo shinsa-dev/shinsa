@@ -21,7 +21,7 @@ describe('the process tools', () => {
   test('wait_for schedules the check and tells the agent to end its turn', async () => {
     const { sent, call } = createCall();
     expect(await handleProcessTool('wait_for', { check_in_minutes: 1, notes: 'The deploy.' }, call)).toBe(
-      'Shinsa will resume your session in a minute with your notes. End your turn now.'
+      'Shinsa will resume your session in a minute with your notes. Stop here without a closing message.'
     );
     expect(
       await handleProcessTool(
@@ -64,7 +64,7 @@ describe('the process tools', () => {
       } as ShinsaEvent,
     ]);
     expect(await handleProcessTool('wait_for', { check_in_minutes: 1, notes: 'The deploy.' }, call)).toBe(
-      'Your wait ran out, so Shinsa asked the human what to do. End your turn now.'
+      'Your wait ran out, so Shinsa asked the human what to do. Stop here without a closing message.'
     );
   });
 
@@ -81,7 +81,7 @@ describe('the process tools', () => {
       runId: 'run-1',
       attemptId: 'a-1',
       suggestions: [
-        { title: 'Cache it', intent: 'Cache the export.', why: 'It is slow.', waitsOnThis: true },
+        { title: 'Cache it', request: 'Cache the export.', why: 'It is slow.', waitsOnThis: true },
       ],
     });
   });

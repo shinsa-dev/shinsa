@@ -29,22 +29,20 @@ import type { ToolSpec } from './schema.ts';
 const L = DELEGATION_LIMITS;
 
 const DEFAULT_ROLE: Record<RunRole, DelegateRole> = {
-  triage: 'planner',
   planner: 'planner',
   builder: 'builder',
   reviewer: 'reviewer',
   fixer: 'fixer',
-  shipper: 'fixer',
   answerer: 'planner',
   investigator: 'builder',
   researcher: 'planner',
   operator: 'builder',
 };
 
-const TASK_ID = {
+const DELEGATION_ID = {
   type: 'string',
   maxLength: DELEGATION_LIMITS.name,
-  description: 'The task_id that `delegate_task` returned.',
+  description: 'The delegation_id that `delegate_task` returned.',
 };
 
 const CLIENT_REQUEST_ID = {
@@ -58,16 +56,16 @@ export const ORCHESTRATION_TOOL_SPECS = {
   delegate_task: {
     name: 'delegate_task',
     description: [
-      'Hand one self-contained piece of work to another agent and get its result back. It starts from the `task` you give it alone, without this conversation, so put everything it needs in it.',
+      'Hand one self-contained piece of work to another agent and get its result back. It starts from the `brief` you give it alone, without this conversation, so put everything it needs in it.',
       'Use it for work that is independent of yours or should run in parallel: research, a second opinion, an isolated experiment, a review of what you built.',
-      `mode "async" (the default) returns at once; the result arrives in this conversation when the agent finishes, steered into your turn or waking you after it ends, so carry on or end your turn instead of polling. mode "wait" blocks until the result, a question from the agent, or timeout_minutes (${L.waitMinutes} by default); a wait that times out does not stop the agent, and its result still arrives here.`,
+      `mode "async" (the default) returns at once; the result arrives in this conversation when the agent finishes, steered into your turn or waking you after it ends, so carry on or stop instead of polling. mode "wait" blocks until the result, a question from the agent, or timeout_minutes (${L.waitMinutes} by default); a wait that times out does not stop the agent, and its result still arrives here.`,
       'For every review round, call delegate_task again with the original brief, the earlier findings, your responses and the open objections, under a new client_request_id.',
       'An agent that cannot change files can only delegate to the planner and reviewer roles. isolation "worktree" gives the agent its own checkout of your last commit; your uncommitted edits are not in it.',
     ].join(' '),
     inputSchema: {
       type: 'object',
       properties: {
-        task: {
+        brief: {
           type: 'string',
           maxLength: L.brief,
           description:
@@ -104,29 +102,37 @@ export const ORCHESTRATION_TOOL_SPECS = {
           description: 'The model to run it on. Defaults to the model set for its role.',
         },
       },
-      required: ['task'],
+      required: ['brief'],
     },
   },
   delegation_status: {
     name: 'delegation_status',
     description:
-      'Read a task you delegated: its status, its open question, and its result once it has one. Reading a finished result counts as receiving it, so it is not delivered to you again. Do not poll: results arrive by themselves.',
-    inputSchema: { type: 'object', properties: { task_id: TASK_ID }, required: ['task_id'] },
+      'Read a delegation: its status, its open question, and its result once it has one. Reading a finished result counts as receiving it, so it is not delivered to you again. Do not poll: results arrive by themselves.',
+    inputSchema: {
+      type: 'object',
+      properties: { delegation_id: DELEGATION_ID },
+      required: ['delegation_id'],
+    },
   },
   delegation_cancel: {
     name: 'delegation_cancel',
     description:
-      'Stop a task you delegated, and every task it delegated in turn. You get no report for it. A finished task stays as it is.',
-    inputSchema: { type: 'object', properties: { task_id: TASK_ID }, required: ['task_id'] },
+      'Stop a delegation, and every delegation it started in turn. You get no report for it. A finished delegation stays as it is.',
+    inputSchema: {
+      type: 'object',
+      properties: { delegation_id: DELEGATION_ID },
+      required: ['delegation_id'],
+    },
   },
   delegation_answer: {
     name: 'delegation_answer',
     description:
-      'Answer the question a task you delegated is waiting on. When only the human can decide, ask them with `ask` first, then answer here.',
+      'Answer the question a delegation is waiting on. When only the human can decide, ask them with `ask` first, then answer here.',
     inputSchema: {
       type: 'object',
-      properties: { task_id: TASK_ID, answer: { type: 'string', maxLength: L.answer } },
-      required: ['task_id', 'answer'],
+      properties: { delegation_id: DELEGATION_ID, answer: { type: 'string', maxLength: L.answer } },
+      required: ['delegation_id', 'answer'],
     },
   },
   create_task: {
@@ -207,10 +213,12 @@ function findParent(call: OrchestrationCall) {
   return run;
 }
 
-function findChild(call: OrchestrationCall, taskId: string): DelegatedRun {
-  const child = call.state().runs[taskId];
+function findChild(call: OrchestrationCall, delegationId: string): DelegatedRun {
+  const child = call.state().runs[delegationId];
   if (!child || !isDelegatedRun(child) || child.delegation.parentRunId !== call.runId) {
-    throw new Error(`No task ${taskId} was delegated by you. Use the task_id that delegate_task returned.`);
+    throw new Error(
+      `You started no delegation ${delegationId}. Use the delegation_id that delegate_task returned.`
+    );
   }
   return child;
 }
@@ -221,7 +229,7 @@ function serializeStatus(state: ShinsaState, child: DelegatedRun, extra: { waitT
   const open = child.endedAt === null && question !== null && question.answer === null;
   return JSON.stringify(
     {
-      task_id: child.id,
+      delegation_id: child.id,
       title: child.delegation.title,
       role: child.role,
       status,
@@ -233,7 +241,7 @@ function serializeStatus(state: ShinsaState, child: DelegatedRun, extra: { waitT
       question: open
         ? { question: question.question, context: question.context, choices: question.choices }
         : null,
-      delegated_tasks_running: listLiveChildRuns(state, child.id).length,
+      delegations_running: listLiveChildRuns(state, child.id).length,
       result: child.endedAt === null ? null : child.summary,
       wait_timed_out: extra.waitTimedOut ?? false,
     },
@@ -270,7 +278,7 @@ async function delegateTask(input: Record<string, unknown>, call: OrchestrationC
   const parent = findParent(call);
   if (request.provider && !call.hasProvider(request.provider)) {
     throw new Error(
-      `Shinsa has no agent provider "${request.provider}". Leave provider unset to use the default.`
+      `There is no agent provider "${request.provider}". Leave provider unset to use the default.`
     );
   }
   const requestKey = request.requestKey ?? call.requestKey;
@@ -295,7 +303,7 @@ async function delegateTask(input: Record<string, unknown>, call: OrchestrationC
     resolveCommandId(call, 'delegate', request.requestKey)
   );
   const child = selectRequested(call, requestKey);
-  if (!child) throw new Error('The task was not delegated. Try again.');
+  if (!child) throw new Error('Nothing was delegated. Try again.');
   if (!known) call.recordStarted(child.id);
   if (request.mode === 'async') return serializeStatus(call.state(), child);
   const outcome = await call.awaitDelegation(child.id, request.timeoutMinutes * call.minuteMs, call.signal);
@@ -304,29 +312,29 @@ async function delegateTask(input: Record<string, unknown>, call: OrchestrationC
   return serializeStatus(call.state(), findChild(call, child.id), { waitTimedOut: true });
 }
 
-async function cancelTask(input: Record<string, unknown>, call: OrchestrationCall) {
-  const { taskId } = assertProtocol(validateDelegationReference(input));
-  findChild(call, taskId);
+async function cancelDelegation(input: Record<string, unknown>, call: OrchestrationCall) {
+  const { delegationId } = assertProtocol(validateDelegationReference(input));
+  findChild(call, delegationId);
   await call.dispatch({
     type: 'agent.cancel_delegation',
     runId: call.runId,
     attemptId: call.attemptId,
-    childRunId: taskId,
+    childRunId: delegationId,
   });
-  return serializeStatus(call.state(), findChild(call, taskId));
+  return serializeStatus(call.state(), findChild(call, delegationId));
 }
 
-async function answerTask(input: Record<string, unknown>, call: OrchestrationCall) {
-  const { taskId, answer } = assertProtocol(validateDelegationAnswer(input));
-  findChild(call, taskId);
+async function answerDelegation(input: Record<string, unknown>, call: OrchestrationCall) {
+  const { delegationId, answer } = assertProtocol(validateDelegationAnswer(input));
+  findChild(call, delegationId);
   await call.dispatch({
     type: 'agent.answer_delegation',
     runId: call.runId,
     attemptId: call.attemptId,
-    childRunId: taskId,
+    childRunId: delegationId,
     answer,
   });
-  return 'Answered. The delegated agent carries on, and its result arrives here when it finishes.';
+  return 'Answered. The agent carries on, and its result arrives here when it finishes.';
 }
 
 function resolveRepoId(state: ShinsaState, task: Task, name: string | null) {
@@ -334,7 +342,7 @@ function resolveRepoId(state: ShinsaState, task: Task, name: string | null) {
   const repo = Object.values(state.repos).find((candidate) => candidate.name === name);
   if (!repo) {
     const known = Object.values(state.repos).map((candidate) => candidate.name);
-    throw new Error(`Shinsa knows no repository "${name}". Known: ${known.join(', ') || 'none'}.`);
+    throw new Error(`There is no repository "${name}". Known: ${known.join(', ') || 'none'}.`);
   }
   return repo.id === task.repoId ? null : repo.id;
 }
@@ -361,7 +369,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       runId: call.runId,
       attemptId: call.attemptId,
       requestKey,
-      intent: request.intent,
+      request: request.request,
       repoId: resolveRepoId(call.state(), source, request.repository),
       thisWaits: request.thisTaskWaits,
     },
@@ -380,19 +388,19 @@ async function splitPlan(input: Record<string, unknown>, call: OrchestrationCall
     type: 'agent.split_task',
     runId: call.runId,
     attemptId: call.attemptId,
-    intents: request.intents,
+    requests: request.requests,
     thisWaits: request.thisTaskWaits,
   });
   const state = call.state();
   const task = findTaskOf(call, parent);
-  const split = task.splits?.find((entry) => entry.planVersion === (task.spec?.version ?? 0));
+  const split = task.splits?.find((entry) => entry.planVersion === (task.plan?.version ?? 0));
   const tasks = (split?.taskIds ?? []).flatMap((id) => state.tasks[id] ?? []);
   return `The plan is split into these tasks. Link them for the human with:\n${listLinks(tasks)}`;
 }
 
-async function statusTask(input: Record<string, unknown>, call: OrchestrationCall) {
-  const { taskId } = assertProtocol(validateDelegationReference(input));
-  const status = await readStatus(call, findChild(call, taskId));
+async function readDelegation(input: Record<string, unknown>, call: OrchestrationCall) {
+  const { delegationId } = assertProtocol(validateDelegationReference(input));
+  const status = await readStatus(call, findChild(call, delegationId));
   return status;
 }
 
@@ -405,11 +413,11 @@ export function handleOrchestrationTool(
     case 'delegate_task':
       return delegateTask(input, call);
     case 'delegation_status':
-      return statusTask(input, call);
+      return readDelegation(input, call);
     case 'delegation_cancel':
-      return cancelTask(input, call);
+      return cancelDelegation(input, call);
     case 'delegation_answer':
-      return answerTask(input, call);
+      return answerDelegation(input, call);
     case 'create_task':
       return createCourier(input, call);
     case 'split_task':

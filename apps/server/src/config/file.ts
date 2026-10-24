@@ -10,7 +10,6 @@ export interface MachineConfig {
   hostname: string | null;
   editor: string | null;
   terminal: string | null;
-  migratedFrom: { path: string; at: number } | null;
 }
 
 export interface MachineConfigRead {
@@ -30,7 +29,6 @@ export function createMachineConfig(): MachineConfig {
     hostname: null,
     editor: null,
     terminal: null,
-    migratedFrom: null,
   };
 }
 
@@ -74,16 +72,6 @@ function readTime(fields: Fields, key: 'onboardedAt', problems: string[]) {
   return null;
 }
 
-function readMigration(fields: Fields, problems: string[]) {
-  const value = fields.migratedFrom as Fields | null | undefined;
-  if (value === undefined || value === null) return null;
-  if (typeof value === 'object' && isText(value.path) && isTime(value.at)) {
-    return { path: value.path, at: value.at };
-  }
-  problems.push('migratedFrom is not a migration record; it was ignored.');
-  return null;
-}
-
 export function parseMachineConfig(value: unknown): MachineConfigRead {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { config: createMachineConfig(), problems: ['The file is not a JSON object.'], unreadable: false };
@@ -98,7 +86,6 @@ export function parseMachineConfig(value: unknown): MachineConfigRead {
     hostname: readText(fields, 'hostname', problems),
     editor: readText(fields, 'editor', problems),
     terminal: readText(fields, 'terminal', problems),
-    migratedFrom: readMigration(fields, problems),
   };
   return { config, problems, unreadable: false };
 }

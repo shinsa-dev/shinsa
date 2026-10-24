@@ -27,7 +27,7 @@ async function seedTasks(engine: Engine) {
     projectName: null,
   });
   const repoId = Object.keys(engine.state.repos)[0] ?? '';
-  await engine.dispatch({ type: 'task.create', intent: 'Fix the tab scroll in the sidebar', repoId });
+  await engine.dispatch({ type: 'task.create', request: 'Fix the tab scroll in the sidebar', repoId });
   const fixId = Object.keys(engine.state.tasks)[0] ?? '';
   await engine.dispatch({
     type: 'task.triage',
@@ -40,9 +40,9 @@ async function seedTasks(engine: Engine) {
   });
   await engine.dispatch({ type: 'worktree.ready', taskId: fixId, path: '/wt/fix', branch: 'fix/tab-scroll' });
   const runId = Object.keys(engine.state.runs)[0] ?? '';
-  await engine.dispatch({ type: 'task.create', intent: 'Add search', repoId: null });
+  await engine.dispatch({ type: 'task.create', request: 'Add search', repoId: null });
   const searchId = Object.keys(engine.state.tasks).find((id) => id !== fixId) ?? '';
-  await engine.dispatch({ type: 'task.create', intent: 'Old idea', repoId: null });
+  await engine.dispatch({ type: 'task.create', request: 'Old idea', repoId: null });
   const oldId = Object.keys(engine.state.tasks).find((id) => id !== fixId && id !== searchId) ?? '';
   await engine.dispatch({ type: 'task.cancel', taskId: oldId });
   await engine.dispatch({
@@ -107,7 +107,7 @@ describe('GET /api/tasks', () => {
       repo: 'app',
       branch: 'fix/tab-scroll',
       pullRequest: null,
-      decision: { gateId: 'gate-colour', purpose: 'agent_question', title: 'Which colour?' },
+      decision: { gateId: 'gate-colour', type: 'question', title: 'Which colour?' },
       url: `${base}/tasks/T-1`,
     });
     expect((body.tasks as unknown[])[0]).toMatchObject({
@@ -164,11 +164,11 @@ describe('GET /api/tasks/:ref', () => {
     const { body } = await read(`/api/tasks/${fixId}`);
     expect(body).toMatchObject({
       task: { id: fixId, title: 'Fix the tab scroll' },
-      intent: 'Fix the tab scroll in the sidebar',
+      request: 'Fix the tab scroll in the sidebar',
       plan: null,
       summary: null,
-      answer: null,
-      gates: [{ id: 'gate-colour', purpose: 'agent_question' }],
+      result: null,
+      gates: [{ id: 'gate-colour', type: 'question' }],
       waitsOn: [],
       runs: [{ id: runId, role: 'planner', outcome: null, account: null, delegation: null }],
       suggestions: [],
@@ -360,10 +360,10 @@ describe('a task further along', () => {
           checks: 'passing',
           url: 'https://github.com/acme/app/pull/7',
         },
-        spec: {
+        plan: {
           version: 2,
           approvedAt: 5,
-          document: { goal: 'Fix it.', plan: [{ title: 'Edit', detail: 'Edit it.' }] },
+          document: { goal: 'Fix it.', phases: [{ title: 'Edit', detail: 'Edit it.' }] },
         },
       } as never);
       state.tasks['task-2'] = createTask({

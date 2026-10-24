@@ -256,7 +256,7 @@ describe('adopting the login Claude Code already has', () => {
       runs: 0,
     });
     expect(account?.usage.windows.map((window) => [window.label, window.usedPercent])).toEqual([
-      ['Current session', 40],
+      ['5-hour limit', 40],
       ['Weekly · All models', 20],
       ['Weekly · Fable', 0],
     ]);
@@ -1345,7 +1345,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
     expect(verdict).toEqual({ retry: false, failure: failure({ resetAt: 9_500_000 }) });
   });
 
-  test('signed out, it asks for its own sign-in, and signing in answers the gate', async () => {
+  test('signed out, it asks for its own sign-in, and signing in answers that provider’s Sign in gate, not a Claude account’s', async () => {
     let logins: ProviderLogin[] = [{ ...CODEX_LOGIN, status: 'signed_out' }];
     const codex = createCodexSource([codexReading(10)]);
     const world = createWorld({
@@ -1368,7 +1368,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       failure: failure({
         class: 'auth',
         retryable: false,
-        account: { id: 'codex', email: 'codex@example.com' },
+        login: { provider: 'codex', email: 'codex@example.com' },
       }),
     });
     world.stub.update((state) => {
@@ -1376,18 +1376,28 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       state.gates['gate-1'] = createGate({
         id: 'gate-1',
         taskId: 'task-1',
-        kind: 'question',
-        purpose: 'sign_in',
-        account: { id: 'codex', email: 'codex@example.com' },
+        type: 'sign_in',
+        provider: 'codex',
+        account: null,
+      });
+      state.gates['gate-2'] = createGate({
+        id: 'gate-2',
+        taskId: 'task-1',
+        type: 'sign_in',
+        provider: 'claude',
+        account: { id: 'acct-1', email: 'ada@example.com' },
       });
     });
     await world.accounts.syncProviderLogins();
-    expect(world.stub.dispatched.filter((command) => command.type === 'account.signed_in')).toHaveLength(0);
+    expect(
+      world.stub.dispatched.filter((command) => command.type === 'provider.record_sign_in')
+    ).toHaveLength(0);
     logins = [CODEX_LOGIN];
     await world.accounts.syncProviderLogins();
-    expect(world.stub.dispatched.filter((command) => command.type === 'account.signed_in')).toEqual([
-      { type: 'account.signed_in', account: { id: 'codex', email: 'codex@example.com' } },
+    expect(world.stub.dispatched.filter((command) => command.type === 'provider.record_sign_in')).toEqual([
+      { type: 'provider.record_sign_in', provider: 'codex' },
     ]);
+    expect(world.stub.dispatched.some((command) => command.type === 'account.signed_in')).toBe(false);
     expect(world.stub.commandIds.at(-1)).toBe('provider-login:codex:gate-1');
   });
 
@@ -1403,12 +1413,12 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       state.gates['gate-1'] = createGate({
         id: 'gate-1',
         taskId: 'task-1',
-        kind: 'question',
-        purpose: 'sign_in',
-        account: { id: 'codex', email: null },
+        type: 'sign_in',
+        provider: 'codex',
+        account: null,
       });
     });
-    world.stub.reject((command) => command.type === 'account.signed_in');
+    world.stub.reject((command) => command.type === 'provider.record_sign_in');
     const warn = spyOn(log, 'warn');
     try {
       await world.accounts.syncProviderLogins();

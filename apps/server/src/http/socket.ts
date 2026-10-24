@@ -4,7 +4,7 @@ import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
-import type { MessageClassifier } from '../triage/message.ts';
+import type { Classifier } from '../triage/message.ts';
 import { dispatchUserCommand } from './routes.ts';
 
 export interface SocketData {
@@ -48,7 +48,7 @@ export function createSocketHub(
   engine: Engine,
   transcripts: Transcripts,
   accounts?: Accounts,
-  classify: MessageClassifier | null = null
+  classify: Classifier | null = null
 ) {
   const sockets = new Set<Socket>();
 

@@ -47,14 +47,14 @@ async function reachOperationGate(w: World) {
     await agent.call('propose_plan', { ...toolPlan(PLAN), operation: BACKFILL, impact: IMPACT });
   });
   const taskId = await w.createTask('Add the greeting files and backfill them');
-  const plan = await w.untilGate(taskId, 'spec');
+  const plan = await w.untilGate(taskId, 'plan');
   await w.answer(plan, 'approve');
   await w.answer(await w.untilGate(taskId, 'review'), 'approve');
   await w.until('the pull request to open', () => w.task(taskId).pullRequest !== null);
   w.github.update(1, { checks: 'passing' });
   await w.sync(taskId);
   await w.answer(await w.untilGate(taskId, 'merge'), 'approve');
-  const gate = await w.untilGate(taskId, 'question', 'operation');
+  const gate = await w.untilGate(taskId, 'operation');
   return { taskId, plan, gate, refusals };
 }
 
@@ -167,7 +167,7 @@ describe('the verification rules a composition and its plan must pass', () => {
     const taskId = await w.createTask();
     await w.untilGate(taskId, 'review');
     expect(refusals).toEqual([resolveRuleMessage('code.verification_plan')]);
-    expect(w.task(taskId).spec?.document?.verification).toEqual(PLAN.verification);
+    expect(w.task(taskId).plan?.document?.verification).toEqual(PLAN.verification);
     expect(w.agents.sessions.map((session) => session.role)).toEqual([
       'planner',
       'builder',
@@ -228,12 +228,12 @@ describe('the verification rules a composition and its plan must pass', () => {
       await agent.call('complete_phase', {
         summary: 'Wrote a.txt.',
         spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
-        decisions: [],
+        judgement_calls: [],
       });
     });
     w.agents.queue('builder', async (agent) => {
       agent.write('b.txt', 'phase 2\n');
-      const report = { summary: 'Wrote b.txt.', spots: [], decisions: [] };
+      const report = { summary: 'Wrote b.txt.', spots: [], judgement_calls: [] };
       refusal = await agent.call('complete_phase', report).catch((error: Error) => error.message);
       await agent.call('attach_evidence', { kind: 'test', title: 'Both files', text: 'a.txt b.txt' });
       await agent.call('complete_phase', report);

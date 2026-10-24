@@ -76,7 +76,7 @@ async function boot(options: { idleMs?: number; compaction?: boolean }): Promise
     providers: new ProviderRegistry([createProvider(agents, compactions)]),
     triage: (_state, task) =>
       Promise.resolve({
-        title: task.intent.split('\n')[0]?.slice(0, 40) ?? 'Task',
+        title: task.request.split('\n')[0]?.slice(0, 40) ?? 'Task',
         repoPath: repo.path,
         size: 'small',
         branch: `feat/t-${task.id.slice(-8)}`,
@@ -112,9 +112,9 @@ async function withWorld(
   }
 }
 
-async function createTask(world: Boot, intent: string) {
+async function createTask(world: Boot, request: string) {
   const before = new Set(Object.keys(world.shinsa.engine.state.tasks));
-  await world.shinsa.engine.dispatch({ type: 'task.create', intent, repoId: world.repoId });
+  await world.shinsa.engine.dispatch({ type: 'task.create', request, repoId: world.repoId });
   const taskId = Object.keys(world.shinsa.engine.state.tasks).find((id) => !before.has(id));
   if (!taskId) throw new Error('no task');
   return taskId;
@@ -139,16 +139,16 @@ describe('idle sessions, end to end', () => {
       const taskId = await createTask(world, 'Paint it');
       await until(
         'the question',
-        () => openGate(world, taskId, (open) => open.purpose === 'agent_question') !== undefined
+        () => openGate(world, taskId, (open) => open.type === 'question') !== undefined
       );
       await until('the release', () => world.agents.sessions[0]?.cancelled === true);
       const asker = Object.values(world.shinsa.engine.state.runs).find((run) => run.role === 'planner');
       expect(asker?.endedAt).toBeNull();
-      const gate = openGate(world, taskId, (entry) => entry.purpose === 'agent_question') as Gate;
+      const gate = openGate(world, taskId, (entry) => entry.type === 'question') as Gate;
       await world.shinsa.engine.dispatch({
         type: 'gate.answer',
         gateId: gate.id,
-        decision: 'answer',
+        decision: 'reply',
         response: 'green',
       });
       await until('the resumed planner', () => world.agents.of('planner').length === 2);
@@ -162,7 +162,7 @@ describe('idle sessions, end to end', () => {
       const taskId = await createTask(world, 'Build the greeting');
       await until(
         'the review gate',
-        () => openGate(world, taskId, (gate) => gate.kind === 'review') !== undefined,
+        () => openGate(world, taskId, (gate) => gate.type === 'review') !== undefined,
         30_000
       );
       await until('the compaction', () => world.compactions.length === 1);

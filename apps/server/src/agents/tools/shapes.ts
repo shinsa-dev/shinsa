@@ -5,7 +5,6 @@ import {
   SHAPE_LIMITS,
   type ShinsaEvent,
   STEP_SCHEMA,
-  validateAnswer,
   validateDelivery,
   validateReshape,
 } from '@shinsa/core';
@@ -33,11 +32,13 @@ const PROPOSE_CHANGE_SPEC = {
   required: ['request', 'why'],
 };
 
+const AS_YOUR_REPLY =
+  'Write it to the human in the first person: it is your reply, shown in the chat as you wrote it. After the call, stop and write nothing more.';
+
 export const SHAPE_TOOL_SPECS = {
   answer: {
     name: 'answer',
-    description:
-      'Hand the human your answer, then end your turn. Lead with the answer itself, then the evidence: files and lines as shinsa:// links.',
+    description: `Hand the human your answer. ${AS_YOUR_REPLY} Lead with the answer itself, then the evidence: files and lines as shinsa:// links.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -49,21 +50,22 @@ export const SHAPE_TOOL_SPECS = {
   },
   report_diagnosis: {
     name: 'report_diagnosis',
-    description:
-      'Hand the human what you found, then end your turn. Lead with the cause, then the evidence: files and lines as shinsa:// links. Your edits in the worktree are thrown away; only the findings are kept.',
+    description: `Hand the human your diagnosis. ${AS_YOUR_REPLY} Lead with the cause, then the evidence: files and lines as shinsa:// links. Your edits in the worktree are thrown away; only the diagnosis is kept.`,
     inputSchema: {
       type: 'object',
       properties: {
-        findings: limitedText('The cause, or what you ruled out, and the evidence, in markdown.', L.findings),
+        diagnosis: limitedText(
+          'The cause, or what you ruled out, and the evidence, in markdown.',
+          L.diagnosis
+        ),
         propose_change: PROPOSE_CHANGE_SPEC,
       },
-      required: ['findings'],
+      required: ['diagnosis'],
     },
   },
   submit_report: {
     name: 'submit_report',
-    description:
-      'Hand the human your report, then end your turn. Lead with the conclusion, then the options and the evidence behind it.',
+    description: `Hand the human your report. ${AS_YOUR_REPLY} Lead with the conclusion, then the options and the evidence behind it.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -75,8 +77,7 @@ export const SHAPE_TOOL_SPECS = {
   },
   report_outcome: {
     name: 'report_outcome',
-    description:
-      'Hand the human the outcome of the operation, then end your turn. Shinsa finishes the task; nothing is pushed and no pull request is opened.',
+    description: `Hand the human the outcome of the operation. ${AS_YOUR_REPLY} The task finishes with it; nothing is pushed and no pull request is opened.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -91,7 +92,7 @@ export const SHAPE_TOOL_SPECS = {
   reshape_task: {
     name: 'reshape_task',
     description:
-      'Use this instead of a plan when the steps Shinsa guessed do not fit the request: give `shape` to make it an answer, an investigation or research, or `steps` to compose the task from the building blocks. Shinsa checks the steps and tells you what to fix; once they pass, end your turn and Shinsa starts the first new step.',
+      'Use this instead of a plan when the steps Shinsa guessed do not fit the request: give `shape` to make it an answer, an investigation or research, or `steps` to compose the task from the building blocks. Shinsa checks the steps and tells you what to fix; once they pass, stop and Shinsa starts the first new step.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -116,6 +117,7 @@ export const SHAPE_TOOL_SPECS = {
 } satisfies Record<string, ToolSpec>;
 
 const DELIVERING_TOOLS = new Map<string, DeliveringStep>([
+  ['answer', 'answer'],
   ['report_diagnosis', 'investigate'],
   ['submit_report', 'research'],
   ['report_outcome', 'operate'],
@@ -137,11 +139,6 @@ export async function handleShapeTool(name: string, input: Record<string, unknow
   if (step) {
     const { body, proposal } = assertProtocol(validateDelivery(step, input));
     await call.dispatch({ type: 'agent.deliver', runId, attemptId, step, body, ...withProposal(proposal) });
-    return HANDED_OVER;
-  }
-  if (name === 'answer') {
-    const { answer, proposal } = assertProtocol(validateAnswer(input));
-    await call.dispatch({ type: 'agent.answer', runId, attemptId, answer, ...withProposal(proposal) });
     return HANDED_OVER;
   }
   if (name === 'reshape_task') {

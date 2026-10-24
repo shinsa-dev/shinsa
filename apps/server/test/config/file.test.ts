@@ -19,7 +19,6 @@ describe('parseMachineConfig', () => {
       hostname: 'box',
       editor: 'zed',
       terminal: 'Ghostty',
-      migratedFrom: { path: '/old', at: 3 },
     };
     expect(parseMachineConfig(value)).toEqual({
       config: { version: 1, ...value, roots: ['/a', '/b'] },
@@ -34,7 +33,6 @@ describe('parseMachineConfig', () => {
       onboardedAt: 'yesterday',
       port: 99_999,
       hostname: 7,
-      migratedFrom: { path: '' },
     });
     expect(config).toEqual(createMachineConfig());
     expect(problems).toEqual([
@@ -42,7 +40,6 @@ describe('parseMachineConfig', () => {
       'onboardedAt must be a time; it was ignored.',
       'port must be a port number; it was ignored.',
       'hostname must be text; it was ignored.',
-      'migratedFrom is not a migration record; it was ignored.',
     ]);
     expect(parseMachineConfig([]).problems).toEqual(['The file is not a JSON object.']);
     expect(parseMachineConfig(null).config).toEqual(createMachineConfig());

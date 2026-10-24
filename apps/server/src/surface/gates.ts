@@ -1,11 +1,11 @@
-import type { FindingVerdict, Gate, GateDecision, UserCommand } from '@shinsa/core';
+import type { FindingVerdict, GateDecision, GateType, UserCommand } from '@shinsa/core';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findOpenGate } from './resolve.ts';
 import { defineAction, defineCommand, encode, readValue, type SurfaceSpec } from './spec.ts';
 import { TASK_FIELD } from './tasks.ts';
 
-const DECISIONS = ['approve', 'revise', 'reject', 'answer'] as const;
+const DECISIONS = ['approve', 'revise', 'reject', 'reply', 'waive'] as const;
 
 const FEEDBACK_FIELD: FieldSpec = {
   name: 'feedback',
@@ -23,57 +23,42 @@ const GATE_FIELD: FieldSpec = {
   description: 'The gate id, from `shinsa tasks show`.',
 };
 
-interface GateKind {
+interface GateTarget {
   describe: string;
-  humanOnly: boolean;
-  matches: (gate: Gate) => boolean;
+  type: GateType;
 }
 
-const PLAN: GateKind = {
-  describe: 'plan to approve',
-  humanOnly: true,
-  matches: (gate) => gate.kind === 'spec' && gate.purpose === 'decision',
-};
+const PLAN: GateTarget = { describe: 'plan to approve', type: 'plan' };
 
-const REVIEW: GateKind = {
-  describe: 'changes to review',
-  humanOnly: true,
-  matches: (gate) => gate.kind === 'review' && gate.purpose === 'decision',
-};
+const REVIEW: GateTarget = { describe: 'changes to review', type: 'review' };
 
-const MERGE: GateKind = {
-  describe: 'merge to approve',
-  humanOnly: true,
-  matches: (gate) => gate.kind === 'merge' && gate.purpose === 'decision',
-};
+const MERGE: GateTarget = { describe: 'merge to approve', type: 'merge' };
 
-const OPERATION: GateKind = {
-  describe: 'operation to confirm',
-  humanOnly: true,
-  matches: (gate) => gate.purpose === 'operation',
-};
+const OPERATION: GateTarget = { describe: 'operation to confirm', type: 'operation' };
 
-const QUESTION: GateKind = {
-  describe: 'question from an agent',
-  humanOnly: false,
-  matches: (gate) => gate.purpose === 'agent_question' && !gate.secret,
-};
+const QUESTION: GateTarget = { describe: 'question from an agent', type: 'question' };
 
 const DONE_TEXT: Record<GateDecision, string> = {
   approve: 'Approved.',
   revise: 'Asked for changes. A fixer picks it up.',
   reject: 'Rejected.',
-  answer: 'Answered. The agent carries on.',
+  reply: 'Answered. The agent carries on.',
+  waive: 'Starting without checks.',
 };
 
 async function answerGate(
   client: SurfaceClient,
   values: Values,
-  kind: GateKind,
+  target: GateTarget,
   decision: GateDecision,
   response: string | null
 ): Promise<UserCommand> {
-  const gate = await findOpenGate(client, readValue(values, 'task'), kind.describe, kind.matches);
+  const gate = await findOpenGate(
+    client,
+    readValue(values, 'task'),
+    target.describe,
+    (candidate) => candidate.type === target.type
+  );
   return {
     type: 'gate.answer',
     gateId: gate.id,
@@ -86,31 +71,37 @@ async function answerGate(
 function defineGateShortcut(
   path: readonly string[],
   summary: string,
-  kind: GateKind,
-  decision: GateDecision
+  target: GateTarget,
+  decision: 'approve' | 'reject'
 ): SurfaceSpec {
-  const takesText = decision === 'revise' || decision === 'answer';
   return defineCommand({
     path,
     summary,
     command: 'gate.answer',
-    humanOnly: kind.humanOnly,
-    fields: takesText
-      ? [
-          TASK_FIELD,
-          decision === 'answer'
-            ? { ...FEEDBACK_FIELD, name: 'answer', description: 'Your answer.' }
-            : FEEDBACK_FIELD,
-        ]
-      : [TASK_FIELD],
-    build: (values, client) =>
-      answerGate(
-        client,
-        values,
-        kind,
-        decision,
-        takesText ? readValue(values, decision === 'answer' ? 'answer' : 'feedback') : null
-      ),
+    humanOnly: true,
+    fields: [TASK_FIELD],
+    build: (values, client) => answerGate(client, values, target, decision, null),
+    done: () => DONE_TEXT[decision],
+  });
+}
+
+function defineWordsShortcut(
+  path: readonly string[],
+  summary: string,
+  target: GateTarget,
+  decision: 'revise' | 'reply'
+): SurfaceSpec {
+  const field: FieldSpec =
+    decision === 'reply'
+      ? { ...FEEDBACK_FIELD, name: 'answer', description: 'Your answer.' }
+      : FEEDBACK_FIELD;
+  return defineCommand({
+    path,
+    summary,
+    command: 'gate.answer',
+    humanOnly: true,
+    fields: [TASK_FIELD, field],
+    build: (values, client) => answerGate(client, values, target, decision, readValue(values, field.name)),
     done: () => DONE_TEXT[decision],
   });
 }
@@ -144,9 +135,9 @@ export const GATE_SPECS: SurfaceSpec[] = [
         kind: 'choice',
         choices: DECISIONS,
         required: true,
-        description: 'approve, revise, reject or answer.',
+        description: 'approve, revise, reject, reply or waive.',
       },
-      { name: 'response', kind: 'text', description: 'Your answer or feedback.' },
+      { name: 'response', kind: 'text', description: 'Your reply or feedback.' },
       { name: 'planVersion', kind: 'integer', description: 'The plan version you read, for a plan.' },
       {
         name: 'verdicts',
@@ -170,7 +161,7 @@ export const GATE_SPECS: SurfaceSpec[] = [
     PLAN,
     'approve'
   ),
-  defineGateShortcut(['plans', 'revise'], 'Ask the planner to revise the plan.', PLAN, 'revise'),
+  defineWordsShortcut(['plans', 'revise'], 'Ask the planner to revise the plan.', PLAN, 'revise'),
   defineGateShortcut(['plans', 'reject'], 'Reject the plan and cancel the task.', PLAN, 'reject'),
   defineGateShortcut(
     ['reviews', 'approve'],
@@ -178,7 +169,7 @@ export const GATE_SPECS: SurfaceSpec[] = [
     REVIEW,
     'approve'
   ),
-  defineGateShortcut(['reviews', 'revise'], 'Request changes; a fixer makes them.', REVIEW, 'revise'),
+  defineWordsShortcut(['reviews', 'revise'], 'Request changes; a fixer makes them.', REVIEW, 'revise'),
   defineGateShortcut(['reviews', 'reject'], 'Reject the changes and cancel the task.', REVIEW, 'reject'),
   defineCommand({
     path: ['reviews', 'verdicts'],
@@ -204,16 +195,16 @@ export const GATE_SPECS: SurfaceSpec[] = [
   defineGateShortcut(['merges', 'reject'], 'Do not merge; cancel the task.', MERGE, 'reject'),
   defineCommand({
     path: ['operations', 'run'],
-    summary: 'Run the operation of a change that merged. Notes go to the operator with any it has.',
+    summary: 'Run the operation of a change that merged. Notes replace the ones saved on the operation.',
     command: 'gate.answer',
-    humanOnly: OPERATION.humanOnly,
+    humanOnly: true,
     fields: [
       TASK_FIELD,
       { name: 'notes', kind: 'text', positional: 'rest', description: 'Notes for the operator.' },
     ],
     build: (values, client) => {
       const notes = readValue(values, 'notes') || null;
-      return answerGate(client, values, OPERATION, notes ? 'answer' : 'approve', notes);
+      return answerGate(client, values, OPERATION, notes ? 'reply' : 'approve', notes);
     },
     done: (values) =>
       readValue(values, 'notes') ? 'Running the operation with your notes.' : 'Running the operation.',
@@ -222,12 +213,12 @@ export const GATE_SPECS: SurfaceSpec[] = [
     path: ['operations', 'finish'],
     summary: 'Finish a task whose change merged without running its operation.',
     command: 'gate.answer',
-    humanOnly: OPERATION.humanOnly,
+    humanOnly: true,
     fields: [TASK_FIELD],
     build: (values, client) => answerGate(client, values, OPERATION, 'reject', null),
     done: () => 'Finished without running the operation.',
   }),
-  defineGateShortcut(['questions', 'answer'], "Answer an agent's question on a task.", QUESTION, 'answer'),
+  defineWordsShortcut(['questions', 'answer'], "Answer an agent's question on a task.", QUESTION, 'reply'),
   defineAction({
     path: ['gates', 'secret'],
     summary: 'Give an agent the secret it asked for. It goes to the secret store, never to the chat.',

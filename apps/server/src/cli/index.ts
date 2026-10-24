@@ -19,12 +19,12 @@ export interface CliIo {
   projectsDir?: string;
 }
 
-export const USAGE = `shinsa: a human-assisted coding harness
+export const USAGE = `shinsa: a control plane for coding agents
 
 Usage
   shinsa                  Start Shinsa (the server and the web app on http://127.0.0.1:5180)
   shinsa serve            Same as above
-  shinsa do <request>     Hand Shinsa a piece of work. Options: --spec (agree a spec first), --urgent, --high
+  shinsa do <request>     Hand Shinsa a piece of work. Options: --plan-first (approve a plan before building), --urgent, --high
   shinsa import <session> Turn a Claude Code session (.jsonl path or id) into a task. --in <dir> picks the repo
   shinsa status           What needs a decision, and what agents are working on
   shinsa open [task-id]   Open Shinsa, or one task, in the browser

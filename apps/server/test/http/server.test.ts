@@ -71,7 +71,7 @@ async function startWithWorktree(launch?: Launcher) {
     projectName: null,
   });
   const repoId = Object.keys(server.engine.state.repos)[0] ?? '';
-  await server.engine.dispatch({ type: 'task.create', intent: 'Fix the thing', repoId });
+  await server.engine.dispatch({ type: 'task.create', request: 'Fix the thing', repoId });
   const taskId = Object.keys(server.engine.state.tasks)[0] ?? '';
   await server.engine.dispatch({
     type: 'task.triage',
@@ -94,7 +94,7 @@ async function startWithWorktree(launch?: Launcher) {
 describe('request size', () => {
   test('a body over 8 MB is refused before it is read', async () => {
     const { post, engine } = await start();
-    const response = await post('/api/commands', { type: 'task.create', intent: 'x'.repeat(9_000_000) });
+    const response = await post('/api/commands', { type: 'task.create', request: 'x'.repeat(9_000_000) });
     expect(response.status).toBe(413);
     expect(Object.keys(engine.state.tasks)).toEqual([]);
   });
@@ -181,7 +181,7 @@ describe('the request guard', () => {
 
   test('a request without an Origin, or from Shinsa’s own address, is taken without any key', async () => {
     const { post, engine } = await start();
-    const task = { type: 'task.create', intent: 'Add search', repoId: null };
+    const task = { type: 'task.create', request: 'Add search', repoId: null };
     expect((await post('/api/commands', task)).status).toBe(200);
     expect((await post('/api/commands', task, { origin: 'http://localhost:5181' })).status).toBe(200);
     expect((await post('/api/commands', task, { origin: 'http://127.0.0.1:5180' })).status).toBe(200);
@@ -193,10 +193,14 @@ describe('the request guard', () => {
 describe('commands', () => {
   test('a user command is dispatched and the new task id returned', async () => {
     const { post, engine } = await start();
-    const response = await post('/api/commands', { type: 'task.create', intent: 'Add search', repoId: null });
+    const response = await post('/api/commands', {
+      type: 'task.create',
+      request: 'Add search',
+      repoId: null,
+    });
     const body = (await response.json()) as { ok: boolean; taskId: string };
     expect(body.ok).toBe(true);
-    expect(engine.state.tasks[body.taskId]?.intent).toBe('Add search');
+    expect(engine.state.tasks[body.taskId]?.request).toBe('Add search');
     expect(
       await (
         await post('/api/commands', { type: 'project.write', project: { name: 'A', color: 'blue' } })
@@ -246,7 +250,7 @@ describe('commands', () => {
       body: '{',
     });
     expect(await broken.json()).toMatchObject({ error: { code: 'body_invalid' } });
-    const rejected = await post('/api/commands', { type: 'task.create', intent: ' ', repoId: null });
+    const rejected = await post('/api/commands', { type: 'task.create', request: ' ', repoId: null });
     expect(rejected.status).toBe(400);
   });
 
@@ -256,7 +260,7 @@ describe('commands', () => {
       call('/api/commands', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': key },
-        body: JSON.stringify({ type: 'task.create', intent: 'Add search', repoId: null }),
+        body: JSON.stringify({ type: 'task.create', request: 'Add search', repoId: null }),
       });
     const first = (await (await send('k1')).json()) as { taskId: string };
     const again = (await (await send('k1')).json()) as { taskId: string };
@@ -321,12 +325,12 @@ describe('worktree endpoints', () => {
     expect(diff.files.map((file) => file.path)).toEqual(['new.ts']);
   });
 
-  test('a stacked task diffs against its unmerged base, and a broken worktree is a request error', async () => {
+  test('a task diffs its worktree, and a broken worktree is a request error', async () => {
     const server = await startWithWorktree();
     const { engine, call, taskId, worktree, post } = server;
     await post('/api/commands', {
       type: 'task.create',
-      intent: 'On top',
+      request: 'On top',
       repoId: Object.keys(engine.state.repos)[0],
     });
     const top = Object.keys(engine.state.tasks).find((id) => id !== taskId) ?? '';
@@ -334,13 +338,11 @@ describe('worktree endpoints', () => {
     state.tasks[top] = {
       ...(state.tasks[top] as ShinsaState['tasks'][string]),
       worktreePath: worktree,
-      baseTaskId: taskId,
     };
     expect((await call(`/api/tasks/${top}/diff`)).status).toBe(200);
     state.tasks[top] = {
       ...(state.tasks[top] as ShinsaState['tasks'][string]),
       worktreePath: createTempDir(),
-      baseTaskId: null,
     };
     const broken = await call(`/api/tasks/${top}/diff`);
     expect(broken.status).toBe(400);
@@ -449,7 +451,7 @@ describe('the socket', () => {
       JSON.stringify({
         type: 'command',
         id: 'c1',
-        command: { type: 'task.create', intent: 'Do it', repoId: null },
+        command: { type: 'task.create', request: 'Do it', repoId: null },
       })
     );
     client.socket.send(
@@ -459,7 +461,7 @@ describe('the socket', () => {
       JSON.stringify({
         type: 'command',
         id: 'c3',
-        command: { type: 'task.create', intent: ' ', repoId: null },
+        command: { type: 'task.create', request: ' ', repoId: null },
       })
     );
     client.socket.send('not json');
@@ -504,7 +506,7 @@ describe('the socket', () => {
     const message = JSON.stringify({
       type: 'command',
       id: 'resent',
-      command: { type: 'task.create', intent: 'Do it once', repoId: null },
+      command: { type: 'task.create', request: 'Do it once', repoId: null },
     });
     for (const attempt of [1, 2]) {
       const client = connect(base);
@@ -518,7 +520,7 @@ describe('the socket', () => {
       });
       client.socket.close();
     }
-    expect(Object.values(engine.state.tasks).map((task) => task.intent)).toEqual(['Do it once']);
+    expect(Object.values(engine.state.tasks).map((task) => task.request)).toEqual(['Do it once']);
   });
 
   test('a socket message that fails after parsing is logged', async () => {

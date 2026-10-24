@@ -227,7 +227,9 @@ export function startClaudeSession(
 
   send(input.prompt, input.prompt, false);
   input.onEntry({ type: 'user', from: 'shinsa', text: input.prompt, attachments: [] });
-  if (input.extensions) recorder.notify({ kind: 'extensions', ...input.extensions.loaded });
+  if (input.extensions && input.announceExtensions !== false) {
+    recorder.notify({ kind: 'extensions', ...input.extensions.loaded });
+  }
 
   const extensions = resolveClaudeExtensions(input.extensions);
   const hasServers = Object.keys(extensions.servers).length > 0;

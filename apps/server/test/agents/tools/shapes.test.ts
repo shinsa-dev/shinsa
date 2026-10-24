@@ -33,12 +33,13 @@ function createCall(events: ShinsaEvent[] = []) {
   };
 }
 
-const HANDED_OVER = 'Handed over to Shinsa. End your turn now.';
+const HANDED_OVER =
+  'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.';
 
 describe('the shape tools', () => {
   test('report_diagnosis and submit_report hand the work over, with a change for the human to approve', async () => {
     const { sent, call } = createCall();
-    expect(await handleShapeTool('report_diagnosis', { findings: 'The cache never expires.' }, call)).toBe(
+    expect(await handleShapeTool('report_diagnosis', { diagnosis: 'The cache never expires.' }, call)).toBe(
       HANDED_OVER
     );
     expect(
@@ -88,7 +89,7 @@ describe('the shape tools', () => {
     ] as ShinsaCommand[]);
   });
 
-  test('answer may propose a change, and reshape_task turns the task into an inquiry', async () => {
+  test('answer hands the answer over like every inquiry, may propose a change, and reshape_task turns the task into an inquiry', async () => {
     const { sent, call } = createCall([RESHAPED]);
     await handleShapeTool('answer', { answer: 'In a.txt.' }, call);
     await handleShapeTool(
@@ -100,12 +101,13 @@ describe('the shape tools', () => {
       await handleShapeTool('reshape_task', { shape: 'research', reason: 'It asks for a comparison.' }, call)
     ).toBe(HANDED_OVER);
     expect(sent).toEqual([
-      { type: 'agent.answer', runId: 'run-1', attemptId: 'a-1', answer: 'In a.txt.' },
+      { type: 'agent.deliver', runId: 'run-1', attemptId: 'a-1', step: 'answer', body: 'In a.txt.' },
       {
-        type: 'agent.answer',
+        type: 'agent.deliver',
         runId: 'run-1',
         attemptId: 'a-1',
-        answer: 'In a.txt.',
+        step: 'answer',
+        body: 'In a.txt.',
         proposal: { request: 'Move it.', why: 'It is easier to find.' },
       },
       {
@@ -155,7 +157,7 @@ describe('the shape tools', () => {
 
   test('a hand-over that breaks the protocol is rejected with the reasons, and other tools are not this module’s', async () => {
     const { sent, call } = createCall();
-    expect(handleShapeTool('report_diagnosis', {}, call)).rejects.toThrow('findings is required.');
+    expect(handleShapeTool('report_diagnosis', {}, call)).rejects.toThrow('diagnosis is required.');
     expect(
       handleShapeTool('submit_report', { report: 'x'.repeat(SHAPE_LIMITS.report + 1) }, call)
     ).rejects.toThrow(`the limit is ${SHAPE_LIMITS.report}`);
@@ -170,8 +172,8 @@ describe('the shape tools', () => {
   });
 
   test('the schemas publish the limits and say the human decides on a proposed change', () => {
-    expect(SHAPE_TOOL_SPECS.report_diagnosis.inputSchema.properties.findings.maxLength).toBe(
-      SHAPE_LIMITS.findings
+    expect(SHAPE_TOOL_SPECS.report_diagnosis.inputSchema.properties.diagnosis.maxLength).toBe(
+      SHAPE_LIMITS.diagnosis
     );
     expect(SHAPE_TOOL_SPECS.submit_report.inputSchema.properties.report.maxLength).toBe(SHAPE_LIMITS.report);
     expect(SHAPE_TOOL_SPECS.report_outcome.inputSchema.properties.outcome.maxLength).toBe(
@@ -183,5 +185,20 @@ describe('the shape tools', () => {
     expect(proposal.properties.why.maxLength).toBe(SHAPE_LIMITS.why);
     expect(proposal.description).toContain('The human decides');
     expect(SHAPE_TOOL_SPECS.report_outcome.inputSchema.properties).not.toHaveProperty('propose_change');
+  });
+
+  test('the hand-overs the human reads are the reply itself, in the agent’s own voice, with nothing after them', () => {
+    const specs = [
+      SHAPE_TOOL_SPECS.answer,
+      SHAPE_TOOL_SPECS.report_diagnosis,
+      SHAPE_TOOL_SPECS.submit_report,
+      SHAPE_TOOL_SPECS.report_outcome,
+    ];
+    for (const spec of specs) {
+      expect(spec.description).toContain('Write it to the human in the first person: it is your reply');
+      expect(spec.description).toContain('After the call, stop and write nothing more.');
+      expect(spec.description).not.toContain('Shinsa');
+      expect(spec.description).not.toMatch(/\b(restate|summari[sz]e)\b/);
+    }
   });
 });

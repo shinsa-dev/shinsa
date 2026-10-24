@@ -9,13 +9,20 @@ import { TOOL_SPECS } from '../../../src/agents/tools/specs.ts';
 import { listAgentSpecs, SURFACE } from '../../../src/surface/index.ts';
 
 describe('the surface as agent tools', () => {
-  test('lists every action but the ones only the human takes, with read and write hints', () => {
+  test('lists every action but the ones only the human takes and tasks create, with read and write hints', () => {
     const tools = listSurfaceToolSpecs();
     const names = tools.map((tool) => tool.name);
-    expect(tools).toHaveLength(SURFACE.filter((spec) => !spec.humanOnly).length);
-    expect(names).toContain('tasks_create');
-    expect(names).toContain('questions_answer');
-    for (const humanOnly of ['plans_approve', 'reviews_approve', 'merges_approve', 'gates_answer', 'command'])
+    expect(tools).toHaveLength(SURFACE.filter((spec) => !spec.humanOnly && !spec.agentTool).length);
+    expect(names).toContain('tasks_wait_on');
+    expect(names).not.toContain('tasks_create');
+    for (const humanOnly of [
+      'plans_approve',
+      'reviews_approve',
+      'merges_approve',
+      'gates_answer',
+      'questions_answer',
+      'command',
+    ])
       expect(names).not.toContain(humanOnly);
     expect(names).not.toContain('gates_secret');
     expect(names).not.toContain('accounts_sign_in');
@@ -48,6 +55,10 @@ describe('the surface as agent tools', () => {
     expect(readSurfaceToolCall('tasks_show', { task: 'SW-1' })).toMatchObject({ values: { task: 'SW-1' } });
     expect(() => readSurfaceToolCall('nope', {})).toThrow('No tool nope.');
     expect(() => readSurfaceToolCall('merges_approve', { task: 'SW-1' })).toThrow('No tool merges_approve.');
+    expect(() => readSurfaceToolCall('tasks_create', { request: 'Fix it' })).toThrow('No tool tasks_create.');
+    expect(() => readSurfaceToolCall('questions_answer', { task: 'SW-1', answer: 'Yes' })).toThrow(
+      'No tool questions_answer.'
+    );
     expect(() => readSurfaceToolCall('tasks_show', { task: 'x', extra: 1 })).toThrow('Unknown field extra.');
     expect(() => readSurfaceToolCall('tasks_show', {})).toThrow('task is required.');
   });

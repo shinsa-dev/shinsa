@@ -7,7 +7,7 @@ import { createTempDir } from '../helpers/index.ts';
 
 export async function startTask(engine: Engine, repoId: string, dir: string, title: string) {
   const before = new Set(Object.keys(engine.state.tasks));
-  await engine.dispatch({ type: 'task.create', intent: title, repoId });
+  await engine.dispatch({ type: 'task.create', request: title, repoId });
   const taskId = Object.keys(engine.state.tasks).find((id) => !before.has(id)) ?? '';
   await engine.dispatch({
     type: 'task.triage',

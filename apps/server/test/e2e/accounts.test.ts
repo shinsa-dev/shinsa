@@ -205,7 +205,7 @@ describe('accounts end to end', () => {
     const taskId = await world.createTask();
     await world.until('the wait', () => world.task(taskId).usageWait?.status === 'armed');
     await passReset(clock, resetAt);
-    const gate = await world.untilGate(taskId, 'question', 'failure');
+    const gate = await world.untilGate(taskId, 'failure');
     expect(gate.title).toBe('The agent hit its usage limit');
     expect(world.agents.of('planner')).toHaveLength(2);
     expect(world.task(taskId).usageWait).toBeNull();
@@ -229,7 +229,7 @@ describe('accounts end to end', () => {
       plan()
     );
     const taskId = await world.createTask();
-    const gate = await world.untilGate(taskId, 'question', 'sign_in');
+    const gate = await world.untilGate(taskId, 'sign_in');
     expect(gate).toMatchObject({ title: 'Sign in to Claude as a@example.com', account: { id: only.id } });
     expect(world.agents.of('planner')).toHaveLength(1);
     expect(accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');

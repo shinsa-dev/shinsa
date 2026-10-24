@@ -24,8 +24,7 @@ src/
 │                        plugins, system), index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text,
 │                        the docs/cli.md reference)
 ├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
-│                        leniently, written atomically, ConfigStore), migrate.ts (copy ~/.shinsa once, verify,
-│                        switch), index.ts (ServerConfig from the environment and config.json; every SHINSA_*
+│                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json; every SHINSA_*
 │                        variable is read here, except SHINSA_QUICK; prepareDataDir)
 ├── log/                 One JSON line per entry; describeError and redactSecrets (URL credentials, GitHub and
 │                        Anthropic tokens never reach a log, a failure gate or the event log)
@@ -38,14 +37,17 @@ src/
 │                        ShinsaEffect, the pull request watcher), StateClock (clock.ts: the
 │                        base of every timer that fires from state) and MonitorClock (monitors.ts)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop), the live state of a run (active.ts), resume or
-│   │                    hand over per turn (turns.ts), the tool calls (tool-calls.ts), questions and their waiters
-│   │                    (questions.ts), idle release (idle.ts), delegated reports in and out of a turn
-│   │                    (deliveries.ts, delegations.ts), the account seam: leases and rejections (accounts.ts), idle
+│   │                    hand over per turn, and the house rules only to a session without them (turns.ts), the
+│   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts), idle release
+│   │                    (idle.ts), delegated reports in and out of a turn (deliveries.ts, delegations.ts), the
+│   │                    account seam: leases and rejections (accounts.ts), idle
 │   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
 │   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
-│   │                    human-only `shinsa` commands, read from the surface), what `read_task` reads (reading.ts)
+│   │                    human-only `shinsa` commands, read from the surface), what `read_task` reads (reading.ts),
+│   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
-│   │                    (one tool per spec but the human-only ones), client.ts (reads over HTTP, commands through
+│   │                    (one tool per spec but the human-only ones and those with an `agentTool`, such as
+│   │                    `tasks create`, whose agent files a task with `create_task`), client.ts (reads over HTTP, commands through
 │   │                    the server's router on your behalf with byTask, so a message is classified; adding a
 │   │                    repository or folder to a project runs in process through the project changes);
 │   │                    ManageAccess ({ baseUrl, projects, route }) is what serve.ts hands the supervisor as `manage`
@@ -68,13 +70,12 @@ src/
 │   │                    (extensions.ts)
 │   ├── tools/           The `shinsa` MCP server (index.ts: an MCP `Server` each provider exposes its own way) and the
 │   │                    tool schemas (specs.ts, schema.ts): hand-over and process tools (process.ts), the hand-overs
-│   │                    of each task shape: answer, report_findings, submit_report, report_outcome, reshape_task
+│   │                    of each task shape: answer, report_diagnosis, submit_report, report_outcome, reshape_task
 │   │                    (shapes.ts), delegation and couriers (orchestration.ts), schedules (schedules.ts). The plan
 │   │                    parameters in `propose_plan` (verification, impact, evidence, checks, approval) and the
 │   │                    steps `reshape_task` offers are generated from core's VERIFICATION_RULES, PROTOCOL_LIMITS,
 │   │                    PLAN_EVIDENCE_KINDS and STEP_SCHEMA, never hand-written
-│   ├── transcripts/     Per-run JSONL transcripts, live listeners, tailing a file another writer appends to;
-│   │                    legacy.ts migrates transcripts from before the chat protocol
+│   ├── transcripts/     Per-run JSONL transcripts, live listeners, tailing a file another writer appends to
 │   └── quick/           One-shot calls (triage, briefing, the setup chat) on the classifier and writer models:
 │                        structured output with a fallback across the registry's providers, the default one
 │                        first (index.ts, createQuickCalls), the typed decision questions (decide.ts: choice and
@@ -102,11 +103,15 @@ src/
 │                        extensions.json (store.ts), checking and redacting what you send (input.ts), health checks
 │                        and the MCP client (health.ts), sign-in (oauth.ts, and sign-in.ts: the callback page),
 │                        when agents last used each server and skill (usage.ts: Claude Code sessions and Shinsa's
-│                        transcripts, read incrementally), what a run loads and leaves out (session.ts), loading
-│                        what the context optimizer left out mid-run (loader.ts), /api/extensions (routes.ts), the
-│                        Extensions service (index.ts)
+│                        transcripts, read incrementally), what a run loads and leaves out and what it is told about
+│                        it (session.ts), loading what the context optimizer left out mid-run, by any name
+│                        (loader.ts), /api/extensions (routes.ts), the Extensions service (index.ts)
+├── versions/            The agent programs' versions and their updates (docs/engine.md → Versions and updates):
+│                        the latest from the npm registry (registry.ts), each program's own updater, found from
+│                        where its binary lives (updaters.ts), /api/versions with the streamed update
+│                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
 ├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, isolation.ts (detached
-│                        checkouts for isolated delegated tasks), run.ts (git writes that wait out another process's
+│                        checkouts for isolated delegations), run.ts (git writes that wait out another process's
 │                        index.lock)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create, retarget, merge
@@ -114,8 +119,8 @@ src/
 │                        (`sh -c` in the worktree, one timeout, the result named by its command; a repeat runs once)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner (index.ts); discover.ts (scans the home folder for the folders that hold repositories),
-│                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts (the
-│                        setup check before a task's first agent)
+│                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts
+│                        (setup verification before a task's first agent)
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts), the prerequisite checks
 │                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional), the setup
 │                        chat: the fixed questions (questions.ts),
@@ -129,10 +134,14 @@ src/
 ├── triage/              Title, repository, size, branch and dependencies for a new task, and the parts the human left
 │                        to Shinsa (Auto): its shape, priority and dependencies, each with a reason. A task in a
 │                        project chooses among that project's repositories, each named with its path. message.ts:
-│                        the message classifier (feedback, a new round or another task, as a typed decision) and
-│                        routeUserCommand, which the socket and POST /api/commands send every command through, so a
-│                        message reaches decide with its kind; the receipt is taken over the command as sent;
-│                        createCommandRouter, the same route for an agent's management commands
+│                        the message classifier (nothing to do, feedback or a follow-up, a new round with its kind of
+│                        work, or another task, as a typed decision read against each round's outcome) and
+│                        routeUserCommand, which the socket and POST /api/commands send every command through: your
+│                        message is accepted into the task's inbox at once (message.receive) and inbox.ts
+│                        (MessageInbox) classifies and routes it after, in order; the receipt is taken over the
+│                        command as sent; createCommandRouter, the same route for an agent's management commands,
+│                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
+│                        of task is shaped first (resolveRoundShape)
 ├── briefing/            The Home guide, debounced
 └── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts,
@@ -179,8 +188,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   JSON through `http/body.ts`; files are read through `resolveInside` (real paths, so a symlink cannot leave the
   worktree) and evidence by plain name only.
 - **Human-only decisions have no agent path**: a `humanOnly` spec is left out of the agents' tools
-  (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`); which decisions
-  those are is `docs/engine.md` → Who can change Shinsa. There are no keys, codes or cookies and no per-caller routes;
+  (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`), and so are
+  `shinsa settings set` naming one of core's `HUMAN_ONLY_SETTINGS` and `shinsa repos update` changing the checks;
+  which decisions those are is `docs/engine.md` → Who can change Shinsa. Core refuses them on your behalf as well. There are no keys, codes or cookies and no per-caller routes;
   never add one, since an agent's shell reads whatever the user can.
 - **Nothing reaches git or gh as an option.** Branch names pass `assertRefName` (no leading `-`, no `..`), fetches put
   `--` before the ref, `gh api` gets strings with `-f`, and the merge method is checked against core's
@@ -193,7 +203,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Where a run works follows its role** (`#resolveCwd` in `agents/supervisor.ts`): the answerer in the repository
   itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only agent leaves are set aside, never in the repository itself: that is the
-  human's own checkout. The setup check asks for a default branch only when the pipeline needs a worktree and for
+  human's own checkout. Setup verification asks for a default branch only when the pipeline needs a worktree and for
   check commands only when it builds (`runtime/effects.ts`); a worktree reused before any phase report is reset, which
   is how an investigation's scratch edits are dropped before its fix is planned.
 - **One agent at a time in a worktree.** `RunSupervisor` registers a run before it waits, and a run waits only for the
@@ -206,7 +216,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart
   continuation). The eunoe proxy stops after the effects, once no `claude` can still talk to it. Anything new that
   starts a process or a timer is stopped there too.
-- **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a spec, report or findings list that
+- **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
   log. An evidence path is absolute or relative to the worktree; evidence URLs must be http or https.
 - **The diff never touches the worktree's index**: `resolveTaskDiff` adds intent-to-add entries to a copy of it, so a

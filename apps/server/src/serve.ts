@@ -32,15 +32,17 @@ import { EffectRunner, Engine, MonitorClock, type StateClockOptions } from './ru
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore } from './store/index.ts';
+import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
-import { createCommandRouter, createMessageClassifier, type MessageClassifier } from './triage/message.ts';
+import { type Classifier, createClassifier, createCommandRouter } from './triage/message.ts';
+import { Versions, type VersionsOptions } from './versions/index.ts';
 
 export interface ShinsaOptions {
   startSession?: SessionStarter;
   onRejection?: RejectionHandler;
   onNotice?: NoticeListener;
   triage?: TriageResolver;
-  classifyMessage?: MessageClassifier;
+  classify?: Classifier;
   resolveLogin?: LoginResolver;
   providers?: ProviderRegistry;
   models?: ModelSource;
@@ -55,6 +57,7 @@ export interface ShinsaOptions {
   idle?: IdleReleaseOptions;
   compaction?: IdleCompactionOptions;
   extensions?: Pick<ExtensionsOptions, 'check' | 'env' | 'fetch'>;
+  versions?: VersionsOptions;
 }
 
 export interface Shinsa {
@@ -65,9 +68,9 @@ export interface Shinsa {
 
 type Services = ReturnType<typeof createServices>;
 
-function createServices(requested: ServerConfig, options: ShinsaOptions) {
-  const store = new ConfigStore(requested.configPath, requested.machine);
-  const config = prepareDataDir(requested, store);
+function createServices(config: ServerConfig, options: ShinsaOptions) {
+  const store = new ConfigStore(config.configPath, config.machine);
+  prepareDataDir(config);
   const eventLog = new EventLog(config.databasePath);
   const engine = new Engine(eventLog);
   const transcripts = new Transcripts(config.transcriptsDir);
@@ -89,7 +92,7 @@ function createServices(requested: ServerConfig, options: ShinsaOptions) {
   const address = { url: resolveServerUrl(config.hostname, config.port) };
   const resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
   const quick = createQuickCalls(providers, () => engine.state.settings, accounts.readQuickFastMode);
-  const classify = options.classifyMessage ?? createMessageClassifier(quick.classify);
+  const classify = options.classify ?? createClassifier(quick.classify);
   const secrets = new SecretStore(join(config.dataDir, 'secrets.json'));
   const extensions = new Extensions({
     state: () => engine.state,
@@ -97,6 +100,11 @@ function createServices(requested: ServerConfig, options: ShinsaOptions) {
     secrets,
     baseUrl: () => address.url,
     ...options.extensions,
+  });
+  const versions = new Versions({
+    inspect: config.inspect,
+    onUpdated: () => accounts.syncProviderLogins(),
+    ...options.versions,
   });
   const schedules = new Schedules(engine, secrets, {
     ...options.scheduleClock,
@@ -120,6 +128,7 @@ function createServices(requested: ServerConfig, options: ShinsaOptions) {
     },
   });
   const briefings = new Briefings(engine, { ask: quick.write });
+  const inbox = new MessageInbox(engine, classify.message);
   const roots = new Roots(config.roots, store, config.userHome, options.discover);
   return {
     config,
@@ -132,8 +141,10 @@ function createServices(requested: ServerConfig, options: ShinsaOptions) {
     accounts,
     schedules,
     extensions,
+    versions,
     runs,
     briefings,
+    inbox,
     quick,
     classify,
     resolveLogin,
@@ -175,6 +186,7 @@ function startHttp(services: Services, options: ShinsaOptions) {
     accounts,
     schedules: services.schedules,
     extensions: services.extensions,
+    versions: services.versions,
     roots,
     resolveLogin: services.resolveLogin,
     classify: services.classify,
@@ -194,7 +206,9 @@ async function startWork(services: Services) {
   });
   await services.runs.recover();
   await effects.recover();
+  services.inbox.start();
   services.briefings.schedule();
+  services.extensions.syncSnapshot();
   void services.extensions.syncUsage();
   log.info('[Serve] Ready', { dataDir: services.config.dataDir, events: engine.state.seq });
 }
@@ -210,8 +224,10 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
     stop: async () => {
       await services.runs.interruptForShutdown();
       services.briefings.stop();
+      services.inbox.stop();
       services.schedules.stop();
       services.accounts.stop();
+      services.versions.stop();
       for (const clock of services.clocks) clock.stop();
       await services.effects.stop();
       await services.extensions.stop();

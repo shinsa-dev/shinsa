@@ -110,6 +110,22 @@ describe('what a Claude agent is given', () => {
       '## More skills\nRead these files with a shell command when they apply:\n- `/codex/skills/release/SKILL.md`: release'
     );
     expect(resolveClaudeExtensions({ ...EXTENSIONS, skills: [] }).instructions).toBeNull();
+    const leftOut = resolveClaudeExtensions({
+      ...EXTENSIONS,
+      skills: [],
+      deferred: [
+        {
+          name: 'maple',
+          claudeName: 'maple',
+          definition: definition({ url: 'https://maple.dev/mcp' }),
+          tools: ['query_data'],
+          tokens: 4000,
+        },
+      ],
+    }).instructions;
+    expect(leftOut).toStartWith('## Left out until needed');
+    expect(leftOut).toContain('- MCP servers: maple (1 tool). Load one with `load_mcp_server`.');
+    expect(leftOut).toContain('When the human names a server or a skill you do not have');
     expect(
       resolveClaudeExtensions({
         ...EXTENSIONS,
@@ -197,6 +213,19 @@ describe('a Claude session with MCP servers and skills', () => {
     expect(Object.keys(handed[0] ?? {})).toEqual(['shinsa', 'files', 'docs', 'plugin:feed:feed']);
     const append = (options.systemPrompt as { append: string }).append;
     expect(append).toContain('/codex/skills/release/SKILL.md');
+    await run.session.done;
+  });
+
+  test('a resumed session whose set did not change says nothing about it', async () => {
+    const entries: ChatEntryEvent[] = [];
+    const run = startScripted(
+      { ...createInput(EXTENSIONS), announceExtensions: false, onEntry: (entry) => entries.push(entry) },
+      (servers) => Promise.resolve({ added: Object.keys(servers), removed: [], errors: {} })
+    );
+    await until('the brief reaches the agent', () => run.prompts.length === 1);
+    expect(entries.some((entry) => entry.type === 'notice' && entry.notice.kind === 'extensions')).toBe(
+      false
+    );
     await run.session.done;
   });
 

@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compareVersions, readProgramVersion } from '../versions.ts';
+import { compareVersions, type LocateDeps, locateProgram, readProgramVersion } from '../versions.ts';
 
 const CLAUDE_EXECUTABLE_ENV = 'CLAUDE_EXECUTABLE';
 
@@ -12,17 +11,28 @@ export type ClaudeExecutable =
 
 type VersionReader = (path: string) => Promise<string | null>;
 
-export interface ExecutableDeps {
-  env?: Record<string, string | undefined>;
-  which?: (command: string) => string | null;
+export interface ExecutableDeps extends LocateDeps {
   readVersion?: VersionReader;
   minimumVersion?: string;
 }
 
+function readVersionField(value: unknown) {
+  return typeof value === 'string' ? value : '0.0.0';
+}
+
+export function resolveSdkPackage(packagePath = resolveSdkPackagePath()) {
+  const fields = JSON.parse(readFileSync(packagePath, 'utf8')) as {
+    version?: unknown;
+    claudeCodeVersion?: unknown;
+  };
+  return {
+    version: readVersionField(fields.version),
+    claudeCodeVersion: readVersionField(fields.claudeCodeVersion),
+  };
+}
+
 export function resolveSdkClaudeVersion(packagePath = resolveSdkPackagePath()) {
-  const version = (JSON.parse(readFileSync(packagePath, 'utf8')) as { claudeCodeVersion?: unknown })
-    .claudeCodeVersion;
-  return typeof version === 'string' ? version : '0.0.0';
+  return resolveSdkPackage(packagePath).claudeCodeVersion;
 }
 
 function resolveSdkPackagePath() {
@@ -37,19 +47,13 @@ export function readClaudeVersion(path: string) {
   return readProgramVersion(path, parseClaudeVersion);
 }
 
-function resolveOverride(env: Record<string, string | undefined>) {
-  const value = env[CLAUDE_EXECUTABLE_ENV]?.trim();
-  return value ? value.replace(/^~(?=\/|$)/, homedir()) : null;
-}
-
-function whichOnPath(command: string) {
-  return Bun.which(command, { PATH: Bun.env.PATH });
+export function locateClaude(deps: LocateDeps = {}) {
+  return locateProgram('claude', CLAUDE_EXECUTABLE_ENV, deps);
 }
 
 export async function resolveClaudeExecutable(deps: ExecutableDeps = {}): Promise<ClaudeExecutable> {
-  const override = resolveOverride(deps.env ?? Bun.env);
+  const { path, override } = locateClaude(deps);
   if (override) return { ok: true, path: override, version: null };
-  const path = (deps.which ?? whichOnPath)('claude');
   if (!path) {
     return {
       ok: false,
@@ -63,7 +67,7 @@ export async function resolveClaudeExecutable(deps: ExecutableDeps = {}): Promis
     return {
       ok: false,
       reason: 'outdated',
-      message: `Claude Code ${version} is older than Shinsa needs (${minimum} or newer). Update it with \`claude update\`.`,
+      message: `Claude Code ${version} is older than Shinsa needs (${minimum} or newer). Update it from Settings → Agents, or run \`claude update\`.`,
     };
   }
   return { ok: true, path, version };

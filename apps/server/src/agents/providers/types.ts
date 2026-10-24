@@ -46,6 +46,7 @@ export interface AgentSessionInput {
   fastMode?: boolean;
   usageBaseline?: UsageBaseline;
   extensions?: SessionExtensions;
+  announceExtensions?: boolean;
 }
 
 interface SessionAccount {

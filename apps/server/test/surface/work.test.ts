@@ -9,21 +9,23 @@ const DETAIL = createTaskDetail({
   ],
 });
 
-describe('follow-ups', () => {
-  test('lists the suggestions on a task, or says there are none', async () => {
+describe('suggested tasks', () => {
+  test('lists the suggested tasks on a task, or says there are none', async () => {
     const fake = createFakeClient({ '/api/tasks/fix': DETAIL, '/api/tasks/other': createTaskDetail() });
-    expect((await runSpec(fake, ['followups', 'list', 'fix'])).text).toBe(
+    expect((await runSpec(fake, ['suggestions', 'list', 'fix'])).text).toBe(
       'sug-1  Add a test  (open) The scroll has none.\nsug-2  Clean up  (accepted) Dead code.'
     );
-    expect((await runSpec(fake, ['followups', 'list', 'other'])).text).toBe('No follow-ups.');
+    expect((await runSpec(fake, ['suggestions', 'list', 'other'])).text).toBe('No suggested tasks.');
   });
 
   test('accepting adds it, after this task when asked; dismissing drops it', async () => {
     const fake = createFakeClient({ '/api/tasks/fix': DETAIL });
-    expect((await runSpec(fake, ['followups', 'accept', 'fix', 'sug-1'])).text).toBe('Added the follow-up.');
-    await runSpec(fake, ['followups', 'accept', 'fix', 'sug-2', '--after-this']);
-    expect((await runSpec(fake, ['followups', 'dismiss', 'fix', 'sug-1'])).text).toBe('Dismissed.');
-    expect((await runSpec(fake, ['followups', 'keep', 'fix', 'sug-1'])).text).toBe(
+    expect((await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-1'])).text).toBe(
+      'Added the suggested task.'
+    );
+    await runSpec(fake, ['suggestions', 'accept', 'fix', 'sug-2', '--after-this']);
+    expect((await runSpec(fake, ['suggestions', 'dismiss', 'fix', 'sug-1'])).text).toBe('Dismissed.');
+    expect((await runSpec(fake, ['suggestions', 'keep', 'fix', 'sug-1'])).text).toBe(
       'Kept it in this task as a new round.'
     );
     expect(fake.sent).toEqual([
@@ -84,9 +86,7 @@ describe('delegations', () => {
       'run-3  builder  Try it  (completed) on task task-1',
       'run-4  planner    (ended) on task task-1',
     ]);
-    expect((await runSpec(fake, ['delegations', 'list', '--task', 'Fix it'])).text).toBe(
-      'No delegated work.'
-    );
+    expect((await runSpec(fake, ['delegations', 'list', '--task', 'Fix it'])).text).toBe('No delegations.');
   });
 
   test('stopping one sends delegation.cancel for its run', async () => {

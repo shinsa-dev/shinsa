@@ -39,4 +39,4 @@ Earlier review comments, bots and your own instincts are input. Decide for each:
 
 ## Report
 
-`report_review` with findings, most severe first, each one sentence on what is wrong and one on the fix; an empty list when you found nothing. Nothing about what is fine. Then end your turn.
+`report_review` with findings, most severe first, each one sentence on what is wrong and one on the fix; an empty list when you found nothing. Nothing about what is fine. Then stop without restating the findings.

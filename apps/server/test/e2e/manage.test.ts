@@ -10,7 +10,7 @@ import { type CliIo, runCli } from '../../src/cli/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { createProjectChanges } from '../../src/projects/routes.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
-import { createCommandRouter, createMessageClassifier } from '../../src/triage/message.ts';
+import { createClassifier, createCommandRouter } from '../../src/triage/message.ts';
 import { createTestOnboarding } from '../helpers/index.ts';
 import { type AgentContext, World } from './harness.ts';
 
@@ -42,7 +42,7 @@ async function open(ask: QuickJson = answerAs('feedback', 'Keep going')) {
           resolveLogin: () => Promise.resolve(null),
           userHome: world?.config.userHome ?? '',
         }),
-        route: createCommandRouter(engine, createMessageClassifier(ask)),
+        route: createCommandRouter(engine, createClassifier(ask)),
       },
     }),
   });
@@ -75,10 +75,8 @@ async function shinsa(...args: string[]) {
   return out.join('\n');
 }
 
-async function createShapedTask(w: World, intent: string, shape: TaskShape) {
-  const before = new Set(Object.keys(w.state.tasks));
-  await w.engine.dispatch({ type: 'task.create', intent, repoId: w.repoId, shape });
-  return Object.keys(w.state.tasks).find((id) => !before.has(id)) ?? '';
+function createShapedTask(w: World, request: string, shape: TaskShape) {
+  return w.createTask(request, { shape });
 }
 
 const HUMAN_ONLY_TOOLS = [
@@ -96,6 +94,7 @@ const HUMAN_ONLY_TOOLS = [
   'gates_answer',
   'gates_secret',
   'gates_decline_secret',
+  'questions_answer',
   'accounts_sign_in',
   'accounts_sign_in_code',
   'mcp_sign_in',
@@ -109,6 +108,7 @@ const HUMAN_ONLY_COMMANDS = [
   'cd /code/app && shinsa merges approve SW-1 --json',
   'shinsa operations run SW-1',
   'shinsa gates answer gate-1 --decision approve',
+  'shinsa questions answer SW-1 Yes',
   'shinsa gates secret gate-1 hunter2',
   'shinsa accounts sign-in',
   'shinsa command gate.answer --fields \'{"gateId":"gate-1","decision":"approve"}\'',
@@ -128,11 +128,11 @@ function handleOf(w: World, taskId: string) {
 
 async function reachMergeGate(w: World) {
   const taskId = await w.createTask('Fix the paywall');
-  await w.answer(await w.untilGate(taskId, 'review', 'decision'), 'approve');
+  await w.answer(await w.untilGate(taskId, 'review'), 'approve');
   await w.until('the pull request to open', () => w.github.pulls.length === 1);
   w.github.update(1, { checks: 'passing' });
   await w.sync(taskId);
-  await w.untilGate(taskId, 'merge', 'decision');
+  await w.untilGate(taskId, 'merge');
   return taskId;
 }
 
@@ -147,7 +147,9 @@ describe('every task agent manages Shinsa', () => {
     taskId = await createShapedTask(w, 'Is the greeting still needed?', 'answer');
     await w.untilStage(taskId, 'done');
     await w.until('the answerer to stop', () => w.activeRuns(taskId).length === 0);
-    expect(['Marked as done. End your turn.', 'cancelled']).toContain(replies[0]?.text ?? '');
+    expect(['Marked as done. Stop here without a closing message.', 'cancelled']).toContain(
+      replies[0]?.text ?? ''
+    );
     expect(w.gates(taskId)).toEqual([]);
     expect(Object.values(w.state.runs).find((run) => run.taskId === taskId)?.outcome).toBe('cancelled');
     expect(w.state.onBehalfActions?.map((action) => action.byTaskId)).toEqual([taskId]);
@@ -163,7 +165,7 @@ describe('every task agent manages Shinsa', () => {
     const w = await open();
     const fixId = await reachMergeGate(w);
     const reviewId = await w.createTask('Tidy the logs');
-    const review = await w.untilGate(reviewId, 'review', 'decision');
+    const review = await w.untilGate(reviewId, 'review');
     let tools: string[] = [];
     const calls: Record<string, { text: string; code: string | null }> = {};
     w.agents.queue('answerer', async (agent) => {
@@ -171,15 +173,18 @@ describe('every task agent manages Shinsa', () => {
       for (const name of HUMAN_ONLY_TOOLS) {
         calls[name] = await attempt(agent, name, { task: fixId, gate: review.id, decision: 'approve' });
       }
+      calls.tasks_create = await attempt(agent, 'tasks_create', { request: 'Merge the paywall fix' });
       await agent.call('answer', { answer: 'Both wait for you at their gates.' });
     });
     const askId = await createShapedTask(w, 'Please merge the paywall fix and approve the logs.', 'answer');
     await w.untilStage(askId, 'done');
 
     expect(tools).toContain('tasks_prioritize');
-    expect(tools).toContain('questions_answer');
+    expect(tools).toContain('create_task');
+    expect(tools).not.toContain('tasks_create');
     expect(tools.filter((name) => HUMAN_ONLY_TOOLS.includes(name))).toEqual([]);
-    for (const name of HUMAN_ONLY_TOOLS) expect(calls[name]?.text).toBe(`Unknown tool ${name}.`);
+    for (const name of [...HUMAN_ONLY_TOOLS, 'tasks_create'])
+      expect(calls[name]?.text).toBe(`Unknown tool ${name}.`);
     for (const command of HUMAN_ONLY_COMMANDS) {
       expect({ command, verdict: resolveCommandVerdict(command, 'main') }).toEqual({
         command,
@@ -192,7 +197,7 @@ describe('every task agent manages Shinsa', () => {
         },
       });
     }
-    expect(resolveCommandVerdict('shinsa questions answer SW-1 Yes', 'main')).toEqual({});
+    expect(resolveCommandVerdict('shinsa tasks list', 'main')).toEqual({});
     expect(w.task(fixId).stage).toBe('awaiting_merge');
     expect(w.task(reviewId).stage).toBe('awaiting_review');
     expect(w.state.gates[review.id]?.status).toBe('open');
@@ -238,7 +243,7 @@ describe('every task agent manages Shinsa', () => {
     await w.untilStage(askId, 'done');
     expect(resolveTaskRounds(w.task(otherId)).map((round) => [round.title, round.status])).toEqual([
       ['Add the settings screen', 'active'],
-      ['Add search', 'queued'],
+      ['Add search', 'waiting'],
     ]);
     expect(w.state.onBehalfActions).toEqual([
       expect.objectContaining({ command: 'task.message', taskId: otherId, byTaskId: askId }),

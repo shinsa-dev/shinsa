@@ -23,13 +23,15 @@ function stateWith(patch: (state: ShinsaState) => void = () => undefined) {
   return state;
 }
 
+const START_ONLY = { shape: false, start: true, priority: false };
+
 function newTask(overrides: Partial<Task> = {}) {
   return createTask({
     id: 'new',
     repoId: null,
     branch: null,
     stage: 'triage',
-    intent: 'Fix the login button',
+    request: 'Fix the login button',
     ...overrides,
   });
 }
@@ -55,14 +57,14 @@ describe('resolveTriage without the model', () => {
   test('a spec request, a long request or a redesign is large and gets a feat branch', async () => {
     for (const overrides of [
       { planFirst: true },
-      { intent: 'x'.repeat(501) },
-      { intent: 'Redesign the settings\nwith tabs' },
+      { request: 'x'.repeat(501) },
+      { request: 'Redesign the settings\nwith tabs' },
     ]) {
       const triage = await resolveTriage(stateWith(), newTask(overrides), LOCAL, silent);
       expect(triage?.size).toBe('large');
       expect(triage?.branch.startsWith('feat/')).toBe(true);
     }
-    expect((await resolveTriage(stateWith(), newTask({ intent: '\n' }), LOCAL, silent))?.title).toBe(
+    expect((await resolveTriage(stateWith(), newTask({ request: '\n' }), LOCAL, silent))?.title).toBe(
       'Untitled task'
     );
   });
@@ -114,7 +116,7 @@ describe('resolveTriage with the model', () => {
   test('takes the title, repository, size, branch and dependencies it names', async () => {
     const triage = await resolveTriage(
       state,
-      newTask(),
+      newTask({ auto: START_ONLY }),
       LOCAL,
       answer({
         title: '  Fix the login button on mobile  ',
@@ -180,7 +182,7 @@ describe('resolveTriage with structured output', () => {
         waits_on: ['same'],
       } as T);
     };
-    const triage = await resolveTriage(state, newTask(), LOCAL, recording);
+    const triage = await resolveTriage(state, newTask({ auto: START_ONLY }), LOCAL, recording);
     expect(triage).toMatchObject({ size: 'large', repoPath: '/code/api' });
     expect(triage?.waitsOn.map((task) => task.id)).toEqual(['same']);
     const schema = calls[0]?.schema;
@@ -200,7 +202,7 @@ describe('resolveTriage with structured output', () => {
     expect(calls[0]?.prompt).toContain('Options: "same": Add the export.');
 
     calls.length = 0;
-    await resolveTriage(stateWith(), newTask(), LOCAL, recording);
+    await resolveTriage(stateWith(), newTask({ auto: START_ONLY }), LOCAL, recording);
     expect(calls[0]?.schema?.properties.waits_on).toEqual({ type: 'array', maxItems: 0 });
     expect(calls[0]?.prompt).toContain('- waits_on (choices): ');
     expect(calls[0]?.prompt).toContain('There are no options.');
@@ -214,11 +216,11 @@ describe('resolveTriage with structured output', () => {
     };
     await resolveTriage(
       stateWith(),
-      newTask({ mode: 'ask', intent: 'How does the export size chunks?' }),
+      newTask({ mode: 'ask', request: 'How does the export size chunks?' }),
       LOCAL,
       recording
     );
-    await resolveTriage(stateWith(), newTask(), LOCAL, recording);
+    await resolveTriage(stateWith(), newTask({ auto: START_ONLY }), LOCAL, recording);
     expect(prompts[0]).toContain('This request is a question to answer from the code, not work to do.');
     expect(prompts[1]).not.toContain('a question to answer');
   });
@@ -287,7 +289,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       waits_on: ['same'],
       shape_why: '  It asks why the export is slow, not for a change.  ',
       priority_why: 'x'.repeat(200),
-      depends_on_why: 'It measures the export that task adds.',
+      waits_on_why: 'It measures the export that task adds.',
     });
     const triage = await resolveTriage(state, newTask({ auto: AUTO }), LOCAL, ask);
     expect(triage).toMatchObject({
@@ -320,14 +322,14 @@ describe('resolveTriage for what the task left to Shinsa', () => {
       'waits_on',
       'shape_why',
       'priority_why',
-      'depends_on_why',
+      'waits_on_why',
     ]);
     const prompt = calls[0]?.prompt ?? '';
     expect(prompt).toContain('- shape (choice): What kind of task is this? Options: "answer": a question');
     expect(prompt).toContain('"operation": run a one-off action in the repository');
     expect(prompt).toContain('- priority (choice): How soon does this need doing');
     expect(prompt).toContain(
-      'Then say why for each, in one plain sentence: shape_why, priority_why, depends_on_why.'
+      'Then say why for each, in one plain sentence: shape_why, priority_why, waits_on_why.'
     );
     expect(prompt).not.toContain('The human chose');
   });
@@ -396,7 +398,7 @@ describe('resolveTriage for what the task left to Shinsa', () => {
         size: 'small',
         branch: 'feat/export-button',
         waits_on: ['same'],
-        depends_on_why: 'It calls the endpoint that task adds.',
+        waits_on_why: 'It calls the endpoint that task adds.',
       })
     );
     expect(triage?.repoPath).toBe('/code/web');
@@ -507,7 +509,7 @@ describe('triage in a project', () => {
         size: 'small',
         branch: 'feat/export-button',
         waits_on: ['backend', 'unfiled'],
-        depends_on_why: 'It calls the endpoint that task adds.',
+        waits_on_why: 'It calls the endpoint that task adds.',
       } as T);
     };
     const triage = await resolveTriage(

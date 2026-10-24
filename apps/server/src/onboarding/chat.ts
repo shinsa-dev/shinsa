@@ -79,7 +79,7 @@ const CONFIRM_RETRY = 'Pick Yes or No, or answer the question again.';
 const FOLLOW_UP_LIMIT = 240;
 
 const FOLLOW_UP_SYSTEM = [
-  'You help someone answer one question in the setup chat of Shinsa, a coding harness.',
+  'You help someone answer one question in the setup chat of Shinsa, a control plane for coding agents.',
   'Their answer did not clearly pick one of the options.',
   'Write one short follow-up of one or two plain sentences that names each option in everyday words, says what sets it apart, and asks which one they want.',
   `Use at most ${FOLLOW_UP_LIMIT} characters, sentence case, no markdown, no lists, no dashes, no exclamation marks.`,

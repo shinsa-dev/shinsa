@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  isHandOverTool,
   PLAN_EVIDENCE_KINDS,
   PROTOCOL_LIMITS,
   type RunRole,
@@ -53,6 +54,15 @@ describe('the shinsa tool server', () => {
     for (const [name, spec] of Object.entries(TOOL_SPECS)) expect(spec.name).toBe(name);
   });
 
+  test('every hand-over tool tells the agent to stop after it, never to end its turn out loud', () => {
+    const handOvers = SHINSA_TOOL_NAMES.filter(isHandOverTool).map((name) => TOOL_SPECS[name]);
+    expect(handOvers.length).toBeGreaterThan(0);
+    for (const spec of handOvers) {
+      expect(spec.description).toMatch(/stop/);
+      expect(spec.description).not.toContain('end your turn');
+    }
+  });
+
   test('a call reaches the handler, errors come back as tool errors, and other roles’ tools are refused', async () => {
     const seen: unknown[] = [];
     const { call } = readHandlers('planner', (name, input, _signal, requestId) => {
@@ -91,8 +101,9 @@ describe('the shinsa tool server', () => {
     expect(ask.context.maxLength).toBe(PROTOCOL_LIMITS.questionContext);
     const finding = TOOL_SPECS.report_review.inputSchema.properties.findings.items.properties;
     expect(finding.file.maxLength).toBe(PROTOCOL_LIMITS.path);
-    const decision = TOOL_SPECS.complete_phase.inputSchema.properties.decisions.items.properties;
-    expect(decision.file.maxLength).toBe(PROTOCOL_LIMITS.path);
+    const call = TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.properties;
+    expect(call.file.maxLength).toBe(PROTOCOL_LIMITS.path);
+    expect(call.call.maxLength).toBe(PROTOCOL_LIMITS.call);
     expect(TOOL_SPECS.complete_phase.inputSchema.properties.spots.items.properties.file.maxLength).toBe(
       PROTOCOL_LIMITS.path
     );

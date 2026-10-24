@@ -5,7 +5,10 @@ import type {
   AgentProviderInfo,
   OnBehalfAction,
   OnboardingStatus,
+  ProgramVersion,
   QueueSummary,
+  UpdateOutcome,
+  VersionsSnapshot,
 } from '@shinsa/core';
 import type { FieldSpec, Values } from './fields.ts';
 import { findAccount, resolveOptionalAccount } from './resolve.ts';
@@ -20,6 +23,8 @@ const ACCOUNT_FIELD: FieldSpec = {
 };
 
 const ORIGINS = ['claude', 'cswap'] as const;
+
+const PROGRAMS = ['claude', 'codex'] as const;
 
 interface Health {
   ok: boolean;
@@ -63,6 +68,26 @@ function formatUsage(snapshot: AccountsSnapshot) {
           )),
     ])
     .join('\n');
+}
+
+function describeProgram(program: ProgramVersion) {
+  const installed = program.override
+    ? `runs ${program.override}`
+    : (program.version ?? (program.path ? 'unknown version' : 'not installed'));
+  const latest = program.latest ? `, latest ${program.latest}` : '';
+  const action =
+    program.status === 'outdated' || program.status === 'update_available'
+      ? `  (update with \`shinsa versions update ${program.id}\`)`
+      : '';
+  return `${program.label}: ${installed}${latest}, needs ${program.minimum} or newer${action}`;
+}
+
+function formatVersions(snapshot: VersionsSnapshot) {
+  const { sdk } = snapshot;
+  return [
+    ...snapshot.programs.map(describeProgram),
+    `Claude Agent SDK: ${sdk.version}${sdk.latest ? `, latest ${sdk.latest}` : ''} (pairs with Claude Code ${sdk.claudeCodeVersion})`,
+  ].join('\n');
 }
 
 function buildAccountPatch(values: Values): AccountPatch {
@@ -216,6 +241,33 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
             `${provider.id} (${provider.label}): ${provider.models.map((model) => model.id).join(', ')}`
         )
         .join('\n'),
+  }),
+  defineRead<VersionsSnapshot>({
+    path: ['versions', 'list'],
+    summary:
+      'Show the installed Claude Code and Codex, the latest of each and the Claude Agent SDK Shinsa runs.',
+    fields: [],
+    request: () => '/api/versions',
+    format: formatVersions,
+  }),
+  defineAction({
+    path: ['versions', 'update'],
+    summary: 'Update Claude Code or Codex with its own updater.',
+    humanOnly: true,
+    fields: [
+      {
+        name: 'program',
+        kind: 'choice',
+        choices: PROGRAMS,
+        positional: 'one',
+        required: true,
+        description: 'claude or codex.',
+      },
+    ],
+    act: async (client, values) => {
+      const data = await client.post<UpdateOutcome>('/api/versions/update', { program: values.program });
+      return { data, text: `${data.message}\n${formatVersions(data.versions)}` };
+    },
   }),
   defineRead<Health>({
     path: ['health'],

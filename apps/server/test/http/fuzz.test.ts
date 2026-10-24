@@ -73,7 +73,7 @@ const COMMAND_TYPES = [
 ];
 
 const FIELDS = [
-  'intent',
+  'request',
   'repoId',
   'priority',
   'planFirst',
@@ -153,7 +153,7 @@ function createCommand(random: Random, state: ShinsaState): unknown {
   }
   if (random.chance(0.4)) {
     command.type = 'task.create';
-    command.intent ??= random.chance(0.7) ? 'Fix the login page' : createValue(random, state);
+    command.request ??= random.chance(0.7) ? 'Fix the login page' : createValue(random, state);
     if (random.chance(0.5)) command.repoId = null;
   }
   return command;
@@ -177,7 +177,7 @@ const PATHS = [
 
 function createBody(random: Random, state: ShinsaState) {
   const roll = random.next();
-  if (roll < 0.05) return '{"type": "task.create", "intent": ';
+  if (roll < 0.05) return '{"type": "task.create", "request": ';
   if (roll < 0.08) return '\u0000\u0001garbage';
   if (roll < 0.1) return '';
   return JSON.stringify(createCommand(random, state));
@@ -209,7 +209,7 @@ function assertWellFormed(state: ShinsaState) {
     expect(repo.projectId === null || typeof repo.projectId === 'string').toBe(true);
   }
   for (const task of Object.values(state.tasks)) {
-    expect(typeof task.intent).toBe('string');
+    expect(typeof task.request).toBe('string');
     expect(typeof task.title).toBe('string');
     expect(PRIORITY_RANK[task.priority]).toBeNumber();
     expect(typeof task.planFirst).toBe('boolean');
@@ -289,7 +289,7 @@ describe('fuzzing the command surface', () => {
     test(`seed ${seed}: malformed HTTP requests never break the server or the event log`, async () => {
       const random = createRandom(seed * 7919);
       const { engine, base, config } = await startFuzzServer();
-      await engine.dispatch({ type: 'task.create', intent: 'Seed a task', repoId: null });
+      await engine.dispatch({ type: 'task.create', request: 'Seed a task', repoId: null });
       for (let step = 0; step < STEPS; step += 1) {
         const path = random.pick(PATHS);
         const body = createBody(random, engine.state);
@@ -319,7 +319,7 @@ describe('fuzzing the command surface', () => {
       const ok = await fetch(`${base}/api/commands`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ type: 'task.create', intent: 'Still works', repoId: null }),
+        body: JSON.stringify({ type: 'task.create', request: 'Still works', repoId: null }),
       });
       expect(ok.status).toBe(200);
     });
@@ -342,7 +342,7 @@ describe('fuzzing the command surface', () => {
       JSON.stringify({
         type: 'command',
         id: 'last',
-        command: { type: 'task.create', intent: 'Still works', repoId: null },
+        command: { type: 'task.create', request: 'Still works', repoId: null },
       })
     );
     expect(await waitForAck(messages, 'last')).toEqual({ type: 'ack', id: 'last', error: null });

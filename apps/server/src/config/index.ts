@@ -1,8 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { log } from '../log/index.ts';
-import { type ConfigStore, type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
-import { DATABASE_FILE, type MigrationResult, migrateLegacyData } from './migrate.ts';
+import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
 export { ConfigStore, writeJsonFile } from './file.ts';
@@ -11,7 +9,6 @@ export { type Env, resolveShinsaPaths } from './paths.ts';
 export interface ServerConfig {
   home: string;
   configPath: string;
-  legacyDataDir: string | null;
   dataDir: string;
   databasePath: string;
   worktreesDir: string;
@@ -38,6 +35,8 @@ interface EunoeConfig {
 }
 
 export const DEFAULT_PORT = 5180;
+
+const DATABASE_FILE = 'shinsa.sqlite';
 
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -104,7 +103,6 @@ export function resolveConfig(env: Env): ServerConfig {
   return {
     home: paths.home,
     configPath: paths.configPath,
-    legacyDataDir: paths.legacyDataDir,
     ...resolveDataPaths(paths.dataDir, env),
     pluginDir: resolve(import.meta.dirname, '../../plugin'),
     webDir: resolve(import.meta.dirname, '../../../web/dist'),
@@ -124,44 +122,8 @@ export function resolveConfig(env: Env): ServerConfig {
   };
 }
 
-function recordMigration(config: ServerConfig, store: ConfigStore, migration: MigrationResult) {
-  if (migration.status === 'migrated') {
-    log.info('[Config] Copied the data from the old location; it stays there untouched', {
-      from: migration.from,
-      to: migration.to,
-      events: migration.events,
-      files: migration.files,
-    });
-    store.update({ migratedFrom: { path: migration.from, at: Date.now() } });
-    return config;
-  }
-  if (migration.status === 'failed') {
-    log.error('[Config] Could not copy the data from the old location; using it where it is', {
-      from: migration.from,
-      to: migration.to,
-      reason: migration.reason,
-    });
-    const customWorktrees = config.worktreesDir !== join(config.dataDir, 'worktrees');
-    return {
-      ...config,
-      ...resolveDataPaths(
-        migration.from,
-        customWorktrees ? { SHINSA_WORKTREES_DIR: config.worktreesDir } : {}
-      ),
-    };
-  }
-  return config;
-}
-
-export function prepareDataDir(config: ServerConfig, store: ConfigStore): ServerConfig {
-  const prepared = recordMigration(config, store, migrateLegacyData(config.legacyDataDir, config.dataDir));
-  for (const dir of [
-    prepared.dataDir,
-    prepared.worktreesDir,
-    prepared.evidenceDir,
-    prepared.transcriptsDir,
-  ]) {
+export function prepareDataDir(config: ServerConfig) {
+  for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir]) {
     mkdirSync(dir, { recursive: true });
   }
-  return prepared;
 }

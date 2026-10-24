@@ -18,7 +18,7 @@ async function createCheckoutRepo() {
   return { repo, path, head, worktreesDir: createTempDir('shinsa-worktrees-') };
 }
 
-describe('a delegated task’s own checkout', () => {
+describe('a delegation’s own checkout', () => {
   test('is made from the given commit, detached, under the task’s folder', async () => {
     const { repo, head, worktreesDir } = await createCheckoutRepo();
     const path = await createIsolatedWorktree(repo, worktreesDir, 'task-1', 'run-1', head);
@@ -69,9 +69,7 @@ describe('a delegated task’s own checkout', () => {
     await removeIsolatedWorktrees(repo, worktreesDir, 'task-1');
     expect(existsSync(first)).toBe(false);
     expect(existsSync(join(worktreesDir, 'delegations', 'task-1'))).toBe(false);
-    expect(warn.mock.calls.some(([message]) => String(message).includes('delegated task’s checkout'))).toBe(
-      true
-    );
+    expect(warn.mock.calls.some(([message]) => String(message).includes('delegation’s checkout'))).toBe(true);
     warn.mockRestore();
     expect(await git(repo.path, 'worktree', 'list')).not.toContain('run-1');
     await removeIsolatedWorktrees(repo, worktreesDir, 'task-2');

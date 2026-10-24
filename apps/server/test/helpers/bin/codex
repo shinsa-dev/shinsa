@@ -76,7 +76,7 @@ interface Turn {
 
 const PLAN = {
   goal: 'Add the two greeting files.',
-  plan: [
+  phases: [
     { title: 'Write the first file', detail: 'Create a.txt.' },
     { title: 'Write the second file', detail: 'Create b.txt.' },
   ],
@@ -341,7 +341,7 @@ async function runDefault(turn: Turn) {
       return callTool(turn, 'complete_phase', {
         summary: `Wrote the file for phase ${phase}.`,
         spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
-        decisions: [],
+        judgement_calls: [],
       });
     }
     case 'reviewer':

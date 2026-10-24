@@ -4,11 +4,11 @@ import {
   createState,
   decide,
   isDelegatedRun,
+  type PlanDocument,
   type Run,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
-  type PlanDocument,
 } from '@shinsa/core';
 import {
   type DelegationOutcome,
@@ -18,7 +18,7 @@ import {
 
 const SPEC: PlanDocument = {
   goal: 'Ship it.',
-  plan: [
+  phases: [
     { title: 'Find it', detail: 'Find the overflow.' },
     { title: 'Fix it', detail: 'Clamp the width.' },
   ],
@@ -70,7 +70,7 @@ async function building(role: 'builder' | 'planner' = 'builder') {
     });
   }
   const repoId = Object.values(core.state.repos).find((repo) => repo.name === 'app')?.id ?? '';
-  await core.dispatch({ type: 'task.create', intent: 'Fix the tab scroll', repoId });
+  await core.dispatch({ type: 'task.create', request: 'Fix the tab scroll', repoId });
   const taskId = Object.keys(core.state.tasks)[0] ?? '';
   await core.dispatch({
     type: 'task.triage',
@@ -141,10 +141,10 @@ describe('delegate_task', () => {
   test('starts the task on the parent’s role, tells the chat, and returns its status at once', async () => {
     const { core, run } = await building();
     const { call, started } = createCall(core, run.id);
-    const status = parse(await handleOrchestrationTool('delegate_task', { task: 'Check the copy.' }, call));
+    const status = parse(await handleOrchestrationTool('delegate_task', { brief: 'Check the copy.' }, call));
     const [child] = children(core.state);
     expect(status).toEqual({
-      task_id: child?.id,
+      delegation_id: child?.id,
       title: 'Check the copy.',
       role: 'builder',
       status: 'running',
@@ -154,7 +154,7 @@ describe('delegate_task', () => {
       isolation: 'shared',
       has_pending_question: false,
       question: null,
-      delegated_tasks_running: 0,
+      delegations_running: 0,
       result: null,
       wait_timed_out: false,
     });
@@ -164,10 +164,10 @@ describe('delegate_task', () => {
   test('the same client_request_id returns the same task, without a second checkout or chat line', async () => {
     const { core, run } = await building();
     const { call, started, commits } = createCall(core, run.id);
-    const input = { task: 'Try it.', isolation: 'worktree', client_request_id: 'try-1', role: 'builder' };
+    const input = { brief: 'Try it.', isolation: 'worktree', client_request_id: 'try-1', role: 'builder' };
     const first = parse(await handleOrchestrationTool('delegate_task', input, call));
     const second = parse(await handleOrchestrationTool('delegate_task', input, call));
-    expect(second.task_id).toBe(first.task_id);
+    expect(second.delegation_id).toBe(first.delegation_id);
     expect(children(core.state)).toHaveLength(1);
     expect(children(core.state)[0]?.delegation.baseCommit).toBe('abc1234');
     expect(commits()).toBe(1);
@@ -177,9 +177,9 @@ describe('delegate_task', () => {
   test('a call repeated without a client_request_id finds the task and the courier it already made', async () => {
     const { core, run } = await building();
     const { call } = createCall(core, run.id, { requestKey: 'call:a1:7' });
-    const first = parse(await handleOrchestrationTool('delegate_task', { task: 'Try it.' }, call));
-    const second = parse(await handleOrchestrationTool('delegate_task', { task: 'Try it.' }, call));
-    expect(second.task_id).toBe(first.task_id);
+    const first = parse(await handleOrchestrationTool('delegate_task', { brief: 'Try it.' }, call));
+    const second = parse(await handleOrchestrationTool('delegate_task', { brief: 'Try it.' }, call));
+    expect(second.delegation_id).toBe(first.delegation_id);
     expect(children(core.state)).toHaveLength(1);
     await handleOrchestrationTool('create_task', { request: 'Add it.' }, call);
     expect(await handleOrchestrationTool('create_task', { request: 'Add it.' }, call)).toContain(
@@ -190,8 +190,8 @@ describe('delegate_task', () => {
   test('names the command after the attempt and the client request id, so a repeat is answered by its receipt', async () => {
     const { core, run } = await building();
     const { call, ids } = createCall(core, run.id);
-    await handleOrchestrationTool('delegate_task', { task: 'Try it.', client_request_id: 'try-1' }, call);
-    await handleOrchestrationTool('delegate_task', { task: 'Try another.' }, call);
+    await handleOrchestrationTool('delegate_task', { brief: 'Try it.', client_request_id: 'try-1' }, call);
+    await handleOrchestrationTool('delegate_task', { brief: 'Try another.' }, call);
     await handleOrchestrationTool('create_task', { request: 'Add it.', client_request_id: 'c1' }, call);
     expect(ids).toEqual([`agent:${run.id}::delegate:try-1`, null, `agent:${run.id}::create_task:c1`]);
   });
@@ -200,17 +200,17 @@ describe('delegate_task', () => {
     const { core, run } = await building();
     const { call } = createCall(core, run.id);
     await expect(
-      handleOrchestrationTool('delegate_task', { task: 'Try it.', provider: 'nope' }, call)
-    ).rejects.toThrow('Shinsa has no agent provider "nope". Leave provider unset to use the default.');
+      handleOrchestrationTool('delegate_task', { brief: 'Try it.', provider: 'nope' }, call)
+    ).rejects.toThrow('There is no agent provider "nope". Leave provider unset to use the default.');
   });
 
   test('passes the core’s refusal through: a planner cannot delegate a builder', async () => {
     const { core, run } = await building('planner');
     const { call } = createCall(core, run.id);
     await expect(
-      handleOrchestrationTool('delegate_task', { task: 'Build it.', role: 'builder' }, call)
+      handleOrchestrationTool('delegate_task', { brief: 'Build it.', role: 'builder' }, call)
     ).rejects.toThrow('A planner cannot change files');
-    const status = parse(await handleOrchestrationTool('delegate_task', { task: 'Research it.' }, call));
+    const status = parse(await handleOrchestrationTool('delegate_task', { brief: 'Research it.' }, call));
     expect(status.role).toBe('planner');
   });
 
@@ -219,7 +219,7 @@ describe('delegate_task', () => {
     const { call, waits } = createCall(core, run.id, { outcome: 'settled' });
     const pending = handleOrchestrationTool(
       'delegate_task',
-      { task: 'Review it.', role: 'reviewer', mode: 'wait', timeout_minutes: 3 },
+      { brief: 'Review it.', role: 'reviewer', mode: 'wait', timeout_minutes: 3 },
       call
     );
     const status = parse(await pending);
@@ -234,7 +234,7 @@ describe('delegate_task', () => {
     const { call } = createCall(core, run.id);
     await handleOrchestrationTool(
       'delegate_task',
-      { task: 'Review it.', role: 'reviewer', client_request_id: 'r' },
+      { brief: 'Review it.', role: 'reviewer', client_request_id: 'r' },
       call
     );
     const child = children(core.state)[0] as Run;
@@ -242,7 +242,7 @@ describe('delegate_task', () => {
     const status = parse(
       await handleOrchestrationTool(
         'delegate_task',
-        { task: 'Review it.', role: 'reviewer', client_request_id: 'r', mode: 'wait' },
+        { brief: 'Review it.', role: 'reviewer', client_request_id: 'r', mode: 'wait' },
         createCall(core, run.id).call
       )
     );
@@ -254,7 +254,7 @@ describe('delegate_task', () => {
     const { core, run } = await building();
     const { call } = createCall(core, run.id, { outcome: 'timeout' });
     const status = parse(
-      await handleOrchestrationTool('delegate_task', { task: 'Run it.', mode: 'wait' }, call)
+      await handleOrchestrationTool('delegate_task', { brief: 'Run it.', mode: 'wait' }, call)
     );
     expect(status).toMatchObject({ status: 'running', wait_timed_out: true });
     expect(children(core.state)[0]?.delegation.wake).toBe('always');
@@ -263,7 +263,7 @@ describe('delegate_task', () => {
   test('a wait that ends on a question returns it', async () => {
     const { core, run } = await building();
     const { call } = createCall(core, run.id);
-    await handleOrchestrationTool('delegate_task', { task: 'Port it.', client_request_id: 'q' }, call);
+    await handleOrchestrationTool('delegate_task', { brief: 'Port it.', client_request_id: 'q' }, call);
     const child = children(core.state)[0] as Run;
     await core.dispatch({
       type: 'agent.ask',
@@ -276,7 +276,7 @@ describe('delegate_task', () => {
     const status = parse(
       await handleOrchestrationTool(
         'delegate_task',
-        { task: 'Port it.', client_request_id: 'q', mode: 'wait' },
+        { brief: 'Port it.', client_request_id: 'q', mode: 'wait' },
         createCall(core, run.id, { outcome: 'question' }).call
       )
     );
@@ -291,7 +291,7 @@ describe('delegate_task', () => {
   test('a run that no longer exists is told to end its turn', async () => {
     const { core, run } = await building();
     const { call } = createCall(core, run.id, { runId: 'gone' });
-    await expect(handleOrchestrationTool('delegate_task', { task: 'Try it.' }, call)).rejects.toThrow(
+    await expect(handleOrchestrationTool('delegate_task', { brief: 'Try it.' }, call)).rejects.toThrow(
       'This run no longer exists. End your turn.'
     );
   });
@@ -301,8 +301,8 @@ describe('delegate_task', () => {
     const { call } = createCall(core, run.id, { state: () => createState() });
     call.dispatch = () => Promise.resolve([]);
     call.state = () => ({ ...core.state, runs: { [run.id]: run } });
-    await expect(handleOrchestrationTool('delegate_task', { task: 'Try it.' }, call)).rejects.toThrow(
-      'The task was not delegated. Try again.'
+    await expect(handleOrchestrationTool('delegate_task', { brief: 'Try it.' }, call)).rejects.toThrow(
+      'Nothing was delegated. Try again.'
     );
   });
 });
@@ -312,37 +312,41 @@ describe('delegation_status, delegation_cancel and delegation_answer', () => {
     const setup = await building();
     const { call } = createCall(setup.core, setup.run.id);
     const status = parse(
-      await handleOrchestrationTool('delegate_task', { task: 'Check it.', role: 'reviewer' }, call)
+      await handleOrchestrationTool('delegate_task', { brief: 'Check it.', role: 'reviewer' }, call)
     );
-    return { ...setup, call, childId: String(status.task_id) };
+    return { ...setup, call, childId: String(status.delegation_id) };
   }
 
-  test('delegation_status reads a task, and reading a finished one counts as receiving it', async () => {
+  test('delegation_status reads a delegation, and reading a finished one counts as receiving it', async () => {
     const { core, call, childId } = await delegated();
-    expect(parse(await handleOrchestrationTool('delegation_status', { task_id: childId }, call)).status).toBe(
-      'running'
-    );
+    expect(
+      parse(await handleOrchestrationTool('delegation_status', { delegation_id: childId }, call)).status
+    ).toBe('running');
     await core.dispatch({ type: 'run.end', runId: childId, outcome: 'completed', summary: 'Fine.' });
-    expect(parse(await handleOrchestrationTool('delegation_status', { task_id: childId }, call))).toMatchObject({
+    expect(
+      parse(await handleOrchestrationTool('delegation_status', { delegation_id: childId }, call))
+    ).toMatchObject({
       status: 'completed',
       result: 'Fine.',
     });
     expect(core.state.runs[childId]?.delegation?.delivery).toBe('acknowledged');
   });
 
-  test('another run’s task is refused by name', async () => {
+  test('another run’s delegation is refused by name', async () => {
     const { call } = await delegated();
-    await expect(handleOrchestrationTool('delegation_status', { task_id: 'nope' }, call)).rejects.toThrow(
-      'No task nope was delegated by you. Use the task_id that delegate_task returned.'
+    await expect(
+      handleOrchestrationTool('delegation_status', { delegation_id: 'nope' }, call)
+    ).rejects.toThrow('You started no delegation nope. Use the delegation_id that delegate_task returned.');
+    await expect(handleOrchestrationTool('delegation_status', {}, call)).rejects.toThrow(
+      'delegation_id is required.'
     );
-    await expect(handleOrchestrationTool('delegation_status', {}, call)).rejects.toThrow('task_id is required.');
   });
 
-  test('delegation_cancel stops the task and returns it stopped', async () => {
+  test('delegation_cancel stops the delegation and returns it stopped', async () => {
     const { call, childId } = await delegated();
-    expect(parse(await handleOrchestrationTool('delegation_cancel', { task_id: childId }, call)).status).toBe(
-      'cancelled'
-    );
+    expect(
+      parse(await handleOrchestrationTool('delegation_cancel', { delegation_id: childId }, call)).status
+    ).toBe('cancelled');
   });
 
   test('delegation_answer answers the open question', async () => {
@@ -355,8 +359,12 @@ describe('delegation_status, delegation_cancel and delegation_answer', () => {
       context: null,
     });
     expect(
-      await handleOrchestrationTool('delegation_answer', { task_id: childId, answer: 'The first.' }, call)
-    ).toBe('Answered. The delegated agent carries on, and its result arrives here when it finishes.');
+      await handleOrchestrationTool(
+        'delegation_answer',
+        { delegation_id: childId, answer: 'The first.' },
+        call
+      )
+    ).toBe('Answered. The agent carries on, and its result arrives here when it finishes.');
     expect(core.state.runs[childId]?.delegation?.question?.answer).toBe('The first.');
   });
 });
@@ -376,7 +384,7 @@ describe('create_task and split_task', () => {
     );
     expect(core.state.repos[created?.repoId ?? '']?.name).toBe('admin');
     await handleOrchestrationTool('create_task', { request: 'Same repo.', repository: 'app' }, call);
-    expect(Object.values(core.state.tasks).find((task) => task.intent === 'Same repo.')?.repoId).toBe(
+    expect(Object.values(core.state.tasks).find((task) => task.request === 'Same repo.')?.repoId).toBe(
       core.state.tasks[taskId]?.repoId ?? ''
     );
   });
@@ -389,7 +397,7 @@ describe('create_task and split_task', () => {
         { request: 'Do it.', repository: 'web' },
         createCall(core, run.id).call
       )
-    ).rejects.toThrow('Shinsa knows no repository "web". Known: app, admin.');
+    ).rejects.toThrow('There is no repository "web". Known: app, admin.');
     const empty = createCall(core, run.id, { state: () => ({ ...core.state, repos: {} }) }).call;
     await expect(
       handleOrchestrationTool('create_task', { request: 'Do it.', repository: 'web' }, empty)

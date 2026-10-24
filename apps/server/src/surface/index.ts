@@ -114,7 +114,7 @@ export function describeSurface(specs: SurfaceSpec[] = SURFACE) {
 }
 
 export function listAgentSpecs(specs: SurfaceSpec[] = SURFACE) {
-  return specs.filter((spec) => !spec.humanOnly);
+  return specs.filter((spec) => !spec.humanOnly && !spec.agentTool);
 }
 
 function listGroups(specs: SurfaceSpec[]) {
@@ -127,12 +127,15 @@ function serializeArgumentRow(field: FieldSpec) {
   return `| \`${name}\` | ${field.kind}, ${required} | ${field.description} |`;
 }
 
+function describeAgentAccess(spec: SurfaceSpec) {
+  if (spec.humanOnly) return 'Yours alone: no agent has a tool for it, and an agent’s shell may not run it.';
+  if (spec.agentTool) return `Not a task agent's tool: an agent uses \`${spec.agentTool}\` instead.`;
+  return `Every task agent's tool: \`${resolveToolName(spec)}\`${spec.access === 'read' ? ' (reads)' : ''}.`;
+}
+
 function serializeSpecReference(spec: SurfaceSpec) {
   const fields = spec.fields;
   const usage = ['shinsa', ...spec.path, ...fields.map(describeArgument), '[--json]'].join(' ');
-  const where = spec.humanOnly
-    ? 'Yours alone: no agent has a tool for it, and an agent’s shell may not run it.'
-    : `Every task agent's tool: \`${resolveToolName(spec)}\`${spec.access === 'read' ? ' (reads)' : ''}.`;
   const sends = spec.command ? ` Sends \`${spec.command}\`.` : '';
   return [
     `### shinsa ${spec.path.join(' ')}`,
@@ -143,7 +146,7 @@ function serializeSpecReference(spec: SurfaceSpec) {
     usage,
     '```',
     '',
-    `${where}${sends}`,
+    `${describeAgentAccess(spec)}${sends}`,
     ...(fields.length > 0
       ? ['', '| Argument | Kind | What it is |', '| --- | --- | --- |', ...fields.map(serializeArgumentRow)]
       : []),
@@ -167,7 +170,8 @@ export function serializeReference(specs: SurfaceSpec[] = SURFACE) {
     'its id or its exact title; an account by id or email; a repository by name or id; a project by key, name or id.',
     'Every task agent has each command that is not yours alone as a tool of the same name with `_` for spaces and',
     'dashes, taking the same fields in snake_case; what it does is logged as on your behalf from its task. A command',
-    'marked yours alone has no tool (`docs/engine.md` → Who can change Shinsa).',
+    'marked yours alone has no tool (`docs/engine.md` → Who can change Shinsa), and `tasks create` has none either:',
+    'an agent files a task with `create_task`, which files it once however often the call is repeated.',
     '',
     ...groups.flatMap((group) => [group, '']),
   ]

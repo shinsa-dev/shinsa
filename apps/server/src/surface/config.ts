@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import {
   DomainError,
   HOUR_MS,
+  HUMAN_ONLY_SETTINGS,
   type OnboardingStatus,
   PROJECT_COLORS,
   type ProjectInput,
@@ -204,7 +205,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         kind: 'text',
         positional: 'one',
         required: true,
-        description: `One of ${SETTINGS_KEYS.join(', ')}.`,
+        description: `One of ${SETTINGS_KEYS.join(', ')}. Only the human changes ${HUMAN_ONLY_SETTINGS.join(', ')}.`,
       },
       { name: 'value', kind: 'text', positional: 'rest', required: true, description: 'The new value.' },
     ],
@@ -282,7 +283,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineAction({
     path: ['projects', 'add-repo'],
-    summary: 'Put a repository in a project, registering it if Shinsa has not worked there yet.',
+    summary: 'Put a repository in a project, registering it if no agent has worked there yet.',
     fields: [PROJECT_FIELD, PATH_FIELD],
     act: (client, values) => upsertProjectPath(client, values, 'repos'),
   }),
@@ -326,7 +327,7 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineRead<{ repos: Repo[] }>({
     path: ['repos', 'list'],
-    summary: 'List the repositories Shinsa has worked in.',
+    summary: 'List the repositories agents have worked in.',
     fields: [],
     request: () => '/api/repos',
     format: ({ repos }) =>
@@ -346,9 +347,13 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
       {
         name: 'checks',
         kind: 'list',
-        description: 'The check commands, in order. Repeat the option for each.',
+        description: 'The check commands, in order. Repeat the option for each. Only the human changes them.',
       },
-      { name: 'waiveChecks', kind: 'boolean', description: 'Work without checks.' },
+      {
+        name: 'waiveChecks',
+        kind: 'boolean',
+        description: 'Work without checks. Only the human changes it.',
+      },
     ],
     build: async (values, client) => ({
       type: 'repo.update',

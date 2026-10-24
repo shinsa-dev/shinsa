@@ -36,7 +36,7 @@ async function startPlanning() {
     },
     projectName: null,
   });
-  await engine.dispatch({ type: 'task.create', intent: 'Fix the tab scroll', repoId: null });
+  await engine.dispatch({ type: 'task.create', request: 'Fix the tab scroll', repoId: null });
   const taskId = Object.keys(engine.state.tasks)[0] as string;
   const repoId = Object.keys(engine.state.repos)[0] as string;
   await engine.dispatch({

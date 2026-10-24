@@ -99,10 +99,10 @@ describe('shinsa do', () => {
   test('hands the request over from the current directory and prints the task link', async () => {
     const { engine, port } = startTestServer();
     const { io, out } = createIo(port);
-    expect(await runCli(['do', 'fix', 'the', 'scroll', '--urgent', '--spec'], io)).toBe(0);
+    expect(await runCli(['do', 'fix', 'the', 'scroll', '--urgent', '--plan-first'], io)).toBe(0);
     const task = Object.values(engine.state.tasks)[0];
     expect(task).toMatchObject({
-      intent: 'fix the scroll',
+      request: 'fix the scroll',
       priority: 'urgent',
       planFirst: true,
       origin: '/code/app',
@@ -173,7 +173,7 @@ describe('shinsa import', () => {
       ['/code/elsewhere', true, 'high'],
     ]);
     expect(out[0]).toBe(`Imported ${path}`);
-    expect(tasks[0]?.intent).toContain('What was asked first:\nBuild the importer');
+    expect(tasks[0]?.request).toContain('What was asked first:\nBuild the importer');
   });
 
   test('a session without a working directory starts where shinsa ran', async () => {
@@ -335,7 +335,7 @@ describe('managing Shinsa from the command line', () => {
       0
     );
     const task = Object.values(engine.state.tasks)[0];
-    expect(task).toMatchObject({ intent: 'Fix the scroll', priority: 'high' });
+    expect(task).toMatchObject({ request: 'Fix the scroll', priority: 'high' });
     expect(created.out).toEqual([
       `Created the task. Shinsa brings it back when it needs a decision.\nhttp://127.0.0.1:${port}/tasks/${task?.id}`,
     ]);

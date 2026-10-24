@@ -50,14 +50,14 @@ function writeTaskLink(io: CommandIo, receipt: CommandReceipt) {
 
 export async function createTask(args: string[], io: CommandIo) {
   const { flags, positional } = parseArgs(args);
-  const intent = positional.join(' ').trim();
-  if (!intent) throw new Error('Say what should be done: shinsa do "fix the scroll in tab groups"');
+  const request = positional.join(' ').trim();
+  if (!request) throw new Error('Say what should be done: shinsa do "fix the scroll in tab groups"');
   const result = await io.api.sendCommand({
     type: 'task.create',
-    intent,
+    request,
     repoId: null,
     priority: resolvePriority(flags),
-    planFirst: flags.has('--spec'),
+    planFirst: flags.has('--plan-first'),
     origin: io.cwd,
   });
   io.write('Started. Shinsa brings it back when it needs a decision.');
@@ -71,7 +71,7 @@ export async function importSession(args: string[], io: CommandIo) {
   const session = readSession(target, io.projectsDir);
   const result = await io.api.sendCommand({
     type: 'task.create',
-    intent: describeSession(session),
+    request: describeSession(session),
     repoId: null,
     priority: resolvePriority(flags),
     planFirst: true,

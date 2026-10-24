@@ -57,26 +57,26 @@ function resendAll() {
 
 function isCrashPause(gate: Gate) {
   return (
-    gate.purpose === 'failure' && shinsa.engine.state.runs[gate.runId ?? '']?.failure?.code === 'crash_loop'
+    gate.type === 'failure' && shinsa.engine.state.runs[gate.runId ?? '']?.failure?.code === 'crash_loop'
   );
 }
 
 function answerGates() {
   for (const gate of listOpenGates(shinsa.engine.state)) {
-    if (gate.purpose === 'failure' && !isCrashPause(gate)) continue;
-    const decision = gate.purpose === 'agent_question' ? 'answer' : 'approve';
+    if (gate.type === 'failure' && !isCrashPause(gate)) continue;
+    const decision = gate.type === 'question' ? 'reply' : 'approve';
     send(`client:answer:${gate.id}`, {
       type: 'gate.answer',
       gateId: gate.id,
       decision,
-      response: decision === 'answer' ? 'Yes.' : null,
+      response: decision === 'reply' ? 'Yes.' : null,
     });
   }
 }
 
 function cancelOnCue() {
   for (const task of Object.values(shinsa.engine.state.tasks)) {
-    if (task.intent !== CANCEL_INTENT || task.stage !== cancelAt) continue;
+    if (task.request !== CANCEL_INTENT || task.stage !== cancelAt) continue;
     send(`client:cancel:${task.id}`, { type: 'task.cancel', taskId: task.id });
   }
 }
@@ -124,7 +124,7 @@ function isSettled() {
   const tasks = Object.values(shinsa.engine.state.tasks);
   if (tasks.length === 0) return false;
   const gates = listOpenGates(shinsa.engine.state);
-  if (gates.some((gate) => gate.purpose === 'failure' && !isCrashPause(gate))) return true;
+  if (gates.some((gate) => gate.type === 'failure' && !isCrashPause(gate))) return true;
   return tasks.every((task) => isTaskSettled(task) && task.worktreePath === null);
 }
 

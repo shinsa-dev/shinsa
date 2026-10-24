@@ -19,6 +19,18 @@ describe('runCommand', () => {
     expect(result).toEqual({ ok: false, code: 3, stdout: 'hello', stderr: 'err', timedOut: false });
   });
 
+  test('hands every non-blank line of both streams over as it arrives, progress redraws included', async () => {
+    const lines: string[] = [];
+    const result = await runCommand(
+      ['sh', '-c', 'printf "one\\r\\ntwo\\rthree\\n\\n"; printf "warn\\n" >&2; printf "last"'],
+      createTempDir(),
+      { onLine: (line) => lines.push(line) }
+    );
+    expect([...lines].sort()).toEqual(['last', 'one', 'three', 'two', 'warn']);
+    expect(result.stdout).toBe('one\r\ntwo\rthree\n\nlast');
+    expect(result.stderr).toBe('warn');
+  });
+
   test('never prompts and passes extra environment', async () => {
     const result = await runCommand(
       ['sh', '-c', 'echo "$GIT_TERMINAL_PROMPT $GIT_OPTIONAL_LOCKS $GH_PROMPT_DISABLED $EXTRA"'],

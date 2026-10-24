@@ -65,7 +65,7 @@ export function createScheduleRoutes(
     const ref = secrets.writeRef(gateId, gate.taskId, readSecret(fields, 'value'));
     try {
       await engine.dispatch(
-        { type: 'gate.answer', gateId, decision: 'answer', response: ref },
+        { type: 'gate.answer', gateId, decision: 'reply', response: ref },
         { id: `secret:${gateId}:saved` }
       );
     } catch (error) {

@@ -46,7 +46,7 @@ describe('usage windows', () => {
       {
         id: 'five_hour',
         kind: 'session',
-        label: 'Current session',
+        label: '5-hour limit',
         model: null,
         usedPercent: 82,
         resetsAt: Date.parse(SESSION_RESET),
@@ -81,7 +81,7 @@ describe('usage windows', () => {
       {
         id: 'five_hour',
         kind: 'session',
-        label: 'Current session',
+        label: '5-hour limit',
         model: null,
         usedPercent: 100,
         resetsAt: null,
@@ -136,7 +136,7 @@ describe('usage windows', () => {
     });
     expect(windows.map((window) => [window.id, window.label, window.usedPercent])).toEqual([
       ['weekly:opus_4_1', 'Weekly · Opus 4.1', 12],
-      ['five_hour', 'Current session', 5],
+      ['five_hour', '5-hour limit', 5],
     ]);
   });
 

@@ -1,5 +1,4 @@
-import { homedir } from 'node:os';
-import { compareVersions, readProgramVersion } from '../versions.ts';
+import { compareVersions, type LocateDeps, locateProgram, readProgramVersion } from '../versions.ts';
 
 const CODEX_EXECUTABLE_ENV = 'CODEX_EXECUTABLE';
 
@@ -11,9 +10,7 @@ export type CodexExecutable =
   | { ok: true; path: string; version: string | null }
   | { ok: false; reason: 'not_installed' | 'outdated'; message: string; version: string | null };
 
-export interface CodexExecutableDeps {
-  env?: Record<string, string | undefined>;
-  which?: (command: string) => string | null;
+export interface CodexExecutableDeps extends LocateDeps {
   readVersion?: (path: string) => Promise<string | null>;
   minimumVersion?: string;
 }
@@ -26,18 +23,12 @@ export function readCodexVersion(path: string) {
   return readProgramVersion(path, parseCodexVersion);
 }
 
-function resolveOverride(env: Record<string, string | undefined>) {
-  const value = env[CODEX_EXECUTABLE_ENV]?.trim();
-  return value ? value.replace(/^~(?=\/|$)/, homedir()) : null;
-}
-
-function whichOnPath(command: string) {
-  return Bun.which(command, { PATH: Bun.env.PATH });
+export function locateCodex(deps: LocateDeps = {}) {
+  return locateProgram('codex', CODEX_EXECUTABLE_ENV, deps);
 }
 
 export async function resolveCodexExecutable(deps: CodexExecutableDeps = {}): Promise<CodexExecutable> {
-  const override = resolveOverride(deps.env ?? Bun.env);
-  const path = override ?? (deps.which ?? whichOnPath)('codex');
+  const { path } = locateCodex(deps);
   if (!path) {
     return {
       ok: false,
@@ -52,7 +43,7 @@ export async function resolveCodexExecutable(deps: CodexExecutableDeps = {}): Pr
     return {
       ok: false,
       reason: 'outdated',
-      message: `Codex ${version} is older than Shinsa needs (${minimum} or newer). Update it with \`npm install -g @openai/codex@latest\`.`,
+      message: `Codex ${version} is older than Shinsa needs (${minimum} or newer). Update it from Settings → Agents, or run \`codex update\`.`,
       version,
     };
   }

@@ -2,13 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import type { AccountUsage, ChatNotice, UsageWindow } from '@shinsa/core';
 import { writeJsonFile } from '../config/file.ts';
 import { describeError, log } from '../log/index.ts';
-import {
-  KEYED_WINDOWS,
-  type KeyedWindow,
-  listDistinctWindows,
-  resolveWindowId,
-  type UsageRead,
-} from './usage.ts';
+import { KEYED_WINDOWS, type KeyedWindow, resolveWindowId, type UsageRead } from './usage.ts';
 
 export type UsageReader = (accountId: string) => Promise<UsageRead>;
 
@@ -51,10 +45,7 @@ function readCache(path: string): Map<string, Entry> {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as { accounts?: Record<string, AccountUsage> };
     for (const [id, usage] of Object.entries(parsed.accounts ?? {})) {
       if (!Array.isArray(usage?.windows)) continue;
-      const windows = listDistinctWindows(
-        usage.windows.map((window) => ({ ...window, id: resolveWindowId(window.id) }))
-      );
-      entries.set(id, { usage: { ...usage, windows, source: 'cache' }, backoffUntil: null });
+      entries.set(id, { usage: { ...usage, source: 'cache' }, backoffUntil: null });
     }
   } catch (error) {
     log.warn('[Accounts] The usage cache could not be read; starting without it', {

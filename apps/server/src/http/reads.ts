@@ -63,7 +63,7 @@ function readFilter(url: URL): TaskFilter {
 
 function selectDecision(state: ShinsaState, task: Task) {
   const gate = listOpenGates(state, task.id)[0];
-  return gate ? { gateId: gate.id, kind: gate.kind, purpose: gate.purpose, title: gate.title } : null;
+  return gate ? { gateId: gate.id, type: gate.type, title: gate.title } : null;
 }
 
 export function resolveTaskView(state: ShinsaState, task: Task, base: string) {
@@ -104,7 +104,7 @@ function isListed(state: ShinsaState, task: Task, filter: TaskFilter) {
 
 function matchesQuery(state: ShinsaState, task: Task, words: string[]) {
   const repo = task.repoId ? (state.repos[task.repoId]?.name ?? '') : '';
-  const haystack = [task.id, task.handle ?? '', task.title, task.intent, task.branch ?? '', repo]
+  const haystack = [task.id, task.handle ?? '', task.title, task.request, task.branch ?? '', repo]
     .join(' ')
     .toLowerCase();
   return words.every((word) => haystack.includes(word));
@@ -227,16 +227,16 @@ export function createReadRoutes(engine: Engine, transcripts: Transcripts): Read
     const task = findTaskByRef(state, ref);
     return respond({
       task: resolveTaskView(state, task, url.origin),
-      intent: task.intent,
-      plan: task.spec
+      request: task.request,
+      plan: task.plan
         ? {
-            version: task.spec.version,
-            approved: Boolean(task.spec.approvedAt),
-            document: task.spec.document,
+            version: task.plan.version,
+            approved: Boolean(task.plan.approvedAt),
+            document: task.plan.document,
           }
         : null,
       summary: task.summary,
-      answer: task.answer ?? null,
+      result: task.result ?? null,
       findings: task.findings,
       gates: listOpenGates(state, task.id),
       waitsOn: listWaitsOn(state, task).map((other) => ({ id: other.id, title: other.title })),

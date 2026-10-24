@@ -42,7 +42,7 @@ async function boot(): Promise<Boot> {
     providers: new ProviderRegistry([agents.provider('claude', 'Claude')]),
     triage: (_state, task) =>
       Promise.resolve({
-        title: task.intent.split('\n')[0]?.slice(0, 40) ?? 'Task',
+        title: task.request.split('\n')[0]?.slice(0, 40) ?? 'Task',
         repoPath: repo.path,
         size: 'small',
         branch: `feat/t-${task.id.slice(-8)}`,
@@ -70,9 +70,9 @@ async function withWorld(body: (world: Boot) => Promise<void>) {
   }
 }
 
-async function createTask(world: Boot, intent: string) {
+async function createTask(world: Boot, request: string) {
   const before = new Set(Object.keys(world.shinsa.engine.state.tasks));
-  await world.shinsa.engine.dispatch({ type: 'task.create', intent, repoId: world.repoId });
+  await world.shinsa.engine.dispatch({ type: 'task.create', request, repoId: world.repoId });
   const taskId = Object.keys(world.shinsa.engine.state.tasks).find((id) => !before.has(id));
   if (!taskId) throw new Error('no task');
   return taskId;
@@ -142,7 +142,7 @@ describe('a schedule, end to end', () => {
       expect(caught?.runs.map((run) => [run.outcome, run.at])).toEqual([['sent', wake]]);
       expect(caught?.nextRunAt).toBe(wake + HOUR);
       const first = tasksFrom(world, schedule.id)[0] as Task;
-      expect(first.intent).toBe('Audit the dependencies.');
+      expect(first.request).toBe('Audit the dependencies.');
       expect(first.activity[0]?.text).toBe('Started by the schedule “Audit”');
 
       setSystemTime(wake + HOUR);
@@ -195,7 +195,7 @@ describe('a signed webhook and its secret, end to end', () => {
       const typed = await postJson(world, '/api/commands', {
         type: 'gate.answer',
         gateId: gate.id,
-        decision: 'answer',
+        decision: 'reply',
         response: SECRET,
       });
       expect(typed.status).toBe(400);
@@ -233,7 +233,7 @@ describe('a signed webhook and its secret, end to end', () => {
       const schedule = Object.values(world.shinsa.engine.state.schedules)[0];
       const hooked = tasksFrom(world, schedule?.id ?? '');
       expect(hooked).toHaveLength(1);
-      expect(hooked[0]?.intent).toMatch(
+      expect(hooked[0]?.request).toMatch(
         /^Review the push to <webhook-data-[0-9a-f]+>refs\/heads\/main<\/webhook-data-[0-9a-f]+>/
       );
 

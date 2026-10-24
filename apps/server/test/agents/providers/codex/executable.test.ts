@@ -42,7 +42,7 @@ describe('the codex Shinsa runs', () => {
       ok: false,
       reason: 'outdated',
       version: '0.100.0',
-      message: `Codex 0.100.0 is older than Shinsa needs (${CODEX_MINIMUM_VERSION} or newer). Update it with \`npm install -g @openai/codex@latest\`.`,
+      message: `Codex 0.100.0 is older than Shinsa needs (${CODEX_MINIMUM_VERSION} or newer). Update it from Settings → Agents, or run \`codex update\`.`,
     });
   });
 

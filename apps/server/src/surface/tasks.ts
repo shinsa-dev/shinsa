@@ -100,7 +100,7 @@ async function buildTaskCreate(values: Values, client: Parameters<SurfaceSpec['r
   const waitsOn = await findTaskIds(client, readList(values, 'after'));
   return {
     type: 'task.create' as const,
-    intent: readValue(values, 'request'),
+    request: readValue(values, 'request'),
     repoId: await resolveOptionalRepoId(client, readValue(values, 'repo')),
     ...(await buildProjectChoice(client, values)),
     ...(values.priority ? { priority: values.priority as (typeof TASK_PRIORITIES)[number] } : {}),
@@ -193,6 +193,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
     path: ['tasks', 'create'],
     summary: 'Create a task. Shinsa classifies it, plans it and builds it.',
     command: 'task.create',
+    agentTool: 'create_task',
     fields: [
       {
         name: 'request',
@@ -241,7 +242,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
         kind: 'choice',
         choices: MESSAGE_KINDS,
         description:
-          'feedback on the current round, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides.',
+          'feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides.',
       },
     ],
     build: async (values, client) => {
@@ -360,7 +361,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: (values) => `Priority set to ${readValue(values, 'priority')}.`,
   }),
   defineCommand({
-    path: ['tasks', 'block'],
+    path: ['tasks', 'wait-on'],
     summary: 'Make a task wait on other tasks. The list replaces the tasks it waits on now.',
     command: 'task.wait_on',
     fields: [
@@ -381,7 +382,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Saved what it waits on.',
   }),
   defineCommand({
-    path: ['tasks', 'unblock'],
+    path: ['tasks', 'stop-waiting'],
     summary: 'Stop a task waiting on other tasks.',
     command: 'task.wait_on',
     fields: [TASK_FIELD],
@@ -417,15 +418,15 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Saved the account.',
   }),
   defineCommand({
-    path: ['tasks', 'check-now'],
-    summary: "Fire a waiting agent's next check now.",
+    path: ['tasks', 'check-in-now'],
+    summary: "Fire a waiting agent's next check-in now.",
     command: 'monitor.check_in_now',
     fields: [TASK_FIELD],
     build: async (values, client) => ({
       type: 'monitor.check_in_now',
       taskId: await findTaskId(client, readValue(values, 'task')),
     }),
-    done: () => 'Checking now.',
+    done: () => 'Checking in now.',
   }),
   defineCommand({
     path: ['tasks', 'resume-now'],

@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import type { Run, Task } from '@shinsa/core';
-import { assertProtocol, resolveCommitMessage, storeEvidence } from '../../src/agents/handover.ts';
+import {
+  assertProtocol,
+  HANDED_OVER,
+  resolveCommitMessage,
+  storeEvidence,
+} from '../../src/agents/handover.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
@@ -10,7 +15,7 @@ describe('commits', () => {
     title: 'Fix tab scroll',
     branch: 'fix/tab-scroll',
     fixFor: 'checks',
-    spec: { document: { plan: [{ title: 'Find the overflow', detail: '' }] } },
+    plan: { document: { phases: [{ title: 'Find the overflow', detail: '' }] } },
   } as unknown as Task;
 
   test('a phase commits under the branch type with the phase title', () => {
@@ -22,7 +27,7 @@ describe('commits', () => {
   test('a phase title that starts with the commit type does not repeat it', () => {
     const fixTask = {
       ...task,
-      spec: { document: { plan: [{ title: 'Fix add() and empty average()', detail: '' }] } },
+      plan: { document: { phases: [{ title: 'Fix add() and empty average()', detail: '' }] } },
     } as unknown as Task;
     expect(resolveCommitMessage(fixTask, { role: 'builder', phaseIndex: 0 } as Run)).toBe(
       'fix: add() and empty average()'
@@ -44,6 +49,17 @@ describe('commit messages', () => {
       'feat: add search'
     );
     expect(resolveCommitMessage(plain, { role: 'fixer' } as Run)).toBe('fix: apply requested changes');
+  });
+});
+
+describe('the reply to a hand-over', () => {
+  test('tells the agent the hand-over is its reply and to stop without pointing at it or its turn ending', () => {
+    expect(HANDED_OVER).toContain('the human reads it in the chat as your reply.');
+    expect(HANDED_OVER).toContain('Stop here and write nothing more');
+    expect(HANDED_OVER).toContain('never point at it, repeat or summarise it');
+    expect(HANDED_OVER).toContain('never say your turn is over');
+    expect(HANDED_OVER).not.toContain('Shinsa');
+    expect(HANDED_OVER).not.toContain('sees this');
   });
 });
 

@@ -235,8 +235,43 @@ describe('loading what a run left out', () => {
     expect(closed).toBe(2);
   });
 
+  test('finds what the human named loosely, but never guesses between two', async () => {
+    const loader = createLoader({
+      deferred: [createServer('maple'), createServer('echo')],
+      deferredSkills: [
+        {
+          name: 'frontend-design:frontend-design',
+          description: 'Designs.',
+          path: '/nowhere/SKILL.md',
+        },
+      ],
+    });
+    expect(await loader.handle('load_mcp_server', { name: 'the Maple MCP' })).toStartWith(
+      'Connected to maple through Shinsa.'
+    );
+    expect(await loader.handle('load_mcp_server', { name: 'Maple MCP server' })).toBe(
+      'maple is already loaded in this run.'
+    );
+    expect(
+      await loader.handle('call_mcp_tool', { server: 'the maple server', tool: 'echo', arguments: {} })
+    ).toBe('hello');
+    await expect(loader.handle('load_mcp_server', { name: 'the Linear MCP' })).rejects.toThrow(
+      'the Linear MCP is already loaded in this run. Use its tools.'
+    );
+    await expect(loader.handle('load_mcp_server', { name: 'maple or echo' })).rejects.toThrow(
+      'There is no MCP server named maple or echo to load. These can be loaded: maple, echo.'
+    );
+    await expect(loader.handle('load_mcp_server', { name: 'the MCP' })).rejects.toThrow(
+      'There is no MCP server named the MCP to load.'
+    );
+    await expect(loader.handle('load_skill', { name: 'the frontend design skill' })).rejects.toThrow(
+      'ENOENT'
+    );
+  });
+
   test('reads a skill that was left out, without its front matter', async () => {
     expect(await createLoader().handle('load_skill', { name: 'release' })).toBe('# release');
+    expect(await createLoader().handle('load_skill', { name: 'the Release skill' })).toBe('# release');
     expect(resolveSkillBody('No front matter.')).toBe('No front matter.');
   });
 });

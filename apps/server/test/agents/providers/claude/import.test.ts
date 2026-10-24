@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { convertClaudeSession } from '../../../../src/agents/providers/claude/import.ts';
 
-describe('converting and migrating transcripts', () => {
+describe('importing a Claude Code session', () => {
   test('a Claude Code session becomes chat entries with the closing reply final', () => {
     const lines = [
       { type: 'user', timestamp: '2026-10-01T10:00:00Z', message: { content: 'Fix the export' } },

@@ -1,4 +1,5 @@
 import {
+  isAgentQuestion,
   isDelegatedRun,
   isTaskSettled,
   listLiveRuns,
@@ -17,7 +18,6 @@ export const COMPACTION_NEAR_LIMIT = 0.8;
 const RESUMED_ROLES = new Set<RunRole>([
   'builder',
   'fixer',
-  'shipper',
   'answerer',
   'investigator',
   'researcher',
@@ -46,7 +46,7 @@ function isNearLimit({ usedTokens, maxTokens }: SessionContext) {
 }
 
 function hasPendingRequest(state: ShinsaState, taskId: string) {
-  return listOpenGates(state, taskId).some((gate) => gate.purpose === 'agent_question');
+  return listOpenGates(state, taskId).some(isAgentQuestion);
 }
 
 export function resolveCompactionWindow(

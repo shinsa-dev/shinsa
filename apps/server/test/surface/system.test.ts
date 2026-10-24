@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { ProgramVersion, VersionsSnapshot } from '@shinsa/core';
 import { createAccountsSnapshot, createFakeClient, runSpec } from './fixtures.ts';
 
 const SNAPSHOT = createAccountsSnapshot();
@@ -238,5 +239,76 @@ describe('the server', () => {
     );
     const unfinished = createFakeClient({ '/api/onboarding': status(false) });
     expect((await runSpec(unfinished, ['setup', 'status'])).text).toContain('Setup is not finished.');
+  });
+});
+
+describe('versions', () => {
+  const program = (patch: Partial<ProgramVersion>): ProgramVersion => ({
+    id: 'claude',
+    label: 'Claude Code',
+    path: '/opt/bin/claude',
+    version: '2.1.287',
+    latest: '2.1.310',
+    minimum: '2.1.280',
+    status: 'update_available',
+    updater: 'claude update',
+    override: null,
+    updating: false,
+    ...patch,
+  });
+  const snapshot: VersionsSnapshot = {
+    programs: [
+      program({}),
+      program({
+        id: 'codex',
+        label: 'Codex',
+        status: 'outdated',
+        version: '0.120.0',
+        latest: null,
+        minimum: '0.153.0',
+      }),
+      program({ id: 'codex', label: 'Codex', status: 'unknown', version: null, override: '/opt/wrap' }),
+      program({ status: 'not_installed', path: null, version: null }),
+      program({ status: 'unknown', version: null }),
+      program({ status: 'current', version: '2.1.310' }),
+    ],
+    sdk: {
+      name: '@anthropic-ai/claude-agent-sdk',
+      version: '0.3.280',
+      latest: '0.3.310',
+      claudeCodeVersion: '2.1.280',
+    },
+    latestCheckedAt: 1,
+  };
+
+  test('list shows each program’s version, the latest, the minimum and how to update it, then the SDK', async () => {
+    const fake = createFakeClient({ '/api/versions': snapshot });
+    expect((await runSpec(fake, ['versions', 'list'])).text.split('\n')).toEqual([
+      'Claude Code: 2.1.287, latest 2.1.310, needs 2.1.280 or newer  (update with `shinsa versions update claude`)',
+      'Codex: 0.120.0, needs 0.153.0 or newer  (update with `shinsa versions update codex`)',
+      'Codex: runs /opt/wrap, latest 2.1.310, needs 2.1.280 or newer',
+      'Claude Code: not installed, latest 2.1.310, needs 2.1.280 or newer',
+      'Claude Code: unknown version, latest 2.1.310, needs 2.1.280 or newer',
+      'Claude Code: 2.1.310, latest 2.1.310, needs 2.1.280 or newer',
+      'Claude Agent SDK: 0.3.280, latest 0.3.310 (pairs with Claude Code 2.1.280)',
+    ]);
+    const unknown = { ...snapshot, programs: [], sdk: { ...snapshot.sdk, latest: null } };
+    expect((await runSpec(createFakeClient({ '/api/versions': unknown }), ['versions', 'list'])).text).toBe(
+      'Claude Agent SDK: 0.3.280 (pairs with Claude Code 2.1.280)'
+    );
+  });
+
+  test('update runs the program’s updater and says how it went', async () => {
+    const fake = createFakeClient({
+      '/api/versions/update': {
+        ok: true,
+        message: 'Updated Claude Code to 2.1.310.',
+        versions: { ...snapshot, programs: [] },
+      },
+    });
+    expect((await runSpec(fake, ['versions', 'update', 'claude'])).text).toBe(
+      'Updated Claude Code to 2.1.310.\nClaude Agent SDK: 0.3.280, latest 0.3.310 (pairs with Claude Code 2.1.280)'
+    );
+    expect(fake.posts).toEqual([{ path: '/api/versions/update', body: { program: 'claude' } }]);
   });
 });

@@ -4,7 +4,7 @@ import { appendFileSync, type FSWatcher, mkdtempSync, rmSync, writeFileSync } fr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChatEntry } from '@shinsa/core';
-import { readChatEntries, Transcripts, UNREADABLE_LINE } from '../../../src/agents/transcripts/index.ts';
+import { Transcripts, UNREADABLE_LINE } from '../../../src/agents/transcripts/index.ts';
 import { until } from '../../helpers/index.ts';
 
 describe('transcripts', () => {
@@ -50,70 +50,15 @@ describe('transcripts', () => {
     expect(transcripts.listEntries('run-2')).toHaveLength(1);
   });
 
-  test('a legacy file reads as chat entries', () => {
+  test('a line that is not a chat entry reads as an unreadable line', () => {
     const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
     writeFileSync(
-      join(dir, 'old.jsonl'),
+      join(dir, 'other.jsonl'),
       `${JSON.stringify({ at: 1, kind: 'assistant', text: 'hi', tool: null })}\n`
     );
-    expect(new Transcripts(dir).listEntries('old')).toMatchObject([
-      { type: 'agent', phase: 'final', text: 'hi' },
+    expect(new Transcripts(dir).listEntries('other')).toMatchObject([
+      { type: 'error', text: UNREADABLE_LINE },
     ]);
-  });
-});
-
-describe('readChatEntries', () => {
-  test('old Claude-shaped transcripts are migrated on read', () => {
-    const entries = readChatEntries([
-      { at: 1, kind: 'prompt', text: 'Work on: retry', tool: null, source: 'shinsa' },
-      { at: 2, kind: 'assistant', text: 'Starting.', tool: null },
-      {
-        at: 3,
-        kind: 'tool',
-        text: 'bun run dev',
-        tool: 'Bash',
-        toolUseId: 't1',
-        input: '{"command":"bun run dev"',
-      },
-      {
-        at: 4,
-        kind: 'tool_result',
-        text: '<tool_use_error>boom</tool_use_error>',
-        tool: null,
-        toolUseId: 't1',
-      },
-      {
-        at: 5,
-        kind: 'tool',
-        text: 'x',
-        tool: 'mcp__shinsa__complete_phase',
-        toolUseId: 't2',
-        input: '{"summary":"Done."}',
-      },
-      { at: 6, kind: 'assistant', text: 'Handed over.', tool: null },
-      { at: 7, kind: 'error', text: 'Crashed.', tool: null },
-      { v: 2, id: 'now', at: 8, type: 'error', text: 'Current.' },
-      { at: 9, kind: 'mystery', text: '?', tool: null },
-    ]);
-    expect(entries).toMatchObject([
-      { v: 2, at: 1, type: 'user', from: 'shinsa', text: 'Work on: retry' },
-      { at: 2, type: 'agent', phase: 'interim', text: 'Starting.' },
-      { at: 3, type: 'tool_call', callId: 't1', tool: { kind: 'command', command: 'bun run dev' } },
-      { at: 4, type: 'tool_result', callId: 't1', status: 'error', output: 'boom' },
-      {
-        at: 5,
-        type: 'tool_call',
-        tool: { kind: 'shinsa', name: 'complete_phase', args: { summary: 'Done.' } },
-      },
-      { at: 6, type: 'agent', phase: 'final', text: 'Handed over.' },
-      { at: 7, type: 'error', text: 'Crashed.' },
-      { id: 'now', type: 'error', text: 'Current.' },
-    ]);
-  });
-
-  test('current entries pass through untouched', () => {
-    const entry: ChatEntry = { v: 2, id: 'a', at: 1, type: 'error', text: 'boom' };
-    expect(readChatEntries([entry])).toEqual([entry]);
   });
 });
 

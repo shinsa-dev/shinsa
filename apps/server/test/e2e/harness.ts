@@ -6,13 +6,15 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import {
   type ChatNotice,
   type Gate,
+  type GateType,
   listActiveRuns,
   listOpenGates,
+  type PlanDocument,
   type Run,
   type RunFailure,
   type RunRole,
-  type PlanDocument,
   type Task,
+  type TaskShape,
 } from '@shinsa/core';
 import { RunSupervisor, type SupervisorOptions, Transcripts } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES, mapClaudeTool } from '../../src/agents/providers/claude/index.ts';
@@ -35,7 +37,7 @@ import { createConfigAt } from '../helpers/config.ts';
 
 export const PLAN: PlanDocument = {
   goal: 'Add the two greeting files.',
-  plan: [
+  phases: [
     { title: 'Write the first file', detail: 'Create a.txt.' },
     { title: 'Write the second file', detail: 'Create b.txt.' },
   ],
@@ -95,7 +97,6 @@ interface SessionRecord {
 }
 
 const DEFAULT_SCRIPTS: Record<RunRole, AgentScript> = {
-  triage: async () => undefined,
   planner: async (agent) => {
     const operates = agent.prompt.includes(IMPACT_REQUIRED);
     await agent.call('propose_plan', toolPlan(operates ? { ...PLAN, impact: IMPACT } : PLAN));
@@ -112,14 +113,11 @@ const DEFAULT_SCRIPTS: Record<RunRole, AgentScript> = {
   fixer: async (agent) => {
     await agent.call('complete_fix', { summary: 'Fixed it.' });
   },
-  shipper: async (agent) => {
-    await agent.call('complete_fix', { summary: 'Fixed it.' });
-  },
   answerer: async (agent) => {
     await agent.call('answer', { answer: 'It lives in a.txt.' });
   },
   investigator: async (agent) => {
-    await agent.call('report_diagnosis', { findings: 'The greeting files were never written.' });
+    await agent.call('report_diagnosis', { diagnosis: 'The greeting files were never written.' });
   },
   researcher: async (agent) => {
     await agent.call('submit_report', { report: 'Plain text files are the simplest option.' });
@@ -132,7 +130,7 @@ const DEFAULT_SCRIPTS: Record<RunRole, AgentScript> = {
 export function toolPlan(plan: PlanDocument) {
   return {
     goal: plan.goal,
-    plan: plan.plan,
+    phases: plan.phases,
     behaviour: plan.behaviour,
     approach: plan.approach,
     files: plan.files,
@@ -151,7 +149,7 @@ function phaseReport(summary: string) {
   return {
     summary,
     spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
-    decisions: [],
+    judgement_calls: [],
   };
 }
 
@@ -412,6 +410,7 @@ export class World {
   providers: ProviderRegistry | null = null;
   supervise: ((engine: Engine) => Partial<SupervisorOptions>) | null = null;
   dependOn: string[] = [];
+  readonly #shapes = new Map<string, TaskShape>();
   classify: QuickJson | null = null;
   live = false;
   readonly #env: Record<string, string | undefined> = {};
@@ -511,9 +510,11 @@ export class World {
       resolveLogin: () => Promise.resolve(null),
       triage: async (state, task, local) => {
         const waitsOn = this.dependOn.flatMap((id) => state.tasks[id] ?? []);
+        const shape = this.#shapes.get(task.request);
         this.dependOn = [];
         const result = await resolveTriage(state, task, local, this.classify ?? quick.classify);
-        return result ? { ...result, waitsOn } : result;
+        if (!result || !shape) return result ? { ...result, waitsOn } : result;
+        return { ...result, waitsOn, shape, reasons: { ...result.reasons, shape: 'The test chose it.' } };
       },
     });
     engine.onEffect((effect, context) => effects.apply(effect, context));
@@ -587,13 +588,14 @@ export class World {
   }
 
   async createTask(
-    intent = 'Add the greeting files',
-    options: { priority?: Task['priority']; waitsOn?: string[] } = {}
+    request = 'Add the greeting files',
+    options: { priority?: Task['priority']; waitsOn?: string[]; shape?: TaskShape } = {}
   ) {
     const before = new Set(Object.keys(this.state.tasks));
+    if (options.shape) this.#shapes.set(request, options.shape);
     await this.engine.dispatch({
       type: 'task.create',
-      intent,
+      request,
       repoId: this.repoId,
       priority: options.priority,
       waitsOn: options.waitsOn,
@@ -627,15 +629,11 @@ export class World {
     );
   }
 
-  async untilGate(taskId: string, kind?: Gate['kind'], purpose?: Gate['purpose']) {
-    await this.until(`a ${purpose ?? kind ?? 'any'} gate on ${taskId}`, () =>
-      this.gates(taskId).some(
-        (gate) => (!kind || gate.kind === kind) && (!purpose || gate.purpose === purpose)
-      )
+  async untilGate(taskId: string, type?: GateType) {
+    await this.until(`a ${type ?? 'any'} gate on ${taskId}`, () =>
+      this.gates(taskId).some((gate) => !type || gate.type === type)
     );
-    return this.gates(taskId).find(
-      (gate) => (!kind || gate.kind === kind) && (!purpose || gate.purpose === purpose)
-    ) as Gate;
+    return this.gates(taskId).find((gate) => !type || gate.type === type) as Gate;
   }
 
   async answer(gate: Gate, decision: NonNullable<Gate['decision']>, response: string | null = null) {

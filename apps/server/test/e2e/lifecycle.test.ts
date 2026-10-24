@@ -17,8 +17,8 @@ async function open(options?: Parameters<typeof World.create>[0]) {
   return world;
 }
 
-async function toReviewGate(w: World, intent?: string) {
-  const taskId = await w.createTask(intent);
+async function toReviewGate(w: World, request?: string) {
+  const taskId = await w.createTask(request);
   await w.untilStage(taskId, 'awaiting_review');
   return taskId;
 }
@@ -47,7 +47,7 @@ describe('a task from request to merge', () => {
     expect(w.agents.of('reviewer')[0]?.prompt).toContain('You did not write this code.');
 
     expect(task.checkResults?.map((check) => check.outcome)).toEqual(['pass', 'pass']);
-    expect(task.report?.phases.map((phase) => phase.summary)).toEqual([
+    expect(task.report?.sections.map((phase) => phase.summary)).toEqual([
       'Wrote the file for phase 1.',
       'Wrote the file for phase 2.',
     ]);
@@ -55,7 +55,7 @@ describe('a task from request to merge', () => {
       'fix: write the second file',
       'fix: write the first file',
     ]);
-    expect(w.gates(taskId).map((gate) => gate.kind)).toEqual(['review']);
+    expect(w.gates(taskId).map((gate) => gate.type)).toEqual(['review']);
     expect(w.activeRuns()).toHaveLength(0);
   });
 
@@ -117,7 +117,7 @@ describe('fix loops', () => {
   test('the same failure twice stops the loop with a failure gate', async () => {
     const w = await open({ checks: ['test -f never.txt'] });
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'question', 'failure');
+    const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('Fixing is not making progress');
     expect(w.agents.of('fixer')).toHaveLength(2);
     expect(w.activeRuns(taskId)).toHaveLength(0);
@@ -170,9 +170,9 @@ describe('talking to agents', () => {
       await agent.call('propose_plan', toolPlan(PLAN));
     });
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'question', 'agent_question');
+    const gate = await w.untilGate(taskId, 'question');
     expect(gate.title).toBe('Lowercase or uppercase?');
-    await w.answer(gate, 'answer', 'Lowercase.');
+    await w.answer(gate, 'reply', 'Lowercase.');
     await w.untilStage(taskId, 'awaiting_review');
     expect(answer).toBe('The human answered: Lowercase.');
   });
@@ -216,7 +216,7 @@ describe('recovery', () => {
       }
     );
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'question', 'failure');
+    const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('The builder paused');
     expect(gate.body).toBe('overloaded');
     await w.engine.dispatch({ type: 'task.message', taskId, text: 'Try again, it was a blip.' });
@@ -258,7 +258,9 @@ describe('recovery', () => {
     expect(w.task(taskId).stage).toBe('cancelled');
     expect(w.agents.of('planner')[0]?.cancelled).toBe(true);
     expect(existsSync(worktree)).toBe(false);
-    expect(late).not.toBe('Handed over to Shinsa. End your turn now.');
+    expect(late).not.toBe(
+      'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.'
+    );
   });
 });
 

@@ -5,6 +5,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { ExtensionsSnapshot, McpServerSummary } from '@shinsa/core';
 import type { ModelSource } from '../../src/agents/index.ts';
+import { resolveClaudeExtensions } from '../../src/agents/providers/claude/extensions.ts';
 import type { AgentSessionInput } from '../../src/agents/providers/index.ts';
 import { inspectRepo } from '../../src/git/index.ts';
 import { type Shinsa, startShinsa } from '../../src/serve.ts';
@@ -166,6 +167,7 @@ describe('MCP servers and skills, end to end', () => {
     expect(refused.body).toMatchObject({ error: { code: 'server_name_invalid' } });
     await post(shinsa, '/servers/choose', { serverId: 'claude:echo', enabled: false });
     await post(shinsa, '/skills/choose', { skillId: 'user:animate', enabled: false });
+    await post(shinsa, '/optimizer', { enabled: false });
 
     const candidate = await inspectRepo(repo.path);
     await shinsa.engine.dispatch({
@@ -174,7 +176,7 @@ describe('MCP servers and skills, end to end', () => {
       projectName: null,
     });
     const [repoId = ''] = Object.keys(shinsa.engine.state.repos);
-    await shinsa.engine.dispatch({ type: 'task.create', intent: 'What is open?', repoId, shape: 'answer' });
+    await shinsa.engine.dispatch({ type: 'task.create', request: 'What is open?', repoId, mode: 'ask' });
     await until('the agent to start', () => sessions.length === 1);
     const given = sessions[0]?.extensions;
     expect(given?.servers.map((server) => [server.name, server.claudeName])).toEqual([
@@ -305,7 +307,7 @@ async function listAgentTools(input: AgentSessionInput) {
   return tools.map((tool) => tool.name);
 }
 
-async function startTask(shinsa: Shinsa, root: string) {
+async function startTask(shinsa: Shinsa, root: string, request = 'What is open?') {
   const candidate = await inspectRepo(root);
   if (Object.keys(shinsa.engine.state.repos).length === 0) {
     await shinsa.engine.dispatch({
@@ -315,7 +317,7 @@ async function startTask(shinsa: Shinsa, root: string) {
     });
   }
   const [repoId = ''] = Object.keys(shinsa.engine.state.repos);
-  await shinsa.engine.dispatch({ type: 'task.create', intent: 'What is open?', repoId, shape: 'answer' });
+  await shinsa.engine.dispatch({ type: 'task.create', request, repoId, mode: 'ask' });
 }
 
 async function readExtensions(shinsa: Shinsa) {
@@ -342,6 +344,7 @@ async function startOptimizedShinsa(hotLoad: boolean) {
 describe('the context optimizer, end to end', () => {
   test('one server defined in Claude Code, a project and Codex is one row, checked once and loaded once', async () => {
     const { shinsa, repo, agents } = await startOptimizedShinsa(false);
+    await post(shinsa, '/optimizer', { enabled: false });
     const listed = await readExtensions(shinsa);
     const echo = listed.servers.filter((server) => server.name === 'echo');
     expect(echo).toHaveLength(1);
@@ -375,7 +378,7 @@ describe('the context optimizer, end to end', () => {
     expect((chosen.body as unknown as ExtensionsSnapshot).optimizer).toEqual({
       enabled: true,
       days: 14,
-      skills: false,
+      skills: true,
     });
     expect(findServer(chosen.body, 'echo')).toMatchObject({ deferred: true });
     expect(findServer(chosen.body, 'daily')).toMatchObject({ deferred: false });
@@ -393,6 +396,32 @@ describe('the context optimizer, end to end', () => {
     const loaded = await turn.call('load_mcp_server', { name: 'echo' });
     expect(loaded).toStartWith('Connected to echo through Shinsa.');
     expect(await turn.call('call_mcp_tool', { server: 'echo', tool: 'echo', arguments: {} })).toBe(
+      'from echo'
+    );
+    await finishTurn(shinsa, turn);
+  });
+
+  test('starts on, and an agent finds and uses a left-out server the human names loosely', async () => {
+    const { shinsa, repo, agents, usageRead } = await startOptimizedShinsa(false);
+    await usageRead();
+    await post(shinsa, '/check', {});
+    const listed = await readExtensions(shinsa);
+    expect(listed.optimizer).toEqual({ enabled: true, days: 14, skills: true });
+    expect(findServer(listed, 'echo')).toMatchObject({ deferred: true });
+
+    await startTask(shinsa, repo.path, 'Ask the Echo MCP what is open.');
+    await until('the agent to start', () => agents.turns.length === 1);
+    const turn = agents.turns[0] as ScriptedTurn;
+    expect(turn.input.prompt).toContain('Ask the Echo MCP what is open.');
+    expect(turn.input.extensions?.servers.map((server) => server.name)).toEqual(['daily']);
+    const instructions = resolveClaudeExtensions(turn.input.extensions).instructions ?? '';
+    expect(instructions).toContain('- MCP servers: echo (4 tools). Load one with `load_mcp_server`.');
+    expect(instructions).toContain('When the human names a server or a skill you do not have');
+
+    expect(await turn.call('load_mcp_server', { name: 'the Echo MCP' })).toStartWith(
+      'Connected to echo through Shinsa.'
+    );
+    expect(await turn.call('call_mcp_tool', { server: 'Echo', tool: 'echo', arguments: {} })).toBe(
       'from echo'
     );
     await finishTurn(shinsa, turn);

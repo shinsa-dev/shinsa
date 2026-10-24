@@ -163,7 +163,7 @@ describe('starting a delegated run', () => {
     ]);
   });
 
-  test('a delegated task whose own checkout cannot be made fails and says why', async () => {
+  test('a delegation whose own checkout cannot be made fails and says why', async () => {
     const sessions = createSessions();
     const child = finishedChild({
       role: 'builder',
@@ -239,13 +239,13 @@ describe('the delegation tools in a session', () => {
     const handle = (provider: string) =>
       sessions.started[0]?.input.tools.handle(
         'delegate_task',
-        { task: 'Check it.', role: 'reviewer', provider },
+        { brief: 'Check it.', role: 'reviewer', provider },
         new AbortController().signal
       );
     await expect(handle('nope')).rejects.toThrow(
-      'Shinsa has no agent provider "nope". Leave provider unset to use the default.'
+      'There is no agent provider "nope". Leave provider unset to use the default.'
     );
-    await expect(handle('claude')).rejects.toThrow('The task was not delegated. Try again.');
+    await expect(handle('claude')).rejects.toThrow('Nothing was delegated. Try again.');
     sessions.started[0]?.finish();
     await running;
   });
@@ -275,7 +275,7 @@ describe('the delegation tools in a session', () => {
     const delegate = () =>
       sessions.started[0]?.input.tools.handle(
         'delegate_task',
-        { task: 'Check it.', role: 'reviewer' },
+        { brief: 'Check it.', role: 'reviewer' },
         new AbortController().signal,
         7
       );
@@ -298,10 +298,10 @@ describe('delivering results into a running turn', () => {
     await supervisor.deliver('run-1', 1);
     await until('the steer', () => sessions.started[0]?.steers.length === 1);
     expect(sessions.started[0]?.steers[0]).toContain('Found two greetings.');
-    expect(ofType(dispatched, 'delegation.delivered')).toEqual([
-      { type: 'delegation.delivered', runId: 'run-1', generation: 1, items: ['result:child'] },
+    expect(ofType(dispatched, 'delegation.record_delivery')).toEqual([
+      { type: 'delegation.record_delivery', runId: 'run-1', generation: 1, items: ['result:child'] },
     ]);
-    expect(idsOf(context, 'delegation.delivered')).toEqual(['delegation.delivered:run-1:1']);
+    expect(idsOf(context, 'delegation.record_delivery')).toEqual(['delegation.record_delivery:run-1:1']);
     expect(transcripts.listEntries('run-1').at(-1)).toMatchObject({
       type: 'notice',
       notice: { kind: 'delegation', event: 'reported', runIds: ['child'] },
@@ -341,8 +341,8 @@ describe('delivering results into a running turn', () => {
     await other;
     await supervisor.deliver('run-1', 1);
     expect(sessions.started[0]?.steers).toEqual([]);
-    expect(ofType(dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: 1, items: [] },
+    expect(ofType(dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: 1, items: [] },
     ]);
     sessions.started[0]?.finish();
     await parent;
@@ -360,10 +360,10 @@ describe('delivering results into a running turn', () => {
     const [text] = sessions.started[0]?.steers ?? [];
     sessions.started[0]?.finish({ undelivered: [text ?? '', 'Your own message'] });
     await running;
-    expect(ofType(dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: null, items: ['result:child'] },
+    expect(ofType(dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: null, items: ['result:child'] },
     ]);
-    expect(idsOf(context, 'delegation.undelivered')).toEqual(['delegation.undelivered:run-1:1:steered']);
+    expect(idsOf(context, 'delegation.release')).toEqual(['delegation.release:run-1:1:steered']);
   });
 
   test('a report steered into a session that is released while it asks goes back to be delivered', async () => {
@@ -407,8 +407,8 @@ describe('delivering results into a running turn', () => {
     expect(await question).toBe('The question was withdrawn. Continue with your best judgement.');
     await running;
     expect(ofType(dispatched, 'run.end')).toEqual([]);
-    expect(ofType(dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: null, items: ['result:child'] },
+    expect(ofType(dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: null, items: ['result:child'] },
     ]);
   });
 
@@ -421,8 +421,8 @@ describe('delivering results into a running turn', () => {
     const running = supervisor.execute('run-1');
     await supervisor.deliver('run-1', 1);
     await running;
-    expect(ofType(dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: 1, items: [] },
+    expect(ofType(dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: 1, items: [] },
     ]);
   });
 
@@ -471,8 +471,8 @@ describe('delivering results into a running turn', () => {
     await until('the third attempt', () => steers.length === 3);
     finishes[2]?.({ outcome: 'failed', summary: null, failure: limit });
     await running;
-    expect(ofType(dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: null, items: ['result:child'] },
+    expect(ofType(dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: null, items: ['result:child'] },
     ]);
     expect(ofType(dispatched, 'message.deliver')).toEqual([]);
   });
@@ -481,8 +481,8 @@ describe('delivering results into a running turn', () => {
     const idle = setup([createRun({ cohort: cohort('steer') }), finishedChild()]);
     await idle.supervisor.deliver('run-1', 1);
     await idle.supervisor.deliver('run-1', 7);
-    expect(ofType(idle.dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: 1, items: [] },
+    expect(ofType(idle.dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: 1, items: [] },
     ]);
     const refusing = createSessions({ refuseSteer: true });
     const refused = setup([createRun({ cohort: cohort('steer') }), finishedChild()], {
@@ -491,15 +491,15 @@ describe('delivering results into a running turn', () => {
     const running = refused.supervisor.execute('run-1');
     await until('the session', () => refusing.started.length === 1);
     await refused.supervisor.deliver('run-1', 1);
-    expect(ofType(refused.dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: 1, items: [] },
+    expect(ofType(refused.dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: 1, items: [] },
     ]);
     refusing.started[0]?.finish();
     await running;
   });
 });
 
-describe('waking a run that waits on its delegated tasks', () => {
+describe('waking a run that waits on its delegations', () => {
   test('the report starts a turn, and counts as delivered once the session is linked', async () => {
     const sessions = createSessions();
     const context = setup(
@@ -515,11 +515,11 @@ describe('waking a run that waits on its delegated tasks', () => {
     sessions.started[0]?.input.onSession('old');
     sessions.started[0]?.finish();
     await waking;
-    expect(ofType(dispatched, 'delegation.delivered')).toEqual([
-      { type: 'delegation.delivered', runId: 'run-1', generation: 1, items: ['result:child'] },
+    expect(ofType(dispatched, 'delegation.record_delivery')).toEqual([
+      { type: 'delegation.record_delivery', runId: 'run-1', generation: 1, items: ['result:child'] },
     ]);
-    expect(ofType(dispatched, 'delegation.undelivered')).toEqual([]);
-    expect(idsOf(context, 'delegation.delivered')).toEqual(['delegation.delivered:run-1:1']);
+    expect(ofType(dispatched, 'delegation.release')).toEqual([]);
+    expect(idsOf(context, 'delegation.record_delivery')).toEqual(['delegation.record_delivery:run-1:1']);
   });
 
   test('a wake whose session never starts hands the report back; a stale or needless wake does nothing', async () => {
@@ -536,10 +536,10 @@ describe('waking a run that waits on its delegated tasks', () => {
     await supervisor.wake('run-1', 1);
     sessions.started[0]?.finish({ outcome: 'failed', summary: 'crashed' });
     await waking;
-    expect(ofType(dispatched, 'delegation.undelivered')).toEqual([
-      { type: 'delegation.undelivered', runId: 'run-1', generation: 1, items: [] },
+    expect(ofType(dispatched, 'delegation.release')).toEqual([
+      { type: 'delegation.release', runId: 'run-1', generation: 1, items: [] },
     ]);
-    expect(idsOf(context, 'delegation.undelivered')).toEqual(['delegation.undelivered:run-1:1']);
+    expect(idsOf(context, 'delegation.release')).toEqual(['delegation.release:run-1:1']);
   });
 
   test('a delivered report the engine refuses to record is logged, not lost', async () => {
@@ -548,7 +548,7 @@ describe('waking a run that waits on its delegated tasks', () => {
       [createRun({ status: 'waiting', cohort: cohort('wake') }), finishedChild()],
       { startSession: sessions.startSession }
     );
-    reject((command) => command.type === 'delegation.delivered');
+    reject((command) => command.type === 'delegation.record_delivery');
     const warn = spyOn(log, 'warn');
     const waking = supervisor.wake('run-1', 1);
     await until('the session', () => sessions.started.length === 1);

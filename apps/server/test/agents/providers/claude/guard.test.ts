@@ -52,6 +52,7 @@ describe('the command guard', () => {
       'shinsa operations run SW-142 Staging first',
       'shinsa operations finish SW-142',
       'shinsa gates answer gate-1 --decision approve',
+      'shinsa questions answer SW-1 Yes',
       'shinsa gates secret gate-1 hunter2',
       'shinsa gates decline-secret gate-1',
       'shinsa accounts sign-in',
@@ -65,7 +66,7 @@ describe('the command guard', () => {
     for (const command of [
       'shinsa tasks list',
       'shinsa tasks show SW-142',
-      'shinsa questions answer SW-1 Yes',
+      'shinsa tasks create Fix the scroll',
       'shinsa tasks opened',
       'shinsa commander',
       'echo "shinsa merges approved"',
@@ -76,6 +77,44 @@ describe('the command guard', () => {
       hookSpecificOutput: {
         permissionDecisionReason:
           'Only the human runs this command: it decides at a gate, gives a secret, signs in, changes accounts, MCP servers, skills or plugins, opens a task in the browser or sends a raw command. Tell them what you need; it waits for them in Shinsa.',
+      },
+    });
+  });
+
+  test('keeps the settings and repository fields only the human changes out of the agent’s shell, and leaves the rest open', () => {
+    for (const command of [
+      'shinsa settings set approvePlans true',
+      'shinsa settings set --json mergeMethod squash',
+      'shinsa settings set --key=taskBudgetUsd 5',
+      'shinsa settings set fastMode true && echo done',
+      'shinsa settings set agentFastModes \'{"builder":true}\'',
+      'shinsa repos update app --checks "bun test"',
+      'shinsa repos update app --name web --waive-checks',
+      'shinsa repos update app --no-waive-checks',
+      'shinsa repos update app --checks=lint',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
+    }
+    for (const command of [
+      'shinsa settings set defaultModel sonnet',
+      'shinsa settings set maxFixRounds 3',
+      'shinsa settings get approvePlans',
+      'shinsa settings set compaction eunoe; echo approvePlans',
+      'shinsa repos update app --name web --default-branch trunk',
+      'shinsa repos list --checks',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
+    }
+    expect(resolveCommandVerdict('shinsa settings set approvePlans false', 'main')).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecisionReason:
+          'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching and fast mode. Tell them what you would change and why.',
+      },
+    });
+    expect(resolveCommandVerdict('shinsa repos update app --waive-checks', 'main')).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecisionReason:
+          'Only the human changes a repository’s check commands or works without checks. Tell them what you would change and why.',
       },
     });
   });

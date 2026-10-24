@@ -34,13 +34,13 @@ export const PROCESS_TOOL_SPECS = {
   wait_for: {
     name: 'wait_for',
     description:
-      'When your step depends on something outside the repository that is not ready yet (a deploy, a CI run, a service), schedule a later check instead of sleeping or polling, then end your turn. At the check time Shinsa resumes your session with your notes. If the timeout passes first, or you call it again once your checks are used up, your step ends and the human decides what happens next.',
+      'When your step depends on something outside the repository that is not ready yet (a deploy, a CI run, a service), schedule a later check-in instead of sleeping or polling, then stop. At the check-in Shinsa resumes your session with your notes. If the timeout passes first, or you call it again once your check-ins are used up, your step ends and the human decides what happens next.',
     inputSchema: {
       type: 'object',
       properties: {
-        check_in_minutes: minutes('Minutes until the next check.', L.waitCheckMinutes),
+        check_in_minutes: minutes('Minutes until the next check-in.', L.waitCheckMinutes),
         notes: limitedText(
-          'What you are waiting for and how to tell it is ready. Shinsa gives it back to you at every check.',
+          'What you are waiting for and how to tell it is ready. Shinsa gives it back to you at every check-in.',
           L.waitNotes
         ),
         timeout_minutes: minutes(
@@ -51,7 +51,7 @@ export const PROCESS_TOOL_SPECS = {
           type: 'integer',
           minimum: 1,
           maximum: L.waitAttempts,
-          description: 'The most checks to make. Defaults to 10.',
+          description: 'The most check-ins to make. Defaults to 10.',
         },
       },
       required: ['check_in_minutes', 'notes'],
@@ -60,7 +60,7 @@ export const PROCESS_TOOL_SPECS = {
   suggest_tasks: {
     name: 'suggest_tasks',
     description:
-      'Propose follow-up work you noticed that is outside this task. Each becomes a suggestion the human can accept into the roadmap or dismiss; nothing starts until they accept. Do not suggest work this task already covers. When the human asked in this chat for something that does not belong in this task, suggest it with `split_off`: they can make it a task of its own or keep it here as the next round.',
+      'Suggest tasks for work you noticed that is outside this task. Each becomes a suggested task the human can add to the roadmap or dismiss; nothing starts until they accept. Do not suggest work this task already covers. When the human asked in this chat for something that does not belong in this task, suggest it with `split_off`: they can make it a task of its own or keep it here as the next round.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -71,7 +71,7 @@ export const PROCESS_TOOL_SPECS = {
           items: {
             type: 'object',
             properties: {
-              title: limitedText('The follow-up in a few words.', L.suggestionTitle),
+              title: limitedText('The task in a few words.', L.suggestionTitle),
               request: limitedText(
                 'The request as the human would write it: what to change and where.',
                 L.suggestionRequest
@@ -118,8 +118,8 @@ export async function handleProcessTool(name: string, input: Record<string, unkn
       const wait = assertProtocol(validateWait(input));
       const events = await call.dispatch({ type: 'agent.wait_for', runId, attemptId, ...wait });
       if (hasRunOut(events))
-        return 'Your wait ran out, so Shinsa asked the human what to do. End your turn now.';
-      return `Shinsa will resume your session in ${describeWait(wait.checkInMinutes)} with your notes. End your turn now.`;
+        return 'Your wait ran out, so Shinsa asked the human what to do. Stop here without a closing message.';
+      return `Shinsa will resume your session in ${describeWait(wait.checkInMinutes)} with your notes. Stop here without a closing message.`;
     }
     case 'suggest_tasks': {
       const suggestions = assertProtocol(validateSuggestions(input));

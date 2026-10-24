@@ -238,19 +238,13 @@ export class Accounts {
     for (const login of this.#providerLogins) {
       if (login.status !== 'signed_in') continue;
       const gates = listOpenGates(this.#engine.state).filter(
-        (gate) => gate.purpose === 'sign_in' && gate.account?.id === login.provider
+        (gate) => gate.type === 'sign_in' && gate.provider === login.provider && !gate.account
       );
       if (gates.length === 0) continue;
       const ids = gates.map((gate) => gate.id).join(',');
       try {
         await this.#engine.dispatch(
-          {
-            type: 'account.signed_in',
-            account: {
-              id: login.provider,
-              email: this.#providerIdentities.get(login.provider)?.email ?? null,
-            },
-          },
+          { type: 'provider.record_sign_in', provider: login.provider },
           { id: `provider-login:${login.provider}:${ids}` }
         );
       } catch (error) {
@@ -421,7 +415,7 @@ export class Accounts {
     const { failure, provider } = rejection;
     if (failure.class === 'auth') {
       const email = this.#providerIdentities.get(provider)?.email ?? null;
-      return { retry: false, failure: { ...failure, account: { id: provider, email } } };
+      return { retry: false, failure: { ...failure, login: { provider, email } } };
     }
     if (failure.class !== 'usage_limit' || failure.resetAt !== null) return { retry: false };
     const model = this.#engine.state.runs[rejection.runId]?.model ?? null;

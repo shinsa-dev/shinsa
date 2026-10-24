@@ -205,7 +205,7 @@ describe('Codex failures reach core as their class', () => {
     const { w, codex } = await open();
     codex.script('planner', [{ fail: { info: 'unauthorized', message: 'Unauthorized' } }]);
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'question', 'failure');
+    const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('The agent needs you to sign in');
     expect(gate.body).toContain('`codex login`');
   });
@@ -253,7 +253,7 @@ describe('Claude and Codex together', () => {
     let refused = '';
     w.agents.queue('builder', async (agent) => {
       reply = await agent.call('delegate_task', {
-        task: 'Check that a.txt says phase 1.',
+        brief: 'Check that a.txt says phase 1.',
         title: 'Check the file',
         role: 'reviewer',
         mode: 'wait',
@@ -263,12 +263,12 @@ describe('Claude and Codex together', () => {
       await agent.call('complete_phase', {
         summary: 'Wrote it.',
         spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
-        decisions: [],
+        judgement_calls: [],
       });
     });
     w.agents.queue('reviewer', async (agent) => {
       refused = await agent
-        .call('delegate_task', { task: 'Rewrite b.txt.', role: 'builder', provider: 'codex' })
+        .call('delegate_task', { brief: 'Rewrite b.txt.', role: 'builder', provider: 'codex' })
         .catch((error: Error) => error.message);
       await agent.call('report_review', { findings: [] });
     });
@@ -293,7 +293,7 @@ describe('Claude and Codex together', () => {
       {
         tool: 'delegate_task',
         args: {
-          task: 'Survey the tests.',
+          brief: 'Survey the tests.',
           title: 'Survey',
           role: 'planner',
           mode: 'wait',
@@ -305,7 +305,7 @@ describe('Claude and Codex together', () => {
     w.agents.queue('planner', async (agent) => {
       await agent.call('propose_plan', {
         goal: 'Add the two greeting files.',
-        plan: [
+        phases: [
           { title: 'Write the first file', detail: 'Create a.txt.' },
           { title: 'Write the second file', detail: 'Create b.txt.' },
         ],

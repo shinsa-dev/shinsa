@@ -1,6 +1,7 @@
 import {
   type Gate,
   isTaskSettled,
+  resolveAnsweredReply,
   resolveAnswerPrompt,
   resolveDelegationAnswerPrompt,
   resolveQuestionResumePrompt,
@@ -46,9 +47,7 @@ function resolveGateReply(gate: Gate): QuestionReply {
 function describeQuestionReply(reply: QuestionReply, delegated: boolean) {
   switch (reply.kind) {
     case 'answered':
-      return delegated
-        ? `The agent that delegated this task answered: ${reply.text}`
-        : `The human answered: ${reply.text}`;
+      return resolveAnsweredReply(reply.text, delegated);
     case 'superseded':
       return resolveSupersededReply(reply.text);
     case 'withdrawn':

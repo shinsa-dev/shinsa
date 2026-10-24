@@ -82,13 +82,13 @@ export function parseServerDefinition(
 ): McpDefinition {
   const transport = fields.transport;
   if (transport !== 'stdio' && transport !== 'http' && transport !== 'sse') {
-    throw new DomainError('server_invalid', 'Pick how Shinsa reaches the server: a command, HTTP or SSE.');
+    throw new DomainError('server_invalid', 'Pick how Shinsa reaches the MCP: a command, HTTP or SSE.');
   }
   const env = keepSaved(parseTextMap(fields.env, 'The environment'), saved?.env ?? {});
   const headers = keepSaved(parseTextMap(fields.headers, 'The headers'), saved?.headers ?? {});
   if (transport === 'stdio') {
     const command = typeof fields.command === 'string' ? fields.command.trim() : '';
-    if (!command) throw new DomainError('server_invalid', 'Give the command that starts the server.');
+    if (!command) throw new DomainError('server_invalid', 'Give the command that starts the MCP.');
     return {
       transport,
       command,
@@ -101,7 +101,7 @@ export function parseServerDefinition(
     };
   }
   const url = restoreUrl(typeof fields.url === 'string' ? fields.url.trim() : '', saved);
-  if (!isWebUrl(url)) throw new DomainError('server_invalid', 'Give the server’s http or https address.');
+  if (!isWebUrl(url)) throw new DomainError('server_invalid', 'Give the MCP’s http or https address.');
   return {
     transport,
     command: null,
@@ -124,7 +124,7 @@ export function parseServerName(value: unknown, isTaken: (name: string) => boole
   }
   if (RESERVED_NAMES.has(name))
     throw new DomainError('server_name_invalid', 'The name shinsa is Shinsa’s own.');
-  if (isTaken(name)) throw new DomainError('server_name_taken', `Shinsa already has a server named ${name}.`);
+  if (isTaken(name)) throw new DomainError('server_name_taken', `Shinsa already has an MCP named ${name}.`);
   return name;
 }
 
@@ -136,7 +136,7 @@ export function parseServerScope(value: unknown, state: ShinsaState): ExtensionS
     throw new DomainError('scope_invalid', 'There is no project with that id.');
   }
   if (scope.kind === 'repo' && !Object.values(state.repos).some((repo) => repo.path === scope.path)) {
-    throw new DomainError('scope_invalid', 'Shinsa has not worked in that repository yet.');
+    throw new DomainError('scope_invalid', 'No agent has worked in that repository yet.');
   }
   return scope;
 }

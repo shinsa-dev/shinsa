@@ -1,9 +1,14 @@
 import {
+  isTaskResting,
   type MessageKind,
+  type MessageRoute,
   needsMessageKind,
   ROUND_LIMITS,
+  type Round,
   type RoundStatus,
   resolveCurrentRound,
+  resolveShapeOf,
+  resolveTaskPipeline,
   resolveTaskRounds,
   type Task,
   type TaskShape,
@@ -30,6 +35,13 @@ export interface MessageClass {
 
 export type MessageClassifier = (task: Task, text: string) => Promise<MessageClass | null>;
 
+export type ShapeClassifier = (task: Task, request: string) => Promise<TaskShape | null>;
+
+export interface Classifier {
+  message: MessageClassifier;
+  shape: ShapeClassifier;
+}
+
 interface MessageAnswer {
   kind?: unknown;
   shape?: unknown;
@@ -39,26 +51,72 @@ interface MessageAnswer {
 
 const MESSAGE_SYSTEM = [
   'You read one message a developer wrote in the chat of a coding task and decide what it asks for.',
-  'A task is a conversation that runs in rounds: each round is one piece of work with its own plan, build, review and pull request, and new work for the same goal becomes the next round.',
+  'A task is a conversation that runs in rounds. Each round is one piece of work: an answer, research, an investigation, an operation, or a code change shipped as a pull request. New work for the same goal becomes the next round.',
+  'Most messages need no new work. Thanks, an acknowledgement or small talk needs nothing, and a question about what a round did or found is answered in that round. Only a message that asks for something to be done that has not been done is new work.',
   'Return one JSON object with the decisions listed after the message.',
-  `title: what the new work does, imperative, sentence case, at most ${ROUND_LIMITS.title} characters, no trailing period.`,
-  `why: one plain sentence of at most ${ROUND_LIMITS.why} characters saying why you decided that.`,
+  `why: one plain sentence of at most ${ROUND_LIMITS.why} characters saying what the message asks for, and so why you decided that. Write it first.`,
+  `title: what the new work does, imperative, sentence case, at most ${ROUND_LIMITS.title} characters, no trailing period; for anything else, what the message is about.`,
 ].join('\n');
 
-const KIND_QUESTION: ChoiceQuestion = {
+const ACKNOWLEDGE =
+  'needs nothing: thanks, an acknowledgement ("ok", "great", "sick thank you"), praise or small talk';
+
+const SEPARATE_TASK =
+  'asks for work toward another goal, for example in another repository, which belongs in a task of its own';
+
+const RESTING_KIND_QUESTION: ChoiceQuestion = {
   type: 'choice',
-  instructions: 'What is this message?',
+  instructions: 'Nothing is in progress in this task. What is this message?',
   criteria: {
+    acknowledge: ACKNOWLEDGE,
+    feedback:
+      'a question about what the last round did, found or decided ("why did you pick X?", "where did Y go?"), answered from the work already done; nothing new is done',
+    new_round:
+      'asks for something to be done in this task: more work, the next step (such as opening a pull request), or a change to what the last round did, even a small correction ("actually do Z instead")',
+    separate_task: SEPARATE_TASK,
+  },
+};
+
+const WORKING_KIND_QUESTION: ChoiceQuestion = {
+  type: 'choice',
+  instructions: 'A round of this task is in progress. What is this message?',
+  criteria: {
+    acknowledge: ACKNOWLEDGE,
     feedback:
       'about the work of the current round: a correction, an answer, guidance, a nudge or a question about what it does',
     new_round:
       'new work for this task that the current round does not cover: a new idea, an extension or the next step of the same goal',
-    separate_task: 'work unrelated to the goal of this task, which belongs in a task of its own',
+    separate_task: SEPARATE_TASK,
   },
 };
 
+const MESSAGE_SHAPE_QUESTION: ChoiceQuestion = {
+  ...SHAPE_QUESTION,
+  instructions:
+    'For new work (new_round or separate_task): what kind of task is it? Read the message as the request of a new task, with the rounds above as its context; a question about the code is an answer, not a change. For acknowledge or feedback answer "answer"; it is not used.',
+};
+
+const ROUND_SHAPE_SYSTEM = [
+  'You read the request for the next round of a coding task and decide what kind of work it is.',
+  'A task is a conversation that runs in rounds. Each round is one piece of work: an answer, research, an investigation, an operation, or a code change shipped as a pull request.',
+  'Return one JSON object with the decision listed after the request.',
+].join('\n');
+
+const ROUND_SHAPE_QUESTION: ChoiceQuestion = {
+  ...SHAPE_QUESTION,
+  instructions:
+    'What kind of task is this round? Read the request as the request of a new task, with the rounds above as its context; a question about the code is an answer, not a change.',
+};
+
+const ROUND_SHAPE_SCHEMA: JsonSchema = {
+  type: 'object',
+  properties: { shape: resolveDecisionProperty(ROUND_SHAPE_QUESTION) },
+  required: ['shape'],
+  additionalProperties: false,
+};
+
 const ROUND_STATE: Record<RoundStatus, string> = {
-  queued: 'waiting',
+  waiting: 'waiting',
   active: 'in progress',
   shipped: 'pull request open',
   merged: 'merged',
@@ -66,26 +124,48 @@ const ROUND_STATE: Record<RoundStatus, string> = {
   cancelled: 'stopped',
 };
 
-function resolveMessageSchema(): JsonSchema {
+const RESULT_EXCERPT = 400;
+
+function resolveKindQuestion(task: Task) {
+  return isTaskResting(task) ? RESTING_KIND_QUESTION : WORKING_KIND_QUESTION;
+}
+
+function resolveMessageSchema(kind: ChoiceQuestion): JsonSchema {
   const properties: Record<string, unknown> = {
-    kind: resolveDecisionProperty(KIND_QUESTION),
-    shape: resolveDecisionProperty(SHAPE_QUESTION),
-    title: { type: 'string', maxLength: ROUND_LIMITS.title },
     why: { type: 'string', maxLength: ROUND_LIMITS.why },
+    kind: resolveDecisionProperty(kind),
+    shape: resolveDecisionProperty(MESSAGE_SHAPE_QUESTION),
+    title: { type: 'string', maxLength: ROUND_LIMITS.title },
   };
   return { type: 'object', properties, required: Object.keys(properties), additionalProperties: false };
 }
 
-function describeTask(task: Task) {
+function describeOutcome(round: Round) {
+  const text = round.outcome?.result ?? round.outcome?.headline ?? round.outcome?.goal ?? null;
+  if (!text) return '';
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const excerpt = flat.length > RESULT_EXCERPT ? `${flat.slice(0, RESULT_EXCERPT)}…` : flat;
+  return ` What it did: ${excerpt}`;
+}
+
+function describeRound(task: Task, round: Round) {
+  const shape = resolveShapeOf(round.pipeline.length > 0 ? round.pipeline : resolveTaskPipeline(task));
+  return `- Round ${round.number}: ${round.title} (${shape}, ${ROUND_STATE[round.status]}).${describeOutcome(round)}`;
+}
+
+function describeNow(task: Task) {
   const current = resolveCurrentRound(task);
+  if (isTaskResting(task)) return `Now: round ${current.number} is done and nothing is in progress.`;
+  return `Now: round ${current.number} is in progress, ${task.stageReason}.`;
+}
+
+function describeTask(task: Task) {
   return [
     `Task: ${task.title}`,
-    `It started from: ${task.intent.split('\n', 1)[0] ?? ''}`,
+    `It started from: ${task.request.split('\n', 1)[0] ?? ''}`,
     'Its rounds:',
-    ...resolveTaskRounds(task).map(
-      (round) => `- Round ${round.number}: ${round.title} (${ROUND_STATE[round.status]})`
-    ),
-    `The current round, ${current.number}, is ${task.stageReason}.`,
+    ...resolveTaskRounds(task).map((round) => describeRound(task, round)),
+    describeNow(task),
   ];
 }
 
@@ -94,6 +174,7 @@ export async function resolveMessageClass(
   text: string,
   ask: QuickJson
 ): Promise<MessageClass | null> {
+  const kindQuestion = resolveKindQuestion(task);
   const prompt = [
     ...describeTask(task),
     '',
@@ -101,58 +182,102 @@ export async function resolveMessageClass(
     text,
     '',
     'Decisions:',
-    describeDecisionQuestion('kind', KIND_QUESTION),
-    describeDecisionQuestion('shape', {
-      ...SHAPE_QUESTION,
-      instructions: 'If it is new work, what kind of work is it? Answer change when it is not new work.',
-    }),
+    describeDecisionQuestion('kind', kindQuestion),
+    describeDecisionQuestion('shape', MESSAGE_SHAPE_QUESTION),
   ].join('\n');
-  const answer = await ask<MessageAnswer>(MESSAGE_SYSTEM, prompt, resolveMessageSchema());
-  const kind = answer ? (parseDecisionAnswer(KIND_QUESTION, answer.kind) as MessageKind | null) : null;
+  const answer = await ask<MessageAnswer>(MESSAGE_SYSTEM, prompt, resolveMessageSchema(kindQuestion));
+  const kind = answer ? (parseDecisionAnswer(kindQuestion, answer.kind) as MessageKind | null) : null;
   if (!answer || !kind) return null;
   return {
     kind,
     title: parseAnswerText(answer.title, ROUND_LIMITS.title),
     why: parseAnswerText(answer.why, ROUND_LIMITS.why),
-    shape: parseDecisionAnswer(SHAPE_QUESTION, answer.shape) as TaskShape | null,
+    shape: parseDecisionAnswer(MESSAGE_SHAPE_QUESTION, answer.shape) as TaskShape | null,
   };
 }
 
-export function createMessageClassifier(ask: QuickJson): MessageClassifier {
-  return (task, text) => resolveMessageClass(task, text, ask);
+export async function resolveRoundShape(
+  task: Task,
+  request: string,
+  ask: QuickJson
+): Promise<TaskShape | null> {
+  const prompt = [
+    ...describeTask(task),
+    '',
+    'Request for the next round:',
+    request,
+    '',
+    'Decision:',
+    describeDecisionQuestion('shape', ROUND_SHAPE_QUESTION),
+  ].join('\n');
+  const answer = await ask<{ shape?: unknown }>(ROUND_SHAPE_SYSTEM, prompt, ROUND_SHAPE_SCHEMA);
+  return parseDecisionAnswer(ROUND_SHAPE_QUESTION, answer?.shape) as TaskShape | null;
 }
 
-async function classifyCommand(
-  engine: Engine,
-  classify: MessageClassifier,
-  command: Extract<UserCommand, { type: 'task.message' }>
-): Promise<UserCommand> {
-  const task = engine.state.tasks[command.taskId];
-  if (!task || !needsMessageKind(engine.state, task)) return command;
-  const found = await classify(task, command.text);
-  if (!found) return command;
+export function createClassifier(ask: QuickJson): Classifier {
   return {
-    ...command,
+    message: (task, text) => resolveMessageClass(task, text, ask),
+    shape: (task, request) => resolveRoundShape(task, request, ask),
+  };
+}
+
+function isNewWork(kind: MessageKind) {
+  return kind === 'new_round' || kind === 'separate_task';
+}
+
+export function resolveMessageRoute(found: MessageClass | null): MessageRoute {
+  if (!found) return {};
+  return {
     kind: found.kind,
     ...(found.title ? { title: found.title } : {}),
     ...(found.why ? { why: found.why } : {}),
-    ...(found.shape && found.kind !== 'feedback' ? { shape: found.shape } : {}),
+    ...(found.shape && isNewWork(found.kind) ? { shape: found.shape } : {}),
   };
+}
+
+type TaskMessage = Extract<UserCommand, { type: 'task.message' }>;
+
+interface ShapelessRound {
+  task: Task;
+  command: TaskMessage | Extract<UserCommand, { type: 'suggestion.keep' }>;
+  request: string;
+}
+
+async function classifyCommand(engine: Engine, classify: MessageClassifier, command: TaskMessage) {
+  const task = engine.state.tasks[command.taskId];
+  if (!task || !needsMessageKind(engine.state, task)) return command;
+  return { ...command, ...resolveMessageRoute(await classify(task, command.text)) };
+}
+
+function selectShapelessRound(engine: Engine, command: UserCommand): ShapelessRound | null {
+  if (command.type !== 'task.message' && command.type !== 'suggestion.keep') return null;
+  const task = engine.state.tasks[command.taskId];
+  if (!task || command.shape) return null;
+  if (command.type === 'task.message') {
+    return command.kind === 'new_round' ? { task, command, request: command.text } : null;
+  }
+  const suggestion = task.suggestions?.find((candidate) => candidate.id === command.suggestionId);
+  return suggestion?.status === 'open' ? { task, command, request: suggestion.request } : null;
+}
+
+async function shapeCommand(classify: ShapeClassifier, { task, command, request }: ShapelessRound) {
+  const shape = await classify(task, request);
+  return shape ? { ...command, shape } : command;
 }
 
 const classifying = new WeakMap<Engine, Map<string, Promise<UserCommand>>>();
 
-async function routeMessage(
+async function routeOnce(
   engine: Engine,
-  classify: MessageClassifier,
-  command: Extract<UserCommand, { type: 'task.message' }>,
-  options: DispatchOptions & { id: string }
+  command: UserCommand,
+  options: DispatchOptions & { id: string },
+  resolve: () => Promise<UserCommand>
 ) {
   const pending = classifying.get(engine) ?? new Map<string, Promise<UserCommand>>();
   classifying.set(engine, pending);
   const shared = pending.get(options.id);
   if (shared) return engine.dispatch(await shared, { ...options, receipt: command });
-  const routed = classifyCommand(engine, classify, command);
+  const routed = resolve();
   pending.set(options.id, routed);
   try {
     return await engine.dispatch(await routed, { ...options, receipt: command });
@@ -161,20 +286,40 @@ async function routeMessage(
   }
 }
 
-export async function routeUserCommand(
+async function routeResolved(
   engine: Engine,
   command: UserCommand,
   id: string | null,
-  classify: MessageClassifier | null,
-  from: Pick<DispatchOptions, 'onBehalf' | 'byTask'> = {}
+  from: Pick<DispatchOptions, 'onBehalf' | 'byTask'>,
+  resolve: () => Promise<UserCommand>
 ) {
-  if (command.type !== 'task.message' || command.kind || !classify || (id && engine.hasReceipt(id))) {
-    return engine.dispatch(command, id ? { ...from, id } : from);
-  }
-  if (id) return routeMessage(engine, classify, command, { ...from, id });
-  return engine.dispatch(await classifyCommand(engine, classify, command), { ...from, receipt: command });
+  if (id) return routeOnce(engine, command, { ...from, id }, resolve);
+  return engine.dispatch(await resolve(), { ...from, receipt: command });
 }
 
-export function createCommandRouter(engine: Engine, classify: MessageClassifier | null): CommandRouter {
+export function routeUserCommand(
+  engine: Engine,
+  command: UserCommand,
+  id: string | null,
+  classify: Classifier | null,
+  from: Pick<DispatchOptions, 'onBehalf' | 'byTask'> = {}
+) {
+  const plain = id ? { ...from, id } : from;
+  if (!classify || (id && engine.hasReceipt(id))) return engine.dispatch(command, plain);
+  const shapeless = selectShapelessRound(engine, command);
+  if (shapeless)
+    return routeResolved(engine, command, id, from, () => shapeCommand(classify.shape, shapeless));
+  if (command.type !== 'task.message' || command.kind) return engine.dispatch(command, plain);
+  if (!from.onBehalf && !from.byTask) {
+    const { taskId, text } = command;
+    return engine.dispatch(
+      { type: 'message.receive', taskId, text },
+      { ...(id ? { id } : {}), receipt: command }
+    );
+  }
+  return routeResolved(engine, command, id, from, () => classifyCommand(engine, classify.message, command));
+}
+
+export function createCommandRouter(engine: Engine, classify: Classifier | null): CommandRouter {
   return (command, from) => routeUserCommand(engine, command, from.id ?? null, classify, from);
 }

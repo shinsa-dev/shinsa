@@ -85,9 +85,11 @@ describe('resolveDelivery', () => {
     expect(delivery?.items).toEqual(claim.items);
     expect(delivery?.runIds).toEqual(['done', 'asking']);
     expect(delivery?.text).toContain(
-      'Delegated task finished: "Check the copy" (task id done, reviewer):\n\nAll good.'
+      'Delegation finished: "Check the copy" (delegation id done, reviewer):\n\nAll good.'
     );
-    expect(delivery?.text).toContain('"Port it" (task id asking) is waiting for your answer:\nKeep it?');
+    expect(delivery?.text).toContain(
+      'Delegation "Port it" (delegation id asking) is waiting for your answer:\nKeep it?'
+    );
     expect(delivery?.text).toContain('The human added: Also the footer.');
   });
 

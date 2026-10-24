@@ -31,7 +31,7 @@ describe('startShinsa', () => {
   test('inspect mode serves the data without starting agents', async () => {
     const shinsa = await startShinsa(createTestConfig(createTempDir(), { inspect: true }), { models });
     started.push(shinsa);
-    await shinsa.engine.dispatch({ type: 'task.create', intent: 'Look only', repoId: null });
+    await shinsa.engine.dispatch({ type: 'task.create', request: 'Look only', repoId: null });
     await shinsa.engine.settle();
     expect(Object.values(shinsa.engine.state.tasks)[0]?.stage).toBe('triage');
     expect(await (await fetch(`${shinsa.url}/api/queue`)).json()).toMatchObject({ decisions: [] });
@@ -113,7 +113,7 @@ describe('startShinsa', () => {
       },
     });
     started.push(shinsa);
-    await shinsa.engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+    await shinsa.engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     await until('a gate to open', () => Object.keys(shinsa.engine.state.gates).length > 0);
     expect(Object.values(shinsa.engine.state.gates)[0]?.title).toBe('Could not start the task');
   });
@@ -178,7 +178,7 @@ describe('startShinsa', () => {
         type: 'settings.change',
         patch: { agentModels: { classifier: 'sonnet' } },
       });
-      await shinsa.engine.dispatch({ type: 'task.create', intent: 'Fix it', repoId: null });
+      await shinsa.engine.dispatch({ type: 'task.create', request: 'Fix it', repoId: null });
       await until(
         'triage',
         () => Object.values(shinsa.engine.state.tasks)[0]?.title === 'Fix the injected title'
@@ -213,7 +213,7 @@ describe('startShinsa', () => {
       projectName: null,
     });
     const [repoId = ''] = Object.keys(shinsa.engine.state.repos);
-    await shinsa.engine.dispatch({ type: 'task.create', intent: 'What is open?', repoId, shape: 'answer' });
+    await shinsa.engine.dispatch({ type: 'task.create', request: 'What is open?', repoId, mode: 'ask' });
     await until('the agent to read the tasks', () => replies.length === 1);
     expect(replies[0]).toContain('What is open?');
   });

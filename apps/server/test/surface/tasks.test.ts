@@ -137,7 +137,7 @@ describe('tasks create', () => {
   test('sends the request alone, and prints where to follow the task', async () => {
     const fake = createFakeClient({}, 'task-new');
     const result = await runSpec(fake, ['tasks', 'create', 'fix', 'the', 'scroll']);
-    expect(fake.sent).toEqual([{ type: 'task.create', intent: 'fix the scroll', repoId: null }]);
+    expect(fake.sent).toEqual([{ type: 'task.create', request: 'fix the scroll', repoId: null }]);
     expect(result).toEqual({
       data: { ok: true, taskId: 'task-new' },
       text: `Created the task. Shinsa brings it back when it needs a decision.\n${BASE}/tasks/task-new`,
@@ -164,7 +164,7 @@ describe('tasks create', () => {
     expect(fake.sent).toEqual([
       {
         type: 'task.create',
-        intent: 'add search',
+        request: 'add search',
         repoId: 'repo-1',
         priority: 'high',
         planFirst: true,
@@ -224,12 +224,12 @@ describe('the task commands', () => {
       'Priority set to urgent.',
     ],
     [
-      ['tasks', 'block', 'fix', 'search'],
+      ['tasks', 'wait-on', 'fix', 'search'],
       { type: 'task.wait_on', taskId: 'task-123', waitsOn: ['task-456'] },
       'Saved what it waits on.',
     ],
     [
-      ['tasks', 'unblock', 'fix'],
+      ['tasks', 'stop-waiting', 'fix'],
       { type: 'task.wait_on', taskId: 'task-123', waitsOn: [] },
       'It no longer waits on other tasks.',
     ],
@@ -243,7 +243,11 @@ describe('the task commands', () => {
       { type: 'task.bind_account', taskId: 'task-123', account: ACCOUNT },
       'Saved the account.',
     ],
-    [['tasks', 'check-now', 'fix'], { type: 'monitor.check_in_now', taskId: 'task-123' }, 'Checking now.'],
+    [
+      ['tasks', 'check-in-now', 'fix'],
+      { type: 'monitor.check_in_now', taskId: 'task-123' },
+      'Checking in now.',
+    ],
     [['tasks', 'resume-now', 'fix'], { type: 'usage_wait.resume_now', taskId: 'task-123' }, 'Resuming.'],
     [
       ['tasks', 'auto-resume', 'fix', 'true'],

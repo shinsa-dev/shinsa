@@ -1,5 +1,4 @@
-import type { ChatEntry, ChatEvent } from '@shinsa/core';
-import { createChatEntries, type TimedEvent } from '../../transcripts/legacy.ts';
+import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent, markFinalReplies } from '@shinsa/core';
 import type { ImageStore } from '../types.ts';
 import { mapClaudePrompt, mapClaudeResult, mapClaudeTool } from './map.ts';
 
@@ -21,6 +20,22 @@ interface SessionLine {
   isSidechain?: boolean;
   isMeta?: boolean;
   message?: { role?: string; content?: string | ContentBlock[] };
+}
+
+interface TimedEvent {
+  at: number;
+  id: string;
+  event: ChatEvent;
+}
+
+function createChatEntries(timed: TimedEvent[]): ChatEntry[] {
+  const events = markFinalReplies(timed.map((item) => item.event));
+  return timed.map((item, index) => ({
+    ...(events[index] ?? item.event),
+    v: CHAT_PROTOCOL_VERSION,
+    id: item.id,
+    at: item.at,
+  }));
 }
 
 function mapBlock(

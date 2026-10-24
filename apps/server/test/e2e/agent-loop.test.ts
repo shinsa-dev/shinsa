@@ -68,7 +68,7 @@ describe('every way a turn can end reaches core as its class', () => {
       ],
     ]);
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'question', 'failure');
+    const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('The agent hit its usage limit');
     expect(listRuns(w, taskId)[0]?.failure).toMatchObject({ class: 'usage_limit', resetAt: 7_200_000 });
     expect(sdk.params).toHaveLength(1);
@@ -90,14 +90,12 @@ describe('every way a turn can end reaches core as its class', () => {
       ],
     ]);
     const first = await signedOut.w.createTask();
-    expect((await signedOut.w.untilGate(first, 'question', 'failure')).title).toBe(
-      'The agent needs you to sign in'
-    );
+    expect((await signedOut.w.untilGate(first, 'failure')).title).toBe('The agent needs you to sign in');
     await signedOut.w.dispose();
 
     const outdated = await openWithSdk([], { ok: false, reason: 'outdated', message: 'Update Claude Code.' });
     const second = await outdated.w.createTask();
-    const gate = await outdated.w.untilGate(second, 'question', 'failure');
+    const gate = await outdated.w.untilGate(second, 'failure');
     expect(gate.title).toBe('The agent could not start');
     expect(gate.body).toBe('Update Claude Code. Retry starts the step again.');
     expect(outdated.sdk.params).toHaveLength(0);
@@ -116,7 +114,7 @@ describe('every way a turn can end reaches core as its class', () => {
     expect(first?.failure?.class).toBe('context_window_full');
     expect(second?.resume).toBe(false);
     expect(second?.prompt).toContain('so this is a fresh session in the same worktree');
-    await w.untilGate(taskId, 'question', 'failure');
+    await w.untilGate(taskId, 'failure');
     expect(sdk.params[1]?.options).not.toHaveProperty('resume');
   });
 
@@ -178,7 +176,7 @@ describe('restarts', () => {
     await w.restart();
     await w.until('the continuation', () => w.agents.of('planner').length === 2);
     await w.restart();
-    const gate = await w.untilGate(taskId, 'question', 'failure');
+    const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('The planner paused');
     expect(w.agents.of('planner')).toHaveLength(2);
     expect(w.state.runs[runId]?.failure).toMatchObject({ class: 'aborted', code: 'crash_loop' });

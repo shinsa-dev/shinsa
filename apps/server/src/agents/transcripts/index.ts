@@ -14,7 +14,6 @@ import {
 import { join } from 'node:path';
 import { CHAT_PROTOCOL_VERSION, type ChatEntry, type ChatEvent, isChatEntry } from '@shinsa/core';
 import { describeError, log } from '../../log/index.ts';
-import { type LegacyTranscriptEntry, migrateLegacyEntries } from './legacy.ts';
 
 type TranscriptListener = (runId: string, entries: ChatEntry[]) => void;
 
@@ -33,14 +32,19 @@ function createUnreadableEntry(id: string): ChatEntry {
   return { v: CHAT_PROTOCOL_VERSION, id, at: 0, type: 'error', text: UNREADABLE_LINE };
 }
 
-function parseLines(text: string, offset = 0): unknown[] {
+function parseLine(line: string): unknown {
+  try {
+    return JSON.parse(line) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parseLines(text: string, offset = 0): ChatEntry[] {
   return text.split('\n').flatMap((line, index) => {
     if (line.trim().length === 0) return [];
-    try {
-      return [JSON.parse(line) as unknown];
-    } catch {
-      return [createUnreadableEntry(`unreadable-${offset}-${index}`)];
-    }
+    const parsed = parseLine(line);
+    return [isChatEntry(parsed) ? parsed : createUnreadableEntry(`unreadable-${offset}-${index}`)];
   });
 }
 
@@ -56,24 +60,6 @@ function endsMidLine(path: string) {
     closeSync(handle);
   }
   return last[0] !== 0x0a;
-}
-
-export function readChatEntries(lines: unknown[]): ChatEntry[] {
-  if (lines.every(isChatEntry)) return lines;
-  const entries: ChatEntry[] = [];
-  let legacy: LegacyTranscriptEntry[] = [];
-  const flush = () => {
-    entries.push(...migrateLegacyEntries(legacy));
-    legacy = [];
-  };
-  for (const line of lines) {
-    if (isChatEntry(line)) {
-      flush();
-      entries.push(line);
-    } else legacy.push(line as LegacyTranscriptEntry);
-  }
-  flush();
-  return entries;
 }
 
 type FileWatcher = (path: string, onChange: () => void) => FSWatcher;
@@ -112,7 +98,7 @@ export class Transcripts {
   listEntries(runId: string): ChatEntry[] {
     const path = this.#pathOf(runId);
     if (!existsSync(path)) return [];
-    return readChatEntries(parseLines(readFileSync(path, 'utf8')));
+    return parseLines(readFileSync(path, 'utf8'));
   }
 
   record(runId: string, event: ChatEvent) {
@@ -170,7 +156,7 @@ export class Transcripts {
     if (complete === 0) return;
     const start = follower.offset;
     follower.offset += complete;
-    this.#emit(runId, readChatEntries(parseLines(appended.subarray(0, complete).toString('utf8'), start)));
+    this.#emit(runId, parseLines(appended.subarray(0, complete).toString('utf8'), start));
   }
 
   #unfollow(runId: string) {

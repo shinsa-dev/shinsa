@@ -1,4 +1,4 @@
-import { isTaskSettled, listOpenGates, resolveTaskShape } from '@shinsa/core';
+import { isDecisionGate, isTaskSettled, listOpenGates, resolveTaskShape } from '@shinsa/core';
 import { World } from '../e2e/harness.ts';
 
 const FILES = {
@@ -18,13 +18,13 @@ function print(...parts: unknown[]) {
   process.stdout.write(`${parts.map(String).join(' ')}\n`);
 }
 
-async function runShaped(label: string, intent: string) {
-  const taskId = await world.createTask(intent);
+async function runShaped(label: string, request: string) {
+  const taskId = await world.createTask(request);
   await world.until(
     label,
     () =>
       isTaskSettled(world.task(taskId)) ||
-      listOpenGates(world.state, taskId).some((gate) => gate.purpose !== 'decision'),
+      listOpenGates(world.state, taskId).some((gate) => !isDecisionGate(gate)),
     15 * 60_000
   );
   const task = world.task(taskId);
@@ -37,10 +37,10 @@ async function runShaped(label: string, intent: string) {
       Object.values(world.state.runs).flatMap((run) => (run.taskId === taskId ? [run.role] : []))
     )
   );
-  print('result', task.result?.body ?? task.answer ?? '(none)');
+  print('result', task.result?.body ?? '(none)');
   print('proposal', JSON.stringify(task.proposal ?? null));
   print('pull request', JSON.stringify(task.pullRequest));
-  const change = listOpenGates(world.state, taskId).find((gate) => gate.purpose === 'change');
+  const change = listOpenGates(world.state, taskId).find((gate) => gate.type === 'proposal');
   if (change) {
     await world.answer(change, 'reject');
     await world.untilStage(taskId, 'done', 60_000);
@@ -78,7 +78,7 @@ try {
     'the review gate',
     () =>
       world.state.tasks[taskId]?.stage === 'awaiting_review' ||
-      listOpenGates(world.state, taskId).some((gate) => gate.purpose !== 'decision'),
+      listOpenGates(world.state, taskId).some((gate) => !isDecisionGate(gate)),
     20 * 60_000
   );
   const task = world.task(taskId);
@@ -87,15 +87,10 @@ try {
   print(
     'gates',
     JSON.stringify(
-      listOpenGates(world.state, taskId).map((gate) => [
-        gate.kind,
-        gate.purpose,
-        gate.title,
-        gate.body.slice(0, 300),
-      ])
+      listOpenGates(world.state, taskId).map((gate) => [gate.type, gate.title, gate.body.slice(0, 300)])
     )
   );
-  print('plan', JSON.stringify(task.spec?.document?.plan));
+  print('plan', JSON.stringify(task.plan?.document?.phases));
   print('phase reports', JSON.stringify(task.phaseReports.map((report) => report.summary)));
   print('checks', JSON.stringify(task.checkResults));
   print('findings', JSON.stringify(task.findings));
@@ -114,7 +109,7 @@ try {
   const before = new Set(Object.keys(world.state.tasks));
   await world.engine.dispatch({
     type: 'task.create',
-    intent: 'How does average() handle an empty list? Answer from the code.',
+    request: 'How does average() handle an empty list? Answer from the code.',
     repoId: world.repoId,
     mode: 'ask',
   });
@@ -123,13 +118,13 @@ try {
     'the answer',
     () =>
       world.state.tasks[askId]?.stage === 'done' ||
-      listOpenGates(world.state, askId).some((gate) => gate.purpose !== 'decision'),
+      listOpenGates(world.state, askId).some((gate) => !isDecisionGate(gate)),
     10 * 60_000
   );
   const asked = world.task(askId);
   print('\n=== ASK MODE ===');
   print('stage', asked.stage, asked.stageReason);
-  print('answer', asked.answer ?? '(none)');
+  print('answer', asked.result?.body ?? '(none)');
   await runShaped(
     'INVESTIGATE',
     'average([]) returns NaN instead of 0. Find out why and report the cause; do not change the code yet.'

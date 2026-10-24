@@ -6,6 +6,7 @@ import {
   type ExtensionScope,
   type ExtensionsSnapshot,
   isUnused,
+  type LoadedExtensions,
   type McpServerStatus,
   type McpServerSummary,
   type ShinsaState,
@@ -48,6 +49,7 @@ import { resolvePluginSummary } from './plugins.ts';
 import {
   createSessionLoader,
   listSkillsInPlace,
+  resolvePinnedDeferral,
   type SessionExtensions,
   serializeSession,
 } from './session.ts';
@@ -58,6 +60,7 @@ import { UsageIndex } from './usage.ts';
 
 export type { ServerCheck } from './health.ts';
 export type { SessionExtensionSource, SessionExtensions } from './session.ts';
+export { isSameExtensionSet, resolveDeferredInstructions } from './session.ts';
 
 type FetchLike = (url: string | URL, init?: RequestInit) => Promise<Response>;
 
@@ -95,6 +98,9 @@ export class Extensions {
   readonly #now: () => number;
   readonly #env: Env;
   readonly #usage: UsageIndex;
+  #cached: ExtensionsSnapshot | null = null;
+  #refresh: ReturnType<typeof setTimeout> | null = null;
+  #stopped = false;
 
   constructor(options: ExtensionsOptions) {
     this.#options = options;
@@ -128,15 +134,43 @@ export class Extensions {
   }
 
   syncUsage() {
-    return this.#usage.refresh().catch((error: unknown) => {
-      log.warn('[Extensions] Could not read which servers and skills agents used', {
-        error: describeError(error),
-      });
-    });
+    return this.#usage.refresh().then(
+      () => {
+        if (this.#cached) this.syncSnapshot();
+      },
+      (error: unknown) => {
+        log.warn('[Extensions] Could not read which servers and skills agents used', {
+          error: describeError(error),
+        });
+      }
+    );
   }
 
   stop() {
+    this.#stopped = true;
+    if (this.#refresh) clearTimeout(this.#refresh);
+    this.#refresh = null;
     return this.#usage.stop();
+  }
+
+  readSnapshot(): ExtensionsSnapshot {
+    if (!this.#cached) return this.snapshot();
+    this.syncSnapshot();
+    return this.#cached;
+  }
+
+  syncSnapshot() {
+    if (this.#refresh || this.#stopped) return;
+    this.#refresh = setTimeout(() => {
+      this.#refresh = null;
+      try {
+        this.snapshot();
+      } catch (error) {
+        log.warn('[Extensions] Could not refresh the MCPs, plugins and skills', {
+          error: describeError(error),
+        });
+      }
+    }, 0);
   }
 
   #paths(): DiscoveryPaths {
@@ -211,7 +245,7 @@ export class Extensions {
 
   #findGroup(catalog: Catalog, id: unknown) {
     const group = selectGroup(catalog.groups, id);
-    if (!group) throw new DomainError('server_not_found', 'There is no MCP server with that id.');
+    if (!group) throw new DomainError('server_not_found', 'There is no MCP with that id.');
     return group;
   }
 
@@ -246,14 +280,19 @@ export class Extensions {
     return this.#usage.read().readAt !== null;
   }
 
-  #isDeferredServer(optimizer: ContextOptimizer, group: ServerGroup) {
-    if (!optimizer.enabled || !this.#isReady()) return false;
+  #isDeferredServer(optimizer: ContextOptimizer, group: ServerGroup, pin: LoadedExtensions | null = null) {
+    if (!optimizer.enabled) return false;
+    const pinned = resolvePinnedDeferral(pin, 'servers', resolveClaudeName(group.lead));
+    if (pinned !== null) return pinned;
+    if (!this.#isReady()) return false;
     return isUnused(this.#serverFacts(group), this.#now(), optimizer.days);
   }
 
-  #isDeferredSkill(optimizer: ContextOptimizer, skill: CatalogSkill) {
-    if (!optimizer.enabled || !optimizer.skills || skill.source === 'shinsa' || !this.#isReady())
-      return false;
+  #isDeferredSkill(optimizer: ContextOptimizer, skill: CatalogSkill, pin: LoadedExtensions | null = null) {
+    if (!optimizer.enabled || !optimizer.skills || skill.source === 'shinsa') return false;
+    const pinned = resolvePinnedDeferral(pin, 'skills', skill.claudeName ?? skill.name);
+    if (pinned !== null) return pinned;
+    if (!this.#isReady()) return false;
     return isUnused(this.#skillFacts(skill), this.#now(), optimizer.days);
   }
 
@@ -319,7 +358,7 @@ export class Extensions {
     const winners = resolveWinners(
       catalog.groups.filter((group) => listUsedMembers(catalog, group).length > 0)
     );
-    return {
+    this.#cached = {
       servers: catalog.groups.map((group) => this.#resolveServerSummary(catalog, group, winners)),
       skills: catalog.skills.map((skill) => this.#resolveSkillSummary(catalog, skill)),
       plugins: catalog.plugins.map((plugin) => plugin.summary),
@@ -327,6 +366,7 @@ export class Extensions {
       optimizer: this.#store.selectOptimizer(),
       usage: this.#usage.read(),
     };
+    return this.#cached;
   }
 
   #parseName(value: unknown, keepId: string | null) {
@@ -343,7 +383,7 @@ export class Extensions {
   }
 
   createServer(fields: unknown) {
-    if (!isFields(fields)) throw new DomainError('server_invalid', 'Describe the server to add.');
+    if (!isFields(fields)) throw new DomainError('server_invalid', 'Describe the MCP to add.');
     const name = this.#parseName(fields.name, null);
     return this.#writeServer({
       id: `shinsa:${name}`,
@@ -358,7 +398,7 @@ export class Extensions {
   }
 
   updateServer(id: unknown, fields: unknown) {
-    if (!isFields(fields)) throw new DomainError('server_invalid', 'Describe the server.');
+    if (!isFields(fields)) throw new DomainError('server_invalid', 'Describe the MCP.');
     const group = this.#findGroup(this.#catalog(), id);
     const { lead } = group;
     const stored = lead.editable ? lead : null;
@@ -511,6 +551,7 @@ export class Extensions {
       const serverId = await this.#oauth.finish(state, code);
       const group = selectGroup(this.#catalog().groups, serverId);
       if (group) await this.#checkGroup(group);
+      this.#cached = null;
       return serializeSignInPage(
         `Signed in to ${group?.lead.name ?? 'the server'}`,
         'You can close this tab and go back to Shinsa.',
@@ -531,7 +572,10 @@ export class Extensions {
     return this.snapshot();
   }
 
-  async resolveSession(place: ExtensionPlace): Promise<SessionExtensions> {
+  async resolveSession(
+    place: ExtensionPlace,
+    pin: LoadedExtensions | null = null
+  ): Promise<SessionExtensions> {
     if (this.#isReady()) await this.syncUsage();
     const catalog = this.#catalog();
     const optimizer = this.#store.selectOptimizer();
@@ -549,11 +593,11 @@ export class Extensions {
       tokens: this.#status(group).tokens,
     });
     const servers = await Promise.all(
-      winners.filter((group) => !this.#isDeferredServer(optimizer, group)).map(resolveServer)
+      winners.filter((group) => !this.#isDeferredServer(optimizer, group, pin)).map(resolveServer)
     );
     const deferred = await Promise.all(
       winners
-        .filter((group) => this.#isDeferredServer(optimizer, group))
+        .filter((group) => this.#isDeferredServer(optimizer, group, pin))
         .map(async (group) => ({
           ...(await resolveServer(group)),
           tools: this.#status(group).tools.map((tool) => tool.name),
@@ -566,8 +610,8 @@ export class Extensions {
       servers,
       deferred,
       inPlace: skillsInPlace,
-      skills: candidates.filter((skill) => !this.#isDeferredSkill(optimizer, skill)),
-      skippedSkills: candidates.filter((skill) => this.#isDeferredSkill(optimizer, skill)),
+      skills: candidates.filter((skill) => !this.#isDeferredSkill(optimizer, skill, pin)),
+      skippedSkills: candidates.filter((skill) => this.#isDeferredSkill(optimizer, skill, pin)),
     });
   }
 

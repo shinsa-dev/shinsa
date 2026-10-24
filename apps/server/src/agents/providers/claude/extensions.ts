@@ -1,6 +1,6 @@
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type { McpDefinition } from '../../../extensions/definitions.ts';
-import type { SessionExtensions } from '../../../extensions/index.ts';
+import { resolveDeferredInstructions, type SessionExtensions } from '../../../extensions/index.ts';
 import { SHINSA_SKILL_NAMES } from '../instructions.ts';
 
 interface ClaudeExtensions {
@@ -47,6 +47,8 @@ export function resolveClaudeExtensions(extensions: SessionExtensions | undefine
     servers: Object.fromEntries(
       extensions.servers.map((server) => [server.claudeName, serializeClaudeServer(server.definition)])
     ),
-    instructions: resolveSkillFiles(extensions),
+    instructions:
+      [resolveSkillFiles(extensions), resolveDeferredInstructions(extensions)].filter(Boolean).join('\n\n') ||
+      null,
   };
 }

@@ -1,4 +1,4 @@
-import type { UserCommand } from '@shinsa/core';
+import type { ShinsaToolName, UserCommand } from '@shinsa/core';
 import type { CommandReceipt, SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 
@@ -16,6 +16,7 @@ export interface SurfaceSpec {
   access: SurfaceAccess;
   command?: UserCommand['type'];
   humanOnly?: boolean;
+  agentTool?: ShinsaToolName;
   run: (client: SurfaceClient, values: Values) => Promise<SurfaceResult>;
 }
 
@@ -25,6 +26,7 @@ interface CommandDefinition {
   fields: FieldSpec[];
   command: UserCommand['type'];
   humanOnly?: boolean;
+  agentTool?: ShinsaToolName;
   build: (values: Values, client: SurfaceClient) => UserCommand | Promise<UserCommand>;
   done?: (values: Values, receipt: CommandReceipt) => string;
 }
@@ -59,6 +61,7 @@ export function defineCommand(definition: CommandDefinition): SurfaceSpec {
     access: 'write',
     command: definition.command,
     ...(definition.humanOnly ? { humanOnly: true } : {}),
+    ...(definition.agentTool ? { agentTool: definition.agentTool } : {}),
     run: async (client, values) => {
       const receipt = await client.send(await definition.build(values, client));
       const done = definition.done?.(values, receipt) ?? 'Done.';

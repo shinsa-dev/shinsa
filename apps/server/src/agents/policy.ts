@@ -1,3 +1,4 @@
+import { HUMAN_ONLY_SETTINGS } from '@shinsa/core';
 import { SURFACE } from '../surface/index.ts';
 
 interface ForbiddenCommand {
@@ -21,6 +22,18 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
       pattern: new RegExp(String.raw`\bshinsa\s+(?:${HUMAN_ONLY_COMMANDS.join('|')})(?![\w-])`),
       reason:
         'Only the human runs this command: it decides at a gate, gives a secret, signs in, changes accounts, MCP servers, skills or plugins, opens a task in the browser or sends a raw command. Tell them what you need; it waits for them in Shinsa.',
+    },
+    {
+      pattern: new RegExp(
+        String.raw`\bshinsa\s+settings\s+set\b[^;&|\n]*?(?<![\w-])(?:${HUMAN_ONLY_SETTINGS.join('|')})(?![\w-])`
+      ),
+      reason:
+        'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching and fast mode. Tell them what you would change and why.',
+    },
+    {
+      pattern: /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|waive-checks)(?![\w-])/,
+      reason:
+        'Only the human changes a repository’s check commands or works without checks. Tell them what you would change and why.',
     },
     {
       pattern: /\bgh\s+pr\s+(merge|create)\b/,

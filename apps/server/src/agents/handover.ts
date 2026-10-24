@@ -2,7 +2,8 @@ import { isAbsolute, resolve } from 'node:path';
 import type { EvidenceKind, Run, Task } from '@shinsa/core';
 import type { EvidenceStore } from '../store/index.ts';
 
-export const HANDED_OVER = 'Handed over to Shinsa. End your turn now.';
+export const HANDED_OVER =
+  'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.';
 
 const EVIDENCE_KINDS = new Set<EvidenceKind>(['screenshot', 'recording', 'test', 'check', 'note', 'preview']);
 
@@ -47,7 +48,7 @@ function lowerFirst(text: string) {
 export function resolveCommitMessage(task: Task, run: Run) {
   if (run.role !== 'builder') return `fix: ${FIX_COMMIT[task.fixFor ?? 'you']}`;
   const type = resolveCommitType(task);
-  const step = task.spec?.document?.plan[run.phaseIndex ?? 0];
+  const step = task.plan?.document?.phases[run.phaseIndex ?? 0];
   const subject = lowerFirst(step?.title ?? task.title).replace(new RegExp(`^${type}(es)?\\s+`), '');
   return `${type}: ${subject}`.slice(0, SUBJECT_LIMIT);
 }

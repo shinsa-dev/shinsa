@@ -35,7 +35,7 @@ const SPOT = {
         'critical: could break something or encodes a judgement call. high: worth a careful read. normal: context.',
     },
     why: limitedText(
-      'Why the human should read these lines: the risk or the decision, not what the code says.',
+      'Why the human should read these lines: the risk or the judgement call, not what the code says.',
       L.why
     ),
   },
@@ -46,16 +46,16 @@ export const TOOL_SPECS = {
   propose_plan: {
     name: 'propose_plan',
     description:
-      'Hand the plan over, then end your turn. Each phase is then built by its own agent. Every field has a hard limit; a plan that breaks one is rejected with the reasons.',
+      'Hand the plan over, then stop without restating it. Each phase is then built by its own agent. Every field has a hard limit; a plan that breaks one is rejected with the reasons.',
     inputSchema: {
       type: 'object',
       properties: {
         goal: limitedText('The outcome in one or two sentences.', L.goal),
-        plan: {
+        phases: {
           type: 'array',
-          description: `The work as ${L.minPlanSteps} to ${L.planSteps} phases in the order they will be done. Each is one visible step of progress.`,
-          minItems: L.minPlanSteps,
-          maxItems: L.planSteps,
+          description: `The work as ${L.minPlanPhases} to ${L.planPhases} phases in the order they will be done. Each is one visible step of progress.`,
+          minItems: L.minPlanPhases,
+          maxItems: L.planPhases,
           items: {
             type: 'object',
             properties: {
@@ -70,7 +70,7 @@ export const TOOL_SPECS = {
           L.behaviour,
           L.behaviourItem
         ),
-        approach: limitedText('How it will be built, and the decisions you made on the way.', L.approach),
+        approach: limitedText('How it will be built, and the choices you made on the way.', L.approach),
         files: {
           type: 'array',
           maxItems: L.files,
@@ -112,7 +112,7 @@ export const TOOL_SPECS = {
         },
         operation: textList(
           'Only for a task that both changes code and runs an operation: the operation’s steps in order, each with how to check it worked. Leave it out otherwise.',
-          L.planSteps,
+          L.planPhases,
           L.listItem
         ),
         questions: {
@@ -136,7 +136,7 @@ export const TOOL_SPECS = {
       },
       required: [
         'goal',
-        'plan',
+        'phases',
         'behaviour',
         'approach',
         'files',
@@ -149,7 +149,7 @@ export const TOOL_SPECS = {
   complete_phase: {
     name: 'complete_phase',
     description:
-      'Hand your finished phase over, then end your turn. Shinsa commits the changes and starts the next phase, or runs the checks after the last one. The summary and spots are what the human reads at review; a hand-over that breaks a limit is rejected with the reasons.',
+      'Hand your finished phase over, then stop without restating it. Shinsa commits the changes and starts the next phase, or runs the checks after the last one. The summary and spots are what the human reads at review; a hand-over that breaks a limit is rejected with the reasons.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -164,29 +164,29 @@ export const TOOL_SPECS = {
           maxItems: L.spots,
           items: SPOT,
         },
-        decisions: {
+        judgement_calls: {
           type: 'array',
           description: 'Judgement calls the human might disagree with. Empty when there are none.',
-          maxItems: L.decisions,
+          maxItems: L.judgementCalls,
           items: {
             type: 'object',
             properties: {
-              decision: limitedText('What you decided.', L.decision),
+              call: limitedText('What you decided.', L.call),
               reason: limitedText('Why, and the alternative.', L.reason),
               file: limitedPath('Path relative to the repository root.'),
               line: LINE,
             },
-            required: ['decision', 'reason'],
+            required: ['call', 'reason'],
           },
         },
       },
-      required: ['summary', 'spots', 'decisions'],
+      required: ['summary', 'spots', 'judgement_calls'],
     },
   },
   complete_fix: {
     name: 'complete_fix',
     description:
-      'Hand your fix over, then end your turn. Shinsa commits it and runs the checks and the agent review again, or pushes it to the pull request.',
+      'Hand your fix over, then stop without restating it. Shinsa commits it and runs the checks and the agent review again, or pushes it to the pull request.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -201,7 +201,7 @@ export const TOOL_SPECS = {
   report_review: {
     name: 'report_review',
     description:
-      'Report your review findings, then end your turn. An empty list means you found nothing wrong. Each finding is anchored to the lines it is about.',
+      'Report your review findings, then stop without restating them. An empty list means you found nothing wrong. Each finding is anchored to the lines it is about.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -260,7 +260,7 @@ export const TOOL_SPECS = {
   find_tasks: {
     name: 'find_tasks',
     description:
-      'Find tasks Shinsa tracks, to link them for the human. Returns each task as a ready shinsa:// markdown link with its status, repository, branch and pull request. Use those links verbatim; never guess an id.',
+      'Find tasks in any project, to link them for the human. Returns each task as a ready shinsa:// markdown link with its status, repository, branch and pull request. Use those links verbatim; never guess an id.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -275,7 +275,7 @@ export const TOOL_SPECS = {
   read_task: {
     name: 'read_task',
     description:
-      "Read another task Shinsa tracks: its status, request, plan, open decisions, recent activity and its agents' latest replies. It only reads; it never changes the task.",
+      "Read another task: its status, request, plan, open decisions, recent activity and its agents' latest replies. It only reads; it never changes the task.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -290,7 +290,7 @@ export const TOOL_SPECS = {
   note: {
     name: 'note',
     description:
-      'Leave a short note on the task for later: a decision you made, a follow-up worth doing. It shows on the task page.',
+      'Leave a short note on the task for later: a choice you made, or something worth doing next. It shows on the task page.',
     inputSchema: {
       type: 'object',
       properties: { note: { type: 'string' } },

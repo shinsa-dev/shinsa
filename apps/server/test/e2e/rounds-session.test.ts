@@ -43,7 +43,7 @@ interface Turn {
 
 const PLAN = {
   goal: 'Ship the round.',
-  plan: [
+  phases: [
     { title: 'Write the round', detail: 'Write its file.' },
     { title: 'Check the round', detail: 'Check the file is there.' },
   ],
@@ -95,7 +95,7 @@ async function hand(params: QueryParams, brief: string, role: string, round: num
     await callTool(params, 'complete_phase', {
       summary: `Wrote round ${round}, phase ${phase}.`,
       spots: [{ file: `round-${round}-${phase}.txt`, start: 1, end: 1, attention: 'normal', why: 'New.' }],
-      decisions: [],
+      judgement_calls: [],
     });
   }
   if (role === 'reviewer') await callTool(params, 'report_review', { findings: [] });
@@ -156,7 +156,7 @@ async function shipRound(w: World, taskId: string) {
     'the merge gate or the next round',
     () =>
       resolveCurrentRound(w.task(taskId)).number > round ||
-      w.gates(taskId).some((gate) => gate.kind === 'merge')
+      w.gates(taskId).some((gate) => gate.type === 'merge')
   );
 }
 

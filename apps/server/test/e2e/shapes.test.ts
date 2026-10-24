@@ -19,10 +19,8 @@ async function open() {
   return world;
 }
 
-async function createShapedTask(w: World, intent: string, shape: TaskShape) {
-  const before = new Set(Object.keys(w.state.tasks));
-  await w.engine.dispatch({ type: 'task.create', intent, repoId: w.repoId, shape });
-  return Object.keys(w.state.tasks).find((id) => !before.has(id)) ?? '';
+function createShapedTask(w: World, request: string, shape: TaskShape) {
+  return w.createTask(request, { shape });
 }
 
 async function listBranchFiles(w: World, branch: string) {
@@ -71,7 +69,7 @@ describe('an inquiry has no verification steps', () => {
         pipeline: [step],
         stageReason: step === 'answer' ? 'answered your question' : 'wrote the report',
         checkResults: null,
-        spec: null,
+        plan: null,
         pullRequest: null,
       });
       const { gates, effects } = listTaskRecord(w, taskId);
@@ -91,7 +89,7 @@ describe('the shapes a task can take', () => {
     await w.untilStage(taskId, 'done');
     expect(w.task(taskId)).toMatchObject({
       pipeline: ['answer'],
-      answer: 'It lives in a.txt.',
+      result: { step: 'answer', body: 'It lives in a.txt.' },
       worktreePath: null,
       branch: null,
       pullRequest: null,
@@ -100,7 +98,10 @@ describe('the shapes a task can take', () => {
       await agent.call('answer', { answer: 'And b.txt holds the second one.' });
     });
     await w.engine.dispatch({ type: 'task.message', taskId, text: 'And the second greeting?' });
-    await w.until('the follow-up answer', () => w.task(taskId).answer === 'And b.txt holds the second one.');
+    await w.until(
+      'the follow-up answer',
+      () => w.task(taskId).result?.body === 'And b.txt holds the second one.'
+    );
     await w.untilStage(taskId, 'done');
     const [first, second] = w.agents.of('answerer');
     expect(first?.cwd).toBe(w.state.repos[w.repoId]?.path ?? '');
@@ -109,7 +110,7 @@ describe('the shapes a task can take', () => {
     expect(w.github.pulls).toEqual([]);
   });
 
-  test('a change you chose is planned, built, checked, reviewed by you and opened as a pull request', async () => {
+  test('a change is planned, built, checked, reviewed by you and opened as a pull request', async () => {
     const w = await open();
     const taskId = await createShapedTask(w, 'Add the greeting files', 'change');
     await w.answer(await w.untilGate(taskId, 'review'), 'approve');
@@ -123,7 +124,6 @@ describe('the shapes a task can take', () => {
       'pull_request',
       'merge',
     ]);
-    expect(w.task(taskId).auto).toMatchObject({ shape: false });
     expect(w.agents.sessions.map((session) => session.role)).toEqual([
       'planner',
       'builder',
@@ -142,7 +142,7 @@ describe('the shapes a task can take', () => {
       priority: 'high',
       priority_why: 'People see the missing greeting today.',
       waits_on: [],
-      depends_on_why: 'No open task touches the greetings.',
+      waits_on_why: 'No open task touches the greetings.',
     });
     const taskId = await w.createTask('Why are the greetings missing?');
     await w.untilStage(taskId, 'done');
@@ -168,13 +168,13 @@ describe('the shapes a task can take', () => {
     expect(w.agents.sessions.map((session) => session.role)).toEqual(['investigator']);
   });
 
-  test('an investigation reports its findings and finishes with no worktree left and no pull request', async () => {
+  test('an investigation reports its diagnosis and finishes with no worktree left and no pull request', async () => {
     const w = await open();
     let worktree = '';
     w.agents.queue('investigator', async (agent) => {
       worktree = agent.cwd;
       agent.write('probe.txt', 'a scratch edit\n');
-      await agent.call('report_diagnosis', { findings: 'The greeting files were never written.' });
+      await agent.call('report_diagnosis', { diagnosis: 'The greeting files were never written.' });
     });
     const taskId = await createShapedTask(w, 'Find out why the greetings are missing', 'investigate');
     await w.untilStage(taskId, 'done');
@@ -183,7 +183,7 @@ describe('the shapes a task can take', () => {
       pipeline: ['investigate'],
       result: { step: 'investigate', body: 'The greeting files were never written.' },
       pullRequest: null,
-      spec: null,
+      plan: null,
     });
     expect(worktree).not.toBe(w.repoPath);
     expect(w.agents.sessions.map((session) => session.role)).toEqual(['investigator']);
@@ -195,12 +195,12 @@ describe('the shapes a task can take', () => {
     w.agents.queue('investigator', async (agent) => {
       agent.write('probe.txt', 'a scratch edit\n');
       await agent.call('report_diagnosis', {
-        findings: 'Nothing writes the greeting files.',
+        diagnosis: 'Nothing writes the greeting files.',
         propose_change: { request: 'Write a.txt and b.txt.', why: 'The greetings need both files.' },
       });
     });
     const taskId = await createShapedTask(w, 'Find out why the greetings are missing', 'investigate');
-    const gate = await w.untilGate(taskId, 'question', 'change');
+    const gate = await w.untilGate(taskId, 'proposal');
     expect(gate).toMatchObject({
       title: 'Turn this investigation into a fix?',
       body: 'The greetings need both files.\n\nWrite a.txt and b.txt.',
@@ -228,7 +228,7 @@ describe('the shapes a task can take', () => {
       await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
     });
     const taskId = await createShapedTask(w, 'Run the cleanup script once', 'operation');
-    const plan = await w.untilGate(taskId, 'spec');
+    const plan = await w.untilGate(taskId, 'plan');
     expect(w.agents.of('operator')).toHaveLength(0);
     await w.answer(plan, 'approve');
     await w.untilStage(taskId, 'done');
@@ -264,7 +264,7 @@ describe('the shapes a task can take', () => {
       priority: 'normal',
       priority_why: 'Nothing waits on it.',
       waits_on: [],
-      depends_on_why: 'No open task touches the exports.',
+      waits_on_why: 'No open task touches the exports.',
     });
     const refusals: string[] = [];
     w.agents.queue('planner', async (agent) => {
@@ -280,12 +280,12 @@ describe('the shapes a task can take', () => {
       });
     });
     const taskId = await w.createTask('The nightly exports are stuck. Clear them.');
-    const ok = await w.untilGate(taskId, 'question', 'change');
+    const ok = await w.untilGate(taskId, 'proposal');
     expect(refusals).toEqual([
       "An investigation turns into a change or an operation only with the human's OK: put `your_ok` between `investigate` and `plan`.",
     ]);
     expect(ok).toMatchObject({
-      title: 'Run an operation from these findings?',
+      title: 'Run an operation from this diagnosis?',
       body: 'Find what is stuck, then clear it.\n\nPlan the operation. You approve the plan before anything runs.',
     });
     expect(w.task(taskId)).toMatchObject({
@@ -293,7 +293,7 @@ describe('the shapes a task can take', () => {
       result: { step: 'investigate', body: 'The greeting files were never written.' },
     });
     await w.answer(ok, 'approve');
-    await w.answer(await w.untilGate(taskId, 'spec'), 'approve');
+    await w.answer(await w.untilGate(taskId, 'plan'), 'approve');
     await w.untilStage(taskId, 'done');
     expect(w.task(taskId)).toMatchObject({
       result: { step: 'operate', body: 'Ran the cleanup script.' },

@@ -208,7 +208,9 @@ export class ToolCalls {
       route: manage.route,
     });
     const { text } = await call.spec.run(client, call.values);
-    return isTaskSettled(engine.state.tasks[task.id] ?? task) ? `${text} End your turn.` : text;
+    return isTaskSettled(engine.state.tasks[task.id] ?? task)
+      ? `${text} Stop here without a closing message.`
+      : text;
   }
 
   async #handleOther(name: string, call: ToolCall, dispatch: CallDispatch) {

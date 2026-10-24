@@ -4,6 +4,7 @@ import {
   KNOWN_AGENT_PROVIDERS,
   parseUserCommand,
   resolveQueueSummary,
+  resolveRoundBase,
   type ShinsaEvent,
 } from '@shinsa/core';
 import type { Accounts } from '../accounts/index.ts';
@@ -18,12 +19,13 @@ import { describeError } from '../log/index.ts';
 import type { Onboarding } from '../onboarding/index.ts';
 import { createProjectRoutes } from '../projects/routes.ts';
 import { createLoginResolver, type LoginResolver, type RootSource } from '../repos/index.ts';
-import { resolveTaskBaseBranch } from '../runtime/base.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
-import { type MessageClassifier, routeUserCommand } from '../triage/message.ts';
+import { type Classifier, routeUserCommand } from '../triage/message.ts';
+import type { Versions } from '../versions/index.ts';
+import { createVersionRoutes } from '../versions/routes.ts';
 import { type JsonObject, readJson, readJsonObject } from './body.ts';
 import { resolveInside } from './paths.ts';
 import { createReadRoutes } from './reads.ts';
@@ -42,9 +44,10 @@ export interface ApiContext {
   schedules?: Schedules;
   transcripts?: Transcripts;
   extensions?: Extensions;
+  versions?: Versions;
   roots?: RootSource;
   resolveLogin?: LoginResolver;
-  classify?: MessageClassifier;
+  classify?: Classifier;
 }
 
 interface ProviderCatalog {
@@ -89,7 +92,7 @@ export async function dispatchUserCommand(
   engine: Engine,
   body: unknown,
   clientId: string | null = null,
-  classify: MessageClassifier | null = null
+  classify: Classifier | null = null
 ) {
   const command = parseUserCommand(body);
   return selectCreatedTaskId(
@@ -129,7 +132,7 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
   async function respondDiff(taskId: string) {
     const found = selectWorktreeTask(taskId);
     if (!found) return respondError('diff_unavailable', 'No worktree.', 404);
-    const baseBranch = resolveTaskBaseBranch(engine.state, found.task);
+    const baseBranch = resolveRoundBase(found.task);
     return respondJson(await resolveTaskDiff(found.repo, found.worktreePath, baseBranch));
   }
 
@@ -287,6 +290,7 @@ export function createApiRoutes(context: ApiContext) {
     ...(context.schedules ? context.schedules.routes() : []),
     ...(context.transcripts ? createReadRoutes(context.engine, context.transcripts) : []),
     ...(context.extensions ? createExtensionRoutes(context.extensions) : []),
+    ...(context.versions ? createVersionRoutes(context.versions) : []),
     ...(context.roots
       ? createProjectRoutes({
           engine: context.engine,

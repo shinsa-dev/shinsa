@@ -1,4 +1,5 @@
 import { isReadOnlyRole, type RunFailure, resolveSteerPrompt } from '@shinsa/core';
+import { resolveDeferredInstructions } from '../../../extensions/index.ts';
 import { describeError, log } from '../../../log/index.ts';
 import { resolveForbiddenReason } from '../../policy.ts';
 import { resolveSkillInstructions, SHINSA_INSTRUCTIONS } from '../instructions.ts';
@@ -108,7 +109,8 @@ function resolveDeveloperInstructions(input: AgentSessionInput) {
   const skills = input.extensions
     ? resolveCodexSkillInstructions(input.extensions)
     : resolveSkillInstructions(input.pluginDir);
-  return skills ? `${SHINSA_INSTRUCTIONS}\n\n${skills}` : SHINSA_INSTRUCTIONS;
+  const deferred = input.extensions ? resolveDeferredInstructions(input.extensions) : null;
+  return [SHINSA_INSTRUCTIONS, skills, deferred].filter(Boolean).join('\n\n');
 }
 
 function resolveThreadParams(input: AgentSessionInput, endpoint: ToolEndpoint): Params {
@@ -170,7 +172,7 @@ export function startCodexSession(
   let lastLimit = '';
 
   if (!compacting) input.onEntry({ type: 'user', from: 'shinsa', text: input.prompt, attachments: [] });
-  if (!compacting && input.extensions) {
+  if (!compacting && input.extensions && input.announceExtensions !== false) {
     input.onEntry({
       type: 'notice',
       notice: { kind: 'extensions', ...input.extensions.loaded, plugins: [] },

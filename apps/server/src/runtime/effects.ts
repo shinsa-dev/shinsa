@@ -10,6 +10,7 @@ import {
   type PullRequest,
   type Repo,
   type RoundPullRequest,
+  resolveRoundBase,
   resolveTaskPipeline,
   resolveTaskProject,
   type ShinsaEffect,
@@ -47,7 +48,6 @@ import {
   verifySetup,
 } from '../repos/index.ts';
 import type { TriageResolver } from '../triage/index.ts';
-import { resolveTaskBaseBranch } from './base.ts';
 import type { EffectContext, Engine } from './engine.ts';
 
 export interface EffectRunnerOptions {
@@ -61,7 +61,7 @@ const WATCH_INTERVAL_MS = 45_000;
 
 const FAILURE_TITLE: Partial<Record<ShinsaEffect['kind'], string>> = {
   'task.triage': 'Could not start the task',
-  'config.verify': 'Could not check the setup',
+  'config.verify': 'Could not verify the setup',
   'worktree.create': 'Could not set up the worktree',
   'checks.run': 'Could not run the checks',
   'pull_request.open': 'Could not open the pull request',
@@ -236,7 +236,7 @@ export class EffectRunner {
     if (!task || !repo || signal.aborted) return null;
     let read: PullRequestRead | null;
     try {
-      const wanted = resolveTaskBaseBranch(this.#engine.state, task) ?? repo.defaultBranch;
+      const wanted = resolveRoundBase(task) ?? repo.defaultBranch;
       if (task.pullRequest?.state === 'open' && task.pullRequest.base && task.pullRequest.base !== wanted) {
         await retargetPullRequest(repo, task.pullRequest.number, wanted, signal);
       }
@@ -363,7 +363,7 @@ export class EffectRunner {
       this.#config.worktreesDir,
       taskId,
       task.branch,
-      resolveTaskBaseBranch(this.#engine.state, task),
+      resolveRoundBase(task),
       context.signal
     );
     if (context.signal.aborted) return;
@@ -377,7 +377,7 @@ export class EffectRunner {
     const { task, repo } = this.#requireTask(taskId);
     if (task.stage !== 'checking' || !task.worktreePath) return;
     await this.#runs.quiesce(taskId);
-    const planChecks = task.spec?.document?.checks ?? [];
+    const planChecks = task.plan?.document?.checks ?? [];
     const results = await runChecks(repo, task.worktreePath, planChecks, context.signal);
     if (context.signal.aborted) return;
     await this.#engine.dispatch(
@@ -392,8 +392,8 @@ export class EffectRunner {
     await pushBranch(path, branch, context.signal);
     const sha = await resolveHead(path);
     await this.#engine.dispatch(
-      { type: 'pull_request.pushed', taskId, sha },
-      { id: `${context.key}:pull_request.pushed:${sha}` }
+      { type: 'pull_request.record_push', taskId, sha },
+      { id: `${context.key}:pull_request.record_push:${sha}` }
     );
     return true;
   }
@@ -403,12 +403,7 @@ export class EffectRunner {
     if (!task.worktreePath || !task.branch) throw new Error('The task has no worktree.');
     const pushed = await this.#pushHead(taskId, task.worktreePath, task.branch, context);
     if (!pushed || context.signal.aborted) return;
-    const read = await createPullRequest(
-      repo,
-      task,
-      resolveTaskBaseBranch(this.#engine.state, task),
-      context.signal
-    );
+    const read = await createPullRequest(repo, task, resolveRoundBase(task), context.signal);
     if (!read) throw new Error('GitHub did not return the new pull request.');
     await this.#recordRead(taskId, read);
     this.#syncSoon(taskId);
@@ -471,7 +466,7 @@ export class EffectRunner {
     try {
       await removeIsolatedWorktrees(repo, this.#config.worktreesDir, taskId);
     } catch (error) {
-      log.warn('[Effects] Could not remove the checkouts of delegated tasks', {
+      log.warn('[Effects] Could not remove the checkouts of delegations', {
         taskId,
         error: describeError(error),
       });

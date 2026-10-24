@@ -59,7 +59,7 @@ export async function removeIsolatedWorktrees(repo: Repo, worktreesDir: string, 
     const path = join(folder, entry);
     const removed = await runCommand(['git', 'worktree', 'remove', '--force', path], repo.path);
     if (!removed.ok) {
-      log.warn('[Git] Could not remove a delegated task’s checkout; deleting the folder', {
+      log.warn('[Git] Could not remove a delegation’s checkout; deleting the folder', {
         path,
         error: removed.stderr.trim(),
       });

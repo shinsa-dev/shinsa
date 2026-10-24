@@ -1,11 +1,14 @@
 import {
+  type ChatEntry,
   type Handoff,
   type HandoffSource,
   type Run,
   type RunHandoff,
   type RunHandoffReason,
   resolveHandoff,
+  resolveHandoffPrompt,
   type ShinsaState,
+  splitHouseRules,
 } from '@shinsa/core';
 import { log } from '../log/index.ts';
 import { type AgentProvider, resolveCapabilities } from './providers/index.ts';
@@ -29,14 +32,17 @@ export interface TurnContext {
 
 const FRESH: TurnPlan = { resume: null, handoff: null, record: null };
 
-function listConversation(context: TurnContext, sessionId: string): HandoffSource[] {
+function listSessionRuns(context: TurnContext, sessionId: string) {
   return Object.values(context.state.runs)
     .filter((run) => run.taskId === context.run.taskId && run.sessionId === sessionId)
-    .sort((a, b) => a.startedAt - b.startedAt)
-    .map((run) => ({
-      transcriptPath: context.transcripts.resolvePath(run.id),
-      entries: context.transcripts.listEntries(run.id),
-    }));
+    .sort((a, b) => a.startedAt - b.startedAt);
+}
+
+function listConversation(context: TurnContext, sessionId: string): HandoffSource[] {
+  return listSessionRuns(context, sessionId).map((run) => ({
+    transcriptPath: context.transcripts.resolvePath(run.id),
+    entries: context.transcripts.listEntries(run.id),
+  }));
 }
 
 export function resolveHandoffPlan(
@@ -92,4 +98,27 @@ export async function resolveTurnPlan(context: TurnContext): Promise<TurnPlan> {
   });
   await context.recordLost(sessionId);
   return resolveHandoffPlan(context, 'session_restore', sessionId, owner);
+}
+
+function readBriefing(entry: ChatEntry, rules: string) {
+  if (entry.type === 'notice' && entry.notice.kind === 'compaction') return false;
+  if (entry.type === 'user' && entry.from === 'shinsa' && entry.text.includes(rules)) return true;
+  return null;
+}
+
+function hasHouseRules(context: TurnContext, sessionId: string, rules: string) {
+  for (const run of listSessionRuns(context, sessionId).reverse()) {
+    for (const entry of context.transcripts.listEntries(run.id).reverse()) {
+      const briefed = readBriefing(entry, rules);
+      if (briefed !== null) return briefed;
+    }
+  }
+  return false;
+}
+
+export function resolveTurnPrompt(context: TurnContext, plan: TurnPlan, prompt: string) {
+  if (plan.handoff) return resolveHandoffPrompt(plan.handoff.text, prompt);
+  const split = plan.resume ? splitHouseRules(prompt) : null;
+  if (!plan.resume || !split || !hasHouseRules(context, plan.resume, split.rules)) return prompt;
+  return split.instruction;
 }

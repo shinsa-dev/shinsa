@@ -81,22 +81,6 @@ const BROWSER_ACTIONS: Record<string, { action: ChatBrowserAction; keys: string[
   browser_close: { action: 'close', keys: [] },
 };
 
-const PRIMARY_ARG: Record<string, string> = {
-  Bash: 'command',
-  Read: 'file_path',
-  Write: 'file_path',
-  Edit: 'file_path',
-  MultiEdit: 'file_path',
-  NotebookEdit: 'notebook_path',
-  Grep: 'pattern',
-  Glob: 'pattern',
-  LS: 'path',
-  WebFetch: 'url',
-  WebSearch: 'query',
-  Task: 'description',
-  Agent: 'description',
-};
-
 const TODO_STATUSES = new Set<ChatTodoStatus>(['pending', 'in_progress', 'completed']);
 
 function clip(text: string, limit = MAX_TEXT) {
@@ -260,15 +244,6 @@ export function mapClaudeTool(name: string, input: unknown): ChatTool {
     default:
       if (name.startsWith('mcp__')) return mapMcpTool(name, args);
       return { kind: 'other', name, args };
-  }
-}
-
-export function mapLegacyClaudeTool(name: string, input: string | null, summary: string): ChatTool {
-  try {
-    return mapClaudeTool(name, JSON.parse(input ?? ''));
-  } catch {
-    const key = PRIMARY_ARG[name];
-    return mapClaudeTool(name, key ? { [key]: summary } : {});
   }
 }
 

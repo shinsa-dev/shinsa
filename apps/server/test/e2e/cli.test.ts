@@ -72,15 +72,15 @@ describe('the command line drives the whole lifecycle of a task', () => {
     );
     expect(w.task(created.taskId)).toMatchObject({ priority: 'high', repoId: w.repoId });
 
-    await w.untilGate(created.taskId, 'review', 'decision');
-    const listed = await shinsaJson<{ tasks: { id: string; decision: { kind: string } | null }[] }>(
+    await w.untilGate(created.taskId, 'review');
+    const listed = await shinsaJson<{ tasks: { id: string; decision: { type: string } | null }[] }>(
       port,
       'tasks',
       'list',
       '--status',
       'needs_you'
     );
-    expect(listed.tasks.map((task) => [task.id, task.decision?.kind])).toEqual([[created.taskId, 'review']]);
+    expect(listed.tasks.map((task) => [task.id, task.decision?.type])).toEqual([[created.taskId, 'review']]);
 
     const shown = await shinsa(port, 'tasks', 'show', created.taskId.slice(0, 13));
     expect(shown.text).toContain('changes to review');
@@ -94,7 +94,7 @@ describe('the command line drives the whole lifecycle of a task', () => {
     await w.until('the pull request to open', () => w.github.pulls.length === 1);
     w.github.update(1, { checks: 'passing' });
     await w.sync(created.taskId);
-    await w.untilGate(created.taskId, 'merge', 'decision');
+    await w.untilGate(created.taskId, 'merge');
 
     expect((await shinsa(port, 'merges', 'approve', created.taskId)).code).toBe(0);
     await w.untilStage(created.taskId, 'merged');
@@ -117,11 +117,11 @@ describe('the command line drives the whole lifecycle of a task', () => {
       w.repoId,
       '--plan-first'
     );
-    await w.untilGate(taskId, 'spec', 'decision');
+    await w.untilGate(taskId, 'plan');
     const revised = await shinsa(port, 'plans', 'revise', taskId, 'Keep', 'it', 'to', 'one', 'phase');
     expect(revised.text).toContain('Asked for changes.');
-    await w.untilGate(taskId, 'spec', 'decision');
-    expect(w.task(taskId).spec?.feedback).toBe('Keep it to one phase');
+    await w.untilGate(taskId, 'plan');
+    expect(w.task(taskId).plan?.feedback).toBe('Keep it to one phase');
 
     const refused = await shinsa(port, 'reviews', 'approve', taskId, '--json');
     expect(refused.code).toBe(1);

@@ -250,10 +250,10 @@ describe('serializePullRequest', () => {
     expect(serializePullRequest(view, unknown, 5)).toMatchObject({ mergeQueue: null, queueRemoval: null });
   });
 
-  test('the body carries the summary and the spec', () => {
+  test('the body carries the summary and the plan', () => {
     expect(serializePullRequestBody(createTask({ summary: 'Did it.' }))).toBe('Did it.');
-    expect(serializePullRequestBody(createTask({ spec: { body: 'The plan' } as Task['spec'] }))).toContain(
-      '<details><summary>Spec</summary>\n\nThe plan\n</details>'
+    expect(serializePullRequestBody(createTask({ plan: { body: 'The plan' } as Task['plan'] }))).toContain(
+      '<details><summary>Plan</summary>\n\nThe plan\n</details>'
     );
   });
 });

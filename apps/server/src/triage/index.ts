@@ -46,7 +46,7 @@ interface TriageAnswer {
   priority?: unknown;
   shape_why?: unknown;
   priority_why?: unknown;
-  depends_on_why?: unknown;
+  waits_on_why?: unknown;
 }
 
 interface TriageAsks {
@@ -122,7 +122,7 @@ const SHAPE_NOUN: Record<TaskShape, string> = {
 
 const UNCLASSIFIED = 'Shinsa could not classify the request, so';
 
-function resolveDependsOnQuestion(open: Task[]): ChoicesQuestion {
+function resolveWaitsOnQuestion(open: Task[]): ChoicesQuestion {
   return {
     type: 'choices',
     instructions:
@@ -132,7 +132,6 @@ function resolveDependsOnQuestion(open: Task[]): ChoicesQuestion {
 }
 
 function resolveAsks(task: Task): TriageAsks {
-  if (!task.auto) return { shape: false, priority: false, start: true, why: false };
   return { ...task.auto, why: true };
 }
 
@@ -141,7 +140,7 @@ function listWhyKeys(asks: TriageAsks) {
   return [
     ...(asks.shape ? ['shape_why'] : []),
     ...(asks.priority ? ['priority_why'] : []),
-    ...(asks.start ? ['depends_on_why'] : []),
+    ...(asks.start ? ['waits_on_why'] : []),
   ];
 }
 
@@ -169,7 +168,7 @@ function resolveTriageSchema(
 }
 
 function resolveFallbackSize(task: Task): TaskSize {
-  return task.planFirst || task.intent.length > 500 || LARGE_HINT.test(task.intent) ? 'large' : 'small';
+  return task.planFirst || task.request.length > 500 || LARGE_HINT.test(task.request) ? 'large' : 'small';
 }
 
 function resolveFallbackReasons(task: Task, asks: TriageAsks): TriageReasons {
@@ -191,7 +190,7 @@ function describeStart(waitsOn: Task[]) {
 
 function resolveStartReason(answer: TriageAnswer, fallback: TriageReasons, kept: KeptDependencies | null) {
   if (!kept) return fallback.start;
-  const why = kept.dropped ? null : parseAnswerText(answer.depends_on_why, WHY_LIMIT);
+  const why = kept.dropped ? null : parseAnswerText(answer.waits_on_why, WHY_LIMIT);
   return why ?? describeStart(kept.waitsOn);
 }
 
@@ -272,7 +271,6 @@ function describeOpenTask(state: ShinsaState, task: Task) {
 }
 
 function describeHumanChoices(state: ShinsaState, task: Task) {
-  if (!task.auto) return [];
   const choices = [
     ...(task.auto.shape ? [] : [`the kind of task is ${resolveTaskShape(task)}`]),
     ...(task.auto.priority ? [] : [`the priority is ${task.priority}`]),
@@ -286,7 +284,7 @@ function describeHumanChoices(state: ShinsaState, task: Task) {
 }
 
 function isChosenAnswer(task: Task) {
-  return !task.auto?.shape && resolveTaskShape(task) === 'answer';
+  return !task.auto.shape && resolveTaskShape(task) === 'answer';
 }
 
 function describeDecisions(waitsOn: ChoicesQuestion, asks: TriageAsks) {
@@ -312,7 +310,7 @@ interface TriagePlan {
   pool: CandidatePool;
   candidates: LocalRepo[];
   open: Task[];
-  dependsOnQuestion: ChoicesQuestion;
+  waitsOnQuestion: ChoicesQuestion;
   fallback: TriageResult;
 }
 
@@ -338,7 +336,7 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
   if (!first) return null;
   const asks = resolveAsks(task);
   const size = resolveFallbackSize(task);
-  const title = task.intent.split('\n')[0]?.slice(0, TITLE_LIMIT).trim() || 'Untitled task';
+  const title = task.request.split('\n')[0]?.slice(0, TITLE_LIMIT).trim() || 'Untitled task';
   const open = listOpenTasks(state, task, pool.project);
   return {
     task,
@@ -346,7 +344,7 @@ function resolveTriagePlan(state: ShinsaState, task: Task, local: LocalRepo[]): 
     pool,
     candidates,
     open,
-    dependsOnQuestion: resolveDependsOnQuestion(open),
+    waitsOnQuestion: resolveWaitsOnQuestion(open),
     fallback: {
       title,
       repoPath: first.path,
@@ -372,12 +370,12 @@ function describeTriagePrompt(state: ShinsaState, plan: TriagePlan) {
     ...plan.candidates.map((candidate) => `- ${candidate.name}: ${candidate.path}`),
     '',
     'Request:',
-    task.intent,
+    task.request,
     ...(isChosenAnswer(task) ? ['', QUESTION_NOTE] : []),
     ...describeHumanChoices(state, task),
     '',
     'Decisions:',
-    ...describeDecisions(plan.dependsOnQuestion, plan.asks),
+    ...describeDecisions(plan.waitsOnQuestion, plan.asks),
   ].join('\n');
 }
 
@@ -386,9 +384,9 @@ function isDependencyAllowed(state: ShinsaState, plan: TriagePlan, candidate: Ta
   return state.repos[candidate.repoId]?.path === repoPath;
 }
 
-function parseDependsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string) {
+function parseWaitsOn(state: ShinsaState, plan: TriagePlan, answer: TriageAnswer, repoPath: string) {
   if (!plan.asks.start) return { waitsOn: [], kept: null };
-  const named = parseDecisionAnswer(plan.dependsOnQuestion, answer.waits_on);
+  const named = parseDecisionAnswer(plan.waitsOnQuestion, answer.waits_on);
   if (named === null) return { waitsOn: [], kept: null };
   const waitsOn = plan.open.filter(
     (candidate) => named.includes(candidate.id) && isDependencyAllowed(state, plan, candidate, repoPath)
@@ -402,7 +400,7 @@ function parseTriageAnswer(state: ShinsaState, plan: TriagePlan, answer: TriageA
   const repoPath = repo?.path ?? fallback.repoPath;
   const branch =
     typeof answer.branch === 'string' && BRANCH_PATTERN.test(answer.branch) ? answer.branch : null;
-  const { waitsOn, kept } = parseDependsOn(state, plan, answer, repoPath);
+  const { waitsOn, kept } = parseWaitsOn(state, plan, answer, repoPath);
   const shape = asks.shape ? (parseDecisionAnswer(SHAPE_QUESTION, answer.shape) as TaskShape | null) : null;
   const priority = asks.priority
     ? (parseDecisionAnswer(PRIORITY_QUESTION, answer.priority) as TaskPriority | null)
@@ -431,7 +429,7 @@ export async function resolveTriage(
   const answer = await ask<TriageAnswer>(
     TRIAGE_SYSTEM,
     describeTriagePrompt(state, plan),
-    resolveTriageSchema(plan.candidates, plan.dependsOnQuestion, plan.asks)
+    resolveTriageSchema(plan.candidates, plan.waitsOnQuestion, plan.asks)
   );
   if (!answer) return plan.fallback;
   return parseTriageAnswer(state, plan, answer);

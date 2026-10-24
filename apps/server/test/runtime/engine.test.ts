@@ -32,7 +32,7 @@ const REPO: Omit<Repo, 'id' | 'projectId'> = {
 
 async function seedTask(engine: Engine) {
   await engine.dispatch({ type: 'repo.register', repo: REPO, projectName: null });
-  await engine.dispatch({ type: 'task.create', intent: 'Fix the tab scroll', repoId: null });
+  await engine.dispatch({ type: 'task.create', request: 'Fix the tab scroll', repoId: null });
   const taskId = Object.keys(engine.state.tasks)[0] ?? '';
   const repoId = Object.keys(engine.state.repos)[0] ?? '';
   return { taskId, repoId };
@@ -72,7 +72,7 @@ describe('engine', () => {
     engine.start();
 
     await engine.dispatch({ type: 'project.write', project: { name: 'Superwall', color: 'blue' } });
-    await engine.dispatch({ type: 'task.create', intent: 'Fix the tab scroll', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Fix the tab scroll', repoId: null });
     await awaitEffect(log, selectKey(log, 'task.triage'));
 
     expect(Object.values(engine.state.tasks).map((task) => task.stage)).toEqual(['triage']);
@@ -88,7 +88,7 @@ describe('engine', () => {
   test('a rejected command leaves no events and keeps the queue moving', async () => {
     const engine = new Engine(new EventLog(createDatabasePath()));
     const before = engine.state.seq;
-    await expect(engine.dispatch({ type: 'task.create', intent: '   ', repoId: null })).rejects.toThrow(
+    await expect(engine.dispatch({ type: 'task.create', request: '   ', repoId: null })).rejects.toThrow(
       'Describe what you want done.'
     );
     expect(engine.state.seq).toBe(before);
@@ -108,7 +108,7 @@ describe('engine', () => {
       return Promise.resolve();
     });
     engine.start();
-    await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     await awaitEffect(log, selectKey(log, 'task.triage'));
     expect(seen).toContain('task.triage');
     engine.stop();
@@ -119,7 +119,7 @@ describe('command receipts', () => {
   test('a command sent twice under one id is applied once, and the repeat answers with the same events', async () => {
     const path = createDatabasePath();
     const engine = new Engine(new EventLog(path));
-    const command: ShinsaCommand = { type: 'task.create', intent: 'Fix the tab scroll', repoId: null };
+    const command: ShinsaCommand = { type: 'task.create', request: 'Fix the tab scroll', repoId: null };
     const first = await engine.dispatch(command, { id: 'client:a' });
     const seq = engine.state.seq;
     const again = await engine.dispatch(command, { id: 'client:a' });
@@ -170,7 +170,7 @@ describe('command receipts', () => {
     const engine = new Engine(new EventLog(createDatabasePath()));
     expect(await engine.dispatch({ type: 'runs.dispatch' }, { id: 'client:e' })).toEqual([]);
     expect(await engine.dispatch({ type: 'runs.dispatch' }, { id: 'client:e' })).toEqual([]);
-    const broken = { type: 'task.create', intent: null, repoId: null } as unknown as ShinsaCommand;
+    const broken = { type: 'task.create', request: null, repoId: null } as unknown as ShinsaCommand;
     const first = await engine.dispatch(broken, { id: 'client:f' }).catch((error: unknown) => error);
     expect(first).toBeInstanceOf(TypeError);
     await expect(engine.dispatch(broken, { id: 'client:f' })).rejects.toMatchObject({
@@ -248,7 +248,7 @@ describe('effect outbox', () => {
       return attempts < 3 ? Promise.reject(new Error('git is busy')) : Promise.resolve();
     });
     engine.start();
-    await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     await awaitEffect(log, selectKey(log, 'task.triage'));
     expect(attempts).toBe(3);
     expect(log.listEffectStatuses().find((row) => row.kind === 'task.triage')).toMatchObject({
@@ -269,7 +269,7 @@ describe('effect outbox', () => {
       return Promise.resolve();
     });
     engine.start();
-    await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     await awaitEffect(log, selectKey(log, 'task.triage'));
     expect(log.listEffectStatuses().find((row) => row.kind === 'task.triage')).toMatchObject({
       status: 'done',
@@ -312,7 +312,7 @@ describe('effect outbox', () => {
     await engine.settle();
     const gate = Object.values(engine.state.gates).find((candidate) => candidate.taskId === taskId);
     expect(calls).toBe(1);
-    expect(gate?.purpose).toBe('failure');
+    expect(gate?.type).toBe('failure');
     expect(gate?.body).toBe('no claude');
     expect(keys).toEqual([selectKey(log, 'run.execute')]);
     expect(log.listEffectStatuses().find((row) => row.kind === 'run.execute')?.status).toBe('failed');
@@ -388,7 +388,7 @@ describe('cancelling effects', () => {
       return late.promise;
     });
     engine.start();
-    await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     await until('the triage to start', () => signals.length === 1);
     const key = selectKey(log, 'task.triage');
     const taskId = Object.keys(engine.state.tasks)[0] ?? '';
@@ -414,7 +414,7 @@ describe('cancelling effects', () => {
     const warn = spyOn(logger, 'warn');
     try {
       engine.start();
-      await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+      await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
       await until('the triage to start', () => started);
       await engine.dispatch({ type: 'task.cancel', taskId: Object.keys(engine.state.tasks)[0] ?? '' });
       late.reject(new Error('killed'));
@@ -437,7 +437,7 @@ describe('cancelling effects', () => {
 describe('engine lifecycle', () => {
   test('dispatch reports the events it committed, and nothing for a no-op', async () => {
     const engine = new Engine(new EventLog(createDatabasePath()));
-    const events = await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+    const events = await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     expect(events.map((event) => event.type)).toContain('task.created');
     expect(await engine.dispatch({ type: 'runs.dispatch' })).toEqual([]);
   });
@@ -465,14 +465,14 @@ describe('engine lifecycle', () => {
       return calls === 1 ? release.promise : fail.promise;
     });
     engine.start();
-    await engine.dispatch({ type: 'task.create', intent: 'One', repoId: null });
-    await engine.dispatch({ type: 'task.create', intent: 'Another', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'One', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Another', repoId: null });
     await until('both effects', () => calls === 2);
     engine.stop();
     release.resolve();
     fail.reject(new Error('late'));
     await engine.settle();
-    await expect(engine.dispatch({ type: 'task.create', intent: 'Late', repoId: null })).rejects.toThrow(
+    await expect(engine.dispatch({ type: 'task.create', request: 'Late', repoId: null })).rejects.toThrow(
       'shutting down'
     );
     expect(
@@ -493,7 +493,7 @@ describe('engine lifecycle', () => {
       });
     });
     engine.start();
-    await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
     await until(
       'the command to start',
       () => existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim() !== ''
@@ -516,7 +516,7 @@ describe('engine lifecycle', () => {
     engine.onEffectExhausted(() => Promise.reject(new Error('report broke')));
     try {
       engine.start();
-      await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+      await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
       await awaitEffect(log, selectKey(log, 'task.triage'));
       await engine.settle();
       expect(error).toHaveBeenCalledWith('[Engine] Could not report a failed effect', {
@@ -537,7 +537,7 @@ test('without handlers, effects settle and a failure is only recorded', async ()
   const log = new EventLog(createDatabasePath());
   const engine = new Engine(log);
   engine.start();
-  await engine.dispatch({ type: 'task.create', intent: 'Do it', repoId: null });
+  await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
   await awaitEffect(log, selectKey(log, 'task.triage'));
   expect(log.listEffectStatuses().map((row) => row.status)).toEqual(['done']);
   engine.onEffect(() => Promise.reject(new Error('gone')));

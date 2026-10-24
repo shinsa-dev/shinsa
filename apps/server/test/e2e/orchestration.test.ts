@@ -21,7 +21,7 @@ function phaseReport(summary: string) {
   return {
     summary,
     spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
-    decisions: [],
+    judgement_calls: [],
   };
 }
 
@@ -61,12 +61,12 @@ describe('delegating work to other agents', () => {
     w.agents.queue('builder', async (agent) => {
       const status = parse(
         await agent.call('delegate_task', {
-          task: 'Read a.txt and list every greeting in it.',
+          brief: 'Read a.txt and list every greeting in it.',
           role: 'reviewer',
           client_request_id: 'greetings',
         })
       );
-      delegatedId = String(status.task_id);
+      delegatedId = String(status.delegation_id);
       expect(status).toMatchObject({ role: 'reviewer', depth: 1, isolation: 'shared', result: null });
       steered = await nextSteer(agent);
       agent.write('a.txt', 'hello\n');
@@ -108,9 +108,13 @@ describe('delegating work to other agents', () => {
     w.agents.queue('builder', async (agent) => {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const status = parse(
-          await agent.call('delegate_task', { task: 'Check it.', role: 'planner', client_request_id: 'once' })
+          await agent.call('delegate_task', {
+            brief: 'Check it.',
+            role: 'planner',
+            client_request_id: 'once',
+          })
         );
-        ids.push(String(status.task_id));
+        ids.push(String(status.delegation_id));
       }
       await nextSteer(agent);
       agent.write('a.txt', 'one\n');
@@ -138,7 +142,7 @@ describe('delegating work to other agents', () => {
     w.agents.queue('builder', async (agent) => {
       timedOut = parse(
         await agent.call('delegate_task', {
-          task: 'Run the slow suite.',
+          brief: 'Run the slow suite.',
           role: 'reviewer',
           mode: 'wait',
           timeout_minutes: 1,
@@ -175,10 +179,13 @@ describe('delegating work to other agents', () => {
     let reply = '';
     w.agents.queue('builder', async (agent) => {
       const status = parse(
-        await agent.call('delegate_task', { task: 'Name the greeting.', role: 'reviewer' })
+        await agent.call('delegate_task', { brief: 'Name the greeting.', role: 'reviewer' })
       );
       question = await nextSteer(agent);
-      await agent.call('delegation_answer', { task_id: status.task_id, answer: 'Call it hello.' });
+      await agent.call('delegation_answer', {
+        delegation_id: status.delegation_id,
+        answer: 'Call it hello.',
+      });
       await nextSteer(agent, 1);
       agent.write('a.txt', 'hello\n');
       await agent.call('complete_phase', phaseReport('Named it.'));
@@ -195,10 +202,10 @@ describe('delegating work to other agents', () => {
     expect(question).toContain('What should the greeting be called?');
     expect(listOpenGates(w.state, taskId)).toEqual([]);
     await w.untilStage(taskId, 'awaiting_review');
-    expect(reply).toBe('The agent that delegated this task answered: Call it hello.');
+    expect(reply).toBe('The agent that delegated this work to you answered: Call it hello.');
     const [child] = delegated(w, taskId);
     expect(child?.delegation?.question).toMatchObject({ answer: 'Call it hello.' });
-    expect(Object.values(w.state.gates).filter((gate) => gate.purpose === 'agent_question')).toEqual([]);
+    expect(Object.values(w.state.gates).filter((gate) => gate.type === 'question')).toEqual([]);
   });
 
   test('an agent that cannot change files cannot delegate to one that can', async () => {
@@ -206,7 +213,7 @@ describe('delegating work to other agents', () => {
     let refusal = '';
     w.agents.queue('planner', async (agent) => {
       try {
-        await agent.call('delegate_task', { task: 'Write the files.', role: 'builder' });
+        await agent.call('delegate_task', { brief: 'Write the files.', role: 'builder' });
       } catch (error) {
         refusal = error instanceof Error ? error.message : String(error);
       }
@@ -224,12 +231,12 @@ describe('delegating work to other agents', () => {
     const w = await open();
     let refusal = '';
     const chain = async (agent: AgentContext, label: string) => {
-      await agent.call('delegate_task', { task: `Level below ${label}.`, role: 'reviewer' });
+      await agent.call('delegate_task', { brief: `Level below ${label}.`, role: 'reviewer' });
       const result = await nextSteer(agent);
       agent.say(`${label} heard: ${result.includes('did it myself') ? 'did it myself' : 'nothing'}`);
     };
     w.agents.queue('builder', async (agent) => {
-      await agent.call('delegate_task', { task: 'Level one.', role: 'reviewer' });
+      await agent.call('delegate_task', { brief: 'Level one.', role: 'reviewer' });
       await nextSteer(agent);
       agent.write('a.txt', 'deep\n');
       await agent.call('complete_phase', phaseReport('Done deep.'));
@@ -240,7 +247,7 @@ describe('delegating work to other agents', () => {
       (agent) => chain(agent, 'two'),
       async (agent) => {
         try {
-          await agent.call('delegate_task', { task: 'Level four.', role: 'reviewer' });
+          await agent.call('delegate_task', { brief: 'Level four.', role: 'reviewer' });
         } catch (error) {
           refusal = error instanceof Error ? error.message : String(error);
         }
@@ -250,13 +257,13 @@ describe('delegating work to other agents', () => {
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
     expect(refusal).toBe(
-      'Delegated tasks nest at most 3 deep, and this agent is already at that depth. Do the work yourself.'
+      'Delegations nest at most 3 deep, and this agent is already at that depth. Do the work yourself.'
     );
     expect(delegated(w, taskId).map((run) => run.delegation?.depth)).toEqual([1, 2, 3]);
     expect(delegated(w, taskId).every((run) => run.outcome === 'completed')).toBe(true);
   });
 
-  test('a restart mid-delegation brings the delegated task back, and its result still reaches the parent once', async () => {
+  test('a restart mid-delegation brings the delegation back, and its result still reaches the parent once', async () => {
     const w = await open();
     let childId = '';
     const steers: string[] = [];
@@ -264,7 +271,7 @@ describe('delegating work to other agents', () => {
       'builder',
       async (agent) => {
         childId = String(
-          parse(await agent.call('delegate_task', { task: 'Survey it.', role: 'reviewer' })).task_id
+          parse(await agent.call('delegate_task', { brief: 'Survey it.', role: 'reviewer' })).delegation_id
         );
         await agent.hang();
       },
@@ -285,7 +292,7 @@ describe('delegating work to other agents', () => {
       }
     );
     const taskId = await w.createTask();
-    await w.until('the delegated task to start', () => w.agents.of('reviewer').length === 1);
+    await w.until('the delegation to start', () => w.agents.of('reviewer').length === 1);
     await w.restartGracefully();
     await w.untilStage(taskId, 'awaiting_review');
     expect(steers).toHaveLength(1);
@@ -298,13 +305,13 @@ describe('delegating work to other agents', () => {
     expect(delegated(w, taskId)).toHaveLength(1);
   });
 
-  test('stopping a delegated task stops what it delegated in turn, and the parent hears it was stopped', async () => {
+  test('stopping a delegation stops what it delegated in turn, and the parent hears it was stopped', async () => {
     const w = await open();
     let steered = '';
     let childId = '';
     w.agents.queue('builder', async (agent) => {
       childId = String(
-        parse(await agent.call('delegate_task', { task: 'Look around.', role: 'reviewer' })).task_id
+        parse(await agent.call('delegate_task', { brief: 'Look around.', role: 'reviewer' })).delegation_id
       );
       steered = await nextSteer(agent);
       agent.write('a.txt', 'stopped\n');
@@ -313,7 +320,7 @@ describe('delegating work to other agents', () => {
     w.agents.queue(
       'reviewer',
       async (agent) => {
-        await agent.call('delegate_task', { task: 'Look further.', role: 'reviewer' });
+        await agent.call('delegate_task', { brief: 'Look further.', role: 'reviewer' });
         await agent.hang();
       },
       async (agent) => {
@@ -321,7 +328,7 @@ describe('delegating work to other agents', () => {
       }
     );
     const taskId = await w.createTask();
-    await w.until('both delegated tasks to run', () => w.agents.of('reviewer').length === 2);
+    await w.until('both delegations to run', () => w.agents.of('reviewer').length === 2);
     await w.engine.dispatch({ type: 'delegation.cancel', runId: childId });
     await w.until('the parent to hear', () => steered.length > 0);
     const [child, grandchild] = delegated(w, taskId);
@@ -333,13 +340,13 @@ describe('delegating work to other agents', () => {
     await w.untilStage(taskId, 'awaiting_review');
   });
 
-  test('a delegated task in its own checkout starts from the parent’s commit and leaves its changes for the parent', async () => {
+  test('a delegation in its own checkout starts from the parent’s commit and leaves its changes for the parent', async () => {
     const w = await open();
     let steered = '';
     w.agents.queue('builder', async (agent) => {
       agent.write('a.txt', 'committed\n');
       await agent.call('delegate_task', {
-        task: 'Try another wording.',
+        brief: 'Try another wording.',
         role: 'builder',
         isolation: 'worktree',
       });

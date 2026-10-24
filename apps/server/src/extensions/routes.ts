@@ -21,7 +21,7 @@ export function createExtensionRoutes(extensions: Extensions): ApiRoute[] {
     {
       method: 'GET',
       pattern: /^\/api\/extensions$/,
-      respond: () => Promise.resolve(Response.json(extensions.snapshot())),
+      respond: () => Promise.resolve(Response.json(extensions.readSnapshot())),
     },
     post('/check', (fields) => extensions.check(fields.serverId)),
     post('/servers/add', (fields) => extensions.createServer(fields.server)),

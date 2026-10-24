@@ -17,7 +17,7 @@ type RateLimitNotice = Extract<ChatNotice, { kind: 'rate_limit' }>;
 const SESSION: UsageWindow = {
   id: 'five_hour',
   kind: 'session',
-  label: 'Current session',
+  label: '5-hour limit',
   model: null,
   usedPercent: 40,
   resetsAt: 9_000,
@@ -234,18 +234,6 @@ describe('usage limits', () => {
       checkedAt: 1_000,
       source: 'cache',
     });
-  });
-
-  test('a cache an older version wrote gets the model window ids every reader uses now', () => {
-    const path = join(createTempDir(), 'usage.json');
-    const keyed = { ...FABLE, id: 'seven_day_opus', label: 'Weekly · Opus', model: 'Opus' };
-    const read = { ...keyed, id: 'weekly:opus', usedPercent: 60 };
-    writeFileSync(
-      path,
-      JSON.stringify({ accounts: { a: { ...createUnknownUsage(), windows: [SESSION, keyed, read] } } })
-    );
-    const { limits } = createLimits([], { path });
-    expect(limits.snapshot('a').windows).toEqual([SESSION, { ...keyed, id: 'weekly:opus' }]);
   });
 
   test('cached entries without windows are dropped and a broken cache is logged and ignored', () => {

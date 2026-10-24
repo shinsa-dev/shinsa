@@ -17,7 +17,7 @@ const SUGGESTION_FIELD: FieldSpec = {
   kind: 'text',
   positional: 'one',
   required: true,
-  description: 'The follow-up id, from `shinsa followups list`.',
+  description: 'The suggested task id, from `shinsa suggestions list`.',
 };
 
 const SNOOZE_MINUTES = 30;
@@ -33,13 +33,13 @@ interface DelegationView {
 
 export const WORK_SPECS: SurfaceSpec[] = [
   defineRead<TaskDetail>({
-    path: ['followups', 'list'],
-    summary: 'List the follow-up tasks agents suggested on a task.',
+    path: ['suggestions', 'list'],
+    summary: 'List the tasks agents suggested on a task.',
     fields: [TASK_FIELD],
     request: (values) => `/api/tasks/${encode(values.task)}`,
     format: ({ suggestions }) =>
       suggestions.length === 0
-        ? 'No follow-ups.'
+        ? 'No suggested tasks.'
         : suggestions
             .map(
               (suggestion) =>
@@ -48,8 +48,8 @@ export const WORK_SPECS: SurfaceSpec[] = [
             .join('\n'),
   }),
   defineCommand({
-    path: ['followups', 'accept'],
-    summary: 'Add a suggested follow-up to the roadmap as a new task.',
+    path: ['suggestions', 'accept'],
+    summary: 'Add a suggested task to the roadmap.',
     command: 'suggestion.accept',
     fields: [
       TASK_FIELD,
@@ -62,11 +62,11 @@ export const WORK_SPECS: SurfaceSpec[] = [
       suggestionId: readValue(values, 'suggestion'),
       waitsOnThis: values.afterThis === true,
     }),
-    done: () => 'Added the follow-up.',
+    done: () => 'Added the suggested task.',
   }),
   defineCommand({
-    path: ['followups', 'dismiss'],
-    summary: 'Dismiss a suggested follow-up.',
+    path: ['suggestions', 'dismiss'],
+    summary: 'Dismiss a suggested task.',
     command: 'suggestion.dismiss',
     fields: [TASK_FIELD, SUGGESTION_FIELD],
     build: async (values, client) => ({
@@ -77,8 +77,8 @@ export const WORK_SPECS: SurfaceSpec[] = [
     done: () => 'Dismissed.',
   }),
   defineCommand({
-    path: ['followups', 'keep'],
-    summary: 'Keep a suggested separate task in this task instead, as its next round.',
+    path: ['suggestions', 'keep'],
+    summary: 'Keep a suggested task in this task instead, as its next round.',
     command: 'suggestion.keep',
     fields: [TASK_FIELD, SUGGESTION_FIELD],
     build: async (values, client) => ({
@@ -117,14 +117,14 @@ export const WORK_SPECS: SurfaceSpec[] = [
   }),
   defineRead<{ delegations: DelegationView[] }>({
     path: ['delegations', 'list'],
-    summary: 'List the work agents delegated to other agents.',
+    summary: 'List the delegations: work agents handed to other agents.',
     fields: [
       { name: 'task', kind: 'text', description: 'Only this task (id, start of the id, or exact title).' },
     ],
     request: (values) => (values.task ? `/api/delegations?task=${encode(values.task)}` : '/api/delegations'),
     format: ({ delegations }) =>
       delegations.length === 0
-        ? 'No delegated work.'
+        ? 'No delegations.'
         : delegations
             .map(
               (run) =>
@@ -134,7 +134,7 @@ export const WORK_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['delegations', 'stop'],
-    summary: 'Stop a delegated task and everything it delegated.',
+    summary: 'Stop a delegation and every delegation it started.',
     command: 'delegation.cancel',
     fields: [RUN_FIELD],
     build: (values) => ({ type: 'delegation.cancel', runId: readValue(values, 'run') }),

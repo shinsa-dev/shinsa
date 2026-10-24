@@ -18,8 +18,8 @@ async function open(options?: Parameters<typeof World.create>[0]) {
   return world;
 }
 
-async function toPullRequest(w: World, intent?: string) {
-  const taskId = await w.createTask(intent);
+async function toPullRequest(w: World, request?: string) {
+  const taskId = await w.createTask(request);
   await w.untilStage(taskId, 'awaiting_review');
   await w.answer(await w.untilGate(taskId, 'review'), 'approve');
   await w.until('the pull request to open', () => w.task(taskId).pullRequest !== null);
@@ -93,7 +93,7 @@ describe('the pull request loop', () => {
     await w.untilStage(taskId, 'awaiting_review');
     rmSync(w.origin, { recursive: true, force: true });
     await w.answer(await w.untilGate(taskId, 'review'), 'approve');
-    const gate = await w.untilGate(taskId, 'question', 'failure');
+    const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('Could not open the pull request');
     const pushes = w.daemon.log.listEffectStatuses().filter((row) => row.kind === 'pull_request.open');
     expect(pushes).toEqual([
@@ -108,7 +108,7 @@ describe('waiting on another task', () => {
     const parent = await toPullRequest(w, 'Base work');
     w.dependOn = [parent];
     const child = await w.createTask('Build on it');
-    await w.untilStage(child, 'queued');
+    await w.untilStage(child, 'waiting_on_tasks');
     expect(w.task(child).waitsOn).toEqual([parent]);
     expect(w.task(child).worktreePath).toBeNull();
     expect(w.activeRuns(child)).toHaveLength(0);
@@ -119,7 +119,7 @@ describe('waiting on another task', () => {
         'propose_plan',
         toolPlan({
           ...PLAN,
-          plan: [
+          phases: [
             { title: 'Write the third file', detail: 'Create c.txt.' },
             { title: 'Write the fourth file', detail: 'Create d.txt.' },
           ],
@@ -130,11 +130,11 @@ describe('waiting on another task', () => {
       'builder',
       async (agent) => {
         agent.write('c.txt', 'on top\n');
-        await agent.call('complete_phase', { summary: 'Phase one on top.', spots: [], decisions: [] });
+        await agent.call('complete_phase', { summary: 'Phase one on top.', spots: [], judgement_calls: [] });
       },
       async (agent) => {
         agent.write('d.txt', 'on top\n');
-        await agent.call('complete_phase', { summary: 'Phase two on top.', spots: [], decisions: [] });
+        await agent.call('complete_phase', { summary: 'Phase two on top.', spots: [], judgement_calls: [] });
       }
     );
     const parentBranch = w.task(parent).branch ?? '';
@@ -158,9 +158,9 @@ describe('waiting on another task', () => {
     const w = await open();
     const parent = await w.createTask('Base work');
     const child = await w.createTask('Build on it', { waitsOn: [parent] });
-    await w.untilStage(child, 'queued');
+    await w.untilStage(child, 'waiting_on_tasks');
     await w.engine.dispatch({ type: 'task.cancel', taskId: parent });
-    const gate = await w.untilGate(child, 'question', 'failure');
+    const gate = await w.untilGate(child, 'failure');
     expect(gate.title).toBe('“Base work” was cancelled');
     await w.answer(gate, 'approve');
     await w.untilStage(child, 'awaiting_review');
@@ -173,9 +173,9 @@ describe('waiting on another task', () => {
     const second = await w.createTask('Second base');
     const gone = await w.createTask('Dropped base');
     const child = await w.createTask('Build on all of them', { waitsOn: [first, second, gone] });
-    await w.untilStage(child, 'queued');
+    await w.untilStage(child, 'waiting_on_tasks');
     await w.engine.dispatch({ type: 'task.cancel', taskId: gone });
-    const gate = await w.untilGate(child, 'question', 'failure');
+    const gate = await w.untilGate(child, 'failure');
     expect(gate.title).toBe('“Dropped base” was cancelled');
     await w.answer(gate, 'approve');
     await w.until('the cancelled task to be dropped', () => w.task(child).waitsOn.length === 2);
@@ -183,7 +183,7 @@ describe('waiting on another task', () => {
 
     await w.engine.dispatch({ type: 'task.complete', taskId: first });
     await w.engine.settle();
-    expect(w.task(child).stage).toBe('queued');
+    expect(w.task(child).stage).toBe('waiting_on_tasks');
     expect(w.activeRuns(child)).toHaveLength(0);
     await w.engine.dispatch({ type: 'task.complete', taskId: second });
     await w.untilStage(child, 'awaiting_review');
@@ -198,13 +198,13 @@ describe('plan approval', () => {
       await agent.call('propose_plan', toolPlan(PLAN));
     });
     const taskId = await w.createTask('Rework the whole greeting architecture');
-    const plan = await w.untilGate(taskId, 'spec');
+    const plan = await w.untilGate(taskId, 'plan');
     expect(w.task(taskId).size).toBe('large');
     await w.answer(plan, 'revise', 'Only one file.');
     await w.until('the planner to resume', () => w.agents.of('planner').length === 2);
     expect(w.agents.of('planner')[1]?.resume).toBe(w.agents.of('planner')[0]?.sessionId);
     expect(w.agents.of('planner')[1]?.prompt).toContain('Only one file.');
-    await w.answer(await w.untilGate(taskId, 'spec'), 'approve');
+    await w.answer(await w.untilGate(taskId, 'plan'), 'approve');
     await w.untilStage(taskId, 'awaiting_review');
   });
 });
@@ -218,7 +218,7 @@ describe('evidence and transcripts', () => {
       await agent.call('attach_evidence', { kind: 'screenshot', title: 'The new file', path: shot });
       rmSync(shot);
       agent.write('a.txt', 'a\n');
-      await agent.call('complete_phase', { summary: 'Done.', spots: [], decisions: [] });
+      await agent.call('complete_phase', { summary: 'Done.', spots: [], judgement_calls: [] });
     });
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
@@ -241,7 +241,7 @@ describe('evidence and transcripts', () => {
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
     expect(first).toContain('Shinsa rejected this hand-over');
-    expect(first).toContain('plan: at least 2 phases.');
+    expect(first).toContain('phases: at least 2 phases.');
   });
 });
 
@@ -260,12 +260,12 @@ describe('restarts', () => {
       await agent.call('ask', { question: 'Which greeting?' });
     });
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'question', 'agent_question');
+    const gate = await w.untilGate(taskId, 'question');
     await w.restart();
     await w.engine.settle();
     expect(w.agents.of('planner')).toHaveLength(1);
     expect(w.gates(taskId)).toHaveLength(1);
-    await w.answer(gate, 'answer', 'Hello.');
+    await w.answer(gate, 'reply', 'Hello.');
     await w.untilStage(taskId, 'awaiting_review');
     const resumed = w.agents.of('planner')[1];
     expect(resumed?.resume).toBe(w.agents.of('planner')[0]?.sessionId);
@@ -324,7 +324,7 @@ describe('review fixes', () => {
       'builder',
       async (agent) => {
         agent.write('a.txt', 'a\n');
-        await agent.call('complete_phase', { summary: 'One.', spots: [], decisions: [] });
+        await agent.call('complete_phase', { summary: 'One.', spots: [], judgement_calls: [] });
         await w.until('the next builder to be waiting', isSecondWaiting);
         agent.write('late.txt', 'late\n');
         order.push('first finished');
@@ -332,7 +332,7 @@ describe('review fixes', () => {
       async (agent) => {
         order.push('second started');
         agent.write('b.txt', 'b\n');
-        await agent.call('complete_phase', { summary: 'Two.', spots: [], decisions: [] });
+        await agent.call('complete_phase', { summary: 'Two.', spots: [], judgement_calls: [] });
       }
     );
     taskId = await w.createTask();

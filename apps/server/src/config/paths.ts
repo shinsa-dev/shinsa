@@ -7,7 +7,6 @@ export interface ShinsaPaths {
   home: string;
   configPath: string;
   dataDir: string;
-  legacyDataDir: string | null;
 }
 
 const CONFIG_FILE = 'config.json';
@@ -22,7 +21,6 @@ export function resolveShinsaPaths(env: Env): ShinsaPaths {
       home: env.SHINSA_HOME,
       configPath: join(env.SHINSA_HOME, CONFIG_FILE),
       dataDir: join(env.SHINSA_HOME, 'data'),
-      legacyDataDir: null,
     };
   }
   if (env.SHINSA_DATA_DIR) {
@@ -30,7 +28,6 @@ export function resolveShinsaPaths(env: Env): ShinsaPaths {
       home: env.SHINSA_DATA_DIR,
       configPath: join(env.SHINSA_DATA_DIR, CONFIG_FILE),
       dataDir: env.SHINSA_DATA_DIR,
-      legacyDataDir: null,
     };
   }
   const user = resolveUserHome(env);
@@ -39,6 +36,5 @@ export function resolveShinsaPaths(env: Env): ShinsaPaths {
     home,
     configPath: join(home, CONFIG_FILE),
     dataDir: join(home, 'data'),
-    legacyDataDir: join(user, '.shinsa'),
   };
 }

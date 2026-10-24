@@ -36,17 +36,55 @@ const TOOL_CALL_TIMEOUT_MS = 120_000;
 
 const NAME = { type: 'string', maxLength: 128 };
 
-function describeServerChoice(server: DeferredServer) {
+export function describeServerChoice(server: DeferredServer) {
   if (server.tools.length === 0) return server.name;
   return `${server.name} (${server.tools.length} ${server.tools.length === 1 ? 'tool' : 'tools'})`;
 }
 
-function isNameMatch(candidates: string[], wanted: string) {
-  const plain = wanted
+const FILLER_WORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'mcp',
+  'server',
+  'servers',
+  'skill',
+  'skills',
+  'plugin',
+  'tools',
+]);
+
+function resolvePlainName(name: string) {
+  return name
     .trim()
     .toLowerCase()
     .replace(/^mcp__/, '');
+}
+
+function listNameWords(name: string) {
+  return resolvePlainName(name)
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word !== '' && !FILLER_WORDS.has(word));
+}
+
+function isExactName(candidates: string[], wanted: string) {
+  const plain = resolvePlainName(wanted);
   return candidates.some((candidate) => candidate.toLowerCase() === plain);
+}
+
+function isLooseName(candidates: string[], wanted: string) {
+  const words = new Set(listNameWords(wanted));
+  return candidates.some((candidate) => {
+    const own = listNameWords(candidate);
+    return own.length > 0 && own.every((word) => words.has(word));
+  });
+}
+
+function selectByName<T>(entries: T[], names: (entry: T) => string[], wanted: string): T | null {
+  const exact = entries.find((entry) => isExactName(names(entry), wanted));
+  if (exact) return exact;
+  const loose = entries.filter((entry) => isLooseName(names(entry), wanted));
+  return loose.length === 1 ? (loose[0] ?? null) : null;
 }
 
 function serializeContent(content: unknown) {
@@ -87,7 +125,7 @@ export class ExtensionLoader {
           description: [
             'Load an MCP server Shinsa left out of this run because it has not been used lately.',
             `These can be loaded: ${deferred.map(describeServerChoice).join(', ')}.`,
-            'Load one when the task needs it or the human names it. Its tools are listed in the reply.',
+            'Load one when the task needs it or the human names it, in any form (`maple`, “the Maple MCP”). Its tools are listed in the reply.',
           ].join(' '),
           inputSchema: {
             type: 'object',
@@ -120,6 +158,7 @@ export class ExtensionLoader {
         description: [
           'Read a skill Shinsa left out of this run because it has not been used lately.',
           `These can be loaded: ${deferredSkills.map((skill) => skill.name).join(', ')}.`,
+          'Load one when the task needs it or the human names it, in any form.',
         ].join(' '),
         inputSchema: {
           type: 'object',
@@ -148,11 +187,9 @@ export class ExtensionLoader {
   }
 
   #findServer(wanted: string) {
-    const server = this.#extensions.deferred.find((entry) =>
-      isNameMatch([entry.name, entry.claudeName], wanted)
-    );
+    const server = selectByName(this.#extensions.deferred, (entry) => [entry.name, entry.claudeName], wanted);
     if (server) return server;
-    if (isNameMatch(this.#extensions.loadedNames, wanted)) {
+    if (selectByName(this.#extensions.loadedNames, (name) => [name], wanted) !== null) {
       throw new DomainError('server_loaded', `${wanted} is already loaded in this run. Use its tools.`);
     }
     throw new DomainError(
@@ -225,7 +262,8 @@ export class ExtensionLoader {
     }
   }
 
-  async #callTool(serverName: string, tool: string, args: unknown) {
+  async #callTool(wanted: string, tool: string, args: unknown) {
+    const serverName = selectByName([...this.#proxied.keys()], (name) => [name], wanted) ?? wanted;
     const opened = this.#proxied.get(serverName);
     if (!opened) {
       throw new DomainError(
@@ -246,7 +284,7 @@ export class ExtensionLoader {
   }
 
   #loadSkill(wanted: string) {
-    const skill = this.#extensions.deferredSkills.find((entry) => isNameMatch([entry.name], wanted));
+    const skill = selectByName(this.#extensions.deferredSkills, (entry) => [entry.name], wanted);
     if (!skill) {
       throw new DomainError(
         'skill_not_loadable',

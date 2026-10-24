@@ -67,9 +67,9 @@ export class Deliveries {
   async release(runId: string, active: ActiveRun, undelivered: string[]) {
     const items = undelivered.flatMap((text) => active.steered.get(text) ?? []);
     if (items.length > 0) {
-      const id = `delegation.undelivered:${resolveAttemptKey(runId, active.attemptId)}:steered`;
+      const id = `delegation.release:${resolveAttemptKey(runId, active.attemptId)}:steered`;
       await this.#options.engine.dispatch(
-        { type: 'delegation.undelivered', runId, generation: null, items },
+        { type: 'delegation.release', runId, generation: null, items },
         { id }
       );
     }
@@ -80,15 +80,15 @@ export class Deliveries {
 
   #recordUndelivered(runId: string, generation: number) {
     return this.#options.engine.dispatch(
-      { type: 'delegation.undelivered', runId, generation, items: [] },
-      { id: `delegation.undelivered:${runId}:${generation}` }
+      { type: 'delegation.release', runId, generation, items: [] },
+      { id: `delegation.release:${runId}:${generation}` }
     );
   }
 
   #recordDelivered(runId: string, delivery: Delivery) {
     return this.#options.engine.dispatch(
-      { type: 'delegation.delivered', runId, generation: delivery.generation, items: delivery.items },
-      { id: `delegation.delivered:${runId}:${delivery.generation}` }
+      { type: 'delegation.record_delivery', runId, generation: delivery.generation, items: delivery.items },
+      { id: `delegation.record_delivery:${runId}:${delivery.generation}` }
     );
   }
 

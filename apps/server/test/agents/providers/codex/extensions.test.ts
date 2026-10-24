@@ -135,5 +135,59 @@ describe('what a Codex agent is given', () => {
     };
     expect(thread.config['mcp_servers.files']).toMatchObject({ command: 'npx' });
     expect(thread.developerInstructions).toContain('/home/.claude/skills/animate/SKILL.md');
+    expect(thread.developerInstructions).not.toContain('## Left out until needed');
+  });
+
+  test('a resumed thread whose set did not change says nothing about it', async () => {
+    const codex = new FakeCodex();
+    const entries: ChatEvent[] = [];
+    await startCodexSession(
+      {
+        role: 'planner',
+        cwd: createTempDir(),
+        prompt: 'Plan it',
+        model: 'gpt-6-astra',
+        resume: null,
+        defaultBranch: 'main',
+        tools: createShinsaTools('planner', (name) => Promise.resolve(`${name} accepted.`)),
+        pluginDir: '/plugin',
+        onSession: () => undefined,
+        onEntry: (entry) => entries.push(entry),
+        extensions: EXTENSIONS,
+        announceExtensions: false,
+      },
+      { runtime: codex.runtime, requestTimeoutMs: 50, heartbeatMs: 5 }
+    ).done;
+    expect(entries.some((entry) => entry.type === 'notice' && entry.notice.kind === 'extensions')).toBe(
+      false
+    );
+  });
+
+  test('a run that left something out is told to load it when the human names it', async () => {
+    const codex = new FakeCodex();
+    await startCodexSession(
+      {
+        role: 'planner',
+        cwd: createTempDir(),
+        prompt: 'Plan it',
+        model: 'gpt-6-astra',
+        resume: null,
+        defaultBranch: 'main',
+        tools: createShinsaTools('planner', (name) => Promise.resolve(`${name} accepted.`)),
+        pluginDir: '/plugin',
+        onSession: () => undefined,
+        onEntry: () => undefined,
+        extensions: {
+          ...EXTENSIONS,
+          deferredSkills: [{ name: 'release', description: 'Cuts a release.', path: '/r/SKILL.md' }],
+        },
+      },
+      { runtime: codex.runtime, requestTimeoutMs: 50, heartbeatMs: 5 }
+    ).done;
+    const thread = codex.requests('thread/start')[0] as { developerInstructions: string };
+    expect(thread.developerInstructions).toContain(
+      '- Skills: the ones `load_skill` lists. Read one with `load_skill`.'
+    );
+    expect(thread.developerInstructions).not.toContain('- MCP servers:');
   });
 });

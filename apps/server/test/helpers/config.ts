@@ -8,7 +8,6 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
   const config: ServerConfig = {
     home: root,
     configPath: join(root, 'config.json'),
-    legacyDataDir: null,
     userHome: root,
     machine: readMachineConfig(join(root, 'config.json')),
     dataDir,

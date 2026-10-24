@@ -79,7 +79,7 @@ function describeState(state: ShinsaState) {
     .map((task) => {
       const gates = Object.values(state.gates)
         .filter((gate) => gate.taskId === task.id && gate.status === 'open')
-        .map((gate) => `${gate.purpose}:${gate.title}:${gate.body ?? ''}`);
+        .map((gate) => `${gate.type}:${gate.title}:${gate.body ?? ''}`);
       const activity = task.activity
         .slice(-14)
         .map(
@@ -144,17 +144,17 @@ async function assertConsistent(w: World, lives: number, outputs: string[]) {
   expect(failures).toEqual([]);
   assertReceipts(w, read, outputs);
   const all = Object.values(state.tasks);
-  const cancelled = all.filter((task) => task.intent === CANCELLED_INTENT);
+  const cancelled = all.filter((task) => task.request === CANCELLED_INTENT);
   expect(cancelled.map((task) => [task.stage, task.worktreePath, task.pullRequest])).toEqual([
     ['cancelled', null, null],
   ]);
-  const tasks = all.filter((task) => task.intent !== CANCELLED_INTENT);
+  const tasks = all.filter((task) => task.request !== CANCELLED_INTENT);
   if (tasks.some((task) => task.stage !== 'merged')) {
     throw new Error(`Not merged after ${lives} lives\n${describeLog(w)}`);
   }
   const isCrashLoop = (run: Run | undefined) => run?.failure?.code === 'crash_loop';
   const failureGates = Object.values(state.gates).filter(
-    (gate) => gate.purpose === 'failure' && !isCrashLoop(state.runs[gate.runId ?? ''])
+    (gate) => gate.type === 'failure' && !isCrashLoop(state.runs[gate.runId ?? ''])
   );
   expect(failureGates.map((gate) => `${gate.title}: ${gate.body}`)).toEqual([]);
   expect(Object.values(state.gates).filter((gate) => gate.status === 'open')).toEqual([]);
@@ -205,8 +205,8 @@ describe('crash and restart soak', () => {
       w.daemon.stop();
       await w.daemon.engine.settle();
       const seeding = new Engine(new EventLog(w.config.databasePath));
-      for (const intent of [...INTENTS, CANCELLED_INTENT]) {
-        await seeding.dispatch({ type: 'task.create', intent, repoId: w.repoId });
+      for (const request of [...INTENTS, CANCELLED_INTENT]) {
+        await seeding.dispatch({ type: 'task.create', request, repoId: w.repoId });
       }
       const github = JSON.parse(readFileSync(w.github.path, 'utf8'));
       writeFileSync(w.github.path, JSON.stringify({ ...github, defaultChecks: 'passing' }));

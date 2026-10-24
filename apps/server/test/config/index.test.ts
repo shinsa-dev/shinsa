@@ -1,50 +1,37 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import {
-  ConfigStore,
   DEFAULT_PORT,
   prepareDataDir,
   resolveConfig,
   resolveServerAddress,
   resolveShinsaPaths,
 } from '../../src/config/index.ts';
-import { EventLog } from '../../src/store/index.ts';
-import { commitEvents, createTempDir } from '../helpers/index.ts';
-
-function createLegacyData(dir: string) {
-  mkdirSync(join(dir, 'transcripts'), { recursive: true });
-  const log = new EventLog(join(dir, 'shinsa.sqlite'));
-  commitEvents(log, [{ type: 'focus.changed', focus: { projectId: null, until: null } }], [], 0, 1);
-  log.close();
-  writeFileSync(join(dir, 'transcripts', 'run-1.jsonl'), '{}\n');
-}
+import { createTempDir } from '../helpers/index.ts';
 
 describe('resolveShinsaPaths', () => {
-  test('lives in ~/.config/shinsa, with the data beside config.json, and copies from ~/.shinsa', () => {
+  test('lives in ~/.config/shinsa, with the data beside config.json', () => {
     expect(resolveShinsaPaths({ HOME: '/home/me' })).toEqual({
       home: '/home/me/.config/shinsa',
       configPath: '/home/me/.config/shinsa/config.json',
       dataDir: '/home/me/.config/shinsa/data',
-      legacyDataDir: '/home/me/.shinsa',
     });
     expect(resolveShinsaPaths({ HOME: '/home/me', XDG_CONFIG_HOME: '/xdg' }).home).toBe('/xdg/shinsa');
-    expect(resolveShinsaPaths({}).legacyDataDir).toBe(join(homedir(), '.shinsa'));
+    expect(resolveShinsaPaths({}).home).toBe(join(homedir(), '.config', 'shinsa'));
   });
 
-  test('SHINSA_HOME moves everything and SHINSA_DATA_DIR keeps the flat layout, neither migrates', () => {
+  test('SHINSA_HOME moves everything and SHINSA_DATA_DIR keeps the flat layout', () => {
     expect(resolveShinsaPaths({ HOME: '/home/me', SHINSA_HOME: '/tmp/s' })).toEqual({
       home: '/tmp/s',
       configPath: '/tmp/s/config.json',
       dataDir: '/tmp/s/data',
-      legacyDataDir: null,
     });
     expect(resolveShinsaPaths({ SHINSA_DATA_DIR: '/seed/data' })).toEqual({
       home: '/seed/data',
       configPath: '/seed/data/config.json',
       dataDir: '/seed/data',
-      legacyDataDir: null,
     });
   });
 });
@@ -131,43 +118,12 @@ describe('resolveConfig', () => {
   });
 });
 
-function prepare(env: Record<string, string>) {
-  const config = resolveConfig(env);
-  return prepareDataDir(config, new ConfigStore(config.configPath, config.machine));
-}
-
 describe('prepareDataDir', () => {
   test('creates the data directories', () => {
-    const config = prepare({ SHINSA_HOME: createTempDir() });
+    const config = resolveConfig({ SHINSA_HOME: createTempDir() });
+    prepareDataDir(config);
     for (const dir of [config.dataDir, config.worktreesDir, config.evidenceDir, config.transcriptsDir])
       expect(existsSync(dir)).toBe(true);
-  });
-
-  test('copies the old ~/.shinsa on first start, records it in config.json and leaves the original', () => {
-    const user = createTempDir();
-    createLegacyData(join(user, '.shinsa'));
-    const config = prepare({ HOME: user });
-    expect(config.dataDir).toBe(join(user, '.config', 'shinsa', 'data'));
-    expect(readFileSync(join(config.transcriptsDir, 'run-1.jsonl'), 'utf8')).toBe('{}\n');
-    const log = new EventLog(config.databasePath);
-    expect(log.readEvents().events).toHaveLength(1);
-    log.close();
-    expect(existsSync(join(user, '.shinsa', 'shinsa.sqlite'))).toBe(true);
-    const recorded = JSON.parse(readFileSync(config.configPath, 'utf8'));
-    expect(recorded.migratedFrom.path).toBe(join(user, '.shinsa'));
-    expect(prepare({ HOME: user }).dataDir).toBe(config.dataDir);
-  });
-
-  test('keeps using the old directory when the copy cannot be made', () => {
-    const user = createTempDir();
-    createLegacyData(join(user, '.shinsa'));
-    mkdirSync(join(user, '.config', 'shinsa', 'data'), { recursive: true });
-    writeFileSync(join(user, '.config', 'shinsa', 'data', 'stray.txt'), '');
-    const config = prepare({ HOME: user });
-    expect(config.dataDir).toBe(join(user, '.shinsa'));
-    expect(config.worktreesDir).toBe(join(user, '.shinsa', 'worktrees'));
-    const custom = prepare({ HOME: user, SHINSA_WORKTREES_DIR: join(user, 'wt') });
-    expect(custom.worktreesDir).toBe(join(user, 'wt'));
   });
 });
 

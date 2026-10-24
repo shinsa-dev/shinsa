@@ -3,7 +3,13 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { DomainError, type FastModeAvailability, type ShinsaCommand, type ShinsaState } from '@shinsa/core';
+import {
+  DomainError,
+  type FastModeAvailability,
+  resolveHouseRules,
+  type ShinsaCommand,
+  type ShinsaState,
+} from '@shinsa/core';
 import {
   type RunRejection,
   RunSupervisor,
@@ -210,6 +216,58 @@ describe('starting and ending runs', () => {
     await running;
   });
 
+  test('a resumed session keeps the set it ran with and announces it again only when the set changed', async () => {
+    const maple = { servers: [{ name: 'maple', tokens: 4000 }], skills: [], plugins: [], deferred: [] };
+    const linear = { ...maple, servers: [{ name: 'linear', tokens: 1000 }] };
+    const pins: unknown[] = [];
+    let next = maple;
+    const extensions = {
+      resolveSession: (_place: unknown, pin?: unknown) => {
+        pins.push(pin ?? null);
+        return Promise.resolve({
+          servers: [],
+          skills: [],
+          plugins: {},
+          skillsOff: [],
+          codexServersOff: [],
+          deferred: [],
+          deferredSkills: [],
+          loaded: next,
+        });
+      },
+    };
+    const sessions = createSessions();
+    const earlier = createRun({ id: 'run-0', sessionId: 'old', startedAt: 1, endedAt: 2 });
+    const { supervisor, transcripts } = setup(
+      withTask(createTempDir(), [earlier, createRun({ sessionId: 'old' }), createRun({ id: 'run-2' })]),
+      { startSession: sessions.startSession, extensions }
+    );
+    transcripts.record('run-0', { type: 'notice', notice: { kind: 'extensions', ...maple } });
+    const resumed = supervisor.execute('run-1');
+    await until('the resumed session', () => sessions.started.length === 1);
+    expect(pins[0]).toEqual(maple);
+    expect(sessions.started[0]?.input.announceExtensions).toBe(false);
+    sessions.started[0]?.input.onSession('old');
+    sessions.started[0]?.finish();
+    await resumed;
+
+    next = linear;
+    const changed = supervisor.execute('run-1');
+    await until('the session after the change', () => sessions.started.length === 2);
+    expect(pins[1]).toEqual(maple);
+    expect(sessions.started[1]?.input.announceExtensions).toBe(true);
+    sessions.started[1]?.input.onSession('old');
+    sessions.started[1]?.finish();
+    await changed;
+
+    const fresh = supervisor.execute('run-2');
+    await until('the fresh session', () => sessions.started.length === 3);
+    expect(pins[2]).toBeNull();
+    expect(sessions.started[2]?.input.announceExtensions).toBe(true);
+    sessions.started[2]?.finish();
+    await fresh;
+  });
+
   test('a run that left servers out can load one: the loader’s tools reach the agent and see the session', async () => {
     const calls: string[] = [];
     const attached: unknown[] = [];
@@ -339,13 +397,13 @@ describe('starting and ending runs', () => {
     update((state) => {
       Object.assign(state.settings, { fastMode: true, agentFastModes: { fixer: false } });
       state.runs['run-2'] = { ...createRun({ id: 'run-2' }), endedAt: 4, outcome: 'completed' };
-      state.runs['run-3'] = createRun({ id: 'run-3', role: 'shipper', startedAt: 5 });
+      state.runs['run-3'] = createRun({ id: 'run-3', role: 'fixer', startedAt: 5 });
     });
-    const shipper = supervisor.execute('run-3');
-    await until('the shipper session', () => fast.started.length === 3);
-    expect(fast.started[2]?.input).toMatchObject({ role: 'shipper', fastMode: false });
+    const fixer = supervisor.execute('run-3');
+    await until('the fixer session', () => fast.started.length === 3);
+    expect(fast.started[2]?.input).toMatchObject({ role: 'fixer', fastMode: false });
     fast.started[2]?.finish();
-    await shipper;
+    await fixer;
     update((state) => {
       Object.assign(state.settings, {
         compaction: 'off',
@@ -353,7 +411,7 @@ describe('starting and ending runs', () => {
         agentFastModes: { builder: true },
       });
       state.runs['run-3'] = {
-        ...createRun({ id: 'run-3', role: 'shipper' }),
+        ...createRun({ id: 'run-3', role: 'fixer' }),
         endedAt: 6,
         outcome: 'completed',
       };
@@ -806,16 +864,22 @@ describe('hand-overs', () => {
   test('a phase is committed then handed over, a fix likewise, and a review is reported', async () => {
     const { call, path, dispatched, done, running } = await handOverSetup();
     writeFiles(path, { 'a.txt': 'a' });
-    const phase = { summary: 'Wrote `a.txt`.', spots: [], decisions: [] };
-    expect(await call('complete_phase', phase)).toBe('Handed over to Shinsa. End your turn now.');
+    const phase = { summary: 'Wrote `a.txt`.', spots: [], judgement_calls: [] };
+    expect(await call('complete_phase', phase)).toBe(
+      'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.'
+    );
     expect(await git(path, 'log', '-1', '--format=%s')).toBe('fix: the tab scroll');
-    expect(await call('complete_fix', { summary: 'Fixed.' })).toContain('Handed over');
-    expect(await call('report_review', { findings: [] })).toContain('Handed over');
+    expect(await call('complete_fix', { summary: 'Fixed.' })).toContain(
+      'Handed over: the human reads it in the chat as your reply.'
+    );
+    expect(await call('report_review', { findings: [] })).toContain(
+      'Handed over: the human reads it in the chat as your reply.'
+    );
     expect(call('propose_plan', { goal: '' })).rejects.toThrow('Shinsa rejected this hand-over.');
     expect(
       await call('propose_plan', {
         goal: 'Add the files.',
-        plan: [
+        phases: [
           { title: 'Write a', detail: 'Create a.txt.' },
           { title: 'Write b', detail: 'Create b.txt.' },
         ],
@@ -826,7 +890,7 @@ describe('hand-overs', () => {
         verification: ['The checks pass.'],
         questions: [],
       })
-    ).toContain('Handed over');
+    ).toContain('Handed over: the human reads it in the chat as your reply.');
     expect(
       dispatched
         .map((command) => command.type)
@@ -872,9 +936,9 @@ describe('hand-overs', () => {
     );
     const before = await git(path, 'rev-parse', 'HEAD');
     writeFiles(path, { 'half-written.txt': 'partial' });
-    await expect(call('complete_phase', { summary: 'Wrote it.', spots: [], decisions: [] })).rejects.toThrow(
-      'still running'
-    );
+    await expect(
+      call('complete_phase', { summary: 'Wrote it.', spots: [], judgement_calls: [] })
+    ).rejects.toThrow('still running');
     await expect(call('complete_fix', { summary: 'Fixed.' })).rejects.toThrow('still running');
     expect(await git(path, 'rev-parse', 'HEAD')).toBe(before);
     expect(await git(path, 'status', '--porcelain')).toContain('half-written.txt');
@@ -887,7 +951,9 @@ describe('hand-overs', () => {
     update((state) => {
       state.tasks['task-1'] = createTask({ worktreePath: null });
     });
-    expect(await call('complete_fix', { summary: 'Fixed.' })).toContain('Handed over');
+    expect(await call('complete_fix', { summary: 'Fixed.' })).toContain(
+      'Handed over: the human reads it in the chat as your reply.'
+    );
     update((state) => {
       state.runs['run-1'] = createRun({ endedAt: 3 });
     });
@@ -1079,8 +1145,12 @@ describe('resume fallback', () => {
       expect(input?.prompt).toContain('--- shinsa ---\nBuild phase 1.');
       expect(input?.prompt).toContain('--- agent ---\nWrote a.ts.');
       expect(input?.prompt).toEndWith('Carry on.');
-      expect(context.dispatched[0]).toEqual({ type: 'run.session_lost', runId: 'run-1', sessionId: 'old' });
-      expect(context.commandIds[0]).toBe('run.session_lost:run-1:old');
+      expect(context.dispatched[0]).toEqual({
+        type: 'run.record_lost_session',
+        runId: 'run-1',
+        sessionId: 'old',
+      });
+      expect(context.commandIds[0]).toBe('run.record_lost_session:run-1:old');
       expect(context.dispatched[1]).toMatchObject({
         type: 'run.attempt',
         resumed: false,
@@ -1181,6 +1251,105 @@ describe('resume fallback', () => {
     expect(empty.sessions.started[0]?.input).toMatchObject({ resume: null, prompt: 'Carry on.' });
   });
 
+  describe('the house rules', () => {
+    const rules = resolveHouseRules('answerer');
+    const brief = (text: string) => `${rules}\n\nYour role: answerer. ${text}`;
+
+    function briefedSetup(provider: 'claude' | 'codex', history: (transcripts: Transcripts) => void) {
+      const context = restoreSetup(
+        (state) => {
+          for (const run of Object.values(state.runs)) Object.assign(run, { role: 'answerer', provider });
+        },
+        { inspectSession: () => Promise.resolve('present') },
+        provider
+      );
+      history(context.transcripts);
+      return context;
+    }
+
+    function recordBrief(fake: FakeSession) {
+      fake.input.onEntry({ type: 'user', from: 'shinsa', text: fake.input.prompt, attachments: [] });
+      fake.finish();
+    }
+
+    async function send(context: ReturnType<typeof briefedSetup>, runId: string, text: string) {
+      const count = context.sessions.started.length;
+      const running = context.supervisor.execute(runId, brief(text));
+      await until('the session', () => context.sessions.started.length > count);
+      const fake = context.sessions.started[count] as FakeSession;
+      recordBrief(fake);
+      await running;
+      return fake.input;
+    }
+
+    function briefedWith(text: string) {
+      return (transcripts: Transcripts) => {
+        transcripts.record('run-0', { type: 'user', from: 'shinsa', text, attachments: [] });
+        transcripts.record('run-0', { type: 'agent', phase: 'final', text: 'Answered.' });
+      };
+    }
+
+    test('a resumed session that has them gets only the new instruction, on Claude and on Codex, turn after turn', async () => {
+      for (const provider of ['claude', 'codex'] as const) {
+        const context = briefedSetup(provider, briefedWith(brief('The question: why?')));
+        const second = await send(context, 'run-1', 'The follow-up: and then?');
+        expect(second).toMatchObject({
+          resume: 'old',
+          prompt: 'Your role: answerer. The follow-up: and then?',
+        });
+        context.state.runs['run-2'] = createRun({
+          id: 'run-2',
+          role: 'answerer',
+          provider,
+          sessionId: 'old',
+          startedAt: 2,
+        });
+        const third = await send(context, 'run-2', 'The follow-up: one more?');
+        expect(third.prompt).toBe('Your role: answerer. The follow-up: one more?');
+        expect(rules.length).toBeGreaterThan(5_000);
+      }
+    });
+
+    test('a session that never had these rules, or lost them to a compaction, gets the full brief', async () => {
+      const builder = briefedSetup(
+        'claude',
+        briefedWith(`${resolveHouseRules('builder')}\n\nBuild phase 1.`)
+      );
+      expect((await send(builder, 'run-1', 'The follow-up: why?')).prompt).toBe(brief('The follow-up: why?'));
+      const compacted = briefedSetup('codex', (transcripts) => {
+        briefedWith(brief('The question: why?'))(transcripts);
+        transcripts.record('run-0', {
+          type: 'notice',
+          notice: { kind: 'compaction', trigger: 'auto', preTokens: 180_000, summary: null },
+        });
+      });
+      expect((await send(compacted, 'run-1', 'The follow-up: why?')).prompt).toBe(
+        brief('The follow-up: why?')
+      );
+      const unknown = briefedSetup('claude', () => undefined);
+      expect((await send(unknown, 'run-1', 'The follow-up: why?')).prompt).toBe(brief('The follow-up: why?'));
+    });
+
+    test('a fresh session, a provider switch or a lost session gets the full brief', async () => {
+      const fresh = briefedSetup('claude', briefedWith(brief('The question: why?')));
+      fresh.state.runs['run-1'] = createRun({ role: 'answerer', sessionId: null });
+      expect((await send(fresh, 'run-1', 'Why?')).prompt).toBe(brief('Why?'));
+      const lost = restoreSetup(() => undefined, { inspectSession: () => Promise.resolve('missing') });
+      briefedWith(brief('The question: why?'))(lost.transcripts);
+      const running = lost.supervisor.execute('run-1', brief('Why?'));
+      await until('the session', () => lost.sessions.started.length > 0);
+      const input = (lost.sessions.started[0] as FakeSession).input;
+      expect(input.resume).toBeNull();
+      expect(input.prompt).toEndWith(brief('Why?'));
+      lost.sessions.started[0]?.finish();
+      await running;
+      const switched = restoreSetup(() => undefined, {}, 'codex');
+      briefedWith(brief('The question: why?'))(switched.transcripts);
+      await runOnce(switched);
+      expect(switched.sessions.started[0]?.input.prompt).toContain('This step is being handed to you');
+    });
+  });
+
   test('a resume the CLI refuses is retried once on a fresh session with the history', async () => {
     const context = restoreSetup(() => undefined, { inspectSession: () => Promise.resolve('present') });
     const lost = {
@@ -1200,7 +1369,9 @@ describe('resume fallback', () => {
     second.finish('failed', { failure: lost });
     await running;
     expect(context.sessions.started).toHaveLength(2);
-    expect(context.dispatched.filter((command) => command.type === 'run.session_lost')).toHaveLength(1);
+    expect(context.dispatched.filter((command) => command.type === 'run.record_lost_session')).toHaveLength(
+      1
+    );
     expect(endedRuns(context.dispatched)[0]).toMatchObject({
       outcome: 'failed',
       failure: { class: 'session_lost' },
@@ -1236,8 +1407,10 @@ describe('resume fallback', () => {
     expect(third.input.prompt).toContain('<handoff_transcript>');
     third.finish();
     await running;
-    expect(context.dispatched.filter((command) => command.type === 'run.session_lost')).toHaveLength(1);
-    expect(context.commandIds).toContain('run.session_lost:run-1:old');
+    expect(context.dispatched.filter((command) => command.type === 'run.record_lost_session')).toHaveLength(
+      1
+    );
+    expect(context.commandIds).toContain('run.record_lost_session:run-1:old');
   });
 
   test('a history too large to hand over fails the step as a full context instead of dropping it silently', async () => {
@@ -1594,13 +1767,16 @@ describe('the process tools and what a run cost', () => {
     expect(fake.input).toMatchObject({ role: 'answerer', cwd: repoPath });
     const call = (name: string, input: Record<string, unknown>) =>
       fake.input.tools.handle(name, input, new AbortController().signal);
-    expect(await call('answer', { answer: 'In `a.ts`.' })).toBe('Handed over to Shinsa. End your turn now.');
+    expect(await call('answer', { answer: 'In `a.ts`.' })).toBe(
+      'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.'
+    );
     expect(call('summon', {})).rejects.toThrow('Unknown tool summon.');
     fake.finish();
     await running;
-    expect(dispatched.find((command) => command.type === 'agent.answer')).toMatchObject({
+    expect(dispatched.find((command) => command.type === 'agent.deliver')).toMatchObject({
       runId: 'run-1',
-      answer: 'In `a.ts`.',
+      step: 'answer',
+      body: 'In `a.ts`.',
     });
   });
 
@@ -1653,8 +1829,9 @@ describe('the process tools and what a run cost', () => {
     );
     const own = named.find((entry) => entry.names.includes('answer'));
     const delegated = named.find((entry) => entry !== own);
-    expect(own?.names).toEqual(expect.arrayContaining(['answer', 'tasks_list', 'questions_answer']));
-    expect(own?.names).not.toContain('merges_approve');
+    expect(own?.names).toEqual(expect.arrayContaining(['answer', 'tasks_list', 'create_task']));
+    for (const missing of ['merges_approve', 'questions_answer', 'tasks_create'])
+      expect(own?.names).not.toContain(missing);
     expect(delegated?.names).not.toContain('tasks_list');
     expect(
       delegated?.session.input.tools.handle('tasks_list', {}, new AbortController().signal)
@@ -1725,7 +1902,7 @@ describe('the process tools and what a run cost', () => {
     });
     await call('propose_plan', {
       goal: 'Add the files.',
-      plan: [
+      phases: [
         { title: 'Write a', detail: 'Create a.txt.' },
         { title: 'Write b', detail: 'Create b.txt.' },
       ],
@@ -2283,7 +2460,7 @@ describe('secret requests, schedule tools and idle sessions', () => {
       reason: 'For the hook.',
     });
     context.update((state) => {
-      state.gates[gateId] = createGate({ id: gateId, status: 'answered', decision: 'answer', response: REF });
+      state.gates[gateId] = createGate({ id: gateId, status: 'answered', decision: 'reply', response: REF });
     });
     await context.supervisor.resolveQuestion(gateId);
     expect(await reply).toBe(
@@ -2501,7 +2678,7 @@ describe('secret requests, schedule tools and idle sessions', () => {
       };
     });
     await context.supervisor.replyToDelegate('child', questionId);
-    expect(await question).toBe('The agent that delegated this task answered: a.ts');
+    expect(await question).toBe('The agent that delegated this work to you answered: a.ts');
     sessions.started[0]?.finish();
     await run;
     expect(endedRuns(context.dispatched)).toHaveLength(1);

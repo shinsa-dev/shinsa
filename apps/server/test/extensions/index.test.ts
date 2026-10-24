@@ -38,6 +38,7 @@ function createWorld(machine: FakeMachine = createFakeMachine()) {
     });
   };
   const secrets = new SecretStore(join(machine.shinsaHome, 'secrets.json'));
+  writeFile(join(machine.shinsaHome, 'extensions.json'), JSON.stringify({ optimizer: { enabled: false } }));
   const extensions = new Extensions({
     state: () => state,
     config: { home: machine.shinsaHome, userHome: machine.userHome, pluginDir: machine.pluginDir },
@@ -210,7 +211,7 @@ describe('adding and changing servers', () => {
   test('refuses a server it could not run, saying what to fix', () => {
     const { extensions, machine } = createWorld();
     const base = { name: 'docs', transport: 'http', url: 'https://docs.example/mcp' };
-    expect(() => extensions.createServer('docs')).toThrow('Describe the server to add.');
+    expect(() => extensions.createServer('docs')).toThrow('Describe the MCP to add.');
     expect(() => extensions.createServer({ ...base, name: 'has space' })).toThrow('letters, digits');
     expect(() => extensions.createServer({ ...base, name: 'shinsa' })).toThrow('Shinsa’s own');
     expect(() => extensions.createServer({ ...base, transport: 'ws' })).toThrow('a command, HTTP or SSE');
@@ -229,11 +230,11 @@ describe('adding and changing servers', () => {
       'no project'
     );
     expect(() => extensions.createServer({ ...base, scope: { kind: 'repo', path: '/other' } })).toThrow(
-      'has not worked in'
+      'No agent has worked in that repository yet.'
     );
     expect(() => extensions.createServer({ ...base, scope: 'here' })).toThrow('Use it everywhere');
     extensions.createServer({ ...base, scope: { kind: 'repo', path: machine.repo } });
-    expect(() => extensions.createServer(base)).toThrow('already has a server named docs');
+    expect(() => extensions.createServer(base)).toThrow('already has an MCP named docs');
   });
 
   test('editing keeps a secret you leave empty, and renaming moves the server', () => {
@@ -260,8 +261,8 @@ describe('adding and changing servers', () => {
     });
     expect(renamed.servers.some((server) => server.id === 'shinsa:docs')).toBe(false);
     expect(findServer(renamed.servers, 'shinsa:library')).toMatchObject({ enabled: false, headerKeys: [] });
-    expect(() => extensions.updateServer('shinsa:library', null)).toThrow('Describe the server.');
-    expect(() => extensions.updateServer('shinsa:none', {})).toThrow('no MCP server with that id');
+    expect(() => extensions.updateServer('shinsa:library', null)).toThrow('Describe the MCP.');
+    expect(() => extensions.updateServer('shinsa:none', {})).toThrow('no MCP with that id');
   });
 
   test('editing a server from another tool copies it into Shinsa, whose copy then leads its row', async () => {

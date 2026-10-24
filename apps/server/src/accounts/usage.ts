@@ -25,7 +25,7 @@ export interface KeyedWindow {
 }
 
 export const KEYED_WINDOWS: Record<string, KeyedWindow> = {
-  five_hour: { id: 'five_hour', kind: 'session', label: 'Current session', model: null },
+  five_hour: { id: 'five_hour', kind: 'session', label: '5-hour limit', model: null },
   seven_day: { id: 'seven_day', kind: 'weekly', label: 'Weekly · All models', model: null },
   seven_day_opus: { id: 'weekly:opus', kind: 'model', label: 'Weekly · Opus', model: 'Opus' },
   seven_day_sonnet: { id: 'weekly:sonnet', kind: 'model', label: 'Weekly · Sonnet', model: 'Sonnet' },

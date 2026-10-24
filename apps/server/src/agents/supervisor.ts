@@ -5,6 +5,7 @@ import {
   DomainError,
   isDelegatedRun,
   isReadOnlyRole,
+  type LoadedExtensions,
   listLiveRuns,
   type Repo,
   RUN_AGENT_ROLE,
@@ -16,14 +17,13 @@ import {
   resolveAgentModel,
   resolveAgentProvider,
   resolveContinuePrompt,
-  resolveHandoffPrompt,
   resolveTaskProject,
   resolveWeeklyUsed,
   type ShinsaCommand,
   type Task,
 } from '@shinsa/core';
 import type { ServerConfig } from '../config/index.ts';
-import type { SessionExtensionSource } from '../extensions/index.ts';
+import { isSameExtensionSet, type SessionExtensionSource } from '../extensions/index.ts';
 import {
   createIsolatedWorktree,
   describeIsolatedChanges,
@@ -52,6 +52,7 @@ import { type ClockTimers, MINUTE_MS, RunClock } from './clock.ts';
 import { IdleCompaction, type IdleCompactionOptions } from './compaction.ts';
 import { type Delivery, resolveDelegatedReply } from './delegations.ts';
 import { Deliveries } from './deliveries.ts';
+import { SessionExtensionSets } from './extension-sets.ts';
 import type { IdleReleaseOptions } from './idle.ts';
 import { listSurfaceToolSpecs, type ManageAccess } from './manage/index.ts';
 import {
@@ -67,7 +68,13 @@ import { Questions } from './questions.ts';
 import { type ScheduleToolHandler, ToolCalls } from './tool-calls.ts';
 import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
-import { resolveHandoffPlan, resolveTurnPlan, type TurnContext, type TurnPlan } from './turns.ts';
+import {
+  resolveHandoffPlan,
+  resolveTurnPlan,
+  resolveTurnPrompt,
+  type TurnContext,
+  type TurnPlan,
+} from './turns.ts';
 
 export type NoticeListener = (runId: string, notice: ChatNotice) => void;
 
@@ -147,6 +154,7 @@ export class RunSupervisor {
   readonly #deliveries: Deliveries;
   readonly #compaction: IdleCompaction;
   readonly #extensions: SessionExtensionSource | null;
+  readonly #extensionSets: SessionExtensionSets;
   readonly #manages: boolean;
   #shuttingDown = false;
 
@@ -169,6 +177,7 @@ export class RunSupervisor {
     this.#onRejection = options.onRejection ?? null;
     this.#onNotice = options.onNotice ?? null;
     this.#extensions = options.extensions ?? null;
+    this.#extensionSets = new SessionExtensionSets(transcripts, () => this.#engine.state);
     this.#leasing = new AccountLeasing(options.accounts ?? null, () => this.#engine.state, transcripts);
     this.#questions = new Questions({
       engine,
@@ -365,8 +374,8 @@ export class RunSupervisor {
 
   #recordSessionLost(runId: string, sessionId: string) {
     return this.#engine.dispatch(
-      { type: 'run.session_lost', runId, sessionId },
-      { id: `run.session_lost:${runId}:${sessionId}` }
+      { type: 'run.record_lost_session', runId, sessionId },
+      { id: `run.record_lost_session:${runId}:${sessionId}` }
     );
   }
 
@@ -456,16 +465,16 @@ export class RunSupervisor {
     return { attemptId, account };
   }
 
-  async #resolveExtensions(run: Run) {
+  async #resolveExtensions(run: Run, pin: LoadedExtensions | null) {
     if (!this.#extensions) return null;
     const state = this.#engine.state;
     const task = state.tasks[run.taskId];
     const repo = task?.repoId ? state.repos[task.repoId] : undefined;
     try {
-      return await this.#extensions.resolveSession({
-        repoPath: repo?.path ?? null,
-        project: task ? resolveTaskProject(state, task) : null,
-      });
+      return await this.#extensions.resolveSession(
+        { repoPath: repo?.path ?? null, project: task ? resolveTaskProject(state, task) : null },
+        pin
+      );
     } catch (error) {
       log.warn('[Runs] Could not resolve the MCP servers and skills for a run', {
         runId: run.id,
@@ -479,7 +488,8 @@ export class RunSupervisor {
     const { run, active, provider } = turn;
     const { attemptId, account } = await this.#recordAttempt(turn, plan);
     const weeklyBefore = this.#leasing.readWeeklyPercent(run.id, active.lease, provider.id, false);
-    const extensions = await this.#resolveExtensions(run);
+    const pin = plan.resume ? this.#extensionSets.select(plan.resume) : null;
+    const extensions = await this.#resolveExtensions(run, pin);
     const loader = extensions ? (this.#extensions?.createLoader?.(extensions) ?? null) : null;
     const handleTool: ToolHandler = (name, input, signal, requestId) => {
       if (loader?.isLoaderTool(name)) return loader.handle(name, input);
@@ -491,7 +501,7 @@ export class RunSupervisor {
     const session = startSession({
       role: run.role,
       cwd: turn.cwd,
-      prompt: plan.handoff ? resolveHandoffPrompt(plan.handoff.text, turn.prompt) : turn.prompt,
+      prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt),
       model: this.#resolveModel(turn),
       resume: plan.resume,
       defaultBranch: turn.defaultBranch,
@@ -500,12 +510,15 @@ export class RunSupervisor {
         ...(this.#manages && !isDelegatedRun(run) ? listSurfaceToolSpecs() : []),
         ...(loader?.listSpecs() ?? []),
       ]),
-      ...(extensions ? { extensions } : {}),
+      ...(extensions
+        ? { extensions, announceExtensions: !pin || !isSameExtensionSet(pin, extensions.loaded) }
+        : {}),
       ...options,
       ...(active.lease ? { account: { id: active.lease.id, configDir: active.lease.configDir } } : {}),
       usageBaseline: this.#readSessionUsage,
       onSession: (linked) => {
         sessionId = linked;
+        if (extensions) this.#extensionSets.record(linked, extensions.loaded);
         this.#linkSession(run, attemptId, provider.id, linked);
         this.#deliveries.confirmWake(run.id, active);
       },

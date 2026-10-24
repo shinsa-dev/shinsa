@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import {
   createPullRequestWatch,
   evaluatePullRequestWatch,
+  type PlanDocument,
   type PullRequest,
   type ShinsaCommand,
   type ShinsaState,
-  type PlanDocument,
   type Task,
 } from '@shinsa/core';
 import type { RunSupervisor } from '../../src/agents/index.ts';
@@ -279,8 +279,8 @@ describe('triage', () => {
     const config = createTestConfig(createTempDir(), { roots: [root] });
     const eventLog = new EventLog(config.databasePath);
     const engine = new Engine(eventLog);
-    await engine.dispatch({ type: 'task.create', intent: 'Earlier work', repoId: null });
-    await engine.dispatch({ type: 'task.create', intent: 'Fix the button', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Earlier work', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Fix the button', repoId: null });
     const [dependency, task] = Object.values(engine.state.tasks);
     const { runs } = createRuns();
     const runner = new EffectRunner(engine, config, runs, createBriefings().briefings, {
@@ -311,7 +311,7 @@ describe('triage', () => {
     const { root } = await createGitRepo();
     const config = createTestConfig(createTempDir(), { roots: [root] });
     const engine = new Engine(new EventLog(config.databasePath));
-    await engine.dispatch({ type: 'task.create', intent: 'Why is the export slow?', repoId: null });
+    await engine.dispatch({ type: 'task.create', request: 'Why is the export slow?', repoId: null });
     const [task] = Object.values(engine.state.tasks);
     const runner = new EffectRunner(engine, config, createRuns().runs, createBriefings().briefings, {
       resolveLogin: () => Promise.resolve(null),
@@ -458,14 +458,14 @@ describe('worktrees', () => {
     expect(dispatched).toEqual([]);
   });
 
-  test('removing a worktree removes its delegated tasks’ checkouts too, and a failure there is only logged', async () => {
+  test('removing a worktree removes its delegations’ checkouts too, and a failure there is only logged', async () => {
     const { repo, worktree } = await createShippingRepo();
     const { runner, config, dispatched } = setup(withTask({ worktreePath: worktree }, repo));
     mkdirSync(join(config.worktreesDir, 'delegations'), { recursive: true });
     writeFileSync(join(config.worktreesDir, 'delegations', 'task-1'), 'not a folder');
     const warn = spyOn(log, 'warn');
     await runner.apply({ kind: 'worktree.remove', taskId: 'task-1' }, createContext());
-    expect(warn).toHaveBeenCalledWith('[Effects] Could not remove the checkouts of delegated tasks', {
+    expect(warn).toHaveBeenCalledWith('[Effects] Could not remove the checkouts of delegations', {
       taskId: 'task-1',
       error: expect.stringContaining('ENOTDIR'),
     });
@@ -511,7 +511,7 @@ describe('checks', () => {
     const { repo, worktree } = await createShippingRepo();
     const document: PlanDocument = {
       goal: 'Add the file.',
-      plan: [],
+      phases: [],
       behaviour: [],
       approach: 'Write it.',
       files: [],
@@ -525,7 +525,7 @@ describe('checks', () => {
         {
           stage: 'checking',
           worktreePath: worktree,
-          spec: { version: 1, body: '', document, proposedAt: 1 },
+          plan: { version: 1, body: '', document, proposedAt: 1 },
         },
         { ...repo, checkCommands: ['test -f a.txt'] }
       )
@@ -573,8 +573,11 @@ describe('pull requests', () => {
     await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, context);
     const head = await git(worktree, 'rev-parse', 'HEAD');
     expect(await git(origin, 'rev-parse', 'refs/heads/fix/tab-scroll')).toBe(head);
-    expect(dispatched.map((command) => command.type)).toEqual(['pull_request.pushed', 'pull_request.record']);
-    expect(commandIds[0]).toBe(`${context.key}:pull_request.pushed:${head}`);
+    expect(dispatched.map((command) => command.type)).toEqual([
+      'pull_request.record_push',
+      'pull_request.record',
+    ]);
+    expect(commandIds[0]).toBe(`${context.key}:pull_request.record_push:${head}`);
     expect(dispatched[1]).toMatchObject({ remarks: [], viewer: 'shinsa-user' });
     await until('the follow-up sync', () => dispatched.length === 3);
     expect(readGitHub().pulls).toHaveLength(1);
@@ -587,13 +590,13 @@ describe('pull requests', () => {
     const first = setup(withTask({ stage: 'shipping', worktreePath: worktree }, repo));
     await first.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     expect(first.dispatched.map((command) => command.type)).toEqual([
-      'pull_request.pushed',
+      'pull_request.record_push',
       'pull_request.record',
     ]);
     await first.runner.stop();
     const second = setup(withTask({ stage: 'shipping', worktreePath: worktree, pullRequest: PULL }, repo));
     await second.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
-    expect(second.dispatched.map((command) => command.type)).toEqual(['pull_request.pushed']);
+    expect(second.dispatched.map((command) => command.type)).toEqual(['pull_request.record_push']);
     await second.runner.stop();
   });
 
@@ -691,17 +694,6 @@ describe('pull requests', () => {
     await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext(controller.signal));
     expect(readGitHub().calls.some((call) => call[1] === 'merge')).toBe(false);
     expect(dispatched).toEqual([]);
-  });
-
-  test('a stacked task targets its base task until that one merges', async () => {
-    const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll')]);
-    const { repo } = await createGitRepo();
-    const { runner } = setup((state) => {
-      withTask({ stage: 'shipping', pullRequest: PULL, baseTaskId: 'base' }, repo)(state);
-      state.tasks.base = createTask({ id: 'base', branch: 'feat/base', stage: 'awaiting_merge' });
-    });
-    await runner.syncPullRequest('task-1');
-    expect(readGitHub().pulls[0]).toMatchObject({ base: 'feat/base' });
   });
 });
 
