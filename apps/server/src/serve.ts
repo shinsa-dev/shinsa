@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   Accounts,
@@ -24,6 +25,7 @@ import { ConfigStore, prepareDataDir, type ServerConfig } from './config/index.t
 import { EunoeProxy, resolveEunoeCommand } from './eunoe/index.ts';
 import { Extensions, type ExtensionsOptions } from './extensions/index.ts';
 import { resolveServerUrl, startServer } from './http/index.ts';
+import { acquireDataDirLock, resolveServerInstance, type ServerInstance } from './instance/index.ts';
 import { describeError, log } from './log/index.ts';
 import { type AccountSource, type CommandRunner, type Interpreter, Onboarding } from './onboarding/index.ts';
 import { createProjectChanges } from './projects/routes.ts';
@@ -34,7 +36,12 @@ import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore } from './store/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
-import { type Classifier, createClassifier, createCommandRouter } from './triage/message.ts';
+import {
+  type Classifier,
+  createClassifier,
+  createCommandRouter,
+  resolveRoundRepository,
+} from './triage/message.ts';
 import { Versions, type VersionsOptions } from './versions/index.ts';
 
 export interface ShinsaOptions {
@@ -155,18 +162,20 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
     clocks: [new MonitorClock(engine), new UsageResumeClock(engine), new SilenceWatch(engine, transcripts)],
     effects: new EffectRunner(engine, config, runs, briefings, {
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),
+      findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       resolveLogin,
       roots,
     }),
   };
 }
 
-function startHttp(services: Services, options: ShinsaOptions) {
+function startHttp(services: Services, options: ShinsaOptions, instance: ServerInstance) {
   const { engine, config, store, roots, models, accounts } = services;
   const onboardingAccounts = createOnboardingAccounts(accounts);
   return startServer({
     engine,
     config,
+    instance,
     transcripts: services.transcripts,
     evidence: services.evidence,
     models,
@@ -214,8 +223,23 @@ async function startWork(services: Services) {
 }
 
 export async function startShinsa(requested: ServerConfig, options: ShinsaOptions = {}): Promise<Shinsa> {
-  const services = createServices(requested, options);
-  const http = startHttp(services, options);
+  const instance = await resolveServerInstance();
+  mkdirSync(requested.dataDir, { recursive: true });
+  const lock = acquireDataDirLock(requested.dataDir, {
+    ...instance,
+    port: requested.port,
+    url: resolveServerUrl(requested.hostname, requested.port),
+  });
+  let services: Services;
+  let http: ReturnType<typeof startHttp>;
+  try {
+    services = createServices(requested, options);
+    http = startHttp(services, options, instance);
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
+  lock.update({ port: http.server.port ?? requested.port, url: http.url });
   services.address.url = http.url;
   const { engine, config } = services;
   const shinsa: Shinsa = {
@@ -236,6 +260,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       await services.eunoe.stop();
       await http.stop();
       services.eventLog.close();
+      lock.release();
     },
   };
   if (config.inspect) {

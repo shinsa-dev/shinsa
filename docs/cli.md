@@ -5,7 +5,8 @@ this file and the specs differ. How the surface works is `docs/engine.md` → Th
 
 Every command talks to the running server on the configured host (`SHINSA_HOST` or `hostname` in `config.json`;
 127.0.0.1 when the server listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180).
-`--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as
+`shinsa service` is the exception: it manages the background service with launchd and works while the server is
+down. `--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as
 `{ "error": { "code", "message" } }` with exit code 1. A task is named by its handle (SW-142), its id, the start of
 its id or its exact title; an account by id or email; a repository by name or id; a project by key, name or id.
 Every task agent has each command that is not yours alone as a tool of the same name with `_` for spaces and
@@ -1190,7 +1191,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 
 ### shinsa health
 
-Check that Shinsa loaded its log cleanly.
+Check that Shinsa loaded its log cleanly, and which Shinsa is running.
 
 ```
 shinsa health [--json]
@@ -1436,6 +1437,62 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<plugin>` | text, required | The plugin (its id or name). |
+
+## service
+
+### shinsa service install
+
+Run Shinsa in the background with launchd: at login, and again after a crash. Works without the server.
+
+```
+shinsa service install [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+### shinsa service uninstall
+
+Stop the background service and remove it, so Shinsa no longer starts at login.
+
+```
+shinsa service uninstall [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+### shinsa service status
+
+Whether the background service is loaded and running, and which Shinsa it runs.
+
+```
+shinsa service status [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+### shinsa service restart
+
+Restart the background service, after an update for example.
+
+```
+shinsa service restart [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+### shinsa service logs
+
+Print the end of the background service’s log.
+
+```
+shinsa service logs [--lines <integer>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--lines` | integer, optional | How many lines (50 by default). |
 
 ## command
 

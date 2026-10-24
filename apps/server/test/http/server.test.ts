@@ -1,18 +1,16 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type AgentModel,
   KNOWN_AGENT_PROVIDERS,
   type OnboardingChat,
   type ServerMessage,
-  type ShinsaState,
 } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { createWorktree } from '../../src/git/index.ts';
 import { type Launcher, startServer } from '../../src/http/index.ts';
-import { MAX_FILE_BYTES } from '../../src/http/routes.ts';
 import { log as logger } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
@@ -22,7 +20,6 @@ import {
   createTestConfig,
   createTestOnboarding,
   until,
-  writeFiles,
 } from '../helpers/index.ts';
 
 const running: (() => Promise<void>)[] = [];
@@ -101,12 +98,19 @@ describe('request size', () => {
 });
 
 describe('the health endpoint', () => {
-  test('says whether the event log replayed cleanly', async () => {
-    const { call, engine } = await start();
+  test('says whether the event log replayed cleanly, and which Shinsa answered from where', async () => {
+    const { call, engine, config } = await start();
     expect(await (await call('/api/health')).json()).toEqual({
       ok: true,
       seq: engine.state.seq,
       problems: [],
+      version: '0.0.0',
+      commit: null,
+      installPath: join(import.meta.dirname, '../../../..'),
+      dataDir: config.dataDir,
+      pid: process.pid,
+      startedAt: expect.any(Number),
+      uptimeMs: expect.any(Number),
     });
   });
 });
@@ -301,53 +305,6 @@ describe('read endpoints', () => {
 });
 
 describe('worktree endpoints', () => {
-  test('a file is read from the worktree, never from outside it', async () => {
-    const { call, taskId, worktree } = await startWithWorktree();
-    writeFiles(worktree, { 'src/a.ts': 'export {};\n', 'big.txt': 'x'.repeat(MAX_FILE_BYTES + 1) });
-    const outside = createTempDir();
-    writeFiles(outside, { 'secret.txt': 'secret' });
-    symlinkSync(join(outside, 'secret.txt'), join(worktree, 'leak.txt'));
-    const read = (path: string) => call(`/api/tasks/${taskId}/file?path=${encodeURIComponent(path)}`);
-    expect(await (await read('src/a.ts')).json()).toEqual({ path: 'src/a.ts', content: 'export {};\n' });
-    expect(await (await read('src/missing.ts')).json()).toEqual({ path: 'src/missing.ts', content: null });
-    for (const path of ['../../../../etc/passwd', '/etc/passwd', 'leak.txt']) {
-      expect(await (await read(path)).json()).toMatchObject({ error: { code: 'path_invalid' } });
-    }
-    expect(await (await read('big.txt')).json()).toMatchObject({ error: { code: 'file_too_large' } });
-    expect((await call('/api/tasks/nope/file?path=a')).status).toBe(404);
-    expect((await call('/api/tasks/nope/diff')).status).toBe(404);
-  });
-
-  test('the diff covers new files', async () => {
-    const { call, taskId, worktree } = await startWithWorktree();
-    writeFiles(worktree, { 'new.ts': 'x\n' });
-    const diff = (await (await call(`/api/tasks/${taskId}/diff`)).json()) as { files: { path: string }[] };
-    expect(diff.files.map((file) => file.path)).toEqual(['new.ts']);
-  });
-
-  test('a task diffs its worktree, and a broken worktree is a request error', async () => {
-    const server = await startWithWorktree();
-    const { engine, call, taskId, worktree, post } = server;
-    await post('/api/commands', {
-      type: 'task.create',
-      request: 'On top',
-      repoId: Object.keys(engine.state.repos)[0],
-    });
-    const top = Object.keys(engine.state.tasks).find((id) => id !== taskId) ?? '';
-    const state = engine.state as ShinsaState;
-    state.tasks[top] = {
-      ...(state.tasks[top] as ShinsaState['tasks'][string]),
-      worktreePath: worktree,
-    };
-    expect((await call(`/api/tasks/${top}/diff`)).status).toBe(200);
-    state.tasks[top] = {
-      ...(state.tasks[top] as ShinsaState['tasks'][string]),
-      worktreePath: createTempDir(),
-    };
-    const broken = await call(`/api/tasks/${top}/diff`);
-    expect(broken.status).toBe(400);
-  });
-
   test('open runs the editor at a line, Terminal or Finder, and nothing else', async () => {
     const launched: string[][] = [];
     const launch: Launcher = (command) => {

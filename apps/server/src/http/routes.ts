@@ -4,7 +4,6 @@ import {
   KNOWN_AGENT_PROVIDERS,
   parseUserCommand,
   resolveQueueSummary,
-  resolveRoundBase,
   type ShinsaEvent,
 } from '@shinsa/core';
 import type { Accounts } from '../accounts/index.ts';
@@ -14,7 +13,7 @@ import type { Transcripts } from '../agents/transcripts/index.ts';
 import type { ServerConfig } from '../config/index.ts';
 import type { Extensions } from '../extensions/index.ts';
 import { createExtensionRoutes } from '../extensions/routes.ts';
-import { resolveTaskDiff } from '../git/index.ts';
+import { createServerInstance, resolveHealth, type ServerInstance } from '../instance/index.ts';
 import { describeError } from '../log/index.ts';
 import type { Onboarding } from '../onboarding/index.ts';
 import { createProjectRoutes } from '../projects/routes.ts';
@@ -27,6 +26,7 @@ import { type Classifier, routeUserCommand } from '../triage/message.ts';
 import type { Versions } from '../versions/index.ts';
 import { createVersionRoutes } from '../versions/routes.ts';
 import { type JsonObject, readJson, readJsonObject } from './body.ts';
+import { createCodeRoutes } from './code.ts';
 import { resolveInside } from './paths.ts';
 import { createReadRoutes } from './reads.ts';
 
@@ -35,6 +35,7 @@ export type Launcher = (command: string[], cwd: string) => Promise<CommandResult
 export interface ApiContext {
   engine: Engine;
   config: ServerConfig;
+  instance?: ServerInstance;
   evidence: EvidenceStore;
   models: ModelSource;
   providers?: ProviderCatalog;
@@ -63,8 +64,6 @@ export interface ApiRoute {
 }
 
 type OpenTarget = 'editor' | 'finder' | 'terminal';
-
-export const MAX_FILE_BYTES = 2_000_000;
 
 const MAX_IDEMPOTENCY_KEY = 200;
 
@@ -129,13 +128,6 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
     return { task, repo, worktreePath: task.worktreePath };
   }
 
-  async function respondDiff(taskId: string) {
-    const found = selectWorktreeTask(taskId);
-    if (!found) return respondError('diff_unavailable', 'No worktree.', 404);
-    const baseBranch = resolveRoundBase(found.task);
-    return respondJson(await resolveTaskDiff(found.repo, found.worktreePath, baseBranch));
-  }
-
   function resolveOpenCommand(target: OpenTarget, worktreePath: string, location: string | null) {
     const editor = config.editor ?? (Bun.which('cursor') ? 'cursor' : 'code');
     if (target === 'editor')
@@ -154,35 +146,19 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
     return respondJson({ ok: result.ok });
   }
 
-  async function respondFile(taskId: string, url: URL) {
-    const found = selectWorktreeTask(taskId);
-    if (!found) return respondError('worktree_missing', 'No worktree.', 404);
-    const requested = url.searchParams.get('path') ?? '';
-    const path = resolveInside(found.worktreePath, requested);
-    if (!path) return respondError('path_invalid', 'Outside the worktree.', 400);
-    const file = Bun.file(path);
-    if (!(await file.exists())) return respondJson({ path: requested, content: null });
-    if (file.size > MAX_FILE_BYTES)
-      return respondError('file_too_large', 'The file is too large to show.', 400);
-    return respondJson({ path: requested, content: await file.text() });
-  }
-
   return [
-    { method: 'GET', pattern: /^\/api\/tasks\/([^/]+)\/diff$/, respond: ([, id = '']) => respondDiff(id) },
+    ...createCodeRoutes(engine),
     {
       method: 'POST',
       pattern: /^\/api\/tasks\/([^/]+)\/open$/,
       respond: ([, id = ''], request) => respondOpen(id, request),
     },
-    {
-      method: 'GET',
-      pattern: /^\/api\/tasks\/([^/]+)\/file$/,
-      respond: ([, id = ''], request) => respondFile(id, new URL(request.url)),
-    },
   ];
 }
 
-function createServerRoutes({ engine, evidence, models, providers, classify }: ApiContext): ApiRoute[] {
+function createServerRoutes(context: ApiContext): ApiRoute[] {
+  const { engine, config, evidence, models, providers, classify } = context;
+  const instance = context.instance ?? createServerInstance();
   async function respondCommand(request: Request) {
     const key = readIdempotencyKey(request);
     const taskId = await dispatchUserCommand(engine, await readJson(request), key, classify ?? null);
@@ -202,7 +178,9 @@ function createServerRoutes({ engine, evidence, models, providers, classify }: A
       pattern: /^\/api\/health$/,
       respond: () =>
         Promise.resolve(
-          respondJson({ ok: engine.problems.length === 0, seq: engine.state.seq, problems: engine.problems })
+          respondJson(
+            resolveHealth({ seq: engine.state.seq, problems: engine.problems }, config.dataDir, instance)
+          )
         ),
     },
     {
