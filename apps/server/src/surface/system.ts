@@ -10,6 +10,7 @@ import type {
   UpdateOutcome,
   VersionsSnapshot,
 } from '@shinsa/core';
+import { describeVersion, type ServerHealth } from '../instance/index.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findAccount, resolveOptionalAccount } from './resolve.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
@@ -26,11 +27,11 @@ const ORIGINS = ['claude', 'cswap'] as const;
 
 const PROGRAMS = ['claude', 'codex'] as const;
 
-interface Health {
-  ok: boolean;
-  seq: number;
-  problems: { seq: number; type: string; kind: string; error: string }[];
-}
+const UPTIME_UNITS = [
+  { label: 'day', ms: 86_400_000 },
+  { label: 'hour', ms: 3_600_000 },
+  { label: 'minute', ms: 60_000 },
+] as const;
 
 interface Prerequisites {
   ready: boolean;
@@ -88,6 +89,17 @@ function formatVersions(snapshot: VersionsSnapshot) {
     ...snapshot.programs.map(describeProgram),
     `Claude Agent SDK: ${sdk.version}${sdk.latest ? `, latest ${sdk.latest}` : ''} (pairs with Claude Code ${sdk.claudeCodeVersion})`,
   ].join('\n');
+}
+
+function describeUptime(ms: number) {
+  const unit = UPTIME_UNITS.find((candidate) => ms >= candidate.ms);
+  if (!unit) return 'under a minute';
+  const count = Math.floor(ms / unit.ms);
+  return `${count} ${unit.label}${count === 1 ? '' : 's'}`;
+}
+
+function describeRunning(health: ServerHealth) {
+  return `Shinsa ${describeVersion(health)} from ${health.installPath}, pid ${health.pid}, up ${describeUptime(health.uptimeMs)}. Data in ${health.dataDir}.`;
 }
 
 function buildAccountPatch(values: Values): AccountPatch {
@@ -269,18 +281,21 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       return { data, text: `${data.message}\n${formatVersions(data.versions)}` };
     },
   }),
-  defineRead<Health>({
+  defineRead<ServerHealth>({
     path: ['health'],
-    summary: 'Check that Shinsa loaded its log cleanly.',
+    summary: 'Check that Shinsa loaded its log cleanly, and which Shinsa is running.',
     fields: [],
     request: () => '/api/health',
     format: (health) =>
-      health.ok
-        ? `Healthy. ${health.seq} events in the log.`
-        : [
-            `Skipped ${health.problems.length} damaged entries at start:`,
-            ...health.problems.map((problem) => `  #${problem.seq} ${problem.type}: ${problem.error}`),
-          ].join('\n'),
+      [
+        ...(health.ok
+          ? [`Healthy. ${health.seq} events in the log.`]
+          : [
+              `Skipped ${health.problems.length} damaged entries at start:`,
+              ...health.problems.map((problem) => `  #${problem.seq} ${problem.type}: ${problem.error}`),
+            ]),
+        describeRunning(health),
+      ].join('\n'),
   }),
   defineRead<QueueSummary>({
     path: ['queue'],

@@ -29,17 +29,33 @@ const PULL_REQUEST = {
 } as unknown as NonNullable<Task['pullRequest']>;
 
 const COMMENTS: LineComment[] = [
-  { id: 'c1', path: 'src/a.ts', line: 3, text: 'Rename this' },
-  { id: 'c2', path: 'src/b.ts', line: 9, text: 'Drop the log' },
+  {
+    id: 'c1',
+    path: 'src/a.ts',
+    side: 'new',
+    line: 3,
+    endLine: null,
+    ref: null,
+    text: 'Rename this',
+    suggestion: null,
+  },
+  {
+    id: 'c2',
+    path: 'src/b.ts',
+    side: 'new',
+    line: 9,
+    endLine: null,
+    ref: null,
+    text: 'Drop the log',
+    suggestion: null,
+  },
 ];
 
 function createContext(overrides: Partial<TaskPageContext> = {}): TaskPageContext {
   return {
     tab: 'overview',
     tabs: ['overview', 'code', 'chat'],
-    codeView: 'review',
     applyTab: mock(() => {}),
-    applyCodeView: mock(() => {}),
     comments: [],
     clearComments: mock(() => {}),
     ...overrides,
@@ -331,33 +347,6 @@ describe('the view section', () => {
     expect(view?.commands.map((command) => command.current)).toEqual([false, false, true]);
     run(find(all, 'task.t1.tab.code'));
     expect(context.applyTab).toHaveBeenCalledWith('code');
-  });
-
-  it('offers Guided review and All files on the Code tab of a task with a worktree', () => {
-    const { state, task } = setup(createTask({ id: 't1', worktreePath: '/tmp/t1' }));
-    const context = createContext({ tab: 'code', codeView: 'changes' });
-    const all = sections(state, task, context);
-    expect(labels(section(all, 'task.view'))).toEqual([
-      'Overview',
-      'Code',
-      'Chat',
-      'Guided review',
-      'All files',
-    ]);
-    expect(find(all, 'task.t1.view.review').current).toBe(false);
-    expect(find(all, 'task.t1.view.changes').current).toBe(true);
-    run(find(all, 'task.t1.view.review'));
-    run(find(all, 'task.t1.view.changes'));
-    expect((context.applyCodeView as ReturnType<typeof mock>).mock.calls).toEqual([['review'], ['changes']]);
-  });
-
-  it('leaves the code views out without a worktree or off the Code tab', () => {
-    const bare = setup(createTask({ id: 't1' }));
-    expect(
-      labels(section(sections(bare.state, bare.task, createContext({ tab: 'code' })), 'task.view'))
-    ).toEqual(['Overview', 'Code', 'Chat']);
-    const worktree = setup(createTask({ id: 't1', worktreePath: '/tmp/t1' }));
-    expect(labels(section(sections(worktree.state, worktree.task), 'task.view'))).toHaveLength(3);
   });
 });
 

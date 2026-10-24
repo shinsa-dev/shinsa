@@ -25,15 +25,13 @@ import {
   toggleDependency,
 } from '@/lib/tasks/dependencies.ts';
 import { resolveTaskMenuIcon } from '@/lib/tasks/status.ts';
-import { CODE_VIEW, type CodeView, listTaskTabs, TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
+import { listTaskTabs, TASK_TAB, type TaskTab } from '@/lib/tasks/tabs.ts';
 import { resolveTaskPath } from '@/router.ts';
 
 export interface TaskPageContext {
   tab: TaskTab;
   tabs: TaskTab[];
-  codeView: CodeView;
   applyTab: (tab: TaskTab) => void;
-  applyCodeView: (view: CodeView) => void;
   comments: LineComment[];
   clearComments: () => void;
 }
@@ -122,29 +120,7 @@ function listTabCommands(
 }
 
 function listViewCommands(task: Task, page: TaskPageContext): Command[] {
-  const tabs = listTabCommands(task, page.tabs, page.tab, page.applyTab);
-  if (page.tab !== 'code' || !task.worktreePath) return tabs;
-  return [
-    ...tabs,
-    {
-      kind: 'run',
-      id: `task.${task.id}.view.review`,
-      label: CODE_VIEW.review.label,
-      icon: CODE_VIEW.review.icon,
-      current: page.codeView === 'review',
-      keywords: ['code view', 'report', 'walkthrough'],
-      run: () => page.applyCodeView('review'),
-    },
-    {
-      kind: 'run',
-      id: `task.${task.id}.view.changes`,
-      label: CODE_VIEW.changes.label,
-      icon: CODE_VIEW.changes.icon,
-      current: page.codeView === 'changes',
-      keywords: ['code view', 'diff', 'changes'],
-      run: () => page.applyCodeView('changes'),
-    },
-  ];
+  return listTabCommands(task, page.tabs, page.tab, page.applyTab);
 }
 
 function listTravelCommands(state: ShinsaState, task: Task): Command[] {

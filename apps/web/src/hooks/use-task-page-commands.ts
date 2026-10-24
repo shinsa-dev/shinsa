@@ -15,9 +15,7 @@ export function useTaskPageCommands(state: ShinsaState, task: Task, view: TaskVi
       {
         tab: view.tab,
         tabs: view.tabs,
-        codeView: view.codeView,
         applyTab: view.applyTab,
-        applyCodeView: view.applyCodeView,
         comments: draft.comments,
         clearComments: draft.clearComments,
       },

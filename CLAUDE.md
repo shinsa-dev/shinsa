@@ -17,6 +17,8 @@ apps/server/      → @shinsa/server  The local server and the `shinsa` command.
 apps/server/plugin/                 The Claude Code plugin every agent loads: review, evidence, handover skills
 apps/web/         → @shinsa/web     React 19 + Vite + Tailwind 4, laid out like Buzzkit's app (routes/, components/
                                     <domain>/, hooks/, lib/). Renders server state; owns nothing. See apps/web/CLAUDE.md
+apps/desktop/     → @shinsa/desktop Shinsa for Mac: an Electron window that loads the UI from `shinsa serve` and adds the Dock
+                                    badge, notifications, `shinsa://` links and the menu. See apps/desktop/CLAUDE.md
 packages/core/    → @shinsa/core    Pure domain, one folder per concern under src/ (domain, agent-models, events,
                                     commands, effects, state, decide, accounts, costs, schedules, queue, briefing,
                                     report, chat, prompts, progress, protocol); tests under test/ at 100% coverage.
@@ -96,8 +98,9 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
   floating window. Cards is the default layout (no rail, centred pages, a "3 need you" button opens the queue;
   on screen its name comes from `LAYOUT_NAMES`, Desk, and Sidebar's is Shelf);
   Sidebar, picked in Settings → Appearance, adds a permanent rail that moves into a sheet below `md`.
-- **One keyboard shortcut.** ⌘K (Ctrl K) opens the command menu; nothing else is bound to a key (`docs/design.md`,
-  Where Shinsa differs, 14).
+- **One keyboard shortcut, and the Code tab's four.** ⌘K (Ctrl K) opens the command menu; nothing else is bound to a
+  key, except that the Code tab binds ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (`docs/design.md`, Where Shinsa differs,
+  14 and 32; `bun lint:conventions` enforces it).
 - **The design system is paywall-next's**, on Buzzkit's kit in `packages/ui` (`docs/design.md` → Where Shinsa
   differs, which wins). One blue accent (`primary`) for the primary button, links, selection and checkmarks; `success`,
   `warning`, `destructive` and `info` carry state only.

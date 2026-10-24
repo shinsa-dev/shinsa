@@ -61,6 +61,7 @@ function parseFile(chunk: string): DiffFile | null {
     status,
     additions,
     deletions,
+    binary: /^Binary files .* differ$/m.test(chunk) || /^GIT binary patch$/m.test(chunk),
     patch: chunk,
     ...resolveRisk(path),
   };

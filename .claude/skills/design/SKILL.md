@@ -49,6 +49,8 @@ Checklist:
 - [ ] Icons are Central (`<Icon name='Icon…' />`), never a hand-drawn `<svg>`; run
       `bun run --cwd packages/ui generate:icons` after using a new name.
 - [ ] Icon-only buttons name their action in an `aria-label` and the same tooltip.
+- [ ] No keyboard shortcut but ⌘K, and the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (lint fails on a global
+      key listener anywhere else; docs/design.md → Where Shinsa differs, 32).
 - [ ] A tooltip opens over its text and icon only: what a `Hint` or `TooltipTrigger` wraps is inline or
       `w-fit`, never a block across a full-width row (lint fails; docs/design.md → Where Shinsa differs, 13).
 - [ ] Looked at it on `/ui` and in the app, light and dark, desktop and ~900px.

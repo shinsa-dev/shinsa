@@ -25,6 +25,7 @@ process.env.GIT_CONFIG_NOSYSTEM = '1';
 process.env.GIT_OPTIONAL_LOCKS = '0';
 process.env.PATH = `${resolve(import.meta.dirname, 'bin')}:${process.env.PATH ?? ''}`;
 process.env.SHINSA_QUICK = 'off';
+process.env.SHELL = resolve(import.meta.dirname, 'bin/login-shell');
 process.env.CLAUDE_CONFIG_DIR = join(home, 'claude');
 process.env.CODEX_HOME = join(home, 'codex');
 process.env.FAKE_GH_REGISTRY = ghRegistry;

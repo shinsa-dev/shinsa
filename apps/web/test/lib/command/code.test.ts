@@ -1,0 +1,64 @@
+import { describe, expect, it, mock } from 'bun:test';
+import { type CodeCommandContext, listCodeCommands } from '@/lib/command/code.ts';
+
+function context(overrides: Partial<CodeCommandContext> = {}): CodeCommandContext {
+  return {
+    taskId: 't1',
+    modes: ['review', 'changes', 'files'],
+    mode: 'changes',
+    mac: true,
+    split: false,
+    hasEditor: true,
+    applyMode: mock(() => {}),
+    run: mock(() => {}),
+    toggleSplit: mock(() => {}),
+    ...overrides,
+  };
+}
+
+describe('listCodeCommands', () => {
+  it('offers the modes, then going to a file, searching, finding, a line and the diff layout', () => {
+    const section = listCodeCommands(context());
+    expect(section.heading).toBe('Code');
+    expect(
+      section.commands.map((command) => [command.label, command.trailing ?? null, command.current ?? null])
+    ).toEqual([
+      ['Review', null, false],
+      ['Changes', null, true],
+      ['Files', null, false],
+      ['Go to file…', '⌘P', null],
+      ['Search in files', '⇧⌘F', null],
+      ['Find in this file', '⌘F', null],
+      ['Go to line', '⌘G', null],
+      ['Show diffs side by side', null, null],
+    ]);
+  });
+
+  it('runs what it names', () => {
+    const value = context({ split: true, mac: false });
+    const section = listCodeCommands(value);
+    for (const command of section.commands) if (command.kind === 'run') command.run();
+    expect((value.applyMode as ReturnType<typeof mock>).mock.calls).toEqual([
+      ['review'],
+      ['changes'],
+      ['files'],
+    ]);
+    expect((value.run as ReturnType<typeof mock>).mock.calls).toEqual([
+      ['quick-open'],
+      ['search'],
+      ['find'],
+      ['goto-line'],
+    ]);
+    expect(value.toggleSplit).toHaveBeenCalledTimes(1);
+    expect(section.commands.at(-1)?.label).toBe('Show diffs unified');
+    expect(section.commands.find((command) => command.label === 'Go to file…')?.trailing).toBe('Ctrl+P');
+  });
+
+  it('leaves out what needs an open file', () => {
+    expect(
+      listCodeCommands(context({ hasEditor: false, modes: ['files'] })).commands.map(
+        (command) => command.label
+      )
+    ).toEqual(['Files', 'Go to file…', 'Search in files']);
+  });
+});

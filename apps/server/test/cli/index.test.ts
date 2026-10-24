@@ -6,11 +6,13 @@ import { type CliIo, createProcessIo, runCli, USAGE } from '../../src/cli/index.
 import { startServer } from '../../src/http/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Shinsa } from '../../src/serve.ts';
+import type { ServiceControl } from '../../src/service/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import {
   createTempDir,
   createTestConfig,
   createTestOnboarding,
+  overrideEnv,
   until,
   writeFiles,
 } from '../helpers/index.ts';
@@ -277,6 +279,24 @@ describe('the process io', () => {
     }
   });
 
+  test('serve reads the login shell’s environment first, so the agents find the user’s tools', async () => {
+    const restore = overrideEnv({ FAKE_LOGIN_SHELL_EXPORT: '1', FAKE_LOGIN_VAR: undefined });
+    const path = process.env.PATH;
+    try {
+      const shinsa = await createProcessIo().serve({
+        SHINSA_DATA_DIR: join(createTempDir(), 'data'),
+        SHINSA_PORT: '0',
+        SHINSA_INSPECT: '1',
+      });
+      stops.push(shinsa.stop);
+      expect(process.env.FAKE_LOGIN_VAR).toBe('from the login shell');
+      expect(process.env.PATH?.split(':')).toContain('/fake/login/bin');
+    } finally {
+      restore();
+      process.env.PATH = path;
+    }
+  });
+
   test('serve starts Shinsa from the environment and a signal stops it', async () => {
     const exit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     try {
@@ -304,6 +324,44 @@ describe('the process io', () => {
     } finally {
       exit.mockRestore();
     }
+  });
+});
+
+describe('the background service from the command line', () => {
+  const service: ServiceControl = {
+    install: () => Promise.reject(new Error('not in this test')),
+    uninstall: () => Promise.reject(new Error('not in this test')),
+    status: () =>
+      Promise.resolve({
+        label: 'studio.overclock.shinsa',
+        plist: '/p.plist',
+        log: '/serve.log',
+        installed: false,
+        loaded: false,
+        state: null,
+        pid: null,
+        lastExitCode: null,
+        server: null,
+      }),
+    restart: () => Promise.reject(new Error('not in this test')),
+    logs: () => ({ path: '/serve.log', lines: [] }),
+  };
+
+  test('works with no server running, as text or JSON', async () => {
+    const { io, out } = createIo('1', { service });
+    expect(await runCli(['service', 'status'], io)).toBe(0);
+    expect(out[0]?.split('\n')[0]).toBe('Service: not installed');
+    expect(await runCli(['service', 'status', '--json'], io)).toBe(0);
+    expect(JSON.parse(out[1] ?? '')).toMatchObject({ loaded: false, server: null });
+  });
+
+  test('the command line always has it; without it the command explains who runs it', async () => {
+    expect(createProcessIo().service).toBeDefined();
+    const { io, errors } = createIo('1');
+    expect(await runCli(['service', 'logs'], io)).toBe(1);
+    expect(errors).toEqual([
+      'shinsa service: Only the `shinsa` command line manages the background service, from your own terminal.',
+    ]);
   });
 });
 

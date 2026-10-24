@@ -11,32 +11,42 @@ restarts) is `docs/engine.md`; this file is where things live and the rules for 
 ```
 src/
 ├── main.ts              The `shinsa` binary: argv → cli/ (the only file outside coverage; test/main.test.ts runs it)
-├── serve.ts             startShinsa: wires the pieces, recovers in-flight work, returns { url, engine, stop }
-├── cli/                 index.ts routes the commands; commands.ts do / import / status / open; surface.ts every
-│                        `shinsa <group> <action>` (help, --json, the idempotency key); api.ts the HTTP client and
+├── serve.ts             startShinsa: takes the data directory's lock, wires the pieces, recovers in-flight work,
+│                        returns { url, engine, stop }
+├── cli/                 index.ts routes the commands (`serve` reads the login shell's environment first); commands.ts
+│                        do / import / status / open; surface.ts every `shinsa <group> <action>` (help, --json, the
+│                        idempotency key, the service control for `shinsa service`); api.ts the HTTP client and
 │                        the surface client; session.ts reads a Claude Code session for `shinsa import`
+├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
+│                        install.ts (version, commit, install path, the server entry, resolveHealth for
+│                        /api/health), lock.ts (data/serve.lock: atomic create, the live-holder check, takeover)
+├── service/             `shinsa service`: the macOS LaunchAgent (launchd.ts: the plist, reading `launchctl print`)
+│                        and ServiceControl (index.ts: install, uninstall, status, restart, logs over `launchctl`)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
 │                        resolve.ts (task, account, repository and project references), client.ts (SurfaceClient,
 │                        the seam the command line and the management tools both run through), one file per group
 │                        (tasks, gates, work, schedules, config: projects and focus, extensions: mcp, skills and
-│                        plugins, system), index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text,
-│                        the docs/cli.md reference)
+│                        plugins, system, service: the background service, through `SurfaceClient.service`),
+│                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
+│                        reference)
 ├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
 │                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json; every SHINSA_*
 │                        variable is read here, except SHINSA_QUICK; prepareDataDir)
 ├── log/                 One JSON line per entry; describeError and redactSecrets (URL credentials, GitHub and
 │                        Anthropic tokens never reach a log, a failure gate or the event log)
 ├── shell/               runCommand: argv only (never a shell string), its own process group, a timeout that kills
-│                        the whole group, and a failed result (not a throw) when the program is missing
+│                        the whole group, and a failed result (not a throw) when the program is missing; login.ts
+│                        reads the login shell's environment once and merges it into the server's
 ├── store/               EventLog (event-log.ts: the SQLite events, effects and receipts tables; readEvents reports a
 │                        damaged row instead of throwing) and EvidenceStore (evidence.ts: files under /api/evidence)
 ├── runtime/             Engine (engine.ts: serialised dispatch → receipt → decide → commit → apply → broadcast, the
 │                        effect pump, cancellation, settle), EffectRunner (effects.ts: one handler per
 │                        ShinsaEffect, the pull request watcher), StateClock (clock.ts: the
 │                        base of every timer that fires from state) and MonitorClock (monitors.ts)
-├── agents/              RunSupervisor (supervisor.ts: the run loop), the live state of a run (active.ts), resume or
+├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
+│   │                    repository, or data/scratch/<task> for a task with no repository), the live state of a run (active.ts), resume or
 │   │                    hand over per turn, and the house rules only to a session without them (turns.ts), the
 │   │                    tool calls (tool-calls.ts), questions and their waiters (questions.ts), idle release
 │   │                    (idle.ts), delegated reports in and out of a turn (deliveries.ts, delegations.ts), the
@@ -112,7 +122,11 @@ src/
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
 ├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, isolation.ts (detached
 │                        checkouts for isolated delegations), run.ts (git writes that wait out another process's
-│                        index.lock)
+│                        index.lock); the Code tab's reads: read.ts (readGit: raw bytes, a 5 s timeout, a byte cap,
+│                        the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
+│                        the working copy, `git grep`), task-refs.ts (a task's head, base and commits, also once its
+│                        worktree is gone), objects.ts (ObjectCache, the 64 MB cache of what a commit addresses),
+│                        diff.ts (commit to commit, and the working copy against a base)
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create, retarget, merge
 ├── checks/              The repository's check commands, then the plan's own `checks`, each run the same way
@@ -131,7 +145,7 @@ src/
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts
 │                        (resolving a folder you add)
-├── triage/              Title, repository, size, branch and dependencies for a new task, and the parts the human left
+├── triage/              Title, repository (or none), size, branch and dependencies for a new task, and the parts the human left
 │                        to Shinsa (Auto): its shape, priority and dependencies, each with a reason. A task in a
 │                        project chooses among that project's repositories, each named with its path. message.ts:
 │                        the message classifier (nothing to do, feedback or a follow-up, a new round with its kind of
@@ -141,11 +155,13 @@ src/
 │                        (MessageInbox) classifies and routes it after, in order; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
 │                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
-│                        of task is shaped first (resolveRoundShape)
+│                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a
+│                        task with none needs once its work needs one (the setup check calls it)
 ├── briefing/            The Home guide, debounced
 └── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts,
-                         static.ts, paths.ts (resolveInside)
+                         static.ts, paths.ts (resolveInside, assertRepoPath), code.ts (the Code tab's routes:
+                         refs, paths, tree, blob, raw images, search and diff)
 ```
 
 `test/` has one folder per source folder and a test file per module with behaviour of its own; a few modules are
@@ -219,7 +235,12 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
   log. An evidence path is absolute or relative to the worktree; evidence URLs must be http or https.
-- **The diff never touches the worktree's index**: `resolveTaskDiff` adds intent-to-add entries to a copy of it, so a
+- **Code reads are pinned and confined** (`http/code.ts`, `docs/engine.md` → The Code tab's reads): only the task's
+  registered repository, a ref is a full commit id the repository has or `working`, paths are relative with no `.`
+  or `..` segment and pass git as literal pathspecs after `--`, working-copy reads go through `resolveInside`, and
+  every read has a timeout and a size cap. A read named by a commit is immutable (`ETag`, a year's cache, the
+  ObjectCache); the working copy is never cached.
+- **The diff never touches the worktree's index**: `resolveWorkingDiff` adds intent-to-add entries to a copy of it, so a
   diff request cannot collide with an agent's own git commands. The copy keeps the index's modification time: git
   only re-reads a file whose size and time match the index when the entry is as new as the index itself ("racy git"),
   and a copy with a fresh time would hide an edit of the same size made in the same second.
@@ -243,13 +264,22 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Machine config versus events**: a value replaying the log must reproduce is a `settings.change` event, one that
   only describes this machine is `config.json` (`docs/engine.md` → Configuration and data).
 - Never edit the data directory while the server runs.
+- **One server per data directory.** `startShinsa` takes `data/serve.lock` before anything opens the log and gives it
+  back in `stop()` after the log is closed, or at once when the server cannot start listening. Code that starts a
+  second engine on a data directory in one process (a test that simulates a restart) stops the first through
+  `stop()`, or builds the pieces itself as `test/e2e/harness.ts` does.
+- **Spawned programs inherit the server's environment**, which `shinsa serve` fills in from the login shell before
+  anything starts; never read the shell profile again elsewhere, and pass a command's own variables through
+  `runCommand`'s `env`.
 
 ## Testing
 
 - **Tests need no network and no real agents.** `test/helpers/preload.ts` gives every test a clean git identity, the
-  fake `gh` and `open` on `PATH`, `SHINSA_QUICK=off` and a scratch `CLAUDE_CONFIG_DIR`; `test/helpers/bin` also holds
-  fake `claude`, `codex`, `cswap` and `eunoe` (every config's `eunoe.command`, `createConfigAt`), so no test runs the
-  real ones. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
+  fake `gh`, `open` and `launchctl` on `PATH`, `SHINSA_QUICK=off`, a scratch `CLAUDE_CONFIG_DIR` and `SHELL` set to
+  the fake login shell (`test/helpers/bin/login-shell`: `FAKE_LOGIN_SHELL_EXPORT` adds variables and a `PATH` entry,
+  `FAKE_LOGIN_SHELL_HANG`, `FAKE_LOGIN_SHELL_SILENT` and `FAKE_LOGIN_SHELL_LOG` hang, fail or record the call);
+  `test/helpers/bin` also holds fake `claude`, `codex`, `cswap` and `eunoe` (every config's `eunoe.command`,
+  `createConfigAt`), so no test runs the real ones, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
   `resolveExecutable`; `createFakeRuntime` in `test/helpers/query.ts`). Inject fakes through the optional last
   parameters (`startSession`, `providers`, `triage`, `resolveLogin`, `ask`, `runQuery`, `launch`, `discover`,
   `runPrerequisite`, `accounts`, `interpret`, `clarify`, `accountOptions`).

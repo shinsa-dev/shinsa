@@ -14,22 +14,30 @@ describe('useTaskView', () => {
     expect(result.current.task?.id).toBe('t1');
     expect(result.current.tabs).toEqual(['overview', 'code', 'chat']);
     expect(result.current.tab).toBe('overview');
-    expect(result.current.codeView).toBe('review');
+    expect(result.current.codeModes).toEqual(['review', 'changes', 'files']);
     expect(result.current.chatRunId).toBeNull();
     expect(result.current.lead).toBeUndefined();
     expect(result.current.reviewing).toBe(false);
     expect(result.current.draftKey).toBe('none');
   });
 
-  it('reads the tab, code view and run from the URL', () => {
-    navigate('/tasks/t1?tab=chat&view=changes&run=r1');
+  it('reads the tab and run from the URL', () => {
+    navigate('/tasks/t1?tab=chat&run=r1');
     const { result } = view();
     expect(result.current.tab).toBe('chat');
-    expect(result.current.codeView).toBe('changes');
     expect(result.current.chatRunId).toBe('r1');
   });
 
-  it('falls back to the overview for a tab the task does not have yet', () => {
+  it('a task that has not built yet browses its repository in Files alone', () => {
+    navigate('/tasks/t1?tab=code');
+    const { result } = view(
+      createShinsaState({ tasks: [createTask({ id: 't1', stage: 'planning', repoId: 'repo-1' })] })
+    );
+    expect(result.current.tab).toBe('code');
+    expect(result.current.codeModes).toEqual(['files']);
+  });
+
+  it('falls back to the overview for a tab the task does not have', () => {
     navigate('/tasks/t1?tab=code');
     const { result } = view(createShinsaState({ tasks: [createTask({ id: 't1', stage: 'planning' })] }));
     expect(result.current.tabs).toEqual(['overview', 'chat']);
@@ -73,7 +81,7 @@ describe('useTaskView', () => {
   });
 
   it('switches tabs and clears what belonged to the old one', () => {
-    navigate('/tasks/t1?tab=chat&run=r1&view=changes&file=a.ts&layout=cards');
+    navigate('/tasks/t1?tab=chat&run=r1&mode=changes&file=a.ts&line=4&layout=cards');
     const { result } = view();
     act(() => result.current.applyTab('code'));
     expect(location.search).toBe('?tab=code&layout=cards');
@@ -81,13 +89,13 @@ describe('useTaskView', () => {
     expect(location.search).toBe('?layout=cards');
   });
 
-  it('switches the code view on the Code tab', () => {
+  it('switches the code mode on the Code tab, keeping the open file', () => {
     navigate('/tasks/t1?file=a.ts&run=r1');
     const { result } = view();
-    act(() => result.current.applyCodeView('changes'));
-    expect(location.search).toBe('?tab=code&view=changes');
-    act(() => result.current.applyCodeView('review'));
-    expect(location.search).toBe('?tab=code');
+    act(() => result.current.applyCodeMode('changes'));
+    expect(location.search).toBe('?file=a.ts&tab=code&mode=changes');
+    act(() => result.current.applyCodeMode('review'));
+    expect(location.search).toBe('?file=a.ts&tab=code');
   });
 
   it('jumps to what the Now card points at', () => {
@@ -98,6 +106,8 @@ describe('useTaskView', () => {
     act(() => result.current.applyNowTarget('agent'));
     expect(location.search).toBe('?tab=chat');
     act(() => result.current.applyNowTarget('changes'));
-    expect(location.search).toBe('?tab=code&view=changes');
+    expect(location.search).toBe('?tab=code&mode=changes');
+    act(() => result.current.applyNowTarget('review'));
+    expect(location.search).toBe('?tab=code');
   });
 });

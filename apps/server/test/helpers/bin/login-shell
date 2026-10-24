@@ -1,0 +1,13 @@
+#!/bin/sh
+if [ -n "$FAKE_LOGIN_SHELL_LOG" ]; then echo "$*" >> "$FAKE_LOGIN_SHELL_LOG"; fi
+if [ -n "$FAKE_LOGIN_SHELL_HANG" ]; then exec sleep 30; fi
+echo "Welcome to the fake login shell"
+if [ -n "$FAKE_LOGIN_SHELL_EXPORT" ]; then
+  export FAKE_LOGIN_VAR="from the login shell"
+  export FAKE_LOGIN_MULTILINE="first
+second"
+  export PATH="/fake/login/bin:$PATH"
+fi
+if [ -n "$FAKE_LOGIN_SHELL_SILENT" ]; then exit 1; fi
+shift
+eval "$1"

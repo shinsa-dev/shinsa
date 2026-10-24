@@ -1,0 +1,229 @@
+import { afterEach, describe, expect, test } from 'bun:test';
+import { symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { CODE_LIMITS, type ShinsaState, type TaskDiff, type TaskRefs } from '@shinsa/core';
+import type { ModelSource } from '../../src/agents/index.ts';
+import { Transcripts } from '../../src/agents/index.ts';
+import { createWorktree, removeWorktree } from '../../src/git/index.ts';
+import { startServer } from '../../src/http/index.ts';
+import { Engine } from '../../src/runtime/index.ts';
+import { EventLog, EvidenceStore } from '../../src/store/index.ts';
+import {
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  createTestOnboarding,
+  git,
+  writeFiles,
+} from '../helpers/index.ts';
+
+const running: (() => Promise<void>)[] = [];
+
+afterEach(async () => {
+  for (const stop of running.splice(0)) await stop();
+});
+
+const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 1]);
+
+async function startWithTask() {
+  const config = createTestConfig(createTempDir());
+  const engine = new Engine(new EventLog(config.databasePath));
+  const http = startServer({
+    engine,
+    config,
+    transcripts: new Transcripts(config.transcriptsDir),
+    evidence: new EvidenceStore(config.evidenceDir),
+    models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
+    onboarding: createTestOnboarding(engine, config).onboarding,
+  });
+  running.push(http.stop);
+  const base = `http://127.0.0.1:${http.server.port}`;
+  const { repo } = await createGitRepo({
+    files: { 'src/app.ts': 'export const value = 1;\n', 'big.txt': 'x'.repeat(CODE_LIMITS.blobBytes + 1) },
+  });
+  const baseSha = await git(repo.path, 'rev-parse', 'HEAD');
+  const worktree = await createWorktree(repo, config.worktreesDir, 'task-code01', 'feat/code', null);
+  writeFiles(worktree.path, { 'src/app.ts': 'export const value = 2;\n' });
+  writeFileSync(join(worktree.path, 'logo.png'), PNG);
+  await git(worktree.path, 'add', '-A');
+  await git(worktree.path, 'commit', '-q', '-m', 'feat: phase one');
+  const head = await git(worktree.path, 'rev-parse', 'HEAD');
+  await engine.dispatch({ type: 'repo.register', repo: { ...repo, checkCommands: [] }, projectName: null });
+  const repoId = Object.keys(engine.state.repos)[0] ?? '';
+  await engine.dispatch({ type: 'task.create', request: 'Change the value', repoId });
+  const taskId = Object.keys(engine.state.tasks)[0] ?? '';
+  await engine.dispatch({
+    type: 'task.triage',
+    taskId,
+    title: 'Change the value',
+    repoId,
+    size: 'small',
+    branch: 'feat/code',
+    waitsOn: [],
+  });
+  await engine.dispatch({ type: 'worktree.ready', taskId, path: worktree.path, branch: worktree.branch });
+  const call = (path: string, init: RequestInit = {}) => fetch(`${base}/api/tasks/${taskId}/${path}`, init);
+  const json = async <T>(path: string) => (await (await call(path)).json()) as T;
+  return { engine, repo, worktree: worktree.path, taskId, head, baseSha, call, json, base };
+}
+
+describe('code reads', () => {
+  test('refs pin the head, the base and the commits between, and are never cached', async () => {
+    const { call, head, baseSha } = await startWithTask();
+    const response = await call('refs');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const refs = (await response.json()) as TaskRefs;
+    expect(refs).toMatchObject({ head, base: baseSha, branch: 'feat/code', working: true, dirty: false });
+    expect(refs.commits.map((commit) => commit.subject)).toEqual(['feat: phase one']);
+  });
+
+  test('a read at a named commit is immutable and answered from the browser cache the second time', async () => {
+    const { call, head } = await startWithTask();
+    const first = await call(`paths?ref=${head}`);
+    expect(first.headers.get('cache-control')).toContain('immutable');
+    expect(((await first.json()) as { paths: string[] }).paths).toEqual([
+      'README.md',
+      'big.txt',
+      'logo.png',
+      'src/app.ts',
+    ]);
+    const tag = first.headers.get('etag') ?? '';
+    const again = await call(`paths?ref=${head}`, { headers: { 'if-none-match': tag } });
+    expect(again.status).toBe(304);
+    const unpinned = await call('paths');
+    expect(unpinned.headers.get('cache-control')).toBe('no-store');
+  });
+
+  test('reads a folder, a file and an image at a commit', async () => {
+    const { call, json, head } = await startWithTask();
+    expect((await json<{ entries: { name: string }[] }>(`tree?ref=${head}&dir=src`)).entries).toMatchObject([
+      { name: 'app.ts', kind: 'file' },
+    ]);
+    expect(await json(`blob?ref=${head}&path=src/app.ts`)).toMatchObject({
+      content: 'export const value = 2;\n',
+      binary: false,
+    });
+    expect(await json(`blob?ref=${head}&path=big.txt`)).toMatchObject({ tooLarge: true, content: null });
+    expect(await json(`blob?ref=${head}&path=logo.png`)).toMatchObject({ binary: true, image: 'image/png' });
+    const image = await call(`raw?ref=${head}&path=logo.png`);
+    expect(image.headers.get('content-type')).toBe('image/png');
+    expect(image.headers.get('content-security-policy')).toBe("default-src 'none'");
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(PNG);
+    expect((await call(`raw?ref=${head}&path=src/app.ts`)).status).toBe(400);
+    expect((await call(`raw?ref=${head}&path=missing.png`)).status).toBe(404);
+  });
+
+  test('refuses paths that leave the repository and refs that are not commits', async () => {
+    const { call, worktree, head } = await startWithTask();
+    const outside = createTempDir();
+    writeFiles(outside, { 'secret.txt': 'secret' });
+    symlinkSync(join(outside, 'secret.txt'), join(worktree, 'leak.txt'));
+    const paths = ['../../../../etc/passwd', '/etc/passwd', 'src/../README.md', 'a%00b', './README.md', ''];
+    for (const path of paths) {
+      const response = await call(`blob?ref=${head}&path=${path}`);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code: 'path_invalid' } });
+    }
+    expect((await call('tree?ref=working&dir=..')).status).toBe(400);
+    expect(await (await call('blob?ref=working&path=leak.txt')).json()).toMatchObject({
+      error: { code: 'path_invalid' },
+    });
+    for (const [ref, code] of [
+      ['main', 'ref_invalid'],
+      ['HEAD~1', 'ref_invalid'],
+      [`--output=${join(outside, 'x')}`, 'ref_invalid'],
+      ['a'.repeat(40), 'ref_unknown'],
+    ]) {
+      expect(
+        await (await call(`blob?ref=${encodeURIComponent(ref ?? '')}&path=README.md`)).json()
+      ).toMatchObject({
+        error: { code },
+      });
+    }
+  });
+
+  test('the working copy shows the agent’s uncommitted edits, uncached', async () => {
+    const { call, json, worktree } = await startWithTask();
+    writeFiles(worktree, { 'src/app.ts': 'export const value = 3;\n', 'src/new.ts': 'export {};\n' });
+    const response = await call('blob?ref=working&path=src/app.ts');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toMatchObject({ ref: 'working', content: 'export const value = 3;\n' });
+    expect((await json<{ paths: string[] }>('paths?ref=working')).paths).toContain('src/new.ts');
+    expect(
+      (await json<{ entries: { name: string }[] }>('tree?ref=working&dir=src')).entries.map((e) => e.name)
+    ).toEqual(['app.ts', 'new.ts']);
+    const image = await call('raw?ref=working&path=logo.png');
+    expect(new Uint8Array(await image.arrayBuffer())).toEqual(PNG);
+    const diff = await json<TaskDiff>('diff');
+    expect(diff.head).toBe('working');
+    expect(diff.files.map((file) => file.path).sort()).toEqual(['logo.png', 'src/app.ts', 'src/new.ts']);
+  });
+
+  test('a diff between two commits is pinned and cached; the default follows the working copy', async () => {
+    const { call, head, baseSha } = await startWithTask();
+    const pinned = await call(`diff?base=${baseSha}&head=${head}`);
+    expect(pinned.headers.get('cache-control')).toContain('immutable');
+    const diff = (await pinned.json()) as TaskDiff;
+    expect(diff).toMatchObject({ base: baseSha, head });
+    expect(diff.files.map((file) => [file.path, file.binary])).toEqual([
+      ['src/app.ts', false],
+      ['logo.png', true],
+    ]);
+    const tag = pinned.headers.get('etag') ?? '';
+    expect(
+      (await call(`diff?base=${baseSha}&head=${head}`, { headers: { 'if-none-match': tag } })).status
+    ).toBe(304);
+    expect((await call(`diff?base=main&head=${head}`)).status).toBe(400);
+  });
+
+  test('searches at a commit and in the working copy, and refuses a search with nothing to find', async () => {
+    const { json, call, worktree, head } = await startWithTask();
+    expect((await json<{ matches: { path: string }[] }>(`search?ref=${head}&q=value`)).matches).toMatchObject(
+      [{ path: 'src/app.ts', line: 1 }]
+    );
+    writeFiles(worktree, { 'notes.md': 'the value moved\n' });
+    const working = await json<{ matches: { path: string }[] }>('search?ref=working&q=VALUE&glob=*.md');
+    expect(working.matches.map((match) => match.path)).toEqual(['notes.md']);
+    const exact = await json<{ matches: unknown[] }>(`search?ref=${head}&q=VALUE&case=1`);
+    expect(exact.matches).toEqual([]);
+    expect((await json<{ matches: unknown[] }>(`search?ref=${head}&q=val.e&regex=1`)).matches).toHaveLength(
+      1
+    );
+    expect((await call(`search?ref=${head}`)).status).toBe(400);
+    expect((await call(`search?ref=${head}&q=${'x'.repeat(CODE_LIMITS.queryLength + 1)}`)).status).toBe(400);
+    for (const glob of ['-x', ':(top)*', 'x'.repeat(201)]) {
+      expect(
+        await (await call(`search?ref=${head}&q=a&glob=${encodeURIComponent(glob)}`)).json()
+      ).toMatchObject({
+        error: { code: 'glob_invalid' },
+      });
+    }
+  });
+
+  test('a merged task whose worktree is gone keeps its code, read from the branch', async () => {
+    const { engine, repo, worktree, taskId, call, json, head } = await startWithTask();
+    await removeWorktree(repo, worktree);
+    const refs = await json<TaskRefs>('refs');
+    expect(refs).toMatchObject({ head, working: false });
+    expect(await json(`blob?ref=${head}&path=src/app.ts`)).toMatchObject({
+      content: 'export const value = 2;\n',
+    });
+    expect((await json<TaskDiff>('diff')).head).toBe(head);
+    expect(await (await call('blob?ref=working&path=src/app.ts')).json()).toMatchObject({
+      error: { code: 'ref_invalid' },
+    });
+    const state = engine.state as ShinsaState;
+    const task = state.tasks[taskId];
+    if (task) state.tasks[taskId] = { ...task, branch: 'feat/deleted', worktreePath: null };
+    expect(await (await call('refs')).json()).toMatchObject({ error: { code: 'code_unavailable' } });
+  });
+
+  test('a task without a repository, or no task at all, has no code', async () => {
+    const { engine, taskId, base } = await startWithTask();
+    expect((await fetch(`${base}/api/tasks/nope/refs`)).status).toBe(404);
+    const state = engine.state as ShinsaState;
+    const task = state.tasks[taskId];
+    if (task) state.tasks[taskId] = { ...task, repoId: null };
+    expect((await fetch(`${base}/api/tasks/${taskId}/paths`)).status).toBe(404);
+  });
+});

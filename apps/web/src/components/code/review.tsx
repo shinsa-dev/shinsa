@@ -1,32 +1,22 @@
-import type { Task, TaskDiff, WorkReport } from '@shinsa/core';
-import { Button } from '@shinsa/ui/components/button';
+import type { Task, WorkReport } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { CodeView } from '@/components/code/code-view.tsx';
 import { Choice } from '@/components/controls/choice.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
-import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
-import { AttentionLabel } from '@/components/status/text.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
-import { openWorktree } from '@/lib/connection/worktree.ts';
 import { TONE_FILL } from '@/lib/format/tone.ts';
-import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
+import { describeCommentPlace } from '@/lib/review/draft.ts';
 import { describeFindingPlace } from '@/lib/review/findings.ts';
 import {
-  createDecisionTarget,
   formatTargetLines,
-  listFindingMarkers,
-  listFindingTargets,
   listReviewTargets,
   REVIEW_ORDERS,
   type ReviewOrder,
   type ReviewTarget,
-  stepTarget,
   toReviewTarget,
 } from '@/lib/review/targets.ts';
 import { ATTENTION } from '@/lib/tasks/status.ts';
@@ -207,7 +197,7 @@ function Checks({ report }: { report: WorkReport }) {
   );
 }
 
-function Comments() {
+function Comments({ onSelect }: { onSelect: (path: string, line: number, side: 'old' | 'new') => void }) {
   const draft = useReviewDraft();
   if (draft.comments.length === 0) return null;
   return (
@@ -216,10 +206,15 @@ function Comments() {
       <ul className='flex flex-col gap-2 px-2'>
         {draft.comments.map((comment) => (
           <li key={comment.id} className='flex flex-col gap-px text-xs'>
-            <span className='text-2xs text-fg-2'>
-              {describeFindingPlace({ file: comment.path, line: comment.line })}
-            </span>
-            <span className='text-fg-4'>{comment.text}</span>
+            <button
+              type='button'
+              onClick={() => onSelect(comment.path, comment.line, comment.side)}
+              className='w-fit cursor-pointer text-left text-2xs text-primary-text hover:underline active:underline'
+            >
+              {describeCommentPlace(comment)}
+            </button>
+            {comment.text && <span className='text-fg-4'>{comment.text}</span>}
+            {comment.suggestion && <span className='text-fg-2'>Suggested change</span>}
           </li>
         ))}
       </ul>
@@ -246,150 +241,47 @@ function ReviewSummary({
       </div>
       {!task.report && (
         <p className='text-2xs text-fg-2'>
-          This hand-over predates the review protocol, so the spots come from the riskiest hunks.
+          The agent handed over no report, so Shinsa picked these spots from the riskiest changes.
         </p>
       )}
     </div>
   );
 }
 
-function CodePane({
+export function ReviewExplorer({
   task,
-  diff,
-  target,
-  index,
-  total,
-  onStep,
+  report,
+  findings,
+  order,
+  selectedKey,
+  onOrder,
+  onSelect,
+  onSelectLine,
 }: {
   task: Task;
-  diff: TaskDiff;
-  target: ReviewTarget | null;
-  index: number;
-  total: number;
-  onStep: (delta: 1 | -1) => void;
+  report: WorkReport;
+  findings: ReviewTarget[];
+  order: ReviewOrder;
+  selectedKey: string | null;
+  onOrder: (order: ReviewOrder) => void;
+  onSelect: (target: ReviewTarget) => void;
+  onSelectLine: (path: string, line: number, side: 'old' | 'new') => void;
 }) {
-  const file = target ? diff.files.find((candidate) => candidate.path === target.file) : undefined;
   return (
-    <section className='flex min-h-0 min-w-0 flex-1 flex-col'>
-      <Toolbar>
-        {target ? (
-          <>
-            <FilePath path={target.file} />
-            <span className='shrink-0 text-fg-2 text-xs'>{formatTargetLines(target)}</span>
-            <AttentionLabel attention={target.attention} />
-          </>
-        ) : (
-          <span className='text-2xs text-fg-2'>Pick a spot on the left</span>
-        )}
-        <div className='flex-1' />
-        <span className='hidden text-2xs text-fg-2 tabular-nums sm:inline'>
-          {total > 0 ? `${index + 1} of ${total}` : ''}
-        </span>
-        <div className='flex items-center'>
-          <Hint label='Previous spot'>
-            <Button
-              variant='secondary'
-              size='icon-sm'
-              icon='IconChevronTopMedium'
-              aria-label='Previous spot'
-              onClick={() => onStep(-1)}
-            />
-          </Hint>
-          <Hint label='Next spot'>
-            <Button
-              variant='secondary'
-              size='icon-sm'
-              icon='IconChevronDownMedium'
-              aria-label='Next spot'
-              onClick={() => onStep(1)}
-            />
-          </Hint>
-        </div>
-        {target && task.worktreePath && (
-          <Button
-            variant='secondary'
-            size='sm'
-            icon='IconCode'
-            onClick={() => void openWorktree(task.id, 'editor', target.file, target.start)}
-          >
-            Open
-          </Button>
-        )}
-      </Toolbar>
-      {target && !file && (
-        <p className='p-3 text-fg-2 text-xs'>
-          {target.file} is not part of this change. The agent may have pointed at the wrong file.
-        </p>
-      )}
-      {target && file && (
-        <CodeView
-          taskId={task.id}
-          file={file}
-          revision={task.updatedAt}
-          mode='focus'
-          focus={{ start: target.start, end: target.end, attention: target.attention }}
-          markers={listFindingMarkers(task, file.path)}
+    <div className='flex flex-col'>
+      <ReviewSummary task={task} headline={report.headline} order={order} onOrder={onOrder} />
+      <div className='px-1.5 pt-2 pb-6'>
+        <Walkthrough
+          report={report}
+          order={order}
+          selectedKey={selectedKey}
+          findings={findings}
+          onSelect={onSelect}
         />
-      )}
-    </section>
-  );
-}
-
-export function ReviewPane({ task, diff }: { task: Task; diff: TaskDiff }) {
-  const [order, setOrder] = React.useState<ReviewOrder>('walkthrough');
-  const report = React.useMemo(
-    () => task.report ?? resolveFallbackReport(diff, task.summary ?? task.title),
-    [task.report, task.summary, task.title, diff]
-  );
-  const findings = React.useMemo(() => listFindingTargets(task.findings), [task.findings]);
-  const targets = React.useMemo(
-    () => [...listReviewTargets(report, order), ...findings],
-    [report, order, findings]
-  );
-  const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
-  const [decisionTarget, setDecisionTarget] = React.useState<ReviewTarget | null>(null);
-  const selected =
-    decisionTarget ?? targets.find((target) => target.key === selectedKey) ?? targets[0] ?? null;
-  const index = selected ? targets.findIndex((target) => target.key === selected.key) : -1;
-
-  function select(target: ReviewTarget) {
-    setDecisionTarget(null);
-    setSelectedKey(target.key);
-  }
-
-  function step(delta: 1 | -1) {
-    const next = stepTarget(targets, index, delta);
-    if (next) select(next);
-  }
-
-  return (
-    <div className='flex min-h-0 flex-1 max-md:flex-col'>
-      <aside className='flex w-85 shrink-0 flex-col border-border border-r max-md:max-h-2/5 max-md:w-full max-md:border-r-0 max-md:border-b max-lg:w-75'>
-        <ReviewSummary task={task} headline={report.headline} order={order} onOrder={setOrder} />
-        <div className='min-h-0 flex-1 overflow-y-auto px-1.5 pt-2 pb-6'>
-          <Walkthrough
-            report={report}
-            order={order}
-            selectedKey={decisionTarget ? null : (selected?.key ?? null)}
-            findings={findings}
-            onSelect={select}
-          />
-          <JudgementCalls
-            report={report}
-            onSelect={(file, line) => setDecisionTarget(createDecisionTarget(file, line))}
-          />
-          <Checks report={report} />
-          <Comments />
-        </div>
-      </aside>
-      <CodePane
-        task={task}
-        diff={diff}
-        target={selected}
-        index={index}
-        total={targets.length}
-        onStep={step}
-      />
+        <JudgementCalls report={report} onSelect={(file, line) => onSelectLine(file, line, 'new')} />
+        <Checks report={report} />
+        <Comments onSelect={onSelectLine} />
+      </div>
     </div>
   );
 }

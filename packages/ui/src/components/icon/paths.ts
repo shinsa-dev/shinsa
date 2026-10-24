@@ -56,11 +56,13 @@ export const ICON_NAMES = [
   'IconCode',
   'IconCodeLines',
   'IconCoins',
+  'IconColumnWideHalf',
   'IconCommits',
   'IconConsole',
   'IconCrossMedium',
   'IconCrossSmall',
   'IconCursorClick',
+  'IconDifferenceModified',
   'IconDotGrid1x3Horizontal',
   'IconExclamationCircle',
   'IconExclamationCircleFilled',
@@ -81,6 +83,7 @@ export const ICON_NAMES = [
   'IconGlobe',
   'IconHammer',
   'IconHammer2',
+  'IconHashtag',
   'IconHomeRoundDoor',
   'IconHourglass',
   'IconImages1',
@@ -106,6 +109,7 @@ export const ICON_NAMES = [
   'IconMoon',
   'IconNote1',
   'IconOpenaiCodex',
+  'IconPageSearch',
   'IconPaperclip1',
   'IconPause',
   'IconPencil',
@@ -322,6 +326,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   IconCoins: {
     '3': '<g><path d="M9 16C5.68629 16 3 13.3137 3 10C3 6.68629 5.68629 4 9 4C11.4597 4 13.5737 5.48012 14.5 7.59829M21 14C21 17.3137 18.3137 20 15 20C12.3841 20 10.1591 18.3259 9.33811 15.9906C9.11911 15.3677 9 14.6978 9 14C9 10.7998 11.5055 8.1847 14.6619 8.00937C14.7738 8.00315 14.8865 8 15 8C18.3137 8 21 10.6863 21 14Z" stroke="currentColor" stroke-width="2"/></g>',
   },
+  IconColumnWideHalf: {
+    '3': '<g><path d="M18 5H6C4.34315 5 3 6.34315 3 8V16C3 17.6569 4.34315 19 6 19H18C19.6569 19 21 17.6569 21 16V8C21 6.34315 19.6569 5 18 5Z" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/><path d="M3 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
   IconCommits: {
     '3': '<g><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 12H2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 12H17.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
@@ -336,6 +343,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconCursorClick: {
     '3': '<g><path d="M11 3V4.5M16.6569 5.34326L15.5962 6.40392M6.40381 15.5962L5.34315 16.6569M4.5 11H3M6.40381 6.40381L5.34315 5.34315M14.1311 20.8181L10.3877 11.3611C10.146 10.7504 10.7504 10.146 11.3611 10.3877L20.8181 14.1311C21.2015 14.2829 21.2467 14.8076 20.8948 15.0226L17.4045 17.1556C17.3029 17.2176 17.2176 17.3029 17.1556 17.4045L15.0226 20.8948C14.8076 21.2467 14.2829 21.2015 14.1311 20.8181Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconDifferenceModified: {
+    '3': '<g><path d="M17 4H7C5.34315 4 4 5.34315 4 7V17C4 18.6569 5.34315 20 7 20H17C18.6569 20 20 18.6569 20 17V7C20 5.34315 18.6569 4 17 4Z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="currentColor"/></g>',
   },
   IconDotGrid1x3Horizontal: {
     '3': '<g><path d="M12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 13C20.5523 13 21 12.5523 21 12C21 11.4477 20.5523 11 20 11C19.4477 11 19 11.4477 19 12C19 12.5523 19.4477 13 20 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 13C4.55228 13 5 12.5523 5 12C5 11.4477 4.55228 11 4 11C3.44772 11 3 11.4477 3 12C3 12.5523 3.44772 13 4 13Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
@@ -396,6 +406,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconHammer2: {
     '3': '<g><path d="M11.0001 9.9681L14 13L14.7664 12.8467C15.6633 12.6673 16.5001 13.3533 16.5001 14.268C16.5001 14.3961 16.551 14.519 16.6416 14.6096L16.793 14.761C17.1835 15.1515 17.8166 15.1515 18.2072 14.761L20.5001 12.4681C20.7727 12.1955 20.909 12.0592 20.9818 11.9121C21.1205 11.6323 21.1205 11.3038 20.9818 11.024C20.909 10.877 20.7727 10.7407 20.5001 10.4681H19.5001C19.2884 10.2565 19.0551 10.0546 18.8793 9.81153C18.2779 8.97977 18.7277 7.9758 18.2482 7.11299C18.1854 6.99996 18.1315 6.92702 18.0237 6.78114C15.6117 3.51716 12.3844 2.43349 8.4265 3.16495C8.17719 3.21103 8 3.43128 8 3.68481C8 3.87949 8.10607 4.05848 8.27393 4.15709C10.7082 5.58709 11.5231 7.05062 11.0001 9.9681Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 10L4.49986 16.5073C3.67173 17.3363 3.67308 18.6799 4.50288 19.5073C5.33042 20.3324 6.66958 20.3324 7.49712 19.5073L14 13.0234" stroke="currentColor" stroke-width="2"/></g>',
+  },
+  IconHashtag: {
+    '3': '<g><path d="M9 4L7 20M17 4L15 20M4 8H20M20 16H4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>',
   },
   IconHomeRoundDoor: {
     '3': '<g><path d="M9.5 16.5V20H7C5.34315 20 4 18.6569 4 17V10.5383C4 9.57254 4.4649 8.66586 5.24909 8.10222L10.2491 4.50847C11.2953 3.75653 12.7047 3.75653 13.7509 4.50847L18.7509 8.10222C19.5351 8.66586 20 9.57254 20 10.5383V17C20 18.6569 18.6569 20 17 20H14.5V16.5C14.5 15.1193 13.3807 14 12 14C10.6193 14 9.5 15.1193 9.5 16.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g>',
@@ -471,6 +484,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconOpenaiCodex: {
     '3': '<g><path fill-rule="evenodd" clip-rule="evenodd" d="M9.37088 2.18576C11.1759 1.70239 13.0087 2.19059 14.3229 3.32227C16.0284 2.99798 17.8626 3.49276 19.1849 4.81496C20.5066 6.13684 21 7.96945 20.6766 9.67409C21.8096 10.9886 22.2977 12.823 21.8141 14.629C21.3301 16.4355 19.9888 17.7788 18.35 18.3506C17.7783 19.9889 16.4362 21.3295 14.6302 21.8138C12.8243 22.2976 10.9899 21.8091 9.67535 20.6763C7.97048 21.0002 6.13741 20.5067 4.81526 19.1846C3.49332 17.8624 2.99758 16.0289 3.32161 14.3235C2.18976 13.0088 1.70243 11.1746 2.18606 9.36962C2.67009 7.56414 4.00987 6.21916 5.64825 5.647C6.22058 4.009 7.56548 2.66963 9.37088 2.18576ZM12.9805 13.4704C12.4393 13.4707 12.0002 13.9097 12.0001 14.4509C12.0001 14.9922 12.4392 15.4311 12.9805 15.4313H15.9219C16.4633 15.4313 16.9023 14.9924 16.9023 14.4509C16.9022 13.9095 16.4633 13.4704 15.9219 13.4704H12.9805ZM9.40918 9.04408C9.13045 8.58016 8.52809 8.42952 8.06394 8.70801C7.60003 8.98663 7.44965 9.5891 7.72787 10.0533L8.89502 11.9998L7.72787 13.9463C7.44943 14.4104 7.60008 15.0128 8.06394 15.2915C8.52819 15.5701 9.13053 15.4196 9.40918 14.9555L10.8798 12.5044C11.0661 12.1939 11.0661 11.8057 10.8798 11.4952L9.40918 9.04408Z" fill="currentColor"/></g>',
+  },
+  IconPageSearch: {
+    '3': '<g><path d="M20 17.5C20 18.4537 19.6186 19.3182 19 19.9495C18.3647 20.5978 17.4793 21 16.5 21C14.567 21 13 19.433 13 17.5C13 15.567 14.567 14 16.5 14C18.433 14 20 15.567 20 17.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 21H8C6.34315 21 5 19.6569 5 18V6C5 4.34315 6.34315 3 8 3H16C17.6569 3 19 4.34315 19 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 19.9497L20.5 21.5002" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconPaperclip1: {
     '3': '<g><path d="M6 11V15C6 18.3137 8.68629 21 12 21C15.3137 21 18 18.3137 18 15V7C18 4.79086 16.2091 3 14 3C11.7909 3 10 4.79086 10 7V15C10 16.1046 10.8954 17 12 17C13.1046 17 14 16.1046 14 15V7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>',

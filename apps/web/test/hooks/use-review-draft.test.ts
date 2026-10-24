@@ -18,7 +18,18 @@ describe('useReviewDraft', () => {
   it('hands out the draft of the review around it', () => {
     const draft: ReviewDraft = {
       enabled: true,
-      comments: [{ id: '1', path: 'a.ts', line: 4, text: 'Check this.' }],
+      comments: [
+        {
+          id: '1',
+          path: 'a.ts',
+          side: 'new',
+          line: 4,
+          endLine: null,
+          ref: null,
+          text: 'Check this.',
+          suggestion: null,
+        },
+      ],
       addComment: () => undefined,
       removeComment: () => undefined,
       clearComments: () => undefined,

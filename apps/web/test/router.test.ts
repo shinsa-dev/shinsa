@@ -146,9 +146,15 @@ describe('resolveTaskPath', () => {
     expect(resolveTaskPath({ id: 'a/b' })).toBe('/tasks/a%2Fb');
   });
 
-  it('writes tab, view, file and run in that order', () => {
-    expect(resolveTaskPath({ id: 't1' }, { run: 'r1', file: 'src/a.ts', view: 'changes', tab: 'code' })).toBe(
-      '/tasks/t1?tab=code&view=changes&file=src%2Fa.ts&run=r1'
+  it('writes tab, mode, file, its lines and run in that order', () => {
+    expect(
+      resolveTaskPath(
+        { id: 't1' },
+        { run: 'r1', file: 'src/a.ts', mode: 'changes', diff: true, line: 4, end: 9, tab: 'code' }
+      )
+    ).toBe('/tasks/t1?tab=code&mode=changes&file=src%2Fa.ts&diff=1&line=4&end=9&run=r1');
+    expect(resolveTaskPath({ id: 't1' }, { tab: 'code', mode: 'files', file: 'a.ts', line: 4, end: 4 })).toBe(
+      '/tasks/t1?tab=code&mode=files&file=a.ts&line=4'
     );
   });
 

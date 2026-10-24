@@ -1,4 +1,4 @@
-import type { CodeSpot } from '@shinsa/core';
+import type { CodeSpot, Task } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -7,18 +7,20 @@ import { CollapseToggle } from '@/components/layout/surface/panel.tsx';
 import { TokenText } from '@/components/text/code-fence.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { useTokens } from '@/lib/code/highlight.ts';
-import { useFileContent } from '@/lib/connection/files.ts';
+import { useFileContent, useTaskRefs } from '@/lib/connection/code.ts';
 import { formatLineRange } from '@/lib/format/count.ts';
 import { resolveSnippet } from '@/lib/overview/snippet.ts';
 
-function SnippetBody({ taskId, revision, spot }: { taskId: string; revision: number; spot: CodeSpot }) {
-  const loaded = useFileContent(taskId, spot.file, revision);
-  const content = loaded.status === 'ready' ? loaded.value : null;
+function SnippetBody({ task, spot }: { task: Task; spot: CodeSpot }) {
+  const refs = useTaskRefs(task);
+  const loaded = useFileContent(task, refs.status === 'ready' ? refs.value.head : null, spot.file);
+  const content = loaded.status === 'ready' ? loaded.value.content : null;
   const tokens = useTokens(content, spot.file);
   if (content === null) {
+    const waiting = refs.status === 'loading' || loaded.status === 'loading' || loaded.status === 'idle';
     return (
       <p className='px-2 py-1.5 text-2xs text-fg-2'>
-        {loaded.status === 'loading' ? 'Loading…' : 'This file is not in the worktree any more.'}
+        {waiting && refs.status !== 'error' ? 'Loading…' : 'This file is not at the head of the branch.'}
       </p>
     );
   }
@@ -38,15 +40,7 @@ function SnippetBody({ taskId, revision, spot }: { taskId: string; revision: num
   );
 }
 
-export function CodeSnippet({
-  taskId,
-  revision,
-  spot,
-}: {
-  taskId: string;
-  revision: number;
-  spot: CodeSpot;
-}) {
+export function CodeSnippet({ task, spot }: { task: Task; spot: CodeSpot }) {
   const [open, setOpen] = React.useState(false);
   return (
     <figure className='corner-superellipse/1.125 flex flex-col overflow-hidden rounded-lg border border-border'>
@@ -57,7 +51,7 @@ export function CodeSnippet({
         <span className='flex-1' />
         <CollapseToggle open={open} onToggle={() => setOpen(!open)} label='code' />
       </figcaption>
-      {open && <SnippetBody taskId={taskId} revision={revision} spot={spot} />}
+      {open && <SnippetBody task={task} spot={spot} />}
       <Markdown
         text={spot.why}
         className={cn('px-2 py-1.5 text-fg-3 text-xs', open && 'border-border border-t')}

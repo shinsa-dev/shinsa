@@ -16,6 +16,21 @@ export type {
   UsageWindow,
   UsageWindowKind,
 } from './accounts.ts';
+export {
+  CODE_LIMITS,
+  type FileContent,
+  isCommitSha,
+  type RefCommit,
+  type RepoEntry,
+  type RepoEntryKind,
+  type RepoPaths,
+  type RepoTree,
+  resolveImageType,
+  type SearchMatch,
+  type SearchResult,
+  type TaskRefs,
+  WORKING_REF,
+} from './code.ts';
 export { parseUnifiedDiff } from './diff.ts';
 export {
   type ContextOptimizer,

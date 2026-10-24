@@ -193,7 +193,7 @@ identity).
 
 ## 4. The human surface
 
-Desktop-first and responsive: built for a full window, still right in a ~900px floating window. Web, served by `shinsa serve`, with an Electron app around it next.
+Desktop-first and responsive: built for a full window, still right in a ~900px floating window. Web, served by `shinsa serve`, and a Mac app around it (`apps/desktop`) that loads the same page.
 
 - **Home.** The briefing (the decision to take now and why, then the next two or three), the
   new-task box, then the queue: what else needs you, what is in progress, what waits on another
@@ -402,7 +402,10 @@ Built and verified end to end against a scratch repository:
   split: the walkthrough on the left (sections, or every spot ranked by attention, then agent findings,
   judgement calls, checks), the code on the right with the whole file as context, the spot spotlit,
   findings inline, line comments, Previous spot and Next spot to step. Its changes view is a file tree
-  and the full diff.
+  and the full diff. Since 2026-10-24 Code is a workbench (Review, Changes, Files and Search, tabs, ⌘P quick open,
+  find, go to line, a ref picker) on CodeMirror, reading every file from git at a pinned commit, so a merged task
+  keeps its code; edits become suggested changes sent with Request changes (`docs/design.md`, 32;
+  `docs/engine.md` → The Code tab's reads).
 - **Desktop shell.** Home and the queue button show the same queue: Needs you, In progress and Waiting on
   another task, all within the focus project (switching the focus is how you see other work). ⌘K's Next and Previous task that needs you step through the
   decisions; nothing moves you on by itself after you decide. Cards is the default layout: no rail, a

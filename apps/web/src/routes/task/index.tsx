@@ -1,5 +1,6 @@
 import { type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
+import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CARDS_FRAME, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
@@ -10,15 +11,28 @@ import { type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { replaceRoute, resolveCanonicalTaskPath } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
-import { CodeTab } from './code.tsx';
 import { OverviewTab } from './overview.tsx';
+
+const CodeTab = React.lazy(() => import('./code.tsx').then((module) => ({ default: module.CodeTab })));
+
+function OpeningCode() {
+  return (
+    <div className='flex items-center gap-2 p-3 text-fg-2 text-xs'>
+      <Spinner size='sm' /> Opening the code
+    </div>
+  );
+}
 
 function TaskTabContent({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
   switch (view.tab) {
     case 'overview':
       return <OverviewTab state={state} task={task} gate={view.lead} onOpen={view.applyNowTarget} />;
     case 'code':
-      return <CodeTab task={task} view={view.codeView} />;
+      return (
+        <React.Suspense fallback={<OpeningCode />}>
+          <CodeTab task={task} modes={view.codeModes} />
+        </React.Suspense>
+      );
     case 'chat':
       return <ChatTab state={state} task={task} focusRunId={view.chatRunId} />;
   }

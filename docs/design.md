@@ -217,9 +217,9 @@ Only these, and they win over anything below:
    (`PullRequestDetails`, the same body as the overview's pull request fact) shows the task, CI,
    unresolved comments, conflicts and the checks. `RepoChip` and `BranchChip` are a 14px `fg-2`
    icon and the name (the branch in mono); their cards are the overview's repository and branch
-   facts. A file link (`FileLink`) is inline code; when the file is in the current task's diff it
-   opens it in Code → All files (`?tab=code&view=changes&file=`) with a tooltip naming the path and
-   lines, otherwise it stays plain code. Smart anchors carry `data-smart`, so prose link styling
+   facts. A file link (`FileLink`) is inline code; on a task with a repository it opens the file in the
+   Code tab at its lines (a diff tab in Changes once the task has changes, `?tab=code&mode=changes&file=&diff=1&line=`,
+   the file in Files before that), with a tooltip naming the path and lines; elsewhere it stays plain code. Smart anchors carry `data-smart`, so prose link styling
    (blue, underlined) never applies to them.
    `ReferenceText` and the markdown renderer turn text into these pieces from the reference
    syntax (`docs/engine.md` → References): `shinsa://` links, a quoted task title, an exact title
@@ -264,7 +264,7 @@ Only these, and they win over anything below:
     the queue; it never hides. From
     `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
-    bound to a key, and Enter sends in every input.
+    bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), and Enter sends in every input.
 11. **No focus states.** Nothing marks keyboard focus: no ring, outline, border recolour or wash
     (Shape & depth → No focus states). Focus rules below are paywall-next reference only.
 12. **The task page has one left edge and no details panel.** The heading is a `text-base` medium
@@ -308,7 +308,9 @@ Only these, and they win over anything below:
       the first icon sits on the column edge. Items with more to say open an `InfoPopover` on
       hover (see 15), never a tooltip: the pull request shows CI, unresolved comments, mergeable, each
       check with its state and a link to GitHub; the branch its full name and base; the
-      repository its path, project and default branch; several related tasks list as links.
+      repository its path, project and default branch; several related tasks list as links. A task with no
+      repository (a greeting, a general question) has no repository fact at all, and no branch; nothing in the web
+      assumes `task.repoId` is set (the roadmap row's hint reads "No repository").
       Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/status/priority-icon.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
     - **Who worked on this.** Once an agent has run, the facts row ends with `IconAgents` and "3 agents"; its
       `InfoPopover` is a small tree headed "Who worked on this" (`listTaskAgents` in `lib/chat/agents.ts`): each
@@ -418,7 +420,8 @@ Only these, and they win over anything below:
       Revise the plan, Approve the changes / Review the changes / Request changes, Merge #N or
       Merge the pull request, Answer the question, Retry / Retry with guidance, or Allow another $N for a cost
       limit; Sign in / Retry anyway for a Sign in gate; Give the ‹label› / Don’t give the secret for a secret;
-      Resume now and the auto-resume toggle for a usage wait), then View (Overview, Code, Chat, and Guided review / All files on Code), then
+      Resume now and the auto-resume toggle for a usage wait), then View (Overview, Code, Chat), then Code while the Code tab is open (Review, Changes, Files, Go to file…,
+      Search in files, Find in this file, Go to line and the diff layout, each with its key; 32), then
       This task (Wait for another task…, a choice that ticks every task it waits on and toggles
       the one you pick, and Stop waiting, Set priority with the priority icons,
       Message the agent, Open the pull request
@@ -769,8 +772,8 @@ Only these, and they win over anything below:
       Dismiss (secondary) and Add (outline). The select offers Start now and After this task merges
       (Home's When to start words, `lib/tasks/suggestions.ts`), the agent's pick first, preselected and
       marked Suggested; Add sends `waitsOnThis` from what is chosen. An Ask task
-      has no Summary panel and no Code tab, and its progress track is Find the repository →
-      Answer.
+      has no Summary panel, its Code tab browses the repository at its default branch (Files only, 32), and its progress track is Find the repository →
+      Answer, or only Answer when it has no repository.
     - **Results live in the now card**, the way a plan and a review do (`ResultCard` in `now-card.tsx`, on
       `NowFrame`; `resolveNowKind` in `lib/overview/now.ts` picks the card): a finished answer, report, diagnosis or
       outcome is the card's body as markdown, under the eyebrow (status, round, when it arrived) and a title in the
@@ -781,8 +784,8 @@ Only these, and they win over anything below:
       `ResultPanel` (`RESULT_PANEL` in `lib/tasks/shapes.ts`: Answer, Diagnosis, Report, Outcome) shows only while
       the now card shows other work, such as a find and fix's diagnosis kept under its build
       (`isResultInNowCard`). A kind of task without a build step (answer, investigation,
-      research, operation) has no Summary, What changed or Judgement calls panels and no Code tab; find and fix gets
-      its Code tab once it builds. A finished answer, investigation or report keeps the composer, for a follow-up the
+      research, operation) has no Summary, What changed or Judgement calls panels, and its Code tab is Files alone (the
+      repository at its default branch, 32); find and fix gets Review and Changes once it builds. A finished answer, investigation or report keeps the composer, for a follow-up the
       same agent answers.
     - **No strip until the steps are settled.** While triage has not chosen the kind of task, or the planner of a
       task Shinsa shaped can still change its steps (core `resolveShapeState`: `triage` or `planner`), the card's
@@ -790,7 +793,8 @@ Only these, and they win over anything below:
       (`TaskTrack` in `progress-track.tsx`), and the facts row names no kind yet (the roadmap row shows the dotted
       circle, "Kind not chosen yet"). A task that becomes a plain answer never flashes the plan-to-merge strip.
     - **The stage strip follows the pipeline** (core `resolveTaskProgress`): Find the repository when it does not
-      start with a plan, then each step, Answer, Research, Investigate, Your OK to change (Your OK to run before an
+      start with a plan and the task has a repository or its steps need one (an answer or research with no
+      repository has no such step, and no copy about finding one), then each step, Answer, Research, Investigate, Your OK to change (Your OK to run before an
       operation), Plan, Run the operation, Build, Checks and agent review (Checks or Agent review when the task has
       only one), Your review, Pull request, Merge; Your OK is a step of composed steps, and shows after an inquiry while a proposed change waits. A
       strip longer than a change's folds the labels of finished steps below `lg`, and one longer than find and fix
@@ -1256,7 +1260,103 @@ Only these, and they win over anything below:
       stacked pull request" or "Ship round 4 onto #12".
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
 
-`bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
+31. **The desktop app is the same page in a Mac window** (`apps/desktop`, its `CLAUDE.md`; `lib/desktop.ts` on the
+    web side). It loads the UI from the server (the CLI's port, `http://127.0.0.1:5180` by default), so the app, a
+    browser tab and Floaty always show one version; Floaty stays the floating window and the app is the full one.
+    The page learns it runs in the app only from the preload bridge `window.shinsaDesktop`; a browser and Floaty
+    have none and nothing below applies there.
+    - **The title bar is the top bar.** The traffic lights sit inset over the 44px top bar, centred on it.
+      `applyDesktop` (called from `main.tsx`) sets `data-desktop` on `<html>` (`window`, or `fullscreen` when the
+      lights are gone), and the `desktop:` variant (`app.css`) holds the room they take: the Cards top bar
+      `desktop:ps-16`, the Sidebar rail's header and compact bar `desktop:ps-20`; the rail's header drops the
+      wordmark in the app (`desktop:hidden` on `BrandLink`), since its 240px would not hold the lights, the
+      wordmark and the controls. A bar marked `data-window-drag` drags the window; its buttons, links, inputs and
+      the reconnecting dot stay clickable, and toasts, dialogs, menus and tooltips never drag.
+    - **Only the app notifies.** In the app the page never creates a browser `Notification` (and the app denies
+      the page that permission): `notifyDesktop` hands the decision to the app, which shows a silent macOS
+      notification (the page plays its own sound) whose click shows and focuses the window and opens the task.
+      Show a notification defaults to When Shinsa is in the background there, Never in a browser; the browser's
+      permission is never asked. The test notification goes the same way.
+    - **The Dock badge** is the tab's count: `writePageAttention` sends `floaty:badge`'s n to the app with the title
+      and the meta tags, and the badge clears at 0 and while the server is unreachable.
+    - **`shinsa://` links** open in the window, from any app or from inside the page: `shinsa://task/LOC-4` (a
+      handle or an id) opens the task, `shinsa://tasks`, `shinsa://settings` and `shinsa://` their pages, anything
+      else Home. Links to other sites open in the default browser.
+    - **Shinsa is not running**: the window shows one quiet page ("Shinsa is not running", the address, and how to
+      start it) and opens Shinsa by itself as soon as the server answers; the packaged app also offers Start Shinsa
+      once a launch (`shinsa service restart`, then `shinsa service install`), with the last lines of the output if
+      it does not start.
+    - **The window**: closing it hides it (the page keeps its socket, so the badge and notifications go on), the
+      Dock icon or Window → Shinsa brings it back, ⌘Q quits the app and never stops the server. Its size and place
+      are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own (Settings… ⌘,
+      opens `/settings`; View has Reload ⌘R, zoom, full screen); no other shortcut and no menu bar icon.
+
+32. **The Code tab is a small workbench** (`components/code/`, `lib/code/`, `routes/task/code.tsx`, lazily loaded with
+    its editor). Every task with a repository has one (`listTaskTabs`); a task with changes opens it on Review,
+    one without on Files, reading the repository at its default branch.
+    - **Shape.** An explorer column on the left (280px by default, resizable from 200 to 480 by the same handle as the
+      rail, the width kept in `shinsa.code-explorer-width`; below `md` it is a sheet opened from the toolbar's
+      Show the files, closed by picking a file, Escape or a click outside). Below `xl` the toolbar's Unified / Side by
+      side, Suggest a change and Open in editor become icon buttons with their names as tooltips) and the editor on the right: a 36px strip of tabs, the 36px `Toolbar`, then the code. The
+      column's header is the mode `Choice` (Review, Changes, Files; one mode shows as its plain label), the
+      search button (`icon-sm`, pressed while Search is open) and the ref picker under them: a `SelectField`
+      (`sm`, full width) with Head of the branch (or the default branch's name), Working copy (while the worktree
+      exists; its hint says whether there are uncommitted edits), Base, and every earlier commit by its subject, each
+      with its short id as the hint. The ref is the "after" side of everything: the trees, the files, the search and
+      the diffs (base against it).
+    - **Review** is the walkthrough: the report's headline, Walkthrough or By attention, the phases with their
+      spots (a 2px bar in the spot's attention tone), the agent review's findings, judgement calls (each a link to
+      its file and line), the checks the agent ran and your comments (each a link to its place). Picking a spot
+      opens its file as a diff tab, or as the file when the change does not touch it, at the spot's lines; the
+      toolbar then carries the spot's attention, "3 of 13" and Previous spot / Next spot. Without a report the spots
+      come from the riskiest changes and the summary says so.
+    - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
+      each file with its status letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip),
+      a red risk dot with its reason, your comment count, the diff counts (or Binary) and a viewed box (a
+      `CheckMark` when ticked; viewed files dim, "2 files · 1 viewed" heads the tree; kept per task and commit).
+      **Files** is the repository as a lazy tree, a folder read when you open it (`/tree`), the open file's folders
+      opened for you; changed files carry their status letter where the others have the file icon. **Search** (the
+      button or ⇧⌘F) is a field with Match case (`Aa`) and regular expression (`.*`) toggles, a Files to include
+      pattern, a one-line summary ("12 results in 4 files." and whether it stopped early) and the matches grouped by
+      file, the match marked in `amber-a2`; a result opens its file at its line. Tree, search and tab rows are 24px,
+      `text-2xs`, indented 12px a level, with a 14px leading slot (chevron, status letter or icon), the open row
+      `bg-bg-a3`.
+    - **Tabs** follow VS Code: a click opens a preview tab (its name `fg-2`) that the next click replaces, a double
+      click or an edit pins it, eight at most (the oldest goes). A tab shows the status letter of a changed file and
+      its name, the folder when two tabs share a name, and a close button (`icon-xs`, shown on hover and on the open
+      tab). ⌘P (Go to file) opens any file of the repository by name: Buzzkit's command dialog over every path at the
+      ref, ranked by `rankPaths` (a name that contains what you typed first, then word starts and consecutive
+      letters), the matched letters in `primary-text`, the folder as the hint, the open tabs first with no query.
+    - **The editor is CodeMirror 6**, read-only, coloured from the `--code-*` tokens (`globals.css`: keyword purple,
+      string green, number orange, comment `fg-2`, function `primary-text`, type amber, property blue, tag red,
+      punctuation `fg-3`; the diff washes `--code-added`/`--code-removed` and their strong steps for changed words),
+      12px ABC Areal Mono on an 18px line, so both themes need no override. A diff tab is unified by default: removed
+      lines sit above where they were, highlighted from a parse of the whole old file (so a removed line inside a
+      block comment reads as a comment), numbered in red in the gutter; changed words are washed, unchanged stretches
+      of four lines or more fold into "N unchanged lines" (a click opens them). Unified or Side by side (the
+      toolbar's `Choice`, hidden below `md`) is remembered (`shinsa.code-split`); side by side is CodeMirror's merge
+      view with the old file on the left. A binary file shows nothing as text, and an image before and after on a
+      checkerboard; a file over 2 MB says its size.
+    - **Inline.** Findings sit under their last line in their tone (`red-a1` blocking, `amber-a1` a suggestion), each
+      spot's lines carry a 2px bar in its attention tone and the selected one the `primary-a1` wash. At a review or
+      merge gate a click on a line number opens a comment box under it (on the selected lines when the click is in a
+      selection); a removed line's number does the same for the removed line, and its comment sits under the removed
+      block. A comment is `primary-a1` with Remove; it is kept per gate in localStorage, anchored to the commit it was
+      made at, and goes with Request changes. Suggest a change makes the file editable at the head; Add the suggestion
+      keeps the edit as a comment with the changed lines (removed and added, as a small diff) and puts the file back.
+      Nothing is written to the worktree: Shinsa owns every commit.
+    - **Keys.** While the Code tab is open, and only then, it binds ⌘P (Go to file), ⇧⌘F (Search in files), ⌘F
+      (find in the open file, CodeMirror's search panel) and ⌘G (go to line), Ctrl elsewhere (`hooks/use-code-keys.ts`,
+      `lib/code/keys.ts`). Each is also a ⌘K command with its key at the right, so the menu stays the one complete
+      place. This is the one exception to ⌘K being the only shortcut, and `bun lint:conventions` rejects a global key
+      listener anywhere else.
+    - **Every position is in the URL** (`lib/code/location.ts`): the mode, the open tabs, the open file and whether it
+      is a diff, the preview tab, the line and range, the ref, the spot, the order and the search, so a reload or Back
+      puts you where you were. Files are read by commit and cached by commit (`docs/engine.md` → The Code tab's
+      reads), so a merged task whose worktree is gone keeps its code, a review never shifts while an agent types, and
+      nothing is read again because the task changed in some other way.
+
+, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
 and `shadow-control*` are allowed), a `hover:` with no `active:` on its line (a `group-hover:` with no
@@ -1265,7 +1365,8 @@ instead of `CARD`) and `formatAge(…)` or `formatDuration(…)` rendered in JSX
 (pass the time to `TimeAgo` or `Duration` instead; a time built another way is not caught). In the app and the kit
 (`packages/ui/src`) it also rejects raw corners, any `focus:` / `focus-visible:` / `focus-within:` state or
 `ring-offset-*`, an icon faded by hand (19) and a checkmark icon in green; the `/ui` catalog pages are checked for
-raw corners only. Besides that it bans comments (outside `packages/ui`) and enforces the verb catalog.
+raw corners only. Besides that it bans comments (outside `packages/ui`), enforces the verb catalog and rejects a
+global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts` and `hooks/use-code-keys.ts` (32).
 
 ---
 

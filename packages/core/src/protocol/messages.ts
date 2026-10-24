@@ -22,11 +22,13 @@ export interface DiffFile {
   deletions: number;
   risk: 'high' | 'normal' | 'low';
   riskReason: string | null;
+  binary: boolean;
   patch: string;
 }
 
 export interface TaskDiff {
   base: string;
+  head: string;
   files: DiffFile[];
 }
 

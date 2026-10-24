@@ -16,14 +16,14 @@ own work.
 
 | Role | Default model | Session | Hands back with |
 | --- | --- | --- | --- |
-| Classifier | Sonnet | one call, no tools | title, repository, size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
+| Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
 | Planner | Opus | fresh, cannot edit; a revision resumes the last planner session | 2–8 phases (`propose_plan`), or the task's steps composed anew (`reshape_task`, Task shapes, below) |
 | Builder | Opus | a fresh session per phase; a retry or your message while building resumes it | a phase report (`complete_phase`) |
 | Reviewer | Opus | always fresh, cannot edit | findings (`report_review`) |
 | Fixer | Opus | resumes the latest builder or fixer session | a summary (`complete_fix`) |
-| Answerer | Opus | fresh, in the repository itself, cannot edit; a follow-up resumes it | an answer (`answer`), optionally a proposed change (Task shapes, below) |
+| Answerer | Opus | fresh, in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; a follow-up resumes it | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | fresh, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships); a follow-up resumes it | a diagnosis (`report_diagnosis`), optionally a proposed fix |
-| Researcher | the Answerer's | fresh, cannot edit, in the worktree when the task has one, else the repository; a follow-up resumes it | a report (`submit_report`), optionally a proposed change |
+| Researcher | the Answerer's | fresh, cannot edit, in the worktree when the task has one, else the repository, else a scratch folder; a follow-up resumes it | a report (`submit_report`), optionally a proposed change |
 | Operator | the Builder's | fresh, in the task's worktree, after you approved its plan | how the operation went (`report_outcome`), after the evidence its plan asks for |
 | Writer | Sonnet | one call, no thinking | the Home guide: now, up next, a heads-up |
 
@@ -109,10 +109,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
           checks, review, CI and your messages all loop through a fixer
 ```
 
-1. **Classify.** One Sonnet call picks the title, repository, size, branch and, given every open
-   task, the tasks this one waits on (`waits_on`, a list, usually empty). Then the task either
-   waits for them (Scheduling, below) or has its setup verified (`config.verify`, Setup
-   verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
+1. **Classify.** One Sonnet call picks the title, the repository or none (A task without a repository,
+   below), size, branch and, given every open task, the tasks this one waits on (`waits_on`, a list, usually
+   empty). Then the task either waits for them (Scheduling, below) or has its setup verified (`config.verify`,
+   Setup verification, below) and gets its worktree (`worktree.create`): a fresh branch from the freshly fetched
    default branch.
 2. **Plan.** The planner reads the code and calls `propose_plan`. A task created plan first
    (`planFirst`: `shinsa do --plan-first`, `shinsa import`) always waits at a plan gate; otherwise, with
@@ -147,6 +147,35 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 
 That path is one **round**. A task is the conversation, and it can run any number of rounds (Rounds, below): the
 merge ends the round, not the task.
+
+### A task without a repository
+
+A task binds a repository only when its request names one or clearly needs its code. "Hey", "what projects do you
+know", a general question or planning chatter binds none, and never because the project has only one repository.
+
+- **Triage may choose none.** The repository is a choice among the project's repositories (or every one, Projects and
+  task identity, below) plus `none` (`NO_REPOSITORY` in `apps/server/src/triage/index.ts`); the classifier is told
+  when to answer none and never to pick a repository only because it is the only one listed. The repositories on
+  the machine outside the task's project are named as never offered, so "fix the button in kanna" in a project
+  without kanna binds none (and asks at the setup gate) instead of the project's only repository. Without the model the
+  task binds none, unless it was created with a repository (`repoId`) or from inside one (`origin`). `task.triage`
+  then carries `repoId: null` and nothing is registered.
+- **It runs without one.** An answer or research with no repository skips the setup step entirely (`startWork`:
+  no `config.verify`, no "verifying the setup", no Find the repository step in the strip) and runs read-only in a
+  scratch folder of its own, `data/scratch/<task id>` (`RunSupervisor`), never a worktree. Its prompt claims no
+  repository ("The human asked a question or wrote to you", and `describeNoRepository`: work from Shinsa's own
+  tools, and ask with `ask` when the request needs the code of a repository it cannot tell). The task keeps its
+  project.
+- **Work that needs code binds one then.** A step that needs a repository (an investigation, a plan, a build, an
+  operation) on a task with none goes through the setup check, which finds the repository first: one quick call on
+  the classifier model (`resolveRoundRepository` in `triage/message.ts`) reads the task's rounds, the current
+  round's request, the change you agreed to and your messages in that round, and answers one of the project's
+  repositories or none. The server registers it like triage does (`repo.register`, `<effect key>:repo.register`)
+  and sends `config.record` with its `repoId` and what checking it found; core binds it (`task.repo_bound`,
+  "Chose the repository …"). So a no-repository task whose next round asks for a change ("fix the button in kanna")
+  binds kanna when that round starts, and your OK to turn an answer into a change binds one before the planner runs.
+  When the call answers none (or the model is off), core opens the configuration gate "No repository for this
+  task"; a message there ("it is kanna") verifies the setup again, and the same call reads it.
 
 ## Rounds
 
@@ -186,7 +215,8 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/server/sr
   question (`SHAPE_QUESTION`), read as the request of a new task with the earlier rounds as its context, and the round
   takes that preset's steps: "how many ended up in Archive?" is an answer round, "open a pull request for it" a change,
   "move the old checkout under Archive instead" an operation. Only a round with no shape (`--as new_round` with none, or a
-  suggested task kept as the next round) starts as a change, which its planner may reshape.
+  suggested task kept as the next round) starts as a change, which its planner may reshape. A round whose kind needs
+  code on a task with no repository binds one as it starts (A task without a repository, above).
 - **Accepted at once, routed after.** A message you write is accepted before anything is classified
   (`routeUserCommand` on the socket and `POST /api/commands`): it becomes `message.receive`, which core checks and keeps
   in the task's `inbox`, and the acknowledgement and the state push carry it straight away, so the chat shows it as
@@ -303,7 +333,7 @@ folds in `state/shapes.ts`).
   restarts the operator, never the merge, and a pull request read that arrives after the merge changes nothing. An
   operation that runs before any code ships keeps "approve with the plan": nothing has changed since you read it.
 - **Shapes are the named pipelines** (`SHAPE_PIPELINES`): **answer** `[answer]` (the answerer reads the repository itself, no
-  worktree); **investigate** `[investigate]` (an investigator in a scratch worktree reproduces the problem and reports its
+  worktree, or no repository at all); **investigate** `[investigate]` (an investigator in a scratch worktree reproduces the problem and reports its
   diagnosis with `report_diagnosis`); **research** `[research]` (a read-only researcher writes a report with `submit_report`); **change**
   (plan to merge, as above); **fix** `[investigate, …change]` (investigate first, then the worktree is reset onto the default
   branch, so nothing the investigator tried ships, and the planner plans the fix from the diagnosis without asking again);
@@ -357,7 +387,8 @@ folds in `state/shapes.ts`).
   last session (Rounds, above).
 - **Before triage** a task whose kind Shinsa picks has no `pipeline` yet: an Ask task (`mode: 'ask'`) reads as an
   answer and every other one as a change (`resolveTaskPipeline`).
-- **Progress** (`resolveTaskProgress`) draws the pipeline: Find the repository (when it does not start with a plan), each step,
+- **Progress** (`resolveTaskProgress`) draws the pipeline: Find the repository (when it does not start with a plan, and the
+  task has a repository or its steps need one), each step,
   the plan's phases, and Your OK to change (Your OK to run before an operation) for a `your_ok` step or while the proposal
   gate is open; the step is done once the proposal is accepted. The steps follow the pipeline's order, so an operation after
   the merge is the last step; Checks and agent review is named for what the task keeps (Checks, Agent review), and a fix
@@ -721,7 +752,9 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
   the repository folder exists and is a git repository, that the default branch exists (fetching
   it from origin before calling it missing) and that there are checks to run (configured, or
   found in `package.json`). A task whose pipeline needs no worktree (an answer, research) checks the repository only, and
-  one without `build` (an investigation, an operation) skips the checks.
+  one without `build` (an investigation, an operation) skips the checks. A task with no repository whose steps need
+  none never comes here; one whose steps need one finds it first (A task without a repository, above), and the
+  problem when none is found is `no_repository`.
 - Problems open their own `configuration` gate, not a failure: nothing ran. Its title names the problem ("The
   repository is missing", "No checks to run", or "The setup has 2 problems") and its body lists what is wrong and
   how to fix each; the web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again;
@@ -906,7 +939,7 @@ fails when the file and the specs differ.
   `/api/repos`, `/api/projects`, `/api/schedules`, `/api/delegations`, `/api/activity`, in
   `apps/server/src/http/reads.ts`, and `/api/repos/local`, in `projects/routes.ts`), Claude accounts and usage
   (`/api/accounts/*`), folders (`/api/onboarding/setup`), secrets and webhook signing secrets, the health check and
-  the providers. `/api/tasks/<task>` takes an id, a handle, the start of an id or an exact title (more than one match
+  the providers, and the Code tab's reads (below). `/api/tasks/<task>` takes an id, a handle, the start of an id or an exact title (more than one match
   is `task_ambiguous`) and answers the task's view, plan, findings, open gates, what it waits on, runs, suggested
   tasks, recent activity and the same text `read_task` gives an agent. `/api/tasks/<task>/chat` pages the transcripts of the
   task's runs: the last `limit` entries (50), or the ones after the `after` index, filtered by `kinds` (`user`,
@@ -916,8 +949,43 @@ fails when the file and the specs differ.
   `config.json`'s `port`. `--help`, `--json` and the refusal shape are `docs/cli.md`. Commands carry an idempotency
   key per invocation (Command receipts, below).
 - **Yours alone** (`humanOnly`): the specs listed in Who can change Shinsa, below.
+- **Without the server**: `shinsa service` reaches `launchctl` through the command line's `SurfaceClient.service`,
+  never the server, so it works while Shinsa is down; a client without it (an agent's) refuses with
+  `service_unavailable` (Configuration and data → The background service).
 - **Not here at all**: what only the browser keeps (the layout, the theme, notifications and sounds) and the setup
   chat, which `shinsa folders` and `shinsa settings` cover.
+
+## The Code tab's reads
+
+The web's Code tab reads a task's code over HTTP (`apps/server/src/http/code.ts`, on `git/files.ts`,
+`git/task-refs.ts`, `git/diff.ts` and `git/read.ts`). Every route takes the task's id and reads only the repository the
+task is registered to (`task.repoId`); a task with none is `404 code_unavailable`.
+
+| Route | Answers | How |
+|---|---|---|
+| `GET /api/tasks/<id>/refs` | `TaskRefs`: the head commit, the base, the branch, the default branch, whether a working copy exists and has uncommitted edits, and the commits between base and head (100 at most) | the worktree's `HEAD`; without a worktree the branch, then the pull request's head, then the last pushed commit; a task without a branch reads the default branch (`origin` first). The base is the merge base with the round's base branch or the default branch; once the branch is merged, the merge base with the commit before the merge, so a merged task keeps its diff |
+| `GET /api/tasks/<id>/paths?ref=` | `RepoPaths`: every file path (200,000 at most, `truncated`) | `git ls-tree -r`; the working copy `git ls-files --cached --others --exclude-standard` without the deleted ones |
+| `GET /api/tasks/<id>/tree?ref=&dir=` | `RepoTree`: one folder's entries, folders first | `git ls-tree --long`; the working copy from its paths |
+| `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | `git ls-tree` for the object, then `git cat-file blob`; the working copy through `resolveInside` |
+| `GET /api/tasks/<id>/raw?ref=&path=` | an image's bytes, with `default-src 'none'` and `nosniff`; anything but an image is refused | as `blob` |
+| `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut` | `git grep -n -I --column` with `-F` unless `regex=1` (then `-E`), `-i` unless `case=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked` |
+| `GET /api/tasks/<id>/diff?base=&head=` | `TaskDiff` with both ends | `git diff --find-renames base head`, `binary` set for a binary file; `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
+
+- **Refs.** A `ref` is a full commit id that `git cat-file -t` says is a commit of that repository, or `working` for
+  the task's worktree while it exists; nothing else is passed to git (`ref_invalid`, `ref_unknown`). Leaving `ref` out
+  reads the head and is never cached.
+- **Paths.** Relative, without an empty, `.` or `..` segment, a leading `/` or a NUL (`path_invalid`); they reach git
+  after `--` and with `GIT_LITERAL_PATHSPECS`, and the working copy is read through `resolveInside`, so a symlink
+  cannot leave it. A search glob may not start with `-` or `:`, and the query is at most 500 characters.
+- **Limits.** Each read runs with argv only, in its own process group, for 5 s (30 s for a diff) and stops when the
+  client goes away; output is capped (64 MB for listings and diffs, 4 MB for a search, 2 MB for a file), and a search
+  that runs out of time answers with what it found and `timedOut`.
+- **Caching.** A read named by a commit is immutable: it carries an `ETag` and `Cache-Control: private,
+  max-age=31536000, immutable`, a matching `If-None-Match` is a 304, and the server keeps file contents (by object id),
+  path lists and diffs in a 64 MB least-recently-used cache. Working-copy reads are `no-store`. The web keys every
+  read by commit, so a task event (a chat line, a new priority) reads nothing again; it reads the refs again only when
+  what pins the code changes (the stage, the branch, the worktree, a push, a phase or a fix), and the working copy
+  with each task update.
 
 ## Agents manage Shinsa
 
@@ -983,7 +1051,9 @@ plainly what protects what.
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
-  - opening a worktree in an editor (`tasks open`).
+  - opening a worktree in an editor (`tasks open`);
+  - running Shinsa in the background (`service install`, `uninstall`, `status`, `restart`, `logs`: Configuration and
+    data → The background service, below).
 
   They are decisions only you make, need you at the keyboard, or would put a secret through a model. Their surface
   specs are `humanOnly`, so `listAgentSpecs` leaves them out of every agent's tools, the prompt says they wait for you
@@ -1025,8 +1095,9 @@ description, folders }` (`packages/core/src/domain/types.ts`; the rules in `doma
 - **A task is scoped to a project.** `task.create` takes `projectId`; left out, the task takes its repository's
   project, else the focus project (Home's composer shows that default and lets you change it, or pick No project).
   Triage then picks the repository among the project's own (registered ones and those in its folders, `listLocalRepos`
-  over the folders) and names the project in its prompt; a project with neither falls back to every repository. A
-  task without a project gets one from the repository triage picks.
+  over the folders), or none, and names the project in its prompt; a project with neither falls back to every
+  repository. A task without a project gets one from the repository triage picks, and keeps none when triage picks
+  none.
 - **Agents know the project.** Every fresh task run's brief (not a resumed session, not a delegated run) ends with
   the project: its name and key, description, every
   repository with its path (the task's own marked) and its folders (`resolveProjectContext`, appended in
@@ -1201,7 +1272,8 @@ keeps beside its events (`store/event-log.ts`).
   never share an id, and the same cause sent again gets the same id, so it is answered from its receipt instead of
   applied twice. An effect that reports back names its command after itself: `<effect key>:task.triage`,
   `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.record_push:<sha>`, and
-  `<effect key>:effect.fail` when it gives up, and a repository triage registers `<effect key>:repo.register`. The
+  `<effect key>:effect.fail` when it gives up, and a repository triage or the setup check registers
+  `<effect key>:repo.register`. The
   clocks name theirs after what they fire (`monitor:<id>:<attempt>`, `schedule:<id>:<dueAt>` and
   `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`).
   - A run (`agents/supervisor.ts`): its attempt ids are `<run>:<n>`, and the attempt's commands are
@@ -2224,6 +2296,7 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
     ├── shinsa.sqlite  The event log, the effect outbox and the command receipts
     ├── worktrees/     One git worktree per task (`<repo>/<branch>-<id>`), and the checkouts of isolated
     │                  delegations (`delegations/<task>/<run>`)
+    ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      Screenshots, logs and files agents attached
     ├── usage-limits.json  The last usage reading per account
@@ -2234,7 +2307,10 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
     │                  serve.pid and serve.log (The agent loop → Compaction and fast mode)
     ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
     │                  the log)
-    └── onboarding.json  The setup chat so far, so a reload or a restart picks it up where it was
+    ├── onboarding.json  The setup chat so far, so a reload or a restart picks it up where it was
+    ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
+    │                  and boot time (One server per data directory, below)
+    └── serve.log      The background service's output (The background service, below)
 ```
 
 One folder instead of XDG's config and data split on purpose: it is one thing to back up, move or delete, a seeded or
@@ -2243,7 +2319,9 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **Overrides.** `SHINSA_HOME` moves the whole folder (tests use it). `SHINSA_DATA_DIR` is a flat layout:
   that directory is the data directory, and `config.json`, `accounts.json` and `accounts/` live inside it; scratch
   directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
-  command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on.
+  command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on. `SHINSA_WEB_DIR` serves
+  the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
+  default to the checkout's own, beside `apps/server`), for a bundle that lays the files out differently.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say): no effect runs
   (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered. It lists the Claude accounts
   without reading their logins or usage and refuses every change to them (Accounts and usage limits, above).
@@ -2252,6 +2330,16 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
   that is revised and then fixed, and operation-gate notes. Transcripts are synthetic; `SHINSA_SEED_SESSION`, a Claude
   Code session `.jsonl`, replaces one task's transcript with that real session.
+- **The sample repository.** For the code views the seed also builds `repos/shinsa-sample` offline from Shinsa's own
+  committed tree (`git archive HEAD`, about 1,250 files, imported as eight commits with `git fast-import`) and files it
+  under a Sample project (`scripts/seed-code.ts`, helpers in `seed-code-kit.ts`, transcripts in
+  `seed-code-transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
+  commit and one uncommitted edit, twelve changed files (a rename with edits, a deletion, two additions, a PNG,
+  `bun.lock` and a 5,000-line fixture), a report with nine spots (one in a file outside the diff), findings of both
+  severities, judgement calls and a planner, builder, fixer and reviewer chat whose tool calls carry the real lines;
+  SMP-1 merged through a `--no-ff` merge commit with its worktree gone and its branch kept, so its code is read from
+  commits alone; SMP-4 with a builder still running over uncommitted edits; and SMP-3, an answer with no code. The
+  edits anchor on text in Shinsa's own files and stop the seed with the file's name when a commit moves that text.
 - **Repositories.** Nothing is set up by hand. Triage picks a git repository from the folders that hold
   repositories (`config.json`'s `roots` plus `SHINSA_ROOTS`; until either names one, the folders discovery
   suggests, `repos/roots.ts`), or the one `shinsa do` ran in. A repository is registered the first time Shinsa
@@ -2268,6 +2356,63 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   logged once. `shinsa do`, `import`, `status` and `open` only read the port and never copy the file. An unreadable
   `secrets.json` (or one without its salt) is kept aside the same way as `secrets.json.unreadable-<time>`, logged, and
   an empty store is used.
+
+### One server per data directory
+
+Two servers on one data directory would both run every effect: two agents per run, two pushes, two merges. So
+`shinsa serve` takes `data/serve.lock` before it opens the event log (`apps/server/src/instance/lock.ts`). The lock
+is created atomically (written to a draft file, then hard-linked into place, which fails when the lock exists) and
+records the holder: pid, port, URL, version, commit, install path, when it started and when the machine booted. A
+second server finds a live holder and refuses to start with `server_running`, naming it: "Shinsa is already running
+on ~/.config/shinsa/data: http://127.0.0.1:5180 (pid 4242, version 0.0.0 (1a2b3c4)). Stop it first, or set
+SHINSA_HOME to another folder." The port and URL are written again once the server listens (a port of 0 becomes the
+real one). A clean stop removes the lock, after the log is closed, and only when it is still this server's; a
+server that could not listen gives it back at once.
+
+A server that crashed leaves its lock behind, and the next one takes it over (with a warning in the log) when the
+holder is not live: its pid is gone, the lock was written before the last reboot (the boot time differs by more than
+a minute, so a pid reused after a reboot never keeps the lock), it is this process's own pid without this process
+holding it, or the file is not a lock at all. A takeover removes the old file only when it still reads the same, and
+gives up with `server_lock_contended` after three tries, so two servers racing for a stale lock never both win. A
+lock it cannot read (permissions) stops the start instead of being taken over. Inspect mode takes the lock too.
+
+### The login shell environment
+
+An app opened from the Dock and a launchd service start with a bare environment (`PATH=/usr/bin:/bin:/usr/sbin:/sbin`,
+none of the variables the shell profile sets), so the agents would not find `gh`, `claude`, `codex` or Homebrew's
+`git`. `shinsa serve` reads the user's login shell once at start (`apps/server/src/shell/login.ts`): `$SHELL -lic`
+(zsh when `SHELL` is unset) printing a marker and `env -0`, in the home folder, with a 5 s timeout that kills the
+shell's whole process group and `DISABLE_AUTO_UPDATE=true` so oh-my-zsh does not prompt. Whatever the profile prints
+before the marker is ignored. The result is cached for the process and merged into the server's own environment,
+which every command it runs inherits (git, gh, the checks, Claude Code, Codex, eunoe): a variable the server already
+has is kept, one it lacks is added, and `PATH` keeps the server's own entries first and appends the shell's others.
+When the shell cannot be read (missing, hung, failed, no marker) the server logs it and starts anyway, with
+`~/.bun/bin`, `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin` appended to `PATH` where they exist. Only the
+`shinsa serve` command does this; `startShinsa` (tests, the soak child) never runs a shell.
+
+### The background service
+
+`shinsa service install|uninstall|status|restart|logs` (`apps/server/src/service/`, specs in `surface/service.ts`)
+runs Shinsa as a macOS LaunchAgent, `studio.overclock.shinsa`, so it lives through closing a window, a crash and a
+reboot. They are yours alone (Who can change Shinsa, above) and work while the server is down: they talk to
+`launchctl`, not to the server.
+
+- **install** writes `~/Library/LaunchAgents/studio.overclock.shinsa.plist` and loads it with `launchctl bootstrap
+  gui/<uid>`. The plist runs the bun on `PATH` (the one the command line runs under when there is none) with this
+  checkout's `apps/server/src/main.ts serve`, from the checkout; it carries every non-empty `SHINSA_*` variable of the
+  shell that installed it, so the service serves the same data directory and port. `RunAtLoad` starts it at login,
+  `KeepAlive` with `SuccessfulExit: false` restarts it after a crash (a clean stop exits 0 and stays stopped),
+  `ThrottleInterval` 5 s, and stdout and stderr go to `data/serve.log`. Installing again boots the loaded job out
+  first and waits (up to 5 s) for launchd to let go. When another Shinsa already holds the data directory, install
+  says so: the service keeps exiting on the lock, and launchd keeps retrying it, until that one stops.
+- **uninstall** boots the job out and removes the plist.
+- **status**: whether the plist is installed and launchd has the job loaded, its state, pid and last exit code, and
+  the live holder of the data directory's lock (URL, port, pid, version) with whether it is the service's process.
+- **restart**: `launchctl kickstart -k`, after an update for example; refused when the job is not loaded.
+- **logs**: the last lines of `data/serve.log` (`--lines`, 50).
+
+Anywhere but macOS every action but `logs` refuses with `service_unsupported`. Tests never touch launchd: the
+service takes its `launchctl` as a parameter, and `test/helpers/bin/launchctl` stands in for the real one.
 
 ## Onboarding API
 
@@ -2434,7 +2579,11 @@ error: it comes back as a message with `problem: true`.
 
 ## Health
 
-`GET /api/health` answers `{ ok, seq, problems }`. `problems` lists every event row the engine skipped at boot:
+`GET /api/health` answers `{ ok, seq, problems, version, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
+(`resolveHealth`, `apps/server/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
+which Shinsa answered: `version` is the server package's version, `commit` the checkout's `HEAD` (null outside a git
+checkout), `installPath` the folder holding `apps/server`, and `startedAt` and `uptimeMs` count from when the server
+started. `problems` lists every event row the engine skipped at boot:
 `{ seq, type, kind: 'unreadable' | 'unappliable', error }` (a payload that is not JSON or does not match its type,
 or an event `applyEvent` threw on). Replay never stops at a damaged row: every later event is still applied, the
 problem is logged as an error, and new events are numbered after the last row in the table. The web reads it on
@@ -2572,6 +2721,14 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   commands included.
 - **Configuration and setup.** `test/config/` covers the layout and `config.json`; `test/onboarding/`
   and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks and the setup chat.
+- **Running in the background.** `test/instance/lock.test.ts` covers the lock (a live holder refused, each kind of
+  stale lock taken over, a contended takeover, an unreadable lock) and `test/serve.test.ts` the same through
+  `startShinsa`; `test/e2e/lock.test.ts` runs real `shinsa serve` processes on one data directory (the second is
+  refused with the first's address, a clean stop frees the lock, a `kill -9` leaves one the next server takes over).
+  `test/shell/login.test.ts` reads the environment from a fake login shell (`test/helpers/bin/login-shell`, which
+  every test's `SHELL` points at) that prints noise, hangs or fails on request. `test/service/` checks the plist and
+  every `launchctl` call against a fake; the real launchd is checked by hand: `shinsa service install` on a scratch
+  `SHINSA_HOME`, `kill -9` the server and see it back within 5 s, then `shinsa service uninstall`.
 - **Real agents.** `bun run --cwd apps/server test:live` runs a change, an Ask task, an investigation and a support
   question through real Claude agents on a throwaway repository (GitHub stays faked). It costs real tokens, so it is not part of `bun test`. The real eunoe is
   checked by hand: `shinsa serve` on a throwaway `SHINSA_HOME` with `SHINSA_EUNOE_PORT` on a spare port, one task, and

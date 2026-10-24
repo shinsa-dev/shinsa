@@ -6,7 +6,7 @@ import {
   createWorktree,
   refreshWorktree,
   removeWorktree,
-  resolveTaskDiff,
+  resolveWorkingDiff,
 } from '../../src/git/index.ts';
 import { prepareWorktree, resolveFreeBranch, resolveStartPoint } from '../../src/git/worktree.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
@@ -23,8 +23,8 @@ describe('worktrees', () => {
 
     writeFileSync(join(worktree.path, 'app.ts'), 'export const value = 2;\n');
     writeFileSync(join(worktree.path, 'new.ts'), 'export const added = true;\n');
-    const diff = await resolveTaskDiff(repo, worktree.path, null);
-    expect(diff.files.map((file) => file.path).sort()).toEqual(['app.ts', 'new.ts']);
+    const files = await resolveWorkingDiff(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
+    expect(files.map((file) => file.path).sort()).toEqual(['app.ts', 'new.ts']);
 
     expect(await commitWorktree(worktree.path, 'fix(value): bump to two')).toBe(true);
     expect(await git(worktree.path, 'log', '-1', '--format=%s')).toBe('fix(value): bump to two');

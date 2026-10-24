@@ -49,6 +49,10 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | finding | One problem the reviewer reports, blocking or a suggestion, at a file and line | `ReviewFinding` | finding |
 | diagnosis | What an investigation hands over: what it found and why | `report_diagnosis`, `TaskResult` step `investigate` | Diagnosis |
 | judgement call | A choice a builder made in a phase, with its reason | `JudgementCall` | Judgement calls |
+| spot | A line range the work report points you at, ranked critical, high or normal | `CodeSpot` | spot |
+| ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
+| line comment | A comment you leave on a line or range of the new or the removed side, sent with Request changes | `LineComment` (web, `lib/review/draft.ts`) | Your comments |
+| suggested change | An edit you make in the Code tab, kept in your review as a line comment with the replacement text and sent with Request changes; it is never written to the worktree | `LineComment.suggestion`, `Suggestion` | "Suggest a change", "Suggested change" |
 | proposal | An inquiry's request to turn the task into a change or an operation, decided at your OK | `ChangeProposal`, gate type `proposal` | "Your OK", "What it would change" |
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
@@ -707,7 +711,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | --- | --- | --- |
 | `task.triage` | `task.triage` effect (`triage/`) | records title, repository, size, branch, waits on, and the Auto parts |
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
-| `config.record` | `config.verify` effect | records what setup verification found |
+| `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists, or is gone |
 | `checks.record` | `checks.run` effect | records a round of checks |
 | `pull_request.record` | open, merge and watch effects | records a pull request read |
@@ -747,7 +751,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `settings.changed` | settings change (the whole settings object) |
 | `briefing.written` | the Home guide is stored (`projectId`) |
 | `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project) |
-| `task.triaged` | triage set title, repository, size, branch, handle, pipeline, decisions (always) |
+| `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
+| `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
 | `task.reshaped` | the pipeline changed (`by` you, agent or Shinsa, with a reason) |
 | `task.staged` | the stage and its reason changed |
 | `task.prioritized` | the priority changed |
@@ -920,6 +925,7 @@ tools' limits are `PROTOCOL_LIMITS` (`ask`, `wait_for`, `suggest_tasks`), `DELEG
 | Command surface and `humanOnly` | `apps/server/src/surface/`, reference `docs/cli.md` |
 | Shell policy | `apps/server/src/agents/policy.ts` |
 | Composer hint | `apps/web/src/lib/tasks/messages.ts` |
+| The Code tab's reads: `TaskRefs`, `RepoPaths`, `RepoTree`, `FileContent`, `SearchResult`, `TaskDiff`, `CODE_LIMITS` | `packages/core/src/protocol/code.ts`, `protocol/messages.ts`; served by `apps/server/src/http/code.ts` (`docs/engine.md` → The Code tab's reads) |
 
 ## Open protocol questions
 

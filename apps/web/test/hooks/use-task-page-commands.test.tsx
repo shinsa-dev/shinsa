@@ -49,14 +49,14 @@ function find(sections: { commands: Command[] }[], id: string) {
 
 describe('useTaskPageCommands', () => {
   it('registers the task page sections for the tab you are on', () => {
-    navigate('/tasks/t1?tab=code&view=changes');
+    navigate('/tasks/t1?tab=code&mode=changes');
     const { result } = renderHook(() => usePage(), { wrapper: Draft });
     expect(result.current.sections.map((section) => section.id)).toEqual([
       'task.decide',
       'task.view',
       'task.actions',
     ]);
-    expect(find(result.current.sections, 'task.t1.view.changes').current).toBe(true);
+    expect(find(result.current.sections, 'task.t1.tab.code').current).toBe(true);
     const review = find(result.current.sections, 'task.t1.tab.overview');
     act(() => {
       if (review.kind === 'run') review.run();

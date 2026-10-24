@@ -1,0 +1,92 @@
+import type { DiffFile } from '@shinsa/core';
+
+export interface TreeRow {
+  kind: 'directory' | 'file';
+  path: string;
+  name: string;
+  depth: number;
+  file: DiffFile | null;
+}
+
+interface Folder {
+  folders: Map<string, Folder>;
+  files: DiffFile[];
+}
+
+function createFolder(): Folder {
+  return { folders: new Map(), files: [] };
+}
+
+function buildFolders(files: DiffFile[]) {
+  const root = createFolder();
+  for (const file of files) {
+    const parts = file.path.split('/');
+    let folder = root;
+    for (const part of parts.slice(0, -1)) {
+      const next = folder.folders.get(part) ?? createFolder();
+      folder.folders.set(part, next);
+      folder = next;
+    }
+    folder.files.push(file);
+  }
+  return root;
+}
+
+function compact(name: string, folder: Folder): [string, Folder] {
+  let label = name;
+  let current = folder;
+  while (current.files.length === 0 && current.folders.size === 1) {
+    const [[child, next]] = [...current.folders] as [[string, Folder]];
+    label = `${label}/${child}`;
+    current = next;
+  }
+  return [label, current];
+}
+
+function listRows(folder: Folder, prefix: string, depth: number, collapsed: ReadonlySet<string>): TreeRow[] {
+  const rows: TreeRow[] = [];
+  const folders = [...folder.folders].sort(([a], [b]) => a.localeCompare(b));
+  for (const [name, child] of folders) {
+    const [label, inner] = compact(name, child);
+    const path = `${prefix}${label}`;
+    rows.push({ kind: 'directory', path, name: label, depth, file: null });
+    if (!collapsed.has(path)) rows.push(...listRows(inner, `${path}/`, depth + 1, collapsed));
+  }
+  const files = [...folder.files].sort((a, b) => a.path.localeCompare(b.path));
+  for (const file of files) {
+    rows.push({ kind: 'file', path: file.path, name: file.path.slice(prefix.length), depth, file });
+  }
+  return rows;
+}
+
+export function listChangeRows(files: DiffFile[], collapsed: ReadonlySet<string>): TreeRow[] {
+  return listRows(buildFolders(files), '', 0, collapsed);
+}
+
+export function listAncestors(path: string) {
+  const parts = path.split('/').slice(0, -1);
+  return parts.map((_, index) => parts.slice(0, index + 1).join('/'));
+}
+
+export function resolveFileName(path: string) {
+  return path.slice(path.lastIndexOf('/') + 1);
+}
+
+export function resolveDirectory(path: string) {
+  const slash = path.lastIndexOf('/');
+  return slash < 0 ? '' : path.slice(0, slash);
+}
+
+export function sumChanges(files: DiffFile[]) {
+  return {
+    added: files.reduce((sum, file) => sum + file.additions, 0),
+    removed: files.reduce((sum, file) => sum + file.deletions, 0),
+  };
+}
+
+export const FILE_STATUS: Record<DiffFile['status'], { letter: string; name: string; className: string }> = {
+  added: { letter: 'A', name: 'Added', className: 'text-green-text' },
+  removed: { letter: 'D', name: 'Deleted', className: 'text-red-text' },
+  modified: { letter: 'M', name: 'Modified', className: 'text-fg-2' },
+  renamed: { letter: 'R', name: 'Renamed', className: 'text-fg-2' },
+};

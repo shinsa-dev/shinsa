@@ -172,19 +172,46 @@ describe('the server', () => {
     );
   });
 
-  test('health says the log is clean, or lists what it skipped', async () => {
-    const fake = createFakeClient({ '/api/health': { ok: true, seq: 12, problems: [] } });
-    expect((await runSpec(fake, ['health'])).text).toBe('Healthy. 12 events in the log.');
+  test('health says the log is clean, or lists what it skipped, and which Shinsa answered', async () => {
+    const running = {
+      version: '0.0.0',
+      commit: '0123456789abcdef0123456789abcdef01234567',
+      installPath: '/src/shinsa',
+      dataDir: '/home/me/.config/shinsa/data',
+      pid: 4242,
+      startedAt: 0,
+      uptimeMs: 3 * 3_600_000 + 5_000,
+    };
+    const fake = createFakeClient({ '/api/health': { ok: true, seq: 12, problems: [], ...running } });
+    expect((await runSpec(fake, ['health'])).text.split('\n')).toEqual([
+      'Healthy. 12 events in the log.',
+      'Shinsa 0.0.0 (0123456) from /src/shinsa, pid 4242, up 3 hours. Data in /home/me/.config/shinsa/data.',
+    ]);
     const damaged = createFakeClient({
       '/api/health': {
         ok: false,
         seq: 12,
         problems: [{ seq: 4, type: 'task.created', kind: 'unappliable', error: 'No such task.' }],
+        ...running,
+        commit: null,
+        uptimeMs: 30_000,
       },
     });
-    expect((await runSpec(damaged, ['health'])).text).toBe(
-      'Skipped 1 damaged entries at start:\n  #4 task.created: No such task.'
+    expect((await runSpec(damaged, ['health'])).text.split('\n')).toEqual([
+      'Skipped 1 damaged entries at start:',
+      '  #4 task.created: No such task.',
+      'Shinsa 0.0.0 from /src/shinsa, pid 4242, up under a minute. Data in /home/me/.config/shinsa/data.',
+    ]);
+    const day = createFakeClient({
+      '/api/health': { ok: true, seq: 1, problems: [], ...running, uptimeMs: 86_400_000 + 60_000 },
+    });
+    expect((await runSpec(day, ['health'])).text).toEndWith(
+      'up 1 day. Data in /home/me/.config/shinsa/data.'
     );
+    const minutes = createFakeClient({
+      '/api/health': { ok: true, seq: 1, problems: [], ...running, uptimeMs: 2 * 60_000 },
+    });
+    expect((await runSpec(minutes, ['health'])).text).toContain('up 2 minutes.');
   });
 
   test('the queue lists the decisions and the agents at work', async () => {

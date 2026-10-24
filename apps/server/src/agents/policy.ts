@@ -21,7 +21,7 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
     {
       pattern: new RegExp(String.raw`\bshinsa\s+(?:${HUMAN_ONLY_COMMANDS.join('|')})(?![\w-])`),
       reason:
-        'Only the human runs this command: it decides at a gate, gives a secret, signs in, changes accounts, MCP servers, skills or plugins, opens a task in the browser or sends a raw command. Tell them what you need; it waits for them in Shinsa.',
+        'Only the human runs this command: it decides at a gate, gives a secret, signs in, changes accounts, MCP servers, skills or plugins, opens a task in the browser, manages the background service or sends a raw command. Tell them what you need; it waits for them in Shinsa.',
     },
     {
       pattern: new RegExp(

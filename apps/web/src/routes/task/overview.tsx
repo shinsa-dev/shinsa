@@ -70,12 +70,7 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
                 <Markdown text={section.summary} className='text-fg-3 text-xs' />
               </div>
               {section.spots.slice(0, SPOTS_SHOWN).map((spot) => (
-                <CodeSnippet
-                  key={`${spot.file}:${spot.start}`}
-                  taskId={task.id}
-                  revision={task.updatedAt}
-                  spot={spot}
-                />
+                <CodeSnippet key={`${spot.file}:${spot.start}`} task={task} spot={spot} />
               ))}
             </div>
           </li>

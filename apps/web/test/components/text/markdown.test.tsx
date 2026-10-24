@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { ShinsaState } from '@shinsa/core';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { ShinsaState, TaskStage } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, render } from '@testing-library/react';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -11,11 +11,19 @@ const realFetch = globalThis.fetch;
 
 let revision = 1_000;
 
-function createWorld(branch: string | null = 'feat/login') {
+function createWorld(branch: string | null = 'feat/login', stage: TaskStage = 'building') {
   revision += 1;
   return createShinsaState({
     tasks: [
-      createTask({ id: 'task-1', title: 'Fix the flaky checkout test', branch, updatedAt: revision }),
+      createTask({
+        id: 'task-1',
+        title: 'Fix the flaky checkout test',
+        branch,
+        stage,
+        mode: stage === 'answering' ? 'ask' : 'build',
+        repoId: branch ? 'repo-1' : null,
+        updatedAt: revision,
+      }),
       createTask({ id: 'task-2', title: 'Build the login form' }),
     ],
   });
@@ -32,18 +40,6 @@ function openTaskPage(taskId: string) {
   act(() => {
     replaceRoute(`/tasks/${taskId}`);
   });
-}
-
-function serveDiff(paths: string[]) {
-  const fetchMock = mock(async (_url: string) =>
-    Response.json({ files: paths.map((path) => ({ path, additions: 1, deletions: 0 })) })
-  );
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
-  return fetchMock;
-}
-
-async function settle() {
-  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
 beforeEach(() => {
@@ -117,52 +113,36 @@ describe('InlineMarkdown references', () => {
 });
 
 describe('FileLink', () => {
-  it('links a file in the task diff to Code → All files', async () => {
-    const fetchMock = serveDiff(['src/login.ts']);
+  it('links a file of a task with changes to its diff in Code, at its lines', () => {
     const state = createWorld();
     openTaskPage('task-1');
     const view = renderMarkdown(state, 'Changed [src/login.ts](shinsa://file/src/login.ts#L3-L5).');
-    await settle();
     const link = view.getByRole('link');
-    expect(link.getAttribute('href')).toBe('/tasks/task-1?tab=code&view=changes&file=src%2Flogin.ts');
+    expect(link.getAttribute('href')).toBe(
+      '/tasks/task-1?tab=code&mode=changes&file=src%2Flogin.ts&diff=1&line=3&end=5'
+    );
     expect(link.textContent).toBe('src/login.ts');
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/tasks/task-1/diff?r=${revision}`);
   });
 
-  it('keeps a file outside the diff as plain code', async () => {
-    serveDiff(['src/other.ts']);
-    const state = createWorld();
+  it('links a file of a task that changes nothing to the file itself', () => {
+    const state = createWorld('feat/login', 'answering');
     openTaskPage('task-1');
     const view = renderMarkdown(state, 'Read [src/login.ts](shinsa://file/src/login.ts).');
-    await settle();
-    expect(view.queryByRole('link')).toBeNull();
-    expect(view.getByText('src/login.ts').tagName).toBe('CODE');
-  });
-
-  it('keeps a file as plain code while the diff cannot be read', async () => {
-    globalThis.fetch = mock(async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
-    const state = createWorld();
-    openTaskPage('task-1');
-    const view = renderMarkdown(state, 'Read [src/login.ts](shinsa://file/src/login.ts).');
-    await settle();
-    expect(view.queryByRole('link')).toBeNull();
-    expect(view.getByText('src/login.ts').tagName).toBe('CODE');
+    expect(view.getByRole('link').getAttribute('href')).toBe(
+      '/tasks/task-1?tab=code&mode=files&file=src%2Flogin.ts'
+    );
   });
 
   it('keeps a file as plain code outside a task page', () => {
-    const fetchMock = serveDiff(['src/login.ts']);
     const view = renderMarkdown(createWorld(), 'Read [src/login.ts](shinsa://file/src/login.ts).');
     expect(view.queryByRole('link')).toBeNull();
     expect(view.getByText('src/login.ts').tagName).toBe('CODE');
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('keeps a file as plain code when the task has no branch yet', () => {
-    const fetchMock = serveDiff(['src/login.ts']);
+  it('keeps a file as plain code when the task has no repository yet', () => {
     const state = createWorld(null);
     openTaskPage('task-1');
     const view = renderMarkdown(state, 'Read [src/login.ts](shinsa://file/src/login.ts).');
     expect(view.queryByRole('link')).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

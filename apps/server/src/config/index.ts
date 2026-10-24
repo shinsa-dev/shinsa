@@ -4,7 +4,7 @@ import { type MachineConfig, type MachineConfigRead, readMachineConfig } from '.
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
 export { ConfigStore, writeJsonFile } from './file.ts';
-export { type Env, resolveShinsaPaths } from './paths.ts';
+export { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
 export interface ServerConfig {
   home: string;
@@ -104,8 +104,8 @@ export function resolveConfig(env: Env): ServerConfig {
     home: paths.home,
     configPath: paths.configPath,
     ...resolveDataPaths(paths.dataDir, env),
-    pluginDir: resolve(import.meta.dirname, '../../plugin'),
-    webDir: resolve(import.meta.dirname, '../../../web/dist'),
+    pluginDir: env.SHINSA_PLUGIN_DIR || resolve(import.meta.dirname, '../../plugin'),
+    webDir: env.SHINSA_WEB_DIR || resolve(import.meta.dirname, '../../../web/dist'),
     port: resolvePortFrom(env, machine),
     hostname,
     allowedHosts: [

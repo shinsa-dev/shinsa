@@ -206,6 +206,23 @@
   --primary-a3: color-mix(in oklch, var(--primary-4) 22%, transparent);
   --primary-a4: color-mix(in oklch, var(--primary-4) 32%, transparent);
 
+  /* Code: syntax colours and diff washes for the Code tab's editor, read from the
+     tone tokens so both themes follow without a .dark override. */
+  --code-keyword: var(--purple-text);
+  --code-string: var(--green-text);
+  --code-number: var(--orange-text);
+  --code-comment: var(--fg-2);
+  --code-function: var(--primary-text);
+  --code-type: var(--amber-text);
+  --code-property: var(--blue-text);
+  --code-tag: var(--red-text);
+  --code-punctuation: var(--fg-3);
+  --code-meta: var(--fg-2);
+  --code-added: var(--green-a1);
+  --code-added-strong: var(--green-a2);
+  --code-removed: var(--red-a1);
+  --code-removed-strong: var(--red-a2);
+
   /* Semantic (shadcn) mapping */
   --foreground: var(--fg-4);
   --card: var(--bg-1);

@@ -21,7 +21,16 @@ interface ClassRule {
   inCatalog?: boolean;
 }
 
-const ROOTS = ['apps/server/src', 'apps/server/test', 'apps/web/src', 'apps/web/test', 'packages', 'scripts'];
+const ROOTS = [
+  'apps/server/src',
+  'apps/server/test',
+  'apps/web/src',
+  'apps/web/test',
+  'apps/desktop/src',
+  'apps/desktop/test',
+  'packages',
+  'scripts',
+];
 
 const SKIPPED_SEGMENTS = new Set(['node_modules', 'dist']);
 
@@ -30,7 +39,7 @@ const BANNED_VERB_PATTERN = /^(get|fetch|load|set|delete|destroy)[A-Z]/;
 const VERB_CATALOG =
   'find*, select*, list*, count*, resolve*, create*, update*, upsert*, write*, replace*, remove*, assert*, serialize*, parse*, validate*, describe*, request*, sync*, apply*, record*, is*, has*, needs*';
 
-const VERB_CHECK_ROOTS = ['apps/server/src', 'apps/web/src', 'packages/core'];
+const VERB_CHECK_ROOTS = ['apps/server/src', 'apps/web/src', 'apps/desktop/src', 'packages/core'];
 
 const COMMENT_CHECK_EXCLUDED_ROOTS = ['packages/ui'];
 
@@ -177,6 +186,11 @@ const FITTED_WIDTH =
 
 const STRETCHED_TRIGGER_MESSAGE =
   'A tooltip trigger that can stretch past its text. The element a Hint or TooltipTrigger wraps is inline or w-fit, so the empty rest of a row never opens the tooltip (docs/design.md → Where Shinsa differs, 13)';
+
+const SHORTCUT_FILES = ['apps/web/src/hooks/use-command-key.ts', 'apps/web/src/hooks/use-code-keys.ts'];
+
+const SHORTCUT_MESSAGE =
+  'A global keyboard shortcut. ⌘K is the only shortcut, and the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open; both live in hooks/use-command-key.ts and hooks/use-code-keys.ts (docs/design.md → Where Shinsa differs, 14)';
 
 const TIME_CHECK_ROOTS = ['apps/web/src'];
 
@@ -420,11 +434,22 @@ function isStretchedTrigger(node: BabelNode) {
   return !FITTED_WIDTH.test(classes);
 }
 
+function isGlobalKeyListener(node: BabelNode) {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee as BabelNode & { name?: string; property?: BabelNode & { name?: string } };
+  const name = callee.type === 'MemberExpression' ? callee.property?.name : callee.name;
+  if (name !== 'addEventListener') return false;
+  const [event] = node.arguments as (BabelNode & { value?: unknown })[];
+  return event?.type === 'StringLiteral' && (event.value === 'keydown' || event.value === 'keyup');
+}
+
 function collectSyntaxViolations(file: string, program: BabelNode, violations: Violation[]): void {
   const timed = file.endsWith('.tsx') && file !== TIME_COMPONENT_FILE && isUnder(file, TIME_CHECK_ROOTS);
   const styled = isUnder(file, APP_AND_KIT) && !CATALOG.includes(file);
+  const keyed = isUnder(file, APP) && !SHORTCUT_FILES.includes(file);
   walk(program, (node, ancestors) => {
     const line = node.loc?.start.line ?? 0;
+    if (keyed && isGlobalKeyListener(node)) violations.push({ file, line, message: SHORTCUT_MESSAGE });
     if (timed && isUntimedFormatter(node, ancestors)) violations.push({ file, line, message: TIME_MESSAGE });
     if (timed && isStretchedTrigger(node))
       violations.push({ file, line, message: STRETCHED_TRIGGER_MESSAGE });

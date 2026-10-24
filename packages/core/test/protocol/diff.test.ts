@@ -83,6 +83,20 @@ describe('parseUnifiedDiff', () => {
     ]);
   });
 
+  test('marks a binary file, which has no lines to count', () => {
+    const png = file(
+      'diff --git a/logo.png b/logo.png\nindex 1..2 100644',
+      'Binary files a/logo.png and b/logo.png differ'
+    );
+    const patched = file(
+      'diff --git a/icon.ico b/icon.ico\nindex 1..2 100644',
+      'GIT binary patch\nliteral 4'
+    );
+    expect(parseUnifiedDiff(png)[0]).toMatchObject({ binary: true, additions: 0, deletions: 0 });
+    expect(parseUnifiedDiff(patched)[0]?.binary).toBe(true);
+    expect(parseUnifiedDiff(MODIFIED)[0]?.binary).toBe(false);
+  });
+
   test('ignores text that is not a file diff', () => {
     expect(parseUnifiedDiff('')).toEqual([]);
     expect(parseUnifiedDiff('warning: something\n')).toEqual([]);

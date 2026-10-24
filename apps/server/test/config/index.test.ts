@@ -90,6 +90,15 @@ describe('resolveConfig', () => {
     expect(config.allowedHosts).toEqual(['localhost', '127.0.0.1', '[::1]']);
   });
 
+  test('SHINSA_WEB_DIR and SHINSA_PLUGIN_DIR serve the web app and load the plugin from elsewhere', () => {
+    const config = resolveConfig({
+      SHINSA_HOME: createTempDir(),
+      SHINSA_WEB_DIR: '/bundle/web',
+      SHINSA_PLUGIN_DIR: '/bundle/plugin',
+    });
+    expect(config).toMatchObject({ webDir: '/bundle/web', pluginDir: '/bundle/plugin' });
+  });
+
   test('reads config.json once and leaves a broken one for the server to keep aside', () => {
     const home = createTempDir();
     writeFileSync(join(home, 'config.json'), '{ broken');

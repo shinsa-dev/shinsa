@@ -360,7 +360,18 @@ describe('on a task page', () => {
   });
 
   it('disables Approve the changes while line comments exist', async () => {
-    renderTaskPage([{ id: 'c1', path: 'src/login.ts', line: 4, text: 'Keep the return path' }]);
+    renderTaskPage([
+      {
+        id: 'c1',
+        path: 'src/login.ts',
+        side: 'new',
+        line: 4,
+        endLine: null,
+        ref: null,
+        text: 'Keep the return path',
+        suggestion: null,
+      },
+    ]);
     await pressCommandK();
     const approve = screen.getByRole('option', { name: /^Approve the changes/ });
     expect(approve.getAttribute('aria-disabled')).toBe('true');

@@ -16,13 +16,14 @@ function createFile(path: string, overrides: Partial<DiffFile> = {}): DiffFile {
     deletions: 1,
     risk: 'normal',
     riskReason: null,
+    binary: false,
     patch: hunk(10, 3),
     ...overrides,
   };
 }
 
 function createDiff(files: DiffFile[]): TaskDiff {
-  return { base: 'main', files };
+  return { base: 'main', head: 'h', files };
 }
 
 describe('resolveFallbackReport', () => {

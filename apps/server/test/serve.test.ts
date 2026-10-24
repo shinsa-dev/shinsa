@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
-import { readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AccountsSnapshot } from '@shinsa/core';
 import { Cswap } from '../src/accounts/cswap.ts';
@@ -11,6 +11,13 @@ import {
 } from '../src/agents/providers/index.ts';
 import { resolveConfig } from '../src/config/index.ts';
 import { inspectRepo } from '../src/git/index.ts';
+import {
+  createServerInstance,
+  INSTALL_PATH,
+  LOCK_FILE,
+  resolveBootedAt,
+  selectLockHolder,
+} from '../src/instance/index.ts';
 import { log } from '../src/log/index.ts';
 import { EffectRunner, Engine } from '../src/runtime/index.ts';
 import { type Shinsa, startShinsa } from '../src/serve.ts';
@@ -118,6 +125,20 @@ describe('startShinsa', () => {
     expect(Object.values(shinsa.engine.state.gates)[0]?.title).toBe('Could not start the task');
   });
 
+  test('work that needs a repository on a task triaged with none asks for one at the setup gate', async () => {
+    const config = createTestConfig(createTempDir(), { roots: [createTempDir()] });
+    const shinsa = await startShinsa(config, {
+      models,
+      triage: () =>
+        Promise.resolve({ title: 'Fix it', repoPath: null, size: 'small', branch: 'fix/it', waitsOn: [] }),
+      resolveLogin: () => Promise.resolve(null),
+    });
+    started.push(shinsa);
+    await shinsa.engine.dispatch({ type: 'task.create', request: 'Fix it', repoId: null });
+    await until('a gate to open', () => Object.keys(shinsa.engine.state.gates).length > 0);
+    expect(Object.values(shinsa.engine.state.gates)[0]?.title).toBe('No repository for this task');
+  });
+
   test('a broken config.json is kept aside once and its problem logged once, however often it is read', async () => {
     const home = createTempDir();
     writeFileSync(join(home, 'config.json'), '{ broken');
@@ -222,6 +243,80 @@ describe('startShinsa', () => {
     const shinsa = await startShinsa(createTestConfig(createTempDir(), { inspect: true }));
     started.push(shinsa);
     expect(shinsa.url.startsWith('http://127.0.0.1:')).toBe(true);
+  });
+});
+
+describe('one Shinsa per data directory', () => {
+  test('a second Shinsa on the same data folder is refused with the first one’s address, until it stops', async () => {
+    const config = createTestConfig(createTempDir(), { inspect: true });
+    const first = await startShinsa(config, { models });
+    expect(selectLockHolder(config.dataDir)).toMatchObject({
+      pid: process.pid,
+      url: first.url,
+      port: Number(new URL(first.url).port),
+    });
+    await expect(startShinsa(config, { models })).rejects.toThrow(
+      `Shinsa is already running on ${config.dataDir}: ${first.url} (pid ${process.pid}`
+    );
+    await first.stop();
+    expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
+    const second = await startShinsa(config, { models });
+    started.push(second);
+    expect(selectLockHolder(config.dataDir)?.url).toBe(second.url);
+  });
+
+  test('the lock a crashed Shinsa left behind is taken over', async () => {
+    const config = createTestConfig(createTempDir(), { inspect: true });
+    const crashed = Bun.spawn(['true']);
+    await crashed.exited;
+    writeFileSync(
+      join(config.dataDir, LOCK_FILE),
+      JSON.stringify({
+        ...createServerInstance(null, 1),
+        pid: crashed.pid,
+        port: 5180,
+        url: 'http://127.0.0.1:5180',
+        bootedAt: resolveBootedAt(),
+      })
+    );
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    try {
+      const shinsa = await startShinsa(config, { models });
+      started.push(shinsa);
+      expect(selectLockHolder(config.dataDir)).toMatchObject({ pid: process.pid, url: shinsa.url });
+      expect(warn).toHaveBeenCalledWith('[Serve] Took over the lock a stopped Shinsa left behind', {
+        path: join(config.dataDir, LOCK_FILE),
+        pid: crashed.pid,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test('a Shinsa that cannot listen gives the lock back', async () => {
+    const taken = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('taken') });
+    try {
+      const config = createTestConfig(createTempDir(), { inspect: true, port: taken.port ?? 0 });
+      await expect(startShinsa(config, { models })).rejects.toThrow();
+      expect(existsSync(join(config.dataDir, LOCK_FILE))).toBe(false);
+    } finally {
+      await taken.stop(true);
+    }
+  });
+
+  test('health names the version, commit, install path, data folder, pid and uptime', async () => {
+    const config = createTestConfig(createTempDir(), { inspect: true });
+    const shinsa = await startShinsa(config, { models });
+    started.push(shinsa);
+    expect(await (await fetch(`${shinsa.url}/api/health`)).json()).toMatchObject({
+      ok: true,
+      version: '0.0.0',
+      commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+      installPath: INSTALL_PATH,
+      dataDir: config.dataDir,
+      pid: process.pid,
+      uptimeMs: expect.any(Number),
+    });
   });
 });
 

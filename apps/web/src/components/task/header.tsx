@@ -6,7 +6,7 @@ import { TaskHeading } from '@/components/task/heading.tsx';
 import { TaskMenu } from '@/components/task/menu.tsx';
 import { useTaskPageCommands } from '@/hooks/use-task-page-commands.ts';
 import type { TaskView } from '@/hooks/use-task-view.ts';
-import { CODE_VIEW, type CodeView, TASK_TAB } from '@/lib/tasks/tabs.ts';
+import { TASK_TAB } from '@/lib/tasks/tabs.ts';
 
 export function TaskHeader({
   state,
@@ -35,17 +35,6 @@ export function TaskHeader({
       <div className='flex items-start gap-2'>
         <TaskFacts state={state} task={task} className='min-w-0 flex-1' />
         <div className='flex h-6 shrink-0 items-center gap-2'>
-          {view.tab === 'code' && task.worktreePath && (
-            <Choice
-              label='Code view'
-              items={(Object.keys(CODE_VIEW) as CodeView[]).map((value) => ({
-                value,
-                label: CODE_VIEW[value].label,
-              }))}
-              value={view.codeView}
-              onValueChange={view.applyCodeView}
-            />
-          )}
           <TaskMenu state={state} task={task} />
         </div>
       </div>

@@ -7,6 +7,8 @@
     "acks",
     "aeiou",
     "APCA",
+    "apos",
+    "bootout",
     "bunfig",
     "bunx",
     "buzzkit",
@@ -46,6 +48,7 @@
     "octo",
     "oklab",
     "oklch",
+    "OLDPWD",
     "passw",
     "pathspec",
     "PKCE",
@@ -53,6 +56,7 @@
     "sherif",
     "shiki",
     "shinsa",
+    "SHLVL",
     "sicon",
     "sidechain",
     "simctl",
@@ -64,6 +68,7 @@
     "superadmin",
     "superellipse",
     "superwall",
+    "togglefullscreen",
     "toolkits",
     "unappliable",
     "unauthori",
@@ -80,6 +85,11 @@
     "workstream",
     "worktree",
     "worktrees",
-    "xcrun"
+    "xcrun",
+    "pathspecs",
+    "keyup",
+    "nosniff",
+    "keymap",
+    "lezer"
   ]
 }

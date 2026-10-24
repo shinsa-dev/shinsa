@@ -77,6 +77,10 @@ export function useSearchParam(name: string) {
   return useSyncExternalStore(signal.subscribe, () => new URLSearchParams(search).get(name));
 }
 
+export function useSearchString() {
+  return useSyncExternalStore(signal.subscribe, () => search);
+}
+
 export function useRoute() {
   return useSyncExternalStore(signal.subscribe, () => current);
 }
@@ -93,8 +97,11 @@ export function useRouteTaskId(state: ShinsaState | null) {
 export interface TaskPathOptions {
   tab?: 'code' | 'chat';
   run?: string | null;
-  view?: 'changes';
+  mode?: 'changes' | 'files';
   file?: string;
+  diff?: boolean;
+  line?: number | null;
+  end?: number | null;
 }
 
 export type TaskPathTarget = Pick<Task, 'id'> & { handle?: string | null };
@@ -111,8 +118,11 @@ export function resolveTaskTarget(state: ShinsaState, taskId: string): TaskPathT
 export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions = {}) {
   const params = new URLSearchParams();
   if (options.tab) params.set('tab', options.tab);
-  if (options.view) params.set('view', options.view);
+  if (options.mode) params.set('mode', options.mode);
   if (options.file) params.set('file', options.file);
+  if (options.diff) params.set('diff', '1');
+  if (options.line) params.set('line', String(options.line));
+  if (options.end && options.line && options.end > options.line) params.set('end', String(options.end));
   if (options.run) params.set('run', options.run);
   const query = params.toString();
   return `/tasks/${encodeURIComponent(task.handle ?? task.id)}${query ? `?${query}` : ''}`;

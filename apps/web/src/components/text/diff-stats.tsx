@@ -2,7 +2,7 @@ import { TooltipLabel } from '@shinsa/ui/components/tooltip';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { formatLines } from '@/lib/format/count.ts';
 
-export function DiffStatsLabel({ added, removed }: { added: number; removed: number }) {
+function DiffStatsLabel({ added, removed }: { added: number; removed: number }) {
   return (
     <span className='whitespace-nowrap'>
       <span className='text-green-text'>{formatLines(added)}</span> <TooltipLabel>added</TooltipLabel>

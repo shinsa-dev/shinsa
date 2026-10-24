@@ -2,7 +2,9 @@ import { resolveConfig, resolveServerAddress } from '../config/index.ts';
 import { resolveServerUrl } from '../http/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { type Shinsa, startShinsa } from '../serve.ts';
+import { createServiceControl, type ServiceControl } from '../service/index.ts';
 import { describeFailure, runCommand } from '../shell/index.ts';
+import { applyLoginEnv, createLoginEnvReader } from '../shell/login.ts';
 import { describeSurface } from '../surface/index.ts';
 import { createApiClient } from './api.ts';
 import { type CommandIo, createTask, importSession, openInBrowser, printStatus } from './commands.ts';
@@ -17,6 +19,7 @@ export interface CliIo {
   serve: (env: Record<string, string | undefined>) => Promise<Shinsa>;
   onShutdown: (stop: () => Promise<void>) => void;
   projectsDir?: string;
+  service?: ServiceControl;
 }
 
 export const USAGE = `shinsa: a control plane for coding agents
@@ -58,6 +61,12 @@ function stopOnSignal(stop: () => Promise<void>) {
   }
 }
 
+async function serveWithLoginEnv(env: Record<string, string | undefined>) {
+  const added = await applyLoginEnv(Bun.env, createLoginEnvReader(Bun.env));
+  log.info('[Serve] Read the login shell environment', { added: added.length });
+  return startShinsa(resolveConfig(env));
+}
+
 export function createProcessIo(): CliIo {
   return {
     env: Bun.env,
@@ -65,8 +74,9 @@ export function createProcessIo(): CliIo {
     write: (line = '') => process.stdout.write(`${line}\n`),
     writeError: (line) => process.stderr.write(`${line}\n`),
     openUrl,
-    serve: (env) => startShinsa(resolveConfig(env)),
+    serve: serveWithLoginEnv,
     onShutdown: stopOnSignal,
+    service: createServiceControl({ env: Bun.env }),
   };
 }
 
@@ -111,7 +121,11 @@ async function routeCommand(command: string, args: string[], io: CliIo) {
       return 0;
     default:
       if (isSurfaceGroup(command)) {
-        return runSurface([command, ...args], { base: resolveBase(io), write: io.write });
+        return runSurface([command, ...args], {
+          base: resolveBase(io),
+          write: io.write,
+          service: io.service,
+        });
       }
       io.write(USAGE);
       return 1;

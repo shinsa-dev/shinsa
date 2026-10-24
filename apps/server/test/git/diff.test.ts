@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createWorktree, resolveTaskDiff } from '../../src/git/index.ts';
+import { createWorktree, resolveCommitDiff, resolveWorkingDiff } from '../../src/git/index.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 
-describe('resolveTaskDiff', () => {
+describe('resolveWorkingDiff', () => {
   test('shows new files without touching the index an agent may be using', async () => {
     const { repo } = await createGitRepo();
     const worktree = await createWorktree(repo, createTempDir(), 'task-cccccc', 'fix/diff', null);
     writeFiles(worktree.path, { 'new.ts': 'export {};\n', 'README.md': '# changed\n' });
-    const diff = await resolveTaskDiff(repo, worktree.path, null);
-    expect(diff.files.map((file) => file.path).sort()).toEqual(['README.md', 'new.ts']);
+    const files = await resolveWorkingDiff(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
+    expect(files.map((file) => file.path).sort()).toEqual(['README.md', 'new.ts']);
     expect(await git(worktree.path, 'status', '--porcelain')).toBe('M README.md\n?? new.ts');
   });
 
@@ -26,24 +26,45 @@ describe('resolveTaskDiff', () => {
     utimesSync(index, second, second);
     writeFileSync(file, 'export const value = 2;\n');
     utimesSync(file, second, second);
-    const diff = await resolveTaskDiff(repo, worktree.path, null);
-    expect(diff.files.map((entry) => entry.path)).toEqual(['app.ts']);
+    const files = await resolveWorkingDiff(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
+    expect(files.map((entry) => entry.path)).toEqual(['app.ts']);
   });
 
-  test('a stacked task diffs against its base branch, and a repo without origin against its default', async () => {
+  test('names a path with spaces and accents as it is, unquoted', async () => {
     const { repo } = await createGitRepo({ remote: false });
-    const base = await createWorktree(repo, createTempDir(), 'task-dddddd', 'feat/base', null);
-    writeFiles(base.path, { 'base.ts': '' });
-    await git(base.path, 'add', '-A');
-    await git(base.path, 'commit', '-q', '-m', 'feat: base');
-    const top = await createWorktree(repo, createTempDir(), 'task-eeeeee', 'feat/top', 'feat/base');
-    writeFiles(top.path, { 'top.ts': 'x\n' });
-    expect((await resolveTaskDiff(repo, top.path, 'feat/base')).files.map((file) => file.path)).toEqual([
-      'top.ts',
-    ]);
-    expect((await resolveTaskDiff(repo, top.path, null)).files.map((file) => file.path).sort()).toEqual([
-      'base.ts',
-      'top.ts',
-    ]);
+    const worktree = await createWorktree(repo, createTempDir(), 'task-aaaaab', 'fix/names', null);
+    writeFiles(worktree.path, { 'docs/café notes.md': 'hi\n' });
+    const files = await resolveWorkingDiff(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
+    expect(files.map((entry) => entry.path)).toEqual(['docs/café notes.md']);
+  });
+});
+
+describe('resolveCommitDiff', () => {
+  test('diffs two commits, renames and binary files included, without a working copy', async () => {
+    const { path } = await createGitRepo({
+      remote: false,
+      files: { 'old.ts': 'export const a = 1;\n'.repeat(20) },
+    });
+    const base = await git(path, 'rev-parse', 'HEAD');
+    await git(path, 'mv', 'old.ts', 'new.ts');
+    writeFileSync(join(path, 'logo.png'), new Uint8Array([137, 80, 78, 71, 0, 1, 2]));
+    await git(path, 'add', '-A');
+    await git(path, 'commit', '-q', '-m', 'feat: rename');
+    const head = await git(path, 'rev-parse', 'HEAD');
+    const files = await resolveCommitDiff(path, base, head);
+    expect(files.find((file) => file.path === 'new.ts')).toMatchObject({
+      status: 'renamed',
+      previousPath: 'old.ts',
+    });
+    expect(files.find((file) => file.path === 'logo.png')).toMatchObject({ status: 'added', binary: true });
+    expect(await resolveCommitDiff(path, head, head)).toEqual([]);
+  });
+
+  test('a commit the repository lacks is a refusal, not a crash', async () => {
+    const { path } = await createGitRepo({ remote: false });
+    const head = await git(path, 'rev-parse', 'HEAD');
+    await expect(resolveCommitDiff(path, head, 'f'.repeat(40))).rejects.toMatchObject({
+      code: 'diff_failed',
+    });
   });
 });

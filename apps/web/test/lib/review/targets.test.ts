@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { CodeSpot, ReviewFinding, WorkReport } from '@shinsa/core';
 import {
-  createDecisionTarget,
   formatTargetLines,
-  listFindingMarkers,
   listFindingTargets,
   listReviewTargets,
   type ReviewTarget,
   stepTarget,
   toReviewTarget,
 } from '@/lib/review/targets.ts';
-import { createTask } from '../../support/state.ts';
 
 function spot(file: string, attention: CodeSpot['attention'], start = 1, end = start): CodeSpot {
   return { file, start, end, attention, why: `Why ${file}` };
@@ -103,39 +100,6 @@ describe('listFindingTargets', () => {
   });
 });
 
-describe('listFindingMarkers', () => {
-  it('marks findings for one file under the last line they point at', () => {
-    const task = createTask({
-      id: 'task-1',
-      findings: [
-        finding({ severity: 'blocking', message: 'This drops errors.', end: 8 }),
-        finding({ file: 'b.ts' }),
-        finding({ line: 12, end: null }),
-        finding({ file: null, line: null }),
-      ],
-    });
-    expect(listFindingMarkers(task, 'a.ts')).toEqual([
-      {
-        id: 'finding:0',
-        file: 'a.ts',
-        line: 8,
-        tone: 'red',
-        label: 'Agent review · blocking',
-        text: 'This drops errors.',
-      },
-      {
-        id: 'finding:2',
-        file: 'a.ts',
-        line: 12,
-        tone: 'amber',
-        label: 'Agent review',
-        text: 'Consider a guard.',
-      },
-    ]);
-    expect(listFindingMarkers(task, 'missing.ts')).toEqual([]);
-  });
-});
-
 describe('stepTarget', () => {
   const targets = listReviewTargets(REPORT, 'walkthrough');
 
@@ -160,23 +124,17 @@ describe('stepTarget', () => {
   });
 });
 
-describe('createDecisionTarget', () => {
-  it('points at the single line a decision is about', () => {
-    expect(createDecisionTarget('src/a.ts', 42)).toEqual({
-      key: 'decision:src/a.ts:42',
-      file: 'src/a.ts',
-      start: 42,
-      end: 42,
+describe('formatTargetLines', () => {
+  it('shows one line or a range', () => {
+    const target: ReviewTarget = {
+      key: 'k',
+      file: 'a.ts',
+      start: 7,
+      end: 7,
       attention: 'high',
       why: '',
       section: '',
-    });
-  });
-});
-
-describe('formatTargetLines', () => {
-  it('shows one line or a range', () => {
-    const target: ReviewTarget = createDecisionTarget('a.ts', 7);
+    };
     expect(formatTargetLines(target)).toBe('7');
     expect(formatTargetLines({ ...target, end: 12 })).toBe('7–12');
   });

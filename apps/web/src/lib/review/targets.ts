@@ -3,10 +3,8 @@ import {
   type CodeSpot,
   listRankedSpots,
   type ReviewFinding,
-  type Task,
   type WorkReport,
 } from '@shinsa/core';
-import type { Tone } from '@/lib/format/tone.ts';
 
 export type ReviewOrder = 'walkthrough' | 'attention';
 
@@ -23,15 +21,6 @@ export interface ReviewTarget {
   attention: Attention;
   why: string;
   section: string;
-}
-
-export interface CodeMarker {
-  id: string;
-  file: string;
-  line: number;
-  tone: Extract<Tone, 'red' | 'amber'>;
-  label: string;
-  text: string;
 }
 
 export function toReviewTarget(spot: CodeSpot, section: string, key: string): ReviewTarget {
@@ -71,35 +60,6 @@ export function listFindingTargets(findings: ReviewFinding[]): ReviewTarget[] {
         ]
       : []
   );
-}
-
-export function listFindingMarkers(task: Task, file: string): CodeMarker[] {
-  return task.findings.flatMap((finding, index) =>
-    isLocated(finding) && finding.file === file
-      ? [
-          {
-            id: `finding:${index}`,
-            file: finding.file,
-            line: finding.end ?? finding.line,
-            tone: finding.severity === 'blocking' ? ('red' as const) : ('amber' as const),
-            label: finding.severity === 'blocking' ? 'Agent review · blocking' : 'Agent review',
-            text: finding.message,
-          },
-        ]
-      : []
-  );
-}
-
-export function createDecisionTarget(file: string, line: number): ReviewTarget {
-  return {
-    key: `decision:${file}:${line}`,
-    file,
-    start: line,
-    end: line,
-    attention: 'high',
-    why: '',
-    section: '',
-  };
 }
 
 export function stepTarget(targets: ReviewTarget[], index: number, delta: 1 | -1) {

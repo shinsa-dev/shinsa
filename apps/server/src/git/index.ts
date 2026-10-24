@@ -1,5 +1,5 @@
 export { commitWorktree, pushBranch, resolveHead, resolveTree, stashEdits } from './commit.ts';
-export { resolveTaskDiff } from './diff.ts';
+export { resolveCommitDiff, resolveWorkingDiff } from './diff.ts';
 export {
   createIsolatedWorktree,
   describeIsolatedChanges,

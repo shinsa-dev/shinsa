@@ -300,10 +300,7 @@ describe('the Overview while the steps are still being worked out', () => {
     expect(planned.getByLabelText('Progress').textContent).toBe('Working out the steps');
     planned.unmount();
     const answering = createTask({ id: 't', stage: 'answering', pipeline: ['answer'], auto: AUTO });
-    expect(strip(renderOverview(createShinsaState({ tasks: [answering] }), answering))).toEqual([
-      'Repository',
-      'Answer',
-    ]);
+    expect(strip(renderOverview(createShinsaState({ tasks: [answering] }), answering))).toEqual(['Answer']);
   });
 });
 
