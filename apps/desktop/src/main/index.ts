@@ -3,6 +3,7 @@ import { app, type BrowserWindow, dialog, ipcMain, session } from 'electron';
 import { resolveBadgeText } from '../lib/badge.ts';
 import { CHANNELS, type DesktopStart } from '../lib/bridge.ts';
 import { findDeepLink, parseDeepLink, URL_SCHEME } from '../lib/deep-link.ts';
+import { APP_NAME } from '../lib/dev-bundle.ts';
 import { describeServer, type ServerHealth } from '../lib/health.ts';
 import { isPermissionAllowed } from '../lib/navigation.ts';
 import { parseNotice } from '../lib/notice.ts';
@@ -18,10 +19,8 @@ let pendingPath: string | null = null;
 let connecting = false;
 let offeredStart = false;
 
-if (!app.isPackaged) {
-  app.setName('Shinsa Dev');
-  app.setPath('userData', join(app.getPath('appData'), 'Shinsa Dev'));
-}
+app.setName(APP_NAME);
+if (!app.isPackaged) app.setPath('userData', join(app.getPath('appData'), `${APP_NAME} Dev`));
 
 if (app.requestSingleInstanceLock()) {
   watchApp();
@@ -54,6 +53,8 @@ function openLink(raw: string | null) {
 
 async function start() {
   if (app.isPackaged) app.setAsDefaultProtocolClient(URL_SCHEME);
+  else app.dock?.setIcon(join(app.getAppPath(), 'resources', 'icon.png'));
+  applyAboutPanel();
   const origin = resolveAppServerUrl();
   main = new MainWindow(origin, () => void connect());
   if (pendingPath) main.open(pendingPath);
@@ -97,12 +98,12 @@ function watchPage() {
   });
 }
 
+function applyAboutPanel(credits?: string) {
+  app.setAboutPanelOptions({ applicationName: APP_NAME, applicationVersion: app.getVersion(), credits });
+}
+
 function showApp(current: MainWindow, health: ServerHealth) {
-  app.setAboutPanelOptions({
-    applicationName: 'Shinsa',
-    applicationVersion: app.getVersion(),
-    credits: describeServer(current.origin, health),
-  });
+  applyAboutPanel(describeServer(current.origin, health));
   void current.showServerPage();
 }
 

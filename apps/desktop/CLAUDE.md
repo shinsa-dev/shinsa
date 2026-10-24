@@ -14,7 +14,8 @@ src/
 │                   notice.ts (checks a notification the page sends), navigation.ts (what stays in the window, what
 │                   opens in the browser, the permissions the page gets), server-url.ts (which server to load),
 │                   health.ts (GET /api/health, with or without `version`), bounds.ts (window place on connected
-│                   displays), service.ts (starting the service), bridge.ts (the bridge's types and IPC channels)
+│                   displays), service.ts (starting the service), bridge.ts (the bridge's types and IPC channels),
+│                   dev-bundle.ts (the app's name, and the renamed Electron.app `bun run dev` runs)
 ├── main/           The Electron glue, kept thin and outside coverage: index.ts (single instance, deep links,
 │                   connecting to the server, IPC, the session's permissions), window.ts (MainWindow: hide on
 │                   close, navigation, the waiting page), menu.ts, notifications.ts, server.ts (health, starting
@@ -22,6 +23,8 @@ src/
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, windowState, updateBadge, notify, onNavigate,
                     onWindowState) to the server's page only
 static/waiting.html The "Shinsa is not running" page
+resources/          The app icon: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
+                    all three written by scripts/icon.ts
 ```
 
 ## Rules
@@ -32,21 +35,35 @@ static/waiting.html The "Shinsa is not running" page
 - **Trust nothing from the page.** Every IPC message is checked against the window's own top frame on the server's
   origin (`MainWindow.isAppSender`) and parsed in `lib/` (`parseNotice`, `resolveBadgeText`); a `shinsa://` link is
   parsed into a known page path, never loaded or passed to a shell. The page gets only the clipboard and full screen;
-  notifications are denied to it, so only the app notifies.
+  notifications are denied to it, so the page in the app notifies only through the bridge.
+- **Only the app notifies.** Its page says `hello` with surface `desktop` on every socket (`resolveSurface` in
+  `apps/web/src/lib/desktop.ts`, from `window.shinsaDesktop`), and while it is connected the server tells every other
+  page, browser tabs and Floaty, to stay quiet: no sound and no notification, while the count in the title and
+  Floaty's tags stay (`docs/engine.md` → The socket). Nothing in `main/` decides this; it follows from the preload bridge being there.
+- **The icon** follows macOS's 1024px grid: a light 824px squircle (continuous corners of about 185px) inset 100px,
+  with room for its shadow, and the Shinsa mark from `packages/ui/src/components/logo.tsx` in near-black at 488px,
+  centred. Change `scripts/icon.ts`, never the outputs, and run `bun run icon` (needs `rsvg-convert` from Homebrew's
+  librsvg, and `iconutil`). The unpackaged app sets `resources/icon.png` as its Dock icon.
 - **Logic in `lib/`, Electron in `main/`.** Anything that decides goes in `lib/` with a test; `main/` wires it.
 - Which server: `SHINSA_URL` (an origin) wins; unpackaged, the Vite dev server on 5181; packaged, `SHINSA_PORT`, then
   `port` in Shinsa's `config.json`, then 5180, always on 127.0.0.1.
-- Unpackaged runs as "Shinsa Dev" with its own userData (`~/Library/Application Support/Shinsa Dev`) and registers no
-  URL scheme; pass a link as an argument to try one (`electron . shinsa://task/LOC-4` while it runs).
+- The app is "Shinsa" everywhere, packaged or not (`app.setName`, the first menu, the About panel). The menu bar and
+  the Dock read the bundle's `CFBundleName`, so `bun run dev` (`scripts/dev.ts`) runs a copy of Electron.app at
+  `.electron/Shinsa.app` (git-ignored) with `CFBundleName`/`CFBundleDisplayName` Shinsa, bundle id
+  `studio.overclock.shinsa.dev` and Shinsa's icon, signed ad hoc; it is rebuilt only when Electron's version or the
+  icon changes (`.electron/Shinsa.json`).
+- Unpackaged keeps its own userData (`~/Library/Application Support/Shinsa Dev`) and registers no URL scheme; pass a
+  link as an argument to try one (`bun run dev shinsa://task/LOC-4` while it runs).
 - Bundle id `studio.overclock.shinsa`, scheme `shinsa`, Apple Silicon only, unsigned (ad hoc) for now.
 
 ## Commands
 
 | Command | Description |
 |---|---|
-| `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
+| `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app, as `.electron/Shinsa.app`, on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
 | `bun run package` | `release/mac-arm64/Shinsa.app`, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`); not run in CI |
+| `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo (`scripts/icon.ts`) |
 | `bun test` | The `lib/` tests, 100% line and function coverage |
-| `bun run check-types` | `tsc` over `src` and `test` |
+| `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
 
 The root `bun dev` skips this package (`--filter=!@shinsa/desktop`), so it never opens a window by itself.

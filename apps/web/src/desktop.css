@@ -1,0 +1,55 @@
+html[data-desktop],
+html[data-desktop] *,
+html[data-desktop] *::before,
+html[data-desktop] *::after {
+  /* biome-ignore lint/complexity/noImportantStyles: the Mac app never shows the pointer hand; it has to beat every utility, kit rule, inline style and third-party stylesheet */
+  cursor: default !important;
+}
+
+html[data-desktop] input,
+html[data-desktop] textarea,
+html[data-desktop] [contenteditable]:not([contenteditable="false"]),
+html[data-desktop] .cm-content,
+html[data-desktop] .cm-content * {
+  /* biome-ignore lint/complexity/noImportantStyles: an input or the editor keeps the text cursor in the Mac app */
+  cursor: text !important;
+}
+
+html[data-desktop] input[type="button"],
+html[data-desktop] input[type="submit"],
+html[data-desktop] input[type="reset"],
+html[data-desktop] input[type="checkbox"],
+html[data-desktop] input[type="radio"],
+html[data-desktop] input[type="file"],
+html[data-desktop] input[type="range"],
+html[data-desktop] input[type="color"],
+html[data-desktop] input:disabled,
+html[data-desktop] textarea:disabled {
+  /* biome-ignore lint/complexity/noImportantStyles: a control that is not a text field, or a disabled one, keeps the arrow */
+  cursor: default !important;
+}
+
+html[data-desktop] .cursor-col-resize,
+html[data-desktop] .cursor-col-resize::before,
+html[data-desktop] .cursor-col-resize::after,
+html[data-desktop] body[style*="col-resize"],
+html[data-desktop] body[style*="col-resize"] *,
+html[data-desktop] body[style*="col-resize"] *::before,
+html[data-desktop] body[style*="col-resize"] *::after {
+  /* biome-ignore lint/complexity/noImportantStyles: a resize handle, and the whole page while one drags, keep the resize cursor */
+  cursor: col-resize !important;
+}
+
+html[data-desktop] .cursor-grab,
+html[data-desktop] .cursor-grab::before,
+html[data-desktop] .cursor-grab::after {
+  /* biome-ignore lint/complexity/noImportantStyles: what drags keeps the grab cursor */
+  cursor: grab !important;
+}
+
+html[data-desktop] .active\:cursor-grabbing:active,
+html[data-desktop] body:has([data-slot="slider-thumb"][data-dragging]),
+html[data-desktop] body:has([data-slot="slider-thumb"][data-dragging]) * {
+  /* biome-ignore lint/complexity/noImportantStyles: dragging keeps the grabbing cursor */
+  cursor: grabbing !important;
+}

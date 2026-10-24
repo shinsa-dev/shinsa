@@ -1,4 +1,5 @@
-import { app, Menu, type MenuItemConstructorOptions } from 'electron';
+import { Menu, type MenuItemConstructorOptions } from 'electron';
+import { APP_NAME } from '../lib/dev-bundle.ts';
 
 interface MenuActions {
   show: () => void;
@@ -9,9 +10,9 @@ interface MenuActions {
 export function applyMenu({ show, open, reload }: MenuActions) {
   const template: MenuItemConstructorOptions[] = [
     {
-      label: app.getName(),
+      label: APP_NAME,
       submenu: [
-        { role: 'about' },
+        { role: 'about', label: `About ${APP_NAME}` },
         { type: 'separator' },
         {
           label: 'Settings…',
@@ -24,11 +25,11 @@ export function applyMenu({ show, open, reload }: MenuActions) {
         { type: 'separator' },
         { role: 'services' },
         { type: 'separator' },
-        { role: 'hide' },
+        { role: 'hide', label: `Hide ${APP_NAME}` },
         { role: 'hideOthers' },
         { role: 'unhide' },
         { type: 'separator' },
-        { role: 'quit' },
+        { role: 'quit', label: `Quit ${APP_NAME}` },
       ],
     },
     {

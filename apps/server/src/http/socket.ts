@@ -1,4 +1,11 @@
-import { type ClientMessage, DomainError, type ServerMessage, type UserCommand } from '@shinsa/core';
+import {
+  type ClientMessage,
+  DomainError,
+  isSurface,
+  type ServerMessage,
+  type Surface,
+  type UserCommand,
+} from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
 import type { Accounts } from '../accounts/index.ts';
 import type { Transcripts } from '../agents/transcripts/index.ts';
@@ -9,6 +16,7 @@ import { dispatchUserCommand } from './routes.ts';
 
 export interface SocketData {
   transcripts: Map<string, () => void>;
+  surface: Surface | null;
 }
 
 type Socket = ServerWebSocket<SocketData>;
@@ -31,7 +39,14 @@ function parseClientMessage(raw: string | Buffer): ClientMessage | null {
     return null;
   }
   if (!message || typeof message !== 'object') return null;
-  const fields = message as { type?: unknown; id?: unknown; runId?: unknown; command?: unknown };
+  const fields = message as {
+    type?: unknown;
+    id?: unknown;
+    runId?: unknown;
+    command?: unknown;
+    surface?: unknown;
+  };
+  if (fields.type === 'hello' && isSurface(fields.surface)) return { type: 'hello', surface: fields.surface };
   if (fields.type === 'command' && isId(fields.id)) {
     return { type: 'command', id: fields.id, command: fields.command as UserCommand };
   }
@@ -51,16 +66,25 @@ export function createSocketHub(
   classify: Classifier | null = null
 ) {
   const sockets = new Set<Socket>();
+  let desktopConnected = false;
 
-  const unsubscribeAccounts = accounts?.subscribe((snapshot) => {
-    const payload = JSON.stringify({ type: 'accounts', accounts: snapshot } satisfies ServerMessage);
+  function broadcast(message: ServerMessage) {
+    const payload = JSON.stringify(message);
     for (const socket of sockets) socket.send(payload);
-  });
+  }
 
-  const unsubscribeState = engine.subscribe((state) => {
-    const payload = JSON.stringify({ type: 'state', state } satisfies ServerMessage);
-    for (const socket of sockets) socket.send(payload);
-  });
+  function syncSurfaces() {
+    const desktop = [...sockets].some((socket) => socket.data.surface === 'desktop');
+    if (desktop === desktopConnected) return;
+    desktopConnected = desktop;
+    broadcast({ type: 'surfaces', desktop });
+  }
+
+  const unsubscribeAccounts = accounts?.subscribe((snapshot) =>
+    broadcast({ type: 'accounts', accounts: snapshot })
+  );
+
+  const unsubscribeState = engine.subscribe((state) => broadcast({ type: 'state', state }));
 
   const unsubscribeTranscripts = transcripts.subscribe((runId, entries) => {
     const payload = JSON.stringify({
@@ -76,6 +100,10 @@ export function createSocketHub(
 
   async function handleMessage(socket: Socket, message: ClientMessage) {
     switch (message.type) {
+      case 'hello':
+        socket.data.surface = message.surface;
+        syncSurfaces();
+        return;
       case 'command': {
         try {
           await dispatchUserCommand(engine, message.command, message.id, classify);
@@ -109,9 +137,11 @@ export function createSocketHub(
       sockets.add(socket);
       send(socket, { type: 'state', state: engine.state });
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
+      send(socket, { type: 'surfaces', desktop: desktopConnected });
     },
     close(socket: Socket) {
       sockets.delete(socket);
+      syncSurfaces();
       for (const unfollow of socket.data.transcripts.values()) unfollow();
       socket.data.transcripts.clear();
     },

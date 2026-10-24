@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'bun:test';
-import { applyDesktop, isDesktop, notifyDesktop, updateDesktopBadge } from '@/lib/desktop.ts';
+import {
+  applyDesktop,
+  isDesktop,
+  isPageQuiet,
+  notifyDesktop,
+  resolveSurface,
+  updateDesktopBadge,
+} from '@/lib/desktop.ts';
 import { installDesktop } from '../support/desktop.ts';
 
 const NOTICE = { title: 'Paint it', body: 'Which colour?', tag: 'g-1', path: '/tasks/SW-1' };
@@ -20,9 +27,21 @@ describe('in a browser', () => {
     updateDesktopBadge(3);
     expect(notifyDesktop(NOTICE)).toBe(false);
   });
+
+  it('is a browser surface, quiet while the desktop app is connected', () => {
+    expect(resolveSurface()).toBe('browser');
+    expect(isPageQuiet(true)).toBe(true);
+    expect(isPageQuiet(false)).toBe(false);
+  });
 });
 
 describe('in the desktop app', () => {
+  it('is the desktop surface and never quiet', () => {
+    fake = installDesktop();
+    expect(resolveSurface()).toBe('desktop');
+    expect(isPageQuiet(true)).toBe(false);
+  });
+
   it('marks the page for the title bar and follows full screen', () => {
     fake = installDesktop();
     const stop = applyDesktop(() => undefined);

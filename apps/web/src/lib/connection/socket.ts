@@ -4,9 +4,11 @@ import type {
   ClientMessage,
   ServerMessage,
   ShinsaState,
+  Surface,
   UserCommand,
 } from '@shinsa/core';
 import { useEffect, useSyncExternalStore } from 'react';
+import { resolveSurface } from '@/lib/desktop.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 type ConnectionStatus = 'connecting' | 'open' | 'closed';
@@ -26,6 +28,7 @@ interface Pending {
 interface ConnectionOptions {
   openSocket: () => WebSocket;
   retry: (reconnect: () => void, delayMs: number) => void;
+  surface?: () => Surface;
 }
 
 const RETRY_STEPS_MS = [250, 1000, 2000, 5000];
@@ -56,10 +59,12 @@ export class Connection {
   #snapshot: Snapshot = { state: null, status: 'connecting' };
   #attempt = 0;
   #accounts: AccountsSnapshot | null = null;
+  #desktopConnected = false;
   readonly #options: ConnectionOptions;
   readonly #state = createSignal();
   readonly #transcriptSignal = createSignal();
   readonly #accountsSignal = createSignal();
+  readonly #surfacesSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
   readonly #transcriptRefs = new Map<string, number>();
@@ -78,6 +83,7 @@ export class Connection {
     socket.addEventListener('open', () => {
       this.#attempt = 0;
       this.#update({ status: 'open' });
+      this.#send({ type: 'hello', surface: (this.#options.surface ?? resolveSurface)() });
       for (const runId of this.#transcriptRefs.keys()) this.#send({ type: 'transcript.subscribe', runId });
       for (const pending of this.#pending.values()) this.#send(pending.message);
     });
@@ -103,6 +109,10 @@ export class Connection {
   subscribeAccounts = (listener: () => void) => this.#accountsSignal.subscribe(listener);
 
   selectAccounts = () => this.#accounts;
+
+  subscribeSurfaces = (listener: () => void) => this.#surfacesSignal.subscribe(listener);
+
+  isDesktopConnected = () => this.#desktopConnected;
 
   replaceAccounts(accounts: AccountsSnapshot) {
     this.#accounts = accounts;
@@ -183,6 +193,10 @@ export class Connection {
       case 'accounts':
         this.replaceAccounts(message.accounts);
         return;
+      case 'surfaces':
+        this.#desktopConnected = message.desktop;
+        this.#surfacesSignal.publish();
+        return;
     }
   }
 }
@@ -191,6 +205,10 @@ export const connection = new Connection();
 
 export function useConnection() {
   return useSyncExternalStore(connection.subscribe, connection.snapshot);
+}
+
+export function useDesktopConnected() {
+  return useSyncExternalStore(connection.subscribeSurfaces, connection.isDesktopConnected);
 }
 
 export function useTranscript(runId: string | null) {

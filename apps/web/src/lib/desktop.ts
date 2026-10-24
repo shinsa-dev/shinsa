@@ -1,3 +1,5 @@
+import { isQuietSurface, type Surface } from '@shinsa/core';
+
 type DesktopWindowState = 'window' | 'fullscreen';
 
 export interface DesktopNotice {
@@ -28,6 +30,14 @@ function selectDesktop() {
 
 export function isDesktop() {
   return selectDesktop() !== null;
+}
+
+export function resolveSurface(): Surface {
+  return isDesktop() ? 'desktop' : 'browser';
+}
+
+export function isPageQuiet(desktopConnected: boolean) {
+  return isQuietSurface(resolveSurface(), desktopConnected);
 }
 
 export function applyDesktop(navigate: (path: string) => void) {

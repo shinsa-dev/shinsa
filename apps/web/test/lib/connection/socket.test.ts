@@ -6,6 +6,7 @@ import {
   connection,
   sendCommand,
   useConnection,
+  useDesktopConnected,
   useTranscript,
 } from '@/lib/connection/socket.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
@@ -34,6 +35,8 @@ class FakeSocket extends EventTarget {
 }
 
 const COMMAND: UserCommand = { type: 'task.retry', taskId: 't1' };
+
+const HELLO: ClientMessage = { type: 'hello', surface: 'browser' };
 
 function entry(id: string): ChatEntry {
   return { id, kind: 'note', text: id } as unknown as ChatEntry;
@@ -124,7 +127,7 @@ describe('Connection', () => {
     latest().open();
     const sent = subject.command(COMMAND);
     const [id = ''] = commandIds(latest());
-    expect(latest().sent).toEqual([{ type: 'command', id, command: COMMAND }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'command', id, command: COMMAND }]);
     latest().receive({ type: 'ack', id, error: null });
     await expect(sent).resolves.toBeUndefined();
   });
@@ -167,7 +170,7 @@ describe('Connection', () => {
     latest().close();
     retries.at(-1)?.reconnect();
     latest().open();
-    expect(latest().sent).toEqual([{ type: 'command', id, command: COMMAND }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'command', id, command: COMMAND }]);
     latest().receive({ type: 'ack', id, error: null });
     await expect(sent).resolves.toBeUndefined();
   });
@@ -186,7 +189,7 @@ describe('Connection', () => {
     await expect(sent).rejects.toThrow('Lost the connection to Shinsa.');
     retries.at(-1)?.reconnect();
     latest().open();
-    expect(latest().sent).toEqual([]);
+    expect(latest().sent).toEqual([HELLO]);
     latest().receive({ type: 'ack', id, error: null });
   });
 
@@ -214,9 +217,53 @@ describe('Connection', () => {
     latest().open();
     const sent = subject.command(COMMAND);
     const [id = ''] = commandIds(latest());
-    expect(sockets[0]?.sent).toEqual([]);
+    expect(sockets[0]?.sent).toEqual([HELLO]);
     latest().receive({ type: 'ack', id, error: null });
     await expect(sent).resolves.toBeUndefined();
+  });
+});
+
+describe('Connection surfaces', () => {
+  it('says which surface it is before anything else, on every socket', () => {
+    const { subject, retries, latest } = setup();
+    subject.watchTranscript('r1');
+    subject.start();
+    latest().open();
+    expect(latest().sent[0]).toEqual(HELLO);
+    latest().close();
+    retries.at(-1)?.reconnect();
+    latest().open();
+    expect(latest().sent[0]).toEqual(HELLO);
+  });
+
+  it('says it is the desktop app when its surface is', () => {
+    const sockets: FakeSocket[] = [];
+    const subject = new Connection({
+      openSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+      retry: () => undefined,
+      surface: () => 'desktop',
+    });
+    subject.start();
+    sockets[0]?.open();
+    expect(sockets[0]?.sent).toEqual([{ type: 'hello', surface: 'desktop' }]);
+  });
+
+  it('follows whether the desktop app is connected, as the server says', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => {});
+    subject.subscribeSurfaces(listener);
+    subject.start();
+    latest().open();
+    expect(subject.isDesktopConnected()).toBe(false);
+    latest().receive({ type: 'surfaces', desktop: true });
+    expect(subject.isDesktopConnected()).toBe(true);
+    latest().receive({ type: 'surfaces', desktop: false });
+    expect(subject.isDesktopConnected()).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -227,11 +274,12 @@ describe('Connection transcripts', () => {
     latest().open();
     const releaseFirst = subject.watchTranscript('r1');
     const releaseSecond = subject.watchTranscript('r1');
-    expect(latest().sent).toEqual([{ type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
     releaseFirst();
-    expect(latest().sent).toHaveLength(1);
+    expect(latest().sent).toHaveLength(2);
     releaseSecond();
     expect(latest().sent).toEqual([
+      HELLO,
       { type: 'transcript.subscribe', runId: 'r1' },
       { type: 'transcript.unsubscribe', runId: 'r1' },
     ]);
@@ -245,7 +293,7 @@ describe('Connection transcripts', () => {
     subject.watchTranscript('r1');
     release();
     release();
-    expect(latest().sent).toEqual([{ type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
   });
 
   it('ignores a message from the server that is not JSON', () => {
@@ -263,7 +311,7 @@ describe('Connection transcripts', () => {
     subject.start();
     expect(latest().sent).toEqual([]);
     latest().open();
-    expect(latest().sent).toEqual([{ type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
   });
 
   it('re-subscribes open transcripts after a reconnect, and not released ones', () => {
@@ -276,7 +324,7 @@ describe('Connection transcripts', () => {
     latest().close();
     retries.at(-1)?.reconnect();
     latest().open();
-    expect(latest().sent).toEqual([{ type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
   });
 
   it('appends entries and replaces them on a reset', () => {
@@ -370,6 +418,25 @@ describe('the shared connection', () => {
     expect(result.current.status).toBe('open');
     subscribe.mockRestore();
     snapshot.mockRestore();
+  });
+
+  it('useDesktopConnected follows the shared connection', () => {
+    let current = false;
+    let notify = () => {};
+    const subscribe = spyOn(connection, 'subscribeSurfaces').mockImplementation((listener) => {
+      notify = listener;
+      return () => {};
+    });
+    const select = spyOn(connection, 'isDesktopConnected').mockImplementation(() => current);
+    const { result } = renderHook(() => useDesktopConnected());
+    expect(result.current).toBe(false);
+    act(() => {
+      current = true;
+      notify();
+    });
+    expect(result.current).toBe(true);
+    subscribe.mockRestore();
+    select.mockRestore();
   });
 
   it('useTranscript watches the run while mounted and releases it after', () => {
