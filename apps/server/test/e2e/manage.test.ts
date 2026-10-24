@@ -234,7 +234,7 @@ describe('every task agent manages Shinsa', () => {
   test('a message an agent sends without saying what it is gets classified like yours, on your behalf', async () => {
     const w = await open(answerAs('new_round', 'Add search'));
     const otherId = await w.createTask('Add the settings screen');
-    await w.until('the planner', () => w.agents.of('planner').length === 1);
+    await w.until('the planner', () => w.agents.of('plan').length === 1);
     w.agents.queue('answerer', async (agent) => {
       await agent.call('tasks_message', { task: otherId, text: 'Then add search' });
       await agent.call('answer', { answer: 'Asked for search.' });

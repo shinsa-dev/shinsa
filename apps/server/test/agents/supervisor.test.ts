@@ -115,7 +115,7 @@ function withIdleCompaction(patch: (state: ShinsaState) => void) {
     Object.assign(state.settings, {
       compaction: 'claude',
       idleCompaction: true,
-      agentFastModes: { builder: true },
+      agentFastModes: { agent: true },
     });
   };
 }
@@ -156,7 +156,8 @@ describe('starting and ending runs', () => {
     await until('the session', () => sessions.started.length === 1);
     const { input, finish } = sessions.started[0] as FakeSession;
     expect(input).toMatchObject({
-      role: 'builder',
+      role: 'agent',
+      readOnly: false,
       prompt: 'Carry on',
       model: 'opus',
       resume: 'old',
@@ -170,6 +171,29 @@ describe('starting and ending runs', () => {
     await running;
     expect(dispatched.map((command) => command.type)).toEqual(['run.attempt', 'run.link', 'run.end']);
     expect(endedRuns(dispatched)[0]).toMatchObject({ outcome: 'completed' });
+  });
+
+  test('the round agent plans, builds and fixes as separate runs on one session, read-only only while it plans', async () => {
+    const sessions = createSessions();
+    const runs = [
+      createRun({ id: 'run-1', purpose: 'plan', phaseIndex: null, sessionId: 'sess-1', startedAt: 1 }),
+      createRun({ id: 'run-2', purpose: 'build', sessionId: 'sess-1', startedAt: 2 }),
+      createRun({ id: 'run-3', purpose: 'fix', phaseIndex: null, sessionId: 'sess-1', startedAt: 3 }),
+    ];
+    const { supervisor } = setup(withTask(createTempDir(), runs), { startSession: sessions.startSession });
+    for (const [index, run] of runs.entries()) {
+      const running = supervisor.execute(run.id);
+      await until('the session', () => sessions.started.length === index + 1);
+      sessions.started[index]?.finish();
+      await running;
+    }
+    expect(sessions.started.map((fake) => [fake.input.role, fake.input.readOnly, fake.input.resume])).toEqual(
+      [
+        ['agent', true, 'sess-1'],
+        ['agent', false, 'sess-1'],
+        ['agent', false, 'sess-1'],
+      ]
+    );
   });
 
   test('a run is handed the MCP servers and skills for its repository and project, and starts without them when they cannot be read', async () => {
@@ -385,33 +409,33 @@ describe('starting and ending runs', () => {
     fast.started[0]?.finish();
     await first;
     update((state) => {
-      Object.assign(state.settings, { agentFastModes: { builder: true } });
+      Object.assign(state.settings, { agentFastModes: { agent: true } });
       state.runs['run-1'] = { ...createRun(), endedAt: 2, outcome: 'completed' };
       state.runs['run-2'] = createRun({ id: 'run-2', startedAt: 3 });
     });
     const builder = supervisor.execute('run-2');
-    await until('the builder session', () => fast.started.length === 2);
-    expect(fast.started[1]?.input).toMatchObject({ role: 'builder', fastMode: true });
+    await until('the agent session', () => fast.started.length === 2);
+    expect(fast.started[1]?.input).toMatchObject({ role: 'agent', fastMode: true });
     fast.started[1]?.finish();
     await builder;
     update((state) => {
-      Object.assign(state.settings, { fastMode: true, agentFastModes: { fixer: false } });
+      Object.assign(state.settings, { fastMode: true, agentFastModes: { reviewer: false } });
       state.runs['run-2'] = { ...createRun({ id: 'run-2' }), endedAt: 4, outcome: 'completed' };
-      state.runs['run-3'] = createRun({ id: 'run-3', role: 'fixer', startedAt: 5 });
+      state.runs['run-3'] = createRun({ id: 'run-3', role: 'reviewer', startedAt: 5 });
     });
     const fixer = supervisor.execute('run-3');
-    await until('the fixer session', () => fast.started.length === 3);
-    expect(fast.started[2]?.input).toMatchObject({ role: 'fixer', fastMode: false });
+    await until('the reviewer session', () => fast.started.length === 3);
+    expect(fast.started[2]?.input).toMatchObject({ role: 'reviewer', fastMode: false });
     fast.started[2]?.finish();
     await fixer;
     update((state) => {
       Object.assign(state.settings, {
         compaction: 'off',
         defaultProvider: 'plain',
-        agentFastModes: { builder: true },
+        agentFastModes: { agent: true },
       });
       state.runs['run-3'] = {
-        ...createRun({ id: 'run-3', role: 'fixer' }),
+        ...createRun({ id: 'run-3', purpose: 'fix' }),
         endedAt: 6,
         outcome: 'completed',
       };
@@ -446,7 +470,7 @@ describe('starting and ending runs', () => {
     });
   });
 
-  test('edits by a reviewer are set aside, and a stash that fails is only logged', async () => {
+  test('edits by a reviewer or by the agent while it plans are set aside, and a stash that fails is only logged', async () => {
     const { path } = await createGitRepo({ remote: false });
     writeFiles(path, { 'touched.txt': 'x' });
     const sessions = createSessions();
@@ -463,11 +487,12 @@ describe('starting and ending runs', () => {
     await git(empty, 'init', '-q');
     writeFiles(empty, { 'a.txt': 'x' });
     const planner = createSessions();
-    const second = setup(withTask(empty, [createRun({ role: 'planner' })]), {
+    const second = setup(withTask(empty, [createRun({ purpose: 'plan' })]), {
       startSession: planner.startSession,
     });
     const planning = second.supervisor.execute('run-1');
     await until('the planner', () => planner.started.length === 1);
+    expect(planner.started[0]?.input).toMatchObject({ role: 'agent', readOnly: true });
     planner.started[0]?.finish();
     await planning;
     expect(endedRuns(second.dispatched)).toHaveLength(1);
@@ -506,8 +531,8 @@ describe('starting and ending runs', () => {
     expect(await git(worktree, 'status', '--porcelain')).toBe('');
   });
 
-  test('an investigator and an operator work in the task’s worktree and keep their edits there', async () => {
-    for (const role of ['investigator', 'operator'] as const) {
+  test('an investigator and the agent running an operation work in the task’s worktree and keep their edits there', async () => {
+    for (const role of ['investigator', 'agent'] as const) {
       const { path: worktree } = await createGitRepo({ remote: false });
       writeFiles(worktree, { 'edit.txt': 'x' });
       const sessions = createSessions();
@@ -553,8 +578,8 @@ describe('one agent at a time in a worktree', () => {
     const { supervisor, update } = setup(
       withTask(worktree, [
         createRun(),
-        createRun({ id: 'run-2', role: 'fixer' }),
-        createRun({ id: 'run-3', role: 'fixer' }),
+        createRun({ id: 'run-2', purpose: 'fix', prompt: 'Fix it.' }),
+        createRun({ id: 'run-3', purpose: 'fix', prompt: 'Fix it.' }),
       ]),
       { startSession: sessions.startSession }
     );
@@ -565,14 +590,14 @@ describe('one agent at a time in a worktree', () => {
     await Bun.sleep(20);
     expect(sessions.started).toHaveLength(1);
     update((state) => {
-      state.runs['run-3'] = createRun({ id: 'run-3', role: 'fixer', endedAt: 9 });
+      state.runs['run-3'] = createRun({ id: 'run-3', purpose: 'fix', endedAt: 9 });
     });
     sessions.started[0]?.finish();
     await first;
     await until('the second session', () => sessions.started.length === 2);
     sessions.started[1]?.finish();
     await Promise.all([second, third]);
-    expect(sessions.started.map((fake) => fake.input.role)).toEqual(['builder', 'fixer']);
+    expect(sessions.started.map((fake) => fake.input.prompt)).toEqual(['Build phase 1', 'Fix it.']);
   });
 
   test('a run still going after the wait is cancelled so the next can start', async () => {
@@ -1222,7 +1247,7 @@ describe('resume fallback', () => {
 
   test('a role moved to another provider is handed over and runs on that provider’s model for the role', async () => {
     const context = restoreSetup((state) => {
-      state.settings.agentProviders = { builder: 'codex' };
+      state.settings.agentProviders = { agent: 'codex' };
     });
     await runOnce(context);
     expect(context.sessions.started[0]?.input).toMatchObject({ resume: null, model: 'gpt-6-astra' });
@@ -1718,7 +1743,7 @@ describe('shutdown and restart continuation', () => {
         state.runs['run-2'] = createRun({
           id: 'run-2',
           taskId: 'task-2',
-          role: 'fixer',
+          purpose: 'fix',
           sessionId: 'sess-0',
           prompt: 'Fix the checks.',
         });
@@ -1728,9 +1753,14 @@ describe('shutdown and restart continuation', () => {
     continueRuns(respond, ['run-1', 'run-2']);
     await supervisor.recover();
     await until('both sessions', () => sessions.started.length === 2);
-    const prompts = Object.fromEntries(sessions.started.map((fake) => [fake.input.role, fake.input.prompt]));
-    expect(prompts.builder).toContain('Shinsa restarted while you were working');
-    expect(prompts.fixer).toBe('Fix the checks.');
+    const prompts = sessions.started.map((fake) => fake.input.prompt);
+    expect(prompts).toHaveLength(2);
+    expect(prompts).toEqual(
+      expect.arrayContaining([
+        'Fix the checks.',
+        expect.stringContaining('Shinsa restarted while you were working'),
+      ])
+    );
     for (const fake of sessions.started) fake.finish();
   });
 

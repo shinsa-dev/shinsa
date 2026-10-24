@@ -34,6 +34,7 @@ describe('the Codex provider', () => {
     );
     const session = provider.startSession({
       role: 'answerer',
+      readOnly: true,
       cwd: createTempDir(),
       prompt: 'Where is it?',
       model: null,
@@ -59,12 +60,13 @@ describe('the Codex provider', () => {
     expect(await provider.readLogin?.()).toMatchObject({ status: 'signed_in' });
     expect(await provider.readUsage?.()).toMatchObject({ email: 'codex@example.com', plan: 'plus' });
     const compaction = provider.compactSession?.({
-      role: 'builder',
+      role: 'agent',
+      readOnly: false,
       cwd: createTempDir(),
       model: null,
       resume: codex.read().threads[0] ?? null,
       defaultBranch: 'main',
-      tools: createShinsaTools('builder', () => Promise.resolve('No.')),
+      tools: createShinsaTools('agent', () => Promise.resolve('No.')),
       pluginDir: '/plugin',
       onSession: () => undefined,
       onEntry: () => undefined,

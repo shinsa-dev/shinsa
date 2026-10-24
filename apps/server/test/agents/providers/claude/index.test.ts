@@ -38,13 +38,14 @@ describe('the Claude provider', () => {
     expect((await provider.listModels()).map((model) => model.id)).toEqual(['opus']);
     const sessions: string[] = [];
     const session = provider.startSession({
-      role: 'builder',
+      role: 'agent',
+      readOnly: false,
       cwd: '/work',
       prompt: 'Build it',
       model: null,
       resume: null,
       defaultBranch: 'main',
-      tools: createShinsaTools('builder', () => Promise.resolve('ok')),
+      tools: createShinsaTools('agent', () => Promise.resolve('ok')),
       pluginDir: '/plugin',
       onSession: (id) => sessions.push(id),
       onEntry: () => undefined,
@@ -71,12 +72,13 @@ describe('the Claude provider', () => {
     const provider = createClaudeProvider(createFakeRuntime(fake.query));
     expect(provider.capabilities?.compaction).toBe(true);
     const session = provider.compactSession?.({
-      role: 'fixer',
+      role: 'agent',
+      readOnly: false,
       cwd: '/work',
       model: null,
       resume: 'sess-1',
       defaultBranch: 'main',
-      tools: createShinsaTools('fixer', () => Promise.resolve('ok')),
+      tools: createShinsaTools('agent', () => Promise.resolve('ok')),
       pluginDir: '/plugin',
       onSession: () => undefined,
       onEntry: () => undefined,

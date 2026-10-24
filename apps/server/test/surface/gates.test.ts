@@ -53,7 +53,7 @@ describe('answering a gate by id', () => {
         verdicts: [{ index: 0, verdict: 'fix', note: null }],
       },
     ]);
-    expect(result.text).toBe('Asked for changes. A fixer picks it up.');
+    expect(result.text).toBe('Asked for changes. The agent picks them up.');
   });
 
   test('waive starts a task without checks at its setup gate', async () => {
@@ -101,7 +101,7 @@ describe('the gate shortcuts', () => {
     [
       ['plans', 'revise', 'fix', 'split', 'phase', 'two'],
       { gateId: 'gate-plan', decision: 'revise', response: 'split phase two', planVersion: 2 },
-      'Asked for changes. A fixer picks it up.',
+      'Asked for changes. The agent picks them up.',
     ],
     [
       ['plans', 'reject', 'fix'],
@@ -116,7 +116,7 @@ describe('the gate shortcuts', () => {
     [
       ['reviews', 'revise', 'fix', 'rename', 'it'],
       { gateId: 'gate-review', decision: 'revise', response: 'rename it' },
-      'Asked for changes. A fixer picks it up.',
+      'Asked for changes. The agent picks them up.',
     ],
     [
       ['reviews', 'reject', 'fix'],

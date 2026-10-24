@@ -18,15 +18,9 @@ afterEach(async () => {
   world = null;
 });
 
-const ROUND = /This is round (\d+) of the task/;
-
-function readRound(prompt: string) {
-  return Number(ROUND.exec(prompt)?.[1] ?? 1);
-}
-
 const BUILD: AgentScript = async (agent) => {
-  const phase = Number(/builder for phase (\d+)/.exec(agent.prompt)?.[1] ?? 1);
-  const round = readRound(agent.prompt);
+  const phase = (agent.phaseIndex ?? 0) + 1;
+  const { round } = agent;
   agent.write(`round-${round}-phase-${phase}.txt`, `round ${round}, phase ${phase}\n`);
   await agent.call('complete_phase', {
     summary: `Wrote round ${round}, phase ${phase}.`,
@@ -39,7 +33,7 @@ const BUILD: AgentScript = async (agent) => {
 
 async function open() {
   world = await World.create({ checks: ['true'] });
-  world.agents.queue('builder', ...Array.from({ length: 40 }, () => BUILD));
+  world.agents.queue('build', ...Array.from({ length: 40 }, () => BUILD));
   return world;
 }
 
@@ -88,10 +82,10 @@ async function git(cwd: string, ...args: string[]) {
 }
 
 describe('a task that runs in rounds', () => {
-  test('a mono-chat with three rounds ships them all onto one pull request', async () => {
+  test('a mono-chat with three rounds ships them all onto one pull request, every step on one agent session', async () => {
     const w = await open();
     const taskId = await w.createTask('Add MCP v2');
-    await w.until('the planner', () => w.agents.of('planner').length === 1);
+    await w.until('the planner', () => w.agents.of('plan').length === 1);
     await send(
       w,
       taskId,
@@ -134,10 +128,13 @@ describe('a task that runs in rounds', () => {
       [3, 'merged'],
     ]);
     expect(resolveTaskRounds(w.task(taskId)).map((round) => round.pullRequest?.number)).toEqual([1, 1, 1]);
-    const planners = w.agents.of('planner');
+    const planners = w.agents.of('plan');
     expect(planners).toHaveLength(3);
     const first = planners[0]?.sessionId ?? null;
     expect(planners.slice(1).map((session) => session.resume)).toEqual([first, first]);
+    const builds = w.agents.of('build');
+    expect(builds).toHaveLength(6);
+    expect(builds.every((session) => session.resume === first)).toBe(true);
     expect(planners[2]?.prompt).toContain('This is round 3 of the task.');
     expect(planners[2]?.prompt).toContain('Its commits go onto pull request #1');
   });
@@ -145,7 +142,7 @@ describe('a task that runs in rounds', () => {
   test('a round shipped as a stacked pull request opens its own pull request on top of the open one', async () => {
     const w = await open();
     const taskId = await w.createTask('Add MCP v2');
-    await w.until('the planner', () => w.agents.of('planner').length === 1);
+    await w.until('the planner', () => w.agents.of('plan').length === 1);
     await send(
       w,
       taskId,
@@ -229,7 +226,7 @@ describe('a task that runs in rounds', () => {
     };
     const classify = createClassifier(ask);
     let release: (() => void) | null = null;
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       await new Promise<void>((resolve) => {
         release = resolve;
       });
@@ -248,7 +245,7 @@ describe('a task that runs in rounds', () => {
     const taskId = await w.createTask('Add MCP v2');
     await w.until('the planner', () => release !== null);
     await send(w, taskId, 'Use tabs instead of spaces', classify);
-    await w.until('the steer', () => (w.agents.of('planner')[0]?.steers.length ?? 0) > 0);
+    await w.until('the steer', () => (w.agents.of('plan')[0]?.steers.length ?? 0) > 0);
     await send(w, taskId, 'Also add a dark mode toggle', classify);
     expect(asked[0]?.schema?.properties).toMatchObject({
       kind: { type: 'string', enum: ['acknowledge', 'feedback', 'new_round', 'separate_task'] },
@@ -276,7 +273,7 @@ describe('a task that runs in rounds', () => {
   test('a split-off the classifier suggests can be declined and kept in the chat as the next round', async () => {
     const w = await open();
     const taskId = await w.createTask('Add MCP v2');
-    await w.until('the planner', () => w.agents.of('planner').length === 1);
+    await w.until('the planner', () => w.agents.of('plan').length === 1);
     await send(
       w,
       taskId,
@@ -294,31 +291,32 @@ describe('a task that runs in rounds', () => {
     ]);
     await shipRound(w, taskId);
     await w.until('round 2 to start', () => resolveCurrentRound(w.task(taskId)).number === 2);
-    await w.until('the round 2 planner', () => w.agents.of('planner').length === 2);
-    expect(w.agents.of('planner')[1]?.prompt).toContain('Can you also redo the billing page?');
+    await w.until('the round 2 planner', () => w.agents.of('plan').length === 2);
+    expect(w.agents.of('plan')[1]?.prompt).toContain('Can you also redo the billing page?');
   });
 
   test('a restart mid-round resumes the round where it was, with its rounds intact', async () => {
     const w = await open();
     let hold: Promise<void> | null = null;
     const taskId = await w.createTask('Add MCP v2');
-    await w.until('the planner', () => w.agents.of('planner').length === 1);
+    await w.until('the planner', () => w.agents.of('plan').length === 1);
     await send(w, taskId, 'Then add search', createClassifier(answerAs('new_round', 'Add search')));
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       hold = agent.hang();
       await hold;
     });
     await shipRound(w, taskId);
     await w.until('round 2 to start', () => resolveCurrentRound(w.task(taskId)).number === 2);
-    await w.until('the round 2 planner', () => w.agents.of('planner').length === 2);
+    await w.until('the round 2 planner', () => w.agents.of('plan').length === 2);
     const before = w.task(taskId).rounds;
     await w.restartGracefully();
     await w.untilStage(taskId, 'awaiting_review');
     expect(w.task(taskId).rounds?.map((round) => [round.number, round.status])).toEqual(
       before?.map((round) => [round.number, round.status])
     );
-    const planners = w.agents.of('planner');
+    const planners = w.agents.of('plan');
     expect(planners.at(-1)?.resume).toBe(planners[1]?.sessionId);
+    expect(planners.at(-1)?.resume).toBe(planners[0]?.sessionId);
     expect(planners.at(-1)?.prompt).toContain('Shinsa restarted');
     expect(resolveCurrentRound(w.task(taskId))).toMatchObject({ number: 2, status: 'active' });
   });
@@ -349,6 +347,7 @@ describe('a task with no repository', () => {
     expect(answerer?.cwd).toBe(join(w.config.dataDir, 'scratch', taskId));
     expect(answerer?.prompt).toContain('This task works in no repository.');
     expect(Object.keys(w.state.repos)).toEqual([w.repoId]);
+    await w.until('the settled task’s scratch folder to go', () => !existsSync(answerer?.cwd ?? ''));
 
     await send(
       w,
@@ -356,11 +355,11 @@ describe('a task with no repository', () => {
       'Fix the greeting in app',
       createClassifier(answerAs('new_round', 'Fix the greeting in app'))
     );
-    await w.until('the planner', () => w.agents.of('planner').length === 1);
+    await w.until('the planner', () => w.agents.of('plan').length === 1);
     const task = w.task(taskId);
     expect(task.repoId).toBe(w.repoId);
     expect(task.worktreePath).not.toBeNull();
-    expect(w.agents.of('planner')[0]?.cwd).toBe(task.worktreePath ?? '');
+    expect(w.agents.of('plan')[0]?.cwd).toBe(task.worktreePath ?? '');
     expect(task.activity.map((entry) => entry.text)).toContain('Chose the repository app');
     expect(systems.filter((system) => system.startsWith('You read what the current round'))).toHaveLength(1);
   });

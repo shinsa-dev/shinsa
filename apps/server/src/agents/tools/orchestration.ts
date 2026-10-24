@@ -29,15 +29,18 @@ import type { ToolSpec } from './schema.ts';
 const L = DELEGATION_LIMITS;
 
 const DEFAULT_ROLE: Record<RunRole, DelegateRole> = {
+  agent: 'builder',
   planner: 'planner',
   builder: 'builder',
   reviewer: 'reviewer',
-  fixer: 'fixer',
   answerer: 'planner',
   investigator: 'builder',
   researcher: 'planner',
-  operator: 'builder',
 };
+
+function resolveDefaultRole(parent: Run): DelegateRole {
+  return parent.purpose === 'plan' ? 'planner' : DEFAULT_ROLE[parent.role];
+}
 
 const DELEGATION_ID = {
   type: 'string',
@@ -57,10 +60,10 @@ export const ORCHESTRATION_TOOL_SPECS = {
     name: 'delegate_task',
     description: [
       'Hand one self-contained piece of work to another agent and get its result back. It starts from the `brief` you give it alone, without this conversation, so put everything it needs in it.',
-      'Use it for work that is independent of yours or should run in parallel: research, a second opinion, an isolated experiment, a review of what you built.',
+      'Delegate only work whose context should stay apart from yours: a review or a test your own reasoning would bias, or work that is truly independent of yours and can run in parallel. Everything else you do yourself, in this conversation: never one agent per phase or per kind of problem.',
       `mode "async" (the default) returns at once; the result arrives in this conversation when the agent finishes, steered into your turn or waking you after it ends, so carry on or stop instead of polling. mode "wait" blocks until the result, a question from the agent, or timeout_minutes (${L.waitMinutes} by default); a wait that times out does not stop the agent, and its result still arrives here.`,
       'For every review round, call delegate_task again with the original brief, the earlier findings, your responses and the open objections, under a new client_request_id.',
-      'An agent that cannot change files can only delegate to the planner and reviewer roles. isolation "worktree" gives the agent its own checkout of your last commit; your uncommitted edits are not in it.',
+      'An agent that cannot change files, including one that is planning, can only delegate to the planner and reviewer roles. isolation "worktree" gives the agent its own checkout of your last commit; your uncommitted edits are not in it.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -80,7 +83,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
           type: 'string',
           enum: DELEGATE_ROLES,
           description:
-            'planner investigates without changing files, reviewer reviews without changing files, builder and fixer change files. Defaults to your own role.',
+            'planner investigates without changing files, reviewer reviews or tests without changing files, builder changes files. Defaults to builder while you can change files, otherwise to planner (reviewer for a reviewer).',
         },
         mode: { type: 'string', enum: [...DELEGATION_MODES] },
         timeout_minutes: {
@@ -293,7 +296,7 @@ async function delegateTask(input: Record<string, unknown>, call: OrchestrationC
       requestKey,
       title: request.title,
       brief: request.brief,
-      role: request.role ?? DEFAULT_ROLE[parent.role],
+      role: request.role ?? resolveDefaultRole(parent),
       mode: request.mode,
       isolation: known?.delegation.isolation ?? request.isolation,
       baseCommit: known?.delegation.baseCommit ?? baseCommit,

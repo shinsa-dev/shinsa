@@ -1,6 +1,13 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { type Gate, isTaskSettled, listOpenGates, type ShinsaCommand, type TaskStage } from '@shinsa/core';
+import {
+  type Gate,
+  isTaskSettled,
+  listOpenGates,
+  type ShinsaCommand,
+  type ShinsaState,
+  type TaskStage,
+} from '@shinsa/core';
 import type { ModelSource } from '../../../src/agents/index.ts';
 import { startShinsa } from '../../../src/serve.ts';
 import { EventLog } from '../../../src/store/index.ts';
@@ -15,12 +22,18 @@ const config = createConfigAt(root, { allowedHosts: ['127.0.0.1'], settleDelayMs
 
 const agents = new FakeAgents(() => Math.floor(random.next() * 80), join(root, 'sessions.json'));
 
+let readState: (() => ShinsaState) | null = null;
+
+agents.state = () => readState?.() ?? null;
+
 const shinsa = await startShinsa(config, {
   startSession: agents.start,
   resolveLogin: () => Promise.resolve(null),
   models: { listModels: () => Promise.resolve([]) } as ModelSource,
   discover: () => Promise.resolve({ candidates: [], truncated: false }),
 });
+
+readState = () => shinsa.engine.state;
 
 interface Sent {
   id: string;

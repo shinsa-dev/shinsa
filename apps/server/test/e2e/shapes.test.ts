@@ -77,7 +77,7 @@ describe('an inquiry has no verification steps', () => {
       expect(effects).toContain('task.triage');
       expect(effects.filter((kind) => kind === 'checks.run' || kind.startsWith('pull_request.'))).toEqual([]);
     }
-    expect(w.agents.sessions.map((session) => session.role).sort()).toEqual(['answerer', 'researcher']);
+    expect(w.agents.sessions.map((session) => session.key).sort()).toEqual(['answerer', 'researcher']);
     expect(w.github.calls).toEqual([]);
   });
 });
@@ -106,7 +106,7 @@ describe('the shapes a task can take', () => {
     const [first, second] = w.agents.of('answerer');
     expect(first?.cwd).toBe(w.state.repos[w.repoId]?.path ?? '');
     expect(second?.resume).toBe(first?.sessionId ?? '');
-    expect(w.agents.sessions.map((session) => session.role)).toEqual(['answerer', 'answerer']);
+    expect(w.agents.sessions.map((session) => session.key)).toEqual(['answerer', 'answerer']);
     expect(w.github.pulls).toEqual([]);
   });
 
@@ -124,12 +124,7 @@ describe('the shapes a task can take', () => {
       'pull_request',
       'merge',
     ]);
-    expect(w.agents.sessions.map((session) => session.role)).toEqual([
-      'planner',
-      'builder',
-      'builder',
-      'reviewer',
-    ]);
+    expect(w.agents.sessions.map((session) => session.key)).toEqual(['plan', 'build', 'build', 'reviewer']);
     expect(w.github.pulls).toHaveLength(1);
   });
 
@@ -165,7 +160,7 @@ describe('the shapes a task can take', () => {
       priority: { type: 'string', enum: [...TASK_PRIORITIES] },
       waits_on: { type: 'array' },
     });
-    expect(w.agents.sessions.map((session) => session.role)).toEqual(['investigator']);
+    expect(w.agents.sessions.map((session) => session.key)).toEqual(['investigator']);
   });
 
   test('an investigation reports its diagnosis and finishes with no worktree left and no pull request', async () => {
@@ -186,7 +181,7 @@ describe('the shapes a task can take', () => {
       plan: null,
     });
     expect(worktree).not.toBe(w.repoPath);
-    expect(w.agents.sessions.map((session) => session.role)).toEqual(['investigator']);
+    expect(w.agents.sessions.map((session) => session.key)).toEqual(['investigator']);
     expect(w.github.pulls).toEqual([]);
   });
 
@@ -216,20 +211,20 @@ describe('the shapes a task can take', () => {
     expect(files).toEqual(expect.arrayContaining(['a.txt', 'b.txt']));
     expect(files).not.toContain('probe.txt');
     expect(await runCommandOrThrow(['git', 'stash', 'list'], w.repoPath)).toBe('');
-    expect(w.agents.sessions.map((session) => session.role).slice(0, 2)).toEqual(['investigator', 'planner']);
+    expect(w.agents.sessions.map((session) => session.key).slice(0, 2)).toEqual(['investigator', 'plan']);
     expect(w.github.pulls).toHaveLength(1);
   });
 
   test('an operation waits for its plan, runs and finishes with no pull request', async () => {
     const w = await open();
     let ran = '';
-    w.agents.queue('operator', async (agent) => {
+    w.agents.queue('operate', async (agent) => {
       ran = agent.cwd;
       await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
     });
     const taskId = await createShapedTask(w, 'Run the cleanup script once', 'operation');
     const plan = await w.untilGate(taskId, 'plan');
-    expect(w.agents.of('operator')).toHaveLength(0);
+    expect(w.agents.of('operate')).toHaveLength(0);
     await w.answer(plan, 'approve');
     await w.untilStage(taskId, 'done');
     await w.until('the worktree to go', () => w.task(taskId).worktreePath === null && !existsSync(ran));
@@ -267,7 +262,7 @@ describe('the shapes a task can take', () => {
       waits_on_why: 'No open task touches the exports.',
     });
     const refusals: string[] = [];
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       await agent
         .call('reshape_task', {
           steps: ['investigate', 'plan', 'operate'],
@@ -300,11 +295,11 @@ describe('the shapes a task can take', () => {
       proposal: { status: 'accepted' },
       pullRequest: null,
     });
-    expect(w.agents.sessions.map((session) => session.role)).toEqual([
-      'planner',
+    expect(w.agents.sessions.map((session) => session.key)).toEqual([
+      'plan',
       'investigator',
-      'planner',
-      'operator',
+      'plan',
+      'operate',
     ]);
     expect(w.github.pulls).toEqual([]);
   });

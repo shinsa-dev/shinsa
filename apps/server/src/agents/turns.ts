@@ -7,6 +7,7 @@ import {
   type RunHandoffReason,
   resolveHandoff,
   resolveHandoffPrompt,
+  resolveRunBrief,
   type ShinsaState,
   splitHouseRules,
 } from '@shinsa/core';
@@ -116,9 +117,17 @@ function hasHouseRules(context: TurnContext, sessionId: string, rules: string) {
   return false;
 }
 
-export function resolveTurnPrompt(context: TurnContext, plan: TurnPlan, prompt: string) {
-  if (plan.handoff) return resolveHandoffPrompt(plan.handoff.text, prompt);
-  const split = plan.resume ? splitHouseRules(prompt) : null;
-  if (!plan.resume || !split || !hasHouseRules(context, plan.resume, split.rules)) return prompt;
-  return split.instruction;
+export function resolveTurnBrief(state: ShinsaState, run: Run, override: string | null) {
+  const brief = resolveRunBrief(state, run);
+  if (override === null) return brief;
+  return brief === (run.prompt ?? '') ? override : [brief, override].join('\n\n');
+}
+
+export function resolveTurnPrompt(context: TurnContext, plan: TurnPlan, prompt: string, brief: string) {
+  if (plan.handoff) return resolveHandoffPrompt(plan.handoff.text, brief);
+  if (!plan.resume) return brief;
+  const rules = splitHouseRules(brief)?.rules;
+  if (!rules) return prompt;
+  if (!hasHouseRules(context, plan.resume, rules)) return brief;
+  return splitHouseRules(prompt)?.instruction ?? prompt;
 }

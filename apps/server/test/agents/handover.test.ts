@@ -19,7 +19,7 @@ describe('commits', () => {
   } as unknown as Task;
 
   test('a phase commits under the branch type with the phase title', () => {
-    expect(resolveCommitMessage(task, { role: 'builder', phaseIndex: 0 } as Run)).toBe(
+    expect(resolveCommitMessage(task, { role: 'agent', purpose: 'build', phaseIndex: 0 } as Run)).toBe(
       'fix: find the overflow'
     );
   });
@@ -29,26 +29,33 @@ describe('commits', () => {
       ...task,
       plan: { document: { phases: [{ title: 'Fix add() and empty average()', detail: '' }] } },
     } as unknown as Task;
-    expect(resolveCommitMessage(fixTask, { role: 'builder', phaseIndex: 0 } as Run)).toBe(
+    expect(resolveCommitMessage(fixTask, { role: 'agent', purpose: 'build', phaseIndex: 0 } as Run)).toBe(
       'fix: add() and empty average()'
     );
   });
 
-  test('a fix commits with what it fixed', () => {
-    expect(resolveCommitMessage(task, { role: 'fixer' } as Run)).toBe('fix: make the checks pass');
+  test('a fix, or any hand-over that is not a phase, commits with what it fixed', () => {
+    expect(resolveCommitMessage(task, { role: 'agent', purpose: 'fix' } as Run)).toBe(
+      'fix: make the checks pass'
+    );
+    expect(resolveCommitMessage(task, { role: 'agent', purpose: 'operate' } as Run)).toBe(
+      'fix: make the checks pass'
+    );
   });
 });
 
 describe('commit messages', () => {
   test('a branch without a known type commits as feat, and a task without a plan uses its title', () => {
     const plain = { title: 'Add search', branch: 'search', spec: null, fixFor: null } as unknown as Task;
-    expect(resolveCommitMessage(plain, { role: 'builder', phaseIndex: null } as Run)).toBe(
+    expect(resolveCommitMessage(plain, { role: 'agent', purpose: 'build', phaseIndex: null } as Run)).toBe(
       'feat: add search'
     );
-    expect(resolveCommitMessage({ ...plain, branch: null } as Task, { role: 'builder' } as Run)).toBe(
-      'feat: add search'
+    expect(
+      resolveCommitMessage({ ...plain, branch: null } as Task, { role: 'agent', purpose: 'build' } as Run)
+    ).toBe('feat: add search');
+    expect(resolveCommitMessage(plain, { role: 'agent', purpose: 'fix' } as Run)).toBe(
+      'fix: apply requested changes'
     );
-    expect(resolveCommitMessage(plain, { role: 'fixer' } as Run)).toBe('fix: apply requested changes');
   });
 });
 

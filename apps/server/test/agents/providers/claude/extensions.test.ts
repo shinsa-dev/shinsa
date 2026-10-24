@@ -143,13 +143,14 @@ describe('what a Claude agent is given', () => {
 
 function createInput(extensions?: SessionExtensions): AgentSessionInput {
   return {
-    role: 'builder',
+    role: 'agent',
+    readOnly: false,
     cwd: '/work',
     prompt: 'Build it',
     model: null,
     resume: null,
     defaultBranch: 'main',
-    tools: createShinsaTools('builder', () => Promise.resolve('ok')),
+    tools: createShinsaTools('agent', () => Promise.resolve('ok')),
     pluginDir: '/plugin',
     onSession: () => undefined,
     onEntry: () => undefined,

@@ -30,6 +30,7 @@ export interface ProviderUsageReading {
 
 export interface AgentSessionInput {
   role: RunRole;
+  readOnly: boolean;
   cwd: string;
   prompt: string;
   model: string | null;

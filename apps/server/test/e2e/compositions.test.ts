@@ -36,13 +36,13 @@ function resolveRuleMessage(id: string) {
 
 async function reachOperationGate(w: World) {
   const refusals: string[] = [];
-  w.agents.queue('planner', async (agent) => {
+  w.agents.queue('plan', async (agent) => {
     await agent.call('reshape_task', {
       steps: CHANGE_THEN_OPERATE,
       reason: 'The files need a backfill once they ship.',
     });
   });
-  w.agents.queue('planner', async (agent) => {
+  w.agents.queue('plan', async (agent) => {
     await agent.call('propose_plan', toolPlan(PLAN)).catch((error: Error) => refusals.push(error.message));
     await agent.call('propose_plan', { ...toolPlan(PLAN), operation: BACKFILL, impact: IMPACT });
   });
@@ -79,7 +79,7 @@ function expectOperationGate(w: World, taskId: string, gate: Gate) {
       IMPACT,
     ].join('\n'),
   });
-  expect(w.agents.of('operator')).toHaveLength(0);
+  expect(w.agents.of('operate')).toHaveLength(0);
 }
 
 describe('a task the planner composes from a change and an operation', () => {
@@ -88,8 +88,8 @@ describe('a task the planner composes from a change and an operation', () => {
     world = w;
     let operatorBrief = '';
     let operatorFiles: string[] = [];
-    w.agents.queue('operator', async (agent) => {
-      operatorBrief = agent.brief;
+    w.agents.queue('operate', async (agent) => {
+      operatorBrief = agent.prompt;
       operatorFiles = ['a.txt', 'b.txt'].filter((file) => existsSync(join(agent.cwd, file)));
       agent.write('backfilled.txt', 'a.txt\nb.txt\n');
       await agent.call('report_outcome', { outcome: 'Backfilled both greeting files.' });
@@ -101,8 +101,8 @@ describe('a task the planner composes from a change and an operation', () => {
     ]);
     expect(plan.body).toContain(`## Operation\n1. ${BACKFILL[0]}\n2. ${BACKFILL[1]}`);
     expect(plan.body).toContain(`## Impact\n${IMPACT}`);
-    expect(w.agents.of('builder')[0]?.prompt).toContain(
-      "Do not run the plan's operation: an operator runs it after the pull request merges."
+    expect(w.agents.of('build')[0]?.prompt).toContain(
+      "Do not run the plan's operation yet: you run it after the pull request merges and the human confirms it."
     );
     expectOperationGate(w, taskId, gate);
 
@@ -110,7 +110,7 @@ describe('a task the planner composes from a change and an operation', () => {
       'Run the operation or finish the task without it.'
     );
     expect(w.gates(taskId).map((open) => open.id)).toEqual([gate.id]);
-    expect(w.agents.of('operator')).toHaveLength(0);
+    expect(w.agents.of('operate')).toHaveLength(0);
 
     await w.answer(gate, 'approve');
     await w.untilStage(taskId, 'done');
@@ -124,13 +124,13 @@ describe('a task the planner composes from a change and an operation', () => {
     expect(operatorBrief).toContain('The code change in the plan has merged into the default branch');
     expect(operatorBrief).toContain(`The operation to run:\n1. ${BACKFILL[0]}\n2. ${BACKFILL[1]}`);
     expect(operatorFiles).toEqual(['a.txt', 'b.txt']);
-    expect(w.agents.sessions.map((session) => session.role)).toEqual([
-      'planner',
-      'planner',
-      'builder',
-      'builder',
+    expect(w.agents.sessions.map((session) => session.key)).toEqual([
+      'plan',
+      'plan',
+      'build',
+      'build',
       'reviewer',
-      'operator',
+      'operate',
     ]);
     expect(w.gates(taskId)).toEqual([]);
     await w.until('the worktree to be removed', () => w.task(taskId).worktreePath === null);
@@ -148,7 +148,7 @@ describe('a task the planner composes from a change and an operation', () => {
       stageReason: 'merged without running the operation',
       pullRequest: { state: 'merged' },
     });
-    expect(w.agents.of('operator')).toHaveLength(0);
+    expect(w.agents.of('operate')).toHaveLength(0);
     expect(w.gates(taskId)).toEqual([]);
   });
 });
@@ -158,7 +158,7 @@ describe('the verification rules a composition and its plan must pass', () => {
     const w = await World.create();
     world = w;
     const refusals: string[] = [];
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       await agent
         .call('propose_plan', { ...toolPlan(PLAN), verification: [] })
         .catch((error: Error) => refusals.push(error.message));
@@ -168,12 +168,7 @@ describe('the verification rules a composition and its plan must pass', () => {
     await w.untilGate(taskId, 'review');
     expect(refusals).toEqual([resolveRuleMessage('code.verification_plan')]);
     expect(w.task(taskId).plan?.document?.verification).toEqual(PLAN.verification);
-    expect(w.agents.sessions.map((session) => session.role)).toEqual([
-      'planner',
-      'builder',
-      'builder',
-      'reviewer',
-    ]);
+    expect(w.agents.sessions.map((session) => session.key)).toEqual(['plan', 'build', 'build', 'reviewer']);
   });
 
   test('a code change composed without checks or an agent review is refused with each rule, then planned as a change', async () => {
@@ -181,7 +176,7 @@ describe('the verification rules a composition and its plan must pass', () => {
     world = w;
     const refusals: string[] = [];
     let unchanged = '';
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       await agent
         .call('reshape_task', {
           steps: ['plan', 'build', 'your_review', 'pull_request', 'merge'],
@@ -208,22 +203,17 @@ describe('the verification rules a composition and its plan must pass', () => {
     ]);
     expect(unchanged).toBe('Those are the steps this task already has. Plan it with `propose_plan`.');
     expect(w.task(taskId).pipeline).toEqual(CHANGE);
-    expect(w.agents.sessions.map((session) => session.role)).toEqual([
-      'planner',
-      'builder',
-      'builder',
-      'reviewer',
-    ]);
+    expect(w.agents.sessions.map((session) => session.key)).toEqual(['plan', 'build', 'build', 'reviewer']);
   });
 
   test("the plan's evidence is required before the last phase completes, and its checks run with the repository's", async () => {
     const w = await World.create();
     world = w;
     let refusal = '';
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       await agent.call('propose_plan', toolPlan({ ...PLAN, evidence: ['test'], checks: ['test -s a.txt'] }));
     });
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       agent.write('a.txt', 'phase 1\n');
       await agent.call('complete_phase', {
         summary: 'Wrote a.txt.',
@@ -231,7 +221,7 @@ describe('the verification rules a composition and its plan must pass', () => {
         judgement_calls: [],
       });
     });
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       agent.write('b.txt', 'phase 2\n');
       const report = { summary: 'Wrote b.txt.', spots: [], judgement_calls: [] };
       refusal = await agent.call('complete_phase', report).catch((error: Error) => error.message);

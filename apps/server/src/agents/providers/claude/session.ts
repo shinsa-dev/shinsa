@@ -31,7 +31,7 @@ import {
 } from './classify.ts';
 import { listBackgroundWork, resolveCacheExpiry } from './context.ts';
 import { resolveClaudeExtensions, serializeClaudeServer } from './extensions.ts';
-import { guardCommand } from './guard.ts';
+import { guardCommand, listPlanningHooks } from './guard.ts';
 import { type ClaudeRecorder, createClaudeRecorder, resolveUsageSnapshot } from './recorder.ts';
 import { type EunoeLink, resolveClaudeRoute } from './route.ts';
 import { CLAUDE_RUNTIME, type ClaudeRuntime, resolveClaudeProcess } from './sdk.ts';
@@ -267,7 +267,10 @@ export function startClaudeSession(
         },
         plugins: [{ type: 'local', path: input.pluginDir }],
         hooks: {
-          PreToolUse: [{ matcher: 'Bash', hooks: [guardCommand(input.defaultBranch)] }],
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [guardCommand(input.defaultBranch)] },
+            ...(input.readOnly && !isReadOnlyRole(input.role) ? listPlanningHooks() : []),
+          ],
         },
         forwardSubagentText: true,
         settings: {

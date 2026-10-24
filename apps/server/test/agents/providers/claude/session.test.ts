@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { HookInput, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ChatEvent, ChatNotice, RunRole } from '@shinsa/core';
 import { AsyncQueue } from '../../../../src/agents/providers/claude/async-queue.ts';
 import type { ClaudeExecutable } from '../../../../src/agents/providers/claude/executable.ts';
@@ -25,13 +25,14 @@ function createInput(overrides: Partial<AgentSessionInput> = {}) {
   const sessions: string[] = [];
   const handleTool = () => Promise.resolve('ok');
   const input: AgentSessionInput = {
-    role: 'builder',
+    role: 'agent',
+    readOnly: false,
     cwd: '/work',
     prompt: 'Build it',
     model: null,
     resume: null,
     defaultBranch: 'main',
-    tools: createShinsaTools('builder', handleTool),
+    tools: createShinsaTools('agent', handleTool),
     pluginDir: '/plugin',
     onSession: (id) => sessions.push(id),
     onEntry: (entry) => entries.push(entry),
@@ -116,7 +117,12 @@ describe('starting a session', () => {
   });
 
   test('a planner cannot edit, and the model and session to resume are passed on', async () => {
-    const { input } = createInput({ role: 'planner' as RunRole, model: 'opus', resume: 'sess-0' });
+    const { input } = createInput({
+      role: 'planner' as RunRole,
+      readOnly: true,
+      model: 'opus',
+      resume: 'sess-0',
+    });
     const { session, messages, calls } = startScripted(input);
     messages.push(success('ok'));
     await session.done;
@@ -125,6 +131,37 @@ describe('starting a session', () => {
       resume: 'sess-0',
       disallowedTools: ['Edit', 'Write', 'NotebookEdit'],
     });
+  });
+
+  test('the round agent keeps one tool list: planning refuses edits through a hook, building has none', async () => {
+    const planning = startScripted(createInput({ readOnly: true, resume: 'sess-0' }).input);
+    planning.messages.push(success('ok'));
+    await planning.session.done;
+    const building = startScripted(createInput({ resume: 'sess-0' }).input);
+    building.messages.push(success('ok'));
+    await building.session.done;
+    const planned = planning.calls[0]?.options;
+    const built = building.calls[0]?.options;
+    expect(planned?.disallowedTools).toEqual([]);
+    expect(built?.disallowedTools).toEqual([]);
+    expect(planned?.permissionMode).toBe('bypassPermissions');
+    expect(built?.permissionMode).toBe('bypassPermissions');
+    expect(planned?.hooks?.PreToolUse?.map((matcher) => matcher.matcher)).toEqual([
+      'Bash',
+      'Edit',
+      'Write',
+      'NotebookEdit',
+      'MultiEdit',
+    ]);
+    expect(built?.hooks?.PreToolUse?.map((matcher) => matcher.matcher)).toEqual(['Bash']);
+    const hook = planned?.hooks?.PreToolUse?.find((matcher) => matcher.matcher === 'Write')?.hooks[0];
+    const signal = new AbortController().signal;
+    const verdict = await hook?.(
+      { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: {} } as unknown as HookInput,
+      undefined,
+      { signal }
+    );
+    expect(verdict).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } });
   });
 
   test('an account with its own Claude folder runs there, without inherited login overrides', async () => {

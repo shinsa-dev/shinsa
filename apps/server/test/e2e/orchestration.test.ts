@@ -31,9 +31,9 @@ function delegated(w: World, taskId: string): Run[] {
     .sort((a, b) => a.startedAt - b.startedAt);
 }
 
-function stepRun(w: World, taskId: string, role: Run['role']) {
+function stepRun(w: World, taskId: string, purpose: Run['purpose']) {
   return Object.values(w.state.runs).find(
-    (run) => run.taskId === taskId && run.role === role && !run.delegation
+    (run) => run.taskId === taskId && run.purpose === purpose && !run.delegation
   );
 }
 
@@ -58,7 +58,7 @@ describe('delegating work to other agents', () => {
     const w = await open();
     let delegatedId = '';
     let steered = '';
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       const status = parse(
         await agent.call('delegate_task', {
           brief: 'Read a.txt and list every greeting in it.',
@@ -88,11 +88,11 @@ describe('delegating work to other agents', () => {
       summary: 'There is one greeting: hello.',
     });
     expect(child?.delegation).toMatchObject({
-      parentRunId: stepRun(w, taskId, 'builder')?.id,
+      parentRunId: stepRun(w, taskId, 'build')?.id,
       delivery: 'delivered',
     });
     await w.untilStage(taskId, 'awaiting_review');
-    const builder = stepRun(w, taskId, 'builder');
+    const builder = stepRun(w, taskId, 'build');
     expect(notices(w, builder?.id ?? '')).toEqual([
       { kind: 'delegation', event: 'started', runIds: [delegatedId] },
       { kind: 'delegation', event: 'reported', runIds: [delegatedId] },
@@ -105,7 +105,7 @@ describe('delegating work to other agents', () => {
   test('the same client request id returns the task already delegated instead of starting another', async () => {
     const w = await open();
     const ids: string[] = [];
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const status = parse(
           await agent.call('delegate_task', {
@@ -119,9 +119,6 @@ describe('delegating work to other agents', () => {
       await nextSteer(agent);
       agent.write('a.txt', 'one\n');
       await agent.call('complete_phase', phaseReport('Done.'));
-    });
-    w.agents.queue('planner', async (agent) => {
-      await agent.call('propose_plan', toolPlan(PLAN));
     });
     w.agents.queue('planner', async (agent) => {
       agent.say('Checked.');
@@ -139,7 +136,7 @@ describe('delegating work to other agents', () => {
       finishChild = resolve;
     });
     let timedOut: Record<string, unknown> = {};
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       timedOut = parse(
         await agent.call('delegate_task', {
           brief: 'Run the slow suite.',
@@ -149,7 +146,7 @@ describe('delegating work to other agents', () => {
         })
       );
     });
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       expect(agent.prompt).toContain('The slow suite passed.');
       agent.write('a.txt', 'slow\n');
       await agent.call('complete_phase', phaseReport('Done after the suite.'));
@@ -161,13 +158,13 @@ describe('delegating work to other agents', () => {
     const taskId = await w.createTask();
     await w.until('the wait to time out', () => timedOut.wait_timed_out === true);
     expect(timedOut).toMatchObject({ status: 'running', result: null });
-    const builder = stepRun(w, taskId, 'builder');
+    const builder = stepRun(w, taskId, 'build');
     await w.until('the parent to wait', () => w.state.runs[builder?.id ?? '']?.status === 'waiting');
     expect(w.state.runs[builder?.id ?? '']?.waitingOn).toBeTruthy();
     expect(w.activeRuns(taskId).map((run) => run.id)).toEqual([builder?.id ?? '']);
     finishChild();
     await w.untilStage(taskId, 'awaiting_review');
-    const [first, woken] = w.agents.of('builder');
+    const [first, woken] = w.agents.of('build');
     expect(woken?.resume).toBe(first?.sessionId ?? '');
     expect(woken?.prompt).toContain('Shinsa is reporting on work you delegated.');
     expect(w.state.runs[builder?.id ?? '']).toMatchObject({ outcome: 'completed' });
@@ -177,7 +174,7 @@ describe('delegating work to other agents', () => {
     const w = await open();
     let question = '';
     let reply = '';
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       const status = parse(
         await agent.call('delegate_task', { brief: 'Name the greeting.', role: 'reviewer' })
       );
@@ -208,10 +205,10 @@ describe('delegating work to other agents', () => {
     expect(Object.values(w.state.gates).filter((gate) => gate.type === 'question')).toEqual([]);
   });
 
-  test('an agent that cannot change files cannot delegate to one that can', async () => {
+  test('the agent cannot delegate to one that changes files while it plans', async () => {
     const w = await open();
     let refusal = '';
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       try {
         await agent.call('delegate_task', { brief: 'Write the files.', role: 'builder' });
       } catch (error) {
@@ -222,7 +219,7 @@ describe('delegating work to other agents', () => {
     const taskId = await w.createTask();
     await w.until('the refusal', () => refusal.length > 0);
     expect(refusal).toBe(
-      'A planner cannot change files, so the agents it delegates to cannot either. Delegate to a planner or a reviewer.'
+      'While you plan you cannot change files, so the agents you delegate to cannot either. Delegate to a planner or a reviewer.'
     );
     expect(delegated(w, taskId)).toEqual([]);
   });
@@ -235,7 +232,7 @@ describe('delegating work to other agents', () => {
       const result = await nextSteer(agent);
       agent.say(`${label} heard: ${result.includes('did it myself') ? 'did it myself' : 'nothing'}`);
     };
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       await agent.call('delegate_task', { brief: 'Level one.', role: 'reviewer' });
       await nextSteer(agent);
       agent.write('a.txt', 'deep\n');
@@ -268,7 +265,7 @@ describe('delegating work to other agents', () => {
     let childId = '';
     const steers: string[] = [];
     w.agents.queue(
-      'builder',
+      'build',
       async (agent) => {
         childId = String(
           parse(await agent.call('delegate_task', { brief: 'Survey it.', role: 'reviewer' })).delegation_id
@@ -309,7 +306,7 @@ describe('delegating work to other agents', () => {
     const w = await open();
     let steered = '';
     let childId = '';
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       childId = String(
         parse(await agent.call('delegate_task', { brief: 'Look around.', role: 'reviewer' })).delegation_id
       );
@@ -343,7 +340,7 @@ describe('delegating work to other agents', () => {
   test('a delegation in its own checkout starts from the parent’s commit and leaves its changes for the parent', async () => {
     const w = await open();
     let steered = '';
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       agent.write('a.txt', 'committed\n');
       await agent.call('delegate_task', {
         brief: 'Try another wording.',

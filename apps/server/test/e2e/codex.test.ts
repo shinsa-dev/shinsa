@@ -86,21 +86,28 @@ function threads(codex: FakeCodex) {
 }
 
 describe('a task on Codex', () => {
-  test('plans, builds, reviews and merges with every agent on Codex', async () => {
+  test('plans, builds, reviews and merges with every agent on Codex, the round agent on one thread', async () => {
     const { w, codex } = await open();
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
-    expect(listRuns(w, taskId).map((run) => [run.role, run.provider, run.model])).toEqual([
-      ['planner', 'codex', 'gpt-6-astra'],
-      ['builder', 'codex', 'gpt-6-astra'],
-      ['builder', 'codex', 'gpt-6-astra'],
-      ['reviewer', 'codex', 'gpt-6-astra'],
+    expect(listRuns(w, taskId).map((run) => [run.role, run.purpose, run.provider, run.model])).toEqual([
+      ['agent', 'plan', 'codex', 'gpt-6-astra'],
+      ['agent', 'build', 'codex', 'gpt-6-astra'],
+      ['agent', 'build', 'codex', 'gpt-6-astra'],
+      ['reviewer', undefined, 'codex', 'gpt-6-astra'],
     ]);
     expect(threads(codex)).toEqual([
       { sandbox: 'read-only', approvalPolicy: 'never', model: 'gpt-6-astra' },
-      { sandbox: 'danger-full-access', approvalPolicy: 'untrusted', model: 'gpt-6-astra' },
-      { sandbox: 'danger-full-access', approvalPolicy: 'untrusted', model: 'gpt-6-astra' },
       { sandbox: 'read-only', approvalPolicy: 'never', model: 'gpt-6-astra' },
+    ]);
+    const thread = listRuns(w, taskId)[0]?.sessionId;
+    expect(
+      codex
+        .requests('thread/resume')
+        .map((params) => [params.threadId, params.sandbox, params.approvalPolicy])
+    ).toEqual([
+      [thread, 'danger-full-access', 'untrusted'],
+      [thread, 'danger-full-access', 'untrusted'],
     ]);
     const task = w.task(taskId);
     expect(await w.branchLog(task.branch ?? '')).toEqual([
@@ -120,7 +127,7 @@ describe('a task on Codex', () => {
 
   test('a message while a Codex agent works steers its turn', async () => {
     const { w, codex } = await open();
-    codex.script('planner', [READY, { waitSteer: true }, { default: true }]);
+    codex.script('plan', [READY, { waitSteer: true }, { default: true }]);
     const taskId = await w.createTask();
     await untilScripted(w, codex);
     await w.until('the planner’s to-do to show', () => {
@@ -135,7 +142,7 @@ describe('a task on Codex', () => {
 
   test('cancelling the task interrupts the Codex turn and stops its app server', async () => {
     const { w, codex } = await open();
-    codex.script('planner', [READY, { hang: true }]);
+    codex.script('plan', [READY, { hang: true }]);
     const taskId = await w.createTask();
     await untilScripted(w, codex);
     await w.until('the session to link', () => listRuns(w, taskId).some((entry) => entry.sessionId !== null));
@@ -149,7 +156,7 @@ describe('a task on Codex', () => {
 describe('Codex sessions across restarts', () => {
   test('a graceful restart resumes the same Codex thread', async () => {
     const { w, codex } = await open();
-    codex.script('planner', [READY, { hang: true }]);
+    codex.script('plan', [READY, { hang: true }]);
     const taskId = await w.createTask();
     await w.until('the session to link', () => listRuns(w, taskId).some((entry) => entry.sessionId !== null));
     await untilScripted(w, codex);
@@ -162,16 +169,19 @@ describe('Codex sessions across restarts', () => {
 
   test('a thread Codex lost is restored from the transcript on a fresh thread', async () => {
     const { w, codex } = await open();
-    codex.script('planner', [READY, { say: 'I read the repository.' }, { hang: true }]);
+    codex.script('plan', [READY, { say: 'I read the repository.' }, { hang: true }]);
     const taskId = await w.createTask();
     await w.until('the session to link', () => listRuns(w, taskId).some((entry) => entry.sessionId !== null));
     await untilScripted(w, codex);
+    const lost = listRuns(w, taskId)[0]?.sessionId;
     codex.update((state) => {
-      state.missing = true;
+      state.threads = state.threads.filter((known) => known !== lost);
     });
     await w.restart();
     await w.untilStage(taskId, 'awaiting_review');
-    expect(codex.requests('thread/resume')).toHaveLength(1);
+    const thread = listRuns(w, taskId)[0]?.sessionId;
+    expect(thread).not.toBe(lost);
+    expect(codex.requests('thread/resume').map((params) => params.threadId)).toEqual([lost, thread, thread]);
     const restored = String(codex.requests('turn/start')[1]?.prompt);
     expect(restored).toContain('<handoff_transcript>');
     expect(restored).toContain('could not be resumed');
@@ -187,7 +197,7 @@ describe('Codex failures reach core as their class', () => {
   test('a usage limit waits for the reset of the window Codex reported spent', async () => {
     const { w, codex } = await open({ accounts: true });
     const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
-    codex.script('planner', [
+    codex.script('plan', [
       { limits: { primary: { usedPercent: 100, windowDurationMins: 300, resetsAt } } },
       { fail: { info: 'usageLimitExceeded', message: 'You hit your usage limit.' } },
     ]);
@@ -203,7 +213,7 @@ describe('Codex failures reach core as their class', () => {
 
   test('a signed-out Codex pauses the task and says to run codex login', async () => {
     const { w, codex } = await open();
-    codex.script('planner', [{ fail: { info: 'unauthorized', message: 'Unauthorized' } }]);
+    codex.script('plan', [{ fail: { info: 'unauthorized', message: 'Unauthorized' } }]);
     const taskId = await w.createTask();
     const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('The agent needs you to sign in');
@@ -212,7 +222,7 @@ describe('Codex failures reach core as their class', () => {
 
   test('a crashed app server resumes the step once on the same thread', async () => {
     const { w, codex } = await open();
-    codex.script('planner', [{ say: 'Reading.' }, { crash: 'codex panicked' }]);
+    codex.script('plan', [{ say: 'Reading.' }, { crash: 'codex panicked' }]);
     const taskId = await w.createTask();
     await w.untilStage(taskId, 'awaiting_review');
     const [crashed, resumed] = listRuns(w, taskId);
@@ -224,12 +234,12 @@ describe('Codex failures reach core as their class', () => {
 });
 
 describe('Claude and Codex together', () => {
-  test('moving a role from Claude to Codex mid-step hands the conversation over', async () => {
+  test('moving the agent from Claude to Codex mid-step hands the conversation over, and the round stays on Codex', async () => {
     const { w, codex } = await open({ claude: true });
-    w.agents.queue('planner', (agent) => agent.hang());
+    w.agents.queue('plan', (agent) => agent.hang());
     const taskId = await w.createTask();
-    await w.until('the Claude planner to start', () => w.agents.of('planner').length === 1);
-    await w.engine.dispatch({ type: 'settings.change', patch: { agentProviders: { planner: 'codex' } } });
+    await w.until('the Claude planner to start', () => w.agents.of('plan').length === 1);
+    await w.engine.dispatch({ type: 'settings.change', patch: { agentProviders: { agent: 'codex' } } });
     await w.restart();
     await w.until('the Codex planner', () => codex.requests('turn/start').length === 1);
     expect(String(codex.requests('turn/start')[0]?.prompt)).toContain('from another coding agent (Claude)');
@@ -240,18 +250,18 @@ describe('Claude and Codex together', () => {
       ['codex', 'gpt-6-astra'],
     ]);
     expect(run?.sessionProvider).toBe('codex');
-    expect(
-      listRuns(w, taskId)
-        .filter((other) => other.role === 'builder')
-        .map((other) => other.provider)
-    ).toEqual(['claude', 'claude']);
+    const builds = listRuns(w, taskId).filter((other) => other.purpose === 'build');
+    expect(builds.map((other) => [other.provider, other.sessionId])).toEqual([
+      ['codex', run?.sessionId ?? null],
+      ['codex', run?.sessionId ?? null],
+    ]);
   });
 
-  test('a Claude builder delegates a review to Codex, which stays read-only, and a reviewer cannot delegate writing', async () => {
+  test('a Claude agent delegates a review to Codex, which stays read-only, and a reviewer cannot delegate writing', async () => {
     const { w, codex } = await open({ claude: true });
     let reply = '';
     let refused = '';
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       reply = await agent.call('delegate_task', {
         brief: 'Check that a.txt says phase 1.',
         title: 'Check the file',
@@ -286,10 +296,10 @@ describe('Claude and Codex together', () => {
     expect(listRuns(w, taskId).filter((run) => isDelegatedRun(run))).toHaveLength(1);
   });
 
-  test('a Codex builder delegates to a Claude agent through Shinsa’s tools', async () => {
+  test('a Codex agent delegates to a Claude agent through Shinsa’s tools', async () => {
     const { w, codex } = await open({ claude: true });
-    await w.engine.dispatch({ type: 'settings.change', patch: { agentProviders: { builder: 'codex' } } });
-    codex.script('builder', [
+    await w.engine.dispatch({ type: 'settings.change', patch: { agentProviders: { agent: 'codex' } } });
+    codex.script('build', [
       {
         tool: 'delegate_task',
         args: {
@@ -302,21 +312,6 @@ describe('Claude and Codex together', () => {
       },
       { default: true },
     ]);
-    w.agents.queue('planner', async (agent) => {
-      await agent.call('propose_plan', {
-        goal: 'Add the two greeting files.',
-        phases: [
-          { title: 'Write the first file', detail: 'Create a.txt.' },
-          { title: 'Write the second file', detail: 'Create b.txt.' },
-        ],
-        behaviour: ['Both files exist.'],
-        approach: 'Write them.',
-        files: [],
-        out_of_scope: [],
-        verification: ['The checks pass.'],
-        questions: [],
-      });
-    });
     w.agents.queue('planner', async (agent) => {
       agent.say('The tests live in test/.');
     });

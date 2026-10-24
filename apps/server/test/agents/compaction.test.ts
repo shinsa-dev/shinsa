@@ -28,7 +28,8 @@ function idleState(patch: (state: ShinsaState) => void = () => undefined) {
   Object.assign(state.settings, { compaction: 'claude', idleCompaction: true });
   state.tasks['task-1'] = createTask({ stage: 'awaiting_review' });
   state.runs['run-1'] = createRun({
-    role: 'fixer',
+    role: 'agent',
+    purpose: 'fix',
     sessionId: 's1',
     endedAt: 5,
     outcome: 'completed',
@@ -47,8 +48,8 @@ describe('when an idle session compacts', () => {
     });
   });
 
-  test('an investigator, researcher or operator whose session the next message resumes compacts too', () => {
-    for (const role of ['investigator', 'researcher', 'operator'] as const) {
+  test('an answerer, investigator or researcher whose session the next message resumes compacts too', () => {
+    for (const role of ['answerer', 'investigator', 'researcher'] as const) {
       const state = idleState((draft) => {
         Object.assign(draft.tasks['task-1'] ?? {}, { stage: 'awaiting_proposal' });
         Object.assign(draft.runs['run-1'] ?? {}, { role });
@@ -126,7 +127,7 @@ describe('when an idle session compacts', () => {
       (state) => {
         state.runs['run-3'] = createRun({
           id: 'run-3',
-          role: 'builder',
+          role: 'agent',
           startedAt: 9,
           endedAt: 10,
           outcome: 'completed',
@@ -156,7 +157,7 @@ describe('when an idle session compacts', () => {
     const state = idleState((draft) => {
       draft.runs['run-4'] = createRun({
         id: 'run-4',
-        role: 'fixer',
+        role: 'builder',
         startedAt: 9,
         endedAt: 10,
         delegation: { parentRunId: 'run-1' },
@@ -242,7 +243,7 @@ describe('the compaction timer', () => {
       draft.runs['run-5'] = createRun({ id: 'run-5', role: 'reviewer', endedAt: 9, outcome: 'completed' });
       draft.runs['run-6'] = createRun({
         id: 'run-6',
-        role: 'fixer',
+        role: 'builder',
         delegation: { parentRunId: 'run-1' },
       } as never);
     });

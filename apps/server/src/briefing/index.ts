@@ -39,7 +39,7 @@ const BRIEFING_SYSTEM = [
   'Refer to other tasks by their titles in quotes. Never by number, position or id: no "item three", no "the first one", and never write an id outside the task field.',
   `note: one heads-up sentence of at most ${BRIEFING_LIMITS.note} characters, only when something needs attention beyond the order: a paused task, a decision that has waited for days, work waiting on another task. Otherwise null.`,
   'The note must never name or describe a task that is in now or next: the guide already says why each of those matters, so put that in its why. If the only heads-up is about one of them, the note is null.',
-  'Write whole sentences to the developer, not notes. Good why: "It has waited a day, and approving it lets the agent start on “Let the chat call tools”." Good note, about a decision not in now or next: "“Stop the preview flashing” is paused because the builder could not reproduce the flash."',
+  'Write whole sentences to the developer, not notes. Good why: "It has waited a day, and approving it lets the agent start on “Let the chat call tools”." Good note, about a decision not in now or next: "“Stop the preview flashing” is paused because the agent could not reproduce the flash."',
   'Plain, calm and specific. Sentence case, no greeting, no emoji, no em dashes, no exclamation marks.',
 ].join('\n');
 

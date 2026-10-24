@@ -90,6 +90,7 @@ async function boot(options: { idleMs?: number; compaction?: boolean }): Promise
       patch: { compaction: 'claude', idleCompaction: true },
     });
   }
+  agents.state = () => shinsa.engine.state;
   const candidate = await inspectRepo(repo.path);
   await shinsa.engine.dispatch({
     type: 'repo.register',
@@ -127,11 +128,11 @@ function openGate(world: Boot, taskId: string, predicate: (gate: Gate) => boolea
 describe('idle sessions, end to end', () => {
   test('a session waiting too long on an answer is released, and the answer resumes the same session', async () => {
     await withWorld({ idleMs: 30 }, async (world) => {
-      world.agents.queue('planner', async (agent) => {
+      world.agents.queue('plan', async (agent) => {
         const answer = await agent.call('ask', { question: 'Blue or green?' });
         throw new Error(`should have been released, got ${answer}`);
       });
-      world.agents.queue('planner', async (agent) => {
+      world.agents.queue('plan', async (agent) => {
         expect(agent.resumed).toBe(true);
         expect(agent.prompt).toContain('green');
         await agent.call('propose_plan', toolPlan(PLAN));
@@ -142,7 +143,7 @@ describe('idle sessions, end to end', () => {
         () => openGate(world, taskId, (open) => open.type === 'question') !== undefined
       );
       await until('the release', () => world.agents.sessions[0]?.cancelled === true);
-      const asker = Object.values(world.shinsa.engine.state.runs).find((run) => run.role === 'planner');
+      const asker = Object.values(world.shinsa.engine.state.runs).find((run) => run.purpose === 'plan');
       expect(asker?.endedAt).toBeNull();
       const gate = openGate(world, taskId, (entry) => entry.type === 'question') as Gate;
       await world.shinsa.engine.dispatch({
@@ -151,13 +152,13 @@ describe('idle sessions, end to end', () => {
         decision: 'reply',
         response: 'green',
       });
-      await until('the resumed planner', () => world.agents.of('planner').length === 2);
-      expect(world.agents.of('planner')[1]?.resume).toBe(world.agents.of('planner')[0]?.sessionId);
+      await until('the resumed planner', () => world.agents.of('plan').length === 2);
+      expect(world.agents.of('plan')[1]?.resume).toBe(world.agents.of('plan')[0]?.sessionId);
       await until('building', () => world.shinsa.engine.state.tasks[taskId]?.stage !== 'planning');
     });
   });
 
-  test('a finished builder’s large session is compacted once, two minutes before its cache expires', async () => {
+  test('the round agent’s large session is compacted once after its last phase, two minutes before its cache expires', async () => {
     await withWorld({ compaction: true }, async (world) => {
       const taskId = await createTask(world, 'Build the greeting');
       await until(
@@ -167,7 +168,7 @@ describe('idle sessions, end to end', () => {
       );
       await until('the compaction', () => world.compactions.length === 1);
       const builder = Object.values(world.shinsa.engine.state.runs)
-        .filter((run) => run.role === 'builder')
+        .filter((run) => run.purpose === 'build')
         .sort((a, b) => b.startedAt - a.startedAt)[0];
       expect(world.compactions).toEqual([builder?.sessionId ?? '']);
       await until(

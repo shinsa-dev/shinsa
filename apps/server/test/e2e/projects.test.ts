@@ -160,7 +160,7 @@ describe('projects', () => {
     expect(prompts[0]).toContain(
       'Project:\n- name: Basket\n- key: BAS\n- description: A shopping app: an iOS SDK and its server.\n'
     );
-    expect(prompts[0]).toContain('Repositories, most recently worked on first:');
+    expect(prompts[0]).toContain('Repositories:\n');
     expect(prompts[0]).toContain(`- ios-sdk: ${ios}`);
     expect(prompts[0]).toContain(`- server: ${server}`);
     expect(prompts[0]).not.toContain(`- app: ${realpathSync(w.repoPath)}`);

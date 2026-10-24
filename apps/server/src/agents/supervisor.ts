@@ -1,12 +1,11 @@
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
 import {
   type ChatEvent,
   type ChatNotice,
   type DelegatedRun,
   DomainError,
   isDelegatedRun,
-  isReadOnlyRole,
+  isReadOnlyRun,
   type LoadedExtensions,
   listLiveRuns,
   type Repo,
@@ -24,7 +23,7 @@ import {
   type ShinsaCommand,
   type Task,
 } from '@shinsa/core';
-import type { ServerConfig } from '../config/index.ts';
+import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
 import { isSameExtensionSet, type SessionExtensionSource } from '../extensions/index.ts';
 import {
   createIsolatedWorktree,
@@ -35,6 +34,7 @@ import {
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { EvidenceStore } from '../store/index.ts';
+import { type ReleaseClaim, Workspaces } from '../workspaces/index.ts';
 import {
   type AccountBroker,
   type AccountLease,
@@ -72,6 +72,7 @@ import { createShinsaTools, type ToolHandler } from './tools/index.ts';
 import type { Transcripts } from './transcripts/index.ts';
 import {
   resolveHandoffPlan,
+  resolveTurnBrief,
   resolveTurnPlan,
   resolveTurnPrompt,
   type TurnContext,
@@ -95,6 +96,7 @@ export interface SupervisorOptions {
   compaction?: IdleCompactionOptions;
   extensions?: SessionExtensionSource;
   manage?: ManageAccess;
+  workspaces?: Workspaces;
 }
 
 interface Workspace {
@@ -108,6 +110,7 @@ interface Turn {
   cwd: string;
   defaultBranch: string;
   prompt: string;
+  brief: string;
   provider: AgentProvider;
   active: ActiveRun;
 }
@@ -167,6 +170,8 @@ export class RunSupervisor {
   readonly #extensions: SessionExtensionSource | null;
   readonly #extensionSets: SessionExtensionSets;
   readonly #manages: boolean;
+  readonly #claims = new Map<string, AbortController>();
+  readonly workspaces: Workspaces;
   #shuttingDown = false;
 
   constructor(
@@ -180,6 +185,8 @@ export class RunSupervisor {
     this.#config = config;
     this.#transcripts = transcripts;
     this.#evidence = evidence;
+    this.workspaces =
+      options.workspaces ?? new Workspaces({ dataDir: config.dataDir, worktreesDir: config.worktreesDir });
     this.#providers = options.providers ?? new ProviderRegistry();
     this.#startSession = options.startSession ?? null;
     this.#maxRunMs = options.maxRunMs ?? MAX_RUN_MS;
@@ -206,6 +213,7 @@ export class RunSupervisor {
       schedules: options.schedules ?? null,
       minuteMs: options.minuteMs ?? MINUTE_MS,
       manage: options.manage ?? null,
+      workspaces: this.workspaces,
     });
     this.#manages = options.manage !== undefined;
     this.#deliveries = new Deliveries({
@@ -243,19 +251,22 @@ export class RunSupervisor {
     });
     this.#active.set(runId, active);
     let result: AgentSessionResult;
+    let release: ReleaseClaim | null = null;
     try {
       if (!delegated) await this.#compaction.settle(task.id);
       if (!delegated) await this.quiesce(task.id, runId);
+      release = await this.#claimWorkspace(run, task, workspace.repo);
       const current = this.#engine.state.runs[runId];
-      if (!current || current.endedAt !== null || this.#shuttingDown) return;
+      if (!release || !current || current.endedAt !== null || this.#shuttingDown) return;
       const prompt = override ?? run.prompt ?? '';
+      const brief = resolveTurnBrief(this.#engine.state, current, override);
       const { cwd, defaultBranch } = this.#prepareWorkspace(workspace);
-      const turn = { run: current, cwd, defaultBranch, prompt, provider, active };
+      const turn = { run: current, cwd, defaultBranch, prompt, brief, provider, active };
       result = await this.#prepareAndDrive(turn, workspace.repo);
-      if (isReadOnlyRole(run.role) && !isSharedCheckout(run, workspace))
-        await this.#discardEdits(cwd, run.role);
+      if (isReadOnlyRun(run) && !isSharedCheckout(run, workspace)) await this.#discardEdits(cwd, run.role);
       if (isDelegatedRun(current)) result = await this.#resolveDelegatedResult(current, cwd, result);
     } finally {
+      await release?.();
       this.#active.delete(runId);
       this.#questions.forget(runId);
       released.resolve();
@@ -283,10 +294,27 @@ export class RunSupervisor {
     ]);
   }
 
+  async #claimWorkspace(run: Run, task: Task, repo: Repo | null): Promise<ReleaseClaim | null> {
+    if (!repo || isReadOnlyRun(run)) return () => Promise.resolve();
+    const claim = new AbortController();
+    this.#claims.set(run.id, claim);
+    try {
+      return await this.workspaces.resolve(task).claim(repo, task, claim.signal);
+    } catch (error) {
+      if (!claim.signal.aborted) {
+        const summary = `Shinsa could not claim the checkout for this agent: ${describeError(error)}`;
+        await this.#end(run.id, { outcome: 'failed', summary }, null);
+      }
+      return null;
+    } finally {
+      this.#claims.delete(run.id);
+    }
+  }
+
   #resolveWorkspace(run: Run, task: Task): Workspace | null {
     if (task.repoId === null) {
       return {
-        cwd: join(this.#config.dataDir, 'scratch', task.id),
+        cwd: resolveScratchPath(this.#config.dataDir, task.id),
         repo: null,
         defaultBranch: SCRATCH_BRANCH,
       };
@@ -311,7 +339,7 @@ export class RunSupervisor {
 
   async #prepareAndDrive(turn: Turn, repo: Repo | null): Promise<AgentSessionResult> {
     const { run, provider } = turn;
-    if (isReadOnlyRole(run.role) && !resolveCapabilities(provider).planning.readOnly) {
+    if (isReadOnlyRun(run) && !resolveCapabilities(provider).planning.readOnly) {
       return {
         outcome: 'failed',
         summary: UNREADONLY,
@@ -529,8 +557,9 @@ export class RunSupervisor {
     const options = await this.#resolveSpeed(run, provider, active.lease, true);
     const session = startSession({
       role: run.role,
+      readOnly: isReadOnlyRun(run),
       cwd: turn.cwd,
-      prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt),
+      prompt: resolveTurnPrompt(this.#context(turn), plan, turn.prompt, turn.brief),
       model: this.#resolveModel(turn),
       resume: plan.resume,
       defaultBranch: turn.defaultBranch,
@@ -743,6 +772,7 @@ export class RunSupervisor {
   }
 
   async cancel(runId: string) {
+    this.#claims.get(runId)?.abort();
     const active = this.#active.get(runId);
     if (!active) return;
     active.stopping = true;
@@ -751,6 +781,7 @@ export class RunSupervisor {
 
   async interruptForShutdown() {
     this.#shuttingDown = true;
+    for (const claim of this.#claims.values()) claim.abort();
     const compacting = this.#compaction.stop();
     const live = [...this.#active.entries()];
     for (const [runId, active] of live) {
@@ -837,6 +868,7 @@ export class RunSupervisor {
     log.info('[Runs] Compacting an idle session before its prompt cache expires', { runId, sessionId });
     const session = provider.compactSession({
       role: run.role,
+      readOnly: isReadOnlyRun(run),
       cwd: this.#prepareWorkspace(workspace).cwd,
       model: run.attempts?.at(-1)?.model ?? run.model,
       resume: sessionId,

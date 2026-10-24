@@ -114,12 +114,12 @@ describe('accounts end to end', () => {
   test('a rejected turn moves across three accounts, one try each, and goes on where one has room', async () => {
     const { world, added } = await createBench(['a@example.com', 'b@example.com', 'c@example.com']);
     const later = Date.now() + 60 * 60_000;
-    world.agents.queue('planner', limitAt(later), limitAt(later + 1), plan());
+    world.agents.queue('plan', limitAt(later), limitAt(later + 1), plan());
     const taskId = await world.createTask();
     await world.untilStage(taskId, 'building');
-    const planners = world.agents.of('planner');
+    const planners = world.agents.of('plan');
     expect(planners.map((session) => session.account)).toEqual(added.map((account) => account.id));
-    const plannerRun = Object.values(world.state.runs).find((run) => run.role === 'planner');
+    const plannerRun = Object.values(world.state.runs).find((run) => run.purpose === 'plan');
     expect(listAttemptEmails(world, plannerRun?.id ?? '')).toEqual([
       'a@example.com',
       'b@example.com',
@@ -129,15 +129,15 @@ describe('accounts end to end', () => {
       { kind: 'account_switched', email: 'b@example.com', previous: 'a@example.com', reason: 'usage_limit' },
       { kind: 'account_switched', email: 'c@example.com', previous: 'b@example.com', reason: 'usage_limit' },
     ]);
-    await world.until('the builder', () => world.agents.of('builder').length > 0);
-    expect(world.agents.of('builder')[0]?.account).toBe(added[2]?.id);
+    await world.until('the builder', () => world.agents.of('build').length > 0);
+    expect(world.agents.of('build')[0]?.account).toBe(added[2]?.id);
   });
 
   test('when every account is spent the run waits for the first reset of the pool, then resumes there', async () => {
     const { world, added, clock } = await createBench(['a@example.com', 'b@example.com', 'c@example.com']);
     const now = Date.now();
     world.agents.queue(
-      'planner',
+      'plan',
       limitAt(now + 60 * 60_000),
       limitAt(now + RESET_IN_MS),
       limitAt(now + 30 * 60_000),
@@ -145,15 +145,15 @@ describe('accounts end to end', () => {
     );
     const taskId = await world.createTask();
     await world.until('the wait', () => world.task(taskId).usageWait?.status === 'armed');
-    expect(world.agents.of('planner')).toHaveLength(3);
+    expect(world.agents.of('plan')).toHaveLength(3);
     expect(world.task(taskId).usageWait).toMatchObject({ resetAt: now + RESET_IN_MS, autoResume: true });
     expect(world.task(taskId).stageReason).toBe('waiting for the usage limit to reset');
     expect(listOpenGates(world.state, taskId)).toHaveLength(0);
     await passReset(clock, now + RESET_IN_MS);
     await world.untilStage(taskId, 'building');
-    const resumed = world.agents.of('planner')[3];
+    const resumed = world.agents.of('plan')[3];
     expect(resumed?.account).toBe(added[1]?.id);
-    expect(resumed?.resume).toBe(world.agents.of('planner')[2]?.sessionId);
+    expect(resumed?.resume).toBe(world.agents.of('plan')[2]?.sessionId);
     expect(resumed?.prompt).toContain('The limit has reset.');
   });
 
@@ -161,7 +161,7 @@ describe('accounts end to end', () => {
     const { world, added, clock } = await createBench(['a@example.com', 'b@example.com']);
     const bound = added[1] as StoredAccount;
     const resetAt = Date.now() + RESET_IN_MS;
-    world.agents.queue('planner', limitAt(resetAt), plan());
+    world.agents.queue('plan', limitAt(resetAt), plan());
     const taskId = await world.createTask();
     await world.engine.dispatch({
       type: 'task.bind_account',
@@ -169,19 +169,19 @@ describe('accounts end to end', () => {
       account: { id: bound.id, email: bound.email },
     });
     await world.until('the wait', () => world.task(taskId).usageWait?.status === 'armed');
-    expect(world.agents.of('planner').map((session) => session.account)).toEqual([bound.id]);
+    expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id]);
     expect(world.task(taskId).usageWait?.account).toEqual({ id: bound.id, email: 'b@example.com' });
     await passReset(clock, resetAt);
     await world.untilStage(taskId, 'building');
-    expect(world.agents.of('planner').map((session) => session.account)).toEqual([bound.id, bound.id]);
-    await world.until('the builder', () => world.agents.of('builder').length > 0);
-    expect(world.agents.of('builder')[0]?.account).toBe(bound.id);
+    expect(world.agents.of('plan').map((session) => session.account)).toEqual([bound.id, bound.id]);
+    await world.until('the builder', () => world.agents.of('build').length > 0);
+    expect(world.agents.of('build')[0]?.account).toBe(bound.id);
   });
 
   test('the resume after a reset is sent once, however often the clock fires', async () => {
     const { world, clock } = await createBench(['a@example.com']);
     const resetAt = Date.now() + RESET_IN_MS;
-    world.agents.queue('planner', limitAt(resetAt), async (agent) => {
+    world.agents.queue('plan', limitAt(resetAt), async (agent) => {
       await agent.hang();
     });
     const taskId = await world.createTask();
@@ -189,25 +189,25 @@ describe('accounts end to end', () => {
     const wait = world.task(taskId).usageWait;
     if (!wait) throw new Error('no wait');
     await passReset(clock, resetAt);
-    await world.until('the resume', () => world.agents.of('planner').length === 2);
+    await world.until('the resume', () => world.agents.of('plan').length === 2);
     await world.engine.dispatch(
       { type: 'usage_wait.resume', taskId, waitId: wait.id },
       { id: resolveResumeCommandId(taskId, wait) }
     );
     await clock.fireDue();
-    expect(world.agents.of('planner')).toHaveLength(2);
+    expect(world.agents.of('plan')).toHaveLength(2);
   });
 
   test('a window that is still spent after its reset pauses the task instead of looping', async () => {
     const { world, clock } = await createBench(['a@example.com']);
     const resetAt = Date.now() + RESET_IN_MS;
-    world.agents.queue('planner', limitAt(resetAt), limitAt(resetAt));
+    world.agents.queue('plan', limitAt(resetAt), limitAt(resetAt));
     const taskId = await world.createTask();
     await world.until('the wait', () => world.task(taskId).usageWait?.status === 'armed');
     await passReset(clock, resetAt);
     const gate = await world.untilGate(taskId, 'failure');
     expect(gate.title).toBe('The agent hit its usage limit');
-    expect(world.agents.of('planner')).toHaveLength(2);
+    expect(world.agents.of('plan')).toHaveLength(2);
     expect(world.task(taskId).usageWait).toBeNull();
   });
 
@@ -215,7 +215,7 @@ describe('accounts end to end', () => {
     const { world, accounts, added } = await createBench(['a@example.com']);
     const only = added[0] as StoredAccount;
     world.agents.queue(
-      'planner',
+      'plan',
       () => {
         throw new AgentFailure(
           failure({
@@ -231,17 +231,17 @@ describe('accounts end to end', () => {
     const taskId = await world.createTask();
     const gate = await world.untilGate(taskId, 'sign_in');
     expect(gate).toMatchObject({ title: 'Sign in to Claude as a@example.com', account: { id: only.id } });
-    expect(world.agents.of('planner')).toHaveLength(1);
+    expect(world.agents.of('plan')).toHaveLength(1);
     expect(accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
     await accounts.startLogin(only.id);
     await world.untilStage(taskId, 'building');
-    expect(world.agents.of('planner').map((session) => session.account)).toEqual([only.id, only.id]);
+    expect(world.agents.of('plan').map((session) => session.account)).toEqual([only.id, only.id]);
   });
 
   test('a signed-out account hands the turn to another signed-in account straight away', async () => {
     const { world, added } = await createBench(['a@example.com', 'b@example.com']);
     world.agents.queue(
-      'planner',
+      'plan',
       () => {
         throw new AgentFailure(failure({ class: 'auth', message: 'Claude is signed out.', retryable: null }));
       },
@@ -249,7 +249,7 @@ describe('accounts end to end', () => {
     );
     const taskId = await world.createTask();
     await world.untilStage(taskId, 'building');
-    expect(world.agents.of('planner').map((session) => session.account)).toEqual(
+    expect(world.agents.of('plan').map((session) => session.account)).toEqual(
       added.map((account) => account.id)
     );
   });

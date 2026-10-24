@@ -35,7 +35,7 @@ describe('the pull request loop', () => {
     const w = await open();
     const taskId = await toPullRequest(w);
     w.github.update(1, { checks: 'passing', unresolved: 2 });
-    w.agents.queue('fixer', async (agent) => {
+    w.agents.queue('fix', async (agent) => {
       expect(agent.prompt).toContain('2 unresolved review comments');
       agent.write('comments.txt', 'addressed\n');
       await agent.call('complete_fix', { summary: 'Addressed both comments.' });
@@ -55,12 +55,12 @@ describe('the pull request loop', () => {
     const taskId = await toPullRequest(w);
     w.github.update(1, { checks: 'passing', mergeable: 'CONFLICTING' });
     let prompt = '';
-    w.agents.queue('fixer', async (agent) => {
+    w.agents.queue('fix', async (agent) => {
       prompt = agent.prompt;
       await agent.call('complete_fix', { summary: 'Resolved the conflict.' });
     });
     await w.sync(taskId);
-    await w.until('the fixer to run', () => w.agents.of('fixer').length === 1);
+    await w.until('the fixer to run', () => w.agents.of('fix').length === 1);
     expect(prompt).toContain('Merge the base branch into it');
     expect(prompt).toContain('never rebase');
   });
@@ -71,7 +71,7 @@ describe('the pull request loop', () => {
     w.github.update(1, { checks: 'passing' });
     await w.sync(taskId);
     await w.untilGate(taskId, 'merge');
-    w.agents.queue('fixer', (agent) => agent.hang());
+    w.agents.queue('fix', (agent) => agent.hang());
     w.github.update(1, { checks: 'failing' });
     await w.sync(taskId);
     await w.until('the merge gate to go', () => w.gates(taskId).length === 0);
@@ -113,7 +113,7 @@ describe('waiting on another task', () => {
     expect(w.task(child).worktreePath).toBeNull();
     expect(w.activeRuns(child)).toHaveLength(0);
 
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       expect(agent.prompt).toContain('which has merged');
       await agent.call(
         'propose_plan',
@@ -127,7 +127,7 @@ describe('waiting on another task', () => {
       );
     });
     w.agents.queue(
-      'builder',
+      'build',
       async (agent) => {
         agent.write('c.txt', 'on top\n');
         await agent.call('complete_phase', { summary: 'Phase one on top.', spots: [], judgement_calls: [] });
@@ -194,16 +194,16 @@ describe('plan approval', () => {
   test('with plan approval on, a large task waits for the plan and a revision resumes the planner', async () => {
     const w = await open();
     await w.engine.dispatch({ type: 'settings.change', patch: { approvePlans: true } });
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       await agent.call('propose_plan', toolPlan(PLAN));
     });
     const taskId = await w.createTask('Rework the whole greeting architecture');
     const plan = await w.untilGate(taskId, 'plan');
     expect(w.task(taskId).size).toBe('large');
     await w.answer(plan, 'revise', 'Only one file.');
-    await w.until('the planner to resume', () => w.agents.of('planner').length === 2);
-    expect(w.agents.of('planner')[1]?.resume).toBe(w.agents.of('planner')[0]?.sessionId);
-    expect(w.agents.of('planner')[1]?.prompt).toContain('Only one file.');
+    await w.until('the planner to resume', () => w.agents.of('plan').length === 2);
+    expect(w.agents.of('plan')[1]?.resume).toBe(w.agents.of('plan')[0]?.sessionId);
+    expect(w.agents.of('plan')[1]?.prompt).toContain('Only one file.');
     await w.answer(await w.untilGate(taskId, 'plan'), 'approve');
     await w.untilStage(taskId, 'awaiting_review');
   });
@@ -212,7 +212,7 @@ describe('plan approval', () => {
 describe('evidence and transcripts', () => {
   test('evidence files are copied into Shinsa and every session is transcribed', async () => {
     const w = await open();
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       const shot = join(agent.cwd, 'shot.png');
       writeFileSync(shot, 'png');
       await agent.call('attach_evidence', { kind: 'screenshot', title: 'The new file', path: shot });
@@ -234,7 +234,7 @@ describe('evidence and transcripts', () => {
   test('a hand-over that breaks the protocol is rejected with the reasons and can be fixed', async () => {
     const w = await open();
     let first = '';
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       first = await agent.call('propose_plan', { goal: 'x' }).catch((error: Error) => error.message);
       await agent.call('propose_plan', toolPlan(PLAN));
     });
@@ -256,19 +256,19 @@ describe('restarts', () => {
 
   test('an answer to a question whose agent died with the restart starts the step again with it', async () => {
     const w = await open();
-    w.agents.queue('planner', async (agent) => {
+    w.agents.queue('plan', async (agent) => {
       await agent.call('ask', { question: 'Which greeting?' });
     });
     const taskId = await w.createTask();
     const gate = await w.untilGate(taskId, 'question');
     await w.restart();
     await w.engine.settle();
-    expect(w.agents.of('planner')).toHaveLength(1);
+    expect(w.agents.of('plan')).toHaveLength(1);
     expect(w.gates(taskId)).toHaveLength(1);
     await w.answer(gate, 'reply', 'Hello.');
     await w.untilStage(taskId, 'awaiting_review');
-    const resumed = w.agents.of('planner')[1];
-    expect(resumed?.resume).toBe(w.agents.of('planner')[0]?.sessionId);
+    const resumed = w.agents.of('plan')[1];
+    expect(resumed?.resume).toBe(w.agents.of('plan')[0]?.sessionId);
     expect(resumed?.prompt).toContain('Their answer: Hello.');
   });
 });
@@ -286,7 +286,7 @@ describe('review fixes', () => {
     const w = await open();
     const taskId = await toPullRequest(w);
     w.github.update(1, { checks: 'failing' });
-    w.agents.queue('fixer', async (agent) => {
+    w.agents.queue('fix', async (agent) => {
       agent.write('ci.txt', 'fixed\n');
       await agent.call('complete_fix', { summary: 'Fixed CI.' });
     });
@@ -315,13 +315,13 @@ describe('review fixes', () => {
     let taskId = '';
     const isSecondWaiting = () => {
       const second = Object.values(w.state.runs).find(
-        (run) => run.taskId === taskId && run.role === 'builder' && run.phaseIndex === 1
+        (run) => run.taskId === taskId && run.purpose === 'build' && run.phaseIndex === 1
       );
       const key = `run.execute:${second?.id}`;
       return w.daemon.log.listEffectStatuses().some((row) => row.key === key && row.status === 'running');
     };
     w.agents.queue(
-      'builder',
+      'build',
       async (agent) => {
         agent.write('a.txt', 'a\n');
         await agent.call('complete_phase', { summary: 'One.', spots: [], judgement_calls: [] });

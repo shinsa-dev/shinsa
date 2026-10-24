@@ -1,4 +1,4 @@
-import { isReadOnlyRole, type RunFailure, resolveSteerPrompt } from '@shinsa/core';
+import { type RunFailure, resolveSteerPrompt } from '@shinsa/core';
 import { resolveDeferredInstructions } from '../../../extensions/index.ts';
 import { describeError, log } from '../../../log/index.ts';
 import { resolveForbiddenReason } from '../../policy.ts';
@@ -114,13 +114,12 @@ function resolveDeveloperInstructions(input: AgentSessionInput) {
 }
 
 function resolveThreadParams(input: AgentSessionInput, endpoint: ToolEndpoint): Params {
-  const readOnly = isReadOnlyRole(input.role);
   return {
     cwd: input.cwd,
     ...(input.model ? { model: input.model } : {}),
     serviceTier: input.fastMode ? FAST_TIER : null,
-    approvalPolicy: readOnly ? 'never' : 'untrusted',
-    sandbox: readOnly ? 'read-only' : 'danger-full-access',
+    approvalPolicy: input.readOnly ? 'never' : 'untrusted',
+    sandbox: input.readOnly ? 'read-only' : 'danger-full-access',
     developerInstructions: resolveDeveloperInstructions(input),
     config: {
       ...resolveCodexServerConfig(input.extensions),
@@ -146,7 +145,6 @@ export function startCodexSession(
 ): AgentSession {
   const runtime = options.runtime ?? CODEX_RUNTIME;
   const now = options.now ?? Date.now;
-  const readOnly = isReadOnlyRole(input.role);
   const timeoutMs = options.requestTimeoutMs ?? REQUEST_TIMEOUT_MS;
   const compacting = mode === 'compact';
   const recorder = createCodexRecorder(input.onEntry, input.storeImage, compacting ? 'manual' : 'auto');
@@ -346,7 +344,7 @@ export function startCodexSession(
         return Promise.resolve({ decision: reason ? 'decline' : 'accept' });
       }
       case 'item/fileChange/requestApproval':
-        return Promise.resolve({ decision: readOnly ? 'decline' : 'accept' });
+        return Promise.resolve({ decision: input.readOnly ? 'decline' : 'accept' });
       case 'mcpServer/elicitation/request': {
         const ours = params.serverName === 'shinsa';
         return Promise.resolve({

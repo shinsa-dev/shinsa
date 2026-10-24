@@ -74,7 +74,8 @@ export function createRun(overrides: Partial<Run> = {}): Run {
   return {
     id: 'run-1',
     taskId: 'task-1',
-    role: 'builder',
+    role: 'agent',
+    purpose: 'build',
     status: 'running',
     prompt: 'Build phase 1',
     provider: 'claude',

@@ -54,7 +54,7 @@ function createCore() {
   };
 }
 
-async function building(role: 'builder' | 'planner' = 'builder') {
+async function building(purpose: 'build' | 'plan' = 'build') {
   const core = createCore();
   for (const name of ['app', 'admin']) {
     await core.dispatch({
@@ -83,9 +83,9 @@ async function building(role: 'builder' | 'planner' = 'builder') {
   });
   await core.dispatch({ type: 'config.record', taskId, problems: [] });
   await core.dispatch({ type: 'worktree.ready', taskId, path: '/wt/scroll', branch: 'fix/scroll' });
-  const planner = Object.values(core.state.runs)[0] as Run;
-  if (role === 'builder')
-    await core.dispatch({ type: 'agent.propose_plan', runId: planner.id, document: SPEC });
+  const planning = Object.values(core.state.runs)[0] as Run;
+  if (purpose === 'build')
+    await core.dispatch({ type: 'agent.propose_plan', runId: planning.id, document: SPEC });
   const run = Object.values(core.state.runs).find((candidate) => candidate.endedAt === null) as Run;
   return { core, taskId, run };
 }
@@ -138,8 +138,9 @@ function children(state: ShinsaState) {
 }
 
 describe('delegate_task', () => {
-  test('starts the task on the parent’s role, tells the chat, and returns its status at once', async () => {
+  test('starts a builder for a building agent, tells the chat, and returns its status at once', async () => {
     const { core, run } = await building();
+    expect(run).toMatchObject({ role: 'agent', purpose: 'build' });
     const { call, started } = createCall(core, run.id);
     const status = parse(await handleOrchestrationTool('delegate_task', { brief: 'Check the copy.' }, call));
     const [child] = children(core.state);
@@ -204,12 +205,13 @@ describe('delegate_task', () => {
     ).rejects.toThrow('There is no agent provider "nope". Leave provider unset to use the default.');
   });
 
-  test('passes the core’s refusal through: a planner cannot delegate a builder', async () => {
-    const { core, run } = await building('planner');
+  test('passes the core’s refusal through: an agent that is planning cannot delegate a builder', async () => {
+    const { core, run } = await building('plan');
+    expect(run).toMatchObject({ role: 'agent', purpose: 'plan' });
     const { call } = createCall(core, run.id);
     await expect(
       handleOrchestrationTool('delegate_task', { brief: 'Build it.', role: 'builder' }, call)
-    ).rejects.toThrow('A planner cannot change files');
+    ).rejects.toThrow('While you plan you cannot change files');
     const status = parse(await handleOrchestrationTool('delegate_task', { brief: 'Research it.' }, call));
     expect(status.role).toBe('planner');
   });

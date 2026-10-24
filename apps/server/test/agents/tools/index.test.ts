@@ -65,7 +65,7 @@ describe('the shinsa tool server', () => {
 
   test('a call reaches the handler, errors come back as tool errors, and other roles’ tools are refused', async () => {
     const seen: unknown[] = [];
-    const { call } = readHandlers('planner', (name, input, _signal, requestId) => {
+    const { call } = readHandlers('agent', (name, input, _signal, requestId) => {
       seen.push([name, input, requestId]);
       if (name === 'note') return Promise.reject(new Error('note is required.'));
       return Promise.resolve('Handed over.');
@@ -81,8 +81,8 @@ describe('the shinsa tool server', () => {
       content: [{ type: 'text', text: 'note is required.' }],
       isError: true,
     });
-    expect(await call(request('complete_phase'), extra)).toEqual({
-      content: [{ type: 'text', text: 'complete_phase is not available to the planner.' }],
+    expect(await call(request('report_review'), extra)).toEqual({
+      content: [{ type: 'text', text: 'report_review is not available to the agent.' }],
       isError: true,
     });
     expect(seen).toEqual([

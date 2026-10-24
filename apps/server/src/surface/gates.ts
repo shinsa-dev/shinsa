@@ -40,7 +40,7 @@ const QUESTION: GateTarget = { describe: 'question from an agent', type: 'questi
 
 const DONE_TEXT: Record<GateDecision, string> = {
   approve: 'Approved.',
-  revise: 'Asked for changes. A fixer picks it up.',
+  revise: 'Asked for changes. The agent picks them up.',
   reject: 'Rejected.',
   reply: 'Answered. The agent carries on.',
   waive: 'Starting without checks.',
@@ -161,7 +161,7 @@ export const GATE_SPECS: SurfaceSpec[] = [
     PLAN,
     'approve'
   ),
-  defineWordsShortcut(['plans', 'revise'], 'Ask the planner to revise the plan.', PLAN, 'revise'),
+  defineWordsShortcut(['plans', 'revise'], 'Ask the agent to revise the plan.', PLAN, 'revise'),
   defineGateShortcut(['plans', 'reject'], 'Reject the plan and cancel the task.', PLAN, 'reject'),
   defineGateShortcut(
     ['reviews', 'approve'],
@@ -169,7 +169,7 @@ export const GATE_SPECS: SurfaceSpec[] = [
     REVIEW,
     'approve'
   ),
-  defineWordsShortcut(['reviews', 'revise'], 'Request changes; a fixer makes them.', REVIEW, 'revise'),
+  defineWordsShortcut(['reviews', 'revise'], 'Request changes; the agent makes them.', REVIEW, 'revise'),
   defineGateShortcut(['reviews', 'reject'], 'Reject the changes and cancel the task.', REVIEW, 'reject'),
   defineCommand({
     path: ['reviews', 'verdicts'],
@@ -181,7 +181,7 @@ export const GATE_SPECS: SurfaceSpec[] = [
       TASK_FIELD,
       { name: 'fix', kind: 'list', description: 'Finding numbers to fix (from 0).' },
       { name: 'dismiss', kind: 'list', description: 'Finding numbers to dismiss (from 0).' },
-      { name: 'note', kind: 'text', description: 'A note for the fixer.' },
+      { name: 'note', kind: 'text', description: 'A note for the agent.' },
     ],
     build: async (values, client) => {
       const verdicts = buildVerdicts(values);
@@ -200,7 +200,7 @@ export const GATE_SPECS: SurfaceSpec[] = [
     humanOnly: true,
     fields: [
       TASK_FIELD,
-      { name: 'notes', kind: 'text', positional: 'rest', description: 'Notes for the operator.' },
+      { name: 'notes', kind: 'text', positional: 'rest', description: 'Notes for the agent.' },
     ],
     build: (values, client) => {
       const notes = readValue(values, 'notes') || null;

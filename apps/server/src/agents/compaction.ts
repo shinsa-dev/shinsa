@@ -15,14 +15,7 @@ import type { SessionContext } from './providers/index.ts';
 
 export const COMPACTION_NEAR_LIMIT = 0.8;
 
-const RESUMED_ROLES = new Set<RunRole>([
-  'builder',
-  'fixer',
-  'answerer',
-  'investigator',
-  'researcher',
-  'operator',
-]);
+const RESUMED_ROLES = new Set<RunRole>(['agent', 'answerer', 'investigator', 'researcher']);
 
 interface CompactionWindow {
   runId: string;

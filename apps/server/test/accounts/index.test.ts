@@ -472,7 +472,7 @@ describe('inspect mode', () => {
     const world = createWorld({ root: live.root, inspect: true });
     await world.accounts.start();
     expect(world.accounts.snapshot().accounts.map((listed) => listed.email)).toEqual(['seen@example.com']);
-    const refused = { code: 'inspect_mode' };
+    const refused = { code: 'inspect_read_only' };
     await expect(world.accounts.refresh()).rejects.toMatchObject(refused);
     expect(() => world.accounts.update(account.id, { paused: true })).toThrow(
       'Start it without SHINSA_INSPECT to sign in, refresh or change accounts.'

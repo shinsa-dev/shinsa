@@ -49,6 +49,7 @@ interface FakeState {
   standardOnly?: boolean;
   account?: Json | null;
   compact?: 'fails' | 'noTurn';
+  totals?: Record<string, Record<string, number>>;
 }
 
 interface Thread {
@@ -60,6 +61,7 @@ interface Thread {
   ephemeral: boolean;
   client: Client | null;
   role: string | null;
+  offset: Record<string, number>;
 }
 
 interface Turn {
@@ -89,12 +91,29 @@ const PLAN = {
 };
 
 const ROLE_TOOLS: [string, string][] = [
-  ['propose_plan', 'planner'],
-  ['complete_phase', 'builder'],
+  ['propose_plan', 'agent'],
   ['report_review', 'reviewer'],
-  ['complete_fix', 'fixer'],
   ['answer', 'answerer'],
 ];
+
+const PURPOSE_MARKERS: [string, RegExp][] = [
+  ['build', /Now build (phase \d+ of|the whole change)/g],
+  ['operate', /Now run the operation in the plan/g],
+  ['fix', /The checks failed|The agent review found|The human looked at the work|needs work before the human can merge/g],
+];
+
+function resolveScriptKey(turn: Turn) {
+  const role = turn.thread.role ?? 'delegated';
+  if (role !== 'agent') return role;
+  if (turn.thread.sandbox === 'read-only') return 'plan';
+  let found = 'build';
+  let at = -1;
+  for (const [purpose, marker] of PURPOSE_MARKERS) {
+    const index = [...turn.prompt.matchAll(marker)].at(-1)?.index ?? -1;
+    if (index > at) [found, at] = [purpose, index];
+  }
+  return found;
+}
 
 const statePath = Bun.env.FAKE_CODEX_STATE;
 const args = Bun.argv.slice(2);
@@ -190,6 +209,7 @@ function openThread(id: string, params: Json): Thread {
     ephemeral: params.ephemeral === true,
     client: null,
     role: null,
+    offset: readState().totals?.[id] ?? {},
   };
   threads.set(id, thread);
   return thread;
@@ -309,7 +329,7 @@ function usage(
   turn: Turn,
   step: { input: number; cached?: number; written?: number; output: number; window?: number; last?: number; thread?: string }
 ) {
-  const total = {
+  const own = {
     totalTokens: step.input + step.output,
     inputTokens: step.input,
     cachedInputTokens: step.cached ?? 0,
@@ -317,12 +337,21 @@ function usage(
     outputTokens: step.output,
     reasoningOutputTokens: 0,
   };
+  const offset = step.thread ? {} : turn.thread.offset;
+  const total = Object.fromEntries(
+    Object.entries(own).map(([key, value]) => [key, value + (offset[key] ?? 0)])
+  ) as typeof own;
+  if (!step.thread) {
+    withState((state) => {
+      state.totals = { ...state.totals, [turn.thread.id]: total };
+    });
+  }
   notify('thread/tokenUsage/updated', {
     threadId: step.thread ?? turn.thread.id,
     turnId: turn.id,
     tokenUsage: {
       total,
-      last: { ...total, totalTokens: step.last ?? step.input + step.output },
+      last: { ...own, totalTokens: step.last ?? step.input + step.output },
       modelContextWindow: step.window ?? null,
     },
   });
@@ -332,11 +361,11 @@ async function runDefault(turn: Turn) {
   await connect(turn.thread);
   say(turn, 'Working on it.');
   usage(turn, { input: 1_000, cached: 200, output: 100, window: 200_000, last: 1_100 });
-  switch (turn.thread.role) {
-    case 'planner':
+  switch (resolveScriptKey(turn)) {
+    case 'plan':
       return callTool(turn, 'propose_plan', PLAN);
-    case 'builder': {
-      const phase = Number(/builder for phase (\d+)/.exec(turn.prompt)?.[1] ?? 1);
+    case 'build': {
+      const phase = Number([...turn.prompt.matchAll(/Now build phase (\d+) of/g)].at(-1)?.[1] ?? 1);
       await writeFile(turn, phase === 1 ? 'a.txt' : `${String.fromCharCode(96 + phase)}.txt`, `phase ${phase}\n`);
       return callTool(turn, 'complete_phase', {
         summary: `Wrote the file for phase ${phase}.`,
@@ -346,8 +375,10 @@ async function runDefault(turn: Turn) {
     }
     case 'reviewer':
       return callTool(turn, 'report_review', { findings: [] });
-    case 'fixer':
+    case 'fix':
       return callTool(turn, 'complete_fix', { summary: 'Fixed it.' });
+    case 'operate':
+      return callTool(turn, 'report_outcome', { outcome: 'Ran the cleanup script.' });
     case 'answerer':
       return callTool(turn, 'answer', { answer: 'It lives in a.txt.' });
     default:
@@ -356,10 +387,9 @@ async function runDefault(turn: Turn) {
   }
 }
 
-function claimScript(thread: Thread): Step[] | null {
+function claimScript(turn: Turn): Step[] | null {
   return withState((state) => {
-    const role = thread.role ?? 'delegated';
-    const own = state.scripts[role];
+    const own = state.scripts[resolveScriptKey(turn)];
     if (own && own.length > 0) return own.shift() ?? null;
     const any = state.scripts['*'];
     if (any && any.length > 0) return any.shift() ?? null;
@@ -519,8 +549,8 @@ async function runTurn(turn: Turn) {
     }
     notify('turn/started', { threadId: turn.thread.id, turn: { id: turn.id, items: [], status: 'inProgress', error: null } });
     await connect(turn.thread);
-    const script = claimScript(turn.thread);
-    log({ turn: turn.id, role: turn.thread.role, script: script ? 'scripted' : 'default' });
+    const script = claimScript(turn);
+    log({ turn: turn.id, role: resolveScriptKey(turn), script: script ? 'scripted' : 'default' });
     if (!script) {
       const stopped = await runDefault(turn);
       if (stopped) {

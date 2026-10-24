@@ -12,7 +12,9 @@ import {
   type PlanDocument,
   type Run,
   type RunFailure,
+  type RunPurpose,
   type RunRole,
+  type ShinsaState,
   type Task,
   type TaskShape,
 } from '@shinsa/core';
@@ -55,10 +57,15 @@ export const IMPACT =
 
 const IMPACT_REQUIRED = '`impact` is required';
 
+export type ScriptKey = Exclude<RunRole, 'agent'> | RunPurpose;
+
 export interface AgentContext {
   role: RunRole;
+  key: ScriptKey;
+  phaseIndex: number | null;
+  round: number;
+  readOnly: boolean;
   prompt: string;
-  brief: string;
   cwd: string;
   sessionId: string;
   resumed: boolean;
@@ -87,6 +94,9 @@ export type AgentScript = (agent: AgentContext) => Promise<void>;
 
 interface SessionRecord {
   role: RunRole;
+  key: ScriptKey;
+  runId: string | null;
+  readOnly: boolean;
   prompt: string;
   resume: string | null;
   sessionId: string;
@@ -97,22 +107,30 @@ interface SessionRecord {
   account: string | null;
 }
 
-const DEFAULT_SCRIPTS: Record<RunRole, AgentScript> = {
-  planner: async (agent) => {
+const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
+  plan: async (agent) => {
     const operates = agent.prompt.includes(IMPACT_REQUIRED);
     await agent.call('propose_plan', toolPlan(operates ? { ...PLAN, impact: IMPACT } : PLAN));
   },
-  builder: async (agent) => {
-    const match = /builder for phase (\d+)/.exec(agent.brief);
-    const phase = Number(match?.[1] ?? 1);
+  build: async (agent) => {
+    const phase = (agent.phaseIndex ?? 0) + 1;
     agent.write(phase === 1 ? 'a.txt' : `${String.fromCharCode(96 + phase)}.txt`, `phase ${phase}\n`);
     await agent.call('complete_phase', phaseReport(`Wrote the file for phase ${phase}.`));
   },
+  fix: async (agent) => {
+    await agent.call('complete_fix', { summary: 'Fixed it.' });
+  },
+  operate: async (agent) => {
+    await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
+  },
+  planner: async (agent) => {
+    agent.say('Read the code; nothing to add.');
+  },
+  builder: async (agent) => {
+    agent.say('Made the change.');
+  },
   reviewer: async (agent) => {
     await agent.call('report_review', { findings: [] });
-  },
-  fixer: async (agent) => {
-    await agent.call('complete_fix', { summary: 'Fixed it.' });
   },
   answerer: async (agent) => {
     await agent.call('answer', { answer: 'It lives in a.txt.' });
@@ -123,10 +141,62 @@ const DEFAULT_SCRIPTS: Record<RunRole, AgentScript> = {
   researcher: async (agent) => {
     await agent.call('submit_report', { report: 'Plain text files are the simplest option.' });
   },
-  operator: async (agent) => {
-    await agent.call('report_outcome', { outcome: 'Ran the cleanup script.' });
-  },
 };
+
+interface Placement {
+  key: ScriptKey;
+  phaseIndex: number | null;
+  round: number;
+  runId: string | null;
+}
+
+const CONTINUE_MARKER = 'Shinsa restarted while you were working';
+
+const PURPOSE_MARKERS: [RunPurpose, RegExp][] = [
+  ['build', /Now build (phase \d+ of|the whole change)/g],
+  ['operate', /Now run the operation in the plan/g],
+  [
+    'fix',
+    /The checks failed|The agent review found|The human looked at the work|needs work before the human can merge/g,
+  ],
+];
+
+function selectAgentRun(state: ShinsaState, input: AgentSessionInput) {
+  const live = Object.values(state.runs).filter(
+    (run) => run.role === input.role && !run.delegation && run.endedAt === null
+  );
+  return live.find((run) => state.tasks[run.taskId]?.worktreePath === input.cwd) ?? live.at(-1) ?? null;
+}
+
+function readPhaseIndex(prompt: string) {
+  const phases = [...prompt.matchAll(/Now build phase (\d+) of/g)];
+  const last = phases.at(-1)?.[1];
+  return last ? Number(last) - 1 : 0;
+}
+
+function readPurpose(prompt: string): RunPurpose {
+  let found: RunPurpose = 'build';
+  let at = -1;
+  for (const [purpose, marker] of PURPOSE_MARKERS) {
+    const index = [...prompt.matchAll(marker)].at(-1)?.index ?? -1;
+    if (index > at) [found, at] = [purpose, index];
+  }
+  return found;
+}
+
+function readRound(prompt: string) {
+  return Number(/This is round (\d+) of the task/.exec(prompt)?.[1] ?? 1);
+}
+
+function resolvePlacement(input: AgentSessionInput, run: Run | null, previous: Placement | null): Placement {
+  const round = run?.round ?? readRound(input.prompt);
+  if (input.role !== 'agent') return { key: input.role, phaseIndex: null, round, runId: null };
+  if (run?.purpose) return { key: run.purpose, phaseIndex: run.phaseIndex ?? null, round, runId: run.id };
+  if (input.readOnly) return { key: 'plan', phaseIndex: null, round, runId: null };
+  if (previous && input.prompt.includes(CONTINUE_MARKER)) return previous;
+  const key = readPurpose(input.prompt);
+  return { key, phaseIndex: key === 'build' ? readPhaseIndex(input.prompt) : null, round, runId: null };
+}
 
 export function toolPlan(plan: PlanDocument) {
   return {
@@ -159,23 +229,24 @@ export class FakeAgents {
   readonly lost = new Set<string>();
   readonly #pause: () => number;
   readonly #controllers: AbortController[] = [];
-  readonly #queued = new Map<RunRole, AgentScript[]>();
-  readonly #briefs: Map<string, string>;
+  readonly #queued = new Map<ScriptKey, AgentScript[]>();
+  readonly #placements: Map<string, Placement>;
   readonly #memoryPath: string | null;
   #counter = 0;
+  state: (() => ShinsaState | null) | null = null;
 
   constructor(pause: () => number = () => 0, memoryPath: string | null = null) {
     this.#pause = pause;
     this.#memoryPath = memoryPath;
     const remembered =
       memoryPath && existsSync(memoryPath) ? JSON.parse(readFileSync(memoryPath, 'utf8')) : {};
-    this.#briefs = new Map(Object.entries(remembered as Record<string, string>));
+    this.#placements = new Map(Object.entries(remembered as Record<string, Placement>));
   }
 
-  #remember(sessionId: string, brief: string) {
-    this.#briefs.set(sessionId, brief);
+  #remember(sessionId: string, placement: Placement) {
+    this.#placements.set(sessionId, placement);
     if (!this.#memoryPath) return;
-    writeFileSync(`${this.#memoryPath}.tmp`, JSON.stringify(Object.fromEntries(this.#briefs)));
+    writeFileSync(`${this.#memoryPath}.tmp`, JSON.stringify(Object.fromEntries(this.#placements)));
     renameSync(`${this.#memoryPath}.tmp`, this.#memoryPath);
   }
 
@@ -184,8 +255,8 @@ export class FakeAgents {
     if (ms > 0) await Bun.sleep(ms);
   }
 
-  queue(role: RunRole, ...scripts: AgentScript[]) {
-    this.#queued.set(role, [...(this.#queued.get(role) ?? []), ...scripts]);
+  queue(key: ScriptKey, ...scripts: AgentScript[]) {
+    this.#queued.set(key, [...(this.#queued.get(key) ?? []), ...scripts]);
   }
 
   abortAll() {
@@ -207,19 +278,25 @@ export class FakeAgents {
     };
   }
 
-  of(role: RunRole) {
-    return this.sessions.filter((session) => session.role === role);
+  of(key: ScriptKey) {
+    return this.sessions.filter((session) => session.key === key);
   }
 
   start = (input: AgentSessionInput): AgentSession => {
-    const script = this.#queued.get(input.role)?.shift() ?? DEFAULT_SCRIPTS[input.role];
+    const state = input.role === 'agent' ? (this.state?.() ?? null) : null;
+    const run = state ? selectAgentRun(state, input) : null;
     const sessionId = input.resume ?? `session-${++this.#counter}-${Bun.randomUUIDv7()}`;
-    const brief = this.#briefs.get(sessionId) ?? input.prompt;
-    this.#remember(sessionId, brief);
+    const placement = resolvePlacement(input, run, this.#placements.get(sessionId) ?? null);
+    this.#remember(sessionId, placement);
+    const { key } = placement;
+    const script = this.#queued.get(key)?.shift() ?? DEFAULT_SCRIPTS[key];
     const controller = new AbortController();
     this.#controllers.push(controller);
     const record: SessionRecord = {
       role: input.role,
+      key,
+      runId: placement.runId,
+      readOnly: input.readOnly,
       prompt: input.prompt,
       resume: input.resume,
       sessionId,
@@ -244,8 +321,11 @@ export class FakeAgents {
       });
     const agent: AgentContext = {
       role: input.role,
+      key,
+      phaseIndex: placement.phaseIndex,
+      round: placement.round,
+      readOnly: input.readOnly,
       prompt: input.prompt,
-      brief,
       cwd: input.cwd,
       sessionId,
       resumed: input.resume !== null,
@@ -498,6 +578,7 @@ export class World {
   boot() {
     const log = new EventLog(this.config.databasePath);
     const engine = new Engine(log);
+    this.agents.state = () => engine.state;
     const transcripts = new Transcripts(this.config.transcriptsDir);
     const evidence = new EvidenceStore(this.config.evidenceDir);
     const runs = new RunSupervisor(engine, this.config, transcripts, evidence, {

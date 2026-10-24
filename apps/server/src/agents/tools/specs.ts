@@ -46,7 +46,7 @@ export const TOOL_SPECS = {
   propose_plan: {
     name: 'propose_plan',
     description:
-      'Hand the plan over, then stop without restating it. Each phase is then built by its own agent. Every field has a hard limit; a plan that breaks one is rejected with the reasons.',
+      'Hand the plan over, then stop without restating it. You then build each phase yourself, in this same conversation. Every field has a hard limit; a plan that breaks one is rejected with the reasons.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -95,7 +95,7 @@ export const TOOL_SPECS = {
         ),
         evidence: {
           type: 'array',
-          description: `The kinds of evidence the builders attach with \`attach_evidence\` before the human reviews, each named once. Shinsa refuses the last phase until each kind is attached. ${CODE_ONLY}`,
+          description: `The kinds of evidence you attach with \`attach_evidence\` before the human reviews, each named once. Shinsa refuses the last phase until each kind is attached. ${CODE_ONLY}`,
           maxItems: PLAN_EVIDENCE_KINDS.length,
           uniqueItems: true,
           items: { type: 'string', enum: [...PLAN_EVIDENCE_KINDS] },

@@ -51,6 +51,7 @@ async function boot(): Promise<Boot> {
     timeZone: 'UTC',
     scheduleClock: { minDelayMs: 0, maxDelayMs: 20 },
   });
+  agents.state = () => shinsa.engine.state;
   const candidate = await inspectRepo(repo.path);
   await shinsa.engine.dispatch({
     type: 'repo.register',
@@ -122,7 +123,7 @@ describe('a schedule, end to end', () => {
     await withWorld(async (world) => {
       const replies: string[] = [];
       world.agents.queue(
-        'planner',
+        'plan',
         scheduling(
           { name: 'Audit', message: 'Audit the dependencies.', every_minutes: 60, new_task: true },
           replies
@@ -165,7 +166,7 @@ describe('a signed webhook and its secret, end to end', () => {
   test('a verified delivery starts a task; a forgery and a replay do not; the secret is never written down', async () => {
     await withWorld(async (world) => {
       const replies: string[] = [];
-      world.agents.queue('planner', async (agent) => {
+      world.agents.queue('plan', async (agent) => {
         const saved = await agent.call('request_secret', {
           label: 'GitHub webhook secret',
           reason: 'Paste the secret from the repository’s webhook settings.',

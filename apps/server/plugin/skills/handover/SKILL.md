@@ -10,12 +10,12 @@ limits, published in its schema; Shinsa rejects a hand-over that breaks one and 
 call the tool again. The human sees a hand-over in the chat as soon as you make it, so stop after it: never
 announce, repeat or summarise it, and never say your turn is over. This page is how to fill the fields well.
 
-## The plan (`propose_plan`, planner)
+## The plan (`propose_plan`, while you plan)
 
 | Field | Fill it with |
 |---|---|
 | goal | The outcome for the user, one or two sentences |
-| phases | The work as 2 to 8 phases in the order they will be done, each a `title` of a few words and a one-sentence `detail`. Each phase is built by its own agent and committed on its own |
+| phases | The work as 2 to 8 phases in the order you will build them, each a `title` of a few words and a one-sentence `detail`. You build each phase yourself after the plan is in, and Shinsa commits each on its own |
 | behaviour | One observable behaviour per item, as true after the change |
 | approach | How it will be built and the choices you made on the way: modules and data, not code |
 | files | Each file that changes and what changes in it |
@@ -29,7 +29,7 @@ Set these only when they apply:
   how to undo it.
 - `operation`: for a task that both changes code and runs an operation, the operation's steps in order, each with how
   to check it worked.
-- `evidence`: the kinds of evidence the builders must attach before the human reviews (`screenshot`, `recording`,
+- `evidence`: the kinds of evidence you must attach before the human reviews (`screenshot`, `recording`,
   `test`, `note`, `preview`). A change the user sees asks for a screenshot. Shinsa refuses the last phase until each
   kind is attached.
 - `checks`: up to 6 commands Shinsa runs in the worktree after the repository's own checks, when those do not prove
@@ -41,7 +41,7 @@ When the steps Shinsa chose do not fit the request, call `reshape_task` instead 
 answer, an investigation or research, or `steps` to compose it from the building blocks the tool lists, with a
 one-sentence `reason`. Shinsa checks the steps and returns every problem.
 
-## A phase (`complete_phase`, builder)
+## A phase (`complete_phase`, while you build)
 
 The human reviews the work phase by phase: Shinsa builds the review from every phase you hand over, in plan order.
 
@@ -58,7 +58,7 @@ The human reviews the work phase by phase: Shinsa builds the review from every p
 Attach evidence with `attach_evidence` before the last phase (the `evidence` skill). Shinsa commits each phase; never
 commit yourself.
 
-## A fix (`complete_fix`, fixer)
+## A fix (`complete_fix`, while you fix)
 
 One `summary`: what you changed and, for anything you chose not to change, why. Shinsa commits it, then runs the checks
 and the agent review again, or pushes it to the pull request.
@@ -76,7 +76,7 @@ means you found nothing wrong.
 - **`report_diagnosis`** (investigator): the `diagnosis`: the cause, or what you ruled out, then the evidence. Your
   edits in the worktree are thrown away; only the diagnosis is kept.
 - **`submit_report`** (researcher): the conclusion or recommendation first, then the options and the evidence.
-- **`report_outcome`** (operator): what ran, what changed, and anything left to do or undo.
+- **`report_outcome`** (the agent, after it runs the operation): what ran, what changed, and anything left to do or undo.
 
 `answer`, `report_diagnosis` and `submit_report` take `propose_change` (`request`, `why`) only when what you found
 calls for a code change; the human decides whether the task becomes that change.

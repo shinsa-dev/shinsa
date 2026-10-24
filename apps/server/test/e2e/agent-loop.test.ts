@@ -5,7 +5,7 @@ import { createClaudeProvider } from '../../src/agents/providers/claude/index.ts
 import { ProviderRegistry } from '../../src/agents/providers/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { createFakeQuery, createFakeRuntime, emit, type QueryParams } from '../helpers/query.ts';
-import { World } from './harness.ts';
+import { type AgentScript, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
 
@@ -48,6 +48,15 @@ async function openWithSdk(scripts: Script[], executable?: ClaudeExecutable) {
   world = await World.create({ providers: sdk.registry });
   return { w: world, sdk };
 }
+
+const writeFirstPhase: AgentScript = async (agent) => {
+  agent.write('a.txt', 'phase 1\n');
+  await agent.call('complete_phase', {
+    summary: 'Wrote the first greeting.',
+    spots: [{ file: 'a.txt', start: 1, end: 1, attention: 'normal', why: 'The new file.' }],
+    judgement_calls: [],
+  });
+};
 
 function listRuns(w: World, taskId: string): Run[] {
   return Object.values(w.state.runs)
@@ -148,17 +157,17 @@ describe('restarts', () => {
   test('a graceful shutdown marks the agent, and the next boot continues it once with the carry-on prompt', async () => {
     world = await World.create();
     const w = world;
-    w.agents.queue('planner', (agent) => agent.hang());
+    w.agents.queue('plan', (agent) => agent.hang());
     const taskId = await w.createTask();
-    await w.until('the planner to start', () => w.agents.of('planner').length === 1);
-    const hung = w.agents.of('planner')[0];
+    await w.until('the planner to start', () => w.agents.of('plan').length === 1);
+    const hung = w.agents.of('plan')[0];
     const runId = listRuns(w, taskId)[0]?.id ?? '';
     await w.restartGracefully();
     await w.untilStage(taskId, 'awaiting_review');
-    const resumed = w.agents.of('planner')[1];
+    const resumed = w.agents.of('plan')[1];
     expect(resumed?.resume).toBe(hung?.sessionId);
     expect(resumed?.prompt).toContain('re-check the state of any file you were editing');
-    expect(w.agents.of('planner')[0]?.cancelled).toBe(true);
+    expect(w.agents.of('plan')[0]?.cancelled).toBe(true);
     const run = w.state.runs[runId];
     expect(run).toMatchObject({ resumePending: false, outcome: 'completed' });
     expect(run?.continuations).toHaveLength(1);
@@ -169,29 +178,29 @@ describe('restarts', () => {
   test('a run that keeps dying with the server is resumed once, and the next crash opens the failure gate', async () => {
     world = await World.create();
     const w = world;
-    for (let index = 0; index < 2; index += 1) w.agents.queue('planner', (agent) => agent.hang());
+    for (let index = 0; index < 2; index += 1) w.agents.queue('plan', (agent) => agent.hang());
     const taskId = await w.createTask();
-    await w.until('the planner to start', () => w.agents.of('planner').length === 1);
+    await w.until('the planner to start', () => w.agents.of('plan').length === 1);
     const runId = listRuns(w, taskId)[0]?.id ?? '';
     await w.restart();
-    await w.until('the continuation', () => w.agents.of('planner').length === 2);
+    await w.until('the continuation', () => w.agents.of('plan').length === 2);
     await w.restart();
     const gate = await w.untilGate(taskId, 'failure');
-    expect(gate.title).toBe('The planner paused');
-    expect(w.agents.of('planner')).toHaveLength(2);
+    expect(gate.title).toBe('The agent paused');
+    expect(w.agents.of('plan')).toHaveLength(2);
     expect(w.state.runs[runId]?.failure).toMatchObject({ class: 'aborted', code: 'crash_loop' });
   });
 
   test('a run whose server keeps shutting down is resumed three times, then handed to bounded recovery', async () => {
     world = await World.create();
     const w = world;
-    for (let index = 0; index < 4; index += 1) w.agents.queue('planner', (agent) => agent.hang());
+    for (let index = 0; index < 4; index += 1) w.agents.queue('plan', (agent) => agent.hang());
     const taskId = await w.createTask();
-    await w.until('the planner to start', () => w.agents.of('planner').length === 1);
+    await w.until('the planner to start', () => w.agents.of('plan').length === 1);
     const runId = listRuns(w, taskId)[0]?.id ?? '';
     for (let restart = 1; restart <= 3; restart += 1) {
       await w.restartGracefully();
-      await w.until(`continuation ${restart}`, () => w.agents.of('planner').length === restart + 1);
+      await w.until(`continuation ${restart}`, () => w.agents.of('plan').length === restart + 1);
     }
     await w.restartGracefully();
     await w.untilStage(taskId, 'awaiting_review');
@@ -199,9 +208,9 @@ describe('restarts', () => {
     expect(run?.continuations).toHaveLength(3);
     expect(run?.failure).toMatchObject({ class: 'aborted', code: 'restart_loop' });
     const recovery = listRuns(w, taskId).find(
-      (candidate) => candidate.id !== runId && candidate.role === 'planner'
+      (candidate) => candidate.id !== runId && candidate.purpose === 'plan'
     );
-    expect(recovery?.sessionId).toBe(w.agents.of('planner')[0]?.sessionId);
+    expect(recovery?.sessionId).toBe(w.agents.of('plan')[0]?.sessionId);
     expect(recovery?.prompt).toContain('Shinsa restarted 4 times within 5 minutes');
   });
 
@@ -210,14 +219,14 @@ describe('restarts', () => {
       providers: (created) => new ProviderRegistry([created.agents.provider('claude', 'Claude')]),
     });
     const w = world;
-    w.agents.queue('planner', (agent) => agent.hang());
+    w.agents.queue('plan', (agent) => agent.hang());
     const taskId = await w.createTask();
-    await w.until('the planner to start', () => w.agents.of('planner').length === 1);
-    const hung = w.agents.of('planner')[0];
+    await w.until('the planner to start', () => w.agents.of('plan').length === 1);
+    const hung = w.agents.of('plan')[0];
     w.agents.lost.add(hung?.sessionId ?? '');
     await w.restart();
     await w.untilStage(taskId, 'awaiting_review');
-    const restored = w.agents.of('planner')[1];
+    const restored = w.agents.of('plan')[1];
     expect(restored?.resume).toBeNull();
     expect(restored?.prompt).toContain('<handoff_transcript>');
     expect(restored?.prompt).toContain('could not be resumed');
@@ -230,6 +239,48 @@ describe('restarts', () => {
     });
   });
 
+  test('a session lost mid-round is restored on a fresh one with the whole round: the plan, the phases done and the step at hand', async () => {
+    world = await World.create({
+      providers: (created) => new ProviderRegistry([created.agents.provider('claude', 'Claude')]),
+    });
+    const w = world;
+    w.agents.queue('build', writeFirstPhase, (agent) => agent.hang());
+    const taskId = await w.createTask();
+    await w.until('the second phase to start', () => w.agents.of('build').length === 2);
+    const hung = w.agents.of('build')[1];
+    expect(hung?.resume).toBe(w.agents.of('plan')[0]?.sessionId);
+    w.agents.lost.add(hung?.sessionId ?? '');
+    await w.restart();
+    await w.untilStage(taskId, 'awaiting_review');
+    const restored = w.agents.of('build')[2];
+    expect(restored?.resume).toBeNull();
+    const prompt = restored?.prompt ?? '';
+    expect(prompt).toContain('<handoff_transcript>');
+    expect(prompt).toContain('Your role: the agent for this round.');
+    expect(prompt).toContain('Your conversation may no longer hold this round');
+    expect(prompt).toContain('Add the two greeting files.');
+    expect(prompt).toContain('Wrote the first greeting.');
+    expect(prompt).toContain('Now build phase 2 of 2: Write the second file.');
+    expect(prompt).toContain('Shinsa restarted while you were working');
+  });
+
+  test('a session compacted since its brief gets the whole round again on its next step', async () => {
+    world = await World.create();
+    const w = world;
+    w.agents.queue('build', async (agent) => {
+      agent.notice({ kind: 'compaction', trigger: 'auto', preTokens: 180_000, summary: null });
+      await writeFirstPhase(agent);
+    });
+    const taskId = await w.createTask();
+    await w.untilStage(taskId, 'awaiting_review');
+    const [first, second] = w.agents.of('build');
+    expect(first?.prompt).toStartWith('The plan is in, so building starts.');
+    expect(second?.resume).toBe(first?.sessionId);
+    expect(second?.prompt).toContain('Your conversation may no longer hold this round');
+    expect(second?.prompt).toContain('Wrote the first greeting.');
+    expect(second?.prompt).toContain('Now build phase 2 of 2: Write the second file.');
+  });
+
   test('switching provider while a run is paused hands the conversation over at its next turn', async () => {
     world = await World.create({
       providers: (created) =>
@@ -239,13 +290,13 @@ describe('restarts', () => {
         ]),
     });
     const w = world;
-    w.agents.queue('planner', (agent) => agent.hang());
+    w.agents.queue('plan', (agent) => agent.hang());
     const taskId = await w.createTask();
-    await w.until('the planner to start', () => w.agents.of('planner').length === 1);
+    await w.until('the planner to start', () => w.agents.of('plan').length === 1);
     await w.engine.dispatch({ type: 'settings.change', patch: { defaultProvider: 'codex' } });
     await w.restart();
     await w.untilStage(taskId, 'awaiting_review');
-    const switched = w.agents.of('planner')[1];
+    const switched = w.agents.of('plan')[1];
     expect(switched?.resume).toBeNull();
     expect(switched?.prompt).toContain('from another coding agent (Claude)');
     const run = listRuns(w, taskId)[0];

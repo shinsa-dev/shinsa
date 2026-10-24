@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk';
-import { guardCommand, resolveCommandVerdict } from '../../../../src/agents/providers/claude/guard.ts';
+import {
+  guardCommand,
+  listPlanningHooks,
+  resolveCommandVerdict,
+} from '../../../../src/agents/providers/claude/guard.ts';
 
 function denied(command: string, branch = 'main') {
   return 'hookSpecificOutput' in resolveCommandVerdict(command, branch);
@@ -95,6 +99,8 @@ describe('the command guard', () => {
       'shinsa repos update app --name web --waive-checks',
       'shinsa repos update app --no-waive-checks',
       'shinsa repos update app --checks=lint',
+      'shinsa repos update app --workspace gitbutler',
+      'shinsa repos update app --workspace=main_checkout',
     ]) {
       expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
     }
@@ -117,7 +123,7 @@ describe('the command guard', () => {
     expect(resolveCommandVerdict('shinsa repos update app --waive-checks', 'main')).toMatchObject({
       hookSpecificOutput: {
         permissionDecisionReason:
-          'Only the human changes a repository’s check commands or works without checks. Tell them what you would change and why.',
+          'Only the human changes a repository’s check commands, works without checks or chooses where agents work. Tell them what you would change and why.',
       },
     });
   });
@@ -132,5 +138,32 @@ describe('the command guard', () => {
     expect(await run({ hook_event_name: 'PreToolUse', tool_input: { command: 'git push' } })).toMatchObject({
       hookSpecificOutput: { permissionDecision: 'deny' },
     });
+  });
+});
+
+describe('the planning guard', () => {
+  test('one matcher per edit tool, each refusing the edit until the plan is in', async () => {
+    const matchers = listPlanningHooks();
+    expect(matchers.map((matcher) => matcher.matcher)).toEqual([
+      'Edit',
+      'Write',
+      'NotebookEdit',
+      'MultiEdit',
+    ]);
+    const hook = matchers[0]?.hooks[0];
+    const signal = new AbortController().signal;
+    const run = (input: unknown) => hook?.(input as HookInput, undefined, { signal });
+    for (const tool of ['Edit', 'Write', 'NotebookEdit', 'MultiEdit']) {
+      expect(await run({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: {} })).toEqual({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason:
+            'You are planning: Shinsa refuses edits until the plan is in. Hand the plan over with `propose_plan`.',
+        },
+      });
+    }
+    expect(await run({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: {} })).toEqual({});
+    expect(await run({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: {} })).toEqual({});
   });
 });

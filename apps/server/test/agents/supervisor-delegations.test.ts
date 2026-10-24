@@ -126,11 +126,12 @@ function idsOf(
 }
 
 describe('starting a delegated run', () => {
-  test('a read-only step, delegated or not, fails on a provider that cannot keep it from changing files', async () => {
+  test('a read-only step, delegated, planning or not, fails on a provider that cannot keep it from changing files', async () => {
     const sessions = createSessions();
     const reviewer = createRun({ id: 'run-2', role: 'reviewer' });
+    const planning = createRun({ id: 'run-3', purpose: 'plan' });
     const { supervisor, dispatched } = setup(
-      [createRun(), reviewer, finishedChild({ endedAt: null, outcome: null })],
+      [createRun(), reviewer, planning, finishedChild({ endedAt: null, outcome: null })],
       {
         providers: new ProviderRegistry([
           {
@@ -146,6 +147,7 @@ describe('starting a delegated run', () => {
     );
     await supervisor.execute('child');
     await supervisor.execute('run-2');
+    await supervisor.execute('run-3');
     expect(sessions.started).toHaveLength(0);
     expect(ofType(dispatched, 'run.end')).toEqual([
       expect.objectContaining({
@@ -160,6 +162,7 @@ describe('starting a delegated run', () => {
           'This agent provider cannot keep a read-only agent from changing files, so Shinsa will not run a read-only task on it.',
         failure: expect.objectContaining({ class: 'setup_failed', code: 'read_only' }),
       }),
+      expect.objectContaining({ runId: 'run-3', outcome: 'failed' }),
     ]);
   });
 

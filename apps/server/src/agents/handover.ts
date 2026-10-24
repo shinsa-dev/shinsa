@@ -46,7 +46,7 @@ function lowerFirst(text: string) {
 }
 
 export function resolveCommitMessage(task: Task, run: Run) {
-  if (run.role !== 'builder') return `fix: ${FIX_COMMIT[task.fixFor ?? 'you']}`;
+  if (run.purpose !== 'build') return `fix: ${FIX_COMMIT[task.fixFor ?? 'you']}`;
   const type = resolveCommitType(task);
   const step = task.plan?.document?.phases[run.phaseIndex ?? 0];
   const subject = lowerFirst(step?.title ?? task.title).replace(new RegExp(`^${type}(es)?\\s+`), '');

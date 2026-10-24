@@ -22,7 +22,7 @@ interface Call {
 
 function open(handle?: (call: Call) => Promise<string>) {
   const calls: Call[] = [];
-  const tools = createShinsaTools('planner', (name, _input, signal, requestId) => {
+  const tools = createShinsaTools('agent', (name, _input, signal, requestId) => {
     const call = { name, requestId, signal };
     calls.push(call);
     return handle ? handle(call) : Promise.resolve(`${name} done`);

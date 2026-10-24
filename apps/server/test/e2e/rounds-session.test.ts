@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { HookInput, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -37,8 +37,11 @@ afterEach(async () => {
 interface Turn {
   sessionId: string;
   resume: string | null;
-  role: string;
+  purpose: string;
   round: number;
+  disallowed: string[];
+  matchers: (string | undefined)[];
+  edit: unknown;
 }
 
 const PLAN = {
@@ -62,9 +65,11 @@ async function readBrief(params: QueryParams) {
   return typeof content === 'string' ? content : '';
 }
 
-function resolveRole(brief: string) {
+function resolvePurpose(params: QueryParams, brief: string) {
+  if ((params.options?.hooks?.PreToolUse?.length ?? 0) > 1) return 'plan';
   if (brief.includes('Shinsa restarted while you were working')) return 'continued';
-  return /Your role: (\w+)/.exec(brief)?.[1] ?? 'unknown';
+  if (brief.includes('Your role: reviewer')) return 'review';
+  return /Now build phase \d+ of/.test(brief) ? 'build' : 'unknown';
 }
 
 async function callTool(params: QueryParams, name: string, input: Record<string, unknown>) {
@@ -86,11 +91,11 @@ function writeSessionFile(home: string, cwd: string, sessionId: string) {
   appendFileSync(join(dir, `${sessionId}.jsonl`), `${JSON.stringify({ type: 'user' })}\n`);
 }
 
-async function hand(params: QueryParams, brief: string, role: string, round: number) {
+async function hand(params: QueryParams, brief: string, purpose: string, round: number) {
   const cwd = params.options?.cwd ?? '';
-  if (role === 'planner') await callTool(params, 'propose_plan', PLAN);
-  if (role === 'builder') {
-    const phase = /builder for phase (\d+)/.exec(brief)?.[1] ?? '1';
+  if (purpose === 'plan') await callTool(params, 'propose_plan', PLAN);
+  if (purpose === 'build') {
+    const phase = /Now build phase (\d+) of/.exec(brief)?.[1] ?? '1';
     writeFileSync(join(cwd, `round-${round}-${phase}.txt`), `round ${round}, phase ${phase}\n`);
     await callTool(params, 'complete_phase', {
       summary: `Wrote round ${round}, phase ${phase}.`,
@@ -98,7 +103,14 @@ async function hand(params: QueryParams, brief: string, role: string, round: num
       judgement_calls: [],
     });
   }
-  if (role === 'reviewer') await callTool(params, 'report_review', { findings: [] });
+  if (purpose === 'review') await callTool(params, 'report_review', { findings: [] });
+}
+
+async function tryEdit(params: QueryParams) {
+  const hook = params.options?.hooks?.PreToolUse?.find((matcher) => matcher.matcher === 'Write')?.hooks[0];
+  const input = { hook_event_name: 'PreToolUse', tool_name: 'Write', tool_input: {} } as unknown as HookInput;
+  if (!hook) return null;
+  return await hook(input, undefined, { signal: new AbortController().signal });
 }
 
 async function* agentTurn(
@@ -110,9 +122,20 @@ async function* agentTurn(
   const brief = await readBrief(params);
   const resume = params.options?.resume ?? null;
   const sessionId = resume ?? `sdk-${call}`;
-  const round = Number(/This is round (\d+) of the task/.exec(brief)?.[1] ?? 1);
-  const role = resolveRole(brief);
-  turns.push({ sessionId, resume, role, round });
+  const purpose = resolvePurpose(params, brief);
+  const round =
+    purpose === 'plan'
+      ? Number(/This is round (\d+) of the task/.exec(brief)?.[1] ?? 1)
+      : (turns.filter((turn) => turn.purpose === 'plan').at(-1)?.round ?? 1);
+  turns.push({
+    sessionId,
+    resume,
+    purpose,
+    round,
+    disallowed: params.options?.disallowedTools ?? [],
+    matchers: params.options?.hooks?.PreToolUse?.map((matcher) => matcher.matcher) ?? [],
+    edit: await tryEdit(params),
+  });
   writeSessionFile(home, params.options?.cwd ?? '', sessionId);
   yield sdkMessage({ type: 'system', subtype: 'init', session_id: sessionId });
   const baseUrl = params.options?.env?.ANTHROPIC_BASE_URL ?? '';
@@ -120,10 +143,10 @@ async function* agentTurn(
     await fetch(`${baseUrl}/v1/messages`, {
       method: 'POST',
       headers: { 'x-claude-code-session-id': sessionId },
-      body: JSON.stringify({ fold: role === 'planner' ? 'roll' : 'cut' }),
+      body: JSON.stringify({ fold: purpose === 'plan' ? 'roll' : 'cut' }),
     });
   }
-  await hand(params, brief, role, round);
+  await hand(params, brief, purpose, round);
   yield sdkMessage({ type: 'result', subtype: 'success', result: 'Done.', is_error: false });
 }
 
@@ -161,7 +184,7 @@ async function shipRound(w: World, taskId: string) {
 }
 
 describe('a long task that keeps its sessions across rounds', () => {
-  test(`${ROUNDS} rounds reuse the planner’s and the builders’ sessions through eunoe’s compaction, across a restart`, async () => {
+  test(`${ROUNDS} rounds keep one agent session through eunoe’s compaction and a restart, switching only what it may edit`, async () => {
     const { w, turns, dir } = await openWorld();
     const taskId = await w.createTask('Grow the MCP v2 integration');
     for (let round = 1; round <= ROUNDS; round += 1) {
@@ -192,25 +215,35 @@ describe('a long task that keeps its sessions across rounds', () => {
     expect(new Set(resolveTaskRounds(task).map((round) => round.pullRequest?.number))).toEqual(new Set([1]));
     expect(w.github.pulls).toHaveLength(1);
 
-    const planners = turns.filter((turn) => turn.role === 'planner');
-    const builders = turns.filter((turn) => turn.role === 'builder');
+    const planners = turns.filter((turn) => turn.purpose === 'plan');
+    const builders = turns.filter((turn) => turn.purpose === 'build');
+    const agentTurns = turns.filter((turn) => turn.purpose !== 'review');
+    const session = planners[0]?.sessionId ?? '';
     expect(planners).toHaveLength(ROUNDS);
-    expect(new Set(planners.map((turn) => turn.sessionId)).size).toBe(1);
-    expect(planners.slice(1).every((turn) => turn.resume === planners[0]?.sessionId)).toBe(true);
-    for (let round = 2; round <= ROUNDS; round += 1) {
-      const opening = builders.find((turn) => turn.round === round);
-      const previous = builders.filter((turn) => turn.round === round - 1).at(-1);
-      expect(opening?.resume, `round ${round}'s first builder`).toBe(previous?.sessionId ?? null);
-    }
+    expect(builders.length).toBeGreaterThanOrEqual(ROUNDS * 2);
+    expect(new Set(agentTurns.map((turn) => turn.sessionId))).toEqual(new Set([session]));
+    expect(agentTurns.slice(1).every((turn) => turn.resume === session)).toBe(true);
     expect(planners.map((turn) => turn.round)).toEqual(
       Array.from({ length: ROUNDS }, (_, index) => index + 1)
     );
-    expect(turns.filter((turn) => turn.role === 'reviewer').every((turn) => turn.resume === null)).toBe(true);
+    expect(agentTurns.every((turn) => turn.disallowed.length === 0)).toBe(true);
+    expect(planners.every((turn) => turn.matchers.join() === 'Bash,Edit,Write,NotebookEdit,MultiEdit')).toBe(
+      true
+    );
+    expect(builders.every((turn) => turn.matchers.join() === 'Bash' && turn.edit === null)).toBe(true);
+    for (const turn of planners) {
+      expect(turn.edit).toMatchObject({ hookSpecificOutput: { permissionDecision: 'deny' } });
+    }
+    const reviewers = turns.filter((turn) => turn.purpose === 'review');
+    expect(reviewers.length).toBeGreaterThanOrEqual(ROUNDS);
+    expect(reviewers.every((turn) => turn.resume === null)).toBe(true);
+    expect(reviewers.every((turn) => turn.disallowed.join() === 'Edit,Write,NotebookEdit')).toBe(true);
 
     const runs = Object.values(w.state.runs).filter((run) => run.taskId === taskId);
     expect(runs.flatMap((run) => run.attempts ?? []).every((attempt) => attempt.handoff === null)).toBe(true);
+    expect(runs.every((run) => run.role === 'agent' || run.role === 'reviewer')).toBe(true);
     const plannerRuns = runs
-      .filter((run) => run.role === 'planner')
+      .filter((run) => run.purpose === 'plan')
       .sort((a, b) => a.startedAt - b.startedAt);
     expect(plannerRuns.map((run) => run.round ?? 1)).toEqual(
       Array.from({ length: ROUNDS }, (_, index) => index + 1)
@@ -224,8 +257,6 @@ describe('a long task that keeps its sessions across rounds', () => {
       .trim()
       .split('\n')
       .map((line) => JSON.parse(line).thread as string);
-    expect(threads.filter((thread) => thread === `${planners[0]?.sessionId}-fingerprint`)).toHaveLength(
-      ROUNDS
-    );
+    expect(threads.filter((thread) => thread === `${session}-fingerprint`)).toHaveLength(agentTurns.length);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type { ChatEvent, ChatNotice, RunRole } from '@shinsa/core';
+import { type ChatEvent, type ChatNotice, isReadOnlyRole, type RunRole } from '@shinsa/core';
 import { type CodexSessionMode, startCodexSession } from '../../../../src/agents/providers/codex/session.ts';
 import type { AgentSessionInput } from '../../../../src/agents/providers/index.ts';
 import { createShinsaTools, type ToolHandler } from '../../../../src/agents/tools/index.ts';
@@ -14,10 +14,11 @@ interface Started {
 }
 
 function createInput(
-  role: RunRole = 'builder',
+  key: RunRole | 'plan' | 'build' = 'build',
   overrides: Partial<AgentSessionInput> = {},
   handle?: ToolHandler
 ) {
+  const role: RunRole = key === 'plan' || key === 'build' ? 'agent' : key;
   const entries: ChatEvent[] = [];
   const sessions: string[] = [];
   const tools: string[] = [];
@@ -29,6 +30,7 @@ function createInput(
     });
   const input: AgentSessionInput = {
     role,
+    readOnly: key === 'plan' || isReadOnlyRole(role),
     cwd: createTempDir(),
     prompt: 'Do the work',
     model: 'gpt-6-astra',
@@ -75,7 +77,7 @@ const LIMITS_SPENT = {
 describe('a Codex turn', () => {
   test('runs on a new thread, hands over through Shinsa’s tools and reports usage and context', async () => {
     const codex = new FakeCodex();
-    const started = createInput('planner');
+    const started = createInput('plan');
     const result = await start(codex, started).done;
     expect(result).toMatchObject({
       outcome: 'completed',
@@ -123,14 +125,14 @@ describe('a Codex turn', () => {
 
   test('a builder may write and run commands, but Shinsa declines a commit and tells the agent why', async () => {
     const codex = new FakeCodex();
-    codex.script('builder', [
+    codex.script('build', [
       { run: 'bun test', output: '3 pass' },
       { run: 'git commit -m wip' },
       { write: 'notes.md', content: 'hello' },
       { tool: 'complete_phase', args: { summary: 'Done.', spots: [], judgement_calls: [] } },
       { say: 'Finished.' },
     ]);
-    const started = createInput('builder');
+    const started = createInput('build');
     const result = await start(codex, started).done;
     expect(result.outcome).toBe('completed');
     expect(codex.requests('thread/start')[0]).toMatchObject({
@@ -169,19 +171,45 @@ describe('a Codex turn', () => {
 
   test('resumes the thread it is given', async () => {
     const codex = new FakeCodex();
-    const first = createInput('planner');
+    const first = createInput('plan');
     await start(codex, first).done;
     const threadId = first.sessions[0] ?? '';
-    const second = createInput('planner', { resume: threadId });
+    const second = createInput('plan', { resume: threadId });
     const result = await start(codex, second).done;
     expect(result.outcome).toBe('completed');
     expect(second.sessions).toEqual([threadId]);
     expect(codex.requests('thread/resume')).toEqual([expect.objectContaining({ threadId })]);
   });
 
+  test('the round agent plans in the read-only sandbox, then builds on the same thread with write access', async () => {
+    const codex = new FakeCodex();
+    const planning = createInput('plan');
+    await start(codex, planning).done;
+    const threadId = planning.sessions[0] ?? '';
+    codex.script('build', [{ write: 'a.txt', content: 'a' }, { say: 'Built.' }]);
+    const building = createInput('build', { resume: threadId, cwd: planning.input.cwd });
+    expect((await start(codex, building).done).outcome).toBe('completed');
+    expect(building.sessions).toEqual([threadId]);
+    expect(codex.requests('thread/start')[0]).toMatchObject({
+      sandbox: 'read-only',
+      approvalPolicy: 'never',
+    });
+    expect(codex.requests('thread/resume')).toEqual([
+      expect.objectContaining({ threadId, sandbox: 'danger-full-access', approvalPolicy: 'untrusted' }),
+    ]);
+    expect(codex.log.find((entry) => entry.patch)).toMatchObject({ patch: 'a.txt', decision: 'accept' });
+    const replanning = createInput('plan', { resume: threadId, cwd: planning.input.cwd });
+    await start(codex, replanning).done;
+    expect(codex.requests('thread/resume').at(-1)).toMatchObject({
+      threadId,
+      sandbox: 'read-only',
+      approvalPolicy: 'never',
+    });
+  });
+
   test('a thread Codex no longer has ends as a lost session, so Shinsa restores it from the transcript', async () => {
     const codex = new FakeCodex();
-    const started = createInput('planner', { resume: 'thread-gone' });
+    const started = createInput('plan', { resume: 'thread-gone' });
     const result = await start(codex, started).done;
     expect(result.outcome).toBe('failed');
     expect(result.failure).toMatchObject({ class: 'session_lost', code: 'unknown_session' });
@@ -193,9 +221,9 @@ describe('a Codex turn', () => {
 describe('fast mode on Codex', () => {
   test('fast mode asks for Codex’s fast tier, standard speed sends an explicit standard tier', async () => {
     const codex = new FakeCodex();
-    const fast = createInput('planner', { fastMode: true });
+    const fast = createInput('plan', { fastMode: true });
     expect((await start(codex, fast).done).outcome).toBe('completed');
-    const standard = createInput('planner');
+    const standard = createInput('plan');
     expect((await start(codex, standard).done).outcome).toBe('completed');
     expect(codex.requests('thread/start').map((params) => params.serviceTier)).toEqual(['fast', null]);
     expect(notices(fast.entries).filter((notice) => notice.kind === 'fast_mode')).toEqual([]);
@@ -203,7 +231,7 @@ describe('fast mode on Codex', () => {
 
   test('a model Codex runs only at standard speed is noted and the turn carries on', async () => {
     const codex = new FakeCodex({ standardOnly: true });
-    const started = createInput('planner', { fastMode: true });
+    const started = createInput('plan', { fastMode: true });
     expect((await start(codex, started).done).outcome).toBe('completed');
     expect(notices(started.entries)).toContainEqual({
       kind: 'fast_mode',
@@ -216,11 +244,11 @@ describe('fast mode on Codex', () => {
 describe('how a Codex turn fails', () => {
   test('a usage limit reports the spent window the accounts read its reset from', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [
+    codex.script('plan', [
       { limits: LIMITS_SPENT },
       { fail: { info: 'usageLimitExceeded', message: 'You have hit your usage limit.' } },
     ]);
-    const started = createInput('planner');
+    const started = createInput('plan');
     const result = await start(codex, started).done;
     expect(result.failure).toMatchObject({
       class: 'usage_limit',
@@ -240,16 +268,16 @@ describe('how a Codex turn fails', () => {
 
   test('a signed-out Codex asks for codex login', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [{ fail: { info: 'unauthorized', message: 'Unauthorized' } }]);
-    const result = await start(codex, createInput('planner')).done;
+    codex.script('plan', [{ fail: { info: 'unauthorized', message: 'Unauthorized' } }]);
+    const result = await start(codex, createInput('plan')).done;
     expect(result.failure).toMatchObject({ class: 'auth', code: 'unauthorized' });
     expect(result.failure?.message).toContain('`codex login`');
   });
 
   test('a crashed app server ends the run as a transport failure naming what it printed', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [{ say: 'Starting.' }, { crash: 'thread panicked at core/src/lib.rs' }]);
-    const started = createInput('planner');
+    codex.script('plan', [{ say: 'Starting.' }, { crash: 'thread panicked at core/src/lib.rs' }]);
+    const started = createInput('plan');
     const result = await start(codex, started).done;
     expect(result.failure).toMatchObject({ class: 'transport_error', retryable: true });
     expect(result.summary).toContain('thread panicked at core/src/lib.rs');
@@ -258,8 +286,8 @@ describe('how a Codex turn fails', () => {
 
   test('a turn Codex interrupts by itself is an interruption to resume', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [{ interrupted: true }]);
-    const started = createInput('planner');
+    codex.script('plan', [{ interrupted: true }]);
+    const started = createInput('plan');
     const result = await start(codex, started).done;
     expect(result.failure).toMatchObject({ class: 'aborted', code: 'interrupted' });
     expect(notices(started.entries)).toContainEqual({ kind: 'interrupted' });
@@ -267,7 +295,7 @@ describe('how a Codex turn fails', () => {
 
   test('a Codex that cannot run fails before anything starts', async () => {
     const codex = new FakeCodex();
-    const missing = createInput('planner');
+    const missing = createInput('plan');
     const result = await startCodexSession(missing.input, {
       runtime: {
         resolveExecutable: () =>
@@ -279,7 +307,7 @@ describe('how a Codex turn fails', () => {
       code: 'not_installed',
       message: 'Install Codex.',
     });
-    const broken = createInput('planner');
+    const broken = createInput('plan');
     const crashed = await startCodexSession(broken.input, {
       runtime: {
         resolveExecutable: () => Promise.resolve({ ok: true, path: '/no/such/codex', version: null }),
@@ -294,8 +322,8 @@ describe('how a Codex turn fails', () => {
 describe('steering and stopping', () => {
   test('a message steers the running turn', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [READY, { waitSteer: true }, { tool: 'propose_plan', args: {} }]);
-    const started = createInput('planner');
+    codex.script('plan', [READY, { waitSteer: true }, { tool: 'propose_plan', args: {} }]);
+    const started = createInput('plan');
     const session = start(codex, started);
     await untilRunning(started);
     expect(session.steer('Use the second option.')).toBe(true);
@@ -307,8 +335,8 @@ describe('steering and stopping', () => {
 
   test('a message that cannot steer goes in as the next turn, and one after the end is refused', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [{ say: 'First turn.' }], [{ say: 'Second turn.' }]);
-    const started = createInput('planner');
+    codex.script('plan', [{ say: 'First turn.' }], [{ say: 'Second turn.' }]);
+    const started = createInput('plan');
     const session = start(codex, started);
     expect(session.steer('Before the thread exists', 'shinsa')).toBe(true);
     const result = await session.done;
@@ -322,8 +350,8 @@ describe('steering and stopping', () => {
 
   test('cancelling interrupts the turn and returns the messages it never read', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [READY, { hang: true }]);
-    const started = createInput('planner');
+    codex.script('plan', [READY, { hang: true }]);
+    const started = createInput('plan');
     const session = start(codex, started);
     await untilRunning(started);
     await session.cancel();
@@ -335,7 +363,7 @@ describe('steering and stopping', () => {
 
   test('cancelling before the app server starts never starts it', async () => {
     const codex = new FakeCodex();
-    const started = createInput('planner');
+    const started = createInput('plan');
     const session = start(codex, started);
     await session.cancel();
     expect((await session.done).outcome).toBe('cancelled');
@@ -346,14 +374,14 @@ describe('steering and stopping', () => {
 describe('requests and refusals from the app server', () => {
   test('Shinsa accepts its own server’s elicitations, declines others and a command it cannot read, and refuses what needs a person', async () => {
     const codex = new FakeCodex({ noise: true });
-    codex.script('planner', [
+    codex.script('plan', [
       { elicit: 'shinsa' },
       { elicit: 'github' },
       { ask: 'item/tool/requestUserInput' },
       { ask: 'item/commandExecution/requestApproval' },
       { tool: 'propose_plan', args: {} },
     ]);
-    const result = await start(codex, createInput('planner')).done;
+    const result = await start(codex, createInput('plan')).done;
     expect(result.outcome).toBe('completed');
     expect(
       codex.log.filter((entry) => entry.elicited).map((entry) => [entry.elicited, entry.action])
@@ -372,13 +400,13 @@ describe('requests and refusals from the app server', () => {
   test('when steering is refused the message is the next turn, and a refused warning is only logged', async () => {
     const codex = new FakeCodex({ refuse: ['turn/steer'] });
     codex.script(
-      'builder',
+      'build',
       [{ run: 'git push' }, { tool: 'note', args: {} }, { say: 'First.' }],
       [{ say: 'Second.' }]
     );
     const held = Promise.withResolvers<string>();
     const noted = Promise.withResolvers<void>();
-    const started = createInput('builder', {}, () => {
+    const started = createInput('build', {}, () => {
       noted.resolve();
       return held.promise;
     });
@@ -396,13 +424,13 @@ describe('requests and refusals from the app server', () => {
 
   test('a message waiting for the next turn comes back undelivered when the turn fails', async () => {
     const codex = new FakeCodex({ refuse: ['turn/steer'] });
-    codex.script('builder', [
+    codex.script('build', [
       { tool: 'note', args: {} },
       { fail: { info: 'internalServerError', message: 'Boom' } },
     ]);
     const held = Promise.withResolvers<string>();
     const noted = Promise.withResolvers<void>();
-    const started = createInput('builder', {}, () => {
+    const started = createInput('build', {}, () => {
       noted.resolve();
       return held.promise;
     });
@@ -420,13 +448,13 @@ describe('requests and refusals from the app server', () => {
 
   test('a turn Codex will not start and an interrupt it refuses', async () => {
     const refusedTurn = new FakeCodex({ refuse: ['turn/start'] });
-    const turn = await start(refusedTurn, createInput('planner')).done;
+    const turn = await start(refusedTurn, createInput('plan')).done;
     expect(turn.failure).toMatchObject({ class: 'transport_error' });
     expect(turn.summary).toContain('fake codex refuses turn/start');
 
     const refusedInterrupt = new FakeCodex({ refuse: ['turn/interrupt'] });
-    refusedInterrupt.script('planner', [READY, { hang: true }]);
-    const started = createInput('planner');
+    refusedInterrupt.script('plan', [READY, { hang: true }]);
+    const started = createInput('plan');
     const session = start(refusedInterrupt, started);
     await untilRunning(started);
     await session.cancel();
@@ -457,8 +485,8 @@ describe('what the transcript shows', () => {
       { say: '   ' },
       { tool: 'propose_plan', args: {} },
     ];
-    codex.script('planner', steps);
-    const started = createInput('planner');
+    codex.script('plan', steps);
+    const started = createInput('plan');
     const result = await start(codex, started).done;
     expect(result.outcome).toBe('completed');
     const calls = started.entries.flatMap((entry) => (entry.type === 'tool_call' ? [entry.tool] : []));
@@ -508,12 +536,12 @@ describe('what the transcript shows', () => {
 
   test('a tool Shinsa refuses shows as a failed call', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [{ tool: 'complete_phase', args: {} }]);
-    const started = createInput('planner');
+    codex.script('plan', [{ tool: 'report_review', args: {} }]);
+    const started = createInput('plan');
     await start(codex, started).done;
     const result = started.entries.find((entry) => entry.type === 'tool_result');
     expect(result).toMatchObject({ status: 'error' });
-    expect(codex.log.find((entry) => entry.tool === 'complete_phase')?.isError).toBe(true);
+    expect(codex.log.find((entry) => entry.tool === 'report_review')?.isError).toBe(true);
   });
 });
 
@@ -532,12 +560,12 @@ function selectResult(entries: ChatEvent[], callId: string) {
 describe('agents a Codex agent starts', () => {
   test('show inside the step’s turn under the call that started them, nested ones under theirs', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [
+    codex.script('plan', [
       { agent: { thread: 'a1', say: 'Looked.', run: 'ls', nested: 'a2', usage: 500 } },
       { agent: { thread: 'a3', early: true, say: 'Early.', fails: true } },
       { tool: 'propose_plan', args: {} },
     ]);
-    const started = createInput('planner');
+    const started = createInput('plan');
     const result = await start(codex, started).done;
     expect(result.outcome).toBe('completed');
     expect(listCalls(started.entries)).toEqual([
@@ -584,12 +612,12 @@ describe('agents a Codex agent starts', () => {
 
   test('agents Codex reports by path show by their name, and one interrupted ends as stopped', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [
+    codex.script('plan', [
       { activity: { thread: 't1', path: '/root/explorer', say: 'Found it.' } },
       { activity: { thread: 't2', path: '', interrupted: true } },
       { tool: 'propose_plan', args: {} },
     ]);
-    const started = createInput('planner');
+    const started = createInput('plan');
     await start(codex, started).done;
     const tasks = started.entries.flatMap((entry) =>
       entry.type === 'tool_call' && entry.tool.kind === 'task' ? [entry.tool] : []
@@ -613,11 +641,11 @@ describe('agents a Codex agent starts', () => {
 
   test('threads Shinsa never saw started stay out of the transcript, however much they say', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [
+    codex.script('plan', [
       { stray: { thread: 'elsewhere', count: 600 } },
       { tool: 'propose_plan', args: {} },
     ]);
-    const started = createInput('planner');
+    const started = createInput('plan');
     expect((await start(codex, started).done).outcome).toBe('completed');
     expect(texts(started.entries)).toEqual([]);
     expect(listCalls(started.entries).map((call) => call.kind)).toEqual(['shinsa']);
@@ -627,7 +655,7 @@ describe('agents a Codex agent starts', () => {
 describe('compacting a Codex thread', () => {
   test('a compaction runs on its own turn, writes one notice and meters what it cost', async () => {
     const codex = new FakeCodex();
-    const started = createInput('builder', { resume: null });
+    const started = createInput('build', { resume: null });
     const session = start(codex, started, 'compact');
     expect(session.steer('Not now.')).toBe(false);
     const result = await session.done;
@@ -646,23 +674,23 @@ describe('compacting a Codex thread', () => {
 
   test('a compaction Codex never closes with a turn ends once its item is in', async () => {
     const codex = new FakeCodex({ compact: 'noTurn' });
-    const result = await start(codex, createInput('builder'), 'compact').done;
+    const result = await start(codex, createInput('build'), 'compact').done;
     expect(result.outcome).toBe('completed');
   });
 
   test('a compaction that fails or is refused fails, and one that is stopped is cancelled', async () => {
-    const failed = await start(new FakeCodex({ compact: 'fails' }), createInput('builder'), 'compact').done;
+    const failed = await start(new FakeCodex({ compact: 'fails' }), createInput('build'), 'compact').done;
     expect(failed).toMatchObject({ outcome: 'failed', failure: { message: 'Compaction failed.' } });
     const refused = await start(
       new FakeCodex({ refuse: ['thread/compact/start'] }),
-      createInput('builder'),
+      createInput('build'),
       'compact'
     ).done;
     expect(refused.failure).toMatchObject({ class: 'transport_error' });
     expect(refused.summary).toContain('Codex could not compact the thread');
     const silent = start(
       new FakeCodex({ ignore: ['thread/compact/start'] }),
-      createInput('builder'),
+      createInput('build'),
       'compact'
     );
     await until('the compaction to be asked for', () => true);
@@ -673,12 +701,12 @@ describe('compacting a Codex thread', () => {
   test('a compaction whose codex stops while it waits fails, and one stopped while it waits is cancelled', async () => {
     const codex = new FakeCodex({ compact: 'noTurn' });
     const slow = { runtime: codex.runtime, requestTimeoutMs: 50, heartbeatMs: 5, compactGraceMs: 2_000 };
-    const crashed = startCodexSession(createInput('builder').input, slow, 'compact');
+    const crashed = startCodexSession(createInput('build').input, slow, 'compact');
     await until('the compaction to start', () => codex.requests('thread/compact/start').length === 1);
     const pid = codex.log.find((entry) => entry.method === 'thread/compact/start')?.pid ?? 0;
     process.kill(pid, 'SIGKILL');
     expect((await crashed.done).failure).toMatchObject({ class: 'transport_error' });
-    const stopped = startCodexSession(createInput('builder').input, slow, 'compact');
+    const stopped = startCodexSession(createInput('build').input, slow, 'compact');
     await until('the second compaction to start', () => codex.requests('thread/compact/start').length === 2);
     await stopped.cancel();
     expect((await stopped.done).outcome).toBe('cancelled');
@@ -686,8 +714,8 @@ describe('compacting a Codex thread', () => {
 
   test('with compaction off Codex never compacts on its own', async () => {
     const codex = new FakeCodex();
-    await start(codex, createInput('planner', { compaction: 'off' })).done;
-    await start(codex, createInput('planner', { compaction: 'eunoe_compact' })).done;
+    await start(codex, createInput('plan', { compaction: 'off' })).done;
+    await start(codex, createInput('plan', { compaction: 'eunoe_compact' })).done;
     const [off, on] = codex.requests('thread/start');
     expect(off?.config).toMatchObject({ model_auto_compact_token_limit: Number.MAX_SAFE_INTEGER });
     expect(on?.config).not.toHaveProperty('model_auto_compact_token_limit');
@@ -697,12 +725,12 @@ describe('compacting a Codex thread', () => {
 describe('pricing a Codex turn', () => {
   test('a turn Codex moves to another model is priced as that model', async () => {
     const codex = new FakeCodex();
-    codex.script('planner', [
+    codex.script('plan', [
       { reroute: 'gpt-5.6-luna' },
       { usage: { input: 100_000, output: 0, window: 400_000 } },
       { tool: 'propose_plan', args: {} },
     ]);
-    const result = await start(codex, createInput('planner')).done;
+    const result = await start(codex, createInput('plan')).done;
     expect(result.usage?.costUsd).toBeCloseTo(0.02);
   });
 });
@@ -710,7 +738,7 @@ describe('pricing a Codex turn', () => {
 describe('a Codex session’s instructions', () => {
   test('a run gets Shinsa’s instructions and the prompt is Shinsa’s', async () => {
     const codex = new FakeCodex();
-    const started = createInput('planner');
+    const started = createInput('plan');
     await start(codex, started).done;
     expect(String(codex.requests('thread/start')[0]?.developerInstructions)).toStartWith('# Shinsa');
     expect(started.entries[0]).toMatchObject({ type: 'user', from: 'shinsa' });

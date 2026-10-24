@@ -115,7 +115,11 @@ describe('usage resume clock', () => {
     expect(dispatch.mock.calls).toEqual([[{ type: 'usage_wait.resume', taskId, waitId: wait.id }, { id }]]);
     expect(log.selectReceipt(id)).not.toBeNull();
     expect(selectWait(engine, taskId).status).toBe('resumed');
-    expect(findRunningRun(engine, taskId)).toMatchObject({ role: 'planner', usageWaitId: wait.id });
+    expect(findRunningRun(engine, taskId)).toMatchObject({
+      role: 'agent',
+      purpose: 'plan',
+      usageWaitId: wait.id,
+    });
     expect(findRunningRun(engine, taskId).id).not.toBe(wait.runId);
   });
 

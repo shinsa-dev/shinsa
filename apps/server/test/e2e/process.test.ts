@@ -37,7 +37,7 @@ describe('the process around the work', () => {
 
   test('a builder can wait for something outside the repository, and suggest tasks', async () => {
     const w = await open();
-    w.agents.queue('builder', async (agent) => {
+    w.agents.queue('build', async (agent) => {
       await agent.call('suggest_tasks', {
         tasks: [{ title: 'Cache the greetings', request: 'Cache them.', why: 'They are read often.' }],
       });

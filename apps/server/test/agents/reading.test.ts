@@ -80,9 +80,9 @@ describe('reading a task for an agent', () => {
     expect(reading.startsWith(serializeTaskDetail(engine.state, taskId))).toBe(true);
     expect(reading.split('\n').slice(-4)).toEqual([
       'Latest agent replies:',
-      '- planner: Second.',
-      '- planner: Third.',
-      `- planner: ${'x'.repeat(1_500)}…`,
+      '- agent: Second.',
+      '- agent: Third.',
+      `- agent: ${'x'.repeat(1_500)}…`,
     ]);
     expect(reading).not.toContain('Delegated reply.');
     expect(reading).not.toContain('First.');
@@ -95,7 +95,6 @@ describe('reading a task for an agent', () => {
     state.runs['run-builder'] = createRun({
       id: 'run-builder',
       taskId,
-      role: 'builder',
       startedAt: started + 1,
     });
     state.runs['run-early'] = createRun({
@@ -109,8 +108,8 @@ describe('reading a task for an agent', () => {
     transcripts.record('run-early', { type: 'agent', phase: 'final', text: 'Looked first.' });
     expect(resolveTaskReading(state, transcripts, taskId).split('\n').slice(-3)).toEqual([
       '- reviewer: Looked first.',
-      '- planner: Planned it.',
-      '- builder: Built it.',
+      '- agent: Planned it.',
+      '- agent: Built it.',
     ]);
   });
 });

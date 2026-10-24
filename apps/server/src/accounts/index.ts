@@ -18,6 +18,7 @@ import type { AccountLease, AccountLeaseRequest, RejectionVerdict, RunRejection 
 import { resolveClaudeExecutable } from '../agents/providers/claude/executable.ts';
 import type { ProviderUsageSource } from '../agents/providers/index.ts';
 import type { ServerConfig } from '../config/index.ts';
+import { createReadOnlyError } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import { type AccountActions, type AccountSource, createSummaryAccountSource } from '../onboarding/index.ts';
 import type { Engine } from '../runtime/engine.ts';
@@ -347,7 +348,7 @@ export class Accounts {
   snapshot(): AccountsSnapshot {
     const runs = this.#countRuns();
     const now = this.#now();
-    const model = resolveAgentModel(this.#engine.state.settings, 'builder', CLAUDE_PROVIDER);
+    const model = resolveAgentModel(this.#engine.state.settings, 'agent', CLAUDE_PROVIDER);
     const accounts = this.store.list().map((account): AccountSummary => {
       const signIn = this.#signIns.get(account.id);
       const usage = this.limits.snapshot(account.id);
@@ -460,8 +461,7 @@ export class Accounts {
 
   #assertChangeable() {
     if (!this.#config.inspect) return;
-    throw new DomainError(
-      'inspect_mode',
+    throw createReadOnlyError(
       'Shinsa is in inspect mode and only shows this data. Start it without SHINSA_INSPECT to sign in, refresh or change accounts.'
     );
   }

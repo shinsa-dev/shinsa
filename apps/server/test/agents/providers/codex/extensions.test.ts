@@ -106,13 +106,14 @@ describe('what a Codex agent is given', () => {
     const entries: ChatEvent[] = [];
     await startCodexSession(
       {
-        role: 'planner',
+        role: 'agent',
+        readOnly: true,
         cwd: createTempDir(),
         prompt: 'Plan it',
         model: 'gpt-6-astra',
         resume: null,
         defaultBranch: 'main',
-        tools: createShinsaTools('planner', (name) => Promise.resolve(`${name} accepted.`)),
+        tools: createShinsaTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
         pluginDir: '/plugin',
         onSession: () => undefined,
         onEntry: (entry) => entries.push(entry),
@@ -143,13 +144,14 @@ describe('what a Codex agent is given', () => {
     const entries: ChatEvent[] = [];
     await startCodexSession(
       {
-        role: 'planner',
+        role: 'agent',
+        readOnly: true,
         cwd: createTempDir(),
         prompt: 'Plan it',
         model: 'gpt-6-astra',
         resume: null,
         defaultBranch: 'main',
-        tools: createShinsaTools('planner', (name) => Promise.resolve(`${name} accepted.`)),
+        tools: createShinsaTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
         pluginDir: '/plugin',
         onSession: () => undefined,
         onEntry: (entry) => entries.push(entry),
@@ -167,13 +169,14 @@ describe('what a Codex agent is given', () => {
     const codex = new FakeCodex();
     await startCodexSession(
       {
-        role: 'planner',
+        role: 'agent',
+        readOnly: true,
         cwd: createTempDir(),
         prompt: 'Plan it',
         model: 'gpt-6-astra',
         resume: null,
         defaultBranch: 'main',
-        tools: createShinsaTools('planner', (name) => Promise.resolve(`${name} accepted.`)),
+        tools: createShinsaTools('agent', (name) => Promise.resolve(`${name} accepted.`)),
         pluginDir: '/plugin',
         onSession: () => undefined,
         onEntry: () => undefined,
