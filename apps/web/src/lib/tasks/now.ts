@@ -10,24 +10,23 @@ import { formatCount } from '@/lib/format/count.ts';
 import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
 
 export function resolveGateNow(task: Task, gate: Gate) {
-  if (gate.purpose !== 'decision') return gate.title;
-  switch (gate.kind) {
-    case 'spec': {
-      const phases = task.spec?.document?.plan.length ?? 0;
+  switch (gate.type) {
+    case 'plan': {
+      const phases = task.plan?.document?.phases.length ?? 0;
       return phases === 0 ? 'Plan to approve' : `${formatCount(phases, 'phase', 'phases')} to approve`;
     }
     case 'review':
       return task.report?.headline ?? 'Checks passed, agent review clean';
     case 'merge':
       return task.pullRequest ? `PR #${task.pullRequest.number} is clean` : 'Clean and ready to merge';
-    case 'question':
+    default:
       return gate.title;
   }
 }
 
 function resolveActivePhase(task: Task) {
   const index = task.phases.findIndex((phase) => phase.status === 'active');
-  return task.spec?.document?.plan[index]?.title ?? null;
+  return task.plan?.document?.phases[index]?.title ?? null;
 }
 
 export function resolveTaskNow(state: ShinsaState, task: Task): string {

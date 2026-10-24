@@ -156,7 +156,7 @@ describe('typing in the root', () => {
     await type('  Add a dark mode toggle  ');
     await choose(/Create task:/);
     expect(listSentCommands()).toEqual([
-      { type: 'task.create', intent: 'Add a dark mode toggle', repoId: null },
+      { type: 'task.create', request: 'Add a dark mode toggle', repoId: null },
     ]);
     await waitFor(() => expect(isMenuOpen()).toBe(false));
   });
@@ -311,7 +311,7 @@ describe('on a task page', () => {
       }),
       ...tasks.slice(1),
     ],
-    gates: [createGate({ id: 'review', taskId: 'login', kind: 'review' })],
+    gates: [createGate({ id: 'review', taskId: 'login', type: 'review' })],
   });
 
   function Header({ state, comments }: { state: ShinsaState; comments: LineComment[] }) {

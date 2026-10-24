@@ -70,11 +70,11 @@ function resolveProjectId(project: string) {
   return project === NO_PROJECT ? null : project;
 }
 
-export function createNewTaskCommand(intent: string, choices: NewTaskChoices): UserCommand {
+export function createNewTaskCommand(request: string, choices: NewTaskChoices): UserCommand {
   const { project, start, priority } = choices;
   return {
     type: 'task.create',
-    intent: intent.trim(),
+    request: request.trim(),
     repoId: null,
     ...(project === 'auto' ? {} : { projectId: resolveProjectId(project) }),
     ...(priority === 'auto' ? {} : { priority }),

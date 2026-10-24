@@ -53,7 +53,7 @@ function AttentionSignals({ state, route }: { state: ShinsaState; route: Route }
 function Loading() {
   return (
     <div className='grid h-dvh place-items-center bg-background'>
-      <Spinner className='size-5 text-fg-2' />
+      <Spinner size='lg' className='text-fg-2' />
     </div>
   );
 }

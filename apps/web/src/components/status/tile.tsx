@@ -5,8 +5,8 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { TONE_SURFACE, TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 
 const TILE_SIZE = {
-  sm: { tile: 'size-4', icon: 'size-2.5' },
-  md: { tile: 'size-5', icon: 'size-3' },
+  sm: 'size-4',
+  md: 'size-5',
 };
 
 export function StatusTile({
@@ -29,12 +29,12 @@ export function StatusTile({
       {...(label ? { role: 'img', 'aria-label': label } : { 'aria-hidden': true })}
       className={cn(
         'corner-superellipse/1.125 inline-grid shrink-0 place-items-center rounded-control-sm',
-        TILE_SIZE[size].tile,
+        TILE_SIZE[size],
         TONE_SURFACE[tone],
         className
       )}
     >
-      <Icon name={icon} className={cn(TILE_SIZE[size].icon, TONE_TEXT[tone])} />
+      <Icon name={icon} size='sm' className={TONE_TEXT[tone]} />
     </span>
   );
   if (!label) return tile;

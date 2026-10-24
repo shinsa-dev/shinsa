@@ -32,7 +32,7 @@ interface HostProps {
 function ProblemRow({ problem }: { problem: string }) {
   return (
     <div className='flex min-h-8 items-start gap-1.5 py-1.5 pr-1.5 pl-2 text-2xs text-fg-3'>
-      <Icon name='IconExclamationTriangle' className='mt-px size-3.5 shrink-0 text-orange-text' />
+      <Icon size='sm' name='IconExclamationTriangle' className='mt-px text-orange-text' />
       <span className='min-w-0'>{problem}</span>
     </div>
   );
@@ -127,6 +127,7 @@ export function McpServersGroup({
           key={group.key}
           title={group.title}
           detail={String(group.servers.length)}
+          status={group}
           startsOpen={isServerGroupOpen(group)}
           forcedOpen={searching}
         >

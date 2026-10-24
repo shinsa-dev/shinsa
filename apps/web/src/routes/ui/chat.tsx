@@ -1,15 +1,24 @@
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { ChatLine, DetailRail, ExpandRow, FoldLine } from '@/components/chat/chat-line.tsx';
 import { ContextGauge } from '@/components/chat/context-meter.tsx';
 import { DelegationReportRow, DelegationSpawnCard } from '@/components/chat/delegation-card.tsx';
+import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { NoticeLine } from '@/components/chat/notice-line.tsx';
-import { RoundHeader } from '@/components/chat/round-header.tsx';
+import { RoundDivider } from '@/components/chat/round-divider.tsx';
+import { ToolGroup, ToolRow } from '@/components/chat/tool-group.tsx';
+import { UserMessage } from '@/components/chat/user-message.tsx';
+import { CHAT_COLUMN, CHAT_INSET } from '@/components/layout/surface/card.ts';
+import { Panel } from '@/components/layout/surface/panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
+import { StatusTile } from '@/components/status/tile.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import { resolveContextMeter } from '@/lib/chat/context.ts';
 import { type DelegationView, selectDelegation } from '@/lib/chat/delegations.ts';
 import type { QuietNoticeKind, TimelineItemOf } from '@/lib/chat/timeline.ts';
+import { createSampleChatCalls } from './sample-chat.ts';
 import { createSampleDelegations } from './sample-delegations.ts';
-import { acknowledgeSample, createSampleRoundsTask, createSampleState } from './samples.ts';
+import { acknowledgeSample, createSampleRoundsTask, createSampleRun, createSampleState } from './samples.ts';
 import { Specimen } from './section.tsx';
 
 const CONTEXT_TOKENS = [48_000, 156_000, 188_000];
@@ -80,27 +89,128 @@ function DelegatedConversation({ view }: { view: DelegationView }) {
 
 function RoundSpecimens({ now }: { now: number }) {
   const [task] = React.useState(() => createSampleRoundsTask(now));
-  const [open, setOpen] = React.useState<Record<number, boolean>>({ 3: true, 4: true });
+  const [state] = React.useState(() => createSampleState({ tasks: [task] }));
   return (
     <>
-      <Specimen label='RoundHeader · a chat section per round: earlier rounds on their pull request, the current round with its progress, a round waiting with how it ships'>
+      <Specimen label='RoundDivider · where each round starts in the chat: earlier rounds on their pull request, the current round, a round waiting to start'>
         <div className='flex w-full max-w-xl flex-col'>
-          {(task.rounds ?? []).map((round) => (
-            <RoundHeader
-              key={round.number}
-              task={task}
-              round={round}
-              open={open[round.number] === true}
-              onToggle={() => setOpen((current) => ({ ...current, [round.number]: !current[round.number] }))}
-              onShippingChange={acknowledgeSample}
-              className='border-border border-b'
-            />
+          {(task.rounds ?? []).map((round, index) => (
+            <RoundDivider key={round.number} round={round} first={index === 0} />
           ))}
         </div>
       </Specimen>
       <Specimen label='RoundsPanel · the Overview’s earlier rounds, folded and readable, and the rounds waiting to start'>
         <div className='w-full max-w-xl'>
-          <RoundsPanel task={task} onShippingChange={acknowledgeSample} />
+          <RoundsPanel
+            state={state}
+            task={task}
+            onOpen={() => acknowledgeSample()}
+            onShippingChange={acknowledgeSample}
+          />
+        </div>
+      </Specimen>
+    </>
+  );
+}
+
+function IconColumnGuide() {
+  return (
+    <span aria-hidden className='pointer-events-none absolute inset-y-0 start-0 flex ps-(--chat-inset)'>
+      <span className='flex w-5 justify-center'>
+        <span className='w-px bg-primary-a3' />
+      </span>
+    </span>
+  );
+}
+
+function IconColumnSpecimen({ view }: { view: DelegationView | undefined }) {
+  const [calls] = React.useState(createSampleChatCalls);
+  const [now] = React.useState(Date.now);
+  const [run] = React.useState(() =>
+    createSampleRun(now, {
+      id: 'answerer',
+      taskId: 'sample',
+      role: 'answerer',
+      endedAt: now,
+      outcome: 'completed',
+    })
+  );
+  return (
+    <Specimen label='One icon column · chat lines, the hand-over and delegation cards between them, and an Overview panel: every icon sits in a 20px slot on the card’s 12px inset (13px into the chat column: the border and the inset), every title 8px after its icon. The line marks the column'>
+      <div className={cn(CHAT_COLUMN, 'relative flex w-full max-w-xl flex-col gap-4')}>
+        <IconColumnGuide />
+        <ChatLine
+          className={CHAT_INSET}
+          icon='IconBubbleText'
+          label='Answerer'
+          meta='Answered your question'
+        />
+        <div className={CHAT_INSET}>
+          <FoldLine open={false} onToggle={() => undefined} label='Worked for 12s' meta='1 step' />
+        </div>
+        <HandoverCard call={calls.ask} run={run} live={false} />
+        {view && (
+          <DelegationSpawnCard
+            view={view}
+            conversation={(opened) => <DelegatedConversation view={opened} />}
+            onStop={acknowledgeSample}
+          />
+        )}
+        <Panel title='Activity' icon='IconClock'>
+          <div className='flex items-center gap-3 text-fg-3 text-xs'>
+            <StatusTile icon='IconBubbleText' tone='blue' />
+            Answered the question
+          </div>
+          <div className='flex items-center gap-3 text-fg-3 text-xs'>
+            <StatusTile icon='IconArrowRight' tone='neutral' />
+            Answering the question
+          </div>
+        </Panel>
+      </div>
+    </Specimen>
+  );
+}
+
+function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<QuietNoticeKind>[] }) {
+  const [calls] = React.useState(createSampleChatCalls);
+  const [run] = React.useState(() =>
+    createSampleRun(now, {
+      id: 'planner',
+      taskId: 'sample',
+      role: 'planner',
+      endedAt: now,
+      outcome: 'completed',
+    })
+  );
+  const [open, setOpen] = React.useState(true);
+  const loaded = notices.find((item) => item.kind === 'extensions');
+  return (
+    <>
+      <Specimen label='Chat lines · one anatomy for every one-line row in a run: the role header, a notice, the worked-for fold, the brief, tool rows, a hand-over Shinsa handed back and the agent retried'>
+        <div className='flex w-full max-w-xl flex-col gap-4'>
+          <ChatLine icon='IconMap' label='Planner' meta='Planned 4 phases · christo@example.com' />
+          {loaded && <NoticeLine item={loaded} />}
+          <div className='flex min-w-0 flex-col'>
+            <FoldLine open={open} onToggle={() => setOpen(!open)} label='Worked for 58s' meta='8 steps' />
+            {open && (
+              <DetailRail className='pb-0'>
+                <div className='flex min-w-0 flex-col gap-4'>
+                  <ExpandRow icon='IconFileText' label='Brief from Shinsa'>
+                    <Markdown text='List the projects Shinsa knows.' className='prose-chat' />
+                  </ExpandRow>
+                  <ToolGroup calls={calls.work} live={false} />
+                  <ToolRow call={calls.retried} live={false} />
+                </div>
+              </DetailRail>
+            )}
+          </div>
+        </div>
+      </Specimen>
+      <Specimen label='Hand-over cards · one header: a question you answered, the steps set, and a hand-over that failed for good (the only red)'>
+        <div className='flex w-full max-w-xl flex-col gap-4'>
+          <HandoverCard call={calls.ask} run={run} live={false} />
+          <HandoverCard call={calls.reshape} run={run} live={false} />
+          <HandoverCard call={calls.failed} run={run} live={false} />
         </div>
       </Specimen>
     </>
@@ -114,8 +224,10 @@ export function ChatSpecimens() {
   const ended = views.filter((view) => !view.live);
   return (
     <>
+      <IconColumnSpecimen view={views.find((view) => !view.live)} />
+      <LineSpecimens now={now} notices={notices} />
       <RoundSpecimens now={now} />
-      <Specimen label='Delegation spawn cards · working, waiting for its delegated tasks, asked a question, finished, failed, stopped'>
+      <Specimen label='Delegation spawn cards · working, waiting for its delegations, asked a question, finished, failed, stopped'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           {views.map((view) => (
             <DelegationSpawnCard
@@ -134,7 +246,13 @@ export function ChatSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (hover for why)'>
+      <Specimen label='UserMessage · delivered, and delivering while Shinsa decides what the message is'>
+        <div className='flex w-full max-w-xl flex-col gap-2'>
+          <UserMessage text='Use the cheaper plan.' />
+          <UserMessage text='Also add search to the settings page.' pending />
+        </div>
+      </Specimen>
+      <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (open a row for why)'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           {notices.map((item) => (
             <NoticeLine key={item.key} item={item} />

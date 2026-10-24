@@ -46,8 +46,7 @@ function state(gateIds: string[], patch = {}) {
       createGate({
         id,
         taskId: id.startsWith('far') ? 't-2' : 't-1',
-        kind: 'question',
-        purpose: 'agent_question',
+        type: 'question',
         title: `Question ${id}`,
       })
     ),
@@ -76,8 +75,7 @@ describe('chiming and notifying on new decisions', () => {
           createGate({
             id: 'g-1',
             taskId: 't-1',
-            kind: 'question',
-            purpose: 'operation',
+            type: 'operation',
             title: 'The change merged. Run the operation now?',
             commit: 'f00dfacecafe',
             notes,

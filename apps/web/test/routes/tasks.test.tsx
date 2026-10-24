@@ -18,21 +18,21 @@ const ROADMAP = createShinsaState({
       stage: 'building',
       branch: 'feat/search-index',
     }),
-    createTask({ id: 'waiting', title: 'Ship search docs', stage: 'queued', waitsOn: ['working'] }),
+    createTask({ id: 'waiting', title: 'Ship search docs', stage: 'waiting_on_tasks', waitsOn: ['working'] }),
     createTask({ id: 'done', title: 'Rename the settings page', stage: 'merged' }),
     createTask({
       id: 'cancelled',
       title: 'Try a new font',
       stage: 'cancelled',
-      intent: 'Swap Inter for Geist',
+      request: 'Swap Inter for Geist',
     }),
   ],
   gates: [
-    createGate({ id: 'g-merge', taskId: 'merge', kind: 'merge' }),
-    createGate({ id: 'g-review', taskId: 'review', kind: 'review' }),
-    createGate({ id: 'g-plan', taskId: 'plan', kind: 'spec' }),
-    createGate({ id: 'g-answer', taskId: 'answer', kind: 'question', purpose: 'agent_question' }),
-    createGate({ id: 'g-paused', taskId: 'paused', kind: 'review', purpose: 'failure' }),
+    createGate({ id: 'g-merge', taskId: 'merge', type: 'merge' }),
+    createGate({ id: 'g-review', taskId: 'review', type: 'review' }),
+    createGate({ id: 'g-plan', taskId: 'plan', type: 'plan' }),
+    createGate({ id: 'g-answer', taskId: 'answer', type: 'question' }),
+    createGate({ id: 'g-paused', taskId: 'paused', type: 'failure' }),
   ],
 });
 
@@ -182,7 +182,7 @@ function chain(tasks: Task[]) {
 }
 
 function waiting(id: string, title: string, waitsOn: string[], overrides: Partial<Task> = {}) {
-  return createTask({ id, title, stage: 'queued', waitsOn, ...overrides });
+  return createTask({ id, title, stage: 'waiting_on_tasks', waitsOn, ...overrides });
 }
 
 function waitingRows() {

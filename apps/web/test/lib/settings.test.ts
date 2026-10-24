@@ -11,10 +11,7 @@ import {
   AGENT_ROLES,
   type AgentGroup,
   COMPACTION_MODE_ITEMS,
-  changeAgentModel,
-  changeAgentSpeed,
-  changeGroupModel,
-  changeGroupSpeed,
+  describeFollowedRole,
   describeGroupSelects,
   describeRoleSelects,
   FAST_MODE_ITEMS,
@@ -36,16 +33,19 @@ import {
   parseCompaction,
   parseFixRounds,
   parseUsageLimit,
+  resolveAgentModelPatch,
   resolveAgentModelValue,
+  resolveAgentSpeedPatch,
   resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
   resolveFixRoundValue,
   resolveGroupModel,
+  resolveGroupModelPatch,
   resolveGroupSpeed,
+  resolveGroupSpeedPatch,
   resolveHashSectionId,
   resolvePlanValue,
-  resolveProviderIcon,
   resolveRootAdded,
   resolveRootRemoved,
   resolveRootToggled,
@@ -89,12 +89,29 @@ describe('setting choices', () => {
     expect(PLAN_ITEMS.map((item) => item.value)).toEqual(['never', 'large']);
     expect(MERGE_ITEMS.map((item) => item.value)).toEqual(['squash', 'merge', 'rebase']);
     expect(AGENT_GROUPS.map((group) => [group.title, group.roles.map((entry) => entry.title)])).toEqual([
-      ['Doing the work', ['Planner', 'Builder', 'Fixer']],
-      ['Checking the work', ['Reviewer']],
-      ['Answering questions', ['Answerer']],
+      ['Task agents', ['Planner', 'Builder', 'Reviewer', 'Fixer', 'Answerer']],
       ['Quick jobs', ['Classifier', 'Writer']],
     ]);
     expect(AGENT_ROLES).toHaveLength(7);
+  });
+
+  it('names what each group holds in one sentence, and every role in a sentence of its own', () => {
+    expect(AGENT_GROUPS.map((group) => group.description)).toEqual([
+      'They plan, build, review and fix the work, answer questions, investigate problems, do research and run operations.',
+      'They sort new tasks and your messages, and write the guide on Home.',
+    ]);
+    const described = AGENT_GROUPS.flatMap((group) => [...group.roles, ...group.following]);
+    expect(described.every((entry) => /^[A-Z].+\.$/.test(entry.description))).toBe(true);
+  });
+
+  it('lists the investigator, researcher and operator under task agents, following the role whose settings they use', () => {
+    const [task, quick] = AGENT_GROUPS as [AgentGroup, AgentGroup];
+    expect(task.following.map((entry) => [entry.title, describeFollowedRole(entry)])).toEqual([
+      ['Investigator', 'Follows the answerer'],
+      ['Researcher', 'Follows the answerer'],
+      ['Operator', 'Follows the builder'],
+    ]);
+    expect(quick.following).toEqual([]);
   });
 });
 
@@ -228,7 +245,7 @@ describe('agents by what they do', () => {
     },
     { id: 'codex', label: 'Codex', models: [{ id: 'gpt-6-astra', label: 'GPT-6-Astra', description: '' }] },
   ];
-  const [work, review] = AGENT_GROUPS as [(typeof AGENT_GROUPS)[number], (typeof AGENT_GROUPS)[number]];
+  const [work, quick] = AGENT_GROUPS as [AgentGroup, AgentGroup];
 
   it('shows one model for a group whose roles agree, every provider’s models grouped by provider', () => {
     expect(resolveGroupModel(settings(), work)).toBe('claude:opus');
@@ -251,39 +268,33 @@ describe('agents by what they do', () => {
       'GPT-6-Astra',
     ]);
     expect(resolveGroupModel(settings({ agentProviders: { fixer: 'codex' } }), work)).toBe(MIXED_VALUE);
+    expect(resolveGroupModel(settings(), quick)).toBe('claude:sonnet');
   });
 
-  it('saves a pick, provider and model together, for every role in the group, keeping the other roles', async () => {
-    const spies = spyOnCommands();
-    const current = settings({ agentModels: { reviewer: 'sonnet' } });
-    await changeGroupModel(current, work, 'codex:gpt-6-astra', 'Saved.');
-    await changeGroupModel(current, review, 'claude:opus');
-    expect(await changeGroupModel(current, work, MIXED_VALUE)).toBe(false);
-    expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
-      [
-        {
-          type: 'settings.change',
-          patch: {
-            agentProviders: { planner: 'codex', builder: 'codex', fixer: 'codex' },
-            agentModels: {
-              reviewer: 'sonnet',
-              planner: 'gpt-6-astra',
-              builder: 'gpt-6-astra',
-              fixer: 'gpt-6-astra',
-            },
-          },
-        },
-        'Saved.',
-      ],
-      [
-        {
-          type: 'settings.change',
-          patch: { agentProviders: { reviewer: 'claude' }, agentModels: { reviewer: 'opus' } },
-        },
-        undefined,
-      ],
-    ] as never);
-    spies.restore();
+  it('patches a pick, provider and model together, for every role in the group, keeping the other roles', () => {
+    const current = settings({ agentModels: { writer: 'haiku' } });
+    expect(resolveGroupModelPatch(current, work, 'codex:gpt-6-astra')).toEqual({
+      agentProviders: {
+        planner: 'codex',
+        builder: 'codex',
+        reviewer: 'codex',
+        fixer: 'codex',
+        answerer: 'codex',
+      },
+      agentModels: {
+        writer: 'haiku',
+        planner: 'gpt-6-astra',
+        builder: 'gpt-6-astra',
+        reviewer: 'gpt-6-astra',
+        fixer: 'gpt-6-astra',
+        answerer: 'gpt-6-astra',
+      },
+    });
+    expect(resolveGroupModelPatch(current, quick, 'claude:opus')).toEqual({
+      agentProviders: { classifier: 'claude', writer: 'claude' },
+      agentModels: { writer: 'opus', classifier: 'opus' },
+    });
+    expect(resolveGroupModelPatch(current, work, MIXED_VALUE)).toBeNull();
   });
 });
 
@@ -307,7 +318,6 @@ describe('models per role', () => {
       icon: 'IconOpenaiCodex',
       group: 'Codex',
     });
-    expect(resolveProviderIcon('cursor')).toBe('IconRobot');
   });
 
   it('puts a current model the catalog does not know first in its provider’s group, by its display name', () => {
@@ -332,23 +342,12 @@ describe('models per role', () => {
     });
   });
 
-  it('saves a role’s provider and model together, and only that role', () => {
-    const spies = spyOnCommands();
+  it('patches a role’s provider and model together, and only that role', () => {
     const current = settings({ agentProviders: { planner: 'codex' }, agentModels: { builder: 'sonnet' } });
-    void changeAgentModel(current, 'reviewer', 'codex:gpt-5.6-sol', 'Saved.');
-    expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
-      [
-        {
-          type: 'settings.change',
-          patch: {
-            agentProviders: { planner: 'codex', reviewer: 'codex' },
-            agentModels: { builder: 'sonnet', reviewer: 'gpt-5.6-sol' },
-          },
-        },
-        'Saved.',
-      ],
-    ] as never);
-    spies.restore();
+    expect(resolveAgentModelPatch(current, 'reviewer', 'codex:gpt-5.6-sol')).toEqual({
+      agentProviders: { planner: 'codex', reviewer: 'codex' },
+      agentModels: { builder: 'sonnet', reviewer: 'gpt-5.6-sol' },
+    });
   });
 });
 
@@ -362,16 +361,11 @@ describe('resolveSectionId', () => {
     expect(resolveHashSectionId('')).toBeNull();
   });
 
-  it('turns a title of several words into one anchor, and the old Folders link finds it', () => {
+  it('turns a title of several words into one anchor, and a link finds it in any case', () => {
     expect(resolveSectionId('Repository folders')).toBe('settings-repository-folders');
-    expect(resolveHashSectionId('#folders')).toBe('settings-repository-folders');
     expect(resolveHashSectionId('#repository-folders')).toBe('settings-repository-folders');
-  });
-
-  it('sends the old Usage and Codex links to the Accounts section that holds them now', () => {
-    expect(resolveHashSectionId('#usage')).toBe('settings-agent-usage');
-    expect(resolveHashSectionId('#Codex')).toBe('settings-agent-usage');
-    expect(resolveHashSectionId('#accounts')).toBe('settings-agent-usage');
+    expect(resolveHashSectionId('#Accounts')).toBe('settings-accounts');
+    expect(resolveHashSectionId('#models')).toBe('settings-models');
   });
 });
 
@@ -443,10 +437,8 @@ describe('compaction and fast mode', () => {
     expect(listGroupSpeedItems(fast, work, 'needs_credits')).toEqual(listSpeedItems('needs_credits'));
   });
 
-  it('runs every role at standard speed until you pick fast for a group or a role', async () => {
-    const spies = spyOnCommands();
-    const work = AGENT_GROUPS[0] as AgentGroup;
-    const quick = AGENT_GROUPS[3] as AgentGroup;
+  it('runs every role at standard speed until you pick fast for a group or a role', () => {
+    const [work, quick] = AGENT_GROUPS as [AgentGroup, AgentGroup];
     expect(FAST_MODE_ITEMS.map((item) => item.label)).toEqual(['Standard', 'Fast']);
     const chosen: Settings = { ...createSettings(), agentFastModes: { builder: true } };
     expect(resolveSpeedValue(createSettings(), 'builder')).toBe('off');
@@ -459,20 +451,13 @@ describe('compaction and fast mode', () => {
       'Fast',
     ]);
     expect(listGroupSpeedItems(createSettings(), quick)).toBe(FAST_MODE_ITEMS);
-    expect(await changeGroupSpeed(chosen, work, MIXED_VALUE)).toBe(false);
-    await changeGroupSpeed(chosen, quick, 'on');
-    await changeAgentSpeed(chosen, 'planner', 'off', 'Saved.');
-    expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
-      [
-        {
-          type: 'settings.change',
-          patch: { agentFastModes: { builder: true, classifier: true, writer: true } },
-        },
-        undefined,
-      ],
-      [{ type: 'settings.change', patch: { agentFastModes: { builder: true, planner: false } } }, 'Saved.'],
-    ] as never);
-    spies.restore();
+    expect(resolveGroupSpeedPatch(chosen, work, MIXED_VALUE)).toBeNull();
+    expect(resolveGroupSpeedPatch(chosen, quick, 'on')).toEqual({
+      agentFastModes: { builder: true, classifier: true, writer: true },
+    });
+    expect(resolveAgentSpeedPatch(chosen, 'planner', 'off')).toEqual({
+      agentFastModes: { builder: true, planner: false },
+    });
   });
 });
 
@@ -489,8 +474,8 @@ describe('agent selects', () => {
   it('names a group’s selects the way ⌘K does, and a role’s by the role', () => {
     const doing = AGENT_GROUPS[0] as (typeof AGENT_GROUPS)[number];
     expect(describeGroupSelects(doing)).toEqual({
-      model: 'Model for doing the work',
-      speed: 'Speed for doing the work',
+      model: 'Model for task agents',
+      speed: 'Speed for task agents',
     });
     expect(describeRoleSelects(doing.roles[0] as (typeof doing.roles)[number])).toEqual({
       model: 'Planner model',

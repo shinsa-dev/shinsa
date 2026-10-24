@@ -8,31 +8,35 @@ import {
 } from '@shinsa/core';
 import { describeStopDelegation, listLiveDelegations } from '@/lib/chat/delegations.ts';
 import { type Command, RANK } from '@/lib/command/registry.ts';
-import { describeCheckCount } from '@/lib/overview/wait.ts';
+import { describeCheckInCount } from '@/lib/overview/wait.ts';
 import {
   acceptSuggestion,
   dismissSilence,
   dismissSuggestion,
   keepSuggestion,
-  requestCheckNow,
+  requestCheckInNow,
   SNOOZE_HINT,
   snoozeSilence,
   stopDelegation,
 } from '@/lib/tasks/process.ts';
-import { changeRoundShipping, listShippingItems } from '@/lib/tasks/rounds.ts';
-import { FOLLOW_UP_START_LABEL, listFollowUpStarts, listOpenSuggestions } from '@/lib/tasks/suggestions.ts';
+import { changeRoundShipping, listShippingItems, ROUND_ICON } from '@/lib/tasks/rounds.ts';
+import {
+  listOpenSuggestions,
+  listSuggestionStarts,
+  SUGGESTION_START_LABEL,
+} from '@/lib/tasks/suggestions.ts';
 
 function listWaitCommands(task: Task): Command[] {
   if (task.monitor?.status !== 'armed') return [];
   return [
     {
       kind: 'run',
-      id: `task.${task.id}.check-now`,
-      label: 'Check now',
-      hint: describeCheckCount(task.monitor),
+      id: `task.${task.id}.check-in-now`,
+      label: 'Check in now',
+      hint: describeCheckInCount(task.monitor),
       icon: 'IconStopwatch',
-      keywords: ['wait', 'monitor', 'poll', 'wake', 'check'],
-      run: () => void requestCheckNow(task.id),
+      keywords: ['wait', 'monitor', 'poll', 'wake', 'check', 'check in'],
+      run: () => void requestCheckInNow(task.id),
     },
   ];
 }
@@ -71,20 +75,20 @@ function listSuggestionCommands(task: Task): Command[] {
       {
         kind: 'page',
         id: `${id}.accept`,
-        label: `Add the follow-up “${suggestion.title}”`,
+        label: `Add the suggested task “${suggestion.title}”`,
         hint: suggestion.why,
         icon: 'IconPlusMedium',
-        keywords: ['follow-up', 'suggestion', 'roadmap', 'accept', 'add'],
+        keywords: ['suggested task', 'suggestion', 'roadmap', 'accept', 'add'],
         page: {
           kind: 'list',
           crumb: 'Add',
-          placeholder: FOLLOW_UP_START_LABEL,
+          placeholder: SUGGESTION_START_LABEL,
           sections: [
             {
               id: `${id}.start`,
-              heading: FOLLOW_UP_START_LABEL,
+              heading: SUGGESTION_START_LABEL,
               rank: RANK.context,
-              commands: listFollowUpStarts(suggestion).map((item) => ({
+              commands: listSuggestionStarts(suggestion).map((item) => ({
                 kind: 'run',
                 id: `${id}.accept.${item.value}`,
                 label: item.label,
@@ -102,16 +106,16 @@ function listSuggestionCommands(task: Task): Command[] {
             id: `${id}.keep`,
             label: `Keep “${suggestion.title}” in this task`,
             hint: 'As the next round',
-            icon: 'IconArrowsRepeatCircle',
+            icon: ROUND_ICON,
             keywords: ['split', 'separate', 'round', 'keep', 'decline'],
             run: () => void keepSuggestion(task, suggestion),
           }
         : {
             kind: 'run',
             id: `${id}.dismiss`,
-            label: `Dismiss the follow-up “${suggestion.title}”`,
+            label: `Dismiss the suggested task “${suggestion.title}”`,
             icon: 'IconCrossMedium',
-            keywords: ['follow-up', 'suggestion', 'dismiss'],
+            keywords: ['suggested task', 'suggestion', 'dismiss'],
             run: () => void dismissSuggestion(task, suggestion),
           },
     ];

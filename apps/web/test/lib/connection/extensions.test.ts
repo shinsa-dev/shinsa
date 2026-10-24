@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'b
 import type { ExtensionsSnapshot } from '@shinsa/core';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
+  CHECK_INTERVAL_MS,
   checkServers,
   EXTENSION_ACTIONS,
   refreshExtensions,
@@ -110,6 +111,23 @@ describe('the extensions snapshot', () => {
     expect(bodiesTo('/api/extensions/check')).toEqual([{}]);
   });
 
+  it('checks the MCPs at most once a minute, and in between reads twice to catch the server’s rebuild', async () => {
+    serve({
+      'GET /api/extensions': { answer: SNAPSHOT },
+      'POST /api/extensions/check': { answer: SNAPSHOT },
+    });
+    const first = requestServerCheck(1_000);
+    expect(requestServerCheck(1_000)).toBe(first);
+    await first;
+    const shown = selectExtensions();
+    await requestServerCheck(1_000 + CHECK_INTERVAL_MS - 1);
+    expect(bodiesTo('/api/extensions/check')).toHaveLength(1);
+    expect(bodiesTo('/api/extensions')).toHaveLength(2);
+    expect(selectExtensions()).toBe(shown);
+    await requestServerCheck(1_000 + CHECK_INTERVAL_MS);
+    expect(bodiesTo('/api/extensions/check')).toHaveLength(2);
+  });
+
   it('keeps what it showed and says why when the server cannot be read', async () => {
     serve({ 'GET /api/extensions': { answer: SNAPSHOT } });
     await refreshExtensions();
@@ -185,7 +203,7 @@ describe('changes', () => {
     expect(bodiesTo('/api/extensions/skills/choose')).toEqual([{ skillId: 'review', enabled: false }]);
     expect(bodiesTo('/api/extensions/plugins/choose')).toEqual([{ pluginId: 'stripe', enabled: true }]);
     expect(toasts.success.mock.calls.map(([text]) => text)).toEqual([
-      'Checked every server that is on.',
+      'Checked every MCP that is on.',
       'Checked linear.',
       'Added linear.',
       'Saved linear.',
@@ -194,7 +212,7 @@ describe('changes', () => {
       'Signed out of linear.',
       'Turned off the review skill.',
       'Turned on the stripe plugin.',
-      'Agents now leave out servers unused for 14 days.',
+      'Agents now leave out MCPs unused for 14 days.',
     ]);
   });
 

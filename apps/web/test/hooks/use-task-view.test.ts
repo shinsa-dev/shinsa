@@ -44,8 +44,8 @@ describe('useTaskView', () => {
   });
 
   it('leads with a pause or question over the decision, and keys the draft to the decision', () => {
-    const decision = createGate({ id: 'g1', taskId: 't1', kind: 'review' });
-    const failure = createGate({ id: 'g2', taskId: 't1', kind: 'review', purpose: 'failure' });
+    const decision = createGate({ id: 'g1', taskId: 't1', type: 'review' });
+    const failure = createGate({ id: 'g2', taskId: 't1', type: 'failure' });
     const { result } = view(
       createShinsaState({ tasks: [createTask({ id: 't1' })], gates: [decision, failure] })
     );
@@ -58,7 +58,7 @@ describe('useTaskView', () => {
     const merge = view(
       createShinsaState({
         tasks: [createTask({ id: 't1' })],
-        gates: [createGate({ id: 'g1', taskId: 't1', kind: 'merge' })],
+        gates: [createGate({ id: 'g1', taskId: 't1', type: 'merge' })],
       })
     );
     expect(merge.result.current.reviewing).toBe(true);
@@ -66,7 +66,7 @@ describe('useTaskView', () => {
     const plan = view(
       createShinsaState({
         tasks: [createTask({ id: 't1' })],
-        gates: [createGate({ id: 'g1', taskId: 't1', kind: 'spec' })],
+        gates: [createGate({ id: 'g1', taskId: 't1', type: 'plan' })],
       })
     );
     expect(plan.result.current.reviewing).toBe(false);

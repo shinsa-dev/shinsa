@@ -62,11 +62,10 @@ describe('the sign-in dialog', () => {
 });
 
 describe('a sign-in a provider owns', () => {
-  it('is a provider Shinsa knows other than Claude, never an account of its own', () => {
-    expect(resolveSignInProvider({ account: { id: 'codex', email: null } })).toBe('codex');
-    expect(resolveSignInProvider({ account: { id: 'claude', email: null } })).toBeNull();
-    expect(resolveSignInProvider({ account: { id: 'a1b2c3d4', email: 'a@example.com' } })).toBeNull();
-    expect(resolveSignInProvider({ account: null })).toBeNull();
+  it('is the provider the gate names, unless it is Claude, whose accounts Shinsa signs in itself', () => {
+    expect(resolveSignInProvider({ provider: 'codex' })).toBe('codex');
+    expect(resolveSignInProvider({ provider: 'gemini' })).toBe('gemini');
+    expect(resolveSignInProvider({ provider: 'claude' })).toBeNull();
     expect(describeSignInCheck('codex')).toBe('Check the Codex sign-in again');
   });
 

@@ -51,7 +51,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
         <span className={cn('truncate text-fg-4', !compact && 'flex-1')}>
           {focus ? focus.name : 'All work'}
         </span>
-        <Icon name='IconChevronDownSmall' className={cn('text-fg-4', compact ? 'size-4' : 'size-4.5')} />
+        <Icon name='IconChevronDownSmall' size={compact ? 'sm' : 'md'} className='text-fg-4' />
       </DropdownMenuTrigger>
       <DropdownMenuContent align={compact ? 'end' : 'start'} className='min-w-52'>
         <DropdownMenuRadioGroup

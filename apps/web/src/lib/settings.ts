@@ -7,6 +7,8 @@ import {
   describeUsd,
   type FastModeAvailability,
   listAgentProviders,
+  RUN_AGENT_ROLE,
+  type RunRole,
   resolveAgentFastMode,
   resolveAgentModel,
   resolveAgentProvider,
@@ -19,6 +21,7 @@ import {
   type Settings,
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { resolveProviderIcon } from '@/lib/accounts/account.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { resolveToggledRoots } from '@/lib/onboarding.ts';
 import type { AlertPreference, SoundId } from '@/lib/preferences/notifications.ts';
@@ -39,37 +42,75 @@ export function updateSettings(patch: Partial<Settings>, done?: string) {
 export interface AgentRoleEntry {
   role: AgentRole;
   title: string;
+  description: string;
+}
+
+export interface FollowingRoleEntry {
+  role: RunRole;
+  title: string;
+  description: string;
+  follows: AgentRoleEntry;
 }
 
 export interface AgentGroup {
   id: string;
   title: string;
+  description: string;
   roles: AgentRoleEntry[];
+  following: FollowingRoleEntry[];
+}
+
+const TASK_ROLES: AgentRoleEntry[] = [
+  { role: 'planner', title: 'Planner', description: 'Plans the work and the steps a task takes.' },
+  { role: 'builder', title: 'Builder', description: 'Makes the changes, one phase at a time.' },
+  { role: 'reviewer', title: 'Reviewer', description: 'Checks the changes before you see them.' },
+  {
+    role: 'fixer',
+    title: 'Fixer',
+    description: 'Fixes failing checks, review findings and the changes you ask for.',
+  },
+  { role: 'answerer', title: 'Answerer', description: 'Answers questions about your code.' },
+];
+
+function followRole(role: RunRole, title: string, description: string): FollowingRoleEntry {
+  const follows = TASK_ROLES.find((entry) => entry.role === RUN_AGENT_ROLE[role]) as AgentRoleEntry;
+  return { role, title, description, follows };
 }
 
 export const AGENT_GROUPS: AgentGroup[] = [
   {
-    id: 'work',
-    title: 'Doing the work',
-    roles: [
-      { role: 'planner', title: 'Planner' },
-      { role: 'builder', title: 'Builder' },
-      { role: 'fixer', title: 'Fixer' },
+    id: 'task',
+    title: 'Task agents',
+    description:
+      'They plan, build, review and fix the work, answer questions, investigate problems, do research and run operations.',
+    roles: TASK_ROLES,
+    following: [
+      followRole('investigator', 'Investigator', 'Finds the cause of a problem.'),
+      followRole('researcher', 'Researcher', 'Looks into a question and writes a report.'),
+      followRole('operator', 'Operator', 'Runs an operation you approved, such as a deploy.'),
     ],
   },
-  { id: 'review', title: 'Checking the work', roles: [{ role: 'reviewer', title: 'Reviewer' }] },
-  { id: 'answer', title: 'Answering questions', roles: [{ role: 'answerer', title: 'Answerer' }] },
   {
     id: 'quick',
     title: 'Quick jobs',
+    description: 'They sort new tasks and your messages, and write the guide on Home.',
     roles: [
-      { role: 'classifier', title: 'Classifier' },
-      { role: 'writer', title: 'Writer' },
+      {
+        role: 'classifier',
+        title: 'Classifier',
+        description: 'Names and sorts each new task and your messages.',
+      },
+      { role: 'writer', title: 'Writer', description: 'Writes the guide on Home.' },
     ],
+    following: [],
   },
 ];
 
 export const AGENT_ROLES: AgentRoleEntry[] = AGENT_GROUPS.flatMap((group) => group.roles);
+
+export function describeFollowedRole(entry: FollowingRoleEntry) {
+  return `Follows the ${entry.follows.title.toLowerCase()}`;
+}
 
 export interface AgentSelectLabels {
   model: string;
@@ -150,6 +191,8 @@ export function parseBudget(value: string) {
 
 export const FOLDERS_TITLE = 'Repository folders';
 
+export const MODELS_TITLE = 'Models';
+
 export interface RootsChange {
   roots: string[];
   done: string;
@@ -218,12 +261,6 @@ export function parseFixRounds(value: string) {
   return value === 'endless' ? null : Number(value);
 }
 
-const PROVIDER_ICONS: Record<string, MenuItemIcon> = { claude: 'IconClaudeai', codex: 'IconOpenaiCodex' };
-
-export function resolveProviderIcon(provider: string): MenuItemIcon {
-  return PROVIDER_ICONS[provider] ?? 'IconRobot';
-}
-
 const MODEL_KEY_SEPARATOR = ':';
 
 function resolveModelKey(provider: string, model: string) {
@@ -264,15 +301,12 @@ export function listAgentModelItems(
   return at === -1 ? [extra, ...items] : [...items.slice(0, at), extra, ...items.slice(at)];
 }
 
-export function changeAgentModel(settings: Settings, role: AgentRole, key: string, done?: string) {
+export function resolveAgentModelPatch(settings: Settings, role: AgentRole, key: string): Partial<Settings> {
   const { provider, model } = parseModelKey(key);
-  return updateSettings(
-    {
-      agentProviders: { ...settings.agentProviders, [role]: provider },
-      agentModels: { ...settings.agentModels, [role]: model },
-    },
-    done
-  );
+  return {
+    agentProviders: { ...settings.agentProviders, [role]: provider },
+    agentModels: { ...settings.agentModels, [role]: model },
+  };
 }
 
 function resolveShared(values: string[]) {
@@ -295,32 +329,26 @@ function assignRoles<Value>(group: AgentGroup, value: Value) {
   >;
 }
 
-export function changeGroupModel(settings: Settings, group: AgentGroup, key: string, done?: string) {
-  if (key === MIXED_VALUE) return Promise.resolve(false);
+export function resolveGroupModelPatch(
+  settings: Settings,
+  group: AgentGroup,
+  key: string
+): Partial<Settings> | null {
+  if (key === MIXED_VALUE) return null;
   const { provider, model } = parseModelKey(key);
-  return updateSettings(
-    {
-      agentProviders: { ...settings.agentProviders, ...assignRoles(group, provider) },
-      agentModels: { ...settings.agentModels, ...assignRoles(group, model) },
-    },
-    done
-  );
+  return {
+    agentProviders: { ...settings.agentProviders, ...assignRoles(group, provider) },
+    agentModels: { ...settings.agentModels, ...assignRoles(group, model) },
+  };
 }
 
 export function resolveSectionId(title: string) {
   return `settings-${title.toLowerCase().replace(/\s+/g, '-')}`;
 }
 
-const SECTION_ALIASES: Record<string, string> = {
-  accounts: 'agent usage',
-  usage: 'agent usage',
-  codex: 'agent usage',
-  folders: FOLDERS_TITLE,
-};
-
 export function resolveHashSectionId(hash: string) {
   const title = hash.replace(/^#/, '').toLowerCase();
-  return title ? resolveSectionId(SECTION_ALIASES[title] ?? title) : null;
+  return title ? resolveSectionId(title) : null;
 }
 
 const COMPACTION_LEADS = [1, 2, 5, 10];
@@ -424,14 +452,19 @@ export function listGroupSpeedItems(
   return resolveGroupSpeed(settings, group, availability) === MIXED_VALUE ? [MIXED_ITEM, ...items] : items;
 }
 
-export function changeAgentSpeed(settings: Settings, role: AgentRole, value: string, done?: string) {
-  return updateSettings({ agentFastModes: { ...settings.agentFastModes, [role]: value === 'on' } }, done);
+export function resolveAgentSpeedPatch(
+  settings: Settings,
+  role: AgentRole,
+  value: string
+): Partial<Settings> {
+  return { agentFastModes: { ...settings.agentFastModes, [role]: value === 'on' } };
 }
 
-export function changeGroupSpeed(settings: Settings, group: AgentGroup, value: string, done?: string) {
-  if (value === MIXED_VALUE) return Promise.resolve(false);
-  return updateSettings(
-    { agentFastModes: { ...settings.agentFastModes, ...assignRoles(group, value === 'on') } },
-    done
-  );
+export function resolveGroupSpeedPatch(
+  settings: Settings,
+  group: AgentGroup,
+  value: string
+): Partial<Settings> | null {
+  if (value === MIXED_VALUE) return null;
+  return { agentFastModes: { ...settings.agentFastModes, ...assignRoles(group, value === 'on') } };
 }

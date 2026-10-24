@@ -20,13 +20,13 @@ function usage(usedPercent: number) {
   return {
     status: 'ok' as const,
     windows: [
-      createWindow({ id: 's', usedPercent: usedPercent / 2 }),
+      createWindow({ id: 's', usedPercent: usedPercent / 2, resetsAt: Date.now() + 3 * 3_600_000 + 60_000 }),
       createWindow({
         id: 'w',
         kind: 'weekly' as const,
         label: 'Weekly · All models',
         usedPercent,
-        resetsAt: Date.now() + 3 * 3_600_000 + 60_000,
+        resetsAt: Date.now() + 3 * 86_400_000,
       }),
     ],
     detail: null,
@@ -35,10 +35,10 @@ function usage(usedPercent: number) {
   };
 }
 
-function renderMenu() {
+function renderMenu(state = STATE) {
   return render(
     <TooltipProvider>
-      <UsageMenu state={STATE} />
+      <UsageMenu state={state} />
     </TooltipProvider>
   );
 }
@@ -52,8 +52,14 @@ async function hover(element: HTMLElement) {
   });
 }
 
+function markedRows() {
+  return screen
+    .queryAllByRole('img', { name: 'Used for the next turn' })
+    .map((mark) => mark.parentElement?.textContent);
+}
+
 describe('the usage menu', () => {
-  it('shows the highest window of the account the next run uses', () => {
+  it('shows the 5-hour window of the account the next run uses, not its fuller weekly one', () => {
     pushAccounts(
       createSnapshot({
         accounts: [
@@ -63,10 +69,10 @@ describe('the usage menu', () => {
       })
     );
     renderMenu();
-    expect(screen.getByRole('button', { name: 'Agent usage' }).textContent).toBe('42%');
+    expect(screen.getByRole('button', { name: 'Agent usage' }).textContent).toBe('21%');
   });
 
-  it('lists every account with its highest window on hover', async () => {
+  it('lists every account with its 5-hour window on hover', async () => {
     pushAccounts(
       createSnapshot({
         accounts: [
@@ -90,16 +96,20 @@ describe('the usage menu', () => {
     );
     renderMenu();
     await hover(screen.getByRole('button', { name: 'Agent usage' }));
-    expect(await screen.findByText('The next run uses a@example.com')).toBeTruthy();
+    expect(await screen.findByText('Claude · a@example.com')).toBeTruthy();
+    expect(screen.getByText('Claude · b@example.com')).toBeTruthy();
+    expect(screen.queryByText(/next run uses|next turn uses/)).toBeNull();
+    expect(markedRows()).toEqual(['Claude · a@example.com']);
     expect(screen.getAllByText('Agent usage').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('80%')).toHaveLength(2);
-    expect(screen.getByText('Weekly · All models')).toBeTruthy();
+    expect(screen.getAllByText('40%')).toHaveLength(2);
+    expect(screen.getByText('5-hour limit')).toBeTruthy();
+    expect(screen.queryByText('Weekly · All models')).toBeNull();
     expect(screen.getByText('Resets in 3h')).toBeTruthy();
     expect(screen.getByText('Signed out.')).toBeTruthy();
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
   });
 
-  it('reads Agent usage when the next account has no figure, and goes to Settings → Agent usage on click', async () => {
+  it('reads Agent usage when the next account has no figure, and goes to Settings → Agent usage → Accounts on click', async () => {
     pushAccounts(
       createSnapshot({
         accounts: [
@@ -114,7 +124,7 @@ describe('the usage menu', () => {
     const button = screen.getByRole('button', { name: 'Agent usage' });
     expect(button.textContent).toBe('Agent usage');
     fireEvent.click(button);
-    expect(`${location.pathname}${location.hash}`).toBe('/settings#agent-usage');
+    expect(`${location.pathname}${location.hash}`).toBe('/settings#accounts');
   });
 
   it('lists Codex beside the Claude accounts, and glances at it when Codex does the work', async () => {
@@ -127,8 +137,25 @@ describe('the usage menu', () => {
     renderMenu();
     await hover(screen.getByRole('button', { name: 'Agent usage' }));
     expect(await screen.findByText('Codex · codex@example.com')).toBeTruthy();
-    expect(screen.getByText('Weekly limit')).toBeTruthy();
-    expect(screen.getAllByText('64%')).toHaveLength(1);
+    expect(screen.getAllByText('5-hour limit')).toHaveLength(2);
+    expect(screen.queryByText('Weekly limit')).toBeNull();
+    expect(screen.getAllByText('12%')).toHaveLength(1);
+    expect(markedRows()).toEqual(['Claude · a@example.com']);
+  });
+
+  it('marks Codex as the account the next turn uses when Codex does the work', async () => {
+    pushAccounts(
+      createSnapshot({
+        accounts: [createAccount({ id: 'a', isDefault: true, usage: usage(30) })],
+        providers: [createProviderLogin()],
+      })
+    );
+    renderMenu({ ...STATE, settings: { ...STATE.settings, defaultProvider: 'codex' } });
+    const button = screen.getByRole('button', { name: 'Agent usage' });
+    expect(button.textContent).toBe('12%');
+    await hover(button);
+    expect(await screen.findByText('Codex · codex@example.com')).toBeTruthy();
+    expect(markedRows()).toEqual(['Codex · codex@example.com']);
   });
 
   it('is hidden without accounts', () => {

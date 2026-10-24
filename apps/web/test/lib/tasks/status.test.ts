@@ -7,6 +7,7 @@ import {
   resolveTaskGlyph,
   resolveTaskMenuIcon,
   resolveTaskStatus,
+  resolveTaskStatusIcon,
   resolveWorkingGlyph,
 } from '@/lib/tasks/status.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
@@ -22,52 +23,47 @@ function withGate(overrides: Partial<Gate>, task: Partial<Task> = {}) {
 
 describe('gate glyphs and statuses', () => {
   it('give each decision its icon, label and tone', () => {
-    expect(resolveGateGlyph(gate({ kind: 'spec' }))).toEqual({ icon: 'IconFileText', tone: 'purple' });
-    expect(resolveGateGlyph(gate({ kind: 'review' }))).toEqual({ icon: 'IconEyeOpen', tone: 'amber' });
-    expect(resolveGateGlyph(gate({ kind: 'merge' }))).toEqual({ icon: 'IconMerged', tone: 'green' });
-    expect(resolveGateGlyph(gate({ kind: 'question' }))).toEqual({
+    expect(resolveGateGlyph(gate({ type: 'plan' }))).toEqual({ icon: 'IconFileText', tone: 'purple' });
+    expect(resolveGateGlyph(gate({ type: 'review' }))).toEqual({ icon: 'IconEyeOpen', tone: 'amber' });
+    expect(resolveGateGlyph(gate({ type: 'merge' }))).toEqual({ icon: 'IconMerged', tone: 'green' });
+    expect(resolveGateGlyph(gate({ type: 'question' }))).toEqual({
       icon: 'IconBubbleQuestion',
       tone: 'blue',
     });
-    expect(resolveGateStatus(gate({ kind: 'spec' }))).toEqual({ label: 'Plan to approve', tone: 'purple' });
-    expect(resolveGateStatus(gate({ kind: 'review' }))).toEqual({
+    expect(resolveGateStatus(gate({ type: 'plan' }))).toEqual({ label: 'Plan to approve', tone: 'purple' });
+    expect(resolveGateStatus(gate({ type: 'review' }))).toEqual({
       label: 'Changes to review',
       tone: 'amber',
     });
-    expect(resolveGateStatus(gate({ kind: 'merge' }))).toEqual({ label: 'Ready to merge', tone: 'green' });
-    expect(resolveGateStatus(gate({ kind: 'question' }))).toEqual({
+    expect(resolveGateStatus(gate({ type: 'merge' }))).toEqual({ label: 'Ready to merge', tone: 'green' });
+    expect(resolveGateStatus(gate({ type: 'question' }))).toEqual({
       label: 'Needs your answer',
       tone: 'blue',
     });
   });
 
-  it('show a failure as paused in orange and an agent question as needing your answer', () => {
-    expect(resolveGateGlyph(gate({ purpose: 'failure' }))).toEqual({ icon: 'IconPause', tone: 'orange' });
-    expect(resolveGateStatus(gate({ purpose: 'failure' }))).toEqual({ label: 'Paused', tone: 'orange' });
-    expect(resolveGateGlyph(gate({ purpose: 'agent_question', kind: 'review' })).tone).toBe('blue');
-    expect(resolveGateStatus(gate({ purpose: 'agent_question', kind: 'review' })).label).toBe(
-      'Needs your answer'
-    );
+  it('show a failure as paused in orange and a secret request as needing your answer', () => {
+    expect(resolveGateGlyph(gate({ type: 'failure' }))).toEqual({ icon: 'IconPause', tone: 'orange' });
+    expect(resolveGateStatus(gate({ type: 'failure' }))).toEqual({ label: 'Paused', tone: 'orange' });
+    expect(resolveGateGlyph(gate({ type: 'secret' })).tone).toBe('blue');
+    expect(resolveGateStatus(gate({ type: 'secret' })).label).toBe('Needs your answer');
   });
 });
 
 describe('a proposed change', () => {
   it('is a purple decision to approve, like a plan', () => {
-    expect(resolveGateGlyph(gate({ purpose: 'change' }))).toEqual({ icon: 'IconFileEdit', tone: 'purple' });
-    const { state, task } = withGate({ purpose: 'change' }, { stage: 'awaiting_proposal' });
+    expect(resolveGateGlyph(gate({ type: 'proposal' }))).toEqual({ icon: 'IconFileEdit', tone: 'purple' });
+    const { state, task } = withGate({ type: 'proposal' }, { stage: 'awaiting_proposal' });
     expect(resolveTaskStatus(state, task)).toEqual({ label: 'Change to approve', tone: 'purple' });
     expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconFileEdit', tone: 'purple' });
   });
 
   it('shows a merged change waiting for your OK on its operation as a purple decision', () => {
-    expect(resolveGateGlyph(gate({ kind: 'question', purpose: 'operation' }))).toEqual({
+    expect(resolveGateGlyph(gate({ type: 'operation' }))).toEqual({
       icon: 'IconConsole',
       tone: 'purple',
     });
-    const { state, task } = withGate(
-      { kind: 'question', purpose: 'operation' },
-      { stage: 'awaiting_operation' }
-    );
+    const { state, task } = withGate({ type: 'operation' }, { stage: 'awaiting_operation' });
     expect(resolveTaskStatus(state, task)).toEqual({ label: 'Operation to confirm', tone: 'purple' });
     expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconConsole', tone: 'purple' });
   });
@@ -88,14 +84,14 @@ describe('a proposed change', () => {
 
 describe('resolveTaskStatus', () => {
   it('show a setup gate as setup incomplete in orange, in the paused group', () => {
-    const setup = gate({ purpose: 'configuration', kind: 'question' });
+    const setup = gate({ type: 'configuration' });
     expect(resolveGateGlyph(setup)).toEqual({ icon: 'IconToolbox', tone: 'orange' });
     expect(resolveGateStatus(setup)).toEqual({ label: 'Setup incomplete', tone: 'orange' });
-    const { state, task } = withGate({ purpose: 'configuration', kind: 'question' });
+    const { state, task } = withGate({ type: 'configuration' });
     expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconToolbox', tone: 'orange' });
   });
 
-  it('says a task whose agent is waiting to check again is waiting, not building', () => {
+  it('says a task whose agent is waiting to check in again is waiting, not building', () => {
     const task = createTask({
       id: 't',
       monitor: {
@@ -113,16 +109,16 @@ describe('resolveTaskStatus', () => {
       },
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
-      label: 'Waiting to check again',
+      label: 'Waiting to check in again',
       tone: 'blue',
     });
   });
 
   it('shows a sign-in gate as sign in needed in orange, in the paused group', () => {
-    const signIn = gate({ purpose: 'sign_in', kind: 'question' });
+    const signIn = gate({ type: 'sign_in' });
     expect(resolveGateGlyph(signIn)).toEqual({ icon: 'IconUserKey', tone: 'orange' });
     expect(resolveGateStatus(signIn)).toEqual({ label: 'Sign in needed', tone: 'orange' });
-    const { state, task } = withGate({ purpose: 'sign_in', kind: 'question' });
+    const { state, task } = withGate({ type: 'sign_in' });
     expect(resolveTaskStatus(state, task)).toEqual({ label: 'Sign in needed', tone: 'orange' });
     expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconUserKey', tone: 'orange' });
   });
@@ -136,7 +132,7 @@ describe('resolveTaskStatus', () => {
       waitingOn: { delegations: ['child'], since: 1, reason: 'Waiting for the survey.' },
     });
     expect(resolveTaskStatus(createShinsaState({ tasks: [task], runs: [step] }), task)).toEqual({
-      label: 'Waiting for delegated tasks',
+      label: 'Waiting for delegations',
       tone: 'blue',
     });
     const working = createRun({ id: 'r', taskId: 't', status: 'running' });
@@ -167,13 +163,13 @@ describe('resolveTaskStatus', () => {
   });
 
   it('reads the lead gate first', () => {
-    const { state, task } = withGate({ kind: 'merge' });
+    const { state, task } = withGate({ type: 'merge' });
     expect(resolveTaskStatus(state, task)).toEqual({ label: 'Ready to merge', tone: 'green' });
   });
 
   it('says not started in neutral for a task waiting to start on another task', () => {
     const base = createTask({ id: 'base' });
-    const task = createTask({ id: 't', stage: 'queued', waitsOn: ['base'] });
+    const task = createTask({ id: 't', stage: 'waiting_on_tasks', waitsOn: ['base'] });
     expect(resolveTaskStatus(createShinsaState({ tasks: [base, task] }), task)).toEqual({
       label: 'Not started',
       tone: 'neutral',
@@ -200,6 +196,55 @@ describe('resolveTaskStatus', () => {
   });
 });
 
+describe('resolveTaskStatusIcon', () => {
+  const ARMED = { runId: 'r', role: 'builder' as const, phaseIndex: 0, armedAt: 0, status: 'armed' as const };
+
+  function iconOf(overrides: Partial<Task>) {
+    const task = createTask({ id: 't', ...overrides });
+    return resolveTaskStatusIcon(createShinsaState({ tasks: [task, createTask({ id: 'base' })] }), task);
+  }
+
+  it('gives a gate’s status the gate’s icon', () => {
+    const { state, task } = withGate({ type: 'review' });
+    expect(resolveTaskStatusIcon(state, task)).toBe('IconEyeOpen');
+  });
+
+  it('gives each wait its own icon', () => {
+    const monitor = {
+      ...ARMED,
+      id: 'm',
+      notes: 'n',
+      nextCheckAt: 1,
+      timeoutAt: 2,
+      attempts: 0,
+      maxAttempts: 1,
+    };
+    expect(iconOf({ monitor })).toBe('IconClockSnooze');
+    expect(iconOf({ usageWait: { ...ARMED, id: 'w', account: null, resetAt: 2, autoResume: true } })).toBe(
+      'IconGauge'
+    );
+    expect(iconOf({ stage: 'shipping', waitsOn: ['base'] })).toBe('IconHourglass');
+    const task = createTask({ id: 't', stage: 'building' });
+    const step = createRun({
+      id: 'r',
+      taskId: 't',
+      status: 'waiting',
+      waitingOn: { delegations: ['child'], since: 1, reason: 'Waiting for the survey.' },
+    });
+    expect(resolveTaskStatusIcon(createShinsaState({ tasks: [task], runs: [step] }), task)).toBe(
+      'IconAgents'
+    );
+  });
+
+  it('gives every stage an icon, and a gate’s stage the gate’s icon', () => {
+    expect(iconOf({ stage: 'building' })).toBe('IconHammer');
+    expect(iconOf({ stage: 'reviewing' })).toBe('IconEyeSparkle');
+    expect(iconOf({ stage: 'awaiting_plan' })).toBe('IconFileText');
+    expect(iconOf({ stage: 'done' })).toBe('IconCheckCircle2');
+    expect(iconOf({ stage: 'cancelled' })).toBe('IconCircleX');
+  });
+});
+
 describe('resolveTaskGlyph', () => {
   it('uses the stage icon while agents work, and the robot when the stage has none', () => {
     const building = createTask({ id: 'b', stage: 'building' });
@@ -220,10 +265,10 @@ describe('resolveTaskGlyph', () => {
   });
 
   it('shows the section glyph for decisions and waiting tasks', () => {
-    const { state, task } = withGate({ purpose: 'failure' });
+    const { state, task } = withGate({ type: 'failure' });
     expect(resolveTaskGlyph(state, task)).toEqual({ icon: 'IconPause', tone: 'orange' });
     const base = createTask({ id: 'base' });
-    const waiter = createTask({ id: 'w', stage: 'queued', waitsOn: ['base'] });
+    const waiter = createTask({ id: 'w', stage: 'waiting_on_tasks', waitsOn: ['base'] });
     expect(resolveTaskGlyph(createShinsaState({ tasks: [base, waiter] }), waiter)).toEqual({
       icon: 'IconHourglass',
       tone: 'neutral',
@@ -246,7 +291,7 @@ describe('resolveWorkingGlyph', () => {
 
 describe('resolveTaskMenuIcon', () => {
   it('colours the task glyph with its tone for menus', () => {
-    const { state, task } = withGate({ kind: 'review' });
+    const { state, task } = withGate({ type: 'review' });
     expect(resolveTaskMenuIcon(state, task)).toEqual({
       name: 'IconEyeOpen',
       className: 'text-amber-text',

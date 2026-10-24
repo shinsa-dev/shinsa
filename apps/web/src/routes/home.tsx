@@ -13,7 +13,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { TaskQueue, WideSections } from '@/components/queue/queue.tsx';
 import { listHomeSections } from '@/lib/command/home.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
-import { resolveGreeting, resolveHomeQueue } from '@/lib/home.ts';
+import { listGuideTaskIds, resolveGreeting, resolveHomeSections } from '@/lib/home.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { listQueueSections } from '@/lib/queue.ts';
 import { navigate } from '@/router.ts';
@@ -38,7 +38,12 @@ export function HomePage({ state }: { state: ShinsaState }) {
   const layout = useLayoutPreference();
   const briefing = reconcileBriefing(state.briefings[briefingKey(queue.focusProjectId)], queue, now);
   const briefed = new Set([briefing.now, ...briefing.next].flatMap((item) => (item ? [item.taskId] : [])));
-  const { first, last } = resolveHomeQueue(listQueueSections(state, queue, briefed));
+  const { first, finished, conversations, last } = resolveHomeSections(
+    state,
+    listQueueSections(state, queue, briefed),
+    listGuideTaskIds(state, queue, briefing),
+    now
+  );
   useRegisterCommands(listHomeSections(state));
 
   return (
@@ -63,8 +68,8 @@ export function HomePage({ state }: { state: ShinsaState }) {
 
         <WideSections>
           <TaskQueue state={state} variant='wide' sections={first} />
-          <RecentlyFinished state={state} now={now} />
-          <RecentConversations state={state} now={now} />
+          <RecentlyFinished state={state} finished={finished} />
+          <RecentConversations conversations={conversations} />
           <TaskQueue state={state} variant='wide' sections={last} />
         </WideSections>
       </div>

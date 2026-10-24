@@ -25,7 +25,7 @@ describe('describeStarted', () => {
   });
 
   it('says added for a task that has not started because it waits on another', () => {
-    const task = createTask({ id: 't', stage: 'queued', waitsOn: ['base'], createdAt: NOW });
+    const task = createTask({ id: 't', stage: 'waiting_on_tasks', waitsOn: ['base'], createdAt: NOW });
     expect(describeStarted(task, NOW)).toBe('Added just now');
     const fresh = { ...task, createdAt: Date.now() };
     expect(describeStarted(fresh)).toBe('Added just now');

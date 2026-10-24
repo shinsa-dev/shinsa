@@ -4,7 +4,7 @@ import { createTask } from '../../support/state.ts';
 
 const DOCUMENT = {
   goal: 'Ship it.',
-  plan: [],
+  phases: [],
   behaviour: [],
   approach: 'Plainly.',
   files: [],
@@ -16,7 +16,7 @@ const DOCUMENT = {
 describe('resolvePlanVersion', () => {
   it('has nothing for a first plan or no plan', () => {
     expect(resolvePlanVersion(createTask({ id: 't' }))).toBeNull();
-    const first = createTask({ id: 't', spec: { version: 1, body: '', document: DOCUMENT, proposedAt: 1 } });
+    const first = createTask({ id: 't', plan: { version: 1, body: '', document: DOCUMENT, proposedAt: 1 } });
     expect(resolvePlanVersion(first)).toBeNull();
     expect(describePlanEyebrow(first)).toBe('0 phases');
     expect(describePlanEyebrow(createTask({ id: 't' }))).toBe('0 phases');
@@ -25,7 +25,7 @@ describe('resolvePlanVersion', () => {
   it('describes a revision: its summary, the changes in words and the feedback that asked for it', () => {
     const task = createTask({
       id: 't',
-      spec: {
+      plan: {
         version: 3,
         body: '',
         document: DOCUMENT,
@@ -43,10 +43,10 @@ describe('resolvePlanVersion', () => {
     expect(describePlanEyebrow(task)).toBe('Version 3 · 0 phases');
     const phased = createTask({
       id: 't',
-      spec: {
+      plan: {
         version: 1,
         body: '',
-        document: { ...DOCUMENT, plan: [{ title: 'A', detail: '' }] },
+        document: { ...DOCUMENT, phases: [{ title: 'A', detail: '' }] },
         proposedAt: 1,
       },
     });
@@ -54,7 +54,7 @@ describe('resolvePlanVersion', () => {
   });
 
   it('has nothing to show for a revision without a summary or changes', () => {
-    const task = createTask({ id: 't', spec: { version: 2, body: '', document: DOCUMENT, proposedAt: 1 } });
+    const task = createTask({ id: 't', plan: { version: 2, body: '', document: DOCUMENT, proposedAt: 1 } });
     expect(resolvePlanVersion(task)).toBeNull();
   });
 });

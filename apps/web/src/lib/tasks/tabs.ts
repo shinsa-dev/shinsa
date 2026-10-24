@@ -18,7 +18,7 @@ export const CODE_VIEW: Record<CodeView, { label: string; icon: IconName }> = {
 
 const BEFORE_CODE: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'triage',
-  'queued',
+  'waiting_on_tasks',
   'planning',
   'awaiting_plan',
   'answering',

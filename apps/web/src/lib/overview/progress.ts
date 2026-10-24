@@ -1,4 +1,4 @@
-import type { DisplayPhase, DisplayPhaseStatus, TaskProgress } from '@shinsa/core';
+import type { DisplayPhase, DisplayPhaseStatus, ShapeState, TaskProgress } from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
 
 export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped';
@@ -98,3 +98,10 @@ export function resolveLabelFold(step: Step, steps: Step[]): LabelFold {
   if (steps.length <= LONG_STRIP || !isStepReached(step)) return null;
   return steps.length > LONGEST_FULL_STRIP ? 'always' : 'narrow';
 }
+
+export const SHAPING_LABEL = 'Working out the steps';
+
+export const SHAPING_NOTE: Record<Exclude<ShapeState, 'settled'>, string> = {
+  triage: 'Shinsa is reading the request to choose what kind of task it is.',
+  planner: 'The planner can still change the steps before it plans.',
+};

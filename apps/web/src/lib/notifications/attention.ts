@@ -1,4 +1,6 @@
 import {
+  isAgentQuestion,
+  isDecisionGate,
   isPausingGate,
   listOpenGates,
   type QueuedGate,
@@ -54,9 +56,9 @@ function resolveBody(text: string) {
 
 function describeBody({ gate, task, reason }: QueuedGate) {
   if (gate.secret) return `Asks for the ${gate.secret.label}.`;
-  if (gate.purpose === 'agent_question') return gate.title;
-  if (gate.purpose === 'decision') return `${reason}. ${resolveGateNow(task, gate)}`;
-  if (gate.purpose === 'operation') return `${reason}. ${describeOperationIntro(gate)}`;
+  if (isAgentQuestion(gate)) return gate.title;
+  if (isDecisionGate(gate)) return `${reason}. ${resolveGateNow(task, gate)}`;
+  if (gate.type === 'operation') return `${reason}. ${describeOperationIntro(gate)}`;
   return gate.body?.trim() ? `${reason}. ${gate.body}` : reason;
 }
 

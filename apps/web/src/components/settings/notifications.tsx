@@ -37,12 +37,7 @@ export function NotificationGroup({
       </SettingRow>
       <SettingRow title='Sound'>
         <Hint label={needsTestNotification(preferences) ? TEST_BOTH : TEST_SOUND}>
-          <Button
-            variant='secondary'
-            size='sm'
-            icon='IconPlay'
-            onClick={() => void testNotifications(preferences)}
-          >
+          <Button variant='secondary' icon='IconPlay' onClick={() => void testNotifications(preferences)}>
             Test
           </Button>
         </Hint>

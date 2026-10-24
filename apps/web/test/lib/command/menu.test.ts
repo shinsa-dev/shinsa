@@ -87,7 +87,7 @@ describe('keywords', () => {
       handle: 'SW-142',
       repoId: 'r1',
       branch: 'fix/login',
-      intent: 'x'.repeat(300),
+      request: 'x'.repeat(300),
     });
     const state = createShinsaState({ tasks: [task], repos: [createRepo({ id: 'r1', name: 'web' })] });
     expect(listTaskKeywords(state, task)).toEqual([
@@ -266,9 +266,9 @@ describe('listDecisionCommands', () => {
       createTask({ id: 'c', title: 'Quiet' }),
     ];
     const gates = [
-      createGate({ id: 'ga', taskId: 'a', kind: 'merge', openedAt: 1 }),
-      createGate({ id: 'ga2', taskId: 'a', kind: 'review', purpose: 'failure', openedAt: 2 }),
-      createGate({ id: 'gb', taskId: 'b', kind: 'spec', openedAt: 3 }),
+      createGate({ id: 'ga', taskId: 'a', type: 'merge', openedAt: 1 }),
+      createGate({ id: 'ga2', taskId: 'a', type: 'failure', openedAt: 2 }),
+      createGate({ id: 'gb', taskId: 'b', type: 'plan', openedAt: 3 }),
     ];
     return createShinsaState({ tasks, gates });
   }
@@ -385,7 +385,7 @@ describe('listRootBlocks', () => {
       createTask({ id: 'login', title: 'Fix the login redirect', stage: 'reviewing', updatedAt: 3 }),
       createTask({ id: 'billing', title: 'Rework billing emails', updatedAt: 2 }),
     ],
-    gates: [createGate({ id: 'g1', taskId: 'login', kind: 'review' })],
+    gates: [createGate({ id: 'g1', taskId: 'login', type: 'review' })],
   });
   const search: Command = { kind: 'search', id: 'tasks.search', label: 'Search all tasks', search: () => {} };
   const sections: CommandSection[] = [

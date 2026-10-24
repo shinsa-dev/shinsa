@@ -102,7 +102,7 @@ function LoginBody({
     case 'finishing':
       return (
         <>
-          <Spinner className='size-5 text-fg-2' />
+          <Spinner size='lg' className='text-fg-2' />
           <DialogFooter>
             <CancelButton />
           </DialogFooter>

@@ -1,4 +1,4 @@
-import type { Monitor, PlanDocument, Task, UsageWait } from '@shinsa/core';
+import type { DeliveringStep, Monitor, PlanDocument, Task, UsageWait } from '@shinsa/core';
 import { createSampleDelegations } from './sample-delegations.ts';
 import {
   createSampleGate,
@@ -55,7 +55,7 @@ const BACKFILL_IMPACT =
 function createBackfillDocument(): PlanDocument {
   return {
     goal: 'Every product has a currency, so the paywall preview stops falling back to USD.',
-    plan: [
+    phases: [
       {
         title: 'Read the store’s default currency',
         detail: 'Use it when a product has none, in the editor and in the API.',
@@ -89,6 +89,45 @@ function createBackfillGateBody() {
     '## Impact',
     BACKFILL_IMPACT,
   ].join('\n');
+}
+
+function createResultTask(now: number, step: DeliveringStep, title: string, body: string) {
+  return createSampleTask(now, {
+    id: `result-${step}`,
+    title,
+    stage: 'done',
+    pipeline: [step],
+    result: { step, body, runId: null, at: now - 2 * MINUTE },
+  });
+}
+
+function createResultTasks(now: number) {
+  return [
+    createResultTask(
+      now,
+      'answer',
+      'How do exports pick their chunk size?',
+      'From `EXPORT_CHUNK_ROWS`, 5,000 by default. A store can lower it in its export settings.'
+    ),
+    createResultTask(
+      now,
+      'research',
+      'Compare MCP v2 session timeouts',
+      'Every client we checked times a session out after 5 to 10 minutes idle; none retries on its own.'
+    ),
+    createResultTask(
+      now,
+      'investigate',
+      'Find out why exports stall at night',
+      'Each chunk holds a ClickHouse connection and never releases it on a timeout, so the pool runs dry.'
+    ),
+    createResultTask(
+      now,
+      'operate',
+      'Clear the stuck nightly exports',
+      'Released the 2 export locks and restarted the queue. Last night’s exports finished in 14 minutes.'
+    ),
+  ];
 }
 
 function createQuietRun(now: number, id: string, minutes: number) {
@@ -130,7 +169,7 @@ export function createOverviewScene(now: number) {
     monitor: createSampleTask(now, {
       id: 'monitor',
       title: 'Check the preview link once staging deploys',
-      stageReason: 'waiting to check again',
+      stageReason: 'waiting to check in again',
       phases: [{ status: 'active', at: now - HOUR }],
       monitor,
     }),
@@ -162,12 +201,12 @@ export function createOverviewScene(now: number) {
       id: 'plan',
       title: 'Split the onboarding chat into steps',
       stage: 'awaiting_plan',
-      spec: {
+      plan: {
         version: 2,
         body: '',
         document: {
           goal: 'Setup asks one thing at a time, so a first run takes a minute instead of a form.',
-          plan: [
+          phases: [
             {
               title: 'Ask for the folders first',
               detail: 'Keep today’s folder picker as the opening question.',
@@ -198,8 +237,8 @@ export function createOverviewScene(now: number) {
         ],
       },
     }),
-    followUps: createSampleTask(now, {
-      id: 'follow-ups',
+    suggested: createSampleTask(now, {
+      id: 'suggested',
       title: 'Run the embedded chat on MCP v2',
       stage: 'merged',
       suggestions: [
@@ -207,7 +246,7 @@ export function createOverviewScene(now: number) {
           id: 'retry',
           runId: null,
           title: 'Retry a dropped MCP session once',
-          intent: 'Retry a dropped MCP session once before showing the error.',
+          request: 'Retry a dropped MCP session once before showing the error.',
           why: 'Two sessions dropped during review; a single retry would have hidden both.',
           waitsOnThis: true,
           status: 'open',
@@ -218,7 +257,7 @@ export function createOverviewScene(now: number) {
           id: 'docs',
           runId: null,
           title: 'Document the MCP v2 settings',
-          intent: 'Document the MCP v2 settings in the framework docs.',
+          request: 'Document the MCP v2 settings in the framework docs.',
           why: 'The new timeout setting is not in the docs yet.',
           waitsOnThis: false,
           status: 'open',
@@ -228,12 +267,47 @@ export function createOverviewScene(now: number) {
       ],
     }),
     quiet: createSampleTask(now, { id: 'quiet', title: 'Stream MCP tool results' }),
+    shaping: createSampleTask(now, {
+      id: 'shaping',
+      title: 'Why does the export stall?',
+      stage: 'triage',
+      auto: { shape: true, start: true, priority: true },
+    }),
     change: createSampleTask(now, {
       id: 'change',
       title: 'Find out why exports stall at night',
       stage: 'awaiting_proposal',
-      stageReason: 'a change is proposed for you to approve',
-      pipeline: ['investigate'],
+      stageReason: 'a proposal waits for your OK',
+      pipeline: [
+        'investigate',
+        'your_ok',
+        'plan',
+        'build',
+        'checks',
+        'agent_review',
+        'your_review',
+        'pull_request',
+        'merge',
+      ],
+      shapeChanges: [
+        {
+          from: ['investigate'],
+          to: [
+            'investigate',
+            'your_ok',
+            'plan',
+            'build',
+            'checks',
+            'agent_review',
+            'your_review',
+            'pull_request',
+            'merge',
+          ],
+          by: 'agent',
+          reason: 'The stall comes from leaked connections, and the fix is two lines in one function.',
+          at: now - 4 * MINUTE,
+        },
+      ],
       result: {
         step: 'investigate',
         body: 'The nightly export holds one ClickHouse connection per chunk and never releases it on a timeout, so the pool runs dry after about 40 chunks.',
@@ -253,7 +327,7 @@ export function createOverviewScene(now: number) {
       id: 'composed',
       title: 'Clear the stuck nightly exports',
       stage: 'awaiting_proposal',
-      stageReason: 'a change is proposed for you to approve',
+      stageReason: 'a proposal waits for your OK',
       pipeline: ['investigate', 'your_ok', 'plan', 'operate'],
       result: {
         step: 'investigate',
@@ -274,7 +348,7 @@ export function createOverviewScene(now: number) {
       title: 'Backfill missing product currencies',
       stage: 'awaiting_plan',
       pipeline: AFTER_MERGE,
-      spec: {
+      plan: {
         version: 1,
         body: '',
         document: createBackfillDocument(),
@@ -287,7 +361,7 @@ export function createOverviewScene(now: number) {
       stage: 'awaiting_operation',
       stageReason: 'waiting for your OK to run the operation',
       pipeline: AFTER_MERGE,
-      spec: {
+      plan: {
         version: 1,
         body: '',
         document: createBackfillDocument(),
@@ -310,7 +384,7 @@ export function createOverviewScene(now: number) {
     setup: createSampleGate(now, {
       id: 'setup-gate',
       taskId: 'setup',
-      purpose: 'configuration',
+      type: 'configuration',
       title: 'No checks to run',
       body: [
         'Shinsa stopped before any agent started because the setup is not complete:',
@@ -322,15 +396,16 @@ export function createOverviewScene(now: number) {
     signIn: createSampleGate(now, {
       id: 'sign-in-gate',
       taskId: 'sign-in',
-      purpose: 'sign_in',
+      type: 'sign_in',
       title: 'Sign in to Claude as christo@example.com',
       body: 'Claude signed this account out, so the agent stopped. Signing in starts the step again.',
+      provider: 'claude',
       account: { id: 'side', email: 'christo@example.com' },
     }),
     secret: createSampleGate(now, {
       id: 'secret-gate',
       taskId: 'secret',
-      purpose: 'agent_question',
+      type: 'secret',
       title: 'The checkout test needs a Stripe test key to create a payment intent.',
       runId: 'secret-run',
       secret: { label: 'Stripe test key' },
@@ -361,7 +436,7 @@ export function createOverviewScene(now: number) {
     question: createSampleGate(now, {
       id: 'question-gate',
       taskId: 'question',
-      purpose: 'agent_question',
+      type: 'question',
       title: 'Should the v1 endpoint stay for one more release?',
       body: 'Two internal dashboards still call `/v1/chat`. Removing it now breaks them until they move to v2.',
       runId: 'question-run',
@@ -371,37 +446,35 @@ export function createOverviewScene(now: number) {
     plan: createSampleGate(now, {
       id: 'plan-gate',
       taskId: 'plan',
-      kind: 'spec',
-      purpose: 'decision',
+      type: 'plan',
       title: 'Approve the plan',
       planVersion: 2,
     }),
     change: createSampleGate(now, {
       id: 'change-gate',
       taskId: 'change',
-      purpose: 'change',
+      type: 'proposal',
       title: 'Turn this investigation into a fix?',
       body: `${tasks.change.proposal?.why}\n\n${tasks.change.proposal?.request}`,
     }),
     composed: createSampleGate(now, {
       id: 'composed-gate',
       taskId: 'composed',
-      purpose: 'change',
-      title: 'Run an operation from these findings?',
+      type: 'proposal',
+      title: 'Run an operation from this diagnosis?',
       body: `${tasks.composed.proposal?.why}\n\n${tasks.composed.proposal?.request}`,
     }),
     planned: createSampleGate(now, {
       id: 'planned-gate',
       taskId: 'planned',
-      kind: 'spec',
-      purpose: 'decision',
+      type: 'plan',
       title: 'Approve the plan',
       planVersion: 1,
     }),
     operation: createSampleGate(now, {
       id: 'operation-gate',
       taskId: 'operation',
-      purpose: 'operation',
+      type: 'operation',
       title: 'The change merged. Run the operation now?',
       body: createBackfillGateBody(),
       commit: '9f2c4e1b7a3d5e60c8f1a2b3c4d5e6f708192a3b',
@@ -410,8 +483,7 @@ export function createOverviewScene(now: number) {
     review: createSampleGate(now, {
       id: 'review-gate',
       taskId: 'review',
-      kind: 'review',
-      purpose: 'decision',
+      type: 'review',
       title: 'Review the changes',
       escalation: { reason: 'rounds', rounds: 3, at: now - 8 * MINUTE },
     }),
@@ -446,5 +518,5 @@ export function createOverviewScene(now: number) {
     ],
     taskUsageLimit: 10,
   });
-  return { state, tasks, gates, runs, usageWaits, monitor };
+  return { state, tasks, gates, runs, usageWaits, monitor, results: createResultTasks(now) };
 }

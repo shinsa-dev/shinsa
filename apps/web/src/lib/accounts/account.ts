@@ -7,6 +7,7 @@ import {
   RUN_STAGES,
   type Run,
   type RunAccount,
+  resolveProviderLabel,
   type Task,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
@@ -14,7 +15,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 const ANY_ACCOUNT = 'any';
 
 export const ACCOUNT_LABEL = {
-  section: 'Agent usage',
+  section: 'Accounts',
   add: 'Add account',
   addClaude: 'Add a Claude account',
   signInAnother: 'Sign in with another account',
@@ -24,6 +25,8 @@ export const ACCOUNT_LABEL = {
   defaultAccount: 'Default account',
   signIn: 'Sign in',
   signInAgain: 'Sign in again',
+  copySignIn: 'Copy the sign-in command',
+  usedNext: 'Used for the next turn',
   retryAnyway: 'Retry anyway',
   switchAt: 'Switch accounts at',
   afterLimit: 'After a usage limit',
@@ -61,6 +64,22 @@ export interface AccountChoice {
 
 export function resolveAccountLabel(account: { email: string | null }) {
   return account.email ?? 'Claude account';
+}
+
+const PROVIDER_ICONS: Record<string, IconName> = { claude: 'IconClaudeai', codex: 'IconOpenaiCodex' };
+
+export function resolveProviderIcon(provider: string): IconName {
+  return PROVIDER_ICONS[provider] ?? 'IconRobot';
+}
+
+export interface AccountProvider {
+  icon: IconName;
+  label: string;
+}
+
+export function resolveAccountProvider(provider: string, email: string | null): AccountProvider {
+  const name = resolveProviderLabel(provider);
+  return { icon: resolveProviderIcon(provider), label: email ? `${name} · ${email}` : name };
 }
 
 export function listAccountChoices(snapshot: AccountsSnapshot | null, task: Task): AccountChoice[] {
@@ -166,7 +185,3 @@ export const SWITCH_REASON: Record<AccountSwitchReason, string> = {
   headroom: 'This account has more usage left.',
   bound: 'This task runs only on this account.',
 };
-
-export function describeAccountSwitched(email: string | null) {
-  return email ? `Account switched · ${email}` : 'Account switched';
-}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Activity, ChatEntry } from '@shinsa/core';
 import {
+  listFollowUpMessages,
   listHumanMessages,
   resolveLastAgentText,
   resolveLastHandover,
@@ -59,8 +60,43 @@ describe('listHumanMessages', () => {
     ]);
   });
 
+  it('leaves out the request that created the task when only follow-ups are wanted', () => {
+    const task = createTask({
+      id: 't',
+      activity: [
+        { at: 1, actor: 'you', kind: 'asked', text: 'Asked for this', detail: 'hey', evidenceId: null },
+        { at: 2, actor: 'you', kind: 'message', text: 'Sent instructions', detail: 'hey!', evidenceId: null },
+      ],
+    });
+    expect(listFollowUpMessages(task)).toEqual([{ at: 2, text: 'hey!' }]);
+  });
+
   it('is empty for a task with no activity', () => {
     expect(listHumanMessages(createTask({ id: 't' }))).toEqual([]);
+  });
+
+  it('shows a message Shinsa received but has not routed, and one still on its way, as pending', () => {
+    const task = createTask({
+      id: 't',
+      activity: [activity({ at: 1_000, kind: 'message', detail: 'Use tabs' })],
+      inbox: [{ id: 'm1', at: 9_000, text: 'Also add search' }],
+    });
+    expect(
+      listHumanMessages(task, [
+        { at: 8_000, text: 'Also add search' },
+        { at: 2_000, text: 'Use tabs' },
+        { at: 10_000, text: 'And dark mode' },
+      ])
+    ).toEqual([
+      { at: 1_000, text: 'Use tabs' },
+      { at: 9_000, text: 'Also add search', pending: true },
+      { at: 10_000, text: 'And dark mode', pending: true },
+    ]);
+    expect(listHumanMessages(task, [{ at: 7_000, text: 'Use tabs' }])).toContainEqual({
+      at: 7_000,
+      text: 'Use tabs',
+      pending: true,
+    });
   });
 });
 
@@ -87,6 +123,15 @@ describe('resolveRunMessages', () => {
     expect(byRun.get('b')).toEqual([{ at: 200, text: 'go' }]);
   });
 
+  it('gives a message sent after a run ended to the run that answers it, never to the finished one', () => {
+    const done = createRun({ id: 'a', taskId: 't', startedAt: 100, endedAt: 120, outcome: 'completed' });
+    const { byRun } = resolveRunMessages([done, second], [{ at: 150, text: 'hey!' }]);
+    expect(byRun.get('a')).toEqual([]);
+    expect(byRun.get('b')).toEqual([{ at: 150, text: 'hey!' }]);
+    const waiting = resolveRunMessages([done], [{ at: 150, text: 'hey!' }]);
+    expect(waiting.byRun.get('a')).toEqual([{ at: 150, text: 'hey!' }]);
+  });
+
   it('puts every message in the preamble when no agent has run yet', () => {
     const { preamble, byRun } = resolveRunMessages([], [{ at: 10, text: 'hi' }]);
     expect(preamble).toEqual([{ at: 10, text: 'hi' }]);
@@ -108,6 +153,17 @@ describe('resolveTimeline', () => {
       items.map((item) => (item.kind === 'human' || item.kind === 'agent' ? item.text : item.kind))
     ).toEqual(['first', 'one', 'middle', 'two', 'last']);
     expect(only(items, 'human').every((item) => item.attachments.length === 0)).toBe(true);
+  });
+
+  it('marks a message that is still on its way as pending', () => {
+    const items = resolveTimeline(
+      [],
+      [
+        { at: 5, text: 'sent' },
+        { at: 6, text: 'on its way', pending: true },
+      ]
+    );
+    expect(only(items, 'human').map((item) => item.pending ?? false)).toEqual([false, true]);
   });
 
   it('leaves a subagent’s own steps and the run notices out of the main timeline', () => {
@@ -501,7 +557,7 @@ describe('resolveTurns', () => {
         createAgentEntry('Reading', 'interim', 2),
         createCallEntry('1', readTool('a.ts'), 3),
         createCallEntry('2', readTool('b.ts'), 4),
-        createCallEntry('3', shinsaTool('complete_phase', {}), 5),
+        createCallEntry('3', shinsaTool('ask', {}), 5),
         createAgentEntry('All done', 'final', 6),
       ],
       []
@@ -512,6 +568,111 @@ describe('resolveTurns', () => {
     expect(turn?.reply?.text).toBe('All done');
     expect(turn?.steps).toBe(3);
     expect(turn?.live).toBe(false);
+  });
+
+  it('folds a hand-over Shinsa handed back into the work as retried, and keeps the retry as the card', () => {
+    const rejection =
+      'Shinsa rejected this hand-over. Fix these and call the tool again:\n- phases[0].detail is 172 characters; the limit is 160.';
+    const items = resolveTimeline(
+      [
+        createCallEntry('1', shinsaTool('propose_plan', { goal: 'Group the repos' }), 1),
+        createResultEntry('1', rejection, 2, { status: 'error' }),
+        createCallEntry('2', shinsaTool('propose_plan', { goal: 'Group the repos' }), 3),
+        createResultEntry('2', 'The human sees this in the chat now.', 4),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, finished, 500);
+    expect(turn?.outcomes.map((item) => [item.call.callId, item.call.failed])).toEqual([['2', false]]);
+    const [rejected] = turn?.work ?? [];
+    expect(rejected?.kind === 'tools' && rejected.calls.map((call) => [call.result, call.recovery])).toEqual([
+      [rejection, 'retried'],
+    ]);
+    expect(turn?.steps).toBe(2);
+  });
+
+  it('keeps a handed-back hand-over quiet while the run can still retry it, and red once it cannot', () => {
+    const items = resolveTimeline(
+      [
+        createCallEntry('1', shinsaTool('complete_phase', {}), 1),
+        createResultEntry('1', 'Shinsa rejected this hand-over.', 2, { status: 'error' }),
+      ],
+      []
+    );
+    const live = createRun({ id: 'r', taskId: 't', startedAt: 0, endedAt: null });
+    const [working] = resolveTurns(items, live, 500);
+    const [quiet] = working?.work ?? [];
+    expect(quiet?.kind === 'tools' && quiet.calls[0]?.recovery).toBe('retrying');
+    expect(working?.outcomes).toEqual([]);
+    const [ended] = resolveTurns(items, finished, 500);
+    expect(ended?.outcomes.map((item) => [item.call.failed, item.call.recovery])).toEqual([[true, null]]);
+    const movedOn = resolveTimeline(
+      [
+        createCallEntry('1', shinsaTool('complete_phase', {}), 1),
+        createResultEntry('1', 'Shinsa rejected this hand-over.', 2, { status: 'error' }),
+        createCallEntry('2', shinsaTool('ask', { question: 'Which?' }), 3),
+      ],
+      []
+    );
+    expect(resolveTurns(movedOn, live, 500)[0]?.outcomes.map((item) => item.call.recovery)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it('never folds a question, even one that was not answered', () => {
+    const items = resolveTimeline(
+      [
+        createCallEntry('1', shinsaTool('ask', { question: 'Which?' }), 1),
+        createResultEntry('1', 'Cancelled', 2, { status: 'error' }),
+        createCallEntry('2', shinsaTool('ask', { question: 'Which?' }), 3),
+      ],
+      []
+    );
+    const [turn] = resolveTurns(items, finished, 500);
+    expect(turn?.outcomes.map((item) => item.call.callId)).toEqual(['1', '2']);
+  });
+
+  it('shows every hand-over once: words around it fold into the work, never a second reply', () => {
+    for (const name of [
+      'answer',
+      'report_diagnosis',
+      'submit_report',
+      'report_outcome',
+      'propose_plan',
+      'complete_phase',
+      'complete_fix',
+      'report_review',
+      'reshape_task',
+    ] as const) {
+      const items = resolveTimeline(
+        [
+          createAgentEntry('Looking at the projects', 'interim', 1),
+          createCallEntry('1', shinsaTool(name, { answer: 'I know of one project.' }), 2),
+          createAgentEntry('My answer is posted above: I know of one project.', 'final', 3),
+        ],
+        []
+      );
+      const [turn] = resolveTurns(items, finished, 500);
+      expect(turn?.reply).toBeNull();
+      expect(turn?.outcomes.map((item) => item.call.tool.kind === 'shinsa' && item.call.tool.name)).toEqual([
+        name,
+      ]);
+      expect(turn?.work.map((item) => item.kind)).toEqual(['agent', 'agent']);
+    }
+  });
+
+  it('keeps the reply under a question or suggested tasks, which are not the step’s hand-over', () => {
+    for (const name of ['ask', 'suggest_tasks'] as const) {
+      const items = resolveTimeline(
+        [
+          createCallEntry('1', shinsaTool(name, {}), 1),
+          createAgentEntry('Waiting on your answer.', 'final', 2),
+        ],
+        []
+      );
+      expect(resolveTurns(items, finished, 500)[0]?.reply?.text).toBe('Waiting on your answer.');
+    }
   });
 
   it('falls back to the last interim words when a finished turn has no final reply', () => {

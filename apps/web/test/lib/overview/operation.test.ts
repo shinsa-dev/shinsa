@@ -4,8 +4,8 @@ import {
   describeOperationIntro,
   OPERATION_SKIP,
   resolveMergedCommit,
-  resolveNotesPlaceholder,
   resolveOperationBody,
+  resolveOperationRun,
 } from '@/lib/overview/operation.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createTask } from '../../support/state.ts';
@@ -27,8 +27,7 @@ function gate(overrides: Partial<Gate> = {}) {
   return createGate({
     id: 'g',
     taskId: 't',
-    kind: 'question',
-    purpose: 'operation',
+    type: 'operation',
     body: BODY,
     ...overrides,
   });
@@ -82,12 +81,29 @@ describe('the operation gate’s body', () => {
     });
   });
 
-  it('asks for notes, and for more once you left some', () => {
-    expect(resolveNotesPlaceholder({ notes: null })).toBe(
-      'Notes for the operator, such as what to watch or skip.'
-    );
-    expect(resolveNotesPlaceholder({ notes: 'Skip the archive.' })).toBe(
-      'More notes for the operator, added to yours.'
-    );
+  it('runs with the saved notes when the box still holds them', () => {
+    expect(resolveOperationRun({ notes: 'Skip the archive.' }, '  Skip the archive. ')).toEqual({
+      reply: 'runOperation',
+      response: null,
+    });
+    expect(resolveOperationRun({ notes: null }, '   ')).toEqual({ reply: 'runOperation', response: null });
+  });
+
+  it('replaces the notes with the box’s text when it changed', () => {
+    expect(resolveOperationRun({ notes: 'Skip the archive.' }, ' Watch the error rate. ')).toEqual({
+      reply: 'runOperationWithNotes',
+      response: 'Watch the error rate.',
+    });
+    expect(resolveOperationRun({ notes: null }, 'Watch the error rate.')).toEqual({
+      reply: 'runOperationWithNotes',
+      response: 'Watch the error rate.',
+    });
+  });
+
+  it('clears the notes when the box was emptied', () => {
+    expect(resolveOperationRun({ notes: 'Skip the archive.' }, '  ')).toEqual({
+      reply: 'runOperationWithoutNotes',
+      response: '',
+    });
   });
 });

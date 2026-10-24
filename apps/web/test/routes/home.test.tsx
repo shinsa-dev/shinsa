@@ -31,17 +31,29 @@ function createHome() {
         id: 'build',
         title: 'Build the export',
         stage: 'building',
+        activity: [message(now - 30_000)],
+      }),
+      createTask({
+        id: 'asked',
+        title: 'Ask how the export pages',
+        stage: 'cancelled',
         activity: [message(now - 60_000)],
       }),
-      createTask({ id: 'later', title: 'Ship the export docs', stage: 'queued', waitsOn: ['build'] }),
+      createTask({
+        id: 'later',
+        title: 'Ship the export docs',
+        stage: 'waiting_on_tasks',
+        waitsOn: ['build'],
+      }),
       createTask({
         id: 'done',
         title: 'Rename the settings page',
         stage: 'merged',
         stageChangedAt: now - 60_000,
+        activity: [message(now - 10_000)],
       }),
     ],
-    gates: DECISIONS.map((name) => createGate({ id: `g-${name}`, taskId: name, kind: 'review' })),
+    gates: DECISIONS.map((name) => createGate({ id: `g-${name}`, taskId: name, type: 'review' })),
   });
 }
 
@@ -83,6 +95,18 @@ describe('HomePage', () => {
     ]);
   });
 
+  it('shows each task in one section, so a finished or moving task never repeats under Recent conversations', () => {
+    renderHome();
+    const conversations = header(/^Recent conversations/).closest('section') as HTMLElement;
+    expect(within(conversations).getByRole('button', { name: /Ask how the export pages/ })).toBeTruthy();
+    const rowsTitled = (title: string) =>
+      [...document.querySelectorAll('section [data-highlight-item]')].filter(
+        (row) => row.lastElementChild?.previousElementSibling?.firstElementChild?.textContent === title
+      );
+    expect(rowsTitled('Rename the settings page')).toHaveLength(1);
+    expect(rowsTitled('Build the export')).toHaveLength(1);
+  });
+
   it('folds Recently finished and Recent conversations from their headers and remembers them on the next visit', () => {
     const view = renderHome();
     act(() => fireEvent.click(header(/^Recently finished/)));
@@ -120,7 +144,7 @@ describe('HomePage', () => {
   it('leaves Also needs you out when the guide names every decision', () => {
     const state = createShinsaState({
       tasks: [createTask({ id: 'login', title: 'Review the login fix', stage: 'reviewing' })],
-      gates: [createGate({ id: 'g-login', taskId: 'login', kind: 'review' })],
+      gates: [createGate({ id: 'g-login', taskId: 'login', type: 'review' })],
     });
     renderHome(state);
     expect(screen.queryByRole('button', { name: /^Also needs you/ })).toBeNull();
@@ -147,8 +171,10 @@ describe('HomePage', () => {
       tasks: [
         project('w-review', 'Review the login fix', { stage: 'reviewing', handle: 'WK-1' }),
         project('h-review', 'Review the garden plan', { stage: 'reviewing', handle: 'HM-1' }),
-        project('w-build', 'Build the export', { stage: 'building', activity: [message(now - 60_000)] }),
-        project('h-build', 'Water the beds', { stage: 'building', activity: [message(now - 30_000)] }),
+        project('w-build', 'Build the export', { stage: 'building' }),
+        project('h-build', 'Water the beds', { stage: 'building' }),
+        project('w-asked', 'Ask about the export', { stage: 'cancelled', activity: [message(now - 60_000)] }),
+        project('h-asked', 'Ask about the beds', { stage: 'cancelled', activity: [message(now - 30_000)] }),
         project('w-done', 'Rename the settings page', {
           stage: 'merged',
           stageChangedAt: now - 60_000,
@@ -157,15 +183,21 @@ describe('HomePage', () => {
         project('h-done', 'Order the seeds', { stage: 'done', stageChangedAt: now - 60_000 }),
       ],
       gates: [
-        createGate({ id: 'g-w', taskId: 'w-review', kind: 'review' }),
-        createGate({ id: 'g-h', taskId: 'h-review', kind: 'review' }),
+        createGate({ id: 'g-w', taskId: 'w-review', type: 'review' }),
+        createGate({ id: 'g-h', taskId: 'h-review', type: 'review' }),
       ],
       patch: { focus: { projectId: 'work', until: null } },
     });
     const view = renderHome(state);
     const shows = (title: string) => document.body.textContent?.includes(title) ?? false;
-    expect(['Review the login fix', 'Build the export', 'Rename the settings page'].every(shows)).toBe(true);
-    expect(['Review the garden plan', 'Water the beds', 'Order the seeds'].some(shows)).toBe(false);
+    expect(
+      ['Review the login fix', 'Build the export', 'Rename the settings page', 'Ask about the export'].every(
+        shows
+      )
+    ).toBe(true);
+    expect(
+      ['Review the garden plan', 'Water the beds', 'Order the seeds', 'Ask about the beds'].some(shows)
+    ).toBe(false);
     expect(headers()).toEqual(['In progress1|true', 'Recently finished1|true', 'Recent conversations1|true']);
     expect(screen.getByRole('button', { name: /Rename the settings page/ }).textContent).toContain('WK-2 · ');
 

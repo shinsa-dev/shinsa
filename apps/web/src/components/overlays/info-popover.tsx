@@ -30,7 +30,7 @@ export function InfoAction(props: { label: string } & ({ href: string } | { onCl
     return (
       <a href={props.href} target='_blank' rel='noreferrer' className={INFO_ACTION}>
         {props.label}
-        <Icon name='IconArrowUpRight' className='size-3.5' />
+        <Icon size='sm' name='IconArrowUpRight' />
       </a>
     );
   }
@@ -83,7 +83,7 @@ export function InfoRow({
   return (
     <div className='flex min-h-7 items-center justify-between gap-4 px-3 text-xs'>
       <span className='flex min-w-0 items-center gap-2 text-fg-3'>
-        {icon && <Icon name={icon} className={cn('size-3.5 shrink-0', iconClassName)} />}
+        {icon && <Icon size='sm' name={icon} className={iconClassName} />}
         <span className='min-w-0 truncate'>{label}</span>
       </span>
       {value !== undefined && value !== null && (

@@ -1,20 +1,21 @@
 import { describe, expect, it } from 'bun:test';
-import type { Spec } from '@shinsa/core';
+import type { Plan } from '@shinsa/core';
 import {
   ACTOR_LABEL,
+  listActivityNewestFirst,
   resolveActivityActor,
   resolveActivityGlyph,
   resolveOverviewSummary,
 } from '@/lib/overview/activity.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
 
-const SPEC: Spec = {
+const PLAN: Plan = {
   version: 1,
   body: '',
   proposedAt: 0,
   document: {
     goal: 'Let exports retry only the failed chunk.',
-    plan: [],
+    phases: [],
     behaviour: [],
     approach: '',
     files: [],
@@ -24,22 +25,51 @@ const SPEC: Spec = {
   },
 };
 
-const REPORT = { headline: 'Retries only the failed chunk', phases: [], checks: [], decisions: [] };
+const REPORT = { headline: 'Retries only the failed chunk', sections: [], checks: [], judgementCalls: [] };
 
 describe('resolveOverviewSummary', () => {
-  it('prefers the work report headline, then the summary, then the spec goal', () => {
+  it('prefers the work report headline, then the summary, then the plan goal', () => {
     expect(
-      resolveOverviewSummary(createTask({ id: 'a', report: REPORT, summary: 'Summary', spec: SPEC }))
+      resolveOverviewSummary(createTask({ id: 'a', report: REPORT, summary: 'Summary', plan: PLAN }))
     ).toBe('Retries only the failed chunk');
-    expect(resolveOverviewSummary(createTask({ id: 'b', summary: 'Summary', spec: SPEC }))).toBe('Summary');
-    expect(resolveOverviewSummary(createTask({ id: 'c', spec: SPEC }))).toBe(
+    expect(resolveOverviewSummary(createTask({ id: 'b', summary: 'Summary', plan: PLAN }))).toBe('Summary');
+    expect(resolveOverviewSummary(createTask({ id: 'c', plan: PLAN }))).toBe(
       'Let exports retry only the failed chunk.'
     );
   });
 
   it('has no summary before there is anything to say', () => {
     expect(resolveOverviewSummary(createTask({ id: 'a' }))).toBeNull();
-    expect(resolveOverviewSummary(createTask({ id: 'b', spec: { ...SPEC, document: null } }))).toBeNull();
+    expect(resolveOverviewSummary(createTask({ id: 'b', plan: { ...PLAN, document: null } }))).toBeNull();
+  });
+});
+
+describe('listActivityNewestFirst', () => {
+  it('lists the newest entry first and keeps the log’s order between entries of the same moment', () => {
+    const entry = (at: number, text: string) => ({
+      at,
+      kind: 'note' as const,
+      actor: 'shinsa' as const,
+      text,
+      detail: null,
+      evidenceId: null,
+    });
+    const task = createTask({
+      id: 'a',
+      activity: [entry(1, 'Asked'), entry(3, 'Planned'), entry(3, 'Building started'), entry(2, 'Late note')],
+    });
+    expect(listActivityNewestFirst(task).map((item) => item.text)).toEqual([
+      'Building started',
+      'Planned',
+      'Late note',
+      'Asked',
+    ]);
+    expect(task.activity.map((item) => item.text)).toEqual([
+      'Asked',
+      'Planned',
+      'Building started',
+      'Late note',
+    ]);
   });
 });
 
@@ -50,7 +80,7 @@ describe('activity marks', () => {
       icon: 'IconExclamationCircle',
       tone: 'red',
     });
-    expect(resolveActivityGlyph({ ...entry, kind: 'failure', purpose: 'failure' })).toEqual({
+    expect(resolveActivityGlyph({ ...entry, kind: 'failure', gateType: 'failure' })).toEqual({
       icon: 'IconExclamationCircle',
       tone: 'red',
     });
@@ -107,11 +137,11 @@ describe('activity marks', () => {
       detail: null,
       evidenceId: null,
     } as const;
-    expect(resolveActivityGlyph({ ...entry, purpose: 'sign_in' })).toEqual({
+    expect(resolveActivityGlyph({ ...entry, gateType: 'sign_in' })).toEqual({
       icon: 'IconUserKey',
       tone: 'orange',
     });
-    expect(resolveActivityGlyph({ ...entry, purpose: 'configuration' })).toEqual({
+    expect(resolveActivityGlyph({ ...entry, gateType: 'configuration' })).toEqual({
       icon: 'IconToolbox',
       tone: 'orange',
     });

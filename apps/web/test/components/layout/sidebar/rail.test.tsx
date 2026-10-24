@@ -10,7 +10,7 @@ import { createGate, createShinsaState, createTask } from '../../../support/stat
 
 const STATE = createShinsaState({
   tasks: [createTask({ id: 'review', handle: 'SW-1', title: 'Review the login fix', stage: 'reviewing' })],
-  gates: [createGate({ id: 'g-review', taskId: 'review', kind: 'review' })],
+  gates: [createGate({ id: 'g-review', taskId: 'review', type: 'review' })],
 });
 
 describe('the rail’s queue', () => {

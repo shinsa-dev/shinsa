@@ -33,8 +33,7 @@ function waiting(task: Partial<Task> = {}, gate: Partial<Gate> = {}) {
   const opened = createGate({
     id: 'g',
     taskId: 't',
-    kind: 'question',
-    purpose: 'operation',
+    type: 'operation',
     title: 'The change merged. Run the operation now?',
     body: BODY,
     commit: SHA,
@@ -108,52 +107,68 @@ describe('the operation gate after the merge', () => {
     expect(await view.findByText('Running the operation.')).toBeTruthy();
   });
 
-  it('runs it with your notes as guidance for the operator', async () => {
-    const view = renderOverview(waiting());
-    const send = view.getByRole('button', { name: 'Run with these notes' }) as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
+  it('shows the saved notes in the box, and runs with them as they are', async () => {
+    const view = renderOverview(waiting({}, { notes: 'Wait for the deploy.' }));
+    const box = view.getByRole('textbox', { name: 'Notes for the operator' }) as HTMLTextAreaElement;
+    expect(box.value).toBe('Wait for the deploy.');
+    expect(view.queryByRole('button', { name: 'Run with these notes' })).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'Run the operation' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'gate.answer', gateId: 'g', decision: 'approve', response: null },
+    ]);
+    expect(await view.findByText('Running the operation.')).toBeTruthy();
+  });
+
+  it('replaces the notes with the box’s text when you changed it', async () => {
+    const view = renderOverview(waiting({}, { notes: 'Wait for the deploy.' }));
     fireEvent.change(view.getByRole('textbox', { name: 'Notes for the operator' }), {
       target: { value: '  Skip the archived stores.  ' },
     });
-    fireEvent.click(send);
+    fireEvent.click(view.getByRole('button', { name: 'Run the operation' }));
     expect(listSentCommands()).toEqual([
-      { type: 'gate.answer', gateId: 'g', decision: 'answer', response: 'Skip the archived stores.' },
+      { type: 'gate.answer', gateId: 'g', decision: 'reply', response: 'Skip the archived stores.' },
     ]);
     expect(await view.findByText('Running the operation with your notes.')).toBeTruthy();
   });
 
-  it('sends the notes with Enter too', async () => {
-    const view = renderOverview(waiting());
-    const box = view.getByRole('textbox', { name: 'Notes for the operator' });
-    fireEvent.keyDown(box, { key: 'Enter' });
-    fireEvent.change(box, { target: { value: 'Watch the error rate.' } });
-    fireEvent.keyDown(box, { key: 'a' });
-    fireEvent.keyDown(box, { key: 'Enter' });
-    await waitFor(() =>
-      expect(listSentCommands()).toEqual([
-        { type: 'gate.answer', gateId: 'g', decision: 'answer', response: 'Watch the error rate.' },
-      ])
-    );
+  it('clears the notes when you emptied the box', async () => {
+    const view = renderOverview(waiting({}, { notes: 'Wait for the deploy.' }));
+    fireEvent.change(view.getByRole('textbox', { name: 'Notes for the operator' }), {
+      target: { value: '' },
+    });
+    fireEvent.click(view.getByRole('button', { name: 'Run the operation' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'gate.answer', gateId: 'g', decision: 'reply', response: '' },
+    ]);
+    expect(await view.findByText('Running the operation without notes.')).toBeTruthy();
   });
 
-  it('says a message in the composer becomes notes for the operator, and runs nothing', async () => {
+  it('says a message in the composer replaces the notes for the operator, and runs nothing', async () => {
     const view = renderOverview(waiting());
     const composer = view.getByRole('textbox', {
-      name: 'Add notes for the operator. They go with the operation once you run it.',
+      name: 'Write the notes for the operator. They replace the saved notes and go with the operation.',
     });
     fireEvent.change(composer, { target: { value: 'Wait for the deploy.' } });
     fireEvent.click(view.getByRole('button', { name: 'Send message' }));
     expect(listSentCommands()).toEqual([{ type: 'task.message', taskId: 't', text: 'Wait for the deploy.' }]);
-    expect(await view.findByText('Saved as notes for the operator.')).toBeTruthy();
+    expect(await view.findByText('Notes saved.')).toBeTruthy();
   });
 
-  it('shows the notes a message left, and the box adds to them', () => {
-    const view = renderOverview(waiting({}, { notes: 'Wait for the deploy.' }));
-    expect(view.getByText('Your notes for the operator')).toBeTruthy();
-    expect(view.getByText('Wait for the deploy.')).toBeTruthy();
-    expect(view.getByRole('textbox', { name: 'Notes for the operator' }).getAttribute('placeholder')).toBe(
-      'More notes for the operator, added to yours.'
+  it('refills the box when the saved notes change', () => {
+    const view = renderOverview(waiting());
+    const box = view.getByRole('textbox', { name: 'Notes for the operator' }) as HTMLTextAreaElement;
+    expect(box.value).toBe('');
+    fireEvent.change(box, { target: { value: 'A draft.' } });
+    const { task, gate, state } = waiting({}, { notes: 'Wait for the deploy.' });
+    view.rerender(
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey={task.id}>
+          <OverviewTab state={state} task={task} gate={gate} onOpen={mock()} />
+        </ReviewDraftProvider>
+        <Toaster />
+      </TooltipProvider>
     );
+    expect(box.value).toBe('Wait for the deploy.');
   });
 
   it('finishes without the operation only after the confirm dialog', async () => {

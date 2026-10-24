@@ -8,12 +8,13 @@ import {
   resolveAgentModel,
   resolveAgentProvider,
   resolveCandidateSpentUntil,
+  resolvePlanLabel,
   resolveSpentUntil,
   type Settings,
   selectNextAccount,
   type UsageWindow,
 } from '@shinsa/core';
-import { resolveAccountLabel } from '@/lib/accounts/account.ts';
+import { type AccountProvider, resolveAccountProvider } from '@/lib/accounts/account.ts';
 import { formatMoment, formatSince, formatUntil } from '@/lib/format/time.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 
@@ -31,14 +32,13 @@ export interface UsageRow {
 
 export interface UsageGlance {
   provider: string;
-  label: string;
   account: AccountSummary | null;
   row: UsageRow | null;
 }
 
 export interface ProviderGlance {
   login: ProviderLogin;
-  label: string;
+  name: AccountProvider;
   usage: AccountUsage;
   row: UsageRow | null;
   status: AccountStatus | null;
@@ -48,6 +48,14 @@ export interface AccountStatus {
   label: string;
   tone: Tone;
   until: number | null;
+}
+
+export interface UsageAccountHeader {
+  name: AccountProvider;
+  detail: string | null;
+  isDefault: boolean;
+  status: AccountStatus | null;
+  checkedAt: number | null;
 }
 
 export function resolveUsageTone(percent: number): Tone {
@@ -84,24 +92,29 @@ export function resolveUsageModel(settings: Settings) {
   return resolveAgentModel(settings, 'builder', CLAUDE_PROVIDER);
 }
 
-function selectHighestWindow(usage: AccountUsage, model: string | null) {
-  const [highest] = listRelevantWindows(usage, model)
-    .slice()
-    .sort((a, b) => b.usedPercent - a.usedPercent);
+function selectGlanceWindow(usage: AccountUsage, model: string | null) {
+  const windows = listRelevantWindows(usage, model);
+  const spent = windows.find((window) => window.kind !== 'session' && window.usedPercent >= 100);
+  if (spent) return createUsageRow(spent);
+  const session = windows.find((window) => window.kind === 'session');
+  if (session) return createUsageRow(session);
+  const [highest] = windows.slice().sort((a, b) => b.usedPercent - a.usedPercent);
   return highest ? createUsageRow(highest) : null;
 }
 
-export function selectHighestRow(account: AccountSummary, model: string | null) {
-  return selectHighestWindow(account.usage, model);
+export function selectGlanceRow(account: AccountSummary, model: string | null) {
+  return selectGlanceWindow(account.usage, model);
 }
 
-export function describeProviderAccount(login: ProviderLogin) {
-  return login.email ? `${login.label} · ${login.email}` : login.label;
-}
+const LOGIN_STATUS: Partial<Record<ProviderLogin['status'], AccountStatus>> = {
+  signed_out: { label: 'Needs sign-in', tone: 'orange', until: null },
+  outdated: { label: 'Update needed', tone: 'orange', until: null },
+};
 
-function resolveProviderStatus(login: ProviderLogin, usage: AccountUsage, now: number): AccountStatus | null {
-  if (login.status === 'signed_out') return { label: 'Needs sign-in', tone: 'orange', until: null };
-  const until = resolveSpentUntil(usage, null, now);
+export function resolveProviderStatus(login: ProviderLogin, now: number): AccountStatus | null {
+  const status = LOGIN_STATUS[login.status];
+  if (status) return status;
+  const until = login.usage ? resolveSpentUntil(login.usage, null, now) : null;
   return until === null ? null : { label: 'Out of usage', tone: 'red', until };
 }
 
@@ -112,17 +125,17 @@ export function listProviderGlances(snapshot: AccountsSnapshot | null, now: numb
     return [
       {
         login,
-        label: describeProviderAccount(login),
+        name: resolveAccountProvider(login.provider, login.email ?? null),
         usage,
-        row: selectHighestWindow(usage, null),
-        status: resolveProviderStatus(login, usage, now),
+        row: selectGlanceWindow(usage, null),
+        status: resolveProviderStatus(login, now),
       },
     ];
   });
 }
 
 function createProviderGlance(glance: ProviderGlance): UsageGlance {
-  return { provider: glance.login.provider, label: glance.label, account: null, row: glance.row };
+  return { provider: glance.login.provider, account: null, row: glance.row };
 }
 
 export function resolveUsageGlance(
@@ -140,17 +153,20 @@ export function resolveUsageGlance(
   if (account) {
     return {
       provider: CLAUDE_PROVIDER,
-      label: resolveAccountLabel(account),
       account,
-      row: selectHighestRow(account, model),
+      row: selectGlanceRow(account, model),
     };
   }
   const [first] = providers;
   return first ? createProviderGlance(first) : null;
 }
 
-export function describeGlance(glance: UsageGlance) {
-  return `The next run uses ${glance.label}`;
+export function isNextAccount(glance: UsageGlance, account: AccountSummary) {
+  return glance.account?.id === account.id;
+}
+
+export function isNextProvider(glance: UsageGlance, login: ProviderLogin) {
+  return glance.account === null && glance.provider === login.provider;
 }
 
 export function describeUsageDetail(account: { usage: AccountUsage }) {
@@ -178,4 +194,18 @@ export function resolveAccountStatus(
 
 export function describeAccountStatus(status: AccountStatus, now: number) {
   return status.until === null ? status.label : `${status.label} until ${formatMoment(status.until, now)}`;
+}
+
+export function resolveAccountHeader(
+  account: AccountSummary,
+  model: string | null,
+  now: number
+): UsageAccountHeader {
+  return {
+    name: resolveAccountProvider(CLAUDE_PROVIDER, account.email),
+    detail: resolvePlanLabel(account.plan),
+    isDefault: account.isDefault,
+    status: resolveAccountStatus(account, model, now),
+    checkedAt: account.usage.checkedAt,
+  };
 }

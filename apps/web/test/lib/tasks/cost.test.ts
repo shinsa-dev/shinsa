@@ -9,7 +9,7 @@ function usage(costUsd: number | null, tokens = 1_000): RunUsage {
 
 const DOCUMENT = {
   goal: 'g',
-  plan: [{ title: 'Write a', detail: 'd' }],
+  phases: [{ title: 'Write a', detail: 'd' }],
   behaviour: [],
   approach: 'a',
   files: [],
@@ -20,7 +20,7 @@ const DOCUMENT = {
 
 describe('the cost of a task', () => {
   it('rolls runs up into a total, by step and by phase, against the limit', () => {
-    const task = createTask({ id: 't', spec: { version: 1, body: '', document: DOCUMENT, proposedAt: 1 } });
+    const task = createTask({ id: 't', plan: { version: 1, body: '', document: DOCUMENT, proposedAt: 1 } });
     const state = createShinsaState({
       tasks: [task],
       runs: [
@@ -35,8 +35,8 @@ describe('the cost of a task', () => {
       detail: '1.2M tokens, as estimated by the agent provider.',
       budget: { share: 1, over: true },
       byRole: [
-        { key: 'planner', label: 'Plan', cost: '$0.50', tokens: '3k tokens' },
-        { key: 'builder', label: 'Build', cost: '$1.25', tokens: '1.2M tokens' },
+        { key: 'planner', label: 'Planner', cost: '$0.50', tokens: '3k tokens' },
+        { key: 'builder', label: 'Builder', cost: '$1.25', tokens: '1.2M tokens' },
       ],
       byPhase: [{ key: 'phase-0', label: 'Write a', cost: '$1.25', tokens: '1.2M tokens' }],
     });

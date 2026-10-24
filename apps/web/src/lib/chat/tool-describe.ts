@@ -147,11 +147,11 @@ const PLAIN_SHINSA: Record<PlainShinsaTool, { icon: IconName; verb: string }> = 
   report_review: { icon: 'IconShieldCheck', verb: 'Reported the review' },
   read_task: { icon: 'IconFileText', verb: 'Read a task' },
   answer: { icon: 'IconSend', verb: 'Handed over the answer' },
-  report_diagnosis: { icon: 'IconSend', verb: 'Reported the findings' },
+  report_diagnosis: { icon: 'IconSend', verb: 'Reported the diagnosis' },
   submit_report: { icon: 'IconSend', verb: 'Wrote the report' },
   report_outcome: { icon: 'IconSend', verb: 'Reported the outcome' },
-  delegation_status: { icon: 'IconAgents', verb: 'Checked a delegated task' },
-  delegation_cancel: { icon: 'IconCircleX', verb: 'Stopped a delegated task' },
+  delegation_status: { icon: 'IconAgents', verb: 'Checked a delegation' },
+  delegation_cancel: { icon: 'IconCircleX', verb: 'Stopped a delegation' },
   list_schedules: { icon: 'IconClock', verb: 'Listed the schedules' },
   delete_schedule: { icon: 'IconCircleX', verb: 'Deleted a schedule' },
 };
@@ -171,7 +171,7 @@ function describeShinsaWork(name: Exclude<ShinsaToolName, PlainShinsaTool>, args
       return plain(
         'IconAgents',
         'Delegated:',
-        readString(args, 'title') ?? firstLine(readString(args, 'task') ?? '')
+        readString(args, 'title') ?? firstLine(readString(args, 'brief') ?? '')
       );
     case 'create_task':
       return plain('IconPlusSmall', 'Created a task:', firstLine(readString(args, 'request') ?? ''));
@@ -211,10 +211,10 @@ function describeShinsaMessage(
     case 'note':
       return plain('IconNote1', 'Left a note:', readString(args, 'note'));
     case 'wait_for':
-      return plain('IconHourglass', 'Scheduled a check:', readString(args, 'notes'));
+      return plain('IconHourglass', 'Scheduled a check-in:', readString(args, 'notes'));
     case 'suggest_tasks': {
       const count = readList(args, 'tasks').length;
-      return plain('IconLightbulbGlow', `Suggested ${formatCount(count, 'follow-up', 'follow-ups')}`);
+      return plain('IconLightbulbGlow', `Suggested ${formatCount(count, 'task', 'tasks')}`);
     }
     case 'delegation_answer':
       return plain('IconBubbleText', 'Answered a delegated agent:', readString(args, 'answer'));
@@ -317,15 +317,15 @@ const PRESENT_VERB: Record<string, string> = {
   'Looked up tasks': 'Looking up tasks',
   'Read a task': 'Reading a task',
   'Left a note:': 'Leaving a note:',
-  'Scheduled a check:': 'Scheduling a check:',
+  'Scheduled a check-in:': 'Scheduling a check-in:',
   'Handed over the answer': 'Handing over the answer',
-  'Reported the findings': 'Reporting the findings',
+  'Reported the diagnosis': 'Reporting the diagnosis',
   'Wrote the report': 'Writing the report',
   'Reported the outcome': 'Reporting the outcome',
   'Changed the kind of task': 'Changing the kind of task',
   'Delegated:': 'Delegating:',
-  'Checked a delegated task': 'Checking a delegated task',
-  'Stopped a delegated task': 'Stopping a delegated task',
+  'Checked a delegation': 'Checking a delegation',
+  'Stopped a delegation': 'Stopping a delegation',
   'Answered a delegated agent:': 'Answering a delegated agent:',
   'Created a task:': 'Creating a task:',
   'Split the plan into': 'Splitting the plan into',
@@ -335,9 +335,13 @@ const PRESENT_VERB: Record<string, string> = {
   'Asked you for a secret:': 'Asking you for a secret:',
 };
 
+export function resolvePresentVerb(verb: string) {
+  return PRESENT_VERB[verb] ?? verb;
+}
+
 export function resolveRunningLabel(description: ToolDescription) {
   const { verb, target, scope } = description;
-  return [PRESENT_VERB[verb] ?? verb, target, scope && `· ${scope}`].filter(Boolean).join(' ');
+  return [resolvePresentVerb(verb), target, scope && `· ${scope}`].filter(Boolean).join(' ');
 }
 
 const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
@@ -362,17 +366,16 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   find_tasks: (count) => (count === 1 ? 'looked up tasks once' : `looked up tasks ${count} times`),
   read_task: (count) => `read ${formatCount(count, 'task', 'tasks')}`,
   note: (count) => `left ${formatCount(count, 'note', 'notes')}`,
-  wait_for: () => 'scheduled a check',
-  suggest_tasks: () => 'suggested follow-ups',
+  wait_for: () => 'scheduled a check-in',
+  suggest_tasks: () => 'suggested tasks',
   answer: () => 'handed over the answer',
-  report_diagnosis: () => 'reported the findings',
+  report_diagnosis: () => 'reported the diagnosis',
   submit_report: () => 'wrote the report',
   report_outcome: () => 'reported the outcome',
   reshape_task: () => 'changed the kind of task',
-  delegate_task: (count) => `delegated ${formatCount(count, 'task', 'tasks')}`,
-  delegation_status: (count) =>
-    count === 1 ? 'checked a delegated task' : `checked delegated tasks ${count} times`,
-  delegation_cancel: (count) => `stopped ${formatCount(count, 'delegated task', 'delegated tasks')}`,
+  delegate_task: (count) => `started ${formatCount(count, 'delegation', 'delegations')}`,
+  delegation_status: (count) => (count === 1 ? 'checked a delegation' : `checked delegations ${count} times`),
+  delegation_cancel: (count) => `stopped ${formatCount(count, 'delegation', 'delegations')}`,
   delegation_answer: (count) =>
     count === 1 ? 'answered a delegated agent' : `answered delegated agents ${count} times`,
   create_task: (count) => `created ${formatCount(count, 'task', 'tasks')}`,

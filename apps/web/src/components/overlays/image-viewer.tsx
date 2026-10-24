@@ -343,7 +343,7 @@ function ImageViewerDialog({
           </div>
           <div className='pointer-events-none absolute inset-x-0 top-0 flex justify-end p-3'>
             <ChromeButton label='Close' shortcut='Esc' onClick={requestClose}>
-              <Icon name='IconCrossMedium' className='size-4.5' />
+              <Icon size='lg' name='IconCrossMedium' />
             </ChromeButton>
           </div>
           {many && (
@@ -354,7 +354,7 @@ function ImageViewerDialog({
                 onClick={() => step(-1)}
                 className='absolute top-1/2 left-3 -translate-y-1/2'
               >
-                <Icon name='IconChevronLeftMedium' className='size-5' />
+                <Icon size='lg' name='IconChevronLeftMedium' />
               </ChromeButton>
               <ChromeButton
                 label='Next image'
@@ -362,7 +362,7 @@ function ImageViewerDialog({
                 onClick={() => step(1)}
                 className='absolute top-1/2 right-3 -translate-y-1/2'
               >
-                <Icon name='IconChevronRightMedium' className='size-5' />
+                <Icon size='lg' name='IconChevronRightMedium' />
               </ChromeButton>
             </>
           )}

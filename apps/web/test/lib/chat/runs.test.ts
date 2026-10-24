@@ -11,7 +11,9 @@ describe('describeEmptyChat', () => {
   });
 
   it('explains that a queued task waits on another task', () => {
-    expect(describeEmptyChat(createTask({ id: 't', stage: 'queued' })).title).toBe('Not started yet');
+    expect(describeEmptyChat(createTask({ id: 't', stage: 'waiting_on_tasks' })).title).toBe(
+      'Not started yet'
+    );
   });
 
   it('says no agent has run yet at any other stage', () => {

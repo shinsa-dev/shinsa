@@ -26,7 +26,7 @@ export function WaitsOnLinks({ waitsOn }: { waitsOn: Task[] }) {
   const shown = cancelled ? [cancelled] : waitsOn;
   return (
     <Hint label={<WaitsOnHint waitsOn={waitsOn} />}>
-      <span className='flex min-w-0 items-center whitespace-pre text-fg-2 text-xs max-md:hidden'>
+      <span className='flex w-fit min-w-0 items-center whitespace-pre text-fg-2 text-xs max-md:hidden'>
         {!cancelled && <span className='shrink-0'>Waits on </span>}
         {shown.map((parent, index) => (
           <React.Fragment key={parent.id}>
@@ -65,7 +65,7 @@ export function ChainArrow({ state, task }: { state: ShinsaState; task: Task }) 
             />
           }
         >
-          <Icon name='IconArrowCornerDownRight' className='size-3.5' />
+          <Icon size='sm' name='IconArrowCornerDownRight' />
         </DropdownMenuTrigger>
       </Hint>
       <DropdownMenuContent align='start' className='min-w-56 max-w-80'>

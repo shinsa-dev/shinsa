@@ -56,14 +56,14 @@ function show(runs: Run[], task = createTask({ id: 't' })) {
   return { onOpen, view };
 }
 
-describe('the delegated work panel on the Overview', () => {
-  it('lists each delegated task under the one that delegated it, with how many still work', () => {
+describe('the Delegations panel on the Overview', () => {
+  it('lists each delegation under the run that started it, with how many still work', () => {
     const { onOpen } = show([
       delegated('a', {}),
       delegated('a1', { startedAt: NOW - 20_000 }, { parentRunId: 'a', depth: 2 }),
       delegated('b', { endedAt: NOW - 1_000, outcome: 'completed', summary: 'Done.' }),
     ]);
-    expect(screen.getByText('Delegated work')).toBeTruthy();
+    expect(screen.getByText('Delegations')).toBeTruthy();
     expect(screen.getByText('2 working · 1 done')).toBeTruthy();
     expect(screen.getAllByRole('listitem').map((item) => item.textContent?.split('·')[0])).toEqual([
       'ReviewerDelegated aWorking ',
@@ -75,7 +75,7 @@ describe('the delegated work panel on the Overview', () => {
     expect(onOpen).toHaveBeenCalledWith('a1');
   });
 
-  it('lists only the delegated work of the current round', () => {
+  it('lists only the delegations of the current round', () => {
     const task = createTask({
       id: 't',
       stage: 'building',

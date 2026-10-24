@@ -26,16 +26,17 @@ export function createSampleTask(
   overrides: Partial<Task> & { id: string; title: string }
 ): Task {
   return {
-    intent: overrides.title,
+    request: overrides.title,
     repoId: null,
     size: null,
     planFirst: false,
+    auto: { shape: false, start: false, priority: false },
     stage: 'building',
     stageReason: 'building the change',
     priority: 'normal',
     branch: null,
     worktreePath: null,
-    spec: null,
+    plan: null,
     phases: [],
     planAnswers: null,
     summary: null,
@@ -49,7 +50,6 @@ export function createSampleTask(
     phaseReports: [],
     checkResults: null,
     pullRequest: null,
-    baseTaskId: null,
     waitsOn: [],
     note: null,
     origin: null,
@@ -66,8 +66,7 @@ export function createSampleGate(
   overrides: Partial<Gate> & { id: string; taskId: string; title: string }
 ): Gate {
   return {
-    kind: 'question',
-    purpose: 'failure',
+    type: 'failure',
     status: 'open',
     body: '',
     runId: null,
@@ -228,7 +227,7 @@ export function createSampleRoundsTask(now: number): Task {
         number: 4,
         title: 'Add a settings screen for MCP servers',
         request: 'Then add a settings screen for the MCP servers.',
-        status: 'queued',
+        status: 'waiting',
         startedAt: null,
         endedAt: null,
         pullRequest: null,

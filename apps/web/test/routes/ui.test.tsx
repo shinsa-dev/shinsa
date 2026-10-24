@@ -52,8 +52,14 @@ describe('the /ui gallery', () => {
       'Should the v1 endpoint stay for one more release?',
       'The agents could not settle the review',
       'The planner wants your go-ahead on this plan',
-      'Suggested follow-ups',
-      'Delegated work',
+      'Suggested tasks',
+      'Delegations',
+      'Answered your question',
+      'Wrote the report',
+      'Reported the diagnosis',
+      'Reported the outcome',
+      'Diagnosis',
+      'Working out the steps',
       'The change merged. Run the operation now?',
       'Extra checks',
       'The planner asked for your approval.',
@@ -73,12 +79,14 @@ describe('the /ui gallery', () => {
     const chat = findSection('shinsa-chat');
     for (const text of [
       'Working',
-      'Waiting for its delegated tasks',
+      'Waiting for its delegations',
       'Waiting for the agent that delegated it to answer',
-      'Account switched · christo@example.com',
+      'Account switched',
+      '· christo@example.com',
       'Conversation compacted',
       'Session restored from the transcript',
-      'Conversation handed over · Codex',
+      'Conversation handed over',
+      '· Codex',
     ]) {
       expect(chat.getAllByText(text).length).toBeGreaterThan(0);
     }
@@ -90,7 +98,7 @@ describe('the /ui gallery', () => {
     for (const text of [
       'Paused',
       'Needs sign-in',
-      'Signed in with ChatGPT',
+      'Pro',
       'Not signed in',
       'Not installed',
       'Too old for Shinsa',
@@ -126,7 +134,7 @@ describe('the /ui gallery', () => {
   it('answers every action with a toast and sends nothing, even with the connection open', async () => {
     renderGallery();
     const overview = findSection('shinsa-overview');
-    fireEvent.click(overview.getByRole('button', { name: 'Check again' }));
+    fireEvent.click(overview.getByRole('button', { name: 'Verify again' }));
     fireEvent.click(overview.getByRole('button', { name: 'Allow another 10%' }));
     fireEvent.click(overview.getByRole('button', { name: 'Sign in' }));
     const [refresh] = findSection('shinsa-settings').getAllByRole('button', { name: 'Refresh usage' });

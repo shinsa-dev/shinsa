@@ -15,7 +15,7 @@ describe('stage labels', () => {
     expect(STAGE_LABEL.awaiting_plan).toBe('Plan to approve');
     expect(STAGE_LABEL.awaiting_review).toBe('Changes to review');
     expect(STAGE_LABEL.awaiting_merge).toBe('Ready to merge');
-    expect(STAGE_LABEL.queued).toBe('Not started');
+    expect(STAGE_LABEL.waiting_on_tasks).toBe('Not started');
   });
 
   it('gives decisions their status tone and working stages blue', () => {

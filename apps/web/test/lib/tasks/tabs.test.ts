@@ -5,7 +5,7 @@ import { createTask } from '../../support/state.ts';
 
 describe('listTaskTabs', () => {
   it('hides the code tab until there is code to look at', () => {
-    for (const stage of ['triage', 'queued', 'planning', 'awaiting_plan'] as const) {
+    for (const stage of ['triage', 'waiting_on_tasks', 'planning', 'awaiting_plan'] as const) {
       expect(listTaskTabs(createTask({ id: 't', stage }))).toEqual(['overview', 'chat']);
     }
     expect(listTaskTabs(createTask({ id: 't', stage: 'building' }))).toEqual(['overview', 'code', 'chat']);
@@ -44,7 +44,9 @@ describe('listTaskTabs', () => {
   });
 
   it('shows the code tab for an early task that already has a report', () => {
-    const report = { headline: '', phases: [], checks: [], decisions: [] } as NonNullable<Task['report']>;
+    const report = { headline: '', sections: [], checks: [], judgementCalls: [] } as NonNullable<
+      Task['report']
+    >;
     expect(listTaskTabs(createTask({ id: 't', stage: 'planning', report }))).toEqual([
       'overview',
       'code',

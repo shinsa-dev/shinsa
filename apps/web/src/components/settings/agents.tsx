@@ -9,32 +9,44 @@ import {
   type AgentGroup,
   type AgentRoleEntry,
   type AgentSelectLabels,
-  changeAgentModel,
-  changeAgentSpeed,
-  changeGroupModel,
-  changeGroupSpeed,
+  describeFollowedRole,
   describeGroupSelects,
   describeRoleSelects,
   FIX_ROUND_ITEMS,
+  type FollowingRoleEntry,
   listAgentModelItems,
   listGroupModelItems,
   listGroupSpeedItems,
   listSpeedItems,
   MERGE_ITEMS,
   MIXED_VALUE,
+  MODELS_TITLE,
   PLAN_ITEMS,
   parseFixRounds,
+  resolveAgentModelPatch,
   resolveAgentModelValue,
+  resolveAgentSpeedPatch,
   resolveFixRoundValue,
   resolveGroupModel,
+  resolveGroupModelPatch,
   resolveGroupSpeed,
+  resolveGroupSpeedPatch,
   resolvePlanValue,
   resolveSpeedAvailability,
   resolveSpeedValue,
   type SettingItem,
   updateSettings,
 } from '@/lib/settings.ts';
-import { SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
+import { SETTING_ROW, SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
+
+type SettingsUpdate = (patch: Partial<Settings>) => void;
+
+interface ModelsContext {
+  settings: Settings;
+  providers: AgentProviderInfo[];
+  accounts: AccountsSnapshot | null;
+  update: SettingsUpdate;
+}
 
 function AgentSelects({
   labels,
@@ -77,22 +89,33 @@ function AgentSelects({
   );
 }
 
-function RoleRow({
-  settings,
-  providers,
-  accounts,
-  entry,
+function DescribedRow({
+  title,
+  description,
+  children,
 }: {
-  settings: Settings;
-  providers: AgentProviderInfo[];
-  accounts: AccountsSnapshot | null;
-  entry: AgentRoleEntry;
+  title: React.ReactNode;
+  description: string;
+  children: React.ReactNode;
 }) {
-  const { role, title } = entry;
+  return (
+    <div className={SETTING_ROW}>
+      <div className='flex min-w-0 flex-1 flex-col'>
+        <div className='flex min-w-0 items-center gap-1.5 text-fg-4 text-xs'>{title}</div>
+        <p className='text-2xs text-fg-2'>{description}</p>
+      </div>
+      <div className='flex shrink-0 items-center gap-1.5'>{children}</div>
+    </div>
+  );
+}
+
+function RoleRow({ context, entry }: { context: ModelsContext; entry: AgentRoleEntry }) {
+  const { settings, providers, accounts, update } = context;
+  const { role } = entry;
   const model = resolveAgentModelValue(settings, role);
   const availability = resolveSpeedAvailability(accounts, settings, [role]);
   return (
-    <SettingRow title={title}>
+    <DescribedRow title={<span className='truncate'>{entry.title}</span>} description={entry.description}>
       <AgentSelects
         variant='ghost'
         labels={describeRoleSelects(entry)}
@@ -100,10 +123,18 @@ function RoleRow({
         model={model}
         speedItems={listSpeedItems(availability)}
         speed={resolveSpeedValue(settings, role, availability)}
-        onModel={(next) => void changeAgentModel(settings, role, next)}
-        onSpeed={(next) => void changeAgentSpeed(settings, role, next)}
+        onModel={(next) => update(resolveAgentModelPatch(settings, role, next))}
+        onSpeed={(next) => update(resolveAgentSpeedPatch(settings, role, next))}
       />
-    </SettingRow>
+    </DescribedRow>
+  );
+}
+
+function FollowingRoleRow({ entry }: { entry: FollowingRoleEntry }) {
+  return (
+    <DescribedRow title={<span className='truncate'>{entry.title}</span>} description={entry.description}>
+      <span className='w-71.5 truncate ps-2.5 text-fg-2 text-xs'>{describeFollowedRole(entry)}</span>
+    </DescribedRow>
   );
 }
 
@@ -121,17 +152,8 @@ function RolesToggle({ open, onToggle }: { open: boolean; onToggle: () => void }
   );
 }
 
-function AgentGroupBlock({
-  settings,
-  providers,
-  accounts,
-  group,
-}: {
-  settings: Settings;
-  providers: AgentProviderInfo[];
-  accounts: AccountsSnapshot | null;
-  group: AgentGroup;
-}) {
+function AgentGroupBlock({ context, group }: { context: ModelsContext; group: AgentGroup }) {
+  const { settings, providers, accounts, update } = context;
   const model = resolveGroupModel(settings, group);
   const availability = resolveSpeedAvailability(
     accounts,
@@ -140,16 +162,19 @@ function AgentGroupBlock({
   );
   const speed = resolveGroupSpeed(settings, group, availability);
   const [open, setOpen] = React.useState(model === MIXED_VALUE || speed === MIXED_VALUE);
-  const perRole = group.roles.length > 1;
+  const apply = (patch: Partial<Settings> | null) => {
+    if (patch) update(patch);
+  };
   return (
     <div className='flex flex-col'>
-      <SettingRow
+      <DescribedRow
         title={
           <>
             <span className='truncate'>{group.title}</span>
-            {perRole && <RolesToggle open={open} onToggle={() => setOpen((current) => !current)} />}
+            <RolesToggle open={open} onToggle={() => setOpen((current) => !current)} />
           </>
         }
+        description={group.description}
       >
         <AgentSelects
           labels={describeGroupSelects(group)}
@@ -157,24 +182,31 @@ function AgentGroupBlock({
           model={model}
           speedItems={listGroupSpeedItems(settings, group, availability)}
           speed={speed}
-          onModel={(next) => void changeGroupModel(settings, group, next)}
-          onSpeed={(next) => void changeGroupSpeed(settings, group, next)}
+          onModel={(next) => apply(resolveGroupModelPatch(settings, group, next))}
+          onSpeed={(next) => apply(resolveGroupSpeedPatch(settings, group, next))}
         />
-      </SettingRow>
-      {perRole && open && (
+      </DescribedRow>
+      {open && (
         <div className={SETTINGS_SHELF}>
           {group.roles.map((entry) => (
-            <RoleRow
-              key={entry.role}
-              settings={settings}
-              providers={providers}
-              accounts={accounts}
-              entry={entry}
-            />
+            <RoleRow key={entry.role} context={context} entry={entry} />
+          ))}
+          {group.following.map((entry) => (
+            <FollowingRoleRow key={entry.role} entry={entry} />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+export function ModelsGroup(context: ModelsContext) {
+  return (
+    <SettingsGroup title={MODELS_TITLE} className='gap-1.5'>
+      {AGENT_GROUPS.map((group) => (
+        <AgentGroupBlock key={group.id} context={context} group={group} />
+      ))}
+    </SettingsGroup>
   );
 }
 
@@ -183,17 +215,12 @@ export function AgentSettings({ settings }: { settings: Settings }) {
   const accounts = useAccounts();
   return (
     <>
-      <SettingsGroup title='Agents' className='gap-1.5'>
-        {AGENT_GROUPS.map((group) => (
-          <AgentGroupBlock
-            key={group.id}
-            settings={settings}
-            providers={providers}
-            accounts={accounts}
-            group={group}
-          />
-        ))}
-      </SettingsGroup>
+      <ModelsGroup
+        settings={settings}
+        providers={providers}
+        accounts={accounts}
+        update={(patch) => void updateSettings(patch)}
+      />
       <SettingsGroup title='Engine'>
         <SettingRow title='Approve plans'>
           <SelectField

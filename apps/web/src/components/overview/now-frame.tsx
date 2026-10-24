@@ -4,7 +4,7 @@ import type * as React from 'react';
 import { CARD, CARD_FOOTER } from '@/components/layout/surface/card.ts';
 import { StatusText } from '@/components/status/text.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
-import { resolveRoundTag } from '@/lib/tasks/rounds.ts';
+import { resolveRoundCount } from '@/lib/tasks/rounds.ts';
 
 export function NowFrame({
   eyebrow,
@@ -37,7 +37,7 @@ export function NowFrame({
 }
 
 export function Eyebrow({ state, task, extra }: { state: ShinsaState; task: Task; extra?: React.ReactNode }) {
-  const round = resolveRoundTag(task);
+  const round = resolveRoundCount(task);
   return (
     <span className='flex items-center gap-1.5'>
       <StatusText state={state} task={task} className='text-2xs' />

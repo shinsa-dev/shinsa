@@ -1,6 +1,5 @@
 import type { ShinsaState } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
-import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -28,11 +27,11 @@ export function RoadmapSection({
         onClick={() => setOpen(!open)}
         className='sticky top-0 z-10 flex h-8 w-full cursor-pointer items-center gap-2 border-border border-b bg-bg-1 px-3 text-left font-medium text-2xs text-fg-3 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
       >
-        <Icon name={group.icon} className={cn('size-3.5', TONE_TEXT[group.tone])} />
+        <Icon size='sm' name={group.icon} className={TONE_TEXT[group.tone]} />
         {group.title}
         <span className='font-normal text-fg-2 tabular-nums'>{entries.length}</span>
         <span className='flex-1' />
-        <SectionChevron open={open} className='size-4' />
+        <SectionChevron open={open} />
       </button>
       {open &&
         entries.map((entry) => (

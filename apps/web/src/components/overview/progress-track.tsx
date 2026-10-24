@@ -1,8 +1,10 @@
-import type { TaskProgress } from '@shinsa/core';
+import { resolveShapeState, resolveTaskProgress, type Task, type TaskProgress } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
+import { Spinner } from '@shinsa/ui/components/spinner';
 import { Tooltip, TooltipContent, TooltipLabel, TooltipTrigger } from '@shinsa/ui/components/tooltip';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { Hint } from '@/components/overlays/hint.tsx';
 import { InfoLine } from '@/components/overlays/info-popover.tsx';
 import { CheckMark } from '@/components/status/check-mark.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
@@ -12,6 +14,8 @@ import {
   type LabelFold,
   resolveLabelFold,
   resolveSteps,
+  SHAPING_LABEL,
+  SHAPING_NOTE,
   STEP_STATUS_LABEL,
   STEP_STATUS_TONE,
   type Step,
@@ -22,13 +26,13 @@ function StepMark({ status }: { status: StepStatus }) {
   if (status === 'done') {
     return (
       <span className='grid size-4 shrink-0 place-items-center rounded-full bg-green-4/29'>
-        <CheckMark label={STEP_STATUS_LABEL.done} className='size-3.75 text-green-text' />
+        <CheckMark label={STEP_STATUS_LABEL.done} className='text-green-text' />
       </span>
     );
   }
   if (status === 'skipped') {
     return (
-      <Icon name='IconCircleDotted' aria-label={STEP_STATUS_LABEL.skipped} className='size-4 text-fg-2' />
+      <Icon size='sm' name='IconCircleDotted' aria-label={STEP_STATUS_LABEL.skipped} className='text-fg-2' />
     );
   }
   if (status === 'current') {
@@ -52,7 +56,7 @@ function StepItem({ step, fold }: { step: Step; fold: LabelFold }) {
   const emphasised = step.status === 'current' || step.status === 'waiting';
   return (
     <Tooltip>
-      <TooltipTrigger render={<li className='flex shrink-0 cursor-default items-center gap-1.5' />}>
+      <TooltipTrigger render={<li className='flex w-fit shrink-0 cursor-default items-center gap-1.5' />}>
         <StepMark status={step.status} />
         <span
           className={cn(
@@ -102,6 +106,21 @@ export function ProgressTrack({ progress }: { progress: TaskProgress }) {
           <StepItem step={step} fold={resolveLabelFold(step, steps)} />
         </React.Fragment>
       ))}
+    </ol>
+  );
+}
+
+export function TaskTrack({ task }: { task: Task }) {
+  const shaping = resolveShapeState(task);
+  if (shaping === 'settled') return <ProgressTrack progress={resolveTaskProgress(task)} />;
+  return (
+    <ol aria-label='Progress' className='flex self-start'>
+      <Hint label={SHAPING_LABEL} detail={SHAPING_NOTE[shaping]}>
+        <li className='flex h-4 w-fit cursor-default items-center gap-1.5 text-2xs text-fg-2'>
+          <Spinner size='sm' />
+          {SHAPING_LABEL}
+        </li>
+      </Hint>
     </ol>
   );
 }

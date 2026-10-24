@@ -44,7 +44,7 @@ const DIFF: TaskDiff = {
 
 const REPORT: WorkReport = {
   headline: 'Parses the input and guards it.',
-  phases: [
+  sections: [
     {
       title: 'Wire the parser',
       summary: 'Reads one more line.',
@@ -61,9 +61,9 @@ const REPORT: WorkReport = {
     },
   ],
   checks: [],
-  decisions: [
+  judgementCalls: [
     {
-      decision: 'Kept the old reader',
+      call: 'Kept the old reader',
       reason: 'Other callers still use it.',
       file: 'docs/gamma.txt',
       line: 4,
@@ -196,14 +196,14 @@ describe('the review pane', () => {
   it('says so when a spot points at a file outside the change', () => {
     const report: WorkReport = {
       ...REPORT,
-      phases: [
+      sections: [
         {
           title: 'Elsewhere',
           summary: 'A file the change never touched.',
           spots: [{ file: 'docs/missing.txt', start: 3, end: 5, attention: 'high', why: 'Looks here.' }],
         },
       ],
-      decisions: [],
+      judgementCalls: [],
     };
     renderPane(nextTask({ report }));
     expect(

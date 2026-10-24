@@ -75,7 +75,7 @@ describe('createNewTaskCommand', () => {
   it('leaves every Auto part out, so triage decides it', () => {
     expect(createNewTaskCommand(' Fix it ', AUTO_CHOICES)).toEqual({
       type: 'task.create',
-      intent: 'Fix it',
+      request: 'Fix it',
       repoId: null,
     });
   });
@@ -83,7 +83,7 @@ describe('createNewTaskCommand', () => {
   it('sends each part you picked, Start now as no tasks to wait on and No project as null', () => {
     expect(createNewTaskCommand('Fix it', { project: 'p1', start: 'now', priority: 'urgent' })).toEqual({
       type: 'task.create',
-      intent: 'Fix it',
+      request: 'Fix it',
       repoId: null,
       projectId: 'p1',
       priority: 'urgent',
@@ -94,7 +94,7 @@ describe('createNewTaskCommand', () => {
     });
     expect(createNewTaskCommand('Fix it', { ...AUTO_CHOICES, project: NO_PROJECT })).toEqual({
       type: 'task.create',
-      intent: 'Fix it',
+      request: 'Fix it',
       repoId: null,
       projectId: null,
     });

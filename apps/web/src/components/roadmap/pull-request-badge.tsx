@@ -30,7 +30,7 @@ export function PullRequestBadge({ task }: { task: Task }) {
           TONE_TEXT[resolvePullRequestTone(pullRequest)]
         )}
       >
-        <Icon name={pullRequest.state === 'merged' ? 'IconMerged' : 'IconPullRequest'} className='size-3' />
+        <Icon size='sm' name={pullRequest.state === 'merged' ? 'IconMerged' : 'IconPullRequest'} />
         {pullRequest.number}
       </a>
     </Hint>

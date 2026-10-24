@@ -73,8 +73,14 @@ function ClampedMarkdown({ text, label }: { text: string; label?: React.ReactNod
   );
 }
 
+function resolveResultLabel(call: ToolCall, label: string | undefined) {
+  if (!call.failed) return label;
+  return call.recovery === null ? 'Error' : 'Handed back';
+}
+
 function ToolResult({ call, running, label }: { call: ToolCall; running: boolean; label?: string }) {
   const view = resolveToolResult(call);
+  const broken = call.failed && call.recovery === null;
   switch (view.kind) {
     case 'pending':
       return running ? (
@@ -87,7 +93,7 @@ function ToolResult({ call, running, label }: { call: ToolCall; running: boolean
     case 'markdown':
       return <ClampedMarkdown text={view.text} label={label} />;
     case 'text':
-      return <OutputText text={view.text} failed={call.failed} label={call.failed ? 'Error' : label} />;
+      return <OutputText text={view.text} failed={broken} label={resolveResultLabel(call, label)} />;
   }
 }
 
@@ -199,8 +205,8 @@ function TodoDetail({ todos }: { todos: { text: string; status: ChatTodoStatus }
           // biome-ignore lint/suspicious/noArrayIndexKey: to-dos are positional
           <li key={index} className='flex min-w-0 items-start gap-2 text-xs'>
             <Hint label={<span className={mark.className}>{mark.label}</span>}>
-              <span className='mt-px grid shrink-0 place-items-center'>
-                <Icon name={mark.icon} aria-label={mark.label} className={cn('size-4', mark.className)} />
+              <span className='mt-px grid w-fit shrink-0 place-items-center'>
+                <Icon size='sm' name={mark.icon} aria-label={mark.label} className={mark.className} />
               </span>
             </Hint>
             <span

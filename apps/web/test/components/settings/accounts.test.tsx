@@ -88,7 +88,11 @@ function updates() {
 }
 
 async function openMenu(email: string) {
-  let row = screen.getByText(email).parentElement as HTMLElement;
+  await openOptions(`Claude · ${email}`);
+}
+
+async function openOptions(name: string) {
+  let row = screen.getByText(name).parentElement as HTMLElement;
   while (!within(row).queryByRole('button', { name: 'Account options' }))
     row = row.parentElement as HTMLElement;
   fireEvent.click(within(row).getByRole('button', { name: 'Account options' }));
@@ -101,9 +105,9 @@ async function pickItem(name: string | RegExp) {
 }
 
 describe('the Accounts settings', () => {
-  it('lists each account with its plan, default mark, status and usage', () => {
+  it('lists each account with its provider, plan, default mark, status and usage', () => {
     renderAccounts(ACCOUNTS);
-    expect(screen.getByText('a@example.com')).toBeTruthy();
+    expect(screen.getByText('Claude · a@example.com')).toBeTruthy();
     expect(screen.getAllByText('Max')).toHaveLength(2);
     expect(screen.getByText('Pro')).toBeTruthy();
     expect(screen.getByText('Default')).toBeTruthy();
@@ -174,7 +178,7 @@ describe('the Accounts settings', () => {
         ],
       })
     );
-    expect(screen.getByText('Current session')).toBeTruthy();
+    expect(screen.getByText('5-hour limit')).toBeTruthy();
     expect(screen.getByText('Resets in 3h')).toBeTruthy();
     expect(screen.getByText('42%')).toBeTruthy();
     expect(screen.getByText('Weekly · All models')).toBeTruthy();
@@ -194,25 +198,41 @@ describe('the Accounts settings', () => {
     expect(fake.requests.map((request) => request.path)).toEqual(['/api/accounts/refresh']);
   });
 
-  it('shows Codex in the same section: its state, version and the command that fixes it', async () => {
+  it('shows Codex in the same section: its state and the command that fixes it, never its CLI version', async () => {
     renderAccounts({ ...ACCOUNTS, providers: [CODEX_SIGNED_OUT] });
     expect(screen.getByText('Codex')).toBeTruthy();
     expect(screen.getByText('Not signed in')).toBeTruthy();
     expect(screen.getAllByText('Needs sign-in')).toHaveLength(2);
-    expect(screen.getByText('0.153.4')).toBeTruthy();
+    expect(screen.queryByText('0.153.4')).toBeNull();
     expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Check the Codex sign-in again' }));
+    await openOptions('Codex');
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Check the Codex sign-in again',
+    ]);
+    await pickItem('Check the Codex sign-in again');
     await waitFor(() => expect(screen.getByText('Signed in with ChatGPT')).toBeTruthy());
     expect(fake.requests.map((request) => request.path)).toEqual(['/api/accounts/refresh']);
   });
 
-  it('shows a signed-in Codex with its usage windows', () => {
-    renderAccounts({ ...ACCOUNTS, providers: [createProviderLogin()] });
-    expect(screen.getByText('Signed in with ChatGPT')).toBeTruthy();
-    expect(screen.getByText('5-hour limit')).toBeTruthy();
+  it('shows a signed-in Codex like a Claude account: its plan, when its usage was read and its windows', async () => {
+    const codex = createProviderLogin({ version: '0.159.0' });
+    const usage = codex.usage && { ...codex.usage, checkedAt: Date.now() };
+    renderAccounts({ ...ACCOUNTS, providers: [{ ...codex, usage }] });
+    expect(screen.getByText('Codex · codex@example.com')).toBeTruthy();
+    expect(screen.getByText('Plus')).toBeTruthy();
+    expect(screen.queryByText('0.159.0')).toBeNull();
+    expect(screen.getByText('Updated just now')).toBeTruthy();
+    expect(screen.getAllByText('5-hour limit')).toHaveLength(5);
     expect(screen.getByText('Weekly limit')).toBeTruthy();
     expect(screen.getByText('64%')).toBeTruthy();
     expect(screen.queryByText(/More than one Codex account is not supported yet/)).toBeNull();
+    await openOptions('Codex · codex@example.com');
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Copy the sign-in command',
+      'Check the Codex sign-in again',
+    ]);
+    await pickItem('Copy the sign-in command');
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Copied'));
   });
 
   it('says how to start when there is no account, and signs in a new one', async () => {

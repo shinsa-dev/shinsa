@@ -15,7 +15,7 @@ import {
 export function HealthCard({ banner, onDismiss }: { banner: HealthBannerView; onDismiss: () => void }) {
   return (
     <div role='status' className={cn(CARD, 'flex min-w-0 items-center gap-2 py-1.5 ps-3 pe-1.5 text-xs')}>
-      <Icon name='IconExclamationTriangle' className='size-3.5 shrink-0 text-orange-text' />
+      <Icon size='sm' name='IconExclamationTriangle' className='text-orange-text' />
       <span className='min-w-0 flex-1 text-fg-3'>{banner.text}</span>
       <InfoPopover
         className='w-80'

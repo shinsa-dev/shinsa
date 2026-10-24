@@ -43,7 +43,7 @@ export function AddMenu({
     <DropdownMenu onOpenChange={ask}>
       <DropdownMenuTrigger
         render={
-          <Button variant='secondary' size='xs' icon='IconPlusSmall' aria-label={`Add to ${project.name}`}>
+          <Button variant='secondary' size='xs' icon='IconPlusMedium' aria-label={`Add to ${project.name}`}>
             Add
           </Button>
         }

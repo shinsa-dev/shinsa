@@ -2,7 +2,6 @@ import {
   type Gate,
   listActiveRuns,
   listWaitsOn,
-  resolveGateType,
   resolveTaskProgress,
   type ShinsaState,
   type Task,
@@ -11,6 +10,7 @@ import {
 import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
 import { MessageLink } from '@/components/chat/message-link.tsx';
+import { RoleMark } from '@/components/chat/role-mark.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -21,7 +21,7 @@ import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/
 import { OperationCard } from '@/components/overview/operation-card.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { PlanRevision } from '@/components/overview/plan-revision.tsx';
-import { ProgressTrack } from '@/components/overview/progress-track.tsx';
+import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
@@ -33,14 +33,15 @@ import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
-import { isUsageWaitArmed } from '@/lib/accounts/usage-wait.ts';
-import { ROLE_LABEL } from '@/lib/chat/run-role.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import {
+  describeFollowUpNote,
   describeReviewFacts,
   isTaskWatchable,
   type NowTarget,
+  RESULT_TITLE,
   RETRY_NOTE,
+  resolveNowKind,
   resolveNowTitle,
 } from '@/lib/overview/now.ts';
 import { describePlanEyebrow } from '@/lib/overview/plan-version.ts';
@@ -83,18 +84,18 @@ function PlannedOperation({ task }: { task: Task }) {
 }
 
 function PlanList({ task }: { task: Task }) {
-  const document = task.spec?.document;
+  const document = task.plan?.document;
   if (!document) return null;
   return (
     <div className='flex flex-col gap-3'>
       <Markdown text={document.goal} className='text-fg-3 text-xs' />
       <ol className='flex flex-col gap-2.5'>
-        {document.plan.map((step, index) => (
-          <li key={step.title} className='flex gap-2.5'>
+        {document.phases.map((phase, index) => (
+          <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-col gap-px'>
-              <InlineMarkdown text={step.title} className='font-medium text-fg-4 text-xs leading-5' />
-              <Markdown text={step.detail} className='text-fg-3 text-xs' />
+              <InlineMarkdown text={phase.title} className='font-medium text-fg-4 text-xs leading-5' />
+              <Markdown text={phase.detail} className='text-fg-3 text-xs' />
             </div>
           </li>
         ))}
@@ -202,7 +203,7 @@ export function PlanCard({
         <Button
           size='sm'
           loading={busy === approve}
-          onClick={() => void run(approve, () => onReply(approve, null, { planVersion: task.spec?.version }))}
+          onClick={() => void run(approve, () => onReply(approve, null, { planVersion: task.plan?.version }))}
         >
           Approve plan
         </Button>
@@ -256,6 +257,7 @@ export function ChangeCard({
         </FooterNote>
       }
     >
+      {task.result && <Markdown text={task.result.body} className='text-fg-4 text-xs' />}
       {change.why && <Markdown text={change.why} className='text-fg-3 text-xs' />}
       {change.request && (
         <div className='corner-superellipse/1.125 flex flex-col gap-px rounded-lg bg-bg-a1 px-3 py-2.5'>
@@ -280,7 +282,7 @@ function ReviewCard({
 }) {
   const { busy, run } = useBusy<'merge' | 'decide'>();
   const draft = useReviewDraft();
-  const merge = gate.kind === 'merge';
+  const merge = gate.type === 'merge';
   const commented = draft.comments.length > 0;
   const findings = merge ? [] : task.findings;
   const [verdicts, setVerdicts] = React.useState(() => createVerdictDraft(findings));
@@ -307,7 +309,7 @@ function ReviewCard({
           )}
           {!merge && (
             <Hint label={describeApproveHint(commented, action)}>
-              <span className='flex'>
+              <span className='flex w-fit'>
                 <Button
                   size='sm'
                   loading={busy === 'decide'}
@@ -360,9 +362,10 @@ function WorkCard({
           task={task}
           extra={
             run && (
-              <span className='text-fg-2'>
-                {ROLE_LABEL[run.role]} ·{' '}
-                <TimeAgo at={run.startedAt} text={(now) => formatSince('started', run.startedAt, now)} />
+              <span className='flex items-center gap-1.5 text-fg-2'>
+                <RoleMark role={run.role} className='text-fg-3' />
+                <span>·</span>
+                <TimeAgo at={run.startedAt} text={(now) => formatSince('Started', run.startedAt, now)} />
               </span>
             )
           }
@@ -377,7 +380,7 @@ function WorkCard({
           </Button>
         )
       }
-      footer={<ProgressTrack progress={progress} />}
+      footer={<TaskTrack task={task} />}
     >
       {leaf && (
         <p className='flex flex-wrap items-center gap-1 text-fg-3 text-xs'>
@@ -402,7 +405,7 @@ function GateCard({
   gate: Gate;
   onOpen: (target: NowTarget, runId?: string) => void;
 }) {
-  switch (resolveGateType(gate)) {
+  switch (gate.type) {
     case 'configuration':
       return <SetupCard state={state} task={task} gate={gate} />;
     case 'sign_in':
@@ -411,7 +414,7 @@ function GateCard({
       return <SecretCard state={state} task={task} gate={gate} />;
     case 'question':
       return <QuestionCard state={state} task={task} gate={gate} />;
-    case 'change':
+    case 'proposal':
       return <ChangeCard state={state} task={task} gate={gate} />;
     case 'operation':
       return <OperationCard state={state} task={task} gate={gate} />;
@@ -425,6 +428,33 @@ function GateCard({
   }
 }
 
+export function ResultCard({
+  state,
+  task,
+  onOpen,
+}: {
+  state: ShinsaState;
+  task: Task;
+  onOpen: (target: NowTarget, runId?: string) => void;
+}) {
+  const result = task.result;
+  if (!result) return null;
+  const run = result.runId ? state.runs[result.runId] : undefined;
+  return (
+    <NowFrame
+      eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={result.at} />} />}
+      title={RESULT_TITLE[result.step]}
+      footer={
+        <FooterNote note={describeFollowUpNote(result.step, run?.role ?? null)}>
+          <QuietLink onClick={() => onOpen('agent', result.runId ?? undefined)}>Open the chat</QuietLink>
+        </FooterNote>
+      }
+    >
+      <Markdown text={result.body} className='text-fg-4 text-xs' />
+    </NowFrame>
+  );
+}
+
 export function NowCard({
   state,
   task,
@@ -436,12 +466,16 @@ export function NowCard({
   gate: Gate | undefined;
   onOpen: (target: NowTarget, runId?: string) => void;
 }) {
-  if (gate) return <GateCard state={state} task={task} gate={gate} onOpen={onOpen} />;
-  if (isUsageWaitArmed(task) && listActiveRuns(state, task.id).length === 0) {
-    return <UsageWaitCard state={state} task={task} wait={task.usageWait} />;
+  switch (resolveNowKind(state, task, gate)) {
+    case 'gate':
+      return gate && <GateCard state={state} task={task} gate={gate} onOpen={onOpen} />;
+    case 'usage_wait':
+      return task.usageWait && <UsageWaitCard state={state} task={task} wait={task.usageWait} />;
+    case 'wait':
+      return task.monitor && <WaitCard state={state} task={task} monitor={task.monitor} />;
+    case 'result':
+      return <ResultCard state={state} task={task} onOpen={onOpen} />;
+    case 'work':
+      return <WorkCard state={state} task={task} onOpen={onOpen} />;
   }
-  if (task.monitor?.status === 'armed' && listActiveRuns(state, task.id).length === 0) {
-    return <WaitCard state={state} task={task} monitor={task.monitor} />;
-  }
-  return <WorkCard state={state} task={task} onOpen={onOpen} />;
 }

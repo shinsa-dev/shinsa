@@ -307,14 +307,16 @@ export function InputSpecimens() {
           <Field data-disabled='true' className='max-w-sm'>
             <FieldLabel htmlFor='ds-f-disabled'>Repository</FieldLabel>
             <Input id='ds-f-disabled' placeholder='paywall-next' disabled />
-            <FieldDescription>Picked for you from the request; change it on the spec.</FieldDescription>
+            <FieldDescription>Picked for you from the request; change it on the plan.</FieldDescription>
           </Field>
         </Specimen>
         <Specimen label='horizontal: content beside the control'>
           <Field orientation='horizontal' className='max-w-sm'>
             <FieldContent>
-              <FieldLabel htmlFor='ds-f-digest'>Spec first for large work</FieldLabel>
-              <FieldDescription>Large tasks stop at the spec gate before anything is built.</FieldDescription>
+              <FieldLabel htmlFor='ds-f-digest'>Plan first for large work</FieldLabel>
+              <FieldDescription>
+                Large tasks wait for you to approve the plan before anything is built.
+              </FieldDescription>
             </FieldContent>
             <Switch id='ds-f-digest' defaultChecked />
           </Field>
@@ -474,7 +476,7 @@ export function InputSpecimens() {
             <TabsList variant='underline'>
               <TabsTrigger value='review'>Review</TabsTrigger>
               <TabsTrigger value='changes'>Changes</TabsTrigger>
-              <TabsTrigger value='spec'>Spec</TabsTrigger>
+              <TabsTrigger value='plan'>Plan</TabsTrigger>
               <TabsTrigger value='evidence'>Evidence</TabsTrigger>
               <TabsTrigger value='agents'>Agents</TabsTrigger>
             </TabsList>

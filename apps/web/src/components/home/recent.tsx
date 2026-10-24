@@ -1,4 +1,4 @@
-import type { ShinsaState } from '@shinsa/core';
+import type { Activity, ShinsaState, Task } from '@shinsa/core';
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { WideSection } from '@/components/queue/queue.tsx';
 import { TaskGlyph } from '@/components/status/glyphs.tsx';
@@ -7,16 +7,10 @@ import { StatusTile } from '@/components/status/tile.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import {
-  listRecentConversations,
-  listRecentlyFinished,
-  resolveHomeSectionFlag,
-  resolvePreview,
-} from '@/lib/home.ts';
+import { resolveHomeSectionFlag, resolvePreview } from '@/lib/home.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
-export function RecentlyFinished({ state, now }: { state: ShinsaState; now: number }) {
-  const finished = listRecentlyFinished(state, now);
+export function RecentlyFinished({ state, finished }: { state: ShinsaState; finished: Task[] }) {
   return (
     <WideSection
       title='Recently finished'
@@ -43,8 +37,7 @@ export function RecentlyFinished({ state, now }: { state: ShinsaState; now: numb
   );
 }
 
-export function RecentConversations({ state, now }: { state: ShinsaState; now: number }) {
-  const conversations = listRecentConversations(state, now);
+export function RecentConversations({ conversations }: { conversations: { task: Task; entry: Activity }[] }) {
   return (
     <WideSection
       title='Recent conversations'

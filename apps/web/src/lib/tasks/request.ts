@@ -1,13 +1,13 @@
 import type { Task } from '@shinsa/core';
 
-const LONG_INTENT = 160;
+const LONG_REQUEST = 160;
 
 function normalise(text: string) {
   return text.toLowerCase().replace(/\W+/g, '');
 }
 
-export function describeIntent(task: Task) {
-  const text = task.intent.trim();
+export function describeRequest(task: Task) {
+  const text = task.request.trim();
   if (!text || normalise(text) === normalise(task.title)) return null;
-  return { text, long: text.length > LONG_INTENT || text.includes('\n') };
+  return { text, long: text.length > LONG_REQUEST || text.includes('\n') };
 }

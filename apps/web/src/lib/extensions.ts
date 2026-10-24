@@ -19,7 +19,7 @@ import type { Tone } from '@/lib/format/tone.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 
-export const EXTENSION_SECTION = { servers: 'MCP servers', plugins: 'Plugins', skills: 'Skills' } as const;
+export const EXTENSION_SECTION = { servers: 'MCPs', plugins: 'Plugins', skills: 'Skills' } as const;
 
 export type ExtensionKind = keyof typeof EXTENSION_SECTION;
 
@@ -30,9 +30,9 @@ export const EXTENSION_ICON: Record<ExtensionKind, IconName> = {
 };
 
 export const EXTENSION_LABEL = {
-  addServer: 'Add server',
-  addServerCommand: 'Add an MCP server',
-  checkAll: 'Check all servers',
+  addServer: 'Add MCP',
+  addServerCommand: 'Add an MCP',
+  checkAll: 'Check all MCPs',
   checkNow: 'Check now',
   connect: 'Connect',
   signInAgain: 'Sign in again',
@@ -42,7 +42,7 @@ export const EXTENSION_LABEL = {
   remove: 'Remove',
   details: 'Show details',
   hideDetails: 'Hide details',
-  options: 'Server options',
+  options: 'MCP options',
   useEverywhere: 'Use everywhere',
   useInProject: 'Use in one project',
   useInRepo: 'Use in one repository',
@@ -52,27 +52,27 @@ export const EXTENSION_LABEL = {
   signInToMeasure: 'Sign in to measure',
   failingToMeasure: 'Can’t measure while failing',
   offNotMeasured: 'Not measured while off',
-  search: 'Search servers, plugins and skills',
+  search: 'Search MCPs, plugins and skills',
   nothingMatches: 'Nothing matches.',
   optimizerSection: 'Context optimizer',
-  optimizerOn: 'Leave out servers agents haven’t used',
-  optimizerOnHint: 'An agent loads a left-out server when its task needs one.',
+  optimizerOn: 'Leave out MCPs agents haven’t used',
+  optimizerOnHint: 'An agent loads a left-out MCP or skill when its task needs it or you name it.',
   optimizerDays: 'Not used for',
   optimizerSkills: 'Leave out skills too',
   notUsedLately: 'Not used lately',
-  readingUsage: 'Reading which servers and skills agents used…',
+  readingUsage: 'Reading which MCPs and skills agents used…',
   allUsed: 'Agents used everything turned on here.',
   turnOff: 'Turn off',
   loadsWhenNeeded: 'Loads when needed',
   switchHint: 'Only for Shinsa’s agents. Claude Code and Codex keep their own settings.',
-  noServers: 'No MCP servers yet.',
+  noServers: 'No MCPs yet.',
   noPlugins: 'Claude Code has no plugins installed.',
   noSkills: 'No skills found.',
   noProjects: 'No projects yet',
   noRepos: 'No repositories yet',
   keepSecret: 'Leave a value empty to keep the saved one.',
   argsHint: 'One argument per line.',
-  unreadable: 'Couldn’t read the MCP servers, plugins and skills.',
+  unreadable: 'Couldn’t read the MCPs, plugins and skills.',
 } as const;
 
 const SERVER_SOURCE: Record<Exclude<McpSource, 'plugin' | 'claude_project'>, string> = {
@@ -298,7 +298,7 @@ export function describePluginContents(plugin: PluginSummary) {
     plugin.agents > 0 ? formatCount(plugin.agents, 'agent', 'agents') : null,
     plugin.commands > 0 ? formatCount(plugin.commands, 'command', 'commands') : null,
     plugin.hooks ? 'hooks' : null,
-    plugin.servers > 0 ? formatCount(plugin.servers, 'MCP server', 'MCP servers') : null,
+    plugin.servers > 0 ? formatCount(plugin.servers, 'MCP', 'MCPs') : null,
   ].filter((part) => part !== null);
   return parts.length > 0 ? parts.join(', ') : 'Nothing for agents to load';
 }
@@ -383,7 +383,7 @@ export function describePluginToggled(name: string, enabled: boolean) {
 }
 
 export function describeChecked(server: McpServerSummary | null) {
-  return server ? `Checked ${server.name}.` : 'Checked every server that is on.';
+  return server ? `Checked ${server.name}.` : 'Checked every MCP that is on.';
 }
 
 export function describeSignedIn(name: string) {
@@ -406,7 +406,7 @@ export function describeServerRemoval(server: McpServerSummary) {
   return {
     title: `Remove ${server.name}?`,
     body: 'Agents stop using it, and Shinsa forgets its settings and saved secrets.',
-    action: 'Remove server',
+    action: 'Remove MCP',
     done: `Removed ${server.name}.`,
   };
 }
@@ -436,7 +436,7 @@ export function resolveServerDialog(
 ): ServerDialogCopy {
   if (mode === 'add' || !server) {
     return {
-      title: 'Add an MCP server',
+      title: EXTENSION_LABEL.addServerCommand,
       description: 'Agents can use it from their next run.',
       action: EXTENSION_LABEL.addServer,
       done: `Added ${name}.`,
@@ -446,7 +446,7 @@ export function resolveServerDialog(
     return {
       title: `Edit ${server.name}`,
       description: 'Agents pick up the change on their next run.',
-      action: 'Save server',
+      action: 'Save MCP',
       done: `Saved ${name}.`,
     };
   }
@@ -564,7 +564,7 @@ export function validateServerDraft(draft: ServerDraft): DraftCheck {
   if (draft.transport === 'stdio') {
     const command = draft.command.trim();
     const env = parsePairs(draft.env, '=', ENV_KEY);
-    if (!command) errors.command = 'Enter the command that starts the server.';
+    if (!command) errors.command = 'Enter the command that starts it.';
     if (!env) errors.env = 'Write each variable as NAME=value on its own line.';
     if (errors.name || !command || !env) return { ok: false, errors };
     return {
@@ -582,21 +582,26 @@ export function validateServerDraft(draft: ServerDraft): DraftCheck {
 
 export type ServerGroupKey = 'connected' | 'failing' | 'needs_sign_in' | 'checking' | 'off';
 
-export interface ServerStatusGroup {
-  key: ServerGroupKey;
+interface ServerGroupStatus {
   title: string;
+  icon: IconName;
+  tone: Tone;
+}
+
+export interface ServerStatusGroup extends ServerGroupStatus {
+  key: ServerGroupKey;
   servers: McpServerSummary[];
 }
 
-const SERVER_GROUP_TITLE: Record<ServerGroupKey, string> = {
-  connected: 'Connected',
-  failing: 'Failing',
-  needs_sign_in: 'Needs sign-in',
-  checking: 'Not checked yet',
-  off: 'Off',
+const SERVER_GROUP_STATUS: Record<ServerGroupKey, ServerGroupStatus> = {
+  connected: { title: 'Connected', icon: 'IconApiConnection', tone: 'green' },
+  needs_sign_in: { title: 'Needs sign-in', icon: 'IconUserKey', tone: 'orange' },
+  failing: { title: 'Failing', icon: 'IconCircleX', tone: 'red' },
+  checking: { title: 'Not checked yet', icon: 'IconCircleDotted', tone: 'neutral' },
+  off: { title: 'Off', icon: 'IconCircleMinus', tone: 'neutral' },
 };
 
-const SERVER_GROUP_ORDER: ServerGroupKey[] = ['connected', 'failing', 'needs_sign_in', 'checking', 'off'];
+const SERVER_GROUP_ORDER: ServerGroupKey[] = ['connected', 'needs_sign_in', 'failing', 'checking', 'off'];
 
 function resolveServerGroupKey(server: McpServerSummary, plugins: PluginSummary[]): ServerGroupKey {
   if (!server.enabled || isPluginOff(plugins, server.plugin)) return 'off';
@@ -607,7 +612,7 @@ function resolveServerGroupKey(server: McpServerSummary, plugins: PluginSummary[
 export function listServerStatusGroups(servers: McpServerSummary[], plugins: PluginSummary[]) {
   return SERVER_GROUP_ORDER.flatMap((key): ServerStatusGroup[] => {
     const members = servers.filter((server) => resolveServerGroupKey(server, plugins) === key);
-    return members.length > 0 ? [{ key, title: SERVER_GROUP_TITLE[key], servers: members }] : [];
+    return members.length > 0 ? [{ key, ...SERVER_GROUP_STATUS[key], servers: members }] : [];
   });
 }
 
@@ -677,6 +682,39 @@ export function listServerNotes(
   ].filter((note) => note !== null);
 }
 
+const NO_TOOLS: Record<ServerGroupKey, string | null> = {
+  connected: 'It lists no tools.',
+  needs_sign_in: 'Sign in to see its tools.',
+  failing: null,
+  checking: 'Its tools show once it is checked.',
+  off: 'Its tools show once it is on and checked.',
+};
+
+export interface ServerDetailView {
+  tools: { name: string; description: string | null }[];
+  error: string | null;
+  empty: string | null;
+  line: string;
+  target: string;
+}
+
+export function resolveServerDetail(
+  server: McpServerSummary,
+  snapshot: ExtensionsSnapshot,
+  places: ExtensionPlaces,
+  now: number
+): ServerDetailView {
+  const status = resolveServerStatus(server);
+  const { tools } = server.status;
+  return {
+    tools,
+    error: status?.tone === 'red' ? status.detail : null,
+    empty: tools.length > 0 ? null : NO_TOOLS[resolveServerGroupKey(server, snapshot.plugins)],
+    line: listServerNotes(server, snapshot, places, now).join(' · '),
+    target: resolveServerTarget(server),
+  };
+}
+
 export interface Recommendation {
   id: string;
   name: string;
@@ -736,9 +774,9 @@ export function listOptimizerDayItems(current: number) {
 
 export function describeOptimizerChanged(optimizer: ContextOptimizer, patch: Partial<ContextOptimizer>) {
   if (patch.enabled === true) {
-    return `Agents now leave out servers unused for ${formatCount(optimizer.days, 'day', 'days')}.`;
+    return `Agents now leave out MCPs unused for ${formatCount(optimizer.days, 'day', 'days')}.`;
   }
-  if (patch.enabled === false) return 'Agents load every server that is turned on.';
+  if (patch.enabled === false) return 'Agents load every MCP that is turned on.';
   if (patch.skills !== undefined) {
     return patch.skills
       ? 'Agents leave out unused skills too.'

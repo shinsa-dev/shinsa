@@ -4,7 +4,7 @@ import type { Tone } from '@/lib/format/tone.ts';
 
 export const STAGE_LABEL: Record<TaskStage, string> = {
   triage: 'Starting',
-  queued: 'Not started',
+  waiting_on_tasks: 'Not started',
   planning: 'Planning',
   awaiting_plan: 'Plan to approve',
   building: 'Building',
@@ -27,7 +27,7 @@ export const STAGE_LABEL: Record<TaskStage, string> = {
 
 export const STAGE_TONE: Record<TaskStage, Tone> = {
   triage: 'neutral',
-  queued: 'neutral',
+  waiting_on_tasks: 'neutral',
   planning: 'blue',
   awaiting_plan: 'purple',
   building: 'blue',

@@ -2,11 +2,15 @@ import { describe, expect, it } from 'bun:test';
 import type { DisplayPhase, ReportCheck } from '@shinsa/core';
 import {
   describeChecksPassed,
+  describeFollowUpNote,
   describeReviewFacts,
   hasFailingCheck,
   isAgentWorking,
+  isResultInNowCard,
   isTaskWatchable,
   listFeedLines,
+  RESULT_TITLE,
+  resolveNowKind,
   resolveNowTitle,
 } from '@/lib/overview/now.ts';
 import { createAgentEntry, createBrief, createCallEntry, createResultEntry } from '../../support/chat.ts';
@@ -31,28 +35,23 @@ const PULL_REQUEST = {
 };
 
 describe('resolveNowTitle', () => {
-  it('says an answered question is answered', () => {
-    const task = createTask({ id: 'task-1', stage: 'done', mode: 'ask' });
-    expect(resolveNowTitle(task, [], null, undefined)).toBe('Answered. The answer is below.');
-  });
-
-  it('points a finished investigation, report or operation at its result', () => {
-    for (const [step, title] of [
-      ['investigate', 'Finished. The findings are below.'],
-      ['research', 'Finished. The report is below.'],
-      ['operate', 'Finished. The outcome is below.'],
-    ] as const) {
-      const task = createTask({
-        id: 't',
-        stage: 'done',
-        result: { step, body: 'Body.', runId: null, at: 0 },
-      });
-      expect(resolveNowTitle(task, [], null, undefined)).toBe(title);
-    }
+  it('leaves a finished result to its own card and names the settled stage instead', () => {
+    const task = createTask({
+      id: 't',
+      stage: 'done',
+      result: { step: 'answer', body: 'Body.', runId: null, at: 0 },
+    });
+    expect(resolveNowTitle(task, [], null, undefined)).toBe('Marked done.');
+    expect(RESULT_TITLE).toEqual({
+      answer: 'Answered your question',
+      investigate: 'Reported the diagnosis',
+      research: 'Wrote the report',
+      operate: 'Reported the outcome',
+    });
   });
 
   it('says what the task waits on first', () => {
-    const task = createTask({ id: 'task-1', stage: 'queued' });
+    const task = createTask({ id: 'task-1', stage: 'waiting_on_tasks' });
     const base = createTask({ id: 'task-0', title: 'Add the export API' });
     expect(resolveNowTitle(task, [base], phase({}), undefined)).toBe('Waits on “Add the export API”');
   });
@@ -170,7 +169,7 @@ describe('listFeedLines', () => {
     );
     expect(lines).toEqual([
       { key: 'agent', icon: 'IconBubbleText', label: null, text: 'Reading the export code.' },
-      { key: 'call', icon: 'IconConsole', label: 'Ran', text: 'bun test' },
+      { key: 'call', icon: 'IconConsole', label: 'Running', text: 'bun test' },
     ]);
   });
 
@@ -179,12 +178,77 @@ describe('listFeedLines', () => {
       [createCallEntry('call-1', { kind: 'command', action: 'stop', command: 'bun dev', description: null })],
       5
     );
-    expect(lines.map((line) => [line.label, line.text])).toEqual([['Stopped a command', '']]);
+    expect(lines.map((line) => [line.label, line.text])).toEqual([['Stopping a command', '']]);
+  });
+
+  it('names only the latest tool call in the present tense, the way the chat’s live line does', () => {
+    const lines = listFeedLines(
+      [
+        createCallEntry('call-1', { kind: 'read', path: 'a.ts', range: null }, undefined, 'first'),
+        createResultEntry('call-1', 'ok'),
+        createCallEntry('call-2', { kind: 'read', path: 'b.ts', range: null }, undefined, 'second'),
+        createResultEntry('call-2', 'ok'),
+      ],
+      5
+    );
+    expect(lines.map((line) => [line.label, line.text])).toEqual([
+      ['Read', 'a.ts'],
+      ['Reading', 'b.ts'],
+    ]);
   });
 
   it('keeps only the latest lines', () => {
     const entries = ['one', 'two', 'three'].map((text) => createAgentEntry(text, 'interim'));
     expect(listFeedLines(entries, 2).map((line) => line.text)).toEqual(['two', 'three']);
     expect(listFeedLines([], 2)).toEqual([]);
+  });
+});
+
+describe('what the now card shows', () => {
+  const RESULT = { step: 'answer' as const, body: 'Yes.', runId: null, at: 0 };
+
+  it('shows a gate first, then the work of a running agent, then a wait, then a finished result', () => {
+    const done = createTask({ id: 't', stage: 'done', result: RESULT });
+    const state = createShinsaState({ tasks: [done] });
+    const gate = createGate({ id: 'g', taskId: 't', type: 'question' });
+    expect(resolveNowKind(state, done, gate)).toBe('gate');
+    expect(resolveNowKind(state, done, undefined)).toBe('result');
+    const running = createShinsaState({ tasks: [done], runs: [createRun({ id: 'r', taskId: 't' })] });
+    expect(resolveNowKind(running, done, undefined)).toBe('work');
+    const usage = createTask({
+      id: 't',
+      stage: 'answering',
+      usageWait: { status: 'armed' } as never,
+    });
+    expect(resolveNowKind(state, usage, undefined)).toBe('usage_wait');
+    const monitor = createTask({ id: 't', stage: 'building', monitor: { status: 'armed' } as never });
+    expect(resolveNowKind(state, monitor, undefined)).toBe('wait');
+    expect(resolveNowKind(state, createTask({ id: 't', stage: 'done' }), undefined)).toBe('work');
+  });
+
+  it('puts the result in the now card when it is finished or waits for your OK, and leaves it to its panel otherwise', () => {
+    const state = createShinsaState({});
+    const done = createTask({ id: 't', stage: 'done', result: RESULT });
+    expect(isResultInNowCard(state, done, undefined)).toBe(true);
+    expect(isResultInNowCard(state, done, createGate({ id: 'g', taskId: 't', type: 'proposal' }))).toBe(true);
+    expect(isResultInNowCard(state, done, createGate({ id: 'g', taskId: 't', type: 'question' }))).toBe(
+      false
+    );
+    expect(
+      isResultInNowCard(state, createTask({ id: 't', stage: 'building', result: RESULT }), undefined)
+    ).toBe(false);
+    expect(isResultInNowCard(state, createTask({ id: 't', stage: 'done' }), undefined)).toBe(false);
+  });
+
+  it('says who answers a follow-up, and that an operation takes the next piece of work instead', () => {
+    expect(describeFollowUpNote('answer', 'answerer')).toBe(
+      'Ask a follow-up in the chat and the answerer answers in the same conversation.'
+    );
+    expect(describeFollowUpNote('research', null)).toBe(
+      'Ask a follow-up in the chat and the agent answers in the same conversation.'
+    );
+    expect(describeFollowUpNote('operate', 'operator')).toBe(
+      'Ask a follow-up or for more work in the chat. The agent answers a follow-up; more work starts a new round.'
+    );
   });
 });

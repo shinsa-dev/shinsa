@@ -2,13 +2,14 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 
-const SECTION_LABEL = 'flex shrink-0 items-center gap-1.5 font-medium text-2xs text-fg-2';
+const SECTION_LABEL = 'flex shrink-0 items-center gap-1.5 font-medium text-2xs text-fg-2 leading-4';
 
 export function SectionChevron({ open, className }: { open: boolean; className?: string }) {
   return (
     <Icon
       name='IconChevronDownSmall'
-      className={cn('size-3.5 transition-[opacity,rotate] duration-150', !open && '-rotate-90', className)}
+      size='sm'
+      className={cn('transition-[opacity,rotate,color] duration-150', !open && '-rotate-90', className)}
     />
   );
 }

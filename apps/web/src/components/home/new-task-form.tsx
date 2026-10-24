@@ -131,16 +131,16 @@ export function NewTaskFields({
 
 export function NewTaskForm() {
   const { state } = useConnection();
-  const [intent, setIntent] = React.useState('');
+  const [request, setRequest] = React.useState('');
   const [chosen, setChosen] = React.useState<NewTaskChoices>(AUTO_CHOICES);
   const [busy, setBusy] = React.useState(false);
   const field = React.useRef<HTMLTextAreaElement>(null);
   const { choices } = resolveForm(state, chosen);
-  const ready = intent.trim().length > 0 && !busy;
+  const ready = request.trim().length > 0 && !busy;
   const copy = describeNewTask(isWaitingStart(choices.start));
   const choose = (part: Partial<NewTaskChoices>) => setChosen((current) => ({ ...current, ...part }));
   useNewTaskRequest((draft) => {
-    if (draft) setIntent(draft);
+    if (draft) setRequest(draft);
     requestAnimationFrame(() => {
       const element = field.current;
       if (!element) return;
@@ -152,10 +152,10 @@ export function NewTaskForm() {
   async function submit() {
     if (!ready) return;
     setBusy(true);
-    const sent = await sendCommandWithToast(createNewTaskCommand(intent, choices), copy.done);
+    const sent = await sendCommandWithToast(createNewTaskCommand(request, choices), copy.done);
     setBusy(false);
     if (!sent) return;
-    setIntent('');
+    setRequest('');
     setChosen(AUTO_CHOICES);
   }
 
@@ -163,8 +163,8 @@ export function NewTaskForm() {
     <div className='flex w-full flex-col'>
       <textarea
         ref={field}
-        value={intent}
-        onChange={(event) => setIntent(event.target.value)}
+        value={request}
+        onChange={(event) => setRequest(event.target.value)}
         onKeyDown={(event) => {
           if (!isSubmitKey(event)) return;
           event.preventDefault();

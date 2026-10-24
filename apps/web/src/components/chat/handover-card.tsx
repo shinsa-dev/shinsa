@@ -2,16 +2,18 @@ import { type ChatToolArgs, capitalise, type Run } from '@shinsa/core';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { ROW_INDENT, ToolRow } from '@/components/chat/tool-group.tsx';
-import { CARD, CARD_HEADER, CHIP } from '@/components/layout/surface/card.ts';
+import { CardLine, ROW_INDENT } from '@/components/chat/chat-line.tsx';
+import { ToolRow } from '@/components/chat/tool-group.tsx';
+import { CARD, CHAT_INSET, CHIP } from '@/components/layout/surface/card.ts';
+import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import {
-  isWithdrawn,
   readPlanParameters,
   readProposedChange,
+  resolveAskAnswer,
   resolveAskMeta,
   resolveSpotsMeta,
 } from '@/lib/chat/handover.ts';
@@ -34,11 +36,7 @@ function Card({
 }) {
   return (
     <section data-message className={cn(CARD, 'flex min-w-0 flex-col overflow-hidden')}>
-      <h3 className={CARD_HEADER}>
-        <Icon name={icon} className='size-3.5' />
-        {title}
-        {meta && <span className='ms-auto font-normal text-2xs text-fg-2'>{meta}</span>}
-      </h3>
+      <CardLine icon={icon} title={title} meta={meta} />
       {children && <div className='flex min-w-0 flex-col gap-3 border-border border-t p-3'>{children}</div>}
     </section>
   );
@@ -46,13 +44,13 @@ function Card({
 
 function PlanCard({ args }: { args: ChatToolArgs }) {
   const goal = readString(args, 'goal');
-  const steps = readList(args, 'plan');
+  const phases = readList(args, 'phases');
   const changed = readString(args, 'change_summary');
   return (
     <Card
       icon='IconMap'
       title={changed ? 'Revised the plan' : 'Proposed the plan'}
-      meta={steps.length > 0 ? formatCount(steps.length, 'phase', 'phases') : null}
+      meta={phases.length > 0 ? formatCount(phases.length, 'phase', 'phases') : null}
     >
       {changed && (
         <div className='flex flex-col gap-px text-xs'>
@@ -61,19 +59,19 @@ function PlanCard({ args }: { args: ChatToolArgs }) {
         </div>
       )}
       {goal && <Markdown text={goal} />}
-      {steps.length > 0 && (
+      {phases.length > 0 && (
         <ol className='flex flex-col gap-2'>
-          {steps.map((step, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: plan steps are positional
+          {phases.map((phase, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: plan phases are positional
             <li key={index} className='flex gap-2.5'>
               <StepNumber index={index} />
               <div className='flex min-w-0 flex-col gap-px pt-px'>
                 <span className='font-medium text-fg-4 text-xs'>
-                  <InlineMarkdown text={readString(step, 'title') ?? `Phase ${index + 1}`} />
+                  <InlineMarkdown text={readString(phase, 'title') ?? `Phase ${index + 1}`} />
                 </span>
-                {readString(step, 'detail') && (
+                {readString(phase, 'detail') && (
                   <span className='text-fg-3 text-xs'>
-                    <InlineMarkdown text={readString(step, 'detail') ?? ''} />
+                    <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
                   </span>
                 )}
               </div>
@@ -98,25 +96,27 @@ function SummaryCard({
   meta?: React.ReactNode;
 }) {
   const summary = readString(args, 'summary');
-  const decisions = readList(args, 'decisions');
+  const calls = readList(args, 'judgement_calls');
   return (
     <Card icon={icon} title={title} meta={meta}>
       {summary && <Markdown text={summary} />}
-      {decisions.length > 0 && (
+      {calls.length > 0 && (
         <div className='flex flex-col gap-1.5'>
-          <span className='text-2xs text-fg-2'>Decisions</span>
+          <span className='text-2xs text-fg-2'>Judgement calls</span>
           <ul className='flex flex-col gap-1.5'>
-            {decisions.map((decision, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: decisions are positional
-              <li key={index} className='flex gap-2 text-xs'>
-                <Icon name='IconLightbulbGlow' className='mt-0.5 size-3.5 shrink-0 text-fg-4' />
+            {calls.map((call, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: judgement calls are positional
+              <li key={index} className='flex gap-1.25 text-xs leading-5'>
+                <IconSlot>
+                  <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
+                </IconSlot>
                 <span className='min-w-0'>
                   <span className='text-fg-4'>
-                    <InlineMarkdown text={readString(decision, 'decision') ?? ''} />
+                    <InlineMarkdown text={readString(call, 'call') ?? ''} />
                   </span>{' '}
-                  {readString(decision, 'reason') && (
+                  {readString(call, 'reason') && (
                     <span className='text-fg-3'>
-                      <InlineMarkdown text={readString(decision, 'reason') ?? ''} />
+                      <InlineMarkdown text={readString(call, 'reason') ?? ''} />
                     </span>
                   )}
                 </span>
@@ -150,7 +150,7 @@ function ReviewCard({ args }: { args: ChatToolArgs }) {
 function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs; delegated: boolean }) {
   const context = readString(args, 'context');
   const choices = readStrings(args, 'choices');
-  const declined = call.failed || isWithdrawn(call);
+  const answer = resolveAskAnswer(call);
   return (
     <Card
       icon='IconBubbleQuestion'
@@ -170,10 +170,10 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
           ))}
         </ul>
       )}
-      {call.result !== null && !declined && (
+      {answer !== null && (
         <div className='flex gap-2 border-border border-t pt-2.5 text-xs'>
           <span className='shrink-0 text-fg-2'>{delegated ? 'Its answer' : 'Your answer'}</span>
-          <span className='min-w-0 whitespace-pre-wrap text-fg-4'>{call.result}</span>
+          <span className='min-w-0 whitespace-pre-wrap text-fg-4'>{answer}</span>
         </div>
       )}
     </Card>
@@ -185,7 +185,7 @@ function SuggestionsCard({ args }: { args: ChatToolArgs }) {
   return (
     <Card
       icon='IconLightbulbGlow'
-      title={`Suggested ${formatCount(tasks.length, 'follow-up', 'follow-ups')}`}
+      title={`Suggested ${formatCount(tasks.length, 'task', 'tasks')}`}
       meta='In Overview'
     >
       <ul className='flex flex-col gap-2'>
@@ -231,14 +231,22 @@ function ReshapeCard({ args }: { args: ChatToolArgs }) {
   );
 }
 
+function InsetToolRow({ call, live }: { call: ToolCall; live: boolean }) {
+  return (
+    <div className={CHAT_INSET}>
+      <ToolRow call={call} live={live} />
+    </div>
+  );
+}
+
 export function HandoverCard({ call, run, live }: { call: ToolCall; run: Run; live: boolean }) {
   const { tool } = call;
-  if (tool.kind !== 'shinsa') return <ToolRow call={call} live={live} />;
+  if (tool.kind !== 'shinsa') return <InsetToolRow call={call} live={live} />;
   if (call.failed && tool.name !== 'ask') {
     return (
-      <div className='flex min-w-0 flex-col gap-1'>
+      <div className={cn('flex min-w-0 flex-col gap-1', CHAT_INSET)}>
         <ToolRow call={call} live={live} />
-        <p className={cn('line-clamp-3 whitespace-pre-wrap text-2xs text-red-text', ROW_INDENT)}>
+        <p className={cn('line-clamp-3 whitespace-pre-wrap text-red-text text-xs', ROW_INDENT)}>
           {call.result}
         </p>
       </div>
@@ -271,7 +279,7 @@ export function HandoverCard({ call, run, live }: { call: ToolCall; run: Run; li
     case 'answer':
       return <DeliveryCard title='Handed over the answer' args={tool.args} field='answer' />;
     case 'report_diagnosis':
-      return <DeliveryCard title='Reported the findings' args={tool.args} field='findings' />;
+      return <DeliveryCard title='Reported the diagnosis' args={tool.args} field='diagnosis' />;
     case 'submit_report':
       return <DeliveryCard title='Wrote the report' args={tool.args} field='report' />;
     case 'report_outcome':
@@ -283,6 +291,6 @@ export function HandoverCard({ call, run, live }: { call: ToolCall; run: Run; li
     case 'read_task':
     case 'note':
     case 'wait_for':
-      return <ToolRow call={call} live={live} />;
+      return <InsetToolRow call={call} live={live} />;
   }
 }

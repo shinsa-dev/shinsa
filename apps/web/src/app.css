@@ -14,6 +14,7 @@
   font-size: var(--text-xs);
   line-height: 1.45;
   color: var(--fg-3);
+  --icon-color: var(--icon-3);
 }
 
 .prose-shinsa :where(h1, h2, h3, h4) {
@@ -21,11 +22,13 @@
   font-weight: var(--font-weight-medium);
   font-size: var(--text-xs);
   color: var(--fg-4);
+  --icon-color: var(--icon-4);
 }
 
 .prose-shinsa :where(strong) {
   font-weight: var(--font-weight-semibold);
   color: var(--fg-4);
+  --icon-color: var(--icon-4);
 }
 
 .prose-shinsa :where(p, ul, ol, table, blockquote) {
@@ -66,6 +69,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-a2);
   color: var(--fg-4);
+  --icon-color: var(--icon-4);
 }
 
 .prose-shinsa :where(pre code) {
@@ -76,6 +80,7 @@
 
 .prose-shinsa :where(a:not([data-smart])) {
   color: var(--primary-text);
+  --icon-color: var(--primary-text);
   text-decoration: underline;
   text-decoration-color: color-mix(in oklch, var(--primary-text) 40%, transparent);
   text-underline-offset: 2px;
@@ -95,12 +100,14 @@
 .prose-shinsa :where(th) {
   font-weight: var(--font-weight-medium);
   color: var(--fg-2);
+  --icon-color: var(--icon-2);
 }
 
 .prose-shinsa :where(blockquote) {
   padding-left: 0.625rem;
   border-left: 2px solid var(--bg-3);
   color: var(--fg-2);
+  --icon-color: var(--icon-2);
 }
 
 .prose-shinsa > :first-child {
@@ -114,6 +121,7 @@
 .prose-chat {
   line-height: 1.625;
   color: var(--fg-4);
+  --icon-color: var(--icon-4);
 }
 
 .prose-chat :where(p, table, blockquote) {

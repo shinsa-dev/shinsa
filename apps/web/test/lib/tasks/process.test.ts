@@ -4,7 +4,7 @@ import {
   dismissSilence,
   dismissSuggestion,
   keepSuggestion,
-  requestCheckNow,
+  requestCheckInNow,
   SNOOZE_HINT,
   snoozeSilence,
   stopDelegation,
@@ -24,20 +24,20 @@ afterEach(() => {
 
 describe('process actions', () => {
   it('checks a wait now, and snoozes or dismisses a quiet agent for the snooze the engine uses', async () => {
-    await requestCheckNow('t');
+    await requestCheckInNow('t');
     await snoozeSilence('r', 1_000);
     await dismissSilence('r');
     await stopDelegation('child');
     expect(SNOOZE_HINT).toBe('30 minutes');
     expect(spies.sent.mock.calls).toEqual([
-      [{ type: 'monitor.check_in_now', taskId: 't' }, 'Checking now.'],
+      [{ type: 'monitor.check_in_now', taskId: 't' }, 'Checking in now.'],
       [{ type: 'run.snooze_silence', runId: 'r', until: 1_000 + 30 * 60_000 }, 'Snoozed for 30 minutes.'],
       [{ type: 'run.dismiss_silence', runId: 'r' }, 'Dismissed for this step.'],
       [{ type: 'delegation.cancel', runId: 'child' }, 'Stopped.'],
     ] as never);
   });
 
-  it('adds a suggested follow-up to start when you chose, whatever the agent suggested, or dismisses it', async () => {
+  it('adds a suggested task to start when you chose, whatever the agent suggested, or dismisses it', async () => {
     const task = createTask({ id: 't' });
     const suggestion = { id: 's', title: 'Retry', why: 'Flaky', waitsOnThis: true, status: 'open' as const };
     await acceptSuggestion(task, suggestion as never, 'now');

@@ -3,7 +3,7 @@ import { formatCount } from '@/lib/format/count.ts';
 import { formatSince } from '@/lib/format/time.ts';
 
 export function describeStarted(task: Task, now = Date.now()) {
-  const verb = task.stage === 'queued' ? 'Added' : 'Started';
+  const verb = task.stage === 'waiting_on_tasks' ? 'Added' : 'Started';
   return formatSince(verb, task.createdAt, now);
 }
 

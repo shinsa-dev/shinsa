@@ -1,19 +1,23 @@
 import type { ChatEntry, Run, Task } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
 import { resolveLastHandover } from '@/lib/chat/timeline.ts';
 import { readList } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 
-export const ROLE_LABEL: Record<Run['role'], string> = {
-  triage: 'Setup',
-  planner: 'Plan',
-  builder: 'Build',
-  reviewer: 'Review',
-  fixer: 'Fix',
-  shipper: 'Fix',
-  answerer: 'Answer',
-  investigator: 'Investigate',
-  researcher: 'Research',
-  operator: 'Run',
+export interface RoleMark {
+  name: string;
+  icon: IconName;
+}
+
+export const RUN_ROLE: Record<Run['role'], RoleMark> = {
+  planner: { name: 'Planner', icon: 'IconMap' },
+  builder: { name: 'Builder', icon: 'IconHammer' },
+  reviewer: { name: 'Reviewer', icon: 'IconShieldCheck' },
+  fixer: { name: 'Fixer', icon: 'IconBandage' },
+  answerer: { name: 'Answerer', icon: 'IconBubbleText' },
+  investigator: { name: 'Investigator', icon: 'IconMagnifyingGlass' },
+  researcher: { name: 'Researcher', icon: 'IconBook' },
+  operator: { name: 'Operator', icon: 'IconConsole' },
 };
 
 const FIX_FOCUS: { prefix: string; live: string; done: string }[] = [
@@ -25,17 +29,17 @@ const FIX_FOCUS: { prefix: string; live: string; done: string }[] = [
 
 function resolvePlannerHeadline(done: boolean, task: Task, entries: ChatEntry[]) {
   if (!done) return 'Planning the work';
-  const proposed = readList(resolveLastHandover(entries, 'propose_plan'), 'plan').length;
-  const steps = proposed || (task.spec?.document?.plan.length ?? 0);
-  return steps > 0 ? `Planned ${formatCount(steps, 'phase', 'phases')}` : 'Planned the work';
+  const proposed = readList(resolveLastHandover(entries, 'propose_plan'), 'phases').length;
+  const phases = proposed || (task.plan?.document?.phases.length ?? 0);
+  return phases > 0 ? `Planned ${formatCount(phases, 'phase', 'phases')}` : 'Planned the work';
 }
 
 function resolveBuilderHeadline(done: boolean, run: Run, task: Task) {
-  const plan = task.spec?.document?.plan ?? [];
+  const phases = task.plan?.document?.phases ?? [];
   const index = run.phaseIndex ?? null;
-  const step = index === null ? undefined : plan[index];
-  if (index === null || !step) return done ? 'Built the change' : 'Building the change';
-  return `Phase ${index + 1} of ${plan.length}: ${step.title}`;
+  const phase = index === null ? undefined : phases[index];
+  if (index === null || !phase) return done ? 'Built the change' : 'Building the change';
+  return `Phase ${index + 1} of ${phases.length}: ${phase.title}`;
 }
 
 function resolveReviewerHeadline(done: boolean, entries: ChatEntry[]) {
@@ -54,15 +58,12 @@ function resolveReviewerHeadline(done: boolean, entries: ChatEntry[]) {
 function resolveFixHeadline(done: boolean, run: Run) {
   const focus = FIX_FOCUS.find((candidate) => run.prompt?.startsWith(candidate.prefix));
   if (focus) return done ? focus.done : focus.live;
-  if (run.role === 'shipper') return done ? 'Fixed the pull request' : 'Fixing the pull request';
   return done ? 'Fixed the change' : 'Fixing the change';
 }
 
 export function resolveRunHeadline(run: Run, task: Task, entries: ChatEntry[]) {
   const done = run.endedAt !== null && run.outcome === 'completed';
   switch (run.role) {
-    case 'triage':
-      return done ? 'Sorted the task' : 'Sorting the task';
     case 'planner':
       return resolvePlannerHeadline(done, task, entries);
     case 'builder':
@@ -70,12 +71,11 @@ export function resolveRunHeadline(run: Run, task: Task, entries: ChatEntry[]) {
     case 'reviewer':
       return resolveReviewerHeadline(done, entries);
     case 'fixer':
-    case 'shipper':
       return resolveFixHeadline(done, run);
     case 'answerer':
       return done ? 'Answered your question' : 'Answering your question';
     case 'investigator':
-      return done ? 'Reported the findings' : 'Investigating';
+      return done ? 'Reported the diagnosis' : 'Investigating';
     case 'researcher':
       return done ? 'Wrote the report' : 'Researching';
     case 'operator':

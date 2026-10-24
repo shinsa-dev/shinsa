@@ -52,7 +52,7 @@ export function describeEscalationBody(escalation: ReviewEscalation) {
 
 export function describeReviewTitle(gate: Gate) {
   if (gate.escalation) return describeEscalationTitle(gate.escalation);
-  return gate.kind === 'merge'
+  return gate.type === 'merge'
     ? 'The pull request is clean and ready to merge'
     : 'Built and checked. Your turn to review the changes.';
 }

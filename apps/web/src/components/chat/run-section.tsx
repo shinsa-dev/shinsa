@@ -3,22 +3,27 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { RunAccount } from '@/components/accounts/account-items.tsx';
+import { ChatLine, DetailRail, FoldLine } from '@/components/chat/chat-line.tsx';
 import { DelegationNotice } from '@/components/chat/delegation-card.tsx';
 import { HandoverCard } from '@/components/chat/handover-card.tsx';
 import { LiveCard } from '@/components/chat/live-card.tsx';
 import { NoticeLine } from '@/components/chat/notice-line.tsx';
-import { RowChevron } from '@/components/chat/tool-group.tsx';
 import { AgentText, ErrorLine, TurnDetail } from '@/components/chat/turn-detail.tsx';
 import { UserMessage } from '@/components/chat/user-message.tsx';
+import { CHAT_INSET, CHAT_PROSE_INSET } from '@/components/layout/surface/card.ts';
 import { Duration } from '@/components/text/time-ago.tsx';
 import { RunEvidence, TaskEvidence } from '@/lib/chat/run-evidence.ts';
-import { resolveRunHeadline } from '@/lib/chat/run-role.ts';
+import { RUN_ROLE, resolveRunHeadline } from '@/lib/chat/run-role.ts';
 import { type HumanMessage, type RunTurn, resolveTimeline, resolveTurns } from '@/lib/chat/timeline.ts';
 import { resolveClosing } from '@/lib/chat/turns.ts';
 import { useTranscript } from '@/lib/connection/socket.ts';
 import { formatSteps } from '@/lib/format/count.ts';
 
-export const ROW = 'px-3 py-2 mb-1';
+export const ROW = 'py-2 mb-1';
+
+const LINE_ROW = cn(ROW, CHAT_INSET);
+
+const PROSE_ROW = cn(ROW, CHAT_PROSE_INSET);
 
 const NO_MESSAGES: HumanMessage[] = [];
 
@@ -33,22 +38,20 @@ function WorkedRow({ run, turn }: { run: Run; turn: RunTurn }) {
   const [open, setOpen] = React.useState(false);
   return (
     <div className='flex min-w-0 flex-col'>
-      <button
-        type='button'
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className='group/row flex h-5 cursor-pointer items-center gap-px self-start text-fg-2 text-xs transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
-      >
-        <span className='tabular-nums'>
-          Worked for <Duration from={turn.startedAt} to={turn.endedAt} />
-          {turn.steps > 0 && ` · ${formatSteps(turn.steps)}`}
-        </span>
-        <RowChevron open={open} className='text-current' />
-      </button>
+      <FoldLine
+        open={open}
+        onToggle={() => setOpen(!open)}
+        label={
+          <span className='tabular-nums'>
+            Worked for <Duration from={turn.startedAt} to={turn.endedAt} />
+          </span>
+        }
+        meta={turn.steps > 0 && <span className='tabular-nums'>{formatSteps(turn.steps)}</span>}
+      />
       {open && (
-        <div className='mt-3 mb-1 border-border border-l ps-4'>
+        <DetailRail className='pb-0'>
           <TurnDetail items={turn.work} run={run} />
-        </div>
+        </DetailRail>
       )}
     </div>
   );
@@ -59,21 +62,27 @@ function TurnView({
   task,
   turn,
   waiting,
+  lead = true,
 }: {
   run: Run;
   task: Task | null;
   turn: RunTurn;
   waiting: boolean;
+  lead?: boolean;
 }) {
   return (
     <>
-      {turn.human && (
+      {lead && turn.human && (
         <div className={ROW}>
-          <UserMessage text={turn.human.text} attachments={turn.human.attachments} />
+          <UserMessage
+            text={turn.human.text}
+            attachments={turn.human.attachments}
+            pending={turn.human.pending === true}
+          />
         </div>
       )}
       {turn.notices.map((item) => (
-        <div key={item.key} className={ROW}>
+        <div key={item.key} className={item.kind === 'delegation' ? ROW : LINE_ROW}>
           {item.kind === 'delegation' ? (
             task && (
               <DelegationNotice
@@ -92,7 +101,7 @@ function TurnView({
         </div>
       )}
       {!turn.live && turn.work.length > 0 && (
-        <div className={ROW}>
+        <div className={LINE_ROW}>
           <WorkedRow run={run} turn={turn} />
         </div>
       )}
@@ -102,12 +111,12 @@ function TurnView({
         </div>
       ))}
       {turn.reply && (
-        <div className={ROW}>
+        <div className={PROSE_ROW}>
           <AgentText text={turn.reply.text} />
         </div>
       )}
       {turn.errors.map((item) => (
-        <div key={item.key} className={ROW}>
+        <div key={item.key} className={LINE_ROW}>
           <ErrorLine text={item.text} />
         </div>
       ))}
@@ -128,20 +137,22 @@ function RunLabel({
   first: boolean;
   rerun: boolean;
 }) {
+  const role = RUN_ROLE[run.role];
   return (
-    <div
-      className={cn('flex min-w-0 items-center gap-3 px-3 pb-2 text-2xs text-fg-2', first ? 'pt-2' : 'pt-4')}
-    >
-      <span className='flex min-w-0 items-center gap-1'>
-        <Truncate>
-          {headline}
-          {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
-          {run.outcome === 'cancelled' && <span> · Stopped</span>}
-        </Truncate>
-        <RunAccount task={task} run={run} rerun={rerun} />
-      </span>
-      <span aria-hidden className='h-px min-w-6 flex-1 bg-border' />
-    </div>
+    <ChatLine
+      className={cn('mb-2 w-full', CHAT_INSET, first ? 'mt-2' : 'mt-5')}
+      icon={role.icon}
+      label={role.name}
+      meta={
+        <span className='flex min-w-0'>
+          <Truncate className='min-w-0'>{headline}</Truncate>
+          <span className='shrink-0'>
+            {run.outcome === 'failed' && <span className='text-red-text'> · Failed</span>}
+            {run.outcome === 'cancelled' && ' · Stopped'} <RunAccount task={task} run={run} rerun={rerun} />
+          </span>
+        </span>
+      }
+    />
   );
 }
 
@@ -155,7 +166,7 @@ function RunTurns({ run, task }: { run: Run; task: Task }) {
         <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={false} />
       ))}
       {closing && (
-        <div className={ROW}>
+        <div className={closing.kind === 'error' ? LINE_ROW : PROSE_ROW}>
           {closing.kind === 'error' ? <ErrorLine text={closing.text} /> : <AgentText text={closing.text} />}
         </div>
       )}
@@ -185,18 +196,28 @@ export function RunSection({
   );
   const headline = React.useMemo(() => resolveRunHeadline(run, task, entries), [run, task, entries]);
   const closing = resolveClosing(run, turns);
+  const opening = turns[0]?.human ?? null;
   return (
     <RunEvidenceScope runId={run.id}>
       <section
         id={`run-${run.id}`}
         className='corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl transition-colors duration-500 data-focused:bg-primary-a1'
       >
-        <RunLabel run={run} task={task} headline={headline} first={first} rerun={rerun} />
-        {turns.map((turn) => (
-          <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={waiting} />
+        {opening && (
+          <div className={cn(ROW, !first && 'mt-4')}>
+            <UserMessage
+              text={opening.text}
+              attachments={opening.attachments}
+              pending={opening.pending === true}
+            />
+          </div>
+        )}
+        <RunLabel run={run} task={task} headline={headline} first={first || opening !== null} rerun={rerun} />
+        {turns.map((turn, index) => (
+          <TurnView key={turn.key} run={run} task={task} turn={turn} waiting={waiting} lead={index > 0} />
         ))}
         {closing && (
-          <div className={ROW}>
+          <div className={closing.kind === 'error' ? LINE_ROW : PROSE_ROW}>
             {closing.kind === 'error' ? <ErrorLine text={closing.text} /> : <AgentText text={closing.text} />}
           </div>
         )}

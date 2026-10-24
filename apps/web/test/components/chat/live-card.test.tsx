@@ -103,7 +103,7 @@ describe('LiveCard', () => {
     expect(stepLine(view).textContent).toEndWith('2m');
   });
 
-  it('says it is thinking once the last tool call has finished', () => {
+  it('keeps naming the last tool call once it has finished, instead of saying it is thinking', () => {
     pushTranscript('run-live', [
       ...liveEntries(),
       createEntry(
@@ -113,8 +113,23 @@ describe('LiveCard', () => {
       ),
     ]);
     const view = renderLive();
-    expect(stepLine(view).textContent).toContain('Thinking');
+    expect(stepLine(view).textContent).toContain('Running bun test');
+    expect(stepLine(view).textContent).not.toContain('Thinking');
     expect(stepLine(view).textContent).toEndWith('2m · 2 steps');
+  });
+
+  it('says it is thinking once the agent spoke after its last tool call', () => {
+    pushTranscript('run-live', [
+      ...liveEntries(),
+      createEntry(
+        { type: 'tool_result', callId: 'c2', status: 'ok', output: '', images: [] },
+        'r2',
+        NOW - 1000
+      ),
+      createEntry({ type: 'agent', phase: 'interim', text: 'The tests pass.' }, 'a3', NOW - 500),
+    ]);
+    const view = renderLive();
+    expect(stepLine(view).textContent).toContain('Thinking');
   });
 
   it('keeps the duration running while the agent works', () => {

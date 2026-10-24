@@ -75,7 +75,7 @@ describe('listHomeSections', () => {
 
   it('lists a task with several open decisions once', () => {
     const state = waiting(['a', 'b'], {
-      gates: [createGate({ id: 'g-a2', taskId: 'a', kind: 'merge', openedAt: 9 })],
+      gates: [createGate({ id: 'g-a2', taskId: 'a', type: 'merge', openedAt: 9 })],
     });
     expect(listShownIds(state)).toEqual(['a', 'b']);
   });

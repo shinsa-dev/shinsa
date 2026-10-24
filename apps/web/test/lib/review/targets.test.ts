@@ -18,12 +18,12 @@ function spot(file: string, attention: CodeSpot['attention'], start = 1, end = s
 
 const REPORT: WorkReport = {
   headline: 'Adds retries',
-  phases: [
+  sections: [
     { title: 'Set up', summary: '', spots: [spot('a.ts', 'normal'), spot('b.ts', 'critical')] },
     { title: 'Retry', summary: '', spots: [spot('c.ts', 'high'), spot('d.ts', 'critical')] },
   ],
   checks: [],
-  decisions: [],
+  judgementCalls: [],
 };
 
 function finding(overrides: Partial<ReviewFinding>): ReviewFinding {
@@ -31,9 +31,9 @@ function finding(overrides: Partial<ReviewFinding>): ReviewFinding {
 }
 
 describe('listReviewTargets', () => {
-  it('follows the report phase by phase in the walkthrough', () => {
+  it('follows the report section by section in the walkthrough', () => {
     expect(
-      listReviewTargets(REPORT, 'walkthrough').map((target) => [target.key, target.file, target.phase])
+      listReviewTargets(REPORT, 'walkthrough').map((target) => [target.key, target.file, target.section])
     ).toEqual([
       ['0:0', 'a.ts', 'Set up'],
       ['0:1', 'b.ts', 'Set up'],
@@ -52,14 +52,14 @@ describe('listReviewTargets', () => {
   });
 
   it('has nothing to step through in an empty report', () => {
-    const empty = { ...REPORT, phases: [] };
+    const empty = { ...REPORT, sections: [] };
     expect(listReviewTargets(empty, 'walkthrough')).toEqual([]);
     expect(listReviewTargets(empty, 'attention')).toEqual([]);
   });
 });
 
 describe('toReviewTarget', () => {
-  it('carries the spot, its phase and its key', () => {
+  it('carries the spot, its section and its key', () => {
     expect(toReviewTarget(spot('a.ts', 'high', 3, 9), 'Retry', '1:0')).toEqual({
       key: '1:0',
       file: 'a.ts',
@@ -67,7 +67,7 @@ describe('toReviewTarget', () => {
       end: 9,
       attention: 'high',
       why: 'Why a.ts',
-      phase: 'Retry',
+      section: 'Retry',
     });
   });
 });
@@ -88,7 +88,7 @@ describe('listFindingTargets', () => {
         end: 8,
         attention: 'critical',
         why: 'This drops errors.',
-        phase: 'Agent review',
+        section: 'Agent review',
       },
       {
         key: 'finding:3',
@@ -97,7 +97,7 @@ describe('listFindingTargets', () => {
         end: 2,
         attention: 'high',
         why: 'Consider a guard.',
-        phase: 'Agent review',
+        section: 'Agent review',
       },
     ]);
   });
@@ -169,7 +169,7 @@ describe('createDecisionTarget', () => {
       end: 42,
       attention: 'high',
       why: '',
-      phase: '',
+      section: '',
     });
   });
 });

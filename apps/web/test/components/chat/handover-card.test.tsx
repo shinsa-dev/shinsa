@@ -21,6 +21,7 @@ function call(
     result,
     images: [],
     failed: false,
+    recovery: null,
   };
 }
 
@@ -37,7 +38,7 @@ describe('HandoverCard for the process tools', () => {
     const view = renderCard(
       call('propose_plan', {
         goal: 'Ship it.',
-        plan: [{ title: 'One', detail: 'First.' }],
+        phases: [{ title: 'One', detail: 'First.' }],
         change_summary: 'Split the work in two.',
       })
     );
@@ -50,7 +51,7 @@ describe('HandoverCard for the process tools', () => {
     const view = renderCard(
       call('propose_plan', {
         goal: 'Backfill currencies.',
-        plan: [{ title: 'Add the script', detail: 'With a dry run.' }],
+        phases: [{ title: 'Add the script', detail: 'With a dry run.' }],
         impact: 'About 400 rows.',
         evidence: ['test', 'preview'],
         checks: ['bun test currency'],
@@ -120,7 +121,7 @@ describe('HandoverCard for the process tools', () => {
     expect(view.queryByText('Asked you')).toBeNull();
   });
 
-  it('lists suggested follow-ups, shows an answer, and keeps a scheduled check as a row', () => {
+  it('lists suggested tasks, shows an answer, and keeps a scheduled check-in as a row', () => {
     const suggested = renderCard(
       call('suggest_tasks', {
         tasks: [
@@ -129,7 +130,7 @@ describe('HandoverCard for the process tools', () => {
         ],
       })
     );
-    expect(suggested.getByText('Suggested 2 follow-ups')).toBeTruthy();
+    expect(suggested.getByText('Suggested 2 tasks')).toBeTruthy();
     expect(suggested.getByText('It is slow.')).toBeTruthy();
     suggested.unmount();
     const answered = renderCard(call('answer', { answer: 'It retries **three** times.' }));
@@ -137,6 +138,22 @@ describe('HandoverCard for the process tools', () => {
     expect(answered.getByText('three')).toBeTruthy();
     answered.unmount();
     const waited = renderCard(call('wait_for', { notes: 'The deploy.' }, 'Shinsa will wake a fresh agent.'));
-    expect(waited.getByText(/Scheduled a check/)).toBeTruthy();
+    expect(waited.getByText(/Scheduled a check-in/)).toBeTruthy();
+  });
+
+  it('lists the judgement calls a phase handed over, and shows an investigation’s diagnosis', () => {
+    const phase = renderCard(
+      call('complete_phase', {
+        summary: 'The form validates input.',
+        judgement_calls: [{ call: 'Kept the old reader', reason: 'Other callers still use it.' }],
+      })
+    );
+    expect(phase.getByText('Judgement calls')).toBeTruthy();
+    expect(phase.getByText('Kept the old reader')).toBeTruthy();
+    expect(phase.getByText('Other callers still use it.')).toBeTruthy();
+    phase.unmount();
+    const diagnosed = renderCard(call('report_diagnosis', { diagnosis: 'The pool runs **dry**.' }));
+    expect(diagnosed.getByText('Reported the diagnosis')).toBeTruthy();
+    expect(diagnosed.getByText('dry')).toBeTruthy();
   });
 });

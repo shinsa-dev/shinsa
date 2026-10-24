@@ -16,15 +16,15 @@ const FULL = createShinsaState({
       id: 'later',
       title: 'Ship the export docs',
       repoId: 'api',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       waitsOn: ['build'],
     }),
     createTask({ id: 'garden', title: 'Plan the garden beds', repoId: 'garden', stage: 'reviewing' }),
   ],
   gates: [
-    createGate({ id: 'g-review', taskId: 'review', kind: 'review' }),
-    createGate({ id: 'g-merge', taskId: 'merge', kind: 'merge', title: 'Merge #12' }),
-    createGate({ id: 'g-garden', taskId: 'garden', kind: 'review' }),
+    createGate({ id: 'g-review', taskId: 'review', type: 'review' }),
+    createGate({ id: 'g-merge', taskId: 'merge', type: 'merge', title: 'Merge #12' }),
+    createGate({ id: 'g-garden', taskId: 'garden', type: 'review' }),
   ],
   patch: { focus: { projectId: 'work', until: null } },
 });
@@ -122,11 +122,16 @@ describe('compact queue', () => {
       state: createShinsaState({
         tasks: [
           createTask({ id: 'build', title: 'Build the export', stage: 'building' }),
-          createTask({ id: 'docs', title: 'Ship the export docs', stage: 'queued', waitsOn: ['build'] }),
+          createTask({
+            id: 'docs',
+            title: 'Ship the export docs',
+            stage: 'waiting_on_tasks',
+            waitsOn: ['build'],
+          }),
           createTask({
             id: 'garden',
             title: 'Plan the garden beds',
-            stage: 'queued',
+            stage: 'waiting_on_tasks',
             waitsOn: ['docs'],
             priority: 'urgent',
           }),

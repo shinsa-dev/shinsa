@@ -16,7 +16,7 @@ function FileChip({ attachment }: { attachment: ChatAttachment }) {
   return (
     <div className={cn(CARD, 'flex h-10 min-w-0 max-w-64 items-center gap-2 p-1 pr-3')}>
       <span className='corner-superellipse/1.125 grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-fg-2'>
-        <Icon name={attachment.kind === 'image' ? 'IconImages1' : 'IconFileText'} className='size-4' />
+        <Icon size='md' name={attachment.kind === 'image' ? 'IconImages1' : 'IconFileText'} />
       </span>
       <span className='flex min-w-0 flex-col gap-px'>
         <Truncate className='text-fg-4 text-xs'>{attachment.name}</Truncate>
@@ -49,7 +49,15 @@ function Attachments({ attachments }: { attachments: ChatAttachment[] }) {
   );
 }
 
-export function UserMessage({ text, attachments = [] }: { text: string; attachments?: ChatAttachment[] }) {
+export function UserMessage({
+  text,
+  attachments = [],
+  pending = false,
+}: {
+  text: string;
+  attachments?: ChatAttachment[];
+  pending?: boolean;
+}) {
   const [expanded, setExpanded] = React.useState(false);
   const body = text.trim();
   if (!body && attachments.length === 0) return null;
@@ -74,6 +82,7 @@ export function UserMessage({ text, attachments = [] }: { text: string; attachme
           {expanded ? 'Show less' : 'Show more'}
         </button>
       )}
+      {pending && <span className='px-1 text-2xs text-fg-2'>Delivering</span>}
     </div>
   );
 }

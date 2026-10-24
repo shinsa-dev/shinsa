@@ -8,9 +8,13 @@ export function selectLatestAgentText(turn: RunTurn) {
   return turn.work.filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent').at(-1) ?? null;
 }
 
-function selectRunningCall(turn: RunTurn): ToolCall | null {
+export function selectLatestCall(calls: ToolCall[]) {
+  return calls.filter((call) => call.result === null).at(-1) ?? calls.at(-1) ?? null;
+}
+
+function selectLatestStep(turn: RunTurn): ToolCall | null {
   for (const item of [...turn.work].reverse()) {
-    if (item.kind === 'tools') return item.calls.filter((call) => call.result === null).at(-1) ?? null;
+    if (item.kind === 'tools') return selectLatestCall(item.calls);
     if (item.kind === 'agent') return null;
   }
   return null;
@@ -18,9 +22,18 @@ function selectRunningCall(turn: RunTurn): ToolCall | null {
 
 export function resolveLiveStep(turn: RunTurn, waiting: boolean) {
   if (waiting) return 'Paused until you answer';
-  const running = selectRunningCall(turn);
-  if (running) return resolveRunningLabel(running.description);
-  return turn.work.length === 0 ? 'Starting' : 'Thinking';
+  const latest = selectLatestStep(turn);
+  if (latest) return resolveRunningLabel(latest.description);
+  return turn.work.some((item) => item.kind === 'agent' || item.kind === 'tools') ? 'Thinking' : 'Starting';
+}
+
+function isWaitingTurn(turn: RunTurn) {
+  return (
+    turn.human !== null &&
+    !turn.live &&
+    turn.notices.length + turn.work.length + turn.outcomes.length + turn.errors.length === 0 &&
+    turn.reply === null
+  );
 }
 
 export function resolveClosing(run: Run, turns: RunTurn[]): Closing | null {
@@ -30,7 +43,7 @@ export function resolveClosing(run: Run, turns: RunTurn[]): Closing | null {
     const shown = turns.some((turn) => turn.errors.some((item) => item.text.trim() === summary));
     return shown ? null : { kind: 'error', text: summary };
   }
-  const last = turns.at(-1);
+  const last = turns.filter((turn) => !isWaitingTurn(turn)).at(-1);
   const answered = last && (last.reply || last.outcomes.length > 0 || last.errors.length > 0);
   return answered ? null : { kind: 'reply', text: summary };
 }

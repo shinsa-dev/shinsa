@@ -9,7 +9,7 @@ import {
   type Task,
   type TaskBudget,
 } from '@shinsa/core';
-import { ROLE_LABEL } from '@/lib/chat/run-role.ts';
+import { RUN_ROLE } from '@/lib/chat/run-role.ts';
 import { formatCost, formatTokens } from '@/lib/format/money.ts';
 
 interface CostRow {
@@ -67,7 +67,7 @@ export function resolveCostFacts(state: ShinsaState, task: Task): CostFacts | nu
         ? `${tokens}. Some steps ran on a model without a known price.`
         : `${tokens}, as estimated by the agent provider.`,
     budget: budget && { share: Math.min(1, budget.share), over: budget.spent >= budget.limit },
-    byRole: cost.byRole.map(({ role, cost: line }) => toRow(role, ROLE_LABEL[role], line)),
+    byRole: cost.byRole.map(({ role, cost: line }) => toRow(role, RUN_ROLE[role].name, line)),
     byPhase: cost.byPhase.map(({ index, title, cost: line }) => toRow(`phase-${index}`, title, line)),
   };
 }

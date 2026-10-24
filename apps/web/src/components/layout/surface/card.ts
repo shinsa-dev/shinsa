@@ -1,6 +1,21 @@
 export const CARD = 'corner-superellipse/1.125 rounded-xl border border-border bg-card';
 
-export const CARD_HEADER = 'flex h-9 shrink-0 items-center gap-2 bg-bg-a1 px-3 font-medium text-fg-4 text-xs';
+export const ICON_SLOT = 'grid size-5 shrink-0 place-items-center';
+
+export const ICON_SLOT_GAP = 'gap-1.25';
+
+export const CARD_INSET = 'px-3';
+
+export const CARD_HEADER =
+  'flex h-9 shrink-0 items-center gap-1.25 bg-bg-a1 px-3 font-medium text-fg-4 text-xs';
+
+export const CHAT_COLUMN = '[--chat-inset:--spacing(3.25)]';
+
+export const CHAT_NESTED = '[--chat-inset:--spacing(3)]';
+
+export const CHAT_INSET = 'ps-(--chat-inset)';
+
+export const CHAT_PROSE_INSET = 'px-(--chat-inset)';
 
 export const CARD_FOOTER = 'border-border border-t bg-bg-a1 px-3 py-2.5';
 

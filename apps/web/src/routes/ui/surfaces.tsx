@@ -77,7 +77,7 @@ export function SurfaceSpecimens() {
               ] as const
             ).map(([title, pr, when]) => (
               <li key={title} className='flex items-center gap-2.5 px-4 py-2'>
-                <Icon name='IconMerged' className='size-4 shrink-0 text-purple-4' />
+                <Icon size='md' name='IconMerged' className='text-purple-4' />
                 <span className='min-w-0 flex-1 truncate text-fg-4 text-sm'>{title}</span>
                 <span className='shrink-0 text-fg-2 text-xs tabular-nums'>
                   {pr} · {when}
@@ -100,7 +100,7 @@ export function SurfaceSpecimens() {
         <Card className='max-w-52 cursor-pointer transition-shadow hover:shadow-md'>
           <CardHeader>
             <div className='mb-2 flex size-6 items-center justify-center rounded-md bg-bg-2 shadow-1'>
-              <Icon name='IconMerged' className='size-3.5 text-fg-3' />
+              <Icon size='sm' name='IconMerged' className='text-fg-3' />
             </div>
             <CardTitle>Merged</CardTitle>
             <CardDescription>6 this week</CardDescription>
@@ -136,9 +136,9 @@ export function SurfaceSpecimens() {
       >
         <Specimen label='spinner'>
           <Spinner />
-          <Spinner className='size-5 text-fg-2' />
+          <Spinner size='lg' className='text-fg-2' />
           <Button disabled>
-            <Spinner className='size-4' />
+            <Spinner />
             Saving…
           </Button>
         </Specimen>

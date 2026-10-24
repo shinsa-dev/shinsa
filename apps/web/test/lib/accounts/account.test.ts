@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  describeAccountSwitched,
   describeBinding,
   describeDefaultChanged,
   describeImport,
@@ -12,8 +11,10 @@ import {
   listRerunChoices,
   resolveAccountChoiceValue,
   resolveAccountLabel,
+  resolveAccountProvider,
   resolveBoundAccount,
   resolvePauseAction,
+  resolveProviderIcon,
   resolveRunAccount,
   SWITCH_REASON,
   selectRerunRun,
@@ -25,6 +26,15 @@ describe('account labels', () => {
   it('names an account by its email, or as a Claude account without one', () => {
     expect(resolveAccountLabel({ email: 'me@example.com' })).toBe('me@example.com');
     expect(resolveAccountLabel({ email: null })).toBe('Claude account');
+  });
+
+  it('names the provider of every account, with its icon', () => {
+    expect(resolveAccountProvider('claude', 'me@example.com')).toEqual({
+      icon: 'IconClaudeai',
+      label: 'Claude · me@example.com',
+    });
+    expect(resolveAccountProvider('codex', null)).toEqual({ icon: 'IconOpenaiCodex', label: 'Codex' });
+    expect(resolveProviderIcon('cursor')).toBe('IconRobot');
   });
 
   it('says what an account and a binding run on', () => {
@@ -129,9 +139,7 @@ describe('imports and switches', () => {
     });
   });
 
-  it('labels a switched account and why it switched', () => {
-    expect(describeAccountSwitched('b@example.com')).toBe('Account switched · b@example.com');
-    expect(describeAccountSwitched(null)).toBe('Account switched');
+  it('says why the account switched', () => {
     expect(SWITCH_REASON.usage_limit).toBe('The previous account hit its usage limit.');
   });
 });

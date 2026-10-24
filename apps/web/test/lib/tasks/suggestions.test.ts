@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import type { TaskSuggestion } from '@shinsa/core';
-import { listFollowUpStarts, listOpenSuggestions, resolveFollowUpStart } from '@/lib/tasks/suggestions.ts';
+import {
+  listOpenSuggestions,
+  listSuggestionStarts,
+  resolveSuggestionStart,
+} from '@/lib/tasks/suggestions.ts';
 import { createTask } from '../../support/state.ts';
 
 function suggestion(id: string, status: TaskSuggestion['status']): TaskSuggestion {
@@ -8,7 +12,7 @@ function suggestion(id: string, status: TaskSuggestion['status']): TaskSuggestio
     id,
     runId: null,
     title: id,
-    intent: id,
+    request: id,
     why: id,
     waitsOnThis: false,
     status,
@@ -28,14 +32,14 @@ describe('listOpenSuggestions', () => {
 describe('when a follow-up starts', () => {
   it('defaults to what the agent suggested and lists that choice first, marked as suggested', () => {
     const waits = { ...suggestion('a', 'open'), waitsOnThis: true };
-    expect(resolveFollowUpStart(waits)).toBe('after');
-    expect(listFollowUpStarts(waits)).toEqual([
+    expect(resolveSuggestionStart(waits)).toBe('after');
+    expect(listSuggestionStarts(waits)).toEqual([
       { value: 'after', label: 'After this task merges', icon: 'IconHourglass', hint: 'Suggested' },
       { value: 'now', label: 'Start now', icon: 'IconRocket' },
     ]);
     const now = suggestion('b', 'open');
-    expect(resolveFollowUpStart(now)).toBe('now');
-    expect(listFollowUpStarts(now)).toEqual([
+    expect(resolveSuggestionStart(now)).toBe('now');
+    expect(listSuggestionStarts(now)).toEqual([
       { value: 'now', label: 'Start now', icon: 'IconRocket', hint: 'Suggested' },
       { value: 'after', label: 'After this task merges', icon: 'IconHourglass' },
     ]);

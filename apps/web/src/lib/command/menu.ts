@@ -88,7 +88,7 @@ export function listTaskKeywords(state: ShinsaState, task: Task) {
     resolveRepoName(state, task),
     task.branch ?? '',
     resolveTaskStatus(state, task).label,
-    task.intent.slice(0, 200),
+    task.request.slice(0, 200),
   ];
 }
 

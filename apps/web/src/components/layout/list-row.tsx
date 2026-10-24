@@ -33,8 +33,8 @@ export function ListRow({
       data-highlight-item=''
       className={cn(
         'corner-superellipse/1.125 flex w-full cursor-pointer gap-2 rounded-control text-left outline-none',
-        meta ? 'items-start py-1.5' : 'h-7 items-center',
-        leading ? 'ps-1.5 pe-2.5' : 'px-2.5'
+        meta ? 'items-start pt-1.5 pb-1' : 'h-7 items-center',
+        leading ? 'px-1.5' : 'px-2.5'
       )}
     >
       {leading}

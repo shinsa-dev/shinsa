@@ -5,6 +5,7 @@ import { IntegrationSettings } from '@/components/settings/integrations.tsx';
 import { resetExtensions, stopSignInWatch } from '@/lib/connection/extensions.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createExtensions, createPlugin, createServer, createSkill } from '../../support/extensions.ts';
+import { findTooltipText } from '../../support/hover.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 import { createProject, createRepo, createShinsaState } from '../../support/state.ts';
 
@@ -118,14 +119,14 @@ async function renderIntegrations(path = '/settings?tab=integrations') {
 function findBlock(name: string) {
   let block = screen.getByRole('button', { name: new RegExp(`details: ${name}$`) })
     .parentElement as HTMLElement;
-  while (!within(block).queryByRole('button', { name: 'Server options' })) {
+  while (!within(block).queryByRole('button', { name: 'MCP options' })) {
     block = block.parentElement as HTMLElement;
   }
   return block;
 }
 
 async function pickFromMenu(server: string, item: string) {
-  fireEvent.click(within(findBlock(server)).getByRole('button', { name: 'Server options' }));
+  fireEvent.click(within(findBlock(server)).getByRole('button', { name: 'MCP options' }));
   await settle();
   fireEvent.click(screen.getByRole('menuitem', { name: item }));
   await settle();
@@ -176,23 +177,23 @@ describe('Settings → Integrations', () => {
     expect(opened).toHaveBeenLastCalledWith('https://auth.example/x', '_blank');
   });
 
-  it('shows a server’s details, where it is defined and its tools, from its row or its menu', async () => {
+  it('shows an MCP’s tools, each described on hover, over one quiet line, from its row or its menu', async () => {
     await renderIntegrations();
     expect(screen.queryByText('list_issues')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Show details: linear' }));
-    expect(screen.getByText('list_issues')).toBeTruthy();
-    expect(screen.getByText('Defined in Shinsa, ~/.claude.json')).toBeTruthy();
-    expect(screen.getByText('Not used in 40 days')).toBeTruthy();
+    expect(await findTooltipText(screen.getByText('list_issues'))).toBe('List issues.');
+    expect(screen.getByText(/^Defined in Shinsa, ~\/\.claude\.json · .*Not used in 40 days$/)).toBeTruthy();
     await pickFromMenu('linear', 'Hide details');
     expect(screen.queryByText('list_issues')).toBeNull();
     await pickFromMenu('github', 'Show details');
     expect(screen.getByText('GITHUB_TOKEN is not set.')).toBeTruthy();
-    expect(screen.getByText('npx -y gh')).toBeTruthy();
+    expect(screen.queryByText('npx -y gh')).toBeNull();
+    expect(await findTooltipText(screen.getByText(/^Shinsa · /))).toBe('npx -y gh');
   });
 
   it('moves a server to one project from its menu', async () => {
     await renderIntegrations();
-    fireEvent.click(within(findBlock('linear')).getByRole('button', { name: 'Server options' }));
+    fireEvent.click(within(findBlock('linear')).getByRole('button', { name: 'MCP options' }));
     await settle();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Use in one project' }));
     await settle();
@@ -211,7 +212,7 @@ describe('Settings → Integrations', () => {
     await settle();
     expect(bodiesTo('/api/extensions/servers/remove')).toEqual([]);
     await pickFromMenu('linear', 'Remove');
-    fireEvent.click(screen.getByRole('button', { name: 'Remove server' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove MCP' }));
     await waitFor(() => expect(bodiesTo('/api/extensions/servers/remove')).toEqual([{ serverId: 'linear' }]));
   });
 
@@ -248,18 +249,18 @@ describe('Settings → Integrations', () => {
 
   it('adds a server, saying what is missing first', async () => {
     await renderIntegrations();
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add server' })[0] as HTMLElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add MCP' })[0] as HTMLElement);
     await settle();
     const dialog = screen.getByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add server' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add MCP' }));
     await settle();
     expect(within(dialog).getByText('Enter a name.')).toBeTruthy();
-    expect(within(dialog).getByText('Enter the command that starts the server.')).toBeTruthy();
+    expect(within(dialog).getByText('Enter the command that starts it.')).toBeTruthy();
     fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'notion' } });
     fireEvent.change(within(dialog).getByLabelText('Command'), { target: { value: 'npx' } });
     fireEvent.change(within(dialog).getByLabelText('Arguments'), { target: { value: '-y\nnotion-mcp' } });
     expect(within(dialog).queryByText('Enter a name.')).toBeNull();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Add server' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add MCP' }));
     await waitFor(() =>
       expect(bodiesTo('/api/extensions/servers/add')).toEqual([
         {
@@ -280,7 +281,7 @@ describe('Settings → Integrations', () => {
   it('opens the add dialog when ⌘K asks for it, and drops the request from the address', async () => {
     await renderIntegrations('/settings?tab=integrations&add=mcp#mcp-servers');
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect(screen.getByText('Add an MCP server')).toBeTruthy();
+    expect(screen.getByText('Add an MCP')).toBeTruthy();
     expect(`${location.search}${location.hash}`).toBe('?tab=integrations#mcp-servers');
     await settle();
   });
@@ -297,7 +298,7 @@ describe('Settings → Integrations', () => {
 
   it('finds servers, plugins and skills as you type, opening every group that matches', async () => {
     await renderIntegrations();
-    const search = screen.getByRole('searchbox', { name: 'Search servers, plugins and skills' });
+    const search = screen.getByRole('searchbox', { name: 'Search MCPs, plugins and skills' });
     fireEvent.change(search, { target: { value: 'skill-6' } });
     await settle();
     expect(location.search).toBe('?tab=integrations&q=skill-6');
@@ -319,13 +320,13 @@ describe('Settings → Integrations', () => {
     await renderIntegrations();
     expect(screen.getByText('Not used in 40 days · ~4.2k tokens')).toBeTruthy();
     expect(screen.getByText('7 skills')).toBeTruthy();
-    fireEvent.click(screen.getByRole('switch', { name: 'Leave out servers agents haven’t used' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Leave out MCPs agents haven’t used' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Leave out skills too' }));
     fireEvent.click(screen.getByRole('button', { name: 'Turn off' }));
     await settle();
     expect(bodiesTo('/api/extensions/optimizer')).toEqual([{ enabled: true }, { skills: true }]);
     expect(bodiesTo('/api/extensions/servers/choose')).toEqual([{ serverId: 'linear', enabled: false }]);
-    expect(toasts.success).toHaveBeenCalledWith('Agents now leave out servers unused for 14 days.');
+    expect(toasts.success).toHaveBeenCalledWith('Agents now leave out MCPs unused for 14 days.');
   });
 
   it('keeps a long list of failing servers closed until you open it', async () => {
@@ -345,8 +346,8 @@ describe('Settings → Integrations', () => {
 
   it('checks every server from the section header', async () => {
     await renderIntegrations();
-    fireEvent.click(screen.getByRole('button', { name: 'Check all servers' }));
-    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Checked every server that is on.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Check all MCPs' }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith('Checked every MCP that is on.'));
   });
 });
 
@@ -362,9 +363,7 @@ describe('Settings → Integrations without the server', () => {
     );
     await waitFor(() =>
       expect(
-        screen.getByText(
-          'Couldn’t read the MCP servers, plugins and skills. Shinsa answered with status 404.'
-        )
+        screen.getByText('Couldn’t read the MCPs, plugins and skills. Shinsa answered with status 404.')
       ).toBeTruthy()
     );
   });

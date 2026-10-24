@@ -56,7 +56,7 @@ export function ActivityRow({
             className='flex w-fit cursor-pointer items-center gap-1 text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
           >
             Open in chat
-            <Icon name='IconChevronRightSmall' className='size-3.5' />
+            <Icon size='sm' name='IconChevronRightSmall' />
           </button>
         )}
         {evidence && isVisualEvidence(evidence.uri) && (

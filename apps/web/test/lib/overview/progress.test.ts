@@ -12,13 +12,13 @@ import { createTask } from '../../support/state.ts';
 function withPlan(task: Partial<Task> & { id: string }, titles: string[], phases: PhaseProgress['status'][]) {
   return createTask({
     ...task,
-    spec: {
+    plan: {
       version: 1,
       body: '',
       proposedAt: 0,
       document: {
         goal: '',
-        plan: titles.map((title) => ({ title, detail: `${title} in detail` })),
+        phases: titles.map((title) => ({ title, detail: `${title} in detail` })),
         behaviour: [],
         approach: '',
         files: [],
@@ -141,7 +141,7 @@ describe('resolveSteps', () => {
   });
 
   it('carries a step’s detail, such as why it has not started', () => {
-    const steps = resolveSteps(resolveTaskProgress(createTask({ id: 'task-1', stage: 'queued' })));
+    const steps = resolveSteps(resolveTaskProgress(createTask({ id: 'task-1', stage: 'waiting_on_tasks' })));
     expect(steps[0]?.detail).toEqual([{ text: 'Starts when the task it waits on finishes', done: false }]);
   });
 

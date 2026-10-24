@@ -30,7 +30,7 @@ export function SilenceNote({
       <span
         className={cn('flex items-center gap-2', level === 'critical' ? 'text-orange-text' : 'text-fg-3')}
       >
-        <Icon name='IconClock' className='size-3.5 shrink-0' />
+        <Icon size='sm' name='IconClock' />
         <TimeAgo at={since} text={(at) => describeSilence(level, since, at) ?? ''} detail='Last output' />
       </span>
       <span className='flex-1' />

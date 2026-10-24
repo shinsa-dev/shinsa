@@ -5,14 +5,13 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { GlyphLabel, INLINE_TILE, SMART_LINK } from '@/components/links/link.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { ProgressTrack } from '@/components/overview/progress-track.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
   changeRoundShipping,
   describeRoundStatus,
   listShippingItems,
-  resolveRoundTrack,
+  ROUND_ICON,
   selectRoundPullRequest,
 } from '@/lib/tasks/rounds.ts';
 
@@ -76,39 +75,40 @@ export function RoundHeader({
   open,
   onToggle,
   onShippingChange,
-  className,
 }: {
   task: Task;
   round: Round;
   open: boolean;
   onToggle: () => void;
   onShippingChange?: ShippingChanger;
-  className?: string;
 }) {
   const status = describeRoundStatus(round);
   const pullRequest = selectRoundPullRequest(task, round);
   return (
-    <div className={cn('flex flex-col gap-2 px-3 py-2', className)}>
-      <div className='flex min-w-0 items-center gap-2'>
-        <button
-          type='button'
-          aria-expanded={open}
-          onClick={onToggle}
-          className='flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-start text-xs outline-none transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
-        >
-          <span className='shrink-0 font-medium text-fg-4'>Round {round.number}</span>
-          <Truncate className='min-w-0 text-fg-3'>{round.title}</Truncate>
-          <span className={cn('shrink-0 text-2xs', TONE_TEXT[status.tone])}>{status.label}</span>
-          <SectionChevron open={open} className='shrink-0 text-fg-2' />
-        </button>
-        {pullRequest && <RoundPullRequestLink pullRequest={pullRequest} />}
-        <RoundShippingSelect
-          task={task}
-          round={round}
-          {...(onShippingChange ? { onChange: onShippingChange } : {})}
+    <div className='flex min-w-0 items-center gap-2'>
+      <button
+        type='button'
+        aria-expanded={open}
+        onClick={onToggle}
+        className='group/round flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-start text-xs outline-none'
+      >
+        <StatusTile icon={ROUND_ICON} tone={status.tone} />
+        <span className='shrink-0 font-medium text-fg-4 tabular-nums'>Round {round.number}</span>
+        <Truncate className='min-w-0 text-fg-3 transition-colors duration-150 group-hover/round:text-fg-4 group-active/round:text-fg-4'>
+          {round.title}
+        </Truncate>
+        <span className={cn('shrink-0 text-2xs', TONE_TEXT[status.tone])}>{status.label}</span>
+        <SectionChevron
+          open={open}
+          className='text-fg-3 group-hover/round:text-fg-4 group-active/round:text-fg-4'
         />
-      </div>
-      {open && <ProgressTrack progress={resolveRoundTrack(task, round)} />}
+      </button>
+      {pullRequest && <RoundPullRequestLink pullRequest={pullRequest} />}
+      <RoundShippingSelect
+        task={task}
+        round={round}
+        {...(onShippingChange ? { onChange: onShippingChange } : {})}
+      />
     </div>
   );
 }

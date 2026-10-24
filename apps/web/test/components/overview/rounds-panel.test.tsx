@@ -5,7 +5,7 @@ import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { TaskHandle, TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { createRound } from '../../support/rounds.ts';
 import { startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createTask } from '../../support/state.ts';
+import { createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const OPEN = {
   number: 12,
@@ -47,26 +47,39 @@ describe('the rounds of a task on its Overview', () => {
         createRound({
           number: 3,
           title: 'Cache it',
-          status: 'queued',
+          status: 'waiting',
           startedAt: null,
           pullRequest: null,
           outcome: null,
         }),
       ],
     });
+    const opened = mock((_runId: string) => undefined);
+    const state = createShinsaState({
+      tasks: [task],
+      runs: [
+        createRun({ id: 'r1', taskId: 't', role: 'planner', startedAt: 1 }),
+        createRun({ id: 'r2', taskId: 't', role: 'planner', startedAt: 2, round: 2 }),
+      ],
+    });
     render(
       <TooltipProvider>
-        <RoundsPanel task={task} onShippingChange={changed} />
+        <RoundsPanel state={state} task={task} onOpen={opened} onShippingChange={changed} />
       </TooltipProvider>
     );
     const earlier = screen.getByRole('list', { name: 'Earlier rounds' });
     expect(within(earlier).getByText('Add MCP v2')).toBeTruthy();
-    expect(within(earlier).queryByText('Asked for')).toBeNull();
+    expect(within(earlier).queryByText('Do round 1')).toBeNull();
     fireEvent.click(within(earlier).getByRole('button', { name: /Round 1/ }));
-    expect(within(earlier).getByText('Asked for')).toBeTruthy();
-    expect(within(earlier).getByText('Added MCP v2.')).toBeTruthy();
-    expect(within(earlier).getByText('It works.')).toBeTruthy();
+    expect(within(earlier).getByText('Add MCP v2. It works. Merged in pull request #12.')).toBeTruthy();
+    expect(within(earlier).queryByText('Do round 1')).toBeNull();
+    expect(within(earlier).queryByRole('list', { name: 'Progress' })).toBeNull();
+    fireEvent.click(within(earlier).getByRole('button', { name: 'Open in chat' }));
+    expect(opened.mock.calls).toEqual([['r1']]);
     const waiting = screen.getByRole('list', { name: 'Rounds waiting to start' });
+    fireEvent.click(within(waiting).getByRole('button', { name: /Round 3/ }));
+    expect(within(waiting).getByText('Cache it. It starts once round 2 is finished.')).toBeTruthy();
+    expect(within(waiting).queryByRole('button', { name: 'Open in chat' })).toBeNull();
     fireEvent.click(within(waiting).getByRole('combobox', { name: 'How round 3 ships' }));
     const list = (await screen.findAllByRole('listbox')).at(-1) as HTMLElement;
     const option = within(list).getByRole('option', { name: 'As a stacked pull request' });
@@ -79,7 +92,10 @@ describe('the rounds of a task on its Overview', () => {
   });
 
   it('shows nothing for a task with one round', () => {
-    const view = render(<RoundsPanel task={createTask({ id: 't' })} />);
+    const task = createTask({ id: 't' });
+    const view = render(
+      <RoundsPanel state={createShinsaState({ tasks: [task] })} task={task} onOpen={() => undefined} />
+    );
     expect(view.container.textContent).toBe('');
   });
 

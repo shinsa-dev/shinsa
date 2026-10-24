@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveSupersededReply, resolveWithdrawnReply } from '@shinsa/core';
+import { resolveAnsweredReply, resolveSupersededReply, resolveWithdrawnReply } from '@shinsa/core';
 import {
   readPlanParameters,
   readProposedChange,
+  resolveAskAnswer,
   resolveAskMeta,
   resolveSpotsMeta,
 } from '@/lib/chat/handover.ts';
@@ -28,6 +29,23 @@ describe('resolveAskMeta', () => {
     expect(
       resolveAskMeta(createToolCall(ask, { result: resolveSupersededReply('Use the grid.') }), false)
     ).toBe('Withdrawn');
+  });
+});
+
+describe('resolveAskAnswer', () => {
+  const ask = shinsaTool('ask', { question: 'Which one?' });
+
+  it('shows the answer alone, without the words the agent reads around it', () => {
+    const answered = createToolCall(ask, { result: resolveAnsweredReply('Shinsa’s projects', false) });
+    expect(resolveAskAnswer(answered)).toBe('Shinsa’s projects');
+    const delegated = createToolCall(ask, { result: resolveAnsweredReply('The second', true) });
+    expect(resolveAskAnswer(delegated)).toBe('The second');
+  });
+
+  it('has no answer while it waits, when it failed or when it was withdrawn', () => {
+    expect(resolveAskAnswer(createToolCall(ask))).toBeNull();
+    expect(resolveAskAnswer(createToolCall(ask, { result: 'Cancelled', failed: true }))).toBeNull();
+    expect(resolveAskAnswer(createToolCall(ask, { result: resolveWithdrawnReply() }))).toBeNull();
   });
 });
 

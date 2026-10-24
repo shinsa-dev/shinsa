@@ -1,15 +1,17 @@
 import type { Run } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
-import { ExpandRow, IconSlot, ToolGroup } from '@/components/chat/tool-group.tsx';
+import { ExpandRow } from '@/components/chat/chat-line.tsx';
+import { ToolGroup } from '@/components/chat/tool-group.tsx';
+import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
 import type { WorkItem } from '@/lib/chat/timeline.ts';
 import { formatBrief } from '@/lib/chat/turns.ts';
 
 export function ErrorLine({ text }: { text: string }) {
   return (
-    <div data-message className='flex min-w-0 items-start gap-px text-red-text text-xs leading-relaxed'>
+    <div data-message className='flex min-w-0 items-start gap-1.25 text-red-text text-xs leading-relaxed'>
       <IconSlot>
-        <Icon name='IconExclamationCircle' className='size-4' />
+        <Icon size='sm' name='IconExclamationCircle' />
       </IconSlot>
       <span className='min-w-0 whitespace-pre-wrap break-words'>{text}</span>
     </div>

@@ -8,11 +8,12 @@ import {
   DelegationSummary,
   StopDelegation,
 } from '@/components/chat/delegation-card.tsx';
+import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { type DelegationView, describeDelegations, listRoundDelegationTree } from '@/lib/chat/delegations.ts';
 import { stopDelegation } from '@/lib/tasks/process.ts';
 
-const DEPTH_INDENT = ['', 'ps-5', 'ps-10'];
+const DEPTH_INDENT = ['', '', 'ps-6.25'];
 
 function DelegationRow({
   view,
@@ -29,7 +30,9 @@ function DelegationRow({
     <li className={cn('flex min-w-0 flex-col gap-1 py-2 first:pt-0 last:pb-0', DEPTH_INDENT[depth - 1])}>
       <div className='flex min-w-0 items-center gap-2 text-2xs'>
         {depth > 1 && (
-          <Icon name='IconArrowCornerDownRight' aria-hidden className='size-3.5 shrink-0 text-fg-2' />
+          <IconSlot className='-me-0.75'>
+            <Icon size='sm' name='IconArrowCornerDownRight' aria-hidden className='text-fg-2' />
+          </IconSlot>
         )}
         <DelegationSummary
           view={view}
@@ -45,7 +48,7 @@ function DelegationRow({
         />
         {view.live && <StopDelegation view={view} onStop={onStop} />}
       </div>
-      {view.question && <DelegationQuestion question={view.question} className='ps-5.5' />}
+      {view.question && <DelegationQuestion question={view.question} />}
     </li>
   );
 }
@@ -66,7 +69,7 @@ export function DelegationsPanel({
   const summary = describeDelegations(tree.map((entry) => entry.view));
   return (
     <Panel
-      title='Delegated work'
+      title='Delegations'
       icon='IconAgents'
       action={summary && <span className='font-normal text-2xs text-fg-2 tabular-nums'>{summary}</span>}
     >

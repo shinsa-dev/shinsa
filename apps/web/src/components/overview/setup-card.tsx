@@ -37,12 +37,12 @@ export function SetupCard({
             </Button>
           )}
           <Button size='sm' loading={busy === 'recheck'} onClick={() => reply('recheck')}>
-            Check again
+            Verify again
           </Button>
         </>
       }
       footer={
-        <FooterNote note='Fix it in the repository or in Settings, then check again.'>
+        <FooterNote note='Fix it in the repository or in Settings, then verify it again.'>
           <QuietLink busy={busy !== null} onClick={() => reply('cancel')}>
             Cancel task
           </QuietLink>

@@ -87,7 +87,7 @@ describe('NewTaskForm', () => {
     fireEvent.change(field(), { target: { value: '  Exports stall at night  ' } });
     await send('Start');
     expect(listSentCommands()).toEqual([
-      { type: 'task.create', intent: 'Exports stall at night', repoId: null },
+      { type: 'task.create', request: 'Exports stall at night', repoId: null },
     ]);
   });
 
@@ -126,7 +126,7 @@ describe('NewTaskForm', () => {
     expect(listSentCommands()).toEqual([
       {
         type: 'task.create',
-        intent: 'Why do exports stall?',
+        request: 'Why do exports stall?',
         repoId: null,
         projectId: 'p2',
         priority: 'high',
@@ -146,7 +146,7 @@ describe('NewTaskForm', () => {
     expect(listSentCommands()).toEqual([
       {
         type: 'task.create',
-        intent: 'How are exports chunked?',
+        request: 'How are exports chunked?',
         repoId: null,
         projectId: null,
         waitsOn: ['base'],

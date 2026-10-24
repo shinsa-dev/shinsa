@@ -24,48 +24,48 @@ function actionFor(gate?: Partial<Gate>, runs: Partial<Run>[] = []) {
 
 describe('resolveTaskAction', () => {
   it('opens the code tab for changes to review', () => {
-    expect(actionFor({ kind: 'review' })).toEqual({ label: 'Review changes', path: '/tasks/t?tab=code' });
+    expect(actionFor({ type: 'review' })).toEqual({ label: 'Review changes', path: '/tasks/t?tab=code' });
   });
 
   it('opens the task for a plan or a merge', () => {
-    expect(actionFor({ kind: 'spec' })).toEqual({ label: 'Review plan', path: '/tasks/t' });
-    expect(actionFor({ kind: 'merge' })).toEqual({ label: 'Review and merge', path: '/tasks/t' });
+    expect(actionFor({ type: 'plan' })).toEqual({ label: 'Review plan', path: '/tasks/t' });
+    expect(actionFor({ type: 'merge' })).toEqual({ label: 'Review and merge', path: '/tasks/t' });
   });
 
   it('opens the task to decide on a proposed change, where the proposal is', () => {
-    expect(actionFor({ kind: 'question', purpose: 'change', runId: 'run-1' })).toEqual({
+    expect(actionFor({ type: 'proposal', runId: 'run-1' })).toEqual({
       label: 'Decide on the change',
       path: '/tasks/t',
     });
   });
 
   it('opens the task to confirm an operation after the merge', () => {
-    expect(actionFor({ kind: 'question', purpose: 'operation', runId: null })).toEqual({
+    expect(actionFor({ type: 'operation', runId: null })).toEqual({
       label: 'Confirm the operation',
       path: '/tasks/t',
     });
   });
 
   it('opens the asking run in the chat for a question', () => {
-    expect(actionFor({ kind: 'question', runId: 'run-1' })).toEqual({
+    expect(actionFor({ type: 'question', runId: 'run-1' })).toEqual({
       label: 'Answer',
       path: '/tasks/t?tab=chat&run=run-1',
     });
   });
 
   it('opens the task for a question no run asked', () => {
-    expect(actionFor({ kind: 'question' })).toEqual({ label: 'Answer', path: '/tasks/t' });
+    expect(actionFor({ type: 'question' })).toEqual({ label: 'Answer', path: '/tasks/t' });
   });
 
   it('asks you to decide what to do with paused work', () => {
-    expect(actionFor({ purpose: 'failure', runId: 'run-1' })).toEqual({
+    expect(actionFor({ type: 'failure', runId: 'run-1' })).toEqual({
       label: 'Decide what to do',
       path: '/tasks/t',
     });
   });
 
   it('asks you to fix the setup, not to answer a question, and opens the overview where the checks are', () => {
-    expect(actionFor({ kind: 'question', purpose: 'configuration', runId: null })).toEqual({
+    expect(actionFor({ type: 'configuration', runId: null })).toEqual({
       label: 'Fix the setup',
       path: '/tasks/t',
     });
@@ -74,8 +74,7 @@ describe('resolveTaskAction', () => {
   it('asks for a secret by its name on the overview, where the field to paste it is', () => {
     expect(
       actionFor({
-        kind: 'question',
-        purpose: 'agent_question',
+        type: 'secret',
         runId: 'run-1',
         secret: { label: 'GitHub token' },
       })
@@ -83,7 +82,7 @@ describe('resolveTaskAction', () => {
   });
 
   it('asks you to sign in when an account is signed out', () => {
-    expect(actionFor({ kind: 'question', purpose: 'sign_in', runId: 'run-1' })).toEqual({
+    expect(actionFor({ type: 'sign_in', runId: 'run-1' })).toEqual({
       label: 'Sign in',
       path: '/tasks/t',
     });

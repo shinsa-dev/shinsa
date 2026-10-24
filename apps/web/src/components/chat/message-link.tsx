@@ -1,9 +1,9 @@
 import type { Run } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
+import { RoleMark } from '@/components/chat/role-mark.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { ROLE_LABEL } from '@/lib/chat/run-role.ts';
 import { resolveLastAgentText } from '@/lib/chat/timeline.ts';
 import { useTranscript } from '@/lib/connection/socket.ts';
 import { flattenWhitespace } from '@/lib/format/count.ts';
@@ -31,13 +31,12 @@ export function MessageLink({
       )}
     >
       <span className='flex items-center gap-1.5 text-2xs text-fg-2'>
-        <Icon name='IconBubbleText' className='size-3 text-fg-3' />
-        <span className='font-medium text-fg-3'>{ROLE_LABEL[run.role]}</span>
+        <RoleMark role={run.role} className='font-medium text-fg-3' />
         <span>·</span>
         <TimeAgo at={run.endedAt ?? run.startedAt} />
         <span className='ms-auto flex items-center gap-1 text-fg-2 transition-colors duration-150 group-hover:text-fg-4 group-active:text-fg-4'>
           Open in chat
-          <Icon name='IconChevronRightSmall' className='size-3.5' />
+          <Icon size='sm' name='IconChevronRightSmall' />
         </span>
       </span>
       {text && (

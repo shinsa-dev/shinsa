@@ -39,7 +39,7 @@ const SUGGESTION: TaskSuggestion = {
   id: 's',
   runId: null,
   title: 'Cache it',
-  intent: 'Cache the export.',
+  request: 'Cache the export.',
   why: 'It is slow.',
   waitsOnThis: true,
   status: 'open',
@@ -48,7 +48,7 @@ const SUGGESTION: TaskSuggestion = {
 };
 
 describe('process commands', () => {
-  it('offers check now, the quiet-agent warning and each open follow-up', () => {
+  it('offers check in now, the quiet-agent warning and each open suggested task', () => {
     const task = createTask({ id: 't', monitor: MONITOR, suggestions: [SUGGESTION] });
     const quiet = createRun({
       id: 'r',
@@ -59,11 +59,11 @@ describe('process commands', () => {
     const state = createShinsaState({ tasks: [task], runs: [quiet] });
     const commands = listProcessCommands(state, task, NOW);
     expect(commands.map((command) => command.label)).toEqual([
-      'Check now',
+      'Check in now',
       'Snooze the quiet-agent warning on the builder',
       'Dismiss the quiet-agent warning on the builder',
-      'Add the follow-up “Cache it”',
-      'Dismiss the follow-up “Cache it”',
+      'Add the suggested task “Cache it”',
+      'Dismiss the suggested task “Cache it”',
     ]);
     for (const command of commands) if (command.kind === 'run') run(command);
     expect(spies.sent.mock.calls.map(([command]) => command.type)).toEqual([
@@ -100,7 +100,7 @@ describe('process commands', () => {
     ]);
   });
 
-  it('asks when an added follow-up starts, the agent’s suggestion first, and sends the one you pick', () => {
+  it('asks when an added suggested task starts, the agent’s suggestion first, and sends the one you pick', () => {
     for (const waitsOnThis of [true, false]) {
       spies.sent.mockClear();
       const task = createTask({ id: 't', suggestions: [{ ...SUGGESTION, waitsOnThis }] });
@@ -142,12 +142,12 @@ describe('process commands', () => {
       },
       rounds: [
         createRound({ number: 1, status: 'active', outcome: null }),
-        createRound({ number: 2, status: 'queued', startedAt: null, pullRequest: null, outcome: null }),
+        createRound({ number: 2, status: 'waiting', startedAt: null, pullRequest: null, outcome: null }),
       ],
     });
     const commands = listProcessCommands(createShinsaState({ tasks: [task] }), task, NOW);
     expect(commands.map((command) => command.label)).toEqual([
-      'Add the follow-up “Cache it”',
+      'Add the suggested task “Cache it”',
       'Keep “Cache it” in this task',
       'Ship round 2 as a stacked pull request',
     ]);

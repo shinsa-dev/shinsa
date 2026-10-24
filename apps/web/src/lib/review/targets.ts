@@ -22,7 +22,7 @@ export interface ReviewTarget {
   end: number;
   attention: Attention;
   why: string;
-  phase: string;
+  section: string;
 }
 
 export interface CodeMarker {
@@ -34,18 +34,20 @@ export interface CodeMarker {
   text: string;
 }
 
-export function toReviewTarget(spot: CodeSpot, phase: string, key: string): ReviewTarget {
-  return { key, ...spot, phase };
+export function toReviewTarget(spot: CodeSpot, section: string, key: string): ReviewTarget {
+  return { key, ...spot, section };
 }
 
 export function listReviewTargets(report: WorkReport, order: ReviewOrder): ReviewTarget[] {
   if (order === 'attention') {
-    return listRankedSpots(report).map(({ spot, phaseIndex, spotIndex }) =>
-      toReviewTarget(spot, report.phases[phaseIndex]?.title ?? '', `${phaseIndex}:${spotIndex}`)
+    return listRankedSpots(report).map(({ spot, sectionIndex, spotIndex }) =>
+      toReviewTarget(spot, report.sections[sectionIndex]?.title ?? '', `${sectionIndex}:${spotIndex}`)
     );
   }
-  return report.phases.flatMap((phase, phaseIndex) =>
-    phase.spots.map((spot, spotIndex) => toReviewTarget(spot, phase.title, `${phaseIndex}:${spotIndex}`))
+  return report.sections.flatMap((section, sectionIndex) =>
+    section.spots.map((spot, spotIndex) =>
+      toReviewTarget(spot, section.title, `${sectionIndex}:${spotIndex}`)
+    )
   );
 }
 
@@ -64,7 +66,7 @@ export function listFindingTargets(findings: ReviewFinding[]): ReviewTarget[] {
             end: finding.end ?? finding.line,
             attention: finding.severity === 'blocking' ? ('critical' as const) : ('high' as const),
             why: finding.message,
-            phase: 'Agent review',
+            section: 'Agent review',
           },
         ]
       : []
@@ -96,7 +98,7 @@ export function createDecisionTarget(file: string, line: number): ReviewTarget {
     end: line,
     attention: 'high',
     why: '',
-    phase: '',
+    section: '',
   };
 }
 

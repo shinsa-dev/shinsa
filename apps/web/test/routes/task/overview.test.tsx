@@ -49,7 +49,16 @@ function proposing() {
   const task = createTask({
     id: 't',
     stage: 'awaiting_proposal',
-    pipeline: ['investigate'],
+    pipeline: ['investigate', 'your_ok', ...FIX.slice(1)],
+    shapeChanges: [
+      {
+        from: ['investigate'],
+        to: ['investigate', 'your_ok', ...FIX.slice(1)],
+        by: 'agent',
+        reason: 'The stall comes from leaked connections.',
+        at: 0,
+      },
+    ],
     result: { step: 'investigate', body: 'The pool runs **dry**.', runId: null, at: 0 },
     proposal: {
       request: 'Release the connection on a timeout.',
@@ -62,8 +71,7 @@ function proposing() {
   const gate = createGate({
     id: 'g',
     taskId: 't',
-    kind: 'question',
-    purpose: 'change',
+    type: 'proposal',
     title: 'Turn this investigation into a fix?',
   });
   return { task, gate, state: createShinsaState({ tasks: [task], gates: [gate] }) };
@@ -88,8 +96,8 @@ describe('the change gate on the Overview', () => {
     expect(card.getByText('Change to approve')).toBeTruthy();
     expect(card.getByText('The stall comes from leaked connections.')).toBeTruthy();
     expect(card.getByText('Release the connection on a timeout.')).toBeTruthy();
-    expect(view.getByRole('heading', { name: 'Findings' })).toBeTruthy();
-    expect(view.getByText('dry')).toBeTruthy();
+    expect(view.queryByRole('heading', { name: 'Diagnosis' })).toBeNull();
+    expect(card.getByText('dry')).toBeTruthy();
   });
 
   it('makes it a change from the primary action', async () => {
@@ -123,11 +131,12 @@ describe('the Overview for each kind of task', () => {
       result: { step: 'research', body: 'Three options compared.', runId: null, at: 0 },
     });
     const view = renderOverview(createShinsaState({ tasks: [task] }), task);
-    expect(view.getByText('Finished. The report is below.')).toBeTruthy();
-    expect(view.getByRole('heading', { name: 'Report' })).toBeTruthy();
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('Wrote the report')).toBeTruthy();
+    expect(card.getByText('Three options compared.')).toBeTruthy();
+    expect(view.queryByRole('heading', { name: 'Report' })).toBeNull();
     expect(view.queryByRole('heading', { name: 'Summary' })).toBeNull();
-    expect(strip(view)).toEqual(['Repository', 'Research']);
-    const box = view.getByPlaceholderText('Ask a follow-up. The agent answers on this task.');
+    const box = view.getByPlaceholderText('Ask a follow-up, or for more work.');
     fireEvent.change(box, { target: { value: 'Which is cheapest?' } });
     fireEvent.keyDown(box, { key: 'Enter' });
     await waitFor(() =>
@@ -135,7 +144,7 @@ describe('the Overview for each kind of task', () => {
     );
   });
 
-  it('shows the outcome of a finished operation and takes the next piece of work as a new round', () => {
+  it('shows the outcome of a finished operation and takes a follow-up or more work', () => {
     const task = createTask({
       id: 't',
       stage: 'done',
@@ -143,10 +152,15 @@ describe('the Overview for each kind of task', () => {
       result: { step: 'operate', body: 'Rotated 3 keys.', runId: null, at: 0 },
     });
     const view = renderOverview(createShinsaState({ tasks: [task] }), task);
-    expect(view.getByRole('heading', { name: 'Outcome' })).toBeTruthy();
+    expect(view.getByText('Reported the outcome')).toBeTruthy();
+    expect(
+      view.getByText(
+        'Ask a follow-up or for more work in the chat. The agent answers a follow-up; more work starts a new round.'
+      )
+    ).toBeTruthy();
     expect(
       view.getByRole('textbox', {
-        name: 'Ask for the next piece of work. It starts as a new round of this task.',
+        name: 'Ask a follow-up, or for more work.',
       })
     ).toBeTruthy();
   });
@@ -169,7 +183,7 @@ describe('the Overview for each kind of task', () => {
       'Pull request',
       'Merge',
     ]);
-    expect(view.getByRole('heading', { name: 'Findings' })).toBeTruthy();
+    expect(view.getByRole('heading', { name: 'Diagnosis' })).toBeTruthy();
     expect(view.getByRole('heading', { name: 'Summary' })).toBeTruthy();
   });
 });
@@ -221,12 +235,11 @@ describe('steps the planner composed, on the Overview', () => {
     const gate = createGate({
       id: 'g',
       taskId: 't',
-      kind: 'question',
-      purpose: 'change',
-      title: 'Run an operation from these findings?',
+      type: 'proposal',
+      title: 'Run an operation from this diagnosis?',
     });
     const view = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
-    expect(view.getByText('The findings are in')).toBeTruthy();
+    expect(view.getByText('The diagnosis is in')).toBeTruthy();
     expect(view.getByText('What comes next')).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: 'Plan the operation' }));
     expect(listSentCommands()).toEqual([
@@ -270,5 +283,47 @@ describe('the evidence on the Overview', () => {
     expect(view.getByText('Round two log')).toBeTruthy();
     expect(view.queryByText('Round one log')).toBeNull();
     expect(view.queryByText(/First round output\./)).toBeNull();
+  });
+});
+
+describe('the Overview while the steps are still being worked out', () => {
+  const AUTO = { shape: true, start: true, priority: true };
+
+  it('shows no step strip until triage and the planner settle the steps', () => {
+    const triage = createTask({ id: 't', stage: 'triage', stageReason: 'choosing the kind', auto: AUTO });
+    const view = renderOverview(createShinsaState({ tasks: [triage] }), triage);
+    expect(view.getByLabelText('Progress').textContent).toBe('Working out the steps');
+    expect(view.getByLabelText('Progress').querySelector('[data-slot="spinner"]')).not.toBeNull();
+    view.unmount();
+    const planning = createTask({ id: 't', stage: 'planning', pipeline: FIX.slice(1), auto: AUTO });
+    const planned = renderOverview(createShinsaState({ tasks: [planning] }), planning);
+    expect(planned.getByLabelText('Progress').textContent).toBe('Working out the steps');
+    planned.unmount();
+    const answering = createTask({ id: 't', stage: 'answering', pipeline: ['answer'], auto: AUTO });
+    expect(strip(renderOverview(createShinsaState({ tasks: [answering] }), answering))).toEqual([
+      'Repository',
+      'Answer',
+    ]);
+  });
+});
+
+describe('the rounds of a task on its Overview', () => {
+  it('puts the earlier rounds under the current round’s answer, never above it', () => {
+    const task = createTask({
+      id: 't',
+      stage: 'done',
+      pipeline: ['answer'],
+      result: { step: 'answer', body: 'I answer questions about the code.', runId: null, at: 0 },
+      rounds: [
+        createRound({ number: 1, title: 'Respond to greeting', status: 'finished', pipeline: ['answer'] }),
+        createRound({ number: 2, title: 'Say what you can do', status: 'finished', pipeline: ['answer'] }),
+      ],
+    });
+    const view = renderOverview(createShinsaState({ tasks: [task] }), task);
+    const text = view.container.textContent ?? '';
+    expect(text.indexOf('I answer questions about the code.')).toBeLessThan(
+      text.indexOf('Respond to greeting')
+    );
+    expect(view.getByRole('heading', { name: 'Rounds' })).toBeTruthy();
   });
 });

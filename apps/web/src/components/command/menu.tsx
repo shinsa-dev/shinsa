@@ -54,10 +54,12 @@ import {
 import { listScheduleSections } from '@/lib/command/schedules.ts';
 import { FALLBACK_PREFIX, scoreCommand } from '@/lib/command/score.ts';
 import { resolveTaskPage } from '@/lib/command/task.ts';
+import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
 import { useConnection } from '@/lib/connection/socket.ts';
+import { useVersions } from '@/lib/connection/versions.ts';
 import { describeNewTask } from '@/lib/new-task.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { listRecentTaskIds, recordRecentTask } from '@/lib/preferences/recent-tasks.ts';
@@ -81,8 +83,8 @@ function Status({ children }: { children: string }) {
 function Trailing({ command }: { command: MenuCommand }) {
   if (command.current) return <SelectedMark className='ms-auto' />;
   if (command.kind === 'page' || command.kind === 'choice')
-    return <Icon name='IconChevronRightMedium' className='ms-auto size-4' />;
-  if (command.kind === 'link') return <Icon name='IconArrowUpRight' className='ms-auto size-4' />;
+    return <Icon name='IconChevronRightMedium' className='ms-auto' />;
+  if (command.kind === 'link') return <Icon name='IconArrowUpRight' className='ms-auto' />;
   return null;
 }
 
@@ -214,7 +216,7 @@ function TasksGroup({
       >
         Jump to a task
         <CommandHint>{block.total}</CommandHint>
-        <Icon name='IconChevronRightMedium' className='ms-auto size-4' />
+        <Icon name='IconChevronRightMedium' className='ms-auto' />
       </CommandItem>
       {block.tasks.map((task) => (
         <TaskRow
@@ -365,7 +367,7 @@ function JumpGroup({
           {task.handle && (
             <CommandHint className='shrink-0 tabular-nums'>{resolveHandleText(task)}</CommandHint>
           )}
-          <Icon name='IconChevronRightMedium' className='ms-auto size-4' />
+          <Icon name='IconChevronRightMedium' className='ms-auto' />
         </CommandItem>
       ))}
     </CommandGroup>
@@ -381,6 +383,7 @@ export function CommandMenu() {
   const layout = useLayoutPreference();
   const accounts = useAccounts();
   const extensions = useExtensions(open);
+  const versions = useVersions(open);
   const [query, setQuery] = React.useState('');
   const [stack, setStack] = React.useState<Visit[]>([]);
   const [selected, setSelected] = React.useState('');
@@ -479,16 +482,16 @@ export function CommandMenu() {
   };
 
   const createTask = () => {
-    const intent = trimmed;
+    const request = trimmed;
     later(
       () =>
-        void sendCommandWithToast({ type: 'task.create', intent, repoId: null }, describeNewTask(false).done)
+        void sendCommandWithToast({ type: 'task.create', request, repoId: null }, describeNewTask(false).done)
     );
   };
 
   const draftTask = () => {
-    const intent = trimmed;
-    later(() => requestNewTaskOnHome(intent));
+    const request = trimmed;
+    later(() => requestNewTaskOnHome(request));
   };
 
   const sections = [
@@ -497,6 +500,7 @@ export function CommandMenu() {
     ...listAccountSections(accounts),
     ...listScheduleSections(state),
     ...listExtensionSections(extensions.snapshot),
+    ...listVersionSections(versions.snapshot, versions.updating),
   ].sort((a, b) => a.rank - b.rank);
   const allTasks = listMenuTasks(state);
 

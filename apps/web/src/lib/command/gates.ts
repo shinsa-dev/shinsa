@@ -1,4 +1,4 @@
-import { type Gate, listOpenGates, resolveGateType, type ShinsaState, type Task } from '@shinsa/core';
+import { type Gate, isDecisionGate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { describeSignInCheck, resolveSignInProvider } from '@/lib/accounts/sign-in.ts';
 import { type Command, type MenuPage, RANK } from '@/lib/command/registry.ts';
@@ -56,7 +56,7 @@ function listSetupCommands(task: Task, gate: Gate): Command[] {
     {
       kind: 'run',
       id: `${id}.recheck`,
-      label: 'Check the setup again',
+      label: 'Verify the setup again',
       hint: gate.title,
       icon: resolveGateGlyph(gate).icon,
       keywords: ['configuration', 'setup', 'retry', 'verify'],
@@ -190,7 +190,7 @@ function listPlanCommands(task: Task, gate: Gate): Command[] {
       label: 'Approve the plan',
       icon: 'IconCheckmark1',
       keywords: ['spec', 'go ahead', 'build', 'accept'],
-      run: () => void replyToGate(gate, resolvePlanReply(task), null, { planVersion: task.spec?.version }),
+      run: () => void replyToGate(gate, resolvePlanReply(task), null, { planVersion: task.plan?.version }),
     },
     {
       kind: 'page',
@@ -329,19 +329,6 @@ function listOperationCommands(gate: Gate): Command[] {
     },
     {
       kind: 'page',
-      id: `${id}.run-operation-notes`,
-      label: 'Run the operation with notes',
-      icon: 'IconBubbleText',
-      keywords: ['guidance', 'notes', 'tell', 'operation', 'run'],
-      page: compose(
-        'Run with notes',
-        'Notes for the operator, such as what to watch or skip.',
-        'Run with these notes',
-        (text) => replyToGate(gate, 'runOperationWithNotes', text)
-      ),
-    },
-    {
-      kind: 'page',
       id: `${id}.skip-operation`,
       label: 'Finish without it',
       icon: 'IconCheckCircle2',
@@ -381,7 +368,7 @@ function listOperationCommands(gate: Gate): Command[] {
 }
 
 function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: GateContext): Command[] {
-  switch (resolveGateType(gate)) {
+  switch (gate.type) {
     case 'configuration':
       return listSetupCommands(task, gate);
     case 'sign_in':
@@ -390,7 +377,7 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
       return listSecretCommands(task, gate);
     case 'failure':
       return listFailureCommands(state, gate);
-    case 'change':
+    case 'proposal':
       return listChangeCommands(task, gate);
     case 'operation':
       return listOperationCommands(gate);
@@ -407,6 +394,6 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
 
 export function listOpenGateCommands(state: ShinsaState, task: Task, context: GateContext) {
   return listOpenGates(state, task.id)
-    .sort((a, b) => Number(a.purpose === 'decision') - Number(b.purpose === 'decision'))
+    .sort((a, b) => Number(isDecisionGate(a)) - Number(isDecisionGate(b)))
     .flatMap((gate) => listGateCommands(state, task, gate, context));
 }

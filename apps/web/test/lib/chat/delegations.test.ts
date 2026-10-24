@@ -13,7 +13,6 @@ import {
   listLiveDelegations,
   listRoundDelegationTree,
   resolveDelegationStatusLabel,
-  resolveStepRunId,
   selectDelegation,
 } from '@/lib/chat/delegations.ts';
 import { createRound } from '../../support/rounds.ts';
@@ -118,7 +117,7 @@ describe('resolveDelegationStatusLabel', () => {
     });
     expect(label(delegated('a'))).toEqual({ label: 'Working', tone: 'blue' });
     expect(label(delegated('a', { status: 'waiting' }))).toEqual({
-      label: 'Waiting for its delegated tasks',
+      label: 'Waiting for its delegations',
       tone: 'blue',
     });
     expect(label(delegated('a', {}, { question: QUESTION }))).toEqual({
@@ -233,18 +232,8 @@ describe('listDelegationPath', () => {
   });
 });
 
-describe('resolveStepRunId', () => {
-  it('finds the step a delegated run hangs under, and keeps any other id as it is', () => {
-    const state = stateWith(delegated('a'), delegated('a1', {}, { parentRunId: 'a', depth: 2 }));
-    expect(resolveStepRunId(state, 'a1')).toBe('step');
-    expect(resolveStepRunId(state, 'step')).toBe('step');
-    expect(resolveStepRunId(state, 'missing')).toBe('missing');
-    expect(resolveStepRunId(state, null)).toBeNull();
-  });
-});
-
 describe('describeParkedRun', () => {
-  it('says how many delegated tasks a waiting step waits for, and nothing for a working or ended one', () => {
+  it('says how many delegations a waiting step waits for, and nothing for a working or ended one', () => {
     const waiting = (delegations: string[]) =>
       createRun({
         id: 'step',
@@ -253,12 +242,12 @@ describe('describeParkedRun', () => {
         waitingOn: { delegations, since: NOW, reason: 'x' },
       });
     expect(describeParkedRun(waiting(['a', 'b']))).toEqual({
-      label: 'Waiting for 2 delegated tasks',
+      label: 'Waiting for 2 delegations',
       tone: 'blue',
     });
-    expect(describeParkedRun(waiting(['a']))?.label).toBe('Waiting for 1 delegated task');
+    expect(describeParkedRun(waiting(['a']))?.label).toBe('Waiting for 1 delegation');
     expect(describeParkedRun(createRun({ id: 's', taskId: 't', status: 'waiting' }))?.label).toBe(
-      'Waiting for its delegated tasks'
+      'Waiting for its delegations'
     );
     expect(describeParkedRun(createRun({ id: 's', taskId: 't', status: 'running' }))).toBeNull();
     expect(

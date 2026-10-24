@@ -53,13 +53,14 @@ describe('Jump to', () => {
       ['Notifications', 'General'],
       ['Context', 'General'],
       ['Setup', 'General'],
-      ['Agents', 'Agents'],
+      ['Models', 'Agents'],
       ['Engine', 'Agents'],
-      ['Agent usage', 'Agent usage'],
+      ['Versions', 'Agents'],
+      ['Accounts', 'Agent usage'],
       ['Limits', 'Agent usage'],
-      ['Projects', 'Projects'],
       ['Repository folders', 'Projects'],
-      ['MCP servers', 'Integrations'],
+      ['Projects', 'Projects'],
+      ['MCPs', 'Integrations'],
       ['Plugins', 'Integrations'],
       ['Skills', 'Integrations'],
       ['Schedules', 'Automations'],
@@ -98,22 +99,18 @@ describe('Change a setting', () => {
       ['Automatic fix rounds', 'Until clean'],
       ['Merge with', 'Squash'],
       ['Compaction', 'Eunoe compaction'],
-      ['Model for doing the work', 'Opus'],
-      ['Speed for doing the work', 'Standard'],
-      ['Model for checking the work', 'Opus'],
-      ['Speed for checking the work', 'Standard'],
-      ['Model for answering questions', 'Opus'],
-      ['Speed for answering questions', 'Standard'],
+      ['Model for task agents', 'Opus'],
+      ['Speed for task agents', 'Standard'],
       ['Model for quick jobs', 'Sonnet'],
       ['Speed for quick jobs', 'Standard'],
       ['Planner model', 'Opus'],
       ['Planner speed', 'Standard'],
       ['Builder model', 'Opus'],
       ['Builder speed', 'Standard'],
-      ['Fixer model', 'Opus'],
-      ['Fixer speed', 'Standard'],
       ['Reviewer model', 'Opus'],
       ['Reviewer speed', 'Standard'],
+      ['Fixer model', 'Opus'],
+      ['Fixer speed', 'Standard'],
       ['Answerer model', 'Opus'],
       ['Answerer speed', 'Standard'],
       ['Classifier model', 'Sonnet'],
@@ -134,14 +131,14 @@ describe('Change a setting', () => {
       ],
     });
     const held = listSettingsSections(settings, MODELS, DEFAULT_PREFERENCES, noCredits);
-    expect(find(held, 'settings.speed.work')).toMatchObject({
+    expect(find(held, 'settings.speed.task')).toMatchObject({
       hint: 'Standard',
       value: 'off',
       options: [{ value: 'off', label: 'Standard', icon: 'IconSpeedMiddle' }],
     });
     expect(find(held, 'settings.speed.builder')).toMatchObject({ value: 'off', options: [{ value: 'off' }] });
     const open = listSettingsSections(settings, MODELS, DEFAULT_PREFERENCES, createSnapshot());
-    expect(find(open, 'settings.speed.work')).toMatchObject({ value: 'on', hint: 'Fast' });
+    expect(find(open, 'settings.speed.task')).toMatchObject({ value: 'on', hint: 'Fast' });
   });
 
   it('keeps the per-role choices for typing, and the cost limit for setups without a weekly limit', () => {
@@ -151,7 +148,7 @@ describe('Change a setting', () => {
       label: 'Cost limit per task',
       hint: 'No limit',
     });
-    const group = find(sections, 'settings.model.work');
+    const group = find(sections, 'settings.model.task');
     expect(group).not.toHaveProperty('searchOnly');
   });
 
@@ -189,7 +186,7 @@ describe('Change a setting', () => {
     pick(sections, 'settings.merge', 'rebase');
     pick(sections, 'settings.model.planner', 'claude:sonnet');
     pick(sections, 'settings.model.quick', 'codex:gpt-6-astra');
-    pick(sections, 'settings.model.review', 'claude:sonnet');
+    pick(sections, 'settings.model.task', 'mixed');
     pick(sections, 'settings.usage-limit', '10');
     pick(sections, 'settings.usage-limit', 'off');
     pick(sections, 'settings.switch-at', '95');
@@ -198,7 +195,7 @@ describe('Change a setting', () => {
     pick(sections, 'settings.compaction', 'off');
     pick(sections, 'settings.compaction', '5');
     pick(sections, 'settings.compaction.mode', 'eunoe_default');
-    pick(sections, 'settings.speed.work', 'on');
+    pick(sections, 'settings.speed.task', 'on');
     pick(sections, 'settings.speed.builder', 'off');
     expect(spies.sent.mock.calls.map(([command, done]) => [command, done])).toEqual([
       [{ type: 'settings.change', patch: { attentionLimit: 3 } }, 'Saved.'],
@@ -229,16 +226,6 @@ describe('Change a setting', () => {
         },
         'Saved.',
       ],
-      [
-        {
-          type: 'settings.change',
-          patch: {
-            agentProviders: { reviewer: 'claude' },
-            agentModels: { builder: 'sonnet', reviewer: 'sonnet' },
-          },
-        },
-        'Saved.',
-      ],
       [{ type: 'settings.change', patch: { taskUsageLimit: 10 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { taskUsageLimit: null } }, 'Saved.'],
       [{ type: 'settings.change', patch: { accountSwitchAt: 95 } }, 'Saved.'],
@@ -250,7 +237,9 @@ describe('Change a setting', () => {
       [
         {
           type: 'settings.change',
-          patch: { agentFastModes: { planner: true, builder: true, fixer: true } },
+          patch: {
+            agentFastModes: { planner: true, builder: true, reviewer: true, fixer: true, answerer: true },
+          },
         },
         'Saved.',
       ],
@@ -303,18 +292,16 @@ describe('openSettingsSection', () => {
   it('scrolls to the section on its tab and opens its tab from anywhere else', () => {
     history.replaceState(null, '', '/settings?tab=accounts');
     const section = document.createElement('section');
-    section.id = 'settings-agent-usage';
+    section.id = 'settings-accounts';
     const scroll = mock((_options?: ScrollIntoViewOptions) => {});
     section.scrollIntoView = scroll;
     document.body.append(section);
-    openSettingsSection('Agent usage');
+    openSettingsSection('Accounts');
     expect(scroll).toHaveBeenCalledTimes(1);
     section.remove();
     history.replaceState(null, '', '/tasks');
-    openSettingsSection('Agent usage');
-    expect(`${location.pathname}${location.search}${location.hash}`).toBe(
-      '/settings?tab=accounts#agent-usage'
-    );
+    openSettingsSection('Accounts');
+    expect(`${location.pathname}${location.search}${location.hash}`).toBe('/settings?tab=accounts#accounts');
     history.replaceState(null, '', '/tasks');
     openSettingsSection('Repository folders');
     expect(`${location.search}${location.hash}`).toBe('?tab=projects#repository-folders');

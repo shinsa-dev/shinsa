@@ -7,18 +7,18 @@ export const STALLED_REASON: Record<StalledReason, string> = {
   cancelled: 'was cancelled',
 };
 
-export function describeNextCheck(monitor: Monitor, now: number) {
-  return formatUntil('Checks again', monitor.nextCheckAt, now);
+export function describeNextCheckIn(monitor: Monitor, now: number) {
+  return formatUntil('Checks in again', monitor.nextCheckAt, now);
 }
 
 export function describeGiveUp(monitor: Monitor, now: number) {
   return monitor.timeoutAt <= now
-    ? 'gives up at the next check'
+    ? 'gives up at the next check-in'
     : formatUntil('gives up', monitor.timeoutAt, now);
 }
 
-export function describeCheckCount(monitor: Monitor) {
-  return `Check ${monitor.attempts + 1} of ${monitor.maxAttempts}`;
+export function describeCheckInCount(monitor: Monitor) {
+  return `Check-in ${monitor.attempts + 1} of ${monitor.maxAttempts}`;
 }
 
 export function describeSilence(level: SilenceLevel, since: number, now: number) {

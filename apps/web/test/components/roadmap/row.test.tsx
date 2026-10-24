@@ -14,7 +14,7 @@ const STATE = createShinsaState({
     createTask({
       id: 'docs',
       title: 'Ship search docs',
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       waitsOn: ['base'],
       branch: 'docs/search',
       worktreePath: '/tmp/docs',

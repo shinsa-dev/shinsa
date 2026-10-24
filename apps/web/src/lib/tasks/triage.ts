@@ -1,16 +1,7 @@
-import {
-  isSamePipeline,
-  lowerFirst,
-  resolveTaskPipeline,
-  SHAPE_PIPELINES,
-  type ShinsaState,
-  type Task,
-  type TaskPriority,
-} from '@shinsa/core';
+import { lowerFirst, type ShinsaState, type Task, type TaskPriority } from '@shinsa/core';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
-import { SHAPE_LABEL } from '@/lib/tasks/shapes.ts';
 
-export type TriageFact = 'shape' | 'start' | 'priority';
+export type TriageFact = 'start' | 'priority';
 
 function describePriority(priority: TaskPriority) {
   return priority === 'urgent' ? PRIORITY_LABEL.urgent : `${PRIORITY_LABEL[priority]} priority`;
@@ -33,17 +24,7 @@ function describeWhy(auto: boolean, decided: string, why: string) {
   return `You changed this. Shinsa chose “${lowerFirst(decided)}”: ${why}`;
 }
 
-function resolveShapeWhy(task: Task) {
-  const last = task.shapeChanges?.at(-1);
-  if (last?.by === 'agent' && last.reason) return `An agent set these steps: ${last.reason}`;
-  const decision = task.triageDecisions?.shape;
-  if (!decision) return null;
-  const auto = isSamePipeline(resolveTaskPipeline(task), SHAPE_PIPELINES[decision.value]);
-  return describeWhy(auto, SHAPE_LABEL[decision.value], decision.why);
-}
-
 export function resolveTriageWhy(state: ShinsaState, task: Task, fact: TriageFact): string | null {
-  if (fact === 'shape') return resolveShapeWhy(task);
   if (fact === 'start') {
     const decision = task.triageDecisions?.start;
     if (!decision) return null;

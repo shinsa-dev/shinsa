@@ -34,12 +34,12 @@ import { ATTENTION } from '@/lib/tasks/status.ts';
 function SpotButton({
   target,
   selected,
-  showPhase,
+  showSection,
   onSelect,
 }: {
   target: ReviewTarget;
   selected: boolean;
-  showPhase: boolean;
+  showSection: boolean;
   onSelect: () => void;
 }) {
   const ref = React.useRef<HTMLButtonElement>(null);
@@ -68,7 +68,7 @@ function SpotButton({
         <span className='shrink-0 text-2xs text-fg-2'>{formatTargetLines(target)}</span>
       </span>
       {target.why && <span className='text-fg-3 text-xs'>{target.why}</span>}
-      {showPhase && <span className='text-2xs text-fg-2'>{target.phase}</span>}
+      {showSection && <span className='text-2xs text-fg-2'>{target.section}</span>}
     </button>
   );
 }
@@ -98,24 +98,24 @@ function Walkthrough({
     <>
       {order === 'walkthrough' ? (
         <ol className='flex flex-col gap-3'>
-          {report.phases.map((phase, phaseIndex) => (
-            <li key={phase.title} className='flex flex-col gap-1'>
+          {report.sections.map((section, sectionIndex) => (
+            <li key={section.title} className='flex flex-col gap-1'>
               <div className='flex gap-2 px-2'>
-                <StepNumber index={phaseIndex} />
+                <StepNumber index={sectionIndex} />
                 <div className='flex min-w-0 flex-col gap-px'>
-                  <span className='font-medium text-fg-4 text-xs'>{phase.title}</span>
-                  <p className='text-2xs text-fg-2'>{phase.summary}</p>
+                  <span className='font-medium text-fg-4 text-xs'>{section.title}</span>
+                  <p className='text-2xs text-fg-2'>{section.summary}</p>
                 </div>
               </div>
               <div className='flex flex-col gap-px pl-4.5'>
-                {phase.spots.map((spot, spotIndex) => {
-                  const target = toReviewTarget(spot, phase.title, `${phaseIndex}:${spotIndex}`);
+                {section.spots.map((spot, spotIndex) => {
+                  const target = toReviewTarget(spot, section.title, `${sectionIndex}:${spotIndex}`);
                   return (
                     <SpotButton
                       key={target.key}
                       target={target}
                       selected={selectedKey === target.key}
-                      showPhase={false}
+                      showSection={false}
                       onSelect={() => onSelect(target)}
                     />
                   );
@@ -131,7 +131,7 @@ function Walkthrough({
               key={target.key}
               target={target}
               selected={selectedKey === target.key}
-              showPhase
+              showSection
               onSelect={() => onSelect(target)}
             />
           ))}
@@ -146,7 +146,7 @@ function Walkthrough({
                 key={target.key}
                 target={target}
                 selected={selectedKey === target.key}
-                showPhase={false}
+                showSection={false}
                 onSelect={() => onSelect(target)}
               />
             ))}
@@ -157,21 +157,21 @@ function Walkthrough({
   );
 }
 
-function Decisions({
+function JudgementCalls({
   report,
   onSelect,
 }: {
   report: WorkReport;
   onSelect: (file: string, line: number) => void;
 }) {
-  if (report.decisions.length === 0) return null;
+  if (report.judgementCalls.length === 0) return null;
   return (
     <>
-      <SideHeading count={report.decisions.length}>Judgement calls</SideHeading>
+      <SideHeading count={report.judgementCalls.length}>Judgement calls</SideHeading>
       <ul className='flex flex-col gap-2 px-2'>
-        {report.decisions.map(({ decision, reason, file, line }) => (
-          <li key={decision} className='flex flex-col gap-px text-xs'>
-            <span className='font-medium text-fg-4'>{decision}</span>
+        {report.judgementCalls.map(({ call, reason, file, line }) => (
+          <li key={call} className='flex flex-col gap-px text-xs'>
+            <span className='font-medium text-fg-4'>{call}</span>
             <span className='text-fg-2'>{reason}</span>
             {file && (
               <button
@@ -374,7 +374,7 @@ export function ReviewPane({ task, diff }: { task: Task; diff: TaskDiff }) {
             findings={findings}
             onSelect={select}
           />
-          <Decisions
+          <JudgementCalls
             report={report}
             onSelect={(file, line) => setDecisionTarget(createDecisionTarget(file, line))}
           />

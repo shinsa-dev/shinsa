@@ -3,9 +3,10 @@ import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { SizeAnimator } from '@shinsa/ui/components/size-animator';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { RowChevron } from '@/components/chat/tool-group.tsx';
+import { RowChevron, SHIMMER_LINE } from '@/components/chat/chat-line.tsx';
 import { TurnDetail } from '@/components/chat/turn-detail.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { Duration } from '@/components/text/time-ago.tsx';
@@ -76,11 +77,13 @@ export function LiveCard({ run, turn, waiting }: { run: Run; turn: RunTurn; wait
         type='button'
         aria-expanded={open}
         onClick={() => setOpen(!open)}
-        className='group/row flex h-9 min-w-0 cursor-pointer items-center gap-2 px-3 text-left text-2xs'
+        className='group/row flex h-9 min-w-0 cursor-pointer items-center gap-1.25 px-3 text-left text-2xs'
       >
-        <Pulse tone={tone} />
-        <span className='min-w-0 flex-1 truncate text-fg-3'>
-          {paused ? step : <ShimmeringText key={step} text={step} className='block truncate' />}
+        <IconSlot>
+          <Pulse tone={tone} />
+        </IconSlot>
+        <span className='min-w-0 flex-1 truncate text-fg-3 leading-normal'>
+          {paused ? step : <ShimmeringText key={step} text={step} className={SHIMMER_LINE} />}
         </span>
         <span className='shrink-0 text-fg-2 tabular-nums transition-colors duration-150 group-hover/row:text-fg-4 group-active/row:text-fg-4'>
           <Duration from={turn.startedAt} to={Math.max(now, turn.startedAt)} ongoing />

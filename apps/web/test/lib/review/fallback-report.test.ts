@@ -37,12 +37,14 @@ describe('resolveFallbackReport', () => {
     );
     expect(report.headline).toBe('Adds retries to exports');
     expect(report.checks).toEqual([]);
-    expect(report.decisions).toEqual([]);
-    expect(report.phases.map((phase) => [phase.title, phase.spots.map((spot) => spot.file)])).toEqual([
-      ['Look closely', ['src/auth.ts']],
-      ['The main change', ['src/app.ts']],
-      ['Tests and docs', ['docs/guide.md']],
-    ]);
+    expect(report.judgementCalls).toEqual([]);
+    expect(report.sections.map((section) => [section.title, section.spots.map((spot) => spot.file)])).toEqual(
+      [
+        ['Look closely', ['src/auth.ts']],
+        ['The main change', ['src/app.ts']],
+        ['Tests and docs', ['docs/guide.md']],
+      ]
+    );
   });
 
   it('ranks spots by the risk of their file and says why they matter', () => {
@@ -54,7 +56,7 @@ describe('resolveFallbackReport', () => {
       ]),
       ''
     );
-    expect(report.phases.flatMap((phase) => phase.spots)).toEqual([
+    expect(report.sections.flatMap((section) => section.spots)).toEqual([
       { file: 'src/auth.ts', start: 10, end: 12, attention: 'critical', why: 'Touches sign-in.' },
       { file: 'src/new.ts', start: 1, end: 4, attention: 'high', why: 'New file.' },
       { file: 'test/app.test.ts', start: 10, end: 12, attention: 'normal', why: 'Changed lines.' },
@@ -70,14 +72,14 @@ describe('resolveFallbackReport', () => {
       ]),
       ''
     );
-    expect(report.phases[0]?.spots.map((spot) => [spot.file, spot.start, spot.end])).toEqual([
+    expect(report.sections[0]?.spots.map((spot) => [spot.file, spot.start, spot.end])).toEqual([
       ['a.ts', 7, 7],
       ['b.ts', 4, 4],
       ['c.ts', 1, 1],
     ]);
   });
 
-  it('takes at most three spots from a file and six from a phase', () => {
+  it('takes at most three spots from a file and six from a section', () => {
     const patch = [hunk(1, 1), hunk(20, 1), hunk(40, 1), hunk(60, 1)].join('');
     const report = resolveFallbackReport(
       createDiff([
@@ -87,7 +89,7 @@ describe('resolveFallbackReport', () => {
       ]),
       ''
     );
-    const spots = report.phases[0]?.spots ?? [];
+    const spots = report.sections[0]?.spots ?? [];
     expect(spots).toHaveLength(6);
     expect(spots.map((spot) => `${spot.file}:${spot.start}`)).toEqual([
       'a.ts:1',
@@ -108,14 +110,14 @@ describe('resolveFallbackReport', () => {
       ]),
       ''
     );
-    expect(report.phases[0]?.spots.map((spot) => spot.file)).toEqual(['large.ts', 'medium.ts', 'small.ts']);
+    expect(report.sections[0]?.spots.map((spot) => spot.file)).toEqual(['large.ts', 'medium.ts', 'small.ts']);
   });
 
-  it('leaves out files without text changes and phases with nothing to show', () => {
+  it('leaves out files without text changes and sections with nothing to show', () => {
     const report = resolveFallbackReport(
       createDiff([createFile('logo.png', { patch: '' })]),
       'Swaps the logo'
     );
-    expect(report).toEqual({ headline: 'Swaps the logo', phases: [], checks: [], decisions: [] });
+    expect(report).toEqual({ headline: 'Swaps the logo', sections: [], checks: [], judgementCalls: [] });
   });
 });

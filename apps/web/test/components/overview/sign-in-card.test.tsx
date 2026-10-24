@@ -34,14 +34,14 @@ afterEach(() => {
   stopFakeServer();
 });
 
-function createSignInGate(account: Gate['account']) {
+function createSignInGate(provider: string | undefined, account: Gate['account'] = null) {
   return createGate({
     id: 'g-sign-in',
     taskId: 't-sign-in',
-    kind: 'question',
-    purpose: 'sign_in',
+    type: 'sign_in',
     title: 'Sign in to Codex',
     body: 'Codex says it is signed out.',
+    ...(provider ? { provider } : {}),
     account,
   });
 }
@@ -58,7 +58,7 @@ function renderCard(gate: Gate, props: { onCheck?: () => Promise<unknown>; onSig
 }
 
 describe('the Codex sign-in card', () => {
-  const gate = createSignInGate({ id: CODEX_PROVIDER, email: null });
+  const gate = createSignInGate(CODEX_PROVIDER);
 
   it('checks the Codex sign-in again and stays busy until the check is back', async () => {
     const check = Promise.withResolvers<boolean>();
@@ -122,18 +122,12 @@ describe('the Codex sign-in card', () => {
 });
 
 describe('the Claude sign-in card', () => {
-  it('offers the plain sign-in for a Claude account', () => {
+  it('offers the plain sign-in for a Claude account, whose sign-in Shinsa runs', () => {
     const onSignIn = mock();
-    renderCard(createSignInGate({ id: CLAUDE_PROVIDER, email: null }), { onSignIn });
+    renderCard(createSignInGate(CLAUDE_PROVIDER, { id: 'work', email: 'me@example.com' }), { onSignIn });
     expect(screen.queryByRole('button', { name: 'Check the Codex sign-in again' })).toBeNull();
     expect(screen.queryByText('codex login')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(onSignIn).toHaveBeenCalled();
-  });
-
-  it('offers the plain sign-in when the gate names no account', () => {
-    renderCard(createSignInGate(null));
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeDefined();
-    expect(screen.queryByRole('button', { name: 'Copy' })).toBeNull();
   });
 });

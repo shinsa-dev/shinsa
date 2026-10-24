@@ -16,18 +16,9 @@ const PULL_REQUEST: NonNullable<Task['pullRequest']> = {
 
 describe('resolveBranchBase', () => {
   const repo = createRepo({ id: 'app', defaultBranch: 'trunk' });
-  const base = createTask({ id: 'base', branch: 'feat/base' });
-
-  it('stacks on the base task branch first', () => {
-    const task = createTask({ id: 't', baseTaskId: 'base', repoId: 'app', pullRequest: PULL_REQUEST });
-    expect(resolveBranchBase(createShinsaState({ tasks: [base, task], repos: [repo] }), task)).toBe(
-      'feat/base'
-    );
-  });
-
-  it('then uses the pull request base, then the repository default branch', () => {
+  it('uses the pull request base, then the repository default branch', () => {
     const withPullRequest = createTask({ id: 't', repoId: 'app', pullRequest: PULL_REQUEST });
-    const plain = createTask({ id: 'p', repoId: 'app', baseTaskId: 'missing' });
+    const plain = createTask({ id: 'p', repoId: 'app' });
     const state = createShinsaState({ tasks: [withPullRequest, plain], repos: [repo] });
     expect(resolveBranchBase(state, withPullRequest)).toBe('release');
     expect(resolveBranchBase(state, plain)).toBe('trunk');

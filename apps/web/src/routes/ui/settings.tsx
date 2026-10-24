@@ -1,6 +1,13 @@
-import { type AccountsSnapshot, createSettings, type ProviderLogin } from '@shinsa/core';
+import {
+  type AccountsSnapshot,
+  createSettings,
+  KNOWN_AGENT_PROVIDERS,
+  type ProviderLogin,
+  type Settings,
+} from '@shinsa/core';
 import * as React from 'react';
 import { type AccountActions, AccountsGroup } from '@/components/settings/accounts.tsx';
+import { ModelsGroup } from '@/components/settings/agents.tsx';
 import { ContextOptimizerGroup } from '@/components/settings/context-optimizer.tsx';
 import { SettingsGroup } from '@/components/settings/group.tsx';
 import { McpServersGroup } from '@/components/settings/mcp-servers.tsx';
@@ -8,10 +15,12 @@ import { NotificationGroup } from '@/components/settings/notifications.tsx';
 import { PluginsGroup } from '@/components/settings/plugins.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
+import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
+import { createSampleVersions } from './sample-versions.ts';
 import {
   acknowledgeSample,
   createSampleSchedule,
@@ -48,6 +57,11 @@ const SAMPLE_EXTENSION_ACTIONS: ExtensionActions = {
   chooseSkill: acknowledgeSample,
   choosePlugin: acknowledgeSample,
   chooseOptimizer: acknowledgeSample,
+};
+
+const SAMPLE_VERSION_ACTIONS: VersionActions = {
+  refresh: acknowledgeSample,
+  update: acknowledgeSample,
 };
 
 function selectSampleLogin(logins: ProviderLogin[], status: ProviderLogin['status']) {
@@ -143,19 +157,56 @@ function createScheduleScene(now: number) {
   return { state: createSampleState({ tasks: [task], schedules }), schedules };
 }
 
+function ModelsSpecimen({ label, initial }: { label: string; initial: Settings }) {
+  const [settings, setSettings] = React.useState(initial);
+  return (
+    <Specimen label={label}>
+      <div className='w-full max-w-xl'>
+        <ModelsGroup
+          settings={settings}
+          providers={KNOWN_AGENT_PROVIDERS}
+          accounts={null}
+          update={(patch) => setSettings((current) => ({ ...current, ...patch }))}
+        />
+      </div>
+    </Specimen>
+  );
+}
+
 export function SettingsSpecimens() {
   const [now] = React.useState(Date.now);
   const [{ state, schedules }] = React.useState(() => createScheduleScene(now));
   const [preferences, setPreferences] = React.useState(DEFAULT_PREFERENCES);
   const [scenes] = React.useState(() => createAccountScenes(now));
   const [extensions] = React.useState(() => createSampleExtensions(now));
+  const [versions] = React.useState(createSampleVersions);
   const settings = createSettings();
   return (
     <>
+      <ModelsSpecimen
+        label='ModelsGroup · Task agents on Opus, Quick jobs on Sonnet; Per role folded'
+        initial={settings}
+      />
+      <ModelsSpecimen
+        label='ModelsGroup · the builder on Sonnet: Task agents read Set per role and open on every role, the investigator, researcher and operator following theirs'
+        initial={{ ...settings, agentModels: { builder: 'sonnet' } }}
+      />
       {scenes.map((scene) => (
         <Specimen key={scene.label} label={scene.label}>
           <div className='w-full max-w-xl'>
             <AccountsGroup snapshot={scene.snapshot} settings={settings} actions={SAMPLE_ACCOUNT_ACTIONS} />
+          </div>
+        </Specimen>
+      ))}
+      {versions.map((scene) => (
+        <Specimen key={scene.label} label={scene.label}>
+          <div className='w-full max-w-xl'>
+            <VersionsGroup
+              snapshot={scene.snapshot}
+              failure={null}
+              updating={[]}
+              actions={SAMPLE_VERSION_ACTIONS}
+            />
           </div>
         </Specimen>
       ))}
@@ -182,7 +233,7 @@ export function SettingsSpecimens() {
           />
         </div>
       </Specimen>
-      <Specimen label='McpServersGroup · grouped by status: connected (one defined in three places), failing, needs sign-in, not checked, off; a problem reading a config'>
+      <Specimen label='McpServersGroup · grouped by status, each in its tone with its icon: connected (one defined in three places), needs sign-in, failing, not checked, off; a problem reading a config'>
         <div className='w-full max-w-xl'>
           <McpServersGroup
             snapshot={extensions}

@@ -35,8 +35,14 @@ export const OPERATION_SKIP = {
   action: 'Finish without it',
 };
 
-export function resolveNotesPlaceholder(gate: Pick<Gate, 'notes'>) {
-  return gate.notes
-    ? 'More notes for the operator, added to yours.'
-    : 'Notes for the operator, such as what to watch or skip.';
+export type OperationRun = 'runOperation' | 'runOperationWithNotes' | 'runOperationWithoutNotes';
+
+export function resolveOperationRun(
+  gate: Pick<Gate, 'notes'>,
+  text: string
+): { reply: OperationRun; response: string | null } {
+  const notes = text.trim();
+  if (notes === (gate.notes ?? '').trim()) return { reply: 'runOperation', response: null };
+  if (!notes) return { reply: 'runOperationWithoutNotes', response: '' };
+  return { reply: 'runOperationWithNotes', response: notes };
 }

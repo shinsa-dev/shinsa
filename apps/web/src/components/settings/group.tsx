@@ -5,6 +5,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { SectionChevron, SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { resolveSectionId } from '@/lib/settings.ts';
 
 export const SETTING_ROW = 'flex min-h-10 items-center gap-4 py-1 pr-1.5 pl-2';
@@ -62,7 +63,7 @@ export function PathRow({
     <div className={cn(SETTING_ROW, 'gap-2')}>
       <Hint label={iconLabel}>
         <span className='grid size-3.5 shrink-0 place-items-center'>
-          <Icon name={icon} className='size-3.5' />
+          <Icon size='sm' name={icon} />
         </span>
       </Hint>
       <span className='flex min-w-0 flex-1 items-baseline gap-1.5'>
@@ -95,12 +96,14 @@ export function SettingsBlock({ header, children }: { header: React.ReactNode; c
 export function FoldingBlock({
   title,
   detail,
+  status,
   startsOpen = false,
   forcedOpen = false,
   children,
 }: {
   title: string;
   detail: string;
+  status?: { icon: IconName; tone: Tone };
   startsOpen?: boolean;
   forcedOpen?: boolean;
   children: React.ReactNode;
@@ -118,9 +121,13 @@ export function FoldingBlock({
           'cursor-pointer text-left text-xs transition-colors hover:text-fg-4 active:text-fg-4'
         )}
       >
-        <SectionChevron open={open} className='shrink-0' />
-        <span className='min-w-0 flex-1 truncate font-medium text-fg-4'>{title}</span>
+        {status && (
+          <Icon size='sm' name={status.icon} className={cn('-translate-y-px', TONE_TEXT[status.tone])} />
+        )}
+        <span className='min-w-0 truncate font-medium text-fg-4'>{title}</span>
         <span className={TOKEN_TEXT}>{detail}</span>
+        <span className='flex-1' />
+        <SectionChevron open={open} className='shrink-0' />
       </button>
       {open && <div className={SETTINGS_SHELF}>{children}</div>}
     </div>

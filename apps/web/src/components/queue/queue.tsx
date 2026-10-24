@@ -50,14 +50,14 @@ export function WideSection({
 }) {
   const [open, toggle] = useStoredToggle(flag, true);
   return (
-    <section className='flex flex-col gap-1'>
+    <section className={cn('flex flex-col gap-1', open && 'pb-1')}>
       <SectionLabel count={count} open={open} onToggle={toggle} className='px-1'>
         {title}
       </SectionLabel>
       {open && (
         <div className={cn(CARD, 'p-1 [--glyph-ring:var(--color-card)]')}>
           {count === 0 ? (
-            <p className='px-2.5 py-2 text-2xs text-fg-2'>{empty}</p>
+            <p className='p-2.5 text-2xs text-fg-2'>{empty}</p>
           ) : (
             <HoverHighlight className='flex flex-col gap-px'>{children}</HoverHighlight>
           )}
@@ -95,14 +95,15 @@ function CompactSection({
       >
         <span className='grid size-5 shrink-0 place-items-center'>
           <Icon
+            size='sm'
             name={section.icon}
-            className={cn('size-3.5', section.tone !== 'neutral' && TONE_TEXT[section.tone])}
+            className={cn(section.tone !== 'neutral' && TONE_TEXT[section.tone])}
           />
         </span>
         <span className='min-w-0 truncate'>{section.title}</span>
         <span className='font-normal tabular-nums'>{count}</span>
         <span className='flex-1' />
-        <SectionChevron open={open} className='opacity-0 group-hover/section:opacity-(--icon-alpha)' />
+        <SectionChevron open={open} className='opacity-0 group-hover/section:opacity-100' />
       </button>
       {open && (
         <div className='flex flex-col pt-0.5'>

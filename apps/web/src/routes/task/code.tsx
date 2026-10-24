@@ -11,7 +11,7 @@ function TaskDiff({ task, view }: { task: Task; view: CodeView }) {
   if (loaded.status === 'idle' || loaded.status === 'loading') {
     return (
       <div className='flex items-center gap-2 p-3 text-fg-2 text-xs'>
-        <Spinner className='size-3.5' /> Reading the changes
+        <Spinner size='sm' /> Reading the changes
       </div>
     );
   }

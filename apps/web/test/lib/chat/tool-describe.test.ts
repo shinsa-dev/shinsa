@@ -33,7 +33,7 @@ describe('isHandover', () => {
     }
   });
 
-  it('treats the findings, the report, the outcome and a change of kind as hand-overs', () => {
+  it('treats the diagnosis, the report, the outcome and a change of kind as hand-overs', () => {
     for (const name of ['report_diagnosis', 'submit_report', 'report_outcome', 'reshape_task'] as const) {
       expect(isHandover({ kind: 'shinsa', name, args: {} })).toBe(true);
     }
@@ -233,13 +233,11 @@ describe('describeTool', () => {
     expect(shinsa('find_tasks')).toBe('Looked up tasks');
     expect(shinsa('read_task', { task_id: 't1' })).toBe('Read a task');
     expect(shinsa('note', { note: 'Remember' })).toBe('Left a note: Remember');
-    expect(shinsa('wait_for', { notes: 'The deploy' })).toBe('Scheduled a check: The deploy');
-    expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }, { title: 'b' }] })).toBe(
-      'Suggested 2 follow-ups'
-    );
-    expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }] })).toBe('Suggested 1 follow-up');
+    expect(shinsa('wait_for', { notes: 'The deploy' })).toBe('Scheduled a check-in: The deploy');
+    expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }, { title: 'b' }] })).toBe('Suggested 2 tasks');
+    expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }] })).toBe('Suggested 1 task');
     expect(shinsa('answer', { answer: 'Here.' })).toBe('Handed over the answer');
-    expect(shinsa('report_diagnosis', { findings: 'It leaks.' })).toBe('Reported the findings');
+    expect(shinsa('report_diagnosis', { diagnosis: 'It leaks.' })).toBe('Reported the diagnosis');
     expect(shinsa('submit_report', { report: 'Report.' })).toBe('Wrote the report');
     expect(shinsa('report_outcome', { outcome: 'Done.' })).toBe('Reported the outcome');
     expect(shinsa('reshape_task', { shape: 'answer', reason: 'Only a question.' })).toBe(
@@ -256,13 +254,13 @@ describe('describeTool', () => {
   it('describes the delegation tools by what they handed to whom', () => {
     const shinsa = (name: Extract<ChatTool, { kind: 'shinsa' }>['name'], args = {}) =>
       line({ kind: 'shinsa', name, args });
-    expect(shinsa('delegate_task', { title: 'Survey the tests', task: 'Long brief' })).toBe(
+    expect(shinsa('delegate_task', { title: 'Survey the tests', brief: 'Long brief' })).toBe(
       'Delegated: Survey the tests'
     );
-    expect(shinsa('delegate_task', { task: 'Read a.ts\nThen report' })).toBe('Delegated: Read a.ts');
+    expect(shinsa('delegate_task', { brief: 'Read a.ts\nThen report' })).toBe('Delegated: Read a.ts');
     expect(shinsa('delegate_task')).toBe('Delegated:');
-    expect(shinsa('delegation_status', { task_id: 'r' })).toBe('Checked a delegated task');
-    expect(shinsa('delegation_cancel', { task_id: 'r' })).toBe('Stopped a delegated task');
+    expect(shinsa('delegation_status', { delegation_id: 'r' })).toBe('Checked a delegation');
+    expect(shinsa('delegation_cancel', { delegation_id: 'r' })).toBe('Stopped a delegation');
     expect(shinsa('delegation_answer', { answer: 'Use b.ts' })).toBe('Answered a delegated agent: Use b.ts');
     expect(shinsa('create_task', { request: 'Bump the SDK\nIn the admin app' })).toBe(
       'Created a task: Bump the SDK'
@@ -440,8 +438,8 @@ describe('resolveGroupPhrase', () => {
     expect(phrase('note', 2)).toBe('Left 2 notes');
     expect(phrase('read_task', 2)).toBe('Read 2 tasks');
     expect([phrase('wait_for', 1), phrase('suggest_tasks', 1), phrase('answer', 1)]).toEqual([
-      'Scheduled a check',
-      'Suggested follow-ups',
+      'Scheduled a check-in',
+      'Suggested tasks',
       'Handed over the answer',
     ]);
     expect([
@@ -450,7 +448,7 @@ describe('resolveGroupPhrase', () => {
       phrase('report_outcome', 1),
       phrase('reshape_task', 1),
     ]).toEqual([
-      'Reported the findings',
+      'Reported the diagnosis',
       'Wrote the report',
       'Reported the outcome',
       'Changed the kind of task',
@@ -469,10 +467,10 @@ describe('resolveGroupPhrase', () => {
       phrase('delete_schedule', 1),
       phrase('request_secret', 1),
     ]).toEqual([
-      'Delegated 2 tasks',
-      'Checked a delegated task',
-      'Checked delegated tasks 3 times',
-      'Stopped 1 delegated task',
+      'Started 2 delegations',
+      'Checked a delegation',
+      'Checked delegations 3 times',
+      'Stopped 1 delegation',
       'Answered a delegated agent',
       'Answered delegated agents 2 times',
       'Created 1 task',

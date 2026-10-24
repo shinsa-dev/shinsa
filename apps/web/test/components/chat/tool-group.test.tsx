@@ -56,7 +56,7 @@ describe('ToolGroup', () => {
   it('folds calls in a row into one counted row and says how many failed', () => {
     const view = renderGroup(runCommands(3, { failed: [1] }));
     const row = view.getByRole('button', { name: /Ran 3 commands/ });
-    expect(row.textContent).toBe('Ran 3 commands1 failed');
+    expect(row.textContent).toBe('Ran 3 commands · 1 failed');
     expect(view.queryByText('step 0')).toBeNull();
   });
 
@@ -72,5 +72,48 @@ describe('ToolGroup', () => {
     const view = renderGroup(runCommands(3, { open: [2] }), true);
     expect(view.getByRole('button', { name: /Ran 3 commands/ })).toBeTruthy();
     expect(view.container.textContent).toContain('Running step 2');
+  });
+
+  it('keeps the latest call in its place under the folded row once it finished, so the turn does not shrink', () => {
+    const view = renderGroup(runCommands(3, { open: [2] }), true);
+    expect(view.getAllByRole('button')).toHaveLength(2);
+    view.rerender(
+      <TooltipProvider>
+        <ToolGroup calls={runCommands(3)} live />
+      </TooltipProvider>
+    );
+    const [group, latest] = view.getAllByRole('button');
+    expect(group?.textContent).toBe('Ran 3 commands');
+    expect(latest?.textContent).toBe('Ranstep 2');
+  });
+
+  it('shows no call under the folded row once the run has moved past the group', () => {
+    const view = renderGroup(runCommands(3));
+    expect(view.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('shows a hand-over Shinsa handed back as a quiet row: Retried, or Retrying while the agent fixes it', () => {
+    const [failed] = runCommands(1, { failed: [0] });
+    if (!failed) throw new Error('no call');
+    const call: ToolCall = {
+      ...failed,
+      tool: { kind: 'shinsa', name: 'propose_plan', args: {} },
+      result: 'phases[0].detail is 172 characters; the limit is 160.',
+    };
+    const retried = renderGroup([{ ...call, recovery: 'retried' }]);
+    const row = retried.getByRole('button');
+    expect(retried.getByText('· Retried').className).toContain('text-fg-2');
+    expect(row.querySelector('svg')?.getAttribute('class')).not.toContain('red');
+    fireEvent.click(row);
+    expect(retried.getByText('Handed back')).toBeTruthy();
+    retried.unmount();
+    expect(renderGroup([{ ...call, recovery: 'retrying' }]).getByText('· Retrying')).toBeTruthy();
+  });
+
+  it('marks a failure no one recovered from in red', () => {
+    const view = renderGroup(runCommands(1, { failed: [0] }));
+    expect(view.getByText('Failed').className).toContain('text-red-text');
+    fireEvent.click(view.getByRole('button'));
+    expect(view.getByText('Error')).toBeTruthy();
   });
 });

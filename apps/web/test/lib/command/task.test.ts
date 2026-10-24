@@ -96,7 +96,7 @@ function answered(gateId: string, decision: string, response: string | null, don
 
 describe('the decision on a task page', () => {
   it('offers approving or revising the plan', async () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'spec' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'plan' });
     const { state, task } = setup(createTask({ id: 't1', stage: 'awaiting_plan' }), [gate]);
     const all = sections(state, task);
     expect(section(all, 'task.decide')?.heading).toBe('Decide on this task');
@@ -110,7 +110,7 @@ describe('the decision on a task page', () => {
   });
 
   it('says the operation runs next when you approve an operation task’s plan', () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'spec' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'plan' });
     const task = createTask({ id: 't1', stage: 'awaiting_plan', pipeline: ['plan', 'operate'] });
     const { state } = setup(task, [gate]);
     run(find(sections(state, task), 'task.t1.gate.g1.approve'));
@@ -120,7 +120,7 @@ describe('the decision on a task page', () => {
   });
 
   it('offers approving, reviewing and requesting changes on a review', async () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'review' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
     const { state, task } = setup(createTask({ id: 't1', worktreePath: '/tmp/t1' }), [gate]);
     const all = sections(state, task);
     expect(labels(section(all, 'task.decide'))).toEqual([
@@ -141,7 +141,7 @@ describe('the decision on a task page', () => {
   });
 
   it('leaves out Review the changes on the Code tab and without a worktree', () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'review' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
     const onCode = setup(createTask({ id: 't1', worktreePath: '/tmp/t1' }), [gate]);
     expect(
       labels(section(sections(onCode.state, onCode.task, createContext({ tab: 'code' })), 'task.decide'))
@@ -154,7 +154,7 @@ describe('the decision on a task page', () => {
   });
 
   it('disables Approve the changes while there are draft comments', () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'review' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
     const { state, task } = setup(createTask({ id: 't1' }), [gate]);
     const all = sections(state, task, createContext({ comments: COMMENTS }));
     const approve = find(all, 'task.t1.gate.g1.approve');
@@ -166,7 +166,7 @@ describe('the decision on a task page', () => {
   });
 
   it('sends the draft comments with Request changes and then clears them', async () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'review' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
     const { state, task } = setup(createTask({ id: 't1' }), [gate]);
     const context = createContext({ comments: COMMENTS });
     await send(find(sections(state, task, context), 'task.t1.gate.g1.revise'), 'A few things');
@@ -183,7 +183,7 @@ describe('the decision on a task page', () => {
 
   it('keeps the draft comments when Request changes fails to send', async () => {
     spies.sent.mockResolvedValue(false);
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'review' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
     const { state, task } = setup(createTask({ id: 't1' }), [gate]);
     const context = createContext({ comments: COMMENTS });
     expect(await send(find(sections(state, task, context), 'task.t1.gate.g1.revise'), 'A few things')).toBe(
@@ -193,7 +193,7 @@ describe('the decision on a task page', () => {
   });
 
   it('names the pull request it merges', () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'merge' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'merge' });
     const withPr = setup(createTask({ id: 't1', pullRequest: PULL_REQUEST }), [gate]);
     const all = sections(withPr.state, withPr.task);
     expect(labels(section(all, 'task.decide'))).toEqual(['Merge #42', 'Request changes']);
@@ -209,8 +209,7 @@ describe('the decision on a task page', () => {
     const gate = createGate({
       id: 'g1',
       taskId: 't1',
-      kind: 'question',
-      purpose: 'agent_question',
+      type: 'question',
       title: 'Which database?',
     });
     const { state, task } = setup(createTask({ id: 't1' }), [gate]);
@@ -218,7 +217,7 @@ describe('the decision on a task page', () => {
     expect(answer).toMatchObject({ label: 'Answer the question', hint: 'Which database?' });
     await send(answer, 'Postgres');
     expect(spies.sent.mock.calls).toEqual([
-      answered('g1', 'answer', 'Postgres', 'Answered. The agent carries on.'),
+      answered('g1', 'reply', 'Postgres', 'Answered. The agent carries on.'),
     ] as never);
   });
 
@@ -226,8 +225,7 @@ describe('the decision on a task page', () => {
     const gate = createGate({
       id: 'g1',
       taskId: 't1',
-      kind: 'question',
-      purpose: 'agent_question',
+      type: 'secret',
       title: 'For the webhook.',
       secret: { label: 'GitHub secret' },
     });
@@ -250,8 +248,7 @@ describe('the decision on a task page', () => {
     const gate = createGate({
       id: 'g1',
       taskId: 't1',
-      kind: 'review',
-      purpose: 'failure',
+      type: 'failure',
       title: 'The checks failed',
     });
     const { state, task } = setup(createTask({ id: 't1' }), [gate]);
@@ -262,13 +259,13 @@ describe('the decision on a task page', () => {
     await send(find(all, 'task.t1.gate.g1.guide'), 'Skip the flaky test');
     expect(spies.sent.mock.calls).toEqual([
       answered('g1', 'approve', null, 'Picking it up again.'),
-      answered('g1', 'approve', 'Skip the flaky test', 'Retrying with your guidance.'),
+      answered('g1', 'reply', 'Skip the flaky test', 'Retrying with your guidance.'),
     ] as never);
   });
 
   it('puts a pause or a question before the decision it holds up', () => {
-    const decision = createGate({ id: 'g1', taskId: 't1', kind: 'review', openedAt: 1 });
-    const failure = createGate({ id: 'g2', taskId: 't1', kind: 'review', purpose: 'failure', openedAt: 2 });
+    const decision = createGate({ id: 'g1', taskId: 't1', type: 'review', openedAt: 1 });
+    const failure = createGate({ id: 'g2', taskId: 't1', type: 'failure', openedAt: 2 });
     const { state, task } = setup(createTask({ id: 't1' }), [decision, failure]);
     expect(labels(section(sections(state, task), 'task.decide'))).toEqual([
       'Retry',
@@ -279,7 +276,7 @@ describe('the decision on a task page', () => {
   });
 
   it('signs in again or retries anyway at a sign-in gate', () => {
-    const signIn = createGate({ id: 'g1', taskId: 't1', kind: 'question', purpose: 'sign_in' });
+    const signIn = createGate({ id: 'g1', taskId: 't1', type: 'sign_in' });
     const { state, task } = setup(createTask({ id: 't1' }), [signIn]);
     expect(labels(section(sections(state, task), 'task.decide'))).toEqual(['Sign in', 'Retry anyway']);
   });
@@ -294,7 +291,7 @@ describe('the decision on a task page', () => {
   });
 
   it('answers any question gate the way it answers an agent’s', () => {
-    const question = createGate({ id: 'g2', taskId: 't1', kind: 'question' });
+    const question = createGate({ id: 'g2', taskId: 't1', type: 'question' });
     const { state, task } = setup(createTask({ id: 't1' }), [question]);
     expect(labels(section(sections(state, task), 'task.decide'))).toEqual(['Answer the question']);
   });
@@ -303,8 +300,7 @@ describe('the decision on a task page', () => {
     const budget = createGate({
       id: 'g1',
       taskId: 't1',
-      kind: 'question',
-      purpose: 'failure',
+      type: 'failure',
       cause: 'budget',
     });
     const { state, task } = setup(createTask({ id: 't1' }), [budget]);
@@ -450,22 +446,16 @@ describe('the This task section', () => {
     );
     await send(message, 'Use the new client');
     expect(spies.sent.mock.calls).toEqual([
-      [
-        { type: 'task.message', taskId: 't1', text: 'Use the new client' },
-        'Sent. The step starts again with your message.',
-      ],
+      [{ type: 'task.message', taskId: 't1', text: 'Use the new client' }, 'Sent. Restarting the step.'],
     ] as never);
   });
 
   it('turns a message at the operation gate into notes for the operator', async () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'question', purpose: 'operation' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'operation' });
     const { state, task } = setup(createTask({ id: 't1', stage: 'awaiting_operation' }), [gate]);
     await send(find(sections(state, task), 'task.t1.message'), 'Wait for the deploy');
     expect(spies.sent.mock.calls).toEqual([
-      [
-        { type: 'task.message', taskId: 't1', text: 'Wait for the deploy' },
-        'Saved as notes for the operator.',
-      ],
+      [{ type: 'task.message', taskId: 't1', text: 'Wait for the deploy' }, 'Notes saved.'],
     ] as never);
   });
 
@@ -524,7 +514,7 @@ describe('waiting on other tasks', () => {
   });
 
   it('names the choice for where the task is', () => {
-    const early = setup(createTask({ id: 't1', stage: 'queued' }), [], [createTask({ id: 't2' })]);
+    const early = setup(createTask({ id: 't1', stage: 'waiting_on_tasks' }), [], [createTask({ id: 't2' })]);
     expect(find(sections(early.state, early.task), 'task.t1.dependency.wait').label).toBe(
       'Wait for another task…'
     );
@@ -641,7 +631,7 @@ describe('moving through Needs you', () => {
 
 describe('resolveTaskPage', () => {
   it('opens a task from anywhere with its decision, tabs and actions', () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'review' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
     const { state, task } = setup(createTask({ id: 't1', title: 'Fix login', worktreePath: '/tmp/t1' }), [
       gate,
     ]);
@@ -663,7 +653,7 @@ describe('resolveTaskPage', () => {
     expect(labels(page.sections[2])).toContain('Cancel task');
   });
 
-  it('offers what the task page offers while a task waits: check now, resume, quiet agent, delegated work', () => {
+  it('offers what the task page offers while a task waits: check in now, resume, quiet agent, delegations', () => {
     const monitor = {
       id: 'm',
       runId: 'r',
@@ -720,7 +710,7 @@ describe('resolveTaskPage', () => {
     if (page.kind !== 'list') throw new Error('Expected a list page');
     expect(labels(page.sections.find((entry) => entry.id === 'task'))).toEqual(
       expect.arrayContaining([
-        'Check now',
+        'Check in now',
         'Snooze the quiet-agent warning on the builder',
         'Stop “Survey the tests” and what it delegated',
         'Resume now',
@@ -737,7 +727,7 @@ describe('resolveTaskPage', () => {
   });
 
   it('sends Request changes from another page without comments to clear', async () => {
-    const gate = createGate({ id: 'g1', taskId: 't1', kind: 'merge' });
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'merge' });
     const { state, task } = setup(createTask({ id: 't1' }), [gate]);
     const page = resolveTaskPage(state, task, null);
     if (page.kind !== 'list') throw new Error('Expected a list page');

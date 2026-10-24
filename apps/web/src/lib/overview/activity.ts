@@ -5,7 +5,7 @@ const ACTIVITY_GLYPH: Record<Activity['kind'], Glyph> = {
   asked: { icon: 'IconBubbleText', tone: 'neutral' },
   set_up: { icon: 'IconBranch', tone: 'neutral' },
   stage: { icon: 'IconArrowRight', tone: 'neutral' },
-  spec: { icon: 'IconFileText', tone: 'purple' },
+  plan: { icon: 'IconFileText', tone: 'purple' },
   decision: { icon: 'IconCheckCircle2', tone: 'blue' },
   work: { icon: 'IconHammer', tone: 'blue' },
   review: { icon: 'IconShieldCheck', tone: 'amber' },
@@ -26,8 +26,8 @@ const ACTIVITY_GLYPH: Record<Activity['kind'], Glyph> = {
 };
 
 export function resolveActivityGlyph(entry: Activity): Glyph {
-  if (entry.purpose === 'failure') return ACTIVITY_GLYPH[entry.kind];
-  return resolvePauseGlyph(entry.purpose) ?? ACTIVITY_GLYPH[entry.kind];
+  if (entry.gateType === 'failure') return ACTIVITY_GLYPH[entry.kind];
+  return resolvePauseGlyph(entry.gateType) ?? ACTIVITY_GLYPH[entry.kind];
 }
 
 export const ACTOR_LABEL: Record<Activity['actor'], string> = {
@@ -49,5 +49,9 @@ export function resolveActivityActor(state: ShinsaState, entry: Activity): Activ
 }
 
 export function resolveOverviewSummary(task: Task) {
-  return task.report?.headline ?? task.summary ?? task.spec?.document?.goal ?? null;
+  return task.report?.headline ?? task.summary ?? task.plan?.document?.goal ?? null;
+}
+
+export function listActivityNewestFirst(task: Task): Activity[] {
+  return [...task.activity].reverse().sort((left, right) => right.at - left.at);
 }

@@ -91,7 +91,7 @@ export function OnboardingPage() {
           )}
           {!chat && !failure && (
             <div className='grid min-h-60 place-items-center'>
-              <Spinner className='size-5 text-fg-2' />
+              <Spinner size='lg' className='text-fg-2' />
             </div>
           )}
           {chat?.messages.map((message) => (

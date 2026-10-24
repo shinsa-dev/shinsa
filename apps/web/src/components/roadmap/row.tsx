@@ -58,7 +58,7 @@ function KindMark({ task }: { task: Task }) {
         aria-label={resolveShapeLabel(task)}
         className='grid size-4 shrink-0 place-items-center text-fg-2'
       >
-        <Icon name={resolveShapeIcon(task)} className='size-3.5' />
+        <Icon size='sm' name={resolveShapeIcon(task)} />
       </span>
     </Hint>
   );
@@ -108,7 +108,7 @@ export function RoadmapRow({
           {depth > 0 && <ChainArrow state={state} task={task} />}
           <Hint label={`${PRIORITY_LABEL[task.priority]} priority`}>
             <span className='grid size-4 shrink-0 place-items-center'>
-              <PriorityIcon priority={task.priority} className='size-3.5' />
+              <PriorityIcon priority={task.priority} />
             </span>
           </Hint>
           <TaskHandle task={task} />

@@ -3,8 +3,10 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { RowChevron } from '@/components/chat/tool-group.tsx';
-import { CARD } from '@/components/layout/surface/card.ts';
+import { CARD_LINE, ChatLine, ExpandRow, RowChevron } from '@/components/chat/chat-line.tsx';
+import { RoleMark } from '@/components/chat/role-mark.tsx';
+import { CARD, CHAT_INSET, CHAT_NESTED } from '@/components/layout/surface/card.ts';
+import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
@@ -32,9 +34,7 @@ function DelegationMark({ view }: { view: DelegationView }) {
   if (view.status === 'queued' || view.status === 'running' || view.status === 'waiting') {
     return <Pulse tone={status.tone} />;
   }
-  return (
-    <CheckOutcomeIcon outcome={DELEGATION_OUTCOME[view.status]} label={status.label} className='size-3.5' />
-  );
+  return <CheckOutcomeIcon outcome={DELEGATION_OUTCOME[view.status]} label={status.label} />;
 }
 
 function DelegationStatus({ view }: { view: DelegationView }) {
@@ -55,10 +55,10 @@ function DelegationStatus({ view }: { view: DelegationView }) {
 export function DelegationSummary({ view, title }: { view: DelegationView; title: React.ReactNode }) {
   return (
     <>
-      <span className='grid size-3.5 shrink-0 place-items-center'>
+      <IconSlot className='-me-0.75'>
         <DelegationMark view={view} />
-      </span>
-      <span className='shrink-0 text-fg-2'>{view.role}</span>
+      </IconSlot>
+      <RoleMark role={view.run.role} className='text-fg-2' />
       {title}
       <DelegationStatus view={view} />
     </>
@@ -67,8 +67,10 @@ export function DelegationSummary({ view, title }: { view: DelegationView; title
 
 export function DelegationQuestion({ question, className }: { question: string; className?: string }) {
   return (
-    <div className={cn('flex min-w-0 items-start gap-2 text-xs', className)}>
-      <Icon name='IconBubbleQuestion' aria-hidden className='mt-0.5 size-3.5 shrink-0 text-amber-text' />
+    <div className={cn('flex min-w-0 items-start gap-1.25 text-xs leading-5', className)}>
+      <IconSlot>
+        <Icon size='sm' name='IconBubbleQuestion' aria-hidden className='text-amber-text' />
+      </IconSlot>
       <InlineMarkdown text={question} className='min-w-0 text-fg-3' />
     </div>
   );
@@ -121,50 +123,42 @@ export function DelegationSpawnCard({
         'flex min-w-0 scroll-mt-4 flex-col overflow-hidden transition-colors duration-500 data-focused:bg-primary-a1'
       )}
     >
-      <div className='flex h-9 min-w-0 items-center gap-1 ps-3 pe-1.5'>
+      <div className={cn(CARD_LINE, 'gap-1 pe-1.5')}>
         <button
           type='button'
           aria-expanded={open}
           onClick={() => setOpen(!open)}
-          className='group/row flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 text-left text-2xs'
+          className='group/row flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 text-left'
         >
           <DelegationSummary
             view={view}
-            title={<Truncate className='min-w-0 flex-1 font-medium text-fg-4 text-xs'>{view.title}</Truncate>}
+            title={<Truncate className='min-w-0 flex-1 font-medium text-fg-4'>{view.title}</Truncate>}
           />
-          <RowChevron open={open} className='group-hover/row:text-fg-4 group-active/row:text-fg-4' />
+          <RowChevron
+            open={open}
+            className='text-fg-2 group-hover/row:text-fg-4 group-active/row:text-fg-4'
+          />
         </button>
         {view.live && <StopDelegation view={view} onStop={onStop} />}
       </div>
       {view.question && (
         <DelegationQuestion question={view.question} className='border-border border-t px-3 py-2' />
       )}
-      {open && <div className='border-border border-t py-1'>{conversation(view)}</div>}
+      {open && <div className={cn('border-border border-t py-1', CHAT_NESTED)}>{conversation(view)}</div>}
     </div>
   );
 }
 
 export function DelegationReportRow({ view }: { view: DelegationView }) {
-  const [open, setOpen] = React.useState(false);
+  const parts = { icon: <DelegationMark view={view} />, label: `${describeReportVerb(view)}: ${view.title}` };
   return (
-    <div data-message className='flex min-w-0 flex-col'>
-      <button
-        type='button'
-        aria-expanded={open}
-        disabled={!view.result}
-        onClick={() => setOpen(!open)}
-        className='group/row flex h-5 min-w-0 cursor-pointer items-center gap-1.5 self-start text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4 disabled:cursor-default'
-      >
-        <DelegationMark view={view} />
-        <span className='truncate'>
-          {describeReportVerb(view)}: <span className='text-fg-3'>{view.title}</span>
-        </span>
-        {view.result && <RowChevron open={open} className='text-current' />}
-      </button>
-      {open && view.result && (
-        <div className='ms-1.5 mt-2 mb-1 border-border border-l ps-4'>
+    <div data-message className={cn('flex min-w-0 flex-col', CHAT_INSET)}>
+      {view.result ? (
+        <ExpandRow {...parts}>
           <Markdown text={view.result} className='prose-chat' />
-        </div>
+        </ExpandRow>
+      ) : (
+        <ChatLine {...parts} />
       )}
     </div>
   );

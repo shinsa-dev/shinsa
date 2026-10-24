@@ -21,30 +21,30 @@ function listFileSpots(file: DiffFile): CodeSpot[] {
     }));
 }
 
-function createPhase(title: string, summary: string, files: DiffFile[]): ReportSection | null {
+function createSection(title: string, summary: string, files: DiffFile[]): ReportSection | null {
   const spots = files.flatMap(listFileSpots).slice(0, 6);
   return spots.length > 0 ? { title, summary, spots } : null;
 }
 
 export function resolveFallbackReport(diff: TaskDiff, headline: string): WorkReport {
-  const phases = [
-    createPhase(
+  const sections = [
+    createSection(
       'Look closely',
       'Files in sensitive areas.',
       diff.files.filter((file) => file.risk === 'high')
     ),
-    createPhase(
+    createSection(
       'The main change',
       'The largest changes, by lines touched.',
       diff.files
         .filter((file) => file.risk === 'normal')
         .sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions))
     ),
-    createPhase(
+    createSection(
       'Tests and docs',
       'Supporting changes.',
       diff.files.filter((file) => file.risk === 'low')
     ),
-  ].filter((phase): phase is ReportSection => phase !== null);
-  return { headline, phases, checks: [], decisions: [] };
+  ].filter((section): section is ReportSection => section !== null);
+  return { headline, sections, checks: [], judgementCalls: [] };
 }

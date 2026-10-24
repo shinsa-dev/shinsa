@@ -1,5 +1,7 @@
 import type { IconName } from '@shinsa/ui/components/icon';
-import { FOLDERS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
+import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import { FOLDERS_TITLE, MODELS_TITLE, resolveHashSectionId, resolveSectionId } from '@/lib/settings.ts';
+import { VERSIONS_SECTION } from '@/lib/versions.ts';
 
 export type SettingsTabId = 'general' | 'agents' | 'accounts' | 'projects' | 'integrations' | 'automations';
 
@@ -24,28 +26,28 @@ const SETTINGS_TABS: Record<SettingsTabId, SettingsTab> = {
     label: 'Agents',
     icon: 'IconAgents',
     activeIcon: 'IconAgentsFilled',
-    sections: ['Agents', 'Engine'],
+    sections: [MODELS_TITLE, 'Engine', VERSIONS_SECTION],
   },
   accounts: {
     id: 'accounts',
     label: 'Agent usage',
     icon: 'IconGauge',
     activeIcon: 'IconGaugeFilled',
-    sections: ['Agent usage', 'Limits'],
+    sections: [ACCOUNT_LABEL.section, 'Limits'],
   },
   projects: {
     id: 'projects',
     label: 'Projects',
     icon: 'IconFolder1',
     activeIcon: 'IconFolder1Filled',
-    sections: ['Projects', FOLDERS_TITLE],
+    sections: [FOLDERS_TITLE, 'Projects'],
   },
   integrations: {
     id: 'integrations',
     label: 'Integrations',
     icon: 'IconIntegrations',
     activeIcon: 'IconIntegrationsFilled',
-    sections: ['Context optimizer', 'MCP servers', 'Plugins', 'Skills'],
+    sections: ['Context optimizer', 'MCPs', 'Plugins', 'Skills'],
   },
   automations: {
     id: 'automations',

@@ -22,7 +22,7 @@ afterEach(() => {
 
 const STATE = createShinsaState({
   tasks: [createTask({ id: 't1', worktreePath: '/tmp/t1' })],
-  gates: [createGate({ id: 'g1', taskId: 't1', kind: 'review' })],
+  gates: [createGate({ id: 'g1', taskId: 't1', type: 'review' })],
 });
 
 function Draft({ children }: { children: React.ReactNode }) {

@@ -44,6 +44,7 @@ import {
   resolveScopeText,
   resolveServerCost,
   resolveServerCostHint,
+  resolveServerDetail,
   resolveServerDialog,
   resolveServerMenu,
   resolveServerSource,
@@ -258,10 +259,8 @@ describe('what agents load', () => {
       describePluginContents(
         createPlugin({ id: 'p', skills: 3, agents: 2, commands: 1, hooks: true, servers: 1 })
       )
-    ).toBe('3 skills, 2 agents, 1 command, hooks, 1 MCP server');
-    expect(describePluginContents(createPlugin({ id: 'p', skills: 1, servers: 2 }))).toBe(
-      '1 skill, 2 MCP servers'
-    );
+    ).toBe('3 skills, 2 agents, 1 command, hooks, 1 MCP');
+    expect(describePluginContents(createPlugin({ id: 'p', skills: 1, servers: 2 }))).toBe('1 skill, 2 MCPs');
     expect(describePluginContents(createPlugin({ id: 'p' }))).toBe('Nothing for agents to load');
   });
 });
@@ -304,7 +303,7 @@ describe('toasts', () => {
     expect(describePluginToggled('stripe', false)).toBe('Turned off the stripe plugin.');
     expect(describePluginToggled('stripe', true)).toBe('Turned on the stripe plugin.');
     expect(describeChecked(createServer({ id: 'linear' }))).toBe('Checked linear.');
-    expect(describeChecked(null)).toBe('Checked every server that is on.');
+    expect(describeChecked(null)).toBe('Checked every MCP that is on.');
     expect(describeSignedIn('linear')).toBe('Signed in to linear.');
     expect(describeAlreadySignedIn('linear')).toBe('linear is already signed in.');
     expect(describeSignInFailed('linear')).toBe('Couldn’t sign in to linear. Try again.');
@@ -312,7 +311,7 @@ describe('toasts', () => {
     expect(describeServerRemoval(createServer({ id: 'linear' }))).toEqual({
       title: 'Remove linear?',
       body: 'Agents stop using it, and Shinsa forgets its settings and saved secrets.',
-      action: 'Remove server',
+      action: 'Remove MCP',
       done: 'Removed linear.',
     });
   });
@@ -333,12 +332,12 @@ describe('the server dialog', () => {
   it('names the dialog and its button for what it does', () => {
     const theirs = createServer({ id: 'sentry', source: 'claude', editable: false });
     expect(resolveServerDialog('add', null, [], 'linear')).toEqual({
-      title: 'Add an MCP server',
+      title: 'Add an MCP',
       description: 'Agents can use it from their next run.',
-      action: 'Add server',
+      action: 'Add MCP',
       done: 'Added linear.',
     });
-    expect(resolveServerDialog('edit', theirs, [], 'sentry').action).toBe('Save server');
+    expect(resolveServerDialog('edit', theirs, [], 'sentry').action).toBe('Save MCP');
     expect(resolveServerDialog('edit', theirs, [], 'sentry').done).toBe('Saved sentry.');
     expect(resolveServerDialog('copy', theirs, [], 'sentry')).toEqual({
       title: 'Copy sentry to Shinsa',
@@ -441,7 +440,7 @@ describe('the server dialog', () => {
       ok: false,
       errors: {
         name: 'Enter a name.',
-        command: 'Enter the command that starts the server.',
+        command: 'Enter the command that starts it.',
         env: 'Write each variable as NAME=value on its own line.',
       },
     });
@@ -465,8 +464,8 @@ describe('the server dialog', () => {
 });
 
 describe('opening the add dialog from anywhere', () => {
-  it('links to the MCP servers section with the dialog open', () => {
-    expect(resolveAddServerPath()).toBe('/settings?tab=integrations&add=mcp#mcp-servers');
+  it('links to the MCPs section with the dialog open', () => {
+    expect(resolveAddServerPath()).toBe('/settings?tab=integrations&add=mcp#mcps');
   });
 
   it('drops the request once the dialog is open and keeps the rest of the address', () => {
@@ -474,9 +473,9 @@ describe('opening the add dialog from anywhere', () => {
       resolvePathWithoutAdd({
         pathname: '/settings',
         search: '?tab=integrations&add=mcp',
-        hash: '#mcp-servers',
+        hash: '#mcps',
       })
-    ).toBe('/settings?tab=integrations#mcp-servers');
+    ).toBe('/settings?tab=integrations#mcps');
     expect(resolvePathWithoutAdd({ pathname: '/settings', search: '?add=mcp', hash: '' })).toBe('/settings');
   });
 });
@@ -486,7 +485,7 @@ const DAY = 86_400_000;
 const NOW = 400 * DAY;
 
 describe('servers by status', () => {
-  it('puts each server in one group, in the order Connected, Failing, Needs sign-in, Not checked yet, Off', () => {
+  it('puts each server in one group, in the order Connected, Needs sign-in, Failing, Not checked yet, Off, each in its tone with its icon', () => {
     const servers = [
       createServer({ id: 'off', enabled: false }, { state: 'connected', tokens: 300 }),
       createServer({ id: 'unplugged', plugin: 'vercel' }, { state: 'connected' }),
@@ -496,15 +495,21 @@ describe('servers by status', () => {
       createServer({ id: 'ok' }, { state: 'connected', tokens: 4_200 }),
     ];
     const groups = listServerStatusGroups(servers, [VERCEL]);
-    expect(groups.map((group) => [group.key, group.title, group.servers.map((server) => server.id)])).toEqual(
-      [
-        ['connected', 'Connected', ['ok']],
-        ['failing', 'Failing', ['broken']],
-        ['needs_sign_in', 'Needs sign-in', ['locked']],
-        ['checking', 'Not checked yet', ['waiting']],
-        ['off', 'Off', ['off', 'unplugged']],
-      ]
-    );
+    expect(
+      groups.map((group) => [
+        group.key,
+        group.title,
+        group.tone,
+        group.icon,
+        group.servers.map((server) => server.id),
+      ])
+    ).toEqual([
+      ['connected', 'Connected', 'green', 'IconApiConnection', ['ok']],
+      ['needs_sign_in', 'Needs sign-in', 'orange', 'IconUserKey', ['locked']],
+      ['failing', 'Failing', 'red', 'IconCircleX', ['broken']],
+      ['checking', 'Not checked yet', 'neutral', 'IconCircleDotted', ['waiting']],
+      ['off', 'Off', 'neutral', 'IconCircleMinus', ['off', 'unplugged']],
+    ]);
     expect(listServerStatusGroups([], [])).toEqual([]);
   });
 
@@ -522,6 +527,8 @@ describe('servers by status', () => {
     const group = (key: ServerStatusGroup['key'], count: number): ServerStatusGroup => ({
       key,
       title: key,
+      icon: 'IconServer',
+      tone: 'neutral',
       servers: Array.from({ length: count }, (_, index) => createServer({ id: `s${index}` })),
     });
     expect(isServerGroupOpen(group('connected', 40))).toBe(true);
@@ -582,6 +589,35 @@ describe('a server’s details', () => {
       'Its plugin is off',
       'Not used in 3 days',
     ]);
+  });
+
+  it('details an MCP as its tools over one quiet line, or says why it has none', () => {
+    const tools = [{ name: 'search', description: 'Search.' }];
+    const connected = createServer(
+      { id: 'maple', url: 'https://maple.dev/mcp' },
+      { state: 'connected', tools }
+    );
+    const snapshot = createExtensions({ servers: [connected] });
+    expect(resolveServerDetail(connected, snapshot, PLACES, 0)).toEqual({
+      tools,
+      error: null,
+      empty: null,
+      line: 'Shinsa',
+      target: 'https://maple.dev/mcp',
+    });
+    const detail = (server: McpServerSummary) => resolveServerDetail(server, snapshot, PLACES, 0);
+    expect(detail(createServer({ id: 'a' }, { state: 'connected' })).empty).toBe('It lists no tools.');
+    expect(detail(createServer({ id: 'a' }, { state: 'needs_sign_in' })).empty).toBe(
+      'Sign in to see its tools.'
+    );
+    expect(detail(createServer({ id: 'a' })).empty).toBe('Its tools show once it is checked.');
+    expect(detail(createServer({ id: 'a', enabled: false })).empty).toBe(
+      'Its tools show once it is on and checked.'
+    );
+    expect(detail(createServer({ id: 'a' }, { state: 'failing', error: 'exit 1' }))).toMatchObject({
+      error: 'exit 1',
+      empty: null,
+    });
   });
 
   it('opens Shinsa’s own server to edit and another tool’s to copy', () => {
@@ -697,10 +733,10 @@ describe('what agents have not used lately', () => {
   it('says what a change to the optimizer means for agents', () => {
     const optimizer = { enabled: false, days: 14, skills: false };
     expect(describeOptimizerChanged(optimizer, { enabled: true })).toBe(
-      'Agents now leave out servers unused for 14 days.'
+      'Agents now leave out MCPs unused for 14 days.'
     );
     expect(describeOptimizerChanged(optimizer, { enabled: false })).toBe(
-      'Agents load every server that is turned on.'
+      'Agents load every MCP that is turned on.'
     );
     expect(describeOptimizerChanged(optimizer, { skills: true })).toBe('Agents leave out unused skills too.');
     expect(describeOptimizerChanged(optimizer, { skills: false })).toBe(

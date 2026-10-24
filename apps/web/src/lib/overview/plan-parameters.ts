@@ -1,4 +1,4 @@
-import { PLAN_EVIDENCE_KINDS, type PlanEvidenceKind, type PlanDocument } from '@shinsa/core';
+import { PLAN_EVIDENCE_KINDS, type PlanDocument, type PlanEvidenceKind } from '@shinsa/core';
 
 export type PlanParameters = Pick<PlanDocument, 'impact' | 'evidence' | 'checks' | 'approval'>;
 

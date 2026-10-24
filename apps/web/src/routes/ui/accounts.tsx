@@ -92,7 +92,7 @@ export function AccountSpecimens() {
           </span>
         ))}
       </Specimen>
-      <Specimen label='UsageMenuButton · Agent usage: the next run’s account; hover for every account and provider, click goes to Settings → Agent usage'>
+      <Specimen label='UsageMenuButton · Agent usage: the next turn’s account; hover for every account and provider, a blue dot on the one the next turn uses, click goes to Settings → Agent usage'>
         <UsageMenuButton snapshot={snapshot} settings={settings} onOpen={() => void acknowledgeSample()} />
       </Specimen>
       <Specimen label='AccountStatusText · only when something is wrong'>

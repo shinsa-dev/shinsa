@@ -3,6 +3,7 @@ import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CARD, CARD_HEADER } from '@/components/layout/surface/card.ts';
+import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 
 export function CollapseToggle({
@@ -55,7 +56,9 @@ export function Panel({
         className={cn(CARD_HEADER, 'cursor-pointer select-none', open && 'border-border border-b')}
         onClick={toggle}
       >
-        <Icon name={icon} className='size-3.5' />
+        <IconSlot>
+          <Icon size='sm' name={icon} />
+        </IconSlot>
         {title}
         <span className='flex-1' />
         {action && (

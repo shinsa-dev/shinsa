@@ -18,6 +18,7 @@ import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
+import { VersionSettings } from '@/components/settings/versions.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listSettingsSections } from '@/lib/command/settings.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
@@ -68,7 +69,12 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
         </>
       );
     case 'agents':
-      return <AgentSettings settings={state.settings} />;
+      return (
+        <>
+          <AgentSettings settings={state.settings} />
+          <VersionSettings />
+        </>
+      );
     case 'accounts':
       return (
         <>
@@ -79,8 +85,8 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
     case 'projects':
       return (
         <>
-          <ProjectSettings state={state} />
           <FolderSettings />
+          <ProjectSettings state={state} />
         </>
       );
     case 'integrations':
@@ -99,7 +105,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const current = findSettingsTab(tab);
   const scroller = React.useRef<HTMLDivElement>(null);
   useRegisterCommands(listSettingsSections(state.settings, providers, notifications, accounts));
-  const extensions = useExtensions(tab === 'integrations');
+  const extensions = useExtensions();
   const extensionsRead = extensions.snapshot !== null || extensions.failure !== null;
   const foldersRead = useOnboardingStatus() !== null;
   useSectionScroll(scroller, tab, accounts !== null && isTabRead(tab, extensionsRead, foldersRead));

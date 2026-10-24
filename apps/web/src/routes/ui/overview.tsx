@@ -1,12 +1,19 @@
 import type { Gate, ShinsaState, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import * as React from 'react';
-import { ResultPanel } from '@/components/overview/answer-panel.tsx';
 import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
 import { FindingVerdicts } from '@/components/overview/finding-verdicts.tsx';
-import { ChangeCard, PausedCard, PlanCard, QuestionCard } from '@/components/overview/now-card.tsx';
+import {
+  ChangeCard,
+  PausedCard,
+  PlanCard,
+  QuestionCard,
+  ResultCard,
+} from '@/components/overview/now-card.tsx';
 import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
 import { OperationCard } from '@/components/overview/operation-card.tsx';
+import { TaskTrack } from '@/components/overview/progress-track.tsx';
+import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
@@ -58,7 +65,9 @@ function EscalatedReview({ state, task, gate }: { state: ShinsaState; task: Task
 
 export function OverviewSpecimens() {
   const [now] = React.useState(Date.now);
-  const [{ state, tasks, gates, runs, usageWaits, monitor }] = React.useState(() => createOverviewScene(now));
+  const [{ state, tasks, gates, runs, usageWaits, monitor, results }] = React.useState(() =>
+    createOverviewScene(now)
+  );
   const ignore = () => undefined;
   return (
     <>
@@ -78,7 +87,7 @@ export function OverviewSpecimens() {
           />
         </Card>
       </Specimen>
-      <Specimen label='SignInCard · a provider with a sign-in of its own (Codex): check again, never sign in from Shinsa'>
+      <Specimen label='SignInCard · a provider with a sign-in of its own (Codex): check the sign-in again, never sign in from Shinsa'>
         <Card>
           <SignInCard
             state={state}
@@ -87,7 +96,8 @@ export function OverviewSpecimens() {
               ...gates.signIn,
               title: 'Sign in to Codex as christo@openai.example',
               body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
-              account: { id: 'codex', email: 'christo@openai.example' },
+              provider: 'codex',
+              account: null,
             }}
             onReply={acknowledgeSample}
             onCheck={acknowledgeSample}
@@ -108,7 +118,7 @@ export function OverviewSpecimens() {
           ))}
         </Card>
       </Specimen>
-      <Specimen label='WaitCard · waiting to check again'>
+      <Specimen label='WaitCard · waiting to check in again'>
         <Card>
           <WaitCard state={state} task={tasks.monitor} monitor={monitor} onCheck={acknowledgeSample} />
         </Card>
@@ -201,10 +211,9 @@ export function OverviewSpecimens() {
           />
         </Card>
       </Specimen>
-      <Specimen label='ChangeCard · an investigation proposes a fix, then its findings'>
+      <Specimen label='ChangeCard · an investigation proposes a fix, with its diagnosis inside the card'>
         <Card>
           <ChangeCard state={state} task={tasks.change} gate={gates.change} onReply={acknowledgeSample} />
-          <ResultPanel task={tasks.change} />
         </Card>
       </Specimen>
       <Specimen label='ChangeCard · your OK in steps the planner composed, before an operation'>
@@ -212,16 +221,33 @@ export function OverviewSpecimens() {
           <ChangeCard state={state} task={tasks.composed} gate={gates.composed} onReply={acknowledgeSample} />
         </Card>
       </Specimen>
-      <Specimen label='SuggestionsPanel · follow-ups with When to start'>
+      <Specimen label='ResultCard · a finished answer, report, diagnosis or outcome, shown in the now card'>
+        <Card>
+          {results.map((task) => (
+            <ResultCard key={task.id} state={state} task={task} onOpen={acknowledgeSample} />
+          ))}
+        </Card>
+      </Specimen>
+      <Specimen label='ResultPanel · a diagnosis kept under the work it led to'>
+        <Card>
+          <ResultPanel task={tasks.change} />
+        </Card>
+      </Specimen>
+      <Specimen label='TaskTrack · while triage or the planner works out the steps'>
+        <Card>
+          <TaskTrack task={tasks.shaping} />
+        </Card>
+      </Specimen>
+      <Specimen label='SuggestionsPanel · suggested tasks with When to start'>
         <Card>
           <SuggestionsPanel
-            task={tasks.followUps}
+            task={tasks.suggested}
             onAccept={acknowledgeSample}
             onDismiss={acknowledgeSample}
           />
         </Card>
       </Specimen>
-      <Specimen label='DelegationsPanel · delegated work, nested under the task that delegated it'>
+      <Specimen label='DelegationsPanel · delegations, nested under the task that started them'>
         <Card>
           <DelegationsPanel
             state={state}

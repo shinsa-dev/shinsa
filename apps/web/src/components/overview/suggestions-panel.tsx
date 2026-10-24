@@ -7,14 +7,14 @@ import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { acceptSuggestion, dismissSuggestion, keepSuggestion } from '@/lib/tasks/process.ts';
 import {
-  FOLLOW_UP_START_LABEL,
-  type FollowUpStart,
-  listFollowUpStarts,
   listOpenSuggestions,
-  resolveFollowUpStart,
+  listSuggestionStarts,
+  resolveSuggestionStart,
+  SUGGESTION_START_LABEL,
+  type SuggestionStart,
 } from '@/lib/tasks/suggestions.ts';
 
-type SuggestionAccepter = (suggestion: TaskSuggestion, start: FollowUpStart) => Promise<boolean>;
+type SuggestionAccepter = (suggestion: TaskSuggestion, start: SuggestionStart) => Promise<boolean>;
 
 type SuggestionDismisser = (suggestion: TaskSuggestion) => Promise<boolean>;
 
@@ -32,7 +32,7 @@ function SuggestionRow({
   onKeep: SuggestionKeeper;
 }) {
   const { busy, run } = useBusy<'accept' | 'dismiss' | 'keep'>();
-  const [start, setStart] = React.useState<FollowUpStart>(resolveFollowUpStart(suggestion));
+  const [start, setStart] = React.useState<SuggestionStart>(resolveSuggestionStart(suggestion));
 
   return (
     <li className='flex items-start gap-3 py-2 first:pt-0 last:pb-0'>
@@ -42,10 +42,10 @@ function SuggestionRow({
       </div>
       <div className='flex shrink-0 items-center gap-1.5'>
         <SelectField
-          label={FOLLOW_UP_START_LABEL}
+          label={SUGGESTION_START_LABEL}
           size='sm'
           variant='ghost'
-          items={listFollowUpStarts(suggestion)}
+          items={listSuggestionStarts(suggestion)}
           value={start}
           onValueChange={setStart}
         />
@@ -95,7 +95,7 @@ export function SuggestionsPanel({
   const open = listOpenSuggestions(task);
   if (open.length === 0) return null;
   return (
-    <Panel title='Suggested follow-ups' icon='IconLightbulbGlow'>
+    <Panel title='Suggested tasks' icon='IconLightbulbGlow'>
       <ul className='flex flex-col divide-y divide-border'>
         {open.map((suggestion) => (
           <SuggestionRow

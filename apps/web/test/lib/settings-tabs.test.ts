@@ -30,7 +30,9 @@ describe('settings tabs', () => {
   });
 
   it('finds a tab by id', () => {
-    expect(findSettingsTab('accounts').sections).toEqual(['Agent usage', 'Limits']);
+    expect(findSettingsTab('accounts').sections).toEqual(['Accounts', 'Limits']);
+    expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Versions']);
+    expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Projects']);
   });
 
   it('opens Integrations for a link to the context optimizer', () => {
@@ -41,15 +43,14 @@ describe('settings tabs', () => {
   it('opens the tab the URL names, else the tab of the linked section, else General', () => {
     expect(resolveSettingsTab('agents')).toBe('agents');
     expect(resolveSettingsTab(null, '#limits')).toBe('accounts');
-    expect(resolveSettingsTab(null, '#usage')).toBe('accounts');
     expect(resolveSettingsTab(null, '#accounts')).toBe('accounts');
-    expect(resolveSettingsTab(null, '#agent-usage')).toBe('accounts');
+    expect(resolveSettingsTab(null, '#models')).toBe('agents');
     expect(resolveSettingsTab('nonsense', '#repository-folders')).toBe('projects');
     expect(resolveSettingsTab('integrations')).toBe('integrations');
-    expect(resolveSettingsTab(null, '#mcp-servers')).toBe('integrations');
+    expect(resolveSettingsTab(null, '#mcps')).toBe('integrations');
     expect(resolveSettingsTab(null, '#nothing-here')).toBe('general');
     expect(resolveSettingsTab(null)).toBe('general');
-    expect(resolveSettingsTab('advanced', '#context')).toBe('general');
+    expect(resolveSettingsTab('nonsense', '#context')).toBe('general');
   });
 
   it('knows which tab holds a section, and orders sections the way the tabs show them', () => {

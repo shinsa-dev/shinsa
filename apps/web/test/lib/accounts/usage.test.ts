@@ -8,19 +8,20 @@ import {
 } from '@shinsa/core';
 import {
   describeAccountStatus,
-  describeGlance,
-  describeProviderAccount,
   describeResetsIn,
   describeUsageChecked,
   describeUsageDetail,
+  isNextAccount,
+  isNextProvider,
   listProviderGlances,
   listUsageRows,
+  resolveAccountHeader,
   resolveAccountStatus,
   resolveUsageGlance,
   resolveUsageModel,
   resolveUsageText,
   resolveUsageTone,
-  selectHighestRow,
+  selectGlanceRow,
 } from '@/lib/accounts/usage.ts';
 import { createAccount, createProviderLogin, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { NOW } from '../../support/state.ts';
@@ -66,28 +67,61 @@ describe('usage rows', () => {
       ),
     });
     expect(listUsageRows(account)).toEqual([
-      { id: 's', label: 'Current session', percent: 42, tone: 'neutral', resetsAt: NOW + 3 * HOUR },
+      { id: 's', label: '5-hour limit', percent: 42, tone: 'neutral', resetsAt: NOW + 3 * HOUR },
       { id: 'w', label: 'Weekly · All models', percent: 100, tone: 'red', resetsAt: null },
     ]);
   });
 
-  it('reads an account by the windows that apply to the builder model', () => {
+  it('glances at the 5-hour window, not the fuller weekly one', () => {
     const settings: Settings = { ...SETTINGS, agentModels: { builder: 'claude-fable-1' } };
     expect(resolveUsageModel(settings)).toBe('claude-fable-1');
     const account = createAccount({
       id: 'a',
       usage: usage(
+        createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 70 }),
         createWindow({ id: 's', usedPercent: 30 }),
+        createWindow({ id: 'f', kind: 'model', label: 'Weekly · Fable', model: 'fable', usedPercent: 80 })
+      ),
+    });
+    expect(selectGlanceRow(account, 'claude-fable-1')).toMatchObject({
+      id: 's',
+      label: '5-hour limit',
+      percent: 30,
+      tone: 'neutral',
+    });
+  });
+
+  it('glances at a spent weekly window instead of the 5-hour one, so a blocked account never reads low', () => {
+    const weekly = createAccount({
+      id: 'a',
+      usage: usage(
+        createWindow({ id: 's', usedPercent: 12 }),
+        createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 100 })
+      ),
+    });
+    expect(selectGlanceRow(weekly, 'claude-fable-1')).toMatchObject({ id: 'w', percent: 100, tone: 'red' });
+    const model = createAccount({
+      id: 'b',
+      usage: usage(
+        createWindow({ id: 's', usedPercent: 12 }),
+        createWindow({ id: 'o', kind: 'model', label: 'Weekly · Opus', model: 'opus', usedPercent: 100 }),
+        createWindow({ id: 'f', kind: 'model', label: 'Weekly · Fable', model: 'fable', usedPercent: 100 })
+      ),
+    });
+    expect(selectGlanceRow(model, 'claude-fable-1')).toMatchObject({ id: 'f', label: 'Weekly · Fable' });
+  });
+
+  it('falls back to the fullest window that applies to the builder model when there is no 5-hour one', () => {
+    const account = createAccount({
+      id: 'a',
+      usage: usage(
+        createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 60 }),
         createWindow({ id: 'f', kind: 'model', label: 'Weekly · Fable', model: 'fable', usedPercent: 80 }),
         createWindow({ id: 'o', kind: 'model', label: 'Weekly · Opus', model: 'opus', usedPercent: 95 })
       ),
     });
-    expect(selectHighestRow(account, 'claude-fable-1')).toMatchObject({
-      id: 'f',
-      percent: 80,
-      tone: 'amber',
-    });
-    expect(selectHighestRow(createAccount({ id: 'b', usage: usage() }), 'opus')).toBeNull();
+    expect(selectGlanceRow(account, 'claude-fable-1')).toMatchObject({ id: 'f', percent: 80, tone: 'amber' });
+    expect(selectGlanceRow(createAccount({ id: 'b', usage: usage() }), 'opus')).toBeNull();
   });
 });
 
@@ -127,11 +161,10 @@ describe('the usage glance follows the server’s pick', () => {
     expect(glance?.account?.id).toBe(pickedByServer(accounts, settings));
   });
 
-  it('glances at the next account and its highest window, and at nothing without accounts', () => {
+  it('glances at the next account and its 5-hour window, and at nothing without accounts', () => {
     const snapshot = createSnapshot({ accounts: [at('a', 42, { isDefault: true })] });
     expect(resolveUsageGlance(snapshot, SETTINGS, NOW)).toMatchObject({
       provider: 'claude',
-      label: 'a@example.com',
       account: { id: 'a' },
       row: { percent: 42 },
     });
@@ -139,7 +172,7 @@ describe('the usage glance follows the server’s pick', () => {
     expect(resolveUsageGlance(null, SETTINGS, NOW)).toBeNull();
   });
 
-  it('glances at Codex when it does the work, or when it is the only provider with a reading', () => {
+  it('glances at Codex’s 5-hour window when it does the work, or when it is the only provider with a reading', () => {
     const codex = createProviderLogin();
     const both = createSnapshot({ accounts: [at('a', 42, { isDefault: true })], providers: [codex] });
     expect(resolveUsageGlance(both, SETTINGS, NOW)).toMatchObject({
@@ -149,9 +182,8 @@ describe('the usage glance follows the server’s pick', () => {
     const onCodex: Settings = { ...SETTINGS, defaultProvider: 'codex' };
     expect(resolveUsageGlance(both, onCodex, NOW)).toEqual({
       provider: 'codex',
-      label: 'Codex · codex@example.com',
       account: null,
-      row: expect.objectContaining({ id: 'seven_day', percent: 64 }),
+      row: expect.objectContaining({ id: 'five_hour', label: '5-hour limit', percent: 12 }),
     });
     expect(resolveUsageGlance(createSnapshot({ providers: [codex] }), SETTINGS, NOW)).toMatchObject({
       provider: 'codex',
@@ -162,7 +194,7 @@ describe('the usage glance follows the server’s pick', () => {
 });
 
 describe('every provider with a reading of its own', () => {
-  it('shows its account, its highest window and whether it is out of usage or signed out', () => {
+  it('shows its account, its 5-hour window and whether it is out of usage or signed out', () => {
     const spent = createProviderLogin({
       email: null,
       usage: {
@@ -175,7 +207,7 @@ describe('every provider with a reading of its own', () => {
     });
     const [glance] = listProviderGlances(createSnapshot({ providers: [spent] }), NOW);
     expect(glance).toMatchObject({
-      label: 'Codex',
+      name: { icon: 'IconOpenaiCodex', label: 'Codex' },
       row: { percent: 100, tone: 'red' },
       status: { label: 'Out of usage', tone: 'red', until: NOW + HOUR },
     });
@@ -189,16 +221,47 @@ describe('every provider with a reading of its own', () => {
       listProviderGlances(createSnapshot({ providers: [createProviderLogin()] }), NOW)[0]?.status
     ).toBeNull();
     expect(listProviderGlances(null, NOW)).toEqual([]);
-    expect(describeProviderAccount(createProviderLogin({ email: null }))).toBe('Codex');
+  });
+});
+
+describe('the account the next turn uses', () => {
+  it('marks the Claude account the glance picked, or the provider when it does the work', () => {
+    const account = at('a', 10);
+    const codex = createProviderLogin();
+    const onClaude = { provider: 'claude', account, row: null };
+    expect(isNextAccount(onClaude, account)).toBe(true);
+    expect(isNextAccount(onClaude, at('b', 10))).toBe(false);
+    expect(isNextProvider(onClaude, codex)).toBe(false);
+    const onCodex = { provider: 'codex', account: null, row: null };
+    expect(isNextAccount(onCodex, account)).toBe(false);
+    expect(isNextProvider(onCodex, codex)).toBe(true);
+    expect(isNextProvider(onCodex, { ...codex, provider: 'other' })).toBe(false);
+  });
+});
+
+describe('a Claude account’s header in Agent usage', () => {
+  it('names the account with its provider, its plan, the default mark, its status and when it was read', () => {
+    const account = createAccount({
+      id: 'a',
+      plan: 'max',
+      isDefault: true,
+      paused: true,
+      usage: { status: 'ok', windows: [], detail: null, checkedAt: NOW - 60_000, source: 'read' },
+    });
+    expect(resolveAccountHeader(account, 'opus', NOW)).toEqual({
+      name: { icon: 'IconClaudeai', label: 'Claude · a@example.com' },
+      detail: 'Max',
+      isDefault: true,
+      status: { label: 'Paused', tone: 'neutral', until: null },
+      checkedAt: NOW - 60_000,
+    });
+    expect(resolveAccountHeader(createAccount({ id: 'b', plan: null }), 'opus', NOW).detail).toBeNull();
   });
 });
 
 describe('the glance’s words', () => {
-  it('names the next account and the server’s detail, or that nothing came back yet', () => {
+  it('gives the server’s detail, or says nothing came back yet', () => {
     const account = at('a', 10);
-    expect(describeGlance({ provider: 'claude', label: 'a@example.com', account, row: null })).toBe(
-      'The next run uses a@example.com'
-    );
     expect(describeUsageDetail(account)).toBe('No usage reported yet.');
     const blocked = createAccount({
       id: 'b',

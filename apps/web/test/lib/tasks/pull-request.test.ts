@@ -106,7 +106,9 @@ describe('CI_GLYPH', () => {
 
 describe('listTaskChecks', () => {
   it('prefers the latest check results, then the report, then nothing', () => {
-    const report = { headline: '', phases: [], checks: [PASS], decisions: [] } as NonNullable<Task['report']>;
+    const report = { headline: '', sections: [], checks: [PASS], judgementCalls: [] } as NonNullable<
+      Task['report']
+    >;
     expect(listTaskChecks(createTask({ id: 't', checkResults: [FAIL], report }))).toEqual([FAIL]);
     expect(listTaskChecks(createTask({ id: 't', report }))).toEqual([PASS]);
     expect(listTaskChecks(createTask({ id: 't' }))).toEqual([]);

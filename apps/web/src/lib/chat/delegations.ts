@@ -28,7 +28,7 @@ export interface DelegationView {
 const STATUS: Record<DelegationStatus, Status> = {
   queued: { label: 'Waiting to start', tone: 'neutral' },
   running: { label: 'Working', tone: 'blue' },
-  waiting: { label: 'Waiting for its delegated tasks', tone: 'blue' },
+  waiting: { label: 'Waiting for its delegations', tone: 'blue' },
   completed: { label: 'Finished', tone: 'green' },
   failed: { label: 'Failed', tone: 'red' },
   cancelled: { label: 'Stopped', tone: 'neutral' },
@@ -122,22 +122,14 @@ export function listChatRuns(runs: Run[]) {
   return runs.filter((run) => !isDelegatedRun(run));
 }
 
-function traceDelegation(state: ShinsaState, runId: string | null) {
+export function listDelegationPath(state: ShinsaState, runId: string | null) {
   const path = new Set<string>();
   let run = runId ? state.runs[runId] : undefined;
   while (run && isDelegatedRun(run) && !path.has(run.id)) {
     path.add(run.id);
     run = state.runs[run.delegation.parentRunId];
   }
-  return { path, step: run?.id ?? null };
-}
-
-export function listDelegationPath(state: ShinsaState, runId: string | null) {
-  return traceDelegation(state, runId).path;
-}
-
-export function resolveStepRunId(state: ShinsaState, runId: string | null) {
-  return traceDelegation(state, runId).step ?? runId;
+  return path;
 }
 
 export function describeParkedRun(run: Run): Status | null {
@@ -148,9 +140,7 @@ export function describeParkedRun(run: Run): Status | null {
   const count = run.waitingOn?.delegations.length ?? 0;
   return {
     label:
-      count > 0
-        ? `Waiting for ${formatCount(count, 'delegated task', 'delegated tasks')}`
-        : STATUS.waiting.label,
+      count > 0 ? `Waiting for ${formatCount(count, 'delegation', 'delegations')}` : STATUS.waiting.label,
     tone: 'blue',
   };
 }

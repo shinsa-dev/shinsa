@@ -57,23 +57,23 @@ describe('the Integrations group', () => {
     const [section] = listExtensionSections(null);
     expect(section?.heading).toBe('Integrations');
     expect(section?.commands.map((command) => command.label)).toEqual([
-      'Add an MCP server',
-      'MCP servers',
+      'Add an MCP',
+      'MCPs',
       'Plugins',
       'Skills',
     ]);
   });
 
   it('opens Settings with the add dialog, or at a section', () => {
-    run('Add an MCP server');
+    run('Add an MCP');
     expect(`${location.pathname}${location.search}${location.hash}`).toBe(
-      '/settings?tab=integrations&add=mcp#mcp-servers'
+      '/settings?tab=integrations&add=mcp#mcps'
     );
     const open = spyOn(settingsCommands, 'openSettingsSection').mockImplementation(() => {});
     open.mockClear();
     run('Skills');
-    run('MCP servers');
-    expect(open.mock.calls).toEqual([['Skills'], ['MCP servers']]);
+    run('MCPs');
+    expect(open.mock.calls).toEqual([['Skills'], ['MCPs']]);
     open.mockRestore();
   });
 

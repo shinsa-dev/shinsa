@@ -1,5 +1,6 @@
 import {
   compareTasks,
+  isAgentQuestion,
   isDependencyOf,
   isPausingGate,
   isTaskSettled,
@@ -74,11 +75,11 @@ export function resolveRoadmapGroup(state: ShinsaState, task: Task): RoadmapGrou
   const gate = selectLeadGate(state, task);
   if (gate) {
     if (isPausingGate(gate)) return 'paused';
-    if (gate.purpose === 'change') return 'change';
-    if (gate.purpose === 'operation') return 'operation';
-    if (gate.purpose === 'agent_question' || gate.kind === 'question') return 'answer';
-    if (gate.kind === 'merge') return 'merge';
-    if (gate.kind === 'review') return 'review';
+    if (gate.type === 'proposal') return 'change';
+    if (gate.type === 'operation') return 'operation';
+    if (isAgentQuestion(gate)) return 'answer';
+    if (gate.type === 'merge') return 'merge';
+    if (gate.type === 'review') return 'review';
     return 'plan';
   }
   return listWaitsOn(state, task).length > 0 ? 'waiting' : 'working';
@@ -163,7 +164,7 @@ function orderRoadmapGroup(state: ShinsaState, key: RoadmapGroupKey, tasks: Task
 
 function matchesSearch(state: ShinsaState, task: Task, needle: string) {
   const repo = task.repoId ? (state.repos[task.repoId]?.name ?? '') : '';
-  return `${task.title} ${task.intent} ${task.branch ?? ''} ${repo}`.toLowerCase().includes(needle);
+  return `${task.title} ${task.request} ${task.branch ?? ''} ${repo}`.toLowerCase().includes(needle);
 }
 
 export function listRoadmapSections(state: ShinsaState, search: string, status: RoadmapGroupKey | null) {

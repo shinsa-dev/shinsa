@@ -52,7 +52,7 @@ export function ProjectSettings({
         <SettingsBlock
           header={
             <>
-              <Icon name='IconCircleDotted' className='size-3.5 shrink-0 text-fg-2' />
+              <Icon size='sm' name='IconCircleDotted' className='text-fg-2' />
               <span className='font-medium text-fg-2 text-xs'>No project</span>
             </>
           }

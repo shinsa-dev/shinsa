@@ -11,7 +11,7 @@ function suggestion(id: string, waitsOnThis: boolean): TaskSuggestion {
     id,
     runId: null,
     title: `Follow-up ${id}`,
-    intent: 'Do it.',
+    request: 'Do it.',
     why: 'It helps.',
     waitsOnThis,
     status: 'open',

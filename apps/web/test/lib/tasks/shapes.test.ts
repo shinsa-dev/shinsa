@@ -5,6 +5,7 @@ import {
   describeSteps,
   describeTaskSteps,
   isCodeTask,
+  isShapeChosen,
   RESULT_PANEL,
   resolvePlannedOperation,
   resolveShapeIcon,
@@ -54,7 +55,7 @@ describe('shape labels', () => {
   });
 
   it('title each result by the step that wrote it', () => {
-    expect(RESULT_PANEL.investigate.title).toBe('Findings');
+    expect(RESULT_PANEL.investigate.title).toBe('Diagnosis');
     expect(RESULT_PANEL.research.title).toBe('Report');
     expect(RESULT_PANEL.operate.title).toBe('Outcome');
   });
@@ -62,7 +63,7 @@ describe('shape labels', () => {
 
 const PLAN = {
   goal: 'g',
-  plan: [
+  phases: [
     { title: 'Write a', detail: 'd' },
     { title: 'Write b', detail: 'd' },
   ],
@@ -87,7 +88,7 @@ describe('describeTaskSteps', () => {
         createTask({
           id: 't',
           stage: 'building',
-          spec: { version: 1, body: '', document: PLAN, proposedAt: 1 },
+          plan: { version: 1, body: '', document: PLAN, proposedAt: 1 },
         })
       )
     ).toBe('Change: plan, build, checks and agent review, your review, pull request, then merge.');
@@ -163,6 +164,50 @@ describe('describeChangeGate', () => {
     });
   });
 
+  it('words a proposal the same once the agent added your OK and the change to the steps', () => {
+    const proposal = {
+      request: 'Release the connection.',
+      why: 'It leaks.',
+      status: 'open',
+      runId: null,
+      at: 5,
+    } as const;
+    const task = createTask({
+      id: 't',
+      pipeline: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+      proposal,
+      shapeChanges: [
+        {
+          from: ['investigate'],
+          to: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+          by: 'agent',
+          reason: 'It leaks.',
+          at: 5,
+        },
+      ],
+    });
+    expect(describeChangeGate(task, createGate({ id: 'g', taskId: 't' }))).toMatchObject({
+      eyebrow: 'The investigation proposes a fix',
+      requestLabel: 'What it would change',
+    });
+    const earlier = createTask({
+      ...task,
+      shapeChanges: [
+        {
+          from: ['investigate'],
+          to: ['investigate', 'your_ok', 'plan', 'build', 'merge'],
+          by: 'agent',
+          reason: 'Composed.',
+          at: 1,
+        },
+      ],
+    });
+    expect(describeChangeGate(earlier, createGate({ id: 'g', taskId: 't' }))).toMatchObject({
+      eyebrow: 'The diagnosis is in',
+      requestLabel: 'What comes next',
+    });
+  });
+
   it('falls back to the gate’s body, the why before the request', () => {
     const answer = createTask({ id: 't', pipeline: ['answer'] });
     expect(
@@ -223,7 +268,7 @@ describe('composed steps', () => {
     expect(
       describeChangeGate(task, createGate({ id: 'g', taskId: 't', body: 'Find it.\n\nPlan it.' }))
     ).toEqual({
-      eyebrow: 'The findings are in',
+      eyebrow: 'The diagnosis is in',
       keep: 'Keep it as an investigation',
       why: 'Find it.',
       request: 'Plan it.',
@@ -243,13 +288,13 @@ describe('composed steps', () => {
 });
 
 describe('resolvePlannedOperation', () => {
-  const spec = (operation?: string[]) => ({
+  const plan = (operation?: string[]) => ({
     version: 1,
     body: '',
     approvedAt: null,
     document: {
       goal: 'g',
-      plan: [],
+      phases: [],
       behaviour: [],
       approach: '',
       files: [],
@@ -263,15 +308,15 @@ describe('resolvePlannedOperation', () => {
     const after: PipelineStep[] = ['plan', 'build', 'your_review', 'pull_request', 'merge', 'operate'];
     const before: PipelineStep[] = ['plan', 'operate', 'build', 'your_review', 'pull_request', 'merge'];
     expect(
-      resolvePlannedOperation(createTask({ pipeline: after, spec: spec(['Backfill.']) } as never))
+      resolvePlannedOperation(createTask({ pipeline: after, plan: plan(['Backfill.']) } as never))
     ).toEqual({ heading: 'After the merge, the operation', steps: ['Backfill.'] });
     expect(
-      resolvePlannedOperation(createTask({ pipeline: before, spec: spec(['Snapshot.']) } as never))?.heading
+      resolvePlannedOperation(createTask({ pipeline: before, plan: plan(['Snapshot.']) } as never))?.heading
     ).toBe('First, the operation');
   });
   it('shows nothing for an operation alone, a change alone or a plan without steps', () => {
     expect(
-      resolvePlannedOperation(createTask({ pipeline: ['plan', 'operate'], spec: spec(['Run.']) } as never))
+      resolvePlannedOperation(createTask({ pipeline: ['plan', 'operate'], plan: plan(['Run.']) } as never))
     ).toBeNull();
     expect(
       resolvePlannedOperation(
@@ -282,9 +327,22 @@ describe('resolvePlannedOperation', () => {
       resolvePlannedOperation(
         createTask({
           pipeline: ['plan', 'build', 'your_review', 'pull_request', 'merge', 'operate'],
-          spec: spec(),
+          plan: plan(),
         } as never)
       )
     ).toBeNull();
+  });
+});
+
+describe('a task whose kind triage has not chosen yet', () => {
+  it('names no kind and says Shinsa is still choosing it', () => {
+    const task = createTask({ id: 't', stage: 'triage', auto: { shape: true, start: true, priority: true } });
+    expect(isShapeChosen(task)).toBe(false);
+    expect(resolveShapeLabel(task)).toBe('Kind not chosen yet');
+    expect(resolveShapeIcon(task)).toBe('IconCircleDotted');
+    expect(describeTaskSteps(task)).toBe('Shinsa is reading the request to choose what kind of task it is.');
+    expect(
+      isShapeChosen(createTask({ id: 'u', stage: 'triage', pipeline: ['answer'], auto: task.auto }))
+    ).toBe(true);
   });
 });

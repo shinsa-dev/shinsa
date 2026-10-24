@@ -2,7 +2,11 @@ import { compareTasks, listPendingDependencies, type ShinsaState, type Task } fr
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { listOpenTaskChoices } from '@/lib/tasks/roadmap.ts';
 
-const BEFORE_BUILD: ReadonlySet<Task['stage']> = new Set<Task['stage']>(['triage', 'queued', 'planning']);
+const BEFORE_BUILD: ReadonlySet<Task['stage']> = new Set<Task['stage']>([
+  'triage',
+  'waiting_on_tasks',
+  'planning',
+]);
 
 function isBeforeBuild(task: Task) {
   return BEFORE_BUILD.has(task.stage);

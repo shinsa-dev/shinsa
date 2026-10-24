@@ -36,19 +36,14 @@ export function CheckMark({ label, className }: { label?: string; className?: st
       name='IconCheckmark1Small'
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      className={cn('size-3.5 shrink-0', CHECK_TEXT, className)}
+      size='sm'
+      className={cn(CHECK_TEXT, className)}
     />
   );
 }
 
 export function SelectedMark({ className }: { className?: string }) {
-  return (
-    <Icon
-      name='IconCheckmark1'
-      aria-label='Selected'
-      className={cn('size-3.5 shrink-0', CHECK_TEXT, className)}
-    />
-  );
+  return <Icon name='IconCheckmark1' aria-label='Selected' size='sm' className={cn(CHECK_TEXT, className)} />;
 }
 
 export function CheckOutcomeIcon({
@@ -64,8 +59,8 @@ export function CheckOutcomeIcon({
   const named = label ?? glyph.label;
   return (
     <Hint label={<span className={glyph.textClassName}>{named}</span>}>
-      <span className={cn('grid size-4 shrink-0 place-items-center', className)}>
-        <Icon name={glyph.icon} aria-label={named} className={cn('size-3.5', glyph.iconClassName)} />
+      <span className={cn('inline-grid shrink-0 place-items-center', className)}>
+        <Icon name={glyph.icon} aria-label={named} size='sm' className={glyph.iconClassName} />
       </span>
     </Hint>
   );

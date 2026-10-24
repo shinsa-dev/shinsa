@@ -9,6 +9,7 @@ import {
   type ChatFastModeStatus,
   type ChatNotice,
   type ChatTool,
+  isHandOverTool,
   isSubagentEvent,
   type LoadedExtensions,
   type Run,
@@ -20,6 +21,7 @@ import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-
 export interface HumanMessage {
   at: number;
   text: string;
+  pending?: boolean;
 }
 
 export interface ToolCall {
@@ -30,11 +32,12 @@ export interface ToolCall {
   result: string | null;
   images: string[];
   failed: boolean;
+  recovery: 'retried' | 'retrying' | null;
 }
 
 export type TimelineItem =
   | { kind: 'instructions'; key: string; at: number; text: string; first: boolean }
-  | { kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[] }
+  | { kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[]; pending?: boolean }
   | { kind: 'agent'; key: string; at: number; text: string; phase: 'interim' | 'final' }
   | { kind: 'tools'; key: string; at: number; calls: ToolCall[] }
   | { kind: 'handover'; key: string; at: number; call: ToolCall }
@@ -71,17 +74,45 @@ export interface RunTurn {
   live: boolean;
 }
 
-export function listHumanMessages(task: Task): HumanMessage[] {
+function listMessagesOf(task: Task, kinds: readonly string[]): HumanMessage[] {
   return task.activity
-    .filter((entry) => entry.actor === 'you' && (entry.kind === 'asked' || entry.kind === 'message'))
+    .filter((entry) => entry.actor === 'you' && kinds.includes(entry.kind))
     .flatMap((entry) => (entry.detail ? [{ at: entry.at, text: entry.detail }] : []));
+}
+
+const SENT_WINDOW_MS = 5_000;
+
+function isLanded(sent: HumanMessage, landed: HumanMessage[]) {
+  return landed.some(
+    (message) => message.text.trim() === sent.text.trim() && message.at >= sent.at - SENT_WINDOW_MS
+  );
+}
+
+export function listHumanMessages(task: Task, sending: HumanMessage[] = []): HumanMessage[] {
+  const received = (task.inbox ?? []).map(({ at, text }) => ({ at, text, pending: true }));
+  const landed = [...listMessagesOf(task, ['asked', 'message']), ...received];
+  const unsent = sending
+    .filter((message) => !isLanded(message, landed))
+    .map(({ at, text }) => ({ at, text, pending: true }));
+  return [...landed, ...unsent].sort((left, right) => left.at - right.at);
+}
+
+export function listFollowUpMessages(task: Task, sending: HumanMessage[] = []): HumanMessage[] {
+  const asked = new Set(listMessagesOf(task, ['asked']).map((message) => message.at));
+  return listHumanMessages(task, sending).filter((message) => message.pending || !asked.has(message.at));
+}
+
+function selectMessageOwner(runs: Run[], at: number) {
+  const latest = runs.filter((run) => run.startedAt <= at).at(-1);
+  if (!latest || latest.endedAt === null || latest.endedAt >= at) return latest;
+  return runs.find((run) => run.startedAt > at) ?? latest;
 }
 
 export function resolveRunMessages(runs: Run[], messages: HumanMessage[]) {
   const preamble: HumanMessage[] = [];
   const byRun = new Map<string, HumanMessage[]>(runs.map((run) => [run.id, []]));
   for (const message of messages) {
-    const owner = runs.filter((run) => run.startedAt <= message.at).at(-1);
+    const owner = selectMessageOwner(runs, message.at);
     if (owner) byRun.get(owner.id)?.push(message);
     else preamble.push(message);
   }
@@ -112,6 +143,7 @@ function createToolCall(entry: ChatEntryOf<'tool_call'>): ToolCall {
     result: null,
     images: [],
     failed: false,
+    recovery: null,
   };
 }
 
@@ -268,8 +300,15 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
   for (const [index, part] of mergeByTime(entries, messages).entries()) {
     if (part.type === 'human') {
       builder.group = null;
-      const { at, text } = part.message;
-      builder.items.push({ kind: 'human', key: `human-${at}-${index}`, at, text, attachments: [] });
+      const { at, text, pending } = part.message;
+      builder.items.push({
+        kind: 'human',
+        key: `human-${at}-${index}`,
+        at,
+        text,
+        attachments: [],
+        ...(pending ? { pending } : {}),
+      });
     } else if (!isSubagentEvent(part.entry)) {
       applyEntry(builder, part.entry);
     }
@@ -313,15 +352,54 @@ interface TurnClose {
   endedAt: number;
 }
 
+function isTurnHandOver(item: TimelineItem) {
+  return item.kind === 'handover' && item.call.tool.kind === 'shinsa' && isHandOverTool(item.call.tool.name);
+}
+
+function selectReply(body: TimelineItem[], quiet: boolean) {
+  if (body.some(isTurnHandOver)) return null;
+  const agents = body.filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
+  return agents.filter((item) => item.phase === 'final').at(-1) ?? (quiet ? null : (agents.at(-1) ?? null));
+}
+
+function isRejectedHandover(item: TimelineItem): item is TimelineItemOf<'handover'> {
+  return item.kind === 'handover' && item.call.failed && !isQuestion(item.call);
+}
+
+function isQuestion(call: ToolCall) {
+  return call.tool.kind === 'shinsa' && call.tool.name === 'ask';
+}
+
+function selectToolName(call: ToolCall) {
+  return call.tool.kind === 'shinsa' ? call.tool.name : null;
+}
+
+function resolveRecovery(items: TimelineItem[], index: number, running: boolean): ToolCall['recovery'] {
+  const item = items[index];
+  if (!item || !isRejectedHandover(item)) return null;
+  const name = selectToolName(item.call);
+  const retried = items
+    .slice(index + 1)
+    .some((later) => later.kind === 'handover' && selectToolName(later.call) === name);
+  if (retried) return 'retried';
+  return running && items.slice(index + 1).every((later) => later.kind !== 'handover') ? 'retrying' : null;
+}
+
+function foldRejectedHandovers(items: TimelineItem[], running: boolean): TimelineItem[] {
+  return items.map((item, index) => {
+    const recovery = resolveRecovery(items, index, running);
+    if (recovery === null || item.kind !== 'handover') return item;
+    return { kind: 'tools', key: item.key, at: item.at, calls: [{ ...item.call, recovery }] };
+  });
+}
+
 function closeTurn(
   { human, body }: TurnGroup,
   { key, live, failed, startedAt, endedAt }: TurnClose,
   now: number
 ): RunTurn {
-  const agents = body.filter((item): item is TimelineItemOf<'agent'> => item.kind === 'agent');
   const errors = body.filter((item): item is TimelineItemOf<'error'> => item.kind === 'error');
-  const fallback = live || failed || errors.length > 0 ? null : (agents.at(-1) ?? null);
-  const reply = agents.filter((item) => item.phase === 'final').at(-1) ?? fallback;
+  const reply = selectReply(body, live || failed || errors.length > 0);
   return {
     key,
     human,
@@ -339,11 +417,11 @@ function closeTurn(
 
 export function resolveTurns(items: TimelineItem[], run: Run, now = Date.now()): RunTurn[] {
   const groups: TurnGroup[] = [{ human: null, body: [] }];
-  for (const item of items) {
+  const running = run.endedAt === null;
+  for (const item of foldRejectedHandovers(items, running)) {
     if (item.kind === 'human') groups.push({ human: item, body: [] });
     else groups.at(-1)?.body.push(item);
   }
-  const running = run.endedAt === null;
   return groups
     .filter((group, index) => group.human !== null || group.body.length > 0 || (index === 0 && running))
     .map((group, index, all) => {

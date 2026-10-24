@@ -1,18 +1,18 @@
-import { type Monitor, resolveTaskProgress, type ShinsaState, type Task } from '@shinsa/core';
+import type { Monitor, ShinsaState, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
-import { ProgressTrack } from '@/components/overview/progress-track.tsx';
+import { TaskTrack } from '@/components/overview/progress-track.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
-import { describeCheckCount, describeGiveUp, describeNextCheck } from '@/lib/overview/wait.ts';
-import { requestCheckNow } from '@/lib/tasks/process.ts';
+import { describeCheckInCount, describeGiveUp, describeNextCheckIn } from '@/lib/overview/wait.ts';
+import { requestCheckInNow } from '@/lib/tasks/process.ts';
 
 export function WaitCard({
   state,
   task,
   monitor,
-  onCheck = () => requestCheckNow(task.id),
+  onCheck = () => requestCheckInNow(task.id),
 }: {
   state: ShinsaState;
   task: Task;
@@ -27,7 +27,7 @@ export function WaitCard({
         <Eyebrow
           state={state}
           task={task}
-          extra={<TimeAgo at={monitor.nextCheckAt} text={(now) => describeNextCheck(monitor, now)} />}
+          extra={<TimeAgo at={monitor.nextCheckAt} text={(now) => describeNextCheckIn(monitor, now)} />}
         />
       }
       title='The agent is waiting on something outside the repository'
@@ -38,15 +38,15 @@ export function WaitCard({
           loading={busy === 'check'}
           onClick={() => void run('check', onCheck)}
         >
-          Check now
+          Check in now
         </Button>
       }
-      footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
+      footer={<TaskTrack task={task} />}
     >
       <div className='flex flex-col gap-px text-xs'>
         <InlineMarkdown text={monitor.notes} className='text-fg-4' />
         <span className='text-2xs text-fg-2'>
-          {describeCheckCount(monitor)} ·{' '}
+          {describeCheckInCount(monitor)} ·{' '}
           <TimeAgo at={monitor.timeoutAt} text={(now) => describeGiveUp(monitor, now)} />
         </span>
       </div>

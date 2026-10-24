@@ -55,9 +55,17 @@ describe('resolveLiveStep', () => {
     expect(resolveLiveStep(turn, false)).toBe('Running bun test');
   });
 
-  it('says it is thinking once every step has finished or the agent spoke after them', () => {
-    const finished = liveTurn([createCallEntry('1', readTool('a.ts'), 1), createResultEntry('1', 'text', 2)]);
-    expect(resolveLiveStep(finished, false)).toBe('Thinking');
+  it('keeps naming the latest step after it finished, until the next one starts', () => {
+    const finished = liveTurn([
+      createCallEntry('1', commandTool('bun test'), 1),
+      createResultEntry('1', 'ok', 2),
+      createCallEntry('2', readTool('a.ts'), 3),
+      createResultEntry('2', 'text', 4),
+    ]);
+    expect(resolveLiveStep(finished, false)).toBe('Reading a.ts');
+  });
+
+  it('says it is thinking only once the agent spoke after its last step', () => {
     const spoke = liveTurn([
       createCallEntry('1', readTool('a.ts'), 1),
       createAgentEntry('Hmm', 'interim', 2),
@@ -70,23 +78,27 @@ describe('resolveLiveStep', () => {
     expect(resolveLiveStep(turn, false)).toBe('Running bun test');
   });
 
-  it('says it is thinking when only the brief has arrived', () => {
-    expect(resolveLiveStep(liveTurn([createBrief('Build it', 1)]), false)).toBe('Thinking');
+  it('says it is starting when only the brief has arrived', () => {
+    expect(resolveLiveStep(liveTurn([createBrief('Build it', 1)]), false)).toBe('Starting');
   });
 
   it('says it is starting before anything has happened', () => {
     expect(resolveLiveStep(liveTurn([]), false)).toBe('Starting');
   });
 
-  it('does not treat a pending hand-over as the running step', () => {
+  it('does not treat a pending hand-over as the latest step', () => {
     const turn = liveTurn([
       createCallEntry('1', readTool('a.ts'), 1),
       createResultEntry('1', 'text', 2),
       createCallEntry('2', shinsaTool('propose_plan', { plan: [] }), 3),
     ]);
-    expect(resolveLiveStep(turn, false)).toBe('Thinking');
+    expect(resolveLiveStep(turn, false)).toBe('Reading a.ts');
   });
 });
+
+function shinsaToolEntry() {
+  return createCallEntry('1', shinsaTool('answer'), 1);
+}
 
 describe('resolveClosing', () => {
   const ended = (overrides: Partial<Run>) =>
@@ -120,6 +132,20 @@ describe('resolveClosing', () => {
       resolveClosing(run, turnsFor([createCallEntry('1', shinsaTool('complete_phase'), 1)], run))
     ).toBeNull();
     expect(resolveClosing(run, turnsFor([createErrorEntry('Crashed', 1)], run))).toBeNull();
+  });
+
+  it('never repeats a finished run’s reply under a message the next run has not picked up yet', () => {
+    const run = ended({ summary: 'Answered the question.' });
+    const turns = resolveTurns(
+      resolveTimeline(
+        [shinsaToolEntry(), createAgentEntry('Hey! I am the answerer.', 'final', 2)],
+        [{ at: 200, text: 'hey!' }]
+      ),
+      run,
+      1_000
+    );
+    expect(turns.map((turn) => turn.human?.text ?? null)).toEqual([null, 'hey!']);
+    expect(resolveClosing(run, turns)).toBeNull();
   });
 
   it('shows a failed run summary as an error unless the same error is already on screen', () => {

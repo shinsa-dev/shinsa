@@ -11,7 +11,7 @@ import { createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 describe('resolveDependencyLabel', () => {
   it('offers waiting before building starts and merging after once it has', () => {
-    for (const stage of ['triage', 'queued', 'planning'] as const) {
+    for (const stage of ['triage', 'waiting_on_tasks', 'planning'] as const) {
       expect(resolveDependencyLabel(createTask({ id: 't', stage }))).toBe('Wait for another task');
     }
     for (const stage of ['awaiting_plan', 'building', 'shipping'] as const) {
@@ -24,10 +24,10 @@ describe('describeWaitsOnHeading', () => {
   it('says what the dependency holds back and agrees with how many there are', () => {
     const one = [createTask({ id: 'a' })];
     const two = [createTask({ id: 'a' }), createTask({ id: 'b' })];
-    expect(describeWaitsOnHeading(createTask({ id: 't', stage: 'queued' }), one)).toBe(
+    expect(describeWaitsOnHeading(createTask({ id: 't', stage: 'waiting_on_tasks' }), one)).toBe(
       'Starts when this finishes'
     );
-    expect(describeWaitsOnHeading(createTask({ id: 't', stage: 'queued' }), two)).toBe(
+    expect(describeWaitsOnHeading(createTask({ id: 't', stage: 'waiting_on_tasks' }), two)).toBe(
       'Starts when these finish'
     );
     expect(describeWaitsOnHeading(createTask({ id: 't', stage: 'shipping' }), two)).toBe(
@@ -38,7 +38,7 @@ describe('describeWaitsOnHeading', () => {
 
 describe('listDependencyChoices', () => {
   it('lists the tasks already chosen first, then the other open tasks, each in priority order', () => {
-    const subject = createTask({ id: 'self', stage: 'queued', waitsOn: ['late-pick', 'gone'] });
+    const subject = createTask({ id: 'self', stage: 'waiting_on_tasks', waitsOn: ['late-pick', 'gone'] });
     const state = createShinsaState({
       tasks: [
         subject,
@@ -47,7 +47,7 @@ describe('listDependencyChoices', () => {
         createTask({ id: 'late-pick', createdAt: NOW - 1_000 }),
         createTask({ id: 'gone', stage: 'cancelled', createdAt: NOW - 95_000 }),
         createTask({ id: 'merged', stage: 'merged' }),
-        createTask({ id: 'dependent', stage: 'queued', waitsOn: ['self'] }),
+        createTask({ id: 'dependent', stage: 'waiting_on_tasks', waitsOn: ['self'] }),
       ],
     });
     expect(listDependencyChoices(state, subject).map((task) => task.id)).toEqual([

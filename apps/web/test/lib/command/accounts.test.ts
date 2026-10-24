@@ -47,7 +47,7 @@ describe('the global Accounts group', () => {
     run(section?.commands[0]);
     run(section?.commands[1]);
     expect(signIn).toHaveBeenCalledWith();
-    expect(open).toHaveBeenCalledWith('Agent usage');
+    expect(open).toHaveBeenCalledWith('Accounts');
     signIn.mockRestore();
     open.mockRestore();
   });

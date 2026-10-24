@@ -158,7 +158,7 @@ describe('delegated work in the task’s chat', () => {
     ]);
     expect(screen.getByText('Finished')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Stop “Survey the login tests”/ })).toBeNull();
-    fireEvent.click(screen.getByText('Reported back:'));
+    fireEvent.click(screen.getByRole('button', { name: /^Reported back: Survey the login tests/ }));
     expect(screen.getByText('Two of the tests are skipped.')).toBeTruthy();
   });
 
@@ -171,7 +171,8 @@ describe('delegated work in the task’s chat', () => {
         NOW - 4_000
       ),
     ]);
-    expect(screen.getByText('Failed:')).toBeTruthy();
+    expect(screen.getByText('Failed: Survey the login tests')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Failed:/ })).toBeNull();
   });
 
   it('shows nothing for a delegated run that no longer exists', () => {

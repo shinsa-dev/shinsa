@@ -1,4 +1,4 @@
-import { ICON_NAMES, Icon } from '@shinsa/ui/components/icon';
+import { ICON_NAMES, Icon, type IconSize } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { Section, Specimen } from './section.tsx';
 
@@ -22,6 +22,21 @@ const FOREGROUNDS = [
   { name: 'fg-2', cls: 'bg-fg-2' },
   { name: 'fg-3', cls: 'bg-fg-3' },
   { name: 'fg-4', cls: 'bg-fg-4' },
+];
+
+const ICON_INKS = [
+  { name: 'icon-1', cls: 'bg-icon-1' },
+  { name: 'icon-2', cls: 'bg-icon-2' },
+  { name: 'icon-3', cls: 'bg-icon-3' },
+  { name: 'icon-4', cls: 'bg-icon-4' },
+];
+
+const ICON_PAIRS = ['text-fg-1', 'text-fg-2', 'text-fg-3', 'text-fg-4', 'text-red-text', 'text-primary-text'];
+
+const ICON_SIZES: { size: IconSize; text: string; label: string }[] = [
+  { size: 'sm', text: 'text-xs', label: 'sm · 14 · 12–13px text, 22/24 controls' },
+  { size: 'md', text: 'text-sm', label: 'md · 16 · 14px+ text, 26/30 controls' },
+  { size: 'lg', text: 'text-base', label: 'lg · 20 · empty states, full-page waits' },
 ];
 
 const ALPHAS = [
@@ -101,6 +116,14 @@ export function TokenSpecimens() {
         </Specimen>
         <Specimen label='foregrounds · fg-1 → fg-4'>
           {FOREGROUNDS.map((t) => (
+            <div key={t.name} className='flex flex-col items-center gap-1.5'>
+              <div className={cn('corner-superellipse/1.125 size-12 rounded-xl', t.cls)} />
+              <span className='text-fg-2 text-xs'>{t.name}</span>
+            </div>
+          ))}
+        </Specimen>
+        <Specimen label='icon inks · icon-1 → icon-4, a step under fg-1 → fg-4'>
+          {ICON_INKS.map((t) => (
             <div key={t.name} className='flex flex-col items-center gap-1.5'>
               <div className={cn('corner-superellipse/1.125 size-12 rounded-xl', t.cls)} />
               <span className='text-fg-2 text-xs'>{t.name}</span>
@@ -215,23 +238,33 @@ export function TokenSpecimens() {
         description='Central Icons only. Paths are generated from the icon names referenced across the codebase, so every icon currently in the bundle is shown here.'
         className='flex-col items-start gap-6'
       >
-        <Specimen label='sizes'>
-          <Icon name='IconBell' className='size-3.5 text-fg-3' />
-          <Icon name='IconBell' className='size-4 text-fg-3' />
-          <Icon name='IconBell' className='size-5 text-fg-3' />
-          <Icon name='IconBell' className='size-6 text-fg-3' />
+        <Specimen label='sizes · the only three'>
+          {ICON_SIZES.map((entry) => (
+            <span key={entry.size} className={cn('flex items-center gap-1.5 text-fg-3', entry.text)}>
+              <Icon name='IconBell' size={entry.size} />
+              {entry.label}
+            </span>
+          ))}
+        </Specimen>
+        <Specimen label='ink · each text colour draws its icon a step quieter; a tone keeps its tone'>
+          {ICON_PAIRS.map((pair) => (
+            <span key={pair} className={cn('flex items-center gap-1.5 text-xs', pair)}>
+              <Icon name='IconBell' />
+              {pair.replace('text-', '')}
+            </span>
+          ))}
         </Specimen>
         <Specimen label='corner radius · 0 → 3'>
-          <Icon name='IconArchive' radius='0' className='size-6 text-fg-3' />
-          <Icon name='IconArchive' radius='1' className='size-6 text-fg-3' />
-          <Icon name='IconArchive' radius='2' className='size-6 text-fg-3' />
-          <Icon name='IconArchive' radius='3' className='size-6 text-fg-3' />
+          <Icon name='IconArchive' radius='0' size='lg' className='text-fg-3' />
+          <Icon name='IconArchive' radius='1' size='lg' className='text-fg-3' />
+          <Icon name='IconArchive' radius='2' size='lg' className='text-fg-3' />
+          <Icon name='IconArchive' radius='3' size='lg' className='text-fg-3' />
         </Specimen>
         <Specimen label={`bundled · ${ICON_NAMES.length} icons`}>
           <div className='grid w-full grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-3'>
             {ICON_NAMES.map((name) => (
               <div key={name} className='flex flex-col items-center gap-1.5'>
-                <Icon name={name} className='size-5 text-fg-3' />
+                <Icon name={name} size='lg' className='text-fg-3' />
                 <span className='w-full truncate text-center text-fg-2 text-xs'>
                   {name.replace('Icon', '')}
                 </span>

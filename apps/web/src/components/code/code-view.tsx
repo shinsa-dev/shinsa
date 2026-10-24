@@ -77,7 +77,7 @@ function CommentComposer({ onSave, onCancel }: { onSave: (text: string) => void;
 function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: () => void }) {
   return (
     <div className={cn(PINNED, 'flex items-start gap-2 bg-primary-a1 py-1.5 pr-3 pl-18 font-sans text-xs')}>
-      <Icon name='IconBubbleText' className='mt-px size-3.5 shrink-0 text-primary-text' />
+      <Icon size='sm' name='IconBubbleText' className='mt-px text-primary-text' />
       <span className='min-w-0 flex-1 whitespace-pre-wrap text-fg-4'>{comment.text}</span>
       <button
         type='button'
@@ -150,7 +150,7 @@ function Row({
               onClick={() => onStartComment(line)}
               className='grid size-4 cursor-pointer place-items-center rounded-full bg-primary text-primary-foreground opacity-0 transition-opacity group-hover/row:opacity-100'
             >
-              <Icon name='IconPlusSmall' className='size-3' />
+              <Icon size='sm' name='IconPlusSmall' />
             </button>
           </Hint>
         )}
@@ -248,7 +248,7 @@ export function CodeView({
   if (!ready) {
     return (
       <div className='flex items-center gap-2 p-3 font-sans text-fg-2 text-xs'>
-        <Spinner className='size-3.5' /> Reading {file.path}
+        <Spinner size='sm' /> Reading {file.path}
       </div>
     );
   }

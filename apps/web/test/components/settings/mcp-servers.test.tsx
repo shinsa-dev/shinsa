@@ -22,10 +22,10 @@ function createSnapshot(state: 'unchecked' | 'connected') {
   return createExtensions({ servers: [createServer({ id: 'linear' }, { state })] });
 }
 
-describe('MCP servers', () => {
+describe('MCPs', () => {
   it('keeps an open dialog and its typed draft when a check moves the server to another group', async () => {
     const view = render(renderGroup(createSnapshot('unchecked')));
-    fireEvent.click(screen.getByRole('button', { name: 'Server options' }));
+    fireEvent.click(screen.getByRole('button', { name: 'MCP options' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Edit/ }));
     fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'linear-2' } });
     view.rerender(renderGroup(createSnapshot('connected')));

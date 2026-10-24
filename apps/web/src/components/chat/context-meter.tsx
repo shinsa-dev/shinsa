@@ -16,7 +16,7 @@ export function ContextGauge({ meter }: { meter: ContextMeterView }) {
         </span>
       }
     >
-      <span role='img' aria-label={meter.label} className='flex items-center gap-1.5 px-1.5'>
+      <span role='img' aria-label={meter.label} className='flex w-fit items-center gap-1.5 px-1.5'>
         <UsageBar row={meter} className='w-10' />
         <UsagePercent percent={meter.percent} className='text-2xs' />
       </span>

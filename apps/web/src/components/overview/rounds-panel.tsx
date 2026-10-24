@@ -1,37 +1,41 @@
-import type { Round, RoundShipping, Task } from '@shinsa/core';
+import type { Round, RoundShipping, Run, ShinsaState, Task } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
-import { RoundHeader } from '@/components/chat/round-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
-import { Markdown } from '@/components/text/markdown.tsx';
-import { listEarlierRounds, listWaitingRounds } from '@/lib/tasks/rounds.ts';
+import { RoundHeader } from '@/components/overview/round-header.tsx';
+import { InlineMarkdown } from '@/components/text/markdown.tsx';
+import { listTaskRuns } from '@/lib/chat/runs.ts';
+import {
+  listEarlierRounds,
+  listWaitingRounds,
+  ROUND_ICON,
+  resolveRoundSummary,
+  selectRoundRun,
+} from '@/lib/tasks/rounds.ts';
 
 type ShippingChanger = (round: Round, shipping: RoundShipping) => Promise<unknown>;
 
-function RoundDetail({ round }: { round: Round }) {
-  const outcome = round.outcome;
+function RoundDetail({
+  round,
+  run,
+  onOpen,
+}: {
+  round: Round;
+  run: Run | null;
+  onOpen: (runId: string) => void;
+}) {
   return (
-    <div className='flex flex-col gap-2 px-3 pb-2 text-xs'>
-      <div className='flex flex-col gap-px'>
-        <span className='text-2xs text-fg-2'>Asked for</span>
-        <Markdown text={round.request} className='text-fg-3' />
-      </div>
-      {outcome?.goal && (
-        <div className='flex flex-col gap-px'>
-          <span className='text-2xs text-fg-2'>Goal</span>
-          <Markdown text={outcome.goal} className='text-fg-3' />
-        </div>
-      )}
-      {outcome?.headline && (
-        <div className='flex flex-col gap-px'>
-          <span className='text-2xs text-fg-2'>What it did</span>
-          <Markdown text={outcome.headline} className='text-fg-3' />
-        </div>
-      )}
-      {outcome?.result && (
-        <div className='flex flex-col gap-px'>
-          <span className='text-2xs text-fg-2'>What it found</span>
-          <Markdown text={outcome.result} className='text-fg-3' />
-        </div>
+    <div className='flex flex-col gap-1.5 ps-7 pt-1.5'>
+      <InlineMarkdown text={resolveRoundSummary(round)} className='text-fg-3 text-xs' />
+      {run && (
+        <button
+          type='button'
+          onClick={() => onOpen(run.id)}
+          className='flex cursor-pointer items-center gap-1 self-start text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+        >
+          Open in chat
+          <Icon size='sm' name='IconChevronRightSmall' />
+        </button>
       )}
     </div>
   );
@@ -40,15 +44,19 @@ function RoundDetail({ round }: { round: Round }) {
 function RoundRow({
   task,
   round,
+  run,
+  onOpen,
   onShippingChange,
 }: {
   task: Task;
   round: Round;
+  run: Run | null;
+  onOpen: (runId: string) => void;
   onShippingChange?: ShippingChanger;
 }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <li className='flex flex-col'>
+    <li className='flex flex-col py-2 first:pt-0 last:pb-0'>
       <RoundHeader
         task={task}
         round={round}
@@ -56,36 +64,56 @@ function RoundRow({
         onToggle={() => setOpen(!open)}
         {...(onShippingChange ? { onShippingChange } : {})}
       />
-      {open && <RoundDetail round={round} />}
+      {open && <RoundDetail round={round} run={run} onOpen={onOpen} />}
     </li>
   );
 }
 
-export function RoundsPanel({ task, onShippingChange }: { task: Task; onShippingChange?: ShippingChanger }) {
+export function RoundsPanel({
+  state,
+  task,
+  onOpen,
+  onShippingChange,
+}: {
+  state: ShinsaState;
+  task: Task;
+  onOpen: (runId: string) => void;
+  onShippingChange?: ShippingChanger;
+}) {
+  const runs = React.useMemo(() => listTaskRuns(state.runs, task.id), [state.runs, task.id]);
   const earlier = listEarlierRounds(task);
   const waiting = listWaitingRounds(task);
   if (earlier.length + waiting.length === 0) return null;
+  const row = (round: Round, changer?: ShippingChanger) => (
+    <RoundRow
+      key={round.number}
+      task={task}
+      round={round}
+      run={selectRoundRun(runs, round)}
+      onOpen={onOpen}
+      {...(changer ? { onShippingChange: changer } : {})}
+    />
+  );
   return (
-    <Panel title='Rounds' icon='IconLayersThree'>
-      {earlier.length > 0 && (
-        <ul aria-label='Earlier rounds' className='-mx-3 -mt-1 flex flex-col divide-y divide-border'>
-          {earlier.map((round) => (
-            <RoundRow key={round.number} task={task} round={round} />
-          ))}
-        </ul>
-      )}
-      {waiting.length > 0 && (
-        <ul aria-label='Rounds waiting to start' className='-mx-3 -mb-1 flex flex-col divide-y divide-border'>
-          {waiting.map((round) => (
-            <RoundRow
-              key={round.number}
-              task={task}
-              round={round}
-              {...(onShippingChange ? { onShippingChange } : {})}
-            />
-          ))}
-        </ul>
-      )}
+    <Panel title='Rounds' icon={ROUND_ICON}>
+      <div className='flex flex-col divide-y divide-border'>
+        {earlier.length > 0 && (
+          <ul
+            aria-label='Earlier rounds'
+            className='flex flex-col divide-y divide-border py-2 first:pt-0 last:pb-0'
+          >
+            {earlier.map((round) => row(round))}
+          </ul>
+        )}
+        {waiting.length > 0 && (
+          <ul
+            aria-label='Rounds waiting to start'
+            className='flex flex-col divide-y divide-border py-2 first:pt-0 last:pb-0'
+          >
+            {waiting.map((round) => row(round, onShippingChange))}
+          </ul>
+        )}
+      </div>
     </Panel>
   );
 }

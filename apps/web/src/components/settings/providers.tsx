@@ -1,12 +1,38 @@
 import type { ProviderLogin } from '@shinsa/core';
-import { cn } from '@shinsa/ui/lib/utils';
-import { RefreshButton } from '@/components/accounts/refresh-button.tsx';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@shinsa/ui/components/dropdown-menu';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
+import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
-import { describeProviderLogin, describeProviderRefresh } from '@/lib/accounts/providers.ts';
-import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { SETTING_ROW, SettingsBlock, TOKEN_TEXT } from './group.tsx';
+import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
+import {
+  describeProviderLogin,
+  describeProviderRefresh,
+  resolveProviderHeader,
+  selectSignInCommand,
+} from '@/lib/accounts/providers.ts';
+import { copyText } from '@/lib/connection/commands.ts';
+import { SETTING_ROW } from './group.tsx';
 import { UsageWindows } from './usage.tsx';
+import { UsageAccountBlock } from './usage-account.tsx';
+
+function ProviderMenu({ login, onRefresh }: { login: ProviderLogin; onRefresh: () => Promise<unknown> }) {
+  const command = selectSignInCommand(login);
+  return (
+    <DropdownMenu>
+      <OptionsTrigger label={ACCOUNT_LABEL.options} />
+      <DropdownMenuContent align='end' className='min-w-52'>
+        {command && (
+          <DropdownMenuItem icon='IconUserKey' onClick={() => void copyText(command)}>
+            {ACCOUNT_LABEL.copySignIn}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem icon='IconArrowRotateClockwise' onClick={() => void onRefresh()}>
+          {describeProviderRefresh(login)}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function ProviderLoginBlock({
   login,
@@ -17,20 +43,9 @@ export function ProviderLoginBlock({
 }) {
   const view = describeProviderLogin(login);
   return (
-    <SettingsBlock
-      header={
-        <>
-          <div className='flex min-w-0 flex-1 items-center gap-1.5 text-xs'>
-            <span className='shrink-0 font-medium text-fg-4'>{login.label}</span>
-            <span className='min-w-0 truncate text-fg-2'>{view.title}</span>
-            {view.status && (
-              <span className={cn('ms-0.5 shrink-0', TONE_TEXT[view.status.tone])}>{view.status.label}</span>
-            )}
-          </div>
-          {login.version && <span className={TOKEN_TEXT}>{login.version}</span>}
-          <RefreshButton label={describeProviderRefresh(login)} onRefresh={onRefresh} />
-        </>
-      }
+    <UsageAccountBlock
+      header={resolveProviderHeader(login, Date.now())}
+      menu={<ProviderMenu login={login} onRefresh={onRefresh} />}
     >
       {login.usage && login.status === 'signed_in' && <UsageWindows account={{ usage: login.usage }} />}
       {view.fix && (
@@ -41,6 +56,6 @@ export function ProviderLoginBlock({
           {view.command && <CopyButton text={view.command} />}
         </div>
       )}
-    </SettingsBlock>
+    </UsageAccountBlock>
   );
 }

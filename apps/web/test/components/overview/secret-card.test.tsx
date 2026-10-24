@@ -29,8 +29,7 @@ function renderSecret() {
   const gate = createGate({
     id: 'g-1',
     taskId: 't-1',
-    kind: 'question',
-    purpose: 'agent_question',
+    type: 'secret',
     title: 'For the GitHub webhook.',
     secret: { label: 'GitHub webhook secret' },
   });

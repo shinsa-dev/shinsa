@@ -93,7 +93,7 @@ function Running({ state, queue }: { state: ShinsaState; queue: Queue }) {
 
 function Note({ state, note }: { state: ShinsaState; note: string }) {
   return (
-    <Aside marker={<Icon name='IconInfoSimple' className='size-3.5' />}>
+    <Aside marker={<Icon size='sm' name='IconInfoSimple' />}>
       <GuideText text={endSentence(note)} state={state} />
     </Aside>
   );

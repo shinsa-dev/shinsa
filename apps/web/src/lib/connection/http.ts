@@ -11,12 +11,12 @@ function describeRefusal(body: unknown, code: number) {
   return typeof message === 'string' ? message : `Shinsa answered with status ${code}.`;
 }
 
-async function send(path: string, body: unknown) {
+async function send(path: string, body: unknown, accept?: string) {
   try {
     if (body === undefined) return await fetch(path);
     return await fetch(path, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(accept ? { accept } : {}) },
       body: JSON.stringify(body),
     });
   } catch {
@@ -35,4 +35,23 @@ export async function requestText(path: string): Promise<string> {
   const response = await send(path, undefined);
   if (!response.ok) throw new Error(describeRefusal(await readBody(response), response.status));
   return response.text();
+}
+
+export async function requestLines<T>(path: string, body: unknown, onLine: (line: T) => void) {
+  const response = await send(path, body, 'application/x-ndjson');
+  if (!response.ok || !response.body)
+    throw new Error(describeRefusal(await readBody(response), response.status));
+  const decoder = new TextDecoder();
+  let pending = '';
+  const take = (text: string) => {
+    const lines = `${pending}${text}`.split('\n');
+    pending = lines.pop() ?? '';
+    for (const line of lines) if (line.trim()) onLine(JSON.parse(line) as T);
+  };
+  try {
+    for await (const chunk of response.body) take(decoder.decode(chunk, { stream: true }));
+  } catch {
+    throw new Error('Shinsa stopped answering.');
+  }
+  take(`${decoder.decode()}\n`);
 }

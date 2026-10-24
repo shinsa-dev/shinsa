@@ -1,4 +1,4 @@
-import { listOpenGates, type ShinsaState, selectLeadGate } from '@shinsa/core';
+import { isDecisionGate, listOpenGates, type ShinsaState, selectLeadGate } from '@shinsa/core';
 import type { NowTarget } from '@/lib/overview/now.ts';
 import {
   type CodeView,
@@ -32,9 +32,7 @@ export function useTaskView(state: ShinsaState, taskId: string) {
   const viewParam = useSearchParam('view');
   const chatRunId = useSearchParam('run');
   const task = state.tasks[taskId] ?? null;
-  const decision = task
-    ? listOpenGates(state, task.id).find((gate) => gate.purpose === 'decision')
-    : undefined;
+  const decision = task ? listOpenGates(state, task.id).find(isDecisionGate) : undefined;
   const lead = (task && selectLeadGate(state, task)) ?? undefined;
   const tabs = task ? listTaskTabs(task) : [];
   return {
@@ -44,7 +42,7 @@ export function useTaskView(state: ShinsaState, taskId: string) {
     tab: resolveTaskTab(tabParam, tabs),
     codeView: resolveCodeView(viewParam),
     chatRunId,
-    reviewing: decision?.kind === 'review' || decision?.kind === 'merge',
+    reviewing: decision?.type === 'review' || decision?.type === 'merge',
     draftKey: decision?.id ?? 'none',
     applyTab,
     applyCodeView,

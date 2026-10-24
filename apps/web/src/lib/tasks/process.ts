@@ -1,11 +1,11 @@
 import { MINUTE_MS, SILENCE_MINUTES, type Task, type TaskSuggestion } from '@shinsa/core';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
-import type { FollowUpStart } from '@/lib/tasks/suggestions.ts';
+import type { SuggestionStart } from '@/lib/tasks/suggestions.ts';
 
 export const SNOOZE_HINT = `${SILENCE_MINUTES.snooze} minutes`;
 
-export function requestCheckNow(taskId: string) {
-  return sendCommandWithToast({ type: 'monitor.check_in_now', taskId }, 'Checking now.');
+export function requestCheckInNow(taskId: string) {
+  return sendCommandWithToast({ type: 'monitor.check_in_now', taskId }, 'Checking in now.');
 }
 
 export function snoozeSilence(runId: string, now = Date.now()) {
@@ -19,7 +19,7 @@ export function dismissSilence(runId: string) {
   return sendCommandWithToast({ type: 'run.dismiss_silence', runId }, 'Dismissed for this step.');
 }
 
-export function acceptSuggestion(task: Task, suggestion: TaskSuggestion, start: FollowUpStart) {
+export function acceptSuggestion(task: Task, suggestion: TaskSuggestion, start: SuggestionStart) {
   return sendCommandWithToast(
     {
       type: 'suggestion.accept',

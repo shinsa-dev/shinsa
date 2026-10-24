@@ -63,6 +63,7 @@ describe('Settings tabs', () => {
     expect(location.search).toBe('?tab=agents');
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Agents');
     expect(screen.getByText('Engine')).toBeTruthy();
+    expect(screen.getByText('Versions')).toBeTruthy();
     expect(screen.queryByText('Appearance')).toBeNull();
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
     expect(within(nav).getByRole('button', { name: 'Agents' }).getAttribute('aria-current')).toBe('page');

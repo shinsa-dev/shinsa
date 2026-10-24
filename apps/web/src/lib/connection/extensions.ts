@@ -35,15 +35,26 @@ export const SIGN_IN_POLL_MS = 2_000;
 
 export const SIGN_IN_LIMIT_MS = 120_000;
 
+export const CHECK_INTERVAL_MS = 60_000;
+
 const signal = createSignal();
 
 let view: ExtensionsView = { snapshot: null, failure: null };
 
+let viewText = '';
+
 let pending: Promise<void> | null = null;
+
+let checking: Promise<void> | null = null;
+
+let checkedAt = Number.NEGATIVE_INFINITY;
 
 let stopWatch: (() => void) | null = null;
 
 function publishExtensions(snapshot: ExtensionsSnapshot) {
+  const text = JSON.stringify(snapshot);
+  if (text === viewText && view.failure === null) return;
+  viewText = text;
   view = { snapshot, failure: null };
   signal.publish();
 }
@@ -60,6 +71,9 @@ export function selectExtensions() {
 export function resetExtensions() {
   stopSignInWatch();
   pending = null;
+  checking = null;
+  checkedAt = Number.NEGATIVE_INFINITY;
+  viewText = '';
   view = { snapshot: null, failure: null };
   signal.publish();
 }
@@ -90,8 +104,16 @@ function updateExtensions(path: string, body: unknown, done?: string) {
   return requestWithToast(() => requestExtensions(path, body), done);
 }
 
-export function requestServerCheck() {
-  return requestExtensions('/api/extensions/check', {}).then(() => undefined, recordFailure);
+export function requestServerCheck(now = Date.now()) {
+  if (checking !== null) return checking;
+  if (now - checkedAt < CHECK_INTERVAL_MS) return refreshExtensions().then(refreshExtensions);
+  checkedAt = now;
+  checking = requestExtensions('/api/extensions/check', {})
+    .then(() => undefined, recordFailure)
+    .then(() => {
+      checking = null;
+    });
+  return checking;
 }
 
 export function useServerCheck() {

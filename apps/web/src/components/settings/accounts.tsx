@@ -1,12 +1,4 @@
-import {
-  type AccountImport,
-  type AccountPatch,
-  type AccountSummary,
-  type AccountsSnapshot,
-  resolvePlanLabel,
-  type Settings,
-} from '@shinsa/core';
-import { Badge } from '@shinsa/ui/components/badge';
+import type { AccountImport, AccountPatch, AccountSummary, AccountsSnapshot, Settings } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import {
   DropdownMenu,
@@ -24,19 +16,16 @@ import {
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
-import { AccountStatusText } from '@/components/accounts/account-status.tsx';
 import { PercentDialog } from '@/components/accounts/percent-dialog.tsx';
 import { RefreshButton } from '@/components/accounts/refresh-button.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
-import { TimeAgo } from '@/components/text/time-ago.tsx';
 import {
   ACCOUNT_LABEL,
   describeDefaultChanged,
   describeImport,
   describeRemoval,
   MOVE_ACTION,
-  resolveAccountLabel,
   resolvePauseAction,
 } from '@/lib/accounts/account.ts';
 import {
@@ -46,7 +35,7 @@ import {
   parseSwitchValue,
   resolveAccountSwitchValue,
 } from '@/lib/accounts/limits.ts';
-import { describeUsageChecked, resolveAccountStatus, resolveUsageModel } from '@/lib/accounts/usage.ts';
+import { resolveAccountHeader, resolveUsageModel } from '@/lib/accounts/usage.ts';
 import {
   importAccount,
   refreshUsage,
@@ -55,9 +44,10 @@ import {
   updateAccount,
   useAccounts,
 } from '@/lib/connection/accounts.ts';
-import { SettingsBlock, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { SettingsEmpty, SettingsGroup } from './group.tsx';
 import { ProviderLoginBlock } from './providers.tsx';
 import { UsageWindows } from './usage.tsx';
+import { UsageAccountBlock } from './usage-account.tsx';
 
 export interface AccountActions {
   signIn: (accountId: string | null) => void;
@@ -254,34 +244,13 @@ function AccountMenu(props: AccountProps) {
 
 function AccountBlock(props: AccountProps) {
   const { account, settings } = props;
-  const status = resolveAccountStatus(account, resolveUsageModel(settings), Date.now());
-  const plan = resolvePlanLabel(account.plan);
-  const checkedAt = account.usage.checkedAt;
   return (
-    <SettingsBlock
-      header={
-        <>
-          <div className='flex min-w-0 flex-1 items-center gap-1.5 text-xs'>
-            <Truncate className='font-medium text-fg-4'>{resolveAccountLabel(account)}</Truncate>
-            {plan && <span className='shrink-0 text-fg-2'>{plan}</span>}
-            {account.isDefault && (
-              <Badge size='sm' className='ms-0.5'>
-                {ACCOUNT_LABEL.default}
-              </Badge>
-            )}
-            {status && <AccountStatusText status={status} className='ms-0.5' />}
-          </div>
-          {checkedAt !== null && (
-            <span className='hidden shrink-0 text-2xs text-fg-2 sm:inline'>
-              <TimeAgo at={checkedAt} text={(now) => describeUsageChecked(checkedAt, now)} />
-            </span>
-          )}
-          <AccountMenu {...props} />
-        </>
-      }
+    <UsageAccountBlock
+      header={resolveAccountHeader(account, resolveUsageModel(settings), Date.now())}
+      menu={<AccountMenu {...props} />}
     >
       <UsageWindows account={account} />
-    </SettingsBlock>
+    </UsageAccountBlock>
   );
 }
 

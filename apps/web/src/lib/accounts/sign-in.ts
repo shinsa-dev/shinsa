@@ -2,7 +2,6 @@ import {
   type AccountsSnapshot,
   CLAUDE_PROVIDER,
   type Gate,
-  KNOWN_AGENT_PROVIDERS,
   type ProviderLogin,
   resolveProviderLabel,
 } from '@shinsa/core';
@@ -47,10 +46,8 @@ export function describeSignedIn(email: string | null) {
   return email ? `Signed in as ${email}.` : 'Signed in to Claude.';
 }
 
-export function resolveSignInProvider(gate: Pick<Gate, 'account'>) {
-  const id = gate.account?.id ?? null;
-  if (id === null || id === CLAUDE_PROVIDER) return null;
-  return KNOWN_AGENT_PROVIDERS.some((provider) => provider.id === id) ? id : null;
+export function resolveSignInProvider(gate: Pick<Gate, 'provider'>) {
+  return gate.provider === CLAUDE_PROVIDER ? null : (gate.provider ?? null);
 }
 
 export function selectSignInLogin(snapshot: AccountsSnapshot | null, provider: string): ProviderLogin | null {

@@ -14,21 +14,17 @@ import {
   EXTENSION_LABEL,
   type ExtensionPlaces,
   isPluginOff,
-  listServerNotes,
   needsConnect,
   resolveCostText,
   resolveServerCost,
   resolveServerCostHint,
-  resolveServerStatus,
-  resolveServerTarget,
+  resolveServerDetail,
   type ServerDialogTarget,
   SWITCH_LABEL,
 } from '@/lib/extensions.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { SETTING_ROW, SETTINGS_SHELF, TOKEN_TEXT } from './group.tsx';
+import { SETTING_ROW, TOKEN_TEXT } from './group.tsx';
 import { ServerMenu } from './mcp-server-menu.tsx';
-
-const DETAIL_ROW = cn(SETTING_ROW, 'gap-1.5 text-2xs text-fg-2');
 
 interface RowProps {
   server: McpServerSummary;
@@ -37,36 +33,30 @@ interface RowProps {
   now: number;
 }
 
+function ToolName({ name, description }: { name: string; description: string | null }) {
+  const text = <span className='min-w-0 cursor-default truncate font-mono text-fg-3 text-xs'>{name}</span>;
+  if (!description) return text;
+  return <Hint label={description}>{text}</Hint>;
+}
+
 function ServerDetail({ server, snapshot, places, now }: RowProps) {
-  const status = resolveServerStatus(server);
-  const { tools } = server.status;
+  const detail = resolveServerDetail(server, snapshot, places, now);
   return (
-    <div className={cn(SETTINGS_SHELF, 'mb-1')}>
-      <div className={DETAIL_ROW}>
-        <Truncate className='min-w-0 flex-1 font-mono'>{resolveServerTarget(server)}</Truncate>
-      </div>
-      <div className={cn(DETAIL_ROW, 'flex-wrap gap-x-3')}>
-        {listServerNotes(server, snapshot, places, now).map((note) => (
-          <span key={note} className='min-w-0'>
-            {note}
-          </span>
-        ))}
-      </div>
-      {status?.tone === 'red' && status.detail && (
-        <div className={cn(DETAIL_ROW, TONE_TEXT.red)}>
-          <span className='min-w-0 flex-1 break-words'>{status.detail}</span>
-        </div>
-      )}
-      {tools.length > 0 && (
-        <ul className='flex flex-col gap-1.5 py-2 pr-1.5 pl-2'>
-          {tools.map((tool) => (
-            <li key={tool.name} className='flex min-w-0 flex-col gap-px'>
-              <span className='truncate font-mono text-fg-4 text-xs'>{tool.name}</span>
-              {tool.description && <Truncate className='text-2xs text-fg-2'>{tool.description}</Truncate>}
+    <div className='flex flex-col gap-1.5 pr-2 pb-2.5 pl-7'>
+      {detail.error && <p className={cn('break-words text-2xs', TONE_TEXT.red)}>{detail.error}</p>}
+      {detail.tools.length > 0 && (
+        <ul className='grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-x-4 gap-y-1'>
+          {detail.tools.map((tool) => (
+            <li key={tool.name} className='flex min-w-0'>
+              <ToolName name={tool.name} description={tool.description} />
             </li>
           ))}
         </ul>
       )}
+      {detail.empty && <p className='text-2xs text-fg-2'>{detail.empty}</p>}
+      <Hint label={detail.target}>
+        <span className='min-w-0 cursor-default truncate text-2xs text-fg-2'>{detail.line}</span>
+      </Hint>
     </div>
   );
 }

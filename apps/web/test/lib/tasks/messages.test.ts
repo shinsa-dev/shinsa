@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
+import { listOutboxMessages } from '@/lib/tasks/outbox.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
@@ -14,8 +15,8 @@ function hintFor(
 
 describe('resolveMessageHint', () => {
   it('says what a message does at each gate a person answers', () => {
-    const gate = (purpose: 'operation' | 'change' | 'failure') =>
-      createGate({ id: 'g', taskId: 't', kind: 'question', purpose });
+    const gate = (type: 'operation' | 'proposal' | 'failure' | 'sign_in') =>
+      createGate({ id: 'g', taskId: 't', type });
     expect(hintFor({ id: 't', stage: 'awaiting_plan' })).toBe(
       'Say what to change in the plan. The planner revises it and asks you again.'
     );
@@ -26,24 +27,32 @@ describe('resolveMessageHint', () => {
       'Ask for a change before the merge. A fixer makes it and the merge comes back to you.'
     );
     expect(hintFor({ id: 't', stage: 'awaiting_operation' }, { gates: [gate('operation')] })).toBe(
-      'Add notes for the operator. They go with the operation once you run it.'
+      'Write the notes for the operator. They replace the saved notes and go with the operation.'
     );
-    expect(hintFor({ id: 't', stage: 'awaiting_proposal' }, { gates: [gate('change')] })).toBe(
+    expect(hintFor({ id: 't', stage: 'awaiting_proposal' }, { gates: [gate('proposal')] })).toBe(
       'Reply instead of deciding. The proposal is declined and the agent carries on with your message.'
     );
     expect(hintFor({ id: 't', stage: 'building' }, { gates: [gate('failure')] })).toBe(
       'Say what to do differently. The step starts again with your message.'
     );
+    expect(hintFor({ id: 't', stage: 'building' }, { gates: [gate('sign_in')] })).toBe(
+      'Say what to do differently. The step starts again with your message.'
+    );
   });
 
-  it('says a message reaches a working agent, starts a new round of a merged task, and a closed task takes none', () => {
+  it('says a message at the setup gate verifies the setup again and goes to the first agent', () => {
+    const setup = createGate({ id: 'g', taskId: 't', type: 'configuration' });
+    expect(hintFor({ id: 't', stage: 'triage' }, { gates: [setup] })).toBe(
+      'Tell the agent something. The setup is verified again and the first agent reads it.'
+    );
+  });
+
+  it('says a message reaches a working agent, takes a follow-up or more work on a merged task, and a closed task takes none', () => {
     const run = createRun({ id: 'r', taskId: 't', status: 'running' });
     expect(hintFor({ id: 't', stage: 'building' }, { runs: [run] })).toBe(
       'Tell the agent something. It reaches the agent while it works.'
     );
-    expect(hintFor({ id: 't', stage: 'merged' })).toBe(
-      'Ask for the next piece of work. It starts as a new round of this task.'
-    );
+    expect(hintFor({ id: 't', stage: 'merged' })).toBe('Ask a follow-up, or for more work.');
     expect(hintFor({ id: 't', stage: 'done', closedAt: 1 })).toBeNull();
   });
 });
@@ -54,10 +63,27 @@ describe('sendTaskMessage', () => {
     const task = createTask({ id: 't', stage: 'awaiting_review' });
     const hint = resolveMessageHint(createShinsaState({ tasks: [task] }), task);
     if (!hint) throw new Error('The task takes no message.');
-    expect(await sendTaskMessage(task, hint, 'Rename the button.')).toBe(true);
+    const sending = sendTaskMessage(task, hint, 'Rename the button.');
+    expect(listOutboxMessages('t').map((message) => message.text)).toEqual(['Rename the button.']);
+    expect(await sending).toBe(true);
+    expect(listOutboxMessages('t')).toEqual([]);
     expect(commands.sent).toHaveBeenCalledWith(
       { type: 'task.message', taskId: 't', text: 'Rename the button.' },
-      'Changes requested. A fixer is on it.'
+      'Changes requested.'
+    );
+    commands.restore();
+  });
+
+  it('toasts that a message at the setup gate verifies the setup again', async () => {
+    const commands = spyOnCommands();
+    const task = createTask({ id: 't', stage: 'triage' });
+    const setup = createGate({ id: 'g', taskId: 't', type: 'configuration' });
+    const hint = resolveMessageHint(createShinsaState({ tasks: [task], gates: [setup] }), task);
+    if (!hint) throw new Error('The task takes no message.');
+    await sendTaskMessage(task, hint, 'Use bun test for the checks.');
+    expect(commands.sent).toHaveBeenCalledWith(
+      { type: 'task.message', taskId: 't', text: 'Use bun test for the checks.' },
+      'Verifying the setup again.'
     );
     commands.restore();
   });

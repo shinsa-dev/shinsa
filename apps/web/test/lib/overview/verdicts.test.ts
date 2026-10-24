@@ -61,13 +61,13 @@ describe('finding verdicts', () => {
     const stalled = { reason: 'stalled' as const, rounds: 1, at: 1 };
     const rounds = { reason: 'rounds' as const, rounds: 2, at: 1 };
     const review = (escalation?: typeof stalled | typeof rounds) =>
-      createGate({ id: 'g', taskId: 't', kind: 'review', ...(escalation ? { escalation } : {}) });
+      createGate({ id: 'g', taskId: 't', type: 'review', ...(escalation ? { escalation } : {}) });
     expect(describeReviewTitle(review(stalled))).toBe(
       'The fix changed nothing and the same findings came back'
     );
     expect(describeReviewTitle(review(rounds))).toBe('The agents could not settle the review');
     expect(describeReviewTitle(review())).toBe('Built and checked. Your turn to review the changes.');
-    expect(describeReviewTitle(createGate({ id: 'g', taskId: 't', kind: 'merge' }))).toBe(
+    expect(describeReviewTitle(createGate({ id: 'g', taskId: 't', type: 'merge' }))).toBe(
       'The pull request is clean and ready to merge'
     );
     expect(describeEscalationBody(stalled)).toContain('Shinsa stopped instead of trying again.');

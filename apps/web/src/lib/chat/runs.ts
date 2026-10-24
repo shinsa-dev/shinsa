@@ -11,7 +11,7 @@ export function describeEmptyChat(task: Task) {
       description: 'It picks the repository and a branch, then an agent starts here.',
     };
   }
-  if (task.stage === 'queued') {
+  if (task.stage === 'waiting_on_tasks') {
     return {
       title: 'Not started yet',
       description: 'An agent picks this task up when the task it waits on is finished.',

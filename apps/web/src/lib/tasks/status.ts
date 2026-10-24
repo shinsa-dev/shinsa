@@ -1,11 +1,12 @@
 import {
   type Attention,
   type Gate,
-  type GatePurpose,
+  type GateType,
   listActiveRuns,
   type ShinsaState,
   selectLeadGate,
   type Task,
+  type TaskStage,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
@@ -22,39 +23,41 @@ export interface Glyph {
   tone: Tone;
 }
 
-const GATE_GLYPH: Record<Gate['kind'], Glyph> = {
-  spec: { icon: 'IconFileText', tone: 'purple' },
+const QUESTION_GLYPH: Glyph = { icon: 'IconBubbleQuestion', tone: 'blue' };
+
+const QUESTION: Status = { label: 'Needs your answer', tone: 'blue' };
+
+const GATE_GLYPH: Record<GateType, Glyph> = {
+  plan: { icon: 'IconFileText', tone: 'purple' },
   review: { icon: 'IconEyeOpen', tone: 'amber' },
   merge: { icon: 'IconMerged', tone: 'green' },
-  question: { icon: 'IconBubbleQuestion', tone: 'blue' },
+  question: QUESTION_GLYPH,
+  secret: QUESTION_GLYPH,
+  proposal: { icon: 'IconFileEdit', tone: 'purple' },
+  operation: { icon: 'IconConsole', tone: 'purple' },
+  failure: { icon: 'IconPause', tone: 'orange' },
+  configuration: { icon: 'IconToolbox', tone: 'orange' },
+  sign_in: { icon: 'IconUserKey', tone: 'orange' },
 };
 
-const GATE_STATUS: Record<Gate['kind'], Status> = {
-  spec: { label: 'Plan to approve', tone: 'purple' },
+const GATE_STATUS: Record<GateType, Status> = {
+  plan: { label: 'Plan to approve', tone: 'purple' },
   review: { label: 'Changes to review', tone: 'amber' },
   merge: { label: 'Ready to merge', tone: 'green' },
-  question: { label: 'Needs your answer', tone: 'blue' },
+  question: QUESTION,
+  secret: QUESTION,
+  proposal: { label: 'Change to approve', tone: 'purple' },
+  operation: { label: 'Operation to confirm', tone: 'purple' },
+  failure: { label: 'Paused', tone: 'orange' },
+  configuration: { label: 'Setup incomplete', tone: 'orange' },
+  sign_in: { label: 'Sign in needed', tone: 'orange' },
 };
 
-const CHANGE_GLYPH: Glyph = { icon: 'IconFileEdit', tone: 'purple' };
-
-const CHANGE: Status = { label: 'Change to approve', tone: 'purple' };
-
-const OPERATION_GLYPH: Glyph = { icon: 'IconConsole', tone: 'purple' };
-
-const OPERATION: Status = { label: 'Operation to confirm', tone: 'purple' };
-
-const PAUSED: Status = { label: 'Paused', tone: 'orange' };
-
-const SETUP: Status = { label: 'Setup incomplete', tone: 'orange' };
-
-const WAITING_TO_CHECK: Status = { label: 'Waiting to check again', tone: 'blue' };
-
-const SIGN_IN: Status = { label: 'Sign in needed', tone: 'orange' };
+const WAITING_TO_CHECK_IN: Status = { label: 'Waiting to check in again', tone: 'blue' };
 
 const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 'blue' };
 
-const WAITING_FOR_DELEGATIONS: Status = { label: 'Waiting for delegated tasks', tone: 'blue' };
+const WAITING_FOR_DELEGATIONS: Status = { label: 'Waiting for delegations', tone: 'blue' };
 
 export const ATTENTION: Record<Attention, Status> = {
   critical: { label: 'Critical', tone: 'red' },
@@ -62,33 +65,16 @@ export const ATTENTION: Record<Attention, Status> = {
   normal: { label: 'Context', tone: 'neutral' },
 };
 
-const PAUSE_GLYPH: Record<'failure' | 'configuration' | 'sign_in', Glyph> = {
-  failure: { icon: 'IconPause', tone: 'orange' },
-  configuration: { icon: 'IconToolbox', tone: 'orange' },
-  sign_in: { icon: 'IconUserKey', tone: 'orange' },
-};
-
-export function resolvePauseGlyph(purpose: GatePurpose | undefined) {
-  return purpose === 'configuration' || purpose === 'sign_in' || purpose === 'failure'
-    ? PAUSE_GLYPH[purpose]
-    : null;
+export function resolvePauseGlyph(type: GateType | undefined) {
+  return type === 'configuration' || type === 'sign_in' || type === 'failure' ? GATE_GLYPH[type] : null;
 }
 
 export function resolveGateGlyph(gate: Gate): Glyph {
-  const paused = resolvePauseGlyph(gate.purpose);
-  if (paused) return paused;
-  if (gate.purpose === 'change') return CHANGE_GLYPH;
-  if (gate.purpose === 'operation') return OPERATION_GLYPH;
-  return gate.purpose === 'agent_question' ? GATE_GLYPH.question : GATE_GLYPH[gate.kind];
+  return GATE_GLYPH[gate.type];
 }
 
 export function resolveGateStatus(gate: Gate): Status {
-  if (gate.purpose === 'failure') return PAUSED;
-  if (gate.purpose === 'configuration') return SETUP;
-  if (gate.purpose === 'sign_in') return SIGN_IN;
-  if (gate.purpose === 'change') return CHANGE;
-  if (gate.purpose === 'operation') return OPERATION;
-  return gate.purpose === 'agent_question' ? GATE_STATUS.question : GATE_STATUS[gate.kind];
+  return GATE_STATUS[gate.type];
 }
 
 function isWaitingForDelegations(state: ShinsaState, task: Task) {
@@ -100,13 +86,48 @@ function isWaitingForDelegations(state: ShinsaState, task: Task) {
 export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   const gate = selectLeadGate(state, task);
   if (gate) return resolveGateStatus(gate);
-  if (task.monitor?.status === 'armed') return WAITING_TO_CHECK;
+  if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
   if (task.usageWait?.status === 'armed') return WAITING_FOR_USAGE;
   if (isWaitingForDelegations(state, task)) return WAITING_FOR_DELEGATIONS;
-  if (task.stage !== 'queued' && resolveRoadmapGroup(state, task) === 'waiting') {
+  if (task.stage !== 'waiting_on_tasks' && resolveRoadmapGroup(state, task) === 'waiting') {
     return { label: ROADMAP_GROUP.waiting.title, tone: ROADMAP_GROUP.waiting.tone };
   }
   return { label: STAGE_LABEL[task.stage], tone: STAGE_TONE[task.stage] };
+}
+
+const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {
+  triage: 'IconPlayCircle',
+  waiting_on_tasks: 'IconHourglass',
+  planning: 'IconLightbulbGlow',
+  awaiting_plan: GATE_GLYPH.plan.icon,
+  building: 'IconHammer',
+  checking: 'IconShieldCheck',
+  reviewing: 'IconEyeSparkle',
+  fixing: 'IconHammer2',
+  awaiting_review: GATE_GLYPH.review.icon,
+  shipping: 'IconRocket',
+  awaiting_merge: GATE_GLYPH.merge.icon,
+  answering: 'IconBubbleText',
+  investigating: 'IconMagnifyingGlass',
+  researching: 'IconBook',
+  operating: 'IconConsole',
+  awaiting_proposal: GATE_GLYPH.proposal.icon,
+  awaiting_operation: GATE_GLYPH.operation.icon,
+  merged: 'IconMerged',
+  done: 'IconCheckCircle2',
+  cancelled: 'IconCircleX',
+};
+
+export function resolveTaskStatusIcon(state: ShinsaState, task: Task): IconName {
+  const gate = selectLeadGate(state, task);
+  if (gate) return resolveGateGlyph(gate).icon;
+  if (task.monitor?.status === 'armed') return 'IconClockSnooze';
+  if (task.usageWait?.status === 'armed') return 'IconGauge';
+  if (isWaitingForDelegations(state, task)) return 'IconAgents';
+  if (task.stage !== 'waiting_on_tasks' && resolveRoadmapGroup(state, task) === 'waiting') {
+    return ROADMAP_GROUP.waiting.icon;
+  }
+  return STAGE_STATUS_ICON[task.stage];
 }
 
 export function resolveTaskGlyph(state: ShinsaState, task: Task): Glyph {

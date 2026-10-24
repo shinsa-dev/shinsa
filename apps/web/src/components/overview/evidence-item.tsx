@@ -64,7 +64,7 @@ function EvidenceBody({ evidence }: { evidence: Evidence }) {
           rel='noreferrer'
           className='corner-superellipse/1.125 flex h-7 items-center gap-2 rounded-control bg-bg-2 px-2.5 text-fg-4 text-xs transition-colors duration-150 hover:bg-bg-3 active:bg-bg-3'
         >
-          <Icon name='IconArrowUpRight' className='size-3.5 shrink-0' />
+          <Icon size='sm' name='IconArrowUpRight' />
           <Truncate>{evidence.uri}</Truncate>
         </a>
       );

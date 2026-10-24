@@ -51,7 +51,7 @@ export function CodeSnippet({
   return (
     <figure className='corner-superellipse/1.125 flex flex-col overflow-hidden rounded-lg border border-border'>
       <figcaption className='flex h-7 items-center gap-1.5 border-border border-b bg-bg-a1 px-2 text-2xs'>
-        <Icon name='IconFileText' className='size-3' />
+        <Icon size='sm' name='IconFileText' />
         <Truncate className='text-fg-3'>{spot.file}</Truncate>
         <span className='shrink-0 text-fg-2'>{formatLineRange(spot.start, spot.end)}</span>
         <span className='flex-1' />

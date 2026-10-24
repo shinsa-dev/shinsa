@@ -101,7 +101,7 @@ function listItemCommands(snapshot: ExtensionsSnapshot): Command[] {
     label: `${toggleLabel(optimizer.enabled)} the context optimizer`,
     icon: 'IconGauge',
     searchOnly: true,
-    keywords: ['context', 'tokens', 'unused', 'servers', 'optimizer'],
+    keywords: ['context', 'tokens', 'unused', 'mcp', 'skills', 'optimizer'],
     run: () => void chooseOptimizer(optimizer, { enabled: !optimizer.enabled }),
   });
   return commands;

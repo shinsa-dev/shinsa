@@ -12,7 +12,7 @@ const HOUR = 3_600_000;
 export function createWindow(overrides: Partial<UsageWindow> & { id: string }): UsageWindow {
   return {
     kind: 'session',
-    label: 'Current session',
+    label: '5-hour limit',
     model: null,
     usedPercent: 20,
     resetsAt: NOW + 3 * HOUR,

@@ -103,8 +103,8 @@ function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger render={<Button variant='outline' size='icon' aria-label='Toggle theme' />}>
-        <Icon name='IconSun' className='size-4 dark:hidden' />
-        <Icon name='IconMoon' className='hidden size-4 dark:block' />
+        <Icon name='IconSun' className='dark:hidden' />
+        <Icon name='IconMoon' className='hidden dark:block' />
       </DropdownMenuTrigger>
       <DropdownMenuContent align='end' className='w-32'>
         <DropdownMenuGroup>
@@ -183,7 +183,7 @@ export function UiPage() {
         <Section
           id='shinsa-chat'
           title='Shinsa composites · chat'
-          description='Delegated work, the quiet notice rows and the context meter, from apps/web/src/components/chat.'
+          description='Delegations, the quiet notice rows and the context meter, from apps/web/src/components/chat.'
           className='flex-col items-start gap-8'
         >
           <ChatSpecimens />
@@ -191,7 +191,7 @@ export function UiPage() {
         <Section
           id='shinsa-settings'
           title='Shinsa composites · settings rows'
-          description='The Accounts section (Claude accounts with their usage, and Codex) in each state, schedule and notification rows, from apps/web/src/components/settings.'
+          description='The Models card folded and opened per role, the Accounts card (Claude accounts with their usage, and Codex) in each state, schedule and notification rows, from apps/web/src/components/settings.'
           className='flex-col items-start gap-8'
         >
           <SettingsSpecimens />

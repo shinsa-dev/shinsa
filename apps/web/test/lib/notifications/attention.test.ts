@@ -19,8 +19,7 @@ import {
 const question = createGate({
   id: 'g-question',
   taskId: 't-1',
-  kind: 'question',
-  purpose: 'agent_question',
+  type: 'question',
   title: 'Which colour should the button be?',
 });
 
@@ -45,9 +44,9 @@ describe('the page status and badge', () => {
   it('waits on you with a decision up, and says failed when one is a failure', () => {
     const review = createGate({ id: 'g-review', taskId: 't-2' });
     expect(resolvePageAttention(withTasks(question, review), NOW)).toEqual({ status: 'waiting', badge: 2 });
-    const failure = createGate({ id: 'g-fail', taskId: 't-2', kind: 'question', purpose: 'failure' });
+    const failure = createGate({ id: 'g-fail', taskId: 't-2', type: 'failure' });
     expect(resolvePageAttention(withTasks(failure), NOW)).toEqual({ status: 'failed', badge: 1 });
-    const signIn = createGate({ id: 'g-sign-in', taskId: 't-2', kind: 'question', purpose: 'sign_in' });
+    const signIn = createGate({ id: 'g-sign-in', taskId: 't-2', type: 'sign_in' });
     expect(resolvePageAttention(withTasks(signIn), NOW)).toEqual({ status: 'failed', badge: 1 });
   });
 
@@ -77,8 +76,7 @@ describe('what a notification says', () => {
     const failure = createGate({
       id: 'g-fail',
       taskId: 't-1',
-      kind: 'question',
-      purpose: 'failure',
+      type: 'failure',
       title: 'Out of automatic fix rounds',
       body: 'Two  files\nstill fail.',
     });
@@ -92,9 +90,9 @@ describe('what a notification says', () => {
   it('shows a review as its plain headline, never the report’s markdown', () => {
     const body = serializeReportMarkdown({
       headline: 'Adds retries',
-      phases: [{ title: 'Retry loop', summary: 'Wraps the call', spots: [] }],
+      sections: [{ title: 'Retry loop', summary: 'Wraps the call', spots: [] }],
       checks: [],
-      decisions: [],
+      judgementCalls: [],
     } as never);
     const task = createTask({
       id: 't',
@@ -113,8 +111,7 @@ describe('what a notification says', () => {
     const gate = createGate({
       id: 'g',
       taskId: 't',
-      kind: 'question',
-      purpose: 'operation',
+      type: 'operation',
       title: 'The change merged. Run the operation now?',
       body: 'Pull request #42 merged as `abc1234`.\n\n## Operation\n1. Run the backfill.\n\n## Impact\nAbout 400 rows.',
     });
@@ -127,6 +124,7 @@ describe('what a notification says', () => {
   it('never repeats a secret request, only names what was asked for', () => {
     const secret = {
       ...question,
+      type: 'secret' as const,
       id: 'g-secret',
       title: 'For the webhook.',
       secret: { label: 'GitHub secret' },
@@ -138,7 +136,7 @@ describe('what a notification says', () => {
     const long = (body: string) =>
       listNewDecisions(
         new Set(),
-        withTasks(createGate({ id: 'g-long', taskId: 't-1', kind: 'question', purpose: 'failure', body })),
+        withTasks(createGate({ id: 'g-long', taskId: 't-1', type: 'failure', body })),
         NOW
       )[0]?.body ?? '';
     const cut = long(`${'word '.repeat(60)}end`);

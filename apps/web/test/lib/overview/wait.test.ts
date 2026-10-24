@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import type { Monitor } from '@shinsa/core';
 import {
-  describeCheckCount,
+  describeCheckInCount,
   describeGiveUp,
-  describeNextCheck,
+  describeNextCheckIn,
   describeSilence,
   STALLED_REASON,
 } from '@/lib/overview/wait.ts';
@@ -25,12 +25,12 @@ const MONITOR: Monitor = {
 };
 
 describe('the wait', () => {
-  it('names the next check, the count and when it gives up', () => {
-    expect(describeNextCheck(MONITOR, 0)).toBe('Checks again in 12m');
-    expect(describeNextCheck(MONITOR, 12 * MINUTE)).toBe('Checks again in under a minute');
-    expect(describeCheckCount(MONITOR)).toBe('Check 2 of 10');
+  it('names the next check-in, the count and when it gives up', () => {
+    expect(describeNextCheckIn(MONITOR, 0)).toBe('Checks in again in 12m');
+    expect(describeNextCheckIn(MONITOR, 12 * MINUTE)).toBe('Checks in again in under a minute');
+    expect(describeCheckInCount(MONITOR)).toBe('Check-in 2 of 10');
     expect(describeGiveUp(MONITOR, 0)).toBe('gives up in 2h');
-    expect(describeGiveUp(MONITOR, 120 * MINUTE)).toBe('gives up at the next check');
+    expect(describeGiveUp(MONITOR, 120 * MINUTE)).toBe('gives up at the next check-in');
   });
 
   it('a quiet run reads as how long it has been quiet, only once it counts', () => {

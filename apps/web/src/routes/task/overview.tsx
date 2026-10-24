@@ -8,18 +8,18 @@ import { CHIP } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
-import { AnswerPanel, ResultPanel } from '@/components/overview/answer-panel.tsx';
 import { CodeSnippet } from '@/components/overview/code-snippet.tsx';
 import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
 import { EvidenceItem } from '@/components/overview/evidence-item.tsx';
 import { NowCard } from '@/components/overview/now-card.tsx';
+import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { Composer } from '@/components/task/composer.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
-import { resolveOverviewSummary } from '@/lib/overview/activity.ts';
+import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { isVisualEvidence, listRoundEvidence } from '@/lib/overview/evidence.ts';
-import type { NowTarget } from '@/lib/overview/now.ts';
+import { isResultInNowCard, type NowTarget } from '@/lib/overview/now.ts';
 import { describeFindingPlace } from '@/lib/review/findings.ts';
 import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { isCodeTask } from '@/lib/tasks/shapes.ts';
@@ -48,8 +48,8 @@ function EvidencePanel({ state, task }: { state: ShinsaState; task: Task }) {
 }
 
 function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget) => void }) {
-  const phases = task.report?.phases ?? [];
-  if (phases.length === 0) return null;
+  const sections = task.report?.sections ?? [];
+  if (sections.length === 0) return null;
   return (
     <Panel
       title='What changed'
@@ -61,15 +61,15 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
       }
     >
       <ol className='flex flex-col gap-4'>
-        {phases.map((phase, index) => (
-          <li key={phase.title} className='flex gap-2.5'>
+        {sections.map((section, index) => (
+          <li key={section.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-1 flex-col gap-2'>
               <div className='flex flex-col gap-px'>
-                <InlineMarkdown text={phase.title} className='font-medium text-fg-4 text-xs leading-5' />
-                <Markdown text={phase.summary} className='text-fg-3 text-xs' />
+                <InlineMarkdown text={section.title} className='font-medium text-fg-4 text-xs leading-5' />
+                <Markdown text={section.summary} className='text-fg-3 text-xs' />
               </div>
-              {phase.spots.slice(0, SPOTS_SHOWN).map((spot) => (
+              {section.spots.slice(0, SPOTS_SHOWN).map((spot) => (
                 <CodeSnippet
                   key={`${spot.file}:${spot.start}`}
                   taskId={task.id}
@@ -85,22 +85,20 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
   );
 }
 
-function DecisionsPanel({ task }: { task: Task }) {
-  const decisions = task.report?.decisions ?? [];
-  if (decisions.length === 0) return null;
+function JudgementCallsPanel({ task }: { task: Task }) {
+  const calls = task.report?.judgementCalls ?? [];
+  if (calls.length === 0) return null;
   return (
-    <Panel title='Decisions the agent made' icon='IconSplit'>
+    <Panel title='Judgement calls' icon='IconSplit'>
       <ul className='flex flex-col divide-y divide-border'>
-        {decisions.map((decision) => (
-          <li key={decision.decision} className='flex gap-2.5 py-2 first:pt-0 last:pb-0'>
-            <Icon name='IconSplit' className='mt-0.5 size-3.5 shrink-0' />
+        {calls.map((call) => (
+          <li key={call.call} className='flex gap-2.5 py-2 first:pt-0 last:pb-0'>
+            <Icon size='sm' name='IconSplit' className='mt-0.5' />
             <div className='flex min-w-0 flex-1 flex-col gap-px'>
-              <InlineMarkdown text={decision.decision} className='font-medium text-fg-4 text-xs leading-5' />
-              <Markdown text={decision.reason} className='text-fg-3 text-xs' />
-              {decision.file && (
-                <code className={cn(CHIP, 'mt-0.5 font-mono text-2xs')}>
-                  {describeFindingPlace(decision)}
-                </code>
+              <InlineMarkdown text={call.call} className='font-medium text-fg-4 text-xs leading-5' />
+              <Markdown text={call.reason} className='text-fg-3 text-xs' />
+              {call.file && (
+                <code className={cn(CHIP, 'mt-0.5 font-mono text-2xs')}>{describeFindingPlace(call)}</code>
               )}
             </div>
           </li>
@@ -129,9 +127,7 @@ export function OverviewTab({
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
-          <RoundsPanel task={task} />
-          <AnswerPanel task={task} />
-          <ResultPanel task={task} />
+          {!isResultInNowCard(state, task, gate) && <ResultPanel task={task} />}
           <DelegationsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
           <SuggestionsPanel task={task} />
           {code && (
@@ -147,10 +143,11 @@ export function OverviewTab({
           )}
           <EvidencePanel state={state} task={task} />
           {code && <ChangesPanel task={task} onOpen={onOpen} />}
-          {code && <DecisionsPanel task={task} />}
+          {code && <JudgementCallsPanel task={task} />}
+          <RoundsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
           <Panel title='Activity' icon='IconClock'>
             <ol className='flex flex-col'>
-              {task.activity.map((entry) => (
+              {listActivityNewestFirst(task).map((entry) => (
                 <ActivityRow
                   key={`${entry.at}-${entry.kind}-${entry.text}`}
                   entry={entry}

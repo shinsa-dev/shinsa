@@ -20,8 +20,7 @@ function question(id: string) {
   return createGate({
     id,
     taskId: 't-1',
-    kind: 'question',
-    purpose: 'agent_question',
+    type: 'question',
     title: `Question ${id}`,
   });
 }

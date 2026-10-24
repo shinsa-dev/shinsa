@@ -10,19 +10,25 @@ export interface TaskAction {
 
 function resolveGateAction(gate: Gate, task: Task): TaskAction {
   const path = resolveTaskPath(task);
-  if (gate.purpose === 'failure') return { label: 'Decide what to do', path };
-  if (gate.purpose === 'configuration') return { label: 'Fix the setup', path };
-  if (gate.purpose === 'sign_in') return { label: 'Sign in', path };
-  if (gate.purpose === 'change') return { label: 'Decide on the change', path };
-  if (gate.purpose === 'operation') return { label: 'Confirm the operation', path };
   if (gate.secret) return { label: `Give the ${resolveSecretLabel(gate)}`, path };
-  switch (gate.kind) {
+  switch (gate.type) {
+    case 'failure':
+      return { label: 'Decide what to do', path };
+    case 'configuration':
+      return { label: 'Fix the setup', path };
+    case 'sign_in':
+      return { label: 'Sign in', path };
+    case 'proposal':
+      return { label: 'Decide on the change', path };
+    case 'operation':
+      return { label: 'Confirm the operation', path };
     case 'question':
+    case 'secret':
       return {
         label: 'Answer',
         path: gate.runId ? resolveTaskPath(task, { tab: 'chat', run: gate.runId }) : path,
       };
-    case 'spec':
+    case 'plan':
       return { label: 'Review plan', path };
     case 'review':
       return { label: 'Review changes', path: resolveTaskPath(task, { tab: 'code' }) };

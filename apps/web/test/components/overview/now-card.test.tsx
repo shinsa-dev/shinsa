@@ -11,6 +11,7 @@ import { createSnapshot } from '../../support/accounts.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 import { createPullRequest } from '../../support/pull-request.ts';
+import { createRound } from '../../support/rounds.ts';
 import {
   holdAcks,
   listSentCommands,
@@ -76,7 +77,7 @@ function reviewing(kind: 'review' | 'merge' = 'review') {
     stage: kind === 'merge' ? 'awaiting_merge' : 'awaiting_review',
     pullRequest: kind === 'merge' ? createPullRequest({ number: 42 }) : null,
   });
-  const gate = createGate({ id: 'gate-1', taskId: 'task-1', kind });
+  const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: kind });
   return { task, gate, state: createShinsaState({ tasks: [task], gates: [gate] }) };
 }
 
@@ -94,6 +95,22 @@ afterEach(() => {
 });
 
 describe('NowCard on the Overview', () => {
+  it('heads a working round in sentence case: its status, the round of all of them, the role and when it started', () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'building',
+      rounds: [
+        createRound({ number: 1, status: 'merged' }),
+        createRound({ number: 2, status: 'active', endedAt: null, outcome: null }),
+      ],
+    });
+    const run = createRun({ id: 'r', taskId: 'task-1', role: 'builder', startedAt: Date.now() });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], runs: [run] }), task, undefined);
+    const eyebrow = view.getByText('Round 2 of 2').parentElement as HTMLElement;
+    expect(eyebrow.textContent).toMatch(/·Round 2 of 2·.*Builder.*·Started just now$/);
+    expect(eyebrow.textContent).not.toMatch(/round 2|started/);
+  });
+
   it('offers Review then Approve changes on a review gate', () => {
     const { task, gate, state } = reviewing();
     const { view } = renderOverview(state, task, gate);
@@ -176,13 +193,13 @@ describe('NowCard on the Overview', () => {
     const task = createTask({
       id: 'task-1',
       stage: 'awaiting_plan',
-      spec: {
+      plan: {
         version: 1,
         body: '',
         proposedAt: 0,
         document: {
           goal: 'Ship a login form.',
-          plan: [
+          phases: [
             { title: 'Add the fields', detail: 'Email and password.' },
             { title: 'Validate input', detail: 'With zod.' },
           ],
@@ -195,7 +212,7 @@ describe('NowCard on the Overview', () => {
         },
       },
     });
-    const gate = createGate({ id: 'gate-1', taskId: 'task-1', kind: 'spec' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan' });
     const { view, onOpen } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     const card = within(view.container.querySelector('section') as HTMLElement);
     expect(card.getByText('Ship a login form.')).toBeTruthy();
@@ -213,7 +230,7 @@ describe('NowCard on the Overview', () => {
 
   it('says the operation runs next when you approve an operation’s plan', async () => {
     const task = createTask({ id: 'task-1', stage: 'awaiting_plan', pipeline: ['plan', 'operate'] });
-    const gate = createGate({ id: 'gate-1', taskId: 'task-1', kind: 'spec' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan' });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     fireEvent.click(view.getByRole('button', { name: 'Approve plan' }));
     expect(await view.findByText('Approved. Running the operation now.')).toBeTruthy();
@@ -224,13 +241,13 @@ describe('NowCard on the Overview', () => {
     const task = createTask({
       id: 'task-1',
       stage: 'awaiting_plan',
-      spec: {
+      plan: {
         version: 1,
         body: '',
         proposedAt: 0,
         document: {
           goal: 'Backfill currencies.',
-          plan: [{ title: 'Add the script', detail: 'With a dry run.' }],
+          phases: [{ title: 'Add the script', detail: 'With a dry run.' }],
           behaviour: [],
           approach: '',
           files: [],
@@ -244,7 +261,7 @@ describe('NowCard on the Overview', () => {
         },
       },
     });
-    const gate = createGate({ id: 'gate-1', taskId: 'task-1', kind: 'spec' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan' });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     const card = within(view.container.querySelector('section') as HTMLElement);
     expect(card.getByText('Impact')).toBeTruthy();
@@ -261,7 +278,7 @@ describe('NowCard on the Overview', () => {
     const gate = createGate({
       id: 'gate-1',
       taskId: 'task-1',
-      purpose: 'failure',
+      type: 'failure',
       title: 'Out of automatic fix rounds',
       body: 'The checks kept failing.',
     });
@@ -287,7 +304,7 @@ describe('NowCard on the Overview', () => {
       outcome: 'failed',
       summary: 'Tests broke.',
     });
-    const gate = createGate({ id: 'gate-1', taskId: 'task-1', purpose: 'failure', runId: 'run-1' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'failure', runId: 'run-1' });
     const { view, onOpen } = renderOverview(
       createShinsaState({ tasks: [task], gates: [gate], runs: [run] }),
       task,
@@ -303,8 +320,7 @@ describe('NowCard on the Overview', () => {
     const gate = createGate({
       id: 'gate-1',
       taskId: 'task-1',
-      kind: 'question',
-      purpose: 'agent_question',
+      type: 'question',
       title: 'Which colour?',
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
@@ -315,7 +331,7 @@ describe('NowCard on the Overview', () => {
     expect(listSentCommands()).toEqual([]);
     fireEvent.keyDown(field, { key: 'Enter' });
     expect(listSentCommands()).toEqual([
-      { type: 'gate.answer', gateId: 'gate-1', decision: 'answer', response: 'Blue' },
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'reply', response: 'Blue' },
     ]);
     expect(await view.findByText('Answered. The agent carries on.')).toBeTruthy();
   });
@@ -325,8 +341,7 @@ describe('NowCard on the Overview', () => {
     const gate = createGate({
       id: 'gate-1',
       taskId: 'task-1',
-      kind: 'question',
-      purpose: 'agent_question',
+      type: 'question',
       title: 'Which colour?',
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
@@ -339,7 +354,7 @@ describe('NowCard on the Overview', () => {
     releaseAcks();
     await waitFor(() => expect(findButton(view, 'Send answer').hasAttribute('aria-busy')).toBe(false));
     expect(listSentCommands()).toEqual([
-      { type: 'gate.answer', gateId: 'gate-1', decision: 'answer', response: 'Green' },
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'reply', response: 'Green' },
     ]);
   });
 
@@ -347,7 +362,7 @@ describe('NowCard on the Overview', () => {
     const task = createTask({
       id: 'task-1',
       stage: 'awaiting_plan',
-      spec: {
+      plan: {
         version: 2,
         body: '',
         proposedAt: 0,
@@ -356,7 +371,7 @@ describe('NowCard on the Overview', () => {
         feedback: 'Validate on the server too.',
         document: {
           goal: 'Ship a login form.',
-          plan: [{ title: 'Validate input', detail: 'With zod.' }],
+          phases: [{ title: 'Validate input', detail: 'With zod.' }],
           behaviour: [],
           approach: '',
           files: [],
@@ -366,7 +381,7 @@ describe('NowCard on the Overview', () => {
         },
       },
     });
-    const gate = createGate({ id: 'gate-1', taskId: 'task-1', kind: 'spec', planVersion: 2 });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan', planVersion: 2 });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     expect(view.getByText(/Version 2 · 1 phase/)).toBeTruthy();
     expect(view.getByText('What changed')).toBeTruthy();
@@ -380,8 +395,7 @@ describe('NowCard on the Overview', () => {
     const gate = createGate({
       id: 'gate-1',
       taskId: 'task-1',
-      kind: 'question',
-      purpose: 'agent_question',
+      type: 'question',
       title: 'Which colour?',
       choices: ['Blue', 'Green'],
       recommendation: 'Green',
@@ -390,7 +404,7 @@ describe('NowCard on the Overview', () => {
     expect(view.getByText('Recommended')).toBeTruthy();
     fireEvent.click(view.getByRole('button', { name: /Green/ }));
     expect(listSentCommands()).toEqual([
-      { type: 'gate.answer', gateId: 'gate-1', decision: 'answer', response: 'Green' },
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'reply', response: 'Green' },
     ]);
     expect(await view.findByText('Answered. The agent carries on.')).toBeTruthy();
   });
@@ -443,7 +457,7 @@ describe('NowCard on the Overview', () => {
     ]);
   });
 
-  it('shows what the setup is missing, checks again, starts without checks or cancels', async () => {
+  it('shows what the setup is missing, verifies it again, waives the checks or cancels', async () => {
     const task = createTask({
       id: 'task-1',
       stage: 'triage',
@@ -452,15 +466,14 @@ describe('NowCard on the Overview', () => {
     const gate = createGate({
       id: 'gate-1',
       taskId: 'task-1',
-      kind: 'question',
-      purpose: 'configuration',
+      type: 'configuration',
       title: 'No checks to run',
       body: 'Shinsa stopped before any agent started because the setup is not complete:\n- No check commands are set.',
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
     expect(view.getByText('No checks to run')).toBeTruthy();
     expect(view.getByText('No check commands are set.')).toBeTruthy();
-    fireEvent.click(view.getByRole('button', { name: 'Check again' }));
+    fireEvent.click(view.getByRole('button', { name: 'Verify again' }));
     const start = view.getByRole('button', { name: 'Start without checks' }) as HTMLButtonElement;
     await waitFor(() => expect(start.disabled).toBe(false));
     fireEvent.click(start);
@@ -469,7 +482,7 @@ describe('NowCard on the Overview', () => {
     fireEvent.click(cancel);
     expect(listSentCommands().map((command) => (command as { decision: string }).decision)).toEqual([
       'approve',
-      'answer',
+      'waive',
       'reject',
     ]);
   });
@@ -479,7 +492,7 @@ describe('NowCard on the Overview', () => {
     const failure = createGate({
       id: 'gate-1',
       taskId: 'task-1',
-      purpose: 'failure',
+      type: 'failure',
       title: 'Out of fix rounds',
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [failure] }), task, failure);
@@ -493,7 +506,7 @@ describe('NowCard on the Overview', () => {
 
   it('offers to allow more on a task that reached its usage or cost limit', () => {
     const task = createTask({ id: 'task-1' });
-    const gate = createGate({ id: 'gate-1', taskId: 'task-1', purpose: 'failure', cause: 'budget' });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'failure', cause: 'budget' });
     const run = createRun({
       id: 'run-1',
       taskId: 'task-1',
@@ -510,7 +523,7 @@ describe('NowCard on the Overview', () => {
     expect(usage.view.getByRole('button', { name: 'Allow another 10%' })).toBeTruthy();
   });
 
-  it('shows a waiting agent’s notes and checks now on request', async () => {
+  it('shows a waiting agent’s notes and checks in now on request', async () => {
     const now = Date.now();
     const task = createTask({
       id: 'task-1',
@@ -531,8 +544,8 @@ describe('NowCard on the Overview', () => {
     const { view } = renderOverview(createShinsaState({ tasks: [task] }), task, undefined);
     expect(view.getByText('The agent is waiting on something outside the repository')).toBeTruthy();
     expect(view.getByText('The staging deploy.')).toBeTruthy();
-    expect(view.getByText(/Check 2 of 10/)).toBeTruthy();
-    fireEvent.click(view.getByRole('button', { name: 'Check now' }));
+    expect(view.getByText(/Check-in 2 of 10/)).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Check in now' }));
     await waitFor(() =>
       expect(listSentCommands()).toEqual([{ type: 'monitor.check_in_now', taskId: 'task-1' }])
     );
@@ -562,8 +575,8 @@ describe('NowCard on the Overview', () => {
 
   it('names the task up the chain that holds this one up', () => {
     const blocker = createTask({ id: 'blocker', title: 'Fix the schema', stage: 'awaiting_review' });
-    const task = createTask({ id: 'task-1', stage: 'queued', waitsOn: ['blocker'] });
-    const gate = createGate({ id: 'gate-b', taskId: 'blocker', kind: 'review' });
+    const task = createTask({ id: 'task-1', stage: 'waiting_on_tasks', waitsOn: ['blocker'] });
+    const gate = createGate({ id: 'gate-b', taskId: 'blocker', type: 'review' });
     const { view } = renderOverview(
       createShinsaState({ tasks: [task, blocker], gates: [gate] }),
       task,
@@ -573,18 +586,19 @@ describe('NowCard on the Overview', () => {
     expect(view.getByText(/is waiting on you/)).toBeTruthy();
   });
 
-  it('shows the answer to a question, and adds or dismisses a suggested follow-up', async () => {
+  it('shows the answer to a question, and adds or dismisses a suggested task', async () => {
     const task = createTask({
       id: 'task-1',
       stage: 'done',
       mode: 'ask',
-      answer: 'It retries **three** times.',
+      pipeline: ['answer'],
+      result: { step: 'answer', body: 'It retries **three** times.', runId: null, at: 1 },
       suggestions: [
         {
           id: 's',
           runId: null,
           title: 'Cache the export',
-          intent: 'Cache it.',
+          request: 'Cache it.',
           why: 'It is slow.',
           waitsOnThis: true,
           status: 'open',
@@ -594,8 +608,12 @@ describe('NowCard on the Overview', () => {
       ],
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task] }), task, undefined);
-    expect(view.getByRole('heading', { name: 'Answer' })).toBeTruthy();
-    expect(view.getByText('three')).toBeTruthy();
+    expect(view.getByText('Answered your question')).toBeTruthy();
+    expect(view.queryByRole('heading', { name: 'Answer' })).toBeNull();
+    expect(view.getAllByText('three')).toHaveLength(1);
+    expect(
+      view.getByText('Ask a follow-up in the chat and the agent answers in the same conversation.')
+    ).toBeTruthy();
     expect(view.queryByText('Summary')).toBeNull();
     expect(view.getByRole('combobox', { name: 'When to start' }).textContent).toBe('After this task merges');
     fireEvent.click(view.getByRole('button', { name: 'Add' }));
@@ -631,8 +649,7 @@ describe('NowCard about an account', () => {
     const gate = createGate({
       id: 'g',
       taskId: 't',
-      kind: 'question',
-      purpose: 'sign_in',
+      type: 'sign_in',
       title: 'Sign in to Claude as a@example.com',
       body: 'Claude says the login expired. Sign in again and the step starts again by itself.',
       account: { id: 'a', email: 'a@example.com' },

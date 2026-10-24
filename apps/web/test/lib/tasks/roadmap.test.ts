@@ -14,7 +14,7 @@ import {
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../../support/state.ts';
 
 function waiting(id: string, waitsOn: string[], overrides: Partial<Task> = {}) {
-  return createTask({ id, stage: 'queued', waitsOn, ...overrides });
+  return createTask({ id, stage: 'waiting_on_tasks', waitsOn, ...overrides });
 }
 
 function chainOf(tasks: Task[], section: Task[] = tasks) {
@@ -32,16 +32,16 @@ describe('resolveRoadmapGroup', () => {
   }
 
   it('files each open decision under what you do at it', () => {
-    expect(groupFor({ kind: 'merge' })).toBe('merge');
-    expect(groupFor({ kind: 'review' })).toBe('review');
-    expect(groupFor({ kind: 'spec' })).toBe('plan');
-    expect(groupFor({ kind: 'question' })).toBe('answer');
+    expect(groupFor({ type: 'merge' })).toBe('merge');
+    expect(groupFor({ type: 'review' })).toBe('review');
+    expect(groupFor({ type: 'plan' })).toBe('plan');
+    expect(groupFor({ type: 'question' })).toBe('answer');
   });
 
-  it('files an agent question as an answer and a failure as paused, whatever the gate kind', () => {
-    expect(groupFor({ kind: 'review', purpose: 'agent_question' })).toBe('answer');
-    expect(groupFor({ kind: 'merge', purpose: 'failure' })).toBe('paused');
-    expect(groupFor({ kind: 'question', purpose: 'sign_in' })).toBe('paused');
+  it('files a secret request as an answer and a failure or sign-in as paused', () => {
+    expect(groupFor({ type: 'secret' })).toBe('answer');
+    expect(groupFor({ type: 'failure' })).toBe('paused');
+    expect(groupFor({ type: 'sign_in' })).toBe('paused');
   });
 
   it('lets a failure or a question lead over a decision on the same task', () => {
@@ -49,32 +49,30 @@ describe('resolveRoadmapGroup', () => {
     const state = createShinsaState({
       tasks: [subject],
       gates: [
-        createGate({ id: 'decision', taskId: 't', kind: 'review' }),
-        createGate({ id: 'failure', taskId: 't', kind: 'review', purpose: 'failure' }),
+        createGate({ id: 'decision', taskId: 't', type: 'review' }),
+        createGate({ id: 'failure', taskId: 't', type: 'failure' }),
       ],
     });
     expect(resolveRoadmapGroup(state, subject)).toBe('paused');
   });
 
   it('files a proposed change as a decision of its own, and an investigation at work as in progress', () => {
-    expect(groupFor({ kind: 'question', purpose: 'change' }, { stage: 'awaiting_proposal' })).toBe('change');
-    expect(groupFor({ kind: 'question', status: 'answered' }, { stage: 'investigating' })).toBe('working');
+    expect(groupFor({ type: 'proposal' }, { stage: 'awaiting_proposal' })).toBe('change');
+    expect(groupFor({ type: 'question', status: 'answered' }, { stage: 'investigating' })).toBe('working');
   });
 
   it('files an operation waiting for your OK after the merge as a decision of its own, not a question', () => {
-    expect(groupFor({ kind: 'question', purpose: 'operation' }, { stage: 'awaiting_operation' })).toBe(
-      'operation'
-    );
+    expect(groupFor({ type: 'operation' }, { stage: 'awaiting_operation' })).toBe('operation');
   });
 
   it('ignores answered gates', () => {
-    expect(groupFor({ kind: 'review', status: 'answered' })).toBe('working');
+    expect(groupFor({ type: 'review', status: 'answered' })).toBe('working');
   });
 
   it('puts settled tasks in done or cancelled, even with a gate left open', () => {
-    expect(groupFor({ kind: 'merge' }, { stage: 'merged' })).toBe('done');
-    expect(groupFor({ kind: 'merge' }, { stage: 'done' })).toBe('done');
-    expect(groupFor({ kind: 'merge' }, { stage: 'cancelled' })).toBe('cancelled');
+    expect(groupFor({ type: 'merge' }, { stage: 'merged' })).toBe('done');
+    expect(groupFor({ type: 'merge' }, { stage: 'done' })).toBe('done');
+    expect(groupFor({ type: 'merge' }, { stage: 'cancelled' })).toBe('cancelled');
   });
 
   it('separates tasks waiting on another task from tasks agents are working on', () => {
@@ -256,8 +254,8 @@ describe('listOpenTaskChoices', () => {
     createTask({ id: 'self' }),
     createTask({ id: 'later', createdAt: NOW - 10_000 }),
     createTask({ id: 'urgent', priority: 'urgent' }),
-    createTask({ id: 'child', waitsOn: ['self'], stage: 'queued' }),
-    createTask({ id: 'grandchild', waitsOn: ['child'], stage: 'queued' }),
+    createTask({ id: 'child', waitsOn: ['self'], stage: 'waiting_on_tasks' }),
+    createTask({ id: 'grandchild', waitsOn: ['child'], stage: 'waiting_on_tasks' }),
     createTask({ id: 'merged', stage: 'merged' }),
     createTask({ id: 'cancelled', stage: 'cancelled' }),
   ];
@@ -286,13 +284,18 @@ describe('listRoadmapSections', () => {
     createTask({ id: 'merged', stage: 'merged', stageChangedAt: NOW - 50_000 }),
     createTask({ id: 'done', stage: 'done', stageChangedAt: NOW - 1_000 }),
     createTask({ id: 'gone', stage: 'cancelled', stageChangedAt: NOW - 1_000 }),
-    createTask({ id: 'waiter', stage: 'queued', waitsOn: ['old'], intent: 'After the OAuth change' }),
-    createTask({ id: 'next', stage: 'queued', waitsOn: ['waiter'], branch: 'feat/next-step' }),
+    createTask({
+      id: 'waiter',
+      stage: 'waiting_on_tasks',
+      waitsOn: ['old'],
+      request: 'After the OAuth change',
+    }),
+    createTask({ id: 'next', stage: 'waiting_on_tasks', waitsOn: ['waiter'], branch: 'feat/next-step' }),
     createTask({ id: 'review', title: 'Review me' }),
   ];
   const state = createShinsaState({
     tasks,
-    gates: [createGate({ id: 'g', taskId: 'review', kind: 'review' })],
+    gates: [createGate({ id: 'g', taskId: 'review', type: 'review' })],
   });
 
   function ids(status: Parameters<typeof listRoadmapSections>[2], search = '') {
@@ -324,7 +327,7 @@ describe('listRoadmapSections', () => {
     expect(ids('done')).toEqual({ done: ['done', 'merged'] });
   });
 
-  it('matches the search against title, intent and branch, ignoring case and spaces around it', () => {
+  it('matches the search against title, request and branch, ignoring case and spaces around it', () => {
     expect(ids('working', '  WORK ')).toEqual({ working: ['high', 'old', 'new'] });
     expect(ids('waiting', 'oauth')).toEqual({ waiting: ['waiter'] });
     expect(ids('waiting', 'feat/next')).toEqual({ waiting: ['next'] });
@@ -350,7 +353,7 @@ describe('describeRoadmapCounts', () => {
     const state = createShinsaState({
       tasks: [
         createTask({ id: 'a' }),
-        createTask({ id: 'b', stage: 'queued' }),
+        createTask({ id: 'b', stage: 'waiting_on_tasks' }),
         createTask({ id: 'c', stage: 'merged' }),
         createTask({ id: 'd', stage: 'done' }),
         createTask({ id: 'e', stage: 'cancelled' }),

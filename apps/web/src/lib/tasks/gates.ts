@@ -16,12 +16,12 @@ export interface AnswerExtras {
 }
 
 const GATE_REPLY = {
-  answer: { decision: 'answer', done: 'Answered. The agent carries on.' },
+  answer: { decision: 'reply', done: 'Answered. The agent carries on.' },
   retry: { decision: 'approve', done: 'Picking it up again.' },
-  guide: { decision: 'approve', done: 'Retrying with your guidance.' },
+  guide: { decision: 'reply', done: 'Retrying with your guidance.' },
   cancel: { decision: 'reject', done: 'Cancelled.' },
-  recheck: { decision: 'approve', done: 'Checking the setup again.' },
-  skipChecks: { decision: 'answer', done: 'Starting without checks for this repository.' },
+  recheck: { decision: 'approve', done: 'Verifying the setup again.' },
+  skipChecks: { decision: 'waive', done: 'Starting without checks for this repository.' },
   approvePlan: { decision: 'approve', done: 'Approved. Building now.' },
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
   revisePlan: { decision: 'revise', done: 'Sent back to the planner.' },
@@ -33,7 +33,8 @@ const GATE_REPLY = {
   planOperation: { decision: 'approve', done: 'Approved. Planning the operation now.' },
   keepAsIs: { decision: 'reject', done: 'Kept as it is. The task is done.' },
   runOperation: { decision: 'approve', done: 'Running the operation.' },
-  runOperationWithNotes: { decision: 'answer', done: 'Running the operation with your notes.' },
+  runOperationWithNotes: { decision: 'reply', done: 'Running the operation with your notes.' },
+  runOperationWithoutNotes: { decision: 'reply', done: 'Running the operation without notes.' },
   skipOperation: { decision: 'reject', done: 'Finished without running the operation.' },
 } as const satisfies Record<string, { decision: GateDecision; done: string }>;
 

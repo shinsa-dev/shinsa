@@ -89,6 +89,7 @@ export function createToolCall(tool: ChatTool, overrides: Partial<ToolCall> = {}
     result: null,
     images: [],
     failed: false,
+    recovery: null,
     ...overrides,
   };
 }

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { PipelineStep, Task, TriageDecisions } from '@shinsa/core';
+import type { Task, TriageDecisions } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { findTooltipText } from '../../support/hover.ts';
+import { createRound } from '../../support/rounds.ts';
 import {
   listSentCommands,
   pushAccounts,
@@ -13,7 +14,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createShinsaState, createTask } from '../../support/state.ts';
+import { createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const DECIDED: TriageDecisions = {
   shape: { value: 'answer', why: 'It asks how something works.' },
@@ -87,13 +88,10 @@ describe('what Shinsa decided, in the facts', () => {
     });
   }
 
-  it('gives the kind its steps and Shinsa’s reason in its tooltip, and offers no way to change it', async () => {
+  it('leaves the kind of task out: the task itself shows it', () => {
     const view = renderFacts(decided());
-    const kind = view.getByText('Answer only');
-    expect(kind.closest('button')).toBeNull();
-    expect(await findTooltipText(kind.parentElement as HTMLElement)).toBe(
-      'Answer only: find the repository, then answer.Shinsa chose this: It asks how something works.'
-    );
+    expect(view.queryByText('Answer only')).toBeNull();
+    expect(view.getByText('Answering')).toBeTruthy();
   });
 
   it('gives the priority Shinsa’s reason, and changes it in one click', async () => {
@@ -112,17 +110,12 @@ describe('what Shinsa decided, in the facts', () => {
     expect(await findTooltipText(view.getByRole('button', { name: 'High' }))).toBe(
       'You changed this. Shinsa chose “normal priority”: Nothing is waiting on it.'
     );
-    const kind = view.getByText('Change');
-    expect(kind.closest('button')).toBeNull();
-    expect(await findTooltipText(kind.parentElement as HTMLElement)).toBe(
-      'Change: plan, build, checks and agent review, your review, pull request, then merge.You changed this. Shinsa chose “answer only”: It asks how something works.'
-    );
   });
 
   it('puts why a task waits on its Waits on fact, which starts it now', async () => {
     const base = createTask({ id: 'base', title: 'Fix the schema' });
     const task = decided({
-      stage: 'queued',
+      stage: 'waiting_on_tasks',
       waitsOn: ['base'],
       triageDecisions: { ...DECIDED, start: { value: ['base'], why: 'It reads the same table.' } },
     });
@@ -144,45 +137,6 @@ describe('what Shinsa decided, in the facts', () => {
     expect(await findTooltipText(view.getByText(/^Started/))).toContain(
       'Shinsa chose this: Nothing it reads is changing.'
     );
-  });
-});
-
-describe('steps the planner composed, in the facts', () => {
-  const COMPOSED: PipelineStep[] = ['investigate', 'your_ok', 'plan', 'operate'];
-
-  it('name the kind by its steps and give the planner’s reason', async () => {
-    const view = renderFacts(
-      createTask({
-        id: 't',
-        stage: 'investigating',
-        pipeline: COMPOSED,
-        triageDecisions: { ...DECIDED, shape: { value: 'change', why: 'It asks for work.' } },
-        shapeChanges: [
-          {
-            from: ['plan', 'operate'],
-            to: COMPOSED,
-            by: 'agent',
-            reason: 'Find what is stuck first.',
-            at: 1,
-          },
-        ],
-      })
-    );
-    const kind = view.getByText('Investigation, then operation');
-    expect(kind.closest('button')).toBeNull();
-    expect(await findTooltipText(kind.parentElement as HTMLElement)).toBe(
-      'Investigation, then operation: find the repository, investigate, your OK to run, plan, then run the operation.An agent set these steps: Find what is stuck first.'
-    );
-  });
-});
-
-describe('the kind of task in the facts', () => {
-  it('names the kind of every task without a menu to change it', () => {
-    const investigation = renderFacts(
-      createTask({ id: 't', stage: 'investigating', pipeline: ['investigate'] })
-    );
-    expect(investigation.getByText('Investigation')).toBeTruthy();
-    expect(investigation.queryByRole('button', { name: 'Investigation' })).toBeNull();
   });
 });
 
@@ -215,5 +169,50 @@ describe('the Account fact', () => {
   it('is left out for a task that runs on any account', () => {
     renderFacts(createTask({ id: 't' }));
     expect(screen.queryByRole('button', { name: /^Runs on/ })).toBeNull();
+  });
+});
+
+describe('the round and the agents in the facts row', () => {
+  it('names the current round with one icon and, on hover, its title, how it stands and when it started', async () => {
+    const task = createTask({
+      id: 't',
+      handle: 'SW-7',
+      rounds: [
+        createRound({ number: 1, status: 'finished' }),
+        createRound({ number: 2, title: 'Explain what it can do', status: 'active', outcome: null }),
+      ],
+    });
+    renderFacts(task);
+    const round = screen.getByText('Round 2 of 2');
+    expect(screen.getByRole('button', { name: 'Copy SW-7' }).textContent).toBe('SW-7');
+    expect(await findTooltipText(round)).toMatch(/^Round 2: Explain what it can doIn progressStarted /);
+  });
+
+  it('lists who worked on the task, each role once and its delegated agents under it, opening the chat', async () => {
+    const task = createTask({ id: 't', handle: 'SW-7' });
+    const state = createShinsaState({
+      tasks: [task],
+      runs: [
+        createRun({ id: 'a', taskId: 't', role: 'answerer', startedAt: 1, endedAt: 2, outcome: 'completed' }),
+        createRun({ id: 'b', taskId: 't', role: 'answerer', startedAt: 3 }),
+      ],
+    });
+    pushState(state);
+    render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+      </TooltipProvider>
+    );
+    const trigger = screen.getByRole('button', { name: /1 agent/ });
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    const list = await screen.findByRole('list', { name: 'Who worked on this' });
+    expect(list.textContent).toBe('Answerer2 runs · working now');
+    fireEvent.click(screen.getByRole('button', { name: /Answerer/ }));
+    expect(window.location.pathname + window.location.search).toBe('/tasks/SW-7?tab=chat&run=b');
   });
 });

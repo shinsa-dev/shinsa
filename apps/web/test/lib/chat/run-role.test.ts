@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import type { Run, PlanDocument, Task } from '@shinsa/core';
-import { ROLE_LABEL, resolveRunHeadline } from '@/lib/chat/run-role.ts';
+import type { PlanDocument, Run, Task } from '@shinsa/core';
+import { RUN_ROLE, resolveRunHeadline } from '@/lib/chat/run-role.ts';
 import { createCallEntry, shinsaTool } from '../../support/chat.ts';
 import { createRun, createTask, NOW } from '../../support/state.ts';
 
 function document(titles: string[]): PlanDocument {
   return {
     goal: 'Goal',
-    plan: titles.map((title) => ({ title, detail: `${title} detail` })),
+    phases: titles.map((title) => ({ title, detail: `${title} detail` })),
     behaviour: [],
     approach: '',
     files: [],
@@ -18,7 +18,7 @@ function document(titles: string[]): PlanDocument {
 }
 
 function withPlan(titles: string[]): Task {
-  return createTask({ id: 't', spec: { version: 1, body: '', document: document(titles), proposedAt: NOW } });
+  return createTask({ id: 't', plan: { version: 1, body: '', document: document(titles), proposedAt: NOW } });
 }
 
 const task = createTask({ id: 't' });
@@ -31,19 +31,17 @@ function done(overrides: Partial<Run>) {
   return createRun({ id: 'r', taskId: 't', endedAt: NOW, outcome: 'completed', ...overrides });
 }
 
-describe('ROLE_LABEL', () => {
-  it('names each role by the step it does, with shipping fixes shown as fixes', () => {
-    expect(ROLE_LABEL).toEqual({
-      triage: 'Setup',
-      planner: 'Plan',
-      builder: 'Build',
-      reviewer: 'Review',
-      fixer: 'Fix',
-      shipper: 'Fix',
-      answerer: 'Answer',
-      investigator: 'Investigate',
-      researcher: 'Research',
-      operator: 'Run',
+describe('RUN_ROLE', () => {
+  it('names each role in plain words with one icon', () => {
+    expect(Object.fromEntries(Object.entries(RUN_ROLE).map(([role, mark]) => [role, mark.name]))).toEqual({
+      planner: 'Planner',
+      builder: 'Builder',
+      reviewer: 'Reviewer',
+      fixer: 'Fixer',
+      answerer: 'Answerer',
+      investigator: 'Investigator',
+      researcher: 'Researcher',
+      operator: 'Operator',
     });
   });
 });
@@ -56,21 +54,16 @@ describe('resolveRunHeadline', () => {
 
   it('describes an investigation, research and an operation while they work and once they hand over', () => {
     expect(resolveRunHeadline(live({ role: 'investigator' }), task, [])).toBe('Investigating');
-    expect(resolveRunHeadline(done({ role: 'investigator' }), task, [])).toBe('Reported the findings');
+    expect(resolveRunHeadline(done({ role: 'investigator' }), task, [])).toBe('Reported the diagnosis');
     expect(resolveRunHeadline(live({ role: 'researcher' }), task, [])).toBe('Researching');
     expect(resolveRunHeadline(done({ role: 'researcher' }), task, [])).toBe('Wrote the report');
     expect(resolveRunHeadline(live({ role: 'operator' }), task, [])).toBe('Running the operation');
     expect(resolveRunHeadline(done({ role: 'operator' }), task, [])).toBe('Reported the outcome');
   });
 
-  it('describes triage while it runs and once it is done', () => {
-    expect(resolveRunHeadline(live({ role: 'triage' }), task, [])).toBe('Sorting the task');
-    expect(resolveRunHeadline(done({ role: 'triage' }), task, [])).toBe('Sorted the task');
-  });
-
   it('keeps the present tense for a run that failed or was stopped', () => {
-    expect(resolveRunHeadline(done({ role: 'triage', outcome: 'failed' }), task, [])).toBe(
-      'Sorting the task'
+    expect(resolveRunHeadline(done({ role: 'builder', outcome: 'failed' }), task, [])).toBe(
+      'Building the change'
     );
     expect(resolveRunHeadline(done({ role: 'planner', outcome: 'cancelled' }), task, [])).toBe(
       'Planning the work'
@@ -79,10 +72,10 @@ describe('resolveRunHeadline', () => {
 
   it('counts the phases of the plan the planner proposed last', () => {
     const entries = [
-      createCallEntry('1', shinsaTool('propose_plan', { plan: [{ title: 'a' }] }), 1),
+      createCallEntry('1', shinsaTool('propose_plan', { phases: [{ title: 'a' }] }), 1),
       createCallEntry(
         '2',
-        shinsaTool('propose_plan', { plan: [{ title: 'a' }, { title: 'b' }, { title: 'c' }] }),
+        shinsaTool('propose_plan', { phases: [{ title: 'a' }, { title: 'b' }, { title: 'c' }] }),
         2
       ),
     ];
@@ -146,7 +139,7 @@ describe('resolveRunHeadline', () => {
     ];
     for (const [prompt, present, past] of cases) {
       expect(resolveRunHeadline(live({ role: 'fixer', prompt }), task, [])).toBe(present);
-      expect(resolveRunHeadline(done({ role: 'shipper', prompt }), task, [])).toBe(past);
+      expect(resolveRunHeadline(done({ role: 'fixer', prompt }), task, [])).toBe(past);
     }
   });
 
@@ -155,9 +148,5 @@ describe('resolveRunHeadline', () => {
       'Fixing the change'
     );
     expect(resolveRunHeadline(done({ role: 'fixer' }), task, [])).toBe('Fixed the change');
-    expect(resolveRunHeadline(live({ role: 'shipper' }), task, [])).toBe('Fixing the pull request');
-    expect(resolveRunHeadline(done({ role: 'shipper', prompt: 'Other' }), task, [])).toBe(
-      'Fixed the pull request'
-    );
   });
 });

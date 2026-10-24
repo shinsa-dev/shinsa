@@ -8,14 +8,12 @@ export function AnswerBox({
   label,
   placeholder,
   submitLabel,
-  variant = 'primary',
   busy,
   onSubmit,
 }: {
   label: string;
   placeholder: string;
   submitLabel: string;
-  variant?: 'primary' | 'outline';
   busy: boolean;
   onSubmit: (text: string) => void;
 }) {
@@ -42,7 +40,7 @@ export function AnswerBox({
         className={cn(COMPOSER_FIELD, 'max-h-48 min-h-14')}
       />
       <div className={cn(COMPOSER_FOOTER, 'justify-end')}>
-        <Button variant={variant} size='sm' disabled={!text.trim()} loading={busy} onClick={submit}>
+        <Button size='sm' disabled={!text.trim()} loading={busy} onClick={submit}>
           {submitLabel}
         </Button>
       </div>

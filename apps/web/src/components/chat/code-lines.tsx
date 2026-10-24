@@ -26,7 +26,7 @@ export function ShowMoreButton({ label, onClick }: { label: string; onClick: () 
   return (
     <button type='button' onClick={onClick} className={SHOW_MORE}>
       {label}
-      <Icon name='IconChevronDownSmall' className='size-3.5' />
+      <Icon size='sm' name='IconChevronDownSmall' />
     </button>
   );
 }

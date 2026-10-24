@@ -10,6 +10,7 @@ import {
   resolveOperationTiming,
   resolvePresetOf,
   resolveShapeOf,
+  resolveShapeState,
   resolveTaskPipeline,
   resolveTaskProgress,
   resolveTaskShape,
@@ -54,7 +55,8 @@ const STEP_LABEL: Record<PipelineStep, string> = {
 };
 
 export const RESULT_PANEL: Record<DeliveringStep, { title: string; icon: IconName }> = {
-  investigate: { title: 'Findings', icon: 'IconMagnifyingGlass' },
+  answer: { title: 'Answer', icon: 'IconBubbleText' },
+  investigate: { title: 'Diagnosis', icon: 'IconMagnifyingGlass' },
   research: { title: 'Report', icon: 'IconBook' },
   operate: { title: 'Outcome', icon: 'IconConsole' },
 };
@@ -79,7 +81,7 @@ const WORK_NOUN: Record<WorkStep, string> = {
 const RESULT_IN: Record<InquiryStep, string> = {
   answer: 'The answer is in',
   research: 'The report is in',
-  investigate: 'The findings are in',
+  investigate: 'The diagnosis is in',
 };
 
 const GO_ON: Record<WorkStep, { label: string; reply: 'makeChange' | 'planOperation'; note: string }> = {
@@ -105,7 +107,18 @@ function isWorkStep(step: PipelineStep): step is WorkStep {
   return step in WORK_NOUN;
 }
 
+const UNCHOSEN = {
+  label: 'Kind not chosen yet',
+  icon: 'IconCircleDotted',
+  steps: 'Shinsa is reading the request to choose what kind of task it is.',
+} as const;
+
+export function isShapeChosen(task: Task) {
+  return resolveShapeState(task) !== 'triage';
+}
+
 export function resolveShapeLabel(task: Task) {
+  if (!isShapeChosen(task)) return UNCHOSEN.label;
   const pipeline = resolveTaskPipeline(task);
   const preset = resolvePresetOf(pipeline);
   const inquiry = resolveInquiryStep(pipeline);
@@ -117,7 +130,8 @@ export function resolveShapeLabel(task: Task) {
   return capitalise(parts.join(', then '));
 }
 
-export function resolveShapeIcon(task: Task) {
+export function resolveShapeIcon(task: Task): IconName {
+  if (!isShapeChosen(task)) return UNCHOSEN.icon;
   return SHAPE_ICON[resolveTaskShape(task)];
 }
 
@@ -127,6 +141,7 @@ function listStepTitles(task: Task) {
 }
 
 export function describeTaskSteps(task: Task) {
+  if (!isShapeChosen(task)) return UNCHOSEN.steps;
   const steps = listStepTitles(task);
   const last = steps.pop() ?? '';
   const list = steps.length > 0 ? `${steps.join(', ')}, then ${last}` : last;
@@ -148,10 +163,15 @@ function resolveChangeStep(task: Task) {
   return resolveInquiryStep(resolveTaskPipeline(task)) ?? 'investigate';
 }
 
+function isAddedByProposal(task: Task) {
+  const at = task.proposal?.at;
+  return (task.shapeChanges ?? []).some((change) => change.at === at && !change.from.includes('your_ok'));
+}
+
 export function describeChangeGate(task: Task, gate: Gate) {
   const step = resolveChangeStep(task);
   const pipeline = resolveTaskPipeline(task);
-  const composed = pipeline.includes('your_ok');
+  const composed = pipeline.includes('your_ok') && !isAddedByProposal(task);
   const open = task.proposal?.status === 'open' ? task.proposal : null;
   const [why = '', ...rest] = gate.body.split('\n\n');
   return {
@@ -171,7 +191,7 @@ const OPERATION_HEADING = {
 
 export function resolvePlannedOperation(task: Task) {
   const timing = resolveOperationTiming(resolveTaskPipeline(task));
-  const steps = task.spec?.document?.operation ?? [];
+  const steps = task.plan?.document?.operation ?? [];
   if (timing === null || timing === 'alone' || steps.length === 0) return null;
   return { heading: OPERATION_HEADING[timing], steps };
 }

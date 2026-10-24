@@ -1,14 +1,18 @@
 import {
   type Activity,
+  type Briefing,
   capitalise,
   DAY_MS,
   isInFocus,
   isTaskComplete,
+  listReferenceSpans,
+  type Queue,
   type ShinsaState,
   type Task,
   type TaskStage,
 } from '@shinsa/core';
 import type { QueueSection } from '@/lib/queue.ts';
+import { resolveCatalog, selectPullRequestTask } from '@/lib/tasks/references.ts';
 
 const RECENT_LIMIT = 5;
 
@@ -30,10 +34,10 @@ const RUNNING_VERB: Partial<Record<TaskStage, string>> = {
 
 const PULL_REQUEST = /\b(?:(the|its)\s+)?(?:pull request|PR)\s+#\d+/gi;
 
-export function listRecentConversations(state: ShinsaState, now: number) {
+export function listRecentConversations(state: ShinsaState, now: number, shown: ReadonlySet<string>) {
   const latest: { task: Task; entry: Activity }[] = [];
   for (const task of Object.values(state.tasks)) {
-    if (!isInFocus(state, task, now)) continue;
+    if (shown.has(task.id) || !isInFocus(state, task, now)) continue;
     const entry = task.activity
       .filter((candidate) => candidate.actor === 'agent' && candidate.runId)
       .reduce<Activity | null>(
@@ -45,11 +49,14 @@ export function listRecentConversations(state: ShinsaState, now: number) {
   return latest.sort((a, b) => b.entry.at - a.entry.at).slice(0, RECENT_LIMIT);
 }
 
-export function listRecentlyFinished(state: ShinsaState, now: number) {
+export function listRecentlyFinished(state: ShinsaState, now: number, shown: ReadonlySet<string>) {
   return Object.values(state.tasks)
     .filter(
       (task) =>
-        isTaskComplete(task) && now - task.stageChangedAt <= FINISHED_WINDOW_MS && isInFocus(state, task, now)
+        !shown.has(task.id) &&
+        isTaskComplete(task) &&
+        now - task.stageChangedAt <= FINISHED_WINDOW_MS &&
+        isInFocus(state, task, now)
     )
     .sort((a, b) => b.stageChangedAt - a.stageChangedAt)
     .slice(0, RECENT_LIMIT);
@@ -59,9 +66,42 @@ export function resolveHomeSectionFlag(key: QueueSection['key'] | 'finished' | '
   return `shinsa.home-open.${key}`;
 }
 
-export function resolveHomeQueue(sections: QueueSection[]) {
+function listNamedTaskIds(state: ShinsaState, text: string) {
+  return listReferenceSpans(dropPullRequestNumbers(text), resolveCatalog(state), { numbers: false }).flatMap(
+    ({ reference }) => {
+      if (reference.kind === 'task') return [reference.id];
+      if (reference.kind !== 'pr') return [];
+      const owner = selectPullRequestTask(state, reference.repo, reference.number, null);
+      return owner ? [owner.id] : [];
+    }
+  );
+}
+
+export function listGuideTaskIds(state: ShinsaState, queue: Queue, briefing: Briefing) {
+  const items = briefing.now ? [briefing.now, ...briefing.next] : [];
+  return new Set([
+    ...items.flatMap((item) => [item.taskId, ...listNamedTaskIds(state, item.why)]),
+    ...queue.working.map((task) => task.id),
+    ...(briefing.note ? listNamedTaskIds(state, briefing.note) : []),
+  ]);
+}
+
+export function resolveHomeSections(
+  state: ShinsaState,
+  sections: QueueSection[],
+  guided: ReadonlySet<string>,
+  now: number
+) {
+  const shown = new Set([
+    ...guided,
+    ...sections.flatMap((section) => section.items.map((item) => item.task.id)),
+  ]);
+  const finished = listRecentlyFinished(state, now, shown);
+  for (const task of finished) shown.add(task.id);
   return {
     first: sections.filter((section) => !section.startsCollapsed),
+    finished,
+    conversations: listRecentConversations(state, now, shown),
     last: sections.filter((section) => section.startsCollapsed),
   };
 }
@@ -74,7 +114,7 @@ export function resolveGreeting(now: number) {
 
 export function resolveRunningVerb(task: Task) {
   if (task.usageWait?.status === 'armed') return 'waiting for the usage limit on';
-  if (task.monitor?.status === 'armed') return 'waiting to check again on';
+  if (task.monitor?.status === 'armed') return 'waiting to check in again on';
   return RUNNING_VERB[task.stage] ?? 'working on';
 }
 

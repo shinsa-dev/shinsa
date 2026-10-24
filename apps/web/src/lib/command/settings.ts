@@ -7,6 +7,7 @@ import {
   resolveIdleCompaction,
   type Settings,
 } from '@shinsa/core';
+import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import {
   listSwitchItems,
   needsSnoozeSetting,
@@ -30,10 +31,6 @@ import {
   ALERT_ITEMS,
   COMPACTION_MODE_ITEMS,
   COST_LIMIT_TITLE,
-  changeAgentModel,
-  changeAgentSpeed,
-  changeGroupModel,
-  changeGroupSpeed,
   describeGroupSelects,
   describeRoleSelects,
   FIX_ROUND_ITEMS,
@@ -47,19 +44,24 @@ import {
   listSpeedItems,
   listUsageLimitItems,
   MERGE_ITEMS,
+  MODELS_TITLE,
   needsCostLimit,
   PLAN_ITEMS,
   parseBudget,
   parseCompaction,
   parseFixRounds,
   parseUsageLimit,
+  resolveAgentModelPatch,
   resolveAgentModelValue,
+  resolveAgentSpeedPatch,
   resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
   resolveFixRoundValue,
   resolveGroupModel,
+  resolveGroupModelPatch,
   resolveGroupSpeed,
+  resolveGroupSpeedPatch,
   resolvePlanValue,
   resolveSectionId,
   resolveSpeedAvailability,
@@ -77,23 +79,31 @@ import {
   resolveSettingsPath,
   resolveSettingsTab,
 } from '@/lib/settings-tabs.ts';
+import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { navigate } from '@/router.ts';
 
 const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] = [
   { title: 'Attention', icon: 'IconInboxEmpty', keywords: ['decisions', 'queue'] },
   { title: 'Notifications', icon: 'IconBell', keywords: ['sound', 'chime', 'alert', 'badge'] },
   {
-    title: 'Agents',
+    title: MODELS_TITLE,
     icon: 'IconRobot',
     keywords: [
-      'models',
+      'agents',
+      'task agents',
+      'quick jobs',
       'providers',
+      'opus',
+      'sonnet',
       'codex',
       'planner',
       'builder',
       'reviewer',
       'fixer',
       'answerer',
+      'investigator',
+      'researcher',
+      'operator',
       'classifier',
       'writer',
       'fast mode',
@@ -107,10 +117,15 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
   },
   { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'merge'] },
   {
-    title: 'Agent usage',
+    title: VERSIONS_SECTION,
+    icon: 'IconArrowDown',
+    keywords: ['update', 'upgrade', 'claude code', 'codex', 'cli', 'sdk', 'latest'],
+  },
+  {
+    title: ACCOUNT_LABEL.section,
     icon: 'IconGauge',
     keywords: [
-      'accounts',
+      'agent usage',
       'claude',
       'sign in',
       'login',
@@ -202,8 +217,8 @@ function listGroupRoles(group: AgentGroup) {
   return group.roles.map(({ role }) => role);
 }
 
-function patchSettings(next: Partial<Settings>) {
-  void updateSettings(next, SAVED);
+function patchSettings(next: Partial<Settings> | null) {
+  if (next) void updateSettings(next, SAVED);
 }
 
 function listJumpCommands(): Command[] {
@@ -303,14 +318,14 @@ function listGroupChoices(
         labels.model,
         listGroupModelItems(providers, settings, group),
         resolveGroupModel(settings, group),
-        (next) => void changeGroupModel(settings, group, next, SAVED)
+        (next) => patchSettings(resolveGroupModelPatch(settings, group, next))
       ),
       settingChoice(
         `speed.${group.id}`,
         labels.speed,
         listGroupSpeedItems(settings, group, availability),
         resolveGroupSpeed(settings, group, availability),
-        (next) => void changeGroupSpeed(settings, group, next, SAVED)
+        (next) => patchSettings(resolveGroupSpeedPatch(settings, group, next))
       ),
     ];
   });
@@ -332,7 +347,7 @@ function listRoleChoices(
         labels.model,
         listAgentModelItems(providers, model),
         model,
-        (next) => void changeAgentModel(settings, role, next, SAVED),
+        (next) => patchSettings(resolveAgentModelPatch(settings, role, next)),
         true
       ),
       settingChoice(
@@ -340,7 +355,7 @@ function listRoleChoices(
         labels.speed,
         listSpeedItems(availability),
         resolveSpeedValue(settings, role, availability),
-        (next) => void changeAgentSpeed(settings, role, next, SAVED),
+        (next) => patchSettings(resolveAgentSpeedPatch(settings, role, next)),
         true
       ),
     ];

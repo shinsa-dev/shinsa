@@ -42,19 +42,19 @@ function TaskPreview({ state, task, action }: { state: ShinsaState; task: Task; 
             {task.handle && <span className='tabular-nums'>{resolveHandleText(task)}</span>}
             {repo && (
               <span className='inline-flex min-w-0 items-center gap-1'>
-                <Icon name={repo.remote ? 'IconGithub' : 'IconFolder1'} className='size-3' />
+                <Icon size='sm' name={repo.remote ? 'IconGithub' : 'IconFolder1'} />
                 <span className='truncate'>{repo.name}</span>
               </span>
             )}
             {task.branch && (
               <span className='inline-flex min-w-0 items-center gap-1'>
-                <Icon name='IconBranch' className='size-3' />
+                <Icon size='sm' name='IconBranch' />
                 <span className='truncate font-mono'>{task.branch}</span>
               </span>
             )}
             {task.pullRequest && (
               <span className='inline-flex items-center gap-1'>
-                <Icon name='IconPullRequest' className='size-3' />#{task.pullRequest.number}
+                <Icon size='sm' name='IconPullRequest' />#{task.pullRequest.number}
               </span>
             )}
           </div>

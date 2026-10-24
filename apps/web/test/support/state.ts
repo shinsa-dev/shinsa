@@ -13,7 +13,7 @@ export const NOW = Date.UTC(2026, 9, 22, 14, 0);
 
 export function createTask(overrides: Partial<Task> & { id: string }): Task {
   return {
-    intent: `Do ${overrides.id}`,
+    request: `Do ${overrides.id}`,
     title: `Task ${overrides.id}`,
     repoId: null,
     size: null,
@@ -23,7 +23,7 @@ export function createTask(overrides: Partial<Task> & { id: string }): Task {
     priority: 'normal',
     branch: null,
     worktreePath: null,
-    spec: null,
+    plan: null,
     phases: [],
     planAnswers: null,
     summary: null,
@@ -37,7 +37,6 @@ export function createTask(overrides: Partial<Task> & { id: string }): Task {
     phaseReports: [],
     checkResults: null,
     pullRequest: null,
-    baseTaskId: null,
     waitsOn: [],
     note: null,
     origin: null,
@@ -45,14 +44,14 @@ export function createTask(overrides: Partial<Task> & { id: string }): Task {
     updatedAt: NOW - 30_000,
     stageChangedAt: NOW - 30_000,
     activity: [],
+    auto: { shape: false, start: false, priority: false },
     ...overrides,
   };
 }
 
 export function createGate(overrides: Partial<Gate> & { id: string; taskId: string }): Gate {
   return {
-    kind: 'review',
-    purpose: 'decision',
+    type: 'review',
     status: 'open',
     title: 'Review the changes',
     body: '',

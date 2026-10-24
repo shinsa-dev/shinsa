@@ -8,16 +8,16 @@ export interface PlanVersion {
 }
 
 export function resolvePlanVersion(task: Task): PlanVersion | null {
-  const spec = task.spec;
-  if (!spec || spec.version < 2) return null;
-  const summary = spec.changeSummary ?? null;
-  const changes = (spec.changes ?? []).map(describePlanChange);
+  const plan = task.plan;
+  if (!plan || plan.version < 2) return null;
+  const summary = plan.changeSummary ?? null;
+  const changes = (plan.changes ?? []).map(describePlanChange);
   if (!summary && changes.length === 0) return null;
-  return { summary, changes, feedback: spec.feedback ?? null };
+  return { summary, changes, feedback: plan.feedback ?? null };
 }
 
 export function describePlanEyebrow(task: Task) {
-  const version = task.spec?.version ?? 1;
-  const phases = formatCount(task.spec?.document?.plan.length ?? 0, 'phase', 'phases');
+  const version = task.plan?.version ?? 1;
+  const phases = formatCount(task.plan?.document?.phases.length ?? 0, 'phase', 'phases');
   return version > 1 ? `Version ${version} · ${phases}` : phases;
 }

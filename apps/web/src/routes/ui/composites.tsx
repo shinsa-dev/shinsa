@@ -189,7 +189,7 @@ export function CompositeSpecimens() {
       <Specimen label='Priority · project dots'>
         {TASK_PRIORITIES.map((priority) => (
           <span key={priority} className='flex items-center gap-1.5 text-fg-3 text-xs'>
-            <PriorityIcon priority={priority} className='size-3.5' />
+            <PriorityIcon priority={priority} />
             {PRIORITY_LABEL[priority]}
           </span>
         ))}

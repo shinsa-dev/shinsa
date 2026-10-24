@@ -7,6 +7,7 @@ import {
 } from '@shinsa/core';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@shinsa/ui/components/dropdown-menu';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
+import { Tooltip, TooltipContent, TooltipLabel, TooltipTrigger } from '@shinsa/ui/components/tooltip';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -17,23 +18,29 @@ import { CheckList, PullRequestDetails } from '@/components/links/pull-request.t
 import { RepoDetails } from '@/components/links/repo.tsx';
 import { TaskPopoverRows } from '@/components/links/task.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { InfoHeader, InfoPopover, InfoRow, InfoSection } from '@/components/overlays/info-popover.tsx';
+import {
+  InfoHeader,
+  InfoLine,
+  InfoPopover,
+  InfoRow,
+  InfoSection,
+} from '@/components/overlays/info-popover.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
+import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
-import { TONE_FILL, TONE_TEXT } from '@/lib/format/tone.ts';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeChecksPassed, hasFailingCheck, isAgentWorking } from '@/lib/overview/now.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import { describePullRequestFact, describeStarted } from '@/lib/tasks/facts.ts';
 import { type Check, listTaskChecks, resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
-import { resolveRoundTag } from '@/lib/tasks/rounds.ts';
-import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
-import { resolveTaskStatus } from '@/lib/tasks/status.ts';
+import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
+import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
 import { resolveTriageWhy } from '@/lib/tasks/triage.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
@@ -64,22 +71,87 @@ function FactPopover({
 
 function HandleFact({ task }: { task: Task }) {
   const { copied, copy } = useCopyText(task.handle ?? '');
-  const round = resolveRoundTag(task);
   if (!task.handle) return null;
   return (
-    <span className='flex items-center'>
-      <Hint label={copied ? 'Copied' : 'Copy the task’s handle'}>
-        <button
-          type='button'
-          aria-label={`Copy ${task.handle}`}
-          onClick={copy}
-          className={cn(FACT, FACT_INTERACTIVE, 'tabular-nums')}
-        >
-          {task.handle}
-        </button>
-      </Hint>
-      {round && <span className={cn(FACT, 'tabular-nums')}>{round}</span>}
-    </span>
+    <Hint label={copied ? 'Copied' : 'Copy the task’s handle'}>
+      <button
+        type='button'
+        aria-label={`Copy ${task.handle}`}
+        onClick={copy}
+        className={cn(FACT, FACT_INTERACTIVE, 'tabular-nums')}
+      >
+        {task.handle}
+      </button>
+    </Hint>
+  );
+}
+
+function RoundFact({ task }: { task: Task }) {
+  const round = resolveRoundFact(task);
+  if (!round) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className={cn(FACT, 'max-w-72 cursor-default tabular-nums')} />}>
+        <Icon size='sm' name={ROUND_ICON} />
+        {round.label}
+      </TooltipTrigger>
+      <TooltipContent className='flex-col items-stretch gap-1'>
+        <span>{round.title}</span>
+        <InfoLine
+          label={
+            <span className='flex items-center gap-1.5'>
+              <Icon size='sm' name={ROUND_ICON} className={TONE_TEXT[round.status.tone]} />
+              <span className={TONE_TEXT[round.status.tone]}>{round.status.label}</span>
+            </span>
+          }
+          value={<TooltipLabel>{round.time}</TooltipLabel>}
+        />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const AGENT_INDENT = ['ps-2', 'ps-6', 'ps-10', 'ps-14'];
+
+function AgentsFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const agents = listTaskAgents(state, task);
+  if (agents.length === 0) return null;
+  return (
+    <FactPopover
+      trigger={
+        <>
+          <Icon size='sm' name='IconAgents' />
+          <span className='tabular-nums'>{describeAgentCount(agents)}</span>
+        </>
+      }
+    >
+      <InfoHeader title='Who worked on this' description='Each agent role, and the agents it delegated to.' />
+      <ul aria-label='Who worked on this' className='flex flex-col border-border border-t p-1'>
+        {agents.map((agent) => (
+          <li key={agent.key}>
+            <button
+              type='button'
+              onClick={() => navigate(resolveTaskPath(task, { tab: 'chat', run: agent.runId }))}
+              className={cn(
+                'corner-superellipse/1.125 flex h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-item pe-2 text-start text-xs transition-colors duration-150 hover:bg-bg-a2 active:bg-bg-a2',
+                AGENT_INDENT[agent.depth] ?? AGENT_INDENT.at(-1)
+              )}
+            >
+              {agent.depth > 0 && (
+                <Icon size='sm' name='IconArrowCornerDownRight' aria-hidden className='text-fg-2' />
+              )}
+              <Icon size='sm' name={agent.icon} className='text-fg-3' />
+              <span className='shrink-0 font-medium text-fg-4'>{agent.name}</span>
+              {agent.label && <Truncate className='min-w-0 text-fg-3'>{agent.label}</Truncate>}
+              <span className='ms-auto flex shrink-0 items-center gap-1.5 ps-3 text-2xs text-fg-2'>
+                {agent.live && <Pulse tone='blue' />}
+                {agent.detail}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </FactPopover>
   );
 }
 
@@ -88,14 +160,9 @@ function StatusFact({ state, task }: { state: ShinsaState; task: Task }) {
   const working = isAgentWorking(state, task);
   return (
     <span className={FACT}>
-      <span className='grid size-3.5 shrink-0 place-items-center'>
-        {working ? (
-          <Pulse tone={status.tone} />
-        ) : (
-          <span className={cn('size-1.5 rounded-full', TONE_FILL[status.tone])} />
-        )}
-      </span>
+      <Icon size='sm' name={resolveTaskStatusIcon(state, task)} className={TONE_TEXT[status.tone]} />
       <span className='font-medium'>{status.label}</span>
+      {working && <Pulse tone={status.tone} />}
     </span>
   );
 }
@@ -107,7 +174,7 @@ function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
     <FactPopover
       trigger={
         <>
-          <Icon name='IconFolder1' className='size-3.5 shrink-0' />
+          <Icon size='sm' name='IconFolder1' />
           <span className='truncate'>{repo.name}</span>
         </>
       }
@@ -124,7 +191,7 @@ function BranchFact({ state, task }: { state: ShinsaState; task: Task }) {
       className='max-w-64'
       trigger={
         <>
-          <Icon name='IconBranch' className='size-3.5 shrink-0' />
+          <Icon size='sm' name='IconBranch' />
           <span className='truncate'>{task.branch}</span>
         </>
       }
@@ -141,10 +208,7 @@ function PullRequestFact({ state, task, checks }: { state: ShinsaState; task: Ta
     <FactPopover
       trigger={
         <>
-          <Icon
-            name='IconPullRequest'
-            className={cn('size-3.5 shrink-0', TONE_TEXT[resolvePullRequestTone(pullRequest)])}
-          />
+          <Icon size='sm' name='IconPullRequest' className={TONE_TEXT[resolvePullRequestTone(pullRequest)]} />
           <span className='tabular-nums'>#{pullRequest.number}</span>
           {describePullRequestFact(pullRequest).map((note) => (
             <span key={note.text} className={TONE_TEXT[note.tone]}>
@@ -166,8 +230,9 @@ function ChecksFact({ checks }: { checks: Check[] }) {
       trigger={
         <>
           <Icon
+            size='sm'
             name={failing ? 'IconCircleXFilled' : 'IconCheckCircle2Filled'}
-            className={cn('size-3.5 shrink-0', failing ? 'text-red-4' : 'text-primary-4')}
+            className={cn(failing ? 'text-red-4' : 'text-primary-4')}
           />
           <span className='tabular-nums'>{describeChecksPassed(checks)}</span>
         </>
@@ -185,10 +250,7 @@ function CostFact({ state, task }: { state: ShinsaState; task: Task }) {
     <FactPopover
       trigger={
         <>
-          <Icon
-            name='IconCoins'
-            className={cn('size-3.5 shrink-0', cost.budget?.over && 'text-orange-text')}
-          />
+          <Icon size='sm' name='IconCoins' className={cn(cost.budget?.over && 'text-orange-text')} />
           <span className='tabular-nums'>{cost.total}</span>
         </>
       }
@@ -214,7 +276,7 @@ function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
   const why = resolveTriageWhy(state, task, 'priority');
   const trigger = (
     <DropdownMenuTrigger render={<button type='button' className={cn(FACT, FACT_INTERACTIVE)} />}>
-      <PriorityIcon priority={task.priority} className='size-3.5 shrink-0' />
+      <PriorityIcon priority={task.priority} />
       {PRIORITY_LABEL[task.priority]}
     </DropdownMenuTrigger>
   );
@@ -228,23 +290,12 @@ function PriorityFact({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-function ShapeFact({ state, task }: { state: ShinsaState; task: Task }) {
-  return (
-    <Hint label={describeTaskSteps(task)} detail={resolveTriageWhy(state, task, 'shape')}>
-      <span className={cn(FACT, 'max-w-72 cursor-default')}>
-        <Icon name={resolveShapeIcon(task)} className='size-3.5 shrink-0' />
-        <span className='truncate'>{resolveShapeLabel(task)}</span>
-      </span>
-    </Hint>
-  );
-}
-
 function StartedFact({ state, task }: { state: ShinsaState; task: Task }) {
   const waiting = listPendingDependencies(state, task).length > 0;
   const why = waiting ? null : resolveTriageWhy(state, task, 'start');
   return (
     <span className={FACT}>
-      <Icon name='IconClock' className='size-3.5 shrink-0' />
+      <Icon size='sm' name='IconClock' />
       <TimeAgo at={task.createdAt} text={(now) => describeStarted(task, now)} detail={why ?? undefined} />
     </span>
   );
@@ -255,7 +306,7 @@ function AccountFact({ task }: { task: Task }) {
   if (isTaskSettled(task)) {
     return (
       <span className={cn(FACT, 'max-w-72')}>
-        <Icon name='IconUser' className='size-3.5 shrink-0' />
+        <Icon size='sm' name='IconUser' />
         <span className='truncate'>{describeRunsOn(task.account)}</span>
       </span>
     );
@@ -265,7 +316,7 @@ function AccountFact({ task }: { task: Task }) {
       <DropdownMenuTrigger
         render={<button type='button' className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')} />}
       >
-        <Icon name='IconUser' className='size-3.5 shrink-0' />
+        <Icon size='sm' name='IconUser' />
         <span className='truncate'>{describeRunsOn(task.account)}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align='start' className='min-w-48 max-w-80'>
@@ -295,7 +346,7 @@ function RelatedFact({
         onClick={() => navigate(resolveTaskPath(first))}
         className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')}
       >
-        <Icon name={icon} className='size-3.5 shrink-0' />
+        <Icon size='sm' name={icon} />
         <span className='shrink-0'>{verb}</span>
         <Truncate>{first.title}</Truncate>
       </button>
@@ -306,7 +357,7 @@ function RelatedFact({
     <FactPopover
       trigger={
         <>
-          <Icon name={icon} className='size-3.5 shrink-0' />
+          <Icon size='sm' name={icon} />
           <span>{verb}</span>
           <span className='tabular-nums'>{count}</span>
         </>
@@ -327,7 +378,7 @@ function WaitsOnFact({ state, task }: { state: ShinsaState; task: Task }) {
   const why = resolveTriageWhy(state, task, 'start');
   const trigger = (
     <DropdownMenuTrigger render={<button type='button' className={cn(FACT, FACT_INTERACTIVE, 'max-w-72')} />}>
-      <Icon name='IconHourglass' className={cn('size-3.5 shrink-0', cancelled && 'text-orange-text')} />
+      <Icon size='sm' name='IconHourglass' className={cn(cancelled && 'text-orange-text')} />
       <span className='shrink-0'>Waits on</span>
       <span className='truncate'>{waitsOn.map((blocker) => blocker.title).join(', ')}</span>
     </DropdownMenuTrigger>
@@ -351,13 +402,12 @@ export function TaskFacts({
   task: Task;
   className?: string;
 }) {
-  const base = task.baseTaskId ? state.tasks[task.baseTaskId] : undefined;
   const checks = listTaskChecks(task);
   return (
     <div className={cn('-ms-1.5 flex flex-wrap items-center gap-1', className)}>
       <HandleFact task={task} />
+      <RoundFact task={task} />
       <StatusFact state={state} task={task} />
-      <ShapeFact state={state} task={task} />
       <RepoFact state={state} task={task} />
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} checks={checks} />
@@ -366,7 +416,7 @@ export function TaskFacts({
       <StartedFact state={state} task={task} />
       <CostFact state={state} task={task} />
       <AccountFact task={task} />
-      {base && <RelatedFact state={state} icon='IconLayersTwo' verb='On top of' tasks={[base]} />}
+      <AgentsFact state={state} task={task} />
       <WaitsOnFact state={state} task={task} />
       <RelatedFact
         state={state}

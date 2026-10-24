@@ -123,7 +123,7 @@ export function OverlaySpecimens() {
               <CommandItem icon='IconBook'>
                 Documentation
                 <CommandHint>shinsa.dev</CommandHint>
-                <Icon name='IconArrowUpRight' className='ml-auto size-4' />
+                <Icon name='IconArrowUpRight' className='ml-auto' />
               </CommandItem>
             </CommandGroup>
           </CommandList>
@@ -201,7 +201,7 @@ export function OverlaySpecimens() {
       <Section id='tooltip' title='Tooltip' description='A compact dark pill. Supports a trailing shortcut.'>
         <Tooltip>
           <TooltipTrigger render={<Button variant='outline' />}>Top</TooltipTrigger>
-          <TooltipContent>Approve the spec</TooltipContent>
+          <TooltipContent>Approve the plan</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger render={<Button variant='outline' />}>Right</TooltipTrigger>

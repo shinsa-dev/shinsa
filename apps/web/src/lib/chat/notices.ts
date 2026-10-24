@@ -1,6 +1,6 @@
 import { type LoadedExtension, type LoadedExtensions, sumLoadedTokens } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { describeAccountSwitched, SWITCH_REASON } from '@/lib/accounts/account.ts';
+import { SWITCH_REASON } from '@/lib/accounts/account.ts';
 import type { QuietNoticeKind, TimelineItemOf } from '@/lib/chat/timeline.ts';
 import { formatTokenEstimate, resolveTokenText } from '@/lib/extensions.ts';
 import { formatCount } from '@/lib/format/count.ts';
@@ -18,15 +18,16 @@ export interface NoticeGroup {
 
 interface NoticeLineView {
   icon: IconName;
-  text: string;
-  hint: string;
+  label: string;
+  meta: string | null;
+  detail: string;
   groups?: NoticeGroup[];
 }
 
 export const NOTICE_GROUP_LIMIT = 8;
 
 const LOADED_GROUPS = [
-  { key: 'servers', title: 'MCP servers', one: 'MCP server', many: 'MCP servers' },
+  { key: 'servers', title: 'MCPs', one: 'MCP', many: 'MCPs' },
   { key: 'skills', title: 'Skills', one: 'skill', many: 'skills' },
   { key: 'plugins', title: 'Plugins', one: 'plugin', many: 'plugins' },
 ] as const;
@@ -53,7 +54,12 @@ function resolveDeferredGroup(loaded: LoadedExtensions): NoticeGroup[] {
 
 function describeDeferred(loaded: LoadedExtensions) {
   const count = loaded.deferred?.length ?? 0;
-  return count > 0 ? ` · ${count} left out` : '';
+  return count > 0 ? `${count} left out` : null;
+}
+
+function joinMeta(parts: (string | null)[]) {
+  const present = parts.filter((part): part is string => part !== null);
+  return present.length > 0 ? present.join(' · ') : null;
 }
 
 function resolveExtensionsLine(loaded: LoadedExtensions): NoticeLineView {
@@ -62,8 +68,9 @@ function resolveExtensionsLine(loaded: LoadedExtensions): NoticeLineView {
     const deferred = resolveDeferredGroup(loaded);
     return {
       icon: 'IconBlocks',
-      text: `Loaded only Shinsa’s tools${describeDeferred(loaded)}`,
-      hint: 'No MCP server, skill or plugin was turned on for this run.',
+      label: 'Loaded only Shinsa’s tools',
+      meta: describeDeferred(loaded),
+      detail: 'No MCP, skill or plugin was turned on for this run.',
       ...(deferred.length > 0 ? { groups: deferred } : {}),
     };
   }
@@ -73,8 +80,9 @@ function resolveExtensionsLine(loaded: LoadedExtensions): NoticeLineView {
     .join(', ');
   return {
     icon: 'IconBlocks',
-    text: `Loaded ${counts}${total > 0 ? ` · ${formatTokenEstimate(total)}` : ''}${describeDeferred(loaded)}`,
-    hint: 'What this run loaded at its start, with the tokens each one cost.',
+    label: `Loaded ${counts}`,
+    meta: joinMeta([total > 0 ? formatTokenEstimate(total) : null, describeDeferred(loaded)]),
+    detail: 'What this run loaded at its start, with the tokens each one cost.',
     groups: [
       ...present.map((group) => {
         const items = loaded[group.key];
@@ -100,14 +108,16 @@ function resolveHandoffLine(item: TimelineItemOf<'handoff'>): NoticeLineView {
   if (item.reason === 'provider_switch') {
     return {
       icon: 'IconArrowsRepeat',
-      text: `Conversation handed over · ${item.toProvider}`,
-      hint: `From ${item.fromProvider} to ${item.toProvider}. ${carried}`,
+      label: 'Conversation handed over',
+      meta: item.toProvider,
+      detail: `From ${item.fromProvider} to ${item.toProvider}. ${carried}`,
     };
   }
   return {
     icon: 'IconArrowRotateClockwise',
-    text: 'Session restored from the transcript',
-    hint: `The ${item.toProvider} session could not be resumed, so a new one started from the transcript. ${carried}`,
+    label: 'Session restored from the transcript',
+    meta: null,
+    detail: `The ${item.toProvider} session could not be resumed, so a new one started from the transcript. ${carried}`,
   };
 }
 
@@ -130,15 +140,17 @@ function resolveFastModeLine(item: TimelineItemOf<'fast_mode'>): NoticeLineView 
   if (item.status === 'cooldown') {
     return {
       icon: 'IconSpeedMiddle',
-      text: 'Fast mode paused',
-      hint: 'Fast mode is cooling down after a rate limit. The run continues at standard speed.',
+      label: 'Fast mode paused',
+      meta: null,
+      detail: 'Fast mode is cooling down after a rate limit. The run continues at standard speed.',
     };
   }
   const reason = (item.reason && FAST_MODE_REASONS[item.reason]) || 'Fast mode is not available right now.';
   return {
     icon: 'IconSpeedMiddle',
-    text: 'Fast mode unavailable',
-    hint: `${reason} The run continues at standard speed.`,
+    label: 'Fast mode unavailable',
+    meta: null,
+    detail: `${reason} The run continues at standard speed.`,
   };
 }
 
@@ -146,21 +158,26 @@ function resolveCompactionLine(item: TimelineItemOf<'compaction'>): NoticeLineVi
   if (item.by === 'eunoe' && item.trigger === 'fold') {
     return {
       icon: 'IconLayersTwo',
-      text: 'Finished turns folded',
-      hint: 'Eunoe folded the finished turns to your messages, the output that mattered and the replies. The full transcript stays searchable.',
+      label: 'Finished turns folded',
+      meta: null,
+      detail:
+        'Eunoe folded the finished turns to your messages, the output that mattered and the replies. The full transcript stays searchable.',
     };
   }
   if (item.by === 'eunoe') {
     return {
       icon: 'IconMinimize',
-      text: 'Conversation compacted by Eunoe',
-      hint: 'The context reached its limit, so Eunoe folded the finished turns instead of summarising them.',
+      label: 'Conversation compacted by Eunoe',
+      meta: null,
+      detail:
+        'The context reached its limit, so Eunoe folded the finished turns instead of summarising them.',
     };
   }
   return {
     icon: 'IconBubbleText',
-    text: 'Conversation compacted',
-    hint:
+    label: 'Conversation compacted',
+    meta: null,
+    detail:
       item.trigger === 'auto'
         ? 'The context filled up, so the agent summarised the conversation.'
         : 'Summarised while the agent was idle, so the next step starts from a smaller context.',
@@ -171,8 +188,9 @@ export function resolveNoticeLine(item: TimelineItemOf<QuietNoticeKind>): Notice
   if (item.kind === 'account') {
     return {
       icon: 'IconArrowsRepeatRightLeft',
-      text: describeAccountSwitched(item.email),
-      hint: SWITCH_REASON[item.reason],
+      label: 'Account switched',
+      meta: item.email,
+      detail: SWITCH_REASON[item.reason],
     };
   }
   if (item.kind === 'handoff') return resolveHandoffLine(item);
@@ -181,8 +199,9 @@ export function resolveNoticeLine(item: TimelineItemOf<QuietNoticeKind>): Notice
   if (item.kind === 'proxy') {
     return {
       icon: 'IconCloudSimpleDisconnected',
-      text: 'Eunoe unavailable · Claude Code compacts this run',
-      hint: `${item.detail ?? 'Eunoe did not answer.'} Shinsa tries Eunoe again in a minute.`,
+      label: 'Eunoe unavailable',
+      meta: 'Claude Code compacts this run',
+      detail: `${item.detail ?? 'Eunoe did not answer.'} Shinsa tries Eunoe again in a minute.`,
     };
   }
   return resolveCompactionLine(item);

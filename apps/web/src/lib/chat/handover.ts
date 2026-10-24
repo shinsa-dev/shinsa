@@ -1,10 +1,10 @@
-import { type ChatToolArgs, QUESTION_WITHDRAWN } from '@shinsa/core';
+import { type ChatToolArgs, QUESTION_WITHDRAWN, readAnsweredReply } from '@shinsa/core';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { listPlanEvidenceKinds, type PlanParameters } from '@/lib/overview/plan-parameters.ts';
 
-export function isWithdrawn(call: ToolCall) {
+function isWithdrawn(call: ToolCall) {
   return call.result?.startsWith(QUESTION_WITHDRAWN) ?? false;
 }
 
@@ -12,6 +12,11 @@ export function resolveAskMeta(call: ToolCall, delegated: boolean) {
   if (call.result === null) return delegated ? 'Waiting for an answer' : 'Waiting for your answer';
   if (isWithdrawn(call)) return 'Withdrawn';
   return call.failed ? 'Not answered' : 'Answered';
+}
+
+export function resolveAskAnswer(call: ToolCall) {
+  if (call.result === null || call.failed || isWithdrawn(call)) return null;
+  return readAnsweredReply(call.result);
 }
 
 export function resolveSpotsMeta(args: ChatToolArgs) {
