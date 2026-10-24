@@ -32,9 +32,11 @@ import {
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  selectCheckoutHolder,
   type Task,
 } from '../../src/index.ts';
 import { IMPACT, PLAN } from '../harness.ts';
+import { assertAgentInvariants, assertOneSessionPerRound } from './agent-invariants.ts';
 import {
   assertDelegationInvariants,
   assertDelegationProgress,
@@ -58,6 +60,11 @@ import {
   selectScheduleWrite,
 } from './schedule-invariants.ts';
 import { assertShapeInvariants, listShapeCommands, listShapeMarks } from './shape-invariants.ts';
+import {
+  assertWorkspaceInvariants,
+  listWorkspaceMarks,
+  selectWorkspaceCommand,
+} from './workspace-invariants.ts';
 
 type Random = () => number;
 
@@ -169,11 +176,11 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
       if (chance(random, 0.05)) commands.push({ type: 'agent.note', runId, note: 'Late.' });
       continue;
     }
-    switch (run.role) {
-      case 'planner':
+    switch (run.purpose ?? run.role) {
+      case 'plan':
         commands.push({ type: 'agent.propose_plan', runId, document: resolvePlanDocument(state) });
         break;
-      case 'builder':
+      case 'build':
         commands.push({
           type: 'agent.complete_phase',
           runId,
@@ -194,7 +201,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
       case 'reviewer':
         commands.push({ type: 'agent.report_review', runId, findings: randomFindings(random) });
         break;
-      case 'operator':
+      case 'operate':
         commands.push({ type: 'agent.deliver', runId, step: 'operate', body: 'Ran it.' });
         break;
       default:
@@ -416,7 +423,11 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   if (chance(random, 0.05)) {
     commands.push({
       type: 'settings.change',
-      patch: { approvePlans: chance(random, 0.5), maxFixRounds: pick(random, [null, 1, 3]) ?? null },
+      patch: {
+        approvePlans: chance(random, 0.5),
+        maxFixRounds: pick(random, [null, 1, 3]) ?? null,
+        agentModels: chance(random, 0.5) ? { answerer: 'sonnet' } : {},
+      },
     });
   }
   return commands;
@@ -445,15 +456,16 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
   return Object.values(state.runs).flatMap((run): ShinsaCommand[] => {
     if (run.endedAt !== null) return [];
     const runId = run.id;
+    const wait: ShinsaCommand = {
+      type: 'agent.wait_for',
+      runId,
+      checkInMinutes: 1 + Math.floor(random() * 3),
+      notes: 'Wait for the deploy.',
+      timeoutMinutes: chance(random, 0.5) ? 2 + Math.floor(random() * 10) : null,
+      maxAttempts: chance(random, 0.5) ? 1 + Math.floor(random() * 3) : null,
+    };
     const commands: ShinsaCommand[] = [
-      {
-        type: 'agent.wait_for',
-        runId,
-        checkInMinutes: 1 + Math.floor(random() * 3),
-        notes: 'Wait for the deploy.',
-        timeoutMinutes: chance(random, 0.5) ? 2 + Math.floor(random() * 10) : null,
-        maxAttempts: chance(random, 0.5) ? 1 + Math.floor(random() * 3) : null,
-      },
+      run.purpose === 'plan' ? { type: 'agent.note', runId, note: 'Planning.' } : wait,
       {
         type: 'agent.suggest_tasks',
         runId,
@@ -480,7 +492,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
     ];
     if (run.role === 'answerer')
       commands.push({ type: 'agent.deliver', runId, step: 'answer', body: 'It works like this.' });
-    if (run.role === 'fixer') {
+    if (run.purpose === 'fix') {
       const fix: ShinsaCommand = {
         type: 'agent.complete_fix',
         runId,
@@ -497,7 +509,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       };
       commands.push(review, review, review);
     }
-    if (run.role === 'planner') {
+    if (run.purpose === 'plan') {
       commands.push({ type: 'agent.propose_plan', runId, document: PLAN, changeSummary: 'Tightened it.' });
     }
     return commands;
@@ -716,6 +728,7 @@ function assertInvariants(state: ShinsaState, now: number) {
 
   assertScheduleInvariants(state);
   assertHandleInvariants(state);
+  assertWorkspaceInvariants(state);
   for (const task of Object.values(state.tasks)) {
     const runs = listActiveRuns(state, task.id);
     const gates = listOpenGates(state, task.id);
@@ -737,6 +750,7 @@ function assertInvariants(state: ShinsaState, now: number) {
 
     assertShapeInvariants(task, gates, state, context);
     assertRoundInvariants(state, task, context);
+    assertAgentInvariants(state, task, context);
     if (isTaskSettled(task)) {
       expect(runs, context).toHaveLength(0);
       expect(gates, context).toHaveLength(0);
@@ -766,7 +780,8 @@ function assertInvariants(state: ShinsaState, now: number) {
       expect(listOpenBlockers(state, task), context).toHaveLength(0);
     }
     if (task.stage === 'waiting_on_tasks') {
-      expect(listPendingDependencies(state, task).length > 0 || gates.length > 0, context).toBe(true);
+      const waiting = listPendingDependencies(state, task).length > 0 || gates.length > 0;
+      expect(waiting || selectCheckoutHolder(state, task) !== null, context).toBe(true);
     }
     assertProcessInvariants(state, task, gates, context);
   }
@@ -785,6 +800,7 @@ type SideStream =
   | 'rounds'
   | 'composed_rounds'
   | 'on_behalf'
+  | 'workspaces'
   | null;
 
 function selectOnBehalfCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
@@ -859,6 +875,8 @@ function selectSideCommand(
       return selectRoundCommand(state, randoms.rounds, true);
     case 'on_behalf':
       return selectOnBehalfCommand(state, randoms.rounds);
+    case 'workspaces':
+      return selectWorkspaceCommand(state, randoms.planner);
     default:
       return null;
   }
@@ -920,6 +938,7 @@ function simulate(
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
       const stamped = { ...event, seq: state.seq + 1, at: now } as ShinsaEvent;
+      assertOneSessionPerRound(state, stamped, `seed ${seed}, step ${step}, after ${command.type}`);
       log.push(stamped);
       state = applyEvent(state, stamped);
     }
@@ -1034,12 +1053,16 @@ describe('decide under random command sequences', () => {
     'keeps every invariant while GitHub fails to read pull requests, and stops a watch that cannot read',
     () => {
       const reached = new Set<string>();
-      for (let seed = 1; seed <= RARE_SEEDS; seed += 1) {
-        for (const mark of listReachedStates(simulate(seed, STEPS, 'outages'))) reached.add(mark);
+      const observe = (state: ShinsaState) => {
+        for (const mark of listReachedStates(state)) reached.add(mark);
+      };
+      for (let seed = 1; seed <= RARE_SEEDS * 2; seed += 1) {
+        if (seed > RARE_SEEDS && reached.has('unreadable pull request')) break;
+        observe(simulate(seed, STEPS, 'outages', observe));
       }
       expect(reached).toContain('unreadable pull request');
     },
-    RARE_SEEDS * 2_000
+    RARE_SEEDS * 4_000
   );
 
   test(
@@ -1133,6 +1156,23 @@ describe('decide under random command sequences', () => {
         actions += simulate(seed, STEPS, 'on_behalf').onBehalfActions?.length ?? 0;
       }
       expect(actions).toBeGreaterThan(0);
+    },
+    SEEDS * 2_000
+  );
+
+  test(
+    'keeps one task at a time in a main checkout while the repository changes where agents work',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const mark of listWorkspaceMarks(state)) if (mark) reached.add(mark);
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'workspaces', collect);
+      expect([...reached].sort()).toEqual([
+        'waited for the checkout',
+        'worked in the checkout',
+        'worked on a GitButler branch',
+      ]);
     },
     SEEDS * 2_000
   );

@@ -85,6 +85,7 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
   const prompt = run?.rolePrompt ?? run?.prompt ?? '';
   decider.startRun(decider.task(task.id), wait.role, `${prompt}${resolveUsageResumeNudge()}`, {
     resumeFrom: run,
+    purpose: run?.purpose ?? null,
     phaseIndex: wait.phaseIndex,
     monitorId: run?.monitorId ?? null,
     usageWaitId: wait.id,

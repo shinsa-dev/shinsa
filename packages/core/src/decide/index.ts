@@ -23,7 +23,7 @@ import { recordConfig } from './config.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
-import { releaseWaiting } from './dependencies.ts';
+import { releaseWaiting, stackTask } from './dependencies.ts';
 import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
@@ -138,6 +138,7 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return answerGate(decider, command.gateId, command.decision, command.response, {
         ...(command.planVersion === undefined ? {} : { planVersion: command.planVersion }),
         ...(command.verdicts === undefined ? {} : { verdicts: command.verdicts }),
+        ...(command.comments === undefined ? {} : { comments: command.comments }),
       });
     case 'suggestion.accept':
       return acceptSuggestion(decider, command);
@@ -171,6 +172,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return readyWorktree(decider, command);
     case 'worktree.gone':
       return removeWorktree(decider, command);
+    case 'task.stack':
+      return stackTask(decider, command);
     case 'effect.fail':
       return failEffect(decider, command);
     case 'checks.record':

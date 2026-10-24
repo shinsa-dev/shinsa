@@ -41,10 +41,27 @@ const OPERATION_NOTE = [
 
 const COMBINED_NOTE: Record<Exclude<OperationTiming, 'alone'>, string> = {
   before_build:
-    "This task runs an operation first and then changes the code: an operator runs the operation once the human approves the plan, then builders build the phases, and the change goes through the human's review, a pull request and the merge.",
+    "This task runs an operation first and then changes the code: you run the operation once the human approves the plan, then build the phases, and the change goes through the human's review, a pull request and the merge.",
   after_merge:
-    "This task changes the code and then runs an operation: builders build the phases, the change goes through the human's review, a pull request and the merge, and then an operator runs the operation on the merged code (a backfill, a migration, a cleanup).",
+    "This task changes the code and then runs an operation: you build the phases, the change goes through the human's review, a pull request and the merge, and then you run the operation on the merged code (a backfill, a migration, a cleanup).",
 };
+
+const FIXING = 'then whatever the checks, the agent review, the pull request or the human find to fix';
+
+const ROUND_JOB: Record<OperationTiming | 'build', string> = {
+  build: `each phase in turn, ${FIXING}.`,
+  alone: 'the operation in the plan, step by step.',
+  before_build: `the operation in the plan first, then each phase in turn, ${FIXING}.`,
+  after_merge: `each phase in turn, ${FIXING}, and after the merge the operation in the plan.`,
+};
+
+function describeRoundJob(task: Task) {
+  return ROUND_JOB[resolveOperationTiming(resolveTaskPipeline(task)) ?? 'build'];
+}
+
+export function resolveAgentPrompt(instruction: string) {
+  return [resolveHouseRules('agent'), '', instruction].join('\n');
+}
 
 function describeOperationNote(task: Task) {
   const timing = resolveOperationTiming(resolveTaskPipeline(task));
@@ -83,11 +100,13 @@ function describeReshapeNote(task: Task) {
   ].join('\n');
 }
 
-export function resolvePlannerPrompt(task: Task, repo: Repo | null, bases: Task[], feedback: string | null) {
+export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task[], feedback: string | null) {
   return [
-    resolveHouseRules('planner'),
+    resolveHouseRules('agent'),
     '',
-    'Your role: planner. Plan this piece of work. Do not change any code.',
+    `Your role: the agent for this round. You plan it, then carry it out yourself in this same conversation: ${describeRoundJob(task)}`,
+    'Nobody else works from your plan, so write it for yourself and for the human who reads it.',
+    'While you plan you can read the code and run commands, but you cannot change files: Shinsa refuses edits until the plan is in.',
     describeTaskLink(task),
     describeRounds(task),
     describeRepository(repo),
@@ -108,9 +127,8 @@ export function resolvePlannerPrompt(task: Task, repo: Repo | null, bases: Task[
       : '',
     '',
     'Read the code you need to understand the change, then call `propose_plan`.',
-    `The \`phases\` split the work into ${PROTOCOL_LIMITS.minPlanPhases} to ${PROTOCOL_LIMITS.planPhases} phases, in order. Each phase is built by a separate agent that sees the plan,`,
-    'its own phase and the summaries of the phases before it, so a phase must be a self-contained step with a clear end:',
-    'a title of a few words and one or two sentences saying exactly what is done and how it is verified.',
+    `The \`phases\` split the work into ${PROTOCOL_LIMITS.minPlanPhases} to ${PROTOCOL_LIMITS.planPhases} phases, in order. You build them one after another in this conversation, and Shinsa commits each one when you hand it over,`,
+    'so a phase must be a step with a clear end: a title of a few words and one or two sentences saying exactly what is done and how it is verified.',
     'Small changes still get a plan; two or three phases is fine.',
     'Decide everything you can decide from the code and the request, and say so in the approach.',
     'If the human must decide something before work can start, ask it with `ask` first, then plan with the answer.',
@@ -120,45 +138,33 @@ export function resolvePlannerPrompt(task: Task, repo: Repo | null, bases: Task[
 }
 
 function describeOperationForBuilder(task: Task) {
-  const timing = resolveOperationTiming(resolveTaskPipeline(task));
-  if (timing === 'after_merge') {
-    return "Do not run the plan's operation: an operator runs it after the pull request merges.";
-  }
-  if (timing === 'before_build') return describeEarlierWork(task).trimStart();
-  return '';
+  if (resolveOperationTiming(resolveTaskPipeline(task)) !== 'after_merge') return '';
+  return "Do not run the plan's operation yet: you run it after the pull request merges and the human confirms it.";
 }
 
-export function resolvePhasePrompt(task: Task, repo: Repo | null, bases: Task[], index: number) {
+function describePhaseOpening(task: Task, index: number) {
+  if (index > 0) return `Phase ${index} is committed.`;
+  if (task.result?.step === 'operate') return 'The operation is done.';
+  const answers = task.planAnswers ? ` They answered: ${task.planAnswers}` : '';
+  if (task.plan?.approvedAt) return `The human approved the plan.${answers}`;
+  return 'The plan is in, so building starts.';
+}
+
+export function resolvePhaseInstruction(task: Task, repo: Repo | null, index: number) {
   const plan = task.plan?.document?.phases ?? [];
   const phase = plan[index];
   const last = index >= plan.length - 1;
   return [
-    resolveHouseRules('builder'),
-    '',
-    `Your role: builder for phase ${index + 1} of ${Math.max(plan.length, 1)}. Do this phase completely, and only this phase.`,
-    describeTaskLink(task),
-    describeRounds(task),
-    describeRepository(repo),
-    describeBases(bases),
-    '',
-    'The human asked for:',
-    resolveRequest(task),
-    '',
-    describeGoal(task),
-    describePlan(task),
-    describeApprovedPlan(task),
-    task.planAnswers ? ['', 'The human answered:', task.planAnswers].join('\n') : '',
-    '',
-    describePreviousPhases(task, index),
-    '',
-    phase ? `Your phase: ${phase.title}. ${phase.detail}` : 'Your phase: build the whole change.',
+    describePhaseOpening(task, index),
+    phase
+      ? `Now build phase ${index + 1} of ${plan.length}: ${phase.title}. ${phase.detail}`
+      : 'Now build the whole change.',
     describeOperationForBuilder(task),
-    '',
-    'Work until the phase is done and verified, not until it compiles.',
+    'Do this phase completely, and only this phase. Work until it is done and verified, not until it compiles.',
     describeCheckCommands(repo),
     last
       ? 'This is the last phase: the whole change must work end to end when you finish.'
-      : 'Later phases build on yours; leave the code in a working state.',
+      : 'Later phases build on this one; leave the code in a working state.',
     'For user-facing changes, run the app and attach screenshots or a short recording with `attach_evidence`.',
     'For logic, write the test that fails without your change and passes with it.',
     'When the phase is done, call `complete_phase`:',
@@ -168,7 +174,40 @@ export function resolvePhasePrompt(task: Task, repo: Repo | null, bases: Task[],
     '  Leave boilerplate and mechanical edits out.',
     '- decisions: judgement calls the human might disagree with.',
     'Then stop.',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function joinLines(lines: string[]) {
+  return lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+export function describeRound(task: Task, repo: Repo | null, bases: Task[], before: number) {
+  return [
+    joinLines([
+      `Your role: the agent for this round. You planned it and you carry it out yourself: ${describeRoundJob(task)}`,
+      'Your conversation may no longer hold this round, so here is where it stands. Run `git status`, `git log` and `git diff` to see the work so far.',
+      describeTaskLink(task),
+      describeRounds(task),
+      describeRepository(repo),
+      describeBases(bases),
+    ]),
+    joinLines(['The human asked for:', resolveRequest(task), resolveLaterMessages(task)]),
+    joinLines([
+      describeGoal(task),
+      describePlan(task),
+      describeApprovedPlan(task),
+      task.planAnswers ? `The human answered:\n${task.planAnswers}` : '',
+    ]),
+    describePreviousPhases(task, before),
+    describeEarlierWork(task).trim(),
+  ]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 function describeReviewScope(task: Task, repo: Repo | null, stacked: string | null) {
@@ -199,7 +238,7 @@ export function resolveReviewerPrompt(task: Task, repo: Repo | null, bases: Task
     describeGoal(task),
     describePlan(task),
     '',
-    'What the builders say they did:',
+    'What the agent says it did:',
     ...task.phaseReports.map((report) => `- ${report.summary}`),
     '',
     describeReviewScope(task, repo, stacked?.branch ?? null),
@@ -260,14 +299,14 @@ export function resolveInvestigatorPrompt(task: Task, repo: Repo | null, followU
     'Lead with the cause in one or two sentences (or what is still unknown), then how you reproduced it and the evidence (files and lines as shinsa:// links).',
     describeWhatFollows(task) ??
       (continues
-        ? 'The human already asked for a fix: a planner plans it from your diagnosis next, so end with what the fix should change.'
+        ? 'The human already asked for a fix: an agent plans it from your diagnosis next, so end with what the fix should change.'
         : PROPOSAL_RULE),
     'Then stop.',
   ].join('\n');
 }
 
 const OPERATION_MOMENT: Record<Exclude<OperationTiming, 'alone'>, string> = {
-  before_build: 'The code change in the plan is built after you, from the state you leave.',
+  before_build: 'You build the code change in the plan after it, from the state the operation leaves.',
   after_merge:
     'The code change in the plan has merged into the default branch, and your worktree has it. The human read the merged commit and confirmed the operation. Run it against that code.',
 };
@@ -284,8 +323,6 @@ function describeOperation(task: Task) {
     return describePlan(task) + describeImpact(task);
   return (
     [
-      describePlan(task),
-      '',
       OPERATION_MOMENT[timing],
       'The operation to run:',
       ...steps.map((step, index) => `${index + 1}. ${step}`),
@@ -293,28 +330,24 @@ function describeOperation(task: Task) {
   );
 }
 
-export function resolveOperatorPrompt(task: Task, repo: Repo | null, guidance: string | null) {
+function describeOperationOpening(task: Task) {
+  if (resolveOperationTiming(resolveTaskPipeline(task)) === 'after_merge') return '';
+  return task.plan?.approvedAt ? 'The human approved the plan.' : '';
+}
+
+export function resolveOperationInstruction(task: Task, guidance: string | null) {
   return [
-    resolveHouseRules('operator'),
-    '',
-    'Your role: operator. Run the operation in the approved plan, step by step, and report how it went.',
-    describeTaskLink(task),
-    describeRounds(task),
-    describeRepository(repo),
-    '',
-    'The human asked for:',
-    resolveRequest(task),
-    '',
-    describeGoal(task),
+    describeOperationOpening(task),
+    'Now run the operation in the plan, step by step, and report how it went.',
     describeOperation(task),
-    describeApprovedPlan(task),
     guidance ? ['', 'Guidance from the human:', guidance].join('\n') : '',
-    describeEarlierWork(task),
     '',
     'Run only what the plan says. Check each step before the next; stop and ask with `ask` when a step fails or would do more than the plan says.',
     `Then call \`report_outcome\` with \`outcome\`: markdown, at most ${SHAPE_LIMITS.outcome} characters: what ran, what changed, anything left to do or undo.`,
     'Then stop.',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function resolveAnswererPrompt(task: Task, repo: Repo | null, followUp: string | null) {

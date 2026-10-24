@@ -25,14 +25,16 @@ export {
 } from './orchestration.ts';
 export { resolveProjectContext } from './project.ts';
 export {
+  resolveAgentPrompt,
   resolveAnswererPrompt,
   resolveInvestigatorPrompt,
-  resolveOperatorPrompt,
-  resolvePhasePrompt,
-  resolvePlannerPrompt,
+  resolveOperationInstruction,
+  resolvePhaseInstruction,
+  resolvePlanningPrompt,
   resolveResearcherPrompt,
   resolveReviewerPrompt,
 } from './roles.ts';
+export { resolveRunBrief } from './root.ts';
 export { REFERENCE_RULES, resolveHouseRules, splitHouseRules } from './rules.ts';
 export {
   QUESTION_WITHDRAWN,

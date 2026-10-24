@@ -14,6 +14,7 @@ export {
   type DeliveryVia,
   isDelegatedRun,
   isReadOnlyRole,
+  isReadOnlyRun,
   type QueuedMessage,
   type RunDelegation,
   type RunWait,
@@ -168,6 +169,7 @@ export {
   isHandOverTool,
   isShinsaToolName,
   listToolNames,
+  PURPOSE_HAND_OVERS,
   SHINSA_TOOL_NAMES,
   type ShinsaToolName,
 } from './tools.ts';
@@ -186,3 +188,14 @@ export {
   validatePlanRules,
   validateVerification,
 } from './verification.ts';
+export {
+  canUseGitButler,
+  DEFAULT_WORKSPACE_MODE,
+  isSettingUpWorkspace,
+  isSharedWorkspace,
+  resolveRepoWorkspace,
+  WORKSPACE_MODES,
+  WORKSPACE_SETUP_REASON,
+  type WorkspaceMode,
+  type WorkspaceSupport,
+} from './workspaces.ts';

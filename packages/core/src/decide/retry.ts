@@ -1,4 +1,5 @@
 import { isPausingGate } from '../domain/index.ts';
+import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { resetFixBudget } from './fixes.ts';
@@ -42,7 +43,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       startPlanning(decider, taskId, guidance);
       return;
     case 'building':
-      startPhase(decider, taskId, resolveCurrentPhase(task), decider.lastRun(taskId, ['builder']), hint);
+      startPhase(decider, taskId, resolveCurrentPhase(task), hint);
       return;
     case 'checking':
       startChecks(decider, taskId);
@@ -53,11 +54,9 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
     case 'fixing':
       decider.startRun(
         task,
-        'fixer',
-        `Continue the fix you were working on and finish with \`complete_fix\`.${hint}`,
-        {
-          resumeFrom: decider.lastRun(taskId, ['fixer', 'builder']),
-        }
+        'agent',
+        resolveAgentPrompt(`Continue the fix you were working on and finish with \`complete_fix\`.${hint}`),
+        { purpose: 'fix', resumeFrom: decider.rootRun(taskId) }
       );
       return;
     case 'shipping':

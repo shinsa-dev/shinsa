@@ -114,7 +114,7 @@ describe('questions and messages', () => {
     harness.send({ type: 'agent.ask', runId: builder.id, gateId: 'q1', question: 'Which?', context: null });
     harness.send({ type: 'run.end', runId: builder.id, outcome: 'failed', summary: 'crash' });
     expect(harness.state.gates.q1?.status).toBe('withdrawn');
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
   });
 });
 
@@ -158,7 +158,7 @@ describe('daemon hand-offs', () => {
 });
 
 describe('messages before work starts', () => {
-  test('a message sent before planning starts reaches the planner', () => {
+  test('a message sent before planning starts reaches the agent', () => {
     const harness = createHarness();
     const first = createTask(harness);
     const second = createTask(harness, { request: 'Second', waitsOn: [first] });
@@ -196,7 +196,7 @@ describe('questions that lose their agent', () => {
     reachShipping(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'gh' });
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'failing' }) });
-    expect(harness.activeRun(taskId).role).toBe('fixer');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
 });
@@ -360,7 +360,7 @@ describe('a message to a resting task', () => {
     expect(harness.state.gates.q1).toMatchObject({ status: 'withdrawn', supersededBy: 'ok' });
   });
 
-  test('a question about a finished operation resumes the operator’s session in the same round', () => {
+  test('a question about a finished operation resumes the agent’s session in the same round', () => {
     const harness = createHarness();
     const taskId = runOperation(harness);
     expect(resolveMessageEffect(harness.state, harness.task(taskId))).toBe('follow_up');

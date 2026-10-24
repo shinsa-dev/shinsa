@@ -46,7 +46,7 @@ describe('the step schema', () => {
     }
     expect(STEP_SCHEMA.your_review.actor).toEqual({ by: 'you' });
     expect(STEP_SCHEMA.checks.actor).toEqual({ by: 'shinsa' });
-    expect(STEP_SCHEMA.build.actor).toEqual({ by: 'agent', role: 'builder' });
+    expect(STEP_SCHEMA.build.actor).toEqual({ by: 'agent', role: 'agent' });
     expect(STEP_SCHEMA.agent_review.gate.strength).toBe('soft');
     expect(STEP_SCHEMA.merge.gate.strength).toBe('hard');
     expect(STEP_SCHEMA.answer.gate.strength).toBe('none');

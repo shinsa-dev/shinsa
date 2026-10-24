@@ -18,6 +18,7 @@ import {
   listOpenGates,
   listPendingDependencies,
   resolveTaskProject,
+  selectCheckoutHolder,
 } from '../state/queries.ts';
 import { resolveGateWords } from './reasons.ts';
 import type { Queue, QueuedGate } from './types.ts';
@@ -60,7 +61,11 @@ export function isInFocus(state: ShinsaState, task: Task, now: number) {
 }
 
 export function listWaitsOn(state: ShinsaState, task: Task): Task[] {
-  if (task.stage === 'waiting_on_tasks') return listPendingDependencies(state, task);
+  if (task.stage === 'waiting_on_tasks') {
+    const pending = listPendingDependencies(state, task);
+    const holder = pending.length === 0 ? selectCheckoutHolder(state, task) : null;
+    return holder ? [holder] : pending;
+  }
   if (task.stage === 'shipping' || task.stage === 'awaiting_merge') return listOpenBlockers(state, task);
   return [];
 }

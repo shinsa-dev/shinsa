@@ -1,15 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import type { RunRole } from '../../src/index.ts';
 import {
+  resolveAgentPrompt,
   resolveAnswererPrompt,
   resolveChecksFixPrompt,
   resolveDelegatePrompt,
   resolveFollowUpPrompt,
   resolveHumanFixPrompt,
   resolveInvestigatorPrompt,
-  resolveOperatorPrompt,
-  resolvePhasePrompt,
-  resolvePlannerPrompt,
+  resolveOperationInstruction,
+  resolvePhaseInstruction,
+  resolvePlanningPrompt,
   resolvePullRequestFixPrompt,
   resolveResearcherPrompt,
   resolveReviewerPrompt,
@@ -19,16 +20,7 @@ import {
 import { resolveHouseRules } from '../../src/prompts/rules.ts';
 import { createHarness, createTask, proposePlan, pullRequest } from '../harness.ts';
 
-const WORKING_ROLES: RunRole[] = [
-  'planner',
-  'builder',
-  'reviewer',
-  'fixer',
-  'answerer',
-  'investigator',
-  'researcher',
-  'operator',
-];
+const WORKING_ROLES: RunRole[] = ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'];
 
 const CONVERSATION_SENTENCES = [
   'The human reads this conversation as you write it and talks to you in it.',
@@ -101,16 +93,16 @@ describe('the role and fix prompts', () => {
   test('tell the agent to stop after its hand-over, never to end its turn', () => {
     const { task, repo } = context();
     const prompts = [
-      resolvePlannerPrompt(task, repo, [], null),
-      resolvePhasePrompt(task, repo, [], 0),
+      resolvePlanningPrompt(task, repo, [], null),
+      resolvePhaseInstruction(task, repo, 0),
       resolveReviewerPrompt(task, repo, []),
       resolveAnswererPrompt(task, repo, null),
       resolveResearcherPrompt(task, repo, null),
       resolveInvestigatorPrompt(task, repo, null),
-      resolveOperatorPrompt(task, repo, null),
+      resolveOperationInstruction(task, null),
       resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]),
       resolveReviewFixPrompt([{ severity: 'blocking', file: null, line: null, message: 'Handle it.' }]),
-      resolveHumanFixPrompt('Rename it.'),
+      resolveHumanFixPrompt('Rename it.', []),
       resolvePullRequestFixPrompt(pullRequest({ checks: 'failing' })),
     ];
     for (const prompt of prompts) {
@@ -125,14 +117,12 @@ describe('splitting the house rules off a brief', () => {
   test('every role brief starts with its house rules, which split off from the instruction', () => {
     const { task, repo } = context();
     const briefs: [RunRole, string][] = [
-      ['planner', resolvePlannerPrompt(task, repo, [], null)],
-      ['builder', resolvePhasePrompt(task, repo, [], 0)],
+      ['agent', resolvePlanningPrompt(task, repo, [], null)],
       ['reviewer', resolveReviewerPrompt(task, repo, [])],
       ['answerer', resolveAnswererPrompt(task, repo, null)],
       ['answerer', resolveFollowUpPrompt(task, repo, 'Why?')],
       ['researcher', resolveResearcherPrompt(task, repo, null)],
       ['investigator', resolveInvestigatorPrompt(task, repo, null)],
-      ['operator', resolveOperatorPrompt(task, repo, null)],
     ];
     for (const [role, brief] of briefs) {
       const split = splitHouseRules(brief);
@@ -143,8 +133,21 @@ describe('splitting the house rules off a brief', () => {
   });
 
   test('a brief without house rules, such as a fix prompt, has nothing to split', () => {
-    expect(splitHouseRules(resolveHumanFixPrompt('Rename it.'))).toBeNull();
-    expect(splitHouseRules(resolveHouseRules('fixer'))).toBeNull();
+    expect(splitHouseRules(resolveHumanFixPrompt('Rename it.', []))).toBeNull();
+    expect(splitHouseRules(resolveHouseRules('agent'))).toBeNull();
+  });
+
+  test('the round agent’s short instructions carry its house rules and split back to the instruction', () => {
+    const { task, repo } = context();
+    for (const instruction of [
+      resolvePhaseInstruction(task, repo, 0),
+      resolveOperationInstruction(task, null),
+      resolveHumanFixPrompt('Rename it.', []),
+    ]) {
+      const split = splitHouseRules(resolveAgentPrompt(instruction));
+      expect(split?.rules).toBe(resolveHouseRules('agent'));
+      expect(split?.instruction).toBe(instruction);
+    }
   });
 });
 

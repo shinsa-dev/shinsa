@@ -393,12 +393,12 @@ describe('settings', () => {
   test('fast mode per role is recorded as the map you send, and sending the same map again does nothing', () => {
     const harness = createHarness();
     expect(harness.state.settings.agentFastModes).toEqual({});
-    harness.send({ type: 'settings.change', patch: { agentFastModes: { builder: true } } });
-    harness.send({ type: 'settings.change', patch: { agentFastModes: { builder: true, reviewer: false } } });
-    expect(harness.state.settings.agentFastModes).toEqual({ builder: true, reviewer: false });
+    harness.send({ type: 'settings.change', patch: { agentFastModes: { agent: true } } });
+    harness.send({ type: 'settings.change', patch: { agentFastModes: { agent: true, reviewer: false } } });
+    expect(harness.state.settings.agentFastModes).toEqual({ agent: true, reviewer: false });
     expect(harness.state.settings.fastMode).toBe(false);
     const seq = harness.state.seq;
-    harness.send({ type: 'settings.change', patch: { agentFastModes: { builder: true, reviewer: false } } });
+    harness.send({ type: 'settings.change', patch: { agentFastModes: { agent: true, reviewer: false } } });
     expect(harness.state.seq).toBe(seq);
     harness.send({ type: 'settings.change', patch: { agentFastModes: { reviewer: false } } });
     expect(harness.state.settings.agentFastModes).toEqual({ reviewer: false });
@@ -408,18 +408,18 @@ describe('settings', () => {
     const harness = createHarness();
     harness.send({
       type: 'settings.change',
-      patch: { agentModels: { reviewer: 'sonnet', planner: 'fable' } },
+      patch: { agentModels: { reviewer: 'sonnet', agent: 'fable' } },
     });
     harness.send({ type: 'settings.change', patch: { agentProviders: { reviewer: 'codex' } } });
-    expect(harness.state.settings.agentModels).toEqual({ planner: 'fable' });
+    expect(harness.state.settings.agentModels).toEqual({ agent: 'fable' });
     harness.send({
       type: 'settings.change',
       patch: {
-        agentProviders: { reviewer: 'codex', planner: 'codex' },
-        agentModels: { planner: 'gpt-5.6-sol' },
+        agentProviders: { reviewer: 'codex', agent: 'codex' },
+        agentModels: { agent: 'gpt-5.6-sol' },
       },
     });
-    expect(harness.state.settings.agentModels).toEqual({ planner: 'gpt-5.6-sol' });
+    expect(harness.state.settings.agentModels).toEqual({ agent: 'gpt-5.6-sol' });
   });
 
   test('switching the default provider clears the default model unless the same change names one', () => {
@@ -435,7 +435,7 @@ describe('settings', () => {
 
   test('each step runs on the provider and model set for its role', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { agentProviders: { planner: 'codex' } } });
+    harness.send({ type: 'settings.change', patch: { agentProviders: { agent: 'codex' } } });
     const taskId = createTask(harness);
     expect(harness.activeRun(taskId)).toMatchObject({ provider: 'codex', model: 'gpt-6-astra' });
   });

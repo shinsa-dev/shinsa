@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { isTaskLive } from '../../src/decide/liveness.ts';
 import { listActiveRuns, resolveQueue } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, failing, type Harness, proposePlan } from '../harness.ts';
+import {
+  buildAll,
+  createHarness,
+  createTask,
+  failing,
+  type Harness,
+  PASSING,
+  proposePlan,
+} from '../harness.ts';
 
 const MINUTE = 60_000;
 
@@ -41,7 +49,7 @@ describe('waiting with wait_for', () => {
     const task = harness.task(taskId);
     expect(task.monitor).toMatchObject({
       runId: builder.id,
-      role: 'builder',
+      role: 'agent',
       phaseIndex: 0,
       notes: 'Check that the staging deploy finished.',
       attempts: 0,
@@ -74,7 +82,8 @@ describe('waiting with wait_for', () => {
     fire(harness, taskId);
     const run = harness.activeRun(taskId);
     expect(run).toMatchObject({
-      role: 'builder',
+      role: 'agent',
+      purpose: 'build',
       phaseIndex: 0,
       sessionId: 'builder-1',
       monitorId: harness.task(taskId).monitor?.id,
@@ -126,7 +135,7 @@ describe('waiting with wait_for', () => {
     expect(gate.body).toContain('The agent was waiting for: Check that the staging deploy finished.');
     expect(gate.body).toContain('The agent used all 1 check and still needed to wait.');
     harness.send({ type: 'task.retry', taskId });
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
     expect(harness.activeRun(taskId).monitorId).toBeUndefined();
   });
 
@@ -146,10 +155,15 @@ describe('waiting with wait_for', () => {
     );
   });
 
-  test('only builders and fixers can wait', () => {
+  test('the reviewer cannot wait, and the round agent waits on the step it was on', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    expect(() => waitFor(harness, taskId)).toThrow('A planner cannot do that.');
+    waitFor(harness, taskId);
+    fire(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    expect(() => waitFor(harness, taskId)).toThrow('A reviewer cannot do that.');
   });
 });
 
@@ -165,7 +179,7 @@ describe('when the wait ends', () => {
     expect(gate.body).toContain('The wait ran out of time after 0 checks.');
     expect(harness.task(taskId).monitor?.status).toBe('exhausted');
     harness.send({ type: 'task.retry', taskId });
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
     expect(harness.task(taskId).monitor?.status).toBe('exhausted');
   });
 
@@ -222,7 +236,7 @@ describe('when the wait ends', () => {
     expect(harness.activeRun(taskId).monitorId).toBe(harness.task(taskId).monitor?.id);
   });
 
-  test('a fixer can wait too, and its wait survives a recovery of the woken run', () => {
+  test('the agent can wait too, and its wait survives a recovery of the woken run', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     buildAll(harness, taskId);
@@ -236,6 +250,6 @@ describe('when the wait ends', () => {
       outcome: 'failed',
       summary: 'crash',
     });
-    expect(harness.activeRun(taskId)).toMatchObject({ role: 'fixer', monitorId });
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix', monitorId });
   });
 });

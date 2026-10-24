@@ -161,7 +161,7 @@ describe('finding the inquiry and the work of a pipeline', () => {
 });
 
 describe('composed steps', () => {
-  test('the planner can compose steps no preset has, from the same building blocks', () => {
+  test('the agent can compose steps no preset has, from the same building blocks', () => {
     const compositions: PipelineStep[][] = [
       ['investigate', 'your_ok', 'plan', 'operate'],
       ['research', 'your_ok', 'plan', 'build', ...REVIEW_TAIL],
@@ -256,10 +256,10 @@ describe('whether a task’s steps are settled', () => {
     expect(resolveShapeState({ stage: 'triage', auto: AUTO, pipeline: [], plan: null })).toBe('triage');
   });
 
-  test('the planner may still change the steps of an auto task that plans first, until it plans or composes', () => {
+  test('the agent may still change the steps of an auto task that plans first, until it plans or composes', () => {
     const planning = { stage: 'planning' as const, auto: AUTO, pipeline: [...CHANGE], plan: null };
-    expect(resolveShapeState(planning)).toBe('planner');
-    expect(resolveShapeState({ ...planning, stage: 'waiting_on_tasks' })).toBe('planner');
+    expect(resolveShapeState(planning)).toBe('agent');
+    expect(resolveShapeState({ ...planning, stage: 'waiting_on_tasks' })).toBe('agent');
     expect(
       resolveShapeState({
         ...planning,

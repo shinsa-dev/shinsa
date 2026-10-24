@@ -17,6 +17,7 @@ import type {
   Project,
   PullRequest,
   Repo,
+  ReviewComment,
   ReviewEscalation,
   Round,
   RoundShipping,
@@ -38,6 +39,7 @@ import type {
   TaskSuggestion,
   TriageDecisions,
   UsageWait,
+  WorkspaceMode,
 } from '../domain/index.ts';
 import type { PullRequestWatch, PullRequestWatchChange } from '../domain/pull-requests.ts';
 import type { PlanDocument, ReportCheck, ReviewFinding, WorkReport } from '../report/types.ts';
@@ -126,8 +128,17 @@ type EventBody =
       onto?: number | null;
     }
   | { type: 'task.recovered'; taskId: string; recoveries: number; fingerprint?: string }
-  | { type: 'worktree.created'; taskId: string; path: string; branch: string }
+  | { type: 'worktree.requested'; taskId: string; workspace: WorkspaceMode }
+  | {
+      type: 'worktree.created';
+      taskId: string;
+      path: string;
+      branch: string;
+      workspace: WorkspaceMode;
+      returnBranch?: string;
+    }
   | { type: 'worktree.removed'; taskId: string }
+  | { type: 'task.stacked'; taskId: string; onTaskId: string; branch: string }
   | {
       type: 'plan.proposed';
       taskId: string;
@@ -158,6 +169,7 @@ type EventBody =
       decision: GateDecision;
       response: string | null;
       verdicts?: FindingVerdict[];
+      comments?: ReviewComment[];
     }
   | { type: 'gate.withdrawn'; gateId: string }
   | { type: 'gate.noted'; gateId: string; notes: string | null }

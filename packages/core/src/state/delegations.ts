@@ -18,14 +18,13 @@ export type DeliveryItem =
   | { kind: 'message'; messageId: string };
 
 const ROLE_NAME: Record<Run['role'], string> = {
+  agent: 'agent',
   planner: 'planner',
   builder: 'builder',
   reviewer: 'reviewer',
-  fixer: 'fixer',
   answerer: 'answerer',
   investigator: 'investigator',
   researcher: 'researcher',
-  operator: 'operator',
 };
 
 function createCohort(): DeliveryCohort {

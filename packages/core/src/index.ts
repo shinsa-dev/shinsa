@@ -39,6 +39,7 @@ export {
   resolveHandoffPrompt,
   resolveHouseRules,
   resolveQuestionResumePrompt,
+  resolveRunBrief,
   resolveSteerPrompt,
   resolveSupersededReply,
   resolveWithdrawnReply,

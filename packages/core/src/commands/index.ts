@@ -10,6 +10,7 @@ import type {
   Project,
   PullRequest,
   Repo,
+  ReviewComment,
   RoundShipping,
   RunAccount,
   RunFailure,
@@ -95,6 +96,7 @@ export type UserCommand =
       response: string | null;
       planVersion?: number;
       verdicts?: FindingVerdict[];
+      comments?: ReviewComment[];
     }
   | { type: 'suggestion.accept'; taskId: string; suggestionId: string; waitsOnThis: boolean }
   | { type: 'suggestion.dismiss'; taskId: string; suggestionId: string }
@@ -174,8 +176,9 @@ type SystemCommand =
       priority?: TaskPriority;
       reasons?: TriageReasons;
     }
-  | { type: 'worktree.ready'; taskId: string; path: string; branch: string }
+  | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }
   | { type: 'worktree.gone'; taskId: string }
+  | { type: 'task.stack'; taskId: string; branch: string }
   | { type: 'run.link'; runId: string; sessionId: string; attemptId?: string | null; provider: string }
   | {
       type: 'run.end';

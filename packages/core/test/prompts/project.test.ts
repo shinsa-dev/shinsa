@@ -53,6 +53,17 @@ describe('the project context', () => {
     ]);
   });
 
+  test('names the repository a task works in when it is outside the project', () => {
+    const harness = createHarness();
+    createBasket(harness);
+    const projectId = Object.keys(harness.state.projects)[0] ?? '';
+    const kanna = registerRepo(harness, 'kanna', null);
+    const taskId = createTask(harness, { repoId: kanna });
+    const lines = resolveProjectContext(harness.state, { ...harness.task(taskId), projectId }).split('\n');
+    expect(lines.at(-1)).toBe('This task works in kanna (/code/kanna), a repository outside the project.');
+    expect(lines).toContain('- server: /code/server');
+  });
+
   test('leaves out a description, repositories and folders the project does not have', () => {
     const harness = createHarness();
     harness.send({ type: 'project.write', project: { name: 'Notes', color: 'blue' } });
@@ -80,7 +91,7 @@ describe('the project context', () => {
     const taskId = createTask(harness, { repoId: server, size: 'large' });
     const context = resolveProjectContext(harness.state, harness.task(taskId));
     const planner = harness.activeRun(taskId);
-    expect(planner.role).toBe('planner');
+    expect(planner).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(planner.prompt).toContain(context);
     expect(planner.prompt).toContain('This task belongs to the project Basket');
     linkSession(harness, taskId, 'planner-session');

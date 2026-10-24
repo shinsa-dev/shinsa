@@ -2,7 +2,7 @@ import { type Activity, type Gate, type Run, resolveRoundStamp, type Task } from
 import type { ShinsaState } from './project.ts';
 
 type ActivityEntry = Pick<Activity, 'actor' | 'kind' | 'text'> &
-  Partial<Pick<Activity, 'detail' | 'evidenceId' | 'runId' | 'gateType'>>;
+  Partial<Pick<Activity, 'detail' | 'evidenceId' | 'runId' | 'gateType' | 'comments'>>;
 
 const ACTIVITY_LIMIT = 200;
 

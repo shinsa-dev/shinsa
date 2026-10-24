@@ -21,7 +21,7 @@ describe('resolveAgentModel', () => {
     const settings = { ...createSettings(), defaultModel: 'fable' };
     expect(resolveAgentModel(settings, 'classifier')).toBe('sonnet');
     expect(resolveAgentModel(settings, 'writer')).toBe('sonnet');
-    expect(resolveAgentModel(settings, 'builder')).toBe('fable');
+    expect(resolveAgentModel(settings, 'agent')).toBe('fable');
   });
 
   test('no role defaults to Haiku, though it stays in the catalog to pick', () => {
@@ -31,27 +31,25 @@ describe('resolveAgentModel', () => {
   });
 
   test('with no default model each role falls back to its own', () => {
-    const settings = { ...createSettings(), defaultModel: null, agentModels: { planner: '' } };
-    expect(resolveAgentModel(settings, 'planner')).toBe('opus');
+    const settings = { ...createSettings(), defaultModel: null, agentModels: { agent: '' } };
+    expect(resolveAgentModel(settings, 'agent')).toBe('opus');
   });
 });
 
 describe('resolveAgentProvider', () => {
   test('a role runs on the default provider unless settings move it', () => {
-    const settings = { ...createSettings(), agentProviders: { reviewer: 'codex', fixer: '' } };
+    const settings = { ...createSettings(), agentProviders: { reviewer: 'codex', answerer: '' } };
     expect(resolveAgentProvider(settings, 'reviewer')).toBe('codex');
-    expect(resolveAgentProvider(settings, 'fixer')).toBe('claude');
-    expect(resolveAgentProvider({ ...createSettings(), agentProviders: undefined }, 'planner')).toBe(
-      'claude'
-    );
+    expect(resolveAgentProvider(settings, 'answerer')).toBe('claude');
+    expect(resolveAgentProvider({ ...createSettings(), agentProviders: undefined }, 'agent')).toBe('claude');
   });
 });
 
 describe('resolveAgentModel on another provider', () => {
   test('a role moved to Codex uses Codex’s model for that role, not the Claude default', () => {
-    const settings = { ...createSettings(), agentProviders: { builder: 'codex' } };
-    expect(resolveAgentModel(settings, 'builder')).toBe('gpt-6-astra');
-    expect(resolveAgentModel({ ...settings, agentModels: { builder: 'gpt-5.6-sol' } }, 'builder')).toBe(
+    const settings = { ...createSettings(), agentProviders: { agent: 'codex' } };
+    expect(resolveAgentModel(settings, 'agent')).toBe('gpt-6-astra');
+    expect(resolveAgentModel({ ...settings, agentModels: { agent: 'gpt-5.6-sol' } }, 'agent')).toBe(
       'gpt-5.6-sol'
     );
   });
@@ -65,9 +63,9 @@ describe('resolveAgentModel on another provider', () => {
 
   test('with Codex as the default provider the default model counts for its working roles', () => {
     const settings = { ...createSettings(), defaultProvider: 'codex', defaultModel: 'gpt-5.6-terra' };
-    expect(resolveAgentModel(settings, 'planner')).toBe('gpt-5.6-terra');
+    expect(resolveAgentModel(settings, 'agent')).toBe('gpt-5.6-terra');
     expect(resolveAgentModel(settings, 'writer')).toBe('gpt-5.6-luna');
-    expect(resolveAgentModel(settings, 'planner', 'claude')).toBe('opus');
+    expect(resolveAgentModel(settings, 'agent', 'claude')).toBe('opus');
   });
 });
 
@@ -105,7 +103,7 @@ describe('listAgentProviders', () => {
     expect(listAgentProviders(createSettings())).toEqual(['claude']);
     const mixed = {
       ...createSettings(),
-      agentProviders: { builder: 'codex', fixer: 'codex', writer: 'gemini' },
+      agentProviders: { reviewer: 'codex', answerer: 'codex', writer: 'gemini' },
     };
     expect(listAgentProviders(mixed)).toEqual(['claude', 'codex']);
     expect(listAgentProviders({ ...createSettings(), defaultProvider: 'codex' })).toEqual(['codex']);

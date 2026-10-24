@@ -117,6 +117,25 @@ describe('finished tasks', () => {
     harness.send({ type: 'task.retry', taskId });
     expect(harness.state.seq).toBe(events);
   });
+
+  test('a task that settles, done, merged or cancelled, has its scratch folder removed once', () => {
+    const harness = createHarness();
+    const done = createTask(harness);
+    const cancelled = createTask(harness, { request: 'Other' });
+    const merged = createTask(harness, { request: 'Third' });
+    expect(harness.send({ type: 'task.complete', taskId: done }).effects).toContainEqual({
+      kind: 'scratch.remove',
+      taskId: done,
+    });
+    expect(harness.send({ type: 'task.cancel', taskId: cancelled }).effects).toContainEqual({
+      kind: 'scratch.remove',
+      taskId: cancelled,
+    });
+    shipAndMerge(harness, merged);
+    expect(harness.lastEffect('scratch.remove').taskId).toBe(merged);
+    expect(harness.send({ type: 'task.cancel', taskId: done }).effects).toEqual([]);
+    expect(harness.effectsOf('scratch.remove')).toHaveLength(3);
+  });
 });
 
 describe('system commands that arrive twice', () => {

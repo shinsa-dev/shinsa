@@ -105,7 +105,7 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
     const proposal = chance(random, 0.5) ? PROPOSAL : null;
     if (run.role === 'answerer')
       return [{ type: 'agent.deliver', runId: run.id, step: 'answer', body: 'Because.', proposal }];
-    if (run.role === 'planner' && (combined || chance(random, 0.5))) {
+    if (run.purpose === 'plan' && (combined || chance(random, 0.5))) {
       return [
         {
           type: 'agent.reshape',
@@ -115,7 +115,7 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
         },
       ];
     }
-    if (run.role === 'planner') {
+    if (run.purpose === 'plan') {
       return [
         {
           type: 'agent.reshape',
@@ -125,9 +125,10 @@ function listAgentCommands(state: ShinsaState, random: Random, combined: boolean
         },
       ];
     }
-    if (run.role === 'investigator' || run.role === 'researcher' || run.role === 'operator') {
+    const delivering = run.purpose === 'operate' ? 'operator' : run.role;
+    if (delivering === 'investigator' || delivering === 'researcher' || delivering === 'operator') {
       return [
-        { type: 'agent.deliver', runId: run.id, step: DELIVERING[run.role], body: 'Found it.', proposal },
+        { type: 'agent.deliver', runId: run.id, step: DELIVERING[delivering], body: 'Found it.', proposal },
       ];
     }
     return [];
@@ -151,9 +152,9 @@ const MERGED = {
 
 function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   const runs = listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
-    if (run.role === 'planner')
+    if (run.purpose === 'plan')
       return [{ type: 'agent.propose_plan', runId: run.id, document: OPERATION_PLAN }];
-    if (run.role === 'builder') {
+    if (run.purpose === 'build') {
       return [
         { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },
       ];

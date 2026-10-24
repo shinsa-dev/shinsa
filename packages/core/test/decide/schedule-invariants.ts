@@ -21,7 +21,7 @@ function chance(random: Random, odds: number) {
   return random() < odds;
 }
 
-const SCHEDULING_ROLES = new Set<RunRole>(['planner', 'builder', 'fixer', 'answerer']);
+const SCHEDULING_ROLES = new Set<RunRole>(['agent', 'answerer']);
 
 const TRIGGERS: ScheduleTrigger[] = [
   { kind: 'interval', everyMinutes: 1 },

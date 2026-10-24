@@ -11,6 +11,7 @@ import {
   PASSING,
   proposePlan,
   reachReviewGate,
+  readInstruction,
 } from '../harness.ts';
 
 describe('checks and agent review', () => {
@@ -26,7 +27,7 @@ describe('checks and agent review', () => {
     expect(run.prompt).toContain('You did not write this code.');
   });
 
-  test('failing checks start a fixer on the builder session with the failure output', () => {
+  test('failing checks start the agent on the agent session with the failure output', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
@@ -39,7 +40,7 @@ describe('checks and agent review', () => {
     expect(task.stage).toBe('fixing');
     expect(task.fixFor).toBe('checks');
     expect(task.fixRounds).toBe(1);
-    expect(run.role).toBe('fixer');
+    expect(run).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(run.sessionId).toBe('builder-2');
     expect(run.prompt).toContain('src/a.ts(3,1): error TS2322');
   });
@@ -56,7 +57,7 @@ describe('checks and agent review', () => {
     expect(harness.task(taskId).stage).toBe('reviewing');
   });
 
-  test('blocking findings go to a fixer, then checks and a fresh reviewer', () => {
+  test('blocking findings go to the agent, then checks and a fresh reviewer', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     buildAll(harness, taskId);
@@ -197,7 +198,7 @@ describe('the automatic fix budget', () => {
     expect(harness.openGate(taskId).title).toBe('Out of automatic fix rounds');
     harness.send({ type: 'task.retry', taskId });
     harness.send({ type: 'checks.record', taskId, results: failing('b') });
-    expect(harness.activeRun(taskId).role).toBe('fixer');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(harness.task(taskId).fixRounds).toBe(1);
   });
 
@@ -213,7 +214,7 @@ describe('the automatic fix budget', () => {
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
     harness.send({ type: 'task.retry', taskId });
     harness.send({ type: 'checks.record', taskId, results: failing() });
-    expect(harness.activeRun(taskId).role).toBe('fixer');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
   });
 
   test('changes you ask for start a fresh budget and do not use it up', () => {
@@ -229,7 +230,7 @@ describe('the automatic fix budget', () => {
     });
     harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Renamed.' });
     harness.send({ type: 'checks.record', taskId, results: failing() });
-    expect(harness.activeRun(taskId).role).toBe('fixer');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
   });
 });
 
@@ -322,7 +323,63 @@ describe('review rounds that escalate to you', () => {
     expect(harness.task(taskId).fixFingerprints).toEqual([]);
     fix(harness, taskId, 'tree-3');
     review(harness, taskId, blocking('Fourth.'));
-    expect(harness.activeRun(taskId).role).toBe('fixer');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
+  });
+
+  test('fixing the findings you kept sends your line comments too, and the activity keeps them', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    review(harness, taskId, blocking('First.'));
+    fix(harness, taskId, 'tree-1');
+    review(harness, taskId, blocking('Second.'));
+    fix(harness, taskId, 'tree-2');
+    review(harness, taskId, blocking('Third.'));
+    const comment = {
+      path: 'src/a.ts',
+      side: 'new' as const,
+      line: 4,
+      endLine: null,
+      text: 'Keep the guard here.',
+      suggestion: null,
+    };
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: null,
+      verdicts: [{ index: 0, verdict: 'fix', note: null }],
+      comments: [comment],
+    });
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toStartWith('The human looked at the work and decided on each review finding.');
+    expect(prompt).toContain('- src/a.ts, line 4: Keep the guard here.');
+    const decision = harness
+      .task(taskId)
+      .activity.filter((entry) => entry.kind === 'decision')
+      .at(-1);
+    expect(decision?.comments).toEqual([comment]);
+    expect(harness.events.filter((event) => event.type === 'gate.answered').at(-1)).toMatchObject({
+      comments: [comment],
+    });
+  });
+
+  test('a decision without line comments records none', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'revise',
+      response: 'Again.',
+    });
+    const decision = harness
+      .task(taskId)
+      .activity.filter((entry) => entry.kind === 'decision')
+      .at(-1);
+    expect(decision).toBeDefined();
+    expect(decision && 'comments' in decision).toBe(false);
   });
 
   test('a finding you dismissed does not block when the reviewer raises it again', () => {

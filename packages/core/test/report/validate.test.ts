@@ -244,7 +244,7 @@ describe('the plan parameters', () => {
     verification: ['A test.'],
   };
 
-  test('keeps the impact, the evidence, the extra checks and the approval the planner asks for', () => {
+  test('keeps the impact, the evidence, the extra checks and the approval the agent asks for', () => {
     const result = validatePlanHandOver({
       ...plan,
       impact: ' Touches 40 rows. ',

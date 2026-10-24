@@ -48,6 +48,7 @@ function applyGateAnswered(state: ShinsaState, event: EventOf<'gate.answered'>) 
     kind: 'decision',
     text: describeDecision(event.decision, gate.title),
     detail: event.response,
+    ...(event.comments ? { comments: event.comments } : {}),
   });
 }
 

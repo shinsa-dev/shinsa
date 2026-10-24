@@ -4,6 +4,7 @@ import {
   type Gate,
   type GateDecision,
   isTaskSettled,
+  type ReviewComment,
   resolveGateDefinition,
 } from '../domain/index.ts';
 import { resolveHumanFixPrompt, resolveVerdictFixPrompt } from '../prompts/index.ts';
@@ -22,6 +23,7 @@ import { answerOperation, answerProposal, startAfterPlan } from './shapes.ts';
 interface AnswerOptions {
   planVersion?: number;
   verdicts?: FindingVerdict[];
+  comments?: ReviewComment[];
 }
 
 function describePlanChange(decider: Decider, gate: Gate) {
@@ -102,6 +104,36 @@ function assertVerdicts(decider: Decider, gate: Gate, decision: GateDecision, ve
   }
 }
 
+function describeCommentProblem(comment: ReviewComment) {
+  if (comment.endLine !== null && comment.endLine <= comment.line) {
+    return `The comment on ${comment.path} must end on a line after line ${comment.line}.`;
+  }
+  if (!comment.suggestion) {
+    return comment.text.trim() ? null : `The comment on ${comment.path} has no words.`;
+  }
+  if (comment.side === 'old') return `A suggested change on ${comment.path} must be on the new side.`;
+  const count = (comment.endLine ?? comment.line) - comment.line + 1;
+  if (comment.suggestion.original.split('\n').length !== count) {
+    return `The suggested change on ${comment.path} must quote the ${count === 1 ? 'line' : `${count} lines`} it replaces.`;
+  }
+  return null;
+}
+
+function assertComments(gate: Gate, decision: GateDecision, comments?: ReviewComment[]) {
+  if (!comments || comments.length === 0) return;
+  if (gate.type !== 'review' && gate.type !== 'merge') {
+    throw new DomainError('comments_invalid', 'Only a review takes line comments.');
+  }
+  if (decision !== 'revise') {
+    throw new DomainError(
+      'comments_conflict',
+      'Line comments go to the agent when you request changes. Request changes, or clear them first.'
+    );
+  }
+  const problem = comments.map(describeCommentProblem).find((found) => found !== null);
+  if (problem) throw new DomainError('comments_invalid', problem);
+}
+
 function answerQuestion(decider: Decider, gate: Gate) {
   decider.run({ kind: 'question.resolve', gateId: gate.id });
 }
@@ -123,7 +155,7 @@ function approveReview(decider: Decider, taskId: string) {
   requestPush(decider, taskId);
 }
 
-function reviseWork(decider: Decider, gate: Gate, response: string | null) {
+function reviseWork(decider: Decider, gate: Gate, response: string | null, comments: ReviewComment[]) {
   if (gate.type === 'plan') {
     startPlanning(decider, gate.taskId, response ?? 'Revise the plan.');
     return;
@@ -131,19 +163,25 @@ function reviseWork(decider: Decider, gate: Gate, response: string | null) {
   const findings = decider.task(gate.taskId).findings;
   const judged = gate.type === 'review' && findings.some((finding) => finding.verdict);
   const prompt = judged
-    ? resolveVerdictFixPrompt(findings, response)
-    : resolveHumanFixPrompt(response ?? 'Revise the work.');
+    ? resolveVerdictFixPrompt(findings, response, comments)
+    : resolveHumanFixPrompt(response, comments);
   startFix(decider, gate.taskId, 'you', prompt, null);
 }
 
-function answerDecision(decider: Decider, gate: Gate, decision: GateDecision, response: string | null) {
+function answerDecision(
+  decider: Decider,
+  gate: Gate,
+  decision: GateDecision,
+  response: string | null,
+  comments: ReviewComment[]
+) {
   const taskId = gate.taskId;
   if (decision === 'reject') {
     settleTask(decider, taskId, 'cancelled', `${gate.type} rejected`);
     return;
   }
   if (decision === 'revise') {
-    reviseWork(decider, gate, response);
+    reviseWork(decider, gate, response, comments);
     return;
   }
   if (gate.type === 'plan') {
@@ -174,9 +212,11 @@ export function answerGate(
   assertDecision(gate, decision, response);
   assertCurrentPlan(decider, gate, decision, options.planVersion);
   assertVerdicts(decider, gate, decision, options.verdicts);
+  assertComments(gate, decision, options.comments);
   assertConfigurationAnswer(decider, gate, decision);
   const verdicts = options.verdicts && options.verdicts.length > 0 ? { verdicts: options.verdicts } : {};
-  decider.emit({ type: 'gate.answered', gateId, decision, response, ...verdicts });
+  const comments = options.comments && options.comments.length > 0 ? { comments: options.comments } : {};
+  decider.emit({ type: 'gate.answered', gateId, decision, response, ...verdicts, ...comments });
   decider.requestBriefing(gate.taskId);
   switch (gate.type) {
     case 'question':
@@ -199,7 +239,7 @@ export function answerGate(
     case 'plan':
     case 'review':
     case 'merge':
-      answerDecision(decider, gate, decision, response);
+      answerDecision(decider, gate, decision, response, options.comments ?? []);
       return;
   }
 }

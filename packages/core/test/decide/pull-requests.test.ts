@@ -380,7 +380,7 @@ function record(
 }
 
 describe('watching the pull request', () => {
-  test('a new comment holds the merge gate and a fixer reads it; once read, the clean pull request reaches the merge gate', () => {
+  test('a new comment holds the merge gate and the agent reads it; once read, the clean pull request reaches the merge gate', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, {}, [REMARK]);
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
@@ -397,7 +397,7 @@ describe('watching the pull request', () => {
     expect(harness.openGate(taskId).type).toBe('merge');
   });
 
-  test('the reader’s own replies never start a fixer', () => {
+  test('the reader’s own replies never start the agent', () => {
     const { harness, taskId } = shipping();
     record(harness, taskId, {}, [{ ...REMARK, author: 'shinsa-user' }]);
     expect(harness.openGate(taskId).type).toBe('merge');
@@ -581,7 +581,7 @@ describe('merge queues', () => {
     expect(harness.task(taskId).stageReason).toBe('removed from the merge queue');
   });
 
-  test('a queue that takes out a pull request that now fails sends it to a fixer with the reason', () => {
+  test('a queue that takes out a pull request that now fails sends it to the agent with the reason', () => {
     const { harness, taskId } = merging();
     record(harness, taskId, { mergeQueue: { state: 'auto_merge', position: null } });
     expect(harness.task(taskId).stageReason).toBe('waiting for GitHub to merge it automatically');

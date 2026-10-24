@@ -12,6 +12,7 @@ const TASK_EFFECTS: ShinsaEffect[] = [
   { kind: 'task.triage', taskId: 't' },
   { kind: 'worktree.create', taskId: 't' },
   { kind: 'worktree.remove', taskId: 't' },
+  { kind: 'scratch.remove', taskId: 't' },
   { kind: 'config.verify', taskId: 't' },
   { kind: 'pull_request.open', taskId: 't' },
   { kind: 'pull_request.push', taskId: 't' },

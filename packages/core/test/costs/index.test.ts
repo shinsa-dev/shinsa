@@ -21,7 +21,7 @@ describe('resolveTaskCost', () => {
     const planner = harness.activeRun(taskId).id;
     harness.send({ type: 'run.meter', runId: planner, usage: usage(0.1) });
     buildAll(harness, taskId);
-    const builders = Object.values(harness.state.runs).filter((run) => run.role === 'builder');
+    const builders = Object.values(harness.state.runs).filter((run) => run.purpose === 'build');
     for (const [index, run] of builders.entries()) {
       harness.send({ type: 'run.meter', runId: run.id, usage: usage(index === 0 ? 1 : null) });
     }
@@ -38,10 +38,7 @@ describe('resolveTaskCost', () => {
       unpricedRuns: 1,
       weeklyPercent: 0,
     });
-    expect(cost.byRole.map((line) => [line.role, line.cost.runs])).toEqual([
-      ['planner', 1],
-      ['builder', 2],
-    ]);
+    expect(cost.byRole.map((line) => [line.role, line.cost.runs])).toEqual([['agent', 3]]);
     expect(cost.byPhase.map((line) => [line.index, line.title, line.cost.knownUsd])).toEqual([
       [0, 'Find the overflow', 1],
       [1, 'Fix and verify', 0],
@@ -56,7 +53,8 @@ describe('resolveTaskCost', () => {
     harness.state.runs.x = {
       ...harness.activeRun(taskId),
       id: 'x',
-      role: 'builder',
+      role: 'agent',
+      purpose: 'build',
       phaseIndex: 4,
       usage: usage(0.2),
     };
@@ -67,16 +65,11 @@ describe('resolveTaskCost', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
-    for (const role of ['operator', 'researcher', 'investigator', 'planner'] as const) {
+    for (const role of ['reviewer', 'researcher', 'investigator', 'agent'] as const) {
       harness.state.runs[role] = { ...run, id: role, role, usage: usage(0.5) };
     }
     const cost = resolveTaskCost(harness.state, harness.task(taskId));
-    expect(cost.byRole.map((line) => line.role)).toEqual([
-      'planner',
-      'investigator',
-      'researcher',
-      'operator',
-    ]);
+    expect(cost.byRole.map((line) => line.role)).toEqual(['agent', 'investigator', 'researcher', 'reviewer']);
     expect(cost.byRole.reduce((sum, line) => sum + line.cost.knownUsd, 0)).toBe(cost.total.knownUsd);
   });
 });

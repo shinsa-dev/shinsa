@@ -12,6 +12,7 @@ import {
   PLAN,
   proposePlan,
   reachReviewGate,
+  readInstruction,
   readyWorktree,
 } from '../harness.ts';
 
@@ -22,27 +23,27 @@ function withApproval(approvePlans: boolean) {
 }
 
 describe('planning', () => {
-  test('every task starts with a planner on the planner model', () => {
+  test('every task starts with the agent on the agent model', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
     expect(harness.task(taskId).stage).toBe('planning');
-    expect(run.role).toBe('planner');
+    expect(run).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(run.model).toBe('opus');
     expect(run.status).toBe('running');
     expect(harness.lastEffect('run.execute').runId).toBe(run.id);
   });
 
-  test('agent models come from settings per role', () => {
+  test('the round agent plans and builds on the one model its settings name', () => {
     const harness = createHarness();
     harness.send({
       type: 'settings.change',
-      patch: { agentModels: { planner: 'fable', builder: 'sonnet' } },
+      patch: { agentModels: { agent: 'fable', reviewer: 'sonnet' } },
     });
     const taskId = createTask(harness);
     expect(harness.activeRun(taskId).model).toBe('fable');
     proposePlan(harness, taskId);
-    expect(harness.activeRun(taskId).model).toBe('sonnet');
+    expect(harness.activeRun(taskId).model).toBe('fable');
   });
 
   test('the plan gate rule decides which plans wait for you, with Approve plans on and off', () => {
@@ -144,7 +145,7 @@ describe('planning', () => {
     expect(harness.task(taskId).stage).toBe('building');
   });
 
-  test('revising the plan resumes the planner session with the feedback', () => {
+  test('revising the plan resumes the agent session with the feedback', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: true } });
     const taskId = createTask(harness, { size: 'large' });
@@ -157,7 +158,7 @@ describe('planning', () => {
       response: 'Smaller.',
     });
     const run = harness.activeRun(taskId);
-    expect(run.role).toBe('planner');
+    expect(run).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(run.sessionId).toBe('planner-session');
     expect(run.resume).toBe(true);
     expect(run.prompt).toContain('Feedback on the previous plan:\nSmaller.');
@@ -165,22 +166,36 @@ describe('planning', () => {
 });
 
 describe('phases', () => {
-  test('each phase gets its own builder that sees the earlier phase summaries', () => {
+  test('each phase is a run of its own on the session that planned it, told only what is next', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
+    linkSession(harness, taskId, 'round');
     proposePlan(harness, taskId);
     const first = harness.activeRun(taskId);
-    expect(first.phaseIndex).toBe(0);
-    expect(first.prompt).toContain('Your phase: Find the overflow.');
+    expect(first).toMatchObject({ purpose: 'build', phaseIndex: 0, resume: true, sessionId: 'round' });
+    expect(readInstruction(first)).toStartWith(
+      'The plan is in, so building starts.\nNow build phase 1 of 2: Find the overflow.'
+    );
     completePhase(harness, taskId, 'The `TabGroup` container scrolls, not the list.');
 
     const second = harness.activeRun(taskId);
     expect(second.id).not.toBe(first.id);
-    expect(second.phaseIndex).toBe(1);
+    expect(second).toMatchObject({ phaseIndex: 1, resume: true, sessionId: 'round' });
+    expect(readInstruction(second)).toStartWith('Phase 1 is committed.\nNow build phase 2 of 2');
+    expect(second.prompt).toContain('This is the last phase');
+    expect(second.prompt).not.toContain('The `TabGroup` container scrolls');
+    expect(harness.task(taskId).phases.map((phase) => phase.status)).toEqual(['done', 'active']);
+  });
+
+  test('a phase with no session to resume gets the round brief with the earlier phase summaries', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    completePhase(harness, taskId, 'The `TabGroup` container scrolls, not the list.');
+    const second = harness.activeRun(taskId);
     expect(second.resume).toBe(false);
     expect(second.prompt).toContain('- Find the overflow: The `TabGroup` container scrolls, not the list.');
-    expect(second.prompt).toContain('This is the last phase');
-    expect(harness.task(taskId).phases.map((phase) => phase.status)).toEqual(['done', 'active']);
+    expect(second.prompt).toContain('Now build phase 2 of 2');
   });
 
   test('after the last phase Shinsa runs the checks itself', () => {

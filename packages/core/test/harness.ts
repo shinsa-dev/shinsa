@@ -14,9 +14,15 @@ import {
   type ShinsaEvent,
   type ShinsaEventInput,
   type ShinsaState,
+  splitHouseRules,
 } from '../src/index.ts';
 
 export type Harness = ReturnType<typeof createHarness>;
+
+export function readInstruction(run: Run) {
+  const prompt = run.rolePrompt ?? run.prompt ?? '';
+  return splitHouseRules(prompt)?.instruction ?? prompt;
+}
 
 export function createHarness() {
   let state = createState();

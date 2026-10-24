@@ -14,6 +14,7 @@ import type { Round } from './rounds.ts';
 import type { GateSecret } from './schedules.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
 import type { PipelineStep } from './steps.ts';
+import type { WorkspaceMode } from './workspaces.ts';
 
 export type TaskStage =
   | 'triage'
@@ -44,16 +45,17 @@ export type TaskMode = 'build' | 'ask';
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 
 export type RunRole =
+  | 'agent'
   | 'planner'
   | 'builder'
   | 'reviewer'
-  | 'fixer'
   | 'answerer'
   | 'investigator'
-  | 'researcher'
-  | 'operator';
+  | 'researcher';
 
-export type AgentRole = 'classifier' | 'planner' | 'builder' | 'reviewer' | 'fixer' | 'answerer' | 'writer';
+export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate';
+
+export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 
 export type FixReason = 'checks' | 'review' | 'you' | 'pull_request';
 
@@ -139,6 +141,22 @@ export interface FindingVerdict {
   note: string | null;
 }
 
+export type CommentSide = 'old' | 'new';
+
+export interface SuggestedChange {
+  original: string;
+  replacement: string;
+}
+
+export interface ReviewComment {
+  path: string;
+  side: CommentSide;
+  line: number;
+  endLine: number | null;
+  text: string;
+  suggestion: SuggestedChange | null;
+}
+
 export type ReviewEscalationReason = 'rounds' | 'stalled' | 'exhausted';
 
 export interface FixFingerprint {
@@ -153,7 +171,12 @@ export interface ReviewEscalation {
   at: number;
 }
 
-export type ConfigProblemKind = 'repository' | 'no_repository' | 'default_branch' | 'check_commands';
+export type ConfigProblemKind =
+  | 'repository'
+  | 'no_repository'
+  | 'default_branch'
+  | 'check_commands'
+  | 'workspace';
 
 export interface ConfigProblem {
   kind: ConfigProblemKind;
@@ -173,6 +196,7 @@ export interface Repo {
   projectId: string | null;
   checkCommands: string[];
   checksWaived?: boolean;
+  workspace?: WorkspaceMode;
 }
 
 export interface Project {
@@ -317,7 +341,13 @@ export interface Activity {
   gateType?: GateType;
   onBehalf?: boolean;
   byTask?: string | null;
+  comments?: ReviewComment[];
   round?: number;
+}
+
+export interface TaskStack {
+  taskId: string;
+  branch: string;
 }
 
 export interface Task {
@@ -334,6 +364,9 @@ export interface Task {
   priority: TaskPriority;
   branch: string | null;
   worktreePath: string | null;
+  workspace?: WorkspaceMode;
+  returnBranch?: string;
+  stackedOn?: TaskStack;
   plan: Plan | null;
   phases: PhaseProgress[];
   planAnswers: string | null;
@@ -399,6 +432,7 @@ export interface Run {
   id: string;
   taskId: string;
   role: RunRole;
+  purpose?: RunPurpose;
   status?: RunStatus;
   phaseIndex?: number | null;
   prompt?: string;

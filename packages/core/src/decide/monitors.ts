@@ -77,6 +77,7 @@ function wake(decider: Decider, task: Task, monitor: Monitor) {
   const waited = decider.state.runs[monitor.runId] ?? null;
   decider.startRun(decider.task(task.id), monitor.role, resolveMonitorPrompt(monitor, attempt), {
     resumeFrom: waited,
+    purpose: waited?.purpose ?? null,
     phaseIndex: monitor.phaseIndex,
     monitorId: monitor.id,
     account: waited?.account ?? null,

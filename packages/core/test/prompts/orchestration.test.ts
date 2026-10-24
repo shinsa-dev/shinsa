@@ -13,8 +13,9 @@ import {
   resolveDelegatePrompt,
   resolveDelegationAnswerPrompt,
   resolveDeliveryPrompt,
-  resolvePhasePrompt,
-  resolvePlannerPrompt,
+  resolveOperationInstruction,
+  resolvePhaseInstruction,
+  resolvePlanningPrompt,
   resolveReviewerPrompt,
 } from '../../src/prompts/index.ts';
 import { createHarness, createTask, proposePlan } from '../harness.ts';
@@ -59,9 +60,11 @@ function expectOnlyOwnTools(prompt: string, role: RunRole, depth = 0) {
 describe('the orchestration rules every step agent reads', () => {
   test('name the tools, the defaults and the limits as numbers', () => {
     const { task, repo } = context();
-    const rules = resolvePhasePrompt(task, repo, [], 0);
+    const rules = resolvePlanningPrompt(task, repo, [], null);
     for (const phrase of [
       '`delegate_task`',
+      'Delegate only work whose context should stay apart from yours',
+      'never hand each phase, or each problem type, to its own agent',
       'starts from your brief alone',
       '`mode: "wait"`',
       '10 by default, 60 at most',
@@ -81,8 +84,9 @@ describe('the orchestration rules every step agent reads', () => {
 
   test('every step agent is told about the tools it has and no others', () => {
     const { task, repo } = context();
-    expectOnlyOwnTools(resolvePlannerPrompt(task, repo, [], null), 'planner');
-    expectOnlyOwnTools(resolvePhasePrompt(task, repo, [], 0), 'builder');
+    expectOnlyOwnTools(resolvePlanningPrompt(task, repo, [], null), 'agent');
+    expectOnlyOwnTools(resolvePhaseInstruction(task, repo, 0), 'agent');
+    expectOnlyOwnTools(resolveOperationInstruction(task, null), 'agent');
     expectOnlyOwnTools(resolveAnswererPrompt(task, repo, null), 'answerer');
     const reviewer = resolveReviewerPrompt(task, repo, []);
     expectOnlyOwnTools(reviewer, 'reviewer');

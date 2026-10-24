@@ -16,7 +16,7 @@ import {
 describe('settings', () => {
   test('a new state gets its own copy of the defaults', () => {
     const state = createState();
-    state.settings.agentModels = { planner: 'haiku' };
+    state.settings.agentModels = { agent: 'haiku' };
     state.settings.maxFixRounds = 3;
     expect(createState().settings.agentModels).toEqual({});
     expect(createState().settings.maxFixRounds).toBeNull();
@@ -141,12 +141,12 @@ describe('resolveCompaction and resolveFastMode', () => {
   });
 
   test('a role runs in fast mode when it is switched on for that role, otherwise as the global switch says', () => {
-    expect(resolveAgentFastMode(createSettings(), 'builder')).toBe(false);
+    expect(resolveAgentFastMode(createSettings(), 'agent')).toBe(false);
     const fast = { ...createSettings(), fastMode: true };
-    expect(resolveAgentFastMode(fast, 'builder')).toBe(true);
-    const mixed = { ...fast, agentFastModes: { builder: false, classifier: true } };
-    expect(resolveAgentFastMode(mixed, 'builder')).toBe(false);
-    expect(resolveAgentFastMode(mixed, 'planner')).toBe(true);
+    expect(resolveAgentFastMode(fast, 'agent')).toBe(true);
+    const mixed = { ...fast, agentFastModes: { agent: false, classifier: true } };
+    expect(resolveAgentFastMode(mixed, 'agent')).toBe(false);
+    expect(resolveAgentFastMode(mixed, 'answerer')).toBe(true);
     const standard = { ...createSettings(), agentFastModes: { reviewer: true } };
     expect(resolveAgentFastMode(standard, 'reviewer')).toBe(true);
     expect(resolveAgentFastMode(standard, 'writer')).toBe(false);

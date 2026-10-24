@@ -62,7 +62,17 @@ export {
   sumLoadedTokens,
   type UsageFacts,
 } from './extensions.ts';
-export type { ClientMessage, DiffFile, RepoCandidate, ServerMessage, TaskDiff } from './messages.ts';
+export {
+  type ClientMessage,
+  type DiffFile,
+  isQuietSurface,
+  isSurface,
+  type RepoCandidate,
+  type ServerMessage,
+  SURFACES,
+  type Surface,
+  type TaskDiff,
+} from './messages.ts';
 export type {
   OnboardingChat,
   OnboardingCheck,

@@ -1,6 +1,6 @@
 import type { CommandOf } from '../commands/index.ts';
 import type { FixReason, ReviewEscalation, ReviewEscalationReason, Task } from '../domain/index.ts';
-import { resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
+import { resolveAgentPrompt, resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
 import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
@@ -103,8 +103,9 @@ export function startFix(
     treeHash: task.treeHash ?? null,
   });
   decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
-  decider.startRun(decider.task(taskId), 'fixer', prompt, {
-    resumeFrom: decider.lastRun(taskId, ['fixer', 'builder']),
+  decider.startRun(decider.task(taskId), 'agent', resolveAgentPrompt(prompt), {
+    purpose: 'fix',
+    resumeFrom: decider.rootRun(taskId),
   });
 }
 

@@ -37,32 +37,20 @@ export const KNOWN_AGENT_PROVIDERS: AgentProviderInfo[] = [
   { id: CODEX_PROVIDER, label: 'Codex', models: KNOWN_CODEX_MODELS },
 ];
 
-export const AGENT_ROLES: readonly AgentRole[] = [
-  'classifier',
-  'planner',
-  'builder',
-  'reviewer',
-  'fixer',
-  'answerer',
-  'writer',
-];
+export const AGENT_ROLES: readonly AgentRole[] = ['classifier', 'agent', 'reviewer', 'answerer', 'writer'];
 
 const DEFAULT_AGENT_MODELS: Record<AgentRole, string> = {
   classifier: 'sonnet',
-  planner: 'opus',
-  builder: 'opus',
+  agent: 'opus',
   reviewer: 'opus',
-  fixer: 'opus',
   answerer: 'opus',
   writer: 'sonnet',
 };
 
 const DEFAULT_CODEX_MODELS: Record<AgentRole, string> = {
   classifier: 'gpt-5.6-luna',
-  planner: 'gpt-6-astra',
-  builder: 'gpt-6-astra',
+  agent: 'gpt-6-astra',
   reviewer: 'gpt-6-astra',
-  fixer: 'gpt-6-astra',
   answerer: 'gpt-6-astra',
   writer: 'gpt-5.6-luna',
 };
@@ -73,21 +61,20 @@ const PROVIDER_DEFAULT_MODELS: Record<string, Record<AgentRole, string>> = {
 };
 
 export const RUN_AGENT_ROLE: Record<RunRole, AgentRole> = {
-  planner: 'planner',
-  builder: 'builder',
+  agent: 'agent',
+  planner: 'agent',
+  builder: 'agent',
   reviewer: 'reviewer',
-  fixer: 'fixer',
   answerer: 'answerer',
   investigator: 'answerer',
   researcher: 'answerer',
-  operator: 'builder',
 };
 
 export function resolveAgentProvider(settings: Settings, role: AgentRole) {
   return settings.agentProviders?.[role] || settings.defaultProvider;
 }
 
-const WORKING_ROLES: readonly AgentRole[] = ['planner', 'builder', 'reviewer', 'fixer', 'answerer'];
+const WORKING_ROLES: readonly AgentRole[] = ['agent', 'reviewer', 'answerer'];
 
 export function listAgentProviders(settings: Settings) {
   return [...new Set(WORKING_ROLES.map((role) => resolveAgentProvider(settings, role)))];

@@ -78,7 +78,7 @@ describe('a courier task', () => {
     expect(harness.task(taskId)).toMatchObject({ waitsOn: [task?.id ?? ''], stage: 'building' });
   });
 
-  test('a planning task cannot wait on a task its own planner creates', () => {
+  test('a planning task cannot wait on a task its agent creates while planning', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);

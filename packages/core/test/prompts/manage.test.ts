@@ -5,16 +5,7 @@ import { MANAGE_RULES } from '../../src/prompts/index.ts';
 import { resolveHouseRules } from '../../src/prompts/rules.ts';
 import { createHarness, createTask } from '../harness.ts';
 
-const ROLES: RunRole[] = [
-  'planner',
-  'builder',
-  'reviewer',
-  'fixer',
-  'answerer',
-  'investigator',
-  'researcher',
-  'operator',
-];
+const ROLES: RunRole[] = ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'];
 
 describe('the management rules', () => {
   test('give the agent every command-line action as a tool and leave the human’s decisions at their gates', () => {

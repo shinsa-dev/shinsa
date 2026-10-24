@@ -1,8 +1,15 @@
+import type { CommandOf } from '../commands/index.ts';
 import { compareTasks, DomainError, isTaskComplete, type Task } from '../domain/index.ts';
-import { isDependencyOf, listOpenGates, listPendingDependencies } from '../state/queries.ts';
+import {
+  isDependencyOf,
+  listOpenGates,
+  listPendingDependencies,
+  selectStackTarget,
+} from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { startWork } from './lifecycle.ts';
 import { reviewMergeHold } from './pull-requests.ts';
+import { holdForCheckout } from './workspaces.ts';
 
 export function resolveDependencies(decider: Decider, task: Task | null, ids: string[]) {
   const kept: string[] = [];
@@ -73,6 +80,22 @@ export function changeDependencies(
   }
 }
 
+export function stackTask(decider: Decider, command: CommandOf<'task.stack'>) {
+  const task = decider.task(command.taskId);
+  const below = selectStackTarget(decider.state, task, command.branch);
+  if (!below) {
+    throw new DomainError(
+      'stack_refused',
+      `No other open task of this repository works on ${command.branch} without waiting on this one, so this task cannot stack on it.`
+    );
+  }
+  if (task.stackedOn?.taskId !== below.id || task.stackedOn.branch !== command.branch) {
+    decider.emit({ type: 'task.stacked', taskId: task.id, onTaskId: below.id, branch: command.branch });
+  }
+  if (!task.waitsOn.includes(below.id))
+    changeDependencies(decider, task.id, [...task.waitsOn, below.id], 'shinsa');
+}
+
 function pauseForCancelled(decider: Decider, task: Task, cancelled: Task[], remaining: Task[]) {
   const one = cancelled.length === 1;
   const waited = `This task was waiting for ${one ? 'it' : 'them'} to finish.`;
@@ -109,6 +132,7 @@ export function releaseWaiting(decider: Decider) {
       decider.stage(task.id, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
       continue;
     }
+    if (holdForCheckout(decider, task.id)) continue;
     startWork(decider, task.id);
   }
 }

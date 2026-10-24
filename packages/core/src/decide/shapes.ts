@@ -31,10 +31,11 @@ import {
   type WorkStep,
 } from '../domain/index.ts';
 import {
+  resolveAgentPrompt,
   resolveAnswererPrompt,
   resolveFollowUpPrompt,
   resolveInvestigatorPrompt,
-  resolveOperatorPrompt,
+  resolveOperationInstruction,
   resolveResearcherPrompt,
 } from '../prompts/index.ts';
 import { listOpenGates } from '../state/queries.ts';
@@ -42,6 +43,7 @@ import { assertEvidence } from './agents.ts';
 import type { Decider } from './decider.ts';
 import { settleTask, startPhase, startPlanning, startWork } from './lifecycle.ts';
 import { findCurrentRun } from './runs.ts';
+import { requestWorkspace } from './workspaces.ts';
 
 const INQUIRY_STAGE: Record<InquiryStep, TaskStage> = {
   answer: 'answering',
@@ -154,8 +156,9 @@ export function startInquiry(decider: Decider, taskId: string, step: InquiryStep
 export function startOperation(decider: Decider, taskId: string, guidance: string | null) {
   decider.stage(taskId, 'operating', 'running the operation');
   const task = decider.task(taskId);
-  decider.startRun(task, 'operator', resolveOperatorPrompt(task, decider.repoOf(task), guidance), {
-    resumeFrom: guidance ? decider.lastRun(taskId, ['operator']) : decider.resumeRound(task, ['operator']),
+  decider.startRun(task, 'agent', resolveAgentPrompt(resolveOperationInstruction(task, guidance)), {
+    purpose: 'operate',
+    resumeFrom: decider.rootRun(taskId),
   });
 }
 
@@ -241,11 +244,6 @@ export function answerOperation(
   startOperation(decider, gate.taskId, notes);
 }
 
-function requestWorktree(decider: Decider, taskId: string) {
-  decider.stage(taskId, 'triage', 'setting up the worktree');
-  decider.run({ kind: 'worktree.create', taskId });
-}
-
 export function startStep(decider: Decider, taskId: string, step: EntryStep) {
   if (step === null) {
     settleTask(decider, taskId, 'done', 'finished every step');
@@ -266,7 +264,7 @@ export function proceedAfterSetup(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
   const step = resolveNextStep(task);
   if (step !== null && isWorktreeStep(step)) {
-    requestWorktree(decider, taskId);
+    requestWorkspace(decider, taskId);
     return;
   }
   startStep(decider, taskId, step);
@@ -319,7 +317,7 @@ function finishInquiry(
     return;
   }
   if (pipeline.includes('plan')) {
-    requestWorktree(decider, taskId);
+    requestWorkspace(decider, taskId);
     return;
   }
   if (proposal) {
@@ -460,15 +458,7 @@ export function followUpInquiry(decider: Decider, taskId: string, text: string) 
   startInquiry(decider, taskId, step, text);
 }
 
-const FOLLOW_UP_ROLES: RunRole[] = [
-  'planner',
-  'builder',
-  'fixer',
-  'operator',
-  'answerer',
-  'researcher',
-  'investigator',
-];
+const FOLLOW_UP_ROLES: RunRole[] = ['agent', 'answerer', 'researcher', 'investigator'];
 
 export function answerFollowUp(decider: Decider, taskId: string, question: string | null) {
   decider.stage(taskId, 'answering', 'answering your follow-up');

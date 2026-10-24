@@ -36,14 +36,10 @@ const REPORT_ONLY_RULE =
 const SCRATCH_RULE =
   'You are in a git worktree made for this task alone, as scratch space: nothing you change in it ships. Never touch the main checkout, never commit, push or merge.';
 
-const OPERATION_RULE =
-  'You are in a git worktree made for this task alone. You run an operation the human approved; nothing goes through a pull request. Never commit, push or merge, and never touch the main checkout.';
-
 const ROLE_RULE: Partial<Record<RunRole, string>> = {
   answerer: QUESTION_ONLY_RULE,
   researcher: REPORT_ONLY_RULE,
   investigator: SCRATCH_RULE,
-  operator: OPERATION_RULE,
 };
 
 function describeWaitingRule(tools: readonly ShinsaToolName[]) {
@@ -86,16 +82,7 @@ export function resolveHouseRules(role: RunRole) {
   ].join('\n');
 }
 
-const BRIEFED_ROLES: readonly RunRole[] = [
-  'planner',
-  'builder',
-  'reviewer',
-  'fixer',
-  'answerer',
-  'investigator',
-  'researcher',
-  'operator',
-];
+const BRIEFED_ROLES: readonly RunRole[] = ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'];
 
 export function splitHouseRules(prompt: string) {
   for (const role of BRIEFED_ROLES) {

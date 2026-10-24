@@ -6,13 +6,14 @@ import {
   isAgentQuestion,
   isDelegatedRun,
   isLaterRound,
+  isOfCurrentRound,
   isPausingGate,
-  isTaskComplete,
   isTaskSettled,
   type Run,
   type RunAccount,
   type RunFailure,
   type RunOutcome,
+  type RunPurpose,
   type RunRole,
   resolveRoundStamp,
   type Task,
@@ -22,6 +23,7 @@ import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effe
 import type { ShinsaEventInput } from '../events/index.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
 import { resolveProjectContext } from '../prompts/project.ts';
+import { listTaskBases, needsRoundBrief, resolveRoundBrief } from '../prompts/root.ts';
 import { listChildRuns, listLiveChildRuns } from '../state/delegations.ts';
 import { applyEvent, type ShinsaState } from '../state/project.ts';
 import { findTask, listActiveRuns, listOpenGates, resolveTaskProject } from '../state/queries.ts';
@@ -42,6 +44,7 @@ export interface Decision {
 
 interface StartRunOptions {
   resumeFrom?: Run | null;
+  purpose?: RunPurpose | null;
   phaseIndex?: number | null;
   feedback?: string | null;
   monitorId?: string | null;
@@ -127,9 +130,7 @@ export class Decider {
   }
 
   basesOf(task: Task) {
-    return task.waitsOn
-      .map((id) => this.state.tasks[id])
-      .filter((dependency): dependency is Task => dependency !== undefined && isTaskComplete(dependency));
+    return listTaskBases(this.state, task);
   }
 
   requestBriefing(taskId: string) {
@@ -145,6 +146,17 @@ export class Decider {
 
   resumeRound(task: Task, roles: RunRole[]) {
     return isLaterRound(task) ? this.lastRun(task.id, roles) : null;
+  }
+
+  rootRun(taskId: string) {
+    const agent = this.lastRun(taskId, ['agent']);
+    const inquiry = this.lastRun(taskId, ['answerer', 'investigator', 'researcher']);
+    if (!inquiry || !isOfCurrentRound(this.task(taskId), inquiry)) return agent;
+    if (agent && agent.startedAt >= inquiry.startedAt) return agent;
+    const sameSettings =
+      inquiry.provider === resolveAgentProvider(this.state.settings, RUN_AGENT_ROLE.agent) &&
+      inquiry.model === resolveAgentModel(this.state.settings, RUN_AGENT_ROLE.agent);
+    return sameSettings ? inquiry : null;
   }
 
   lastRun(taskId: string, roles: RunRole[]) {
@@ -179,7 +191,7 @@ export class Decider {
     for (const child of listLiveChildRuns(this.state, runId)) this.stopRun(child, CASCADE_SUMMARY);
   }
 
-  #listAdoptable(taskId: string, role: RunRole, phaseIndex: number | null) {
+  #listAdoptable(taskId: string, role: RunRole, purpose: RunPurpose | null, phaseIndex: number | null) {
     const predecessors = [
       ...[...this.#held].map((id) => this.state.runs[id]),
       ...listActiveRuns(this.state, taskId),
@@ -188,6 +200,7 @@ export class Decider {
         run !== undefined &&
         run.taskId === taskId &&
         run.role === role &&
+        (run.purpose ?? null) === purpose &&
         (run.phaseIndex ?? null) === phaseIndex
     );
     return predecessors.flatMap((run) =>
@@ -197,8 +210,8 @@ export class Decider {
     );
   }
 
-  #adopt(taskId: string, role: RunRole, phaseIndex: number | null) {
-    const adopted = this.#listAdoptable(taskId, role, phaseIndex);
+  #adopt(taskId: string, role: RunRole, purpose: RunPurpose | null, phaseIndex: number | null) {
+    const adopted = this.#listAdoptable(taskId, role, purpose, phaseIndex);
     if (adopted.length === 0) return { id: null, note: '' };
     const id = this.context.newId();
     for (const child of adopted) {
@@ -220,7 +233,8 @@ export class Decider {
   }
 
   startRun(task: Task, role: RunRole, prompt: string, options: StartRunOptions = {}) {
-    const adoption = this.#adopt(task.id, role, options.phaseIndex ?? null);
+    const purpose = options.purpose ?? null;
+    const adoption = this.#adopt(task.id, role, purpose, options.phaseIndex ?? null);
     this.cancelRuns(task.id);
     this.withdrawGates(task.id, isPausingGate);
     this.clearWaits(task.id, {
@@ -230,15 +244,21 @@ export class Decider {
     const resumeFrom = options.resumeFrom?.sessionId ? options.resumeFrom : null;
     const account = this.#runAccounts.get(task.id) ?? options.account ?? null;
     this.#runAccounts.delete(task.id);
+    const placement = { purpose: purpose ?? undefined, phaseIndex: options.phaseIndex ?? null };
+    const briefed =
+      !resumeFrom && needsRoundBrief({ role, ...placement })
+        ? resolveRoundBrief(this.state, task, placement, prompt)
+        : prompt;
     const appended = `${resumeFrom ? '' : resolveProjectContext(this.state, task)}${adoption.note}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,
       role,
+      ...(purpose ? { purpose } : {}),
       status: 'queued',
       phaseIndex: options.phaseIndex ?? null,
-      prompt: `${prompt}${appended}`,
-      ...(appended ? { rolePrompt: prompt } : {}),
+      prompt: `${briefed}${appended}`,
+      ...(appended || briefed !== prompt ? { rolePrompt: prompt } : {}),
       resume: resumeFrom !== null,
       provider: resolveAgentProvider(this.state.settings, RUN_AGENT_ROLE[role]),
       model: resolveAgentModel(this.state.settings, RUN_AGENT_ROLE[role]),

@@ -1,5 +1,5 @@
 import { describeCount } from '../chat/text.ts';
-import type { PullRequest, PullRequestWatchChange } from '../domain/index.ts';
+import type { PullRequest, PullRequestWatchChange, ReviewComment, SuggestedChange } from '../domain/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import { describeFindingPlace } from './context.ts';
 
@@ -48,10 +48,47 @@ export function resolveReviewFixPrompt(findings: ReviewFinding[]) {
   ].join('\n');
 }
 
-export function resolveHumanFixPrompt(message: string) {
-  return ['The human looked at the work and wrote:', '', message, describeFixClosing(WORK_FIX_NEXT)].join(
-    '\n'
-  );
+function fenceVerbatim(text: string) {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longest + 1));
+  return `${fence}\n${text}\n${fence}`;
+}
+
+function describeCommentLines(comment: ReviewComment) {
+  const plural = comment.endLine !== null;
+  const lines = plural ? `${comment.line}-${comment.endLine}` : String(comment.line);
+  return `${comment.side === 'old' ? 'removed ' : ''}${plural ? 'lines' : 'line'} ${lines}`;
+}
+
+function describeSuggestedChange(lines: string, change: SuggestedChange) {
+  return [
+    `Suggested change to ${lines}. Apply it as written unless that breaks something. Replace:`,
+    fenceVerbatim(change.original),
+    'with:',
+    fenceVerbatim(change.replacement),
+  ];
+}
+
+function describeLineComment(comment: ReviewComment) {
+  const lines = describeCommentLines(comment);
+  return [
+    `- ${comment.path}, ${lines}${comment.text ? `: ${comment.text}` : ''}`,
+    ...(comment.suggestion ? describeSuggestedChange(lines, comment.suggestion) : []),
+  ].join('\n');
+}
+
+function describeLineComments(comments: readonly ReviewComment[]) {
+  if (comments.length === 0) return [];
+  return ['', 'Line comments:', ...comments.map(describeLineComment)];
+}
+
+export function resolveHumanFixPrompt(message: string | null, comments: readonly ReviewComment[]) {
+  const note = message?.trim() ?? '';
+  const opening =
+    note || comments.length === 0
+      ? ['The human looked at the work and wrote:', '', note || 'Revise the work.']
+      : ['The human looked at the work and left line comments.'];
+  return [...opening, ...describeLineComments(comments), describeFixClosing(WORK_FIX_NEXT)].join('\n');
 }
 
 function describeVerdict(finding: ReviewFinding) {
@@ -59,7 +96,11 @@ function describeVerdict(finding: ReviewFinding) {
   return `${describeFindingLines([finding])}${note}`;
 }
 
-export function resolveVerdictFixPrompt(findings: ReviewFinding[], message: string | null) {
+export function resolveVerdictFixPrompt(
+  findings: ReviewFinding[],
+  message: string | null,
+  comments: readonly ReviewComment[]
+) {
   const fix = findings.filter((finding) => finding.verdict === 'fix');
   const dismissed = findings.filter((finding) => finding.verdict === 'dismiss');
   return [
@@ -69,6 +110,7 @@ export function resolveVerdictFixPrompt(findings: ReviewFinding[], message: stri
       ? ['', 'Leave these alone; the human dismissed them:', ...dismissed.map(describeVerdict)]
       : []),
     ...(message?.trim() ? ['', 'The human also wrote:', message.trim()] : []),
+    ...describeLineComments(comments),
     describeFixClosing(WORK_FIX_NEXT),
   ].join('\n');
 }

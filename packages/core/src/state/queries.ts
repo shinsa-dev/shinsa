@@ -2,11 +2,15 @@ import {
   DomainError,
   isAgentQuestion,
   isDelegatedRun,
+  isSettingUpWorkspace,
   isTaskComplete,
   isTaskSettled,
   parseTaskHandle,
   type Run,
+  resolveRepoWorkspace,
+  resolveRoundBase,
   type Task,
+  type WorkspaceMode,
 } from '../domain/index.ts';
 import { listLiveChildRuns } from './delegations.ts';
 import type { ShinsaState } from './project.ts';
@@ -53,6 +57,31 @@ export function listPendingDependencies(state: ShinsaState, task: Task) {
   return listDependencies(state, task).filter((dependency) => !isTaskComplete(dependency));
 }
 
+export function resolveTaskWorkspace(state: ShinsaState, task: Task): WorkspaceMode {
+  if (task.worktreePath !== null || isSettingUpWorkspace(task)) {
+    return task.workspace ?? resolveRepoWorkspace(null);
+  }
+  return resolveRepoWorkspace(task.repoId === null ? null : state.repos[task.repoId]);
+}
+
+function holdsCheckout(task: Task) {
+  return task.workspace === 'main_checkout' && (task.worktreePath !== null || isSettingUpWorkspace(task));
+}
+
+export function selectCheckoutHolder(state: ShinsaState, task: Task) {
+  if (task.repoId === null) return null;
+  return (
+    Object.values(state.tasks).find(
+      (other) => other.id !== task.id && other.repoId === task.repoId && holdsCheckout(other)
+    ) ?? null
+  );
+}
+
+export function isWaitingForCheckout(state: ShinsaState, task: Task) {
+  if (holdsCheckout(task) || resolveTaskWorkspace(state, task) !== 'main_checkout') return false;
+  return selectCheckoutHolder(state, task) !== null;
+}
+
 export function listDependents(state: ShinsaState, taskId: string) {
   return Object.values(state.tasks).filter((task) => task.waitsOn.includes(taskId) && !isTaskSettled(task));
 }
@@ -67,6 +96,30 @@ export function isDependencyOf(state: ShinsaState, taskId: string, candidateId: 
     pending.push(...(state.tasks[id]?.waitsOn ?? []));
   }
   return false;
+}
+
+export function selectStackTarget(state: ShinsaState, task: Task, branch: string) {
+  if (task.repoId === null) return null;
+  const below = Object.values(state.tasks).find(
+    (other) =>
+      other.id !== task.id &&
+      other.repoId === task.repoId &&
+      other.workspace === 'gitbutler' &&
+      other.worktreePath !== null &&
+      other.branch === branch &&
+      !isTaskSettled(other)
+  );
+  if (!below || isDependencyOf(state, task.id, below.id)) return null;
+  return below;
+}
+
+export function resolvePullRequestBase(state: ShinsaState, task: Task) {
+  const round = resolveRoundBase(task);
+  if (round) return round;
+  const stacked = task.stackedOn;
+  const below = stacked ? state.tasks[stacked.taskId] : undefined;
+  if (!(stacked && below) || below.branch !== stacked.branch) return null;
+  return below.pullRequest?.state === 'open' ? stacked.branch : null;
 }
 
 export function resolveTaskProject(state: ShinsaState, task: Task) {

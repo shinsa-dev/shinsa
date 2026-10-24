@@ -5,13 +5,16 @@ import {
   DomainError,
   hasTool,
   isDelegatedRun,
+  isHandOverTool,
   isTaskSettled,
   MINUTE_MS,
+  PURPOSE_HAND_OVERS,
   RUN_STAGES,
   type Run,
   type RunFailure,
   type RunFailureClass,
   type RunOutcome,
+  type RunPurpose,
   type ShinsaToolName,
   type Task,
 } from '../domain/index.ts';
@@ -52,8 +55,23 @@ const FAILURE_RECOVERY: Record<RunFailureClass, FailureRecovery> = {
   model_error: RESUME,
 };
 
+const PURPOSE_REFUSAL: Record<RunPurpose, string> = {
+  plan: 'You are planning this round: hand the plan over with `propose_plan`, or compose the steps with `reshape_task`.',
+  build: 'You are building a phase: hand it over with `complete_phase`.',
+  fix: 'You are fixing the work: hand the fix over with `complete_fix`.',
+  operate: 'You are running the operation: report how it went with `report_outcome`.',
+};
+
+function assertPurpose(run: Run, tool: ShinsaToolName) {
+  if (!run.purpose || !isHandOverTool(tool) || PURPOSE_HAND_OVERS[run.purpose].includes(tool)) return;
+  throw new DomainError('wrong_step', PURPOSE_REFUSAL[run.purpose]);
+}
+
 function assertTool(run: Run, tool: ShinsaToolName) {
-  if (hasTool(run, tool)) return;
+  if (hasTool(run, tool)) {
+    assertPurpose(run, tool);
+    return;
+  }
   if (tool === 'delegate_task' && (run.delegation?.depth ?? 0) >= DELEGATION_LIMITS.depth) {
     throw new DomainError(
       'delegation_depth',
@@ -111,6 +129,7 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   const nudge = fresh ? resolveFreshSessionNudge(why) : resolveRecoveryNudge(why);
   decider.startRun(decider.task(task.id), role, `${run.rolePrompt ?? run.prompt ?? ''}${nudge}`, {
     resumeFrom: fresh ? null : run,
+    purpose: run.purpose ?? null,
     phaseIndex: run.phaseIndex ?? null,
     monitorId: run.monitorId ?? null,
     account: run.account ?? null,

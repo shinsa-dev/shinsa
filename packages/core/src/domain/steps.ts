@@ -188,7 +188,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     gate: {
       strength: 'hard',
       types: ['proposal'],
-      when: 'The inquiry handed over and proposes what comes next, or the planner composed this step.',
+      when: 'The inquiry handed over and proposes what comes next, or the agent composed this step while planning.',
     },
     placement: 'canonical',
     needs: [
@@ -212,7 +212,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     step: 'plan',
     title: 'Plan',
     class: 'planning',
-    actor: { by: 'agent', role: 'planner' },
+    actor: { by: 'agent', role: 'agent' },
     inputs: ['the request', 'the inquiry’s result and your OK, when there was one', 'the repository'],
     outputs: [
       {
@@ -243,13 +243,13 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     step: 'operate',
     title: 'Run the operation',
     class: 'operation',
-    actor: { by: 'agent', role: 'operator' },
+    actor: { by: 'agent', role: 'agent' },
     inputs: ['the approved plan: its operation steps and impact', 'after a merge, the merged code'],
     outputs: [
       { name: 'the outcome', tool: 'report_outcome', evidence: false },
       { name: 'what each step showed', tool: 'attach_evidence', evidence: true },
     ],
-    exit: 'The operator reported how the operation went.',
+    exit: 'The agent reported how the operation went.',
     gate: {
       strength: 'hard',
       types: ['plan', 'operation'],
@@ -264,8 +264,8 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     step: 'build',
     title: 'Build',
     class: 'code',
-    actor: { by: 'agent', role: 'builder' },
-    inputs: ['the approved plan', 'its own phase', 'the summaries of the phases before it'],
+    actor: { by: 'agent', role: 'agent' },
+    inputs: ['the approved plan, in the conversation that planned it', 'each phase in turn'],
     outputs: [
       { name: 'a phase report per phase, committed', tool: 'complete_phase', evidence: false },
       { name: 'the evidence the plan asks for', tool: 'attach_evidence', evidence: true },
@@ -292,7 +292,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     actor: { by: 'shinsa' },
     inputs: ['the repository’s check commands', 'the checks the plan adds'],
     outputs: [{ name: 'the check results', tool: null, evidence: true }],
-    exit: 'Every check passes. A failure goes to a fixer with its output.',
+    exit: 'Every check passes. A failure goes back to the agent with its output.',
     gate: { strength: 'soft', types: ['checks'], when: null },
     placement: 'canonical',
     needs: [NEEDS_BUILD],
@@ -334,7 +334,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     actor: { by: 'shinsa' },
     inputs: ['the reviewed branch'],
     outputs: [{ name: 'the pull request, CI and bot verdicts', tool: null, evidence: true }],
-    exit: 'CI is green, no comment is unread and there is no conflict. Anything new goes to a fixer.',
+    exit: 'CI is green, no comment is unread and there is no conflict. Anything new goes back to the agent.',
     gate: { strength: 'soft', types: ['ci'], when: null },
     placement: 'canonical',
     needs: [
@@ -427,7 +427,7 @@ const HARD_GATES = {
     ],
     decisions: [
       { decision: 'approve', does: 'Records the version you read and starts the build or the operation.' },
-      { decision: 'revise', does: 'The planner revises the plan with your words.' },
+      { decision: 'revise', does: 'The agent revises the plan with your words.' },
       CANCEL,
     ],
     refusal: DECISION_REFUSAL,
@@ -446,7 +446,7 @@ const HARD_GATES = {
     ],
     decisions: [
       { decision: 'approve', does: 'Pushes the branch and opens the pull request.' },
-      { decision: 'revise', does: 'A fixer works on your words or the findings you kept.' },
+      { decision: 'revise', does: 'The agent works on your words or the findings you kept.' },
       CANCEL,
     ],
     refusal: DECISION_REFUSAL,
@@ -460,7 +460,7 @@ const HARD_GATES = {
     shows: ['the final diff', 'CI and the bot verdicts', 'what changed since your review'],
     decisions: [
       { decision: 'approve', does: 'Merges the pull request.' },
-      { decision: 'revise', does: 'A fixer works on your words.' },
+      { decision: 'revise', does: 'The agent works on your words.' },
       CANCEL,
     ],
     refusal: DECISION_REFUSAL,
@@ -514,11 +514,17 @@ const HARD_GATES = {
       'the merged commit and pull request',
       'the operation steps from the approved plan',
       'its impact',
-      'your notes for the operator',
+      'your notes for the agent',
     ],
     decisions: [
-      { decision: 'approve', does: 'Starts the operator on the merged code with the notes on the gate.' },
-      { decision: 'reply', does: 'Replaces the notes with your words, then starts the operator.' },
+      {
+        decision: 'approve',
+        does: 'Starts the agent on the operation, on the merged code, with the notes on the gate.',
+      },
+      {
+        decision: 'reply',
+        does: 'Replaces the notes with your words, then starts the agent on the operation.',
+      },
       { decision: 'reject', does: 'Finishes the task without running the operation.' },
     ],
     refusal: 'Run the operation or finish the task without it.',
@@ -569,7 +575,7 @@ const SOFT_GATES = {
     shows: ['each check command and its output'],
     outcomes: [
       { decision: 'pass', does: 'Goes on to the agent review.' },
-      { decision: 'fail', does: 'A fixer gets the output; the checks run again after the fix.' },
+      { decision: 'fail', does: 'The agent gets the output; the checks run again after the fix.' },
       { decision: 'escalate', does: 'Out of fix rounds or stalled: a failure gate asks you.' },
     ],
     escalatesTo: 'failure',
@@ -582,7 +588,10 @@ const SOFT_GATES = {
     shows: ['the diff', 'the plan'],
     outcomes: [
       { decision: 'pass', does: 'Opens your review.' },
-      { decision: 'fail', does: 'A fixer works on the blocking findings; checks and a new reviewer follow.' },
+      {
+        decision: 'fail',
+        does: 'The agent works on the blocking findings; checks and a new reviewer follow.',
+      },
       {
         decision: 'escalate',
         does: 'After three rounds, a stall or the fix budget: your review opens with the findings.',
@@ -598,7 +607,7 @@ const SOFT_GATES = {
     shows: ['each CI run', 'new comments and review threads', 'conflicts'],
     outcomes: [
       { decision: 'pass', does: 'Opens the merge gate.' },
-      { decision: 'fail', does: 'A fixer is told exactly what is new and pushes a fix.' },
+      { decision: 'fail', does: 'The agent is told exactly what is new, and its fix is pushed.' },
       { decision: 'escalate', does: 'The watch stops or runs out of rounds: a failure gate asks you.' },
     ],
     escalatesTo: 'failure',

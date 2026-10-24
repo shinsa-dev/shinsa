@@ -140,7 +140,7 @@ export function describeWhatFollows(task: Task) {
   if (!pipeline.includes('your_ok')) return null;
   const work = resolveWorkStep(pipeline) === 'operate' ? 'operation' : 'change';
   return [
-    `After your hand-over the human decides whether this task goes on to the ${work}, which a planner then plans from what you hand over.`,
+    `After your hand-over the human decides whether this task goes on to the ${work}. If they agree, the ${work} is planned and carried out from what you hand over, usually by you in this same conversation.`,
     `End with what the ${work} should do.`,
   ].join('\n');
 }

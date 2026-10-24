@@ -140,7 +140,7 @@ describe('binding a task to an account', () => {
     expect(harness.task(other).account).toEqual(HOME);
     expect(harness.task(done).account).toEqual(WORK);
     expect(listOpenGates(harness.state, bound)).toHaveLength(0);
-    expect(harness.activeRun(bound).role).toBe('planner');
+    expect(harness.activeRun(bound)).toMatchObject({ role: 'agent', purpose: 'plan' });
   });
 });
 
@@ -153,7 +153,7 @@ describe('running one step on a chosen account', () => {
     harness.send({ type: 'task.retry', taskId, account: HOME });
     const rerun = harness.activeRun(taskId);
     expect(rerun.id).not.toBe(before.id);
-    expect(rerun).toMatchObject({ role: 'planner', account: HOME });
+    expect(rerun).toMatchObject({ role: 'agent', purpose: 'plan', account: HOME });
     expect(harness.state.runs[before.id]?.outcome).toBe('cancelled');
     harness.send({ type: 'run.end', runId: rerun.id, outcome: 'failed', summary: 'crashed' });
     expect(harness.activeRun(taskId).account).toEqual(HOME);
@@ -169,9 +169,14 @@ describe('running one step on a chosen account', () => {
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
     harness.send({ type: 'task.retry', taskId, account: HOME });
-    expect(harness.activeRun(taskId)).toMatchObject({ role: 'builder', phaseIndex: 0, account: HOME });
+    expect(harness.activeRun(taskId)).toMatchObject({
+      role: 'agent',
+      purpose: 'build',
+      phaseIndex: 0,
+      account: HOME,
+    });
     completePhase(harness, taskId);
-    expect(harness.activeRun(taskId)).toMatchObject({ role: 'builder', phaseIndex: 1 });
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build', phaseIndex: 1 });
     expect(harness.activeRun(taskId).account).toBeUndefined();
   });
 
@@ -242,7 +247,7 @@ describe('usage-limit waits', () => {
     const { taskId, run, wait } = waitingTask(harness);
     expect(wait).toMatchObject({
       runId: run.id,
-      role: 'planner',
+      role: 'agent',
       account: WORK,
       autoResume: true,
       status: 'armed',
@@ -266,7 +271,12 @@ describe('usage-limit waits', () => {
     harness.advance(resetAtOf(harness, taskId));
     fire(harness, taskId);
     const resumed = harness.activeRun(taskId);
-    expect(resumed).toMatchObject({ role: 'planner', sessionId: 'plan-session', usageWaitId: waitId });
+    expect(resumed).toMatchObject({
+      role: 'agent',
+      purpose: 'plan',
+      sessionId: 'plan-session',
+      usageWaitId: waitId,
+    });
     expect(resumed.prompt).toContain('The limit has reset.');
     expect(resumed.prompt?.startsWith(run.rolePrompt ?? '')).toBe(true);
     expect(harness.task(taskId).usageWait?.status).toBe('resumed');
@@ -285,7 +295,7 @@ describe('usage-limit waits', () => {
     );
   });
 
-  test('a builder that waited resumes its own phase, and asking for auto-resume twice changes nothing', () => {
+  test('the agent that waited resumes its own phase, and asking for auto-resume twice changes nothing', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
@@ -310,7 +320,7 @@ describe('usage-limit waits', () => {
     expect(harness.task(taskId).usageWait?.id).toBe(wait.id);
     harness.advance(HOUR * 2);
     fire(harness, taskId);
-    expect(harness.activeRun(taskId)).toMatchObject({ role: 'builder', phaseIndex: 0 });
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build', phaseIndex: 0 });
   });
 
   test('a limit that resets without auto-resume pauses the task at the reset', () => {
@@ -347,7 +357,7 @@ describe('usage-limit waits', () => {
     const harness = createHarness();
     harness.send({
       type: 'settings.change',
-      patch: { autoResume: false, agentProviders: { planner: 'codex' } },
+      patch: { autoResume: false, agentProviders: { agent: 'codex' } },
     });
     const taskId = createTask(harness);
     const run = harness.activeRun(taskId);
@@ -436,7 +446,7 @@ describe('usage-limit waits', () => {
     harness.send({ type: 'usage_wait.change', taskId, autoResume: true });
     expect(harness.task(taskId).stageReason).toBe('waiting for the usage limit to reset');
     fire(harness, taskId);
-    expect(harness.activeRun(taskId).role).toBe('planner');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
   });
 
   test('changing a task that waits for nothing is refused', () => {
@@ -468,7 +478,7 @@ describe('usage-limit waits', () => {
     expect(resumed.task(third).usageWait).toBeNull();
   });
 
-  test('a waiting planner made to wait on another task drops its wait, and the resume starts nothing', () => {
+  test('an agent that plans, made to wait on another task drops its wait, and the resume starts nothing', () => {
     const harness = createHarness();
     const other = createTask(harness, { request: 'Other work' });
     const { taskId, wait } = waitingTask(harness);
@@ -541,8 +551,8 @@ describe('the sign-in gate', () => {
     fail(harness, second, signedOut());
     fail(harness, elsewhere, signedOut(HOME));
     harness.send({ type: 'account.signed_in', account: WORK });
-    expect(harness.activeRun(first).role).toBe('planner');
-    expect(harness.activeRun(second).role).toBe('planner');
+    expect(harness.activeRun(first)).toMatchObject({ role: 'agent', purpose: 'plan' });
+    expect(harness.activeRun(second)).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(harness.openGate(elsewhere).account).toEqual(HOME);
     const answered = Object.values(harness.state.gates).filter(
       (gate) => gate.type === 'sign_in' && gate.status === 'answered'
@@ -560,7 +570,7 @@ describe('the sign-in gate', () => {
       decision: 'approve',
       response: null,
     });
-    expect(harness.activeRun(taskId).role).toBe('planner');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
     fail(harness, taskId, signedOut());
     expect(() =>
       harness.send({
@@ -651,7 +661,7 @@ describe('the sign-in gate', () => {
     harness.send({ type: 'provider.record_sign_in', provider: 'claude' });
     expect(harness.openGate(claude).account).toEqual(WORK);
     harness.send({ type: 'provider.record_sign_in', provider: 'codex' });
-    expect(harness.activeRun(codex).role).toBe('planner');
+    expect(harness.activeRun(codex)).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(harness.openGate(cursor).provider).toBe('cursor');
     expect(harness.openGate(claude).provider).toBe('claude');
     expect(harness.send({ type: 'provider.record_sign_in', provider: 'codex' }).events).toEqual([]);

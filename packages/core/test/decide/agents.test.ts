@@ -5,6 +5,7 @@ import {
   createHarness,
   createTask,
   failing,
+  PASSING,
   PLAN,
   proposePlan,
   pullRequest,
@@ -41,12 +42,17 @@ describe('stale and late commands', () => {
     }
   });
 
-  test('a role cannot use another role’s hand-over', () => {
+  test('the round agent cannot hand over a step it is not on', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     expect(() =>
       harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'x' })
-    ).toThrow('A planner cannot do that.');
+    ).toThrow('You are planning this round: hand the plan over with `propose_plan`');
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: failing() });
+    expect(() =>
+      harness.send({ type: 'agent.deliver', runId: harness.activeRun(taskId).id, step: 'operate', body: 'x' })
+    ).toThrow('You are fixing the work: hand the fix over with `complete_fix`.');
   });
 
   test('triage that finishes after a cancel removes the worktree and starts nothing', () => {
@@ -114,10 +120,12 @@ describe('agent hand-overs', () => {
   test('an agent is refused a tool its role does not have', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
     const runId = harness.activeRun(taskId).id;
     expect(() =>
-      harness.send({ type: 'agent.attach_evidence', runId, kind: 'note', title: 'x', uri: '/e/1.txt' })
-    ).toThrow('A planner cannot do that.');
+      harness.send({ type: 'agent.ask', runId, gateId: 'q1', question: 'Which?', context: null })
+    ).toThrow('A reviewer cannot do that.');
   });
 
   test('asking the same question twice opens one gate, and a gate id cannot be reused', () => {
@@ -134,7 +142,7 @@ describe('agent hand-overs', () => {
     );
   });
 
-  test('only a fixer can hand over a fix', () => {
+  test('a phase is handed over as a phase, never as a fix', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     proposePlan(harness, taskId);
@@ -144,7 +152,10 @@ describe('agent hand-overs', () => {
         runId: harness.activeRun(taskId).id,
         summary: 'Skipped ahead.',
       })
-    ).toThrow('A builder cannot do that.');
+    ).toThrow('You are building a phase: hand it over with `complete_phase`.');
+    expect(() =>
+      harness.send({ type: 'agent.propose_plan', runId: harness.activeRun(taskId).id, document: PLAN })
+    ).toThrow('You are building a phase');
     expect(harness.task(taskId).stage).toBe('building');
   });
 
@@ -314,7 +325,7 @@ describe('the tree a hand-over committed', () => {
 });
 
 describe('the plan meets the verification rules', () => {
-  test('a plan for a change without a verification plan goes back to the planner, who carries on', () => {
+  test('a plan for a change without a verification plan goes back to the agent, who carries on', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);

@@ -1,5 +1,5 @@
 import { DELEGATION_LIMITS } from './delegations.ts';
-import type { Run, RunRole } from './types.ts';
+import type { Run, RunPurpose, RunRole } from './types.ts';
 
 export const SHINSA_TOOL_NAMES = [
   'propose_plan',
@@ -44,11 +44,23 @@ const HAND_OVER_TOOLS: ReadonlySet<ShinsaToolName> = new Set<ShinsaToolName>([
   'reshape_task',
 ]);
 
-const ROLE_TOOLS: Record<RunRole, readonly ShinsaToolName[]> = {
-  planner: ['propose_plan', 'reshape_task', 'ask', 'find_tasks', 'note', 'suggest_tasks'],
-  builder: ['complete_phase', 'ask', 'attach_evidence', 'find_tasks', 'note', 'wait_for', 'suggest_tasks'],
+type StepRole = Exclude<RunRole, 'planner' | 'builder'>;
+
+const ROLE_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
+  agent: [
+    'propose_plan',
+    'reshape_task',
+    'complete_phase',
+    'complete_fix',
+    'report_outcome',
+    'ask',
+    'attach_evidence',
+    'find_tasks',
+    'note',
+    'wait_for',
+    'suggest_tasks',
+  ],
   reviewer: ['report_review', 'attach_evidence', 'find_tasks', 'note', 'suggest_tasks'],
-  fixer: ['complete_fix', 'ask', 'attach_evidence', 'find_tasks', 'note', 'wait_for', 'suggest_tasks'],
   answerer: ['answer', 'ask', 'find_tasks', 'note', 'suggest_tasks'],
   investigator: [
     'report_diagnosis',
@@ -60,7 +72,13 @@ const ROLE_TOOLS: Record<RunRole, readonly ShinsaToolName[]> = {
     'suggest_tasks',
   ],
   researcher: ['submit_report', 'ask', 'find_tasks', 'note', 'suggest_tasks'],
-  operator: ['report_outcome', 'ask', 'attach_evidence', 'find_tasks', 'note', 'wait_for', 'suggest_tasks'],
+};
+
+export const PURPOSE_HAND_OVERS: Record<RunPurpose, readonly ShinsaToolName[]> = {
+  plan: ['propose_plan', 'reshape_task'],
+  build: ['complete_phase'],
+  fix: ['complete_fix'],
+  operate: ['report_outcome'],
 };
 
 const DELEGATE_TOOLS: readonly ShinsaToolName[] = [
@@ -80,15 +98,12 @@ const DELEGATION_TOOLS: readonly ShinsaToolName[] = [
   'delegation_answer',
 ];
 
-const TASK_TOOLS: Partial<Record<RunRole, readonly ShinsaToolName[]>> = {
-  planner: ['create_task'],
+const TASK_TOOLS: Record<StepRole, readonly ShinsaToolName[]> = {
+  agent: ['create_task', 'split_task'],
   reviewer: ['create_task'],
-  builder: ['create_task', 'split_task'],
-  fixer: ['create_task'],
   answerer: ['create_task'],
   investigator: ['create_task'],
   researcher: ['create_task'],
-  operator: ['create_task'],
 };
 
 const SCHEDULE_TOOLS: readonly ShinsaToolName[] = [
@@ -105,14 +120,15 @@ const REVIEWER_SCHEDULE_TOOLS: readonly ShinsaToolName[] = [
 ];
 
 const SCHEDULING_ROLES: ReadonlySet<RunRole> = new Set<RunRole>([
-  'planner',
-  'builder',
-  'fixer',
+  'agent',
   'answerer',
   'investigator',
   'researcher',
-  'operator',
 ]);
+
+function isStepRole(role: RunRole): role is StepRole {
+  return role in ROLE_TOOLS;
+}
 
 export function isShinsaToolName(name: string): name is ShinsaToolName {
   return (SHINSA_TOOL_NAMES as readonly string[]).includes(name);
@@ -123,12 +139,14 @@ export function isHandOverTool(name: ShinsaToolName) {
 }
 
 export function listToolNames(role: RunRole, depth = 0): ShinsaToolName[] {
-  if (depth > 0) return [...DELEGATE_TOOLS, ...(depth < DELEGATION_LIMITS.depth ? DELEGATION_TOOLS : [])];
+  if (depth > 0 || !isStepRole(role)) {
+    return [...DELEGATE_TOOLS, ...(depth < DELEGATION_LIMITS.depth ? DELEGATION_TOOLS : [])];
+  }
   return [
     ...ROLE_TOOLS[role],
     ...READ_TOOLS,
     ...DELEGATION_TOOLS,
-    ...(TASK_TOOLS[role] ?? []),
+    ...TASK_TOOLS[role],
     ...(SCHEDULING_ROLES.has(role) ? SCHEDULE_TOOLS : []),
     ...(role === 'reviewer' ? REVIEWER_SCHEDULE_TOOLS : []),
   ];

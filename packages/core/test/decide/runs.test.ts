@@ -18,7 +18,7 @@ describe('recovery', () => {
     const first = harness.activeRun(taskId);
     harness.send({ type: 'run.end', runId: first.id, outcome: 'completed', summary: null });
     const second = harness.activeRun(taskId);
-    expect(second.role).toBe('planner');
+    expect(second).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(second.sessionId).toBe('plan-1');
     expect(second.prompt).toContain('ended its turn without calling the hand-over tool');
     expect(harness.task(taskId).recoveries).toBe(1);
@@ -42,12 +42,12 @@ describe('recovery', () => {
     });
     const gate = harness.openGate(taskId);
     expect(gate.type).toBe('failure');
-    expect(gate.title).toBe('The builder paused');
+    expect(gate.title).toBe('The agent paused');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
 
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
     const run = harness.activeRun(taskId);
-    expect(run.role).toBe('builder');
+    expect(run).toMatchObject({ role: 'agent', purpose: 'build' });
     expect(run.phaseIndex).toBe(0);
     expect(harness.task(taskId).recoveries).toBe(0);
   });
@@ -69,7 +69,7 @@ describe('recovery', () => {
       outcome: 'completed',
       summary: null,
     });
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
   });
 
   test('run.end after the agent handed over is ignored', () => {
@@ -429,7 +429,7 @@ describe('restart continuation', () => {
     harness.send({ type: 'run.continue', runId: run.id });
     expect(harness.state.runs[run.id]?.failure).toMatchObject({ class: 'aborted', code: 'crash_loop' });
     const gate = harness.openGate(taskId);
-    expect(gate).toMatchObject({ type: 'failure', title: 'The planner paused' });
+    expect(gate).toMatchObject({ type: 'failure', title: 'The agent paused' });
     expect(gate.body).toContain('Shinsa stopped unexpectedly while this step ran');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });

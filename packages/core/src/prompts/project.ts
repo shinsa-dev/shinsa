@@ -14,6 +14,7 @@ export function resolveProjectContext(state: ShinsaState, task: Task) {
   const repos = Object.values(state.repos)
     .filter((repo) => repo.projectId === project.id)
     .sort((a, b) => a.name.localeCompare(b.name));
+  const own = task.repoId ? state.repos[task.repoId] : undefined;
   return [
     '',
     `This task belongs to the project ${project.name} (tasks ${project.key}-1, ${project.key}-2 and so on). When the human says "the project", "the app" or "the server", they mean this project's repositories, so you do not need to ask which one.`,
@@ -23,6 +24,9 @@ export function resolveProjectContext(state: ShinsaState, task: Task) {
       : '',
     project.folders.length > 0
       ? `Its folders (every repository in them belongs to it): ${project.folders.join(', ')}`
+      : '',
+    own && own.projectId !== project.id
+      ? `This task works in ${own.name} (${own.path}), a repository outside the project.`
       : '',
   ]
     .filter((line, index) => index === 0 || line !== '')

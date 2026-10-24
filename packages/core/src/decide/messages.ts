@@ -131,13 +131,7 @@ function restartStep(decider: Decider, task: Task, text: string) {
       startOperation(decider, task.id, text);
       return;
     default:
-      startPhase(
-        decider,
-        task.id,
-        resolveCurrentPhase(task),
-        decider.lastRun(task.id, ['builder']),
-        `\n\nThe human added: ${text}`
-      );
+      startPhase(decider, task.id, resolveCurrentPhase(task), `\n\nThe human added: ${text}`);
   }
 }
 
@@ -182,7 +176,7 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
     case 'send_back':
     case 'fix':
       decider.withdrawGates(task.id, (gate) => gate.type === 'review' || gate.type === 'merge');
-      startFix(decider, task.id, 'you', resolveHumanFixPrompt(text), null);
+      startFix(decider, task.id, 'you', resolveHumanFixPrompt(text, []), null);
   }
 }
 

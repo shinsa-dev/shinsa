@@ -142,7 +142,7 @@ export function isComposedByAgent(task: Pick<Task, 'shapeChanges'>) {
   return (task.shapeChanges ?? []).some((change) => change.by === 'agent');
 }
 
-export type ShapeState = 'triage' | 'planner' | 'settled';
+export type ShapeState = 'triage' | 'agent' | 'settled';
 
 const SHAPING_STAGES: ReadonlySet<Task['stage']> = new Set<Task['stage']>([
   'triage',
@@ -156,7 +156,7 @@ export function resolveShapeState(
   if (!task.auto.shape || !SHAPING_STAGES.has(task.stage)) return 'settled';
   if (!task.pipeline || task.pipeline.length === 0) return 'triage';
   if (task.plan !== null || isComposedByAgent(task) || task.pipeline[0] !== 'plan') return 'settled';
-  return 'planner';
+  return 'agent';
 }
 
 export function isSamePipeline(a: readonly PipelineStep[], b: readonly PipelineStep[]) {

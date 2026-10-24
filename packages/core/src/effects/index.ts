@@ -11,6 +11,7 @@ export type ShinsaEffect =
   | { kind: 'pull_request.merge'; taskId: string }
   | { kind: 'pull_request.watch'; taskId: string }
   | { kind: 'worktree.remove'; taskId: string }
+  | { kind: 'scratch.remove'; taskId: string }
   | { kind: 'config.verify'; taskId: string }
   | { kind: 'briefing.request'; projectId: string | null }
   | { kind: 'run.wake'; runId: string; generation: number }
@@ -34,6 +35,7 @@ export const EFFECT_RECOVERY: Readonly<Record<ShinsaEffectKind, EffectRecovery>>
   'pull_request.merge': 'replay_safe',
   'pull_request.watch': 'replay_safe',
   'worktree.remove': 'replay_safe',
+  'scratch.remove': 'replay_safe',
   'config.verify': 'replay_safe',
   'briefing.request': 'replay_safe',
   'run.wake': 'process_bound',
@@ -78,6 +80,7 @@ export function resolveEffectKey(effect: ShinsaEffect, seq: number) {
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
+    case 'scratch.remove':
     case 'config.verify':
     case 'pull_request.open':
     case 'pull_request.push':
@@ -108,6 +111,7 @@ export function resolveEffectLane(effect: ShinsaEffect) {
     case 'task.triage':
     case 'worktree.create':
     case 'worktree.remove':
+    case 'scratch.remove':
     case 'config.verify':
     case 'checks.run':
     case 'pull_request.open':

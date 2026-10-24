@@ -30,14 +30,13 @@ export interface TaskBudget {
 }
 
 const ROLE_RANK: Record<RunRole, number> = {
-  planner: 1,
+  agent: 1,
   answerer: 2,
   investigator: 3,
   researcher: 4,
-  operator: 5,
-  builder: 6,
-  reviewer: 7,
-  fixer: 8,
+  reviewer: 5,
+  planner: 6,
+  builder: 7,
 };
 
 function createLine(): CostLine {
@@ -109,7 +108,7 @@ export function resolveTaskCost(state: ShinsaState, task: Task): TaskCost {
   for (const run of runs) {
     total = addRun(total, run);
     byRole.set(run.role, addRun(byRole.get(run.role) ?? createLine(), run));
-    if (run.role === 'builder' && typeof run.phaseIndex === 'number') {
+    if (run.purpose === 'build' && typeof run.phaseIndex === 'number') {
       byPhase.set(run.phaseIndex, addRun(byPhase.get(run.phaseIndex) ?? createLine(), run));
     }
   }

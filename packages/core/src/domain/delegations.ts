@@ -6,7 +6,7 @@ export type DelegationWake = 'always' | 'settled_only';
 
 export type DelegationIsolation = 'shared' | 'worktree';
 
-export type DelegateRole = Extract<RunRole, 'planner' | 'builder' | 'reviewer' | 'fixer'>;
+export type DelegateRole = Extract<RunRole, 'planner' | 'builder' | 'reviewer'>;
 
 export type DelegationDelivery = 'none' | 'delivered' | 'acknowledged';
 
@@ -96,7 +96,7 @@ export const DELEGATION_LIMITS = {
   name: 200,
 } as const;
 
-export const DELEGATE_ROLES: readonly DelegateRole[] = ['planner', 'builder', 'reviewer', 'fixer'];
+export const DELEGATE_ROLES: readonly DelegateRole[] = ['planner', 'builder', 'reviewer'];
 
 const READ_ONLY_ROLES: ReadonlySet<RunRole> = new Set<RunRole>([
   'planner',
@@ -111,6 +111,10 @@ export function isDelegatedRun(run: Run): run is Run & { delegation: RunDelegati
 
 export function isReadOnlyRole(role: RunRole) {
   return READ_ONLY_ROLES.has(role);
+}
+
+export function isReadOnlyRun(run: Pick<Run, 'role' | 'purpose'>) {
+  return isReadOnlyRole(run.role) || run.purpose === 'plan';
 }
 
 export function resolveDelegationStatus(run: Run & { delegation: RunDelegation }): DelegationStatus {

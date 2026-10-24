@@ -19,12 +19,16 @@ import { TASK_SHAPES, type TaskShape } from '../domain/shapes.ts';
 import { TASK_PRIORITIES } from '../domain/stages.ts';
 import type {
   AgentRole,
+  CommentSide,
   FindingVerdict,
   FindingVerdictKind,
   GateDecision,
+  ReviewComment,
+  SuggestedChange,
   TaskMode,
   TaskPriority,
 } from '../domain/types.ts';
+import { WORKSPACE_MODES, type WorkspaceMode } from '../domain/workspaces.ts';
 import type { ProjectInput, UserCommand } from './index.ts';
 
 type Fields = Record<string, unknown>;
@@ -53,7 +57,15 @@ const KINDS: ReadonlySet<MessageKind> = new Set(MESSAGE_KINDS);
 
 const SHIPPINGS: ReadonlySet<RoundShipping> = new Set(ROUND_SHIPPINGS);
 
+const WORKSPACES: ReadonlySet<WorkspaceMode> = new Set(WORKSPACE_MODES);
+
 const MAX_VERDICTS = 50;
+
+const SIDES = new Set<CommentSide>(['old', 'new']);
+
+const MAX_COMMENTS = 100;
+
+const MAX_PATH = 1_024;
 
 const MAX_NOTE = 2_000;
 
@@ -77,8 +89,8 @@ function readText(fields: Fields, key: string, max = MAX_TEXT): string {
   return value;
 }
 
-function readId(fields: Fields, key: string) {
-  const value = readText(fields, key, MAX_ID);
+function readId(fields: Fields, key: string, max = MAX_ID) {
+  const value = readText(fields, key, max);
   if (value.length === 0) refuse(`${key} must not be empty.`);
   return value;
 }
@@ -168,6 +180,30 @@ function readVerdicts(value: unknown): FindingVerdict[] {
   });
 }
 
+function readSuggestedChange(value: unknown): SuggestedChange | null {
+  if (value === null || value === undefined) return null;
+  const fields = readObject(value, 'suggestion');
+  readKnownKeys(fields, ['original', 'replacement'], 'A suggested change');
+  return { original: readText(fields, 'original'), replacement: readText(fields, 'replacement') };
+}
+
+function readComments(value: unknown): ReviewComment[] {
+  if (!Array.isArray(value)) refuse('comments must be a list.');
+  if (value.length > MAX_COMMENTS) refuse(`comments has more than ${MAX_COMMENTS} entries.`);
+  return value.map((item) => {
+    const fields = readObject(item, 'A comment');
+    readKnownKeys(fields, ['path', 'side', 'line', 'endLine', 'text', 'suggestion'], 'A comment');
+    return {
+      path: readId(fields, 'path', MAX_PATH),
+      side: readChoice(fields, 'side', SIDES),
+      line: readCount(fields, 'line'),
+      endLine: fields.endLine === null || fields.endLine === undefined ? null : readCount(fields, 'endLine'),
+      text: readText(fields, 'text'),
+      suggestion: readSuggestedChange(fields.suggestion),
+    };
+  });
+}
+
 function readGateAnswer(fields: Fields): UserCommand {
   return {
     type: 'gate.answer',
@@ -176,6 +212,7 @@ function readGateAnswer(fields: Fields): UserCommand {
     response: readNullableText(fields, 'response'),
     ...(fields.planVersion === undefined ? {} : { planVersion: readCount(fields, 'planVersion') }),
     ...(fields.verdicts === undefined ? {} : { verdicts: readVerdicts(fields.verdicts) }),
+    ...(fields.comments === undefined ? {} : { comments: readComments(fields.comments) }),
   };
 }
 
@@ -192,6 +229,7 @@ const REPO_PATCH_KEYS = [
   'projectId',
   'checkCommands',
   'checksWaived',
+  'workspace',
 ] as const;
 
 function readRepoPatch(value: unknown): RepoPatch {
@@ -204,6 +242,7 @@ function readRepoPatch(value: unknown): RepoPatch {
   if ('projectId' in fields) patch.projectId = readNullableId(fields, 'projectId');
   if ('checkCommands' in fields) patch.checkCommands = readList(fields, 'checkCommands', readText);
   if ('checksWaived' in fields) patch.checksWaived = readBoolean(fields, 'checksWaived');
+  if ('workspace' in fields) patch.workspace = readChoice(fields, 'workspace', WORKSPACES);
   return patch;
 }
 

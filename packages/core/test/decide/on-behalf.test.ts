@@ -230,11 +230,12 @@ describe('acting for the human', () => {
       snoozeLimited: false,
       accountSwitchAt: 90,
       fastMode: true,
-      agentFastModes: { builder: true },
+      agentFastModes: { agent: true },
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],
       checksWaived: true,
+      workspace: 'main_checkout',
     };
     const refused: ShinsaCommand[] = [
       ...HUMAN_ONLY_SETTINGS.map(

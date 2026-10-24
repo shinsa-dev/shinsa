@@ -17,7 +17,13 @@ import {
 } from '../domain/index.ts';
 import { resolveFocusProject } from '../queue/rank.ts';
 import { resolveNextHandle } from '../state/project.ts';
-import { isDependencyOf, isTriaged, listPendingDependencies } from '../state/queries.ts';
+import {
+  isDependencyOf,
+  isTriaged,
+  isWaitingForCheckout,
+  listPendingDependencies,
+  resolveTaskWorkspace,
+} from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { changeDependencies, resolveDependencies } from './dependencies.ts';
 import { settleTask, startWork } from './lifecycle.ts';
@@ -209,14 +215,21 @@ export function retryTaskCommand(decider: Decider, command: CommandOf<'task.retr
 
 export function readyWorktree(decider: Decider, command: CommandOf<'worktree.ready'>) {
   const current = decider.task(command.taskId);
-  if (current.repoId === null) return;
-  const unchanged = current.worktreePath === command.path && current.branch === command.branch;
+  if (current.repoId === null || isWaitingForCheckout(decider.state, current)) return;
+  const workspace = resolveTaskWorkspace(decider.state, current);
+  const unchanged =
+    current.worktreePath === command.path &&
+    current.branch === command.branch &&
+    current.workspace === workspace &&
+    (command.returnBranch === undefined || current.returnBranch === command.returnBranch);
   if (!unchanged) {
     decider.emit({
       type: 'worktree.created',
       taskId: command.taskId,
       path: command.path,
       branch: command.branch,
+      workspace,
+      ...(command.returnBranch === undefined ? {} : { returnBranch: command.returnBranch }),
     });
   }
   const task = decider.task(command.taskId);

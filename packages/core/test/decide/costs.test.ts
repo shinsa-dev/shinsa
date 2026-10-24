@@ -75,7 +75,7 @@ describe('the cost limit per task', () => {
   test('a task over its limit pauses before its next step instead of stopping a running agent', () => {
     const { harness, taskId } = limited(5);
     meter(harness, taskId, 6);
-    expect(harness.activeRun(taskId).role).toBe('planner');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
     proposePlan(harness, taskId);
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ type: 'failure', cause: 'budget', title: 'Reached its cost limit' });
@@ -96,7 +96,7 @@ describe('the cost limit per task', () => {
       response: null,
     });
     expect(harness.task(taskId).budgetAcknowledgedUsd).toBe(6);
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
     meter(harness, taskId, 4);
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
@@ -107,7 +107,7 @@ describe('the cost limit per task', () => {
     proposePlan(harness, taskId);
     harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 20 } });
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
   });
 
   test('turning the limit off releases them too, and keeps other pauses', () => {
@@ -228,7 +228,7 @@ describe('the usage limit per task', () => {
     answerGate(harness, taskId);
     expect(harness.task(taskId).usageAcknowledgedPercent).toBe(12);
     expect(harness.task(taskId).budgetAcknowledgedUsd).toBeUndefined();
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
   });
 
   test('continuing past both limits allows another of each', () => {
@@ -302,7 +302,7 @@ describe('delegated work', () => {
     const cost = resolveTaskCost(harness.state, task);
     expect(cost.total).toMatchObject({ runs: 2, knownUsd: 1.1 });
     expect(cost.byRole.map(({ role, cost: line }) => [role, line.knownUsd])).toEqual([
-      ['builder', 0.4],
+      ['agent', 0.4],
       ['reviewer', 0.7],
     ]);
     expect(isOverBudget(harness.state, task)).toBe(true);

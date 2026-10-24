@@ -1,17 +1,9 @@
 import type { CommandOf } from '../commands/index.ts';
-import {
-  DELEGATION_LIMITS,
-  DomainError,
-  type RunRole,
-  type Task,
-  type TaskCreator,
-} from '../domain/index.ts';
+import { DELEGATION_LIMITS, DomainError, type Run, type Task, type TaskCreator } from '../domain/index.ts';
 import type { Decider } from './decider.ts';
 import { changeDependencies } from './dependencies.ts';
 import { findCurrentRun } from './runs.ts';
 import { createTask } from './tasks.ts';
-
-const BUILDING_ROLES: ReadonlySet<RunRole> = new Set<RunRole>(['builder', 'fixer']);
 
 function selectCreated(decider: Decider, task: Task, requestKey: string) {
   return (
@@ -21,8 +13,8 @@ function selectCreated(decider: Decider, task: Task, requestKey: string) {
   );
 }
 
-function assertCanWait(role: RunRole) {
-  if (BUILDING_ROLES.has(role)) return;
+function assertCanWait(run: Run) {
+  if (run.purpose === 'build' || run.purpose === 'fix') return;
   throw new DomainError(
     'cannot_wait',
     'Only a task that is building can wait on a task it creates. Create it without this_task_waits and say how the two relate in your hand-over.'
@@ -50,7 +42,7 @@ function waitOn(decider: Decider, task: Task, ids: string[]) {
 export function createCourierTask(decider: Decider, command: CommandOf<'agent.create_task'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'create_task');
   if (selectCreated(decider, task, command.requestKey)) return;
-  if (command.thisWaits) assertCanWait(run.role);
+  if (command.thisWaits) assertCanWait(run);
   const createdId = spawnTask(
     decider,
     command.repoId ? { ...task, repoId: command.repoId } : task,

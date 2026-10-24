@@ -153,23 +153,28 @@ describe('delegating a task', () => {
     expect(child(harness, parent.id, { key: 'round-2' }).id).not.toBe(first.id);
   });
 
-  test('refuses a role outside planner, builder, reviewer and fixer', () => {
+  test('refuses a role outside planner, builder and reviewer', () => {
     const { harness, taskId } = building();
     expect(() => child(harness, harness.activeRun(taskId).id, { role: 'answerer' as DelegateRole })).toThrow(
-      'Delegate to one of: planner, builder, reviewer, fixer.'
+      'Delegate to one of: planner, builder, reviewer.'
     );
   });
 
   test('a child is never broader than its parent: a read-only agent only delegates read-only roles', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    const planner = harness.activeRun(taskId);
-    expect(() => child(harness, planner.id, { role: 'builder' })).toThrow(
-      'A planner cannot change files, so the agents it delegates to cannot either.'
+    const planning = harness.activeRun(taskId);
+    expect(() => child(harness, planning.id, { role: 'builder' })).toThrow(
+      'While you plan you cannot change files, so the agents you delegate to cannot either.'
     );
-    const researcher = child(harness, planner.id, { role: 'planner' });
-    expect(() => child(harness, researcher.id, { role: 'fixer' })).toThrow('A planner cannot change files');
+    const researcher = child(harness, planning.id, { role: 'planner' });
+    expect(() => child(harness, researcher.id, { role: 'builder' })).toThrow('A planner cannot change files');
     expect(child(harness, researcher.id, { role: 'reviewer' }).delegation?.depth).toBe(2);
+  });
+
+  test('the round agent may delegate writing work once it builds', () => {
+    const { harness, taskId } = building();
+    expect(child(harness, harness.activeRun(taskId).id, { role: 'builder' }).delegation?.depth).toBe(1);
   });
 
   test('delegations nest at most three deep', () => {

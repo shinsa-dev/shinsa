@@ -14,7 +14,8 @@ function stateWith(...runs: Partial<Run>[]): ShinsaState {
     state.runs[id] = {
       id,
       taskId: 'task-1',
-      role: 'builder',
+      role: 'agent',
+      purpose: 'build',
       provider: 'claude',
       model: null,
       sessionId: null,

@@ -3,6 +3,7 @@ import {
   GATE_SCHEMA,
   type GateType,
   listOpenGates,
+  type ReviewComment,
   SHAPE_PIPELINES,
   type TaskShape,
 } from '../../src/index.ts';
@@ -20,6 +21,7 @@ import {
   pushed,
   reachReviewGate,
   reachShipping,
+  readInstruction,
   readyWorktree,
   verifySetup,
 } from '../harness.ts';
@@ -90,7 +92,7 @@ describe('answering a gate', () => {
     expect(harness.activeRun(taskId).prompt).toContain('The human answered:\nUse 240px.');
   });
 
-  test('asking for changes to a plan sends it back to the planner', () => {
+  test('asking for changes to a plan sends it back to the agent', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: true } });
     const taskId = createTask(harness, { size: 'large' });
@@ -105,7 +107,7 @@ describe('answering a gate', () => {
     expect(harness.activeRun(taskId).prompt).toContain('Feedback on the previous plan:\nRevise the plan.');
   });
 
-  test('asking for changes at the review gate starts a fixer, then checks and review again', () => {
+  test('asking for changes at the review gate starts the agent, then checks and review again', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     reachReviewGate(harness, taskId);
@@ -116,7 +118,7 @@ describe('answering a gate', () => {
       response: 'Dark mode.',
     });
     const run = harness.activeRun(taskId);
-    expect(run.role).toBe('fixer');
+    expect(run).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(run.prompt).toContain('Dark mode.');
     harness.send({ type: 'agent.complete_fix', runId: run.id, summary: 'Added dark mode.' });
     expect(harness.task(taskId).stage).toBe('checking');
@@ -160,7 +162,7 @@ describe('approving a plan', () => {
     return { harness, taskId, gate: harness.openGate(taskId) };
   }
 
-  test('approves the version you read and hands the builder that version', () => {
+  test('approves the version you read and hands the agent that version', () => {
     const { harness, taskId, gate } = planGate();
     harness.send({
       type: 'gate.answer',
@@ -229,7 +231,7 @@ describe('verdicts on review findings', () => {
     return { harness, taskId, gate: harness.openGate(taskId) };
   }
 
-  test('asking for changes sends the fixer only what you kept and leaves the rest alone', () => {
+  test('asking for changes sends the agent only what you kept and leaves the rest alone', () => {
     const { harness, taskId, gate } = reviewWithFindings();
     harness.send({
       type: 'gate.answer',
@@ -241,7 +243,7 @@ describe('verdicts on review findings', () => {
         { index: 1, verdict: 'dismiss', note: 'Premature.' },
       ],
     });
-    const prompt = harness.activeRun(taskId).prompt ?? '';
+    const prompt = readInstruction(harness.activeRun(taskId));
     expect(prompt.startsWith('The human looked at the work and decided on each review finding.')).toBe(true);
     expect(prompt).toContain('Fix these:\n- [suggestion] a.ts:3: Rename it.');
     expect(prompt).toContain(
@@ -304,6 +306,97 @@ describe('verdicts on review findings', () => {
     ).toThrow('Only review findings take a verdict.');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null, verdicts: [] });
     expect(harness.state.gates[gate.id]?.verdicts).toBeUndefined();
+  });
+});
+
+describe('line comments with a request for changes', () => {
+  const suggestion: ReviewComment = {
+    path: 'src/a.ts',
+    side: 'new',
+    line: 2,
+    endLine: 3,
+    text: '',
+    suggestion: { original: 'let a;\nlet b;', replacement: 'const a = 1;' },
+  };
+
+  function reviewGate() {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    return { harness, taskId, gate: harness.openGate(taskId) };
+  }
+
+  test('the agent gets each comment, and a suggested change with the lines it replaces and the replacement', () => {
+    const { harness, taskId, gate } = reviewGate();
+    harness.send({
+      type: 'gate.answer',
+      gateId: gate.id,
+      decision: 'revise',
+      response: null,
+      comments: [suggestion, { ...suggestion, line: 9, endLine: null, text: 'Why?', suggestion: null }],
+    });
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toStartWith('The human looked at the work and left line comments.');
+    expect(prompt).toContain('Replace:\n```\nlet a;\nlet b;\n```\nwith:\n```\nconst a = 1;\n```');
+    expect(prompt).toContain('- src/a.ts, line 9: Why?');
+  });
+
+  test('line comments go only with a request for changes at a review or merge gate', () => {
+    const { harness, gate } = reviewGate();
+    expect(() =>
+      harness.send({
+        type: 'gate.answer',
+        gateId: gate.id,
+        decision: 'approve',
+        response: null,
+        comments: [suggestion],
+      })
+    ).toThrow('Line comments go to the agent when you request changes.');
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null, comments: [] });
+    expect(harness.state.gates[gate.id]?.status).toBe('answered');
+
+    const planned = createHarness();
+    planned.send({ type: 'settings.change', patch: { approvePlans: true } });
+    const taskId = createTask(planned, { size: 'large' });
+    proposePlan(planned, taskId);
+    expect(() =>
+      planned.send({
+        type: 'gate.answer',
+        gateId: planned.openGate(taskId).id,
+        decision: 'revise',
+        response: 'x',
+        comments: [suggestion],
+      })
+    ).toThrow('Only a review takes line comments.');
+  });
+
+  test('refuses a comment whose lines, words or suggested change do not hold together', () => {
+    const { harness, gate } = reviewGate();
+    const send = (comment: ReviewComment) =>
+      refusalOf(() =>
+        harness.send({
+          type: 'gate.answer',
+          gateId: gate.id,
+          decision: 'revise',
+          response: null,
+          comments: [comment],
+        })
+      );
+    expect(send({ ...suggestion, endLine: 2 })).toBe(
+      'The comment on src/a.ts must end on a line after line 2.'
+    );
+    expect(send({ ...suggestion, text: ' ', suggestion: null })).toBe(
+      'The comment on src/a.ts has no words.'
+    );
+    expect(send({ ...suggestion, side: 'old' })).toBe(
+      'A suggested change on src/a.ts must be on the new side.'
+    );
+    expect(send({ ...suggestion, endLine: 4 })).toBe(
+      'The suggested change on src/a.ts must quote the 3 lines it replaces.'
+    );
+    expect(send({ ...suggestion, endLine: null })).toBe(
+      'The suggested change on src/a.ts must quote the line it replaces.'
+    );
   });
 });
 

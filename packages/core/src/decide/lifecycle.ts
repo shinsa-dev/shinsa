@@ -5,17 +5,22 @@ import {
   PLAN_GATE_RULE,
   type PlanGateReason,
   type ReviewEscalation,
-  type Run,
   resolveTaskPipeline,
   type Task,
 } from '../domain/index.ts';
 import type { ShinsaEffectKind } from '../effects/index.ts';
-import { resolvePhasePrompt, resolvePlannerPrompt, resolveReviewerPrompt } from '../prompts/index.ts';
+import {
+  resolveAgentPrompt,
+  resolvePhaseInstruction,
+  resolvePlanningPrompt,
+  resolveReviewerPrompt,
+} from '../prompts/index.ts';
 import { assembleReport } from '../report/assemble.ts';
 import { serializeReportMarkdown } from '../report/markdown.ts';
 import { listPendingDependencies } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
 import { proceedAfterSetup } from './shapes.ts';
+import { holdForCheckout } from './workspaces.ts';
 
 type SettledStage = 'merged' | 'done' | 'cancelled';
 
@@ -59,6 +64,7 @@ export function startWork(decider: Decider, taskId: string) {
     decider.stage(taskId, 'waiting_on_tasks', `waiting for ${quoteTitles(pending)} to finish`);
     return;
   }
+  if (holdForCheckout(decider, taskId)) return;
   if (!needsSetup(decider.task(taskId))) {
     proceedAfterSetup(decider, taskId);
     return;
@@ -72,12 +78,9 @@ export function startPlanning(decider: Decider, taskId: string, feedback: string
   const task = decider.task(taskId);
   decider.startRun(
     task,
-    'planner',
-    resolvePlannerPrompt(task, decider.repoOf(task), decider.basesOf(task), feedback),
-    {
-      resumeFrom: feedback ? decider.lastRun(taskId, ['planner']) : decider.resumeRound(task, ['planner']),
-      feedback,
-    }
+    'agent',
+    resolvePlanningPrompt(task, decider.repoOf(task), decider.basesOf(task), feedback),
+    { purpose: 'plan', resumeFrom: decider.rootRun(taskId), feedback }
   );
 }
 
@@ -95,13 +98,7 @@ export function needsPlanApproval(decider: Decider, task: Task) {
   return decider.state.settings.approvePlans === true && PLAN_GATE_RULE.withApprovePlans.some(passes);
 }
 
-export function startPhase(
-  decider: Decider,
-  taskId: string,
-  index: number,
-  resumeFrom: Run | null = null,
-  addition = ''
-) {
+export function startPhase(decider: Decider, taskId: string, index: number, addition = '') {
   const plan = decider.task(taskId).plan?.document?.phases ?? [];
   const step = plan[index];
   decider.stage(
@@ -113,11 +110,11 @@ export function startPhase(
     decider.emit({ type: 'phase.updated', taskId, index, status: 'active' });
   }
   const task = decider.task(taskId);
-  const prompt = resolvePhasePrompt(task, decider.repoOf(task), decider.basesOf(task), index) + addition;
-  const opening = index === 0 && task.phaseReports.length === 0;
-  decider.startRun(task, 'builder', prompt, {
+  const instruction = resolvePhaseInstruction(task, decider.repoOf(task), index) + addition;
+  decider.startRun(task, 'agent', resolveAgentPrompt(instruction), {
+    purpose: 'build',
     phaseIndex: index,
-    resumeFrom: resumeFrom ?? (opening ? decider.resumeRound(task, ['builder', 'fixer']) : null),
+    resumeFrom: decider.rootRun(taskId),
   });
 }
 
@@ -170,6 +167,7 @@ export function settleTask(
   decider.clearWaits(taskId);
   decider.stage(taskId, stage, reason, by);
   if (task.worktreePath) decider.run({ kind: 'worktree.remove', taskId });
+  decider.run({ kind: 'scratch.remove', taskId });
   decider.requestBriefing(taskId);
   for (const dependent of Object.values(decider.state.tasks)) {
     if (!dependent.waitsOn.includes(taskId)) continue;

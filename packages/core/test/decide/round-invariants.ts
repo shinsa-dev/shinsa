@@ -70,8 +70,8 @@ function listLaterRoundCommands(state: ShinsaState): ShinsaCommand[] {
   );
   const runs = listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
     if (!later.has(run.taskId) || run.delegation) return [];
-    if (run.role === 'planner') return [{ type: 'agent.propose_plan', runId: run.id, document: PLAN }];
-    if (run.role === 'builder') {
+    if (run.purpose === 'plan') return [{ type: 'agent.propose_plan', runId: run.id, document: PLAN }];
+    if (run.purpose === 'build') {
       return [
         { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },
       ];
@@ -181,7 +181,7 @@ function listLaterComposingCommands(state: ShinsaState, random: Random): ShinsaC
   const later = listLaterTaskIds(state);
   return listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
     if (!later.has(run.taskId) || run.delegation) return [];
-    if (run.role === 'planner') {
+    if (run.purpose === 'plan') {
       const steps = pick(random, LATER_COMPOSITIONS) ?? [];
       return [{ type: 'agent.reshape', runId: run.id, steps, reason: 'Find it first.' }];
     }

@@ -72,7 +72,7 @@ describe('validateDelegationRequest', () => {
       ok: false,
       errors: [
         'brief is required.',
-        'role must be one of planner, builder, reviewer, fixer.',
+        'role must be one of planner, builder, reviewer.',
         'mode must be one of async, wait.',
         'isolation must be one of shared, worktree.',
         'timeout_minutes must be a whole number from 1 to 60.',

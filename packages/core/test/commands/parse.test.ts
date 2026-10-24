@@ -93,8 +93,8 @@ describe('parseUserCommand', () => {
             mergeMethod: 'rebase',
             attentionLimit: 2,
             approvePlans: true,
-            agentModels: { builder: 'sonnet' },
-            agentProviders: { builder: 'codex' },
+            agentModels: { agent: 'sonnet' },
+            agentProviders: { agent: 'codex' },
           },
         },
         {
@@ -106,8 +106,8 @@ describe('parseUserCommand', () => {
             mergeMethod: 'rebase',
             attentionLimit: 2,
             approvePlans: true,
-            agentModels: { builder: 'sonnet' },
-            agentProviders: { builder: 'codex' },
+            agentModels: { agent: 'sonnet' },
+            agentProviders: { agent: 'codex' },
           },
         },
       ],
@@ -283,7 +283,7 @@ describe('parseUserCommand', () => {
 });
 
 describe('parseUserCommand for the process commands', () => {
-  test('a new task takes no shape: only triage and the planner shape a task', () => {
+  test('a new task takes no shape: only triage and the agent shape a task', () => {
     expect(
       parseUserCommand({ type: 'task.create', request: 'Why?', repoId: null, shape: 'investigate' })
     ).toEqual({ type: 'task.create', request: 'Why?', repoId: null });
@@ -363,11 +363,11 @@ describe('parseUserCommand for the process commands', () => {
     expect(
       parseUserCommand({
         type: 'settings.change',
-        patch: { fastMode: false, agentFastModes: { builder: true, classifier: false } },
+        patch: { fastMode: false, agentFastModes: { agent: true, classifier: false } },
       })
     ).toEqual({
       type: 'settings.change',
-      patch: { fastMode: false, agentFastModes: { builder: true, classifier: false } },
+      patch: { fastMode: false, agentFastModes: { agent: true, classifier: false } },
     });
     const refused: [unknown, string][] = [
       [
@@ -375,8 +375,8 @@ describe('parseUserCommand for the process commands', () => {
         'agentFastModes has no role boss.',
       ],
       [
-        { type: 'settings.change', patch: { agentFastModes: { builder: 'yes' } } },
-        'builder must be true or false.',
+        { type: 'settings.change', patch: { agentFastModes: { agent: 'yes' } } },
+        'agent must be true or false.',
       ],
       [{ type: 'settings.change', patch: { agentFastModes: true } }, 'agentFastModes must be an object.'],
       [{ type: 'settings.change', patch: { agentFastModes: null } }, 'agentFastModes must be an object.'],
@@ -443,6 +443,70 @@ describe('parseUserCommand for the process commands', () => {
     ];
     for (const [body, message] of refused) {
       expect(() => parseUserCommand(body)).toThrow(new DomainError('command_invalid', message));
+    }
+  });
+});
+
+describe('parseUserCommand for line comments', () => {
+  const answer = { type: 'gate.answer', gateId: 'g', decision: 'revise', response: null } as const;
+
+  test('reads each comment with its suggested change, original and replacement', () => {
+    expect(
+      parseUserCommand({
+        ...answer,
+        comments: [
+          {
+            path: 'src/a.ts',
+            side: 'new',
+            line: 3,
+            endLine: 4,
+            text: '',
+            suggestion: { original: 'a\nb', replacement: 'c' },
+          },
+          { path: 'src/b.ts', side: 'old', line: 9, text: 'Keep it.' },
+        ],
+      })
+    ).toEqual({
+      ...answer,
+      comments: [
+        {
+          path: 'src/a.ts',
+          side: 'new',
+          line: 3,
+          endLine: 4,
+          text: '',
+          suggestion: { original: 'a\nb', replacement: 'c' },
+        },
+        { path: 'src/b.ts', side: 'old', line: 9, endLine: null, text: 'Keep it.', suggestion: null },
+      ],
+    });
+  });
+
+  test('refuses a malformed comment with a message saying what is wrong', () => {
+    const comment = { path: 'a.ts', side: 'new', line: 1, text: 'x' };
+    const refused: [unknown, string][] = [
+      [{ ...answer, comments: 'x' }, 'comments must be a list.'],
+      [
+        { ...answer, comments: Array.from({ length: 101 }, () => comment) },
+        'comments has more than 100 entries.',
+      ],
+      [{ ...answer, comments: [{ ...comment, side: 'left' }] }, 'side must be one of old, new.'],
+      [{ ...answer, comments: [{ ...comment, line: 0 }] }, 'line must be a whole number of 1 or more.'],
+      [{ ...answer, comments: [{ ...comment, path: '' }] }, 'path must not be empty.'],
+      [
+        { ...answer, comments: [{ ...comment, path: 'a'.repeat(1_025) }] },
+        'path is longer than 1024 characters.',
+      ],
+      [{ ...answer, comments: [{ ...comment, author: 'me' }] }, 'A comment cannot change author.'],
+      [{ ...answer, comments: [{ ...comment, suggestion: 'x' }] }, 'suggestion must be an object.'],
+      [
+        { ...answer, comments: [{ ...comment, suggestion: { original: 'a', text: 'b' } }] },
+        'A suggested change cannot change text.',
+      ],
+      [{ ...answer, comments: [{ ...comment, suggestion: { original: 'a' } }] }, 'replacement must be text.'],
+    ];
+    for (const [input, message] of refused) {
+      expect(() => parseUserCommand(input)).toThrow(message);
     }
   });
 });

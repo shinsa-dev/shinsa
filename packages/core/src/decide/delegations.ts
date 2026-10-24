@@ -7,6 +7,7 @@ import {
   isAgentQuestion,
   isDelegatedRun,
   isReadOnlyRole,
+  isReadOnlyRun,
   type Run,
   type RunFailure,
   type RunOutcome,
@@ -45,6 +46,14 @@ const EMPTY_RESULT = 'It ended without a reply.';
 
 function withArticle(name: string) {
   return `${/^[aeiou]/.test(name) ? 'An' : 'A'} ${name}`;
+}
+
+function describeCeiling(parent: Run) {
+  const who =
+    parent.purpose === 'plan'
+      ? 'While you plan you cannot change files, so the agents you delegate to'
+      : `${withArticle(describeDelegateRole(parent.role))} cannot change files, so the agents it delegates to`;
+  return `${who} cannot either. Delegate to a planner or a reviewer.`;
 }
 
 function describeDelegations(count: number) {
@@ -110,11 +119,8 @@ export function requestDelegation(decider: Decider, command: CommandOf<'agent.de
   }
   assertDelegationRoom(decider, parent);
   const depth = (parent.delegation?.depth ?? 0) + 1;
-  if (isReadOnlyRole(parent.role) && !isReadOnlyRole(command.role)) {
-    throw new DomainError(
-      'delegation_ceiling',
-      `${withArticle(describeDelegateRole(parent.role))} cannot change files, so the agents it delegates to cannot either. Delegate to a planner or a reviewer.`
-    );
+  if (isReadOnlyRun(parent) && !isReadOnlyRole(command.role)) {
+    throw new DomainError('delegation_ceiling', describeCeiling(parent));
   }
   if (command.isolation === 'worktree' && (!task.worktreePath || !command.baseCommit)) {
     throw new DomainError(

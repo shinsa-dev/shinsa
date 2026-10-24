@@ -20,6 +20,7 @@ import {
   createTask,
   type Harness,
   IMPACT,
+  linkSession,
   PASSING,
   PLAN,
   proposePlan,
@@ -211,9 +212,56 @@ describe('an investigation', () => {
     expect(harness.lastEffect('config.verify').taskId).toBe(taskId);
     passSetup(harness, taskId);
     const planner = harness.activeRun(taskId);
-    expect(planner.role).toBe('planner');
+    expect(planner).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(planner.prompt).toContain('The diagnosis from the investigation:\nThe investigate result.');
     expect(planner.prompt).toContain('The human approved going on after that:\nStream the export in chunks.');
+  });
+
+  test('the Agent resumes the investigator’s session after your OK: one root agent for the round', () => {
+    const harness = createHarness();
+    const taskId = start(harness, { shape: 'investigate' });
+    passSetup(harness, taskId);
+    const investigator = harness.activeRun(taskId);
+    linkSession(harness, taskId, 'session-investigate');
+    deliver(harness, taskId, 'investigate', PROPOSAL);
+    approve(harness, taskId);
+    passSetup(harness, taskId);
+    const agent = harness.activeRun(taskId);
+    expect(agent).toMatchObject({
+      role: 'agent',
+      purpose: 'plan',
+      resume: true,
+      sessionId: 'session-investigate',
+      provider: investigator.provider,
+      model: investigator.model,
+    });
+    expect(agent.prompt).toContain('The diagnosis from the investigation:\nThe investigate result.');
+    linkSession(harness, taskId, 'session-investigate');
+    proposePlan(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build', sessionId: 'session-investigate' });
+  });
+
+  test('when the inquiry ran on another model, the Agent starts fresh with the full brief and the result', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } });
+    const taskId = start(harness, { shape: 'investigate' });
+    passSetup(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'investigator', model: 'sonnet' });
+    linkSession(harness, taskId, 'session-investigate');
+    deliver(harness, taskId, 'investigate', PROPOSAL);
+    approve(harness, taskId);
+    passSetup(harness, taskId);
+    const agent = harness.activeRun(taskId);
+    expect(agent).toMatchObject({
+      role: 'agent',
+      purpose: 'plan',
+      resume: false,
+      sessionId: null,
+      model: 'opus',
+    });
+    expect(agent.prompt).toContain('Your role: the agent for this round.');
+    expect(agent.prompt).toContain('The diagnosis from the investigation:\nThe investigate result.');
+    expect(agent.prompt).toContain('The human approved going on after that:\nStream the export in chunks.');
   });
 
   test('declining the fix finishes the task as an investigation', () => {
@@ -308,7 +356,7 @@ describe('find and fix', () => {
         .map((phase) => phase.status)
     ).toEqual(['done', 'done', 'pending']);
     ready(harness, taskId);
-    expect(harness.activeRun(taskId).role).toBe('planner');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
     proposePlan(harness, taskId);
     completePhase(harness, taskId);
     completePhase(harness, taskId);
@@ -409,9 +457,9 @@ describe('an operation', () => {
     expect(harness.openGate(taskId).type).toBe('plan');
     approve(harness, taskId);
     const run = harness.activeRun(taskId);
-    expect(run.role).toBe('operator');
+    expect(run).toMatchObject({ role: 'agent', purpose: 'operate' });
     expect(harness.task(taskId).stage).toBe('operating');
-    expect(run.prompt).toContain('Run the operation in the approved plan');
+    expect(run.prompt).toContain('Now run the operation in the plan, step by step');
     expect(run.prompt).toContain('This is plan version 1, approved by the human.');
     harness.send({ type: 'task.message', taskId, text: 'Use bun 1.3.' });
     harness.send({ type: 'message.deliver', taskId, text: 'Use bun 1.3 everywhere.' });
@@ -433,7 +481,7 @@ describe('an operation', () => {
     ]);
   });
 
-  test('a paused operation retries the operator, and a message restarts it with the guidance', () => {
+  test('a paused operation retries the agent, and a message restarts it with the guidance', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'operation' });
     passSetup(harness, taskId);
@@ -441,7 +489,7 @@ describe('an operation', () => {
     approve(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Broke', detail: 'x' });
     harness.send({ type: 'task.retry', taskId });
-    expect(harness.activeRun(taskId).role).toBe('operator');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'operate' });
     harness.send({ type: 'effect.fail', taskId, title: 'Broke again', detail: 'x' });
     harness.send({ type: 'message.deliver', taskId, text: 'Skip the cache.' });
     expect(harness.activeRun(taskId).prompt).toContain('Guidance from the human:\nSkip the cache.');
@@ -470,7 +518,7 @@ describe('an operation', () => {
   });
 });
 
-describe('the planner reshapes', () => {
+describe('the agent reshapes', () => {
   test('a task Shinsa shaped into an answer when there is nothing to change', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'How does the retry work?' });
@@ -515,7 +563,7 @@ describe('the planner reshapes', () => {
     );
   });
 
-  test('once a plan exists the planner revises it instead', () => {
+  test('once a plan exists the agent revises it instead', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { approvePlans: true } });
     const taskId = createTask(harness, { size: 'large' });
@@ -556,7 +604,7 @@ describe('the inquiry steps', () => {
     expect(harness.activeRun(investigation).prompt).toContain('The human followed up:\nTry Safari.');
   });
 
-  test('a planner that reshapes to research hands the existing worktree to a read-only researcher', () => {
+  test('the agent that reshapes to research hands the existing worktree to a read-only researcher', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'Compare the queue libraries' });
     harness.send({
@@ -570,7 +618,7 @@ describe('the inquiry steps', () => {
     );
   });
 
-  test('a planner that reshapes back to an investigation already delivered finishes the task', () => {
+  test('the agent that reshapes back to an investigation already delivered finishes the task', () => {
     const harness = createHarness();
     const taskId = start(harness, { triage: { shape: 'fix' } });
     passSetup(harness, taskId);
@@ -626,7 +674,7 @@ function listSteps(harness: Harness, taskId: string) {
   return resolveTaskProgress(harness.task(taskId)).phases.map((phase) => `${phase.title}:${phase.status}`);
 }
 
-describe('the planner composes the steps', () => {
+describe('the agent composes the steps', () => {
   test('investigate, your OK, then an operation: the diagnosis waits for your OK before the operation is planned', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'The nightly export stalls. Clear whatever is stuck.' });
@@ -671,7 +719,7 @@ describe('the planner composes the steps', () => {
     expect(harness.task(taskId).stageReason).toBe('verifying the setup');
     passSetup(harness, taskId);
     const planner = harness.activeRun(taskId);
-    expect(planner.role).toBe('planner');
+    expect(planner).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(planner.prompt).not.toContain('`reshape_task`');
     expect(planner.prompt).toContain('The human approved going on after that:');
     proposePlan(harness, taskId);
@@ -682,7 +730,7 @@ describe('the planner composes the steps', () => {
     expect(listSteps(harness, taskId).every((step) => step.endsWith(':done'))).toBe(true);
   });
 
-  test('research, your OK, then a change: the report is in the planner’s prompt and the change ends at your review', () => {
+  test('research, your OK, then a change: the report is in the agent’s prompt and the change ends at your review', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'Pick a queue library and switch to it' });
     compose(harness, taskId, ['research', 'your_ok', 'plan', 'build', ...REVIEW_TAIL], 'Compare first.');
@@ -747,7 +795,7 @@ describe('the planner composes the steps', () => {
     expect(resolveNextStep(harness.task(taskId))).toBe('your_ok');
   });
 
-  test('refuses steps that break the rules, names every problem and keeps the planner running', () => {
+  test('refuses steps that break the rules, names every problem and keeps the agent running', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const planner = harness.activeRun(taskId);
@@ -792,7 +840,7 @@ describe('the planner composes the steps', () => {
     );
   });
 
-  test('a planner that composes your OK after findings already in asks for it before planning', () => {
+  test('the agent that composes your OK after findings already in asks for it before planning', () => {
     const harness = createHarness();
     const taskId = start(harness, { triage: { shape: 'fix' } });
     passSetup(harness, taskId);
@@ -864,8 +912,8 @@ describe('a change, then an operation', () => {
       'Turned into a change, then an operation'
     );
     const planner = harness.activeRun(taskId);
-    expect(planner.role).toBe('planner');
-    expect(planner.prompt).toContain('then an operator runs the operation on the merged code');
+    expect(planner).toMatchObject({ role: 'agent', purpose: 'plan' });
+    expect(planner.prompt).toContain('then you run the operation on the merged code');
     expect(() => proposePlan(harness, taskId)).toThrow(
       'This task also runs an operation: list its steps in `operation`'
     );
@@ -874,9 +922,9 @@ describe('a change, then an operation', () => {
     expect(harness.openGate(taskId)).toMatchObject({ type: 'plan' });
     expect(harness.openGate(taskId).body).toContain(`## Operation\n1. ${BACKFILL[0]}`);
     approve(harness, taskId);
-    expect(harness.activeRun(taskId).role).toBe('builder');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'build' });
     expect(harness.activeRun(taskId).prompt).toContain(
-      "Do not run the plan's operation: an operator runs it after the pull request merges."
+      "Do not run the plan's operation yet: you run it after the pull request merges and the human confirms it."
     );
     reachMergedPullRequest(harness, taskId);
     expect(harness.task(taskId)).toMatchObject({ stage: 'awaiting_operation' });
@@ -892,7 +940,7 @@ describe('a change, then an operation', () => {
     expect(listSteps(harness, taskId).at(-1)).toBe('Run the operation:waiting');
     approve(harness, taskId);
     const operator = harness.activeRun(taskId);
-    expect(operator.role).toBe('operator');
+    expect(operator).toMatchObject({ role: 'agent', purpose: 'operate' });
     expect(operator.prompt).toContain('has merged into the default branch');
     expect(operator.prompt).toContain(`The impact the human approved:\n${IMPACT}`);
     expect(operator.prompt).toContain(`The operation to run:\n1. ${BACKFILL[0]}\n2. ${BACKFILL[1]}`);
@@ -912,7 +960,7 @@ describe('a change, then an operation', () => {
     expect(listSteps(harness, taskId).every((step) => step.endsWith(':done'))).toBe(true);
   });
 
-  test('a paused operation after the merge retries the operator, never the merge', () => {
+  test('a paused operation after the merge retries the agent, never the merge', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     compose(harness, taskId, [...SHAPE_PIPELINES.change, 'operate']);
@@ -922,7 +970,7 @@ describe('a change, then an operation', () => {
     approve(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Backfill timed out', detail: 'x' });
     harness.send({ type: 'task.retry', taskId });
-    expect(harness.activeRun(taskId).role).toBe('operator');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'operate' });
     expect(harness.task(taskId).stage).toBe('operating');
   });
 
@@ -958,8 +1006,8 @@ describe('a change, then an operation', () => {
     planWithOperation(harness, taskId);
     approve(harness, taskId);
     const operator = harness.activeRun(taskId);
-    expect(operator.role).toBe('operator');
-    expect(operator.prompt).toContain('The code change in the plan is built after you');
+    expect(operator).toMatchObject({ role: 'agent', purpose: 'operate' });
+    expect(operator.prompt).toContain('You build the code change in the plan after it');
     deliver(harness, taskId, 'operate');
     expect(harness.task(taskId).stage).toBe('building');
     expect(harness.activeRun(taskId).prompt).toContain('How the operation went:');
@@ -994,7 +1042,7 @@ describe('the operation after the merge waits for your OK', () => {
     ).toBe(true);
   });
 
-  test('takes your words as guidance for the operator', () => {
+  test('takes your words as guidance for the agent', () => {
     const harness = createHarness();
     const taskId = reachOperationGate(harness);
     harness.send({
@@ -1030,7 +1078,7 @@ describe('the operation after the merge waits for your OK', () => {
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
 
-  test('a message replaces the notes for the operator on the same gate, without asking again or running the operation', () => {
+  test('a message replaces the notes for the agent on the same gate, without asking again or running the operation', () => {
     const harness = createHarness();
     const taskId = reachOperationGate(harness);
     const gate = harness.openGate(taskId);
@@ -1045,7 +1093,7 @@ describe('the operation after the merge waits for your OK', () => {
     expect(harness.task(taskId).stage).toBe('awaiting_operation');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
     approve(harness, taskId);
-    const prompt = harness.activeRun(taskId).prompt;
+    const prompt = harness.activeRun(taskId).rolePrompt;
     expect(prompt).toContain('Guidance from the human:\nSkip the archived accounts.');
     expect(prompt).not.toContain('Wait for the deploy.');
   });
@@ -1057,7 +1105,7 @@ describe('the operation after the merge waits for your OK', () => {
     const gateId = harness.openGate(taskId).id;
     harness.send({ type: 'gate.answer', gateId, decision: 'reply', response: ' Run it on staging first. ' });
     expect(harness.state.gates[gateId]?.notes).toBe('Run it on staging first.');
-    const prompt = harness.activeRun(taskId).prompt;
+    const prompt = harness.activeRun(taskId).rolePrompt;
     expect(prompt).toContain('Guidance from the human:\nRun it on staging first.');
     expect(prompt).not.toContain('Wait for the deploy.');
   });

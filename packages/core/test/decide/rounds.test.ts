@@ -109,7 +109,7 @@ describe('a task is a conversation of rounds', () => {
       [1, 'active'],
       [2, 'waiting'],
     ]);
-    expect(harness.activeRun(taskId).role).toBe('planner');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
     reachMergeGate(harness, taskId);
     const task = harness.task(taskId);
     expect(listStatuses(task)).toEqual([
@@ -126,7 +126,13 @@ describe('a task is a conversation of rounds', () => {
     ).toBe(false);
     readyRound(harness, taskId);
     const planner = harness.activeRun(taskId);
-    expect(planner).toMatchObject({ role: 'planner', round: 2, resume: true, sessionId: 'planner-session' });
+    expect(planner).toMatchObject({
+      role: 'agent',
+      purpose: 'plan',
+      round: 2,
+      resume: true,
+      sessionId: 'planner-session',
+    });
     expect(planner.prompt).toContain('This is round 2 of the task.');
     expect(planner.prompt).toContain('Also stream the tool results');
     expect(planner.prompt).toContain('pull request #42');
@@ -149,7 +155,7 @@ describe('a task is a conversation of rounds', () => {
     readyRound(harness, taskId);
     const builder = () => harness.activeRun(taskId);
     proposePlan(harness, taskId);
-    expect(builder()).toMatchObject({ role: 'builder', round: 3 });
+    expect(builder()).toMatchObject({ role: 'agent', purpose: 'build', round: 3 });
     harness.send({
       type: 'agent.complete_phase',
       runId: builder().id,
@@ -246,14 +252,14 @@ describe('a task is a conversation of rounds', () => {
 });
 
 describe('feedback, new work and work that belongs elsewhere', () => {
-  test('feedback keeps today’s behaviour: it steers the agent, and at the review gate it goes to a fixer', () => {
+  test('feedback keeps today’s behaviour: it steers the agent, and at the review gate it goes to the agent', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     harness.send({ type: 'task.message', taskId, text: 'Use the cache.', kind: 'feedback' });
     expect(harness.lastEffect('run.steer')).toMatchObject({ text: 'Use the cache.' });
     reachReviewGate(harness, taskId);
     harness.send({ type: 'task.message', taskId, text: 'Smaller.', kind: 'feedback' });
-    expect(harness.activeRun(taskId).role).toBe('fixer');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'fix' });
     expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(1);
   });
 
@@ -364,6 +370,7 @@ describe('feedback, new work and work that belongs elsewhere', () => {
       [2, 'active'],
     ]);
     expect(resolveTaskRounds(harness.task(taskId))[0]?.outcome?.result).toBe('Seven.');
+    expect(harness.task(taskId).result).toBeNull();
   });
 
   test('a question task that never had a branch builds its first change round on the branch triage proposed', () => {
@@ -474,7 +481,7 @@ describe('how a round ships', () => {
     expect(harness.task(taskId)).toMatchObject({ branch: null, proposedBranch: `fix/${taskId}-round-2` });
   });
 
-  test('the planner of a later round keeps a pull request step while one is open', () => {
+  test('the agent of a later round keeps a pull request step while one is open', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     newIdea(harness, taskId, 'Next');
@@ -552,7 +559,7 @@ describe('how a round ships', () => {
     expect(harness.send({ type: 'pull_request.record', taskId, pullRequest: merged }).events).toEqual([]);
   });
 
-  test('the planner of a later round cannot wait for your OK while a pull request is open, so a veto never strands it', () => {
+  test('the agent of a later round cannot wait for your OK while a pull request is open, so a veto never strands it', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     reachMergeGate(harness, taskId);
@@ -577,7 +584,7 @@ describe('how a round ships', () => {
         reason: 'Find the flicker first.',
       })
     ).toThrow("cannot wait for the human's OK before it plans");
-    expect(harness.activeRun(taskId).role).toBe('planner');
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
     expect(harness.task(taskId).pullRequest?.state).toBe('open');
   });
 });
@@ -757,7 +764,7 @@ describe('what each round keeps', () => {
     expect(prompt).toContain('This is round 2');
   });
 
-  test('a later round’s builder resumes the session the last builder or fixer used, the reviewer starts fresh', () => {
+  test('a later round’s agent resumes the session the round agent last used, the reviewer starts fresh', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     newIdea(harness, taskId, 'Next');
@@ -774,7 +781,8 @@ describe('what each round keeps', () => {
     readyRound(harness, taskId);
     proposePlan(harness, taskId);
     expect(harness.activeRun(taskId)).toMatchObject({
-      role: 'builder',
+      role: 'agent',
+      purpose: 'build',
       resume: true,
       sessionId: 'builder-2',
     });
@@ -785,7 +793,13 @@ describe('what each round keeps', () => {
       spots: [],
       judgementCalls: [],
     });
-    expect(harness.activeRun(taskId)).toMatchObject({ role: 'builder', resume: false, phaseIndex: 1 });
+    expect(harness.activeRun(taskId)).toMatchObject({
+      role: 'agent',
+      purpose: 'build',
+      resume: true,
+      sessionId: 'builder-2',
+      phaseIndex: 1,
+    });
     harness.send({
       type: 'agent.complete_phase',
       runId: harness.activeRun(taskId).id,

@@ -70,7 +70,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'agentFastModes',
 ] as const satisfies readonly (keyof Settings)[];
 
-export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'checksWaived'] as const;
+export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'checksWaived', 'workspace'] as const;
 
 const DEFAULT_MODEL = 'opus';
 

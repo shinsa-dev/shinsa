@@ -19,6 +19,8 @@ const PROBLEM_FIX: Record<ConfigProblem['kind'], string> = {
     'Say in a message which repository the task works in, and Shinsa verifies the setup again with it. A repository Shinsa does not know yet can be added to the project in Settings.',
   default_branch: 'Set the default branch in the repository settings, then verify the setup again.',
   check_commands: 'Add check commands in the repository settings, or continue without checks.',
+  workspace:
+    'Fix it in the repository, or change where agents work in Settings → Projects, then verify the setup again.',
 };
 
 const PROBLEM_TITLE: Record<ConfigProblem['kind'], string> = {
@@ -26,6 +28,7 @@ const PROBLEM_TITLE: Record<ConfigProblem['kind'], string> = {
   no_repository: 'No repository for this task',
   default_branch: 'The default branch is missing',
   check_commands: 'No checks to run',
+  workspace: 'Agents cannot work in this repository yet',
 };
 
 function describeTitle(problems: ConfigProblem[]) {

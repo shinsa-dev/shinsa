@@ -13,11 +13,12 @@ src/
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
 │                    HUMAN_ONLY_SETTINGS and HUMAN_ONLY_REPO_FIELDS, the fields only the human changes),
 │                    DomainError (errors.ts), the tools of each role (tools.ts: listToolNames, the one source for
-│                    server, decide and prompts, and isHandOverTool), the delegation limits and
-│                    isReadOnlyRole (delegations.ts), accounts, schedules (SCHEDULE_LIMITS), pull request watch
+│                    server, decide and prompts, isHandOverTool, and PURPOSE_HAND_OVERS: the hand-over each purpose
+│                    of the round agent may call), the delegation limits, isReadOnlyRole and isReadOnlyRun (the
+│                    agent is read-only while it plans) (delegations.ts), accounts, schedules (SCHEDULE_LIMITS), pull request watch
 │                    types, time units (time.ts), task shapes (shapes.ts: SHAPE_PIPELINES (the presets),
-│                    validateComposition (the rules checker for the steps a planner composes), the shape of a task,
-│                    resolveShapeState (whether triage or the planner may still change the steps),
+│                    validateComposition (the rules checker for the steps the agent composes while it plans), the shape
+│                    of a task, resolveShapeState (whether triage or the agent may still change the steps),
 │                    findInquiryStep, findWorkStep, resolveProposalUpgrade, SHAPE_LIMITS), the step and gate schema
 │                    (steps.ts: PipelineStep, STEP_SCHEMA, GATE_SCHEMA with the hard GateType and the SoftGateType
 │                    that escalatesTo one, resolveGateDefinition, PLAN_GATE_RULE and describePlanGateRule,
@@ -29,7 +30,8 @@ src/
 │                    isOfCurrentRound, the stack and how a round ships: resolveRoundBase, listStackedPullRequests,
 │                    canChangeRoundShipping, selectShippingTarget), gates (gates.ts: isPausingGate, isDecisionGate
 │                    for plan, review and merge, isAgentQuestion for a question or a secret), the on-your-behalf record
-│                    (on-behalf.ts: OnBehalfAction)
+│                    (on-behalf.ts: OnBehalfAction), where agents work (workspaces.ts: WORKSPACE_MODES,
+│                    resolveRepoWorkspace, WORKSPACE_SETUP_REASON, canUseGitButler)
 ├── agent-models/    The agent model catalog, the default model per role, resolveAgentModel, model labels, and
 │                    RUN_AGENT_ROLE (which agent role's settings each run role uses)
 ├── events/          ShinsaEvent: past-tense facts, the only way state changes (delegations.ts, schedules.ts split
@@ -46,7 +48,8 @@ src/
 │                    cannot apply), write.ts (the shared writes the folds use; applyOnBehalf: an event sent on your
 │                    behalf marks the activity it records), activity.ts (the wording of a task's activity),
 │                    queries.ts (list*, find/select, isDependencyOf, isWaitingOnAnswer, isRunWaiting,
-│                    resolveTaskProject, selectTaskByReference), and the folds by concern, each an apply*Event:
+│                    resolveTaskProject, selectTaskByReference, selectStackTarget and resolvePullRequestBase for a
+│                    GitButler task stacked on another's branch), and the folds by concern, each an apply*Event:
 │                    runs.ts (attempts, links, lost sessions, metering, silence, compaction), gates.ts (opened,
 │                    answered, withdrawn, noted, superseded), pull-requests.ts, waits.ts (monitors and usage waits),
 │                    delegations.ts, schedules.ts, suggestions.ts, reviews.ts (verdicts), accounts.ts (binding),
@@ -57,19 +60,22 @@ src/
 │                    rounds when a task rests, closes or reopens for a follow-up)
 ├── decide/          decide() (index.ts): one exhaustive switch over the command, then releaseWaiting,
 │   │                startQueuedRounds, enforceLiveness and dispatchRuns, over a Decider (decider.ts) that works on a clone and emits
-│   │                events and effects; equality.ts (isSameValue)
+│   │                events and effects (rootRun: the session every Agent run resumes, the round's inquiry
+│   │                agent's after your OK when it ran on the Agent's provider and model); equality.ts (isSameValue)
 │   ├── lifecycle.ts Starting each step (work, planning, a phase, checks, review), the review gate, settling a task
+│   │                (which removes its worktree and its scratch folder: worktree.remove, scratch.remove)
 │   ├── fixes.ts     Fix loops: checks and review reactions, the automatic budget, stall detection, review escalation
 │   ├── fingerprints.ts  Recovery and fix fingerprints, so prose never resets a budget
 │   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues
 │   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
-│   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks
+│   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks, stacking a GitButler
+│   │                     task on another's branch (stackTask)
 │   ├── gates.ts     Answering a gate: which decisions each type takes, what each one does, plan versions, verdicts;
 │   │                refusing any gate answer sent on your behalf (assertHumanDecides) and any command on your
 │   │                behalf that leaves an open gate closed (assertGatesStayOpen, run at the end of decide)
 │   ├── messages.ts  A message from you: resolveMessageEffect says what it does where the task is (steer, retry,
-│   │                verify the setup, revise, fix, replace the operator's notes, a follow-up on a resting task…; the
+│   │                verify the setup, revise, fix, replace the operation's notes, a follow-up on a resting task…; the
 │   │                web's composer hint reads it), then it is delivered, only recorded (acknowledge), queued as a new
 │   │                round or suggested as a separate task by its kind; superseding an open question; a message sent
 │   │                for you to a task at a gate is only
@@ -81,10 +87,12 @@ src/
 │   ├── agents.ts    Agent hand-overs (propose_plan with the plan rules, complete_phase with the evidence the plan
 │   │                asks for, complete_fix, report_review, ask, evidence, note)
 │   ├── shapes.ts    Task shapes: the next step of a pipeline, the inquiry steps (answer, research, investigate)
-│   │                and the operation, results and proposals, your OK and its proposal gate, the planner's
+│   │                and the operation, results and proposals, your OK and its proposal gate, the agent's
 │   │                presets and composed steps, the operation gate and its notes after a merge, follow-ups (an
 │   │                inquiry's own agent, or an answerer on the last session of finished work: answerFollowUp)
 │   ├── tasks.ts     Creating, triaging, prioritising, cancelling and completing tasks; worktrees
+│   ├── workspaces.ts  Asking for a task's workspace in its repository's mode, and waiting for a main checkout
+│   │                another task holds (holdForCheckout)
 │   ├── suggestions.ts  Tasks an agent suggests, accepting and dismissing them, split-offs and keeping one
 │   │                as the next round
 │   ├── rounds.ts    A new round waiting, starting the next one when the current one rests (startQueuedRounds, after
@@ -128,13 +136,17 @@ src/
 │                    an agent (task-detail.ts: serializeTaskDetail, what `read_task` and `tasks_show` read), and
 │                    sentence helpers (text.ts: describeCount, describeList, capitalise, lowerFirst)
 ├── prompts/         House rules and splitting them off a brief (rules.ts) and the delegation rules
-│                    (orchestration-rules.ts), the step catalog, rules and plan parameters the planner reads
-│                    (steps.ts, from the schema), each role's prompt (roles.ts) and the context it describes (context.ts), fix prompts, session prompts (restart,
+│                    (orchestration-rules.ts), the step catalog, rules and plan parameters the agent reads while it
+│                    plans (steps.ts, from the schema), each role's prompt (roles.ts: the round agent's planning prompt,
+│                    its short phase and operation instructions and the round brief) and the context it describes
+│                    (context.ts), the full brief a resumed agent run sends when its session cannot hold the round
+│                    (root.ts: resolveRunBrief), fix prompts, session prompts (restart,
 │                    steer, answer, superseded, usage resume), monitor prompts (waits.ts), the delegated agent's and
 │                    the delivery prompts (orchestration.ts), the budgeted context handoff (handoff.ts), the
 │                    rules for managing Shinsa every role gets (manage.ts, MANAGE_RULES), the follow-up on a finished
 │                    round (follow-up.ts, resolveFollowUpPrompt), the project a fresh
-│                    run is told about (project.ts, resolveProjectContext)
+│                    run is told about, and the repository outside it the task works in, if any (project.ts,
+│                    resolveProjectContext)
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
 └── protocol/        WebSocket messages, diff parsing, the accounts snapshot (accounts.ts), MCP servers, plugins and
                      skills (extensions.ts: the snapshot, scopes, token estimates, what a run loaded, the context
@@ -199,6 +211,9 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     exactly while the task is `awaiting_operation`, which only happens after the merge; an open task with a merged
     pull request is waiting for that gate or running its operation;
   - no dependency cycles;
+  - workspaces (`workspace-invariants.ts`): no two tasks of one repository hold its main checkout (from asking for it
+    until it is given back), a task with a checkout knows its mode, and a task waiting on other tasks waits on an
+    unfinished dependency, a gate or the task holding its checkout;
   - every task sits in one place in the queue (deciding, working or waiting);
   - delegation (`delegation-invariants.ts`): a delegated run's parent is on the same task, depth is its parent's plus
     one and at most three, at most eight live under one step, a read-only parent has no child that writes, a step
@@ -215,6 +230,13 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     task's own pull request;
   - projects (`project-invariants.ts`, `assertHandleInvariants`): a triaged task has a handle, no two tasks share
     one, each parses back to itself with a valid key, and its key's counter is at least its number;
+  - the round agent (`agent-invariants.ts`): a top-level run is the round's agent, a reviewer or an inquiry agent
+    (planner and builder exist only as delegated runs; there is no fixer or operator), every agent run has a purpose
+    and no other run has one, an active agent run's purpose matches the stage (`plan` planning, `build` building,
+    `fix` fixing, `operate` operating), and every new agent run resumes the session of the task's last agent run
+    (one session per round, across phases and fixes, and on into later rounds) unless that run ended with a
+    fresh-class failure (`context_window_full`, `image_error`, `session_lost`), checked as each `run.started` is
+    applied;
   - on your behalf (a walk of commands sent on your behalf): nothing sent on your behalf closes a gate, and none
     moves a task waiting at one to merged or done;
   - replaying the log reproduces the state, and the same input gives the same decision.

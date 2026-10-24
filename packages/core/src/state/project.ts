@@ -538,12 +538,25 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
         ...(event.fingerprint === undefined ? {} : { recoveryFingerprint: event.fingerprint }),
       });
       break;
+    case 'worktree.requested':
+      updateTask(state, event.taskId, event.at, { workspace: event.workspace });
+      break;
     case 'worktree.created':
-      updateTask(state, event.taskId, event.at, { worktreePath: event.path, branch: event.branch });
+      updateTask(state, event.taskId, event.at, {
+        worktreePath: event.path,
+        branch: event.branch,
+        workspace: event.workspace,
+        ...(event.returnBranch === undefined ? {} : { returnBranch: event.returnBranch }),
+      });
       recordRoundBranch(state, event.taskId, event.branch, event.at);
       break;
     case 'worktree.removed':
       updateTask(state, event.taskId, event.at, { worktreePath: null });
+      break;
+    case 'task.stacked':
+      updateTask(state, event.taskId, event.at, {
+        stackedOn: { taskId: event.onTaskId, branch: event.branch },
+      });
       break;
     case 'plan.proposed':
       applyPlanProposed(state, event);
