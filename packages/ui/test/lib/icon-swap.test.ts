@@ -8,8 +8,8 @@ function listChangedProperties(state: string): string[] {
 }
 
 describe('icon swap', () => {
-  it('lands the incoming icon a step under its text, like any icon, and hides the outgoing one', () => {
-    expect(iconSwapIn.split(' ')).toContain('opacity-(--icon-alpha)');
+  it('lands the incoming icon fully drawn, in its own ink, and hides the outgoing one', () => {
+    expect(iconSwapIn.split(' ')).toContain('opacity-100');
     expect(iconSwapOut.split(' ')).toContain('opacity-0');
   });
 

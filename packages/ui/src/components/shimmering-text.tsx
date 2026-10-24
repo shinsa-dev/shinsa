@@ -17,23 +17,17 @@ export type ShimmeringTextProps = Omit<ComponentProps<typeof motion.span>, 'chil
    * @defaultValue false
    */
   paused?: boolean;
-  /**
-   * Legacy alias for `paused`.
-   * @defaultValue false
-   */
-  isStopped?: boolean;
 };
 
 export function ShimmeringText({
   text,
   duration = 1,
-  isStopped = false,
   paused = false,
   className,
   ...props
 }: ShimmeringTextProps) {
   const reducedMotion = useReducedMotion();
-  const stopped = isStopped || paused || reducedMotion === true;
+  const stopped = paused || reducedMotion === true;
 
   const createCharVariants = useCallback(
     (charIndex: number): Variants => ({

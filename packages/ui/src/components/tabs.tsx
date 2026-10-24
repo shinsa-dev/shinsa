@@ -85,7 +85,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         'hover:text-fg-4 active:text-fg-4 data-active:text-fg-4',
         'disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
         'group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start',
-        "[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        '[--icon-size:var(--icon-size-md)] [&_svg]:pointer-events-none',
         // Segmented: full-height tab; the sliding indicator supplies the pill.
         'group-data-[variant=default]/tabs-list:h-full group-data-[variant=default]/tabs-list:rounded-segment group-data-[variant=default]/tabs-list:px-2',
         // Underline: regular weight; the selected tab gains a hairline stroke

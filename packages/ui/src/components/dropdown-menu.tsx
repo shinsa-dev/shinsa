@@ -122,10 +122,10 @@ const ITEM_BASE =
   // leading-4 keeps item heights integral (8px padding + 16px line box);
   // text-xs's default of 1.2 yields 23.6px items, whose fractional edges
   // antialias the menu's bottom padding away at some popup positions.
-  "icon-item relative flex cursor-pointer items-center gap-1.5 rounded-item py-1 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden select-none data-indicator-here:text-fg-4 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5";
+  'relative flex cursor-pointer items-center gap-1.5 rounded-item py-1 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden select-none data-indicator-here:text-fg-4 data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [--icon-size:var(--icon-size-sm)] [&_svg]:pointer-events-none';
 
 const DESTRUCTIVE_ITEM =
-  'data-[variant=destructive]:text-red-4/90 data-[variant=destructive]:data-indicator-here:text-red-4 data-[variant=destructive]:[&_svg]:text-current data-[variant=destructive]:icon-solid';
+  'data-[variant=destructive]:text-red-4/90 data-[variant=destructive]:data-indicator-here:text-red-4 data-[variant=destructive]:[--icon-color:currentColor]';
 
 function DropdownMenuItem({
   className,
@@ -176,7 +176,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <Icon name='IconChevronRightMedium' className='ml-auto size-4' />
+      <Icon name='IconChevronRightMedium' className='ml-auto' />
     </MenuPrimitive.SubmenuTrigger>
   );
 }
@@ -226,7 +226,7 @@ function DropdownMenuCheckboxItem({
         data-slot='dropdown-menu-checkbox-item-indicator'
       >
         <MenuPrimitive.CheckboxItemIndicator>
-          <Icon name='IconCheckmark1' className='size-3.5! rotate-[4deg] text-primary-text' />
+          <Icon name='IconCheckmark1' className='rotate-[4deg] text-primary-text' />
         </MenuPrimitive.CheckboxItemIndicator>
       </span>
       {children}
@@ -258,7 +258,7 @@ function DropdownMenuRadioItem({
         data-slot='dropdown-menu-radio-item-indicator'
       >
         <MenuPrimitive.RadioItemIndicator>
-          <Icon name='IconCheckmark1' className='size-3.5! rotate-[4deg] text-primary-text' />
+          <Icon name='IconCheckmark1' className='rotate-[4deg] text-primary-text' />
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}

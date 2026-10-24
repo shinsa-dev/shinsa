@@ -8,5 +8,5 @@
  * `iconSwapIn` and `iconSwapOut` — transitions retarget mid-swap.
  */
 export const iconSwap = 'transition-[opacity,scale,filter] duration-200 ease-[cubic-bezier(0.2,0,0,1)]';
-export const iconSwapIn = 'scale-100 opacity-(--icon-alpha) blur-none';
+export const iconSwapIn = 'scale-100 opacity-100 blur-none';
 export const iconSwapOut = 'scale-[0.65] opacity-0 blur-[2px]';

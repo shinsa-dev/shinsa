@@ -70,7 +70,7 @@ function CommandInput({
       data-slot='command-input-wrapper'
       className='flex h-10 shrink-0 items-center gap-2 border-bg-3 border-b px-3'
     >
-      <Icon name='IconMagnifyingGlass' className='size-4 shrink-0 text-fg-2' />
+      <Icon name='IconMagnifyingGlass' size='md' className='text-fg-2' />
       {start}
       <CommandPrimitive.Input
         data-slot='command-input'
@@ -224,7 +224,7 @@ function CommandItem({
       data-icon={position}
       data-variant={variant}
       className={cn(
-        "icon-item relative flex cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-2 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden data-[disabled=true]:pointer-events-none data-indicator-here:text-fg-4 data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        'relative flex cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-2 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden [--icon-size:var(--icon-size-sm)] data-[disabled=true]:pointer-events-none data-indicator-here:text-fg-4 data-[disabled=true]:opacity-50 [&_svg]:pointer-events-none',
         DESTRUCTIVE_ITEM,
         className
       )}

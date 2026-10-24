@@ -41,6 +41,29 @@ const OPTICAL_SCALE: Record<string, number> = {
 };
 
 /**
+ * Central's chevrons draw small in their box (a `Small` one spans 8 of the 24
+ * units, a `Medium` one 12, where a Central icon spans about 18), so at the
+ * same size a chevron reads a step smaller than the icon beside it. Every
+ * chevron is drawn to one length, 11.2 of the 24 units (6.5px in its 14px box,
+ * `Icon` always draws a chevron at `sm`), and its stroke is divided by the scale
+ * so it keeps the weight of every other icon.
+ */
+const CHEVRON_SCALE: Record<string, number> = {
+  Small: 1.4,
+  Medium: 0.9333,
+};
+
+/** The enlargement a chevron gets, or null for any other icon. */
+function selectChevronScale(name: string): number | null {
+  const size = name.match(/^IconChevron[A-Za-z]*?(Small|Medium)$/)?.[1];
+  return size ? (CHEVRON_SCALE[size] as number) : null;
+}
+
+function scaleAbout(inner: string, scale: number): string {
+  return `<g transform="translate(12 12) scale(${scale}) translate(-12 -12)">${inner}</g>`;
+}
+
+/**
  * Nudges a mark so its centre of ink, not its bounding box, sits in the middle
  * of the 24x24 box — that is what the eye reads as centred. Measured by
  * rasterising each glyph and taking the alpha-weighted centroid; a thin
@@ -138,11 +161,13 @@ export function renderIconMarkup(name: string, radius: IconRadius): string {
   if (!inner) throw new Error(`Failed to extract SVG for ${name}@r${radius}`);
   const stroke = STROKE_OVERRIDES[name];
   const stroked = stroke ? inner.replaceAll('stroke-width="2"', `stroke-width="${stroke}"`) : inner;
+  const chevron = selectChevronScale(name);
+  if (chevron) {
+    const weight = Number((2 / chevron).toFixed(4));
+    return scaleAbout(stroked.replaceAll('stroke-width="2"', `stroke-width="${weight}"`), chevron);
+  }
   const scale = OPTICAL_SCALE[name];
-  const scaled = scale
-    ? `<g transform="translate(12 12) scale(${scale}) translate(-12 -12)">${stroked}</g>`
-    : stroked;
-  return withOffset(name, scaled);
+  return withOffset(name, scale ? scaleAbout(stroked, scale) : stroked);
 }
 
 function quote(value: string): string {

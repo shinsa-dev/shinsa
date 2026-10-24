@@ -109,6 +109,17 @@ describe('renderIconMarkup', () => {
     expect(renderIconMarkup('IconApple', '3')).toStartWith('<g transform="translate(0.14 -1.03)">');
   });
 
+  it('draws every chevron to one length, at the same stroke weight', () => {
+    expect(renderIconMarkup('IconChevronRightSmall', '0')).toBe(
+      '<g transform="translate(12 12) scale(1.4) translate(-12 -12)"><g><path d="M10 16L14 12L10 8" stroke="currentColor" stroke-width="1.4286" stroke-linecap="round" stroke-linejoin="round"/></g></g>'
+    );
+    expect(renderIconMarkup('IconChevronDownMedium', '0')).toStartWith(
+      '<g transform="translate(12 12) scale(0.9333) translate(-12 -12)">'
+    );
+    expect(renderIconMarkup('IconChevronDownMedium', '0')).toContain('stroke-width="2.1429"');
+    expect(renderIconMarkup('IconChevronDoubleRight', '0')).not.toContain('scale(');
+  });
+
   it('uses our own artwork for custom marks', () => {
     expect(renderIconMarkup('IconPriorityHigh', '0')).toStartWith('<g fill="currentColor"><rect');
   });

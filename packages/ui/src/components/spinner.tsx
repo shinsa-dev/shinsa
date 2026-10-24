@@ -1,12 +1,15 @@
+import { ICON_SIZE_CLASS, type IconSize } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 
 type SpinnerProps = {
   className?: string;
   style?: React.CSSProperties;
+  size?: IconSize;
   'aria-label'?: string;
 };
 
-function Spinner({ className, 'aria-label': ariaLabel = 'Loading', ...props }: SpinnerProps) {
+/** On the icon scale and in the icon ink, like `Icon`: it stands where an icon would. */
+function Spinner({ className, size, 'aria-label': ariaLabel = 'Loading', ...props }: SpinnerProps) {
   return (
     <svg
       data-slot='spinner'
@@ -14,7 +17,7 @@ function Spinner({ className, 'aria-label': ariaLabel = 'Loading', ...props }: S
       aria-label={ariaLabel}
       viewBox='0 0 16 16'
       fill='none'
-      className={cn('size-4 shrink-0 animate-spin opacity-(--icon-alpha)', className)}
+      className={cn('shrink-0 animate-spin', size ? ICON_SIZE_CLASS[size] : 'size-(--icon-size)', className)}
       {...props}
     >
       <circle cx='8' cy='8' r='6.25' stroke='currentColor' strokeOpacity='0.3' strokeWidth='1.5' />

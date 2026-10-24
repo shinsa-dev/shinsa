@@ -25,8 +25,8 @@ const badgeVariants = cva(
         solid: 'selection-inverse bg-fg-4 text-background',
       },
       size: {
-        sm: 'h-4.5 rounded-full px-1.5 text-2xs [&>svg]:size-3!',
-        default: 'h-5 rounded-full px-2 text-2xs [&>svg]:size-3!',
+        sm: 'h-4.5 rounded-full px-1.5 text-2xs [--icon-size:var(--icon-size-sm)]',
+        default: 'h-5 rounded-full px-2 text-2xs [--icon-size:var(--icon-size-sm)]',
       },
     },
     defaultVariants: {

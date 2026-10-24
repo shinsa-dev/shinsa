@@ -105,8 +105,8 @@ function SelectTrigger({
         'group/select-trigger relative isolate flex w-fit cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap font-medium text-fg-4 transition-[color,opacity] duration-150 ease-out',
         // Heights match the button's: default 26, sm 24.
         size === 'sm'
-          ? 'corner-superellipse/1.125 h-6 rounded-control-sm px-1.5 text-xs'
-          : 'corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs',
+          ? 'corner-superellipse/1.125 h-6 rounded-control-sm px-1.5 text-xs [--icon-size:var(--icon-size-sm)]'
+          : 'corner-superellipse/1.125 h-6.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)]',
         "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:transition-[background-color,box-shadow,inset] before:duration-150 before:ease-out before:content-['']",
         'enabled:active:before:inset-x-(--press-inset-x) enabled:active:before:inset-y-(--press-inset-y)',
         variant === 'ghost'
@@ -116,15 +116,13 @@ function SelectTrigger({
         'disabled:cursor-not-allowed disabled:opacity-50',
         'data-placeholder:text-fg-2',
         '*:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-1.5',
-        "[&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        '[&_svg]:pointer-events-none',
         className
       )}
       {...props}
     >
       {children}
-      <SelectPrimitive.Icon
-        render={<Icon name='IconChevronDownMedium' className='pointer-events-none size-4' />}
-      />
+      <SelectPrimitive.Icon render={<Icon name='IconChevronDownMedium' className='pointer-events-none' />} />
     </SelectPrimitive.Trigger>
   );
 }
@@ -215,7 +213,7 @@ function SelectItem({
         // The sliding indicator draws the highlight; items only shift text color.
         // pl-2 is load-bearing: list p-1 (4px) + pl-2 (8px) puts the item's
         // text 12px in, which is what the aligned popup is positioned from.
-        "icon-item relative flex w-full cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-7 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden data-disabled:pointer-events-none data-indicator-here:text-fg-4 data-disabled:opacity-50 [&[data-indicator-here]_span]:text-fg-4 [&_svg:not([class*='size-'])]:size-3.5 [&_svg]:pointer-events-none [&_svg]:shrink-0 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        'relative flex w-full cursor-pointer select-none items-center gap-1.5 rounded-item py-1 pr-7 pl-2 font-medium text-fg-3 text-xs leading-4 outline-hidden [--icon-size:var(--icon-size-sm)] data-disabled:pointer-events-none data-indicator-here:text-fg-4 data-disabled:opacity-50 [&[data-indicator-here]_span]:text-fg-4 [&_svg]:pointer-events-none *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2',
         className
       )}
       {...props}
@@ -227,13 +225,10 @@ function SelectItem({
       {renderMenuIcon(icon, 'inline-end')}
       <SelectPrimitive.ItemIndicator
         render={
-          <span className='pointer-events-none absolute right-2 flex size-4 items-center justify-center' />
+          <span className='pointer-events-none absolute right-2 flex size-(--icon-size-md) items-center justify-center' />
         }
       >
-        <Icon
-          name='IconCheckmark1'
-          className='pointer-events-none size-3.5! rotate-[4deg] text-primary-text'
-        />
+        <Icon name='IconCheckmark1' className='pointer-events-none rotate-[4deg] text-primary-text' />
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   );
@@ -257,12 +252,12 @@ function SelectScrollUpButton({
     <SelectPrimitive.ScrollUpArrow
       data-slot='select-scroll-up-button'
       className={cn(
-        "top-0 z-10 flex w-full cursor-default items-center justify-center bg-popover py-1 [&_svg:not([class*='size-'])]:size-4",
+        'top-0 z-10 flex w-full cursor-default items-center justify-center bg-popover py-1',
         className
       )}
       {...props}
     >
-      <Icon name='IconChevronTopMedium' className='size-4' />
+      <Icon name='IconChevronTopMedium' />
     </SelectPrimitive.ScrollUpArrow>
   );
 }
@@ -275,12 +270,12 @@ function SelectScrollDownButton({
     <SelectPrimitive.ScrollDownArrow
       data-slot='select-scroll-down-button'
       className={cn(
-        "bottom-0 z-10 flex w-full cursor-default items-center justify-center bg-popover py-1 [&_svg:not([class*='size-'])]:size-4",
+        'bottom-0 z-10 flex w-full cursor-default items-center justify-center bg-popover py-1',
         className
       )}
       {...props}
     >
-      <Icon name='IconChevronDownMedium' className='size-4' />
+      <Icon name='IconChevronDownMedium' />
     </SelectPrimitive.ScrollDownArrow>
   );
 }

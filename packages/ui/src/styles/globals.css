@@ -34,12 +34,14 @@
   --press-inset-x: 1px;
   --press-inset-y: 0.5px;
 
-  /* Icon strength: an icon is its text's colour at 85%, a step under the
-     words, and a menu row's at 90%. `Icon` draws at `--icon-alpha`;
-     `icon-item` and `icon-solid` change it for everything inside. */
-  --icon-alpha-text: 0.85;
-  --icon-alpha-item: 0.9;
-  --icon-alpha: var(--icon-alpha-text);
+  /* Icon sizes: the only three. sm beside 12–13px text, 22/24px controls and
+     rows; md beside 14px+ text and in 26/30px controls; lg for empty states
+     and full-page waits. `Icon` and `Spinner` draw at `--icon-size`, which a
+     primitive sets for the glyphs inside it. */
+  --icon-size-sm: 0.875rem;
+  --icon-size-md: 1rem;
+  --icon-size-lg: 1.25rem;
+  --icon-size: var(--icon-size-sm);
   --background: oklch(1 0 0);
   --background-subtle: oklch(0.985 0 0);
 
@@ -57,6 +59,17 @@
   --fg-2: oklch(0.543 0.009 278.5);
   --fg-3: oklch(0.443 0.008 277);
   --fg-4: oklch(0.21 0.008 274.53);
+
+  /* Icon inks: icon-N draws beside fg-N text, solid, at 72% of its text's
+     APCA contrast on bg-1 (Lc 75 / 62 / 54 / 30), so the step reads the same
+     in both themes. icon-2 is held at 3:1 (WCAG non-text) because an
+     icon-only secondary button carries meaning by the glyph alone. A text
+     utility sets the paired ink in `--icon-color` (the `text-*` utility
+     below), and `Icon` draws in it. */
+  --icon-1: oklch(0.831 0.004 271.36);
+  --icon-2: oklch(0.665 0.009 278.5);
+  --icon-3: oklch(0.631 0.008 277);
+  --icon-4: oklch(0.538 0.008 274.53);
 
   /* Alpha surfaces/foregrounds — layer on any background */
   --bg-a1: oklch(0 0 0 / 0.027);
@@ -230,6 +243,11 @@
   --fg-3: oklch(0.787 0.007 286.24);
   --fg-4: oklch(0.946 0.001 286.37);
 
+  --icon-1: oklch(0.44 0.008 286.14);
+  --icon-2: oklch(0.5 0.009 286.15);
+  --icon-3: oklch(0.58 0.007 286.24);
+  --icon-4: oklch(0.66 0.004 286.37);
+
   --bg-a1: oklch(1 0 0 / 0.039);
   --bg-a2: oklch(1 0 0 / 0.071);
   --bg-a3: oklch(1 0 0 / 0.11);
@@ -361,6 +379,10 @@
   --color-fg-2: var(--fg-2);
   --color-fg-3: var(--fg-3);
   --color-fg-4: var(--fg-4);
+  --color-icon-1: var(--icon-1);
+  --color-icon-2: var(--icon-2);
+  --color-icon-3: var(--icon-3);
+  --color-icon-4: var(--icon-4);
   --color-bg-a1: var(--bg-a1);
   --color-bg-a2: var(--bg-a2);
   --color-bg-a3: var(--bg-a3);
@@ -451,6 +473,17 @@
   --color-orange-a3: var(--orange-a3);
   --color-orange-a4: var(--orange-a4);
   --color-orange-text: var(--orange-text);
+
+  /* The icon ink each grey text colour pairs with (the `text-*` utility
+     below). Colours not listed here are tones: their icon is the tone. */
+  --icon-ink-fg-1: var(--icon-1);
+  --icon-ink-fg-2: var(--icon-2);
+  --icon-ink-fg-3: var(--icon-3);
+  --icon-ink-fg-4: var(--icon-4);
+  --icon-ink-foreground: var(--icon-4);
+  --icon-ink-card-foreground: var(--icon-4);
+  --icon-ink-popover-foreground: var(--icon-4);
+  --icon-ink-muted-foreground: var(--icon-2);
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -688,6 +721,7 @@
   body {
     background-color: var(--color-background);
     color: var(--fg-3);
+    --icon-color: var(--icon-3);
     font-family: var(--font-sans);
     letter-spacing: -0.02em;
   }
@@ -835,8 +869,13 @@
   gap: 8px;
   padding: 6px 10px;
   min-height: 34px;
-  width: auto;
+  width: fit-content;
   max-width: 420px;
+}
+[data-sonner-toaster][data-x-position="center"] [data-sonner-toast].bk-toast {
+  left: 0;
+  right: 0;
+  margin-inline: auto;
 }
 [data-sonner-toast][data-styled="true"].bk-toast:has([data-description]) {
   padding: 10px;
@@ -914,12 +953,11 @@
     transform: scale(0.85);
   }
   to {
-    opacity: var(--icon-alpha);
+    opacity: 1;
     transform: scale(1);
   }
 }
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
-  opacity: var(--icon-alpha);
   transform: none;
   transform-origin: center;
   animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -982,15 +1020,19 @@
   -webkit-text-stroke: var(--faux-medium-stroke, 0.011em) currentColor;
 }
 
-/* Icon strength for a context: a menu, select or command row's icons sit at
-   90% of the row's text; `icon-solid` keeps them equal to it (an icon-only or
-   ghost button, an error). `Icon` reads the variable, so it inherits. */
-@utility icon-item {
-  --icon-alpha: var(--icon-alpha-item);
+/* Every text colour also names its icon's ink: a grey step pairs with its
+   icon-N (the --icon-ink-* map in the theme), any other colour with itself.
+   The variable inherits, so an icon inside the text draws in it. */
+@utility text-* {
+  --icon-color: --value(--icon-ink-*, --color-*);
 }
 
-@utility icon-solid {
-  --icon-alpha: 1;
+/* An icon draws in the ink its text set, never in the text's own colour.
+   Unlayered so it wins over a colour utility on the icon itself: a class
+   there (`text-red-text`, a hover step) changes the ink through the utility
+   above instead. */
+:where([data-slot="icon"], [data-slot="spinner"]) {
+  color: var(--icon-color, currentColor);
 }
 
 /* A disclosure chevron turns on the move clock and brightens on the hover

@@ -20,8 +20,9 @@ const buttonVariants = cva(
     'disabled:cursor-not-allowed disabled:opacity-45 data-loading:pointer-events-none',
     '[&_svg]:pointer-events-none [&_svg]:shrink-0',
     // Chevrons are tiny glyphs in a roomy viewbox: pull them in (2px gap, 5px
-    // edge padding) and draw them at 16px so they sit optically like the text.
-    "data-chevron:data-[icon=inline-end]:pr-[5px] data-chevron:data-[icon=inline-start]:pl-[5px] data-chevron:gap-0.5 data-chevron:[&_svg:not([class*='size-'])]:size-4",
+    // edge padding) so they sit optically like the text. They take the
+    // button's icon size like every other glyph in it.
+    'data-chevron:data-[icon=inline-end]:pr-[5px] data-chevron:data-[icon=inline-start]:pl-[5px] data-chevron:gap-0.5',
   ].join(' '),
   {
     variants: {
@@ -32,7 +33,7 @@ const buttonVariants = cva(
           'not-disabled:hover:before:bg-primary/80 not-disabled:active:before:bg-primary/80',
         ].join(' '),
         secondary:
-          'icon-solid text-fg-2 not-disabled:hover:text-fg-4 not-disabled:hover:before:bg-bg-a2/70 not-disabled:active:text-fg-4 not-disabled:active:before:bg-bg-a2/70',
+          'text-fg-2 not-disabled:hover:text-fg-4 not-disabled:hover:before:bg-bg-a2/70 not-disabled:active:text-fg-4 not-disabled:active:before:bg-bg-a2/70',
         outline: [
           'text-fg-4 before:bg-background dark:before:bg-bg-3',
           'before:shadow-control-elevated not-disabled:hover:before:shadow-control-elevated-hover not-disabled:active:before:shadow-control-elevated-hover',
@@ -52,15 +53,15 @@ const buttonVariants = cva(
       // An icon on either side trims that side's padding by 2px so the glyph
       // sits optically level with the text edge.
       size: {
-        xs: "h-5.5 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        sm: "h-6 gap-1 rounded-control-sm px-2 text-xs data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        xs: 'h-5.5 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5',
+        sm: 'h-6 gap-1 rounded-control-sm px-2 text-xs [--icon-size:var(--icon-size-sm)] data-[icon=inline-end]:pr-1.5 data-[icon=inline-start]:pl-1.5',
         default:
-          "h-6.5 gap-1.5 rounded-control px-2.5 text-xs data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2 [&_svg:not([class*='size-'])]:size-4",
-        lg: "h-7.5 gap-1.5 rounded-control px-3 text-sm data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5 [&_svg:not([class*='size-'])]:size-4",
-        'icon-xs': "icon-solid size-5.5 rounded-control-sm px-0 [&_svg:not([class*='size-'])]:size-3.5",
-        'icon-sm': "icon-solid size-6 rounded-control-sm px-0 [&_svg:not([class*='size-'])]:size-3.5",
-        icon: "icon-solid size-6.5 rounded-control px-0 [&_svg:not([class*='size-'])]:size-4",
-        'icon-lg': "icon-solid size-7.5 rounded-control px-0 [&_svg:not([class*='size-'])]:size-4",
+          'h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2',
+        lg: 'h-7.5 gap-1.5 rounded-control px-3 text-sm [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5',
+        'icon-xs': 'size-5.5 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]',
+        'icon-sm': 'size-6 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]',
+        icon: 'size-6.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]',
+        'icon-lg': 'size-7.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]',
       },
     },
     defaultVariants: {
@@ -89,7 +90,7 @@ function Button({
   const iconOnly = children === undefined || children === null || children === false;
   const position = menuIconPosition(icon) ?? (loading ? 'inline-start' : undefined);
   const iconName = typeof icon === 'string' ? icon : icon?.name;
-  const spinner = <Spinner className={SPINNER_SIZE[size ?? 'default']} />;
+  const spinner = <Spinner />;
   return (
     <ButtonPrimitive
       data-slot='button'
@@ -108,16 +109,5 @@ function Button({
     </ButtonPrimitive>
   );
 }
-
-const SPINNER_SIZE: Record<NonNullable<VariantProps<typeof buttonVariants>['size']>, string> = {
-  xs: 'size-3',
-  sm: 'size-3',
-  default: 'size-3.5',
-  lg: 'size-4',
-  'icon-xs': 'size-3',
-  'icon-sm': 'size-3',
-  icon: 'size-3.5',
-  'icon-lg': 'size-4',
-};
 
 export { Button, buttonVariants };

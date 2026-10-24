@@ -10,28 +10,22 @@ function markup(inner: string) {
 }
 
 describe('Icon', () => {
-  it('is decorative by default and draws in its text colour a step under the text', () => {
+  it('is decorative by default, takes its context’s size and draws in the icon ink', () => {
     const svg = render(<Icon name='IconBell' />).container.querySelector('svg') as SVGElement;
     expect(svg.getAttribute('aria-hidden')).toBe('true');
     expect(svg.getAttribute('role')).toBeNull();
-    expect(svg.classList.contains('opacity-(--icon-alpha)')).toBe(true);
+    expect(svg.getAttribute('data-slot')).toBe('icon');
+    expect(svg.classList.contains('size-(--icon-size)')).toBe(true);
+    expect(svg.getAttribute('class')).not.toContain('opacity');
     expect(svg.innerHTML).toContain('currentColor');
-    expect(svg.getAttribute('width')).toBe('24');
   });
 
-  it('lets a reveal or a swap replace the icon alpha with its own opacity', () => {
-    const svg = render(<Icon name='IconBell' className='size-3 opacity-0' />).container.querySelector(
-      'svg'
-    ) as SVGElement;
-    expect(svg.classList.contains('opacity-0')).toBe(true);
-    expect(svg.classList.contains('opacity-(--icon-alpha)')).toBe(false);
-  });
-
-  it('becomes a named image with a label', () => {
-    const view = render(<Icon name='IconBell' ariaLabel='Notifications' size={16} />);
+  it('becomes a named image with a label, at a size from the scale', () => {
+    const view = render(<Icon name='IconBell' ariaLabel='Notifications' size='lg' />);
     const svg = view.getByRole('img', { name: 'Notifications' });
     expect(svg.getAttribute('aria-hidden')).toBeNull();
-    expect(svg.getAttribute('width')).toBe('16');
+    expect(svg.classList.contains('size-(--icon-size-lg)')).toBe(true);
+    expect(svg.classList.contains('size-(--icon-size)')).toBe(false);
   });
 
   it('draws chevrons square-cornered and everything else at the default radius', () => {

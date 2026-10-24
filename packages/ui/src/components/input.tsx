@@ -40,9 +40,10 @@ function Input({
     <span data-slot='input-frame' className={cn('relative inline-flex w-full', className)}>
       {input}
       <Spinner
+        size={size === 'sm' ? 'sm' : 'md'}
         aria-hidden={!loading}
         className={cn(
-          'pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-fg-2 transition-opacity duration-150',
+          'pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-fg-2 transition-opacity duration-150',
           !loading && 'opacity-0'
         )}
       />

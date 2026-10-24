@@ -40,14 +40,17 @@ describe('Button', () => {
       expect(button.querySelectorAll('svg')).toHaveLength(1);
     });
 
-    it('draws the spinner a step under its text, like the icon it replaces', () => {
+    it('draws the spinner at the button’s icon size, like the icon it replaces', () => {
       const view = render(
-        <Button loading icon='IconBell'>
+        <Button loading icon='IconBell' size='sm'>
           Send
         </Button>
       );
-      expect(view.getByRole('status', { name: 'Loading' }).classList.contains('opacity-(--icon-alpha)')).toBe(
+      expect(view.getByRole('status', { name: 'Loading' }).classList.contains('size-(--icon-size)')).toBe(
         true
+      );
+      expect(view.getByRole('button', { name: /Send/ }).className).toContain(
+        '[--icon-size:var(--icon-size-sm)]'
       );
     });
 

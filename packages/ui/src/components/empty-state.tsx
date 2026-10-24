@@ -40,10 +40,10 @@ function EmptyState({
         <span
           className={cn(
             'relative flex items-center justify-center rounded-lg bg-bg-2 text-fg-3 shadow-[inset_0_0_0_1px_var(--bg-4)]',
-            small ? 'size-8 [&>svg]:size-4' : 'size-9 [&>svg]:size-4.5'
+            small ? 'size-8' : 'size-9'
           )}
         >
-          <Icon name={icon} />
+          <Icon name={icon} size={small ? 'md' : 'lg'} />
         </span>
       </div>
       <div className='flex flex-col gap-px'>
