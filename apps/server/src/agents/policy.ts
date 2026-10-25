@@ -30,7 +30,7 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
         String.raw`\bshinsa\s+settings\s+set\b[^;&|\n]*?(?<![\w-])(?:${HUMAN_ONLY_SETTINGS.join('|')})(?![\w-])`
       ),
       reason:
-        'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching and fast mode. Tell them what you would change and why.',
+        'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching, fast mode and delegations at once. Tell them what you would change and why.',
     },
     {
       pattern: /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|waive-checks|workspace)(?![\w-])/,

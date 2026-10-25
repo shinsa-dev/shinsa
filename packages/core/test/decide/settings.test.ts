@@ -357,6 +357,19 @@ describe('settings', () => {
     expect(harness.state.seq).toBe(0);
   });
 
+  test('delegations at once are a whole number of one or more, or no limit', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { delegationLimit: 4 } });
+    expect(harness.state.settings.delegationLimit).toBe(4);
+    harness.send({ type: 'settings.change', patch: { delegationLimit: null } });
+    expect(harness.state.settings.delegationLimit).toBeNull();
+    for (const delegationLimit of [0, 2.5, -1]) {
+      expect(() => harness.send({ type: 'settings.change', patch: { delegationLimit } })).toThrow(
+        'Delegations at once must be a whole number of 1 or more, or no limit.'
+      );
+    }
+  });
+
   test('accounts switch at a whole percentage from 1 to 100', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { accountSwitchAt: 95 } });

@@ -57,10 +57,14 @@ describe('settings', () => {
     expect((await runSpec(fake, ['settings', 'set', 'maxFixRounds', '4'])).text).toBe('Set maxFixRounds.');
     await runSpec(fake, ['settings', 'set', 'agentModels', '{"agent":"opus"}']);
     await runSpec(fake, ['settings', 'set', 'mergeMethod', 'squash']);
+    await runSpec(fake, ['settings', 'set', 'delegationLimit', '6']);
+    await runSpec(fake, ['settings', 'set', 'delegationLimit', 'null']);
     expect(fake.sent).toEqual([
       { type: 'settings.change', patch: { maxFixRounds: 4 } },
       { type: 'settings.change', patch: { agentModels: { agent: 'opus' } } },
       { type: 'settings.change', patch: { mergeMethod: 'squash' } },
+      { type: 'settings.change', patch: { delegationLimit: 6 } },
+      { type: 'settings.change', patch: { delegationLimit: null } },
     ]);
   });
 

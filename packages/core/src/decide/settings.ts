@@ -32,6 +32,17 @@ function assertSettings(patch: Partial<Settings>) {
   if (rounds !== undefined && rounds !== null && !isWholeBetween(rounds, 1, Number.MAX_SAFE_INTEGER)) {
     throw new DomainError('settings_invalid', 'Fix rounds must be a whole number of 1 or more.');
   }
+  const delegations = patch.delegationLimit;
+  if (
+    delegations !== undefined &&
+    delegations !== null &&
+    !isWholeBetween(delegations, 1, Number.MAX_SAFE_INTEGER)
+  ) {
+    throw new DomainError(
+      'settings_invalid',
+      'Delegations at once must be a whole number of 1 or more, or no limit.'
+    );
+  }
   const attention = patch.attentionLimit;
   if (attention !== undefined && !isWholeBetween(attention, 1, Number.MAX_SAFE_INTEGER)) {
     throw new DomainError('settings_invalid', 'The attention limit must be a whole number of 1 or more.');

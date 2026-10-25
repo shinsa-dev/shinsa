@@ -73,13 +73,14 @@ describe('the orchestration rules every step agent reads', () => {
       'a new `client_request_id` for each round',
       '`delegation_status`',
       '`delegation_cancel`',
-      'at most 3 deep, and at most 8 run at once',
+      'Delegations nest at most 3 deep.',
       '`create_task`',
       'Your hand-over tools wait for your delegations',
       'ask them with `ask` first',
     ]) {
       expect(rules).toContain(phrase);
     }
+    expect(rules).not.toContain('at once under one step');
   });
 
   test('every step agent is told about the tools it has and no others', () => {

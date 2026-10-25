@@ -21,6 +21,7 @@ import {
   listAttentionItems,
   listBudgetItems,
   listCompactionItems,
+  listDelegationLimitItems,
   listGroupModelItems,
   listGroupSpeedItems,
   listSpeedItems,
@@ -31,6 +32,8 @@ import {
   PLAN_ITEMS,
   parseBudget,
   parseCompaction,
+  parseDelegationCount,
+  parseDelegationLimit,
   parseFixRounds,
   parseUsageLimit,
   resolveAgentModelPatch,
@@ -39,6 +42,7 @@ import {
   resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
+  resolveDelegationLimitValue,
   resolveFixRoundValue,
   resolveGroupModel,
   resolveGroupModelPatch,
@@ -63,6 +67,31 @@ function settings(overrides: Partial<Settings> = {}): Settings {
 }
 
 describe('setting choices', () => {
+  it('offers no limit on delegations at once by default, the usual limits and a custom entry', () => {
+    expect(listDelegationLimitItems(settings()).map((item) => [item.value, item.label])).toEqual([
+      ['off', 'No limit'],
+      ['2', '2 at once'],
+      ['4', '4 at once'],
+      ['8', '8 at once'],
+      ['16', '16 at once'],
+      ['custom', 'Custom…'],
+    ]);
+    expect(resolveDelegationLimitValue(settings())).toBe('off');
+    expect(resolveDelegationLimitValue(settings({ delegationLimit: 4 }))).toBe('4');
+    const custom = listDelegationLimitItems(settings({ delegationLimit: 12 })).map((item) => item.value);
+    expect(custom).toEqual(['off', '2', '4', '8', '12', '16', 'custom']);
+    expect(parseDelegationLimit('off')).toBeNull();
+    expect(parseDelegationLimit('8')).toBe(8);
+  });
+
+  it('reads a typed delegation limit only as a whole number of one or more', () => {
+    expect(parseDelegationCount(' 12 ')).toBe(12);
+    expect(parseDelegationCount('1')).toBe(1);
+    for (const text of ['0', '2.5', '-3', 'six', '', '99999999999999999999']) {
+      expect(parseDelegationCount(text)).toBeNull();
+    }
+  });
+
   it('adds a stored attention limit that is not one of the usual choices, so the select shows it', () => {
     const items = listAttentionItems(settings({ attentionLimit: 4 }));
     expect(items.map((item) => item.value)).toEqual(['1', '2', '3', '4', '5']);

@@ -7,6 +7,7 @@ import {
   resolveAgentFastMode,
   resolveAttentionLimit,
   resolveCompaction,
+  resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
   SETTINGS_KEYS,
@@ -36,6 +37,7 @@ describe('the settings a command may change', () => {
       defaultProvider: 'claude',
       defaultModel: null,
       maxFixRounds: null,
+      delegationLimit: null,
       mergeMethod: 'squash',
       attentionLimit: 1,
       approvePlans: false,
@@ -53,6 +55,15 @@ describe('the settings a command may change', () => {
       fastMode: false,
     };
     expect(Object.keys(every).sort()).toEqual([...SETTINGS_KEYS].sort());
+  });
+});
+
+describe('resolveDelegationLimit', () => {
+  test('sets no limit on delegations at once unless one is chosen', () => {
+    expect(createSettings().delegationLimit).toBeNull();
+    expect(resolveDelegationLimit(createSettings())).toBeNull();
+    expect(resolveDelegationLimit({ ...createSettings(), delegationLimit: undefined })).toBeNull();
+    expect(resolveDelegationLimit({ ...createSettings(), delegationLimit: 4 })).toBe(4);
   });
 });
 

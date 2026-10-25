@@ -13,6 +13,7 @@ import {
   resolveAgentModel,
   resolveAgentProvider,
   resolveAttentionLimit,
+  resolveDelegationLimit,
   resolveFastModeAvailability,
   resolveIdleCompaction,
   resolveModelLabel,
@@ -256,6 +257,47 @@ export function resolveFixRoundValue(settings: Settings) {
 
 export function parseFixRounds(value: string) {
   return value === 'endless' ? null : Number(value);
+}
+
+export const DELEGATION_LIMIT_TITLE = 'Delegations at once';
+
+export const CUSTOM_DELEGATION_LIMIT = 'custom';
+
+export const DELEGATION_LIMIT_HINT = 'Enter a whole number of 1 or more.';
+
+const DELEGATION_LIMITS = [2, 4, 8, 16];
+
+function createDelegationLimitItem(limit: number): SettingItem<string> {
+  return { value: String(limit), label: `${limit} at once`, icon: 'IconArrowSplitRight' };
+}
+
+export function listDelegationLimitItems(settings: Settings): SettingItem<string>[] {
+  const current = resolveDelegationLimit(settings);
+  const limits =
+    current === null || DELEGATION_LIMITS.includes(current)
+      ? DELEGATION_LIMITS
+      : [...DELEGATION_LIMITS, current].sort((a, b) => a - b);
+  return [
+    { value: 'off', label: 'No limit', icon: 'IconInfinity' },
+    ...limits.map(createDelegationLimitItem),
+    { value: CUSTOM_DELEGATION_LIMIT, label: 'Custom…', icon: 'IconPencil' },
+  ];
+}
+
+export function resolveDelegationLimitValue(settings: Settings) {
+  const limit = resolveDelegationLimit(settings);
+  return limit === null ? 'off' : String(limit);
+}
+
+export function parseDelegationLimit(value: string) {
+  return value === 'off' ? null : Number(value);
+}
+
+export function parseDelegationCount(text: string) {
+  const trimmed = text.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const count = Number(trimmed);
+  return count >= 1 && Number.isSafeInteger(count) ? count : null;
 }
 
 const MODEL_KEY_SEPARATOR = ':';

@@ -17,7 +17,7 @@ import {
   selectRootRun,
   type Task,
 } from '../../src/index.ts';
-import { countLiveUnderRoot, listPendingItems } from '../../src/state/delegations.ts';
+import { listPendingItems } from '../../src/state/delegations.ts';
 
 type Random = () => number;
 
@@ -180,9 +180,7 @@ function assertChild(
   expect(run.delegation.depth, context).toBeLessThanOrEqual(DELEGATION_LIMITS.depth);
   if (parent && isReadOnlyRole(parent.role))
     expect(isReadOnlyRole(run.role), `${context}: ceiling`).toBe(true);
-  const root = selectRootRun(state, run);
-  expect(root, context).not.toBeNull();
-  expect(countLiveUnderRoot(state, root?.id ?? ''), context).toBeLessThanOrEqual(DELEGATION_LIMITS.live);
+  expect(selectRootRun(state, run), context).not.toBeNull();
 }
 
 export function assertDelegationInvariants(state: ShinsaState, task: Task, context: string) {

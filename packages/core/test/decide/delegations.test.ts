@@ -189,16 +189,24 @@ describe('delegating a task', () => {
     );
   });
 
-  test('at most eight delegations run at once under one step, counted across the whole tree', () => {
+  test('delegations at once are unlimited by default', () => {
     const { harness, taskId } = building();
+    const parent = harness.activeRun(taskId);
+    for (let index = 0; index < 20; index += 1) child(harness, parent.id);
+    expect(listChildRuns(harness.state, parent.id)).toHaveLength(20);
+  });
+
+  test('a set limit caps the delegations running at once under one step, counted across the whole tree', () => {
+    const { harness, taskId } = building();
+    harness.send({ type: 'settings.change', patch: { delegationLimit: 8 } });
     const parent = harness.activeRun(taskId);
     const nested = child(harness, parent.id, { role: 'builder' });
     for (let index = 0; index < 6; index += 1) child(harness, parent.id);
     child(harness, nested.id);
     expect(() => child(harness, nested.id)).toThrow(
-      '8 delegations under this step are still running, which is the limit.'
+      '8 delegations under this step are still running, and the human allows 8 at once (the Delegations at once setting).'
     );
-    expect(() => child(harness, parent.id)).toThrow('which is the limit');
+    expect(() => child(harness, parent.id)).toThrow('the Delegations at once setting');
     finish(harness, listChildRuns(harness.state, parent.id).at(-1)?.id ?? '');
     expect(child(harness, parent.id).delegation?.depth).toBe(1);
   });

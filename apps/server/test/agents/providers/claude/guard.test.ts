@@ -139,6 +139,7 @@ describe('the command guard', () => {
       'shinsa settings set --key=taskBudgetUsd 5',
       'shinsa settings set fastMode true && echo done',
       'shinsa settings set agentFastModes \'{"builder":true}\'',
+      'shinsa settings set delegationLimit 4',
       'shinsa repos update app --checks "bun test"',
       'shinsa repos update app --name web --waive-checks',
       'shinsa repos update app --no-waive-checks',
@@ -161,7 +162,7 @@ describe('the command guard', () => {
     expect(resolveCommandVerdict('shinsa settings set approvePlans false', 'main')).toMatchObject({
       hookSpecificOutput: {
         permissionDecisionReason:
-          'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching and fast mode. Tell them what you would change and why.',
+          'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching, fast mode and delegations at once. Tell them what you would change and why.',
       },
     });
     expect(resolveCommandVerdict('shinsa repos update app --waive-checks', 'main')).toMatchObject({

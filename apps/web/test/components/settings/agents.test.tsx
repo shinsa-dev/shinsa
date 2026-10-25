@@ -5,7 +5,14 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { AgentSettings } from '@/components/settings/agents.tsx';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
-import { listSentCommands, pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import {
+  holdAcks,
+  listSentCommands,
+  pushAccounts,
+  releaseAcks,
+  startFakeServer,
+  stopFakeServer,
+} from '../../support/server.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 let providers: Mock<typeof fetch>;
@@ -158,5 +165,58 @@ describe('Settings → Agents → Models', () => {
     const fast = within(list).getByRole('option', { name: /Fast/ });
     expect(fast.textContent).toContain('Unavailable: needs usage credits');
     expect(fast.getAttribute('aria-disabled')).toBe('true');
+  });
+});
+
+describe('Settings → Agents → Engine', () => {
+  it('runs delegations without a limit by default and saves a picked limit', async () => {
+    renderAgents();
+    expect(screen.getByRole('combobox', { name: 'Delegations at once' }).textContent).toBe('No limit');
+    await choose('Delegations at once', '4 at once');
+    expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { delegationLimit: 4 } }]);
+  });
+
+  it('shows a limit set elsewhere and goes back to no limit', async () => {
+    renderAgents({ ...createSettings(), delegationLimit: 6 });
+    expect(screen.getByRole('combobox', { name: 'Delegations at once' }).textContent).toBe('6 at once');
+    await choose('Delegations at once', 'No limit');
+    expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { delegationLimit: null } }]);
+  });
+
+  it('saves a number typed in Custom…, refusing one that is not a whole number of 1 or more', async () => {
+    renderAgents({ ...createSettings(), delegationLimit: 6 });
+    await choose('Delegations at once', 'Custom…');
+    const field = screen.getByRole('textbox', { name: 'Delegations' }) as HTMLInputElement;
+    expect(field.value).toBe('6');
+    fireEvent.change(field, { target: { value: '0' } });
+    fireEvent.submit(field.closest('form') as HTMLFormElement);
+    expect(screen.getByRole('alert').textContent).toBe('Enter a whole number of 1 or more.');
+    fireEvent.change(field, { target: { value: '12' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    await act(async () => {
+      fireEvent.submit(field.closest('form') as HTMLFormElement);
+    });
+    await settle();
+    expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { delegationLimit: 12 } }]);
+  });
+
+  it('keeps the dialog open when the save is refused, and sends nothing on Cancel', async () => {
+    renderAgents();
+    await choose('Delegations at once', 'Custom…');
+    const field = screen.getByRole('textbox', { name: 'Delegations' }) as HTMLInputElement;
+    expect(field.value).toBe('');
+    fireEvent.change(field, { target: { value: '3' } });
+    holdAcks();
+    await act(async () => {
+      fireEvent.submit(field.closest('form') as HTMLFormElement);
+    });
+    await act(async () => {
+      releaseAcks({ code: 'settings_invalid', message: 'No.' });
+    });
+    await settle();
+    expect(screen.getByRole('textbox', { name: 'Delegations' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await settle();
+    expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { delegationLimit: 3 } }]);
   });
 });

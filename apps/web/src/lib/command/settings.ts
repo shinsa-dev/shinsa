@@ -34,6 +34,8 @@ import {
   ALERT_ITEMS,
   COMPACTION_MODE_ITEMS,
   COST_LIMIT_TITLE,
+  CUSTOM_DELEGATION_LIMIT,
+  DELEGATION_LIMIT_TITLE,
   describeGroupSelects,
   describeRoleSelects,
   FIX_ROUND_ITEMS,
@@ -42,6 +44,7 @@ import {
   listAttentionItems,
   listBudgetItems,
   listCompactionItems,
+  listDelegationLimitItems,
   listGroupModelItems,
   listGroupSpeedItems,
   listSpeedItems,
@@ -52,6 +55,7 @@ import {
   PLAN_ITEMS,
   parseBudget,
   parseCompaction,
+  parseDelegationLimit,
   parseFixRounds,
   parseUsageLimit,
   resolveAgentModelPatch,
@@ -60,6 +64,7 @@ import {
   resolveAttentionValue,
   resolveBudgetValue,
   resolveCompactionValue,
+  resolveDelegationLimitValue,
   resolveFixRoundValue,
   resolveGroupModel,
   resolveGroupModelPatch,
@@ -116,7 +121,7 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     icon: 'IconMinimize',
     keywords: ['compaction', 'compact', 'eunoe', 'fold', 'idle sessions', 'context window'],
   },
-  { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'merge'] },
+  { title: 'Engine', icon: 'IconToolbox', keywords: ['plans', 'fix rounds', 'delegations', 'merge'] },
   {
     title: VERSIONS_SECTION,
     icon: 'IconArrowDown',
@@ -293,6 +298,13 @@ function listWorkflowChoices(settings: Settings): Command[] {
       FIX_ROUND_ITEMS,
       resolveFixRoundValue(settings),
       (value) => patchSettings({ maxFixRounds: parseFixRounds(value) })
+    ),
+    settingChoice(
+      'delegation-limit',
+      DELEGATION_LIMIT_TITLE,
+      listDelegationLimitItems(settings).filter((item) => item.value !== CUSTOM_DELEGATION_LIMIT),
+      resolveDelegationLimitValue(settings),
+      (value) => patchSettings({ delegationLimit: parseDelegationLimit(value) })
     ),
     settingChoice('merge', 'Merge with', MERGE_ITEMS, settings.mergeMethod, (value) =>
       patchSettings({ mergeMethod: value as Settings['mergeMethod'] })

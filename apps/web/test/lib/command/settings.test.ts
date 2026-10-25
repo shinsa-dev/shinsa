@@ -98,6 +98,7 @@ describe('Change a setting', () => {
       ['Show a notification', 'Never'],
       ['Approve plans', 'When you ask'],
       ['Automatic fix rounds', 'Until clean'],
+      ['Delegations at once', 'No limit'],
       ['Merge with', 'Squash'],
       ['Compaction', 'Eunoe compaction'],
       ['Model for task agents', 'Opus'],
@@ -184,6 +185,8 @@ describe('Change a setting', () => {
     pick(sections, 'settings.plans', 'never');
     pick(sections, 'settings.fix-rounds', '5');
     pick(sections, 'settings.fix-rounds', 'endless');
+    pick(sections, 'settings.delegation-limit', '8');
+    pick(sections, 'settings.delegation-limit', 'off');
     pick(sections, 'settings.budget', '5');
     pick(sections, 'settings.budget', 'off');
     pick(sections, 'settings.merge', 'rebase');
@@ -206,6 +209,8 @@ describe('Change a setting', () => {
       [{ type: 'settings.change', patch: { approvePlans: false } }, 'Saved.'],
       [{ type: 'settings.change', patch: { maxFixRounds: 5 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { maxFixRounds: null } }, 'Saved.'],
+      [{ type: 'settings.change', patch: { delegationLimit: 8 } }, 'Saved.'],
+      [{ type: 'settings.change', patch: { delegationLimit: null } }, 'Saved.'],
       [{ type: 'settings.change', patch: { taskBudgetUsd: 5 } }, 'Saved.'],
       [{ type: 'settings.change', patch: { taskBudgetUsd: null } }, 'Saved.'],
       [{ type: 'settings.change', patch: { mergeMethod: 'rebase' } }, 'Saved.'],
@@ -267,6 +272,24 @@ describe('Change a setting', () => {
     if (command.kind !== 'choice') throw new Error('Not a choice');
     expect(command.options.map((option) => option.label)).toEqual(['80%', '85%', '90%', '95%', '98%']);
     expect(command.value).toBe('85');
+  });
+
+  it('offers delegations at once without the custom entry ⌘K cannot take', () => {
+    const settings: Settings = { ...createSettings(), delegationLimit: 6 };
+    const command = find(
+      listSettingsSections(settings, MODELS, DEFAULT_PREFERENCES),
+      'settings.delegation-limit'
+    );
+    if (command.kind !== 'choice') throw new Error('Not a choice');
+    expect(command.options.map((option) => option.label)).toEqual([
+      'No limit',
+      '2 at once',
+      '4 at once',
+      '6 at once',
+      '8 at once',
+      '16 at once',
+    ]);
+    expect(command.value).toBe('6');
   });
 
   it('keeps sound and notification choices in this browser, asking before notifications', async () => {

@@ -83,7 +83,6 @@ export interface TaskSplit {
 
 export const DELEGATION_LIMITS = {
   depth: 3,
-  live: 8,
   brief: 20_000,
   title: 80,
   requestKey: 200,

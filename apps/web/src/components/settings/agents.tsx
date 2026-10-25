@@ -1,4 +1,5 @@
 import type { AccountsSnapshot, AgentProviderInfo, Settings } from '@shinsa/core';
+import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
@@ -9,12 +10,15 @@ import {
   type AgentGroup,
   type AgentRoleEntry,
   type AgentSelectLabels,
+  CUSTOM_DELEGATION_LIMIT,
+  DELEGATION_LIMIT_TITLE,
   describeFollowedRole,
   describeGroupSelects,
   describeRoleSelects,
   FIX_ROUND_ITEMS,
   type FollowingRoleEntry,
   listAgentModelItems,
+  listDelegationLimitItems,
   listGroupModelItems,
   listGroupSpeedItems,
   listSpeedItems,
@@ -22,10 +26,12 @@ import {
   MIXED_VALUE,
   MODELS_TITLE,
   PLAN_ITEMS,
+  parseDelegationLimit,
   parseFixRounds,
   resolveAgentModelPatch,
   resolveAgentModelValue,
   resolveAgentSpeedPatch,
+  resolveDelegationLimitValue,
   resolveFixRoundValue,
   resolveGroupModel,
   resolveGroupModelPatch,
@@ -37,6 +43,7 @@ import {
   type SettingItem,
   updateSettings,
 } from '@/lib/settings.ts';
+import { DelegationLimitDialog } from './delegation-limit-dialog.tsx';
 import { SETTING_ROW, SETTINGS_SHELF, SettingRow, SettingsGroup } from './group.tsx';
 
 type SettingsUpdate = (patch: Partial<Settings>) => void;
@@ -210,6 +217,30 @@ export function ModelsGroup(context: ModelsContext) {
   );
 }
 
+function DelegationLimitField({ settings }: { settings: Settings }) {
+  const choosing = useDialogState<'custom'>();
+  return (
+    <>
+      <SelectField
+        label={DELEGATION_LIMIT_TITLE}
+        items={listDelegationLimitItems(settings)}
+        value={resolveDelegationLimitValue(settings)}
+        onValueChange={(value) => {
+          if (value === CUSTOM_DELEGATION_LIMIT) choosing.show('custom');
+          else void updateSettings({ delegationLimit: parseDelegationLimit(value) });
+        }}
+      />
+      {choosing.value && (
+        <DelegationLimitDialog
+          control={choosing.control}
+          initial={settings.delegationLimit ?? null}
+          onSave={(delegationLimit) => updateSettings({ delegationLimit })}
+        />
+      )}
+    </>
+  );
+}
+
 export function AgentSettings({ settings }: { settings: Settings }) {
   const providers = useAgentProviders();
   const accounts = useAccounts();
@@ -237,6 +268,9 @@ export function AgentSettings({ settings }: { settings: Settings }) {
             value={resolveFixRoundValue(settings)}
             onValueChange={(value) => void updateSettings({ maxFixRounds: parseFixRounds(value) })}
           />
+        </SettingRow>
+        <SettingRow title={DELEGATION_LIMIT_TITLE}>
+          <DelegationLimitField settings={settings} />
         </SettingRow>
         <SettingRow title='Merge with'>
           <SelectField

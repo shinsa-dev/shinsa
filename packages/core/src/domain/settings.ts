@@ -20,6 +20,7 @@ export interface Settings {
   defaultProvider: string;
   defaultModel: string | null;
   maxFixRounds: number | null;
+  delegationLimit?: number | null;
   mergeMethod: MergeMethod;
   attentionLimit?: number;
   approvePlans?: boolean;
@@ -41,6 +42,7 @@ export const SETTINGS_KEYS = [
   'defaultProvider',
   'defaultModel',
   'maxFixRounds',
+  'delegationLimit',
   'mergeMethod',
   'attentionLimit',
   'approvePlans',
@@ -68,6 +70,7 @@ export const HUMAN_ONLY_SETTINGS = [
   'accountSwitchAt',
   'fastMode',
   'agentFastModes',
+  'delegationLimit',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_REPO_FIELDS = ['checkCommands', 'checksWaived', 'workspace'] as const;
@@ -86,6 +89,7 @@ const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
   maxFixRounds: null,
+  delegationLimit: null,
   mergeMethod: 'squash',
   attentionLimit: DEFAULT_ATTENTION_LIMIT,
   approvePlans: false,
@@ -108,6 +112,10 @@ export function createSettings(): Settings {
 
 export function resolveAttentionLimit(settings: Settings) {
   return Math.max(1, settings.attentionLimit ?? DEFAULT_ATTENTION_LIMIT);
+}
+
+export function resolveDelegationLimit(settings: Settings) {
+  return settings.delegationLimit ?? null;
 }
 
 export function resolveAccountSwitchAt(settings: Settings) {

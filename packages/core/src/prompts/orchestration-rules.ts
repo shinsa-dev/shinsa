@@ -20,7 +20,7 @@ export function resolveOrchestrationRules(tools: readonly ShinsaToolName[]) {
     describeQuestions(tools, stepRun),
     '- For every review round, call `delegate_task` again with the original brief, the earlier findings, your responses and the objections still open. Use a new `client_request_id` for each round, and the same one when you retry the call for that round.',
     '- Keep each returned `delegation_id`. `delegation_status` reads one, and reading a finished result counts as receiving it. `delegation_cancel` stops one and everything it delegated.',
-    `- Delegations nest at most ${DELEGATION_LIMITS.depth} deep, and at most ${DELEGATION_LIMITS.live} run at once under one step.`,
+    `- Delegations nest at most ${DELEGATION_LIMITS.depth} deep.`,
     ...(stepRun
       ? [
           '- Your hand-over tools wait for your delegations: get their results or stop them before you hand over. When you stop while they run, Shinsa wakes you with their results.',

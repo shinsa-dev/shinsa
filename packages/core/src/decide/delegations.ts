@@ -11,6 +11,7 @@ import {
   type Run,
   type RunFailure,
   type RunOutcome,
+  resolveDelegationLimit,
 } from '../domain/index.ts';
 import { resolveDelegatePrompt } from '../prompts/orchestration.ts';
 import {
@@ -101,12 +102,14 @@ function findChild(decider: Decider, parent: Run, childRunId: string): Delegated
 }
 
 function assertDelegationRoom(decider: Decider, parent: Run) {
+  const limit = resolveDelegationLimit(decider.state.settings);
+  if (limit === null) return;
   const root = selectRootRun(decider.state, parent) ?? parent;
   const live = countLiveUnderRoot(decider.state, root.id);
-  if (live >= DELEGATION_LIMITS.live) {
+  if (live >= limit) {
     throw new DomainError(
       'delegation_limit',
-      `${live} delegations under this step are still running, which is the limit. End your turn, and the next one to finish wakes you and frees a place, or stop one with \`delegation_cancel\`.`
+      `${live} delegations under this step are still running, and the human allows ${limit} at once (the Delegations at once setting). End your turn, and the next one to finish wakes you and frees a place, or stop one with \`delegation_cancel\`.`
     );
   }
 }
