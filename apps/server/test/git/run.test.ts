@@ -29,7 +29,7 @@ describe('runGitOrThrow', () => {
     const lock = join(path, '.git', 'index.lock');
     writeFileSync(lock, '');
     const waits = spyOnBackoff(() => rmSync(lock, { force: true }));
-    expect(await commitWorktree(path, 'chore: change')).toBe(true);
+    expect(await commitWorktree(path, 'chore: change')).toEqual({ merge: null });
     expect(waits).toEqual([50]);
     expect(await runGitOrThrow(['log', '-1', '--format=%s'], path)).toBe('chore: change');
   });

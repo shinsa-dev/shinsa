@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import {
   resolveChecksFixPrompt,
+  resolveConflictFixPrompt,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
   resolveReviewFixPrompt,
   resolveVerdictFixPrompt,
+  resolveWorkspaceUpdatedFixPrompt,
 } from '../../src/prompts/index.ts';
 import { pullRequest } from '../harness.ts';
 
@@ -32,6 +34,7 @@ describe('fix prompts', () => {
       'The human looked at the work'
     );
     expect(resolvePullRequestFixPrompt(pullRequest({ number: 42 }))).toStartWith('Pull request #42');
+    expect(resolveConflictFixPrompt('feat/banner')).toStartWith('GitButler left');
   });
 
   test('a fix of the work says the checks and the review follow it', () => {
@@ -44,6 +47,26 @@ describe('fix prompts', () => {
     const prompt = resolvePullRequestFixPrompt(pullRequest({ checks: 'failing' }));
     expect(prompt).toContain('Afterwards Shinsa pushes your fix to the pull request.');
     expect(prompt).not.toContain('agent review');
+  });
+
+  test('a conflict is merged from the fetched base by name and never rebased', () => {
+    const conflicting = pullRequest({ mergeable: false, base: 'main' });
+    expect(resolvePullRequestFixPrompt(conflicting)).toContain(
+      '- The branch has merge conflicts with its base, `main`. Shinsa fetched it: merge it in with `git merge origin/main`, resolve every conflict and `git add` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.'
+    );
+    expect(resolvePullRequestFixPrompt({ ...conflicting, base: undefined })).toContain(
+      'Fetch the base branch, merge it in with `git merge`'
+    );
+  });
+
+  test('after the workspace update the agent resolves what is left in place, with the human’s guidance', () => {
+    const prompt = resolveWorkspaceUpdatedFixPrompt('fix/a', ' Keep their version. ');
+    expect(prompt).toContain('Shinsa updated their GitButler workspace with `but pull`');
+    expect(prompt).toContain('`but resolve conflicts fix/a`');
+    expect(prompt).toContain('Never run `but resolve <commit>`');
+    expect(prompt).toContain('Guidance from the human: Keep their version.');
+    expect(prompt).toContain('Afterwards Shinsa pushes the branch to the pull request.');
+    expect(resolveWorkspaceUpdatedFixPrompt('fix/a', null)).not.toContain('Guidance');
   });
 
   test('one unresolved comment and one new comment read in the singular', () => {
@@ -71,26 +94,17 @@ describe('line comments in a fix prompt', () => {
     line: 12,
     endLine: 13,
     text: 'Name it for what it holds.',
-    suggestion: { original: 'const x = 1;\nconst y = x;', replacement: 'const count = 1;\nconst y = count;' },
   };
 
-  test('a suggested change carries its path, lines, the original text and the replacement verbatim', () => {
+  test('a comment carries its path, lines and words', () => {
     const prompt = resolveHumanFixPrompt('Tidy the names.', [rename]);
     expect(prompt).toContain('The human looked at the work and wrote:\n\nTidy the names.\n\nLine comments:');
-    expect(prompt).toContain(
-      [
-        '- src/a.ts, lines 12-13: Name it for what it holds.',
-        'Suggested change to lines 12-13. Apply it as written unless that breaks something. Replace:',
-        '```\nconst x = 1;\nconst y = x;\n```',
-        'with:',
-        '```\nconst count = 1;\nconst y = count;\n```',
-      ].join('\n')
-    );
+    expect(prompt).toContain('- src/a.ts, lines 12-13: Name it for what it holds.');
   });
 
   test('comments alone open the prompt without words of their own', () => {
     const prompt = resolveHumanFixPrompt(' ', [
-      { path: 'src/b.ts', side: 'old', line: 4, endLine: null, text: 'Keep this line.', suggestion: null },
+      { path: 'src/b.ts', side: 'old', line: 4, endLine: null, text: 'Keep this line.' },
     ]);
     expect(prompt).toStartWith('The human looked at the work and left line comments.\n\nLine comments:\n');
     expect(prompt).toContain('- src/b.ts, removed line 4: Keep this line.');
@@ -98,14 +112,6 @@ describe('line comments in a fix prompt', () => {
 
   test('with neither words nor comments, the agent is asked to revise the work', () => {
     expect(resolveHumanFixPrompt(null, [])).toContain('wrote:\n\nRevise the work.');
-  });
-
-  test('a fence is longer than any run of backticks in the code it quotes', () => {
-    const prompt = resolveHumanFixPrompt(null, [
-      { ...rename, line: 3, endLine: null, text: '', suggestion: { original: 'a ``` b', replacement: '' } },
-    ]);
-    expect(prompt).toContain('- src/a.ts, line 3\nSuggested change to line 3.');
-    expect(prompt).toContain('````\na ``` b\n````\nwith:\n```\n\n```');
   });
 
   test('a verdict prompt lists the line comments after your words', () => {

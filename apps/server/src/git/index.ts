@@ -1,4 +1,11 @@
-export { commitWorktree, pushBranch, resolveHead, resolveTree, stashEdits } from './commit.ts';
+export {
+  commitWorktree,
+  pushBranch,
+  resolveHead,
+  resolveTree,
+  stashEdits,
+  writeMergeHead,
+} from './commit.ts';
 export { resolveCommitDiff, resolveWorkingDiff } from './diff.ts';
 export {
   createIsolatedWorktree,
@@ -8,4 +15,10 @@ export {
 } from './isolation.ts';
 export { assertRefName, slugify } from './refs.ts';
 export { inspectRepo, resolveRepoRoot } from './repo.ts';
-export { createWorktree, discardEdits, refreshWorktree, removeWorktree } from './worktree.ts';
+export {
+  createWorktree,
+  discardEdits,
+  refreshWorktree,
+  removeWorktree,
+  syncRemoteBranch,
+} from './worktree.ts';

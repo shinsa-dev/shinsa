@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
+import { runCommand, runCommandOrThrow } from '../../src/shell/index.ts';
 import { PLAN, toolPlan, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -30,6 +30,10 @@ function remoteLog(w: World, branch: string) {
   return Bun.spawnSync(['git', 'log', '--format=%s', branch], { cwd: w.origin }).stdout.toString();
 }
 
+function remoteParents(w: World, branch: string) {
+  return Bun.spawnSync(['git', 'log', '-1', '--format=%P', branch], { cwd: w.origin }).stdout.toString();
+}
+
 describe('the pull request loop', () => {
   test('unresolved review comments start a fixer and the fix is pushed', async () => {
     const w = await open();
@@ -50,19 +54,38 @@ describe('the pull request loop', () => {
     await w.untilGate(taskId, 'merge');
   });
 
-  test('a merge conflict sends a fixer that is told to merge, never rebase', async () => {
+  test('a pull request that conflicts after main moved is merged by the agent in its own session and pushed', async () => {
     const w = await open();
     const taskId = await toPullRequest(w);
+    const branch = w.task(taskId).branch ?? '';
+    const other = join(w.root, 'other');
+    await runCommandOrThrow(['git', 'clone', '-q', w.origin, other], w.root);
+    writeFileSync(join(other, 'a.txt'), 'main moved\n');
+    await runCommandOrThrow(['git', 'add', 'a.txt'], other);
+    await runCommandOrThrow(['git', 'commit', '-q', '-m', 'feat: move main'], other);
+    await runCommandOrThrow(['git', 'push', '-q', 'origin', 'main'], other);
+    const moved = await runCommandOrThrow(['git', 'rev-parse', 'HEAD'], other);
+
     w.github.update(1, { checks: 'passing', mergeable: 'CONFLICTING' });
     let prompt = '';
     w.agents.queue('fix', async (agent) => {
       prompt = agent.prompt;
-      await agent.call('complete_fix', { summary: 'Resolved the conflict.' });
+      const merge = await runCommand(['git', 'merge', '--no-edit', 'origin/main'], agent.cwd);
+      expect(merge.stdout).toContain('CONFLICT');
+      agent.write('a.txt', 'phase 1\nmain moved\n');
+      await runCommandOrThrow(['git', 'add', 'a.txt'], agent.cwd);
+      await agent.call('complete_fix', { summary: 'Merged main and kept both lines.' });
     });
     await w.sync(taskId);
-    await w.until('the fixer to run', () => w.agents.of('fix').length === 1);
-    expect(prompt).toContain('Merge the base branch into it');
-    expect(prompt).toContain('never rebase');
+    await w.until('the merge to reach origin', () => remoteParents(w, branch).includes(moved));
+    expect(prompt).toContain('Shinsa fetched it: merge it in with `git merge origin/main`');
+    expect(prompt).toContain('Never rebase or force-push.');
+    const [plan] = w.agents.of('plan');
+    expect(w.agents.of('fix').map((session) => session.resume)).toEqual([plan?.sessionId ?? '']);
+
+    w.github.update(1, { mergeable: 'MERGEABLE' });
+    await w.sync(taskId);
+    await w.untilGate(taskId, 'merge');
   });
 
   test('a merge gate is withdrawn when CI turns red again', async () => {

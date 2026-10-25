@@ -26,7 +26,7 @@ describe('worktrees', () => {
     const files = await resolveWorkingDiff(worktree.path, await git(worktree.path, 'rev-parse', 'HEAD'));
     expect(files.map((file) => file.path).sort()).toEqual(['app.ts', 'new.ts']);
 
-    expect(await commitWorktree(worktree.path, 'fix(value): bump to two')).toBe(true);
+    expect(await commitWorktree(worktree.path, 'fix(value): bump to two')).toEqual({ merge: null });
     expect(await git(worktree.path, 'log', '-1', '--format=%s')).toBe('fix(value): bump to two');
 
     const second = await createWorktree(repo, worktrees, 'task-123456', 'fix/value', null);

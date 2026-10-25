@@ -25,13 +25,17 @@ export async function resolveFreeBranch(repo: Repo, branch: string, signal?: Abo
   return `${branch}-${Date.now()}`;
 }
 
-export async function resolveStartPoint(repo: Repo, baseBranch: string | null, signal?: AbortSignal) {
-  if (baseBranch) return assertRefName(baseBranch);
-  const branch = assertRefName(repo.defaultBranch);
-  await runCommand(['git', 'fetch', '--quiet', 'origin', '--', branch], repo.path, {
+export function syncRemoteBranch(repo: Repo, branch: string, signal?: AbortSignal) {
+  return runCommand(['git', 'fetch', '--quiet', 'origin', '--', assertRefName(branch)], repo.path, {
     timeoutMs: GIT_NETWORK_TIMEOUT_MS,
     signal,
   });
+}
+
+export async function resolveStartPoint(repo: Repo, baseBranch: string | null, signal?: AbortSignal) {
+  if (baseBranch) return assertRefName(baseBranch);
+  const branch = assertRefName(repo.defaultBranch);
+  await syncRemoteBranch(repo, branch, signal);
   const remoteBase = await runCommand(
     ['git', 'rev-parse', '--verify', '--quiet', `origin/${branch}`],
     repo.path,

@@ -1,5 +1,5 @@
 import { describeCount } from '../chat/text.ts';
-import type { PullRequest, PullRequestWatchChange, ReviewComment, SuggestedChange } from '../domain/index.ts';
+import type { PullRequest, PullRequestWatchChange, ReviewComment } from '../domain/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import { describeFindingPlace } from './context.ts';
 
@@ -48,33 +48,14 @@ export function resolveReviewFixPrompt(findings: ReviewFinding[]) {
   ].join('\n');
 }
 
-function fenceVerbatim(text: string) {
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
-  const fence = '`'.repeat(Math.max(3, longest + 1));
-  return `${fence}\n${text}\n${fence}`;
-}
-
 function describeCommentLines(comment: ReviewComment) {
   const plural = comment.endLine !== null;
   const lines = plural ? `${comment.line}-${comment.endLine}` : String(comment.line);
   return `${comment.side === 'old' ? 'removed ' : ''}${plural ? 'lines' : 'line'} ${lines}`;
 }
 
-function describeSuggestedChange(lines: string, change: SuggestedChange) {
-  return [
-    `Suggested change to ${lines}. Apply it as written unless that breaks something. Replace:`,
-    fenceVerbatim(change.original),
-    'with:',
-    fenceVerbatim(change.replacement),
-  ];
-}
-
 function describeLineComment(comment: ReviewComment) {
-  const lines = describeCommentLines(comment);
-  return [
-    `- ${comment.path}, ${lines}${comment.text ? `: ${comment.text}` : ''}`,
-    ...(comment.suggestion ? describeSuggestedChange(lines, comment.suggestion) : []),
-  ].join('\n');
+  return `- ${comment.path}, ${describeCommentLines(comment)}: ${comment.text}`;
 }
 
 function describeLineComments(comments: readonly ReviewComment[]) {
@@ -153,6 +134,14 @@ function describeUnresolved(count: number) {
     : `There are ${count} unresolved review comments`;
 }
 
+function describeMergeConflict(pullRequest: PullRequest) {
+  const base = pullRequest.base ?? null;
+  if (!base) {
+    return '- The branch has merge conflicts with its base. Fetch the base branch, merge it in with `git merge`, resolve every conflict and `git add` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.';
+  }
+  return `- The branch has merge conflicts with its base, \`${base}\`. Shinsa fetched it: merge it in with \`git merge origin/${base}\`, resolve every conflict and \`git add\` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.`;
+}
+
 function describeStandingProblems(pullRequest: PullRequest) {
   return [
     pullRequest.checks === 'failing'
@@ -161,10 +150,52 @@ function describeStandingProblems(pullRequest: PullRequest) {
     pullRequest.unresolvedComments > 0
       ? `- ${describeUnresolved(pullRequest.unresolvedComments)} (review bots or people). Read them with \`gh pr view ${pullRequest.number} --comments\` and the review threads API.`
       : '',
-    pullRequest.mergeable === false
-      ? '- The branch has merge conflicts with its base. Merge the base branch into it and resolve them; never rebase or force-push.'
-      : '',
+    pullRequest.mergeable === false ? describeMergeConflict(pullRequest) : '',
   ].filter(Boolean);
+}
+
+function describeResolving(branch: string) {
+  return [
+    'Resolve them in place:',
+    `- List the conflicts with \`but resolve conflicts ${branch}\`.`,
+    `- Resolve each with \`but resolve apply <path>:<N> --commit ${branch}\`, piping in the content you want, or with \`--ours\` (the default branch's side) or \`--theirs\` (your commit's side).`,
+    '- Check with `but status` that no commit on the branch is still conflicted.',
+    '',
+    "Never run `but resolve <commit>`: it checks the commit out and moves the human's checkout. When you cannot tell which side is right, ask the human with `ask`.",
+  ];
+}
+
+function describeConflictedBranch(branch: string) {
+  return [
+    `GitButler left commits on your branch \`${branch}\` conflicted. The task your branch was stacked on settled without merging, so Shinsa took your branch out of the stack and GitButler moved your commits onto the default branch.`,
+    '',
+    ...describeResolving(branch),
+  ];
+}
+
+export function resolveConflictFixPrompt(branch: string) {
+  return [
+    ...describeConflictedBranch(branch),
+    describeFixClosing(
+      'Afterwards Shinsa pushes the branch, or first runs the checks and agent review when the human has not approved the work yet.'
+    ),
+  ].join('\n');
+}
+
+export function resolveConflictSteer(branch: string) {
+  return [...describeConflictedBranch(branch), '', 'Resolve them before you hand over.'].join('\n');
+}
+
+export function resolveWorkspaceUpdatedFixPrompt(branch: string, guidance: string | null) {
+  return [
+    `Your pull request conflicted with its base, so at the human's request Shinsa updated their GitButler workspace with \`but pull\`. GitButler rebased your branch \`${branch}\` onto the new default branch, kept everyone's uncommitted work, and marked any commit that no longer applies as conflicted. Check with \`but status\` whether a commit on your branch is conflicted.`,
+    '',
+    ...describeResolving(branch),
+    ...(guidance?.trim() ? ['', `Guidance from the human: ${guidance.trim()}`] : []),
+    describeFixClosing(
+      'When nothing on the branch is conflicted, call it even if you changed nothing. Afterwards Shinsa pushes the branch to the pull request.'
+    ),
+  ].join('\n');
 }
 
 export function resolvePullRequestFixPrompt(
