@@ -16,6 +16,11 @@ export function describeFindingPlace({ file, line, end }: FindingPlace) {
   return end !== null && end !== undefined && end !== line ? `${path}:${line}-${end}` : `${path}:${line}`;
 }
 
+function readOptionalText(record: Record<string, unknown>, key: 'title' | 'fix') {
+  const value = readString(record, key);
+  return value ? { [key]: value } : {};
+}
+
 function readLine(value: unknown) {
   return typeof value === 'number' ? value : null;
 }
@@ -27,6 +32,8 @@ export function readReportedFindings(args: ChatToolArgs): ReviewFinding[] {
     line: readLine(finding.line),
     end: readLine(finding.end),
     message: readString(finding, 'message') ?? '',
+    ...readOptionalText(finding, 'title'),
+    ...readOptionalText(finding, 'fix'),
   }));
 }
 

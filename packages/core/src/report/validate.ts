@@ -44,6 +44,9 @@ export const PROTOCOL_LIMITS = {
   option: 100,
   findingCount: 12,
   finding: 280,
+  findingTitle: 80,
+  findingFix: 600,
+  reviewSummary: 400,
   path: 300,
   changeSummary: 240,
   questionContext: 2_000,
@@ -306,23 +309,30 @@ function readPlanParameters(reader: Reader, input: Record<string, unknown>): Par
   };
 }
 
-export function validateFindings(input: Record<string, unknown>): Validation<ReviewFinding[]> {
+export function validateReview(
+  input: Record<string, unknown>
+): Validation<{ summary: string | null; findings: ReviewFinding[] }> {
   const reader = new Reader();
+  const summary = reader.optionalText(input.summary, 'summary', PROTOCOL_LIMITS.reviewSummary);
   const findings = reader.list(input.findings, 'findings', PROTOCOL_LIMITS.findingCount).map((raw, index) => {
     const path = `findings[${index}]`;
     const record = reader.record(raw, path);
     const line = reader.optionalLine(record.line, `${path}.line`);
     const end = reader.optionalLine(record.end, `${path}.end`) ?? line;
     reader.range(line, end, path, 'line');
+    const title = reader.optionalText(record.title, `${path}.title`, PROTOCOL_LIMITS.findingTitle);
+    const fix = reader.optionalText(record.fix, `${path}.fix`, PROTOCOL_LIMITS.findingFix);
     return {
       severity: reader.pick(record.severity, `${path}.severity`, FINDING_SEVERITIES),
       file: reader.optionalText(record.file, `${path}.file`, PROTOCOL_LIMITS.path),
       line,
       end,
+      ...(title === null ? {} : { title }),
       message: reader.text(record.message, `${path}.message`, PROTOCOL_LIMITS.finding),
+      ...(fix === null ? {} : { fix }),
     };
   });
-  return reader.result(findings);
+  return reader.result({ summary, findings });
 }
 
 export function validatePlanHandOver(input: Record<string, unknown>): Validation<PlanHandOver> {

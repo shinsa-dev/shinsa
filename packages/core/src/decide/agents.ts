@@ -124,7 +124,13 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
 
 export function reportReview(decider: Decider, command: CommandOf<'agent.report_review'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'report_review');
-  decider.emit({ type: 'review.reported', taskId: task.id, findings: command.findings, runId: run.id });
+  decider.emit({
+    type: 'review.reported',
+    taskId: task.id,
+    summary: command.summary,
+    findings: command.findings,
+    runId: run.id,
+  });
   decider.endRun(run, 'completed', null);
   decider.progressed(task.id);
   reactToFindings(decider, task.id, command.findings);

@@ -31,7 +31,7 @@ function resolveGateAction(gate: Gate, task: Task): TaskAction {
     case 'plan':
       return { label: 'Review plan', path };
     case 'review':
-      return { label: 'Review changes', path: resolveTaskPath(task, { tab: 'code' }) };
+      return { label: 'Review changes', path: resolveTaskPath(task, { tab: 'review' }) };
     case 'merge':
       return { label: 'Review and merge', path };
   }

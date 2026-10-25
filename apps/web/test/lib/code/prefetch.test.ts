@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { DiffFile, ReviewFinding, Task, TaskDiff, TaskRefs, WorkReport } from '@shinsa/core';
+import type { DiffFile, Task, TaskDiff, TaskRefs } from '@shinsa/core';
 import { claimPrefetch, prefetchTaskCode } from '@/lib/code/prefetch.ts';
 import { createTask } from '../../support/state.ts';
 
@@ -75,23 +75,16 @@ function nextTask(overrides: Partial<Task> = {}) {
   return createTask({ id: `prefetch-${count}`, repoId: 'repo-1', stage: 'awaiting_review', ...overrides });
 }
 
-const REPORT: WorkReport = {
-  headline: 'h',
-  sections: [
-    {
-      title: 't',
-      summary: 's',
-      spots: [{ file: 'src/new.ts', start: 1, end: 1, attention: 'normal', why: 'w' }],
-    },
-  ],
-  checks: [],
-  judgementCalls: [],
-};
-
 describe('prefetchTaskCode', () => {
-  it('reads the refs, the diff, the root folder and the first spot the review opens', async () => {
-    expect(await prefetchTaskCode(nextTask({ report: REPORT }), '')).toBe('src/new.ts');
-    expect(requests).toEqual(['refs', `diff ${HEAD}`, `tree ${HEAD}`, `blob ${HEAD} src/new.ts`]);
+  it('reads the refs, the diff, the root folder and the first changed file', async () => {
+    expect(await prefetchTaskCode(nextTask(), '')).toBe('src/a.ts');
+    expect(requests).toEqual([
+      'refs',
+      `diff ${HEAD}`,
+      `tree ${HEAD}`,
+      `blob ${HEAD} src/a.ts`,
+      `blob ${BASE} src/a.ts`,
+    ]);
   });
 
   it('reads both sides of a changed file, and only the old one of a deleted file', async () => {
@@ -101,18 +94,8 @@ describe('prefetchTaskCode', () => {
     expect(requests.some((request) => request.startsWith(`blob ${HEAD}`))).toBe(false);
   });
 
-  it('falls back to the riskiest changes, then to the findings, when there is no report', async () => {
-    diff.files = [createFile('src/a.ts', { risk: 'high', patch: '@@ -1 +1 @@\n-a\n+b\n' })];
-    expect(await prefetchTaskCode(nextTask(), '')).toBe('src/a.ts');
-    expect(requests).toContain(`blob ${BASE} src/a.ts`);
+  it('opens nothing when the change touches no file', async () => {
     diff.files = [];
-    const finding: ReviewFinding = {
-      severity: 'blocking',
-      file: 'src/elsewhere.ts',
-      line: 3,
-      message: 'Broken',
-    };
-    expect(await prefetchTaskCode(nextTask({ findings: [finding] }), '')).toBe('src/elsewhere.ts');
     expect(await prefetchTaskCode(nextTask(), '')).toBeNull();
     expect(await prefetchTaskCode(nextTask(), '?mode=changes')).toBeNull();
   });

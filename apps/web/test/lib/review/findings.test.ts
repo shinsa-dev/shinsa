@@ -22,12 +22,28 @@ describe('the findings a reviewer reported', () => {
     expect(
       readReportedFindings({
         findings: [
-          { severity: 'blocking', file: 'src/a.ts', line: 3, end: 5, message: 'Guard it.' },
+          {
+            severity: 'blocking',
+            file: 'src/a.ts',
+            line: 3,
+            end: 5,
+            message: 'Guard it.',
+            title: 'No guard',
+            fix: 'Add `if`.',
+          },
           { severity: 'nit' },
         ],
       })
     ).toEqual([
-      { severity: 'blocking', file: 'src/a.ts', line: 3, end: 5, message: 'Guard it.' },
+      {
+        severity: 'blocking',
+        file: 'src/a.ts',
+        line: 3,
+        end: 5,
+        message: 'Guard it.',
+        title: 'No guard',
+        fix: 'Add `if`.',
+      },
       { severity: 'suggestion', file: null, line: null, end: null, message: '' },
     ]);
   });

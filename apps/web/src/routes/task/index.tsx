@@ -12,11 +12,14 @@ import { replaceRoute, resolveCanonicalTaskPath } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
 import { CodeTab, prefetchCode, usePrefetchCode } from './lazy-code.tsx';
 import { OverviewTab } from './overview.tsx';
+import { ReviewTab } from './review.tsx';
 
 function TaskTabContent({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
   switch (view.tab) {
     case 'overview':
       return <OverviewTab state={state} task={task} gate={view.lead} onOpen={view.applyNowTarget} />;
+    case 'review':
+      return <ReviewTab state={state} task={task} />;
     case 'code':
       return <CodeTab task={task} modes={view.codeModes} />;
     case 'chat':

@@ -112,7 +112,17 @@ describe('fix loops', () => {
     const w = await open();
     w.agents.queue('reviewer', async (agent) => {
       await agent.call('report_review', {
-        findings: [{ severity: 'blocking', file: 'a.txt', line: 1, message: 'Say hello, not phase 1.' }],
+        summary: 'Read the greeting change; it prints the wrong word.',
+        findings: [
+          {
+            severity: 'blocking',
+            file: 'a.txt',
+            line: 1,
+            title: 'Wrong greeting',
+            message: 'Say hello, not phase 1.',
+            fix: 'Write `hello` on line 1.',
+          },
+        ],
       });
     });
     w.agents.queue('fix', async (agent) => {

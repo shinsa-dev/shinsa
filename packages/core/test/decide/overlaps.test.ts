@@ -88,6 +88,7 @@ describe('files another open task changes too', () => {
     harness.send({
       type: 'agent.report_review',
       runId: review.id,
+      summary: null,
       findings: [{ severity: 'blocking', file: 'src/a.ts', line: 1, message: 'It breaks the login.' }],
     });
     const fix = harness.activeRun(taskId);

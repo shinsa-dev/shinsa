@@ -223,6 +223,7 @@ describe('verdicts on review findings', () => {
     harness.send({
       type: 'agent.report_review',
       runId: harness.activeRun(taskId).id,
+      summary: null,
       findings: [
         { severity: 'suggestion', file: 'a.ts', line: 3, message: 'Rename it.' },
         { severity: 'suggestion', file: 'b.ts', line: 9, message: 'Cache it.' },
@@ -488,7 +489,12 @@ describe('decisions only the human makes', () => {
     completePhase(harness, operation);
     completePhase(harness, operation);
     harness.send({ type: 'checks.record', taskId: operation, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(operation).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(operation).id,
+      summary: null,
+      findings: [],
+    });
     approve(harness, operation);
     pushed(harness, operation);
     harness.send({

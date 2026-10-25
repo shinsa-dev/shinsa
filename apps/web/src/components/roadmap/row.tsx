@@ -17,10 +17,12 @@ import { DependencyItems } from '@/components/task/dependency-items.tsx';
 import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { selectTaskProject } from '@/lib/projects.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
 import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
+import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 import { PullRequestBadge } from './pull-request-badge.tsx';
 import { ChainArrow, WaitsOnLinks } from './waits-on.tsx';
@@ -50,13 +52,16 @@ function TaskMenuItems({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-function KindMark({ task }: { task: Task }) {
+function KindMark({ state, task }: { state: ShinsaState; task: Task }) {
   return (
     <Hint label={describeTaskSteps(task)}>
       <span
         role='img'
         aria-label={resolveShapeLabel(task)}
-        className='grid size-4 shrink-0 place-items-center text-fg-2'
+        className={cn(
+          'grid size-4 shrink-0 place-items-center',
+          TONE_TEXT[resolveTaskStatus(state, task).tone]
+        )}
       >
         <Icon size='sm' name={resolveShapeIcon(task)} />
       </span>
@@ -119,7 +124,7 @@ export function RoadmapRow({
           <Truncate>{repo?.name ?? 'No repository'}</Truncate>
         </span>
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
-          <KindMark task={task} />
+          <KindMark state={state} task={task} />
           <RowStatus state={state} task={task} group={group} />
         </span>
         <span className='max-md:hidden'>

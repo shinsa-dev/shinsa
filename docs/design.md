@@ -162,7 +162,10 @@ Only these, and they win over anything below:
      attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
      `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`, with a 2px `primary-a1` outline
      outside its box so the wash wraps the full-width content instead of sitting flush with it; a delegation card
-     opened from a link takes the same wash (`SELECTED_WASH` in `chat-line.tsx`). It fades with the wash.
+     opened from a link takes the same wash (`SELECTED_WASH` in `chat-line.tsx`). It fades with the wash. The run's
+     box hugs its content: its first row's top spacing and its last row's bottom spacing sit outside it, as the
+     section's own margin (`SECTION_EDGES` in `run-section.tsx`), so the wash is the same 2px on all four sides of
+     the message and its cards, never a deep band under the last card.
    - **A task in rounds stays one chat**: a quiet divider with a hairline marks where each round starts
      (`RoundDivider`, 30); nothing folds, so a run of any round is always on the page.
 8. **One queue, two sizes.** `components/queue/queue.tsx` is the only list of tasks by what they
@@ -224,7 +227,7 @@ Only these, and they win over anything below:
    guide, the chat, every rendered markdown block and the overview's facts. A task link
    (`TaskLink`) is a 16px state tile (gate or stage glyph) and the title, medium `fg-4`,
    underlined on hover; the tile and first word never part at a wrap. It goes where the work is
-   (`?tab=code` for a review, `?tab=chat&run=` for a question or a running agent) and, on hover,
+   (`?tab=review` for a review, `?tab=chat&run=` for a question or a running agent) and, on hover,
    opens a preview card: status in its tone, what is happening now, repository, branch and pull
    request (each with its icon), how long it has waited (`TimeAgo`, exact time on hover) and its
    one action as a button. A pull request link (`PrLink`) is a tile in the pull request's tone
@@ -280,7 +283,8 @@ Only these, and they win over anything below:
     the queue; it never hides. From
     `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
-    bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), and Enter sends in every input.
+    bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
+    open (34), and Enter sends in every input.
 11. **No focus states.** Nothing marks keyboard focus: no ring, outline, border recolour or wash
     (Shape & depth → No focus states). Focus rules below are paywall-next reference only.
 12. **The task page has one left edge and no details panel.** The heading is a `text-base` medium
@@ -297,7 +301,7 @@ Only these, and they win over anything below:
     Cards or Sidebar frame.
     - **The decision card.** The Overview opens with the task's now card
       (`components/overview/now-card.tsx`), and a gate's actions sit at its top right, each named
-      for what it decides: a review gate has Review (outline, opens Code) then **Approve
+      for what it decides: a review gate has Review (outline, opens the Review tab, 34) then **Approve
       changes** (primary; its tooltip says it opens the pull request, and it is disabled while
       line comments are drafted; **Fix N findings** in its place sends the drafted comments with the
       findings you kept and clears them); a merge gate has Review then **Merge #N**; a plan gate has
@@ -306,9 +310,10 @@ Only these, and they win over anything below:
       operation**; a paused task has Retry; a question has its answer
       box. Status labels say what waits on you the same way: Plan to approve, **Changes to
       review** (never the bare "Ready for review"), Ready to merge.
-    - **Panels keep their action when collapsed.** An Overview panel's header action ("Review the
-      code" on What changed) stays in the header whether the panel is open or closed
-      (`components/layout/surface/panel.tsx`).
+    - **Panels keep their action when collapsed.** An Overview panel's header action ("Open the
+      review" on What changed, which opens the Review tab) stays in the header whether the panel is open or closed
+      (`components/layout/surface/panel.tsx`); a panel can start collapsed (`defaultOpen`), as the Review tab's
+      Everything else does.
     - **Activity reads newest first.** The Overview's Activity panel lists the newest entry at the top and older
       ones below it (`listActivityNewestFirst`; entries of the same moment keep the log's order, reversed). Every
       place that lists a task's activity uses it.
@@ -449,7 +454,8 @@ Only these, and they win over anything below:
       Revise the plan, Approve the changes / Review the changes / Request changes, Merge #N or
       Merge the pull request, Answer the question, Retry / Retry with guidance, or Allow another $N for a cost
       limit; Sign in / Retry anyway for a Sign in gate; Give the ‹label› / Don’t give the secret for a secret;
-      Resume now and the auto-resume toggle for a usage wait), then View (Overview, Code, Chat), then Code while the Code tab is open (Review, Changes, Files, Go to file…,
+      Resume now and the auto-resume toggle for a usage wait), then View (Overview, Review, Code, Chat), then Review while the
+      Review tab is open (Next place to check and Previous place to check, J and K; 34), then Code while the Code tab is open (Changes, Files, Go to file…,
       Search in files, Hide viewed files or Show viewed files while the task has changes, Find in this file, Go to
       line and the diff layout, each with its key; 32), then
       This task (Wait for another task…, a choice that ticks every task it waits on and toggles
@@ -654,11 +660,13 @@ Only these, and they win over anything below:
     row's corner arrow sits under its parent's priority mark (26px per level) and is a 20px
     button: `bg-bg-a2` and `fg-4` on hover and pressed alike, the same while its menu is open,
     "Waits on" and the parents in its tooltip; it opens the Waits on menu. Every row starts with
-    its priority mark, and its status column with its kind's icon in `fg-2` (`SHAPE_ICON`, named
+    its priority mark, and its status column with its kind's icon in the status's tone (`SHAPE_ICON`, named
     for screen readers) whose tooltip lists the steps the task takes ("Investigation: find the
     repository, investigate, then your OK to change.", composed steps included, `describeTaskSteps` in `lib/tasks/shapes.ts`,
     from core's `resolveTaskProgress` with a plan's phases as one build). Filter by status in
     ⌘K offers the same sections with the same icons.
+    - **The pull request badge** (`PullRequestBadge`, the Pull request column) is the pull request's number on its
+      tone's soft surface (`TONE_SURFACE`, one step stronger on hover), the same tint as a status tile.
     - **Change to approve** is its own section between Plan to approve and Needs your answer (`IconFileEdit`,
       purple): a proposed change decides what gets built, like a plan, but it is not a plan yet.
     - **Operation to confirm** follows it (`IconConsole`, purple): a merged change whose operation waits for your
@@ -702,7 +710,7 @@ Only these, and they win over anything below:
     `TONED_ICON_SOURCES` there names the file and folder marks the Code tab draws in a pastel file tint (32). Chevrons draw square-cornered and all at one size: `Icon` always
     draws a chevron in a 14px box, and the generator scales `IconChevron…Small` 1.4× and `…Medium` 0.9333× so every
     chevron is 6.5px long, dividing the stroke by the scale so the weight matches (Iconography → Icon sizes). `Icon`,
-    `Spinner` and `Logo` are the only things that draw an svg.
+    `Spinner` and `Logo` are the only things that draw an svg. `Logo` draws in its text's colour, not the icon ink: the brand mark beside "Shinsa" is as strong as the word.
     **An icon draws in a solid icon ink, one step quieter than its text, and never at an opacity.**
     You read the text; the icon is taken in passively. Each grey text step has its ink in
     globals.css: `icon-1`…`icon-4` beside `fg-1`…`fg-4` (Iconography → Icon colour has the values
@@ -988,13 +996,17 @@ Only these, and they win over anything below:
       away: the task waits as "Paused until the usage limit resets" and its failure gate opens at the
       reset, or the failure gate opens at once; nothing is hidden). ⌘K's Change a setting has the same
       rows, without Other….
+    - **Settings → Agents → Engine** is titles-only rows: Approve plans, Automatic fix rounds, Delegations at once
+      (No limit, the default, or 2, 4, 8 or 16 at once, a stored number not in the list added in order, and
+      Custom…, which opens a dialog for any whole number of 1 or more; `delegationLimit`, `docs/engine.md` →
+      Delegation) and Merge with. ⌘K's Change a setting has the same rows, without Custom….
     - **The sign-in dialog** (`sign-in-dialog.tsx`, one `Dialog` mounted by `Root`, opened by
       `startSignIn`): Starting sign-in… with a spinner; "Sign in to Claude" with the browser note,
       the sign-in page as a link and a code field, Submit code the form's primary button; Finishing
       sign-in…; "Signed in as a@b.com." with Done; or the failure with Try again. Every dialog that
-      takes a typed value (sign-in code, a switch percentage) is one pattern: a left-aligned header,
+      takes a typed value (sign-in code, a switch percentage, a delegation limit) is one pattern: a left-aligned header,
       the field in a `<form>` (Enter submits), and a right-aligned footer of secondary Cancel and a primary button
-      named for what it does. A percentage the dialog can check itself shows as the field's `FieldError`; a code
+      named for what it does. A percentage or a count the dialog can check itself shows as the field's `FieldError`; a code
       the server refuses comes back as an error toast and the code stays in the field. Cancel while a sign-in runs
       cancels it.
     - **A dialog closes without a visible change.** Nothing it shows changes while it animates out;
@@ -1362,8 +1374,9 @@ Only these, and they win over anything below:
       sheet that sets the pointer on everything and fails if any computes `pointer` in the app.
 
 32. **The Code tab is a small workbench** (`components/code/`, `lib/code/`, `routes/task/code.tsx`, lazily loaded with
-    its editor). Every task with a repository has one (`listTaskTabs`); a task with changes opens it on Review,
-    one without on Files, reading the repository at its default branch.
+    its editor). Every task with a repository has one (`listTaskTabs`); a task with changes opens it on Changes,
+    one without on Files, reading the repository at its default branch. Since 2026-10-25 the review is not a mode of
+    the workbench: it is the Review tab (34), and Code is the raw material, the changes and the files.
     - **It opens at once** (`routes/task/load-code.tsx`, `lib/code/prefetch.ts`). A task page that has a Code tab
       prefetches it when the browser is idle (`requestIdleCallback`, 2 s at most), and at once when the Code tab is
       hovered or focused, or open on load: the tab's and CodeMirror's chunks, and in parallel the refs, the diff, the
@@ -1375,26 +1388,23 @@ Only these, and they win over anything below:
       the first line of code before, 170ms on a cold click now and about 45ms once the page has been idle a moment or
       the tab was hovered.
     - **Shape.** An explorer column on the left (280px by default, resizable from 200 to 480 by the same handle as the
-      rail, the width kept in `shinsa.code-explorer-width`; below `md` it is a sheet opened from the toolbar's
+      rail, the width kept in `shinsa.code-explorer-width`; never narrower than its header row needs: the explorer
+      measures the mode tabs and the search button at their natural width and that, with the row's padding, is the
+      least the handle allows, so the search button never covers a tab, whatever the modes or the font; below `md` it is a sheet opened from the toolbar's
       Show the files, closed by picking a file, Escape or a click outside) and the editor on the right: the 36px
       `Toolbar` (the file's icon, its path and diff counts, "Saving…" while an edit is on its way, and on a diff the
       layout toggle), then the code. The toolbar has no Open in editor: Shinsa is where you read and edit the code
       (the task's ⌘K and its menu still open the checkout in your editor). There are no editor
       tabs: one file is open at a time, and you switch from the file list, the review, a search result or ⌘P. The
-      column's header is the mode `Choice` (Review, Changes, Files; one mode shows as its plain label), the
+      column's header is the mode `Choice` (Changes, Files; one mode shows as its plain label), the
       search button (`icon-sm`, pressed while Search is open) and the ref picker under them: a `SelectField`
       (`sm`, full width) with Head of the branch (or the default branch's name), Working copy (while the worktree
       exists; its hint says whether there are uncommitted edits), Base, and every earlier commit by its subject, each
       with its short id as the hint. The ref is the "after" side of everything: the trees, the files, the search and
       the diffs (base against it).
-    - **Review** is the walkthrough: the report's headline, Walkthrough or By attention, the phases with their
-      spots (a 2px bar in the spot's attention tone), the agent review's findings, judgement calls (each a link to
-      its file and line), the checks the agent ran and your comments (each a link to its place). Each spot is a
-      compact row (`py-1`, the file's icon, its path and lines, the reason in `text-2xs`), hovered `bg-bg-a2`,
-      selected `primary-a1` like a tree row. Picking a spot
-      opens its file as a diff, or as the file when the change does not touch it, at the spot's lines; the
-      toolbar then carries the spot's attention, "3 of 13" and Previous spot / Next spot. Without a report the spots
-      come from the riskiest changes and the summary says so.
+    - **Spots and findings in the code.** A spot's lines carry a 2px bar in its attention tone, and the `spot` in the
+      URL (a link from the Review tab) washes that spot `primary-a1` and scrolls to it. There is no walkthrough here
+      and no Previous spot / Next spot: stepping through what needs you is the Review tab's (34).
     - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
       each file with a red risk dot with its reason, your comment count, the diff counts (or Binary), its status
       letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
@@ -1463,14 +1473,20 @@ Only these, and they win over anything below:
       cursor landing in a folded block widget past it in the direction it was going; a selection or an edit is left
       alone). Each side scrolls sideways on its own: its line numbers stay pinned at its left on the page background
       and the code slides under them, while the fold labels and the notes under lines follow the scroll
-      (`--scroll-left`), so they stay in view. A binary file shows nothing as text, and an image before and after on a
-      checkerboard; a file over 2 MB says its size.
+      (`--scroll-left`), so they stay in view. A file added or deleted whole has one side only, so side by side shows
+      that side at the full width (the unified view, no empty half) and the layout toggle is hidden for it
+      (`hasOneSide`). A binary file shows nothing as text, and an image before and after on a checkerboard; a file
+      over 2 MB says its size and that it is too large to show as text. A file over 1 MB, or with a line over 10,000
+      characters (a minified bundle), stops before the editor with "Opening this file may slow the page", the reason
+      ("‹path› has a line of 900,000 characters, too long to show as text.") and Open anyway (`resolveTextGuard`).
     - **You edit directly.** The file at Head of the branch or the Working copy of an open task is editable: typing
-      edits, there is no mode to turn on and nothing to confirm, and ⌘Z undoes. In a diff the new side is the editable
+      edits, there is no mode to turn on and nothing to confirm, and ⌘Z undoes (every VS Code editing key, below). In a diff the new side is the editable
       one (the right side side by side, the whole editor unified) and the diff follows each keystroke. Each pause
       (600ms) saves the file to the task's working copy (`lib/code/edits.ts`, `FileSaver`; `hooks/use-file-saver.ts`;
       `POST /api/tasks/<id>/file`, `docs/engine.md` → Your edits), "Saving…" shows in the toolbar meanwhile, and a file
-      you leave or close is saved at once. A save names the text it expects on disk; when the file changed there (an
+      you leave or close is saved at once, as is the file when you press ⌘S. A save never rebuilds the editor: when
+      the first save makes the file one you edited and its read moves to the working copy, the pane keeps the text on
+      screen until the new read lands (`holdPaneContent`), so the cursor, focus and undo history stay where they were. A save names the text it expects on disk; when the file changed there (an
       agent writing, another window), the editor takes the disk version: your unsaved edit is kept when it touches
       other lines, and otherwise the disk version shows with "This file changed on disk where you were typing, so it
       shows the new version." in a one-line strip under the toolbar (`IconCircleInfo`, `text-2xs` `fg-2`). Once you
@@ -1481,12 +1497,15 @@ Only these, and they win over anything below:
       commit, so it is read-only. Pick Head of the branch to edit."), a merged task, a finished one, one with no checkout
       (`resolveEditRefusal`, core), or the server's refusal of a save. Shinsa still makes every commit: your edits go
       into the round's next commit, and the agent hears which files you edited (`docs/engine.md` → Your edits).
-    - **Inline.** Findings sit under their last line in their tone (`red-a1` blocking, `amber-a1` a suggestion), each
-      spot's lines carry a 2px bar in its attention tone and the selected one the `primary-a1` wash. At a review or
+    - **Inline.** Findings sit under their last line as the review card (`ReviewNote`, 34) in its compact form: the
+      author (Agent review), the tone (Blocking red, Suggestion amber), the title, the message as markdown and the
+      suggested fix, with no snippet or place (the line above is the place). Each spot's lines carry a 2px bar in its
+      attention tone and the selected one the `primary-a1` wash. At a review or
       merge gate a click on a line number opens a comment box under it (on the selected lines when the click is in a
       selection); a removed line's number does the same for the removed line, and its comment sits under the removed
-      block. A comment is `primary-a1` with Remove; it is kept per gate in localStorage, anchored to the commit it was
-      made at, and goes with Request changes. A comment is words only; to change the code, edit it (above). The comment
+      block. A comment is kept per gate in localStorage, anchored to the commit it was
+      made at, and goes with Request changes. Saved, it is the same compact card, authored You, its lines as the
+      label, with Remove at the right. A comment is words only; to change the code, edit it (above). The comment
       box and every note under a line are at most 36rem wide and never wider than the side they sit in less its
       gutter (`100cqw - 6rem`, each editor being its own inline-size container), so a box for a long selection wraps
       inside the visible pane instead of running off it.
@@ -1494,11 +1513,39 @@ Only these, and they win over anything below:
       (find in the open file) and ⌘G (go to line), Ctrl elsewhere (`hooks/use-code-keys.ts`,
       `lib/code/keys.ts`). Each is also a ⌘K command with its key at the right, so the menu stays the one complete
       place. This is the one exception to ⌘K being the only shortcut, and `bun lint:conventions` rejects a global key
-      listener anywhere else.
+      listener anywhere else. Inside the editor, CodeMirror's own keymap gives VS Code's editing keys
+      (`lib/code/editor/commands.ts`, `EDITOR_COMMANDS`, each one CodeMirror command; Ctrl for ⌘ off the Mac where
+      VS Code does): ⌘S save now, ⌘Z undo, ⇧⌘Z and ⌘Y redo, ⌘F find, ⌥⌘F (Ctrl H) replace, ⌃G and ⌘G go to line,
+      ⌘D add the next occurrence, ⇧⌘L select every occurrence, ⌥⌘↑ / ⌥⌘↓ (Ctrl Alt) add a cursor above or below,
+      ⌥-click add a cursor, ⇧⌥-drag select a column, ⌥↑ / ⌥↓ move the line, ⇧⌥↑ / ⇧⌥↓ copy it, ⇧⌘K delete it,
+      ⌘] / ⌘[ indent and outdent (Tab and ⇧Tab too), ⌘/ toggle a line comment, ⌘L select the line, ⌃⇧⌘→ / ⌃⇧⌘←
+      (⇧Alt → / ←) expand and shrink the selection by syntax, ⌥⌘[ / ⌥⌘] (Ctrl ⇧[ / ]) fold and unfold the block,
+      ⌃⌥[ / ⌃⌥] fold and unfold every block, Escape back to one cursor. They act only while the editor has focus,
+      so they are no global listener, and ⌘K lists every one in its Editor group with its key (`lib/command/editor.ts`;
+      the ones that edit are off, with the reason, on a read-only file).
     - **Find in the open file** (⌘F) is our find bar in CodeMirror's top panel (`components/code/editor/find-bar.tsx`
-      on `lib/code/editor/find.ts`, which hands the panel's element to React): the shared search field, "3 of 12"
-      (or "No results", counted up to 999), Previous match / Next match and Close; Enter and ⇧Enter step, Escape
-      closes and puts you back in the code. CodeMirror's own panel, with its text buttons and checkboxes, is gone.
+      on `lib/code/editor/find.ts`, which hands the panel's element to React): the shared search field (up to 320px),
+      Previous match / Next match right after it, then "3 of 12" (or "No results", counted up to 999), and Close at
+      the far end; Enter and ⇧Enter step, Escape closes and puts you back in the code. On an editable file a chevron
+      before the field (Show replace) opens a second row, also opened by ⌥⌘F: Replace with, Replace and Replace all
+      (Enter replaces the next, ⌘Enter all). CodeMirror's own panel, with its text buttons and checkboxes, is gone.
+    - **Loading is centred.** Every wait in the Code tab ("Reading the code…", "Opening the code…", "Reading the
+      changes…", "Reading the files…", "Opening ‹path›…") is the spinner with its line under it, centred in the pane
+      it holds (`components/code/code-loading.tsx`).
+    - **Nothing moves when you switch.** Switching the ref (Head of the branch, Base, Working copy, a commit) or
+      Changes and Files measures zero layout shift (a `layout-shift` PerformanceObserver over every switch, on the
+      seed and on a 4,500-file task): the changes tree keeps the diff on screen until the next ref's diff arrives
+      (`holdLoaded`), the Files tree keeps its last fully read rows until every open folder of the new ref is read
+      (`isTreeSettled`) and then shows the new commit's rows as a new list, and a new editor stays hidden until
+      CodeMirror has measured its lines, so its gutter never slides into place.
+    - **Large changes stay fast.** The trees and the search results are virtual lists (`VirtualRows`, 22px rows), so
+      a change of thousands of files or a 100,000-file repository renders only the rows in view. The diff the tree
+      reads is a summary with patches for the small files only (`docs/engine.md` → The Code tab's reads); the editor
+      reads both sides of the open file and never the whole patch. The editor is built in a task of its own after the
+      tree paints, and its language a task later, the merge diff gives up after 20ms (`DIFF_CONFIG`) and the unified
+      view parses an old side of at most 100,000 characters, so no main-thread task passes 50ms on open, scroll or
+      switch (measured on a production build: `.playwright-mcp/shinsa-perf/` in the Kanna checkout). A search
+      streams: matches show as they are found, and the summary line once it ends.
     - **Every position is in the URL** (`lib/code/location.ts`): the mode, the open file and whether it
       is a diff, the line and range, the ref, the spot, the order and the search, so a reload or Back
       puts you where you were. Files are read by commit and cached by commit (`docs/engine.md` → The Code tab's
@@ -1526,11 +1573,56 @@ Only these, and they win over anything below:
       task's diff is numbered with a 2px bar on changed lines. A binary file says "A binary file, not shown as
       text.", a renamed one "Renamed from ‹path›." above its lines, identical text "No line changed."
     - **A change snippet** (`components/text/change-snippet.tsx`) is a file and its lines in a frame, folded until
-      you open it: open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
+      you open it. Its header is the file's icon, path and lines; on a task with a repository that place is a link that
+      opens the Code tab at those lines (with the spot, so the Code tab washes it; "Open in Code" on hover), and it can
+      lead with a label (the attention of a walkthrough spot). Open, open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
       two lines of context (`narrowHunks`), the lines themselves washed `primary-a1`; when the change does not reach
       them, the file at the head around them as unchanged lines (`createContextHunk`). A finding's place is its
       header, so a finding with a snippet drops its place chip. A blocking finding's snippet starts open
       (`startsOpen`); a suggestion's and every spot's stay folded.
+34. **Review is a report** (`routes/task/review.tsx`, `components/review/note.tsx`, `lib/review/report.ts`, since
+    2026-10-25). Review is a task tab of its own, after Overview and before Code: Overview, Review, Code, Chat. It
+    shows once there is something to review (`hasReview` in `lib/tasks/tabs.ts`): the task builds, and it has a work
+    report or agent findings, or it reached the review gate or anything after it. It reads like the Overview, top to
+    bottom in the same centred column, never a split with a file list:
+    - **What the change does.** A `NowFrame`: the status and the diff counts as the eyebrow, the report's headline as
+      the title, and how many places need you ("3 places need your attention, the most critical first."). The
+      decision sits at its top right exactly as on the Overview's now card (`ReviewActions`,
+      `components/overview/review-actions.tsx`, shared by both): Approve changes, or Fix N findings once you keep any,
+      or Merge #N at the merge gate; Request changes stays ⌘K's. The Fix / Dismiss verdicts and your line comments
+      live in the review draft (`ReviewDraftProvider`), so the Overview, the Review tab and ⌘K always agree. Without
+      a report the places come from the riskiest changes and a quiet line says so.
+    - **Needs your attention**, most critical first (`listAttentionItems`): blocking findings, critical spots, spots to
+      read carefully, suggestions, then judgement calls. Each is one review card (`ReviewNote`), with Previous place /
+      Next place (`icon-xs`) at the heading's right. A spot on the same lines as a finding folds into that finding's
+      card ("The agent marked these lines") instead of showing the same code twice. Your saved line comments follow
+      under "Your comments", each with Remove.
+    - **The review card** is how every review comment looks, anywhere: a `CARD` whose 36px header band carries the
+      author's icon and name (Agent review `IconEyeSparkle`, Agent `IconAgent`, You `IconBubbleText`), the tone as a dot
+      and label (Blocking and Critical red, Suggestion and Read carefully amber, Judgement call purple, your comment
+      blue with its lines), the section it belongs to in `fg-2`, and at the right the action (Fix / Dismiss at a
+      review gate, Remove for a comment). Under it: the title (`text-xs` medium `fg-4`), the message as markdown
+      (inline code, smart links to tasks, pull requests, files and branches through the shared reference
+      components), the change snippet of its exact lines open (the header a link into Code at those lines), and the
+      suggested fix on a `bg-a1` block headed "Suggested fix" (`IconBandage`). The selected card has a 2px
+      `primary-a3` outline 2px outside it and scrolls into view. In the Code tab the same card is compact: no snippet
+      and no place (32).
+      The chat's review card and the Overview's finding verdicts (`FindingText`) show the same parts in their
+      smaller row: severity, title, message, snippet and suggested fix.
+    - **Walkthrough**: a panel with the report's sections numbered, each title and summary over its spots as change
+      snippets, folded, the critical and read-carefully ones labelled with their tone.
+    - **Agent review**: the reviewer's summary in its own words, what it found ("Found 1 blocking finding and 2
+      suggestions.") and "A signal for you, never the approval."; "The agent review has not run yet." before it ran.
+    - **Checks**: each check the agent ran with its outcome mark and detail.
+    - **Everything else**, collapsed: the changed files nothing above points at, each a file link with its counts,
+      and the findings you dismissed in earlier rounds, compact.
+    - **Stepping.** The place you are on is `?spot=` in the URL (the same keys the Code tab uses: `0:1` a spot,
+      `finding:0` a finding, `call:0` a judgement call, `comment:<id>` your comment), so a link opens the Review tab on
+      that card. J and K step to the next and previous place while the Review tab is open and you are not typing
+      (`hooks/use-review-keys.ts`, `lib/review/keys.ts`), each also a ⌘K command (Next place to check, Previous place
+      to check) with its key; this and the Code tab's keys are the only exceptions to ⌘K being the one shortcut.
+    - **Links in.** The Overview's Review and What changed's link, ⌘K's Review the changes, a task link's action and
+      the queue's Review changes open `?tab=review`.
 
 , a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own

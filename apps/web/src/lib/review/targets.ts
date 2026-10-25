@@ -1,17 +1,4 @@
-import {
-  type Attention,
-  type CodeSpot,
-  listRankedSpots,
-  type ReviewFinding,
-  type WorkReport,
-} from '@shinsa/core';
-
-export type ReviewOrder = 'walkthrough' | 'attention';
-
-export const REVIEW_ORDERS: { value: ReviewOrder; label: string }[] = [
-  { value: 'walkthrough', label: 'Walkthrough' },
-  { value: 'attention', label: 'By attention' },
-];
+import type { Attention, CodeSpot, ReviewFinding, WorkReport } from '@shinsa/core';
 
 export interface ReviewTarget {
   key: string;
@@ -23,16 +10,11 @@ export interface ReviewTarget {
   section: string;
 }
 
-export function toReviewTarget(spot: CodeSpot, section: string, key: string): ReviewTarget {
+function toReviewTarget(spot: CodeSpot, section: string, key: string): ReviewTarget {
   return { key, ...spot, section };
 }
 
-export function listReviewTargets(report: WorkReport, order: ReviewOrder): ReviewTarget[] {
-  if (order === 'attention') {
-    return listRankedSpots(report).map(({ spot, sectionIndex, spotIndex }) =>
-      toReviewTarget(spot, report.sections[sectionIndex]?.title ?? '', `${sectionIndex}:${spotIndex}`)
-    );
-  }
+export function listReviewTargets(report: WorkReport): ReviewTarget[] {
   return report.sections.flatMap((section, sectionIndex) =>
     section.spots.map((spot, spotIndex) =>
       toReviewTarget(spot, section.title, `${sectionIndex}:${spotIndex}`)
@@ -60,14 +42,4 @@ export function listFindingTargets(findings: ReviewFinding[]): ReviewTarget[] {
         ]
       : []
   );
-}
-
-export function stepTarget(targets: ReviewTarget[], index: number, delta: 1 | -1) {
-  if (targets.length === 0) return null;
-  const from = index < 0 ? (delta > 0 ? -1 : 0) : index;
-  return targets[(from + delta + targets.length) % targets.length] ?? null;
-}
-
-export function formatTargetLines(target: ReviewTarget) {
-  return target.start === target.end ? String(target.start) : `${target.start}–${target.end}`;
 }

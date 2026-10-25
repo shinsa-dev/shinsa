@@ -10,6 +10,7 @@ import {
   resolveVerdict,
   resolveVerdictAction,
   resolveVerdictAnswer,
+  resolveVerdictDraft,
   VERDICT_ITEMS,
 } from '@/lib/overview/verdicts.ts';
 import { createGate } from '../../support/state.ts';
@@ -20,6 +21,11 @@ const FINDINGS: ReviewFinding[] = [
 ];
 
 describe('finding verdicts', () => {
+  it('lays the verdicts you chose over the defaults', () => {
+    expect(resolveVerdictDraft(FINDINGS, { 1: 'fix' })).toEqual({ 0: 'fix', 1: 'fix' });
+    expect(resolveVerdictDraft(FINDINGS, {})).toEqual({ 0: 'fix', 1: 'dismiss' });
+  });
+
   it('starts with blocking findings to fix and suggestions dismissed', () => {
     const draft = createVerdictDraft(FINDINGS);
     expect(draft).toEqual({ 0: 'fix', 1: 'dismiss' });

@@ -13,15 +13,19 @@ describe('a finding’s code', () => {
     const view = render(
       <TooltipProvider>
         <FindingText
-          severity='blocking'
-          place={{ file: 'src/a.ts', line: 3, end: null }}
-          message='Off by one.'
+          finding={{
+            severity: 'blocking',
+            file: 'src/a.ts',
+            line: 3,
+            end: null,
+            message: 'Off by one.',
+            title: 'The loop skips the last item',
+            fix: 'Use `<=`.',
+          }}
           task={task}
         />
         <FindingText
-          severity='suggestion'
-          place={{ file: 'src/b.ts', line: 7, end: null }}
-          message='Rename it.'
+          finding={{ severity: 'suggestion', file: 'src/b.ts', line: 7, end: null, message: 'Rename it.' }}
           task={task}
         />
       </TooltipProvider>
@@ -29,6 +33,8 @@ describe('a finding’s code', () => {
     expect(view.getByRole('button', { name: 'Collapse code' }).getAttribute('aria-expanded')).toBe('true');
     expect(view.getByRole('button', { name: 'Expand code' }).getAttribute('aria-expanded')).toBe('false');
     expect(view.getAllByText('Loading…')).toHaveLength(1);
+    expect(view.getByText('The loop skips the last item')).toBeDefined();
+    expect(view.getByText('Suggested fix')).toBeDefined();
     view.unmount();
     pending.mockRestore();
   });

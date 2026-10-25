@@ -63,7 +63,7 @@ builds never reviews its own work.
 | --- | --- | --- | --- |
 | Classifier | Sonnet | one call, no tools | title, repository (or none), size, branch, and for what you left on Auto: the shape, the priority and the tasks it waits on, each with why |
 | Agent | Opus | one session per task, resumed by every run of every round: it plans read-only, then builds, fixes and operates with edits; a fresh session only when the old one cannot go on (Recovery) | while planning, 2–8 phases (`propose_plan`) or the task's steps composed anew (`reshape_task`, Task shapes, below); a phase report per phase (`complete_phase`); a summary per fix (`complete_fix`); how the operation went (`report_outcome`), after the evidence its plan asks for |
-| Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | findings (`report_review`) |
+| Reviewer | Opus | one session of its own per task, resumed by every review of every round and never the Agent's; it cannot edit | a summary and findings (`report_review`) |
 | Answerer | Opus | the task's session (fresh only for a task's first run), in the repository itself (a scratch folder of its own when the task has no repository), cannot edit; on another model than the session's it resumes it on its own, on another provider it starts fresh | an answer (`answer`), optionally a proposed change (Task shapes, below) |
 | Investigator | the Answerer's | the task's session, in the task's worktree used as scratch (it may run anything and add logging; nothing it changes ships) | a diagnosis (`report_diagnosis`), optionally a proposed fix |
 | Researcher | the Answerer's | the task's session, cannot edit, in the worktree when the task has one, else the repository, else a scratch folder | a report (`submit_report`), optionally a proposed change |
@@ -174,7 +174,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 4. **Checks.** After the last phase Shinsa runs the checks. A failure goes back to the Agent's session with the
    output. Every fix prompt says what follows the fix: the task's checks and agent review where it
    has them, then your review; for a pull request fix, the push.
-5. **Agent review.** A fresh reviewer reads the diff. Blocking findings go back to the Agent, and then
+5. **Agent review.** A fresh reviewer reads the diff. It hands over one `report_review`: a summary of what it checked
+   and its view of the change, and each finding anchored to lines with a title, what is wrong and why it matters,
+   and a suggested fix when it has one (`resolveReviewerPrompt`). The task keeps them as `reviewSummary` and
+   `findings` until the next review or round. Blocking findings go back to the Agent, and then
    the checks and a new reviewer run again. Suggestions alone do not block.
 6. **Your review.** The review gate shows one report built from every phase. Approve it, or write
    in the chat: a message while the gate is open withdraws it and goes to the Agent. Approving with edits you made in
@@ -769,7 +772,7 @@ in which finished work reaches you is managed.
   running: there is no cap. A run is created `queued` and `dispatchRuns` starts it in the same
   command, so `queued` only lasts until the end of that command (or across a restart, until the
   boot dispatch). An agent may start as many of its provider's own subagents as it needs; Shinsa's
-  delegations have their own limits (Delegation, below).
+  delegations nest at most three deep and run without a limit unless you set one (Delegation → Limits, below).
 - **No agent limit.** Work you asked for never waits for a slot: there is no cap, hidden or behind an environment
   switch, and a stored `maxConcurrentRuns` is ignored. If a machine ever needs one, it belongs in `dispatchRuns` and
   nowhere else.
@@ -1170,8 +1173,12 @@ and the run supervisor.
   started (`requestKey`) and never starts a second one or a second checkout. The tool names its
   command `agent:<run>:<attempt>:delegate:<id>`, so a repeat inside one attempt is answered by its
   command receipt, and a different brief under the same id is refused with `command_id_conflict`.
-- **Limits.** Delegation nests three deep (`DELEGATION_LIMITS.depth`) and at most eight delegations
-  run at once under one step, at any depth (`live`). A refusal says what to do instead.
+- **Limits.** Delegation nests three deep (`DELEGATION_LIMITS.depth`), a fixed guard against runaway nesting. How
+  many delegations run at once under one step, at any depth, has no limit by default; the human may set one in
+  Settings → Agents → Engine, Delegations at once (`delegationLimit`, a whole number of 1 or more, or `null` for no
+  limit; human-only). The orchestration rules never mention it, so the system prompt stays the same when the setting
+  changes (Caching): only the refusal (`delegation_limit`) names the limit and the setting, and says what to do
+  instead. Lowering it never stops a delegation already running; it refuses new ones until the count is below it.
 - **A child is never broader than its parent.** The Agent while it plans (`isReadOnlyRun`), a reviewer, answerer,
   researcher or delegated planner cannot change files, so it can only delegate to a planner or reviewer, checked again
   on every request ("While you plan you cannot change files, so the agents you delegate to cannot either."). A
@@ -1283,8 +1290,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
 | `GET /api/tasks/<id>/tree?ref=&dir=` | `RepoTree`: one folder's entries, folders first | `git ls-tree --long`; the working copy from its paths |
 | `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | `git ls-tree` for the object, then `git cat-file blob`; the working copy through `resolveInside` |
 | `GET /api/tasks/<id>/raw?ref=&path=` | an image's bytes, with `default-src 'none'` and `nosniff`; anything but an image is refused | as `blob` |
-| `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&word=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut` | `git grep -n -I --column` with `-F` unless `regex=1` (then `-E`), `-i` unless `case=1`, `-w` with `word=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked` |
-| `GET /api/tasks/<id>/diff?base=&head=` | `TaskDiff` with both ends | `git diff --find-renames base head`, `binary` set for a binary file; `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
+| `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&word=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut`; asked with `Accept: application/x-ndjson` (the web does), a stream of `SearchLine`s instead: `matches` lines as git finds them, then one `done` line with how it ended (or one `failed` line), `no-store` | `git grep -n -I --column`: a plain search that ignores case is `-E` with each letter folded into a class (`[cC][oO]…`, the rest escaped; `-i` made git grep up to twenty times slower), a case-sensitive one `-F`, `regex=1` is `-E` with `-i` unless `case=1`, `-w` with `word=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked`. git is stopped at the 2,001st line, so a common word answers at once |
+| `GET /api/tasks/<id>/diff?base=&head=&path=&previous=` | `TaskDiff` with both ends: every changed file with its status, counts and risk, and the patch of the small ones only; the rest have `patch: ''` and `patchOmitted` (with `path`, and `previous` for a rename, the named file alone with its whole patch) | `git diff --raw --numstat -z --find-renames base head` for the list (`parseDiffSummary`), then one `git diff` over the files that fit the patch budget, in risk order (`selectPatchedFiles`, `mergeDiffPatches`: none over 2,000 changed lines or 256 KB, 20,000 lines and 1 MB in all, 400 files; a named file up to 2 MB); `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
 
 - **Where agents work.** The working copy is the task's own only in a worktree or a main checkout. A GitButler task
   shares its checkout with every applied branch, so its head is its branch and its `working` ref is assembled: the
@@ -1300,8 +1307,12 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   after `--` and with `GIT_LITERAL_PATHSPECS`, and the working copy is read through `resolveInside`, so a symlink
   cannot leave it. A search glob may not start with `-` or `:`, and the query is at most 500 characters.
 - **Limits.** Each read runs with argv only, in its own process group, for 5 s (30 s for a diff) and stops when the
-  client goes away; output is capped (64 MB for listings and diffs, 4 MB for a search, 2 MB for a file), and a search
-  that runs out of time answers with what it found and `timedOut`.
+  client goes away; output is capped (64 MB for listings and diffs, 4 MB or 2,000 lines for a search, 2 MB for a
+  file), and a search that runs out of time answers with what it found and `timedOut`. A diff answer stays small
+  however large the change: measured on a throwaway clone of paywall-next diffed across 400 commits (4,503 files,
+  449,198 lines added and 116,097 removed), the diff is 1.9 MB (it was 32 MB with every patch) and takes 0.9 s cold and
+  35 ms cached; on a synthetic 100,000-file repository with a 50,000-line file, a 5 MB one-line bundle and binaries, a
+  search for a word in every file answers in under 100 ms (it timed out at 5 s with no result before).
 - **Caching.** A read named by a commit is immutable: it carries an `ETag` and `Cache-Control: private,
   max-age=31536000, immutable`, a matching `If-None-Match` is a 304, and the server keeps file contents (by object id),
   path lists and diffs in a 64 MB least-recently-used cache. Working-copy reads are `no-store`. The web keys every
@@ -1368,7 +1379,7 @@ plainly what protects what.
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
-    `accountSwitchAt`, `fastMode`, `agentFastModes`) and a repository's checks (`HUMAN_ONLY_REPO_FIELDS`:
+    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's checks (`HUMAN_ONLY_REPO_FIELDS`:
     `checkCommands`, `checksWaived`); agents keep the rest (models, providers, fix rounds, attention, compaction);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);

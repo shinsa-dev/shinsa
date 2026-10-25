@@ -1006,6 +1006,12 @@ export function resolveReviewReport(sample: CodeSample, checks: ReportCheck[]) {
   return { phases, report };
 }
 
+export const REVIEW_SUMMARY =
+  'I read the rename across lib/review, the code view and the tests, and opened old spot links against the new parser. The rename is clean, but links to agent findings and judgement calls stop working.';
+
+export const MERGED_REVIEW_SUMMARY =
+  'I read the new queue order and its two tests. Urgent work sits on top inside each gate and the input is left untouched; nothing to report.';
+
 export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
   const { review } = sample;
   const listFinding = resolveLine(review.spots.after, 'export function listFindingSpots');
@@ -1014,8 +1020,10 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       severity: 'blocking',
       file: SAMPLE_PATHS.spotKeys,
       line: resolveLine(review.spotKeys.after, 'const match ='),
+      title: 'Old links to findings open nothing',
       message:
-        'parseSpotKey returns null for finding and decision keys, so a link to an agent finding or a judgement call opens nothing. Parse those forms too, or keep them out of the link. The new test pins the null.',
+        'parseSpotKey returns null for finding and decision keys, so a link to an agent finding or a judgement call opens nothing. The new test pins the null, so the regression looks intended.',
+      fix: 'Parse `finding:N` and `decision:N` as keys of their own, or leave those keys out of the link, and change the test that pins the null.',
     },
     {
       severity: 'suggestion',
@@ -1024,6 +1032,8 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       end: resolveLine(review.spots.after, "section: 'Agent review'", listFinding),
       message:
         'listFindingSpots and listFindingMarkers both check isLocated and map a severity to a tone. One helper would keep the two from drifting.',
+      title: 'Two copies of the severity mapping',
+      fix: 'Extract `resolveFindingTone(finding)` and call it from both functions.',
     },
     {
       severity: 'suggestion',
@@ -1031,12 +1041,17 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       line: resolveLine(review.codeView.after, "from '@/lib/review/spots.ts'"),
       message:
         'The code view only needs CodeMarker. Moving that type next to the code view would keep the review module out of its chunk.',
+      title: 'The code view pulls in the review module',
+      fix: 'Move `CodeMarker` into the code view folder and import it from there.',
     },
     {
       severity: 'suggestion',
       file: SAMPLE_PATHS.webGuide,
       line: resolveLine(review.webGuide.before, 'Review targets and markers'),
-      message: 'apps/web/CLAUDE.md still describes lib/review as review targets.',
+      title: 'The web guide still says targets',
+      message:
+        'apps/web/CLAUDE.md still describes lib/review as review targets, so the next agent reads the old name.',
+      fix: 'Change the line to “Review spots and markers”.',
     },
     {
       severity: 'suggestion',
@@ -1044,6 +1059,8 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
       line: null,
       message:
         'Settings, schedules and MCP code still say target. They mean something else and should keep it, but add them to the plan’s out of scope so the next pass does not rename them.',
+      title: 'Other uses of target are not marked out of scope',
+      fix: 'Add “target in settings, schedules and MCP code” to the plan’s out of scope.',
     },
   ];
 }
@@ -1144,6 +1161,7 @@ function scriptReview(sample: CodeSample, push: Push) {
   push(at(REVIEW_MARKS.reviewer[1] - 0.2), {
     type: 'review.reported',
     taskId: task,
+    summary: REVIEW_SUMMARY,
     findings: listReviewFindings(sample),
     runId: reviewer,
   });
@@ -1284,6 +1302,7 @@ function scriptMerged(sample: CodeSample, push: Push) {
   push(at(MERGED_MARKS.reviewer[1] - 0.2), {
     type: 'review.reported',
     taskId: task,
+    summary: MERGED_REVIEW_SUMMARY,
     findings: [],
     runId: runId(task, 3),
   });

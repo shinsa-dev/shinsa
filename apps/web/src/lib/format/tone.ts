@@ -10,6 +10,16 @@ export const TONE_SURFACE: Record<Tone, string> = {
   purple: 'bg-purple-a2 text-purple-text',
 };
 
+export const TONE_SURFACE_HOVER: Record<Tone, string> = {
+  neutral: 'hover:bg-bg-a3 active:bg-bg-a3',
+  blue: 'hover:bg-primary-a3 active:bg-primary-a3',
+  amber: 'hover:bg-amber-a3 active:bg-amber-a3',
+  orange: 'hover:bg-orange-a3 active:bg-orange-a3',
+  green: 'hover:bg-green-a3 active:bg-green-a3',
+  red: 'hover:bg-red-a3 active:bg-red-a3',
+  purple: 'hover:bg-purple-a3 active:bg-purple-a3',
+};
+
 export const TONE_TEXT: Record<Tone, string> = {
   neutral: 'text-fg-2',
   blue: 'text-primary-text',

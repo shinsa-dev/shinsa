@@ -1,4 +1,4 @@
-import type { Attention, Task, TaskRefs } from '@shinsa/core';
+import type { Task, TaskDiff, TaskRefs } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
@@ -10,10 +10,10 @@ import { Explorer, type ExplorerProps } from '@/components/code/explorer.tsx';
 import { QuickOpen } from '@/components/code/quick-open.tsx';
 import { ResizeHandle } from '@/components/layout/sidebar/resize-handle.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { AttentionLabel } from '@/components/status/text.tsx';
 import { useCodeKeyLabel, useCodeKeys } from '@/hooks/use-code-keys.ts';
 import { useCodeLocation } from '@/hooks/use-code-location.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
+import { resolveEditState } from '@/lib/code/edits.ts';
 import { type CodeKey, describeCodeKey } from '@/lib/code/keys.ts';
 import {
   type CodeFileRef,
@@ -27,8 +27,9 @@ import {
 import { resolveViewRef } from '@/lib/code/refs.ts';
 import { resolveFileSource } from '@/lib/code/source.ts';
 import { listCodeCommands } from '@/lib/command/code.ts';
+import { listEditorCommands } from '@/lib/command/editor.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
-import { useTaskDiff } from '@/lib/connection/code.ts';
+import { holdLoaded, type Loaded, useTaskDiff } from '@/lib/connection/code.ts';
 import {
   toggleViewedFile,
   useExplorerWidth,
@@ -37,60 +38,16 @@ import {
   useViewedFiles,
 } from '@/lib/preferences/code.ts';
 import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
-import {
-  listFindingTargets,
-  listReviewTargets,
-  type ReviewTarget,
-  stepTarget,
-} from '@/lib/review/targets.ts';
+import { listFindingTargets, listReviewTargets } from '@/lib/review/targets.ts';
 import type { ExplorerMode } from '@/lib/tasks/tabs.ts';
-
-function SpotStepper({
-  index,
-  total,
-  attention,
-  onStep,
-}: {
-  index: number;
-  total: number;
-  attention: Attention | null;
-  onStep: (delta: 1 | -1) => void;
-}) {
-  if (total === 0) return null;
-  return (
-    <span className='flex shrink-0 items-center gap-1'>
-      {attention && <AttentionLabel attention={attention} />}
-      <span className='text-2xs text-fg-2 tabular-nums max-lg:hidden'>
-        {index >= 0 ? `${index + 1} of ${total}` : `${total} spots`}
-      </span>
-      <Hint label='Previous spot'>
-        <Button
-          variant='secondary'
-          size='icon-sm'
-          icon='IconChevronTopMedium'
-          aria-label='Previous spot'
-          onClick={() => onStep(-1)}
-        />
-      </Hint>
-      <Hint label='Next spot'>
-        <Button
-          variant='secondary'
-          size='icon-sm'
-          icon='IconChevronDownMedium'
-          aria-label='Next spot'
-          onClick={() => onStep(1)}
-        />
-      </Hint>
-    </span>
-  );
-}
 
 export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; modes: ExplorerMode[] }) {
   const { location, apply } = useCodeLocation(modes);
   const draft = useReviewDraft();
   const narrow = useMediaQuery('(max-width: 767px)');
   const mac = useCodeKeyLabel();
-  const width = useExplorerWidth();
+  const [explorerFloor, setExplorerFloor] = React.useState(0);
+  const width = useExplorerWidth(explorerFloor);
   const [unified, toggleSplit] = useUnifiedDiff();
   const split = !unified;
   const [hideViewed, toggleHideViewed] = useHideViewed();
@@ -100,7 +57,12 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const editor = React.useRef<EditorHandle>(null);
   const gitRef = resolveViewRef(location.ref, refs);
   const reviewing = modes.includes('changes');
-  const diff = useTaskDiff(task, reviewing ? refs.base : null, refs.base ? gitRef : null);
+  const shownDiff = React.useRef<Loaded<TaskDiff>>({ status: 'idle' });
+  const diff = holdLoaded(
+    shownDiff.current,
+    useTaskDiff(task, reviewing ? refs.base : null, refs.base ? gitRef : null)
+  );
+  shownDiff.current = diff;
   const diffValue = diff.status === 'ready' ? diff.value : null;
   const report = React.useMemo(
     () => task.report ?? (diffValue ? resolveFallbackReport(diffValue, task.summary ?? task.title) : null),
@@ -108,10 +70,9 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   );
   const findings = React.useMemo(() => listFindingTargets(task.findings), [task.findings]);
   const targets = React.useMemo(
-    () => (report ? [...listReviewTargets(report, location.order), ...findings] : findings),
-    [report, location.order, findings]
+    () => (report ? [...listReviewTargets(report), ...findings] : findings),
+    [report, findings]
   );
-  const spotIndex = targets.findIndex((target) => target.key === location.spot);
   const viewed = useViewedFiles(task.id, reviewing ? gitRef : null);
   const commentCounts = React.useMemo(() => {
     const counts = new Map<string, number>();
@@ -126,31 +87,15 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     setSheetOpen(false);
   }
 
-  function openTarget(target: ReviewTarget) {
-    const kind = changed.has(target.file) ? 'diff' : 'file';
-    open({ kind, path: target.file }, { line: target.start, end: target.end, spot: target.key });
-  }
-
   function openLine(path: string, line: number) {
     open({ kind: changed.has(path) ? 'diff' : 'file', path }, { line });
   }
 
   React.useEffect(() => {
     if (location.active || (reviewing && !diffValue)) return;
-    const first = location.mode === 'review' ? targets[0] : undefined;
-    if (first) {
-      const kind = changed.has(first.file) ? 'diff' : 'file';
-      apply(
-        resolveOpenPatch({ kind, path: first.file }, { line: first.start, end: first.end, spot: first.key }),
-        {
-          replace: true,
-        }
-      );
-      return;
-    }
     const file = location.mode === 'changes' ? diffValue?.files[0] : undefined;
     if (file) apply(resolveOpenPatch({ kind: 'diff', path: file.path }), { replace: true });
-  }, [location, targets, changed, diffValue, reviewing, apply]);
+  }, [location, diffValue, reviewing, apply]);
 
   function applyMode(mode: CodeMode) {
     apply(mode === 'search' ? resolveSearchPatch(location) : resolveModePatch(mode, modes));
@@ -181,6 +126,16 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       toggleSplit,
       toggleHideViewed,
     }),
+    ...(active
+      ? [
+          listEditorCommands({
+            taskId: task.id,
+            mac,
+            readOnly: resolveEditState({ task, refs, gitRef, headPath: active.headPath }).reason,
+            run: (id) => editor.current?.run(id),
+          }),
+        ]
+      : []),
   ]);
 
   const explorer: ExplorerProps = {
@@ -190,16 +145,11 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     modes,
     location,
     diff,
-    report,
-    findings,
     commentCounts,
     viewed,
     searchInput,
     onMode: applyMode,
     onRef: (ref) => apply({ ref: ref === refs.head ? null : ref }),
-    onOrder: (order) => apply({ order: order === 'walkthrough' ? null : order }, { replace: true }),
-    onTarget: openTarget,
-    onLine: (path, line, side) => openLine(path, side === 'new' ? line : 0),
     onChange: (path) => open({ kind: 'diff', path }),
     onFile: (path) => open({ kind: 'file', path }),
     onMatch: openLine,
@@ -233,7 +183,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
           className='relative flex shrink-0 flex-col border-border border-r'
           style={{ width: width.width }}
         >
-          <Explorer {...explorer} />
+          <Explorer {...explorer} onFloor={setExplorerFloor} />
           <ResizeHandle
             label='Resize the file list'
             onPointerDown={width.startResize}
@@ -254,22 +204,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
             split={split}
             onSplit={toggleSplit}
             handle={editor}
-            toolbar={
-              <>
-                {explorerButton}
-                {location.mode === 'review' && (
-                  <SpotStepper
-                    index={spotIndex}
-                    total={targets.length}
-                    attention={targets[spotIndex]?.attention ?? null}
-                    onStep={(delta) => {
-                      const next = stepTarget(targets, spotIndex, delta);
-                      if (next) openTarget(next);
-                    }}
-                  />
-                )}
-              </>
-            }
+            toolbar={explorerButton}
           />
         ) : (
           <div className='flex min-h-0 flex-1 flex-col'>

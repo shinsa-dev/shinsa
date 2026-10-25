@@ -1,4 +1,4 @@
-import type { ReviewComment } from '@shinsa/core';
+import type { FindingVerdictKind, ReviewComment } from '@shinsa/core';
 import * as React from 'react';
 
 export interface LineComment extends ReviewComment {
@@ -15,6 +15,8 @@ export interface ReviewDraft {
   addComment: (comment: DraftComment) => void;
   removeComment: (id: string) => void;
   clearComments: () => void;
+  verdicts: Readonly<Record<number, FindingVerdictKind>>;
+  setVerdict: (index: number, verdict: FindingVerdictKind) => void;
 }
 
 function ignore() {}
@@ -25,6 +27,8 @@ export const ReviewDraftContext = React.createContext<ReviewDraft>({
   addComment: ignore,
   removeComment: ignore,
   clearComments: ignore,
+  verdicts: {},
+  setVerdict: ignore,
 });
 
 const STORAGE_PREFIX = 'shinsa.review-draft.';

@@ -34,7 +34,12 @@ function newRound(
 function reviewClean(harness: Harness, taskId: string) {
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   linkSession(harness, taskId, 'reviewer-1');
-  harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    findings: [],
+  });
 }
 
 function shipAndMerge(harness: Harness, taskId: string, number = 42) {
@@ -259,6 +264,7 @@ describe('one reviewer session per task', () => {
     harness.send({
       type: 'agent.report_review',
       runId: first.id,
+      summary: null,
       findings: [{ severity: 'blocking', message: 'Breaks the build.', file: 'src/a.ts', line: 1 }],
     });
     expect(harness.activeRun(taskId)).toMatchObject({

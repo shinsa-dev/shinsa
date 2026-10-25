@@ -389,7 +389,7 @@ describe('on a task page', () => {
       createTask({
         id: 'login',
         title: 'Fix the login redirect',
-        stage: 'reviewing',
+        stage: 'awaiting_review',
         worktreePath: '/tmp/wt',
       }),
       ...tasks.slice(1),
@@ -405,6 +405,8 @@ describe('on a task page', () => {
       addComment: () => {},
       removeComment: () => {},
       clearComments: () => {},
+      verdicts: {},
+      setVerdict: () => {},
     };
     return (
       <ReviewDraftContext.Provider value={draft}>

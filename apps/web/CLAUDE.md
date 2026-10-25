@@ -21,11 +21,11 @@ src/
 │   │                    (the setup chat)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
-│   │                    code.tsx, chat.tsx
+│   │                    review.tsx (the Review tab: the report top to bottom), code.tsx, chat.tsx
 │   └── ui/              The showcase: index.tsx (the page, the section nav in page order, the theme switch),
 │                        section.tsx (Section, Specimen), tokens.tsx, inputs.tsx, overlays.tsx and surfaces.tsx
 │                        (the kit), composites.tsx (Shinsa's shared building blocks, the setup pieces and the
-│                        composer), accounts.tsx, overview.tsx, chat.tsx, code.tsx (the editor, its diffs and Go to
+│                        composer), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), code.tsx (the editor, its diffs and Go to
 │                        file) and settings.tsx (the feature pieces in
 │                        each state), samples.ts, sample-accounts.ts, sample-delegations.ts, sample-extensions.ts,
 │                        sample-versions.ts, sample-code.ts and sample-overview.ts (their sample data; samples.ts also has the toast every action
@@ -37,7 +37,7 @@ src/
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
 │                        result panels, the Rounds panel and its round headers, progress track), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
-│                        live card, handover, delegation and notice rows, the context meter), code (the Code tab's workbench: explorer, review walkthrough, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx), command (⌘K), queue, home (guide,
+│                        live card, handover, delegation and notice rows, the context meter), review (note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue, home (guide,
 │                        new task, recently finished and recent conversations), roadmap, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx and workspace-select.tsx (where agents work);
@@ -62,7 +62,7 @@ src/
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
-│                        tab's saving of the file you edit (use-file-saver), ⌘K key…)
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, state, acks,
     │                    transcripts, whether the desktop app is connected, reconnect), commands.ts
@@ -82,7 +82,7 @@ src/
     │                    rows, the root's blocks and their scores, Recent, the New task action), global.ts, gates.ts (the commands of every open gate), task.ts and
     │                    task-actions.ts (a task's page), process.ts (check-ins, the quiet agent, suggested
     │                    tasks, delegations), accounts.ts (Accounts group, Run on account, usage waits),
-    │                    schedules.ts, extensions.ts (the Integrations group), versions.ts (Update Claude Code and
+    │                    schedules.ts, review.ts (the Review tab's Next and Previous place), editor.ts (the Code tab's Editor group: every editing key), extensions.ts (the Integrations group), versions.ts (Update Claude Code and
     │                    Update Codex), and one file per page that
     │                    registers commands (tasks, home, settings)
     ├── accounts/        account.ts (every account label and toast, plans, Run on account choices, each provider's
@@ -102,14 +102,17 @@ src/
     │                    disk, the line merge with a disk change, what you saved per read),
     │                    collapse.ts, pane.ts, keys.ts (⌘P, ⇧⌘F, ⌘F, ⌘G); editor/ (CodeMirror: the Shinsa theme,
     │                    languages, the unified diff with removed lines highlighted in context, note slots, the
-    │                    comment gutter, find.ts: the find bar's panel and match count, collapsed.ts: the cursor
+    │                    comment gutter, find.ts: the find bar's panel, its replace row and match count, commands.ts: VS Code's editing keys as CodeMirror commands, one list for the keymap and ⌘K, collapsed.ts: the cursor
     │                    stepping over folded lines and the sideways scroll the folds and notes follow); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
     │                    the task diff, notes, the 14-line fold), diff-theme.ts (`@pierre/diffs` on the `--code-*`
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)
-    ├── review/          Review targets, the fallback report, the line-comment draft (sides, ranges, kept in
-    │                    localStorage per gate; serializeComments is what `gate.answer` sends
-    │                    as `comments`), finding places
+    ├── review/          The Review tab (report.ts: what needs your attention and in what order, the walkthrough's
+    │                    sections, the other changed files, the review card's items; keys.ts: J and K; places.ts:
+    │                    the paths into Code and into the Review tab), the Code tab's spot targets, the fallback
+    │                    report, the line-comment draft (sides, ranges, kept in localStorage per gate, and your
+    │                    Fix / Dismiss verdicts; serializeComments is what `gate.answer` sends as `comments`),
+    │                    finding places
     ├── overview/        Now card titles, progress steps, activity glyphs, evidence kinds, waits,
     │                    questions, verdicts, plan versions, plan parameters, the operation gate and its notes, setup
     ├── tasks/           Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
@@ -164,8 +167,9 @@ files after it.
   (`useOnboardingChat`). Run setup again (Settings → Setup, ⌘K) is `restartOnboarding`: it restarts the chat on
   the server first, so the page opens on an open question; there is no URL flag. No folder path is written into
   the web.
-- **URL state is the view state.** The task tab (`?tab=code|chat`), the Code tab's whole workbench (`lib/code/location.ts`:
-  `?mode=review|changes|files|search`, `file`, `diff`, `line`, `end`, `ref`, `spot`, `order`, `q`,
+- **URL state is the view state.** The task tab (`?tab=review|code|chat`), the Review tab's place (`?spot=`), the Code
+  tab's whole workbench (`lib/code/location.ts`: `?mode=changes|files|search`, `file`, `diff`, `line`, `end`, `ref`,
+  `spot`, `q`,
   `regex`, `case`, `word`, `glob`), focused run (`?run=`), the Settings tab (`?tab=agents`, `lib/settings-tabs.ts`) and the roadmap filters
   (`?status=`, `?q=`) live in the URL, read with
   `useSearchParam` and written with `updateSearchParams`. Build task URLs only with `resolveTaskPath`: it uses the
@@ -174,10 +178,10 @@ files after it.
   hooks private to them; anything that computes (a label, an order, a section list, a command list) is a `.ts`
   function in `lib/` with a test. A component used by one route still lives in `components/<domain>/` when the
   route file would otherwise grow past a screenful.
-- **⌘K is the only shortcut, but for the Code tab.** Pages add commands with `useRegisterCommands(sections)` while
+- **⌘K is the only shortcut, but for the Code and Review tabs.** Pages add commands with `useRegisterCommands(sections)` while
   mounted (`docs/design.md`, 14). A command or choice option is disabled only with its reason (`disabled: '…'`, a
   string shown in place of the hint); there is no boolean. While the Code tab is open it binds ⌘P, ⇧⌘F, ⌘F and ⌘G (`hooks/use-code-keys.ts`),
-  each also a ⌘K command; `bun lint:conventions` rejects a global key listener anywhere else.
+  and while the Review tab is open J and K (`hooks/use-review-keys.ts`, not while you type), each also a ⌘K command; `bun lint:conventions` rejects a global key listener anywhere else.
 - **One owner per shared piece.** The visual ones (tones, times, cards, check marks, task actions, dependencies)
   are listed in `docs/design.md`, 15. In code, besides those: gate replies go through `lib/tasks/gates.ts`, what a message does (every composer's
   placeholder and toast for `task.message`, and ⌘K's Message the agent) through `lib/tasks/messages.ts`, HTTP

@@ -1,3 +1,4 @@
+import type { FindingVerdictKind } from '@shinsa/core';
 import * as React from 'react';
 import {
   createLineComment,
@@ -21,7 +22,11 @@ export function ReviewDraftProvider({
     key: draftKey,
     comments: readStoredComments(draftKey),
   }));
+  const [chosen, setChosen] = React.useState<{ key: string; verdicts: Record<number, FindingVerdictKind> }>(
+    () => ({ key: draftKey, verdicts: {} })
+  );
   const comments = draft.key === draftKey ? draft.comments : readStoredComments(draftKey);
+  const verdicts = chosen.key === draftKey ? chosen.verdicts : {};
   const value = React.useMemo<ReviewDraft>(() => {
     const update = (change: (current: LineComment[]) => LineComment[]) =>
       setDraft((current) => {
@@ -36,7 +41,13 @@ export function ReviewDraftProvider({
         update((current) => [...current, createLineComment(comment, crypto.randomUUID())]),
       removeComment: (id) => update((current) => current.filter((comment) => comment.id !== id)),
       clearComments: () => update(() => []),
+      verdicts,
+      setVerdict: (index, verdict) =>
+        setChosen((current) => ({
+          key: draftKey,
+          verdicts: { ...(current.key === draftKey ? current.verdicts : {}), [index]: verdict },
+        })),
     };
-  }, [enabled, comments, draftKey]);
+  }, [enabled, comments, verdicts, draftKey]);
   return <ReviewDraftContext.Provider value={value}>{children}</ReviewDraftContext.Provider>;
 }

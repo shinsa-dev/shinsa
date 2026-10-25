@@ -14,7 +14,7 @@ describe('useTaskView', () => {
     expect(result.current.task?.id).toBe('t1');
     expect(result.current.tabs).toEqual(['overview', 'code', 'chat']);
     expect(result.current.tab).toBe('overview');
-    expect(result.current.codeModes).toEqual(['review', 'changes', 'files']);
+    expect(result.current.codeModes).toEqual(['changes', 'files']);
     expect(result.current.chatRunId).toBeNull();
     expect(result.current.lead).toBeUndefined();
     expect(result.current.reviewing).toBe(false);
@@ -92,9 +92,9 @@ describe('useTaskView', () => {
   it('switches the code mode on the Code tab, keeping the open file', () => {
     navigate('/tasks/t1?file=a.ts&run=r1');
     const { result } = view();
+    act(() => result.current.applyCodeMode('files'));
+    expect(location.search).toBe('?file=a.ts&tab=code&mode=files');
     act(() => result.current.applyCodeMode('changes'));
-    expect(location.search).toBe('?file=a.ts&tab=code&mode=changes');
-    act(() => result.current.applyCodeMode('review'));
     expect(location.search).toBe('?file=a.ts&tab=code');
   });
 
@@ -108,6 +108,6 @@ describe('useTaskView', () => {
     act(() => result.current.applyNowTarget('changes'));
     expect(location.search).toBe('?tab=code&mode=changes');
     act(() => result.current.applyNowTarget('review'));
-    expect(location.search).toBe('?tab=code');
+    expect(location.search).toBe('?tab=review');
   });
 });

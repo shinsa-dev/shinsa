@@ -9,22 +9,11 @@ import {
   requestTaskRefs,
   resolveRefsVersion,
 } from '@/lib/connection/code.ts';
-import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
-import { listFindingTargets, listReviewTargets } from '@/lib/review/targets.ts';
 import { listCodeModes } from '@/lib/tasks/tabs.ts';
 
-function selectFirstFile(task: Task, mode: CodeMode, diff: TaskDiff | null): CodeFileRef | null {
-  if (!diff) return null;
-  if (mode === 'changes') {
-    const changed = diff.files[0];
-    return changed ? { kind: 'diff', path: changed.path } : null;
-  }
-  if (mode !== 'review') return null;
-  const report = task.report ?? resolveFallbackReport(diff, task.summary ?? task.title);
-  const first = listReviewTargets(report, 'walkthrough')[0] ?? listFindingTargets(task.findings)[0] ?? null;
-  if (!first) return null;
-  const changed = diff.files.some((file) => file.path === first.file);
-  return { kind: changed ? 'diff' : 'file', path: first.file };
+function selectFirstFile(mode: CodeMode, diff: TaskDiff | null): CodeFileRef | null {
+  const changed = mode === 'changes' ? diff?.files[0] : undefined;
+  return changed ? { kind: 'diff', path: changed.path } : null;
 }
 
 function requestFile(task: Task, refs: TaskRefs, ref: string, file: CodeFileRef, diff: TaskDiff | null) {
@@ -45,7 +34,7 @@ export async function prefetchTaskCode(task: Task, search: string): Promise<stri
     reviewing && refs.base ? requestTaskDiff(task, refs.base, ref) : null,
     requestRepoTree(task, ref, ''),
   ]);
-  const file = location.active ?? selectFirstFile(task, location.mode, diff);
+  const file = location.active ?? selectFirstFile(location.mode, diff);
   if (!file) return null;
   await requestFile(task, refs, ref, file, diff);
   return file.path;

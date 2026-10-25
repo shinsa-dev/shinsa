@@ -1,6 +1,6 @@
 import type { Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import { Spinner } from '@shinsa/ui/components/spinner';
+import { CodeLoading } from '@/components/code/code-loading.tsx';
 import { requestCodeEditor } from '@/components/code/editor-pane.tsx';
 import { Workbench } from '@/components/code/workbench.tsx';
 import { useTaskRefs } from '@/lib/connection/code.ts';
@@ -9,11 +9,7 @@ import type { ExplorerMode } from '@/lib/tasks/tabs.ts';
 export function CodeTab({ task, modes }: { task: Task; modes: ExplorerMode[] }) {
   const refs = useTaskRefs(task);
   if (refs.status === 'idle' || refs.status === 'loading') {
-    return (
-      <div className='flex items-center gap-2 p-3 text-fg-2 text-xs'>
-        <Spinner size='sm' /> Reading the code
-      </div>
-    );
+    return <CodeLoading label='Reading the code…' />;
   }
   if (refs.status === 'error') {
     return (

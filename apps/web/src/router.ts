@@ -95,8 +95,9 @@ export function useRouteTaskId(state: ShinsaState | null) {
 }
 
 export interface TaskPathOptions {
-  tab?: 'code' | 'chat';
+  tab?: 'review' | 'code' | 'chat';
   run?: string | null;
+  spot?: string | null;
   mode?: 'changes' | 'files';
   file?: string;
   diff?: boolean;
@@ -123,6 +124,7 @@ export function resolveTaskPath(task: TaskPathTarget, options: TaskPathOptions =
   if (options.diff) params.set('diff', '1');
   if (options.line) params.set('line', String(options.line));
   if (options.end && options.line && options.end > options.line) params.set('end', String(options.end));
+  if (options.spot) params.set('spot', options.spot);
   if (options.run) params.set('run', options.run);
   const query = params.toString();
   return `/tasks/${encodeURIComponent(task.handle ?? task.id)}${query ? `?${query}` : ''}`;

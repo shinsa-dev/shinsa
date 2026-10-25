@@ -16,7 +16,7 @@ afterEach(() => {
   spies.restore();
 });
 
-const CONTEXT = { comments: [], clearComments: () => {}, tab: null };
+const CONTEXT = { comments: [], clearComments: () => {}, verdicts: {}, tab: null };
 
 function commandsFor(task: Task, gate: Gate) {
   return listOpenGateCommands(createShinsaState({ tasks: [task], gates: [gate] }), task, CONTEXT);
@@ -106,6 +106,7 @@ describe('gate commands', () => {
       clearComments: () => {
         cleared += 1;
       },
+      verdicts: {},
       tab: null,
     };
     const decide = listOpenGateCommands(

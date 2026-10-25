@@ -113,9 +113,9 @@ log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cw
   floating window. Cards is the default layout (no rail, centred pages, a "3 need you" button opens the queue;
   on screen its name comes from `LAYOUT_NAMES`, Desk, and Sidebar's is Shelf);
   Sidebar, picked in Settings → Appearance, adds a permanent rail that moves into a sheet below `md`.
-- **One keyboard shortcut, and the Code tab's four.** ⌘K (Ctrl K) opens the command menu; nothing else is bound to a
-  key, except that the Code tab binds ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (`docs/design.md`, Where Shinsa differs,
-  14 and 32; `bun lint:conventions` enforces it).
+- **One keyboard shortcut, and the Code and Review tabs' own.** ⌘K (Ctrl K) opens the command menu; nothing else is
+  bound to a key, except that the Code tab binds ⌘P, ⇧⌘F, ⌘F and ⌘G and the Review tab J and K while they are open
+  (`docs/design.md`, Where Shinsa differs, 14, 32 and 34; `bun lint:conventions` enforces it).
 - **The design system is paywall-next's**, on Buzzkit's kit in `packages/ui` (`docs/design.md` → Where Shinsa
   differs, which wins). One blue accent (`primary`) for the primary button, links, selection and checkmarks; `success`,
   `warning`, `destructive` and `info` carry state only.

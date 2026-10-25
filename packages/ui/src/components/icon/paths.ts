@@ -11,15 +11,20 @@ export const ICON_NAMES = [
   'IconArrowCornerDownRight',
   'IconArrowDown',
   'IconArrowLeft',
+  'IconArrowRedoDown',
   'IconArrowRight',
   'IconArrowRotateClockwise',
   'IconArrowSplitRight',
+  'IconArrowUndoUp',
   'IconArrowUp',
   'IconArrowUpRight',
+  'IconArrowsHide',
   'IconArrowsRepeat',
   'IconArrowsRepeatCircle',
   'IconArrowsRepeatRightLeft',
+  'IconArrowsShow',
   'IconAudio',
+  'IconBandage',
   'IconBell',
   'IconBell2Snooze',
   'IconBezier',
@@ -67,7 +72,9 @@ export const ICON_NAMES = [
   'IconCpp',
   'IconCrossMedium',
   'IconCrossSmall',
+  'IconCursor',
   'IconCursorClick',
+  'IconCursorList',
   'IconDatabase',
   'IconDifferenceModified',
   'IconDocker',
@@ -76,6 +83,7 @@ export const ICON_NAMES = [
   'IconExclamationCircleFilled',
   'IconExclamationTriangle',
   'IconExclamationTriangleFilled',
+  'IconExpandSimple',
   'IconEyeOpen',
   'IconEyeSlash',
   'IconEyeSparkle',
@@ -121,6 +129,7 @@ export const ICON_NAMES = [
   'IconFileZip',
   'IconFiles',
   'IconFilter1',
+  'IconFloppyDisk1',
   'IconFolder1',
   'IconFolder1Filled',
   'IconFolderAssets',
@@ -213,6 +222,7 @@ export const ICON_NAMES = [
   'IconSpeedHigh',
   'IconSpeedMiddle',
   'IconSplit',
+  'IconSquareBehindSquare2',
   'IconStar',
   'IconStopwatch',
   'IconSun',
@@ -222,6 +232,9 @@ export const ICON_NAMES = [
   'IconTestTube',
   'IconText1',
   'IconTextEdit',
+  'IconTextIndentLeft',
+  'IconTextIndentRight',
+  'IconTextSelect',
   'IconTitleCase',
   'IconToolbox',
   'IconTrashCan',
@@ -272,6 +285,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   IconArrowLeft: {
     '3': '<g><path d="M10 6L4 12L10 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 12H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
+  IconArrowRedoDown: {
+    '3': '<g><path d="M17.5 19L20.4393 16.0607C21.0251 15.4749 21.0251 14.5251 20.4393 13.9393L17.5 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 15L7.5 15C5.01472 15 3 12.9853 3 10.5C3 8.01472 5.01472 6 7.5 6L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
   IconArrowRight: {
     '3': '<g><path d="M14 6L20 12L14 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 12H4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
@@ -281,11 +297,17 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   IconArrowSplitRight: {
     '3': '<g><path d="M15 20H20V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9V4H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 12H4M12 12L19 19M12 12L19 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
+  IconArrowUndoUp: {
+    '3': '<g><path d="M6.49977 5L3.56043 7.93934C2.97465 8.52513 2.97465 9.47487 3.56043 10.0607L6.49977 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9H16.5C18.9853 9 21 11.0147 21 13.5C21 15.9853 18.9853 18 16.5 18H12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
   IconArrowUp: {
     '3': '<g><path d="M12 5V20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10L12 4L18 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconArrowUpRight: {
     '3': '<g><path d="M18 15V6M18 6H9M18 6L6.25 17.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconArrowsHide: {
+    '3': '<g><path d="M9.5 16.25L12 13.75L14.5 16.25" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 7.75L12 10.25L9.5 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 20V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 9V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 5H6C4.34315 5 3 6.34315 3 8V16C3 17.6569 4.34315 19 6 19H7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 5H18C19.6569 5 21 6.34315 21 8V16C21 17.6569 19.6569 19 18 19H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconArrowsRepeat: {
     '3': '<g><path d="M4 13V8C4 6.34315 5.34315 5 7 5H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 2L16 5L13 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 11V16C20 17.6569 18.6569 19 17 19H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 22L8 19L11 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
@@ -296,8 +318,14 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   IconArrowsRepeatRightLeft: {
     '3': '<g><path d="M17.5 3L19.7929 5.29289C20.1834 5.68342 20.1834 6.31658 19.7929 6.70711L17.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.49985 21L4.20696 18.7071C3.81643 18.3166 3.81643 17.6834 4.20696 17.2929L6.49985 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H17C18.6569 18 20 16.6569 20 15V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 11V9C4 7.34315 5.34315 6 7 6H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
+  IconArrowsShow: {
+    '3': '<g><path d="M9.5 5.5L12 3L14.5 5.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14.5 18.5L12 21L9.5 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 9V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 20V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 9H6C4.34315 9 3 10.3431 3 12C3 13.6569 4.34315 15 6 15H7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 9H18C19.6569 9 21 10.3431 21 12C21 13.6569 19.6569 15 18 15H17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
   IconAudio: {
     '3': '<g><path d="M9.99609 18.5C9.99609 19.8807 8.65295 21 6.99609 21C5.33924 21 3.99609 19.8807 3.99609 18.5C3.99609 17.1193 5.33924 16 6.99609 16C8.65295 16 9.99609 17.1193 9.99609 18.5ZM9.99609 18.5V8.23211C9.99609 6.90728 10.8651 5.73932 12.1341 5.35863L17.4214 3.77243C18.7046 3.38746 19.9961 4.34835 19.9961 5.68808V15.5M19.9961 15.5C19.9961 16.8807 18.6529 18 16.9961 18C15.3392 18 13.9961 16.8807 13.9961 15.5C13.9961 14.1193 15.3392 13 16.9961 13C18.6529 13 19.9961 14.1193 19.9961 15.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g>',
+  },
+  IconBandage: {
+    '3': '<g><path d="M4.75 12.75L12.75 4.75C14.5449 2.95507 17.4551 2.95508 19.25 4.75C21.0449 6.54492 21.0449 9.45507 19.25 11.25L11.25 19.25C9.45507 21.0449 6.54492 21.0449 4.75 19.25C2.95508 17.4551 2.95507 14.5449 4.75 12.75Z" stroke="currentColor" stroke-width="2"/><path d="M6 12L12 18" stroke="currentColor" stroke-width="2"/><path d="M12 6L18 12" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="1" fill="currentColor"/><circle cx="14" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="14" r="1" fill="currentColor"/><circle cx="10" cy="12" r="1" fill="currentColor"/></g>',
   },
   IconBell: {
     '3': '<g><path d="M4.58073 9.43467C5.10819 5.74248 8.2703 3 12 3C15.7296 3 18.8918 5.74248 19.4192 9.43467L20.0108 13.5757C20.269 15.383 18.8666 17 17.0409 17H6.959C5.13335 17 3.73096 15.383 3.98915 13.5757L4.58073 9.43467Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 17C16 19.2091 14.2091 21 12 21C9.79086 21 8 19.2091 8 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
@@ -446,8 +474,14 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   IconCrossSmall: {
     '3': '<g><path d="M8 8L16 16M16 8L8 16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>',
   },
+  IconCursor: {
+    '3': '<g><path d="M20.8423 6.47053L12.4355 1.61692C12.1655 1.46103 11.8324 1.46103 11.5625 1.61692L3.1561 6.47053C2.92917 6.60156 2.78906 6.84386 2.78906 7.10633V16.8937C2.78906 17.1557 2.92917 17.3985 3.1561 17.5295L11.5629 22.3831C11.8328 22.539 12.166 22.539 12.4359 22.3831L20.8427 17.5295C21.0696 17.3985 21.2097 17.1561 21.2097 16.8937V7.10633C21.2097 6.84427 21.0696 6.60156 20.8427 6.47053H20.8423ZM20.3142 7.49863L12.1987 21.5551C12.1438 21.6498 11.999 21.6111 11.999 21.5014V12.2974C11.999 12.1135 11.9007 11.9433 11.7413 11.851L3.7706 7.2492C3.67588 7.19436 3.71456 7.04948 3.82427 7.04948H20.0553C20.2858 7.04948 20.4299 7.29932 20.3146 7.49904H20.3142V7.49863Z" fill="currentColor"/></g>',
+  },
   IconCursorClick: {
     '3': '<g><path d="M11 3V4.5M16.6569 5.34326L15.5962 6.40392M6.40381 15.5962L5.34315 16.6569M4.5 11H3M6.40381 6.40381L5.34315 5.34315M14.1311 20.8181L10.3877 11.3611C10.146 10.7504 10.7504 10.146 11.3611 10.3877L20.8181 14.1311C21.2015 14.2829 21.2467 14.8076 20.8948 15.0226L17.4045 17.1556C17.3029 17.2176 17.2176 17.3029 17.1556 17.4045L15.0226 20.8948C14.8076 21.2467 14.2829 21.2015 14.1311 20.8181Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconCursorList: {
+    '3': '<g><path d="M11.8125 16.3125L14.6614 13.4636C15.1815 12.9435 14.981 12.0588 14.2876 11.8137L5.47398 8.69785C4.68128 8.41761 3.91761 9.18128 4.19785 9.97398L7.31369 18.7876C7.55884 19.481 8.44353 19.6815 8.96361 19.1614L11.8125 16.3125ZM11.8125 16.3125L16.5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 4H11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 8H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconDatabase: {
     '3': '<g stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6.25" rx="7" ry="2.75"/><path d="M5 6.25v11.5c0 1.52 3.13 2.75 7 2.75s7-1.23 7-2.75V6.25M5 12c0 1.52 3.13 2.75 7 2.75s7-1.23 7-2.75"/></g>',
@@ -472,6 +506,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconExclamationTriangleFilled: {
     '3': '<g><path fill-rule="evenodd" clip-rule="evenodd" d="M8.6026 4.07088C10.1677 1.5532 13.8318 1.5532 15.3969 4.07088L21.4996 13.8884C23.156 16.5529 21.2399 20.0001 18.1025 20.0001H5.89699C2.75962 20.0001 0.843525 16.5529 2.49985 13.8884L8.6026 4.07088ZM12 8C12.5523 8 13 8.44771 13 9V12C13 12.5523 12.5523 13 12 13C11.4477 13 11 12.5523 11 12V9C11 8.44771 11.4477 8 12 8ZM10.75 15C10.75 14.3096 11.3096 13.75 12 13.75C12.6904 13.75 13.25 14.3096 13.25 15C13.25 15.6904 12.6904 16.25 12 16.25C11.3096 16.25 10.75 15.6904 10.75 15Z" fill="currentColor"/></g>',
+  },
+  IconExpandSimple: {
+    '3': '<g><path d="M6 13V16C6 17.1046 6.89543 18 8 18H11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 6H16C17.1046 6 18 6.89543 18 8V11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconEyeOpen: {
     '3': '<g><path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M21.2246 10.6522C16.4094 3.11588 7.59077 3.11597 2.77557 10.6523C2.25157 11.4724 2.25157 12.5277 2.77557 13.3478C7.59077 20.8841 16.4094 20.884 21.2246 13.3477C21.7486 12.5276 21.7486 11.4723 21.2246 10.6522Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
@@ -607,6 +644,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconFilter1: {
     '3': '<g><path d="M17.1716 4H6.82843C5.26633 4 4 5.26633 4 6.82843C4 7.57857 4.29799 8.29799 4.82843 8.82843L9.12132 13.1213C9.68393 13.6839 10 14.447 10 15.2426V20.057C10 20.7552 10.6974 21.2385 11.3511 20.9933L13.3511 20.2433C13.7414 20.097 14 19.7238 14 19.307V15.2426C14 14.447 14.3161 13.6839 14.8787 13.1213L19.1716 8.82843C19.702 8.29799 20 7.57857 20 6.82843C20 5.26633 18.7337 4 17.1716 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g>',
+  },
+  IconFloppyDisk1: {
+    '3': '<g><path d="M4 7C4 5.34315 5.34315 4 7 4H15.7574C16.553 4 17.3161 4.31607 17.8787 4.87868L19.1213 6.12132C19.6839 6.68393 20 7.44699 20 8.24264V17C20 18.6569 18.6569 20 17 20H7C5.34315 20 4 18.6569 4 17V7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 19V14C8 13.4477 8.44772 13 9 13H15C15.5523 13 16 13.4477 16 14V19C16 19.5523 15.5523 20 15 20H9C8.44772 20 8 19.5523 8 19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 4V7C8 7.55228 8.44772 8 9 8H15C15.5523 8 16 7.55228 16 7V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconFolder1: {
     '3': '<g><path d="M3 7V16C3 17.6569 4.34315 19 6 19H18C19.6569 19 21 17.6569 21 16V10C21 8.34315 19.6569 7 18 7H13.0704C12.4017 7 11.7772 6.6658 11.4063 6.1094L10.5937 4.8906C10.2228 4.3342 9.59834 4 8.92963 4H6C4.34315 4 3 5.34315 3 7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
@@ -884,6 +924,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   IconSplit: {
     '3': '<g><path d="M12 3V21M8 5H6C4.34315 5 3 6.34315 3 8V16C3 17.6569 4.34315 19 6 19H8M16 19H18C19.6569 19 21 17.6569 21 16V8C21 6.34315 19.6569 5 18 5H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
+  IconSquareBehindSquare2: {
+    '3': '<g><path d="M9 9V5.25C9 4.00736 10.0074 3 11.25 3H18.75C19.9926 3 21 4.00736 21 5.25V12.75C21 13.9926 19.9926 15 18.75 15H15M12.75 9H5.25C4.00736 9 3 10.0074 3 11.25V18.75C3 19.9926 4.00736 21 5.25 21H12.75C13.9926 21 15 19.9926 15 18.75V11.25C15 10.0074 13.9926 9 12.75 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
   IconStar: {
     '3': '<g><path d="M10.9907 2.63041C11.3958 1.78986 12.6042 1.78986 13.0093 2.63041L15.0244 6.81163C15.1874 7.14991 15.5122 7.38356 15.8875 7.43254L20.5265 8.038C21.4591 8.15972 21.8325 9.29762 21.1503 9.93882L17.7567 13.1284C17.4822 13.3865 17.3581 13.7645 17.427 14.1331L18.279 18.6885C18.4503 19.6043 17.4726 20.3075 16.6459 19.8633L12.5335 17.6533C12.2007 17.4745 11.7993 17.4745 11.4665 17.6533L7.35409 19.8633C6.52737 20.3075 5.54974 19.6043 5.72101 18.6885L6.57296 14.1331C6.64189 13.7645 6.51782 13.3865 6.24327 13.1284L2.84968 9.93882C2.16747 9.29762 2.54089 8.15972 3.47346 8.038L8.11245 7.43254C8.48776 7.38356 8.81257 7.14991 8.9756 6.81163L10.9907 2.63041Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
@@ -910,6 +953,15 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconTextEdit: {
     '3': '<g><path d="M2 6H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 10H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12.8787 18.1214L21 10.0001C22.1046 8.89549 22.1046 7.10463 21 6.00006C19.8954 4.89549 18.1046 4.89549 17 6.00006L8.87868 14.1214C8.31607 14.684 8 15.447 8 16.2427V19.0001H10.7574C11.553 19.0001 12.3161 18.684 12.8787 18.1214Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconTextIndentLeft: {
+    '3': '<g><path d="M10 6H21M10 12H21M10 18H21M5 12H3.5M3 9.33998L6 12L3 14.65V9.33998Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconTextIndentRight: {
+    '3': '<g><path d="M18 12.0001L21 9.34009V14.6501L18 12.0001Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 6H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 12H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 18H3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 12H20.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconTextSelect: {
+    '3': '<g><path d="M4 7V16C4 17.6569 5.34315 19 7 19H13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 17V8C20 6.34315 18.6569 5 17 5H11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="5" r="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="19" r="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 10H15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 14H13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconTitleCase: {
     '3': '<g><path d="M2.32525 18.4247C3.0182 18.4247 3.40798 18.0782 3.65051 17.2467L4.30881 15.2978H8.8216L9.4799 17.2726C9.71376 18.0869 10.1035 18.4247 10.8398 18.4247C11.602 18.4247 12.1477 17.9136 12.1477 17.1947C12.1477 16.9348 12.1044 16.701 11.9832 16.3632L8.55308 7.0604C8.18063 6.0383 7.5743 5.58789 6.55221 5.58789C5.56476 5.58789 4.94978 6.05563 4.58598 7.06906L1.17324 16.3632C1.06063 16.6836 1 16.9781 1 17.1947C1 17.9483 1.51105 18.4247 2.32525 18.4247ZM4.88048 13.2709L6.50024 8.15178H6.56087L8.21527 13.2709H4.88048Z" fill="currentColor"/><path d="M16.6643 18.4073C17.825 18.4073 18.9857 17.827 19.5054 16.8396H19.5574V17.316C19.6093 18.0609 20.0857 18.442 20.77 18.442C21.489 18.442 22 18.0089 22 17.1687V11.8764C22 10.0054 20.4495 8.77543 18.0675 8.77543C16.1446 8.77543 14.6548 9.45971 14.2217 10.5684C14.1351 10.759 14.0918 10.9409 14.0918 11.1401C14.0918 11.7118 14.5335 12.1102 15.1485 12.1102C15.5556 12.1102 15.8761 11.9543 16.1533 11.6425C16.7163 10.9149 17.184 10.6637 17.9549 10.6637C18.9077 10.6637 19.5141 11.1661 19.5141 12.0323V12.6473L17.1754 12.7858C14.854 12.9244 13.5548 13.9032 13.5548 15.5923C13.5548 17.264 14.8973 18.4073 16.6643 18.4073ZM17.4959 16.5797C16.647 16.5797 16.0753 16.1466 16.0753 15.4537C16.0753 14.7954 16.6124 14.3709 17.5565 14.3017L19.5141 14.1804V14.856C19.5141 15.8608 18.6046 16.5797 17.4959 16.5797Z" fill="currentColor"/></g>',

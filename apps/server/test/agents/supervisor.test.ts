@@ -897,9 +897,13 @@ describe('hand-overs', () => {
     expect(await call('complete_fix', { summary: 'Fixed.' })).toContain(
       'Handed over: the human reads it in the chat as your reply.'
     );
-    expect(await call('report_review', { findings: [] })).toContain(
+    expect(await call('report_review', { summary: 'Read the change.', findings: [] })).toContain(
       'Handed over: the human reads it in the chat as your reply.'
     );
+    expect(dispatched.find((command) => command.type === 'agent.report_review')).toMatchObject({
+      summary: 'Read the change.',
+      findings: [],
+    });
     expect(call('propose_plan', { goal: '' })).rejects.toThrow('Shinsa rejected this hand-over.');
     expect(
       await call('propose_plan', {

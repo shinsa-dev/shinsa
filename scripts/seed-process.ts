@@ -44,19 +44,25 @@ const ESCALATED_FINDINGS: ReviewFinding[] = [
     file: 'src/export/clickhouse.ts',
     line: 42,
     end: 48,
+    title: 'The retry offset lives only in memory',
     message: 'The retry keeps the offset in memory; a restart mid-export starts the chunk from zero again.',
+    fix: 'Read the offset from the export row before each retry and write it back after every chunk, in the same transaction as the chunk itself.',
   },
   {
     severity: 'blocking',
     file: 'src/export/chunks.ts',
     line: 18,
+    title: 'Retries have no backoff',
     message: 'Three retries with no backoff hammer ClickHouse when it is already slow.',
+    fix: 'Wait between attempts, doubling each time:\n\n```ts\nawait sleep(500 * 2 ** attempt);\n```',
   },
   {
     severity: 'suggestion',
     file: null,
     line: null,
+    title: 'Retries are invisible in the logs',
     message: 'Log the attempt number so a slow export is easy to spot.',
+    fix: 'Add `attempt` to the export log line.',
   },
 ];
 
@@ -116,6 +122,8 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       branch: 'fix/export-retry-restart',
       ageHours: 4,
       summary: 'Retries now resume from the last written chunk.',
+      reviewSummary:
+        'I checked the fix round against the same two findings. The offset still lives in memory and the retries still have no backoff, so a restart or a slow ClickHouse breaks the export.',
       findings: ESCALATED_FINDINGS,
       runs: [
         { role: 'agent', purpose: 'build', minutes: 9, summary: 'Persisted the chunk offset.' },

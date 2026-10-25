@@ -80,6 +80,16 @@ describe('resolveFallbackReport', () => {
     ]);
   });
 
+  it('points a file whose patch was left out of the list at its first line', () => {
+    const report = resolveFallbackReport(
+      createDiff([createFile('big.ts', { patch: '', patchOmitted: true })]),
+      ''
+    );
+    expect(report.sections[0]?.spots.map((spot) => [spot.file, spot.start, spot.end])).toEqual([
+      ['big.ts', 1, 1],
+    ]);
+  });
+
   it('takes at most three spots from a file and six from a section', () => {
     const patch = [hunk(1, 1), hunk(20, 1), hunk(40, 1), hunk(60, 1)].join('');
     const report = resolveFallbackReport(

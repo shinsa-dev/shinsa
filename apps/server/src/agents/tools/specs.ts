@@ -205,6 +205,10 @@ export const TOOL_SPECS = {
     inputSchema: {
       type: 'object',
       properties: {
+        summary: limitedText(
+          'One or two sentences: what you checked and your overall view of the change.',
+          L.reviewSummary
+        ),
         findings: {
           type: 'array',
           maxItems: L.findingCount,
@@ -215,7 +219,9 @@ export const TOOL_SPECS = {
               file: limitedPath('Path relative to the repository root.'),
               line: { ...LINE, description: 'First line, numbered as in the new file.' },
               end: { ...LINE, description: 'Last line.' },
-              message: limitedText('What is wrong and what to do about it.', L.finding),
+              title: limitedText('What is wrong, in a few words.', L.findingTitle),
+              message: limitedText('What is wrong and why it matters.', L.finding),
+              fix: limitedText('What to change: a sentence, or a short code block.', L.findingFix),
             },
             required: ['severity', 'message'],
           },

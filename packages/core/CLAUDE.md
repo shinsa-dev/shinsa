@@ -11,6 +11,7 @@ src/
 ├── index.ts         The public barrel. Everything it exports stays importable by the same name
 ├── domain/          Entity types (types.ts), stage sets and priority order (stages.ts), settings, their defaults and
 │                    SETTINGS_KEYS (settings.ts; resolveAgentFastMode: a role's fast mode, else the global one;
+│                    resolveDelegationLimit: delegations at once under one step, null for no limit;
 │                    HUMAN_ONLY_SETTINGS and HUMAN_ONLY_REPO_FIELDS, the fields only the human changes),
 │                    DomainError (errors.ts), the tools of each role (tools.ts: listCallableToolNames, what a role may
 │                    call, the one source for decide and prompts; listToolNames, what a session is served: one union

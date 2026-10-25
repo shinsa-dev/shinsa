@@ -160,7 +160,13 @@ type EventBody =
   | { type: 'phase.updated'; taskId: string; index: number; status: PhaseStatus }
   | { type: 'phase.completed'; taskId: string; report: PhaseReport }
   | { type: 'work.submitted'; taskId: string; summary: string; report: WorkReport | null }
-  | { type: 'review.reported'; taskId: string; findings: ReviewFinding[]; runId?: string | null }
+  | {
+      type: 'review.reported';
+      taskId: string;
+      summary: string | null;
+      findings: ReviewFinding[];
+      runId?: string | null;
+    }
   | {
       type: 'fix.started';
       taskId: string;

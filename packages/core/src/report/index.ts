@@ -21,12 +21,12 @@ export {
   PROTOCOL_LIMITS,
   type Validation,
   validateDelivery,
-  validateFindings,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
   validateQuestion,
   validateReshape,
+  validateReview,
   validateSuggestions,
   validateWait,
 } from './validate.ts';

@@ -5,8 +5,10 @@ import {
   listGrepMatches,
   listReviewFindings,
   MERGED_PLAN,
+  MERGED_REVIEW_SUMMARY,
   PULL_REQUEST_NUMBER,
   REVIEW_PLAN,
+  REVIEW_SUMMARY,
   resolveReviewReport,
   SAMPLE_ANSWER,
   SAMPLE_LIVE,
@@ -120,7 +122,9 @@ function serializeFinding(finding: ReviewFinding) {
     file: finding.file,
     line: finding.line,
     end: finding.end ?? null,
+    title: finding.title,
     message: finding.message,
+    fix: finding.fix,
   };
 }
 
@@ -305,7 +309,11 @@ function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string
           listMatches(SAMPLE_PATHS.webGuide, review.webGuide.before, 'Review targets'),
           'apps/web'
         ),
-        handOver('report_review', { findings: findings.map(serializeFinding) }, 'Review recorded.'),
+        handOver(
+          'report_review',
+          { summary: REVIEW_SUMMARY, findings: findings.map(serializeFinding) },
+          'Review recorded.'
+        ),
       ],
       finish(
         `One blocking finding: [parseSpotKey](shinsa://file/${SAMPLE_PATHS.spotKeys}#L${spotKeyLine}) drops finding and decision keys, so older links to an agent finding open nothing. Four suggestions, none blocking. The rename itself is clean and the [recorded fixture](shinsa://file/${SAMPLE_PATHS.fixture}) still loads all of its spots.`
@@ -371,7 +379,7 @@ function listMergedRuns(sample: CodeSample, openings: ReadonlyMap<string, string
       [brief('reviewer', title, `${request}\n\nReview the branch against main and report findings.`)],
       [
         read(SAMPLE_PATHS.queueStack, sample.merged.stack),
-        handOver('report_review', { findings: [] }, 'Review recorded.'),
+        handOver('report_review', { summary: MERGED_REVIEW_SUMMARY, findings: [] }, 'Review recorded.'),
       ],
       finish(`No findings. Pull request #${PULL_REQUEST_NUMBER} can go as it is.`)
     ),

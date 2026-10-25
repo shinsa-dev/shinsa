@@ -38,6 +38,7 @@ export interface DiffFile {
   riskReason: string | null;
   binary: boolean;
   patch: string;
+  patchOmitted?: boolean;
 }
 
 export interface TaskDiff {

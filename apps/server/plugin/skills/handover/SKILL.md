@@ -66,8 +66,10 @@ and the agent review again, or pushes it to the pull request.
 ## Review findings (`report_review`, reviewer)
 
 Up to 12 findings, one per problem, anchored to `file` and `line`/`end`. `blocking` is a bug, a missed requirement, a
-broken rule or a failing check; everything else is a `suggestion`. Say what is wrong and what to do. An empty list
-means you found nothing wrong.
+broken rule or a failing check; everything else is a `suggestion`. Each finding has a `title` (what is wrong, in a few
+words, at most 80 characters), a `message` (what is wrong and why it matters, at most 280) and, when you know what to
+change, a `fix` (a sentence or a short code block, at most 600). A `summary` of one or two sentences (at most 400) says
+what you checked and your overall view of the change. An empty list means you found nothing wrong.
 
 ## Inquiries and operations
 

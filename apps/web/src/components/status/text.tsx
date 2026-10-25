@@ -1,8 +1,8 @@
-import type { Attention, ShinsaState, Task } from '@shinsa/core';
+import type { ShinsaState, Task } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
-import { TONE_FILL, TONE_TEXT } from '@/lib/format/tone.ts';
+import { TONE_FILL, TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { resolveTaskNow } from '@/lib/tasks/now.ts';
-import { ATTENTION, resolveTaskStatus } from '@/lib/tasks/status.ts';
+import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 
 export function StatusText({
   state,
@@ -28,8 +28,7 @@ export function TaskMeta({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-export function AttentionLabel({ attention }: { attention: Attention }) {
-  const { label, tone } = ATTENTION[attention];
+export function ToneLabel({ label, tone }: { label: string; tone: Tone }) {
   return (
     <span className={cn('inline-flex shrink-0 items-center gap-1.5 font-medium text-2xs', TONE_TEXT[tone])}>
       <span className={cn('size-1.5 rounded-full', TONE_FILL[tone])} />

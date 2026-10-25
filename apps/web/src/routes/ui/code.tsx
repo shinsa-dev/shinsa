@@ -119,6 +119,7 @@ function DiffEditor({ split }: { split: boolean }) {
         reveal={null}
         onComment={null}
         onEdit={ignore}
+        onSave={ignore}
         renderNote={renderNote}
         handle={handle}
       />
@@ -142,6 +143,7 @@ function FileEditor() {
         reveal={null}
         onComment={null}
         onEdit={ignore}
+        onSave={ignore}
         renderNote={renderNote}
         handle={handle}
       />

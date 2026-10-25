@@ -84,6 +84,7 @@ function listEvents(): ShinsaEventInput[] {
     {
       type: 'review.reported',
       taskId: TASK,
+      summary: null,
       findings: [{ severity: 'blocking', file: null, line: null, message: 'Retries a 400 too.' }],
     },
     { type: 'fix.started', taskId: TASK, round: 2, reason: 'review' },

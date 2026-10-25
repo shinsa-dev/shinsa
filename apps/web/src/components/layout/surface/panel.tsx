@@ -40,14 +40,16 @@ export function Panel({
   title,
   icon,
   action,
+  defaultOpen = true,
   children,
 }: {
   title: string;
   icon: IconName;
   action?: React.ReactNode;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(defaultOpen);
   const toggle = () => setOpen((current) => !current);
   return (
     <section className={cn(CARD, 'flex flex-col overflow-hidden')}>

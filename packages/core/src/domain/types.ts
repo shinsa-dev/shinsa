@@ -375,6 +375,7 @@ export interface Task {
   planAnswers: string | null;
   summary: string | null;
   report: WorkReport | null;
+  reviewSummary: string | null;
   findings: ReviewFinding[];
   fixRounds: number;
   fixFor: FixReason | null;

@@ -15,12 +15,11 @@ function applyNowTarget(target: NowTarget, runId?: string) {
     updateSearchParams({ ...resolveClearPatch(), tab: 'chat', run: runId ?? null });
     return;
   }
-  updateSearchParams({
-    ...resolveClearPatch(),
-    tab: 'code',
-    run: null,
-    mode: target === 'review' ? null : target,
-  });
+  if (target === 'review') {
+    updateSearchParams({ ...resolveClearPatch(), tab: 'review', run: null });
+    return;
+  }
+  updateSearchParams({ ...resolveClearPatch(), tab: 'code', run: null, mode: target });
 }
 
 export function useTaskView(state: ShinsaState, taskId: string) {

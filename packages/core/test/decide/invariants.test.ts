@@ -199,7 +199,12 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         }
         break;
       case 'reviewer':
-        commands.push({ type: 'agent.report_review', runId, findings: randomFindings(random) });
+        commands.push({
+          type: 'agent.report_review',
+          runId,
+          summary: chance(random, 0.5) ? 'Checked the change.' : null,
+          findings: randomFindings(random),
+        });
         break;
       case 'operate':
         commands.push({ type: 'agent.deliver', runId, step: 'operate', body: 'Ran it.' });
@@ -526,6 +531,7 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       const review: ShinsaCommand = {
         type: 'agent.report_review',
         runId,
+        summary: null,
         findings: [{ severity: 'blocking', file: 'a.ts', line: 1, message: `Again ${state.seq % 2}` }],
       };
       commands.push(review, review, review);

@@ -8,12 +8,10 @@ import {
   traceStalledLeaf,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import * as React from 'react';
 import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
 import { FindingVerdicts } from '@/components/overview/finding-verdicts.tsx';
 import { LiveFeed } from '@/components/overview/live-feed.tsx';
@@ -23,6 +21,7 @@ import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { PlanRevision } from '@/components/overview/plan-revision.tsx';
 import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
+import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { SecretCard } from '@/components/overview/secret-card.tsx';
 import { SetupCard } from '@/components/overview/setup-card.tsx';
 import { SignInCard } from '@/components/overview/sign-in-card.tsx';
@@ -46,22 +45,13 @@ import {
 } from '@/lib/overview/now.ts';
 import { describePlanEyebrow } from '@/lib/overview/plan-version.ts';
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
-import {
-  createVerdictDraft,
-  describeApproveHint,
-  describeEscalationBody,
-  describeReviewTitle,
-  isVerdictActionBlocked,
-  resolveVerdictAction,
-  resolveVerdictAnswer,
-} from '@/lib/overview/verdicts.ts';
+import { describeEscalationBody, describeReviewTitle, resolveVerdictDraft } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { describeSpent } from '@/lib/tasks/cost.ts';
 import {
   type GateReplier,
   type GateReply,
   replyToGate,
-  resolveApprovalReply,
   resolvePlanReply,
   resolveRetryLabel,
   resolveRetryReply,
@@ -287,13 +277,10 @@ function ReviewCard({
   gate: Gate;
   onOpen: (target: NowTarget) => void;
 }) {
-  const { busy, run } = useBusy<'merge' | 'decide'>();
   const draft = useReviewDraft();
   const merge = gate.type === 'merge';
-  const commented = draft.comments.length > 0;
   const findings = merge ? [] : task.findings;
-  const [verdicts, setVerdicts] = React.useState(() => createVerdictDraft(findings));
-  const action = resolveVerdictAction(findings, verdicts);
+  const verdicts = resolveVerdictDraft(findings, draft.verdicts);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -303,44 +290,7 @@ function ReviewCard({
           <Button variant='outline' size='sm' onClick={() => onOpen('review')}>
             Review
           </Button>
-          {merge && (
-            <Button
-              size='sm'
-              icon='IconMerged'
-              loading={busy === 'merge'}
-              onClick={() =>
-                void run('merge', () => replyToGate(gate, resolveApprovalReply(task, gate, 'merge')))
-              }
-            >
-              {task.pullRequest ? `Merge #${task.pullRequest.number}` : 'Merge'}
-            </Button>
-          )}
-          {!merge && (
-            <Hint label={describeApproveHint(commented, action)}>
-              <span className='flex w-fit'>
-                <Button
-                  size='sm'
-                  loading={busy === 'decide'}
-                  disabled={isVerdictActionBlocked(commented, action)}
-                  onClick={() =>
-                    void run('decide', async () => {
-                      const extras = resolveVerdictAnswer(findings, verdicts, draft.comments);
-                      const sent = await replyToGate(
-                        gate,
-                        resolveApprovalReply(task, gate, action.reply),
-                        null,
-                        extras
-                      );
-                      if (sent && extras.comments) draft.clearComments();
-                      return sent;
-                    })
-                  }
-                >
-                  {action.label}
-                </Button>
-              </span>
-            </Hint>
-          )}
+          <ReviewActions task={task} gate={gate} />
         </>
       }
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
@@ -351,12 +301,7 @@ function ReviewCard({
           : describeReviewFacts(task, merge, describeSpent(state, task))}
       </p>
       {findings.length > 0 && (
-        <FindingVerdicts
-          task={task}
-          findings={findings}
-          draft={verdicts}
-          onChange={(index, verdict) => setVerdicts((current) => ({ ...current, [index]: verdict }))}
-        />
+        <FindingVerdicts task={task} findings={findings} draft={verdicts} onChange={draft.setVerdict} />
       )}
     </NowFrame>
   );

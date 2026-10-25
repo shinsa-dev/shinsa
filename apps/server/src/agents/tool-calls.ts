@@ -7,10 +7,10 @@ import {
   type ShinsaEvent,
   selectStackTarget,
   serializeTaskReferences,
-  validateFindings,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
+  validateReview,
 } from '@shinsa/core';
 import { resolveHead } from '../git/index.ts';
 import type { Engine } from '../runtime/engine.ts';
@@ -187,9 +187,9 @@ export class ToolCalls {
         break;
       }
       case 'report_review': {
-        const findings = assertProtocol(validateFindings(input));
+        const { summary, findings } = assertProtocol(validateReview(input));
         this.#findCurrent(runId, attemptId);
-        await dispatch({ type: 'agent.report_review', runId, attemptId, findings });
+        await dispatch({ type: 'agent.report_review', runId, attemptId, summary, findings });
         break;
       }
     }

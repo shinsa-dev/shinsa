@@ -126,11 +126,12 @@ function respond(url: URL) {
   }
   if (name === 'file') return Response.json({ path: 'README.md', changed: true });
   if (name === 'search') {
-    return Response.json({
-      ref,
-      matches: [{ path: 'docs/alpha.txt', line: 2, column: 1, text: 'two' }],
-      truncated: false,
-      timedOut: false,
+    const lines = [
+      { kind: 'matches', matches: [{ path: 'docs/alpha.txt', line: 2, column: 1, text: 'two' }] },
+      { kind: 'done', result: { ref, matches: [], truncated: false, timedOut: false } },
+    ];
+    return new Response(lines.map((line) => JSON.stringify(line)).join('\n'), {
+      headers: { 'content-type': 'application/x-ndjson' },
     });
   }
   return new Response('not found', { status: 404 });
@@ -163,7 +164,7 @@ function renderCode(task: Task, query = '', enabled = true) {
   return render(
     <TooltipProvider>
       <ReviewDraftProvider enabled={enabled} draftKey={`gate-${task.id}`}>
-        <CodeTab task={task} modes={task.stage === 'planning' ? ['files'] : ['review', 'changes', 'files']} />
+        <CodeTab task={task} modes={task.stage === 'planning' ? ['files'] : ['changes', 'files']} />
       </ReviewDraftProvider>
     </TooltipProvider>
   );
@@ -171,10 +172,6 @@ function renderCode(task: Task, query = '', enabled = true) {
 
 function params() {
   return new URLSearchParams(location.search);
-}
-
-function spotFor(why: string) {
-  return screen.getByText(why).closest('button') as HTMLButtonElement;
 }
 
 async function findLine(text: string) {
@@ -185,71 +182,32 @@ async function findLine(text: string) {
   });
 }
 
-describe('the review', () => {
-  it('opens the first spot as a diff, in the URL, and steps through the spots', async () => {
-    renderCode(nextTask());
-    expect(await screen.findByText('Parses the input and guards it.')).toBeDefined();
-    await waitFor(() => expect(params().get('spot')).toBe('0:0'));
-    expect(params().get('file')).toBe('docs/alpha.txt');
+describe('notes in the code', () => {
+  it('opens the first changed file as a diff, and shows an agent finding as a rich note under its line', async () => {
+    renderCode(
+      nextTask({
+        findings: [
+          {
+            severity: 'blocking',
+            file: 'docs/alpha.txt',
+            line: 2,
+            message: 'The new line says `two`.',
+            title: 'Wrong word',
+            fix: 'Write `2` instead.',
+          },
+        ],
+      })
+    );
+    await waitFor(() => expect(params().get('file')).toBe('docs/alpha.txt'));
     expect(params().get('diff')).toBe('1');
-    expect(params().get('line')).toBe('2');
     await findLine('two');
-    expect(spotFor('Adds the second line.').getAttribute('aria-current')).toBe('true');
-    expect(screen.getByText('1 of 2')).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: 'Next spot' }));
-    await waitFor(() => expect(params().get('file')).toBe('docs/beta.txt'));
-    expect(screen.getByText('2 of 2')).toBeDefined();
-    await findLine('guard');
-    fireEvent.click(screen.getByRole('button', { name: 'Previous spot' }));
-    await waitFor(() => expect(params().get('spot')).toBe('0:0'));
+    expect(await screen.findByText('Wrong word')).toBeDefined();
+    expect(screen.getByText('Agent review')).toBeDefined();
+    expect(screen.getByText('Blocking')).toBeDefined();
+    expect(screen.getByText('Suggested fix')).toBeDefined();
   });
 
-  it('reorders by attention in the URL, and a judgement call opens its file at its line', async () => {
-    renderCode(nextTask());
-    await screen.findByText('Wire the parser');
-    fireEvent.click(screen.getByRole('tab', { name: 'By attention' }));
-    expect(params().get('order')).toBe('attention');
-    expect(
-      screen
-        .getAllByText(/^(Adds the second line|Rejects empty input)\.$/)
-        .map((element) => element.textContent)
-    ).toEqual(['Rejects empty input.', 'Adds the second line.']);
-    fireEvent.click(screen.getByRole('button', { name: 'README.md:1' }));
-    await waitFor(() => expect(params().get('file')).toBe('README.md'));
-    expect(params().get('diff')).toBeNull();
-    await findLine('# Sample');
-    expect(screen.getByText('bun test')).toBeDefined();
-  });
-
-  it('picks spots from the riskiest changes when the agent handed over no report', async () => {
-    renderCode(nextTask({ report: null, summary: 'Older hand-over.' }));
-    expect(await screen.findByText('Older hand-over.')).toBeDefined();
-    expect(
-      screen.getByText(
-        'The agent handed over no report, so Shinsa picked these spots from the riskiest changes.'
-      )
-    ).toBeDefined();
-    expect(screen.getByText('Look closely')).toBeDefined();
-  });
-
-  it('a spot in a file outside the change opens that file instead of a diff', async () => {
-    const report: WorkReport = {
-      ...REPORT,
-      sections: [
-        {
-          title: 'Elsewhere',
-          summary: 'A file the change never touched.',
-          spots: [{ file: 'README.md', start: 1, end: 1, attention: 'high', why: 'Looks here.' }],
-        },
-      ],
-    };
-    renderCode(nextTask({ report }));
-    await waitFor(() => expect(params().get('file')).toBe('README.md'));
-    expect(params().get('diff')).toBeNull();
-    await findLine('# Sample');
-  });
-
-  it('comments on a line, keeps the comment through a reload and lists it', async () => {
+  it('comments on a line, keeps the comment through a reload and removes it', async () => {
     const task = nextTask();
     const first = renderCode(task);
     await findLine('two');
@@ -258,13 +216,13 @@ describe('the review', () => {
     const field = await screen.findByRole('textbox', { name: 'Comment' });
     fireEvent.change(field, { target: { value: 'Name this line.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Add comment' }));
-    await waitFor(() => expect(screen.getByText('Your comments')).toBeDefined());
-    expect(screen.getAllByText('Name this line.').length).toBeGreaterThan(0);
+    expect(await screen.findByText('Name this line.')).toBeDefined();
+    expect(screen.getByText('You')).toBeDefined();
     first.unmount();
     renderCode(task);
-    expect(await screen.findByText('Your comments')).toBeDefined();
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Remove' }))[0] as HTMLElement);
-    await waitForGone(() => screen.queryByText('Your comments'));
+    expect(await screen.findByText('Name this line.')).toBeDefined();
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    await waitForGone(() => screen.queryByText('Name this line.'));
   });
 });
 
@@ -314,7 +272,7 @@ describe('changes and files', () => {
   it('a task without changes only browses files, at its default branch', async () => {
     renderCode(nextTask({ stage: 'planning', report: null }));
     expect(await screen.findByRole('tree', { name: 'Files' })).toBeDefined();
-    expect(screen.queryByRole('tab', { name: 'Review' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Changes' })).toBeNull();
     expect(screen.getByText('Open a file')).toBeDefined();
   });
 
@@ -411,6 +369,88 @@ describe('editing in place', () => {
       { timeout: 5_000 }
     );
     expect(screen.queryByText(/read-only/)).toBeNull();
+  });
+
+  it('keeps the same editor through each save, so you can edit, save and edit again', async () => {
+    const disk = { text: '# Sample\n' };
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://localhost');
+      const name = url.pathname.split('/').at(-1);
+      if (init?.body) {
+        const write = JSON.parse(String(init.body)) as { content: string };
+        writes.push(write);
+        disk.text = write.content;
+        return Response.json({ path: 'README.md', changed: true });
+      }
+      if (name === 'refs') return Response.json({ ...REFS, working: true, dirty: true });
+      if (name === 'blob' && url.searchParams.get('ref') === 'working')
+        return Response.json({
+          ref: 'working',
+          path: 'README.md',
+          content: disk.text,
+          size: disk.text.length,
+          binary: false,
+          tooLarge: false,
+          missing: false,
+          image: null,
+        });
+      return respond(url);
+    }) as typeof fetch;
+    const task = nextTask({ worktreePath: '/w', stage: 'awaiting_review', updatedAt: 1 });
+    const page = (current: Task) => (
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey={`gate-${task.id}`}>
+          <CodeTab task={current} modes={['changes', 'files']} />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+    navigate(`/tasks/${task.id}?tab=code&mode=files&file=README.md`);
+    const view = render(page(task));
+    const editor = EditorView.findFromDOM((await findLine('# Sample')) as HTMLElement);
+    if (!editor) throw new Error('No editor');
+    let expected = '# Sample\n';
+    for (const word of ['one', 'two', 'three', 'four']) {
+      act(() =>
+        editor.dispatch({
+          changes: { from: editor.state.doc.length, insert: `${word}\n` },
+          userEvent: 'input.type',
+        })
+      );
+      expected += `${word}\n`;
+      await waitFor(() => expect(disk.text).toBe(expected), { timeout: 5_000 });
+      view.rerender(page({ ...task, editedPaths: ['README.md'], updatedAt: writes.length + 1 }));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+      expect(editor.dom.isConnected).toBe(true);
+      expect(editor.state.readOnly).toBe(false);
+      expect(editor.state.doc.toString()).toBe(expected);
+    }
+    expect(writes.map((write) => (write as { base: string }).base)).toEqual([
+      '# Sample\n',
+      '# Sample\none\n',
+      '# Sample\none\ntwo\n',
+      '# Sample\none\ntwo\nthree\n',
+    ]);
+  });
+
+  it('shows a whole new file on its own side at full width, with no layout to switch', async () => {
+    renderCode(nextTask(), '&mode=changes&file=docs/beta.txt&diff=1');
+    await findLine('guard');
+    expect(document.querySelector('.cm-mergeView')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Show unified' })).toBeNull();
+  });
+
+  it('holds back a file with a line too long to show until you open it anyway', async () => {
+    HEAD_FILES['long.min.js'] = `${'x'.repeat(10_001)}\n`;
+    try {
+      renderCode(nextTask(), '&mode=files&file=long.min.js');
+      expect(
+        await screen.findByText('long.min.js has a line of 10,001 characters, too long to show as text.')
+      ).toBeDefined();
+      fireEvent.click(screen.getByRole('button', { name: 'Open anyway' }));
+      await waitFor(() => expect(document.querySelector('.cm-line')).not.toBeNull());
+    } finally {
+      delete HEAD_FILES['long.min.js'];
+    }
   });
 
   it('says why an earlier commit or a task with no checkout is read-only', async () => {

@@ -1,7 +1,7 @@
 import type { Task } from '@shinsa/core';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import * as React from 'react';
+import { CodeLoading } from '@/components/code/code-loading.tsx';
 import { claimPrefetch, prefetchTaskCode } from '@/lib/code/prefetch.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
 
@@ -33,11 +33,7 @@ export function CodeTab(props: React.ComponentProps<CodeModule['CodeTab']>) {
     );
   }
   if (!module) {
-    return (
-      <div className='flex items-center gap-2 p-3 text-fg-2 text-xs'>
-        <Spinner size='sm' /> Opening the code
-      </div>
-    );
+    return <CodeLoading label='Opening the code…' />;
   }
   return <module.CodeTab {...props} />;
 }

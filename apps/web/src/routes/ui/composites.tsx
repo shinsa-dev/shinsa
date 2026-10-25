@@ -303,7 +303,7 @@ export function CompositeSpecimens() {
             icon='IconCodeLines'
             action={
               <Button variant='link' size='sm'>
-                Review the code
+                Open the review
               </Button>
             }
           >

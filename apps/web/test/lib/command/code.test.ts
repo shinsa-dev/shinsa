@@ -4,7 +4,7 @@ import { type CodeCommandContext, listCodeCommands } from '@/lib/command/code.ts
 function context(overrides: Partial<CodeCommandContext> = {}): CodeCommandContext {
   return {
     taskId: 't1',
-    modes: ['review', 'changes', 'files'],
+    modes: ['changes', 'files'],
     mode: 'changes',
     mac: true,
     split: false,
@@ -25,7 +25,6 @@ describe('listCodeCommands', () => {
     expect(
       section.commands.map((command) => [command.label, command.trailing ?? null, command.current ?? null])
     ).toEqual([
-      ['Review', null, false],
       ['Changes', null, true],
       ['Files', null, false],
       ['Go to file…', '⌘P', null],
@@ -41,11 +40,7 @@ describe('listCodeCommands', () => {
     const value = context({ split: true, hideViewed: true, mac: false });
     const section = listCodeCommands(value);
     for (const command of section.commands) if (command.kind === 'run') command.run();
-    expect((value.applyMode as ReturnType<typeof mock>).mock.calls).toEqual([
-      ['review'],
-      ['changes'],
-      ['files'],
-    ]);
+    expect((value.applyMode as ReturnType<typeof mock>).mock.calls).toEqual([['changes'], ['files']]);
     expect((value.run as ReturnType<typeof mock>).mock.calls).toEqual([
       ['quick-open'],
       ['search'],

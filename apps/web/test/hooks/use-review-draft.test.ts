@@ -32,6 +32,8 @@ describe('useReviewDraft', () => {
       addComment: () => undefined,
       removeComment: () => undefined,
       clearComments: () => undefined,
+      verdicts: {},
+      setVerdict: () => undefined,
     };
     const { result } = renderHook(() => useReviewDraft(), {
       wrapper: ({ children }) => React.createElement(ReviewDraftContext.Provider, { value: draft }, children),

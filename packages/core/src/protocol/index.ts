@@ -29,12 +29,19 @@ export {
   type RepoPaths,
   type RepoTree,
   resolveImageType,
+  type SearchLine,
   type SearchMatch,
   type SearchResult,
   type TaskRefs,
   WORKING_REF,
 } from './code.ts';
-export { parseUnifiedDiff } from './diff.ts';
+export {
+  DIFF_PATCH_LIMITS,
+  mergeDiffPatches,
+  parseDiffSummary,
+  parseUnifiedDiff,
+  selectPatchedFiles,
+} from './diff.ts';
 export {
   type ContextOptimizer,
   createContextOptimizer,

@@ -164,7 +164,7 @@ function ReviewCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
         {findings.map((finding, index) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: findings are positional
           <li key={index} className='flex'>
-            <FindingText severity={finding.severity} place={finding} message={finding.message} task={task} />
+            <FindingText finding={finding} task={task} />
           </li>
         ))}
       </ul>

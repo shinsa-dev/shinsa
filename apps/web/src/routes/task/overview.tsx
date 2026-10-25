@@ -56,7 +56,7 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
       icon='IconCodeLines'
       action={
         <Button variant='link' size='sm' onClick={() => onOpen('review')}>
-          Review the code
+          Open the review
         </Button>
       }
     >

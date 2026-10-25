@@ -24,7 +24,7 @@ function actionFor(gate?: Partial<Gate>, runs: Partial<Run>[] = []) {
 
 describe('resolveTaskAction', () => {
   it('opens the code tab for changes to review', () => {
-    expect(actionFor({ type: 'review' })).toEqual({ label: 'Review changes', path: '/tasks/t?tab=code' });
+    expect(actionFor({ type: 'review' })).toEqual({ label: 'Review changes', path: '/tasks/t?tab=review' });
   });
 
   it('opens the task for a plan or a merge', () => {

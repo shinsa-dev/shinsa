@@ -133,11 +133,12 @@ src/
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
 ├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, isolation.ts (detached
 │                        checkouts for isolated delegations), run.ts (git writes that wait out another process's
-│                        index.lock); the Code tab's reads: read.ts (readGit: raw bytes, a 5 s timeout, a byte cap,
-│                        the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
-│                        the working copy, `git grep`), task-refs.ts (a task's head, base and commits, also once its
+│                        index.lock); the Code tab's reads: read.ts (readGit: raw bytes, a 5 s timeout, a byte or line cap,
+│                        each chunk as it comes, the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
+│                        the working copy, `git grep` with case folded into the pattern and its matches streamed), task-refs.ts (a task's head, base and commits, also once its
 │                        worktree is gone), objects.ts (ObjectCache, the 64 MB cache of what a commit addresses),
-│                        diff.ts (commit to commit, and the working copy against a base), changed-files.ts (the
+│                        diff.ts (commit to commit, and the working copy against a base: the file list from
+│                        `--raw --numstat`, the patches of the small files only, or of the files named), changed-files.ts (the
 │                        files a task's branch committed since its base plus what its checkout has not committed)
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
 │                        (types.ts: prepare, claim, commit, push, remove, writeEdit, listConflicted, update: `but

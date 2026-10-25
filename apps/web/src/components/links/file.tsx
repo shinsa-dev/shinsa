@@ -6,8 +6,7 @@ import { InAppLink } from '@/components/links/link.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import { formatLineRange } from '@/lib/format/count.ts';
-import { hasChanges } from '@/lib/tasks/tabs.ts';
-import { resolveTaskPath } from '@/router.ts';
+import { resolveCodePath } from '@/lib/review/places.ts';
 
 const FILE_CODE = 'rounded-sm bg-bg-a2 px-1 font-mono text-fg-4';
 
@@ -17,16 +16,17 @@ export function FileLink({
   line = null,
   end = null,
   label,
+  spot = null,
 }: {
   task: Task | null;
   path: string;
   line?: number | null;
   end?: number | null;
   label?: string;
+  spot?: string | null;
 }) {
   const text = label?.trim() || path;
   if (!task?.repoId) return <code className={FILE_CODE}>{text}</code>;
-  const changed = hasChanges(task);
   return (
     <Hint
       label={
@@ -37,14 +37,7 @@ export function FileLink({
       }
     >
       <InAppLink
-        path={resolveTaskPath(task, {
-          tab: 'code',
-          mode: changed ? 'changes' : 'files',
-          file: path,
-          diff: changed,
-          line,
-          end,
-        })}
+        path={resolveCodePath(task, { file: path, start: line, end }, spot)}
         className='group/link inline-flex cursor-pointer items-center gap-1 align-bottom no-underline outline-none'
       >
         <Icon name={resolveFileIcon(path)} size='sm' />

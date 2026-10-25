@@ -66,6 +66,7 @@ describe('checks and agent review', () => {
     harness.send({
       type: 'agent.report_review',
       runId: reviewer.id,
+      summary: null,
       findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
     });
     expect(harness.task(taskId).stage).toBe('fixing');
@@ -85,9 +86,24 @@ describe('checks and agent review', () => {
     harness.send({
       type: 'agent.report_review',
       runId: harness.activeRun(taskId).id,
-      findings: [{ severity: 'suggestion', file: null, line: null, message: 'Rename it.' }],
+      summary: 'Checked the change; one naming nit.',
+      findings: [
+        {
+          severity: 'suggestion',
+          file: null,
+          line: null,
+          title: 'Vague name',
+          message: 'Rename it.',
+          fix: 'Call it `retryCount`.',
+        },
+      ],
     });
     expect(harness.task(taskId).stage).toBe('awaiting_review');
+    expect(harness.task(taskId).reviewSummary).toBe('Checked the change; one naming nit.');
+    expect(harness.task(taskId).findings[0]).toMatchObject({
+      title: 'Vague name',
+      fix: 'Call it `retryCount`.',
+    });
   });
 
   test('the same failure twice in a row stops the loop with a failure gate', () => {
@@ -164,6 +180,7 @@ describe('fix loop limits', () => {
       harness.send({
         type: 'agent.report_review',
         runId: harness.activeRun(taskId).id,
+        summary: null,
         findings: [finding(`wording ${round}`)],
       });
       if (harness.task(taskId).stage !== 'fixing') break;
@@ -241,7 +258,12 @@ describe('review rounds that escalate to you', () => {
 
   function review(harness: Harness, taskId: string, findings = blocking()) {
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings,
+    });
   }
 
   function fix(harness: Harness, taskId: string, treeHash: string | null = null) {
@@ -403,6 +425,7 @@ describe('review rounds that escalate to you', () => {
     harness.send({
       type: 'agent.report_review',
       runId: harness.activeRun(taskId).id,
+      summary: null,
       findings: blocking('Third.'),
     });
     expect(harness.openGate(taskId)).toMatchObject({ type: 'review' });

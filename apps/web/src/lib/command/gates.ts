@@ -1,4 +1,11 @@
-import { type Gate, isDecisionGate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
+import {
+  type FindingVerdictKind,
+  type Gate,
+  isDecisionGate,
+  listOpenGates,
+  type ShinsaState,
+  type Task,
+} from '@shinsa/core';
 import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { describeSignInCheck, resolveSignInProvider } from '@/lib/accounts/sign-in.ts';
 import { type Command, type MenuPage, RANK } from '@/lib/command/registry.ts';
@@ -6,11 +13,11 @@ import { refreshUsage, startSignIn } from '@/lib/connection/accounts.ts';
 import { OPERATION_SKIP } from '@/lib/overview/operation.ts';
 import { canSkipChecks } from '@/lib/overview/setup.ts';
 import {
-  createVerdictDraft,
   describeApproveHint,
   isVerdictActionBlocked,
   resolveVerdictAction,
   resolveVerdictAnswer,
+  resolveVerdictDraft,
   type VerdictAction,
 } from '@/lib/overview/verdicts.ts';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
@@ -25,12 +32,13 @@ import {
 } from '@/lib/tasks/gates.ts';
 import { describeChangeGate } from '@/lib/tasks/shapes.ts';
 import { resolveGateGlyph } from '@/lib/tasks/status.ts';
-import type { TaskTab } from '@/lib/tasks/tabs.ts';
+import { hasReview, type TaskTab } from '@/lib/tasks/tabs.ts';
 import { resolveTaskPath } from '@/router.ts';
 
 export interface GateContext {
   comments: LineComment[];
   clearComments: () => void;
+  verdicts: Readonly<Record<number, FindingVerdictKind>>;
   tab: TaskTab | null;
 }
 
@@ -261,7 +269,7 @@ function resolveDecision(task: Task, gate: Gate, context: GateContext) {
       run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'approveChanges')),
     };
   }
-  const draft = createVerdictDraft(task.findings);
+  const draft = resolveVerdictDraft(task.findings, context.verdicts);
   const action = resolveVerdictAction(task.findings, draft);
   const extras = resolveVerdictAnswer(task.findings, draft, context.comments);
   const hint = describeApproveHint(commented, action);
@@ -286,14 +294,14 @@ function createDecideCommand(task: Task, gate: Gate, context: GateContext): Comm
 function listReviewCommands(task: Task, gate: Gate, context: GateContext): Command[] {
   const id = resolveGateId(gate);
   const commands: Command[] = [createDecideCommand(task, gate, context)];
-  if (context.tab !== 'code' && task.worktreePath) {
+  if (context.tab !== 'review' && hasReview(task)) {
     commands.push({
       kind: 'go',
       id: `${id}.review`,
       label: 'Review the changes',
       icon: 'IconEyeOpen',
-      keywords: ['code', 'diff', 'read'],
-      to: resolveTaskPath(task, { tab: 'code' }),
+      keywords: ['code', 'diff', 'read', 'report'],
+      to: resolveTaskPath(task, { tab: 'review' }),
     });
   }
   commands.push(createReviseCommand(gate, context));

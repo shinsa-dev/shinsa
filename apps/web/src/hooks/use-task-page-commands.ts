@@ -18,6 +18,7 @@ export function useTaskPageCommands(state: ShinsaState, task: Task, view: TaskVi
         applyTab: view.applyTab,
         comments: draft.comments,
         clearComments: draft.clearComments,
+        verdicts: draft.verdicts,
       },
       accounts
     )

@@ -29,6 +29,7 @@ export function createTask(overrides: Partial<Task> & { id: string }): Task {
     summary: null,
     report: null,
     findings: [],
+    reviewSummary: null,
     fixRounds: 0,
     fixFor: null,
     fixSignature: null,

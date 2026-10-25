@@ -3,6 +3,7 @@ import type { Task } from '@shinsa/core';
 import {
   CODE_MODE,
   hasChanges,
+  hasReview,
   listCodeModes,
   listTaskTabs,
   resolveTaskTab,
@@ -43,9 +44,34 @@ describe('listTaskTabs', () => {
   });
 });
 
+describe('the Review tab', () => {
+  const report = { headline: '', sections: [], checks: [], judgementCalls: [] } as NonNullable<
+    Task['report']
+  >;
+
+  it('comes before Code once there is something to review: a report, findings or a review gate', () => {
+    expect(listTaskTabs(createTask({ id: 't', stage: 'building', report }))).toEqual([
+      'overview',
+      'review',
+      'code',
+      'chat',
+    ]);
+    const finding = { severity: 'blocking' as const, file: null, line: null, message: 'm' };
+    expect(hasReview(createTask({ id: 't', stage: 'fixing', findings: [finding] }))).toBe(true);
+    for (const stage of ['awaiting_review', 'shipping', 'awaiting_merge', 'merged', 'done'] as const) {
+      expect(hasReview(createTask({ id: 't', stage }))).toBe(true);
+    }
+  });
+
+  it('is not there while the agent still builds, nor for a task that builds nothing', () => {
+    expect(hasReview(createTask({ id: 't', stage: 'building' }))).toBe(false);
+    expect(hasReview(createTask({ id: 't', stage: 'done', pipeline: ['research'] }))).toBe(false);
+  });
+});
+
 describe('listCodeModes', () => {
-  it('reviews and lists changes once a task builds, and browses files before that', () => {
-    expect(listCodeModes(createTask({ id: 't', stage: 'building' }))).toEqual(['review', 'changes', 'files']);
+  it('lists changes once a task builds, and browses files before that', () => {
+    expect(listCodeModes(createTask({ id: 't', stage: 'building' }))).toEqual(['changes', 'files']);
     expect(listCodeModes(createTask({ id: 't', stage: 'planning' }))).toEqual(['files']);
     expect(listCodeModes(createTask({ id: 't', stage: 'done', mode: 'ask' }))).toEqual(['files']);
   });
@@ -74,12 +100,7 @@ describe('resolveTaskTab', () => {
   });
 
   it('labels every tab and code mode', () => {
-    expect(Object.values(TASK_TAB).map((tab) => tab.label)).toEqual(['Overview', 'Code', 'Chat']);
-    expect(Object.values(CODE_MODE).map((mode) => mode.label)).toEqual([
-      'Review',
-      'Changes',
-      'Files',
-      'Search',
-    ]);
+    expect(Object.values(TASK_TAB).map((tab) => tab.label)).toEqual(['Overview', 'Review', 'Code', 'Chat']);
+    expect(Object.values(CODE_MODE).map((mode) => mode.label)).toEqual(['Changes', 'Files', 'Search']);
   });
 });

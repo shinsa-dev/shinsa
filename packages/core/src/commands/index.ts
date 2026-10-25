@@ -121,7 +121,7 @@ type AgentCommand =
       treeHash?: string | null;
     }
   | { type: 'agent.complete_fix'; runId: string; summary: string; treeHash?: string | null }
-  | { type: 'agent.report_review'; runId: string; findings: ReviewFinding[] }
+  | { type: 'agent.report_review'; runId: string; summary: string | null; findings: ReviewFinding[] }
   | {
       type: 'agent.ask';
       runId: string;

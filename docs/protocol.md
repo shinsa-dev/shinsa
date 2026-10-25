@@ -220,7 +220,8 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `checkResults` | `ReportCheck[]` \| null | the last round of checks |
-| `findings` | `ReviewFinding[]` | the last agent review |
+| `reviewSummary` | string \| null | the last agent review's summary: what the reviewer checked and its view of the change |
+| `findings` | `ReviewFinding[]` | the last agent review's findings, each with an optional `title` and `fix` |
 | `dismissedFindings?` | `ReviewFinding[]` (last 30) | findings you dismissed, never reported again |
 | `fixRounds` | number | automatic fix rounds used |
 | `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| null | what the current fix is for (`conflict`: commits GitButler left conflicted on the task's branch) |
@@ -675,7 +676,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `checksWaived`, `workspace` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus | `focus set`, `focus clear` | agent |
-| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes` (`HUMAN_ONLY_SETTINGS`) |
+| `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit` (`HUMAN_ONLY_SETTINGS`) |
 
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
@@ -716,7 +717,7 @@ role without the tool (`hasTool`).
 | `agent.propose_plan` | `propose_plan` | hands over a plan (checked by `validatePlanRules`) |
 | `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls; Shinsa commits it (the last one needs the evidence) |
 | `agent.complete_fix` | `complete_fix` | hands over a fix; Shinsa commits and pushes when shipping |
-| `agent.report_review` | `report_review` | hands over the findings |
+| `agent.report_review` | `report_review` | hands over the review: `summary` (or null) and the findings |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
@@ -829,7 +830,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `work.submitted` | the work report was assembled (`sections`, `judgementCalls`) |
 | `work.committed` | Shinsa committed (the tree hash) |
 | `checks.recorded` | a round of checks finished |
-| `review.reported`, `review.escalated` | a reviewer reported; the review escalated to you |
+| `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`); the review escalated to you |
 | `fix.started` | a fix round started (reason, signature, tree) |
 | `evidence.attached` | evidence was attached |
 | `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered, withdrawn, or replaced by your message |
@@ -943,7 +944,7 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`**, **`questions`** (**`question`**, **`options`**, `recommendation`); `impact`, `evidence`, `checks`, `approval`, `operation`, `change_summary` | goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope and verification 6 × 200; questions 4 (question 200, 2 to 4 options of 100); impact 1,000; checks 6 × 200; operation 8 × 200; change summary 240 |
 | `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**), **`judgement_calls`** (**`call`**, **`reason`**, `file`, `line`) | summary 240; 6 spots (why 180); 5 judgement calls (call 120, reason 240) |
 | `complete_fix` | **`summary`** | 240 |
-| `report_review` | **`findings`** (**`severity`**: blocking or suggestion, **`message`**, `file`, `line`, `end`) | 12 findings, message 280 |
+| `report_review` | **`findings`** (**`severity`**: blocking or suggestion, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary` | summary 400; 12 findings (title 80, message 280, fix 600) |
 | `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**) | answer 8,000; request 2,000, why 240 |
 | `report_diagnosis` | **`diagnosis`**; `propose_change` | 12,000 |
 | `submit_report` | **`report`**; `propose_change` | 40,000 |

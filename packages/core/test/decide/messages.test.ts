@@ -282,7 +282,12 @@ function mergeWithSessions(harness: Harness, taskId: string) {
   }
   harness.send({ type: 'checks.record', taskId, results: PASSING });
   linkSession(harness, taskId, 'reviewer-1');
-  harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    findings: [],
+  });
   approve(harness, taskId);
   pushed(harness, taskId);
   harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });

@@ -22,7 +22,7 @@ export function FindingVerdicts({
           key={index}
           className='flex items-start gap-3 py-2 first:pt-0 last:pb-0'
         >
-          <FindingText severity={finding.severity} place={finding} message={finding.message} task={task} />
+          <FindingText finding={finding} task={task} />
           <Choice
             label='Verdict'
             items={VERDICT_ITEMS}

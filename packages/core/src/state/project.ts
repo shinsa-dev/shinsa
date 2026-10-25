@@ -136,6 +136,7 @@ function createTask(event: EventOf<'task.created'>): Task {
     planAnswers: null,
     summary: null,
     report: null,
+    reviewSummary: null,
     findings: [],
     fixRounds: 0,
     fixFor: null,
@@ -427,7 +428,7 @@ function applyWorkSubmitted(state: ShinsaState, event: EventOf<'work.submitted'>
 }
 
 function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported'>) {
-  updateTask(state, event.taskId, event.at, { findings: event.findings });
+  updateTask(state, event.taskId, event.at, { reviewSummary: event.summary, findings: event.findings });
   record(state, event.taskId, event.at, {
     actor: 'agent',
     kind: 'review',

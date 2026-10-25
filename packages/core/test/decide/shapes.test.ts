@@ -382,7 +382,12 @@ describe('find and fix', () => {
     completePhase(harness, taskId);
     completePhase(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     expect(harness.openGate(taskId).type).toBe('review');
   });
 });
@@ -768,7 +773,12 @@ describe('the agent composes the steps', () => {
     completePhase(harness, taskId);
     completePhase(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     expect(harness.task(taskId).stage).toBe('awaiting_review');
     expect(listSteps(harness, taskId).slice(0, 3)).toEqual([
       'Find the repository:done',
@@ -916,7 +926,12 @@ function reachMergedPullRequest(harness: Harness, taskId: string) {
   completePhase(harness, taskId);
   completePhase(harness, taskId);
   harness.send({ type: 'checks.record', taskId, results: PASSING });
-  harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    findings: [],
+  });
   approve(harness, taskId);
   pushed(harness, taskId);
   harness.send({
@@ -1006,7 +1021,12 @@ describe('a change, then an operation', () => {
     completePhase(harness, taskId);
     completePhase(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'effect.fail', taskId, title: 'Could not read the pull request', detail: 'x' });

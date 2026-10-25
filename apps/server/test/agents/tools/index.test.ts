@@ -100,8 +100,13 @@ describe('the shinsa tool server', () => {
     const ask = TOOL_SPECS.ask.inputSchema.properties;
     expect(ask.question.maxLength).toBe(PROTOCOL_LIMITS.question);
     expect(ask.context.maxLength).toBe(PROTOCOL_LIMITS.questionContext);
-    const finding = TOOL_SPECS.report_review.inputSchema.properties.findings.items.properties;
+    const review = TOOL_SPECS.report_review.inputSchema.properties;
+    expect(review.summary.maxLength).toBe(PROTOCOL_LIMITS.reviewSummary);
+    const finding = review.findings.items.properties;
     expect(finding.file.maxLength).toBe(PROTOCOL_LIMITS.path);
+    expect(finding.title.maxLength).toBe(PROTOCOL_LIMITS.findingTitle);
+    expect(finding.message.maxLength).toBe(PROTOCOL_LIMITS.finding);
+    expect(finding.fix.maxLength).toBe(PROTOCOL_LIMITS.findingFix);
     const call = TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.properties;
     expect(call.file.maxLength).toBe(PROTOCOL_LIMITS.path);
     expect(call.call.maxLength).toBe(PROTOCOL_LIMITS.call);

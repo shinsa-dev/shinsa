@@ -254,7 +254,12 @@ export function buildAll(harness: Harness, taskId: string) {
 export function reachReviewGate(harness: Harness, taskId: string) {
   buildAll(harness, taskId);
   harness.send({ type: 'checks.record', taskId, results: PASSING });
-  harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+  harness.send({
+    type: 'agent.report_review',
+    runId: harness.activeRun(taskId).id,
+    summary: null,
+    findings: [],
+  });
 }
 
 export function linkSession(harness: Harness, taskId: string, sessionId = 'session-1') {

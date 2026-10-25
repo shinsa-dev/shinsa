@@ -1,6 +1,4 @@
-import type { ReviewOrder } from '@/lib/review/targets.ts';
-
-export type CodeMode = 'review' | 'changes' | 'files' | 'search';
+export type CodeMode = 'changes' | 'files' | 'search';
 
 type CodeFileKind = 'diff' | 'file';
 
@@ -16,7 +14,6 @@ export interface CodeLocation {
   end: number | null;
   ref: string | null;
   spot: string | null;
-  order: ReviewOrder;
   query: string;
   regex: boolean;
   caseSensitive: boolean;
@@ -34,7 +31,6 @@ const CODE_PARAMS = [
   'end',
   'ref',
   'spot',
-  'order',
   'q',
   'regex',
   'case',
@@ -42,7 +38,7 @@ const CODE_PARAMS = [
   'glob',
 ] as const;
 
-const CODE_MODES: CodeMode[] = ['review', 'changes', 'files', 'search'];
+const CODE_MODES: CodeMode[] = ['changes', 'files', 'search'];
 
 export function resolveFileKey(file: CodeFileRef) {
   return `${file.kind === 'diff' ? 'd' : 'f'}:${file.path}`;
@@ -71,7 +67,6 @@ export function parseCodeLocation(read: (name: string) => string | null, modes: 
     end: line !== null && end !== null && end >= line ? end : null,
     ref: read('ref'),
     spot: read('spot'),
-    order: read('order') === 'attention' ? 'attention' : 'walkthrough',
     query: read('q') ?? '',
     regex: read('regex') === '1',
     caseSensitive: read('case') === '1',

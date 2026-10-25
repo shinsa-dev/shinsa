@@ -86,6 +86,7 @@ export interface SeedTask {
   plan?: PlanDocument;
   report?: WorkReport;
   summary?: string;
+  reviewSummary?: string;
   findings?: ReviewFinding[];
   runs?: SeedRun[];
   gate?: { type: GateType; title: string; body: string; details?: Partial<Gate> };

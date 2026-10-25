@@ -1,11 +1,10 @@
 import { ICON_SIZE_CLASS, type IconSize } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 
-/** The mark, on the icon scale and in the icon ink like `Icon`. */
+/** The mark, on the icon scale but in its text's colour: the brand is never the quieter icon ink. */
 export function Logo({ size, className }: { size?: IconSize; className?: string }) {
   return (
     <svg
-      data-slot='icon'
       viewBox='0 0 365 365'
       fill='currentColor'
       xmlns='http://www.w3.org/2000/svg'

@@ -87,6 +87,7 @@ export {
   resolveAgentFastMode,
   resolveAttentionLimit,
   resolveCompaction,
+  resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
   SETTINGS_KEYS,

@@ -101,15 +101,18 @@ export const SAMPLE_CODE_FINDINGS: ReviewFinding[] = [
     severity: 'blocking',
     file: SAMPLE_CODE_PATH,
     line: 19,
+    title: 'A spot without a file opens a nameless file',
     message:
       'A spot without a file still becomes a spot here, and the Code tab then opens a file with no name.',
+    fix: 'Skip spots without a file:\n\n```ts\nif (!spot.file) continue;\n```',
   },
   {
     severity: 'suggestion',
     file: SAMPLE_CODE_PATH,
     line: 42,
     end: 43,
-    message: 'describeSpot is only used by the walkthrough; it could live next to it.',
+    title: 'Move `describeSpot` next to its caller',
+    message: '`describeSpot` is only used by the walkthrough; it could live next to it.',
   },
 ];
 

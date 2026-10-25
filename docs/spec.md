@@ -416,7 +416,8 @@ Built and verified end to end against a scratch repository:
   and the full diff. Since 2026-10-24 Code is a workbench (Review, Changes, Files and Search, tabs, ⌘P quick open,
   find, go to line, a ref picker) on CodeMirror, reading every file from git at a pinned commit, so a merged task
   keeps its code; since 2026-10-25 you edit it directly (Direct editing in the Code tab, below; `docs/design.md`, 32;
-  `docs/engine.md` → The Code tab's reads).
+  `docs/engine.md` → The Code tab's reads), and the review is a tab of its own that reads like a report (Review is a
+  report, below).
 - **Desktop shell.** Home and the queue button show the same queue: Needs you, In progress and Waiting on
   another task, all within the focus project (switching the focus is how you see other work). ⌘K's Next and Previous task that needs you step through the
   decisions; nothing moves you on by itself after you decide. Cards is the default layout: no rail, a
@@ -738,6 +739,31 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   stacked on first takes its branch out of the stack, so the task above stays applied with its own commits and its
   pull request goes back to the default branch; while the task below is open, the task above keeps waiting on it and
   that dependency cannot be removed (the Waits on menu shows it as "Stacked on “‹title›”").
+
+### Review is a report (2026-10-25)
+
+- **Review is its own tab.** A task page has Overview, Review, Code and Chat. Review shows once there is something to
+  review (a work report, agent findings, or the review gate reached); Code keeps the raw material: the changes and the
+  files. The walkthrough split inside Code, with its order switch and its spot stepper, is gone.
+- **It reads top to bottom, like the Overview.** What the change does in a sentence, with the decision (Approve
+  changes, Fix N findings, Merge #N) where it is on the Overview; then what needs your attention, most critical first:
+  blocking findings, critical spots, spots to read carefully, suggestions, judgement calls; then the walkthrough by
+  section with its snippets; then the agent review's summary and the checks; then everything else, collapsed.
+- **Every review comment is one rich card**: author (Agent review, Agent, You), severity in its tone, a short title,
+  the reason as markdown with smart links, the exact lines as a snippet whose header opens Code there, and the
+  suggested fix. The Code tab shows the same card inline under the line.
+- **Step with J and K** (or ⌘K's Next place to check and Previous place to check); the place is in the URL, so a link
+  opens the Review tab on it.
+- **The reviewer says more.** `report_review` takes a summary of what the reviewer checked and thinks, and each finding
+  a title and a suggested fix besides its reason (`docs/protocol.md` → Hand-overs).
+
+### Delegations at once is a setting (2026-10-25)
+
+- **No limit by default.** How many delegations run at once under one step used to be capped at eight; it is now
+  Settings → Agents → Engine, Delegations at once (No limit, 2, 4, 8, 16 or a custom number; ⌘K and
+  `shinsa settings set delegationLimit` too), changed only by you. The nesting depth stays three. The agents' rules
+  no longer mention a running limit, so changing it never invalidates a cached session; a refused delegation says
+  the limit and where it is set (`docs/engine.md` → Delegation → Limits).
 
 ## 11. Open questions
 

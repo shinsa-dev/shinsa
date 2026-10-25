@@ -810,8 +810,14 @@ function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
       report: task.report ?? null,
     });
   }
-  if (task.findings)
-    push(clock.step(0.2), { type: 'review.reported', taskId: task.id, findings: task.findings });
+  if (task.findings) {
+    push(clock.step(0.2), {
+      type: 'review.reported',
+      taskId: task.id,
+      summary: task.reviewSummary ?? null,
+      findings: task.findings,
+    });
+  }
   pushTaskPullRequest(task, push, clock);
 }
 
@@ -949,7 +955,8 @@ function resolveHandover({ task, role, purpose }: SeedRunTimes): ChatTool {
   if (purpose === 'build') return { kind: 'shinsa', name: 'complete_phase', args: { summary: body } };
   if (purpose === 'operate') return { kind: 'shinsa', name: 'report_outcome', args: { outcome: body } };
   if (role === 'reviewer') {
-    return { kind: 'shinsa', name: 'report_review', args: { findings: task.findings ?? [] } };
+    const summary = task.reviewSummary ? { summary: task.reviewSummary } : {};
+    return { kind: 'shinsa', name: 'report_review', args: { ...summary, findings: task.findings ?? [] } };
   }
   return (
     resolveShapeHandover(role, body) ?? { kind: 'shinsa', name: 'complete_fix', args: { summary: body } }
@@ -1520,13 +1527,38 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
           },
         ],
       },
+      reviewSummary:
+        'I read the new MCP session, the rewired chat and the three new tests, and ran a chat against a server that drops after connecting. The streaming and tool rows work; the reconnect limit does not hold, so a flaky server keeps the chat retrying forever.',
       findings: [
+        {
+          severity: 'blocking',
+          file: sessionFile,
+          line: lineOf(MCP_SESSION_NEW, 'async ensureConnected('),
+          end: lineOf(MCP_SESSION_NEW, 'this.attempts = 0;'),
+          title: 'The reconnect limit resets on every connect',
+          message:
+            'ensureConnected sets attempts back to 0 after each successful connect. A server that accepts and then drops gets three new tries every time, so the chat never shows the unreachable error the plan promises.',
+          fix: 'Count attempts for the whole session: remove `this.attempts = 0;` from ensureConnected and reset it in `close()` instead.\n\n```ts\nasync close() {\n  await this.client?.close();\n  this.client = null;\n  this.attempts = 0;\n}\n```',
+        },
         {
           severity: 'suggestion',
           file: sessionFile,
-          line: lineOf(MCP_SESSION_NEW, 'this.attempts = 0;'),
+          line: lineOf(MCP_SESSION_NEW, 'const client = new Client({'),
+          end: lineOf(MCP_SESSION_NEW, 'this.client = client;'),
+          title: 'A dropped connection is never noticed',
           message:
-            'Reset the attempt counter when a connected client drops, or the limit applies per connection rather than per session.',
+            'this.client stays set after the transport closes, so ensureConnected returns early and the next complete() call fails on a dead client instead of reconnecting.',
+          fix: 'Clear the client when the connection closes:\n\n```ts\nclient.onclose = () => {\n  this.client = null;\n};\n```',
+        },
+        {
+          severity: 'suggestion',
+          file: chatFile,
+          line: lineOf(EMBEDDED_CHAT_NEW, 'async reset()'),
+          end: lineOf(EMBEDDED_CHAT_NEW, 'await this.session.close();'),
+          title: 'reset() clears the history before the session closes',
+          message:
+            'A reply still streaming when reset() runs is recorded into the new, empty history, so the next conversation starts with a stray assistant message.',
+          fix: 'Close the session first, then clear the history.',
         },
       ],
       runs: [
@@ -1535,15 +1567,15 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         {
           role: 'reviewer',
           minutes: 4,
-          summary: 'One suggestion on the reconnect counter.',
+          summary: 'One blocking finding on the reconnect limit, two suggestions.',
           reply:
-            'One suggestion, nothing blocking. The reconnect counter in [mcp-session.ts](shinsa://file/src/chat/mcp-session.ts#L15) only resets after a successful connect, so a flaky server gets three new tries every time.\n\n[Let the embedded chat call paywall tools](shinsa://task/task-chat-tools) waits on this change, and #4531 from "Refuse to duplicate code-first paywalls" touches the same editor, so merging that first keeps the conflicts small. The work is on [feat/embedded-chat-mcp](shinsa://branch/feat/embedded-chat-mcp) in [paywall-next](shinsa://repo/paywall-next).',
+            'One blocking finding: the reconnect counter in [mcp-session.ts](shinsa://file/src/chat/mcp-session.ts#L26) resets after every successful connect, so a flaky server gets three new tries every time. Two suggestions, on dropped connections and on reset().\n\n[Let the embedded chat call paywall tools](shinsa://task/task-chat-tools) waits on this change, and #4531 from "Refuse to duplicate code-first paywalls" touches the same editor, so merging that first keeps the conflicts small. The work is on [feat/embedded-chat-mcp](shinsa://branch/feat/embedded-chat-mcp) in [paywall-next](shinsa://repo/paywall-next).',
         },
       ],
       gate: {
         type: 'review',
         title: 'Review the embedded chat on MCP v2',
-        body: 'Built, checked and reviewed by an agent. One suggestion left for you to judge.',
+        body: 'Built, checked and reviewed by an agent. One blocking finding and two suggestions left for you to judge.',
       },
     },
     {
@@ -1868,12 +1900,17 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         checks: [{ name: 'bun lint', outcome: 'pass', detail: null }],
         judgementCalls: [],
       },
+      reviewSummary:
+        'I read the scroll change and opened a group with 40 tabs. The row scrolls and keeps the active tab in view; the only issue is the animation on first render.',
       findings: [
         {
           severity: 'suggestion',
           file: 'src/ui/tab-group.tsx',
           line: lineOf(TAB_GROUP_NEW, "behavior: 'smooth'"),
-          message: 'Use instant scrolling on mount and smooth only on user selection.',
+          title: 'The row animates on page load',
+          message:
+            'The effect scrolls smoothly on mount too, so a page that opens on a later tab slides the whole row into place.',
+          fix: "Scroll instantly on the first render and smoothly only after a selection, for example with a ref that records the first run:\n\n```ts\nconst behavior = mounted.current ? 'smooth' : 'instant';\nmounted.current = true;\n```",
         },
       ],
       runs: [

@@ -11,14 +11,13 @@ function listHunkRanges(patch: string) {
 }
 
 function listFileSpots(file: DiffFile): CodeSpot[] {
-  return listHunkRanges(file.patch)
-    .slice(0, 3)
-    .map((range) => ({
-      file: file.path,
-      ...range,
-      attention: file.risk === 'high' ? 'critical' : file.risk === 'normal' ? 'high' : 'normal',
-      why: file.riskReason ?? (file.status === 'added' ? 'New file.' : 'Changed lines.'),
-    }));
+  const ranges = file.patchOmitted ? [{ start: 1, end: 1 }] : listHunkRanges(file.patch);
+  return ranges.slice(0, 3).map((range) => ({
+    file: file.path,
+    ...range,
+    attention: file.risk === 'high' ? 'critical' : file.risk === 'normal' ? 'high' : 'normal',
+    why: file.riskReason ?? (file.status === 'added' ? 'New file.' : 'Changed lines.'),
+  }));
 }
 
 function createSection(title: string, summary: string, files: DiffFile[]): ReportSection | null {

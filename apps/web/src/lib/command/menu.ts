@@ -163,7 +163,7 @@ export function listDecisionCommands(
   return [...tasks.values()]
     .filter((task) => task.id !== currentTaskId)
     .flatMap((task) =>
-      listOpenGateCommands(state, task, { comments: [], clearComments: () => {}, tab: null })
+      listOpenGateCommands(state, task, { comments: [], clearComments: () => {}, verdicts: {}, tab: null })
         .filter((command) => !registeredIds.has(command.id))
         .map(
           (command): Command => ({

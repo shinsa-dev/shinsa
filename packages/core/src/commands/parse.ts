@@ -150,6 +150,10 @@ function readInteger(fields: Fields, key: string) {
   return value;
 }
 
+function readNullableInteger(fields: Fields, key: string) {
+  return fields[key] === null ? null : readInteger(fields, key);
+}
+
 function readAccount(fields: Fields, key: string): RunAccount | null {
   if (fields[key] === null) return null;
   const account = readObject(fields[key], key);
@@ -263,9 +267,8 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   const patch: Partial<Settings> = {};
   if ('defaultProvider' in fields) patch.defaultProvider = readId(fields, 'defaultProvider');
   if ('defaultModel' in fields) patch.defaultModel = readNullableId(fields, 'defaultModel');
-  if ('maxFixRounds' in fields) {
-    patch.maxFixRounds = fields.maxFixRounds === null ? null : readInteger(fields, 'maxFixRounds');
-  }
+  if ('maxFixRounds' in fields) patch.maxFixRounds = readNullableInteger(fields, 'maxFixRounds');
+  if ('delegationLimit' in fields) patch.delegationLimit = readNullableInteger(fields, 'delegationLimit');
   if ('mergeMethod' in fields) patch.mergeMethod = readChoice(fields, 'mergeMethod', MERGE_METHODS);
   if ('attentionLimit' in fields) patch.attentionLimit = readInteger(fields, 'attentionLimit');
   if ('approvePlans' in fields) patch.approvePlans = readBoolean(fields, 'approvePlans');
@@ -277,9 +280,7 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   if ('taskBudgetUsd' in fields) {
     patch.taskBudgetUsd = fields.taskBudgetUsd === null ? null : readNumber(fields, 'taskBudgetUsd');
   }
-  if ('taskUsageLimit' in fields) {
-    patch.taskUsageLimit = fields.taskUsageLimit === null ? null : readInteger(fields, 'taskUsageLimit');
-  }
+  if ('taskUsageLimit' in fields) patch.taskUsageLimit = readNullableInteger(fields, 'taskUsageLimit');
   if ('autoResume' in fields) patch.autoResume = readBoolean(fields, 'autoResume');
   if ('snoozeLimited' in fields) patch.snoozeLimited = readBoolean(fields, 'snoozeLimited');
   if ('accountSwitchAt' in fields) patch.accountSwitchAt = readInteger(fields, 'accountSwitchAt');

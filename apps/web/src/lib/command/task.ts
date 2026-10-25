@@ -37,9 +37,10 @@ export interface TaskPageContext {
   applyTab: (tab: TaskTab) => void;
   comments: LineComment[];
   clearComments: () => void;
+  verdicts: GateContext['verdicts'];
 }
 
-const NO_GATE_CONTEXT: GateContext = { comments: [], clearComments: () => {}, tab: null };
+const NO_GATE_CONTEXT: GateContext = { comments: [], clearComments: () => {}, verdicts: {}, tab: null };
 
 function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
   if (isTaskSettled(task)) return [];
@@ -192,7 +193,12 @@ export function listTaskPageSections(
   page: TaskPageContext,
   accounts: AccountsSnapshot | null
 ): CommandSection[] {
-  const context: GateContext = { comments: page.comments, clearComments: page.clearComments, tab: page.tab };
+  const context: GateContext = {
+    comments: page.comments,
+    clearComments: page.clearComments,
+    verdicts: page.verdicts,
+    tab: page.tab,
+  };
   const decide = listOpenGateCommands(state, task, context);
   const travel = listTravelCommands(state, task);
   return [

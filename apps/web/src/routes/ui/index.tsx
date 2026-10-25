@@ -19,6 +19,7 @@ import { CompositeSpecimens } from './composites.tsx';
 import { INPUT_SECTIONS, InputSpecimens } from './inputs.tsx';
 import { OVERLAY_SECTIONS, OverlaySpecimens } from './overlays.tsx';
 import { OverviewSpecimens } from './overview.tsx';
+import { ReviewSpecimens } from './review.tsx';
 import { Section } from './section.tsx';
 import { SettingsSpecimens } from './settings.tsx';
 import { SURFACE_SECTIONS, SurfaceSpecimens } from './surfaces.tsx';
@@ -33,6 +34,7 @@ const SECTIONS = [
   { id: 'shinsa-accounts', label: 'Accounts' },
   { id: 'shinsa-overview', label: 'Overview cards' },
   { id: 'shinsa-chat', label: 'Chat' },
+  { id: 'shinsa-review', label: 'Review' },
   { id: 'shinsa-code', label: 'Code' },
   { id: 'shinsa-settings', label: 'Settings rows' },
 ];
@@ -189,6 +191,14 @@ export function UiPage() {
           className='flex-col items-start gap-8'
         >
           <ChatSpecimens />
+        </Section>
+        <Section
+          id='shinsa-review'
+          title='Shinsa composites · review'
+          description='The Review tab’s cards, from apps/web/src/components/review: every review comment (an agent finding, a spot, a judgement call, your line comment) is one rich card, and the Code tab shows the same card inline.'
+          className='flex-col items-start gap-8'
+        >
+          <ReviewSpecimens />
         </Section>
         <Section
           id='shinsa-code'

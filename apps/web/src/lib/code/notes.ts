@@ -1,19 +1,12 @@
 import type { CommentSide, ReviewFinding } from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
+import { type ReviewItem, toFindingItem } from '@/lib/review/report.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
 import { ATTENTION } from '@/lib/tasks/status.ts';
 
 export type CodeNote =
-  | {
-      kind: 'finding';
-      key: string;
-      side: CommentSide;
-      line: number;
-      tone: Extract<Tone, 'red' | 'amber'>;
-      label: string;
-      text: string;
-    }
+  | { kind: 'finding'; key: string; side: CommentSide; line: number; item: ReviewItem }
   | { kind: 'comment'; key: string; side: CommentSide; line: number; comment: LineComment }
   | { kind: 'composer'; key: string; side: CommentSide; line: number; start: number; endLine: number | null };
 
@@ -34,16 +27,13 @@ export interface Composer {
 export function listFindingNotes(findings: readonly ReviewFinding[], path: string): CodeNote[] {
   return findings.flatMap((finding, index) => {
     if (finding.file !== path || !finding.line) return [];
-    const blocking = finding.severity === 'blocking';
     return [
       {
         kind: 'finding' as const,
         key: `finding:${index}`,
         side: 'new' as const,
         line: finding.end ?? finding.line,
-        tone: blocking ? ('red' as const) : ('amber' as const),
-        label: blocking ? 'Agent review · blocking' : 'Agent review',
-        text: finding.message,
+        item: toFindingItem(finding, index),
       },
     ];
   });

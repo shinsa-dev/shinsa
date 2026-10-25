@@ -56,6 +56,7 @@ function createContext(overrides: Partial<TaskPageContext> = {}): TaskPageContex
     applyTab: mock(() => {}),
     comments: [],
     clearComments: mock(() => {}),
+    verdicts: {},
     ...overrides,
   };
 }
@@ -135,7 +136,10 @@ describe('the decision on a task page', () => {
 
   it('offers approving, reviewing and requesting changes on a review', async () => {
     const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
-    const { state, task } = setup(createTask({ id: 't1', worktreePath: '/tmp/t1' }), [gate]);
+    const { state, task } = setup(
+      createTask({ id: 't1', worktreePath: '/tmp/t1', stage: 'awaiting_review' }),
+      [gate]
+    );
     const all = sections(state, task);
     expect(labels(section(all, 'task.decide'))).toEqual([
       'Approve the changes',
@@ -145,7 +149,7 @@ describe('the decision on a task page', () => {
     const approve = find(all, 'task.t1.gate.g1.approve');
     expect(approve.disabled).toBeUndefined();
     expect(approve.hint).toBe('Opens the pull request');
-    expect(find(all, 'task.t1.gate.g1.review')).toMatchObject({ kind: 'go', to: '/tasks/t1?tab=code' });
+    expect(find(all, 'task.t1.gate.g1.review')).toMatchObject({ kind: 'go', to: '/tasks/t1?tab=review' });
     run(approve);
     await send(find(all, 'task.t1.gate.g1.revise'), 'Handle the empty list');
     expect(spies.sent.mock.calls).toEqual([
@@ -670,9 +674,10 @@ describe('moving through Needs you', () => {
 describe('resolveTaskPage', () => {
   it('opens a task from anywhere with its decision, tabs and actions', () => {
     const gate = createGate({ id: 'g1', taskId: 't1', type: 'review' });
-    const { state, task } = setup(createTask({ id: 't1', title: 'Fix login', worktreePath: '/tmp/t1' }), [
-      gate,
-    ]);
+    const { state, task } = setup(
+      createTask({ id: 't1', title: 'Fix login', worktreePath: '/tmp/t1', stage: 'awaiting_review' }),
+      [gate]
+    );
     const page = resolveTaskPage(state, task, null);
     if (page.kind !== 'list') throw new Error('Expected a list page');
     expect(page.crumb).toBe('Fix login');
@@ -685,6 +690,7 @@ describe('resolveTaskPage', () => {
     ]);
     expect(page.sections[1]?.commands).toMatchObject([
       { kind: 'go', label: 'Overview', to: '/tasks/t1' },
+      { kind: 'go', label: 'Review', to: '/tasks/t1?tab=review' },
       { kind: 'go', label: 'Code', to: '/tasks/t1?tab=code' },
       { kind: 'go', label: 'Chat', to: '/tasks/t1?tab=chat' },
     ]);

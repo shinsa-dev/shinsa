@@ -209,7 +209,12 @@ function finishRound(push: Push, clock: SeedClock, script: RoundScript, counter:
   });
   push(clock.step(0.1), { type: 'work.submitted', taskId: TASK, summary: `${script.title}.`, report: null });
   run(push, clock, [counter.runs++, counter.round] as [number, number], null, 4, 'No findings.');
-  push(clock.step(0.1), { type: 'review.reported', taskId: TASK, findings: [] });
+  push(clock.step(0.1), {
+    type: 'review.reported',
+    taskId: TASK,
+    summary: `I read the change for “${script.title}” and ran its tests. Nothing to report.`,
+    findings: [],
+  });
 }
 
 function newRound(push: Push, clock: SeedClock, number: number, script: RoundScript) {

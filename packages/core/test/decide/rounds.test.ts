@@ -171,7 +171,7 @@ describe('a task is a conversation of rounds', () => {
       judgementCalls: [],
     });
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: builder().id, findings: [] });
+    harness.send({ type: 'agent.report_review', runId: builder().id, summary: null, findings: [] });
     approve(harness, taskId);
     expect(harness.task(taskId).stageReason).toBe('pushing the changes');
     pushed(harness, taskId);
@@ -437,7 +437,12 @@ describe('how a round ships', () => {
     expect(task.activity.at(-1)?.text).toBe('Round 2 ships onto the open pull request');
     buildAll(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     approve(harness, taskId);
     expect(() => harness.send({ type: 'round.ship', taskId, number: 2, shipping: 'stacked' })).toThrow(
       'Round 2 has already gone to its pull request'
@@ -517,7 +522,12 @@ describe('how a round ships', () => {
     completePhase(harness, taskId);
     completePhase(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ state: 'merged' }) });
@@ -670,6 +680,30 @@ describe('ending a task', () => {
 });
 
 describe('what each round keeps', () => {
+  test('a new round starts with no review summary or findings', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    newIdea(harness, taskId, 'Next');
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Read the whole change; one naming nit.',
+      findings: [
+        { severity: 'suggestion', file: 'src/a.ts', line: 2, title: 'Vague name', message: 'Rename it.' },
+      ],
+    });
+    expect(harness.task(taskId).reviewSummary).toBe('Read the whole change; one naming nit.');
+    approve(harness, taskId);
+    pushed(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    readyRound(harness, taskId);
+    expect(resolveCurrentRound(harness.task(taskId)).number).toBe(2);
+    expect(harness.task(taskId).reviewSummary).toBeNull();
+    expect(harness.task(taskId).findings).toEqual([]);
+  });
+
   test('evidence counts for the round it was attached in', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
@@ -701,7 +735,12 @@ describe('what each round keeps', () => {
       judgementCalls: [],
     });
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
@@ -774,7 +813,12 @@ describe('what each round keeps', () => {
     linkSession(harness, taskId, 'builder-2');
     completePhase(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     approve(harness, taskId);
     pushed(harness, taskId);
     harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });

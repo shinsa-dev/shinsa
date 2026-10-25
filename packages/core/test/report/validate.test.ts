@@ -3,12 +3,12 @@ import {
   PROTOCOL_LIMITS,
   type Validation,
   validateDelivery,
-  validateFindings,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
   validateQuestion,
   validateReshape,
+  validateReview,
   validateSuggestions,
   validateWait,
 } from '../../src/index.ts';
@@ -171,31 +171,65 @@ describe('validatePlanHandOver reads the plan document', () => {
   });
 });
 
-describe('validateFindings', () => {
+describe('validateReview', () => {
   test('anchors each finding, defaulting the end line to the start', () => {
     expect(
       readValue(
-        validateFindings({
+        validateReview({
+          summary: ' Checked the retry path. ',
           findings: [
-            { severity: 'blocking', file: 'a.ts', line: 3, message: 'Off by one.' },
-            { severity: 'suggestion', message: 'Rename it.' },
+            {
+              severity: 'blocking',
+              file: 'a.ts',
+              line: 3,
+              title: 'Off by one',
+              message: 'The loop skips the last item.',
+              fix: 'Use `<=` in the loop.',
+            },
+            { severity: 'suggestion', message: 'Rename it.', title: '', fix: null },
+          ],
+        })
+      )
+    ).toEqual({
+      summary: 'Checked the retry path.',
+      findings: [
+        {
+          severity: 'blocking',
+          file: 'a.ts',
+          line: 3,
+          end: 3,
+          title: 'Off by one',
+          message: 'The loop skips the last item.',
+          fix: 'Use `<=` in the loop.',
+        },
+        { severity: 'suggestion', file: null, line: null, end: null, message: 'Rename it.' },
+      ],
+    });
+  });
+
+  test('an empty review is fine, a broken finding is not', () => {
+    expect(readValue(validateReview({}))).toEqual({ summary: null, findings: [] });
+    expect(
+      errorsOf(
+        validateReview({
+          summary: 'x'.repeat(PROTOCOL_LIMITS.reviewSummary + 1),
+          findings: [
+            {
+              severity: 'nit',
+              line: 9,
+              end: 2,
+              title: 'x'.repeat(PROTOCOL_LIMITS.findingTitle + 1),
+              message: 'x'.repeat(300),
+              fix: 'x'.repeat(PROTOCOL_LIMITS.findingFix + 1),
+            },
           ],
         })
       )
     ).toEqual([
-      { severity: 'blocking', file: 'a.ts', line: 3, end: 3, message: 'Off by one.' },
-      { severity: 'suggestion', file: null, line: null, end: null, message: 'Rename it.' },
-    ]);
-  });
-
-  test('an empty review is fine, a broken finding is not', () => {
-    expect(readValue(validateFindings({}))).toEqual([]);
-    expect(
-      errorsOf(
-        validateFindings({ findings: [{ severity: 'nit', line: 9, end: 2, message: 'x'.repeat(300) }] })
-      )
-    ).toEqual([
+      `summary is ${PROTOCOL_LIMITS.reviewSummary + 1} characters; the limit is ${PROTOCOL_LIMITS.reviewSummary}.`,
       'findings[0].end comes before findings[0].line.',
+      `findings[0].title is ${PROTOCOL_LIMITS.findingTitle + 1} characters; the limit is ${PROTOCOL_LIMITS.findingTitle}.`,
+      `findings[0].fix is ${PROTOCOL_LIMITS.findingFix + 1} characters; the limit is ${PROTOCOL_LIMITS.findingFix}.`,
       'findings[0].severity must be one of blocking, suggestion.',
       `findings[0].message is 300 characters; the limit is ${PROTOCOL_LIMITS.finding}.`,
     ]);

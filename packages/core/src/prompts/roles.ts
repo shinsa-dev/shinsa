@@ -249,8 +249,12 @@ export function resolveReviewerPrompt(task: Task, repo: Repo | null, bases: Task
     'Shinsa already ran the checks and they pass. Look for what checks miss.',
     'A blocking finding is a bug, a missed requirement, a broken repository rule or a security problem. Everything optional is a suggestion.',
     'Anchor every finding to a file and line range. Reproduce a finding before you report it; one you cannot reproduce is a guess.',
+    'Give every finding a title of at most 80 characters that says what is wrong in a few words.',
+    'Use its message, at most 280 characters, for what is wrong and why it matters.',
+    'Add a fix of at most 600 characters when you know what to change: a sentence, or a short code block.',
+    'Write a summary of one or two sentences, at most 400 characters: what you checked and your overall view of the change.',
     describeDismissedFindings(task),
-    'Call `report_review` with your findings (an empty list if there are none), then stop.',
+    'Call `report_review` with your summary and your findings (an empty list if there are none), then stop.',
     'You are a signal for the human, never the approval.',
   ].join('\n');
 }

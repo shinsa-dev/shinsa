@@ -16,7 +16,7 @@ export function BrandLink({ onNavigate, className }: { onNavigate?: () => void; 
       )}
     >
       <span className='grid size-5 shrink-0 place-items-center'>
-        <Logo className='size-3' />
+        <Logo className='size-3.25' />
       </span>
       Shinsa
     </button>

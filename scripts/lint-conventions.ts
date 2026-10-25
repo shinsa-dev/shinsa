@@ -187,7 +187,11 @@ const FITTED_WIDTH =
 const STRETCHED_TRIGGER_MESSAGE =
   'A tooltip trigger that can stretch past its text. The element a Hint or TooltipTrigger wraps is inline or w-fit, so the empty rest of a row never opens the tooltip (docs/design.md → Where Shinsa differs, 13)';
 
-const SHORTCUT_FILES = ['apps/web/src/hooks/use-command-key.ts', 'apps/web/src/hooks/use-code-keys.ts'];
+const SHORTCUT_FILES = [
+  'apps/web/src/hooks/use-command-key.ts',
+  'apps/web/src/hooks/use-code-keys.ts',
+  'apps/web/src/hooks/use-review-keys.ts',
+];
 
 const SHORTCUT_MESSAGE =
   'A global keyboard shortcut. ⌘K is the only shortcut, and the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open; both live in hooks/use-command-key.ts and hooks/use-code-keys.ts (docs/design.md → Where Shinsa differs, 14)';

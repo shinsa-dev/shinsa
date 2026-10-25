@@ -73,7 +73,9 @@ export interface ReviewFinding {
   file: string | null;
   line: number | null;
   end?: number | null;
+  title?: string;
   message: string;
+  fix?: string;
   verdict?: 'fix' | 'dismiss';
   verdictNote?: string | null;
 }

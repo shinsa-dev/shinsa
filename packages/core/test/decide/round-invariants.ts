@@ -76,7 +76,8 @@ function listLaterRoundCommands(state: ShinsaState): ShinsaCommand[] {
         { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },
       ];
     }
-    if (run.role === 'reviewer') return [{ type: 'agent.report_review', runId: run.id, findings: [] }];
+    if (run.role === 'reviewer')
+      return [{ type: 'agent.report_review', runId: run.id, summary: null, findings: [] }];
     return [];
   });
   const gates = listOpenGates(state).flatMap((gate): ShinsaCommand[] => {

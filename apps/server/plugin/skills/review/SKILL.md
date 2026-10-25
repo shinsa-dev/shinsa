@@ -39,4 +39,4 @@ Earlier review comments, bots and your own instincts are input. Decide for each:
 
 ## Report
 
-`report_review` with findings, most severe first, each one sentence on what is wrong and one on the fix; an empty list when you found nothing. Nothing about what is fine. Then stop without restating the findings.
+`report_review` with a `summary` (one or two sentences: what you checked and your overall view of the change) and the findings, most severe first, each with a `title` (what is wrong, in a few words), a `message` (what is wrong and why it matters) and a `fix` when you know what to change; an empty list when you found nothing. Nothing about what is fine. Then stop without restating the findings.

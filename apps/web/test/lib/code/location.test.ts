@@ -8,7 +8,7 @@ import {
   resolveSearchPatch,
 } from '@/lib/code/location.ts';
 
-const MODES = ['review', 'changes', 'files'] as const;
+const MODES = ['changes', 'files'] as const;
 
 function parse(query: string, modes = [...MODES]) {
   const params = new URLSearchParams(query);
@@ -18,7 +18,7 @@ function parse(query: string, modes = [...MODES]) {
 describe('parseCodeLocation', () => {
   it('reads every view position from the URL', () => {
     const location = parse(
-      'mode=changes&file=a.ts&diff=1&line=4&end=9&ref=abc&spot=1%3A2&order=attention&q=needle&regex=1&case=1&word=1&glob=*.ts'
+      'mode=changes&file=a.ts&diff=1&line=4&end=9&ref=abc&spot=1%3A2&q=needle&regex=1&case=1&word=1&glob=*.ts'
     );
     expect(location).toEqual({
       mode: 'changes',
@@ -27,7 +27,6 @@ describe('parseCodeLocation', () => {
       end: 9,
       ref: 'abc',
       spot: '1:2',
-      order: 'attention',
       query: 'needle',
       regex: true,
       caseSensitive: true,
@@ -38,12 +37,13 @@ describe('parseCodeLocation', () => {
   });
 
   it('falls back to the first mode the task has, keeps search always, and ignores what makes no sense', () => {
-    expect(parse('mode=review', ['files']).mode).toBe('files');
+    expect(parse('mode=changes', ['files']).mode).toBe('files');
+    expect(parse('mode=review').mode).toBe('changes');
     expect(parse('mode=search', ['files']).mode).toBe('search');
-    expect(parse('').mode).toBe('review');
+    expect(parse('').mode).toBe('changes');
     expect(parse('', []).mode).toBe('files');
-    const location = parse('line=0&end=2&order=sideways');
-    expect(location).toMatchObject({ line: null, end: null, order: 'walkthrough', active: null });
+    const location = parse('line=0&end=2');
+    expect(location).toMatchObject({ line: null, end: null, active: null });
     expect(parse('line=9&end=3').end).toBeNull();
   });
 });
@@ -73,7 +73,7 @@ describe('opening a file', () => {
 
 describe('patches', () => {
   it('leave the default mode out of the URL and write the search', () => {
-    expect(resolveModePatch('review', [...MODES])).toEqual({ mode: null });
+    expect(resolveModePatch('changes', [...MODES])).toEqual({ mode: null });
     expect(resolveModePatch('files', [...MODES])).toEqual({ mode: 'files' });
     expect(
       resolveSearchPatch({ query: 'x', regex: true, caseSensitive: false, wholeWord: true, glob: ' ' })

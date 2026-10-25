@@ -45,25 +45,13 @@ describe('listFindingNotes', () => {
       ],
       'a.ts'
     );
-    expect(notes).toEqual([
-      {
-        kind: 'finding',
-        key: 'finding:0',
-        side: 'new',
-        line: 8,
-        tone: 'red',
-        label: 'Agent review · blocking',
-        text: 'This drops errors.',
-      },
-      {
-        kind: 'finding',
-        key: 'finding:3',
-        side: 'new',
-        line: 4,
-        tone: 'amber',
-        label: 'Agent review',
-        text: 'Consider a guard.',
-      },
+    expect(
+      notes.map((note) =>
+        note.kind === 'finding' ? [note.key, note.line, note.item.label, note.item.body] : null
+      )
+    ).toEqual([
+      ['finding:0', 8, 'Blocking', 'This drops errors.'],
+      ['finding:3', 4, 'Suggestion', 'Consider a guard.'],
     ]);
   });
 });

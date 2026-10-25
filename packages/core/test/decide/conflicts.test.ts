@@ -35,7 +35,12 @@ describe('commits GitButler left conflicted', () => {
     linkSession(harness, taskId, 'agent-session');
     buildAll(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     expect(harness.openGate(taskId).type).toBe('review');
 
     conflict(harness, taskId);
@@ -132,7 +137,12 @@ describe('commits GitButler left conflicted', () => {
     buildAll(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     conflict(harness, taskId);
-    harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
     expect(listOpenGates(harness.state, taskId)).toEqual([]);
     expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'conflict', heldConflict: null });
     const { prompt = '' } = harness.activeRun(taskId);
@@ -185,6 +195,7 @@ describe('commits GitButler left conflicted', () => {
     harness.send({
       type: 'agent.report_review',
       runId: harness.activeRun(taskId).id,
+      summary: null,
       findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
     });
     const fix = harness.activeRun(taskId);

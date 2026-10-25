@@ -1,25 +1,24 @@
 import { Button } from '@shinsa/ui/components/button';
-import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { ReviewNote } from '@/components/review/note.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
+import { toCommentItem } from '@/lib/review/report.ts';
 
-const NOTE =
-  'flex max-w-[min(36rem,calc(100cqw-6rem))] flex-col gap-1.5 rounded-lg px-3 py-2 font-sans text-xs';
+const NOTE_WIDTH = 'max-w-[min(36rem,calc(100cqw-6rem))]';
 
-const FINDING_SURFACE = { red: 'bg-red-a1', amber: 'bg-amber-a1' } as const;
+const NOTE = `flex ${NOTE_WIDTH} flex-col gap-1.5 rounded-lg px-3 py-2 font-sans text-xs`;
 
 function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: (() => void) | null }) {
   return (
-    <div className={cn(NOTE, 'bg-primary-a1')}>
-      <div className='flex items-center gap-2'>
-        <Icon size='sm' name='IconBubbleText' className='text-primary-text' />
-        <span className='min-w-0 flex-1 truncate text-2xs text-fg-2'>
-          Your comment · {describeCommentLines(comment)}
-        </span>
-        {onRemove && (
+    <ReviewNote
+      item={toCommentItem(comment)}
+      compact
+      className={NOTE_WIDTH}
+      action={
+        onRemove && (
           <button
             type='button'
             className='cursor-pointer text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
@@ -27,10 +26,9 @@ function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: ((
           >
             Remove
           </button>
-        )}
-      </div>
-      <p className='whitespace-pre-wrap break-words text-fg-4'>{comment.text}</p>
-    </div>
+        )
+      }
+    />
   );
 }
 
@@ -85,14 +83,7 @@ export function CodeNoteView({
   onSave: (text: string) => void;
   onCancel: () => void;
 }) {
-  if (note.kind === 'finding') {
-    return (
-      <div className={cn(NOTE, FINDING_SURFACE[note.tone])}>
-        <span className='font-medium text-fg-4'>{note.label}</span>
-        <p className='whitespace-pre-wrap text-fg-3'>{note.text}</p>
-      </div>
-    );
-  }
+  if (note.kind === 'finding') return <ReviewNote item={note.item} compact className={NOTE_WIDTH} />;
   if (note.kind === 'comment') {
     return (
       <CommentNote comment={note.comment} onRemove={onRemove ? () => onRemove(note.comment.id) : null} />

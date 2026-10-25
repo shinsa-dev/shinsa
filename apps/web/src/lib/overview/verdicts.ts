@@ -21,6 +21,13 @@ export function createVerdictDraft(findings: ReviewFinding[]): VerdictDraft {
   );
 }
 
+export function resolveVerdictDraft(
+  findings: ReviewFinding[],
+  chosen: Readonly<Record<number, FindingVerdictKind>>
+): VerdictDraft {
+  return { ...createVerdictDraft(findings), ...chosen };
+}
+
 export function resolveVerdict(draft: VerdictDraft, index: number): FindingVerdictKind {
   return draft[index] ?? 'dismiss';
 }
