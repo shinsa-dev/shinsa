@@ -110,13 +110,31 @@ data directory for it.
   an unsigned download, and `SMAppService` will not register the engine from an unsigned app. The release workflow
   (`.github/workflows/release.yml`) gets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`
   and `APPLE_TEAM_ID` as secrets and drops `mac.identity=-`.
-- **Releases live in a public repository.** `shinsa-dev/shinsa` stays private, and a private repository's release
-  files cannot be downloaded without signing in. A public `shinsa-dev/releases` with no code holds only the
-  releases: the workflow in the private repository publishes there with a token that can write to it.
-  `shinsa.dev/download` points at `shinsa-dev/releases/releases/latest/download/Shinsa-mac-arm64.dmg`, GitHub still
-  counts every download, and electron-updater reads the same releases.
+- **Releases live in this repository.** `shinsa-dev/shinsa` goes public, under MIT, when Shinsa launches; until
+  then its release files cannot be downloaded without signing in, which is fine while nothing is published.
+  `shinsa.dev/download` points at `releases/latest/download/Shinsa-mac-arm64.dmg`, GitHub counts every download, and
+  electron-updater reads the same releases.
 - **Artifacts**: `Shinsa-mac-arm64.dmg` for the download, and the `zip` and `latest-mac.yml` electron-updater
   needs, on every release.
+
+## Permissions
+
+Running in the background needs no prompt of its own, but three things can stop the engine without a word, so
+onboarding checks each and says how to fix it, and Settings shows the same rows afterwards:
+
+- **Login item.** Registering the LaunchAgent shows macOS's own "Background item added" notice, and you can turn it
+  off in System Settings → General → Login Items. The app reads the registration's status (`enabled`,
+  `requiresApproval`, `notRegistered`) on every launch; anything but `enabled` is an onboarding step and a health
+  banner with a button that opens Login Items (`SMAppService.openSystemSettingsLoginItems`).
+- **Folders macOS protects.** Desktop, Documents, Downloads and iCloud Drive need consent per app, and a background
+  process cannot ask for it well. When a folder chosen at onboarding is inside one, the step asks for Full Disk
+  Access for Shinsa's engine, with the button that opens Privacy & Security; repositories anywhere else, such as
+  `~/Developer`, need nothing.
+- **Notifications.** The app asks once, the first time it has something to tell you, and onboarding offers to ask
+  up front. Denied notifications still leave the Dock badge.
+
+Nothing else: no accessibility, screen recording or network permission. Agents' own tools (a browser for evidence,
+a simulator) ask for theirs when they first use them.
 
 ## What goes away
 
