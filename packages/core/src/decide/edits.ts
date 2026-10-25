@@ -5,7 +5,6 @@ import {
   type EditsApproval,
   isDelegatedRun,
   resolveEditRefusal,
-  type Task,
 } from '../domain/index.ts';
 import { listRunningRuns } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
@@ -22,8 +21,13 @@ export function recordEdit(decider: Decider, command: CommandOf<'task.record_edi
   const running = listRunningRuns(decider.state, task.id).find(
     (run) => run.status !== 'waiting' && !isDelegatedRun(run)
   );
-  if (running)
-    decider.run({ kind: 'run.steer', runId: running.id, text: describeHumanEdits([command.path]) });
+  if (!running) return;
+  decider.run({
+    kind: 'run.steer',
+    runId: running.id,
+    text: describeHumanEdits([command.path]),
+    from: 'shinsa',
+  });
 }
 
 export function commitEdits(decider: Decider, command: CommandOf<'task.commit_edits'>) {
@@ -33,10 +37,6 @@ export function commitEdits(decider: Decider, command: CommandOf<'task.commit_ed
   if (command.treeHash && task.treeHash !== command.treeHash) {
     decider.emit({ type: 'work.committed', taskId: task.id, treeHash: command.treeHash });
   }
-}
-
-export function hasUncommittedEdits(task: Pick<Task, 'editedPaths'>) {
-  return (task.editedPaths ?? []).length > 0;
 }
 
 export function recordEditsApproval(decider: Decider, taskId: string, gate: EditsApproval) {

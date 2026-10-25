@@ -18,6 +18,7 @@ import { declineSecret, resolveSecretLabel } from '@/lib/secrets.ts';
 import {
   type AnswerExtras,
   replyToGate,
+  resolveApprovalReply,
   resolvePlanReply,
   resolveRetryLabel,
   resolveRetryReply,
@@ -239,8 +240,14 @@ function createReviseCommand(gate: Gate, context: GateContext): Command {
   };
 }
 
-async function sendVerdicts(gate: Gate, action: VerdictAction, extras: AnswerExtras, context: GateContext) {
-  const sent = await replyToGate(gate, action.reply, null, extras);
+async function sendVerdicts(
+  task: Task,
+  gate: Gate,
+  action: VerdictAction,
+  extras: AnswerExtras,
+  context: GateContext
+) {
+  const sent = await replyToGate(gate, resolveApprovalReply(task, gate, action.reply), null, extras);
   if (sent && extras.comments) context.clearComments();
 }
 
@@ -251,7 +258,7 @@ function resolveDecision(task: Task, gate: Gate, context: GateContext) {
       label: 'Approve the changes',
       hint: 'Opens the pull request',
       ...(commented ? { disabled: 'Send or clear your comments first' } : {}),
-      run: () => void replyToGate(gate, 'approveChanges'),
+      run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'approveChanges')),
     };
   }
   const draft = createVerdictDraft(task.findings);
@@ -262,7 +269,7 @@ function resolveDecision(task: Task, gate: Gate, context: GateContext) {
     label: action.label,
     hint,
     ...(isVerdictActionBlocked(commented, action) ? { disabled: hint } : {}),
-    run: () => void sendVerdicts(gate, action, extras, context),
+    run: () => void sendVerdicts(task, gate, action, extras, context),
   };
 }
 
@@ -301,7 +308,7 @@ function listMergeCommands(task: Task, gate: Gate, context: GateContext): Comman
       label: task.pullRequest ? `Merge #${task.pullRequest.number}` : 'Merge the pull request',
       icon: 'IconMerged',
       keywords: ['merge', 'ship', 'land', 'approve', 'pull request'],
-      run: () => void replyToGate(gate, 'merge'),
+      run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'merge')),
     },
     createReviseCommand(gate, context),
   ];

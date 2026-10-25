@@ -61,6 +61,7 @@ import {
   type GateReplier,
   type GateReply,
   replyToGate,
+  resolveApprovalReply,
   resolvePlanReply,
   resolveRetryLabel,
   resolveRetryReply,
@@ -307,7 +308,9 @@ function ReviewCard({
               size='sm'
               icon='IconMerged'
               loading={busy === 'merge'}
-              onClick={() => void run('merge', () => replyToGate(gate, 'merge'))}
+              onClick={() =>
+                void run('merge', () => replyToGate(gate, resolveApprovalReply(task, gate, 'merge')))
+              }
             >
               {task.pullRequest ? `Merge #${task.pullRequest.number}` : 'Merge'}
             </Button>
@@ -322,7 +325,12 @@ function ReviewCard({
                   onClick={() =>
                     void run('decide', async () => {
                       const extras = resolveVerdictAnswer(findings, verdicts, draft.comments);
-                      const sent = await replyToGate(gate, action.reply, null, extras);
+                      const sent = await replyToGate(
+                        gate,
+                        resolveApprovalReply(task, gate, action.reply),
+                        null,
+                        extras
+                      );
                       if (sent && extras.comments) draft.clearComments();
                       return sent;
                     })

@@ -197,11 +197,13 @@ export {
   validateVerification,
 } from './verification.ts';
 export {
+  type ApprovalPath,
   canUseGitButler,
   DEFAULT_WORKSPACE_MODE,
   describeHumanEdits,
   isSettingUpWorkspace,
   isSharedWorkspace,
+  resolveApprovalPath,
   resolveEditRefusal,
   resolveRepoWorkspace,
   WORKSPACE_MODES,

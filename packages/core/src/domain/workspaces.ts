@@ -1,3 +1,4 @@
+import { hasStep } from './shapes.ts';
 import type { Repo, Task } from './types.ts';
 
 export const WORKSPACE_MODES = ['worktrees', 'gitbutler', 'main_checkout'] as const;
@@ -48,4 +49,16 @@ export function describeHumanEdits(paths: readonly string[]) {
     `The human edited ${paths.length === 1 ? 'this file' : 'these files'} in the working copy: ${paths.join(', ')}.`,
     'Their edits are part of the work and go into your next commit: keep them, and read a file again before you change it.',
   ].join(' ');
+}
+
+export type ApprovalPath = 'check_edits' | 'open' | 'push' | 'push_edits' | 'merge';
+
+export function resolveApprovalPath(
+  task: Pick<Task, 'editedPaths' | 'pipeline' | 'mode' | 'pullRequest'>,
+  gate: 'review' | 'merge'
+): ApprovalPath {
+  const edited = (task.editedPaths ?? []).length > 0;
+  if (gate === 'merge') return edited ? 'push_edits' : 'merge';
+  if (edited && hasStep(task, 'checks')) return 'check_edits';
+  return task.pullRequest ? 'push' : 'open';
 }

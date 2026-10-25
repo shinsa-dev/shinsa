@@ -1,5 +1,12 @@
 import type { CommandOf } from '../commands/index.ts';
-import { isTaskSettled, type PullRequest, type Task, type TaskStage } from '../domain/index.ts';
+import {
+  isTaskSettled,
+  type PullRequest,
+  type RunPurpose,
+  type RunRole,
+  type Task,
+  type TaskStage,
+} from '../domain/index.ts';
 import {
   resolveConflictFixPrompt,
   resolveConflictSteer,
@@ -67,6 +74,19 @@ export function startHeldConflictFix(decider: Decider, taskId: string) {
   if (!task.heldConflict || task.heldConflict !== task.branch) return false;
   startConflictFix(decider, taskId, task.heldConflict);
   return true;
+}
+
+export function tellHeldConflict(
+  decider: Decider,
+  taskId: string,
+  role: RunRole,
+  purpose: RunPurpose | null
+) {
+  const task = decider.task(taskId);
+  if (role !== 'agent' || !purpose || purpose === 'plan') return '';
+  if (!task.heldConflict || task.heldConflict !== task.branch) return '';
+  holdConflict(decider, taskId, null);
+  return `\n\n${resolveConflictSteer(task.heldConflict)}`;
 }
 
 export function isAwaitingWorkspaceUpdate(decider: Decider, task: Task) {

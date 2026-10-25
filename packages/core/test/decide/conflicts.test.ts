@@ -3,6 +3,7 @@ import { listActiveRuns, listOpenGates } from '../../src/index.ts';
 import {
   approve,
   buildAll,
+  completePhase,
   createHarness,
   createTask,
   linkSession,
@@ -134,7 +135,8 @@ describe('commits GitButler left conflicted', () => {
     harness.send({ type: 'agent.report_review', runId: harness.activeRun(taskId).id, findings: [] });
     expect(listOpenGates(harness.state, taskId)).toEqual([]);
     expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'conflict', heldConflict: null });
-    expect(harness.activeRun(taskId).prompt).toContain(`but resolve conflicts fix/${taskId}`);
+    const { prompt = '' } = harness.activeRun(taskId);
+    expect(prompt.split(`but resolve conflicts fix/${taskId}`)).toHaveLength(2);
   });
 
   test('a conflict held while the merge runs starts the fix where the merge gate would open again', () => {
@@ -154,15 +156,41 @@ describe('commits GitButler left conflicted', () => {
     expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'conflict', heldConflict: null });
   });
 
-  test('a held conflict an agent at work is then told about is no longer held', () => {
+  test('a conflict found while planning is told to the agent at its first build turn, then no longer held', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     conflict(harness, taskId);
     expect(harness.task(taskId).heldConflict).toBe(`fix/${taskId}`);
     proposePlan(harness, taskId);
+    const build = harness.activeRun(taskId);
+    expect(build.purpose).toBe('build');
+    expect(build.prompt).toContain(`but resolve conflicts fix/${taskId}`);
+    expect(build.prompt).toEndWith('Resolve them before you hand over.');
+    expect(build.rolePrompt).not.toContain('but resolve');
+    expect(harness.task(taskId)).toMatchObject({ stage: 'building', heldConflict: null });
+
+    completePhase(harness, taskId);
+    expect(harness.activeRun(taskId).prompt).not.toContain('but resolve');
     conflict(harness, taskId);
     expect(harness.task(taskId).heldConflict).toBeNull();
     expect(harness.lastEffect('run.steer').text).toContain('Resolve them before you hand over.');
+  });
+
+  test('a conflict held while reviewing is told at the fix turn the review starts', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    conflict(harness, taskId);
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      findings: [{ severity: 'blocking', file: 'src/a.ts', line: 3, message: 'Off by one.' }],
+    });
+    const fix = harness.activeRun(taskId);
+    expect(fix).toMatchObject({ role: 'agent', purpose: 'fix' });
+    expect(fix.prompt).toEndWith('Resolve them before you hand over.');
+    expect(harness.task(taskId)).toMatchObject({ fixFor: 'review', heldConflict: null });
   });
 
   test('conflicts the agent leaves unresolved twice stop at a failure gate', () => {

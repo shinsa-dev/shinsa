@@ -32,8 +32,10 @@ src/
 │                    canChangeRoundShipping, selectShippingTarget), gates (gates.ts: isPausingGate, isDecisionGate
 │                    for plan, review and merge, isAgentQuestion for a question or a secret), the on-your-behalf record
 │                    (on-behalf.ts: OnBehalfAction), where agents work (workspaces.ts: WORKSPACE_MODES,
-│                    resolveRepoWorkspace, WORKSPACE_SETUP_REASON, canUseGitButler), the files another open task
-│                    changes too (overlaps.ts: listNewOverlapPaths, describeOverlaps, the note the Agent's next turn gets)
+│                    resolveRepoWorkspace, WORKSPACE_SETUP_REASON, canUseGitButler; resolveApprovalPath, what
+│                    approving the review or the merge does with your edits, for decide and the web's toast), the
+│                    files another open task changes too (overlaps.ts: listNewOverlapPaths, describeOverlaps, the
+│                    note the Agent's next turn gets)
 ├── agent-models/    The agent model catalog, the default model per role, resolveAgentModel, model labels, and
 │                    RUN_AGENT_ROLE (which agent role's settings each run role uses)
 ├── events/          ShinsaEvent: past-tense facts, the only way state changes (delegations.ts, schedules.ts split
@@ -76,10 +78,11 @@ src/
 │   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks, stacking a GitButler
 │   │                     task on another's branch (stackTask), the lock on that dependency (assertStackKept) and
 │   │                     unstacking the tasks above one that settles without a merge (unstackTasksOn)
-│   ├── edits.ts     Your edits from the Code tab: recording one (task.record_edit, steering a working agent),
-│   │                committing them (task.commit_edits), and approving the review or the merge with them
-│   │                (task.edits_approved: the checks run again before the push, or CI before the merge;
-│   │                applyEditsApproval); the next run's prompt names them (Decider.startRun)
+│   ├── edits.ts     Your edits from the Code tab: recording one (task.record_edit, steering a working agent
+│   │                with a note of Shinsa's), committing them (task.commit_edits), and approving the review or the
+│   │                merge with them (task.edits_approved: the checks run again before the push, or CI before the
+│   │                merge, as resolveApprovalPath in domain/workspaces.ts says; applyEditsApproval); the next
+│   │                run's prompt names them (Decider.startRun)
 │   ├── overlaps.ts  Files another open task of the repository changes too: recording the new ones
 │   │                (task.record_overlaps), steering the task's Agent at work at once when another task's hand-over
 │   │                found them, else telling its next run (tellOverlaps, from Decider.startRun); told once
@@ -107,7 +110,8 @@ src/
 │   │                another task holds (holdForCheckout)
 │   ├── conflicts.ts Commits GitButler left conflicted on a task's branch (recordConflict): steer the Agent at work,
 │   │                start a fix (`fixFor: 'conflict'`) at the review gate, the merge gate or while shipping, or
-│   │                hold it (task.conflict_held) for the task's next review or merge gate (startHeldConflictFix);
+│   │                hold it (task.conflict_held) for the Agent's next build, fix or operation turn (tellHeldConflict,
+│   │                from Decider.startRun) or the task's next review or merge gate (startHeldConflictFix);
 │   │                a GitButler pull request that conflicts with its base: the Update the workspace gate
 │   │                (askToUpdateWorkspace, `cause: 'workspace_update'`), `but pull` (the workspace.update effect)
 │   │                and the conflict fix after it (recordWorkspaceUpdate)

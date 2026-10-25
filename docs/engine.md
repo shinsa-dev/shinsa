@@ -340,10 +340,14 @@ gone), so Shinsa keeps the assignment itself:
   never to run `but resolve <commit>`, which enters resolution mode and checks the commit out, and the shell
   policy refuses it. After the fix a task past your review pushes (`but push` force-pushes the rewritten branch)
   and one before it runs the checks and review again. Elsewhere (planning, reviewing, checking, a merge that is
-  running) core keeps the conflict (`task.conflict_held`, `Task.heldConflict`) and acts on it at the task's next
-  gate: where the review gate or the merge gate would open, the fix starts instead (`startHeldConflictFix`), so the
-  work never reaches you conflicted. A held conflict an Agent at work is then steered about is no longer held, and
-  starting the conflict fix clears it.
+  running) core keeps the conflict (`task.conflict_held`, `Task.heldConflict`) and tells the Agent at its next turn
+  that writes: the first build turn after planning, a fix or the operation gets the same note at the end of its
+  prompt (`tellHeldConflict` in `Decider.startRun`, next to your edits and the overlap note, so the session's prefix
+  stays the same), and the conflict is no longer held. A conflict still held when no such turn came first is acted
+  on at the task's next gate: where the review gate or the merge gate would open, the fix starts instead
+  (`startHeldConflictFix`), so the work never reaches you conflicted. A held conflict an Agent at work is then
+  steered about is no longer held either, and starting the conflict fix clears it (a conflict fix is never told it
+  twice).
 - **A pull request that conflicts with its base.** In a worktree or the main checkout the Agent merges the fetched
   base in (The pull request watch). In GitButler it cannot: `git merge` takes the checkout out of GitButler, and only
   `but pull` brings the new default branch in, rebasing every applied branch, yours too. So when the watch reads a
@@ -398,8 +402,9 @@ every commit.
   putting a file back the way it was committed takes it off both lists.
 - **The agent is told.** A running agent of the task is steered at once with `describeHumanEdits` ("The human edited
   this file in the working copy: ‹path›. Their edits are part of the work and go into your next commit: keep them, and
-  read a file again before you change it."), and the next run of the task gets the same line for every untold file
-  appended to its prompt (`Decider.startRun`, `task.edits_told`), on the session it resumes or a new one.
+  read a file again before you change it."), as a note of Shinsa's (`run.steer` with `from: 'shinsa'`, like the
+  overlap and conflict notes), not as a message from you, and the next run of the task gets the same line for every
+  untold file appended to its prompt (`Decider.startRun`, `task.edits_told`), on the session it resumes or a new one.
 - **Committed with the round.** A phase or fix hand-over commits everything in the checkout as before, your edits
   included (`work.committed` clears `editedPaths`). Edits no hand-over took yet are committed by Shinsa
   (`fix: apply the edits made in the Code tab`, then `task.commit_edits`) and never ship unchecked:
@@ -411,6 +416,15 @@ every commit.
     edits"; the push effect commits first), waits for CI, and merges when the pull request is clean again
     (`openMergeGate` takes the approval instead of opening the gate). A CI failure, a new comment or a conflict goes
     to a fix turn as usual, and the merge gate opens again after it.
+  - On a pipeline without the checks step there is nothing to run again, so approving the review with them pushes
+    straight away, as approving without edits does: the push effect commits them first.
+  - What an approval does is `resolveApprovalPath` (core), so the decision and the toast after it agree: "Approved.
+    Committing your edits and running the checks.", "Approved. Pushing your edits. The pull request merges once CI
+    passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
+    request is open) or "Merging." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
+  - A commit of your edits made while a merge is in progress in the checkout (a hand-over that was undone put it
+    back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
+    tab`: `commitWorktree` builds every commit that concludes a merge that way (The pull request watch → Conflicts).
   - A real fix turn (any `fix.started` past round 0, or yours) drops the approval; a retry keeps it.
 - **What the Code tab reads in GitButler.** One working directory holds every applied branch, so the working copy of a
   GitButler task is assembled (`http/code.ts`, the `owned` ref): the files the task owns in the ledger, which include

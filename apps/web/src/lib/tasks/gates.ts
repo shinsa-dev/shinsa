@@ -1,8 +1,10 @@
 import {
+  type ApprovalPath,
   type FindingVerdict,
   type Gate,
   type GateDecision,
   type ReviewComment,
+  resolveApprovalPath,
   resolveTaskPipeline,
   resolveWorkStep,
   type ShinsaState,
@@ -29,9 +31,15 @@ const GATE_REPLY = {
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
   revisePlan: { decision: 'revise', done: 'Sent back to the agent.' },
   approveChanges: { decision: 'approve', done: 'Approved. Opening the pull request.' },
+  pushChanges: { decision: 'approve', done: 'Approved. Pushing the changes.' },
+  approveEdits: { decision: 'approve', done: 'Approved. Committing your edits and running the checks.' },
   requestChanges: { decision: 'revise', done: 'Sent back to the agent.' },
   fixFindings: { decision: 'revise', done: 'Sent. The agent works on what you kept.' },
   merge: { decision: 'approve', done: 'Merging.' },
+  mergeEdits: {
+    decision: 'approve',
+    done: 'Approved. Pushing your edits. The pull request merges once CI passes.',
+  },
   makeChange: { decision: 'approve', done: 'Approved. Planning the change now.' },
   planOperation: { decision: 'approve', done: 'Approved. Planning the operation now.' },
   keepAsIs: { decision: 'reject', done: 'Kept as it is. The task is done.' },
@@ -71,4 +79,17 @@ export function resolveRetryReply(gate: Gate): GateReply {
 
 export function resolvePlanReply(task: Task): GateReply {
   return resolveWorkStep(resolveTaskPipeline(task)) === 'operate' ? 'approveOperationPlan' : 'approvePlan';
+}
+
+const APPROVAL_REPLY: Record<ApprovalPath, GateReply> = {
+  check_edits: 'approveEdits',
+  open: 'approveChanges',
+  push: 'pushChanges',
+  push_edits: 'mergeEdits',
+  merge: 'merge',
+};
+
+export function resolveApprovalReply(task: Task, gate: Gate, reply: GateReply): GateReply {
+  if (reply !== 'approveChanges' && reply !== 'merge') return reply;
+  return APPROVAL_REPLY[resolveApprovalPath(task, gate.type === 'merge' ? 'merge' : 'review')];
 }

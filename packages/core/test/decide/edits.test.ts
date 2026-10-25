@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { describeHumanEdits, listOpenGates, resolveEditRefusal } from '../../src/index.ts';
+import {
+  describeHumanEdits,
+  listOpenGates,
+  resolveApprovalPath,
+  resolveEditRefusal,
+} from '../../src/index.ts';
 import {
   approve,
   createHarness,
@@ -52,6 +57,7 @@ describe('your edits in the Code tab', () => {
       kind: 'run.steer',
       runId: run.id,
       text: describeHumanEdits(['src/a.ts']),
+      from: 'shinsa',
     });
     const steers = harness.effectsOf('run.steer').length;
     edit(harness, taskId, 'src/a.ts', false);
@@ -199,5 +205,21 @@ describe('your edits in the Code tab', () => {
     expect(describeHumanEdits(['a.ts', 'b.ts'])).toStartWith(
       'The human edited these files in the working copy: a.ts, b.ts.'
     );
+  });
+
+  test('approving says what happens: edits are checked when the round has checks, pushed at the merge', () => {
+    const change = { mode: 'build' as const, pullRequest: null };
+    const edited = { ...change, editedPaths: ['src/a.ts'] };
+    expect(resolveApprovalPath(change, 'review')).toBe('open');
+    expect(resolveApprovalPath({ ...change, pullRequest: pullRequest() }, 'review')).toBe('push');
+    expect(resolveApprovalPath(edited, 'review')).toBe('check_edits');
+    expect(
+      resolveApprovalPath(
+        { ...edited, pipeline: ['plan', 'build', 'your_review', 'pull_request', 'merge'] },
+        'review'
+      )
+    ).toBe('open');
+    expect(resolveApprovalPath(change, 'merge')).toBe('merge');
+    expect(resolveApprovalPath(edited, 'merge')).toBe('push_edits');
   });
 });

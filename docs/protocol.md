@@ -210,7 +210,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `stackedOn?` | `TaskStack` (`taskId`, `branch`) | GitButler: the other task whose branch this task's branch is stacked on (`task.stack`); its pull request targets that branch while that task's pull request is open (`resolvePullRequestBase`); while that task is open the dependency on it cannot be removed (`dependency_stacked`), and cleared by `task.unstacked` when it settles without a merge |
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: the checks run again before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
-| `heldConflict?` | string \| null | a branch GitButler left conflicted while the task could not take a fix (planning, reviewing, checking, merging); the fix starts where its next review or merge gate would open (`task.conflict_held`) |
+| `heldConflict?` | string \| null | a branch GitButler left conflicted while the task could not take a fix (planning, reviewing, checking, merging); told to the Agent at its next build, fix or operation turn (the note at the end of its prompt), else the fix starts where its next review or merge gate would open (`task.conflict_held`) |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
@@ -749,7 +749,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
 | `task.stack` | the hand-over commit (`agents/tool-calls.ts`) | GitButler stacked the task's branch on another task's (`branch`): records it and makes the task wait on that task |
-| `task.record_conflict` | the worktree removal and push effects | GitButler left commits on the task's branch (`branch`) conflicted: steers its Agent, starts a fix (`fixFor: 'conflict'`) at the review gate, the merge gate or while shipping, or holds it for the next of those gates (`task.conflict_held`) |
+| `task.record_conflict` | the worktree removal and push effects | GitButler left commits on the task's branch (`branch`) conflicted: steers its Agent, starts a fix (`fixFor: 'conflict'`) at the review gate, the merge gate or while shipping, or holds it for the Agent's next build, fix or operation turn or the next of those gates (`task.conflict_held`) |
 | `task.record_workspace_update` | the `workspace.update` effect, after `but pull` | `guidance`: your words from the gate, if any; starts the conflict fix in the Agent's session |
 | `task.record_edit` | the file route after a save from the Code tab (`http/edits.ts`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
@@ -823,7 +823,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.overlaps_told` | a steer or a new Agent run's prompt named the untold overlaps; clears every `untold` |
 | `task.edits_committed` | Shinsa committed your edits before a push or the checks; clears `editedPaths` |
 | `task.edits_approved` | `gate`: the review or merge you approved with uncommitted edits (`approvedEdits`), or null once the checks or CI it waited for passed |
-| `task.conflict_held` | `branch`: a conflict kept for the task's next review or merge gate, or null once an Agent at work was told |
+| `task.conflict_held` | `branch`: a conflict kept for the Agent's next build, fix or operation turn or the task's next review or merge gate, or null once an Agent at work or a new turn of it was told |
 | `plan.proposed`, `plan.answered`, `plan.approved` | a plan version was proposed; you answered it; approved |
 | `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`) |
 | `work.submitted` | the work report was assembled (`sections`, `judgementCalls`) |
@@ -878,7 +878,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
 | `run.cancel` | process_bound | `cancel:<id>` | `run.end` |
-| `run.steer` | process_bound | `steer:<id>` | `message.deliver` when it is too late to steer; `from: 'shinsa'` steers a note of Shinsa's (an overlap, a conflict) instead of your words |
+| `run.steer` | process_bound | `steer:<id>` | `message.deliver` when it is too late to steer; `from: 'shinsa'` steers a note of Shinsa's (an overlap, a conflict, your edits in the Code tab) instead of your words |
 | `question.resolve` | process_bound | `gate:<id>` | none: releases the waiting `ask` call |
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |

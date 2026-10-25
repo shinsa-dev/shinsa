@@ -3,9 +3,9 @@ import {
   type FindingVerdict,
   type Gate,
   type GateDecision,
-  hasStep,
   isTaskSettled,
   type ReviewComment,
+  resolveApprovalPath,
   resolveGateDefinition,
 } from '../domain/index.ts';
 import { resolveHumanFixPrompt, resolveVerdictFixPrompt } from '../prompts/index.ts';
@@ -15,7 +15,7 @@ import { answerConfiguration, assertConfigurationAnswer } from './config.ts';
 import { updateWorkspace } from './conflicts.ts';
 import { acknowledgeBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
-import { hasUncommittedEdits, recordEditsApproval } from './edits.ts';
+import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
 import { settleTask, startChecks, startPlanning } from './lifecycle.ts';
 import { requestPush, shipReviewedWork, startMerge } from './pull-requests.ts';
@@ -149,8 +149,7 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
 
 function approveReview(decider: Decider, taskId: string) {
   clearFixLoop(decider, taskId);
-  const task = decider.task(taskId);
-  if (hasUncommittedEdits(task) && hasStep(task, 'checks')) {
+  if (resolveApprovalPath(decider.task(taskId), 'review') === 'check_edits') {
     recordEditsApproval(decider, taskId, 'review');
     startChecks(decider, taskId, 'committing your edits and running the checks');
     return;
@@ -159,7 +158,7 @@ function approveReview(decider: Decider, taskId: string) {
 }
 
 function approveMerge(decider: Decider, taskId: string) {
-  if (!hasUncommittedEdits(decider.task(taskId))) {
+  if (resolveApprovalPath(decider.task(taskId), 'merge') === 'merge') {
     startMerge(decider, taskId);
     return;
   }
