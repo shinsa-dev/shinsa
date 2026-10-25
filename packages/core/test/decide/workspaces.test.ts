@@ -19,6 +19,7 @@ import {
   pullRequest,
   reachShipping,
   registerRepo,
+  shipAndMerge,
   verifySetup,
 } from '../harness.ts';
 
@@ -295,5 +296,63 @@ describe('stacking on another task’s GitButler branch', () => {
     );
     harness.send({ type: 'task.wait_on', taskId: below, waitsOn: [above] });
     expect(() => harness.send({ type: 'task.stack', taskId: above, branch })).toThrow('stack on it');
+  });
+
+  test('the dependency a stack added cannot be removed while the task below is open, by you or on your behalf', () => {
+    const { harness, below, above, branch } = startTwo();
+    const other = createTask(harness, { request: 'Add a footer' });
+    harness.send({ type: 'task.stack', taskId: above, branch });
+    harness.send({ type: 'task.wait_on', taskId: above, waitsOn: [below, other] });
+    const title = harness.task(below).title;
+    const message = `This task’s branch is stacked on the branch of “${title}”, so it keeps waiting for “${title}” to merge. It stops waiting when “${title}” merges or is cancelled.`;
+    expect(() => harness.send({ type: 'task.wait_on', taskId: above, waitsOn: [other] })).toThrow(message);
+    expect(() => harness.send({ type: 'task.wait_on', taskId: above, waitsOn: [] })).toThrow(message);
+    expect(() =>
+      harness.send({ type: 'task.wait_on', taskId: above, waitsOn: [] }, { onBehalf: true })
+    ).toThrow(message);
+    harness.send({ type: 'task.wait_on', taskId: above, waitsOn: [below] });
+    expect(harness.task(above)).toMatchObject({ waitsOn: [below], stackedOn: { taskId: below, branch } });
+  });
+
+  test('once the task below merges, the dependency is yours to remove and the stack stays for GitButler', () => {
+    const { harness, below, above, branch } = startTwo();
+    harness.send({ type: 'task.stack', taskId: above, branch });
+    shipAndMerge(harness, below);
+    expect(harness.task(above).stackedOn).toEqual({ taskId: below, branch });
+    expect(harness.events.some((event) => event.type === 'task.unstacked')).toBe(false);
+    harness.send({ type: 'task.wait_on', taskId: above, waitsOn: [] });
+    expect(harness.task(above).waitsOn).toEqual([]);
+  });
+
+  test('cancelling the task below unstacks the task above, drops the dependency and points its pull request at the default branch', () => {
+    const { harness, below, above, branch } = startTwo();
+    harness.send({ type: 'task.stack', taskId: above, branch });
+    reachShipping(harness, below);
+    harness.send({ type: 'pull_request.record', taskId: below, pullRequest: pullRequest() });
+    expect(resolvePullRequestBase(harness.state, harness.task(above))).toBe(branch);
+    const count = harness.events.length;
+    harness.send({ type: 'task.cancel', taskId: below });
+    const events = harness.events.slice(count).filter((event) => 'taskId' in event && event.taskId === above);
+    expect(events.map((event) => event.type)).toEqual(['task.unstacked', 'task.waits_on_changed']);
+    expect(events).toMatchObject([
+      { type: 'task.unstacked', fromTaskId: below },
+      { type: 'task.waits_on_changed', waitsOn: [], by: 'shinsa' },
+    ]);
+    expect(harness.task(above).stackedOn).toBeUndefined();
+    expect(harness.task(above)).toMatchObject({ waitsOn: [], stage: 'building' });
+    expect(resolvePullRequestBase(harness.state, harness.task(above))).toBeNull();
+    harness.send({ type: 'task.wait_on', taskId: above, waitsOn: [] });
+  });
+
+  test('a settled task above is left alone when the task below is cancelled', () => {
+    const { harness, below, above, branch } = startTwo();
+    harness.send({ type: 'task.stack', taskId: above, branch });
+    harness.send({ type: 'task.cancel', taskId: above });
+    const count = harness.events.length;
+    harness.send({ type: 'task.cancel', taskId: below });
+    expect(harness.events.slice(count).some((event) => 'taskId' in event && event.taskId === above)).toBe(
+      false
+    );
+    expect(harness.task(above).stackedOn).toEqual({ taskId: below, branch });
   });
 });

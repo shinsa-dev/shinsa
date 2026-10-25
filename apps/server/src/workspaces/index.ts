@@ -12,7 +12,7 @@ import { describeDirtyCheckout, isCheckoutClean, MainCheckoutStrategy } from './
 import type { WorkspaceStrategy } from './types.ts';
 import { WorktreeStrategy } from './worktrees.ts';
 
-export type { ReleaseClaim, WorkspaceStrategy } from './types.ts';
+export { ConflictedBranchError, type ReleaseClaim, type WorkspaceStrategy } from './types.ts';
 
 export interface WorkspacesOptions {
   dataDir: string;

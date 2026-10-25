@@ -63,6 +63,7 @@ import {
   replyToGate,
   resolvePlanReply,
   resolveRetryLabel,
+  resolveRetryReply,
 } from '@/lib/tasks/gates.ts';
 import { describeChangeGate, resolvePlannedOperation } from '@/lib/tasks/shapes.ts';
 
@@ -160,7 +161,11 @@ export function PausedCard({
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
       title={gate.title}
       action={
-        <Button size='sm' loading={busy === 'retry'} onClick={() => reply('retry')}>
+        <Button
+          size='sm'
+          loading={busy === resolveRetryReply(gate)}
+          onClick={() => reply(resolveRetryReply(gate))}
+        >
           {resolveRetryLabel(state, gate)}
         </Button>
       }

@@ -101,7 +101,6 @@ describe('gate commands', () => {
           line: 4,
           endLine: null,
           text: 'Keep the guard.',
-          suggestion: null,
         },
       ],
       clearComments: () => {
@@ -117,7 +116,7 @@ describe('gate commands', () => {
     expect([decide?.label, decide?.hint, decide?.disabled]).toEqual([
       'Fix 1 finding',
       'Sends the findings you kept and your line comments to the agent',
-      false,
+      undefined,
     ]);
     run(decide);
     expect(spies.sent).toHaveBeenCalledWith(
@@ -134,7 +133,6 @@ describe('gate commands', () => {
             line: 4,
             endLine: null,
             text: 'Keep the guard.',
-            suggestion: null,
           },
         ],
       },

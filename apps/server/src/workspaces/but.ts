@@ -13,9 +13,14 @@ interface ButChange {
   filePath: string;
 }
 
+interface ButBranch {
+  name: string;
+  commits?: { conflicted?: boolean }[];
+}
+
 interface ButStatus {
   uncommittedChanges: ButChange[];
-  stacks: { branches: { name: string }[] }[];
+  stacks: { branches: ButBranch[] }[];
 }
 
 export async function isButInstalled(signal?: AbortSignal) {
@@ -49,4 +54,17 @@ export async function readButStatus(cwd: string, signal?: AbortSignal) {
 
 export function listAppliedBranches(status: ButStatus) {
   return status.stacks.flatMap((stack) => stack.branches.map((branch) => branch.name));
+}
+
+export function isStackedWithOthers(status: ButStatus, name: string) {
+  return status.stacks.some(
+    (stack) => stack.branches.length > 1 && stack.branches.some((branch) => branch.name === name)
+  );
+}
+
+export function listConflictedBranches(status: ButStatus) {
+  return status.stacks
+    .flatMap((stack) => stack.branches)
+    .filter((branch) => branch.commits?.some((commit) => commit.conflicted === true))
+    .map((branch) => branch.name);
 }

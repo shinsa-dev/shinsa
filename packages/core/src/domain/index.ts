@@ -27,6 +27,11 @@ export { DomainError } from './errors.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
 export {
+  describeOverlaps,
+  listNewOverlapPaths,
+  type OverlapNote,
+} from './overlaps.ts';
+export {
   formatTaskHandle,
   isProjectKey,
   NO_PROJECT_KEY,
@@ -168,10 +173,13 @@ export {
   hasTool,
   isHandOverTool,
   isShinsaToolName,
+  isTaskSessionRole,
+  listCallableToolNames,
   listToolNames,
   PURPOSE_HAND_OVERS,
   SHINSA_TOOL_NAMES,
   type ShinsaToolName,
+  TASK_SESSION_ROLES,
 } from './tools.ts';
 export type * from './types.ts';
 export {
@@ -191,8 +199,10 @@ export {
 export {
   canUseGitButler,
   DEFAULT_WORKSPACE_MODE,
+  describeHumanEdits,
   isSettingUpWorkspace,
   isSharedWorkspace,
+  resolveEditRefusal,
   resolveRepoWorkspace,
   WORKSPACE_MODES,
   WORKSPACE_SETUP_REASON,

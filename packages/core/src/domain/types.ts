@@ -57,7 +57,7 @@ export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate';
 
 export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 
-export type FixReason = 'checks' | 'review' | 'you' | 'pull_request';
+export type FixReason = 'checks' | 'review' | 'you' | 'pull_request' | 'conflict';
 
 export type RunStatus = 'queued' | 'running' | 'waiting';
 
@@ -111,6 +111,7 @@ export interface RunAttempt {
   handoff: RunHandoff | null;
   startedAt: number;
   account?: RunAccount | null;
+  cwd?: string;
 }
 
 export type RunContinuationReason = 'shutdown' | 'crash';
@@ -131,7 +132,9 @@ export type GateType =
   | 'configuration'
   | 'sign_in';
 
-export type GateCause = 'budget' | 'monitor';
+export type GateCause = 'budget' | 'monitor' | 'workspace_update';
+
+export type EditsApproval = 'review' | 'merge';
 
 export type FindingVerdictKind = 'fix' | 'dismiss';
 
@@ -143,18 +146,12 @@ export interface FindingVerdict {
 
 export type CommentSide = 'old' | 'new';
 
-export interface SuggestedChange {
-  original: string;
-  replacement: string;
-}
-
 export interface ReviewComment {
   path: string;
   side: CommentSide;
   line: number;
   endLine: number | null;
   text: string;
-  suggestion: SuggestedChange | null;
 }
 
 export type ReviewEscalationReason = 'rounds' | 'stalled' | 'exhausted';
@@ -350,6 +347,12 @@ export interface TaskStack {
   branch: string;
 }
 
+export interface TaskOverlap {
+  taskId: string;
+  paths: string[];
+  untold: string[];
+}
+
 export interface Task {
   id: string;
   handle?: string | null;
@@ -420,6 +423,11 @@ export interface Task {
   rounds?: Round[];
   closedAt?: number | null;
   inbox?: InboxMessage[];
+  editedPaths?: string[];
+  untoldEdits?: string[];
+  overlaps?: TaskOverlap[];
+  approvedEdits?: EditsApproval | null;
+  heldConflict?: string | null;
 }
 
 export interface InboxMessage {

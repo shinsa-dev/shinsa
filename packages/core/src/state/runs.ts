@@ -49,6 +49,7 @@ function applyRunAttempted(state: ShinsaState, event: EventOf<'run.attempted'>) 
     handoff: event.handoff,
     startedAt: event.at,
     ...(event.account ? { account: event.account } : {}),
+    ...(event.cwd ? { cwd: event.cwd } : {}),
   };
   updateRun(state, event.runId, {
     attemptId: event.attemptId,

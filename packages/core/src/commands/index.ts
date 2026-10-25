@@ -179,6 +179,16 @@ type SystemCommand =
   | { type: 'worktree.ready'; taskId: string; path: string; branch: string; returnBranch?: string }
   | { type: 'worktree.gone'; taskId: string }
   | { type: 'task.stack'; taskId: string; branch: string }
+  | { type: 'task.record_conflict'; taskId: string; branch: string }
+  | { type: 'task.record_edit'; taskId: string; path: string; changed: boolean }
+  | { type: 'task.commit_edits'; taskId: string; treeHash: string | null }
+  | {
+      type: 'task.record_overlaps';
+      taskId: string;
+      overlaps: { taskId: string; paths: string[] }[];
+      from: string;
+    }
+  | { type: 'task.record_workspace_update'; taskId: string; guidance: string | null }
   | { type: 'run.link'; runId: string; sessionId: string; attemptId?: string | null; provider: string }
   | {
       type: 'run.end';
@@ -197,6 +207,7 @@ type SystemCommand =
       resumed: boolean;
       handoff: RunHandoff | null;
       account?: RunAccount | null;
+      cwd?: string | null;
     }
   | { type: 'run.interrupt'; runId: string; attemptId?: string | null }
   | { type: 'run.continue'; runId: string }

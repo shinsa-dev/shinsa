@@ -25,7 +25,7 @@ import {
   resolveTaskWorkspace,
 } from '../state/queries.ts';
 import { type Decider, quoteTitles } from './decider.ts';
-import { changeDependencies, resolveDependencies } from './dependencies.ts';
+import { assertStackKept, changeDependencies, resolveDependencies } from './dependencies.ts';
 import { settleTask, startWork } from './lifecycle.ts';
 import { retryTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
@@ -153,6 +153,7 @@ export function prioritizeTask(decider: Decider, command: CommandOf<'task.priori
 export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>) {
   const task = decider.task(command.taskId);
   if (isTaskSettled(task)) throw new DomainError('task_settled', 'This task is finished.');
+  assertStackKept(decider, task, command.waitsOn);
   changeDependencies(decider, task.id, resolveDependencies(decider, task, command.waitsOn), 'you');
 }
 

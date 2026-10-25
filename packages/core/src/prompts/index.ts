@@ -1,9 +1,12 @@
 export {
   resolveChecksFixPrompt,
+  resolveConflictFixPrompt,
+  resolveConflictSteer,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
   resolveReviewFixPrompt,
   resolveVerdictFixPrompt,
+  resolveWorkspaceUpdatedFixPrompt,
 } from './fixes.ts';
 export { resolveFollowUpPrompt } from './follow-up.ts';
 export {
@@ -42,9 +45,11 @@ export {
   resolveAnsweredReply,
   resolveAnswerPrompt,
   resolveContinuePrompt,
+  resolveMovedNote,
   resolveQuestionResumePrompt,
   resolveSteerPrompt,
   resolveSupersededReply,
   resolveWithdrawnReply,
+  selectSessionCwd,
 } from './session.ts';
 export { resolveMonitorPrompt } from './waits.ts';

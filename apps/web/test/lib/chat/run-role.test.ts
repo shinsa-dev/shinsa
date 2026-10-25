@@ -163,6 +163,8 @@ describe('resolveRunHeadline', () => {
       ['The agent review found problems.', 'Fixing the review findings', 'Fixed the review findings'],
       ['The human looked at the work and wrote:', 'Making your changes', 'Made your changes'],
       ['Pull request #12 needs work', 'Fixing the pull request', 'Fixed the pull request'],
+      ['GitButler left commits on your branch', 'Resolving conflicts', 'Resolved conflicts'],
+      ['Your pull request conflicted with its base', 'Resolving conflicts', 'Resolved conflicts'],
     ];
     for (const [instruction, present, past] of cases) {
       const prompt = resolveAgentPrompt(instruction);

@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   clearDependencies,
   describeWaitsOnHeading,
+  hasRemovableDependencies,
   listDependencyChoices,
+  resolveDependencyChoiceLabel,
   resolveDependencyLabel,
   toggleDependency,
 } from '@/lib/tasks/dependencies.ts';
@@ -96,10 +98,35 @@ describe('dependency commands', () => {
   });
 
   it('stops waiting on every task at once', async () => {
-    await clearDependencies(createTask({ id: 't', waitsOn: ['a', 'b'] }));
+    await clearDependencies(createTask({ id: 't', waitsOn: ['a', 'b'] }), null);
     expect(spies.sent).toHaveBeenCalledWith(
       { type: 'task.wait_on', taskId: 't', waitsOn: [] },
       'No longer waiting.'
     );
+  });
+
+  it('keeps waiting on the task this one is stacked on when it stops waiting on the rest', async () => {
+    await clearDependencies(createTask({ id: 't', waitsOn: ['a', 'b'] }), blocker);
+    expect(spies.sent).toHaveBeenCalledWith(
+      { type: 'task.wait_on', taskId: 't', waitsOn: ['b'] },
+      'Now waits only on “Add login”, which this task is stacked on.'
+    );
+  });
+});
+
+describe('a task stacked on another one', () => {
+  const below = createTask({ id: 'b', title: 'Add login' });
+
+  it('names the task it is stacked on in that task’s choice and leaves the others as they are', () => {
+    expect(resolveDependencyChoiceLabel(below, below)).toBe('Stacked on “Add login”');
+    expect(resolveDependencyChoiceLabel(below, createTask({ id: 'o', title: 'Other' }))).toBe('Other');
+    expect(resolveDependencyChoiceLabel(null, below)).toBe('Add login');
+  });
+
+  it('has something to stop waiting on only beside the task it is stacked on', () => {
+    expect(hasRemovableDependencies(createTask({ id: 't', waitsOn: ['b'] }), below)).toBe(false);
+    expect(hasRemovableDependencies(createTask({ id: 't', waitsOn: ['b', 'o'] }), below)).toBe(true);
+    expect(hasRemovableDependencies(createTask({ id: 't', waitsOn: ['b'] }), null)).toBe(true);
+    expect(hasRemovableDependencies(createTask({ id: 't' }), null)).toBe(false);
   });
 });

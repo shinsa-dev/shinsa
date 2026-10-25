@@ -103,13 +103,18 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
   startPhase(decider, task.id, index + 1);
 }
 
+function isPushedFix(task: Task) {
+  if (task.fixFor === 'pull_request') return true;
+  return task.fixFor === 'conflict' && (task.pullRequest !== null || task.pushPending === true);
+}
+
 export function completeFix(decider: Decider, command: CommandOf<'agent.complete_fix'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'complete_fix');
   recordTree(decider, task.id, command.treeHash);
   decider.emit({ type: 'task.noted', taskId: task.id, note: command.summary, runId: run.id });
   decider.endRun(run, 'completed', command.summary);
   decider.progressed(task.id);
-  if (task.fixFor !== 'pull_request') {
+  if (!isPushedFix(task)) {
     startChecks(decider, task.id);
     return;
   }

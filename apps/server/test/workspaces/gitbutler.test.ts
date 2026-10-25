@@ -6,7 +6,10 @@ import { log } from '../../src/log/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { readButStatus } from '../../src/workspaces/but.ts';
 import { GitButlerStrategy } from '../../src/workspaces/gitbutler.ts';
+import { ConflictedBranchError } from '../../src/workspaces/index.ts';
 import { WorkspaceLock } from '../../src/workspaces/lock.ts';
+import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
+import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRound, createTask } from '../helpers/state.ts';
 
@@ -338,5 +341,137 @@ describe('GitButler workspaces', () => {
     rmSync(join(dataDir, 'missing'), { force: true });
     const release = await strategy.claim(repo, task);
     await release();
+  });
+});
+
+describe('cancelling a task in a GitButler stack', () => {
+  async function listStacks(path: string) {
+    const status = await readButStatus(path);
+    return status.stacks.map((stack) => stack.branches.map((branch) => branch.name));
+  }
+
+  async function listConflicted(path: string, branch: string) {
+    const status = await readButStatus(path);
+    const found = status.stacks.flatMap((stack) => stack.branches).find((entry) => entry.name === branch);
+    return (found?.commits ?? []).map((commit) => commit.conflicted === true);
+  }
+
+  async function stackTwo() {
+    const workspace = await createWorkspace();
+    const { repo, strategy } = workspace;
+    const below = await startTask(strategy, repo, 'task-1', 'fix/scroll');
+    const above = await startTask(strategy, repo, 'task-2', 'feat/banner');
+    await editAndCommit(strategy, repo, below, { 'a.txt': 'a, fixed\n' });
+    await editAndCommit(strategy, repo, above, { 'banner.txt': 'banner\n' });
+    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    await editAndCommit(strategy, repo, above, { 'a.txt': 'a, fixed\nand more\n' }, () => true);
+    info.mockRestore();
+    return { ...workspace, below, above };
+  }
+
+  test('the task below is taken out of the stack first, so the task above stays applied with its commits', async () => {
+    const { repo, path, strategy, below } = await stackTwo();
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    await strategy.remove(repo, { ...below, stage: 'cancelled' });
+    expect(warn).toHaveBeenCalledWith(
+      '[Workspaces] Taking a task’s branch out of its stack left conflicted commits on other branches',
+      { taskId: 'task-1', branch: 'fix/scroll', conflicted: ['feat/banner'] }
+    );
+    warn.mockRestore();
+    expect(await listStacks(path)).toEqual([['feat/banner']]);
+    expect(await git(path, 'log', '--format=%s', 'main..feat/banner')).toBe(
+      '[conflict] feat: task-2\nfeat: task-2'
+    );
+    expect(await git(path, 'merge-base', 'main', 'feat/banner')).toBe(await git(path, 'rev-parse', 'main'));
+    expect(await listConflicted(path, 'feat/banner')).toEqual([true, false]);
+    expect(readFileSync(join(path, 'banner.txt'), 'utf8')).toBe('banner\n');
+    expect(await listUncommitted(path)).toBe('');
+  });
+
+  test('the task above is taken out of the stack, so the task below keeps its branch applied', async () => {
+    const { repo, path, strategy, above } = await stackTwo();
+    await strategy.remove(repo, { ...above, stage: 'cancelled' });
+    expect(await listStacks(path)).toEqual([['fix/scroll']]);
+    expect(readFileSync(join(path, 'a.txt'), 'utf8')).toBe('a, fixed\n');
+    expect(existsSync(join(path, 'banner.txt'))).toBe(false);
+  });
+
+  test('a task in the middle of a stack leaves the ones above stacked on the one below', async () => {
+    const { repo, path, strategy } = await createWorkspace({ 'c.txt': 'c\n' });
+    const bottom = await startTask(strategy, repo, 'task-1', 'fix/scroll');
+    const middle = await startTask(strategy, repo, 'task-2', 'feat/banner');
+    const top = await startTask(strategy, repo, 'task-3', 'feat/footer');
+    await editAndCommit(strategy, repo, bottom, { 'a.txt': 'a, fixed\n' });
+    await editAndCommit(strategy, repo, middle, { 'b.txt': 'b, banner\n' });
+    await editAndCommit(strategy, repo, top, { 'c.txt': 'c, footer\n' });
+    await runCommandOrThrow(['but', 'move', 'feat/banner', '--above', 'fix/scroll', '--json'], path);
+    await runCommandOrThrow(['but', 'move', 'feat/footer', '--above', 'feat/banner', '--json'], path);
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    await strategy.remove(repo, { ...middle, stage: 'cancelled' });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+    expect(await listStacks(path)).toEqual([['feat/footer', 'fix/scroll']]);
+    expect(readFileSync(join(path, 'b.txt'), 'utf8')).toBe('b\n');
+    expect(readFileSync(join(path, 'c.txt'), 'utf8')).toBe('c, footer\n');
+  });
+
+  test('the task above is not pushed while conflicted, and resolving in place with `but resolve apply` lets it push', async () => {
+    const { repo, path, origin, strategy, below, above } = await stackTwo();
+    const stacked = await strategy.push(repo, above);
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    await strategy.remove(repo, { ...below, stage: 'cancelled' });
+    warn.mockRestore();
+    expect(await strategy.listConflicted(repo)).toEqual(['feat/banner']);
+    const refused = strategy.push(repo, above);
+    await expect(refused).rejects.toBeInstanceOf(ConflictedBranchError);
+    await expect(refused).rejects.toThrow('GitButler left commits on feat/banner conflicted');
+
+    const head = await git(path, 'symbolic-ref', 'HEAD');
+    const conflicts = await runCommandOrThrow(['but', 'resolve', 'conflicts', 'feat/banner', '--json'], path);
+    expect(JSON.parse(conflicts)).toMatchObject({ branch: 'feat/banner', files: [{ path: 'a.txt' }] });
+    await runCommandOrThrow(
+      ['but', 'resolve', 'apply', 'a.txt:1', '--commit', 'feat/banner', '--json'],
+      path,
+      {
+        input: 'a\nand more\n',
+      }
+    );
+    expect(await git(path, 'symbolic-ref', 'HEAD')).toBe(head);
+    expect(await strategy.listConflicted(repo)).toEqual([]);
+    expect(await readBranchFile(path, 'feat/banner', 'a.txt')).toBe('a\nand more');
+    expect(await listUncommitted(path)).toBe('');
+    const sha = await strategy.push(repo, above);
+    expect(await git(origin, 'rev-parse', 'refs/heads/feat/banner')).toBe(sha);
+    expect(await git(origin, 'log', '--format=%s', `main..${sha}`)).not.toContain('feat: task-1');
+    expect(sha).not.toBe(stacked);
+  });
+
+  test('updating the workspace runs `but pull`: your uncommitted work stays, and a commit that no longer applies is left conflicted on its branch', async () => {
+    const { repo, path, root, origin, strategy } = await createWorkspace();
+    const task = await startTask(strategy, repo, 'task-1', 'fix/scroll');
+    const other = await startTask(strategy, repo, 'task-2', 'feat/banner');
+    await editAndCommit(strategy, repo, task, { 'a.txt': 'a, fixed\n' });
+    await editAndCommit(strategy, repo, other, { 'banner.txt': 'banner\n' });
+    writeFiles(path, { 'notes.txt': 'mine\n' });
+    const upstream = join(root, 'upstream');
+    await runCommandOrThrow(['git', 'clone', '-q', origin, upstream], root);
+    writeFiles(upstream, { 'a.txt': 'a, upstream\n', 'c.txt': 'c\n' });
+    await git(upstream, 'commit', '-qam', 'main moved');
+    await git(upstream, 'add', '-A');
+    await git(upstream, 'commit', '-qm', 'add c');
+    await git(upstream, 'push', '-q', 'origin', 'main');
+
+    await strategy.update(repo);
+    expect(readFileSync(join(path, 'notes.txt'), 'utf8')).toBe('mine\n');
+    expect(readFileSync(join(path, 'c.txt'), 'utf8')).toBe('c\n');
+    expect(await strategy.listConflicted(repo)).toEqual(['fix/scroll']);
+    expect(await git(path, 'merge-base', '--is-ancestor', 'origin/main', 'feat/banner')).toBe('');
+    expect(await listApplied(path)).toEqual(['feat/banner', 'fix/scroll']);
+  });
+
+  test('only a GitButler workspace is updated', async () => {
+    const message = 'Only a GitButler workspace is updated by Shinsa';
+    await expect(new WorktreeStrategy(createTempDir()).update()).rejects.toThrow(message);
+    await expect(new MainCheckoutStrategy().update()).rejects.toThrow(message);
   });
 });

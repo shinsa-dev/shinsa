@@ -15,7 +15,13 @@ import {
 } from '@/lib/overview/verdicts.ts';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
 import { declineSecret, resolveSecretLabel } from '@/lib/secrets.ts';
-import { type AnswerExtras, replyToGate, resolvePlanReply, resolveRetryLabel } from '@/lib/tasks/gates.ts';
+import {
+  type AnswerExtras,
+  replyToGate,
+  resolvePlanReply,
+  resolveRetryLabel,
+  resolveRetryReply,
+} from '@/lib/tasks/gates.ts';
 import { describeChangeGate } from '@/lib/tasks/shapes.ts';
 import { resolveGateGlyph } from '@/lib/tasks/status.ts';
 import type { TaskTab } from '@/lib/tasks/tabs.ts';
@@ -167,8 +173,8 @@ function listFailureCommands(state: ShinsaState, gate: Gate): Command[] {
       label: resolveRetryLabel(state, gate),
       hint: gate.title,
       icon: 'IconArrowRotateClockwise',
-      keywords: ['retry', 'resume', 'again', 'restart', 'paused'],
-      run: () => void replyToGate(gate, 'retry'),
+      keywords: ['retry', 'resume', 'again', 'restart', 'paused', 'update', 'but pull'],
+      run: () => void replyToGate(gate, resolveRetryReply(gate)),
     },
     {
       kind: 'page',
@@ -243,18 +249,19 @@ function resolveDecision(task: Task, gate: Gate, context: GateContext) {
   if (task.findings.length === 0) {
     return {
       label: 'Approve the changes',
-      hint: commented ? 'Send or clear your comments first' : 'Opens the pull request',
-      disabled: commented,
+      hint: 'Opens the pull request',
+      ...(commented ? { disabled: 'Send or clear your comments first' } : {}),
       run: () => void replyToGate(gate, 'approveChanges'),
     };
   }
   const draft = createVerdictDraft(task.findings);
   const action = resolveVerdictAction(task.findings, draft);
   const extras = resolveVerdictAnswer(task.findings, draft, context.comments);
+  const hint = describeApproveHint(commented, action);
   return {
     label: action.label,
-    hint: describeApproveHint(commented, action),
-    disabled: isVerdictActionBlocked(commented, action),
+    hint,
+    ...(isVerdictActionBlocked(commented, action) ? { disabled: hint } : {}),
     run: () => void sendVerdicts(gate, action, extras, context),
   };
 }

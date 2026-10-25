@@ -1,10 +1,18 @@
-import { type Repo, resolveRoundBase, type Task } from '@shinsa/core';
+import { DomainError, type Repo, resolveRoundBase, type Task } from '@shinsa/core';
 import { assertRefName } from '../git/index.ts';
 import { resolveFreeBranch } from '../git/worktree.ts';
 import { describeError, log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
-import { isGitButlerWorkspace, listAppliedBranches, readButStatus, runBut } from './but.ts';
 import {
+  isGitButlerWorkspace,
+  isStackedWithOthers,
+  listAppliedBranches,
+  listConflictedBranches,
+  readButStatus,
+  runBut,
+} from './but.ts';
+import {
+  adoptPath,
   claimChanges,
   endBaseline,
   forgetTask,
@@ -12,11 +20,20 @@ import {
   listOwnedPaths,
   readDirtyState,
   recordCommitted,
+  selectOtherOwner,
   startBaseline,
   type WorkspaceLedger,
 } from './ledger.ts';
 import { WorkspaceLock } from './lock.ts';
-import { type CanStackOn, requireCheckout, type WorkspaceCommit, type WorkspaceStrategy } from './types.ts';
+import {
+  type CanStackOn,
+  ConflictedBranchError,
+  requireCheckout,
+  type WorkspaceCommit,
+  type WorkspaceStrategy,
+} from './types.ts';
+
+const UPDATE_HOLDER = 'workspace-update';
 
 function describeConflicts(paths: string[]) {
   return `These files had uncommitted changes that are not this task’s, so Shinsa will not commit them to its branch: ${paths.join(', ')}. Undo your edits to them, or ask the human what to do.`;
@@ -140,8 +157,25 @@ export class GitButlerStrategy implements WorkspaceStrategy {
 
   async push(repo: Repo, task: Task, signal?: AbortSignal) {
     const branch = assertRefName(requireCheckout(task).branch);
-    await this.#serially(repo, () => runBut(['push', branch], repo.path, { signal }));
+    await this.#serially(repo, async () => {
+      const status = await readButStatus(repo.path, signal);
+      if (listConflictedBranches(status).includes(branch)) throw new ConflictedBranchError(branch);
+      await runBut(['push', branch], repo.path, { signal });
+    });
     return runCommandOrThrow(['git', 'rev-parse', `refs/heads/${branch}`], repo.path);
+  }
+
+  async update(repo: Repo, signal?: AbortSignal) {
+    const release = await this.#lease.acquire(repo.id, UPDATE_HOLDER, signal);
+    try {
+      await this.#serially(repo, () => runBut(['pull', '--json'], repo.path, { signal }));
+    } finally {
+      release();
+    }
+  }
+
+  listConflicted(repo: Repo) {
+    return this.#serially(repo, async () => listConflictedBranches(await readButStatus(repo.path)));
   }
 
   remove(repo: Repo, task: Task) {
@@ -149,8 +183,40 @@ export class GitButlerStrategy implements WorkspaceStrategy {
       await this.#discardOwned(repo, task);
       const branch = task.branch;
       if (!branch || task.pullRequest?.state === 'merged') return;
-      const applied = listAppliedBranches(await readButStatus(repo.path));
-      if (applied.includes(branch)) await runBut(['unapply', assertRefName(branch), '--json'], repo.path);
+      const status = await readButStatus(repo.path);
+      if (!listAppliedBranches(status).includes(branch)) return;
+      if (isStackedWithOthers(status, branch)) await this.#unstack(repo, task.id, branch);
+      await runBut(['unapply', assertRefName(branch), '--json'], repo.path);
+    });
+  }
+
+  async #unstack(repo: Repo, taskId: string, branch: string) {
+    await runBut(['move', assertRefName(branch), '--unstack', '--json'], repo.path);
+    const conflicted = listConflictedBranches(await readButStatus(repo.path)).filter(
+      (name) => name !== branch
+    );
+    if (conflicted.length === 0) return;
+    log.warn(
+      '[Workspaces] Taking a task’s branch out of its stack left conflicted commits on other branches',
+      {
+        taskId,
+        branch,
+        conflicted,
+      }
+    );
+  }
+
+  writeEdit(repo: Repo, task: Task, path: string, write: () => boolean) {
+    return this.#serially(repo, async () => {
+      const ledger = this.#ledgers.read(repo.id);
+      if (selectOtherOwner(ledger, task.id, path)) {
+        throw new DomainError(
+          'file_taken',
+          `Another task has uncommitted changes in ${path}, so your edit would mix with them. Edit it once that task has committed them.`
+        );
+      }
+      if (!write()) return;
+      this.#ledgers.write(repo.id, adoptPath(ledger, task.id, path, await readDirtyState(repo.path)));
     });
   }
 

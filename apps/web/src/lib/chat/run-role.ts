@@ -24,6 +24,8 @@ const FIX_FOCUS: { prefix: string; live: string; done: string }[] = [
   { prefix: 'The agent review found', live: 'Fixing the review findings', done: 'Fixed the review findings' },
   { prefix: 'The human looked at the work', live: 'Making your changes', done: 'Made your changes' },
   { prefix: 'Pull request #', live: 'Fixing the pull request', done: 'Fixed the pull request' },
+  { prefix: 'GitButler left', live: 'Resolving conflicts', done: 'Resolved conflicts' },
+  { prefix: 'Your pull request conflicted', live: 'Resolving conflicts', done: 'Resolved conflicts' },
 ];
 
 function resolvePlanHeadline(done: boolean, task: Task, entries: ChatEntry[]) {

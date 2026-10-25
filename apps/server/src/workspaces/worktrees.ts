@@ -9,9 +9,16 @@ import {
   removeWorktree,
   resolveHead,
   resolveTree,
+  writeMergeHead,
 } from '../git/index.ts';
 import { runGitOrThrow } from '../git/run.ts';
-import { NO_CLAIM, requireCheckout, type WorkspaceCommit, type WorkspaceStrategy } from './types.ts';
+import {
+  NO_CLAIM,
+  refuseUpdate,
+  requireCheckout,
+  type WorkspaceCommit,
+  type WorkspaceStrategy,
+} from './types.ts';
 
 export async function commitCheckout(path: string, message: string): Promise<WorkspaceCommit> {
   const before = await resolveHead(path);
@@ -19,7 +26,9 @@ export async function commitCheckout(path: string, message: string): Promise<Wor
   return {
     treeHash: await resolveTree(path),
     undo: async () => {
-      if (committed) await runGitOrThrow(['reset', '--soft', before], path);
+      if (!committed) return;
+      await runGitOrThrow(['reset', '--soft', before], path);
+      if (committed.merge) await writeMergeHead(path, committed.merge);
     },
   };
 }
@@ -60,5 +69,18 @@ export class WorktreeStrategy implements WorkspaceStrategy {
 
   claim() {
     return Promise.resolve(NO_CLAIM);
+  }
+
+  writeEdit(_repo: Repo, _task: Task, _path: string, write: () => boolean) {
+    write();
+    return Promise.resolve();
+  }
+
+  listConflicted() {
+    return Promise.resolve([]);
+  }
+
+  update() {
+    return refuseUpdate();
   }
 }

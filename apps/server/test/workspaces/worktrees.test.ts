@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { runCommand } from '../../src/shell/index.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRound, createTask } from '../helpers/state.ts';
@@ -30,6 +31,28 @@ describe('worktrees', () => {
     await nothing.undo();
     expect(await git(checkout.path, 'rev-parse', 'HEAD')).toBe(head);
     expect(await (await strategy.claim())()).toBeUndefined();
+  });
+
+  test('a resolved merge of the base is committed as git’s merge, and undo puts it back in progress', async () => {
+    const { repo, path, strategy, checkout, task } = await startTask();
+    writeFiles(checkout.path, { 'a.txt': 'task\n' });
+    await strategy.commit(repo, task, 'feat: a');
+    writeFiles(path, { 'a.txt': 'main\n' });
+    await git(path, 'add', 'a.txt');
+    await git(path, 'commit', '-qm', 'main moved');
+    await runCommand(['git', 'merge', '--no-edit', 'main'], checkout.path);
+    writeFiles(checkout.path, { 'a.txt': 'task\nmain\n' });
+    await git(checkout.path, 'add', 'a.txt');
+
+    const commit = await strategy.commit(repo, task, 'fix: resolve conflicts');
+    const main = await git(path, 'rev-parse', 'main');
+    expect(await git(checkout.path, 'rev-parse', 'HEAD^2')).toBe(main);
+    await commit.undo();
+    expect(await git(checkout.path, 'rev-parse', 'MERGE_HEAD')).toBe(main);
+    await strategy.commit(repo, task, 'fix: resolve conflicts again');
+    expect(await git(checkout.path, 'log', '-1', '--format=%s %P')).toBe(
+      `Merge branch 'main' into fix/tab-scroll ${await git(checkout.path, 'rev-parse', 'HEAD^1')} ${main}`
+    );
   });
 
   test('an untouched worktree is reset, a later round only drops its scratch edits, and work is kept', async () => {

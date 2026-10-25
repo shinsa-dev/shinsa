@@ -31,6 +31,7 @@ const FIX_REASON_TEXT: Record<Exclude<FixReason, 'you'>, string> = {
   checks: 'fixing failing checks',
   review: 'fixing what the agent review found',
   pull_request: 'fixing the pull request',
+  conflict: 'resolving the conflicts GitButler left',
 };
 
 const DECISION_TEXT: Record<GateDecision, string> = {

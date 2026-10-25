@@ -37,6 +37,7 @@ import { applyDelegationEvent, recordCourierTask, resolveLineage } from './deleg
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
+import { applyOverlapEvent } from './overlaps.ts';
 import { applyPullRequestEvent } from './pull-requests.ts';
 import { applyRoundEvent, createFirstRound, recordRoundBranch, recordRoundStaged } from './rounds.ts';
 import { applyRunEvent } from './runs.ts';
@@ -329,14 +330,17 @@ function listFixFingerprints(task: Task | undefined, event: EventOf<'fix.started
 function applyFixStarted(state: ShinsaState, event: EventOf<'fix.started'>) {
   const task = state.tasks[event.taskId];
   const signature = event.signature ?? null;
+  const fixing = event.round > 0 || event.reason === 'you';
   updateTask(state, event.taskId, event.at, {
     fixRounds: event.round,
     fixFor: event.reason ?? null,
     fixSignature: signature,
     stalledFixes: event.stalled ?? 0,
     fixFingerprints: listFixFingerprints(task, event),
+    ...(fixing && task?.approvedEdits ? { approvedEdits: null } : {}),
+    ...(fixing && event.reason === 'conflict' && task?.heldConflict ? { heldConflict: null } : {}),
   });
-  if (event.round > 0 || event.reason === 'you') {
+  if (fixing) {
     record(state, event.taskId, event.at, {
       actor: 'shinsa',
       kind: 'fix',
@@ -369,6 +373,26 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       : describeMessage(event),
     detail: event.text,
   });
+}
+
+function applyEdited(state: ShinsaState, event: EventOf<'task.edited'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const without = (paths: string[] | undefined) => (paths ?? []).filter((path) => path !== event.path);
+  if (!event.changed) {
+    updateTask(state, event.taskId, event.at, {
+      editedPaths: without(task.editedPaths),
+      untoldEdits: without(task.untoldEdits),
+    });
+    return;
+  }
+  const fresh = !(task.editedPaths ?? []).includes(event.path);
+  updateTask(state, event.taskId, event.at, {
+    editedPaths: [...without(task.editedPaths), event.path].sort(),
+    untoldEdits: [...without(task.untoldEdits), event.path].sort(),
+  });
+  if (fresh)
+    record(state, event.taskId, event.at, { actor: 'you', kind: 'work', text: `Edited ${event.path}` });
 }
 
 function describeMessage(event: EventOf<'task.messaged'>) {
@@ -558,6 +582,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
         stackedOn: { taskId: event.onTaskId, branch: event.branch },
       });
       break;
+    case 'task.unstacked':
+      updateTask(state, event.taskId, event.at, { stackedOn: undefined });
+      break;
     case 'plan.proposed':
       applyPlanProposed(state, event);
       break;
@@ -626,7 +653,26 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       });
       break;
     case 'work.committed':
-      updateTask(state, event.taskId, event.at, { treeHash: event.treeHash });
+      updateTask(state, event.taskId, event.at, { treeHash: event.treeHash, editedPaths: [] });
+      break;
+    case 'task.edited':
+      applyEdited(state, event);
+      break;
+    case 'task.edits_told':
+      updateTask(state, event.taskId, event.at, { untoldEdits: [] });
+      break;
+    case 'task.overlapped':
+    case 'task.overlaps_told':
+      applyOverlapEvent(state, event);
+      break;
+    case 'task.edits_committed':
+      updateTask(state, event.taskId, event.at, { editedPaths: [] });
+      break;
+    case 'task.edits_approved':
+      updateTask(state, event.taskId, event.at, { approvedEdits: event.gate });
+      break;
+    case 'task.conflict_held':
+      updateTask(state, event.taskId, event.at, { heldConflict: event.branch });
       break;
     case 'task.suggested':
       applySuggested(state, event);

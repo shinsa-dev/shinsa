@@ -37,7 +37,6 @@ const COMMENTS: LineComment[] = [
     endLine: null,
     ref: null,
     text: 'Rename this',
-    suggestion: null,
   },
   {
     id: 'c2',
@@ -47,7 +46,6 @@ const COMMENTS: LineComment[] = [
     endLine: null,
     ref: null,
     text: 'Drop the log',
-    suggestion: null,
   },
 ];
 
@@ -145,7 +143,7 @@ describe('the decision on a task page', () => {
       'Request changes',
     ]);
     const approve = find(all, 'task.t1.gate.g1.approve');
-    expect(approve.disabled).toBe(false);
+    expect(approve.disabled).toBeUndefined();
     expect(approve.hint).toBe('Opens the pull request');
     expect(find(all, 'task.t1.gate.g1.review')).toMatchObject({ kind: 'go', to: '/tasks/t1?tab=code' });
     run(approve);
@@ -174,8 +172,8 @@ describe('the decision on a task page', () => {
     const { state, task } = setup(createTask({ id: 't1' }), [gate]);
     const all = sections(state, task, createContext({ comments: COMMENTS }));
     const approve = find(all, 'task.t1.gate.g1.approve');
-    expect(approve.disabled).toBe(true);
-    expect(approve.hint).toBe('Send or clear your comments first');
+    expect(approve.disabled).toBe('Send or clear your comments first');
+    expect(approve.hint).toBe('Opens the pull request');
     expect(find(all, 'task.t1.gate.g1.revise').label).toBe('Request changes with 2 comments');
     const one = sections(state, task, createContext({ comments: COMMENTS.slice(0, 1) }));
     expect(find(one, 'task.t1.gate.g1.revise').label).toBe('Request changes with 1 comment');
@@ -194,8 +192,8 @@ describe('the decision on a task page', () => {
           decision: 'revise',
           response: 'A few things',
           comments: [
-            { path: 'src/a.ts', side: 'new', line: 3, endLine: null, text: 'Rename this', suggestion: null },
-            { path: 'src/b.ts', side: 'new', line: 9, endLine: null, text: 'Drop the log', suggestion: null },
+            { path: 'src/a.ts', side: 'new', line: 3, endLine: null, text: 'Rename this' },
+            { path: 'src/b.ts', side: 'new', line: 9, endLine: null, text: 'Drop the log' },
           ],
         },
         'Sent back to the agent.',
@@ -317,6 +315,17 @@ describe('the decision on a task page', () => {
     const question = createGate({ id: 'g2', taskId: 't1', type: 'question' });
     const { state, task } = setup(createTask({ id: 't1' }), [question]);
     expect(labels(section(sections(state, task), 'task.decide'))).toEqual(['Answer the question']);
+  });
+
+  it('offers updating the workspace on a GitButler pull request that conflicts', () => {
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'failure', cause: 'workspace_update' });
+    const { state, task } = setup(createTask({ id: 't1' }), [gate]);
+    const all = sections(state, task);
+    expect(labels(section(all, 'task.decide'))).toEqual(['Update the workspace', 'Retry with guidance']);
+    run(find(all, 'task.t1.gate.g1.retry'));
+    expect(spies.sent.mock.calls).toEqual([
+      answered('g1', 'approve', null, 'Updating the workspace with but pull.'),
+    ] as never);
   });
 
   it('offers the same retry on a paused budget as the card does', () => {
@@ -570,6 +579,39 @@ describe('waiting on other tasks', () => {
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'task.wait_on', taskId: 't1', waitsOn: [] }, 'No longer waiting.'],
     ] as never);
+  });
+
+  it('keeps the task this one is stacked on when it stops waiting, and offers no Stop waiting for that one alone', () => {
+    const below = createTask({ id: 't2', title: 'Add the API', branch: 'feat/api', stage: 'building' });
+    const stackedOn = { taskId: 't2', branch: 'feat/api' };
+    const { state, task } = setup(
+      createTask({ id: 't1', stage: 'building', waitsOn: ['t2', 't3'], stackedOn }),
+      [],
+      [below, createTask({ id: 't3', title: 'Write the schema' })]
+    );
+    const all = sections(state, task);
+    const wait = find(all, 'task.t1.dependency.wait');
+    if (wait.kind !== 'choice') throw new Error('Expected a choice');
+    expect(wait.options.map((option) => option.label)).toEqual([
+      'Stacked on “Add the API”',
+      'Write the schema',
+    ]);
+    expect(wait.options.map((option) => option.disabled)).toEqual([
+      'Kept until it merges or is cancelled',
+      undefined,
+    ]);
+    run(find(all, 'task.t1.dependency.clear'));
+    expect(spies.sent.mock.calls).toEqual([
+      [
+        { type: 'task.wait_on', taskId: 't1', waitsOn: ['t2'] },
+        'Now waits only on “Add the API”, which this task is stacked on.',
+      ],
+    ] as never);
+    const alone = setup(createTask({ id: 't1', stage: 'building', waitsOn: ['t2'], stackedOn }), [], [below]);
+    const ids = sections(alone.state, alone.task).flatMap((entry) =>
+      entry.commands.map((command) => command.id)
+    );
+    expect(ids).not.toContain('task.t1.dependency.clear');
   });
 
   it('offers nothing about waiting on a finished task', () => {

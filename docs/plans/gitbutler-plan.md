@@ -22,7 +22,8 @@ agent working in their checkout.
   remove), used by the worktree, checks, push and removal effects and by the hand-over commit. The setup check
   verifies the mode (`but` installed, a GitButler workspace, a clean checkout that is not a GitButler workspace).
   `GET /api/repos/workspaces` says per repository whether GitButler can be chosen. The Code tab reads a GitButler
-  task from its branch, with no working copy. `shinsa repos update --workspace`, refused in an agent's shell.
+  task's working copy as the files it owns in the ledger, from disk, and every other file from its branch.
+  `shinsa repos update --workspace`, refused in an agent's shell.
 - **GitButler.** A branch per task with `but branch new` (stacked rounds `--above` the round below), applied with
   the others; one agent that can change files at a time per workspace (read-only roles never wait); the ledger
   in `data/workspaces/` records which uncommitted paths belong to which task, so `but commit -b` takes exactly the
@@ -41,6 +42,29 @@ agent working in their checkout.
   the other branch while that task's pull request is open, else the default branch (`resolvePullRequestBase`, the
   watch retargets it). Tested against the real `but` (the move, the commit on the stacked branch, a refused stack) and
   through the supervisor's hand-over.
+- **Cancelling a task in a stack.** Before unapplying a branch that shares a stack with others, the remove path takes
+  it out of the stack (`but move <branch> --unstack`, then `but unapply <branch>`): the branches above it stay applied
+  with their commits, on the branch below it or on the workspace target when it was the bottom, and the ones below
+  keep theirs. This also fixes cancelling the task on top, whose unapply used to take the task below with it. Core
+  agrees in the same command: settling a task without a merge sends `task.unstacked` for each open task stacked on
+  it, clears its `stackedOn` and drops the dependency the stack added, so its pull request's base is the default
+  branch again. Tested against the real `but` (bottom, top and middle of a stack) and in core.
+- **The conflicted commit left above a cancelled task** (2026-10-25). After the removal the server reads which
+  applied branches have conflicted commits and sends `task.record_conflict` for each open task on one; the push
+  refuses a conflicted branch (`ConflictedBranchError`) and sends the same command. Core steers an Agent that is
+  building, fixing or operating, and at the review gate, the merge gate or while shipping starts a fix
+  (`fixFor: 'conflict'`) in the Agent's own session, which resolves in place with `but resolve conflicts` and
+  `but resolve apply --commit <branch>` (never `but resolve <commit>`, which checks the commit out) and asks you
+  when it cannot tell which side is right. Then it pushes (`but push` force-pushes the rewritten branch, dropping
+  the cancelled commits from the pull request) or, before your review, runs the checks and review again. The shell
+  policy refuses every `but` command but the reads and `but resolve conflicts|apply|status`. Tested against the
+  real `but` (the refused push, resolving in place without moving the checkout, the force-push) and in core.
+- **The dependency a stack added is locked.** While the task below is open, `task.wait_on` that drops it is refused
+  (`dependency_stacked`), from you or on your behalf, so the task above cannot merge first and ship the commits below
+  with it. The Waits on menus show the task ticked and disabled as "Stacked on “‹title›”"; Stop waiting keeps it and
+  is not offered when it is the only one; ⌘K's choice names it the same way and disables it with the reason
+  "Kept until it merges or is cancelled". The lock ends when the task below
+  merges or is cancelled.
 - **Web.** Settings → Projects: a select on every repository's row, GitButler disabled with the reason until it is
   set up; ⌘K "Where agents work in ‹repository›" on the Settings page.
 - **Tests.** Core decide and invariants; every strategy against throwaway repositories, GitButler against the real
@@ -63,12 +87,35 @@ agent working in their checkout.
 - **Refuses: a change to lines another applied branch changed** ("Cannot commit: 1 change could not be applied:
   a.txt, line 1 depends on ‹branch›"); its hint is to stack the branch on the other one (`but move <branch> --above
   <other>`, which moves the branch's commits with it and reports `stackBranch`). Shinsa follows that hint for another
-  task's branch (Done, above). Unapplying the lower branch of a stack unapplies the whole stack.
+  task's branch (Done, above). Unapplying any branch of a stack (bottom, middle or top) unapplies the whole stack.
+- **Unstacks: one branch at a time** (`but move <branch> --unstack`, also `--branch` with no name; reports
+  `unstackBranch`). The branch leaves its stack with its own commits, rebased onto the workspace target; the
+  branches above it stay stacked on the one below. A commit that changed lines of the branch it left (the reason it
+  was stacked) is kept but marked conflicted ("this operation left 1 commit(s) conflicted… Resolve with `but
+  resolve`, or back out with `but undo`"; `conflicted` in `but status --json`, a `[conflict]` subject in git), and
+  `but push` refuses the branch until it is resolved (`but resolve`, or non-interactively `but resolve apply <path>
+  --commit <branch> --ours|--theirs`).
 - **Breaks on a plain `git commit`** on `gitbutler/workspace` ("GitButler mode exit required"): Shinsa never runs one
   there, and the shell policy already refuses `git commit` for agents.
 - **`but worktree`** (linked worktrees inside GitButler) needs an experimental feature flag; not used.
 - **`but pr new`** needs GitButler's own forge sign-in (`but config forge auth`); Shinsa opens pull requests with
   `gh` as in every mode.
+
+- **Your edits from the Code tab** (2026-10-25). `GitButlerStrategy.writeEdit` writes under the repository's serial
+  lock and records the path as the task's in the ledger (`adoptPath`), so the next hand-over commits it to the task's
+  branch; a path another task has uncommitted changes in is refused (`file_taken`), and one that is clean again
+  leaves the ledger (`docs/engine.md` → Your edits). The Code tab's working copy reads the files the task owns
+  from disk and the rest from its branch, so a reload shows your edit. Approving the review with an uncommitted
+  edit commits it and runs the checks again before the push; approving the merge with one pushes it and merges once
+  CI passes.
+- **A conflicting pull request in GitButler** (2026-10-25). When the watch reads a GitButler task's pull request as
+  conflicting with its base, a failure gate (`cause: 'workspace_update'`) offers Update the workspace, which runs
+  `but pull` (`GitButlerStrategy.update`, after any writing agent in the workspace is done; GitButler keeps
+  uncommitted work), then the task's Agent resolves what is left in place in its own session and Shinsa pushes.
+  Tested against the real `but` (a branch left conflicted, another rebased onto the new default branch, your
+  uncommitted file kept) and in core.
+- **Conflicts noticed while a task plans, reviews or checks** (2026-10-25) are held (`task.conflict_held`) and the
+  fix starts where the task's next review or merge gate would open.
 
 ## Not done
 
@@ -79,14 +126,13 @@ agent working in their checkout.
 - **Stacking on your own branch.** A conflict with a branch that is not an open task's (your own work, a merged
   task's branch still applied) is still refused: there is no task to wait on, and the pull request's base would be a
   branch Shinsa does not push.
-- **Cancelling the task below a stack** unapplies its branch, and GitButler unapplies the branches stacked on it with
-  it; Shinsa does not unstack the task above first (`but move --unstack`).
-- **Removing the dependency** a stack added (the Waits on menu) leaves the branches stacked; nothing stops the task
-  above from merging first, which would merge the commits below with it.
-- **Edits you make during an agent's run** to a file that was clean are counted as the agent's. A per-file watch
-  could tell them apart; not built.
-- **Merged branches** are left applied until your next `but pull`; Shinsa does not pull, since that rebases your
-  own branches too.
+- **A per-branch update.** Update the workspace runs `but pull`, which rebases every applied branch, your own too;
+  GitButler has no command that brings the default branch into one branch alone.
+- **Edits you make outside Shinsa during an agent's run** to a file that was clean are counted as the agent's. A
+  per-file watch could tell them apart; not built. Edits you make in the Code tab are recorded as the task's at once
+  (Done: Your edits from the Code tab).
+- **Merged branches** are left applied until the next `but pull` (yours, or Update the workspace on a conflicting
+  pull request); Shinsa does not pull on its own, since that rebases your own branches too.
 - **Isolated delegations** in GitButler check out the workspace commit (every applied branch), not the task's branch
   alone.
 - **The shell policy** does not yet refuse `git checkout <branch>`, `git switch` or `git stash` in a GitButler or

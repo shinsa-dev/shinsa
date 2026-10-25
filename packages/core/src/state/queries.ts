@@ -113,13 +113,22 @@ export function selectStackTarget(state: ShinsaState, task: Task, branch: string
   return below;
 }
 
+function selectStackBelow(state: ShinsaState, task: Task) {
+  const stacked = task.stackedOn;
+  const below = stacked ? state.tasks[stacked.taskId] : undefined;
+  return stacked && below && below.branch === stacked.branch ? below : null;
+}
+
+export function selectStackedOnTask(state: ShinsaState, task: Task) {
+  const below = selectStackBelow(state, task);
+  return below && !isTaskSettled(below) ? below : null;
+}
+
 export function resolvePullRequestBase(state: ShinsaState, task: Task) {
   const round = resolveRoundBase(task);
   if (round) return round;
-  const stacked = task.stackedOn;
-  const below = stacked ? state.tasks[stacked.taskId] : undefined;
-  if (!(stacked && below) || below.branch !== stacked.branch) return null;
-  return below.pullRequest?.state === 'open' ? stacked.branch : null;
+  const below = selectStackBelow(state, task);
+  return below?.pullRequest?.state === 'open' ? below.branch : null;
 }
 
 export function resolveTaskProject(state: ShinsaState, task: Task) {

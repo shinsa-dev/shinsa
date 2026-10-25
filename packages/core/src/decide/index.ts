@@ -20,10 +20,12 @@ import {
 } from './agents.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
+import { recordConflict, recordWorkspaceUpdate } from './conflicts.ts';
 import { meterRun } from './costs.ts';
 import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting, stackTask } from './dependencies.ts';
+import { commitEdits, recordEdit } from './edits.ts';
 import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
@@ -31,6 +33,7 @@ import { dropMessage, messageTask, receiveMessage, redeliverMessage, routeMessag
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { applyOrchestration } from './orchestration.ts';
+import { recordOverlaps } from './overlaps.ts';
 import { recordPullRequest, recordPullRequestReadFailure, recordPush } from './pull-requests.ts';
 import { changeRoundShipping, startQueuedRounds } from './rounds.ts';
 import {
@@ -174,6 +177,16 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return removeWorktree(decider, command);
     case 'task.stack':
       return stackTask(decider, command);
+    case 'task.record_conflict':
+      return recordConflict(decider, command);
+    case 'task.record_edit':
+      return recordEdit(decider, command);
+    case 'task.commit_edits':
+      return commitEdits(decider, command);
+    case 'task.record_overlaps':
+      return recordOverlaps(decider, command);
+    case 'task.record_workspace_update':
+      return recordWorkspaceUpdate(decider, command);
     case 'effect.fail':
       return failEffect(decider, command);
     case 'checks.record':

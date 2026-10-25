@@ -156,6 +156,8 @@ function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: nu
     proposal: null,
     shapeChanges: [],
     configProblems: [],
+    approvedEdits: null,
+    heldConflict: null,
     ...resolveBranchPatch(task, choice, needsWorktree(next.pipeline), at),
   };
 }

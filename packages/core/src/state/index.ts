@@ -36,6 +36,7 @@ export {
   resolveTaskProject,
   resolveTaskWorkspace,
   selectCheckoutHolder,
+  selectStackedOnTask,
   selectStackTarget,
   selectTaskByHandle,
   selectTaskByReference,

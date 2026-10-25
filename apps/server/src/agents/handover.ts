@@ -14,6 +14,7 @@ const FIX_COMMIT: Record<NonNullable<Task['fixFor']>, string> = {
   review: 'address review findings',
   you: 'apply requested changes',
   pull_request: 'address pull request feedback',
+  conflict: 'resolve conflicts',
 };
 
 const SUBJECT_LIMIT = 72;

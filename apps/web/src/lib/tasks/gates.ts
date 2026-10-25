@@ -20,6 +20,7 @@ export interface AnswerExtras {
 const GATE_REPLY = {
   answer: { decision: 'reply', done: 'Answered. The agent carries on.' },
   retry: { decision: 'approve', done: 'Picking it up again.' },
+  updateWorkspace: { decision: 'approve', done: 'Updating the workspace with but pull.' },
   guide: { decision: 'reply', done: 'Retrying with your guidance.' },
   cancel: { decision: 'reject', done: 'Cancelled.' },
   recheck: { decision: 'approve', done: 'Verifying the setup again.' },
@@ -59,8 +60,13 @@ export function replyToGate(
 }
 
 export function resolveRetryLabel(state: ShinsaState, gate: Gate) {
+  if (gate.cause === 'workspace_update') return 'Update the workspace';
   const task = state.tasks[gate.taskId];
   return (gate.cause === 'budget' && task && describeBudgetRetry(state, task)) || 'Retry';
+}
+
+export function resolveRetryReply(gate: Gate): GateReply {
+  return gate.cause === 'workspace_update' ? 'updateWorkspace' : 'retry';
 }
 
 export function resolvePlanReply(task: Task): GateReply {

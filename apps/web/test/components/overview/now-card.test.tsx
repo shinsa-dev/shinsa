@@ -485,9 +485,7 @@ describe('NowCard on the Overview', () => {
         decision: 'revise',
         response: null,
         verdicts: [{ index: 0, verdict: 'fix', note: null }],
-        comments: [
-          { path: 'src/a.ts', side: 'new', line: 3, endLine: null, text: 'Rename this.', suggestion: null },
-        ],
+        comments: [{ path: 'src/a.ts', side: 'new', line: 3, endLine: null, text: 'Rename this.' }],
       },
     ]);
     await waitFor(() => expect(findButton(view, 'Fix 1 finding').hasAttribute('aria-busy')).toBe(false));
@@ -540,6 +538,23 @@ describe('NowCard on the Overview', () => {
     expect(cancel.disabled).toBe(true);
     releaseAcks();
     await waitFor(() => expect(cancel.disabled).toBe(false));
+  });
+
+  it('updates the workspace in one click on a GitButler pull request that conflicts with its base', async () => {
+    const task = createTask({ id: 'task-1', stage: 'shipping' });
+    const gate = createGate({
+      id: 'gate-1',
+      taskId: 'task-1',
+      type: 'failure',
+      cause: 'workspace_update',
+      title: 'Pull request #42 conflicts with main',
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    fireEvent.click(view.getByRole('button', { name: 'Update the workspace' }));
+    expect(listSentCommands()).toEqual([
+      { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null },
+    ]);
+    expect(await view.findByText('Updating the workspace with but pull.')).toBeTruthy();
   });
 
   it('offers to allow more on a task that reached its usage or cost limit', () => {

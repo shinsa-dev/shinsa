@@ -6,6 +6,7 @@ import {
   resolveQueue,
   resolveQueueStep,
   type ShinsaState,
+  selectStackedOnTask,
   type Task,
 } from '@shinsa/core';
 import {
@@ -20,7 +21,9 @@ import { listTaskActionCommands } from '@/lib/command/task-actions.ts';
 import type { LineComment } from '@/lib/review/draft.ts';
 import {
   clearDependencies,
+  hasRemovableDependencies,
   listDependencyChoices,
+  resolveDependencyChoiceLabel,
   resolveDependencyLabel,
   toggleDependency,
 } from '@/lib/tasks/dependencies.ts';
@@ -45,6 +48,7 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
     .map((dependency) => dependency.title)
     .join(', ');
   const choices = listDependencyChoices(state, task);
+  const stackedOn = selectStackedOnTask(state, task);
   const commands: Command[] = [];
   if (choices.length > 0) {
     commands.push({
@@ -58,9 +62,10 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
       value: task.waitsOn,
       options: choices.map((choice) => ({
         value: choice.id,
-        label: choice.title,
+        label: resolveDependencyChoiceLabel(stackedOn, choice),
         icon: resolveTaskMenuIcon(state, choice),
         keywords: [choice.branch ?? ''],
+        ...(stackedOn?.id === choice.id ? { disabled: 'Kept until it merges or is cancelled' } : {}),
       })),
       pick: (value) => {
         const dependency = state.tasks[value];
@@ -68,7 +73,7 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
       },
     });
   }
-  if (task.waitsOn.length > 0) {
+  if (hasRemovableDependencies(task, stackedOn)) {
     commands.push({
       kind: 'run',
       id: `${id}.clear`,
@@ -76,7 +81,7 @@ function listDependencyCommands(state: ShinsaState, task: Task): Command[] {
       ...(hint ? { hint } : {}),
       icon: 'IconCrossMedium',
       keywords: ['wait', 'dependency', 'start now', 'unblock', 'remove'],
-      run: () => void clearDependencies(task),
+      run: () => void clearDependencies(task, stackedOn),
     });
   }
   return commands;

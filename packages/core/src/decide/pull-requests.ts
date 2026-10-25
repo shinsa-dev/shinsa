@@ -12,8 +12,10 @@ import {
   type Task,
 } from '../domain/index.ts';
 import { resolvePullRequestFixPrompt } from '../prompts/index.ts';
-import { listActiveRuns, listOpenBlockers } from '../state/queries.ts';
+import { listActiveRuns, listOpenBlockers, resolveTaskWorkspace } from '../state/queries.ts';
+import { askToUpdateWorkspace, isAwaitingWorkspaceUpdate, startHeldConflictFix } from './conflicts.ts';
 import { type Decider, quoteTitles } from './decider.ts';
+import { applyEditsApproval } from './edits.ts';
 import { startFix } from './fixes.ts';
 import { settleTask } from './lifecycle.ts';
 import { recordEarlierRoundMerged } from './rounds.ts';
@@ -92,8 +94,13 @@ function describeQueueRemoval(previous: MergeQueueEntry, pullRequest: PullReques
 
 function openMergeGate(decider: Decider, task: Task, removal: string | null) {
   if (holdForBlockers(decider, task) || hasMergeGate(decider, task.id)) return;
+  if (startHeldConflictFix(decider, task.id)) return;
   decider.progressed(task.id);
   decider.withdrawGates(task.id, (gate) => gate.type === 'failure');
+  if (applyEditsApproval(decider, task.id, 'merge')) {
+    startMerge(decider, task.id);
+    return;
+  }
   decider.stage(
     task.id,
     'awaiting_merge',
@@ -131,6 +138,17 @@ export function requestPush(decider: Decider, taskId: string) {
   restartWatch(decider, taskId);
   decider.emit({ type: 'pull_request.push_requested', taskId });
   decider.run({ kind: task.pullRequest ? 'pull_request.push' : 'pull_request.open', taskId });
+}
+
+export function shipReviewedWork(decider: Decider, taskId: string) {
+  const reason = decider.task(taskId).pullRequest ? 'pushing the changes' : 'opening the pull request';
+  decider.stage(taskId, 'shipping', reason);
+  requestPush(decider, taskId);
+}
+
+export function startMerge(decider: Decider, taskId: string) {
+  decider.stage(taskId, 'awaiting_merge', 'merging');
+  decider.run({ kind: 'pull_request.merge', taskId });
 }
 
 export function recheckPullRequest(decider: Decider, taskId: string) {
@@ -219,7 +237,7 @@ function reactToWatch(
     openMergeGate(decider, decider.task(task.id), removal);
     return;
   }
-  if (watch.stopped) return;
+  if (watch.stopped || isAwaitingWorkspaceUpdate(decider, task)) return;
   decider.withdrawGates(task.id, (gate) => gate.type === 'merge');
   if (report.exhausted) {
     recordWatch(decider, task.id, { ...report.next, stopped: 'comment_limit' }, report.changes);
@@ -233,6 +251,10 @@ function reactToWatch(
   recordWatch(decider, task.id, report.next, report.changes);
   if (!hasFixableChange(report.changes) && !needsPullRequestFix(pullRequest)) {
     decider.stage(task.id, 'shipping', 'waiting for CI');
+    return;
+  }
+  if (pullRequest.mergeable === false && resolveTaskWorkspace(decider.state, task) === 'gitbutler') {
+    askToUpdateWorkspace(decider, task, pullRequest);
     return;
   }
   startFix(

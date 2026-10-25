@@ -620,6 +620,7 @@ describe('cancelling effects', () => {
           'pull_request.open',
           'pull_request.push',
           'pull_request.watch',
+          'workspace.update',
         ],
         reason: 'The task is finished.',
       },

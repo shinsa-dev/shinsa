@@ -1,6 +1,7 @@
 import { isPausingGate } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
+import { UPDATING_WORKSPACE, updateWorkspace } from './conflicts.ts';
 import type { Decider } from './decider.ts';
 import { resetFixBudget } from './fixes.ts';
 import {
@@ -56,12 +57,13 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
         task,
         'agent',
         resolveAgentPrompt(`Continue the fix you were working on and finish with \`complete_fix\`.${hint}`),
-        { purpose: 'fix', resumeFrom: decider.rootRun(taskId) }
+        { purpose: 'fix', resumeFrom: decider.taskSession(taskId, 'agent') }
       );
       return;
     case 'shipping':
       decider.cancelRuns(taskId);
-      requestPush(decider, taskId);
+      if (task.stageReason === UPDATING_WORKSPACE) updateWorkspace(decider, taskId, guidance);
+      else requestPush(decider, taskId);
       return;
     case 'awaiting_merge':
       decider.cancelRuns(taskId);
