@@ -332,7 +332,7 @@ describe('the rounds of a task on its Overview', () => {
     const view = renderOverview(state, task);
     expect(view.queryByRole('heading', { name: 'Report' })).toBeNull();
     const earlier = view.getByRole('list', { name: 'Earlier rounds' });
-    fireEvent.click(within(earlier).getByRole('button', { name: /Round 1/ }));
+    fireEvent.click(within(earlier).getByRole('button', { name: /round 1/ }));
     expect(
       within(earlier).getByText('Compare Shinsa with T3 Code. Shinsa runs the agents itself.')
     ).toBeTruthy();

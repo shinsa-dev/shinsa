@@ -8,7 +8,6 @@ import {
   type WorkReport,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -24,6 +23,7 @@ import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
 import { ReviewActions } from '@/components/overview/review-actions.tsx';
 import { ReviewNote } from '@/components/review/note.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
+import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { ToneLabel } from '@/components/status/text.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
@@ -163,7 +163,7 @@ function Comments({ task, selected }: { task: Task; selected: string | null }) {
             action={
               <button
                 type='button'
-                className='cursor-pointer text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+                className='cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
                 onClick={() => draft.removeComment(comment.id)}
               >
                 Remove
@@ -342,13 +342,7 @@ export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
   if (!report) {
     return (
       <div className={cn(PAGE_COLUMN, 'flex items-center gap-2 py-5 text-fg-2 text-xs')}>
-        {diff.status === 'error' ? (
-          diff.message
-        ) : (
-          <>
-            <Spinner size='sm' /> Reading the changes
-          </>
-        )}
+        {diff.status === 'error' ? diff.message : <LoadingLine label='Reading the changes' />}
       </div>
     );
   }

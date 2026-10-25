@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import { type PlanDocument, type Run, resolveHouseRules, type Task } from '@shinsa/core';
+import {
+  type FixFocus,
+  type PlanDocument,
+  resolveHouseRules,
+  serializeRun,
+  type Task,
+  type WireRun,
+} from '@shinsa/core';
 import { RUN_ROLE, resolveRunHeadline } from '@/lib/chat/run-role.ts';
 import { createCallEntry, shinsaTool } from '../../support/chat.ts';
 import { createRun, createTask, NOW } from '../../support/state.ts';
@@ -23,15 +30,11 @@ function withPlan(titles: string[]): Task {
 
 const task = createTask({ id: 't' });
 
-function resolveAgentPrompt(instruction: string) {
-  return `${resolveHouseRules('agent')}\n\n${instruction}`;
-}
-
-function live(overrides: Partial<Run>) {
+function live(overrides: Partial<WireRun> & { prompt?: string }) {
   return createRun({ id: 'r', taskId: 't', ...overrides });
 }
 
-function done(overrides: Partial<Run>) {
+function done(overrides: Partial<WireRun>) {
   return createRun({ id: 'r', taskId: 't', endedAt: NOW, outcome: 'completed', ...overrides });
 }
 
@@ -157,36 +160,34 @@ describe('resolveRunHeadline', () => {
     ).toBe('Reviewed the change, 3 findings (2 blocking)');
   });
 
-  it('names what a fix is for from the first words of its instruction, after the house rules', () => {
-    const cases: [string, string, string][] = [
-      ['The checks failed after the last change:', 'Fixing the failing checks', 'Fixed the failing checks'],
-      ['The agent review found problems.', 'Fixing the review findings', 'Fixed the review findings'],
-      ['The human looked at the work and wrote:', 'Making your changes', 'Made your changes'],
-      ['Pull request #12 needs work', 'Fixing the pull request', 'Fixed the pull request'],
-      ['GitButler left commits on your branch', 'Resolving conflicts', 'Resolved conflicts'],
-      ['Your pull request conflicted with its base', 'Resolving conflicts', 'Resolved conflicts'],
+  it('names what a fix is for from the focus the server resolved', () => {
+    const cases: [FixFocus, string, string][] = [
+      ['checks', 'Fixing the failing checks', 'Fixed the failing checks'],
+      ['review', 'Fixing the review findings', 'Fixed the review findings'],
+      ['changes', 'Making your changes', 'Made your changes'],
+      ['pull_request', 'Fixing the pull request', 'Fixed the pull request'],
+      ['conflicts', 'Resolving conflicts', 'Resolved conflicts'],
     ];
-    for (const [instruction, present, past] of cases) {
-      const prompt = resolveAgentPrompt(instruction);
-      expect(resolveRunHeadline(live({ role: 'agent', purpose: 'fix', prompt }), task, [])).toBe(present);
-      expect(resolveRunHeadline(done({ role: 'agent', purpose: 'fix', prompt }), task, [])).toBe(past);
+    for (const [fixFocus, present, past] of cases) {
+      expect(resolveRunHeadline(live({ role: 'agent', purpose: 'fix', fixFocus }), task, [])).toBe(present);
+      expect(resolveRunHeadline(done({ role: 'agent', purpose: 'fix', fixFocus }), task, [])).toBe(past);
     }
   });
 
-  it('reads the short instruction of a fix that carries the round brief', () => {
-    const run = live({
-      role: 'agent',
-      purpose: 'fix',
-      prompt: resolveAgentPrompt('Your conversation may no longer hold this round.\n\nThe checks failed:'),
-      rolePrompt: resolveAgentPrompt('The checks failed after the last change:'),
-    });
-    expect(resolveRunHeadline(run, task, [])).toBe('Fixing the failing checks');
+  it('names a fix from the run the socket sends, which has no prompt', () => {
+    const run = serializeRun(
+      live({
+        role: 'agent',
+        purpose: 'fix',
+        prompt: `${resolveHouseRules('agent')}\n\nThe human looked at the work and wrote:`,
+      })
+    );
+    expect(run).not.toHaveProperty('prompt');
+    expect(resolveRunHeadline(run, task, [])).toBe('Making your changes');
   });
 
-  it('falls back to fixing the change when the fix instruction is unknown or missing', () => {
-    expect(
-      resolveRunHeadline(live({ role: 'agent', purpose: 'fix', prompt: 'Something else' }), task, [])
-    ).toBe('Fixing the change');
+  it('falls back to fixing the change when the server found no focus', () => {
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'fix' }), task, [])).toBe('Fixing the change');
     expect(resolveRunHeadline(done({ role: 'agent', purpose: 'fix' }), task, [])).toBe('Fixed the change');
   });
 });

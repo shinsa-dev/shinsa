@@ -38,14 +38,11 @@ export function CodeTab(props: React.ComponentProps<CodeModule['CodeTab']>) {
   return <module.CodeTab {...props} />;
 }
 
-export async function prefetchCode(task: Task) {
+export async function prefetchCode(task: Task, search: string = window.location.search) {
   const release = claimPrefetch(task);
   if (!release) return;
   try {
-    const [module, path] = await Promise.all([
-      requestCodeTab(),
-      prefetchTaskCode(task, window.location.search),
-    ]);
+    const [module, path] = await Promise.all([requestCodeTab(), prefetchTaskCode(task, search)]);
     await module.prefetchCodeEditor(path);
   } catch {
     release();

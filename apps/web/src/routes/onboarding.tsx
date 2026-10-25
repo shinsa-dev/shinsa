@@ -3,7 +3,6 @@ import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { ScrollArea } from '@shinsa/ui/components/scroll-area';
 import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import { ROW } from '@/components/chat/run-section.tsx';
 import { AgentText, ErrorLine } from '@/components/chat/turn-detail.tsx';
@@ -12,6 +11,7 @@ import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OnboardingChoices } from '@/components/onboarding/choices.tsx';
+import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { Composer } from '@/components/task/composer.tsx';
 import { useOnboardingChat } from '@/hooks/use-onboarding-chat.ts';
 import { useStickToBottom } from '@/hooks/use-stick-to-bottom.ts';
@@ -91,7 +91,7 @@ export function OnboardingPage() {
           )}
           {!chat && !failure && (
             <div className='grid min-h-60 place-items-center'>
-              <Spinner size='lg' className='text-fg-2' />
+              <LoadingSpinner label='Reading the setup' />
             </div>
           )}
           {chat?.messages.map((message) => (

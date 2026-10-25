@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, setSystemTime } from 'bun:test';
-import type { ChatEntry, Run, ShinsaState, Task } from '@shinsa/core';
+import { type ChatEntry, type Run, type ShinsaState, serializeState, type Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { ChatTab } from '@/routes/task/chat.tsx';
@@ -112,6 +112,7 @@ function renderChat(state: ShinsaState, task: Task, focusRunId: string | null = 
 
 beforeEach(() => {
   startFakeServer();
+  pushAccounts(createSnapshot());
   setSystemTime(new Date(NOW));
 });
 
@@ -336,7 +337,7 @@ describe('ChatTab', () => {
       run('fix', 30, { purpose: 'fix', prompt: 'The checks failed after the last change:' }),
       run('review', 40, { role: 'reviewer' }),
     ];
-    const view = renderChat(createShinsaState({ tasks: [task], runs }), task);
+    const view = renderChat(serializeState(createShinsaState({ tasks: [task], runs })), task);
     const headers = [...view.container.querySelectorAll('section[id^="run-"] > [data-chat-line]')].map(
       (header) => header.textContent ?? ''
     );
