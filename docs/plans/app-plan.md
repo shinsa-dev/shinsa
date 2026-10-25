@@ -136,6 +136,27 @@ onboarding checks each and says how to fix it, and Settings shows the same rows 
 Nothing else: no accessibility, screen recording or network permission. Agents' own tools (a browser for evidence,
 a simulator) ask for theirs when they first use them.
 
+## When the engine is not running
+
+The engine is what does the work, so the app never lets it stop without saying so. The app's main process watches it
+and every page shows what it finds in the health banner at the top (`lib/connection/health.ts`, the same banner
+`GET /api/health` fills today), above whatever page you are on, until the engine is back:
+
+| What happened | How the app knows | What the banner says and offers |
+|---|---|---|
+| The login item is off or waits for approval | `SMAppService` status on launch and on every reconnect | Shinsa cannot run in the background; **Open Login Items** |
+| The engine crashed and launchd is restarting it | the socket drops, launchd's last exit status | The engine stopped and is restarting; it clears itself, or after three crashes in ten minutes becomes the next row |
+| The engine keeps crashing | repeated exits, the engine's crash file in `data/` | The engine keeps stopping, with the last error; **Restart engine**, **Copy details** |
+| The engine was killed and is not coming back | no socket, the job not loaded | The engine is not running; **Start engine** (registers and kicks the job) |
+| A folder it needs is blocked | the engine reports `EPERM` on a chosen folder | Shinsa cannot read ‹folder›; **Open Privacy & Security** |
+| The engine is a different version than the app | the version handshake | The engine is updating, then reconnects |
+
+Each row links to a short guide (`docs/troubleshooting.md`, and the same text on shinsa.dev) with the steps by hand,
+for when the button is not enough. A crash also leaves a line in the task's chat for any run it cut off ("The engine
+stopped during this run; it resumed when the engine came back"), as recovery does today. While the app is closed
+nothing can warn you on the Mac; the hosted dashboard shows that your Mac is offline, and the Dock badge shows a
+warning sign the next time the app opens.
+
 ## What goes away
 
 - `shinsa serve` as a command, and the CLI's default of running it.
@@ -152,7 +173,7 @@ a simulator) ask for theirs when they first use them.
 1. **The compiled engine.** `bun build --compile` of `apps/server` with the Agent SDK, the plugin and Eunoe beside
    it; a release workflow artifact that runs a task end to end on a clean Mac without Bun.
 2. **The bundle and the LaunchAgent.** The engine inside `Shinsa.app`, registered by the app, the Unix socket, the
-   interface from `shinsa-app://`. Pass: install from the DMG, open, finish onboarding, quit, and a schedule still
+   interface from `shinsa-app://`, and the engine's rows in the health banner. Pass: install from the DMG, open, finish onboarding, quit, and a schedule still
    fires.
 3. **The command line.** Install the `shinsa` command, `shinsa .`, socket transport, the removals above.
 4. **Signed releases and updates.** Developer ID, notarization, the public releases repository, electron-updater,
