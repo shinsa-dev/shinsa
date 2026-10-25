@@ -120,7 +120,7 @@ describe('Change a setting', () => {
     ]);
   });
 
-  it('offers only standard speed where fast mode needs usage credits nobody has', () => {
+  it('holds fast speed back with its reason where fast mode needs usage credits nobody has', () => {
     const settings = { ...createSettings(), fastMode: true };
     const noCredits = createSnapshot({
       accounts: [
@@ -131,9 +131,15 @@ describe('Change a setting', () => {
     expect(find(held, 'settings.speed.task')).toMatchObject({
       hint: 'Standard',
       value: 'off',
-      options: [{ value: 'off', label: 'Standard', icon: 'IconSpeedMiddle' }],
+      options: [
+        { value: 'off', label: 'Standard', icon: 'IconSpeedMiddle' },
+        { value: 'on', label: 'Fast', icon: 'IconSpeedHigh', disabled: 'Unavailable: needs usage credits' },
+      ],
     });
-    expect(find(held, 'settings.speed.agent')).toMatchObject({ value: 'off', options: [{ value: 'off' }] });
+    expect(find(held, 'settings.speed.agent')).toMatchObject({
+      value: 'off',
+      options: [{ value: 'off' }, { value: 'on', disabled: 'Unavailable: needs usage credits' }],
+    });
     const open = listSettingsSections(settings, MODELS, DEFAULT_PREFERENCES, createSnapshot());
     expect(find(open, 'settings.speed.task')).toMatchObject({ value: 'on', hint: 'Fast' });
   });
@@ -321,7 +327,7 @@ describe('Setup', () => {
 });
 
 describe('Where agents work', () => {
-  it('each repository is a choice found by search, GitButler only where it is set up, and picking one saves it', () => {
+  it('each repository is a choice found by search, GitButler held back with its reason until it is set up, and picking one saves it', () => {
     const repos = [createRepo({ id: 'web' }), createRepo({ id: 'app', workspace: 'gitbutler' })];
     const support = {
       web: { butInstalled: false, gitButlerWorkspace: true },
@@ -341,7 +347,11 @@ describe('Where agents work', () => {
       keywords: expect.arrayContaining(['gitbutler', 'main checkout']),
     });
     if (web.kind !== 'choice') throw new Error('not a choice');
-    expect(web.options.map((option) => option.value)).toEqual(['worktrees', 'main_checkout']);
+    expect(web.options.map((option) => [option.value, option.disabled])).toEqual([
+      ['worktrees', undefined],
+      ['gitbutler', 'Install GitButler’s command line (`but`) to use it.'],
+      ['main_checkout', undefined],
+    ]);
     const app = find(sections, 'settings.workspace.app');
     if (app.kind !== 'choice') throw new Error('not a choice');
     expect(app.options.map((option) => option.value)).toEqual(['worktrees', 'gitbutler', 'main_checkout']);

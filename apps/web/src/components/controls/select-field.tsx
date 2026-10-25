@@ -15,7 +15,7 @@ interface SelectFieldItem<Value extends string> {
   label: string;
   icon?: MenuItemIcon;
   hint?: string;
-  disabled?: boolean;
+  disabled?: string;
   group?: string;
 }
 
@@ -30,12 +30,15 @@ function listItemGroups<Value extends string>(items: readonly SelectFieldItem<Va
 }
 
 function SelectFieldItems<Value extends string>({ items }: { items: readonly SelectFieldItem<Value>[] }) {
-  return items.map((item) => (
-    <SelectItem key={item.value} value={item.value} icon={item.icon} disabled={item.disabled}>
-      {item.label}
-      {item.hint && <span className='font-normal text-fg-2'>{item.hint}</span>}
-    </SelectItem>
-  ));
+  return items.map((item) => {
+    const hint = item.disabled ?? item.hint;
+    return (
+      <SelectItem key={item.value} value={item.value} icon={item.icon} disabled={item.disabled !== undefined}>
+        {item.label}
+        {hint && <span className='font-normal text-fg-2'>{hint}</span>}
+      </SelectItem>
+    );
+  });
 }
 
 export function SelectField<Value extends string>({

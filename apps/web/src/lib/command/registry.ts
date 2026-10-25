@@ -7,6 +7,7 @@ export interface ChoiceOption {
   icon?: MenuItemIcon;
   dot?: string;
   keywords?: string[];
+  disabled?: string;
 }
 
 interface CommandBase {
@@ -17,7 +18,7 @@ interface CommandBase {
   taskId?: string;
   keywords?: string[];
   destructive?: boolean;
-  disabled?: boolean;
+  disabled?: string;
   current?: boolean;
   trailing?: string;
   searchOnly?: boolean;
@@ -36,6 +37,10 @@ export type Command =
       value: string | string[] | null;
       pick: (value: string) => void;
     });
+
+export function isDisabled(item: { disabled?: string }) {
+  return item.disabled !== undefined;
+}
 
 export function isChosen(command: { value: string | string[] | null }, value: string) {
   return Array.isArray(command.value) ? command.value.includes(value) : command.value === value;

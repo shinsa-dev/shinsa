@@ -5,6 +5,7 @@ import {
   type Command,
   type CommandSection,
   isChosen,
+  isDisabled,
   type MenuPage,
   RANK,
 } from '@/lib/command/registry.ts';
@@ -102,15 +103,14 @@ export function resolveFirstValue(frame: Frame, tasks: Task[]): string {
   if (frame.kind === 'compose') return COMPOSE_VALUE;
   if (frame.kind === 'tasks') return tasks[0] ? `jump:${tasks[0].id}` : '';
   if (frame.kind === 'choice') {
-    const option =
-      frame.command.options.find((candidate) => isChosen(frame.command, candidate.value)) ??
-      frame.command.options[0];
+    const enabled = frame.command.options.filter((candidate) => !isDisabled(candidate));
+    const option = enabled.find((candidate) => isChosen(frame.command, candidate.value)) ?? enabled[0];
     return option ? `${frame.command.id}:${option.value}` : '';
   }
   const first = [...frame.sections]
     .sort((a, b) => a.rank - b.rank)
     .flatMap((section) => section.commands)
-    .find((command) => !command.disabled && !command.searchOnly);
+    .find((command) => !isDisabled(command) && !command.searchOnly);
   return first?.id ?? '';
 }
 
@@ -199,7 +199,9 @@ function scoreBest(query: string, entries: { value: string; keywords: string[] }
 function scoreCommands(query: string, commands: Command[]) {
   return scoreBest(
     query,
-    commands.map((command) => ({ value: command.id, keywords: listCommandKeywords(command) }))
+    commands
+      .filter((command) => !isDisabled(command))
+      .map((command) => ({ value: command.id, keywords: listCommandKeywords(command) }))
   );
 }
 
@@ -235,10 +237,12 @@ function listTypedBlocks(sections: CommandSection[], query: string): MenuBlock[]
       key: command.id,
       score: scoreBest(
         query,
-        command.options.map((option) => ({
-          value: `${command.id}:${option.value}`,
-          keywords: listOptionKeywords(command, option),
-        }))
+        command.options
+          .filter((option) => !isDisabled(option))
+          .map((option) => ({
+            value: `${command.id}:${option.value}`,
+            keywords: listOptionKeywords(command, option),
+          }))
       ),
       command,
     })

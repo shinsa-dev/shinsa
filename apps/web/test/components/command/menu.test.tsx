@@ -300,6 +300,89 @@ describe('sections a page registers', () => {
   });
 });
 
+describe('disabled commands and options', () => {
+  function Held({
+    run,
+    notes = () => {},
+    pick,
+  }: {
+    run: () => void;
+    notes?: () => void;
+    pick: (value: string) => void;
+  }) {
+    useRegisterCommands([
+      {
+        id: 'held',
+        heading: 'Held',
+        rank: RANK.context,
+        commands: [
+          {
+            kind: 'run',
+            id: 'held.ship',
+            label: 'Ship the build',
+            hint: 'Starts at once',
+            disabled: 'Wait for CI',
+            run,
+          },
+          { kind: 'run', id: 'held.notes', label: 'Ship the notes', hint: 'Starts at once', run: notes },
+          {
+            kind: 'choice',
+            id: 'held.lane',
+            label: 'Pick a lane…',
+            heading: 'Lane',
+            value: 'fast',
+            options: [
+              { value: 'fast', label: 'Fast lane', disabled: 'Closed today' },
+              { value: 'slow', label: 'Slow lane' },
+            ],
+            pick,
+          },
+        ],
+      },
+    ]);
+    return null;
+  }
+
+  it('shows a disabled command greyed with its reason in place of its hint, and never runs it', async () => {
+    const run = mock();
+    const notes = mock();
+    renderMenu(<Held run={run} notes={notes} pick={mock()} />);
+    await pressCommandK();
+    const ship = screen.getByRole('option', { name: /^Ship the build/ });
+    expect(ship.getAttribute('aria-disabled')).toBe('true');
+    expect(ship.textContent).toBe('Ship the buildWait for CI');
+    expect(selectedOption()).toBe('Ship the notesStarts at once');
+    fireEvent.click(ship);
+    await type('ship');
+    expect(selectedOption()).toBe('Ship the notesStarts at once');
+    press('Enter');
+    await waitFor(() => expect(notes).toHaveBeenCalledTimes(1));
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('shows a disabled option greyed with its reason, opens on an enabled one and never picks it', async () => {
+    const pick = mock();
+    renderMenu(<Held run={mock()} pick={pick} />);
+    await pressCommandK();
+    await type('lane');
+    const flat = screen.getByRole('option', { name: /^Fast lane/ });
+    expect(flat.getAttribute('aria-disabled')).toBe('true');
+    expect(flat.textContent).toBe('Fast laneClosed today');
+    expect(screen.getByRole('option', { name: /^Slow lane/ }).textContent).toBe('Slow laneLane');
+    await choose(/^Pick a lane/);
+    const fast = screen.getByRole('option', { name: /^Fast lane/ });
+    expect(fast.getAttribute('aria-disabled')).toBe('true');
+    expect(fast.textContent).toBe('Fast laneClosed today');
+    await waitFor(() => expect(selectedOption()).toBe('Slow lane'));
+    press('ArrowUp');
+    expect(selectedOption()).toBe('Slow lane');
+    fireEvent.click(fast);
+    expect(pick).not.toHaveBeenCalled();
+    press('Enter');
+    await waitFor(() => expect(pick).toHaveBeenCalledWith('slow'));
+  });
+});
+
 describe('on a task page', () => {
   const reviewState = createShinsaState({
     tasks: [
@@ -369,7 +452,6 @@ describe('on a task page', () => {
         endLine: null,
         ref: null,
         text: 'Keep the return path',
-        suggestion: null,
       },
     ]);
     await pressCommandK();

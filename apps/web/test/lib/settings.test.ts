@@ -427,7 +427,7 @@ describe('compaction and fast mode', () => {
     expect(resolveSpeedAvailability(codexCredits, onCodex, ['reviewer', 'agent'])).toBe('available');
     expect(listSpeedItems('needs_credits')).toEqual([
       { value: 'off', label: 'Standard', icon: 'IconSpeedMiddle' },
-      { value: 'on', label: 'Fast', icon: 'IconSpeedHigh', hint: FAST_MODE_UNAVAILABLE, disabled: true },
+      { value: 'on', label: 'Fast', icon: 'IconSpeedHigh', disabled: FAST_MODE_UNAVAILABLE },
     ]);
     expect(FAST_MODE_UNAVAILABLE).toBe('Unavailable: needs usage credits');
     expect(listSpeedItems('unknown')).toBe(FAST_MODE_ITEMS);

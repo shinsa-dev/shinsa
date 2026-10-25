@@ -46,6 +46,7 @@ import {
 import {
   type ChoiceOption,
   isChosen,
+  isDisabled,
   type Command as MenuCommand,
   useCommandMenuOpen,
   useRegisteredSections,
@@ -98,17 +99,18 @@ function CommandRow({
   onSelect: (command: MenuCommand) => void;
 }) {
   const task = command.taskId ? state.tasks[command.taskId] : undefined;
+  const hint = command.disabled ?? command.hint;
   return (
     <CommandItem
       value={command.id}
       keywords={listCommandKeywords(command)}
       icon={task ? resolveTaskMenuIcon(state, task) : command.icon}
-      disabled={command.disabled}
+      disabled={isDisabled(command)}
       onSelect={() => onSelect(command)}
       variant={command.destructive ? 'destructive' : 'default'}
     >
       <Truncate className='min-w-0'>{command.label}</Truncate>
-      {command.hint && <CommandHint className='min-w-12 shrink-[4]'>{command.hint}</CommandHint>}
+      {hint && <CommandHint className='min-w-12 shrink-[4]'>{hint}</CommandHint>}
       {command.trailing && <Status>{command.trailing}</Status>}
       <Trailing command={command} />
     </CommandItem>
@@ -135,11 +137,16 @@ function ChoiceRows({
       value={`${command.id}:${option.value}`}
       keywords={listOptionKeywords(command, option)}
       icon={option.icon}
+      disabled={isDisabled(option)}
       onSelect={() => onPick(command, option.value)}
     >
       <OptionDot option={option} />
       <Truncate className='min-w-0'>{option.label}</Truncate>
-      {flat && <CommandHint>{command.heading}</CommandHint>}
+      {option.disabled ? (
+        <CommandHint className='min-w-12 shrink-[4]'>{option.disabled}</CommandHint>
+      ) : (
+        flat && <CommandHint>{command.heading}</CommandHint>
+      )}
       {isChosen(command, option.value) && <SelectedMark className='ms-auto' />}
     </CommandItem>
   ));

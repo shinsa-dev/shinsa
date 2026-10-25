@@ -25,7 +25,7 @@ import {
   resolveRepoName,
   TASKS_FRAME,
 } from '@/lib/command/menu.ts';
-import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
+import { type ChoiceOption, type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { useNewTaskRequest } from '@/lib/new-task.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate } from '@/router.ts';
@@ -155,6 +155,23 @@ describe('resolveFirstValue', () => {
     expect(resolveFirstValue({ kind: 'choice', command: { ...choice(null), options: [] } }, [])).toBe('');
   });
 
+  it('never opens a choice on a disabled option, even the current one', () => {
+    const held = choice('dark');
+    const options = [{ ...held.options[0], disabled: 'Not here' } as ChoiceOption, ...held.options.slice(1)];
+    expect(resolveFirstValue({ kind: 'choice', command: { ...held, value: null, options } }, [])).toBe(
+      'appearance.theme:dark'
+    );
+    const locked = options.map((option) => ({ ...option, disabled: 'Not here' }));
+    expect(resolveFirstValue({ kind: 'choice', command: { ...held, options: locked } }, [])).toBe('');
+    const current = [
+      held.options[0] as ChoiceOption,
+      { ...held.options[1], disabled: 'Not here' } as ChoiceOption,
+    ];
+    expect(resolveFirstValue({ kind: 'choice', command: { ...held, options: current } }, [])).toBe(
+      'appearance.theme:system'
+    );
+  });
+
   it('highlights the first enabled, visible command of the best ranked section', () => {
     const frame = list([
       { id: 'late', heading: 'Late', rank: 50, commands: [runCommand('late.first')] },
@@ -163,7 +180,7 @@ describe('resolveFirstValue', () => {
         heading: 'Early',
         rank: 0,
         commands: [
-          runCommand('early.disabled', { disabled: true }),
+          runCommand('early.disabled', { disabled: 'Not ready yet' }),
           runCommand('early.typing', { searchOnly: true }),
           runCommand('early.first'),
         ],
@@ -377,6 +394,18 @@ describe('listSectionBlocks', () => {
     const [quiet, task] = listSectionBlocks(sections, 'cancel');
     expect(task?.score ?? 0).toBeGreaterThan(quiet?.score ?? 0);
   });
+
+  it('scores a section by its best enabled command, so a disabled match never ranks it first', () => {
+    const held: CommandSection[] = [
+      {
+        id: 'held',
+        heading: 'Held',
+        rank: 0,
+        commands: [runCommand('held.cancel', { label: 'Cancel task', disabled: 'Not now' })],
+      },
+    ];
+    expect(listSectionBlocks(held, 'cancel')[0]?.score).toBe(0);
+  });
 });
 
 describe('listRootBlocks', () => {
@@ -408,6 +437,22 @@ describe('listRootBlocks', () => {
     expect(keys(blocks)).not.toContain('recent');
     const tasks = blocks.find((block) => block.kind === 'tasks');
     expect(tasks?.kind === 'tasks' && tasks.tasks.map((task) => task.id)).toEqual(['login', 'billing']);
+  });
+
+  it('ranks a choice by its enabled options only', () => {
+    const theme = choice('dark');
+    const held = { ...theme, options: theme.options.map((option) => ({ ...option, disabled: 'Not here' })) };
+    const blocks = listRootBlocks({
+      state,
+      sections: [{ id: 'appearance', heading: 'Appearance', rank: RANK.global, commands: [held] }],
+      registered: [],
+      recent: [],
+      currentTaskId: null,
+      query: 'dark',
+      now: NOW,
+    });
+    expect(blocks.find((block) => block.key === 'appearance.theme')?.score).toBe(0);
+    expect(keys(root('dark'))[0]).toBe('appearance.theme');
   });
 
   it('leaves out the search block when no section offers a search', () => {

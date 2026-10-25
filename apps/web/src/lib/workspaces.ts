@@ -1,5 +1,4 @@
 import {
-  canUseGitButler,
   type Repo,
   resolveRepoWorkspace,
   WORKSPACE_MODES,
@@ -15,7 +14,7 @@ export interface WorkspaceItem {
   label: string;
   hint: string;
   icon: MenuItemIcon;
-  disabled: boolean;
+  disabled?: string;
 }
 
 export const WORKSPACE_TITLE = 'Where agents work';
@@ -59,14 +58,8 @@ export function listWorkspaceItems(repo: Repo, support: WorkspaceSupportMap | nu
   const current = resolveRepoWorkspace(repo);
   const repoSupport = support?.[repo.id];
   return WORKSPACE_MODES.map((mode) => {
-    const unavailable =
-      mode === 'gitbutler' && mode !== current && !(repoSupport && canUseGitButler(repoSupport));
-    return {
-      value: mode,
-      ...WORKSPACE_COPY[mode],
-      hint: unavailable ? (describeGitButlerSupport(repoSupport) ?? '') : WORKSPACE_COPY[mode].hint,
-      disabled: unavailable,
-    };
+    const reason = mode === 'gitbutler' && mode !== current ? describeGitButlerSupport(repoSupport) : null;
+    return { value: mode, ...WORKSPACE_COPY[mode], ...(reason ? { disabled: reason } : {}) };
   });
 }
 

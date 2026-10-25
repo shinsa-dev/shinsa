@@ -28,7 +28,7 @@ describe('the Versions commands', () => {
   it('offers Update Claude Code before the versions are read', () => {
     const commands = listCommands(null, []);
     expect(commands.map((command) => [command.label, command.hint, command.disabled])).toEqual([
-      ['Update Claude Code', undefined, false],
+      ['Update Claude Code', undefined, undefined],
     ]);
     run(commands[0]);
     expect(update).toHaveBeenCalledWith('claude');
@@ -39,8 +39,8 @@ describe('the Versions commands', () => {
     expect(
       listCommands(snapshot, ['codex']).map((command) => [command.label, command.hint, command.disabled])
     ).toEqual([
-      ['Update Claude Code', '2.1.287 → 2.1.310', false],
-      ['Update Codex', 'Updating…', true],
+      ['Update Claude Code', '2.1.287 → 2.1.310', undefined],
+      ['Update Codex', 'Updating…', 'Updating…'],
     ]);
     expect(listCommands(snapshot, []).map((command) => command.hint)).toEqual([
       '2.1.287 → 2.1.310',

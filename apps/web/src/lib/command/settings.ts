@@ -216,9 +216,12 @@ function settingChoice(
     keywords: ['setting', label],
     heading: label,
     value,
-    options: items
-      .filter((item) => !item.disabled)
-      .map((item) => ({ value: item.value, label: item.label, icon: item.icon })),
+    options: items.map((item) => ({
+      value: item.value,
+      label: item.label,
+      icon: item.icon,
+      ...(item.disabled === undefined ? {} : { disabled: item.disabled }),
+    })),
     pick,
     ...(searchOnly ? { searchOnly } : {}),
   };

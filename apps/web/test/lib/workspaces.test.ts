@@ -43,17 +43,19 @@ describe('where agents work', () => {
   it('offers the three modes, GitButler held back with its reason until it is set up, unless it is already chosen', () => {
     const web = createRepo({ id: 'web' });
     const [worktrees, gitbutler, checkout] = listWorkspaceItems(web, null);
-    expect(worktrees).toMatchObject({ value: 'worktrees', label: 'Worktrees', disabled: false });
+    expect(worktrees).toMatchObject({ value: 'worktrees', label: 'Worktrees' });
+    expect(worktrees?.disabled).toBeUndefined();
     expect(gitbutler).toMatchObject({
       value: 'gitbutler',
-      disabled: true,
-      hint: 'Checking whether GitButler is set up here.',
+      disabled: 'Checking whether GitButler is set up here.',
+      hint: expect.stringContaining('test them together'),
     });
-    expect(checkout).toMatchObject({ value: 'main_checkout', label: 'Main checkout', disabled: false });
+    expect(checkout).toMatchObject({ value: 'main_checkout', label: 'Main checkout' });
+    expect(checkout?.disabled).toBeUndefined();
     const ready = listWorkspaceItems(web, { web: { butInstalled: true, gitButlerWorkspace: true } });
-    expect(ready[1]).toMatchObject({ disabled: false, hint: expect.stringContaining('test them together') });
+    expect(ready[1]?.disabled).toBeUndefined();
     const chosen = listWorkspaceItems(createRepo({ id: 'web', workspace: 'gitbutler' }), {});
-    expect(chosen[1]?.disabled).toBe(false);
+    expect(chosen[1]?.disabled).toBeUndefined();
   });
 
   it('saves a new mode with a toast that says what changes, and does nothing for the current one', async () => {

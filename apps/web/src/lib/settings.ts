@@ -31,7 +31,7 @@ export interface SettingItem<Value extends string> {
   label: string;
   icon?: MenuItemIcon;
   hint?: string;
-  disabled?: boolean;
+  disabled?: string;
   group?: string;
 }
 
@@ -405,7 +405,7 @@ export const FAST_MODE_UNAVAILABLE = 'Unavailable: needs usage credits';
 
 const FAST_MODE_HELD: SettingItem<string>[] = [
   FAST_MODE_ITEMS[0] as SettingItem<string>,
-  { value: 'on', label: 'Fast', icon: 'IconSpeedHigh', hint: FAST_MODE_UNAVAILABLE, disabled: true },
+  { value: 'on', label: 'Fast', icon: 'IconSpeedHigh', disabled: FAST_MODE_UNAVAILABLE },
 ];
 
 export function resolveSpeedAvailability(

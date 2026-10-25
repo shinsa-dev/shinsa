@@ -29,7 +29,7 @@ function createUpdateCommand(
     ...(hint ? { hint } : {}),
     icon: 'IconArrowDown',
     keywords: PROGRAM_KEYWORDS[program],
-    disabled: busy,
+    ...(busy ? { disabled: 'Updating…' } : {}),
     run: () => void requestUpdate(program),
   };
 }
