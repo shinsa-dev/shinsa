@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Root } from '@/root.tsx';
 import { navigate } from '@/router.ts';
@@ -7,6 +7,10 @@ import { listSentCommands, startFakeServer, stopFakeServer } from '../support/se
 const NOTHING_SENT = 'Nothing was sent. This page only shows samples.';
 
 let requests: ReturnType<typeof spyOn<typeof globalThis, 'fetch'>> | null = null;
+
+beforeAll(async () => {
+  await import('@/routes/ui/index.tsx');
+});
 
 beforeEach(() => {
   startFakeServer();
