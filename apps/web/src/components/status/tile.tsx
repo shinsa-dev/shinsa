@@ -5,7 +5,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { TONE_SURFACE, TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 
 const TILE_SIZE = {
-  sm: 'size-4',
+  sm: 'size-4.5',
   md: 'size-5',
 };
 

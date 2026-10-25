@@ -2480,7 +2480,7 @@ the glyphs inside it.
   about the box's centre, dividing the stroke by the same factor, so every
   chevron is 6.5px long at the same weight: the size of the Overview cards'
   fold chevrons.
-- A tile is not an icon: `StatusTile` is a 16px (`sm`) or 20px (`md`) tinted
+- A tile is not an icon: `StatusTile` is an 18px (`sm`) or 20px (`md`) tinted
   square around an `sm` glyph, so the glyph's drawn part matches the 14px icons
   in its row.
 
