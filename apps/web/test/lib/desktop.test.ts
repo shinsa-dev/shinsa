@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
   applyDesktop,
+  checkDesktopUpdates,
+  installDesktopUpdate,
   isDesktop,
   isPageQuiet,
   notifyDesktop,
+  readDesktopUpdate,
   resolveSurface,
+  selectDesktopBuild,
+  subscribeDesktopUpdate,
   updateDesktopBadge,
 } from '@/lib/desktop.ts';
 import { installDesktop } from '../support/desktop.ts';
@@ -69,5 +74,37 @@ describe('in the desktop app', () => {
     expect(notifyDesktop(NOTICE)).toBe(true);
     expect(fake.badges).toEqual([2]);
     expect(fake.notices).toEqual([NOTICE]);
+  });
+});
+
+describe('the app’s own update', () => {
+  it('is nothing in a browser', () => {
+    expect(selectDesktopBuild()).toBeNull();
+    expect(readDesktopUpdate()).toEqual({ status: 'none' });
+    let heard = 0;
+    subscribeDesktopUpdate(() => {
+      heard += 1;
+    })();
+    installDesktopUpdate();
+    checkDesktopUpdates();
+    expect(heard).toBe(0);
+  });
+
+  it('reads the app’s version and update, hears each change, and asks the app to install or check', () => {
+    fake = installDesktop();
+    fake.bridge.update = { status: 'downloading', version: '0.6.0' };
+    expect(selectDesktopBuild()).toEqual({ version: '0.0.0', protocol: 1 });
+    expect(readDesktopUpdate()).toEqual({ status: 'downloading', version: '0.6.0' });
+    let heard = 0;
+    const stop = subscribeDesktopUpdate(() => {
+      heard += 1;
+    });
+    fake.changeUpdate({ status: 'ready', version: '0.6.0' });
+    expect(heard).toBe(1);
+    expect(readDesktopUpdate()).toEqual({ status: 'ready', version: '0.6.0' });
+    stop();
+    installDesktopUpdate();
+    checkDesktopUpdates();
+    expect(fake.updateCalls).toEqual(['install', 'check']);
   });
 });

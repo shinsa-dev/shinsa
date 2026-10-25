@@ -6,6 +6,7 @@ import { BrandLink } from '@/components/layout/brand-link.tsx';
 import { CARDS_FRAME } from '@/components/layout/page/column.ts';
 import { QueueMenu } from '@/components/queue/menu.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
+import { UpdateButton } from '@/components/status/update-button.tsx';
 import { useRoute, useRouteTaskId } from '@/router.ts';
 
 export function CardsTopBar({ state }: { state: ShinsaState }) {
@@ -18,6 +19,7 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
         {route.name === 'task' && <QueueMenu state={state} activeTaskId={activeTaskId} />}
         <ConnectionStatus />
         <span className='flex-1' />
+        <UpdateButton />
         {route.name !== 'onboarding' && (
           <>
             <UsageMenu state={state} />

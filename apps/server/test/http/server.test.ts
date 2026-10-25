@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type AgentModel,
+  ENGINE_PROTOCOL,
   KNOWN_AGENT_PROVIDERS,
   type OnboardingChat,
   type ServerMessage,
@@ -11,6 +12,7 @@ import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
 import { createWorktree } from '../../src/git/index.ts';
 import { type Launcher, startServer } from '../../src/http/index.ts';
+import type { EngineRestarter } from '../../src/instance/index.ts';
 import { log as logger } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
@@ -32,7 +34,9 @@ function createModels(models: AgentModel[]) {
   return { listModels: () => Promise.resolve(models) } as unknown as ModelSource;
 }
 
-async function start(options: { config?: Partial<ServerConfig>; launch?: Launcher } = {}) {
+async function start(
+  options: { config?: Partial<ServerConfig>; launch?: Launcher; restarter?: EngineRestarter } = {}
+) {
   const config = createTestConfig(createTempDir(), options.config);
   const engine = new Engine(new EventLog(config.databasePath));
   const transcripts = new Transcripts(config.transcriptsDir);
@@ -45,6 +49,7 @@ async function start(options: { config?: Partial<ServerConfig>; launch?: Launche
     models: createModels([{ id: 'opus', label: 'Opus', description: 'x' }]),
     onboarding: createTestOnboarding(engine, config).onboarding,
     launch: options.launch,
+    restarter: options.restarter,
   });
   running.push(http.stop);
   const base = `http://127.0.0.1:${http.server.port}`;
@@ -105,6 +110,9 @@ describe('the health endpoint', () => {
       seq: engine.state.seq,
       problems: [],
       version: '0.0.0',
+      protocol: ENGINE_PROTOCOL,
+      busy: false,
+      restart: null,
       commit: null,
       installPath: join(import.meta.dirname, '../../../..'),
       dataDir: config.dataDir,
@@ -112,6 +120,33 @@ describe('the health endpoint', () => {
       startedAt: expect.any(Number),
       uptimeMs: expect.any(Number),
     });
+  });
+});
+
+describe('the engine restart endpoint', () => {
+  test('restarts the engine now or once agents are idle, when it runs in the background', async () => {
+    const asked: string[] = [];
+    const restarter = {
+      request: (when: string) => {
+        asked.push(when);
+        return Promise.resolve({ restarting: when === 'now' });
+      },
+    } as unknown as EngineRestarter;
+    const { post } = await start({ restarter });
+    expect(await (await post('/api/engine/restart', { when: 'idle' })).json()).toEqual({ restarting: false });
+    expect(await (await post('/api/engine/restart', { when: 'now' })).json()).toEqual({ restarting: true });
+    expect(asked).toEqual(['idle', 'now']);
+  });
+
+  test('refuses an unknown moment, and a Shinsa that cannot restart from the app', async () => {
+    const { post } = await start();
+    const invalid = await post('/api/engine/restart', { when: 'later' });
+    expect(invalid.status).toBe(400);
+    expect(((await invalid.json()) as { error: { code: string } }).error.code).toBe('when_invalid');
+    const unsupported = await post('/api/engine/restart', { when: 'now' });
+    expect(((await unsupported.json()) as { error: { code: string } }).error.code).toBe(
+      'restart_unsupported'
+    );
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { ENGINE_PROTOCOL } from '@shinsa/core';
 import {
   createServerInstance,
   describeVersion,
@@ -38,16 +39,20 @@ describe('which Shinsa is running', () => {
 
   test('health is ok without damaged entries and counts the uptime from the start', () => {
     const instance = createServerInstance('a'.repeat(40), 1_000);
-    expect(resolveHealth({ seq: 9, problems: [] }, '/data', instance, 61_000)).toEqual({
+    const idle = { busy: false, restart: null };
+    expect(resolveHealth({ seq: 9, problems: [] }, '/data', instance, idle, 61_000)).toEqual({
       ok: true,
       seq: 9,
       problems: [],
       ...instance,
+      protocol: ENGINE_PROTOCOL,
+      busy: false,
+      restart: null,
       dataDir: '/data',
       uptimeMs: 60_000,
     });
     const problem = { seq: 3, type: 'task.created', kind: 'unreadable' as const, error: 'Not JSON.' };
-    expect(resolveHealth({ seq: 9, problems: [problem] }, '/data', instance, 0)).toMatchObject({
+    expect(resolveHealth({ seq: 9, problems: [problem] }, '/data', instance, idle, 0)).toMatchObject({
       ok: false,
       problems: [problem],
       uptimeMs: 0,

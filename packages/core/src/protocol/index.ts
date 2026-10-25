@@ -43,6 +43,15 @@ export {
   selectPatchedFiles,
 } from './diff.ts';
 export {
+  DEVELOPMENT_VERSION,
+  ENGINE_PROTOCOL,
+  type EngineFit,
+  type EngineRestartWhen,
+  resolveEngineFit,
+  resolveVersionOrder,
+  type ShinsaBuild,
+} from './engine.ts';
+export {
   type ContextOptimizer,
   createContextOptimizer,
   type ExtensionPlace,

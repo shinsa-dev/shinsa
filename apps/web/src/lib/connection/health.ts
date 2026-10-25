@@ -14,6 +14,10 @@ export interface ServerHealth {
   ok: boolean;
   seq: number;
   problems: LogProblem[];
+  version?: string;
+  protocol?: number;
+  busy?: boolean;
+  restart?: 'idle' | null;
 }
 
 export interface HealthBannerView {
@@ -94,6 +98,10 @@ export function watchHealth(source: Pick<Connection, 'subscribe' | 'snapshot'> =
     if (now && !open) void refreshHealth();
     open = now;
   });
+}
+
+export function useServerHealth() {
+  return React.useSyncExternalStore(signal.subscribe, () => health);
 }
 
 export function useHealthBanner() {

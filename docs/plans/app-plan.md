@@ -101,20 +101,30 @@ Shinsa.app/Contents/
   it the next time you quit; Shinsa → Restart to Update installs it now, and a notification says it is ready. Shinsa
   → Check for Updates… checks by hand and says when you are up to date. Quitting or restarting the app never stops
   the engine, so an app update cannot interrupt an agent.
-- **The engine follows the app, when it is safe** (phase 2, with the bundle). After the app restarts on a new
-  version, the engine inside it is newer than the one running. The engine reports its version and a `protocol`
-  number in `/api/health`; `protocol` goes up only when the contract between the interface and the engine breaks
-  (an HTTP route, a socket message, the state's shape), so most releases keep it.
-  - **Same protocol:** the app keeps working with the running engine and restarts it (`launchctl kickstart -k`) the
-    next time no agent run is mid-turn and no effect is in flight. The health banner says "Shinsa 0.5.0 finishes
-    updating when agents are idle", with **Restart now**.
-  - **New protocol:** the interface cannot talk to the old engine. If nothing is running the app restarts the engine
-    at once; otherwise the banner asks: **Restart now** (runs resume on their own sessions afterwards) or **When
-    agents are idle**, and only the banner shows until then.
-  - **An engine newer than the app** (an app put back to an older version): the app does not talk to it and asks you
-    to update.
+- **The engine follows the app, when it is safe** (built: `ENGINE_PROTOCOL` and `resolveEngineFit` in
+  `packages/core/src/protocol/engine.ts`, the engine's `EngineRestarter` in `apps/server/src/instance/restart.ts`,
+  the page's `lib/connection/engine.ts` and `components/status/engine-banner.tsx`). The app tells its page its own
+  version and protocol over the bridge; the engine reports its version, `protocol`, whether an agent is mid-turn
+  (`busy`) and a restart it waits for (`restart`) in `/api/health`. `protocol` goes up only when the contract
+  between the interface and the engine breaks (an HTTP route, a socket message, the state's shape), so most releases
+  keep it. The page compares the two and acts:
+  - **Same protocol, older engine:** it asks the engine to restart once agents are idle (`POST /api/engine/restart`
+    with `when: idle`); with nothing mid-turn that is at once. The banner says "The engine restarts into Shinsa 0.5.0
+    once agents are idle", with **Restart now**.
+  - **New protocol, older engine:** with nothing mid-turn it restarts the engine at once; otherwise the banner asks:
+    **Restart now** (runs resume on their own sessions afterwards) or **When agents are idle**.
+  - **An engine on a newer protocol** (an app put back to an older version): the banner asks you to update the app,
+    with **Update Shinsa**. A newer engine on the same protocol only gets the header's Update button.
+  - The engine restarts itself through launchd (`launchctl kickstart -k`, as `shinsa service restart`), and only
+    when it runs as the background service; otherwise the banner says to stop and start it. A development build
+    (version `0.0.0`) is compared by protocol only, so running from source never restarts anything.
   - The engine is restart-safe by construction (`docs/engine.md` → Recovery): the event log holds everything, and a
     run cut off by the restart resumes on its own session with a line in its chat.
+  - Until phase 2 bundles the engine, the engine runs from source (`0.0.0`), so in practice only a protocol change
+    acts; with the bundle, every release does.
+- **The Update button.** Once an update is downloaded, a small blue **Update** button fades into the header (both
+  layouts, `components/status/update-button.tsx`); its hint says the version and that agents keep working, and it
+  installs and relaunches the app.
 - **Why not update the engine separately:** two version numbers means a compatibility matrix to keep and to explain,
   and every bug report starts with "which engine?". With one bundle the app is the thing you install and update, and
   updating the engine is a restart.

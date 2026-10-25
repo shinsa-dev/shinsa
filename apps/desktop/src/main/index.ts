@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { ENGINE_PROTOCOL } from '@shinsa/core';
 import { app, type BrowserWindow, dialog, ipcMain, session } from 'electron';
 import { resolveBadgeText } from '../lib/badge.ts';
 import { CHANNELS, type DesktopStart } from '../lib/bridge.ts';
@@ -67,7 +68,7 @@ async function start() {
     open: (path) => main?.open(path),
     reload: () => main?.reload(),
   };
-  updater = new Updater(refreshMenu, () => main?.show());
+  updater = new Updater(publishUpdate, () => main?.show());
   refreshMenu();
   updater.start();
   await connect();
@@ -75,6 +76,11 @@ async function start() {
 
 function refreshMenu() {
   if (menuActions && updater) applyMenu({ ...menuActions, update: updater.menuItem });
+}
+
+function publishUpdate() {
+  refreshMenu();
+  if (updater) main?.win.webContents.send(CHANNELS.update, updater.pageState);
 }
 
 function applySessionPolicy(origin: string) {
@@ -91,9 +97,20 @@ function watchPage() {
   ipcMain.on(CHANNELS.start, (event) => {
     const payload: DesktopStart | null =
       main && event.sender === main.win.webContents
-        ? { version: app.getVersion(), windowState: main.windowState }
+        ? {
+            version: app.getVersion(),
+            protocol: ENGINE_PROTOCOL,
+            update: updater?.pageState ?? { status: 'none' },
+            windowState: main.windowState,
+          }
         : null;
     event.returnValue = payload;
+  });
+  ipcMain.on(CHANNELS.installUpdate, (event) => {
+    if (main?.isAppSender(event)) updater?.install();
+  });
+  ipcMain.on(CHANNELS.checkForUpdates, (event) => {
+    if (main?.isAppSender(event)) void updater?.check(true);
   });
   ipcMain.on(CHANNELS.badge, (event, count: unknown) => {
     if (main?.isAppSender(event)) app.dock?.setBadge(resolveBadgeText(count));

@@ -25,7 +25,12 @@ import { ConfigStore, prepareDataDir, type ServerConfig } from './config/index.t
 import { EunoeProxy, resolveEunoeCommand } from './eunoe/index.ts';
 import { Extensions, type ExtensionsOptions } from './extensions/index.ts';
 import { resolveServerUrl, startServer } from './http/index.ts';
-import { acquireDataDirLock, resolveServerInstance, type ServerInstance } from './instance/index.ts';
+import {
+  acquireDataDirLock,
+  createServiceRestarter,
+  resolveServerInstance,
+  type ServerInstance,
+} from './instance/index.ts';
 import { describeError, log } from './log/index.ts';
 import { type AccountSource, type CommandRunner, type Interpreter, Onboarding } from './onboarding/index.ts';
 import { createProjectChanges } from './projects/routes.ts';
@@ -33,6 +38,7 @@ import { createLoginResolver, type Discoverer, type LoginResolver, Roots } from 
 import { EffectRunner, Engine, MonitorClock, type StateClockOptions } from './runtime/index.ts';
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
+import { createServiceControl } from './service/index.ts';
 import { EventLog, EvidenceStore } from './store/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
@@ -201,6 +207,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     resolveLogin: services.resolveLogin,
     classify: services.classify,
     workspaces: services.runs.workspaces,
+    restarter: createServiceRestarter(engine, createServiceControl({ env: Bun.env })),
   });
 }
 

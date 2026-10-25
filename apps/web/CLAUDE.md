@@ -51,7 +51,7 @@ src/
 │                        onboarding (checks, choices), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
 │                        Settings' tabs use, the list row, the logo link home, page/ column, heading, toolbar, section
 │                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, step number),
-│                        status (tiles, glyphs, tones in text, check marks, priority, the health banner), links (TaskLink, PrLink,
+│                        status (tiles, glyphs, tones in text, check marks, priority, the health and engine banners, the Update button), links (TaskLink, PrLink,
 │                        RepoChip, BranchChip, FileLink, references), overlays (hint, info popover, image
 │                        viewer, confirm dialog), text (time ago, markdown, code fence, file path, diff stats,
 │                        finding text, code-diff.tsx: CodeDiff, the one wrapper for every diff outside the Code
@@ -74,7 +74,8 @@ src/
     │                    projects.ts (/api/repos/local, adding a repository or a folder to a project),
     │                    accounts.ts (useAccounts over the snapshot the socket holds, /api/accounts/* changes,
     │                    the sign-in dialog state), health.ts (/api/health on start and after each reconnect,
-    │                    the banner's text and its dismissal), extensions.ts (useExtensions over
+    │                    the banner's text and its dismissal), engine.ts (the app against the engine: the engine
+    │                    banner's view, the automatic restart and requestEngineRestart), extensions.ts (useExtensions over
     │                    /api/extensions, the server check, every /api/extensions/* change and the MCP
     │                    sign-in watch), versions.ts (useVersions over /api/versions, Check for updates, and
     │                    requestUpdate: the update's lines streamed into its toast; http.ts's requestLines reads them)
@@ -131,7 +132,8 @@ src/
     ├── preferences/     localStorage: theme, layout, rail width, recent tasks, section flags, notifications
     ├── desktop.ts       The desktop app's bridge (`window.shinsaDesktop`, absent in a browser and Floaty):
     │                    `data-desktop` on <html>, its navigation, the Dock badge, notifications, the page's
-    │                    surface and whether it stays quiet (`isPageQuiet`)
+    │                    surface and whether it stays quiet (`isPageQuiet`), the app's version and protocol
+    │                    (`selectDesktopBuild`) and its own update (`readDesktopUpdate`, `installDesktopUpdate`)
     └── queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
         not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,

@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { ENGINE_PROTOCOL } from '@shinsa/core';
 import serverPackage from '../../package.json' with { type: 'json' };
 import { runCommand } from '../shell/index.ts';
 
@@ -17,8 +18,14 @@ interface HealthProblem {
   error: string;
 }
 
-export interface ServerHealth extends ServerInstance {
+export interface EngineActivity {
+  busy: boolean;
+  restart: 'idle' | null;
+}
+
+export interface ServerHealth extends ServerInstance, EngineActivity {
   ok: boolean;
+  protocol: number;
   seq: number;
   problems: readonly HealthProblem[];
   dataDir: string;
@@ -29,6 +36,7 @@ export function resolveHealth(
   log: { seq: number; problems: readonly HealthProblem[] },
   dataDir: string,
   instance: ServerInstance,
+  activity: EngineActivity,
   now = Date.now()
 ): ServerHealth {
   return {
@@ -36,6 +44,8 @@ export function resolveHealth(
     seq: log.seq,
     problems: log.problems,
     ...instance,
+    protocol: ENGINE_PROTOCOL,
+    ...activity,
     dataDir,
     uptimeMs: Math.max(0, now - instance.startedAt),
   };

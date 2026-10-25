@@ -3093,7 +3093,7 @@ says hello counts as no desktop.
 
 ## Health
 
-`GET /api/health` answers `{ ok, seq, problems, version, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
+`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
 (`resolveHealth`, `apps/server/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
 which Shinsa answered: `version` is the server package's version, `commit` the checkout's `HEAD` (null outside a git
 checkout), `installPath` the folder holding `apps/server`, and `startedAt` and `uptimeMs` count from when the server
@@ -3105,6 +3105,15 @@ start and after every reconnect (`lib/connection/health.ts`) and, while `ok` is 
 entries were skipped, each listed under Details, until it is dismissed for the session (`docs/design.md`, 27). A
 transcript line torn by a crash is shown as an error entry,
 and the next line is never glued onto it (`readChatEntries`).
+
+`protocol` is `ENGINE_PROTOCOL` (`packages/core/src/protocol/engine.ts`), raised only when the contract between the
+interface and the engine breaks; `busy` is whether an agent run is mid-turn (`isEngineBusy`: a live run with status
+`running`), and `restart` is `idle` while the engine waits for that to end before restarting. **`POST
+/api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine through launchd (`launchctl kickstart -k`, as
+`shinsa service restart`), at once or once no agent is mid-turn, and answers `{ restarting }` before it goes; it
+refuses with `restart_unsupported` unless this process is the background service on macOS (`EngineRestarter`,
+`apps/server/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
+(`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live
 

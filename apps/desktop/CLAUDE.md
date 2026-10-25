@@ -22,8 +22,9 @@ src/
 │                   close, navigation, the waiting page), menu.ts, notifications.ts, server.ts (health, starting
 │                   the service in the login shell), prefs.ts (window bounds in userData/prefs.json),
 │                   updater.ts (Updater: electron-updater, checked at start and every four hours)
-└── preload/        index.ts: exposes `window.shinsaDesktop` (version, windowState, updateBadge, notify, onNavigate,
-                    onWindowState) to the server's page only
+└── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, windowState, updateBadge,
+                    notify, installUpdate, checkForUpdates, onNavigate, onWindowState, onUpdate) to the server's page
+                    only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
 static/waiting.html The "Shinsa is not running" page
 resources/          The app icon: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
                     all three written by scripts/icon.ts

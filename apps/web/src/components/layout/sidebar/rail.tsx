@@ -7,6 +7,7 @@ import { BrandLink } from '@/components/layout/brand-link.tsx';
 import { NavItem } from '@/components/layout/nav-item.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
+import { UpdateButton } from '@/components/status/update-button.tsx';
 import { requestNewTaskOnHome } from '@/lib/command/menu.ts';
 import { navigate, useRoute, useRouteTaskId } from '@/router.ts';
 
@@ -25,6 +26,7 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
         <BrandLink onNavigate={onNavigate} className='desktop:hidden' />
         <ConnectionStatus />
         <span className='flex-1' />
+        <UpdateButton />
         {route.name !== 'onboarding' && <UsageMenu state={state} />}
         <CommandMenuButton />
       </div>

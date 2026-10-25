@@ -21,17 +21,20 @@ import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { InfoHeader, InfoPopover, InfoRow, InfoSection } from '@/components/overlays/info-popover.tsx';
 import { CheckMark, CheckOutcomeIcon, SelectedMark } from '@/components/status/check-mark.tsx';
+import { EngineCard } from '@/components/status/engine-banner.tsx';
 import { HealthCard } from '@/components/status/health-banner.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
+import { UpdateButtonView } from '@/components/status/update-button.tsx';
 import { CodeDiff } from '@/components/text/code-diff.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
 import { Duration, TimeAgo } from '@/components/text/time-ago.tsx';
 import type { DiffSource } from '@/lib/code/diff-view.ts';
+import { resolveEngineView } from '@/lib/connection/engine.ts';
 import { resolveHealthBanner } from '@/lib/connection/health.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
@@ -334,6 +337,29 @@ export function CompositeSpecimens() {
           </div>
         </Specimen>
       )}
+      <Specimen label='EngineCard · the app is newer than the engine, older than it, or waits for agents'>
+        <div className='flex w-full max-w-xl flex-col gap-2'>
+          {ENGINE_SAMPLES.map(({ key, view }) =>
+            view.banner ? (
+              <EngineCard key={key} banner={view.banner} onAction={() => void acknowledgeSample()} />
+            ) : null
+          )}
+        </div>
+      </Specimen>
+      <Specimen label='UpdateButton · in the header once an update is downloaded; hover it'>
+        <UpdateButtonView version='0.6.0' onClick={() => void acknowledgeSample()} />
+      </Specimen>
     </>
   );
 }
+
+const ENGINE_APP = { version: '0.6.0', protocol: 2 };
+
+const ENGINE_SAMPLES = [
+  { key: 'waiting', health: { version: '0.5.2', protocol: 2, busy: true, restart: 'idle' as const } },
+  { key: 'choose', health: { version: '0.5.2', protocol: 1, busy: true, restart: null } },
+  { key: 'update', health: { version: '0.7.0', protocol: 3, busy: false, restart: null } },
+].map(({ key, health }) => ({
+  key,
+  view: resolveEngineView(ENGINE_APP, { ok: true, seq: 1, problems: [], ...health }, null),
+}));

@@ -1171,6 +1171,17 @@ Only these, and they win over anything below:
       log at start. Everything else loaded."), a quiet "Details" that opens an `InfoPopover` ("Damaged log entries",
       then one `InfoRow` per problem: "Entry 41 · task.staged" over Unreadable or Not applied) and a `secondary`
       `icon-xs` Dismiss (×) with the same tooltip. Dismissing hides it for the session, until the problems change.
+    - **The engine banner** (`components/status/engine-banner.tsx`, `lib/connection/engine.ts`): under the health
+      banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
+      (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
+      ("The engine restarts into Shinsa 0.5.0 once agents are idle."), the orange triangle when you must act ("Shinsa
+      0.5.0 needs its engine restarted. Agents are working, so choose when."), and `sm` buttons at the end: the first
+      `primary` (Restart now, Update Shinsa), the second `secondary` (When agents are idle). No dismiss: it goes when
+      the versions match. `/ui` shows `EngineCard` in its three states.
+    - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
+      `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
+      scales in (`fade-in-0 zoom-in-95`, 200 ms), its hint names the version and says agents keep working, and a
+      click installs and relaunches the app. Nothing shows in a browser or while the update downloads.
 
 28. **The task chat is the one place to talk.** An Answer task is how you just talk (`docs/engine.md` → Agents
     manage Shinsa); nothing in the top bar, the rail or ⌘K opens a conversation of its own.

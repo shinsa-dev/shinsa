@@ -19,3 +19,8 @@ export {
   ServerRunningError,
   selectLockHolder,
 } from './lock.ts';
+export {
+  createServiceRestarter,
+  EngineRestarter,
+  isEngineBusy,
+} from './restart.ts';

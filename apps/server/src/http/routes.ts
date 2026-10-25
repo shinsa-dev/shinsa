@@ -1,6 +1,7 @@
 import {
   type AgentProviderInfo,
   DomainError,
+  type EngineRestartWhen,
   KNOWN_AGENT_PROVIDERS,
   parseUserCommand,
   resolveQueueSummary,
@@ -17,6 +18,8 @@ import { createExtensionRoutes } from '../extensions/routes.ts';
 import {
   createReadOnlyError,
   createServerInstance,
+  type EngineRestarter,
+  isEngineBusy,
   resolveHealth,
   type ServerInstance,
 } from '../instance/index.ts';
@@ -59,6 +62,7 @@ export interface ApiContext {
   resolveLogin?: LoginResolver;
   classify?: Classifier;
   workspaces?: Workspaces;
+  restarter?: EngineRestarter;
 }
 
 interface ProviderCatalog {
@@ -168,8 +172,13 @@ function createTaskRoutes(context: ApiContext): ApiRoute[] {
   ];
 }
 
+function readRestartWhen(body: JsonObject): EngineRestartWhen {
+  if (body.when === 'now' || body.when === 'idle') return body.when;
+  throw new DomainError('when_invalid', 'Restart the engine now or once agents are idle.');
+}
+
 function createServerRoutes(context: ApiContext): ApiRoute[] {
-  const { engine, config, evidence, models, providers, classify } = context;
+  const { engine, config, evidence, models, providers, classify, restarter } = context;
   const instance = context.instance ?? createServerInstance();
   async function respondCommand(request: Request) {
     const key = readIdempotencyKey(request);
@@ -191,9 +200,23 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
       respond: () =>
         Promise.resolve(
           respondJson(
-            resolveHealth({ seq: engine.state.seq, problems: engine.problems }, config.dataDir, instance)
+            resolveHealth({ seq: engine.state.seq, problems: engine.problems }, config.dataDir, instance, {
+              busy: isEngineBusy(engine.state),
+              restart: restarter?.pending ?? null,
+            })
           )
         ),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/engine\/restart$/,
+      respond: async (_match, request) => {
+        const when = readRestartWhen(await readJsonObject(request));
+        if (!restarter) {
+          throw new DomainError('restart_unsupported', 'This Shinsa cannot restart its engine from the app.');
+        }
+        return respondJson(await restarter.request(when));
+      },
     },
     {
       method: 'GET',

@@ -7,6 +7,7 @@ import { SignInDialog } from '@/components/accounts/sign-in-dialog.tsx';
 import { CommandMenu } from '@/components/command/menu.tsx';
 import { CardsShell } from '@/components/layout/cards/shell.tsx';
 import { SidebarShell } from '@/components/layout/sidebar/shell.tsx';
+import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
@@ -68,6 +69,7 @@ function Workspace({ route }: { route: Exclude<Route, { name: 'ui' }> }) {
   return (
     <Shell state={state}>
       <HealthBanner />
+      <EngineBanner />
       <AttentionSignals state={state} route={route} />
       <Page state={state} route={route} />
     </Shell>

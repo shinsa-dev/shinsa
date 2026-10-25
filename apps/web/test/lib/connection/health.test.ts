@@ -7,6 +7,7 @@ import {
   resolveHealthBanner,
   type ServerHealth,
   useHealthBanner,
+  useServerHealth,
   watchHealth,
 } from '@/lib/connection/health.ts';
 import { createSignal } from '@/lib/signal.ts';
@@ -135,5 +136,14 @@ describe('reading the health', () => {
     answer = createHealth([torn]);
     await act(() => refreshHealth());
     expect(result.current?.problems).toHaveLength(1);
+  });
+});
+
+describe('useServerHealth', () => {
+  it('reads the health the banner keeps', async () => {
+    serveHealth(() => createHealth([UNREADABLE]));
+    const { result } = renderHook(() => useServerHealth());
+    await act(() => refreshHealth());
+    expect(result.current?.ok).toBe(false);
   });
 });

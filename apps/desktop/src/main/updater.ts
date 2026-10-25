@@ -6,6 +6,7 @@ import {
   describeUpdateFailure,
   describeUpdateItem,
   isUpdateSupported,
+  resolveDesktopUpdate,
   UPDATE_CHECK_MS,
   type UpdateState,
 } from '../lib/update.ts';
@@ -25,18 +26,30 @@ export class Updater {
     if (!this.#supported) return;
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
-    autoUpdater.on('update-available', (info) => this.#set({ status: 'downloading', version: info.version, percent: 0 }));
+    autoUpdater.on('update-available', (info) =>
+      this.#set({ status: 'downloading', version: info.version, percent: 0 })
+    );
     autoUpdater.on('download-progress', (progress) => {
       if (this.#state.status === 'downloading') this.#set({ ...this.#state, percent: progress.percent });
     });
     autoUpdater.on('update-not-available', () => this.#settle({ status: 'current' }));
     autoUpdater.on('update-downloaded', (info) => this.#ready(info.version));
-    autoUpdater.on('error', (error) => this.#settle({ status: 'failed', message: describeUpdateFailure(error) }));
+    autoUpdater.on('error', (error) =>
+      this.#settle({ status: 'failed', message: describeUpdateFailure(error) })
+    );
+  }
+
+  get pageState() {
+    return resolveDesktopUpdate(this.#state);
   }
 
   get menuItem() {
     const item = describeUpdateItem(this.#state);
-    return { ...item, visible: this.#supported, click: () => (item.install ? this.install() : this.check(true)) };
+    return {
+      ...item,
+      visible: this.#supported,
+      click: () => (item.install ? this.install() : this.check(true)),
+    };
   }
 
   start() {
@@ -54,7 +67,7 @@ export class Updater {
   }
 
   install() {
-    autoUpdater.quitAndInstall();
+    if (this.#state.status === 'ready') autoUpdater.quitAndInstall();
   }
 
   #ready(version: string) {
@@ -66,7 +79,8 @@ export class Updater {
     const manual = this.#state.status === 'checking' && this.#state.manual;
     this.#set(next);
     const result = manual ? describeManualResult(next, app.getVersion()) : null;
-    if (result) void dialog.showMessageBox({ type: next.status === 'failed' ? 'warning' : 'info', ...result });
+    if (result)
+      void dialog.showMessageBox({ type: next.status === 'failed' ? 'warning' : 'info', ...result });
   }
 
   #set(next: UpdateState) {

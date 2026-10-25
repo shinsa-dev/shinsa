@@ -5,6 +5,7 @@ import {
   describeUpdateFailure,
   describeUpdateItem,
   isUpdateSupported,
+  resolveDesktopUpdate,
   UPDATE_CHECK_MS,
 } from '../../src/lib/update.ts';
 
@@ -83,6 +84,21 @@ describe('describeUpdateFailure', () => {
   });
 
   it('falls back to a plain sentence when the error says nothing', () => {
-    expect(describeUpdateFailure(new Error(''))).toBe('The update server did not answer. Try again later.');
+    expect(describeUpdateFailure('')).toBe('The update server did not answer. Try again later.');
+  });
+});
+
+describe('resolveDesktopUpdate', () => {
+  it('tells the page only about a version on its way or ready to install', () => {
+    expect(resolveDesktopUpdate({ status: 'downloading', version: '0.3.0', percent: 40 })).toEqual({
+      status: 'downloading',
+      version: '0.3.0',
+    });
+    expect(resolveDesktopUpdate({ status: 'ready', version: '0.3.0' })).toEqual({
+      status: 'ready',
+      version: '0.3.0',
+    });
+    expect(resolveDesktopUpdate({ status: 'checking', manual: true })).toEqual({ status: 'none' });
+    expect(resolveDesktopUpdate({ status: 'failed', message: 'offline' })).toEqual({ status: 'none' });
   });
 });

@@ -1,3 +1,5 @@
+import type { DesktopUpdate } from './bridge.ts';
+
 export const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000;
 
 export type UpdateState =
@@ -57,4 +59,10 @@ export function describeUpdateFailure(error: unknown) {
   const text = error instanceof Error ? error.message : String(error);
   const firstLine = text.split('\n')[0]?.trim() ?? '';
   return firstLine || 'The update server did not answer. Try again later.';
+}
+
+export function resolveDesktopUpdate(state: UpdateState): DesktopUpdate {
+  if (state.status === 'downloading') return { status: 'downloading', version: state.version };
+  if (state.status === 'ready') return { status: 'ready', version: state.version };
+  return { status: 'none' };
 }
