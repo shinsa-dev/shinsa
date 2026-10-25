@@ -35,12 +35,12 @@ docs/                               spec.md, engine.md, protocol.md, design.md, 
 web ──WebSocket──► shinsa serve
                     Engine.dispatch(command)
                       └─ decide(state, command) ─► events + effects      (packages/core, pure)
-                         events → SQLite log → applyEvent → state → broadcast to every socket
+                         events → SQLite log → the decided state → a patch to every socket
                          effects → EffectRunner: triage, worktrees, agent runs, PRs, briefings
                                     └─ results come back as commands (run.end, pull_request.record…)
 ```
 
-- **State is the event log.** `decide` is pure and deterministic given `now` and `newId`; every state change is an event; replaying the log rebuilds state exactly. Never mutate state outside `applyEvent`.
+- **State is the event log.** `decide` is pure and deterministic given `now` and `newId`; every state change is an event (except the Home guide, kept beside the log: `docs/engine.md` → The briefing); replaying the log rebuilds state exactly (a snapshot only saves replaying it). Never mutate state outside `applyEvent`, and a fold writes a record only through `writeEntry`/`removeEntry` (`docs/engine.md` → State in memory).
 - **A task is a conversation of rounds.** Each round is one piece of work with its own steps, plan, build, review and
   pull request; a new idea in the chat starts the next round on the same branch, worktree and agent sessions, shipped
   onto the open pull request or stacked on it. Merge ends a round, not the task; you (or an agent, once nothing is open)
@@ -81,9 +81,12 @@ web ──WebSocket──► shinsa serve
   checks (`HUMAN_ONLY_REPO_FIELDS`). Their surface specs are `humanOnly`, so no agent has a tool or a shell command for
   them, and core refuses them on your behalf: nothing sent for you closes a gate, and a message an agent sends to a
   task at a gate is kept for its next agent (`docs/engine.md` → Who can change Shinsa has the list and the HTTP guard).
-- **No backwards compatibility.** Shinsa has never shipped: a rename or a removal is done everywhere at once, with no
-  readers for old events, stored shapes or transcripts, no data migrations and no redirects for old routes or ids
-  (`docs/protocol.md` → Naming decisions).
+- **No backwards compatibility in code.** Shinsa has never shipped: a rename or a removal is done everywhere at once,
+  with no readers for old events, stored shapes or transcripts and no redirects for old routes or ids
+  (`docs/protocol.md` → Naming decisions). The one exception is the user's own event log: when a change would leave
+  old event shapes in it, `apps/server/src/store/legacy.ts` rewrites them once on start, versioned by SQLite's
+  `user_version` (bump `LOG_VERSION` in `store/event-log.ts`), so code never reads an old shape (`docs/engine.md` →
+  State in memory).
 
 ## Commands
 

@@ -1287,8 +1287,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
 |---|---|---|
 | `GET /api/tasks/<id>/refs` | `TaskRefs`: the head commit, the base, the branch, the default branch, whether a working copy exists and has uncommitted edits, and the commits between base and head (100 at most) | the worktree's `HEAD`; without a worktree the branch, then the pull request's head, then the last pushed commit; a task without a branch reads the default branch (`origin` first). The base is the merge base with the round's base branch or the default branch; once the branch is merged, the merge base with the commit before the merge, so a merged task keeps its diff |
 | `GET /api/tasks/<id>/paths?ref=` | `RepoPaths`: every file path (200,000 at most, `truncated`) | `git ls-tree -r`; the working copy `git ls-files --cached --others --exclude-standard` without the deleted ones |
-| `GET /api/tasks/<id>/tree?ref=&dir=` | `RepoTree`: one folder's entries, folders first | `git ls-tree --long`; the working copy from its paths |
-| `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | `git ls-tree` for the object, then `git cat-file blob`; the working copy through `resolveInside` |
+| `GET /api/tasks/<id>/tree?ref=&dir=` | `RepoTree`: one folder's entries, folders first | the folder's tree object through the same long-lived reader as `blob` (`info <commit>:<dir>`, `contents`, then `info` for each file's size), kept in the cache by commit and folder (a cold folder of paywall-next went from about 27 ms to 2 to 10 ms); a path git cannot take on one line falls back to `git ls-tree --long`; the working copy from its paths |
+| `GET /api/tasks/<id>/blob?ref=&path=` | `FileContent`: the text, or `binary` (a NUL in the first 8 KB, with the image type for an image), `tooLarge` (over 2 MB) or `missing` | one long-lived `git cat-file --batch-command` per repository (`git/blobs.ts`, `CatFilePool`): `info <commit>:<path>` for the object and its size, then `contents <object>`, so a file costs no process (a cold read went from about 40 ms, three `git` processes, to 1 to 2 ms); the reader stops after 30 s idle or a 5 s stall and starts again on the next read; a path git cannot take on one line falls back to `git ls-tree` and `git cat-file blob`; the working copy through `resolveInside` |
 | `GET /api/tasks/<id>/raw?ref=&path=` | an image's bytes, with `default-src 'none'` and `nosniff`; anything but an image is refused | as `blob` |
 | `GET /api/tasks/<id>/search?ref=&q=&regex=1&case=1&word=1&glob=` | `SearchResult`: up to 2,000 matches with path, line, column and text, `truncated` and `timedOut`; asked with `Accept: application/x-ndjson` (the web does), a stream of `SearchLine`s instead: `matches` lines as git finds them, then one `done` line with how it ended (or one `failed` line), `no-store` | `git grep -n -I --column`: a plain search that ignores case is `-E` with each letter folded into a class (`[cC][oO]…`, the rest escaped; `-i` made git grep up to twenty times slower), a case-sensitive one `-F`, `regex=1` is `-E` with `-i` unless `case=1`, `-w` with `word=1`, the glob as a `:(glob)` pathspec (`**/` in front when it names no folder); the working copy adds `--untracked`. git is stopped at the 2,001st line, so a common word answers at once |
 | `GET /api/tasks/<id>/diff?base=&head=&path=&previous=` | `TaskDiff` with both ends: every changed file with its status, counts and risk, and the patch of the small ones only; the rest have `patch: ''` and `patchOmitted` (with `path`, and `previous` for a rename, the named file alone with its whole patch) | `git diff --raw --numstat -z --find-renames base head` for the list (`parseDiffSummary`), then one `git diff` over the files that fit the patch budget, in risk order (`selectPatchedFiles`, `mergeDiffPatches`: none over 2,000 changed lines or 256 KB, 20,000 lines and 1 MB in all, 400 files; a named file up to 2 MB); `head=working` diffs the working copy through a copy of its index (below). Without both ends it is the task's base against its working copy, or its head once the worktree is gone (what `shinsa tasks diff` reads) |
@@ -1301,7 +1301,8 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   the diff is the branch's against the base with each owned file's working-copy diff in its place
   (`resolveWorkingDiff` with those paths).
 - **Refs.** A `ref` is a full commit id that `git cat-file -t` says is a commit of that repository, or `working` for
-  the task's working copy while its checkout exists; nothing else is passed to git (`ref_invalid`, `ref_unknown`). Leaving `ref` out
+  the task's working copy while its checkout exists; nothing else is passed to git (`ref_invalid`, `ref_unknown`). A
+  commit once found is remembered per repository (`assertCommit`), so later reads at it start no process. Leaving `ref` out
   reads the head and is never cached.
 - **Paths.** Relative, without an empty, `.` or `..` segment, a leading `/` or a NUL (`path_invalid`); they reach git
   after `--` and with `GIT_LITERAL_PATHSPECS`, and the working copy is read through `resolveInside`, so a symlink
@@ -1315,10 +1316,12 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   search for a word in every file answers in under 100 ms (it timed out at 5 s with no result before).
 - **Caching.** A read named by a commit is immutable: it carries an `ETag` and `Cache-Control: private,
   max-age=31536000, immutable`, a matching `If-None-Match` is a 304, and the server keeps file contents (by object id),
-  path lists and diffs in a 64 MB least-recently-used cache. Working-copy reads are `no-store`. The web keys every
+  path lists, folders and diffs in a 64 MB least-recently-used cache. Working-copy reads are `no-store`. The web keys every
   read by commit, so a task event (a chat line, a new priority) reads nothing again; it reads the refs again only when
   what pins the code changes (the stage, the branch, the worktree, a push, a phase or a fix), and the working copy
-  with each task update.
+  with each task update. The web keeps its last 300 reads (`CODE_READ_LIMIT`, least recently used first), shows
+  a read's last answer while a newer version of it loads, and reads most of them before they are asked for
+  (`docs/design.md`, 36).
 
 ## Agents manage Shinsa
 
@@ -1478,13 +1481,18 @@ changes costs one call.
 
 - **Shape.** `Briefing` in `packages/core/src/briefing/types.ts`: `now` (a task id and why to take it
   first), `next` (up to three more, each with a why), `running` (one line on what agents are
-  doing) and `note` (a heads-up, or null). It is stored on `briefing.written` beside a plain
-  `text` rendering, which `shinsa status` prints.
+  doing) and `note` (a heads-up, or null). It is stored beside a plain `text` rendering, which
+  `shinsa status` prints.
+- **Kept beside the log, not in it.** Only the newest guide per focus project matters and the writer rewrites it
+  after every gate change, so it is not an event: `Engine.writeBriefing` keeps it in the `briefings` table of
+  `shinsa.sqlite` (one row per project, `*` for the whole queue) and puts it into the state as `state.briefings`
+  (the state's shape is unchanged), and every socket gets a `state.patch` at the same log position (`from` equal to
+  `to`), which the page applies like any other. On boot the engine reads the table after the events, so a snapshot's
+  older guide never wins. Inspect mode writes none.
 - **The writer** gets every open decision with its id, title, what the gate really is (a review
   is built and checked, not ready to merge), its age, what it unblocks, priority and repository,
   plus what agents are working on. It answers with JSON against a schema in which `now.task` and every
-  `next[].task` is a choice among the listed decisions' ids (Quick calls, in The agent loop). The write is
-  `briefing.write` under `briefing:<focus project or *>:<state seq it was computed from>`.
+  `next[].task` is a choice among the listed decisions' ids (Quick calls, in The agent loop).
 - **Validation** (`parseBriefing`): `now` must be a decision in the queue, or the whole answer is
   dropped. `next` keeps known decisions once each, at most three, and falls back to the ranked
   order when empty. A why or note is replaced by the plain one when it is too long, points at a
@@ -1584,6 +1592,58 @@ changes costs one call.
   finds nothing new and makes none. Git writes in a worktree wait out another process's `index.lock` for about
   1.5 s instead of failing (an editor or a terminal running git at the same moment).
 
+## State in memory
+
+The engine holds the state in memory and changes it only by adopting what `decide` worked out; the log stays the
+truth, and a snapshot only saves replaying it.
+
+- **No copy of the state per command.** `decide` works on a draft (`createDraft`, `packages/core/src/state/draft.ts`):
+  the state's top level is copied, and a record of it (tasks, runs, gates and the rest, `STATE_RECORDS`) only the first
+  time an event writes to it (`writeEntry`, `removeEntry`, the only way the folds write a record). Entities are never
+  changed in place, a fold writes a new one, so everything else is shared with the state the command started from. The
+  decision carries the new state and the ids it wrote (`Decision.state`, `Decision.changes`), and the engine adopts
+  that state after the commit instead of applying the events again: it is the state replaying the events gives, which
+  the random walks check after every command (`invariants.test.ts`), and the state before stays as it was, which is
+  what a listener gets as `previous`. A refused command leaves its draft behind and nothing else.
+- **Liveness and the queue in one pass.** Which tasks have an open gate or a run (`resolveMovingTasks`,
+  `resolveActiveRunTasks`) is worked out once per command and once per queue, not once per task, and how many tasks
+  wait on each is counted once per queue.
+- **Snapshots.** `EventLog` keeps one snapshot of the state in its `snapshots` table: the state as JSON, the log
+  position it was taken at, the problems found up to there, the state version, a checksum of the JSON and the anchor,
+  a hash of the newest event row at or before that position. On boot the engine reads the snapshot and replays only the events after it
+  (`readEvents(after)`, `replayEventLog(events, from)`). The snapshot is used only when its version is this code's, its
+  anchor matches the row in the log and its checksum its JSON; otherwise the whole log is replayed (logged with the
+  reason: `version`, `anchor`, `checksum` or `unreadable`) and a new snapshot written. The version is a hash of every
+  source file of `@shinsa/core` and the snapshot format (`resolveStateVersion`, `apps/server/src/store/snapshot.ts`),
+  so a change to how events fold into state never reads an old snapshot; where those files cannot be read the version
+  is null and the engine replays the whole log every boot and writes no snapshot. A snapshot is written 3 s after a
+  boot that replayed events past it, 3 s after the last of 2,000 events since the last one (so a burst of work is never
+  stalled by the write), and when the engine stops. `shinsa serve` builds its engine with the version, so every
+  server keeps one; inspect mode never writes one, and an engine without a version (most tests) neither. A snapshot is
+  only a shortcut: one that cannot be written is logged and left for the next. Anchoring on the newest row at or
+  before its position lets a log whose last rows were moved out (below) still take one.
+- **Older events in the user's log are rewritten once, on start.** Code never reads an old shape; when a change would
+  leave one in a user's log, `store/legacy.ts` gets its rules and `LOG_VERSION` goes up by one. Logs written before
+  the task Agent kept runs as
+  `planner`, `builder`, `fixer`, `shipper` or `operator`, answers as `task.answered`, `specFirst` on `task.created`,
+  the removed `worktreesDirectory` setting and worktrees without a `workspace`. Before it replays anything, a writable
+  engine runs `EventLog.replaceLegacyEvents` (the rules are `store/legacy.ts`): a top-level run of one of those roles
+  becomes the `agent` with the matching purpose (`plan`, `build`, `fix`, `fix`, `operate`), an `agent` run without one
+  takes its task's stage at the time (else `build` for a phase, `plan` otherwise), a delegated run keeps a helper role
+  (`builder` when its role is not one), no other run keeps a purpose, `task.answered` becomes `task.delivered` with
+  step `answer`, and the rest take the current field. Logs from before the guide moved out of the log (above, The
+  briefing) have their `briefing.written` rows moved: the newest per project goes to the `briefings` table with its
+  row's time, every such row and the receipts of `briefing.write` are deleted, and the log position they reached is
+  kept in `seq_floor`, so the next event never takes a position an earlier event had (server ids such as `boot:<seq>`
+  name it). A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 2) marks
+  the log so each pass runs once: a log at 1 only has its briefings moved. A role it does not know stays as written:
+  the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
+  `run_purpose_unknown`, `run_purpose_unexpected`), so it shows in `/api/health` problems instead of reaching a page.
+  Inspect mode writes nothing: it runs the same rules in memory on its read-only view instead
+  (`EventLog.applyLegacyView`), so an old log reads in the new shape with no false problems, its `briefing.written`
+  rows are hidden from the events and their newest guide per project shown over the `briefings` table, and its
+  snapshot is skipped (the whole log replays); the file on disk keeps its old rows and `user_version`.
+
 ## Command receipts
 
 From T3 Code's orchestration v2 (harness plan WS4 names the sources). The engine
@@ -1647,7 +1707,7 @@ keeps beside its events (`store/event-log.ts`).
     /api/projects/<id>/repos` or `/folders`, or an agent's tool): `repo:<path>:<seq>` (the log position, so
     registering a path again after `repo.remove` is a new command); the project change it makes gets a fresh id.
     Webhook deliveries: `webhook:<schedule>:<delivery>`, and `webhook:<schedule>:<delivery>:fail` for one core
-    refused. The briefing: `briefing:<focus project or *>:<log position it was written from>`. A setup-chat answer:
+    refused. A setup-chat answer:
     `setup:<chat>:<question>:<hash of what it saves>`. `POST /api/onboarding/setup` has no cause to name and gets a
     fresh id, like any request without an `Idempotency-Key`.
 
@@ -2778,7 +2838,8 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
 ├── accounts.json    The Claude accounts Shinsa runs on (Accounts and usage limits, above)
 ├── accounts/<id>/   One Claude config folder per account Shinsa signed in or imported
 └── data/
-    ├── shinsa.sqlite  The event log, the effect outbox and the command receipts
+    ├── shinsa.sqlite  The event log, the effect outbox, the command receipts, the latest state snapshot and the
+    │                  Home guide per project (`briefings`)
     ├── worktrees/     One git worktree per task (`<repo>/<branch>-<id>`), and the checkouts of isolated
     │                  delegations (`delegations/<task>/<run>`)
     ├── scratch/       The working folder of each task with no repository (`<task id>`), where its answerer runs;
@@ -3095,8 +3156,9 @@ error: it comes back as a message with `problem: true`.
 
 Every page holds one WebSocket on `/ws` (`apps/server/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
-`docs/protocol.md` → The socket). On connect the server sends the state, the accounts and `surfaces`; then every
-change of state or accounts goes to every socket, and a transcript only to the sockets following its run. The page's
+`docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
+accounts and `surfaces`; then every change of state goes to every socket as a patch, every change of the accounts whole, and a transcript only to the
+sockets following its run. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)
 and `browser` anywhere else, Floaty included. The server keeps each socket's surface and tells every socket, with
 `surfaces { desktop }`, whether at least one desktop surface is connected: on connect, and again only when that
@@ -3105,6 +3167,53 @@ changes (a desktop says hello, or the last one closes). A page that is not the d
 count in the title and Floaty's tags (`docs/design.md`, 31). A message the
 server does not recognise, including a `hello` with an unknown surface, is logged and ignored; a socket that never
 says hello counts as no desktop.
+
+- **Patches, not the state.** A command changes a few entries, so the server sends only those
+  (`state.patch { patch }`, `StatePatch` in `packages/core/src/protocol/patch.ts`). `decide` reports which entries its
+  events wrote (`Decision.changes`: ids per record of the state), the engine hands each listener the state before the
+  command and those changes (`StateChange`), and `resolveStatePatch` turns them into the patch once per command for
+  every socket: per entry `put` (new or replaced), `remove`, or `fields` (only the fields whose value changed, and
+  `unset` for the ones that went away); a list that only grew at its end, such as a task's activity, goes as
+  `{ drop, append }`. `focus`, `settings` and `onBehalfActions` go the same way. A patch names the log position it
+  applies to and the one it reaches (`from`, `to`); `applyStatePatch` refuses one whose `from` is not the state's
+  `seq`. The page then asks for the whole state again (`state.sync`), ignores patches until it arrives and skips a
+  patch it already has (`to` below its `seq`, or at it for a patch that moved the position). A patch whose `from` and
+  `to` are equal changes the state without an event (a new Home guide, The briefing) and is applied like any other. A patch copies only what it changes: every entry, list and record
+  it leaves alone keeps its identity, so a component that selects one task does not render again when another changes.
+- **Runs without their prompts.** A run's `prompt` and `rolePrompt` stay in the event log and in the engine's state,
+  where recovery, a usage resume and a resumed session's brief read them, and never go to the page: the state on
+  connect, after `state.sync` and in every patch holds each run as a `WireRun` (`serializeRun`), which leaves them out
+  and adds `fixFocus`, what a fix is for (`resolveFixFocus`, from the first words of its instruction), the one thing
+  the page read from them. A run's wire form is kept per run object, so a run is converted once and a connect after
+  that only copies the record. No command the page decides for itself reads a prompt (only a recovery and a usage
+  resume do, and neither is optimistic), and the page converts what it decides the same way, so a fix it starts
+  shows its focus at once. The CLI and agents read through the HTTP routes and `read_task`, which use the engine's
+  state and are unchanged.
+- **One render per frame.** The page queues what arrives (the state, patches and transcript entries) and applies it
+  once per animation frame (`Connection.flush`), with a 32 ms timer beside it so a hidden page, which gets no frames,
+  still follows Shinsa (its title, Floaty's tags, sounds and notifications). An answer to a command (`ack`) applies what
+  is queued at once, so a command's own change is shown before its promise settles.
+- **Clicks show at once.** A command that settles the same way however often it is applied, or is refused when
+  applied again (answering a gate, priority, cancel, complete, waiting on tasks, how a round ships, dismissing a
+  suggestion or a quiet run, the usage wait, settings and the focus: `OPTIMISTIC_COMMANDS` in
+  `lib/connection/optimistic.ts`), is decided in the page too, by the same `decide`, on the last state the server
+  sent, and shown at once. Runs it starts get ids of their own (`optimistic-<n>`) until the server's patch names
+  them. Every new state from the server is decided over again with the commands still waiting, and the command leaves
+  the page's guess when its answer arrives: on success the server's own change is already in, on a refusal the guess
+  is taken back and the refusal shown. A command that creates something (a task, a project) or goes through the
+  classifier (a message) is never guessed.
+- **Transcripts stream.** `transcript.subscribe { runId, from }` asks for the entries from position `from`, the number
+  the page holds, so a reconnect or a second look at a run sends only what is new; the server answers in pages of 500
+  (`TRANSCRIPT_PAGE`), each `transcript { runId, entries, start }` with the position of its first entry, and every new
+  entry follows with its own. The page appends an entry at its position, skips one it has, starts over at position 0
+  and asks again from what it holds when a page would leave a gap (for a run it no longer follows it drops the page
+  instead). The page keeps every run it follows and the 24 others read or let go of last
+  (`TRANSCRIPT_CACHE_LIMIT`, least recently used first out), so a run dropped is read again from 0. The server keeps the entries of every followed run
+  and of the eight runs read last in memory (`Transcripts`) and reads only the bytes appended since, so a long
+  transcript is parsed once, not on every line, and every `listEntries` caller gets its own copy.
+- **Selectors.** `useShinsaSelector(select)` (`lib/connection/selectors.ts`) gives a component the part of the state it
+  reads and renders it again only when that part changes; `useTask`, `useRun` and `useGate` read one entry, and
+  `useShinsaState` the whole state.
 
 ## Health
 
@@ -3154,12 +3263,22 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   (`delegation-invariants.ts`), rounds (`round-invariants.ts`), schedules (`schedule-invariants.ts`), projects and
   handles (`project-invariants.ts`), and the round agent (`agent-invariants.ts`: no top-level planner or builder, a
   purpose on every Agent run that matches its stage, and every new Agent run resuming the task's last Agent session
-  unless that one ended with a fresh-class failure). What each walk checks is listed once, in `packages/core/CLAUDE.md`.
+  unless that one ended with a fresh-class failure). Every walk also checks that `decide` leaves its input alone, that
+  the state it decided equals its events replayed, and that its patch rebuilds the state on a copy kept on the side.
+  What each walk checks is listed once, in `packages/core/CLAUDE.md`.
 - **The engine and the outbox.** `apps/server/test/runtime/engine.test.ts` and `test/store/event-log.test.ts` run them
   on SQLite: retries and backoff, failure gates, lane ordering and the side lane, restart recovery per class, effect
   keys, cancellation (a running effect aborted, its late result ignored), damaged effect and event
   rows, and command receipts (a repeat answered, a reused id refused, a refusal remembered, receipts across a restart
-  and pruned after a week). `test/agents/transcripts` covers a transcript line torn by a crash.
+  and pruned after a week). `test/runtime/snapshots.test.ts` and `test/store/snapshot.test.ts` cover snapshots: a boot
+  that replays only the events after one, one of another version, of a log changed under it or with a damaged payload
+  replaced by a full replay, problems kept across one, none written read-only or without a version, a write once
+  quiet after a boot or a burst, a failed write logged, the Home guide kept beside the log and back after a boot, and
+  the state version following the source (`test/serve.test.ts`: a real server keeps one and its next start reads it);
+  `test/store/legacy.test.ts` the one-time rewrite and the move of briefings out of the log; and that a
+  listener's state before and changes patch one state into the next. `test/agents/transcripts` covers a transcript
+  line torn by a crash, reading from a position, the entries kept in memory and each new entry's position;
+  `test/http/server.test.ts` the socket's patches, `state.sync` and transcript pages.
 - **Agents.** `apps/server/test/agents/providers/claude/` covers every `terminal_reason` and failure class
   (`classify.test.ts`), executable discovery, session files under `CLAUDE_CONFIG_DIR`, prompt ids and echo matching,
   steering windows, context usage, the account, the compaction route and fast mode (`route.test.ts`, the

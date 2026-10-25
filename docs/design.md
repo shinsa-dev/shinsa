@@ -50,19 +50,25 @@ Only these, and they win over anything below:
    lingers briefly, widens under the pointer and can be dragged; a press on the bare track centres
    the thumb there. The geometry is `lib/scroll.ts`, shared with `ScrollFade`. The task chat scrolls in one;
    other scrollers keep the hidden-scrollbar rule below.
-   **Content fades where it scrolls under something.** There is one fade: the kit's `scroll-fade` mask on the
-   scrolling element (`ScrollArea`'s `fade`, on by default, or `ScrollFade`), 24px at whichever edge still hides
-   content, never a gradient overlay. Every page whose body scrolls under a header uses `PageScroll`
-   (`components/layout/page/page-scroll.tsx`, a `ScrollArea` with the fade): Home, Settings and the task's
-   Overview. The task chat and the setup chat keep their own `ScrollArea` with the fade on, so
-   their content fades under the header at the top and into the composer at the bottom; the composer draws no
-   gradient of its own. **A fade is right on the first painted frame.** The scroll position drives it through a
-   scroll timeline (`animation-timeline: scroll(self)`, globals.css → Scroll edge fades): each edge's fade grows
-   over the first 24px of travel toward it, decided by style alone, never by a measure, an observer or a
-   transition after the content renders. `ScrollFade` puts `scroll-fade` on its scroller in the markup and decorates
-   a `targetRef` in a layout effect (render it after its target). A browser without scroll timelines, and a
-   clipping element that is not a scroll container (`CardAction`), fall back to the `data-overflow-*` attributes
-   `ScrollArea` and `ScrollFade` set.
+   **Content fades where it scrolls under something.** There is one fade: the kit's `scroll-fade` mask
+   (`ScrollArea`'s `fade`, on by default, or `ScrollFade`), 24px at whichever edge still hides content, never a
+   gradient overlay, so it needs no colour and works on every surface. Every page whose body scrolls under a header
+   uses `PageScroll` (`components/layout/page/page-scroll.tsx`, a `ScrollArea` with the fade): Home, Settings and
+   the task's Overview. The task chat and the setup chat keep their own `ScrollArea` with the fade on, so their
+   content fades under the header at the top and into the composer at the bottom; the composer draws no gradient of
+   its own. **Scrolling never repaints the fade.** The mask sits on a still box around the scroller
+   (`data-fade-scope`), not on the scroller, so it is painted once and the content scrolls under it on the
+   compositor; a mask on the scrolling element made the browser repaint the whole chat on every scroll frame
+   (`docs/performance.md` → Chat, overview, review and lists). **A fade is right on the first painted frame.** The
+   scroll position drives it through a scroll timeline (globals.css → Scroll edge fades): the scroller inside
+   (`scroll-fade-source`) names its timelines, the box scopes them (`timeline-scope`), and each edge's fade grows
+   over the first 24px of travel toward it, decided by style alone, never by a measure, an observer or a transition
+   after the content renders. The names are unique per `ScrollArea` and `ScrollFade` (`resolveFadeTimelines`,
+   `lib/scroll.ts`), so a scroller inside another never answers for it. `ScrollFade` renders the box in its markup,
+   or masks a `targetRef` itself in a layout effect (render it after its target); a bare `scroll-fade` reads its
+   own element's timelines, which is right for a clipping element that does not scroll (`CardAction`). A browser
+   without scroll timelines, and that clipping element, fall back to the `data-overflow-*` attributes `ScrollArea`
+   and `ScrollFade` set on the masked box.
 7. **The task chat follows Kanna's transcript.** One centred column the composer's width; every
    item is a row box (`py-2 mb-1`, 20px from item to item) on the column's left edge. Agent text is full-width
    `prose-chat` markdown (13px, 1.625 leading, 20/12px paragraph margins, highlighted code fences in the Code tab's
@@ -89,7 +95,7 @@ Only these, and they win over anything below:
      and your bubble stay on the column's edges. Inside an opened delegation card the conversation's inset is the
      card's 12px alone (`CHAT_NESTED`).
    - **Card headers** (hand-over cards: Asked you, Set the steps, Proposed the plan…) are one `CardLine`: a 36px
-     band on `bg-bg-a1`, `px-3`, the 20px slot and 14px icon on the card's 12px inset, the title 8px after the
+     band on `bg-bg-a1`, `ps-3 pe-3`, the 20px slot and 14px icon on the card's 12px inset, the title 8px after the
      glyph (`gap-1.25`) in `text-xs` medium `fg-4`, the meta in `text-xs` `fg-2` at the right. The Overview's
      `Panel` header (`CARD_HEADER`) is the same band, slot and 8px. A delegation's spawn card and the live card's
      row use the same band and slot. Inside a card, an icon that leads a row sits in the same 20px slot on the
@@ -247,7 +253,7 @@ Only these, and they win over anything below:
    it. One-line previews (`InlineMarkdown`, inside rows and buttons) show references as plain
    medium text instead of nested links. On Home, `GuideText` keeps "pull request #N" written as
    "the pull request" and does not link numbers, since the task card already shows it.
-   **The compact queue.** The sidebar and the queue button render the queue `compact`: collapsible `h-6` headers with a 14px icon in a 20px slot, the same rows
+   **The compact queue.** The sidebar and the queue button render the queue `compact`: collapsible `h-6` headers (the whole header folds; its chevron, shown on hover, 5px from the top, bottom and end) with a 14px icon in a 20px slot, the same rows
    without the age. Every leading icon in the sidebar (nav items, the Focus dot, section icons,
    row tiles) sits in a 20px slot 6px in from the row (`ps-1.5`), so their centres share
    one vertical axis. Open and closed sections are shared by both through `localStorage`, and a
@@ -276,15 +282,16 @@ Only these, and they win over anything below:
     `cards` and `sidebar`.
     Cards (the default) has no rail: a top
     bar with a "3 need you" button that opens the compact queue, and task pages centred on the
-    same axis as Home (see 12). The button sits at the top left, right after the Shinsa logo,
-    because that corner is navigation and nothing on the right (Focus) moves when it comes and
+    same axis as Home (see 12). The button sits at the top left, right after the Shinsa logo (the Home
+    button in the Mac app, 31), because that corner is navigation and nothing on the right (Focus) moves when it comes and
     goes; it shows on every task page at every width, and it is the only place Cards lists the
     queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
     the queue; it never hides. From
     `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
-    open (34), and Enter sends in every input.
+    open (34), and Enter sends in every input. The Mac app's menu adds Go → Back ⌘[, Forward ⌘] and Home
+    ⇧⌘H (31); those are the app's, not the page's.
 11. **No focus states.** Nothing marks keyboard focus: no ring, outline, border recolour or wash
     (Shape & depth → No focus states). Focus rules below are paywall-next reference only.
 12. **The task page has one left edge and no details panel.** The heading is a `text-base` medium
@@ -313,7 +320,27 @@ Only these, and they win over anything below:
     - **Panels keep their action when collapsed.** An Overview panel's header action ("Open the
       review" on What changed, which opens the Review tab) stays in the header whether the panel is open or closed
       (`components/layout/surface/panel.tsx`); a panel can start collapsed (`defaultOpen`), as the Review tab's
-      Everything else does.
+      Everything else does. A passive figure beside the title (the Delegations count) is the panel's `meta`, not
+      its action, so a click on it folds the panel like the rest of the header.
+    - **The whole header is the trigger** (`DisclosureHeader`, `components/layout/surface/disclosure-header.tsx`,
+      since 2026-10-25). Every collapsible header folds from a click anywhere on it: Overview and Review panels,
+      change snippets, the live card's row, a delegation's spawn card, a round's row, Home's sections, the compact
+      queue's sections, the roadmap's groups and Settings' folding blocks. A header with nothing interactive in it
+      is one `<button>` with `aria-expanded` (inside its `h2` or `figcaption` when it has one). A header that holds
+      its own controls (a link, Stop, a select) takes the click on the header element itself, its controls sit in
+      `DisclosureAction`, which stops the click from reaching the header, and the chevron is the one focusable
+      trigger, a `<button>` with `aria-expanded` and "Expand ‹label›" / "Collapse ‹label›"; no button is ever
+      nested in another. **A trailing chevron's end inset equals its vertical inset**, so it wraps the header's
+      corner evenly: end padding = (header height − chevron box) ÷ 2. The header names its height (`strip`: `line`
+      24, `strip` 28, `block` 32, `band` 36) and the chevron its box (`chevron`: `box`, the 22px `icon-xs`
+      button look with its hover wash, on card bands and snippets; `glyph`, the bare 14px chevron, on section and
+      group headers), and `resolveDisclosureStrip` (`components/layout/surface/disclosure.ts`) writes both as CSS
+      variables and derives the end padding and the chevron box from them: band 7px, snippet 3px, block 9px,
+      line 5px. The chevron is always last, after the header's controls (a delegation's Stop comes before it).
+      Home's section labels and a round's row keep the chevron right after the label and have no trailing inset.
+      `disclosure-header.test.tsx` fails when a header is built by hand (`aria-expanded` outside the primitive
+      and the listed row disclosures: chat lines, tree items, Show more, the request under a title, Per role, an
+      MCP's details row) or when a header ends in a chevron without a strip.
     - **Activity reads newest first.** The Overview's Activity panel lists the newest entry at the top and older
       ones below it (`listActivityNewestFirst`; entries of the same moment keep the log's order, reversed). Every
       place that lists a task's activity uses it.
@@ -423,6 +450,16 @@ Only these, and they win over anything below:
       rejects a `Hint` or `TooltipTrigger` around a block element (a `div`, `p`, `li`… or a `flex`, `grid`
       or `block` class) with no `w-fit`, `inline-*`, `size-*` or fixed width; `test/support/triggers.ts`
       checks the rendered chat the same way.
+    - **One tooltip serves the page.** The `TooltipProvider` in `root.tsx` mounts the only Base UI tooltip; a
+      `Hint`, a time, a clipped `Truncate` or a `TooltipTrigger` is just its own element, registered by a ref and
+      marked `data-tooltip-trigger` (`useTooltipTrigger` in `@shinsa/ui/components/tooltip`). The provider opens
+      the tooltip on hover after the trigger's delay (150ms for times and clipped text, at once for the rest), on
+      keyboard focus, and on a tap where there is no hover; it closes it when the pointer leaves, on a press of the
+      trigger, on Escape and when focus leaves. A tooltip closed by a press or Escape stays closed until the pointer
+      leaves its trigger. What it shows is built when it opens, so a time's exact moment is formatted only then.
+      While it is open the trigger carries `aria-describedby` (the tooltip) and `data-popup-open`. A trigger costs
+      no component, state or listener of its own, so a page full of hints stays cheap to keep and to show again
+      (35).
     Content follows Buzzkit's scanning rules: the value first in `fg-4`, the qualifier muted in
     `TooltipLabel`, states in their status colour (`*-text`), lists one item per line in the
     foreground, mixed bright and muted text inside one `whitespace-nowrap` span. Never a sentence
@@ -537,8 +574,8 @@ Only these, and they win over anything below:
       the right. Home's sections and every Settings group use it. The action's buttons sit 2px apart
       (`gap-0.5`, the one 2px gap in the web, which `SectionLabel` owns: Refresh beside Add account or Add
       server), so callers pass them as a fragment. With `onToggle` it folds: the
-      label and count become one button with a 14px chevron (`SectionChevron`, turned when closed,
-      shared with the compact queue's headers) and `aria-expanded`; every Home section uses that
+      whole header becomes one button with the label, the count and a 14px chevron right after them (turned when
+      closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
       Attention, Notifications, Context, Setup), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
@@ -594,7 +631,7 @@ Only these, and they win over anything below:
       and no hairline between blocks. Projects, accounts and the agent groups' per-role rows use it. A control on the shelf
       has no fill at rest, since the shelf is already the second surface: never a fill on a fill. A button there is the
       kit's `secondary` (its ghost; `CopyButton` is always one), a select `ghost`; the one exception is an MCP's
-      Connect, primary `xs`, the one thing to act on. `CARD_HEADER` is the one card header strip (36px, `bg-bg-a1`, `px-3`, a 14px icon in a
+      Connect, primary `xs`, the one thing to act on. `CARD_HEADER` is the one card header strip (36px, `bg-bg-a1`, `ps-3 pe-3`, the end padding taken over by the 7px trailing inset when it folds, a 14px icon in a
       20px `IconSlot` on the 12px inset, 8px from the glyph to a `text-xs` medium `fg-4` title), used by `Panel`;
       the chat's hand-over cards (`CardLine`), the delegation card and the live card's row are the same band. A row
       icon in the card's body sits in the same slot on the same inset, so header and rows share one icon column
@@ -1101,7 +1138,7 @@ Only these, and they win over anything below:
       shared `CheckOutcomeIcon` for finished, failed or stopped), the role in `fg-2` ("Reviewer"), the
       title in medium `fg-4`, the status in its tone with the running `Duration` ("Waiting to start" neutral,
       Working blue, "Waiting for its delegations" blue while its own delegations run, "Asked the agent
-      that delegated it" amber while its question is open; `lib/chat/delegations.ts`), a chevron, and a secondary `icon-xs` Stop (×) while it is live, named
+      that delegated it" amber while its question is open; `lib/chat/delegations.ts`), a secondary `icon-xs` Stop (×) while it is live, then the chevron box last on the 7px trailing inset (the whole row folds it), Stop named
       "Stop “‹title›” and what it delegated" in its tooltip and `aria-label` alike. An
       open question sits under the row on a hairline; the chevron opens the delegated agent's own
       conversation inside the card, its own delegations nested the same way. A `reported`
@@ -1224,7 +1261,7 @@ Only these, and they win over anything below:
       A config Shinsa could not read is a quiet warning row first. MCPs are grouped by status, each group a quiet
       folding block (`FoldingBlock` in `group.tsx`, laid out like the roadmap's group headers: a 32px header with the
       group's icon at `size='sm'` in its tone and no background, the title, the count right after it in `fg-2`, and
-      the section chevron at the far right; so the status icons sit in the column of the rows' own chevrons below
+      the section chevron at the far right, 9px from the end like from the top and bottom; so the status icons sit in the column of the rows' own chevrons below
       them) over its shelf, in this order: Connected (green, `IconApiConnection`),
       Needs sign-in (orange, `IconUserKey`, the Sign in gate's glyph), Failing (red, `IconCircleX`), Not checked yet
       (neutral, `IconCircleDotted`; only while a check is due) and Off (neutral, `IconCircleMinus`; turned off, or its
@@ -1342,10 +1379,18 @@ Only these, and they win over anything below:
     - **The title bar is the top bar.** The traffic lights sit inset over the 44px top bar, centred on it.
       `applyDesktop` (called from `main.tsx`) sets `data-desktop` on `<html>` (`window`, or `fullscreen` when the
       lights are gone), and the `desktop:` variant (`app.css`) holds the room they take: the Cards top bar
-      `desktop:ps-16`, the Sidebar rail's header and compact bar `desktop:ps-20`; the rail's header drops the
-      wordmark in the app (`desktop:hidden` on `BrandLink`), since its 240px would not hold the lights, the
-      wordmark and the controls. A bar marked `data-window-drag` drags the window; its buttons, links, inputs and
-      the reconnecting dot stay clickable, and toasts, dialogs, menus and tooltips never drag.
+      `desktop:ps-16`, the Sidebar rail's header and compact bar `desktop:ps-20`. A bar marked `data-window-drag`
+      drags the window; its buttons, links, inputs and the reconnecting dot stay clickable, and toasts, dialogs,
+      menus and tooltips never drag. The bars are chrome: `select-none`, so a drag across them never selects text,
+      while content (the chat, the overview, code) stays selectable.
+    - **Home, not the wordmark.** A Mac app's toolbar carries its controls, not its name (the menu bar and the
+      Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
+      (`components/layout/home-link.tsx`) renders `HomeButton` there (secondary `icon-sm`, `IconHome`, `aria-label`
+      Home, the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
+      header and the compact bar alike. The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
+      the page's own history (`MainWindow.step`, which never steps onto the waiting page,
+      `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for
+      indent and outdent while it has focus, since the page sees the key before the menu does.
     - **Only the app notifies.** In the app the page never creates a browser `Notification` (and the app denies
       the page that permission): `notifyDesktop` hands the decision to the app, which shows a silent macOS
       notification (the page plays its own sound) whose click shows and focuses the window and opens the task.
@@ -1370,38 +1415,61 @@ Only these, and they win over anything below:
     - **The window**: closing it hides it (the page keeps its socket, so the badge and notifications go on), the
       Dock icon or Window → Shinsa brings it back, ⌘Q quits the app and never stops the server. Its size and place
       are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own (Settings… ⌘,
-      opens `/settings`; View has Reload ⌘R, zoom, full screen); no other shortcut and no menu bar icon.
+      opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no other shortcut
+      and no menu bar icon.
     - **It is called Shinsa** in the menu bar, its first menu (About Shinsa, Hide Shinsa, Quit Shinsa), the About
       panel, the Dock and notifications, packaged and in development alike. The menu bar and the Dock read the
       bundle's `CFBundleName`, so `bun run dev` runs a copy of Electron.app renamed to `.electron/Shinsa.app`
       (`scripts/dev.ts`, under the bundle id `studio.overclock.shinsa.dev`, with Shinsa's icon) rather than
       Electron.app itself.
-    - **No pointer hand.** A Mac app shows the arrow over buttons, links, tabs and rows, so inside the app
-      (`html[data-desktop]`) every element and pseudo-element takes the default cursor (`src/desktop.css`, imported
-      by `app.css`, `!important` so it beats Tailwind's `cursor-pointer`, the kit's base rule, inline styles and
-      CodeMirror's). Only these keep their own: text fields, text areas, `contenteditable` and the code editor
-      (`.cm-content`) show the text cursor unless disabled; a resize handle (`cursor-col-resize`), and the whole
-      page while a pane is dragged, the resize cursor; what drags (`cursor-grab`, a dragged slider) grab and
-      grabbing. Disabled controls and `zoom-in` images get the arrow too. A browser and Floaty keep the pointer
-      (Component checklist → State). `test/desktop-css.test.tsx` renders the clickable controls under a
-      sheet that sets the pointer on everything and fails if any computes `pointer` in the app.
+    - **No pointer hand, every other cursor.** A Mac app shows the arrow over buttons, links, tabs and rows, so
+      inside the app (`html[data-desktop]`) whatever a browser shows the pointer hand on takes the arrow instead
+      (`src/desktop.css`, imported by `app.css`): the elements and roles the kit's base rule gives the pointer,
+      `a[href]`, `cursor-pointer`, an inline `cursor: pointer`, CodeMirror's fold markers and completion rows, and
+      the text inside them. It is `!important` so it beats utilities, the kit, inline styles and third-party
+      sheets, and it stops at any other cursor utility. Nothing else changes: text and inputs keep the I-beam, a
+      resize handle and the whole page while a pane is dragged the resize cursor, what drags grab and grabbing,
+      `zoom-in` images the magnifier, and a disabled control `not-allowed` (inside it too). A browser and Floaty
+      keep the pointer (Component checklist → State). `test/desktop-css.test.tsx` renders the clickable controls
+      under the kit's cursors and fails if any computes `pointer` in the app or if text, resize, grab or
+      not-allowed is lost.
+    - **Native feel.** The page root never rubber-bands in the app (`overscroll-behavior: none` on `html` and
+      `body`); a scroller inside still bounces like any Mac list. There are still no focus rings (11). Getting
+      around is instant (35).
 
 32. **The Code tab is a small workbench** (`components/code/`, `lib/code/`, `routes/task/code.tsx`, lazily loaded with
     its editor). Every task with a repository has one (`listTaskTabs`); a task with changes opens it on Changes,
     one without on Files, reading the repository at its default branch. Since 2026-10-25 the review is not a mode of
     the workbench: it is the Review tab (34), and Code is the raw material, the changes and the files.
-    - **It opens at once** (`routes/task/load-code.tsx`, `lib/code/prefetch.ts`). A task page that has a Code tab
+    - **It opens at once** (`routes/task/lazy-code.tsx`, `lib/code/prefetch.ts`). A task page that has a Code tab
       prefetches it when the browser is idle (`requestIdleCallback`, 2 s at most), and at once when the Code tab is
-      hovered or focused, or open on load: the tab's and CodeMirror's chunks, and in parallel the refs, the diff, the
-      root folder, the file the review opens first (both sides of it) and that file's language. Reads go through the
+      hovered or focused, or open on load: the tab's and CodeMirror's chunks, the tokenizer worker, and in parallel the
+      refs, the diff, the root folder, the file the review opens first (both sides of it) and that file's language. Reads go through the
       one cache by commit (`lib/connection/code.ts`), and a read already answered renders in the same frame, with no
       "Reading…" frame between; the paths list for ⌘P is read when the tab opens, not when ⌘P is pressed. Neither
       the tab nor the editor is a `React.lazy` behind Suspense: React 19 holds a revealed Suspense boundary for
-      300ms, which was most of the wait. Measured on the seed (SMP-2, production build, a click on Code): 790ms to
-      the first line of code before, 170ms on a cold click now and about 45ms once the page has been idle a moment or
-      the tab was hovered.
-    - **Shape.** An explorer column on the left (280px by default, resizable from 200 to 480 by the same handle as the
-      rail, the width kept in `shinsa.code-explorer-width`; never narrower than its header row needs: the explorer
+      300ms, which was most of the wait.
+    - **Every click is instant** (since 2026-10-25; the numbers and how they were measured are `docs/performance.md`
+      → Code tab). A tree row acts on the mouse press, not the release (a file opens, a folder opens or closes;
+      touch and the keyboard still act on the click), and nothing in the Code tab animates: hover and selected
+      backgrounds, the indent guides, the chevrons and the kit's buttons inside it change in the frame they are asked
+      to (`INSTANT` on the workbench turns every transition off). A file is read before you click it: hovering a row
+      for 40 ms (`useHoverIntent`) or focusing it reads it (both sides of a changed file) and tokenizes it in the
+      worker, in side by side builds the file's pair of editor states when the browser is next idle
+      (`EditorSession.prefetchPair`), so a first side-by-side view costs what a revisit does, and opening a file reads the two files after it and the one before when the browser is next idle
+      (`listNeighbourPaths`, `scheduleIdle`). The Files tree reads the closed folders in view when the browser is idle
+      (up to 64 at a time), so opening one shows its rows the next frame; a folder not read yet opens in the one render
+      its rows arrive in (`flushSync`), never a loading frame. There is one CodeMirror view per Code tab (`EditorSession`,
+      `lib/code/editor/session.ts`): opening a file swaps that file's state into it instead of building an editor, and
+      the last 24 files keep their state (scroll, folds, cursor, undo) to come back to. A file shows as plain text the
+      frame it arrives in and takes its colours from the worker a moment later, or at once when its tokens are
+      cached (by language and text); the Lezer language that folds and indents it joins when the browser is idle.
+      `shinsa:code-open` and `shinsa:code-shown` (and `shinsa:tree-toggle` / `shinsa:tree-toggled`) are User Timing
+      marks around each open and each folder toggle (`lib/code/marks.ts`).
+    - **Shape.** An explorer column on the left, or on the right when Settings → Appearance → File list (⌘K has it too,
+      and the Code tab's ⌘K "Move the file list to the right") says so, kept in `shinsa.code-explorer-side` (280px by
+      default, resizable from 200 to 480 by the same handle as the rail, on whichever edge faces the code, the width kept
+      in `shinsa.code-explorer-width`; never narrower than its header row needs: the explorer
       measures the mode tabs and the search button at their natural width and that, with the row's padding, is the
       least the handle allows, so the search button never covers a tab, whatever the modes or the font; below `md` it is a sheet opened from the toolbar's
       Show the files, closed by picking a file, Escape or a click outside) and the editor on the right: the 36px
@@ -1438,15 +1506,16 @@ Only these, and they win over anything below:
       indented 8px a level, then a 14px chevron slot (empty for a file, so a level's icons share one column), the
       14px file or folder icon and the name, 6px after it. Hover is `bg-bg-a2`, the open file `primary-a1` with
       `fg-4` text, so the two never read as the same. The Changes, Files and Search trees all use it; the list sits
-      4px in from the column (`px-1 py-1`). **Indent guides** are VS Code's on hover: a 1px line under each
-      ancestor's chevron, hidden until the pointer is over the explorer column (`TREE_HOVER_GROUP`, faded in over
-      150ms), then `bg-a4`; the guide of the folder holding the open file is `fg-1`, a step stronger, over that
+      4px in from the column (`px-1 py-1`). Hover and selection change in the same frame, with no transition, and a
+      folder's chevron turns without one. **Indent guides** are VS Code's on hover: a 1px line under each
+      ancestor's chevron, hidden until the pointer is over the explorer column (`TREE_HOVER_GROUP`, shown at once),
+      then `bg-a4`; the guide of the folder holding the open file is `fg-1`, a step stronger, over that
       folder's rows only (`findActiveGuide`, `resolveActiveGuide`, `pickGuideLevel` in `lib/code/tree.ts`).
     - **File and folder icons** (`lib/code/file-icons.ts`: `resolveFileIcon(path)`, `resolveFolderIcon(path,
       open)`) mark every file in the trees, the review's spots, search results, ⌘P, the editor's toolbar and every
       `FileLink`. Well-known names win over the extension (package.json, the lockfiles, tsconfig, Dockerfile and
-      compose files, `.gitignore`, README, LICENSE, CHANGELOG, CLAUDE.md and AGENTS.md, `.env*`, tool configs, test
-      files), then the extension, then a plain page (`IconFileText`). They are `Icon`s like any other, drawn at
+      compose files, `.gitignore`, README, LICENSE, CHANGELOG, CLAUDE.md (Claude's mark) and AGENTS.md (a sparkle,
+      the generic mark for agent instructions, in purple), `.env*`, tool configs, test files), then the extension, then a plain page (`IconFileText`). They are `Icon`s like any other, drawn at
       `sm`: Central's own language marks (TypeScript, JavaScript, React, Markdown, Rust, Swift, Java, PHP, C++, Vue,
       Svelte, npm, Git) and Central glyphs for the rest (`{}` JSON, `#` CSS, `</>` HTML, a console for shell, a key
       for `.env`, a lock for lockfiles, a test tube for tests, a gear for configs), plus our own marks for Python,
@@ -1458,8 +1527,9 @@ Only these, and they win over anything below:
       HTML, Swift, Svelte and Git coral, Markdown slate, YAML pink, shell and tests green, Vue and databases teal,
       PHP and C indigo, Java, npm and PDF red. The rest draw in the row's icon ink. A row that sets
       `file-icons-muted` (a viewed file) draws even the tinted marks in its ink: the generator writes each mark's
-      colour as `var(--file-icon-ink, var(--file-<tint>))`. Folders open and close (`IconFolder1`,
-      `IconFolderOpen`), and the folders that say what they hold are tinted (`IconFolderSource`…): `src`/`lib`
+      colour as `var(--file-icon-ink, var(--file-<tint>))`. A closed folder is solid (`IconFolder1Filled`) and an open
+      one outlined (`IconFolderOpen`), as in VS Code's icon themes, and the folders that say what they hold are tinted
+      (`IconFolderSource`…, solid while closed): `src`/`lib`
       blue, tests green, docs azure, `scripts`/`bin` gold, assets purple, `.git`/`.github`/`.husky` coral.
     - ⌘P (Go to file) opens any file of the repository by name: Buzzkit's command dialog over every path at the
       ref, ranked by `rankPaths` (a name that contains what you typed first, then word starts and consecutive
@@ -1472,10 +1542,25 @@ Only these, and they win over anything below:
     - **The editor is CodeMirror 6**, coloured from the `--code-*` tokens (`globals.css`: keyword purple,
       string green, number orange, comment `fg-2`, function `primary-text`, type amber, property blue, tag red,
       punctuation `fg-3`; the diff washes `--code-added`/`--code-removed` and their strong steps for changed words),
-      12px ABC Areal Mono on an 18px line, so both themes need no override. Every other highlighted code (chat code
-      fences, tool output and snippets) runs Shiki on one theme of its own (`lib/code/highlight.ts`,
-      TextMate scopes mapped to the same `--code-*` variables, no GitHub themes), so a fence and the editor read the
-      same colours in both themes; the two parsers can still disagree on a token's kind. A diff opens side by side:
+      12px ABC Areal Mono on an 18px line, so both themes need no override. **Highlighting is VS Code's**: the
+      TextMate grammars VS Code itself ships (through Shiki's `@shikijs/langs` and the Oniguruma engine) tokenize the
+      file in a worker (`lib/code/editor/tokenize.worker.ts`, `textmate.ts`), line by line from each line's state, a
+      slice at a time with the file on screen ahead of prefetching, and only from the first line an edit changed;
+      the editor draws the visible lines' tokens as classes (`lib/code/editor/syntax.ts`, `tm-code-keyword`…).
+      One theme maps TextMate scopes to the `--code-*` tokens for the editor and every other highlighted code (chat
+      code fences, tool output and snippets, `lib/code/grammar.ts`, `CODE_THEME`), so a fence and the editor read the
+      same tokens and colours in both themes. Comments follow Better Comments (the user's VS Code extension): one
+      that starts with `!`, `?`, `TODO`, `*` or a second `//`, after its marker or a doc comment's margin star, takes
+      `--code-comment-alert` (red), `-query` (blue), `-todo` (orange), `-highlight` (green) or `-strike` (`fg-1`,
+      struck through) from the tag to the end of the line (`lib/code/comment-tags.ts`, tokens in `app.css`), in the
+      editor and every fence alike. Markdown is rich: headings bold, emphasis, code spans, fenced code in
+      its own language (the worker loads each fence's grammar first), links underlined, lists, tables and front
+      matter (as YAML). The language comes from the path the way VS Code decides it (`resolveGrammar`): the name
+      first (`Dockerfile`, `Makefile`, `COMMIT_EDITMSG` and the other git message files as git commit,
+      `git-rebase-todo`, `.gitignore`, `.dockerignore` and the other `*ignore` files with a small ignore grammar,
+      `.env*` as dotenv, `tsconfig*.json` and `.vscode/*.json` as JSON with comments, `Cargo.lock` as TOML), then the
+      folder (`.husky/*` hooks as shell), then the extension (TOML, Prisma, Proto, Astro, Svelte, MDX, Terraform and
+      a hundred more), then the shebang. A line over 20,000 characters stays plain, as in VS Code. A diff opens side by side:
       CodeMirror's merge view with the old file on the left. Unified is the toggle (an `icon-sm` button at the
       toolbar's end, hidden below `md`, showing the layout it switches to: `IconLayoutTopBottom` "Show unified",
       `IconLayoutColumn` "Show side by side"; ⌘K has it too), remembered in `shinsa.code-unified`. Unified puts
@@ -1536,15 +1621,25 @@ Only these, and they win over anything below:
       ⌃⌥[ / ⌃⌥] fold and unfold every block, Escape back to one cursor. They act only while the editor has focus,
       so they are no global listener, and ⌘K lists every one in its Editor group with its key (`lib/command/editor.ts`;
       the ones that edit are off, with the reason, on a read-only file).
+    - **Folding is VS Code's.** A gutter after the line numbers holds a chevron for every line that starts a block,
+      shown while the pointer is over the gutter, and always on a folded line (`lib/code/editor/folding.ts`); a click
+      folds or unfolds, and a folded block shows `⋯` on a soft `bg-a2` pill that unfolds on a click. Blocks come from
+      the syntax tree where the language has one (JSON objects and arrays, TypeScript blocks, Markdown sections and
+      fences, Python bodies), and from indentation otherwise, as VS Code folds a language without a folding provider
+      (`indentFolding`: a line folds what is indented under it, over blank lines). The fold keys and ⌘K's Fold the
+      block act on the same blocks.
     - **Find in the open file** (⌘F) is our find bar in CodeMirror's top panel (`components/code/editor/find-bar.tsx`
       on `lib/code/editor/find.ts`, which hands the panel's element to React): the shared search field (up to 320px),
       Previous match / Next match right after it, then "3 of 12" (or "No results", counted up to 999), and Close at
       the far end; Enter and ⇧Enter step, Escape closes and puts you back in the code. On an editable file a chevron
       before the field (Show replace) opens a second row, also opened by ⌥⌘F: Replace with, Replace and Replace all
       (Enter replaces the next, ⌘Enter all). CodeMirror's own panel, with its text buttons and checkboxes, is gone.
-    - **Loading is centred.** Every wait in the Code tab ("Reading the code…", "Opening the code…", "Reading the
-      changes…", "Reading the files…", "Opening ‹path›…") is the spinner with its line under it, centred in the pane
-      it holds (`components/code/code-loading.tsx`).
+    - **Loading is centred, and almost never seen.** The Code tab's reads are prefetched (above and 36), so in
+      normal use none of its waits shows. When one does ("Reading the code…", "Opening the code…", "Reading the
+      changes…", "Reading the files…", "Opening ‹path›…"), the pane stays empty for its first 300ms and only then
+      shows the spinner with its line under it, centred in the pane it holds (`components/code/code-loading.tsx`).
+      Searching keeps the last results on screen while the next search runs, with "Searching" under the field
+      only after 300ms.
     - **Nothing moves when you switch.** Switching the ref (Head of the branch, Base, Working copy, a commit) or
       Changes and Files measures zero layout shift (a `layout-shift` PerformanceObserver over every switch, on the
       seed and on a 4,500-file task): the changes tree keeps the diff on screen until the next ref's diff arrives
@@ -1554,10 +1649,9 @@ Only these, and they win over anything below:
     - **Large changes stay fast.** The trees and the search results are virtual lists (`VirtualRows`, 22px rows), so
       a change of thousands of files or a 100,000-file repository renders only the rows in view. The diff the tree
       reads is a summary with patches for the small files only (`docs/engine.md` → The Code tab's reads); the editor
-      reads both sides of the open file and never the whole patch. The editor is built in a task of its own after the
-      tree paints, and its language a task later, the merge diff gives up after 20ms (`DIFF_CONFIG`) and the unified
-      view parses an old side of at most 100,000 characters, so no main-thread task passes 50ms on open, scroll or
-      switch (measured on a production build: `.playwright-mcp/shinsa-perf/` in the Kanna checkout). A search
+      reads both sides of the open file and never the whole patch. Opening a file swaps a state into the one editor,
+      its tokens come from the worker and its Lezer language joins when the browser is idle, and the merge diff gives
+      up after 20ms (`DIFF_CONFIG`), so no main-thread task passes 50ms on open, scroll or switch (measured on a production build: `.playwright-mcp/shinsa-perf/` in the Kanna checkout). A search
       streams: matches show as they are found, and the summary line once it ends.
     - **Every position is in the URL** (`lib/code/location.ts`): the mode, the open file and whether it
       is a diff, the line and range, the ref, the spot, the order and the search, so a reload or Back
@@ -1573,7 +1667,9 @@ Only these, and they win over anything below:
     - **Lazy.** `CodeDiff` itself is a few lines in the entry bundle; the library loads with
       `components/text/code-diff-view.tsx` the first time a diff is shown (its own chunk, about 81 KB gzipped, and
       the Shiki grammars it shares with the code fences), and the language's grammar is loaded before the first
-      paint, so a diff never shows without its colours. "Loading the changes…" (`fg-2`) holds its place meanwhile.
+      paint, so a diff never shows without its colours. It is not behind `React.lazy` (`requestCodeDiffView`): a task
+      page with a Review tab loads it at idle and when a task row is hovered (36), and if it is still loading the
+      space stays empty, with "Reading the changes" only after 300ms.
     - **Looks like the rest of the code.** The syntax colours are `lib/code/highlight.ts`'s theme on the `--code-*`
       tokens; changed lines wash `--code-added` / `--code-removed`, changed words their strong steps, line numbers
       `fg-2` (green or red on a changed line), on a transparent background in ABC Areal Mono at `text-2xs` on an
@@ -1586,7 +1682,8 @@ Only these, and they win over anything below:
       task's diff is numbered with a 2px bar on changed lines. A binary file says "A binary file, not shown as
       text.", a renamed one "Renamed from ‹path›." above its lines, identical text "No line changed."
     - **A change snippet** (`components/text/change-snippet.tsx`) is a file and its lines in a frame, folded until
-      you open it. Its header is the file's icon, path and lines; on a task with a repository that place is a link that
+      you open it. Its header (28px) is the file's icon, path and lines, and a click anywhere on it but the place folds
+      it, the chevron box 3px from the top, bottom and end; on a task with a repository that place is a link that
       opens the Code tab at those lines (with the spot, so the Code tab washes it; "Open in Code" on hover), and it can
       lead with a label (the attention of a walkthrough spot). Open, open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
       two lines of context (`narrowHunks`), the lines themselves washed `primary-a1`; when the change does not reach
@@ -1637,6 +1734,55 @@ Only these, and they win over anything below:
     - **Links in.** The Overview's Review and What changed's link, ⌘K's Review the changes, a task link's action and
       the queue's Review changes open `?tab=review`.
 
+35. **Getting around is instant** (`root.tsx`, `routes/task/index.tsx`, `lib/kept-views.ts`, `hooks/use-idle.ts`;
+    measured in `docs/performance.md` → Shell and navigation). A click paints its page in the next frame or two,
+    the way a native app switches views:
+    - **Pages you have been to stay mounted.** Home, All tasks and Settings, once visited, and the last three task
+      pages you opened stay in the tree inside React's `Activity`, hidden (`display: none`) rather than unmounted,
+      so going back shows the same page, its scroll and its open sections, without building it again. A hidden
+      page runs no effects (no ⌘K commands, key bindings, transcript subscriptions or reads); they start again
+      when it shows.
+    - **Ahead of the first visit.** Once the browser is idle after the first state arrives, Home, All tasks and
+      Settings are rendered hidden, and a task page renders its other tabs (Overview, Review, Code, Chat) hidden,
+      so even the first click on one only shows it. The Code tab's chunks and reads are prefetched as before (32).
+    - **Hidden pages wait for idle.** A hidden page or tab gets the state as of the last idle moment
+      (`useIdleValue`), not every push, so a busy server does not keep re-rendering pages no one sees; the page you
+      look at gets every push at once. Pages and tabs are memoised on their state and route, so showing one
+      re-renders only what changed.
+    - **No route waits on a chunk.** The pages are in the main bundle, never behind `React.lazy` and `Suspense`
+      (whose reveal throttle alone holds a boundary for 300ms); only `/ui` and the Code tab's editor load apart,
+      and the Code tab is prefetched on idle and on hover.
+    - **What they cost.** A kept page holds its components and DOM. On the seed, a task page with Home, All tasks
+      and Settings kept and its Review and Chat tabs warm holds 20 MB of JS heap: All tasks and Settings rendered
+      ahead are 3.3 MB of it, the hidden tabs 0.6 MB. So a row in a kept list mounts no overlay of its own: hints,
+      times and clipped text share the page's one tooltip (13). Visiting more tasks does not grow it past the three
+      kept ones; what grows is code loaded once (the Settings page, the Code tab's chunks and grammars).
+36. **No loading state in normal use** (since 2026-10-25; `routes/task/prefetch.tsx`, `lib/tasks/prefetch.ts`,
+    `lib/chat/prefetch.ts`, `lib/code/prefetch.ts`, `hooks/use-delayed.ts`, `components/status/loading-line.tsx`;
+    measured in `docs/performance.md` → Loading states). Whatever a click shows is already on the page: rendered
+    ahead (35), read ahead, or the last answer kept while a newer one loads. A spinner, a skeleton or a "Reading…"
+    line is a design bug unless the work could not be foreseen.
+    - **Read before the click.** Hovering a task anywhere (a queue row, Home's lists, All tasks, a task reference,
+      the sidebar) for 40ms, or highlighting it in ⌘K, reads what its page shows: the Code tab's refs, diff
+      summary, root folder, ⌘P's paths and first file, the review's snippets, the diff view's chunk, and the
+      transcripts of its last two runs. Once the browser is idle, the first four tasks of the queue get the same
+      code reads, and Settings' versions and integrations are read. An open task page reads its own at idle; the
+      Code tab reads the other refs (head, base, working copy) of the open file and its folders, the folders above
+      a file you open, ⌘P's top match as you type and a search match you hover.
+    - **Keep it, then refresh it.** Code reads are cached by commit (32) and, once read, a read shows its last
+      answer at once while a newer version (a task update, a moved head) loads, the way the Files tree and the
+      diff already held. Every cache is bounded: the code reads keep the last 300 (`CODE_READ_LIMIT`), finished
+      searches 20 (`CODE_SEARCH_LIMIT`), evidence texts 32 (`EVIDENCE_TEXT_LIMIT`), the review's snippets read
+      ahead 8 per task (`SNIPPET_PREFETCH_LIMIT`), the socket's transcripts every run a chat follows plus the 24
+      read last (`TRANSCRIPT_CACHE_LIMIT`).
+    - **A wait shows only after 300ms.** For what could not be foreseen (a file nothing pointed at, a search
+      never run, the first state after a reload, a sign-in), the place stays empty for 300ms
+      (`LOADING_DELAY_MS`, `useDelayed`) and only then shows the spinner and its line (`LoadingLine`,
+      `LoadingSpinner`, `CodeLoading`), so a fast read never flashes one. Each carries `data-loading-state`,
+      and `data-loading-pending` while it waits unseen, which the walk in `scripts/perf/loading-walk.ts` looks for.
+    - **Not a loading state.** A busy button (22), the live agent's shimmering line (7), "Working out the steps" on
+      the progress track and an update's toast report work the server or an agent is doing, not a read, and stay.
+
 , a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
@@ -1645,8 +1791,10 @@ and `shadow-control*` are allowed), a `hover:` with no `active:` on its line (a 
 instead of `CARD`) and `formatAge(…)` or `formatDuration(…)` rendered in JSX outside `components/text/time-ago.tsx`
 (pass the time to `TimeAgo` or `Duration` instead; a time built another way is not caught). In the app and the kit
 (`packages/ui/src`) it also rejects raw corners, any `focus:` / `focus-visible:` / `focus-within:` state or
-`ring-offset-*`, an icon faded by hand (19) and a checkmark icon in green; the `/ui` catalog pages are checked for
-raw corners only. Besides that it bans comments (outside `packages/ui`), enforces the verb catalog and rejects a
+`ring-offset-*`, an icon faded by hand (19), a checkmark icon in green and a transition on a hover, press or
+highlight colour (`transition-colors`, `transition-shadow`, or a bare `transition` or a colour in
+`transition-[…]` on a line with a `hover:` or `active:`; Motion); the `/ui` catalog pages are checked for raw corners
+and those transitions only. Besides that it bans comments (outside `packages/ui`), enforces the verb catalog and rejects a
 global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts` and `hooks/use-code-keys.ts` (32).
 
 ---
@@ -2258,6 +2406,10 @@ page's "Share" and "New paywall" are separate commands, 16 apart.
   `CardHeader`, `FrameHeader`, `CardFrameHeader` — is 48px: its `sm` controls
   sit 10px from every edge and its title 16px in. A strip that stacks a
   description pads 12 × 16.
+- **A collapsible header's trailing chevron** sits as far from the end as from
+  the top and bottom: `DisclosureHeader` derives the end padding from the
+  header height and the chevron box (Where Shinsa differs, the whole header is
+  the trigger). Never pad a collapsible header's end at the call site.
 - **A strip that ends in controls ends 10px in** — its end padding equals the
   controls' vertical inset (Trailing controls), while the title keeps its 16px
   start. The primitives own it: `CardHeader className="border-b"` drops to
@@ -3150,9 +3302,8 @@ so a long one ends in an ellipsis with the full text in a tooltip. A row that
 genuinely needs two lines is `list-row-two-line` (48px: the label over a
 `text-xs` tertiary meta line on a 16px line) — never `h-auto py-*` on
 `list-row`.
-Colour-only `duration-hover` transitions, no press transform (a secondary
-button's wash is a gradient on `from-*`/`to-*` stops so it eases with the
-border). Focus recolours the border
+No transitions on state: a hover or press wash appears at once and the fill
+deflates in the frame of the press (Motion). Focus recolours the border
 (see Focus); coarse pointers get an invisible 44px hit area.
 **Pending** is one state, `loading` (with `loadingLabel` for the pending copy):
 while the action it started runs, the button disables — so it can't be
@@ -3174,8 +3325,8 @@ one control by removing the shared border and inner corners.
 
 - Between buttons, `GroupSeparator` is the plain border colour; next to a
   hovered or pressed button it lifts to the same `foreground/20` the outline
-  button's border takes, on the **same** `transition-colors duration-hover`, so
-  seam and border move in lockstep. (On teal primary groups the seam is
+  button's border takes, at the same instant (no transition), so seam and
+  border change together. (On teal primary groups the seam is
   invisible against the fill either way.)
 - `GroupText` is a static prefix or suffix: `bg-muted`, tertiary text, icons
   14px `icon-tertiary`.
@@ -3266,8 +3417,8 @@ for the default (gapped) variant; fused groups share edges and need none.
 
 **Grouped edges stay in sync.** Every element that draws an edge inside a
 grouped control — button, input, `GroupText`, group and toggle separators, the
-toggle outline — transitions with the same `transition-colors duration-hover`,
-so a seam never lags or leads the border beside it. And a translucent edge
+toggle outline — changes colour at once with the rest (no transition), so a
+seam never lags or leads the border beside it. And a translucent edge
 only matches another if both composite over the same background: draw a seam
 as the part's own border over its own fill, or reproduce the fill under it
 (see the button-group separator), never as a bare line over the canvas.
@@ -4030,10 +4181,12 @@ anchor (`sideOffset` 4).
   gives glyph or icon keys a spoken name); the keycaps end the tooltip, so the
   end padding drops to 4px — the same inset they have above and below — with
   8px between label and keys. A tooltip names the action; a keys-only tooltip
-  is rare, and when it happens both sides are 4px. On its own a tooltip opens
-  instantly; inside a `TooltipProvider` the provider's `delay` applies (Base
-  UI's 600ms if unset) and neighbours open instantly while one is showing; an
-  explicit `delay` on the trigger wins over both.
+  is rare, and when it happens both sides are 4px. A tooltip opens at once unless
+  its `Tooltip` (or `useTooltipTrigger`'s options) or the nearest nested
+  `TooltipProvider` sets a `delay`; the trigger's own wins. Moving straight
+  from one trigger to the next opens the next after its own delay. The
+  outermost `TooltipProvider` is the page's one tooltip (Where Shinsa
+  differs, 13); without it nothing opens.
 - **Toast.** Neutral surface; the type sets only the icon. Content `p-3`,
   `text-sm`, 2px between title and description, 8px to the action. Icons
   follow the 32px row (14px, 8px to the text, 11px from
@@ -4449,7 +4602,7 @@ component names a role, never a number:
 
 | Role           | Token / utility                       | Value | Used by                                                                                                                   |
 | -------------- | ------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------- |
-| State feedback | `duration-hover` (Tailwind's default) | 150ms | hover, press, focus, open — fill, border, text, icon colour and filter, seams                                             |
+| State feedback | none                                  | 0ms   | hover, press, focus, open, selection, a highlighted menu row — fill, border, text, icon colour, seams, a hover-revealed control, and the press itself: a button's or select trigger's fill deflating (`inset`), the link button's, ghost tab's and checkbox's press `scale`, a pressed highlight's deflate |
 | Movement       | `duration-move`                       | 200ms | tab / segmented / filter-tab indicators, chevron turns, accordion and collapsible height, sidebar collapse, the icon swap |
 | Popup          | `duration-popup`                      | 150ms | popover, tooltip, preview card (enter at scale 0.98 + opacity)                                                            |
 | Dialog         | `duration-dialog`                     | 200ms | dialog, alert dialog and their scrims                                                                                     |
@@ -4457,35 +4610,44 @@ component names a role, never a number:
 | Toast          | literal                               | 500ms | stacking toasts (unchanged)                                                                                               |
 
 Easing: `ease-out` is the strong ease-out `cubic-bezier(0.23, 1, 0.32, 1)`
-and is the default for every transition — 80% of a 150ms change lands in
-~40ms, so feedback reads as instant yet still eases in. `ease-in-out` is
+and is the default for every transition. `ease-in-out` is
 `cubic-bezier(0.77, 0, 0.175, 1)`; `ease-drawer` is
 `cubic-bezier(0.32, 0.72, 0, 1)` for anything that slides like a drawer.
 Never `ease-in` and never `ease-linear` on UI (a progress bar may be linear).
 
 Rules:
 
+- **State is instant; only motion eases.** (Since 2026-10-25, for a native
+  feel: every click and hover lands in the frame it happens, as in a Mac app.)
+  A hover, press or highlight wash, a text, border or icon colour change, a
+  group seam and a control revealed on hover appear at once, with no
+  transition. Transitions are only for things that move: a sheet, a popup or
+  dialog entering, a turning chevron, a sliding selection indicator, a height
+  that opens. A press is state too: the fill deflates, and the link button, a
+  ghost tab and a checkbox scale, in the frame of the press, and lift in the
+  frame of the release, with no transition; a highlight that slides
+  (`useAnimatedIndicator` with `slide`) holds its slide off while the press
+  scale lands and lifts. `transition-colors`, `transition-shadow`,
+  a bare `transition` and a colour in `transition-[…]` beside a `hover:` or
+  `active:` fail `bun lint:conventions`; a colour that changes for another
+  reason (a chat run you jump to, flashed with `data-focused`; a switch being
+  turned on) may still ease.
 - **Never `transition-all`.** Name the properties.
-- **One clock per state change.** Every property that changes when a control
-  changes state — fill, border, text, the icon's colour, a group seam, a
-  hover-revealed overlay — transitions together on
-  `duration-hover`. Nothing may snap beside something that eases.
-- **Children don't keep their own clock.** An icon that inherits its colour
-  is _not_ re-transitioned — a child easing an inherited colour re-eases
-  every frame of its parent's transition and trails it. An icon that also
-  turns uses `transition-disclosure` (turn on the move clock, colour on the
-  hover clock), never `transition-transform` alone. A
-  disclosure chevron is `DisclosureChevron`, never a hand-rotated icon.
-- **Washes over a fill ease too.** A hover wash laid over a fill (secondary
-  button and picker, framed-table cells, interactive tiles) is a gradient on
-  Tailwind's registered `from-*`/`to-*` stops, transparent at rest — a
-  `bg-[image:…]` swap can't interpolate and snapped while the border eased.
-- **Keyboard-driven surfaces don't animate.** List-popup rows (select,
-  combobox, autocomplete, menu, command) highlight instantly, icons included,
-  because the highlight follows the arrow keys; the command palette (⌘K)
-  opens and closes with no transition. List popups themselves open instantly.
-- **Hover is colour, not motion.** No press transform, no hover scale or
-  translate.
+- **A chevron turns, its colour snaps.** A disclosure chevron is
+  `DisclosureChevron` (or `transition-disclosure`: `rotate` and `transform`
+  on the move clock), never a hand-rotated icon; its colour follows its
+  trigger's hover at once like everything else.
+- **Highlights jump.** Menus, selects, the command menu (⌘K) and the rail's
+  nav share one highlight surface (`HighlightList`, `HoverHighlight`,
+  `useAnimatedIndicator` with `slide: false`) that jumps to the hovered or
+  keyboard-highlighted row with no transition, so it never trails the pointer
+  or the arrow keys. Only a selection that changes on a click slides: the
+  segmented control's pill and the underline tabs' line. The command palette
+  opens and closes with no transition, and list popups open instantly.
+- **Hover is colour, not motion.** No hover scale or translate. The only press
+  shapes are the fixed `inset` deflate and the scale of the link button, a
+  ghost tab, a checkbox and the image viewer's round buttons, and they land at
+  once, never eased.
 - **Tooltips:** 150ms in, and instant (`data-instant`, no transition) when
   moving between adjacent triggers.
 - **Reduced motion** is global: under `prefers-reduced-motion: reduce` every
@@ -4587,14 +4749,13 @@ italic; clipped single lines use `Truncate`.
   `:disabled`, `[aria-disabled=true]` and `[data-disabled]`, which get
   `not-allowed` instead (a pending button: `progress`); `Label` itself sets
   `cursor-not-allowed` around a disabled control. Never write
-  `cursor-default` on something that responds to a click. In the Mac app none
-  of this applies: everything takes the arrow (Where Shinsa differs, 31, No
-  pointer hand).
+  `cursor-default` on something that responds to a click. In the Mac app the
+  pointer hand becomes the arrow and every other cursor stays (Where Shinsa
+  differs, 31, No pointer hand, every other cursor).
 - Disabled: `opacity-50` and the `not-allowed` cursor, no separate colours. A disabled control keeps its pointer events — so the cursor shows and a tooltip can explain it — and never reacts: the app's `hover:` variant excludes `:disabled`, `[aria-disabled=true]` and `[data-disabled]`, and a base rule in `styles.css` sets the cursor. Never `pointer-events-none` or `cursor-default` for disabled.
-- Every colour change — fill, text, border, separator, icon fade, overlay —
-  is `transition-colors duration-hover` (icons get the filter from the base
-  rule), identical across all parts of a control so nothing lags or leads
-  (see Motion).
+- Every colour change on hover, press or highlight — fill, text, border,
+  separator, icon, overlay — is instant: no `transition-colors`, no colour in
+  `transition-[…]` (see Motion; lint-enforced).
 - A translucent edge only matches another if both sit over the same fill: draw
   seams as a part's own border over its own fill.
 
@@ -4644,7 +4805,7 @@ this file once, at the end.
 8. **No eyebrows, no italic.**
 9. **Hover is colour, not motion.** Rows wash `foreground/3` (sidebar rows
    5%), controls `bg-accent`, secondary controls lay `foreground/3` over their
-   card fill; `duration-hover`, every part on the one clock; no scale or
+   card fill; instant, no transition (only motion eases); no scale or
    translate.
 10. **Every mode branch or it didn't happen.** A token that differs by mode is
     defined in every cascade branch (`:root`, `.dark, :root.dark`, the
