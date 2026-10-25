@@ -1,6 +1,6 @@
 {
   "name": "shinsa-monorepo",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "build": "turbo run build",

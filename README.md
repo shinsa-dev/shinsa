@@ -104,3 +104,7 @@ How Shinsa works inside is in [`docs/`](docs): start with [`docs/spec.md`](docs/
 - [ ] A phone app for the decisions
 - [ ] More agents beside Claude Code and Codex
 - [ ] A live preview per task: its dev server or simulator
+
+## License
+
+[MIT](LICENSE)
