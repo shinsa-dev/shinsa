@@ -35,8 +35,8 @@
 
 Shinsa runs Claude Code and Codex on your own machine, from your request to a merged pull request. You describe the
 work or ask a question. Shinsa decides what kind of task it is, gives it its own agent, worktree and branch, and
-carries it through planning, building, checks and review. You step in only for what needs a person: the review, the
-merge and the odd question, and the plan when you want to approve it.
+carries it through planning, building, checks and review. Agents find out what they can on their own and ask you only
+for what is yours to decide: the review, the merge, a call they cannot make, and the plan when you want to approve it.
 
 Shinsa (審査) means examination, judging. Agents do the work end to end; the judging stays yours.
 
