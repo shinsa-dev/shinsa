@@ -53,4 +53,6 @@ Checklist:
       key listener anywhere else; docs/design.md → Where Shinsa differs, 32).
 - [ ] A tooltip opens over its text and icon only: what a `Hint` or `TooltipTrigger` wraps is inline or
       `w-fit`, never a block across a full-width row (lint fails; docs/design.md → Where Shinsa differs, 13).
+- [ ] A new tooltip goes through `Hint`, `TimeAgo`/`Duration`, `Truncate` or `useTooltipTrigger`; never a
+      tooltip root per row. The page has one (`TooltipProvider` in `root.tsx`).
 - [ ] Looked at it on `/ui` and in the app, light and dark, desktop and ~900px.

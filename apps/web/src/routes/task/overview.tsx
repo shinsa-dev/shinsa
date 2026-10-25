@@ -17,6 +17,7 @@ import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { Composer } from '@/components/task/composer.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
+import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
 import { isVisualEvidence, listRoundEvidence } from '@/lib/overview/evidence.ts';
 import { type NowTarget, resolveResultPlace } from '@/lib/overview/now.ts';
@@ -25,6 +26,8 @@ import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { isCodeTask } from '@/lib/tasks/shapes.ts';
 
 const SPOTS_SHOWN = 2;
+
+const FIRST_ACTIVITY = 24;
 
 function EvidencePanel({ state, task }: { state: ShinsaState; task: Task }) {
   const evidence = listRoundEvidence(state.evidence, task);
@@ -110,6 +113,33 @@ function JudgementCallsPanel({ task }: { task: Task }) {
   );
 }
 
+function ActivityPanel({
+  state,
+  task,
+  onOpenRun,
+}: {
+  state: ShinsaState;
+  task: Task;
+  onOpenRun: (runId: string) => void;
+}) {
+  const entries = listActivityNewestFirst(task);
+  const shown = useProgressiveCount(entries.length, FIRST_ACTIVITY);
+  return (
+    <Panel title='Activity' icon='IconClock'>
+      <ol className='flex flex-col'>
+        {entries.slice(0, shown).map((entry) => (
+          <ActivityRow
+            key={`${entry.at}-${entry.kind}-${entry.text}`}
+            entry={entry}
+            state={state}
+            onOpenRun={onOpenRun}
+          />
+        ))}
+      </ol>
+    </Panel>
+  );
+}
+
 export function OverviewTab({
   state,
   task,
@@ -147,18 +177,7 @@ export function OverviewTab({
           {code && <ChangesPanel task={task} onOpen={onOpen} />}
           {code && <JudgementCallsPanel task={task} />}
           <RoundsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
-          <Panel title='Activity' icon='IconClock'>
-            <ol className='flex flex-col'>
-              {listActivityNewestFirst(task).map((entry) => (
-                <ActivityRow
-                  key={`${entry.at}-${entry.kind}-${entry.text}`}
-                  entry={entry}
-                  state={state}
-                  onOpenRun={(runId) => onOpen('agent', runId)}
-                />
-              ))}
-            </ol>
-          </Panel>
+          <ActivityPanel state={state} task={task} onOpenRun={(runId) => onOpen('agent', runId)} />
         </div>
       </PageScroll>
       {hint && (

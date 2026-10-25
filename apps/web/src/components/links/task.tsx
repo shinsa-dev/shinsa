@@ -77,7 +77,7 @@ export function TaskLink({ state, task }: { state: ShinsaState; task: Task }) {
   return (
     <InfoPopover
       className='w-80'
-      render={<InAppLink path={action.path} className={SMART_LINK} />}
+      render={<InAppLink path={action.path} data-task={task.id} className={SMART_LINK} />}
       trigger={
         <GlyphLabel
           glyph={<StatusTile {...resolveTaskGlyph(state, task)} size='sm' className={INLINE_TILE} />}
@@ -97,6 +97,7 @@ export function TaskPopoverRows({ state, tasks }: { state: ShinsaState; tasks: T
         <button
           key={task.id}
           type='button'
+          data-task={task.id}
           onClick={() => navigate(resolveTaskAction(state, task).path)}
           className='corner-superellipse/1.125 flex w-full cursor-pointer items-start gap-2 rounded-item px-2 py-1.5 text-left text-xs outline-none hover:bg-bg-a2 active:bg-bg-a2'
         >

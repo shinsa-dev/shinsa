@@ -10,8 +10,18 @@ import { ResizeHandle } from '@/components/layout/sidebar/resize-handle.tsx';
 import { applyDesktop } from '@/lib/desktop.ts';
 import { installDesktop } from './support/desktop.ts';
 
-const DESKTOP_CSS = readFileSync(new URL('../src/desktop.css', import.meta.url), 'utf8');
-const POINTER_EVERYWHERE = '*, .cursor-pointer, [role="treeitem"], a[href], button { cursor: pointer; }';
+const DESKTOP_CSS = readFileSync(new URL('../src/desktop.css', import.meta.url), 'utf8').replace(
+  /\s*\n\s*/g,
+  ' '
+);
+const KIT_CURSORS = `
+  button, a[href], [role="tab"], [role="treeitem"], [role="switch"], .cursor-pointer, button *, a[href] * { cursor: pointer; }
+  button:disabled, input:disabled, textarea:disabled { cursor: not-allowed; }
+  input, textarea, .cm-content { cursor: text; }
+  input[type="checkbox"] { cursor: pointer; }
+  .cursor-col-resize { cursor: col-resize; }
+  .cursor-grab { cursor: grab; }
+`;
 
 let sheets: HTMLStyleElement[] = [];
 let fake: ReturnType<typeof installDesktop> | null = null;
@@ -29,7 +39,9 @@ function renderClickables() {
     <div>
       <Button>Approve</Button>
       <Button disabled>Merge</Button>
-      <a href='/tasks/SW-1'>SW-1</a>
+      <a href='/tasks/SW-1'>
+        <span>SW-1</span>
+      </a>
       <button type='button' className='cursor-pointer' style={{ cursor: 'pointer' }}>
         Inline
       </button>
@@ -44,6 +56,9 @@ function renderClickables() {
         </TabsList>
       </Tabs>
       <ResizeHandle onPointerDown={() => undefined} onDoubleClick={() => undefined} />
+      <button type='button' className='cursor-grab' aria-label='Drag the card'>
+        Card
+      </button>
       <Input aria-label='Title' />
       <Input aria-label='Branch' disabled />
       <input type='checkbox' aria-label='Done' />
@@ -61,8 +76,12 @@ function listPointers(container: HTMLElement) {
   );
 }
 
+function cursorOf(element: Element | null) {
+  return getComputedStyle(element as HTMLElement).cursor;
+}
+
 beforeEach(() => {
-  addSheet(POINTER_EVERYWHERE);
+  addSheet(KIT_CURSORS);
   addSheet(DESKTOP_CSS);
 });
 
@@ -79,32 +98,38 @@ describe('desktop.css', () => {
   it('leaves the pointer alone in a browser', () => {
     stop = applyDesktop(() => undefined);
     const { getByRole } = renderClickables();
-    expect(getComputedStyle(getByRole('button', { name: 'Approve' })).cursor).toBe('pointer');
+    expect(cursorOf(getByRole('button', { name: 'Approve' }))).toBe('pointer');
+    expect(cursorOf(getByRole('link', { name: 'SW-1' }))).toBe('pointer');
   });
 
   for (const windowState of ['window', 'fullscreen'] as const) {
-    it(`shows no pointer anywhere in the Mac app (${windowState})`, () => {
+    it(`replaces the pointer hand with the arrow in the Mac app (${windowState})`, () => {
       fake = installDesktop(windowState);
       stop = applyDesktop(() => undefined);
-      const { container } = renderClickables();
+      const { container, getByRole } = renderClickables();
       expect(document.documentElement.dataset.desktop).toBe(windowState);
       expect(listPointers(container).map((element) => element.outerHTML.slice(0, 80))).toEqual([]);
-      expect(getComputedStyle(document.documentElement).cursor).toBe('default');
+      expect(cursorOf(getByRole('button', { name: 'Approve' }))).toBe('default');
+      expect(cursorOf(getByRole('link', { name: 'SW-1' }))).toBe('default');
+      expect(cursorOf(getByRole('link', { name: 'SW-1' }).firstElementChild)).toBe('default');
+      expect(cursorOf(getByRole('button', { name: 'Inline' }))).toBe('default');
+      expect(cursorOf(getByRole('treeitem'))).toBe('default');
+      expect(cursorOf(getByRole('tab', { name: 'Chat' }))).toBe('default');
     });
   }
 
-  it('keeps the text cursor in inputs and the editor, and the resize cursor on a handle', () => {
+  it('keeps every other cursor: text, resize, grab and not-allowed', () => {
     fake = installDesktop();
     stop = applyDesktop(() => undefined);
     const { getByRole, getByLabelText, container } = renderClickables();
-    expect(getComputedStyle(getByRole('button', { name: 'Approve' })).cursor).toBe('default');
-    expect(getComputedStyle(getByRole('link', { name: 'SW-1' })).cursor).toBe('default');
-    expect(getComputedStyle(getByLabelText('Title')).cursor).toBe('text');
-    expect(getComputedStyle(getByLabelText('Message')).cursor).toBe('text');
-    expect(getComputedStyle(getByLabelText('Branch')).cursor).toBe('default');
-    expect(getComputedStyle(getByLabelText('Done')).cursor).toBe('default');
-    expect(getComputedStyle(container.querySelector('.cm-line') as HTMLElement).cursor).toBe('text');
-    expect(getComputedStyle(getByRole('button', { name: 'Resize the sidebar' })).cursor).toBe('col-resize');
+    expect(cursorOf(getByLabelText('Title'))).toBe('text');
+    expect(cursorOf(getByLabelText('Message'))).toBe('text');
+    expect(cursorOf(getByLabelText('Branch'))).toBe('not-allowed');
+    expect(cursorOf(getByRole('button', { name: 'Merge' }))).toBe('not-allowed');
+    expect(cursorOf(container.querySelector('.cm-content'))).toBe('text');
+    expect(cursorOf(getByRole('button', { name: 'Resize the sidebar' }))).toBe('col-resize');
+    expect(cursorOf(getByRole('button', { name: 'Drag the card' }))).toBe('grab');
+    expect(cursorOf(getByLabelText('Done'))).toBe('default');
   });
 
   it('keeps the resize cursor across the page while a pane is dragged', () => {
@@ -112,7 +137,7 @@ describe('desktop.css', () => {
     stop = applyDesktop(() => undefined);
     const { getByRole } = renderClickables();
     document.body.style.cursor = 'col-resize';
-    expect(getComputedStyle(getByRole('button', { name: 'Approve' })).cursor).toBe('col-resize');
+    expect(cursorOf(getByRole('button', { name: 'Approve' }))).toBe('col-resize');
     document.body.style.removeProperty('cursor');
   });
 });

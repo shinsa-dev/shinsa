@@ -14,7 +14,9 @@ const PRESS_INSET = { x: 1, y: 0.5 };
  * can style their own text/icon color for the highlighted state. The
  * indicator mirrors the item's `data-variant`, so a destructive row can tint
  * it. With `press`, pressing an item deflates the indicator by the same fixed
- * inset every control presses by (`--press-inset-*` in globals.css).
+ * inset every control presses by (`--press-inset-*` in globals.css), in the
+ * frame of the press: the slide's transition is held off while the press
+ * scale lands and while it lifts.
  *
  * Usage:
  *   const rootRef = useRef<HTMLDivElement>(null);
@@ -33,7 +35,8 @@ export function useAnimatedIndicator<T extends HTMLElement>(
     value,
     press = true,
     parkWhenEmpty = false,
-  }: { attribute?: string; value?: string; press?: boolean; parkWhenEmpty?: boolean } = {}
+    slide = true,
+  }: { attribute?: string; value?: string; press?: boolean; parkWhenEmpty?: boolean; slide?: boolean } = {}
 ): React.RefObject<HTMLDivElement | null> {
   const indicatorRef = React.useRef<HTMLDivElement>(null);
 
@@ -102,7 +105,7 @@ export function useAnimatedIndicator<T extends HTMLElement>(
         indicator.style.width = `${el.offsetWidth}px`;
         indicator.style.height = `${el.offsetHeight}px`;
         void indicator.offsetHeight;
-        indicator.style.transition = INDICATOR_TRANSITION;
+        indicator.style.transition = slide ? INDICATOR_TRANSITION : 'none';
         indicator.style.opacity = '1';
         return;
       }
@@ -124,8 +127,16 @@ export function useAnimatedIndicator<T extends HTMLElement>(
 
     let releasing: (() => void) | null = null;
 
+    const snap = (change: () => void) => {
+      const transition = indicator.style.transition;
+      indicator.style.transition = 'none';
+      change();
+      void indicator.offsetWidth;
+      indicator.style.transition = transition;
+    };
+
     const release = () => {
-      indicator.style.removeProperty('--hl-press-scale');
+      snap(() => indicator.style.removeProperty('--hl-press-scale'));
       releasing?.();
       releasing = null;
     };
@@ -141,7 +152,7 @@ export function useAnimatedIndicator<T extends HTMLElement>(
       const height = indicator.offsetHeight;
       const scaleX = width ? 1 - (2 * insetX) / width : 1;
       const scaleY = height ? 1 - (2 * insetY) / height : 1;
-      indicator.style.setProperty('--hl-press-scale', `${scaleX}, ${scaleY}`);
+      snap(() => indicator.style.setProperty('--hl-press-scale', `${scaleX}, ${scaleY}`));
       releasing?.();
       const doc = root.ownerDocument;
       doc.addEventListener('pointerup', release, true);
@@ -161,7 +172,7 @@ export function useAnimatedIndicator<T extends HTMLElement>(
       release();
       activeEl?.removeAttribute('data-indicator-here');
     };
-  }, [rootRef, attribute, value, press, parkWhenEmpty]);
+  }, [rootRef, attribute, value, press, parkWhenEmpty, slide]);
 
   return indicatorRef;
 }

@@ -65,9 +65,11 @@ import { describeNewTask } from '@/lib/new-task.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { listRecentTaskIds, recordRecentTask } from '@/lib/preferences/recent-tasks.ts';
 import { useThemePreference } from '@/lib/preferences/theme.ts';
+import { resolveSelectedTask } from '@/lib/tasks/prefetch.ts';
 import { resolveHandleText } from '@/lib/tasks/rounds.ts';
 import { resolveTaskMenuIcon, resolveTaskStatus } from '@/lib/tasks/status.ts';
 import { navigate, resolveTaskPath, useRoute, useRouteTaskId } from '@/router.ts';
+import { prefetchTask } from '@/routes/task/prefetch.tsx';
 
 function Crumb({ children }: { children: string }) {
   return (
@@ -381,6 +383,21 @@ function JumpGroup({
   );
 }
 
+const SELECTED_PREFETCH_MS = 40;
+
+function usePrefetchSelected(state: ShinsaState | null, selected: string) {
+  const latest = React.useRef(state);
+  latest.current = state;
+  const taskId = resolveSelectedTask(selected);
+  React.useEffect(() => {
+    if (!taskId) return;
+    const timer = setTimeout(() => {
+      if (latest.current) prefetchTask(latest.current, taskId);
+    }, SELECTED_PREFETCH_MS);
+    return () => clearTimeout(timer);
+  }, [taskId]);
+}
+
 export function CommandMenu() {
   const { state } = useConnection();
   const open = useCommandMenuOpen();
@@ -395,6 +412,7 @@ export function CommandMenu() {
   const [stack, setStack] = React.useState<Visit[]>([]);
   const [selected, setSelected] = React.useState('');
   const [recent, setRecent] = React.useState<string[]>([]);
+  usePrefetchSelected(state, selected);
   const restoreFocus = React.useRef(true);
   const openedFrom = React.useRef<HTMLElement | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);

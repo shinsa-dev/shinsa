@@ -90,7 +90,23 @@ const TEXT_STEP: Record<string, number> = {
 const OWN_TEXT_STEP =
   /(?:^|\s)text-(?:fg|icon)-([1-4])(?=\s|$)|(?:^|\s)text-((?:card-|popover-|muted-)?foreground)(?=\s|$)/;
 
+const HOVER_TRANSITION_MESSAGE =
+  'A transition on a hover, press or highlight colour. Washes, text and border colours on hover, press and selection appear at once; only motion (a sheet, a popup, a turning chevron, a sliding indicator) eases (docs/design.md → Motion)';
+
 const CLASS_RULES: ClassRule[] = [
+  {
+    pattern: /(?:^|[\s'"`:])transition-(?:colors|shadow)(?=[\s'"`]|$)/,
+    message: HOVER_TRANSITION_MESSAGE,
+    roots: APP_AND_KIT,
+    inCatalog: true,
+  },
+  {
+    pattern:
+      /^(?=.*(?:^|[\s'"`:])(?:group-|peer-)?(?:hover|active)(?:\/[\w-]+)?:)(?=.*(?:^|[\s'"`:])transition(?:-\[[^\]]*\b(?:color|background-color|border-color|outline-color|box-shadow|fill|stroke)\b[^\]]*\])?(?=[\s'"`]|$))/,
+    message: HOVER_TRANSITION_MESSAGE,
+    roots: APP_AND_KIT,
+    inCatalog: true,
+  },
   {
     pattern: /(?:^|[\s:'"`])text-\[\d/,
     message: 'Raw font size. Use a type role (docs/design.md → Sizing → Type roles)',

@@ -1,8 +1,9 @@
 import { listWaitsOn, type ShinsaState, type Task } from '@shinsa/core';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@shinsa/ui/components/dropdown-menu';
+import { DropdownMenuContent } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { TooltipLabel } from '@shinsa/ui/components/tooltip';
 import * as React from 'react';
+import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { navigate, resolveTaskPath } from '@/router.ts';
@@ -38,7 +39,7 @@ export function WaitsOnLinks({ waitsOn }: { waitsOn: Task[] }) {
                 event.stopPropagation();
                 navigate(resolveTaskPath(parent));
               }}
-              className='min-w-0 truncate text-fg-3 underline-offset-2 transition-colors duration-150 hover:text-fg-4 hover:underline active:text-fg-4 active:underline'
+              className='min-w-0 truncate text-fg-3 underline-offset-2 hover:text-fg-4 hover:underline active:text-fg-4 active:underline'
             >
               {parent.title}
             </a>
@@ -53,24 +54,28 @@ export function WaitsOnLinks({ waitsOn }: { waitsOn: Task[] }) {
 export function ChainArrow({ state, task }: { state: ShinsaState; task: Task }) {
   const waitsOn = listWaitsOn(state, task);
   return (
-    <DropdownMenu>
+    <LazyMenu
+      kind='dropdown'
+      content={
+        <DropdownMenuContent align='start' className='min-w-56 max-w-80'>
+          <WaitsOnItems state={state} task={task} waitsOn={waitsOn} />
+        </DropdownMenuContent>
+      }
+    >
       <Hint label={<WaitsOnHint waitsOn={waitsOn} />}>
-        <DropdownMenuTrigger
+        <LazyMenuTrigger
           render={
             <button
               type='button'
               aria-label='Waits on'
               onClick={(event) => event.stopPropagation()}
-              className='grid size-5 shrink-0 cursor-pointer place-items-center rounded-control-sm text-fg-2 transition-colors duration-150 hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4'
+              className='grid size-5 shrink-0 cursor-pointer place-items-center rounded-control-sm text-fg-2 hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4'
             />
           }
         >
           <Icon size='sm' name='IconArrowCornerDownRight' />
-        </DropdownMenuTrigger>
+        </LazyMenuTrigger>
       </Hint>
-      <DropdownMenuContent align='start' className='min-w-56 max-w-80'>
-        <WaitsOnItems state={state} task={task} waitsOn={waitsOn} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    </LazyMenu>
   );
 }

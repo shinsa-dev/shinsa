@@ -1,11 +1,11 @@
 'use client';
 
-import { INDICATOR_TRANSITION, useAnimatedIndicator } from '@shinsa/ui/hooks/use-animated-indicator';
+import { useAnimatedIndicator } from '@shinsa/ui/hooks/use-animated-indicator';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
 const INDICATOR_STYLE: React.CSSProperties = {
-  transition: INDICATOR_TRANSITION,
+  transition: 'none',
   willChange: 'transform, opacity',
   contain: 'layout paint',
   transformOrigin: 'center',
@@ -13,7 +13,7 @@ const INDICATOR_STYLE: React.CSSProperties = {
 
 /**
  * Menu/list wrapper: a relative container with an absolutely positioned
- * indicator that slides between `data-highlighted` items. Owns the list
+ * indicator that jumps to the `data-highlighted` item, with no transition. Owns the list
  * padding so the indicator can sit flush inside the popup's edge.
  *
  * When a wrapper div isn't possible (e.g. inside Base UI's Tabs.List, which
@@ -33,7 +33,7 @@ function HighlightList({
   press?: boolean;
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const indicatorRef = useAnimatedIndicator(rootRef, { attribute, press });
+  const indicatorRef = useAnimatedIndicator(rootRef, { attribute, press, slide: false });
 
   return (
     <div ref={rootRef} className={cn('relative isolate p-1', className)}>
@@ -52,7 +52,7 @@ function HighlightList({
 
 /**
  * The menu highlight for a plain list (a sidebar, a nav): one shared surface
- * that slides to the hovered `[data-highlight-item]` and
+ * that jumps, with no transition, to the hovered `[data-highlight-item]` and
  * rests on the current one (`data-active="true"`) when the pointer leaves.
  * Items draw no hover or selected background of their own.
  */
@@ -66,7 +66,11 @@ function HoverHighlight({
   indicatorClassName?: string;
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const indicatorRef = useAnimatedIndicator(rootRef, { attribute: 'data-hovered', parkWhenEmpty: true });
+  const indicatorRef = useAnimatedIndicator(rootRef, {
+    attribute: 'data-hovered',
+    parkWhenEmpty: true,
+    slide: false,
+  });
 
   React.useEffect(() => {
     const root = rootRef.current;

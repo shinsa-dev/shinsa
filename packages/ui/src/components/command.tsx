@@ -148,7 +148,11 @@ function CommandList({
 }: React.ComponentProps<typeof CommandPrimitive.List> & { page?: string }) {
   const listRef = React.useRef<HTMLDivElement>(null);
   React.useImperativeHandle(ref, () => listRef.current as HTMLDivElement);
-  const indicatorRef = useAnimatedIndicator(listRef, { attribute: 'data-selected', value: 'true' });
+  const indicatorRef = useAnimatedIndicator(listRef, {
+    attribute: 'data-selected',
+    value: 'true',
+    slide: false,
+  });
   useAnimatedPages(listRef, indicatorRef, page);
 
   return (

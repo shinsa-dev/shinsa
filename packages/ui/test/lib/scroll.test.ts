@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   resolveDragScrollTop,
+  resolveFadeTimelines,
   resolveOverflowEdges,
   resolveThumb,
   resolveTrackScrollTop,
@@ -27,6 +28,16 @@ describe('resolveOverflowEdges', () => {
 
   it('treats a fractional resting position at the end as the end', () => {
     expect(resolveOverflowEdges(299.4, 200, 500)).toEqual({ start: true, end: false });
+  });
+});
+
+describe('resolveFadeTimelines', () => {
+  it('names a timeline per axis from a React id, keeping only characters a name may hold', () => {
+    expect(resolveFadeTimelines('«r1»')).toEqual({
+      '--fade-timeline-y': '--fade-yr1',
+      '--fade-timeline-x': '--fade-xr1',
+    });
+    expect(resolveFadeTimelines('_r_2_')['--fade-timeline-y']).toBe('--fade-y_r_2_');
   });
 });
 

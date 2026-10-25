@@ -118,7 +118,25 @@ describe('Change a setting', () => {
       ['Usage limit per task', 'No limit'],
       ['Switch accounts at', '90%'],
       ['After a usage limit', 'Resume automatically'],
+      ['File list', 'Left'],
     ]);
+  });
+
+  it('moves the Code tab’s file list to either side', () => {
+    const sections = listSettingsSections(
+      createSettings(),
+      MODELS,
+      DEFAULT_PREFERENCES,
+      null,
+      undefined,
+      'right'
+    );
+    expect(sections[1]?.commands.at(-1)?.hint).toBe('Right');
+    pick(sections, 'settings.explorer-side', 'left');
+    expect(localStorage.getItem('shinsa.code-explorer-side')).toBe('left');
+    pick(sections, 'settings.explorer-side', 'right');
+    expect(localStorage.getItem('shinsa.code-explorer-side')).toBe('right');
+    localStorage.removeItem('shinsa.code-explorer-side');
   });
 
   it('holds fast speed back with its reason where fast mode needs usage credits nobody has', () => {

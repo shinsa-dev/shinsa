@@ -32,10 +32,7 @@ export function CodeFence({ code, language }: { code: string; language: string |
           ))}
         </code>
       </pre>
-      <CopyButton
-        text={code}
-        className='absolute top-1.5 right-1.5 opacity-0 transition-opacity duration-150 group-hover/code:opacity-100'
-      />
+      <CopyButton text={code} className='absolute top-1.5 right-1.5 opacity-0 group-hover/code:opacity-100' />
     </div>
   );
 }

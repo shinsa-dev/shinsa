@@ -5,6 +5,14 @@
 
 @custom-variant desktop (&:where([data-desktop="window"] *));
 
+:root {
+  --code-comment-alert: var(--red-text);
+  --code-comment-query: var(--blue-text);
+  --code-comment-todo: var(--orange-text);
+  --code-comment-highlight: var(--green-text);
+  --code-comment-strike: var(--fg-1);
+}
+
 .prose-shinsa {
   font-size: var(--text-xs);
   line-height: 1.45;

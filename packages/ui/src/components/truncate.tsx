@@ -1,6 +1,6 @@
 'use client';
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@shinsa/ui/components/tooltip';
+import { useTooltipTrigger } from '@shinsa/ui/components/tooltip';
 import { isClipped, resolveMiddleTruncation } from '@shinsa/ui/lib/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -107,30 +107,32 @@ function Truncate({
     return () => observer.disconnect();
   }, [full, lines]);
 
-  return (
-    <TooltipProvider delay={TRUNCATE_TOOLTIP_DELAY}>
-      <Tooltip disabled={!clipped}>
-        <TooltipTrigger
-          render={
-            <span
-              ref={ref}
-              data-slot='truncate'
-              className={cn(
-                'block min-w-0',
-                full !== null ? 'overflow-hidden whitespace-nowrap' : lines ? LINE_CLAMP[lines] : 'truncate',
-                className
-              )}
-              {...props}
-            >
-              {full === null ? children : (current ?? full)}
-            </span>
-          }
-        />
-        <TooltipContent className='max-w-72 whitespace-normal text-pretty [overflow-wrap:anywhere]'>
-          <span>{full ?? children}</span>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+  const text = (
+    <span
+      ref={ref}
+      data-slot='truncate'
+      className={cn(
+        'block min-w-0',
+        full !== null ? 'overflow-hidden whitespace-nowrap' : lines ? LINE_CLAMP[lines] : 'truncate',
+        className
+      )}
+      {...props}
+    >
+      {full === null ? children : (current ?? full)}
+    </span>
+  );
+
+  // The tooltip is offered only while the text is cut off; the trigger is the
+  // span itself, so a row of text that fits pays for nothing.
+  return useTooltipTrigger(
+    text,
+    clipped
+      ? {
+          delay: TRUNCATE_TOOLTIP_DELAY,
+          className: 'max-w-72 whitespace-normal text-pretty [overflow-wrap:anywhere]',
+          content: <span>{full ?? children}</span>,
+        }
+      : null
   );
 }
 

@@ -26,7 +26,7 @@ export function MessageLink({
       type='button'
       onClick={() => onOpen(run.id)}
       className={cn(
-        'corner-superellipse/1.125 group flex w-full min-w-0 cursor-pointer flex-col gap-px rounded-lg border border-border bg-card px-3 py-2.5 text-left transition-colors duration-150 hover:bg-bg-a1 active:bg-bg-a1',
+        'corner-superellipse/1.125 group flex w-full min-w-0 cursor-pointer flex-col gap-px rounded-lg border border-border bg-card px-3 py-2.5 text-left hover:bg-bg-a1 active:bg-bg-a1',
         className
       )}
     >
@@ -34,7 +34,7 @@ export function MessageLink({
         <RoleMark role={run.role} className='font-medium text-fg-3' />
         <span>·</span>
         <TimeAgo at={run.endedAt ?? run.startedAt} />
-        <span className='ms-auto flex items-center gap-1 text-fg-2 transition-colors duration-150 group-hover:text-fg-4 group-active:text-fg-4'>
+        <span className='ms-auto flex items-center gap-1 text-fg-2 group-hover:text-fg-4 group-active:text-fg-4'>
           Open in chat
           <Icon size='sm' name='IconChevronRightSmall' />
         </span>

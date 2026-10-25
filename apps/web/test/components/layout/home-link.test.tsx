@@ -1,0 +1,64 @@
+import { afterEach, describe, expect, it } from 'bun:test';
+import { TooltipProvider } from '@shinsa/ui/components/tooltip';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { CardsTopBar } from '@/components/layout/cards/top-bar.tsx';
+import { HomeLink } from '@/components/layout/home-link.tsx';
+import { navigate } from '@/router.ts';
+import { installDesktop } from '../../support/desktop.ts';
+import { findTooltipText } from '../../support/hover.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
+
+const STATE = createShinsaState({
+  tasks: [createTask({ id: 'task', handle: 'SW-1', title: 'Fix the login' })],
+});
+
+let fake: ReturnType<typeof installDesktop> | null = null;
+
+afterEach(() => {
+  fake?.restore();
+  fake = null;
+});
+
+describe('the way home', () => {
+  it('is the Shinsa wordmark in a browser', () => {
+    act(() => navigate('/tasks/SW-1'));
+    render(
+      <TooltipProvider>
+        <HomeLink />
+      </TooltipProvider>
+    );
+    expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
+    act(() => fireEvent.click(screen.getByRole('button', { name: /Shinsa/ })));
+    expect(location.pathname).toBe('/');
+  });
+
+  it('is a Home button with its menu shortcut in the Mac app, never the wordmark', async () => {
+    fake = installDesktop();
+    act(() => navigate('/tasks/SW-1'));
+    let navigated = 0;
+    render(
+      <TooltipProvider>
+        <HomeLink onNavigate={() => navigated++} />
+      </TooltipProvider>
+    );
+    const home = screen.getByRole('button', { name: 'Home' });
+    expect(screen.queryByText('Shinsa')).toBeNull();
+    expect(await findTooltipText(home)).toBe('Home⇧⌘H');
+    act(() => fireEvent.click(home));
+    expect(location.pathname).toBe('/');
+    expect(navigated).toBe(1);
+  });
+
+  it('leads the Cards top bar in the Mac app', () => {
+    fake = installDesktop();
+    act(() => navigate('/'));
+    render(
+      <TooltipProvider>
+        <CardsTopBar state={STATE} />
+      </TooltipProvider>
+    );
+    const bar = screen.getByRole('banner');
+    expect(bar.querySelector('button')?.getAttribute('aria-label')).toBe('Home');
+    expect(bar.textContent).not.toContain('Shinsa');
+  });
+});

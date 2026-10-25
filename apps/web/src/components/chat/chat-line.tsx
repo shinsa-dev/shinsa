@@ -10,20 +10,19 @@ export const ROW_INDENT = 'ps-6.25';
 export const SHIMMER_LINE = 'block truncate leading-normal';
 
 export const SELECTED_WASH =
-  'outline-2 outline-transparent transition-colors duration-500 data-focused:bg-primary-a1 data-focused:outline-primary-a1';
+  'outline-2 outline-transparent transition-[background-color,outline-color] duration-500 data-focused:bg-primary-a1 data-focused:outline-primary-a1';
 
 const LINE = 'flex h-5 min-w-0 max-w-full items-center gap-px self-start text-left text-xs';
 
 const LINE_BUTTON = `group/row ${LINE} cursor-pointer`;
 
-const LINE_INK =
-  'text-fg-3 transition-colors duration-150 group-hover/row:text-fg-4 group-active/row:text-fg-4';
+const LINE_INK = 'text-fg-3 group-hover/row:text-fg-4 group-active/row:text-fg-4';
 
 const LINE_LABEL = `min-w-0 truncate font-medium ${LINE_INK}`;
 
 const LINE_META = 'flex min-w-0 shrink whitespace-pre text-fg-2';
 
-export const CARD_LINE = 'flex h-9 min-w-0 shrink-0 items-center gap-1.25 bg-bg-a1 px-3 text-xs';
+export const CARD_LINE = 'flex h-9 min-w-0 shrink-0 items-center gap-1.25 bg-bg-a1 ps-3 pe-3 text-xs';
 
 export function CardLine({ icon, title, meta }: { icon: IconName; title: string; meta?: React.ReactNode }) {
   return (
@@ -37,13 +36,13 @@ export function CardLine({ icon, title, meta }: { icon: IconName; title: string;
   );
 }
 
-export function RowChevron({ open, className }: { open: boolean; className?: string }) {
+function RowChevron({ open, className }: { open: boolean; className?: string }) {
   return (
     <Icon
       name='IconChevronRightSmall'
       size='sm'
       className={cn(
-        'text-fg-3 transition-[rotate,opacity,color] duration-200 group-hover/row:text-fg-4 group-active/row:text-fg-4',
+        'text-fg-3 transition-[rotate] duration-200 group-hover/row:text-fg-4 group-active/row:text-fg-4',
         open && 'rotate-90',
         className
       )}

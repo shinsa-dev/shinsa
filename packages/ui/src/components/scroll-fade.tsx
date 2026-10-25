@@ -1,6 +1,6 @@
 'use client';
 
-import { resolveOverflowEdges } from '@shinsa/ui/lib/scroll';
+import { resolveFadeTimelines, resolveOverflowEdges } from '@shinsa/ui/lib/scroll';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
@@ -27,8 +27,10 @@ type ScrollFadeProps = Omit<React.ComponentProps<'div'>, 'ref'> & {
  * when you also want a custom scrollbar; reach for this when the scrolling
  * element is native (or owned by something else) and only needs the fades.
  *
- * The fade is a mask on the scrolling element, so it works on any surface and
- * stays strictly inside the scrolling area — it never paints over a border.
+ * The fade is a mask, so it works on any surface and stays strictly inside the
+ * scrolling area — it never paints over a border. On its own scroller it masks
+ * a still box around it, so scrolling never repaints the content; on a
+ * `targetRef` it masks the target itself (`scroll-fade` in globals.css).
  */
 function ScrollFade({
   orientation = 'vertical',
@@ -39,6 +41,9 @@ function ScrollFade({
   ...props
 }: ScrollFadeProps) {
   const internalRef = React.useRef<HTMLDivElement>(null);
+  const maskRef = React.useRef<HTMLDivElement>(null);
+  const id = React.useId();
+  const timelines = React.useMemo(() => resolveFadeTimelines(id), [id]);
   const ref = (targetRef ?? internalRef) as React.RefObject<HTMLElement | null>;
   const dim = typeof size === 'number' ? `${size}px` : size;
 
@@ -48,22 +53,24 @@ function ScrollFade({
   // warning about layout effects on the server.
   useIsomorphicLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    const masked = targetRef ? el : maskRef.current;
+    if (!el || !masked) return;
 
     const vertical = orientation === 'vertical' || orientation === 'both';
     const horizontal = orientation === 'horizontal' || orientation === 'both';
-    // A caller-supplied target doesn't get our className, so opt it in here.
-    el.classList.add('scroll-fade');
-    el.setAttribute('data-fade-orientation', orientation);
-    el.style.setProperty('--fade-size', dim);
+    // A caller-supplied target doesn't get our className, so opt it in here:
+    // it is both the mask and the scroller it reads.
+    if (targetRef) el.classList.add('scroll-fade');
+    masked.setAttribute('data-fade-orientation', orientation);
+    masked.style.setProperty('--fade-size', dim);
 
     const update = () => {
       const y = resolveOverflowEdges(el.scrollTop, el.clientHeight, el.scrollHeight);
       const x = resolveOverflowEdges(el.scrollLeft, el.clientWidth, el.scrollWidth);
-      el.toggleAttribute('data-overflow-y-start', vertical && y.start);
-      el.toggleAttribute('data-overflow-y-end', vertical && y.end);
-      el.toggleAttribute('data-overflow-x-start', horizontal && x.start);
-      el.toggleAttribute('data-overflow-x-end', horizontal && x.end);
+      masked.toggleAttribute('data-overflow-y-start', vertical && y.start);
+      masked.toggleAttribute('data-overflow-y-end', vertical && y.end);
+      masked.toggleAttribute('data-overflow-x-start', horizontal && x.start);
+      masked.toggleAttribute('data-overflow-x-end', horizontal && x.end);
     };
 
     update();
@@ -89,13 +96,13 @@ function ScrollFade({
       mutations.disconnect();
       observer.disconnect();
       if (targetRef) el.classList.remove('scroll-fade');
-      el.removeAttribute('data-fade-orientation');
-      el.style.removeProperty('--fade-size');
+      masked.removeAttribute('data-fade-orientation');
+      masked.style.removeProperty('--fade-size');
       for (const attr of ['y-start', 'y-end', 'x-start', 'x-end']) {
-        el.removeAttribute(`data-overflow-${attr}`);
+        masked.removeAttribute(`data-overflow-${attr}`);
       }
     };
-  }, [ref, orientation, dim]);
+  }, [ref, targetRef, orientation, dim]);
 
   if (targetRef) return null;
 
@@ -109,13 +116,20 @@ function ScrollFade({
   return (
     <div className={cn('relative', className)} {...props}>
       <div
-        ref={internalRef}
-        data-slot='scroll-fade-viewport'
+        ref={maskRef}
+        data-slot='scroll-fade'
+        data-fade-scope=''
         data-fade-orientation={orientation}
-        style={{ '--fade-size': dim } as React.CSSProperties}
-        className={cn('scroll-fade scrollbar-hide size-full rounded-[inherit]', overflow)}
+        style={{ ...timelines, '--fade-size': dim } as React.CSSProperties}
+        className='scroll-fade size-full rounded-[inherit]'
       >
-        {children}
+        <div
+          ref={internalRef}
+          data-slot='scroll-fade-viewport'
+          className={cn('scroll-fade-source scrollbar-hide size-full rounded-[inherit]', overflow)}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );

@@ -3,9 +3,10 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { CARD_LINE, ChatLine, ExpandRow, RowChevron, SELECTED_WASH } from '@/components/chat/chat-line.tsx';
+import { CARD_LINE, ChatLine, ExpandRow, SELECTED_WASH } from '@/components/chat/chat-line.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
 import { CARD, CHAT_INSET, CHAT_NESTED } from '@/components/layout/surface/card.ts';
+import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
@@ -120,24 +121,20 @@ export function DelegationSpawnCard({
       data-delegation={view.run.id}
       className={cn(CARD, 'flex min-w-0 scroll-mt-4 flex-col overflow-hidden', SELECTED_WASH)}
     >
-      <div className={cn(CARD_LINE, 'gap-1 pe-1.5')}>
-        <button
-          type='button'
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-          className='group/row flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 text-left'
-        >
-          <DelegationSummary
-            view={view}
-            title={<Truncate className='min-w-0 flex-1 font-medium text-fg-4'>{view.title}</Truncate>}
-          />
-          <RowChevron
-            open={open}
-            className='text-fg-2 group-hover/row:text-fg-4 group-active/row:text-fg-4'
-          />
-        </button>
-        {view.live && <StopDelegation view={view} onStop={onStop} />}
-      </div>
+      <DisclosureHeader
+        open={open}
+        onToggle={() => setOpen(!open)}
+        label='delegation'
+        strip='band'
+        chevron='box'
+        action={view.live && <StopDelegation view={view} onStop={onStop} />}
+        className={cn(CARD_LINE, 'gap-2')}
+      >
+        <DelegationSummary
+          view={view}
+          title={<Truncate className='min-w-0 flex-1 font-medium text-fg-4'>{view.title}</Truncate>}
+        />
+      </DisclosureHeader>
       {view.question && (
         <DelegationQuestion question={view.question} className='border-border border-t px-3 py-2' />
       )}

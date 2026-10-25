@@ -108,7 +108,7 @@ export function McpServerRow({
           aria-expanded={open}
           aria-label={`${open ? EXTENSION_LABEL.hideDetails : EXTENSION_LABEL.details}: ${server.name}`}
           onClick={toggle}
-          className='flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left text-xs transition-colors hover:text-fg-4 active:text-fg-4'
+          className='flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left text-xs hover:text-fg-4 active:text-fg-4'
         >
           <SectionChevron open={open} className='shrink-0' />
           <Truncate className='min-w-0 shrink-0 font-medium text-fg-4'>{server.name}</Truncate>

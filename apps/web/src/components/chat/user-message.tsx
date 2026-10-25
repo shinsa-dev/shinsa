@@ -79,7 +79,7 @@ export function UserMessage({
           type='button'
           aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
-          className='cursor-pointer px-1 text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+          className='cursor-pointer px-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>

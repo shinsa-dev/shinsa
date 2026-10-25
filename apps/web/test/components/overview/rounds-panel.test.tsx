@@ -71,14 +71,14 @@ describe('the rounds of a task on its Overview', () => {
     const earlier = screen.getByRole('list', { name: 'Earlier rounds' });
     expect(within(earlier).getByText('Add MCP v2')).toBeTruthy();
     expect(within(earlier).queryByText('Do round 1')).toBeNull();
-    fireEvent.click(within(earlier).getByRole('button', { name: /Round 1/ }));
+    fireEvent.click(within(earlier).getByRole('button', { name: /round 1/ }));
     expect(within(earlier).getByText('Add MCP v2. It works. Merged in pull request #12.')).toBeTruthy();
     expect(within(earlier).queryByText('Do round 1')).toBeNull();
     expect(within(earlier).queryByRole('list', { name: 'Progress' })).toBeNull();
     fireEvent.click(within(earlier).getByRole('button', { name: 'Open in chat' }));
     expect(opened.mock.calls).toEqual([['r1']]);
     const waiting = screen.getByRole('list', { name: 'Rounds waiting to start' });
-    fireEvent.click(within(waiting).getByRole('button', { name: /Round 3/ }));
+    fireEvent.click(within(waiting).getByRole('button', { name: /round 3/ }));
     expect(within(waiting).getByText('Cache it. It starts once round 2 is finished.')).toBeTruthy();
     expect(within(waiting).queryByRole('button', { name: 'Open in chat' })).toBeNull();
     fireEvent.click(within(waiting).getByRole('combobox', { name: 'How round 3 ships' }));

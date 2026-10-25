@@ -4,6 +4,19 @@ const RELATIVE_AGE = /^\d+[mhd]$/;
 
 const WEEK_DAYS = 6;
 
+const MONTH_DAY = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+
+const FULL_DAY = new Intl.DateTimeFormat('en', {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+
+const WEEKDAY = new Intl.DateTimeFormat('en', { weekday: 'short' });
+
+const CLOCK = new Intl.DateTimeFormat('en', { hour: 'numeric', minute: '2-digit' });
+
 function formatGap(gap: number, at: number) {
   const seconds = Math.max(0, Math.round(gap / 1000));
   if (seconds < 45) return 'just now';
@@ -13,7 +26,7 @@ function formatGap(gap: number, at: number) {
   if (hours < 24) return `${hours}h`;
   const days = Math.round(hours / 24);
   if (days < 14) return `${days}d`;
-  return new Date(at).toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  return MONTH_DAY.format(at);
 }
 
 export function formatAge(at: number, now = Date.now()) {
@@ -65,16 +78,11 @@ export function formatSpan(at: number, now = Date.now()) {
 }
 
 export function formatDay(at: number) {
-  return new Date(at).toLocaleDateString('en', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return FULL_DAY.format(at);
 }
 
 export function formatClock(at: number) {
-  return new Date(at).toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' });
+  return CLOCK.format(at);
 }
 
 function resolveStartOfDay(at: number) {
@@ -85,9 +93,9 @@ export function formatMoment(at: number, now = Date.now()) {
   const days = Math.round((resolveStartOfDay(at) - resolveStartOfDay(now)) / DAY_MS);
   if (days === 0) return formatClock(at);
   if (days > 0 && days <= WEEK_DAYS) {
-    return `${new Date(at).toLocaleDateString('en', { weekday: 'short' })} ${formatClock(at)}`;
+    return `${WEEKDAY.format(at)} ${formatClock(at)}`;
   }
-  return `${new Date(at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}, ${formatClock(at)}`;
+  return `${MONTH_DAY.format(at)}, ${formatClock(at)}`;
 }
 
 export function resolveMinute(now = Date.now()) {

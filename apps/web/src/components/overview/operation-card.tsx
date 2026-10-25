@@ -34,7 +34,7 @@ function CommitChip({ commit }: { commit: MergedCommit }) {
         onClick={copy}
         className={cn(
           CHIP,
-          'cursor-pointer font-mono text-2xs tabular-nums transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+          'cursor-pointer font-mono text-2xs tabular-nums hover:text-fg-4 active:text-fg-4'
         )}
       >
         {commit.short}

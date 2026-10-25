@@ -2,6 +2,7 @@
 
 import {
   resolveDragScrollTop,
+  resolveFadeTimelines,
   resolveOverflowEdges,
   resolveThumb,
   resolveTrackScrollTop,
@@ -23,6 +24,10 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
  * React and the thumb stays in step on long content. It shows while the
  * region scrolls or the pointer is over it, lingers briefly, widens under
  * the pointer and can be dragged. The geometry lives in `lib/scroll.ts`.
+ *
+ * The fade masks a still box around the scroller rather than the scroller
+ * itself, so scrolling never repaints the content (`scroll-fade` in
+ * globals.css).
  */
 function ScrollArea({
   className,
@@ -41,6 +46,9 @@ function ScrollArea({
   onScroll?: React.UIEventHandler<HTMLDivElement>;
 }) {
   const viewport = React.useRef<HTMLDivElement | null>(null);
+  const mask = React.useRef<HTMLDivElement>(null);
+  const id = React.useId();
+  const timelines = React.useMemo(() => resolveFadeTimelines(id) as React.CSSProperties, [id]);
   const track = React.useRef<HTMLDivElement>(null);
   const thumb = React.useRef<HTMLDivElement>(null);
   const frame = React.useRef(0);
@@ -60,12 +68,13 @@ function ScrollArea({
     const view = viewport.current;
     const bar = track.current;
     const handle = thumb.current;
-    if (!view || !bar || !handle) return;
+    const masked = mask.current;
+    if (!view || !bar || !handle || !masked) return;
     const { scrollTop, scrollHeight, clientHeight } = view;
     if (fade) {
       const edges = resolveOverflowEdges(scrollTop, clientHeight, scrollHeight);
-      view.toggleAttribute('data-overflow-y-start', edges.start);
-      view.toggleAttribute('data-overflow-y-end', edges.end);
+      masked.toggleAttribute('data-overflow-y-start', edges.start);
+      masked.toggleAttribute('data-overflow-y-end', edges.end);
     }
     const geometry = resolveThumb({ scrollTop, scrollHeight, clientHeight });
     bar.toggleAttribute('data-hidden', geometry === null);
@@ -148,20 +157,28 @@ function ScrollArea({
   return (
     <div data-slot='scroll-area' className={cn('relative overflow-hidden', className)} {...props}>
       <div
-        ref={attachViewport}
-        data-slot='scroll-area-viewport'
-        onScroll={(event) => {
-          paint();
-          reveal();
-          onScroll?.(event);
-        }}
-        className={cn(
-          'size-full overflow-y-auto overflow-x-hidden rounded-[inherit] outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-          fade && 'scroll-fade',
-          viewportClassName
-        )}
+        ref={mask}
+        data-slot='scroll-area-fade'
+        data-fade-scope={fade ? '' : undefined}
+        style={fade ? timelines : undefined}
+        className={cn('size-full rounded-[inherit]', fade && 'scroll-fade')}
       >
-        {children}
+        <div
+          ref={attachViewport}
+          data-slot='scroll-area-viewport'
+          onScroll={(event) => {
+            paint();
+            reveal();
+            onScroll?.(event);
+          }}
+          className={cn(
+            'size-full overflow-y-auto overflow-x-hidden rounded-[inherit] outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+            fade && 'scroll-fade-source',
+            viewportClassName
+          )}
+        >
+          {children}
+        </div>
       </div>
       <div
         ref={track}

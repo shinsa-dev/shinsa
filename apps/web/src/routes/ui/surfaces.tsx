@@ -97,7 +97,7 @@ export function SurfaceSpecimens() {
             </CardAction>
           </CardHeader>
         </Card>
-        <Card className='max-w-52 cursor-pointer transition-shadow hover:shadow-md'>
+        <Card className='max-w-52 cursor-pointer hover:shadow-md'>
           <CardHeader>
             <div className='mb-2 flex size-6 items-center justify-center rounded-md bg-bg-2 shadow-1'>
               <Icon size='sm' name='IconMerged' className='text-fg-3' />

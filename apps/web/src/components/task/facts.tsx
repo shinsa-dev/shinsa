@@ -48,7 +48,7 @@ const FACT =
   'inline-flex h-6 min-w-0 shrink-0 items-center gap-1.5 rounded-control-sm px-1.5 text-fg-2 text-xs';
 
 const FACT_INTERACTIVE =
-  'corner-superellipse/1.125 cursor-pointer outline-none transition-colors duration-150 hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4';
+  'corner-superellipse/1.125 cursor-pointer outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-popup-open:bg-bg-a2 data-popup-open:text-fg-4';
 
 function FactPopover({
   trigger,
@@ -133,7 +133,7 @@ function AgentsFact({ state, task }: { state: ShinsaState; task: Task }) {
               type='button'
               onClick={() => navigate(resolveTaskPath(task, { tab: 'chat', run: agent.runId }))}
               className={cn(
-                'corner-superellipse/1.125 flex h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-item pe-2 text-start text-xs transition-colors duration-150 hover:bg-bg-a2 active:bg-bg-a2',
+                'corner-superellipse/1.125 flex h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-item pe-2 text-start text-xs hover:bg-bg-a2 active:bg-bg-a2',
                 AGENT_INDENT[agent.depth] ?? AGENT_INDENT.at(-1)
               )}
             >

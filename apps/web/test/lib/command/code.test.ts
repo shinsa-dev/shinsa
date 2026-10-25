@@ -9,11 +9,13 @@ function context(overrides: Partial<CodeCommandContext> = {}): CodeCommandContex
     mac: true,
     split: false,
     hideViewed: false,
+    side: 'left',
     hasEditor: true,
     applyMode: mock(() => {}),
     run: mock(() => {}),
     toggleSplit: mock(() => {}),
     toggleHideViewed: mock(() => {}),
+    toggleSide: mock(() => {}),
     ...overrides,
   };
 }
@@ -29,6 +31,7 @@ describe('listCodeCommands', () => {
       ['Files', null, false],
       ['Go to file…', '⌘P', null],
       ['Search in files', '⇧⌘F', null],
+      ['Move the file list to the right', null, null],
       ['Hide viewed files', null, null],
       ['Find in this file', '⌘F', null],
       ['Go to line', '⌘G', null],
@@ -37,7 +40,7 @@ describe('listCodeCommands', () => {
   });
 
   it('runs what it names', () => {
-    const value = context({ split: true, hideViewed: true, mac: false });
+    const value = context({ split: true, hideViewed: true, mac: false, side: 'right' });
     const section = listCodeCommands(value);
     for (const command of section.commands) if (command.kind === 'run') command.run();
     expect((value.applyMode as ReturnType<typeof mock>).mock.calls).toEqual([['changes'], ['files']]);
@@ -49,6 +52,10 @@ describe('listCodeCommands', () => {
     ]);
     expect(value.toggleSplit).toHaveBeenCalledTimes(1);
     expect(value.toggleHideViewed).toHaveBeenCalledTimes(1);
+    expect(value.toggleSide).toHaveBeenCalledTimes(1);
+    expect(section.commands.find((command) => command.id.endsWith('.side'))?.label).toBe(
+      'Move the file list to the left'
+    );
     expect(section.commands.find((command) => command.id.endsWith('.hide-viewed'))).toMatchObject({
       label: 'Show viewed files',
       icon: 'IconEyeSlash',
@@ -62,6 +69,6 @@ describe('listCodeCommands', () => {
       listCodeCommands(context({ hasEditor: false, modes: ['files'] })).commands.map(
         (command) => command.label
       )
-    ).toEqual(['Files', 'Go to file…', 'Search in files']);
+    ).toEqual(['Files', 'Go to file…', 'Search in files', 'Move the file list to the right']);
   });
 });

@@ -92,12 +92,7 @@ export function RunAccountLabel({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={
-          <button
-            type='button'
-            className='shrink-0 cursor-pointer transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
-          />
-        }
+        render={<button type='button' className='shrink-0 cursor-pointer hover:text-fg-4 active:text-fg-4' />}
       >
         · {label ?? ACCOUNT_LABEL.pickRerunOn}
       </DropdownMenuTrigger>

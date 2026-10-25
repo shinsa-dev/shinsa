@@ -4,7 +4,7 @@ import type * as React from 'react';
 import { navigate } from '@/router.ts';
 
 const LINK_UNDERLINE =
-  'underline decoration-transparent underline-offset-3 transition-colors duration-150 group-hover/link:decoration-fg-a3 group-active/link:decoration-fg-a3';
+  'underline decoration-transparent underline-offset-3 group-hover/link:decoration-fg-a3 group-active/link:decoration-fg-a3';
 
 export const SMART_LINK = 'group/link cursor-pointer font-medium text-fg-4 no-underline outline-none';
 

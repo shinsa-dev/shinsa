@@ -6,7 +6,7 @@ import type { EditorHandle } from '@/components/code/editor/code-editor.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
 import { QuickOpenDialog } from '@/components/code/quick-open.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
-import { resolveFileIcon } from '@/lib/code/file-icons.ts';
+import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
 import { type CodeNote, listFileNotes } from '@/lib/code/notes.ts';
 import { listKeptLines } from '@/lib/code/pane.ts';
 import {
@@ -39,6 +39,28 @@ const SYNTAX_TOKENS = [
 
 const DIFF_TOKENS = ['added', 'added-strong', 'removed', 'removed-strong'];
 
+const COMMENT_TOKENS = ['alert', 'query', 'todo', 'highlight', 'strike'];
+
+const BETTER_COMMENTS_PATH = 'apps/web/src/lib/review/limits.ts';
+
+const BETTER_COMMENTS_SAMPLE = `// ! Never raise this past the server's own limit.
+// ? Should a finding count against it too?
+// TODO: read it from the settings once they are synced.
+// * The one number every review screen reads.
+//// const LIMIT = 40;
+// A plain comment stays grey.
+export const REVIEW_LIMIT = 24;
+
+/**
+ * Counts the notes a review can still take.
+ * ! Throws when the draft is already over the limit.
+ * todo cover drafts from an older commit
+ */
+export function countRoom(used: number) {
+  if (used > REVIEW_LIMIT) throw new Error('Over the limit.');
+  return REVIEW_LIMIT - used; // * What the composer shows
+}`;
+
 const ICON_SAMPLES = [
   'main.ts',
   'app.js',
@@ -69,8 +91,12 @@ const ICON_SAMPLES = [
   'package.json',
   'LICENSE',
   'CLAUDE.md',
+  'AGENTS.md',
+  '.husky/pre-commit',
   'bun.lock',
 ];
+
+const FOLDER_SAMPLES = ['apps', 'src', 'test', 'docs', 'scripts', 'assets', '.github'];
 
 const FENCE_SAMPLE = SAMPLE_CODE_AFTER.split('\n').slice(11, 29).join('\n');
 
@@ -127,13 +153,13 @@ function DiffEditor({ split }: { split: boolean }) {
   );
 }
 
-function FileEditor() {
+function FileEditor({ path, content }: { path: string; content: string }) {
   const handle = React.useRef<EditorHandle>(null);
   return (
     <EditorFrame className='h-[25rem]'>
       <CodeEditor
-        path={SAMPLE_CODE_PATH}
-        content={FENCE_SAMPLE}
+        path={path}
+        content={content}
         original={null}
         split={false}
         editable={false}
@@ -195,6 +221,20 @@ export function CodeSpecimens() {
           ))}
         </div>
       </Specimen>
+      <Specimen label='Folder icons · solid while closed, outlined while open, tinted when the name says what they hold'>
+        <div className='grid grid-cols-2 gap-x-4 gap-y-1.5 text-2xs text-fg-3 sm:grid-cols-7'>
+          {FOLDER_SAMPLES.map((name) => (
+            <span key={name} className='flex flex-col gap-1'>
+              {[false, true].map((open) => (
+                <span key={String(open)} className='flex items-center gap-1.5'>
+                  <Icon name={resolveFolderIcon(name, open)} size='sm' />
+                  {name}
+                </span>
+              ))}
+            </span>
+          ))}
+        </div>
+      </Specimen>
       <Specimen label='File icons · a pastel --file-* tint per language, and a viewed row muting them (file-icons-muted)'>
         {['', 'file-icons-muted text-fg-1'].map((muted) => (
           <div
@@ -217,7 +257,26 @@ export function CodeSpecimens() {
         <div className='min-w-0'>
           <CodeFence code={FENCE_SAMPLE} language='ts' />
         </div>
-        <FileEditor />
+        <FileEditor path={SAMPLE_CODE_PATH} content={FENCE_SAMPLE} />
+      </Specimen>
+      <Specimen label='Better Comments · a comment that starts with !, ?, TODO, * or // (after its marker, or a doc comment’s margin star) takes --code-comment-alert, -query, -todo, -highlight or -strike (app.css), in the editor and every chat fence'>
+        <div className='flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-2xs'>
+          {COMMENT_TOKENS.map((token) => (
+            <span
+              key={token}
+              className={cn(token === 'strike' && 'line-through')}
+              style={{ color: `var(--code-comment-${token})` }}
+            >
+              {token}
+            </span>
+          ))}
+        </div>
+        <div className='grid grid-cols-1 items-start gap-3 lg:grid-cols-2'>
+          <div className='min-w-0'>
+            <CodeFence code={BETTER_COMMENTS_SAMPLE} language='ts' />
+          </div>
+          <FileEditor path={BETTER_COMMENTS_PATH} content={BETTER_COMMENTS_SAMPLE} />
+        </div>
       </Specimen>
       <Specimen label='CodeEditor · a diff side by side, the default: the old file on the left, the new side editable (type to try it; in a task each edit saves to the working copy)'>
         <DiffEditor split />

@@ -89,7 +89,7 @@ function SectionNav() {
             data-highlighted={highlighted ? '' : undefined}
             onPointerEnter={() => setHovered(s.id)}
             className={cn(
-              'rounded-lg px-2 py-1 font-medium text-sm transition-colors duration-200 data-indicator-here:text-fg-4',
+              'rounded-lg px-2 py-1 font-medium text-sm data-indicator-here:text-fg-4',
               active ? 'text-fg-4' : 'text-fg-2'
             )}
           >

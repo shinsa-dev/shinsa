@@ -16,7 +16,7 @@ export interface CodeLine {
 const VISIBLE_LINES = 14;
 
 const SHOW_MORE =
-  'flex h-7 w-full cursor-pointer items-center justify-center gap-1 border-border border-t text-2xs text-fg-2 transition-colors duration-150 hover:bg-bg-a1 hover:text-fg-4 active:bg-bg-a1 active:text-fg-4';
+  'flex h-7 w-full cursor-pointer items-center justify-center gap-1 border-border border-t text-2xs text-fg-2 hover:bg-bg-a1 hover:text-fg-4 active:bg-bg-a1 active:text-fg-4';
 
 export function ShowMoreButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
@@ -29,17 +29,24 @@ export function ShowMoreButton({ label, onClick }: { label: string; onClick: () 
 
 export function CodeLines({
   lines,
+  language = null,
   gutter = null,
   wrap = false,
   tone = 'default',
 }: {
   lines: CodeLine[];
+  language?: string | null;
   gutter?: 'numbers' | null;
   wrap?: boolean;
   tone?: 'default' | 'failed';
 }) {
   const [expanded, setExpanded] = React.useState(false);
   const shown = expanded || lines.length <= VISIBLE_LINES + 2 ? lines : lines.slice(0, VISIBLE_LINES);
+  const source = React.useMemo(
+    () => (language ? shown.map((line) => line.text).join('\n') : null),
+    [language, shown]
+  );
+  const tokens = useLanguageTokens(source, language);
   return (
     <>
       <div className='overflow-x-auto'>
@@ -64,7 +71,7 @@ export function CodeLines({
                   wrap ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'
                 )}
               >
-                <TokenText text={line.text} tokens={line.tokens} />
+                <TokenText text={line.text} tokens={line.tokens ?? tokens?.[index]} />
               </span>
             </div>
           ))}
@@ -97,7 +104,7 @@ export function DetailBlock({
         {copy && (
           <CopyButton
             text={copy}
-            className='absolute top-1 right-1 bg-card opacity-0 transition-opacity duration-150 group-hover/block:opacity-100'
+            className='absolute top-1 right-1 bg-card opacity-0 group-hover/block:opacity-100'
           />
         )}
       </div>
@@ -118,11 +125,10 @@ export function HighlightedBlock({
   wrap?: boolean;
   tone?: 'default' | 'failed';
 }) {
-  const tokens = useLanguageTokens(code, language);
-  const lines = splitLines(code).map((text, index) => ({ text, tokens: tokens?.[index] }));
+  const lines = React.useMemo(() => splitLines(code).map((text) => ({ text })), [code]);
   return (
     <DetailBlock label={label} copy={code}>
-      <CodeLines lines={lines} wrap={wrap} tone={tone} />
+      <CodeLines lines={lines} language={language} wrap={wrap} tone={tone} />
     </DetailBlock>
   );
 }

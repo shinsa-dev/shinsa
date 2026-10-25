@@ -15,7 +15,8 @@ function setup(props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) {
   const element = viewport.current as HTMLDivElement;
   const track = view.container.querySelector('[data-slot=scroll-area-scrollbar]') as HTMLElement;
   const thumb = view.container.querySelector('[data-slot=scroll-area-thumb]') as HTMLElement;
-  return { view, viewport: element, track, thumb };
+  const mask = view.container.querySelector('[data-slot=scroll-area-fade]') as HTMLElement;
+  return { view, viewport: element, track, thumb, mask };
 }
 
 afterEach(() => {
@@ -36,7 +37,7 @@ describe('ScrollArea', () => {
 
   it('places the thumb and the edge fades from the scroll position', () => {
     const onScroll = mock();
-    const { viewport, track, thumb } = setup({ onScroll });
+    const { viewport, track, thumb, mask } = setup({ onScroll });
     place(viewport, { scrollTop: 396, scrollHeight: 1000, clientHeight: 208 });
     fireEvent.scroll(viewport);
 
@@ -45,16 +46,36 @@ describe('ScrollArea', () => {
     expect(track.hasAttribute('data-scrolling')).toBe(true);
     expect(thumb.style.height).toBe(`${geometry.size}px`);
     expect(thumb.style.transform).toBe(`translate3d(0, ${geometry.offset}px, 0)`);
-    expect(viewport.hasAttribute('data-overflow-y-start')).toBe(true);
-    expect(viewport.hasAttribute('data-overflow-y-end')).toBe(true);
+    expect(mask.hasAttribute('data-overflow-y-start')).toBe(true);
+    expect(mask.hasAttribute('data-overflow-y-end')).toBe(true);
     expect(onScroll).toHaveBeenCalledTimes(1);
   });
 
+  it('fades through a still box around the scroller, on timelines named for this instance', () => {
+    const { viewport, mask, view } = setup();
+    const other = render(<ScrollArea>other</ScrollArea>).container.querySelector(
+      '[data-slot=scroll-area-fade]'
+    ) as HTMLElement;
+    expect(viewport.parentElement).toBe(mask);
+    expect(mask.classList.contains('scroll-fade')).toBe(true);
+    expect(mask.hasAttribute('data-fade-scope')).toBe(true);
+    expect(viewport.classList.contains('scroll-fade-source')).toBe(true);
+    expect(viewport.classList.contains('scroll-fade')).toBe(false);
+    const name = mask.style.getPropertyValue('--fade-timeline-y');
+    expect(name).toStartWith('--fade-y');
+    expect(other.style.getPropertyValue('--fade-timeline-y')).not.toBe(name);
+    view.unmount();
+  });
+
   it('leaves the edges alone without fades', () => {
-    const { viewport } = setup({ fade: false });
+    const { viewport, mask } = setup({ fade: false });
     place(viewport, { scrollTop: 50, scrollHeight: 1000, clientHeight: 208 });
     fireEvent.scroll(viewport);
-    expect(viewport.hasAttribute('data-overflow-y-start')).toBe(false);
+    expect(mask.hasAttribute('data-overflow-y-start')).toBe(false);
+    expect(mask.classList.contains('scroll-fade')).toBe(false);
+    expect(mask.hasAttribute('data-fade-scope')).toBe(false);
+    expect(mask.style.getPropertyValue('--fade-timeline-y')).toBe('');
+    expect(viewport.classList.contains('scroll-fade-source')).toBe(false);
   });
 
   it('hides the scrollbar again a moment after scrolling stops', () => {

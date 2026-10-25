@@ -14,6 +14,7 @@ import { CHAT_COLUMN } from '@/components/layout/surface/card.ts';
 import { Composer } from '@/components/task/composer.tsx';
 import { useOutbox } from '@/hooks/use-outbox.ts';
 import { useStickToBottom } from '@/hooks/use-stick-to-bottom.ts';
+import { useTranscriptWindow } from '@/hooks/use-transcript-window.ts';
 import { selectRerunRun } from '@/lib/accounts/account.ts';
 import { listChatRuns, listDelegationPath } from '@/lib/chat/delegations.ts';
 import { TaskEvidence } from '@/lib/chat/run-evidence.ts';
@@ -24,33 +25,70 @@ import {
   listHumanMessages,
   resolveRunMessages,
 } from '@/lib/chat/timeline.ts';
+import {
+  findRunBlock,
+  listTranscriptBlocks,
+  resolveChatRunId,
+  type TranscriptBlock,
+} from '@/lib/chat/window.ts';
 import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
-import { hasRounds, listRoundSections } from '@/lib/tasks/rounds.ts';
+import { hasRounds } from '@/lib/tasks/rounds.ts';
 
 const NO_MESSAGES: never[] = [];
 
-interface RunListProps {
+interface TranscriptProps {
+  state: ShinsaState;
+  task: Task;
+  runs: Run[];
+  focusRunId: string | null;
+  scroller: React.RefObject<HTMLDivElement | null>;
+  content: React.RefObject<HTMLDivElement | null>;
+}
+
+function TranscriptBlockView({
+  block,
+  task,
+  byRun,
+  waiting,
+  rerunId,
+}: {
+  block: TranscriptBlock;
   task: Task;
   byRun: Map<string, HumanMessage[]>;
   waiting: boolean;
   rerunId: string | null;
+}) {
+  switch (block.kind) {
+    case 'message':
+      return (
+        <div className={ROW}>
+          <UserMessage text={block.message.text} pending={block.message.pending === true} />
+        </div>
+      );
+    case 'round':
+      return (
+        <>
+          <RoundDivider round={block.round} first={block.first} />
+          <div className={ROW}>
+            <UserMessage text={block.round.request} />
+          </div>
+        </>
+      );
+    case 'run':
+      return (
+        <RunSection
+          run={block.run}
+          task={task}
+          messages={byRun.get(block.run.id) ?? NO_MESSAGES}
+          first={block.first}
+          waiting={waiting && block.run.endedAt === null}
+          rerun={block.run.id === rerunId}
+        />
+      );
+  }
 }
 
-function RunList({ runs, leading, ...props }: RunListProps & { runs: Run[]; leading: boolean }) {
-  return runs.map((run, index) => (
-    <RunSection
-      key={run.id}
-      run={run}
-      task={props.task}
-      messages={props.byRun.get(run.id) ?? NO_MESSAGES}
-      first={index === 0 && leading}
-      waiting={props.waiting && run.endedAt === null}
-      rerun={run.id === props.rerunId}
-    />
-  ));
-}
-
-function Transcript({ state, task, runs }: { state: ShinsaState; task: Task; runs: Run[] }) {
+function Transcript({ state, task, runs, focusRunId, scroller, content }: TranscriptProps) {
   const sending = useOutbox(task.id);
   const rounds = hasRounds(task);
   const messages = React.useMemo(
@@ -58,33 +96,27 @@ function Transcript({ state, task, runs }: { state: ShinsaState; task: Task; run
     [task, sending, rounds]
   );
   const { preamble, byRun } = React.useMemo(() => resolveRunMessages(runs, messages), [runs, messages]);
-  const list: RunListProps = {
-    task,
-    byRun,
-    waiting: listOpenGates(state, task.id).some(isAgentQuestion),
-    rerunId: selectRerunRun(task, runs)?.id ?? null,
-  };
+  const blocks = React.useMemo(
+    () => listTranscriptBlocks(task, runs, preamble, rounds),
+    [task, runs, preamble, rounds]
+  );
+  const focusIndex = findRunBlock(blocks, resolveChatRunId(state.runs, focusRunId));
+  const start = useTranscriptWindow({ count: blocks.length, focusIndex, scroller, content });
+  const waiting = listOpenGates(state, task.id).some(isAgentQuestion);
+  const rerunId = selectRerunRun(task, runs)?.id ?? null;
   return (
     <>
       {runs.length === 0 && <EmptyState icon='IconRobot' {...describeEmptyChat(task)} className='min-h-80' />}
-      {preamble.map((message) => (
-        <div key={`${message.at}-${message.text.length}`} className={ROW}>
-          <UserMessage text={message.text} pending={message.pending === true} />
-        </div>
+      {blocks.slice(start).map((block) => (
+        <TranscriptBlockView
+          key={block.key}
+          block={block}
+          task={task}
+          byRun={byRun}
+          waiting={waiting}
+          rerunId={rerunId}
+        />
       ))}
-      {rounds ? (
-        listRoundSections(task, runs).map((section, index) => (
-          <React.Fragment key={section.round.number}>
-            <RoundDivider round={section.round} first={index === 0 && preamble.length === 0} />
-            <div className={ROW}>
-              <UserMessage text={section.round.request} />
-            </div>
-            <RunList {...list} runs={section.runs} leading />
-          </React.Fragment>
-        ))
-      ) : (
-        <RunList {...list} runs={runs} leading={preamble.length === 0} />
-      )}
     </>
   );
 }
@@ -119,13 +151,21 @@ export function ChatTab({
           <TaskEvidence.Provider value={evidence}>
             <OpenDelegations.Provider value={opened}>
               <div ref={content} className={cn(PAGE_COLUMN, CHAT_COLUMN, 'flex flex-col pt-2 pb-6')}>
-                <Transcript state={state} task={task} runs={runs} />
+                <Transcript
+                  key={task.id}
+                  state={state}
+                  task={task}
+                  runs={runs}
+                  focusRunId={focusRunId}
+                  scroller={scroller}
+                  content={content}
+                />
               </div>
             </OpenDelegations.Provider>
           </TaskEvidence.Provider>
         </ScrollArea>
-        {detached && (
-          <div className='pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center'>
+        <div className='pointer-events-none absolute inset-x-0 bottom-3 z-30 flex justify-center'>
+          {detached && (
             <Button
               variant='outline'
               size='sm'
@@ -135,8 +175,8 @@ export function ChatTab({
             >
               Jump to latest
             </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {hint && (
         <Composer

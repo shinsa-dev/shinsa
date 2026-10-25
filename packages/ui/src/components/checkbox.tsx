@@ -27,7 +27,6 @@ function Checkbox({
       data-slot='checkbox'
       className={cn(
         'peer relative inline-grid shrink-0 place-items-center rounded-checkbox border border-icon-1 bg-background text-primary-foreground outline-none',
-        'transition-[background-color,border-color,scale] duration-150 ease-out',
         'not-data-disabled:cursor-pointer after:absolute after:-inset-1.5',
         'not-data-disabled:not-data-checked:hover:border-fg-1 not-data-disabled:not-data-checked:active:border-fg-1',
         'not-data-disabled:active:scale-95 not-data-disabled:[label:active_&]:scale-95',

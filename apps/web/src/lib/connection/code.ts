@@ -31,7 +31,9 @@ export interface CodeSearch {
   glob: string;
 }
 
-const CACHE_LIMIT = 300;
+export const CODE_READ_LIMIT = 300;
+
+export const CODE_SEARCH_LIMIT = 20;
 
 const IDLE = { status: 'idle' } as const;
 
@@ -41,24 +43,36 @@ const reads = new Map<string, Promise<unknown>>();
 
 const settled = new Map<string, Loaded<unknown>>();
 
-function remember<T>(key: string, create: () => Promise<T>): Promise<T> {
+const latest = new Map<string, string>();
+
+function touch<V>(map: Map<string, V>, key: string, value: V, limit = CODE_READ_LIMIT) {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size <= limit) return null;
+  const oldest = map.keys().next().value ?? '';
+  map.delete(oldest);
+  return oldest;
+}
+
+function remember<T>(url: string, key: string, create: () => Promise<T>): Promise<T> {
   const known = reads.get(key);
-  if (known) return known as Promise<T>;
+  if (known) {
+    touch(reads, key, known);
+    return known as Promise<T>;
+  }
   const pending = create();
-  reads.set(key, pending);
+  const evicted = touch(reads, key, pending);
+  if (evicted !== null) settled.delete(evicted);
   pending.then(
     (value) => {
-      if (reads.get(key) === pending) settled.set(key, { status: 'ready', value });
+      if (reads.get(key) !== pending) return;
+      settled.set(key, { status: 'ready', value });
+      touch(latest, url, key);
     },
     () => {
       if (reads.get(key) === pending) reads.delete(key);
     }
   );
-  if (reads.size > CACHE_LIMIT) {
-    const oldest = reads.keys().next().value ?? '';
-    reads.delete(oldest);
-    settled.delete(oldest);
-  }
   return pending;
 }
 
@@ -81,12 +95,13 @@ function resolveVersionedUrl(url: string, version: string) {
 
 function requestCodeRead<T>(url: string, version = ''): Promise<T> {
   const key = resolveVersionedUrl(url, version);
-  return remember(key, () => requestJson<T>(key));
+  return remember(url, key, () => requestJson<T>(key));
 }
 
 function selectSettled<T>(url: string | null, version: string): Loaded<T> {
   if (url === null) return IDLE;
-  return (settled.get(resolveVersionedUrl(url, version)) as Loaded<T> | undefined) ?? LOADING;
+  const known = settled.get(resolveVersionedUrl(url, version)) ?? settled.get(latest.get(url) ?? '');
+  return (known as Loaded<T> | undefined) ?? LOADING;
 }
 
 export function useCodeRead<T>(url: string | null, version = ''): Loaded<T> {
@@ -94,7 +109,7 @@ export function useCodeRead<T>(url: string | null, version = ''): Loaded<T> {
   const [loaded, setLoaded] = React.useState<{ url: string | null; key: string | null; value: Loaded<T> }>(
     () => ({ url, key, value: selectSettled<T>(url, version) })
   );
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (key === null || url === null) return;
     let alive = true;
     requestCodeRead<T>(url, version).then(
@@ -109,7 +124,7 @@ export function useCodeRead<T>(url: string | null, version = ''): Loaded<T> {
       alive = false;
     };
   }, [key, url, version]);
-  if (loaded.key === key) return loaded.value;
+  if (loaded.key === key && loaded.value.status !== 'loading') return loaded.value;
   const known = selectSettled<T>(url, version);
   if (known.status === 'loading' && loaded.url === url) return loaded.value;
   return known;
@@ -161,6 +176,10 @@ export function requestTaskDiff(task: Task, base: string, head: string) {
   );
 }
 
+export function requestRepoPaths(task: Task, ref: string) {
+  return requestCodeRead<RepoPaths>(resolveCodeUrl(task.id, 'paths', { ref }), resolveReadVersion(task, ref));
+}
+
 export function useRepoPaths(task: Task, ref: string | null) {
   const url = ref === null ? null : resolveCodeUrl(task.id, 'paths', { ref });
   return useCodeRead<RepoPaths>(url, ref === null ? '' : resolveReadVersion(task, ref));
@@ -181,7 +200,7 @@ export function useRepoTrees(task: Task, ref: string, dirs: readonly string[]) {
   const key = urls.join('\n');
   const [failures, setFailures] = React.useState<ReadonlyMap<string, string>>(new Map());
   const [, settle] = React.useReducer((count: number) => count + 1, 0);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     let alive = true;
     for (const url of key.split('\n')) {
       requestCodeRead<RepoTree>(url, version).then(
@@ -209,6 +228,13 @@ export function useRepoTrees(task: Task, ref: string, dirs: readonly string[]) {
 export function useTaskDiff(task: Task, base: string | null, head: string | null) {
   const url = base === null || head === null ? null : resolveCodeUrl(task.id, 'diff', { base, head });
   return useCodeRead<TaskDiff>(url, head === null ? '' : resolveReadVersion(task, head));
+}
+
+export function requestFileDiff(task: Task, base: string, head: string, path: string) {
+  return requestCodeRead<TaskDiff>(
+    resolveCodeUrl(task.id, 'diff', { base, head, path }),
+    resolveReadVersion(task, head)
+  );
 }
 
 export function useFileDiff(task: Task, base: string | null, head: string | null, path: string) {
@@ -262,7 +288,10 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
     const fail = (message: string) => {
       if (alive) setView({ key, view: { loaded: { status: 'error', message }, searching: false } });
     };
-    setView({ key, view: { loaded: LOADING, searching: true } });
+    setView((current) => ({
+      key,
+      view: { loaded: holdLoaded(current.view.loaded, LOADING), searching: true },
+    }));
     requestLines<SearchLine>(key, undefined, (line) => {
       if (line.kind === 'failed') {
         failure = line.message;
@@ -281,7 +310,7 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
           fail(failure);
           return;
         }
-        searches.set(key, result);
+        touch(searches, key, result, CODE_SEARCH_LIMIT);
         show(false);
       },
       (error: unknown) => fail(describeFailure(error))
@@ -293,7 +322,7 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
   if (key === null) return { loaded: IDLE, searching: false };
   const finished = searches.get(key);
   if (finished) return { loaded: { status: 'ready', value: finished }, searching: false };
-  return view.key === key ? view.view : { loaded: LOADING, searching: true };
+  return view.key === key ? view.view : { loaded: holdLoaded(view.view.loaded, LOADING), searching: true };
 }
 
 export function resolveRawUrl(taskId: string, ref: string, path: string) {

@@ -1,5 +1,4 @@
 import { isTaskSettled, listWaitsOn, type ShinsaState, type Task } from '@shinsa/core';
-import { ContextMenu, ContextMenuTrigger } from '@shinsa/ui/components/context-menu';
 import {
   DropdownMenuContent,
   DropdownMenuItem,
@@ -8,6 +7,8 @@ import {
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
+import * as React from 'react';
+import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
@@ -29,6 +30,8 @@ import { ChainArrow, WaitsOnLinks } from './waits-on.tsx';
 
 export const ROADMAP_COLUMNS =
   'grid-cols-[minmax(0,1fr)_7.5rem_12rem_4.5rem_4.5rem] max-md:grid-cols-[minmax(0,1fr)_auto]';
+
+export const ROADMAP_ROW_HEIGHT = 36;
 
 const DEPTH_INDENT = ['', '', 'ps-6.5', 'ps-13'];
 
@@ -74,7 +77,7 @@ function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; gro
   return <StatusText state={state} task={task} className='truncate text-xs' />;
 }
 
-export function RoadmapRow({
+export const RoadmapRow = React.memo(function RoadmapRowItem({
   state,
   task,
   group,
@@ -89,8 +92,8 @@ export function RoadmapRow({
   const project = selectTaskProject(state, task);
   const level = Math.min(depth, 3);
   return (
-    <ContextMenu>
-      <ContextMenuTrigger
+    <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
+      <LazyMenuTrigger
         render={
           // biome-ignore lint/a11y/useSemanticElements: the row holds a pull request link, so it cannot be a button
           <div
@@ -105,7 +108,7 @@ export function RoadmapRow({
                 navigate(resolveTaskPath(task));
               }
             }}
-            className={`grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none transition-colors duration-150 hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1 ${ROADMAP_COLUMNS}`}
+            className={`grid h-9 w-full cursor-pointer items-center gap-4 border-border border-b px-3 text-left text-xs outline-none hover:not-has-[a:hover,button:hover]:bg-bg-a1 active:not-has-[a:active,button:active]:bg-bg-a1 data-popup-open:bg-bg-a1 ${ROADMAP_COLUMNS}`}
           />
         }
       >
@@ -133,8 +136,7 @@ export function RoadmapRow({
         <span className='text-right text-2xs text-fg-2'>
           <TimeAgo at={task.updatedAt} />
         </span>
-      </ContextMenuTrigger>
-      <TaskMenuItems state={state} task={task} />
-    </ContextMenu>
+      </LazyMenuTrigger>
+    </LazyMenu>
   );
-}
+});

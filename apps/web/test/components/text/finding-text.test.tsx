@@ -32,7 +32,7 @@ describe('a finding’s code', () => {
     );
     expect(view.getByRole('button', { name: 'Collapse code' }).getAttribute('aria-expanded')).toBe('true');
     expect(view.getByRole('button', { name: 'Expand code' }).getAttribute('aria-expanded')).toBe('false');
-    expect(view.getAllByText('Loading…')).toHaveLength(1);
+    expect(view.getAllByText('Reading the lines')).toHaveLength(1);
     expect(view.getByText('The loop skips the last item')).toBeDefined();
     expect(view.getByText('Suggested fix')).toBeDefined();
     view.unmount();

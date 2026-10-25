@@ -689,13 +689,28 @@
   initial-value: 0px;
 }
 
-/* Goes on the *scrolling* element, never on an overlay above it: a gradient
-   overlay has to guess the surface behind it, so on anything but the page
-   background it paints over the container's own edge (eating a card border).
-   Masking the content instead makes no assumption about what's underneath.
-   Each axis is one mask layer; `intersect` lets both apply at once. */
+/* A mask, never a gradient overlay: an overlay has to guess the surface
+   behind it, so on anything but the page background it paints over the
+   container's own edge (eating a card border). Masking the content instead
+   makes no assumption about what's underneath. Each axis is one mask layer;
+   `intersect` lets both apply at once.
+
+   On a scroller, a mask on the scrolling element itself makes the browser
+   repaint the whole masked scroller on every scroll frame. So ScrollArea and
+   ScrollFade put it on a still box that wraps the scroller
+   (`data-fade-scope`), with `scroll-fade-source` on the scroller inside: the
+   mask is painted once and the content scrolls under it on the compositor.
+   The wrapper reads the scroller's position through the named scroll
+   timelines it scopes (`timeline-scope`); the names come from
+   `--fade-timeline-y` / `--fade-timeline-x`, which the components make unique
+   per instance so nested scrollers never share one. Without
+   `data-fade-scope` the element reads its own timelines: right for a
+   clipping element that does not scroll (`CardAction`), and a bare
+   `scroll-fade` on a scroller still fades, with that repaint. */
 @utility scroll-fade {
   --fade-size: 1.5rem;
+  --fade-timeline-y: --scroll-fade-y;
+  --fade-timeline-x: --scroll-fade-x;
   mask-image:
     linear-gradient(
       to bottom,
@@ -747,7 +762,7 @@
     animation:
       scroll-fade-t linear both,
       scroll-fade-b linear both;
-    animation-timeline: scroll(self block), scroll(self block);
+    animation-timeline: var(--fade-timeline-y), var(--fade-timeline-y);
     animation-range:
       0 var(--fade-size),
       calc(100% - var(--fade-size)) 100%;
@@ -756,7 +771,7 @@
       animation:
         scroll-fade-l linear both,
         scroll-fade-r linear both;
-      animation-timeline: scroll(self inline), scroll(self inline);
+      animation-timeline: var(--fade-timeline-x), var(--fade-timeline-x);
       animation-range:
         0 var(--fade-size),
         calc(100% - var(--fade-size)) 100%;
@@ -768,14 +783,32 @@
         scroll-fade-b linear both,
         scroll-fade-l linear both,
         scroll-fade-r linear both;
-      animation-timeline: scroll(self block), scroll(self block), scroll(self inline), scroll(self inline);
+      animation-timeline:
+        var(--fade-timeline-y), var(--fade-timeline-y), var(--fade-timeline-x), var(--fade-timeline-x);
       animation-range:
         0 var(--fade-size),
         calc(100% - var(--fade-size)) 100%,
         0 var(--fade-size),
         calc(100% - var(--fade-size)) 100%;
     }
+
+    scroll-timeline:
+      var(--fade-timeline-y) block,
+      var(--fade-timeline-x) inline;
+
+    &[data-fade-scope] {
+      scroll-timeline: none;
+      timeline-scope: var(--fade-timeline-y), var(--fade-timeline-x);
+    }
   }
+}
+
+/* The scroller inside a `scroll-fade` wrapper (`data-fade-scope`): it names
+   the scroll timelines the wrapper's fade animates from. */
+@utility scroll-fade-source {
+  scroll-timeline:
+    var(--fade-timeline-y) block,
+    var(--fade-timeline-x) inline;
 }
 
 @keyframes scroll-fade-t {
@@ -1183,10 +1216,10 @@
   color: var(--icon-color, currentColor);
 }
 
-/* A disclosure chevron turns on the move clock and brightens on the hover
-   clock, so it lands with its trigger's text and fill. */
+/* A disclosure chevron turns on the move clock; its colour follows its
+   trigger's hover at once, like every hover. */
 @utility transition-disclosure {
-  transition-property: rotate, transform, color;
-  transition-duration: 200ms, 200ms, 150ms;
+  transition-property: rotate, transform;
+  transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }

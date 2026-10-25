@@ -38,6 +38,19 @@ describe('useAnimatedIndicator', () => {
     expect(indicator.style.transform).toBe('translate(0px, 0px) scale(var(--hl-press-scale, 1))');
   });
 
+  it('appears and moves at once, with no transition, when it does not slide', async () => {
+    const { indicator, getByTestId } = setup(<List options={{ slide: false }}>{items()}</List>);
+    expect(indicator.style.opacity).toBe('1');
+    expect(indicator.style.transition).toBe('none');
+    const b = getByTestId('b');
+    place(b, { offsetLeft: 0, offsetTop: 28, offsetWidth: 120, offsetHeight: 24, offsetParent: null });
+    getByTestId('a').removeAttribute('data-highlighted');
+    b.setAttribute('data-highlighted', '');
+    await act(flush);
+    expect(indicator.style.transition).toBe('none');
+    expect(indicator.style.transform).toBe('translate(0px, 28px) scale(var(--hl-press-scale, 1))');
+  });
+
   it('slides to the next marked item and mirrors its variant', async () => {
     const { indicator, getByTestId } = setup(<List>{items()}</List>);
     const a = getByTestId('a');
@@ -130,6 +143,29 @@ describe('useAnimatedIndicator', () => {
     expect(indicator.style.getPropertyValue('--hl-press-scale')).toBe('0.9, 0.8');
     document.dispatchEvent(new PointerEvent('pointercancel'));
     expect(indicator.style.getPropertyValue('--hl-press-scale')).toBe('');
+  });
+
+  it('lands the press and its release with no transition, keeping the slide for the next move', () => {
+    const { indicator, getByTestId } = setup(<List>{items()}</List>);
+    place(indicator, { offsetWidth: 100, offsetHeight: 20 });
+    expect(indicator.style.transition).toBe(INDICATOR_TRANSITION);
+    const seen: string[] = [];
+    const write = indicator.style.setProperty.bind(indicator.style);
+    const remove = indicator.style.removeProperty.bind(indicator.style);
+    indicator.style.setProperty = (name, value) => {
+      if (name === '--hl-press-scale') seen.push(`press ${indicator.style.transition}`);
+      write(name, value);
+    };
+    indicator.style.removeProperty = (name) => {
+      if (name === '--hl-press-scale') seen.push(`release ${indicator.style.transition}`);
+      return remove(name);
+    };
+
+    getByTestId('a').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    document.dispatchEvent(new PointerEvent('pointerup'));
+
+    expect(seen).toEqual(['press none', 'release none']);
+    expect(indicator.style.transition).toBe(INDICATOR_TRANSITION);
   });
 
   it('does not deflate an unmeasured indicator, or at all without press', () => {

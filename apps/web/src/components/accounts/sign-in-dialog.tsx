@@ -9,9 +9,9 @@ import {
   DialogTitle,
 } from '@shinsa/ui/components/dialog';
 import { Input } from '@shinsa/ui/components/input';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { useHeldValue } from '@shinsa/ui/hooks/use-dialog-state';
 import * as React from 'react';
+import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { describeSignedIn, LOGIN_TITLE, type LoginView, resolveLoginView } from '@/lib/accounts/sign-in.ts';
 import {
   closeSignIn,
@@ -102,7 +102,7 @@ function LoginBody({
     case 'finishing':
       return (
         <>
-          <Spinner size='lg' className='text-fg-2' />
+          <LoadingSpinner label='Signing in' />
           <DialogFooter>
             <CancelButton />
           </DialogFooter>

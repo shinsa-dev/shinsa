@@ -31,7 +31,7 @@ function RoundDetail({
         <button
           type='button'
           onClick={() => onOpen(run.id)}
-          className='flex cursor-pointer items-center gap-1 self-start text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+          className='flex cursor-pointer items-center gap-1 self-start text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
         >
           Open in chat
           <Icon size='sm' name='IconChevronRightSmall' />

@@ -151,7 +151,7 @@ function RolesToggle({ open, onToggle }: { open: boolean; onToggle: () => void }
       type='button'
       aria-expanded={open}
       onClick={onToggle}
-      className='flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded-control-sm text-2xs text-fg-2 outline-none transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+      className='flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded-control-sm text-2xs text-fg-2 outline-none hover:text-fg-4 active:text-fg-4'
     >
       Per role
       <SectionChevron open={open} />

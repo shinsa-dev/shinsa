@@ -22,7 +22,7 @@ export function HealthCard({ banner, onDismiss }: { banner: HealthBannerView; on
         render={
           <button
             type='button'
-            className='shrink-0 cursor-default text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+            className='shrink-0 cursor-default text-fg-2 hover:text-fg-4 active:text-fg-4'
           />
         }
         trigger={HEALTH_COPY.details}

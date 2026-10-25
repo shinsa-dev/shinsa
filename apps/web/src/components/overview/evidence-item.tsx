@@ -4,6 +4,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
+import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { useEvidenceText } from '@/hooks/use-evidence-text.ts';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { resolveEvidenceKind } from '@/lib/overview/evidence.ts';
@@ -12,7 +13,7 @@ function TextEvidence({ uri }: { uri: string }) {
   const text = useEvidenceText(uri);
   return (
     <pre className='corner-superellipse/1.125 max-h-64 overflow-auto rounded-control bg-bg-2 px-2.5 py-2 font-mono text-2xs text-fg-3'>
-      {text ?? 'Loading…'}
+      {text ?? <LoadingLine label='Reading the evidence' />}
     </pre>
   );
 }
@@ -32,7 +33,9 @@ function EvidenceImage({ evidence }: { evidence: Evidence }) {
           ref={viewer.recordOrigin(0)}
           src={evidence.uri}
           alt={evidence.title}
-          className='max-h-96 w-full object-contain'
+          loading='lazy'
+          decoding='async'
+          className='aspect-[16/10] max-h-96 w-full object-contain'
         />
       </button>
       <ImageViewer images={images} viewer={viewer} />
@@ -62,7 +65,7 @@ function EvidenceBody({ evidence }: { evidence: Evidence }) {
           href={evidence.uri}
           target='_blank'
           rel='noreferrer'
-          className='corner-superellipse/1.125 flex h-7 items-center gap-2 rounded-control bg-bg-2 px-2.5 text-fg-4 text-xs transition-colors duration-150 hover:bg-bg-3 active:bg-bg-3'
+          className='corner-superellipse/1.125 flex h-7 items-center gap-2 rounded-control bg-bg-2 px-2.5 text-fg-4 text-xs hover:bg-bg-3 active:bg-bg-3'
         >
           <Icon size='sm' name='IconArrowUpRight' />
           <Truncate>{evidence.uri}</Truncate>

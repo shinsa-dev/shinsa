@@ -23,7 +23,7 @@ export function InfoPopover({
 }
 
 const INFO_ACTION =
-  'flex h-8 w-full cursor-pointer items-center gap-1.5 border-border border-t px-3 text-left text-primary-text text-xs no-underline outline-none transition-opacity duration-150 hover:opacity-80 active:opacity-80';
+  'flex h-8 w-full cursor-pointer items-center gap-1.5 border-border border-t px-3 text-left text-primary-text text-xs no-underline outline-none hover:opacity-80 active:opacity-80';
 
 export function InfoAction(props: { label: string } & ({ href: string } | { onClick: () => void })) {
   if ('href' in props) {

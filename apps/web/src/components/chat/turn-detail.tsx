@@ -4,6 +4,7 @@ import { ExpandRow } from '@/components/chat/chat-line.tsx';
 import { ToolGroup } from '@/components/chat/tool-group.tsx';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Markdown } from '@/components/text/markdown.tsx';
+import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import type { WorkItem } from '@/lib/chat/timeline.ts';
 import { formatBrief } from '@/lib/chat/turns.ts';
 
@@ -41,11 +42,14 @@ function DetailItem({ item, live }: { item: WorkItem; live: boolean }) {
   }
 }
 
+const FIRST_ITEMS = 40;
+
 export function TurnDetail({ items, run }: { items: WorkItem[]; run: Run }) {
   const live = run.endedAt === null;
+  const shown = useProgressiveCount(items.length, FIRST_ITEMS);
   return (
     <div className='flex min-w-0 flex-col gap-4'>
-      {items.map((item, index) => (
+      {items.slice(0, shown).map((item, index) => (
         <DetailItem key={item.key} item={item} live={live && index === items.length - 1} />
       ))}
     </div>

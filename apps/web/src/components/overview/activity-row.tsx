@@ -15,7 +15,7 @@ function ActorLabel({ state, actor }: { state: ShinsaState; actor: ActivityActor
   return (
     <InAppLink
       path={resolveTaskPath(resolveTaskTarget(state, actor.taskId))}
-      className='text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+      className='text-fg-2 hover:text-fg-4 active:text-fg-4'
     >
       {actor.label}
     </InAppLink>
@@ -68,7 +68,7 @@ export function ActivityRow({
           <button
             type='button'
             onClick={() => onOpenRun(run.id)}
-            className='flex w-fit cursor-pointer items-center gap-1 text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+            className='flex w-fit cursor-pointer items-center gap-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
           >
             Open in chat
             <Icon size='sm' name='IconChevronRightSmall' />

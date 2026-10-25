@@ -12,7 +12,9 @@ import { FileLink } from '@/components/links/file.tsx';
 import { PrLink } from '@/components/links/pull-request.tsx';
 import { RepoChip } from '@/components/links/repo.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
+import { useShinsaSelector } from '@/lib/connection/selectors.ts';
 import { useConnection } from '@/lib/connection/socket.ts';
+import { createScopedCache } from '@/lib/format/cache.ts';
 import {
   describeReference,
   resolveCatalog,
@@ -21,20 +23,24 @@ import {
   selectRepo,
   splitReferenceText,
 } from '@/lib/tasks/references.ts';
-import { useRouteTaskId } from '@/router.ts';
+import { resolveRouteTaskId, useRoute, useRouteTaskId } from '@/router.ts';
 
 function useReferenceScope() {
   const { state } = useConnection();
   return useRouteTaskId(state);
 }
 
+const LINKED_LIMIT = 400;
+
+const linked = createScopedCache<ReturnType<typeof resolveCatalog>, string>(LINKED_LIMIT);
+
 export function useReferenceMarkdown(text: string) {
-  const { state } = useConnection();
-  const scope = useReferenceScope();
-  const catalog = resolveCatalog(state);
-  return React.useMemo(
-    () => linkReferences(text, catalog, { exclude: new Set(scope ? [scope] : []) }),
-    [text, catalog, scope]
+  const route = useRoute();
+  const selectScope = React.useCallback((state: ShinsaState) => resolveRouteTaskId(state, route), [route]);
+  const scope = useShinsaSelector(selectScope);
+  const catalog = useShinsaSelector(resolveCatalog) ?? resolveCatalog(null);
+  return linked(catalog).read(`${scope ?? ''}\u0000${text}`, () =>
+    linkReferences(text, catalog, { exclude: new Set(scope ? [scope] : []) })
   );
 }
 

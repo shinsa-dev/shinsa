@@ -7,13 +7,13 @@ import { cva, type VariantProps } from 'class-variance-authority';
 const buttonVariants = cva(
   [
     'group/button relative isolate flex shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap font-medium',
-    'corner-superellipse/1.125 transition-[color,opacity,scale] duration-150 ease-out',
+    'corner-superellipse/1.125',
     // Fill + shadow live on ::before so pressing deflates only the background —
     // the label, icons and layout stay fixed. The press is a fixed inset
     // (tokens in globals.css), so a full-width button presses exactly like a
-    // short one.
+    // short one. The press lands in the frame it happens: no transition on
+    // the inset, the fill or the link button's scale.
     "before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-[inherit] before:content-['']",
-    'before:transition-[background-color,box-shadow,inset] before:duration-150 before:ease-out',
     'not-disabled:active:before:inset-x-(--press-inset-x) not-disabled:active:before:inset-y-(--press-inset-y)',
     'not-disabled:data-[pressed]:before:inset-x-(--press-inset-x) not-disabled:data-[pressed]:before:inset-y-(--press-inset-y)',
     'outline-none',

@@ -44,7 +44,7 @@ export function FileLink({
         <code
           className={cn(
             FILE_CODE,
-            'underline decoration-transparent underline-offset-3 transition-colors duration-150 group-hover/link:decoration-fg-a3 group-active/link:decoration-fg-a3'
+            'underline decoration-transparent underline-offset-3 group-hover/link:decoration-fg-a3 group-active/link:decoration-fg-a3'
           )}
         >
           {text}

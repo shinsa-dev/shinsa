@@ -65,7 +65,7 @@ function ChromeButton({
         aria-label={label}
         onClick={onClick}
         className={cn(
-          'pointer-events-auto grid size-9 cursor-pointer place-items-center rounded-full bg-white/10 text-white outline-none backdrop-blur-md transition-[background-color,scale] duration-150 ease-out hover:bg-white/20 active:scale-95 active:bg-white/20 motion-reduce:transition-none',
+          'pointer-events-auto grid size-9 cursor-pointer place-items-center rounded-full bg-white/10 text-white outline-none backdrop-blur-md hover:bg-white/20 active:scale-95 active:bg-white/20',
           className
         )}
       >

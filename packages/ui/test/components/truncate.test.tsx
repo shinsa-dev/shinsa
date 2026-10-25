@@ -16,7 +16,7 @@ afterEach(() => {
   resizes.restore();
 });
 
-const tooltipEnabled = (element: Element) => !element.hasAttribute('data-trigger-disabled');
+const tooltipEnabled = (element: Element) => element.hasAttribute('data-tooltip-trigger');
 
 describe('Truncate', () => {
   it('offers the full text in a tooltip only while the text is cut off', () => {
@@ -28,7 +28,7 @@ describe('Truncate', () => {
 
     view.rerender(<Truncate data-layout={layout({ clientWidth: 100, scrollWidth: 180 })}>Fits</Truncate>);
     act(() => resizes.resize(text));
-    expect(tooltipEnabled(text)).toBe(true);
+    expect(tooltipEnabled(view.getByText('Fits'))).toBe(true);
   });
 
   it('notices new text that overflows without the element changing size', async () => {

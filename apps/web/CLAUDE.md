@@ -11,17 +11,23 @@ themes, from sample data.
 ```
 src/
 ├── main.tsx             Mounts Root; applies the stored theme and a `?layout=` override before the first paint
-├── root.tsx             Providers (tooltips, toaster), the ⌘K menu, the layout switch (Cards or Sidebar shell)
-│                        and the route switch; starts the connection unless the route is /ui
+├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the layout switch (Cards or Sidebar shell)
+│                        and the route switch, which keeps the pages you have been to mounted and hidden in
+│                        React's Activity and renders Home, All tasks and Settings ahead at idle
+│                        (lib/kept-views.ts, docs/design.md 35); starts the connection unless the route is /ui
 ├── router.ts            The pushState router: parseRoute, navigate, replaceRoute, updateSearchParams,
 │                        useRoute, useSearchParam, resolveTaskPath (the only place a task URL is built)
-├── app.css              Tailwind entry, prose styles, code tokens, chat motion; imports desktop.css (the arrow cursor
-│                        everywhere in the Mac app, docs/design.md 31)
+├── app.css              Tailwind entry, prose styles, code tokens, chat motion; imports desktop.css (in the Mac app
+│                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
+│                        rubber-band on the page root, docs/design.md 31)
 ├── routes/              One file per page: home.tsx, tasks.tsx (the roadmap), settings.tsx, onboarding.tsx
 │   │                    (the setup chat)
-│   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame; resolves `/tasks/<handle or id>` with
+│   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
+│   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
-│   │                    review.tsx (the Review tab: the report top to bottom), code.tsx, chat.tsx
+│   │                    review.tsx (the Review tab: the report top to bottom), code.tsx, chat.tsx,
+│   │                    lazy-code.tsx (the Code tab's chunk and its prefetch), prefetch.tsx (Prefetch: a task's
+│   │                    reads on hover and ⌘K highlight, the queue's at idle, Settings' at idle; docs/design.md 36)
 │   └── ui/              The showcase: index.tsx (the page, the section nav in page order, the theme switch),
 │                        section.tsx (Section, Specimen), tokens.tsx, inputs.tsx, overlays.tsx and surfaces.tsx
 │                        (the kit), composites.tsx (Shinsa's shared building blocks, the setup pieces and the
@@ -49,9 +55,11 @@ src/
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
 │                        onboarding (checks, choices), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
-│                        Settings' tabs use, the list row, the logo link home, page/ column, heading, toolbar, section
-│                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, step number),
-│                        status (tiles, glyphs, tones in text, check marks, priority, the health and engine banners, the Update button), links (TaskLink, PrLink,
+│                        Settings' tabs use, the list row, the logo link home and home-link.tsx (the Home button
+│                        that replaces it in the Mac app), page/ column, heading, toolbar, section
+│                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
+│                        status (tiles, glyphs, tones in text, check marks, priority, the health and engine banners, the Update button,
+│                        loading-line.tsx: LoadingLine and LoadingSpinner, the waits that show only after 300ms), links (TaskLink, PrLink,
 │                        RepoChip, BranchChip, FileLink, references), overlays (hint, info popover, image
 │                        viewer, confirm dialog), text (time ago, markdown, code fence, file path, diff stats,
 │                        finding text, code-diff.tsx: CodeDiff, the one wrapper for every diff outside the Code
@@ -62,13 +70,24 @@ src/
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
-│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys)…)
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys),
+│                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
+│                        at idle, what hidden pages and tabs render with), the chat's rendered window
+│                        (use-transcript-window), the rows in view of a list (use-row-window) and a long list's rows a
+│                        batch at a time (use-progressive-count), use-delayed (useDelayed: true once a wait has
+│                        lasted LOADING_DELAY_MS, 300ms)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
-    ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, state, acks,
-    │                    transcripts, whether the desktop app is connected, reconnect), commands.ts
+    ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
+    │                    patches applied once per frame, acks, transcripts from the position held (every followed
+    │                    run plus the 24 read last, TRANSCRIPT_CACHE_LIMIT), whether the desktop app is connected,
+    │                    reconnect), optimistic.ts (the commands shown before the
+    │                    server answers, decided on the page and converted to the socket's shape, so a run they
+    │                    start has no prompt and a fix its focus), selectors.ts (useShinsaSelector, useTask, useRun,
+    │                    useGate: render again only when the part read changes), commands.ts
     │                    (sendCommandWithToast, requestWithToast, copyText), http.ts (requestJson: a JSON
     │                    request whose refusal becomes the server's message), code.ts (the Code tab's reads: refs, paths, tree, blob,
-    │                    search and diff, cached by commit, never read again for an unrelated task event, and requestFileWrite, the one
+    │                    search and diff, cached by commit in a bounded least-recently-used cache, the last answer shown
+    │                    while a newer version loads, never read again for an unrelated task event, and requestFileWrite, the one
     │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / terminal / Finder), onboarding.ts
     │                    (the onboarding status, folders, suggestions and the setup chat over HTTP),
     │                    projects.ts (/api/repos/local, adding a repository or a folder to a project),
@@ -94,14 +113,23 @@ src/
     │                    usage-wait.ts
     ├── chat/            Transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
-    │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait)
+    │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),
+    │                    the transcript's blocks and the window of them rendered (window.ts), prefetch.ts (a
+    │                    task's last transcripts read ahead)
     ├── code/            The Code tab: location.ts (every view position in the URL: mode, file, line, ref, spot,
     │                    search), tree.ts, file-icons.ts (the icon of a file or folder), prefetch.ts (the Code tab's reads ahead of a
-    │                    click), rank.ts (quick open), search.ts, refs.ts (the ref picker), source.ts, notes.ts
+    │                    click: the tab, a hovered row, a file's neighbours and folders, the other refs, the review's snippets,
+    │                    and a hovered changed file's side-by-side pair handed to the session to build at idle), rank.ts (quick open), search.ts, refs.ts (the ref picker), source.ts, notes.ts
     │                    (findings, comments and spots on a file), edits.ts (editing in place: whether the open
     │                    file is editable and why not, the FileSaver that saves each pause against the text on
     │                    disk, the line merge with a disk change, what you saved per read),
-    │                    collapse.ts, pane.ts, keys.ts (⌘P, ⇧⌘F, ⌘F, ⌘G); editor/ (CodeMirror: the Shinsa theme,
+    │                    collapse.ts, pane.ts, keys.ts (⌘P, ⇧⌘F, ⌘F, ⌘G), grammar.ts (VS Code's choice of language by
+    │                    name, folder, extension and shebang, the TextMate theme on the `--code-*` tokens, token classes),
+    │                    marks.ts (the User Timing marks around an open and a folder toggle); editor/ (CodeMirror: the
+    │                    Shinsa theme, session.ts (EditorSession: one view per Code tab, each file's state swapped in and
+    │                    kept), tokens.ts (the tokenizer worker's client and its cache by text), tokenize.worker.ts,
+    │                    textmate.ts and shiki-engine.ts (VS Code's grammars line by line in the worker), syntax.ts (the
+    │                    tokens as decorations), folding.ts (VS Code's fold gutter and indentation folding),
     │                    languages, the unified diff with removed lines highlighted in context, note slots, the
     │                    comment gutter, find.ts: the find bar's panel, its replace row and match count, commands.ts: VS Code's editing keys as CodeMirror commands, one list for the keymap and ⌘K, collapsed.ts: the cursor
     │                    stepping over folded lines and the sideways scroll the folds and notes follow); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
@@ -116,7 +144,8 @@ src/
     │                    finding places
     ├── overview/        Now card titles, progress steps, activity glyphs, evidence kinds, waits,
     │                    questions, verdicts, plan versions, plan parameters, the operation gate and its notes, setup
-    ├── tasks/           Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
+    ├── tasks/           prefetch.ts (the task under the pointer or highlighted in ⌘K, the queue's tasks read at idle),
+    │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
     │                    rounds, a round's track and pull request, how a round ships), status and tone per task,
     │                    roadmap groups and chains, next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
@@ -128,12 +157,15 @@ src/
     ├── notifications/   attention.ts (decisions, the tab badge and status), watcher.ts, sounds.ts,
     │                    browser.ts, settings.ts (the Notifications rows), page.ts (the tab title and Floaty's
     │                    meta tags)
-    ├── format/          Counts, times, money, labels, tones, the shared minute and second clocks (clock.ts)
+    ├── format/          Counts, times, money, labels, tones, the shared minute and second clocks (clock.ts), a small LRU
+    │                    cache (cache.ts), the rows in view of a list (rows.ts)
     ├── preferences/     localStorage: theme, layout, rail width, recent tasks, section flags, notifications
     ├── desktop.ts       The desktop app's bridge (`window.shinsaDesktop`, absent in a browser and Floaty):
     │                    `data-desktop` on <html>, its navigation, the Dock badge, notifications, the page's
     │                    surface and whether it stays quiet (`isPageQuiet`), the app's version and protocol
     │                    (`selectDesktopBuild`) and its own update (`readDesktopUpdate`, `installDesktopUpdate`)
+    ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings) and the last three
+    │                    task pages, by key, with the URL each was left at
     └── queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
         not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,

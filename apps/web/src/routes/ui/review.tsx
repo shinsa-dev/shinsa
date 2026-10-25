@@ -39,7 +39,7 @@ function Remove() {
   return (
     <button
       type='button'
-      className='cursor-pointer text-2xs text-fg-2 transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+      className='cursor-pointer text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
       onClick={() => void acknowledgeSample()}
     >
       Remove

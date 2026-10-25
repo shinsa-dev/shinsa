@@ -19,7 +19,7 @@ import {
   splitArguments,
   splitLines,
 } from '@/lib/chat/tool-output.ts';
-import { useLanguageTokens, useTokens } from '@/lib/code/highlight.ts';
+import { resolveLanguage } from '@/lib/code/highlight.ts';
 import { countLineChanges } from '@/lib/code/line-changes.ts';
 
 const TODO_MARK: Record<ChatTodoStatus, { icon: IconName; className: string; label: string }> = {
@@ -37,11 +37,10 @@ function StructuredOutput({
   structured: string;
   label?: React.ReactNode;
 }) {
-  const tokens = useLanguageTokens(structured, 'json');
-  const lines = splitLines(structured).map((line, index) => ({ text: line, tokens: tokens?.[index] }));
+  const lines = React.useMemo(() => splitLines(structured).map((line) => ({ text: line })), [structured]);
   return (
     <DetailBlock label={label} copy={text}>
-      <CodeLines lines={lines} wrap />
+      <CodeLines lines={lines} language='json' wrap />
     </DetailBlock>
   );
 }
@@ -100,12 +99,12 @@ function ToolResult({ call, running, label }: { call: ToolCall; running: boolean
 function ReadDetail({ call, path, running }: { call: ToolCall; path: string; running: boolean }) {
   const parsed = React.useMemo(() => parseNumbered(call.result ?? ''), [call.result]);
   const plain = call.failed || call.result === null || call.images.length > 0;
-  const tokens = useTokens(plain ? null : parsed.code, path);
   if (plain) return <ToolResult call={call} running={running} />;
   return (
     <DetailBlock copy={parsed.code}>
       <CodeLines
-        lines={parsed.lines.map((line, index) => ({ ...line, tokens: tokens?.[index] }))}
+        lines={parsed.lines}
+        language={resolveLanguage(path)}
         gutter={parsed.numbered ? 'numbers' : null}
       />
     </DetailBlock>

@@ -48,11 +48,23 @@ describe('globals.css', () => {
   it('drives the scroll fades from scroll timelines, so style alone sets them on the first frame', () => {
     const fade = css.slice(css.indexOf('@utility scroll-fade {'), css.indexOf('@keyframes scroll-fade-t'));
     expect(fade).toContain('@supports (animation-timeline: scroll())');
-    expect(fade).toContain('animation-timeline: scroll(self block), scroll(self block);');
+    expect(fade).toContain('animation-timeline: var(--fade-timeline-y), var(--fade-timeline-y);');
     expect(fade).toContain('&[data-fade-orientation="horizontal"]');
     expect(fade).toContain('&[data-fade-orientation="both"]');
     expect(fade).toContain('transition: none;');
     for (const edge of ['t', 'b', 'l', 'r']) expect(css).toContain(`@keyframes scroll-fade-${edge} {`);
+  });
+
+  it('reads its own named timelines, or, on a still wrapper, the scroller it scopes', () => {
+    const fade = css.slice(css.indexOf('@utility scroll-fade {'), css.indexOf('@keyframes scroll-fade-t'));
+    expect(fade).toContain(
+      '&[data-fade-scope] {\n      scroll-timeline: none;\n      timeline-scope: var(--fade-timeline-y), var(--fade-timeline-x);'
+    );
+    expect(fade).toContain('@utility scroll-fade-source {');
+    expect(fade.match(/var\(--fade-timeline-y\) block,\n\s+var\(--fade-timeline-x\) inline;/g)).toHaveLength(
+      2
+    );
+    expect(fade).not.toContain('scroll(self');
   });
 
   it('sets every file tint in both themes and lets a row mute its marks', () => {

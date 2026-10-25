@@ -21,7 +21,7 @@ export function TaskHeading({ task, className }: { task: Task; className?: strin
             onClick={() => setOpen(!open)}
             className={cn(
               description,
-              'cursor-pointer whitespace-pre-line outline-none transition-colors duration-150 hover:text-fg-3 active:text-fg-3'
+              'cursor-pointer whitespace-pre-line outline-none hover:text-fg-3 active:text-fg-3'
             )}
           >
             {request.text}

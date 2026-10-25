@@ -28,6 +28,9 @@ const PROSE_ROW = cn(ROW, CHAT_PROSE_INSET);
 const SECTION_EDGES =
   'mb-3 [&>:first-child]:mt-0 [&>:first-child]:pt-0 [&>:last-child]:mb-0 [&>:last-child]:pb-0';
 
+const SKIPPED_OFFSCREEN =
+  'supports-[overflow-anchor:auto]:[content-visibility:auto] supports-[overflow-anchor:auto]:[contain-intrinsic-block-size:auto_600px]';
+
 function resolveSectionTop(first: boolean, opening: boolean) {
   if (first) return 'mt-2';
   return opening ? 'mt-6' : 'mt-5';
@@ -182,7 +185,7 @@ function RunTurns({ run, task }: { run: Run; task: Task }) {
   );
 }
 
-export function RunSection({
+export const RunSection = React.memo(function RunSectionView({
   run,
   task,
   messages,
@@ -212,6 +215,7 @@ export function RunSection({
         className={cn(
           'corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl',
           SECTION_EDGES,
+          SKIPPED_OFFSCREEN,
           resolveSectionTop(first, opening !== null),
           SELECTED_WASH
         )}
@@ -237,4 +241,4 @@ export function RunSection({
       </section>
     </RunEvidenceScope>
   );
-}
+});

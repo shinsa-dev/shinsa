@@ -81,7 +81,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot='tabs-trigger'
       className={cn(
-        'relative inline-flex cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap font-medium text-fg-2 text-xs outline-none transition-colors duration-200 ease-out',
+        'relative inline-flex cursor-pointer select-none items-center justify-center gap-1.5 whitespace-nowrap font-medium text-fg-2 text-xs outline-none',
         'hover:text-fg-4 active:text-fg-4 data-active:text-fg-4',
         'disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50',
         'group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start',
@@ -93,7 +93,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
         'group-data-[variant=underline]/tabs-list:data-active:faux-medium group-data-[variant=underline]/tabs-list:h-full group-data-[variant=underline]/tabs-list:px-2 group-data-[variant=underline]/tabs-list:font-normal',
         // Ghost: bare text switchers — no indicator, so the content itself
         // takes the press, exactly like the link button.
-        'group-data-[variant=ghost]/tabs-list:transition-[color,scale] group-data-[variant=ghost]/tabs-list:enabled:active:scale-[0.975] group-data-[variant=ghost]/tabs-list:[will-change:scale]',
+        'group-data-[variant=ghost]/tabs-list:enabled:active:scale-[0.975] group-data-[variant=ghost]/tabs-list:[will-change:scale]',
         className
       )}
       {...props}

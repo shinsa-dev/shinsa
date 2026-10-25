@@ -4,12 +4,14 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { ListRow } from '@/components/layout/list-row.tsx';
-import { SectionChevron, SectionLabel } from '@/components/layout/page/section-label.tsx';
+import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
 import { TaskMeta } from '@/components/status/text.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
+import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { resolveHomeSectionFlag } from '@/lib/home.ts';
 import { useStoredToggle } from '@/lib/preferences/stored-flag.ts';
@@ -23,6 +25,8 @@ import {
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 type Variant = 'wide' | 'compact';
+
+const FIRST_ROWS = 24;
 
 function QueueItemGlyph({ state, item }: { state: ShinsaState; item: QueueItem }) {
   switch (item.kind) {
@@ -87,11 +91,13 @@ function CompactSection({
   const count = section.items.length;
   return (
     <section className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'>
-      <button
-        type='button'
-        aria-expanded={open}
-        onClick={onToggle}
-        className='group/section flex h-6 w-full cursor-pointer items-center gap-2 rounded-control ps-1.5 pe-2.5 text-left font-medium text-2xs text-fg-2 outline-none transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
+      <DisclosureHeader
+        open={open}
+        onToggle={onToggle}
+        strip='line'
+        chevron='glyph'
+        chevronClassName='opacity-0 group-hover/disclosure:opacity-100'
+        className='w-full gap-2 rounded-control ps-1.5 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
       >
         <span className='grid size-5 shrink-0 place-items-center'>
           <Icon
@@ -102,9 +108,7 @@ function CompactSection({
         </span>
         <span className='min-w-0 truncate'>{section.title}</span>
         <span className='font-normal tabular-nums'>{count}</span>
-        <span className='flex-1' />
-        <SectionChevron open={open} className='opacity-0 group-hover/section:opacity-100' />
-      </button>
+      </DisclosureHeader>
       {open && (
         <div className='flex flex-col pt-0.5'>
           {count === 0 ? <p className='py-1 ps-8.5 pe-2.5 text-2xs text-fg-2'>{section.empty}</p> : children}
@@ -127,8 +131,9 @@ function QueueSectionView({
   activeTaskId: string | null;
   onNavigate: () => void;
 }) {
+  const shown = useProgressiveCount(section.items.length, FIRST_ROWS);
   if (section.items.length === 0 && section.empty === null) return null;
-  const rows = section.items.map((item) => (
+  const rows = section.items.slice(0, shown).map((item) => (
     <ListRow
       key={item.key}
       leading={<QueueItemGlyph state={state} item={item} />}

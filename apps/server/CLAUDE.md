@@ -46,9 +46,16 @@ src/
 │                        `fish -lc` when the interactive shell handed off to fish) and
 │                        merges it into the server's, and
 │                        isStartedFromTerminal (a TTY on stdin or stdout) decides whether `serve` needs it
-├── store/               EventLog (event-log.ts: the SQLite events, effects and receipts tables; readEvents reports a
-│                        damaged row instead of throwing) and EvidenceStore (evidence.ts: files under /api/evidence)
-├── runtime/             Engine (engine.ts: serialised dispatch → receipt → decide → commit → apply → broadcast, the
+├── store/               EventLog (event-log.ts: the SQLite events, effects, receipts, snapshots and briefings (the
+│                        Home guide) tables; readEvents reports a damaged row instead of throwing and reads from a
+│                        position; replaceLegacyEvents, the one-time rewrite of older events and move of briefings
+│                        out of the log, versioned by user_version, its rules in legacy.ts; applyLegacyView, the
+│                        same rewrite in memory for inspect mode, which never writes),
+│                        the state snapshot (snapshot.ts: verifySnapshot, resolveStateVersion, a hash of
+│                        @shinsa/core's source) and EvidenceStore (evidence.ts: files under /api/evidence)
+├── runtime/             Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
+│                        receipt → decide → commit → adopt the decided state → listeners with the state before and
+│                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
 │                        effect pump, cancellation, settle), EffectRunner (effects.ts: one handler per
 │                        ShinsaEffect, the pull request watcher), StateClock (clock.ts: the
 │                        base of every timer that fires from state) and MonitorClock (monitors.ts)
@@ -96,7 +103,9 @@ src/
 │   │                    parameters in `propose_plan` (verification, impact, evidence, checks, approval) and the
 │   │                    steps `reshape_task` offers are generated from core's VERIFICATION_RULES, PROTOCOL_LIMITS,
 │   │                    PLAN_EVIDENCE_KINDS and STEP_SCHEMA, never hand-written
-│   ├── transcripts/     Per-run JSONL transcripts, live listeners, tailing a file another writer appends to
+│   ├── transcripts/     Per-run JSONL transcripts, live listeners with each entry's position, tailing a file another
+│   │                    writer appends to, reading only the bytes appended since; the entries of followed and
+│   │                    recently read runs stay in memory
 │   └── quick/           One-shot calls (triage, briefing, the setup chat) on the classifier and writer models:
 │                        structured output with a fallback across the registry's providers, the default one
 │                        first (index.ts, createQuickCalls), the typed decision questions (decide.ts: choice and
@@ -182,7 +191,7 @@ src/
 │                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
 │                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a
 │                        task with none needs once its work needs one (the setup check calls it)
-├── briefing/            The Home guide, debounced
+├── briefing/            The Home guide, debounced, written beside the log through Engine.writeBriefing
 └── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts,
                          static.ts, paths.ts (resolveInside, resolveWritableInside, assertRepoPath), code.ts (the

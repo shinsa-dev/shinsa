@@ -81,7 +81,7 @@ export function QuietLink({
       type='button'
       disabled={busy}
       onClick={onClick}
-      className='cursor-pointer whitespace-nowrap transition-colors duration-150 hover:text-fg-4 active:text-fg-4 disabled:pointer-events-none disabled:opacity-50'
+      className='cursor-pointer whitespace-nowrap hover:text-fg-4 active:text-fg-4 disabled:pointer-events-none disabled:opacity-50'
     >
       {children}
     </button>

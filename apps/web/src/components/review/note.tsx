@@ -11,8 +11,7 @@ import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { describeItemPlace, REVIEW_AUTHOR, type ReviewItem } from '@/lib/review/report.ts';
 
-const SELECTED =
-  'outline-2 outline-offset-2 outline-transparent transition-[outline-color] duration-300 data-selected:outline-primary-a3';
+const SELECTED = 'outline-2 outline-offset-2 outline-transparent data-selected:outline-primary-a3';
 
 function SuggestedFix({ text }: { text: string }) {
   return (

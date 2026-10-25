@@ -6,7 +6,7 @@ import { useImageViewer, type ViewerImage } from '@/hooks/use-image-viewer.ts';
 import { describeOpenImage } from '@/lib/image-view.ts';
 
 const THUMB_SIZE = {
-  sm: 'max-h-24',
+  sm: 'h-24',
   lg: 'max-h-80',
 };
 
@@ -30,13 +30,14 @@ function ImageThumb({
         type='button'
         onClick={onOpen}
         aria-label={label}
-        className='corner-superellipse/1.125 max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-border bg-bg-a1 transition-[border-color] duration-150 hover:border-fg-a1 active:border-fg-a1'
+        className='corner-superellipse/1.125 max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-border bg-bg-a1 hover:border-fg-a1 active:border-fg-a1'
       >
         <img
           ref={originRef}
           src={image.src}
           alt={image.caption ?? ''}
           loading='lazy'
+          decoding='async'
           onError={onBroken}
           className={cn('block h-auto w-auto max-w-full object-contain', THUMB_SIZE[size])}
         />

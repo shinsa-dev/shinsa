@@ -16,6 +16,16 @@ export function resolveOverflowEdges(position: number, viewport: number, content
 }
 
 /**
+ * The scroll timeline names a fade and its scroller share, unique per
+ * instance (`id` from `React.useId`), so a scroller nested in another never
+ * answers for it (`scroll-fade` in globals.css).
+ */
+export function resolveFadeTimelines(id: string) {
+  const name = id.replace(/[^\w-]/g, '');
+  return { '--fade-timeline-y': `--fade-y${name}`, '--fade-timeline-x': `--fade-x${name}` };
+}
+
+/**
  * The overlay thumb for a vertical scroller: its length follows the visible
  * share of the content (never under `THUMB_MIN_SIZE`) and it travels the
  * track inset by `THUMB_EDGE` at both ends. `null` while nothing scrolls.

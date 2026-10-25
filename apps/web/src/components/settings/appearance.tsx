@@ -1,5 +1,12 @@
 import { Choice } from '@/components/controls/choice.tsx';
 import {
+  EXPLORER_SIDE_TITLE,
+  EXPLORER_SIDES,
+  type ExplorerSide,
+  useExplorerSide,
+  writeExplorerSide,
+} from '@/lib/preferences/code.ts';
+import {
   LAYOUT_NAMES,
   LAYOUT_ORDER,
   type LayoutPreference,
@@ -27,7 +34,22 @@ export function AppearanceSettings() {
         />
       </SettingRow>
       <LayoutSetting />
+      <ExplorerSideSetting />
     </SettingsGroup>
+  );
+}
+
+function ExplorerSideSetting() {
+  const side = useExplorerSide();
+  return (
+    <SettingRow title={EXPLORER_SIDE_TITLE}>
+      <Choice<ExplorerSide>
+        label={EXPLORER_SIDE_TITLE}
+        items={EXPLORER_SIDES.map(({ value, label }) => ({ value, label }))}
+        value={side}
+        onValueChange={writeExplorerSide}
+      />
+    </SettingRow>
   );
 }
 
