@@ -15,11 +15,13 @@ src/
 │                   opens in the browser, the permissions the page gets), server-url.ts (which server to load),
 │                   health.ts (GET /api/health, with or without `version`), bounds.ts (window place on connected
 │                   displays), service.ts (starting the service), bridge.ts (the bridge's types and IPC channels),
-│                   dev-bundle.ts (the app's name, and the renamed Electron.app `bun run dev` runs)
+│                   dev-bundle.ts (the app's name, and the renamed Electron.app `bun run dev` runs), update.ts
+│                   (the updater's states, its menu item, notice and answers)
 ├── main/           The Electron glue, kept thin and outside coverage: index.ts (single instance, deep links,
 │                   connecting to the server, IPC, the session's permissions), window.ts (MainWindow: hide on
 │                   close, navigation, the waiting page), menu.ts, notifications.ts, server.ts (health, starting
-│                   the service in the login shell), prefs.ts (window bounds in userData/prefs.json)
+│                   the service in the login shell), prefs.ts (window bounds in userData/prefs.json),
+│                   updater.ts (Updater: electron-updater, checked at start and every four hours)
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, windowState, updateBadge, notify, onNavigate,
                     onWindowState) to the server's page only
 static/waiting.html The "Shinsa is not running" page
@@ -66,7 +68,14 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
 | `bun test` | The `lib/` tests, 100% line and function coverage |
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
 
-Pushing a `v*` tag runs `.github/workflows/release.yml`: on a macOS runner it builds `Shinsa-mac-arm64.dmg`, signed ad
-hoc and versioned from the tag, and publishes it as that tag's GitHub release, where `shinsa.dev/download` points.
+**Updates.** The packaged app updates itself (`main/updater.ts`): electron-updater reads `latest-mac.yml` from the
+GitHub releases of `shinsa-dev/shinsa` (`publish` in `electron-builder.yml`), downloads a new version in the
+background and installs it when you quit, or at once from Shinsa → Restart to Update. Quitting never stops the server,
+so an update never interrupts an agent. Squirrel.Mac installs only an update signed by the same Developer ID, so ad
+hoc builds download but do not install. Releasing is Actions → Release (`.github/workflows/release.yml`, patch,
+minor or major): it raises the latest `v*` tag, builds `Shinsa-mac-arm64.dmg` and `.zip` with that version, signs and
+notarizes when the `CSC_LINK` and Apple secrets are set, and publishes the release, where `shinsa.dev/download`
+points. The version lives in the tag, never in `package.json`. The plan for the engine following the app is
+`docs/plans/app-plan.md` → Versions and updates.
 
 The root `bun dev` skips this package (`--filter=!@shinsa/desktop`), so it never opens a window by itself.

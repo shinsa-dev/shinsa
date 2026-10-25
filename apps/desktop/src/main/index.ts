@@ -10,6 +10,7 @@ import { parseNotice } from '../lib/notice.ts';
 import { applyMenu } from './menu.ts';
 import { showNotice } from './notifications.ts';
 import { requestHealth, requestServiceStart, resolveAppServerUrl } from './server.ts';
+import { Updater } from './updater.ts';
 import { MainWindow } from './window.ts';
 
 const RETRY_MS = 2000;
@@ -18,6 +19,8 @@ let main: MainWindow | null = null;
 let pendingPath: string | null = null;
 let connecting = false;
 let offeredStart = false;
+let menuActions: Omit<Parameters<typeof applyMenu>[0], 'update'> | null = null;
+let updater: Updater | null = null;
 
 app.setName(APP_NAME);
 if (!app.isPackaged) app.setPath('userData', join(app.getPath('appData'), `${APP_NAME} Dev`));
@@ -59,12 +62,19 @@ async function start() {
   main = new MainWindow(origin, () => void connect());
   if (pendingPath) main.open(pendingPath);
   applySessionPolicy(origin);
-  applyMenu({
+  menuActions = {
     show: () => main?.show(),
     open: (path) => main?.open(path),
     reload: () => main?.reload(),
-  });
+  };
+  updater = new Updater(refreshMenu, () => main?.show());
+  refreshMenu();
+  updater.start();
   await connect();
+}
+
+function refreshMenu() {
+  if (menuActions && updater) applyMenu({ ...menuActions, update: updater.menuItem });
 }
 
 function applySessionPolicy(origin: string) {

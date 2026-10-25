@@ -19,3 +19,7 @@ mac:
   category: public.app-category.developer-tools
   minimumSystemVersion: "14.0"
   identity: null
+publish:
+  provider: github
+  owner: shinsa-dev
+  repo: shinsa

@@ -1,8 +1,17 @@
 name: Release
 
 on:
-  push:
-    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version goes up
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -10,21 +19,55 @@ permissions:
 jobs:
   mac:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Next version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          last=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
+          last=${last#v}
+          IFS=. read -r major minor patch <<< "${last:-0.0.0}"
+          case "$BUMP" in
+            major) major=$((major + 1)); minor=0; patch=0 ;;
+            minor) minor=$((minor + 1)); patch=0 ;;
+            patch) patch=$((patch + 1)) ;;
+          esac
+          echo "version=$major.$minor.$patch" >> "$GITHUB_OUTPUT"
+          echo "Releasing $major.$minor.$patch (after ${last:-nothing})" >> "$GITHUB_STEP_SUMMARY"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run build
         working-directory: apps/desktop
-      - run: >-
-          bunx electron-builder --mac dmg --arm64 --publish never
-          -c.mac.identity=-
-          -c.dmg.artifactName=Shinsa-mac-arm64.dmg
-          -c.extraMetadata.version=${GITHUB_REF_NAME#v}
+      - name: Build, sign and notarize
         working-directory: apps/desktop
-      - run: gh release create "$GITHUB_REF_NAME" apps/desktop/release/Shinsa-mac-arm64.dmg --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          signing=(-c.mac.identity=- -c.mac.notarize=false)
+          if [ -n "$CSC_LINK" ]; then signing=(-c.mac.notarize=true); fi
+          bunx electron-builder --mac dmg zip --arm64 --publish never \
+            '-c.mac.artifactName=Shinsa-mac-${arch}.${ext}' \
+            -c.extraMetadata.version="$VERSION" \
+            "${signing[@]}"
+      - name: Publish the release
+        working-directory: apps/desktop/release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: >-
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "Shinsa $VERSION" --generate-notes
+          Shinsa-mac-arm64.dmg Shinsa-mac-arm64.dmg.blockmap
+          Shinsa-mac-arm64.zip Shinsa-mac-arm64.zip.blockmap
+          latest-mac.yml

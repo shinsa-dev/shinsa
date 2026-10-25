@@ -89,13 +89,44 @@ Shinsa.app/Contents/
 - Removed: `serve`, `service install|uninstall|status|restart|logs` and `open`. Settings → Advanced keeps what
   `service` was for: whether the engine is running, its version and log, and Restart.
 
-### Updates
+### Versions and updates
 
-- The app updates itself with electron-updater from the releases feed (Distribution, below). The new bundle holds
-  the new engine; on relaunch the app compares the running engine's version with its own and, when they differ,
-  restarts it with `launchctl kickstart -k`. The engine is restart-safe by construction (`docs/engine.md` →
-  Recovery), so a run in progress resumes after the restart.
-- The app never talks to an engine newer than itself: it asks you to update instead.
+- **One version for everything.** Shinsa has one version number (semver, tags `v0.4.2`) for the app, the engine, the
+  interface and the command line, because they ship in one bundle. That is how VS Code and its server, Docker
+  Desktop and its engine, and Tailscale's app and `tailscaled` do it: no separate engine release, no table of which
+  app works with which engine. Some changes touch only the app, some only the engine, some both; all of them ship as
+  the next Shinsa version.
+- **The app updates itself** (built: `apps/desktop/src/main/updater.ts`, `lib/update.ts`). electron-updater checks
+  the release feed when the app starts and every four hours, downloads a new version in the background and installs
+  it the next time you quit; Shinsa → Restart to Update installs it now, and a notification says it is ready. Shinsa
+  → Check for Updates… checks by hand and says when you are up to date. Quitting or restarting the app never stops
+  the engine, so an app update cannot interrupt an agent.
+- **The engine follows the app, when it is safe** (phase 2, with the bundle). After the app restarts on a new
+  version, the engine inside it is newer than the one running. The engine reports its version and a `protocol`
+  number in `/api/health`; `protocol` goes up only when the contract between the interface and the engine breaks
+  (an HTTP route, a socket message, the state's shape), so most releases keep it.
+  - **Same protocol:** the app keeps working with the running engine and restarts it (`launchctl kickstart -k`) the
+    next time no agent run is mid-turn and no effect is in flight. The health banner says "Shinsa 0.5.0 finishes
+    updating when agents are idle", with **Restart now**.
+  - **New protocol:** the interface cannot talk to the old engine. If nothing is running the app restarts the engine
+    at once; otherwise the banner asks: **Restart now** (runs resume on their own sessions afterwards) or **When
+    agents are idle**, and only the banner shows until then.
+  - **An engine newer than the app** (an app put back to an older version): the app does not talk to it and asks you
+    to update.
+  - The engine is restart-safe by construction (`docs/engine.md` → Recovery): the event log holds everything, and a
+    run cut off by the restart resumes on its own session with a line in its chat.
+- **Why not update the engine separately:** two version numbers means a compatibility matrix to keep and to explain,
+  and every bug report starts with "which engine?". With one bundle the app is the thing you install and update, and
+  updating the engine is a restart.
+- **Releasing** (built: `.github/workflows/release.yml`). Actions → Release → Run workflow, choosing patch, minor or
+  major (or `gh workflow run release.yml -f bump=minor`). It takes the latest `v*` tag, raises it, builds the DMG
+  and the zip with that version, signs and notarizes when the Apple secrets are set, and publishes the GitHub
+  release with `latest-mac.yml`, the file the updater reads, and notes from the merged pull requests. Nothing to bump
+  by hand: the version lives in the tag, not in `package.json`.
+- **Installing an update needs a signed app.** macOS's updater (Squirrel.Mac) installs a new version only when it is
+  signed by the same Developer ID as the running one. Ad hoc builds download updates but cannot install them, so
+  auto-update works from the first release signed with the secrets in Distribution, below. The feed is the releases
+  of `shinsa-dev/shinsa`, which the app reaches without signing in once the repository is public.
 
 ### Development
 
@@ -149,7 +180,7 @@ and every page shows what it finds in the health banner at the top (`lib/connect
 | The engine keeps crashing | repeated exits, the engine's crash file in `data/` | The engine keeps stopping, with the last error; **Restart engine**, **Copy details** |
 | The engine was killed and is not coming back | no socket, the job not loaded | The engine is not running; **Start engine** (registers and kicks the job) |
 | A folder it needs is blocked | the engine reports `EPERM` on a chosen folder | Shinsa cannot read ‹folder›; **Open Privacy & Security** |
-| The engine is a different version than the app | the version handshake | The engine is updating, then reconnects |
+| The engine is older than the app, after an update | `version` and `protocol` in `/api/health` | Shinsa ‹version› finishes updating when agents are idle; **Restart now** (Versions and updates, above) |
 
 Each row links to a short guide (`docs/troubleshooting.md`, and the same text on shinsa.dev) with the steps by hand,
 for when the button is not enough. A crash also leaves a line in the task's chat for any run it cut off ("The engine
@@ -173,11 +204,12 @@ warning sign the next time the app opens.
 1. **The compiled engine.** `bun build --compile` of `apps/server` with the Agent SDK, the plugin and Eunoe beside
    it; a release workflow artifact that runs a task end to end on a clean Mac without Bun.
 2. **The bundle and the LaunchAgent.** The engine inside `Shinsa.app`, registered by the app, the Unix socket, the
-   interface from `shinsa-app://`, and the engine's rows in the health banner. Pass: install from the DMG, open, finish onboarding, quit, and a schedule still
-   fires.
+   interface from `shinsa-app://`, the engine's rows in the health banner, and the engine following the app after an
+   update (`protocol` in `/api/health`, the restart when agents are idle). Pass: install from the DMG, open, finish
+   onboarding, quit, and a schedule still fires; update, and a run in progress finishes before the engine restarts.
 3. **The command line.** Install the `shinsa` command, `shinsa .`, socket transport, the removals above.
-4. **Signed releases and updates.** Developer ID, notarization, the public releases repository, electron-updater,
-   the version handshake.
+4. **Signed releases.** The Developer ID certificate and notarization secrets, after which auto-update installs
+   (the updater and the release workflow are already built).
 5. **Remote.** `docs/plans/remote-plan.md`, against the socket, with the hosted dashboard deployed from `apps/web`.
 
 Docs change with each phase, not before it: `docs/spec.md` → Architecture, `docs/engine.md` → The background

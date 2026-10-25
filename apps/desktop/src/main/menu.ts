@@ -5,14 +5,16 @@ interface MenuActions {
   show: () => void;
   open: (path: string) => void;
   reload: () => void;
+  update: MenuItemConstructorOptions;
 }
 
-export function applyMenu({ show, open, reload }: MenuActions) {
+export function applyMenu({ show, open, reload, update }: MenuActions) {
   const template: MenuItemConstructorOptions[] = [
     {
       label: APP_NAME,
       submenu: [
         { role: 'about', label: `About ${APP_NAME}` },
+        update,
         { type: 'separator' },
         {
           label: 'Settings…',
