@@ -51,7 +51,7 @@ class DemoSocket extends EventTarget {
         type: 'transcript',
         runId: message.runId,
         entries: transcripts.get(message.runId) ?? [],
-        reset: true,
+        start: 0,
       });
       return;
     }
@@ -97,7 +97,7 @@ export function installDemoApi() {
   const demoFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
     if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return native(input, init);
-    return new Promise<Response>((resolve) => setTimeout(() => resolve(answerApi(url)), 120));
+    return Promise.resolve(answerApi(url));
   };
   globalThis.fetch = Object.assign(demoFetch, { preconnect: globalThis.fetch.preconnect });
 }
@@ -171,15 +171,16 @@ function createEntry(event: ChatEvent): ChatEntry {
 
 export function appendTranscript(runId: string, events: ChatEvent[]) {
   const entries = events.map(createEntry);
+  const start = transcripts.get(runId)?.length ?? 0;
   transcripts.set(runId, [...(transcripts.get(runId) ?? []), ...entries]);
   for (const socket of sockets) {
-    if (socket.watches(runId)) socket.receive({ type: 'transcript', runId, entries, reset: false });
+    if (socket.watches(runId)) socket.receive({ type: 'transcript', runId, entries, start });
   }
 }
 
 export function resetTranscript(runId: string) {
   transcripts.delete(runId);
   for (const socket of sockets) {
-    if (socket.watches(runId)) socket.receive({ type: 'transcript', runId, entries: [], reset: true });
+    if (socket.watches(runId)) socket.receive({ type: 'transcript', runId, entries: [], start: 0 });
   }
 }

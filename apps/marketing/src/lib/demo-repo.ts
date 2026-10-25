@@ -228,6 +228,15 @@ export function answerCodeRead(name: string, params: URLSearchParams): unknown {
   }
 }
 
-export function listChangedPaths() {
-  return Object.keys(CHANGED_FILES);
+export function listRepoPaths(ref: string) {
+  return Object.keys(listFiles(ref)).sort();
+}
+
+export function listRepoDirs(ref: string) {
+  const dirs = new Set(['']);
+  for (const path of listRepoPaths(ref)) {
+    const parts = path.split('/');
+    for (let depth = 1; depth < parts.length; depth++) dirs.add(parts.slice(0, depth).join('/'));
+  }
+  return [...dirs];
 }

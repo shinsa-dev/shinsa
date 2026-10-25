@@ -5,15 +5,15 @@ import {
   requestTaskDiff,
   requestTaskRefs,
 } from '@/lib/connection/code.ts';
-import { listChangedPaths } from './demo-repo.ts';
+import { listRepoDirs, listRepoPaths } from './demo-repo.ts';
 
 export async function primeReview(task: Task) {
   const refs = await requestTaskRefs(task);
-  const reads: Promise<unknown>[] = [requestRepoTree(task, refs.head, '')];
+  const commits = refs.base ? [refs.head, refs.base] : [refs.head];
+  const reads: Promise<unknown>[] = commits.flatMap((ref) => [
+    ...listRepoDirs(ref).map((dir) => requestRepoTree(task, ref, dir)),
+    ...listRepoPaths(ref).map((path) => requestFileContent(task, ref, path)),
+  ]);
   if (refs.base) reads.push(requestTaskDiff(task, refs.base, refs.head));
-  for (const path of listChangedPaths()) {
-    reads.push(requestFileContent(task, refs.head, path));
-    if (refs.base) reads.push(requestFileContent(task, refs.base, path));
-  }
   await Promise.all(reads);
 }

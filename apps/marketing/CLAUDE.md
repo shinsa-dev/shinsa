@@ -18,7 +18,9 @@ gives the build process the browser globals the web's modules read when they loa
 plugin in the config points every `react` import at `lib/react-snapshots.ts`, whose `useSyncExternalStore` uses the
 client snapshot as the server one, since React refuses to render or hydrate that hook without it and the web app never
 passes one. And the server half of the stand-in (`installDemoApi`) runs at build too, so `review.tsx` can load the
-workbench's reads with a top-level await before it renders, in the build and in the browser alike. Keep a demo's first
+workbench's reads with a top-level await before it renders, in the build and in the browser alike: `review-prime.ts`
+reads every folder and file at both commits and the diff, and the stand-in answers at once, so the Code tab never
+shows a loading state. Keep a demo's first
 render a function of its sample state: anything read from the clock or the URL during render shows up as a hydration
 mismatch.
 
