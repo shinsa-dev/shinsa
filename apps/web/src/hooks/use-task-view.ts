@@ -10,7 +10,7 @@ function applyTab(tab: TaskTab) {
   updateSearchParams({ ...resolveClearPatch(), tab: tab === 'overview' ? null : tab, run: null });
 }
 
-function applyNowTarget(target: NowTarget, runId?: string) {
+export function applyNowTarget(target: NowTarget, runId?: string) {
   if (target === 'agent') {
     updateSearchParams({ ...resolveClearPatch(), tab: 'chat', run: runId ?? null });
     return;

@@ -12,14 +12,17 @@ behind it is `docs/plans/desktop-plan.md`.
 src/
 ├── lib/            Pure logic, Bun-tested at 100% (test/lib/): deep-link.ts (shinsa:// → a page path), badge.ts,
 │                   notice.ts (checks a notification the page sends), navigation.ts (what stays in the window, what
-│                   opens in the browser, the permissions the page gets), server-url.ts (which server to load),
+│                   opens in the browser, the permissions the page gets, the Go menu's Back and Forward steps:
+│                   resolveHistoryStep), server-url.ts (which server to load),
 │                   health.ts (GET /api/health, with or without `version`), bounds.ts (window place on connected
 │                   displays), service.ts (starting the service), bridge.ts (the bridge's types and IPC channels),
 │                   dev-bundle.ts (the app's name, and the renamed Electron.app `bun run dev` runs), update.ts
 │                   (the updater's states, its menu item, notice and answers)
 ├── main/           The Electron glue, kept thin and outside coverage: index.ts (single instance, deep links,
-│                   connecting to the server, IPC, the session's permissions), window.ts (MainWindow: hide on
-│                   close, navigation, the waiting page), menu.ts, notifications.ts, server.ts (health, starting
+│                   connecting to the server, its first health check sent before the app is ready, IPC, the
+│                   session's permissions), window.ts (MainWindow: hide on close, navigation, Back and Forward,
+│                   the waiting page; V8's code cache without the heat check), menu.ts (the app menu, with Go:
+│                   Back ⌘[, Forward ⌘], Home ⇧⌘H), notifications.ts, server.ts (health, starting
 │                   the service in the login shell), prefs.ts (window bounds in userData/prefs.json),
 │                   updater.ts (Updater: electron-updater, checked at start and every four hours)
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, windowState, updateBadge,

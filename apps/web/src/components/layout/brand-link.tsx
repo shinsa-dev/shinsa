@@ -11,7 +11,7 @@ export function BrandLink({ onNavigate, className }: { onNavigate?: () => void; 
         onNavigate?.();
       }}
       className={cn(
-        'flex cursor-pointer items-center gap-2 font-medium text-fg-4 text-sm outline-none',
+        'flex cursor-pointer items-center gap-1.5 font-medium text-fg-4 text-sm outline-none',
         className
       )}
     >

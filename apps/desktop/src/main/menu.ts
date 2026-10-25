@@ -4,11 +4,12 @@ import { APP_NAME } from '../lib/dev-bundle.ts';
 interface MenuActions {
   show: () => void;
   open: (path: string) => void;
+  step: (offset: -1 | 1) => void;
   reload: () => void;
   update: MenuItemConstructorOptions;
 }
 
-export function applyMenu({ show, open, reload, update }: MenuActions) {
+export function applyMenu({ show, open, step, reload, update }: MenuActions) {
   const template: MenuItemConstructorOptions[] = [
     {
       label: APP_NAME,
@@ -59,6 +60,22 @@ export function applyMenu({ show, open, reload, update }: MenuActions) {
         { type: 'separator' },
         { role: 'togglefullscreen' },
         { role: 'toggleDevTools' },
+      ],
+    },
+    {
+      label: 'Go',
+      submenu: [
+        { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => step(-1) },
+        { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => step(1) },
+        { type: 'separator' },
+        {
+          label: 'Home',
+          accelerator: 'Shift+CmdOrCtrl+H',
+          click: () => {
+            open('/');
+            show();
+          },
+        },
       ],
     },
     {

@@ -10,6 +10,11 @@ export type Route =
   | { name: 'onboarding' }
   | { name: 'ui' };
 
+export interface RouteView {
+  route: Route;
+  search: string;
+}
+
 const signal = createSignal();
 
 function parseSegment(pattern: RegExp, pathname: string) {

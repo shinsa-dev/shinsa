@@ -1,55 +1,111 @@
-html[data-desktop],
-html[data-desktop] *,
-html[data-desktop] *::before,
-html[data-desktop] *::after {
-  /* biome-ignore lint/complexity/noImportantStyles: the Mac app never shows the pointer hand; it has to beat every utility, kit rule, inline style and third-party stylesheet */
+html[data-desktop]
+  :where(
+    button,
+    select,
+    summary,
+    label[for],
+    input[type="checkbox"],
+    input[type="radio"],
+    input[type="file"],
+    [role="button"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"],
+    [role="link"],
+    [role="treeitem"],
+    a[href],
+    area[href],
+    .cursor-pointer,
+    [style*="cursor: pointer"],
+    [style*="cursor:pointer"],
+    .cm-foldGutter span,
+    .cm-foldPlaceholder,
+    .cm-collapsedLines,
+    .cm-tooltip-autocomplete li,
+    .cm-diagnosticAction
+  ):where(
+    :not(
+      :disabled,
+      [aria-disabled="true"],
+      [data-disabled],
+      .cursor-default,
+      .cursor-text,
+      .cursor-move,
+      .cursor-grab,
+      .cursor-grabbing,
+      .cursor-col-resize,
+      .cursor-row-resize,
+      .cursor-ew-resize,
+      .cursor-ns-resize,
+      .cursor-zoom-in,
+      .cursor-zoom-out,
+      .cursor-not-allowed,
+      .cursor-wait,
+      .cursor-progress,
+      .cursor-help,
+      .cursor-crosshair
+    )
+  ),
+html[data-desktop]
+  :where(
+    a[href],
+    area[href],
+    button,
+    label[for],
+    summary,
+    [role="button"],
+    [role="tab"],
+    [role="link"],
+    [role="option"],
+    [role="menuitem"],
+    [role="treeitem"],
+    .cursor-pointer
+  )
+  :where(
+    :not(
+      input,
+      textarea,
+      [contenteditable]:not([contenteditable="false"]),
+      .cm-content,
+      .cm-content *,
+      .cursor-text,
+      .cursor-grab,
+      .cursor-grabbing,
+      .cursor-col-resize,
+      .cursor-not-allowed
+    )
+  ),
+html[data-desktop] :where(a[href], button, [role="button"], .cursor-pointer)::before,
+html[data-desktop] :where(a[href], button, [role="button"], .cursor-pointer)::after {
+  /* biome-ignore lint/complexity/noImportantStyles: the Mac app shows the arrow where a browser shows the pointer hand, over every utility, kit rule, inline style and third-party stylesheet; every other cursor is left alone */
   cursor: default !important;
 }
 
-html[data-desktop] input,
-html[data-desktop] textarea,
-html[data-desktop] [contenteditable]:not([contenteditable="false"]),
-html[data-desktop] .cm-content,
-html[data-desktop] .cm-content * {
-  /* biome-ignore lint/complexity/noImportantStyles: an input or the editor keeps the text cursor in the Mac app */
-  cursor: text !important;
+html[data-desktop] :where(:disabled, [aria-disabled="true"], [data-disabled]) :where(*) {
+  /* biome-ignore lint/complexity/noImportantStyles: inside a disabled control everything shows the control's own not-allowed cursor */
+  cursor: inherit !important;
 }
 
-html[data-desktop] input[type="button"],
-html[data-desktop] input[type="submit"],
-html[data-desktop] input[type="reset"],
-html[data-desktop] input[type="checkbox"],
-html[data-desktop] input[type="radio"],
-html[data-desktop] input[type="file"],
-html[data-desktop] input[type="range"],
-html[data-desktop] input[type="color"],
-html[data-desktop] input:disabled,
-html[data-desktop] textarea:disabled {
-  /* biome-ignore lint/complexity/noImportantStyles: a control that is not a text field, or a disabled one, keeps the arrow */
-  cursor: default !important;
-}
-
-html[data-desktop] .cursor-col-resize,
-html[data-desktop] .cursor-col-resize::before,
-html[data-desktop] .cursor-col-resize::after,
 html[data-desktop] body[style*="col-resize"],
 html[data-desktop] body[style*="col-resize"] *,
 html[data-desktop] body[style*="col-resize"] *::before,
 html[data-desktop] body[style*="col-resize"] *::after {
-  /* biome-ignore lint/complexity/noImportantStyles: a resize handle, and the whole page while one drags, keep the resize cursor */
+  /* biome-ignore lint/complexity/noImportantStyles: while a pane is dragged the whole page keeps the resize cursor */
   cursor: col-resize !important;
 }
 
-html[data-desktop] .cursor-grab,
-html[data-desktop] .cursor-grab::before,
-html[data-desktop] .cursor-grab::after {
-  /* biome-ignore lint/complexity/noImportantStyles: what drags keeps the grab cursor */
-  cursor: grab !important;
-}
-
-html[data-desktop] .active\:cursor-grabbing:active,
 html[data-desktop] body:has([data-slot="slider-thumb"][data-dragging]),
 html[data-desktop] body:has([data-slot="slider-thumb"][data-dragging]) * {
-  /* biome-ignore lint/complexity/noImportantStyles: dragging keeps the grabbing cursor */
+  /* biome-ignore lint/complexity/noImportantStyles: while a slider is dragged the whole page keeps the grabbing cursor */
   cursor: grabbing !important;
+}
+
+html[data-desktop],
+html[data-desktop] body {
+  overscroll-behavior: none;
 }

@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen, shell } from 'electron';
 import { MIN_SIZE, resolveWindowBounds } from '../lib/bounds.ts';
 import { CHANNELS, type DesktopWindowState } from '../lib/bridge.ts';
-import { isAppUrl, type Navigation, resolveNavigation } from '../lib/navigation.ts';
+import { isAppUrl, type Navigation, resolveHistoryStep, resolveNavigation } from '../lib/navigation.ts';
 import { describeWaiting } from '../lib/service.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
 
@@ -52,6 +52,7 @@ export class MainWindow {
         sandbox: true,
         spellcheck: true,
         backgroundThrottling: false,
+        v8CacheOptions: 'bypassHeatCheck',
       },
     });
     this.#watchWindow();
@@ -139,6 +140,17 @@ export class MainWindow {
   open(path: string) {
     if (this.#page === 'app') this.win.webContents.send(CHANNELS.navigate, path);
     else this.#pending = path;
+  }
+
+  step(offset: -1 | 1) {
+    if (this.#page !== 'app') return;
+    const history = this.win.webContents.navigationHistory;
+    const urls = Array.from(
+      { length: history.length() },
+      (_, entry) => history.getEntryAtIndex(entry)?.url ?? ''
+    );
+    const index = resolveHistoryStep(urls, history.getActiveIndex(), offset, this.origin);
+    if (index !== null) history.goToIndex(index);
   }
 
   reload() {

@@ -6,25 +6,95 @@ import { CARDS_FRAME, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/col
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskHeader } from '@/components/task/header.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
-import { type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
+import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
+import { applyNowTarget, type TaskView, useTaskView } from '@/hooks/use-task-view.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
+import type { TaskTab } from '@/lib/tasks/tabs.ts';
 import { replaceRoute, resolveCanonicalTaskPath } from '@/router.ts';
 import { ChatTab } from './chat.tsx';
 import { CodeTab, prefetchCode, usePrefetchCode } from './lazy-code.tsx';
 import { OverviewTab } from './overview.tsx';
+import { usePrefetchTaskPage } from './prefetch.tsx';
 import { ReviewTab } from './review.tsx';
 
-function TaskTabContent({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
-  switch (view.tab) {
+interface TabContentProps {
+  tab: TaskTab;
+  state: ShinsaState;
+  task: Task;
+  lead: TaskView['lead'];
+  codeModes: TaskView['codeModes'];
+  chatRunId: string | null;
+}
+
+function isSameTabContent(before: TabContentProps, after: TabContentProps) {
+  return (
+    before.tab === after.tab &&
+    before.state === after.state &&
+    before.task === after.task &&
+    before.lead === after.lead &&
+    before.chatRunId === after.chatRunId &&
+    before.codeModes.join() === after.codeModes.join()
+  );
+}
+
+const TaskTabContent = React.memo(function TabContent({
+  tab,
+  state,
+  task,
+  lead,
+  codeModes,
+  chatRunId,
+}: TabContentProps) {
+  switch (tab) {
     case 'overview':
-      return <OverviewTab state={state} task={task} gate={view.lead} onOpen={view.applyNowTarget} />;
+      return <OverviewTab state={state} task={task} gate={lead} onOpen={applyNowTarget} />;
     case 'review':
       return <ReviewTab state={state} task={task} />;
     case 'code':
-      return <CodeTab task={task} modes={view.codeModes} />;
+      return <CodeTab task={task} modes={codeModes} />;
     case 'chat':
-      return <ChatTab state={state} task={task} focusRunId={view.chatRunId} />;
+      return <ChatTab state={state} task={task} focusRunId={chatRunId} />;
   }
+}, isSameTabContent);
+
+function TaskTabs({
+  state,
+  task,
+  view,
+  framed,
+}: {
+  state: ShinsaState;
+  task: Task;
+  view: TaskView;
+  framed: boolean;
+}) {
+  const warm = useIdle();
+  const settled = useIdleValue(state);
+  const visited = React.useRef(new Set<TaskTab>());
+  visited.current.add(view.tab);
+  return view.tabs
+    .filter((tab) => warm || visited.current.has(tab))
+    .map((tab) => {
+      const content = (
+        <TaskTabContent
+          tab={tab}
+          state={tab === view.tab ? state : settled}
+          task={task}
+          lead={view.lead}
+          codeModes={view.codeModes}
+          chatRunId={view.chatRunId}
+        />
+      );
+      return (
+        <React.Activity key={tab} mode={tab === view.tab ? 'visible' : 'hidden'}>
+          {framed && tab === 'code' ? (
+            <div className={cn(CARD, 'flex min-h-0 flex-1 flex-col overflow-hidden')}>{content}</div>
+          ) : (
+            content
+          )}
+        </React.Activity>
+      );
+    });
 }
 
 function SidebarTaskPage({ state, task, view }: { state: ShinsaState; task: Task; view: TaskView }) {
@@ -42,7 +112,7 @@ function SidebarTaskPage({ state, task, view }: { state: ShinsaState; task: Task
           className={cn(PAGE_COLUMN, PAGE_TOP, coding ? 'pb-3' : 'pb-1')}
         />
       </div>
-      <TaskTabContent state={state} task={task} view={view} />
+      <TaskTabs state={state} task={task} view={view} framed={false} />
     </div>
   );
 }
@@ -60,13 +130,7 @@ function CardsTaskPage({ state, task, view }: { state: ShinsaState; task: Task; 
         }}
         className={cn(PAGE_COLUMN, PAGE_TOP, coding ? 'pb-3' : 'pb-1')}
       />
-      {coding ? (
-        <div className={cn(CARD, 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
-          <TaskTabContent state={state} task={task} view={view} />
-        </div>
-      ) : (
-        <TaskTabContent state={state} task={task} view={view} />
-      )}
+      <TaskTabs state={state} task={task} view={view} framed />
     </div>
   );
 }
@@ -85,6 +149,7 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   const { task } = view;
   useCanonicalPath(task, taskId);
   usePrefetchCode(task, view.tabs, view.tab);
+  usePrefetchTaskPage(state, task?.id ?? null);
   if (!task) {
     return <EmptyState icon='IconInboxEmpty' title='No such task' description='It may have been removed.' />;
   }

@@ -53,3 +53,19 @@ export function isPermissionAllowed(permission: string, requestingUrl: string, o
     return false;
   }
 }
+
+export function resolveHistoryStep(
+  urls: readonly string[],
+  activeIndex: number,
+  offset: -1 | 1,
+  origin: string
+) {
+  const index = activeIndex + offset;
+  const url = urls[index];
+  if (url === undefined) return null;
+  try {
+    return isAppUrl(new URL(url), origin) ? index : null;
+  } catch {
+    return null;
+  }
+}

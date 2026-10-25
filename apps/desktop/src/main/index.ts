@@ -22,6 +22,7 @@ let connecting = false;
 let offeredStart = false;
 let menuActions: Omit<Parameters<typeof applyMenu>[0], 'update'> | null = null;
 let updater: Updater | null = null;
+let firstHealth: Promise<ServerHealth | null> | null = null;
 
 app.setName(APP_NAME);
 if (!app.isPackaged) app.setPath('userData', join(app.getPath('appData'), `${APP_NAME} Dev`));
@@ -42,6 +43,7 @@ function watchApp() {
   app.on('activate', () => main?.show());
   app.on('before-quit', () => main?.markQuitting());
   watchPage();
+  firstHealth = requestHealth(resolveAppServerUrl());
   void app.whenReady().then(start);
 }
 
@@ -66,6 +68,7 @@ async function start() {
   menuActions = {
     show: () => main?.show(),
     open: (path) => main?.open(path),
+    step: (offset) => main?.step(offset),
     reload: () => main?.reload(),
   };
   updater = new Updater(publishUpdate, () => main?.show());
@@ -146,7 +149,8 @@ async function connect() {
   const current = main;
   if (!current || connecting) return;
   connecting = true;
-  const found = await requestHealth(current.origin);
+  const found = await (firstHealth ?? requestHealth(current.origin));
+  firstHealth = null;
   if (found) {
     connecting = false;
     showApp(current, found);

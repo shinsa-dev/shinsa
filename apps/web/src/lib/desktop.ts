@@ -3,6 +3,8 @@ import { createSignal } from '@/lib/signal.ts';
 
 type DesktopWindowState = 'window' | 'fullscreen';
 
+export const HOME_SHORTCUT = '⇧⌘H';
+
 export interface DesktopNotice {
   title: string;
   body: string;

@@ -177,6 +177,12 @@ apps/desktop/                 @shinsa/desktop
      the packaged app offers Start Shinsa once a launch (`shinsa service restart`, then `install`). Not built: the
      first-run Install / Not now screen, the detached `serve` for Not now, and the 5 s health watch that kicks the
      service while the window is open (the page's own reconnecting socket covers a server restart).
+   - Start-up speed (2026-10-25): the first health check is sent before `app.whenReady`, the window waits for
+     `ready-to-show`, background throttling is off, V8 keeps a code cache from the first run
+     (`v8CacheOptions: 'bypassHeatCheck'`), and `shinsa serve` marks the hashed `/assets/*` immutable, so a
+     relaunch reads the bundle and its compiled code from disk. Measured with `scripts/perf/shell-startup.ts`
+     (`docs/performance.md` → Shell and navigation): about 0.3 s from launch to the page's navigation, 0.42 s to
+     first paint and 0.48 s to Home on an M-series Mac, dominated by Electron's own boot.
 2. **Native integration (2 days). Done, without the summon shortcut.** Badge, notifications with click-through,
    `shinsa://` links (cold and warm start), menu, the notification handshake. Pass: 3 decisions → Dock shows 3,
    only the app notifies, and Floaty's tab stays quiet (no sound, no notification, its badge kept) while the app is
@@ -184,9 +190,10 @@ apps/desktop/                 @shinsa/desktop
    `open shinsa://task/LOC-4` opens that task from a closed app and from a hidden window.
    - Built: `lib/badge.ts`, `lib/notice.ts` with `main/notifications.ts`, `lib/deep-link.ts` (`open-url`,
      `second-instance`, and a link held until the window exists), `main/menu.ts` (macOS's menu with Settings… ⌘,
-     and Reload ⌘R), and the handshake (`hello` and `surfaces` on the socket, `isPageQuiet` in the web).
-   - Changed by decision: no summon shortcut and no other key (`docs/design.md`, 31; Floaty's ⌃Space summons
-     Shinsa), so its check is dropped; the menu has no New task or Command menu items. Floaty's badge shows 3 as
+     Reload ⌘R, and since 2026-10-25 Go: Back ⌘[, Forward ⌘] and Home ⇧⌘H, which the top bar's Home button names
+     where the browser shows the Shinsa wordmark), and the handshake (`hello` and `surfaces` on the socket, `isPageQuiet` in the web).
+   - Changed by decision: no summon shortcut and no page key (`docs/design.md`, 31; Floaty's ⌃Space summons
+     Shinsa; the Go menu's keys are the app's), so its check is dropped; the menu has no New task or Command menu items. Floaty's badge shows 3 as
      well: only sound and notifications are the app's alone.
    - Not built: main polling `/api/queue` for the badge while no page is loaded; the badge clears instead while the
      server is unreachable.

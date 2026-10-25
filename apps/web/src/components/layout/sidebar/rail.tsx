@@ -3,7 +3,7 @@ import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
 import { CommandMenuButton } from '@/components/command/menu.tsx';
 import { FocusMenu } from '@/components/focus/menu.tsx';
-import { BrandLink } from '@/components/layout/brand-link.tsx';
+import { HomeLink } from '@/components/layout/home-link.tsx';
 import { NavItem } from '@/components/layout/nav-item.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
@@ -21,9 +21,9 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
   }
 
   return (
-    <nav className='flex h-full w-full flex-col bg-sidebar [--glyph-ring:var(--color-sidebar)]'>
+    <nav className='flex h-full w-full select-none flex-col bg-sidebar [--glyph-ring:var(--color-sidebar)]'>
       <div data-window-drag className='flex h-11 shrink-0 items-center gap-2 desktop:ps-20 ps-3.5 pe-2'>
-        <BrandLink onNavigate={onNavigate} className='desktop:hidden' />
+        <HomeLink onNavigate={onNavigate} />
         <ConnectionStatus />
         <span className='flex-1' />
         <UpdateButton />

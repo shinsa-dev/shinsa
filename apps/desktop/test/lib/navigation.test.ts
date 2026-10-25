@@ -4,6 +4,7 @@ import {
   isAppUrl,
   isLoopbackHost,
   isPermissionAllowed,
+  resolveHistoryStep,
   resolveNavigation,
 } from '../../src/lib/navigation.ts';
 
@@ -76,5 +77,29 @@ describe('isPermissionAllowed', () => {
   it('never grants notifications, so only the app notifies', () => {
     expect(isPermissionAllowed('notifications', ORIGIN, ORIGIN)).toBe(false);
     expect(isPermissionAllowed('media', ORIGIN, ORIGIN)).toBe(false);
+  });
+});
+
+describe('resolveHistoryStep', () => {
+  const urls = [
+    'file:///Applications/Shinsa.app/static/waiting.html',
+    `${ORIGIN}/`,
+    `${ORIGIN}/tasks/LOC-4`,
+    `${ORIGIN}/settings`,
+  ];
+
+  it('steps back and forward through the server’s own pages', () => {
+    expect(resolveHistoryStep(urls, 2, -1, ORIGIN)).toBe(1);
+    expect(resolveHistoryStep(urls, 2, 1, ORIGIN)).toBe(3);
+  });
+
+  it('never steps onto the waiting page or past either end', () => {
+    expect(resolveHistoryStep(urls, 1, -1, ORIGIN)).toBeNull();
+    expect(resolveHistoryStep(urls, 3, 1, ORIGIN)).toBeNull();
+    expect(resolveHistoryStep(urls, 0, -1, ORIGIN)).toBeNull();
+  });
+
+  it('ignores an entry that is not a URL', () => {
+    expect(resolveHistoryStep(['not a url', `${ORIGIN}/`], 1, -1, ORIGIN)).toBeNull();
   });
 });
