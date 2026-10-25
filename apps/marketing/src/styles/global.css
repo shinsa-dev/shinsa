@@ -12,8 +12,18 @@ astro-island {
 }
 
 .demo-window {
+  --window-w: var(--wide-w);
+  --window-h: var(--wide-h);
   --window-scale: min(1, tan(atan2(100cqw, var(--window-w))));
   height: calc(var(--window-extra) + 37px + var(--window-h) * var(--window-scale));
+}
+
+@container (width < 640px) {
+  .demo-window {
+    --window-w: 100cqw;
+    --window-h: var(--narrow-h);
+    --window-scale: 1;
+  }
 }
 
 .demo-window-content {

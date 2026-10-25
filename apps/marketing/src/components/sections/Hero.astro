@@ -14,7 +14,7 @@ const greetings = Array.from({ length: 24 }, (_, hour) =>
     <h1 class='font-medium text-4xl text-fg-4 leading-[1.08] tracking-tight text-balance md:text-5xl'>
       {hero.headline}
     </h1>
-    <p class='max-w-xl text-base text-fg-2 leading-relaxed text-pretty md:text-lg'>{hero.text}</p>
+    <p class='max-w-[34rem] text-base text-fg-2 leading-relaxed text-balance md:text-lg'>{hero.text}</p>
     <div class='mt-2 flex flex-wrap items-center justify-center gap-2'>
       <Button href={site.downloadUrl}>{hero.primary}</Button>
       <Button href={site.githubUrl} variant='secondary' icon='IconGithub' external>{hero.secondary}</Button>

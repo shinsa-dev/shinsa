@@ -24,7 +24,9 @@ mismatch.
 
 The page reads as one story down the screen: sections follow each other closely, the windows size themselves to the
 screen's height and width in CSS alone (`components/layout/DemoWindow.astro`, `lib/window-size.ts`, `.demo-window` in
-`global.css`), and every demo's box is reserved in the static HTML, so nothing moves when the islands mount. Keep it
+`global.css`), and every demo's box is reserved in the static HTML, so nothing moves when the islands mount. From 640px
+up a window is the desktop app scaled to fit; below it, on a phone, it renders the web app at the phone's own width
+and its `narrow` height, since the web app is responsive and a scaled desktop is too small to read. Keep it
 that way: a demo whose height depends on its content gets fixed inner heights and a reserved height in `index.astro`.
 `Backdrop.astro` draws a circuit board behind it (`lib/board.ts`): each demo
 window is a chip, two traces per side run from one chip to the next, and a signal travels down them as you scroll.

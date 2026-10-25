@@ -1,9 +1,9 @@
 export const site = {
   name: 'Shinsa',
   url: 'https://shinsa.dev',
-  title: 'Shinsa: hand over the work, keep the decisions',
+  title: 'Shinsa: Hand Over the Work, Keep the Decisions',
   description:
-    'Shinsa runs Claude Code and Codex from your request to a merged pull request, and asks you only for the decisions that need a person.',
+    'Shinsa runs Claude Code and Codex from your request to a merged pull request, and stops only for what needs you: the review, the merge and the odd question.',
   downloadUrl: 'https://shinsa.dev/download',
   githubUrl: 'https://github.com/shinsa-dev/shinsa',
 };
