@@ -15,7 +15,6 @@ import {
   isWorktreeStep,
   type PipelineStep,
   type Run,
-  type RunRole,
   resolveInquiryStep,
   resolveOperationTiming,
   resolveProposalUpgrade,
@@ -134,22 +133,18 @@ export function startInquiry(decider: Decider, taskId: string, step: InquiryStep
   const repo = decider.repoOf(task);
   if (step === 'answer') {
     decider.startRun(task, 'answerer', resolveAnswererPrompt(task, repo, followUp), {
-      resumeFrom: followUp ? decider.lastRun(taskId, ['answerer']) : decider.resumeRound(task, ['answerer']),
+      resumeFrom: decider.taskSession(taskId, 'answerer'),
     });
     return;
   }
   if (step === 'research') {
     decider.startRun(task, 'researcher', resolveResearcherPrompt(task, repo, followUp), {
-      resumeFrom: followUp
-        ? decider.lastRun(taskId, ['researcher'])
-        : decider.resumeRound(task, ['researcher']),
+      resumeFrom: decider.taskSession(taskId, 'researcher'),
     });
     return;
   }
   decider.startRun(task, 'investigator', resolveInvestigatorPrompt(task, repo, followUp), {
-    resumeFrom: followUp
-      ? decider.lastRun(taskId, ['investigator'])
-      : decider.resumeRound(task, ['investigator']),
+    resumeFrom: decider.taskSession(taskId, 'investigator'),
   });
 }
 
@@ -158,7 +153,7 @@ export function startOperation(decider: Decider, taskId: string, guidance: strin
   const task = decider.task(taskId);
   decider.startRun(task, 'agent', resolveAgentPrompt(resolveOperationInstruction(task, guidance)), {
     purpose: 'operate',
-    resumeFrom: decider.rootRun(taskId),
+    resumeFrom: decider.taskSession(taskId, 'agent'),
   });
 }
 
@@ -458,13 +453,11 @@ export function followUpInquiry(decider: Decider, taskId: string, text: string) 
   startInquiry(decider, taskId, step, text);
 }
 
-const FOLLOW_UP_ROLES: RunRole[] = ['agent', 'answerer', 'researcher', 'investigator'];
-
 export function answerFollowUp(decider: Decider, taskId: string, question: string | null) {
   decider.stage(taskId, 'answering', 'answering your follow-up');
   const task = decider.task(taskId);
   decider.startRun(task, 'answerer', resolveFollowUpPrompt(task, decider.repoOf(task), question), {
-    resumeFrom: decider.lastRun(taskId, FOLLOW_UP_ROLES),
+    resumeFrom: decider.taskSession(taskId, 'answerer'),
   });
 }
 

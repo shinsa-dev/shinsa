@@ -29,7 +29,7 @@ async function toPullRequest(w: World, taskId: string) {
 }
 
 describe('a task from request to merge', () => {
-  test('one agent plans and builds every phase in one session, then a fresh reviewer, and it stops at your review', async () => {
+  test('one agent plans and builds every phase in one session, then a reviewer on its own, and it stops at your review', async () => {
     const w = await open();
     const taskId = await toReviewGate(w);
     const task = w.task(taskId);
@@ -108,7 +108,7 @@ describe('fix loops', () => {
     expect(w.agents.of('reviewer')).toHaveLength(1);
   });
 
-  test('blocking review findings are fixed and reviewed again by a fresh reviewer', async () => {
+  test('blocking review findings are fixed and reviewed again by the reviewer’s own session', async () => {
     const w = await open();
     w.agents.queue('reviewer', async (agent) => {
       await agent.call('report_review', {
@@ -123,7 +123,10 @@ describe('fix loops', () => {
     const taskId = await toReviewGate(w);
     const reviewers = w.agents.of('reviewer');
     expect(reviewers).toHaveLength(2);
-    expect(reviewers[1]?.resume).toBeNull();
+    expect(reviewers[0]?.resume).toBeNull();
+    expect(reviewers[1]?.resume).not.toBeNull();
+    expect(reviewers[1]?.resume).not.toBe(w.agents.of('fix')[0]?.resume);
+    expect(reviewers[1]?.prompt).toContain('You reviewed earlier work on this task in this conversation.');
     expect(readFileSync(join(w.task(taskId).worktreePath ?? '', 'a.txt'), 'utf8')).toBe('hello\n');
   });
 

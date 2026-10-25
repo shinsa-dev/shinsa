@@ -1,4 +1,4 @@
-import { listToolNames, type RunRole, type ShinsaToolName } from '../domain/index.ts';
+import { listCallableToolNames, type RunRole, type ShinsaToolName } from '../domain/index.ts';
 import { MANAGE_RULES } from './manage.ts';
 import { resolveOrchestrationRules } from './orchestration-rules.ts';
 
@@ -59,13 +59,14 @@ function listToolRules(tools: readonly ShinsaToolName[]) {
       : []),
     describeWaitingRule(tools),
     'To read another task (its status, plan, report, open decisions and latest agent replies), call `read_task` with an id from `find_tasks`. It reads; it never changes the task.',
+    'To see the other open tasks in this repository, their branches, the files they changed and whether an agent works on them now, call `list_repository_work`.',
     'When you notice work worth doing that is outside this task, propose it with `suggest_tasks` instead of doing it. The human decides whether it joins the roadmap.',
     'When the human asks in this chat for something that does not belong in this task, suggest it with `suggest_tasks`, with `split_off` set on it; the human makes it a task of its own or keeps it here as the next round.',
   ];
 }
 
 export function resolveHouseRules(role: RunRole) {
-  const tools = listToolNames(role);
+  const tools = listCallableToolNames(role);
   return [
     INTRO,
     CONVERSATION_RULE,

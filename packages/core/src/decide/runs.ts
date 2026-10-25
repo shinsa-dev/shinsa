@@ -6,7 +6,9 @@ import {
   hasTool,
   isDelegatedRun,
   isHandOverTool,
+  isTaskSessionRole,
   isTaskSettled,
+  listToolNames,
   MINUTE_MS,
   PURPOSE_HAND_OVERS,
   RUN_STAGES,
@@ -15,6 +17,7 @@ import {
   type RunFailureClass,
   type RunOutcome,
   type RunPurpose,
+  type RunRole,
   type ShinsaToolName,
   type Task,
 } from '../domain/index.ts';
@@ -62,6 +65,16 @@ const PURPOSE_REFUSAL: Record<RunPurpose, string> = {
   operate: 'You are running the operation: report how it went with `report_outcome`.',
 };
 
+const ROLE_REFUSAL: Partial<Record<RunRole, string>> = {
+  answerer: 'You are answering: hand the answer over with `answer`.',
+  investigator: 'You are investigating: hand the diagnosis over with `report_diagnosis`.',
+  researcher: 'You are researching: hand the report over with `submit_report`.',
+};
+
+function resolveStepRefusal(run: Run) {
+  return run.purpose ? PURPOSE_REFUSAL[run.purpose] : (ROLE_REFUSAL[run.role] ?? '');
+}
+
 function assertPurpose(run: Run, tool: ShinsaToolName) {
   if (!run.purpose || !isHandOverTool(tool) || PURPOSE_HAND_OVERS[run.purpose].includes(tool)) return;
   throw new DomainError('wrong_step', PURPOSE_REFUSAL[run.purpose]);
@@ -77,6 +90,9 @@ function assertTool(run: Run, tool: ShinsaToolName) {
       'delegation_depth',
       `Delegations nest at most ${DELEGATION_LIMITS.depth} deep, and this agent is already at that depth. Do the work yourself.`
     );
+  }
+  if (isTaskSessionRole(run.role) && !isDelegatedRun(run) && listToolNames(run.role).includes(tool)) {
+    throw new DomainError('wrong_step', resolveStepRefusal(run));
   }
   throw new DomainError('wrong_role', `A ${run.role} cannot do that.`);
 }
@@ -128,7 +144,7 @@ function recover(decider: Decider, run: Run, why: string, failure: RunFailure | 
   const fresh = recovery.mode === 'fresh';
   const nudge = fresh ? resolveFreshSessionNudge(why) : resolveRecoveryNudge(why);
   decider.startRun(decider.task(task.id), role, `${run.rolePrompt ?? run.prompt ?? ''}${nudge}`, {
-    resumeFrom: fresh ? null : run,
+    resumeFrom: fresh ? null : decider.resumableFrom(run),
     purpose: run.purpose ?? null,
     phaseIndex: run.phaseIndex ?? null,
     monitorId: run.monitorId ?? null,
@@ -195,6 +211,7 @@ export function attemptRun(decider: Decider, command: CommandOf<'run.attempt'>) 
     resumed: command.resumed,
     handoff: command.handoff,
     ...(command.account ? { account: command.account } : {}),
+    ...(command.cwd ? { cwd: command.cwd } : {}),
   });
 }
 

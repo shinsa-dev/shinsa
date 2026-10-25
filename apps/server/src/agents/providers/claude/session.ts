@@ -10,7 +10,9 @@ import type {
 import {
   type ChatNotice,
   isReadOnlyRole,
+  isTaskSessionRole,
   type RunFailure,
+  type RunRole,
   type RunUsage,
   resolveSteerPrompt,
 } from '@shinsa/core';
@@ -31,7 +33,7 @@ import {
 } from './classify.ts';
 import { listBackgroundWork, resolveCacheExpiry } from './context.ts';
 import { resolveClaudeExtensions, serializeClaudeServer } from './extensions.ts';
-import { guardCommand, listPlanningHooks } from './guard.ts';
+import { guardCommand, listReadOnlyHooks } from './guard.ts';
 import { type ClaudeRecorder, createClaudeRecorder, resolveUsageSnapshot } from './recorder.ts';
 import { type EunoeLink, resolveClaudeRoute } from './route.ts';
 import { CLAUDE_RUNTIME, type ClaudeRuntime, resolveClaudeProcess } from './sdk.ts';
@@ -190,6 +192,10 @@ function resolveSummary(message: SDKResultMessage, verdict: TurnVerdict) {
   return message.subtype === 'success' ? message.result.slice(0, SUMMARY_LIMIT) : null;
 }
 
+function resolveDisallowedTools(role: RunRole) {
+  return isReadOnlyRole(role) && !isTaskSessionRole(role) ? ['Edit', 'Write', 'NotebookEdit'] : [];
+}
+
 function removeServers(connected: Record<string, McpServerConfig>, names: string[]) {
   for (const name of names) delete connected[name];
 }
@@ -256,7 +262,7 @@ export function startClaudeSession(
         permissionMode: 'bypassPermissions',
         allowDangerouslySkipPermissions: true,
         mcpServers: { [input.tools.name]: serializeToolServer(input.tools) },
-        disallowedTools: isReadOnlyRole(input.role) ? ['Edit', 'Write', 'NotebookEdit'] : [],
+        disallowedTools: resolveDisallowedTools(input.role),
         strictMcpConfig: true,
         skills: extensions.skills,
         settingSources: ['user', 'project', 'local'],
@@ -264,12 +270,16 @@ export function startClaudeSession(
           type: 'preset',
           preset: 'claude_code',
           append: appended,
+          excludeDynamicSections: true,
+          snapshot: true,
         },
         plugins: [{ type: 'local', path: input.pluginDir }],
         hooks: {
           PreToolUse: [
             { matcher: 'Bash', hooks: [guardCommand(input.defaultBranch)] },
-            ...(input.readOnly && !isReadOnlyRole(input.role) ? listPlanningHooks() : []),
+            ...(input.readOnly && resolveDisallowedTools(input.role).length === 0
+              ? listReadOnlyHooks(input.role)
+              : []),
           ],
         },
         forwardSubagentText: true,

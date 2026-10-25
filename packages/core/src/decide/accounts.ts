@@ -84,7 +84,7 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
   decider.emit({ type: 'usage_wait.ended', taskId: task.id, waitId: wait.id, status: 'resumed' });
   const prompt = run?.rolePrompt ?? run?.prompt ?? '';
   decider.startRun(decider.task(task.id), wait.role, `${prompt}${resolveUsageResumeNudge()}`, {
-    resumeFrom: run,
+    resumeFrom: decider.resumableFrom(run),
     purpose: run?.purpose ?? null,
     phaseIndex: wait.phaseIndex,
     monitorId: run?.monitorId ?? null,
@@ -138,8 +138,8 @@ function describeSignInReason(failure: RunFailure, provider: string) {
 }
 
 function resolveSignIn(run: Run, failure: RunFailure) {
-  if (failure.account) {
-    const provider = run.attempts?.at(-1)?.provider ?? run.provider;
+  const provider = run.attempts?.at(-1)?.provider ?? run.provider;
+  if (failure.account && provider === CLAUDE_PROVIDER) {
     return { provider, account: failure.account, email: failure.account.email };
   }
   if (failure.login) return { provider: failure.login.provider, account: null, email: failure.login.email };

@@ -7,8 +7,10 @@ import {
   type RunHandoffReason,
   resolveHandoff,
   resolveHandoffPrompt,
+  resolveMovedNote,
   resolveRunBrief,
   type ShinsaState,
+  selectSessionCwd,
   splitHouseRules,
 } from '@shinsa/core';
 import { log } from '../log/index.ts';
@@ -123,11 +125,18 @@ export function resolveTurnBrief(state: ShinsaState, run: Run, override: string 
   return brief === (run.prompt ?? '') ? override : [brief, override].join('\n\n');
 }
 
+function resolveResumedPrompt(context: TurnContext, resume: string, prompt: string, brief: string) {
+  const rules = splitHouseRules(brief)?.rules;
+  if (!rules) return prompt;
+  if (!hasHouseRules(context, resume, rules)) return brief;
+  return splitHouseRules(prompt)?.instruction ?? prompt;
+}
+
 export function resolveTurnPrompt(context: TurnContext, plan: TurnPlan, prompt: string, brief: string) {
   if (plan.handoff) return resolveHandoffPrompt(plan.handoff.text, brief);
   if (!plan.resume) return brief;
-  const rules = splitHouseRules(brief)?.rules;
-  if (!rules) return prompt;
-  if (!hasHouseRules(context, plan.resume, rules)) return brief;
-  return splitHouseRules(prompt)?.instruction ?? prompt;
+  const turn = resolveResumedPrompt(context, plan.resume, prompt, brief);
+  const started = selectSessionCwd(context.state, plan.resume, context.run.id);
+  if (!started || started === context.cwd) return turn;
+  return `${turn}\n\n${resolveMovedNote(context.cwd)}`;
 }

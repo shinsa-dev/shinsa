@@ -191,9 +191,10 @@ describe('the setup chat', () => {
     await onboarding.chat.resolve();
     const echoed = await say(onboarding, 'roots', 'the dev folder please');
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]?.system).toContain('The question was: Which repository folders should Shinsa use?');
-    expect(prompts[0]?.system).toContain(`- ${developer}: 1 repository`);
-    expect(prompts[0]?.prompt).toBe('The answer:\n"""\nthe dev folder please\n"""');
+    expect(prompts[0]?.prompt).toContain('The question was: Which repository folders should Shinsa use?');
+    expect(new Set(prompts.map((call) => call.system)).size).toBe(1);
+    expect(prompts[0]?.prompt).toContain(`- ${developer}: 1 repository`);
+    expect(prompts[0]?.prompt).toEndWith('The answer:\n"""\nthe dev folder please\n"""');
     expect(lastText(echoed)).toBe('You keep your repositories in ~/Developer (1 repository). Is that right?');
     expect(echoed.prompt).toMatchObject({
       questionId: 'roots',
@@ -232,23 +233,23 @@ describe('the setup chat', () => {
       required: ['understood', 'values'],
       additionalProperties: false,
     });
-    expect(folders?.system).toContain(`- ${developer}: 1 repository`);
-    expect(folders?.system).toContain('If the answer does not clearly choose, return {"understood": false');
+    expect(folders?.prompt).toContain(`- ${developer}: 1 repository`);
+    expect(folders?.prompt).toContain('If the answer does not clearly choose, return {"understood": false');
     expect(merge?.schema).toEqual({
       type: 'object',
       properties: { choice: { type: 'string', enum: ['squash', 'merge', 'rebase', 'keep', 'unclear'] } },
       required: ['choice'],
       additionalProperties: false,
     });
-    expect(merge?.system).toContain(
+    expect(merge?.prompt).toContain(
       '- choice (choice): Which option does the answer choose? It may name the option, describe it in its own words (cheaper, faster, only when I ask) or agree to it. Options: "squash": Squash: every pull request lands as one commit; "merge": Merge commit: every commit is kept and a merge commit joins them; "rebase": Rebase: the commits are replayed onto the default branch, a straight history without a merge commit; "keep": the answer skips the question, has no preference, leaves it to Shinsa or asks to keep the current setting or the default; "unclear": the answer fits none of the options, or could mean more than one of them. Answer with exactly one option, copied exactly.'
     );
   });
 
   test('tells the model what each option means, so an answer that describes one is read', async () => {
     const { onboarding, prompts, engine } = setup({
-      interpret: (system) =>
-        Promise.resolve({ choice: system.includes('Should agents ask you') ? 'no' : 'sonnet' }),
+      interpret: (_system, prompt) =>
+        Promise.resolve({ choice: prompt.includes('Should agents ask you') ? 'no' : 'sonnet' }),
     });
     await onboarding.chat.resolve();
     await say(onboarding, 'roots', '~/Developer');
@@ -260,8 +261,8 @@ describe('the setup chat', () => {
     expect(plans.prompt?.questionId).toBe('accounts');
     expect(engine.state.settings).toMatchObject({ defaultModel: 'sonnet', approvePlans: false });
     const [model, plan] = prompts;
-    expect(model?.system).toContain('"opus": Opus 5.5; "sonnet": Sonnet 5.5: Efficient for routine tasks;');
-    expect(plan?.system).toContain(
+    expect(model?.prompt).toContain('"opus": Opus 5.5; "sonnet": Sonnet 5.5: Efficient for routine tasks;');
+    expect(plan?.prompt).toContain(
       '"no": No, start building: agents start building straight away and plan first only when the human asks for a plan;'
     );
   });
@@ -348,7 +349,7 @@ describe('the setup chat', () => {
   test('a new answer during a confirmation replaces the one being confirmed', async () => {
     const { onboarding, engine } = setup({
       interpret: (_system, prompt) =>
-        Promise.resolve({ choice: prompt.includes('cheap') ? 'sonnet' : 'opus' }),
+        Promise.resolve({ choice: prompt.split('The answer:')[1]?.includes('cheap') ? 'sonnet' : 'opus' }),
     });
     await onboarding.chat.resolve();
     await say(onboarding, 'roots', '~/Developer');
@@ -673,7 +674,7 @@ describe('answers in your own words', () => {
     const saved = await say(onboarding, 'merge', 'Yep, that’s right, thanks');
     expect(saved.prompt?.questionId).toBe('plans');
     expect(engine.state.settings.mergeMethod).toBe('rebase');
-    expect(prompts.map((entry) => entry.prompt)).toEqual([
+    expect(prompts.map((entry) => entry.prompt.split('\n\n').at(-1))).toEqual([
       'The answer:\n"""\nmy dev folder\n"""',
       'The answer:\n"""\nkeep history linear\n"""',
       'The answer:\n"""\nkeep history linear\n"""',

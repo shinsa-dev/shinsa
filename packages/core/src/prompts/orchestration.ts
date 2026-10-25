@@ -5,7 +5,7 @@ import {
   type DelegationStatus,
   hasTool,
   isReadOnlyRole,
-  listToolNames,
+  listCallableToolNames,
   type Repo,
   type Run,
   type Task,
@@ -45,7 +45,7 @@ function describeDelegateCheckout(isolation: DelegationIsolation, readOnly: bool
 
 export function resolveDelegatePrompt(input: DelegatePromptInput) {
   const readOnly = isReadOnlyRole(input.role);
-  const tools = listToolNames(input.role, input.depth);
+  const tools = listCallableToolNames(input.role, input.depth);
   return [
     DELEGATE_INTRO,
     `Your role: ${input.role}${readOnly ? '. Do not change any file' : ''}.`,

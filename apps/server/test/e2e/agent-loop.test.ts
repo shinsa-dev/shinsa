@@ -256,7 +256,9 @@ describe('restarts', () => {
     expect(restored?.resume).toBeNull();
     const prompt = restored?.prompt ?? '';
     expect(prompt).toContain('<handoff_transcript>');
-    expect(prompt).toContain('Your role: the agent for this round.');
+    expect(prompt).toContain(
+      'Your role: the agent for this task, in one conversation across all of its rounds.'
+    );
     expect(prompt).toContain('Your conversation may no longer hold this round');
     expect(prompt).toContain('Add the two greeting files.');
     expect(prompt).toContain('Wrote the first greeting.');

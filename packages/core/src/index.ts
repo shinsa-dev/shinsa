@@ -38,11 +38,13 @@ export {
   resolveHandoff,
   resolveHandoffPrompt,
   resolveHouseRules,
+  resolveMovedNote,
   resolveQuestionResumePrompt,
   resolveRunBrief,
   resolveSteerPrompt,
   resolveSupersededReply,
   resolveWithdrawnReply,
+  selectSessionCwd,
   splitHouseRules,
 } from './prompts/index.ts';
 export * from './protocol/index.ts';

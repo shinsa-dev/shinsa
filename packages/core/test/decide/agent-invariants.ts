@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import {
   isDelegatedRun,
   listActiveRuns,
+  RUN_AGENT_ROLE,
   type Run,
   type RunFailureClass,
   type RunPurpose,
@@ -33,21 +34,47 @@ const FRESH_FAILURES: ReadonlySet<RunFailureClass> = new Set<RunFailureClass>([
   'session_lost',
 ]);
 
-const INQUIRY_ROLES: ReadonlySet<RunRole> = new Set<RunRole>(['answerer', 'investigator', 'researcher']);
+const SESSION_ENDING: ReadonlySet<RunFailureClass> = new Set<RunFailureClass>([
+  'context_window_full',
+  'image_error',
+]);
 
-function isRootCandidate(run: Run, started: Run) {
-  if (run.taskId !== started.taskId || isDelegatedRun(run)) return false;
-  if (run.role === 'agent') return true;
-  return INQUIRY_ROLES.has(run.role) && (run.round ?? 1) === (started.round ?? 1);
-}
+const SESSION_ROLES: ReadonlySet<RunRole> = new Set<RunRole>([
+  'agent',
+  'answerer',
+  'investigator',
+  'researcher',
+]);
 
-function selectRoundRoot(state: ShinsaState, started: Run) {
+function selectSessionHolder(state: ShinsaState, started: Run) {
+  const roles = SESSION_ROLES.has(started.role) ? SESSION_ROLES : new Set<RunRole>([started.role]);
+  const runs = Object.values(state.runs).filter(
+    (run) => run.taskId === started.taskId && run.id !== started.id && !isDelegatedRun(run) && run.sessionId
+  );
+  const ended = new Set(
+    runs.filter((run) => run.failure && SESSION_ENDING.has(run.failure.class)).map((run) => run.sessionId)
+  );
   let last: Run | null = null;
-  for (const run of Object.values(state.runs)) {
-    if (!isRootCandidate(run, started)) continue;
+  for (const run of runs) {
+    if (!roles.has(run.role) || ended.has(run.sessionId)) continue;
     if (!last || run.startedAt >= last.startedAt) last = run;
   }
   return last;
+}
+
+function isRecoveredFresh(state: ShinsaState, started: Run) {
+  let previous: Run | null = null;
+  for (const run of Object.values(state.runs)) {
+    if (run.taskId !== started.taskId || run.id === started.id || isDelegatedRun(run)) continue;
+    if (run.role !== started.role) continue;
+    if (!previous || run.startedAt >= previous.startedAt) previous = run;
+  }
+  return Boolean(previous?.failure && FRESH_FAILURES.has(previous.failure.class));
+}
+
+function isSameProvider(last: Run, started: Run) {
+  if (RUN_AGENT_ROLE[last.role] === RUN_AGENT_ROLE[started.role]) return true;
+  return last.provider === started.provider;
 }
 
 export function assertAgentInvariants(state: ShinsaState, task: Task, context: string) {
@@ -60,21 +87,21 @@ export function assertAgentInvariants(state: ShinsaState, task: Task, context: s
   }
 }
 
-export function assertOneSessionPerRound(state: ShinsaState, event: ShinsaEventInput, context: string) {
-  if (event.type !== 'run.started' || event.run.role !== 'agent' || isDelegatedRun(event.run)) return;
-  const last = selectRoundRoot(state, event.run);
-  if (!last) return;
-  if (last.role !== 'agent' && (last.provider !== event.run.provider || last.model !== event.run.model)) {
-    expect(event.run.resume, `${context}: an agent run that resumes an inquiry on other settings`).toBe(
-      false
-    );
+export function assertOneSessionPerTask(state: ShinsaState, event: ShinsaEventInput, context: string) {
+  if (event.type !== 'run.started' || isDelegatedRun(event.run)) return;
+  if (!SESSION_ROLES.has(event.run.role) && event.run.role !== 'reviewer') return;
+  const last = selectSessionHolder(state, event.run);
+  if (!last || (event.run.resume === false && isRecoveredFresh(state, event.run))) return;
+  if (!isSameProvider(last, event.run)) {
+    expect(
+      event.run.resume,
+      `${context}: a run that resumes another role's session on another provider`
+    ).toBe(false);
     return;
   }
-  if (!last.sessionId) return;
-  if (last.failure && FRESH_FAILURES.has(last.failure.class)) return;
   expect(
     event.run,
-    `${context}: an agent run that does not resume the round's session, the inquiry's included`
+    `${context}: a ${event.run.role} run that does not resume the task's session`
   ).toMatchObject({
     resume: true,
     sessionId: last.sessionId,

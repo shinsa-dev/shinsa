@@ -1,5 +1,8 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import type { HookInput, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { HookInput, Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import type { ChatEvent, ChatNotice, RunRole } from '@shinsa/core';
 import { AsyncQueue } from '../../../../src/agents/providers/claude/async-queue.ts';
 import type { ClaudeExecutable } from '../../../../src/agents/providers/claude/executable.ts';
@@ -806,6 +809,46 @@ describe('compaction and fast mode', () => {
   });
 });
 
+async function readCachedPrefix(options: Options | undefined) {
+  const servers = (options?.mcpServers ?? {}) as unknown as Record<string, { instance: Server }>;
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'prefix', version: '1.0.0' });
+  await servers.shinsa?.instance.connect(serverSide);
+  await client.connect(clientSide);
+  const { tools } = await client.listTools();
+  await client.close();
+  return JSON.stringify({
+    tools,
+    systemPrompt: options?.systemPrompt,
+    disallowedTools: options?.disallowedTools,
+    skills: options?.skills,
+    plugins: options?.plugins,
+    settings: options?.settings,
+    permissionMode: options?.permissionMode,
+  });
+}
+
+describe('the cached prefix of a task’s session', () => {
+  test('is the same for planning, building, fixing, operating and every other kind of work on the task', async () => {
+    const turns: { role: RunRole; readOnly: boolean }[] = [
+      { role: 'agent', readOnly: true },
+      { role: 'agent', readOnly: false },
+      { role: 'answerer', readOnly: true },
+      { role: 'investigator', readOnly: false },
+      { role: 'researcher', readOnly: true },
+    ];
+    const prefixes = new Set<string>();
+    for (const turn of turns) {
+      const tools = createShinsaTools(turn.role, () => Promise.resolve('ok'));
+      const scripted = startScripted(createInput({ ...turn, tools, resume: 'sess-0' }).input);
+      scripted.messages.push(success('ok'));
+      await scripted.session.done;
+      prefixes.add(await readCachedPrefix(scripted.calls[0]?.options));
+    }
+    expect(prefixes.size).toBe(1);
+  });
+});
+
 describe('a session’s instructions', () => {
   test('a run gets Shinsa’s instructions and the prompt is Shinsa’s', async () => {
     const { input, entries } = createInput();
@@ -816,6 +859,8 @@ describe('a session’s instructions', () => {
       type: 'preset',
       preset: 'claude_code',
       append: SHINSA_INSTRUCTIONS,
+      excludeDynamicSections: true,
+      snapshot: true,
     });
     expect(entries[0]).toMatchObject({ type: 'user', from: 'shinsa' });
   });

@@ -104,7 +104,7 @@ export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task
   return [
     resolveHouseRules('agent'),
     '',
-    `Your role: the agent for this round. You plan it, then carry it out yourself in this same conversation: ${describeRoundJob(task)}`,
+    `Your role: the agent for this task, in one conversation across all of its rounds. You plan this round, then carry it out yourself in this same conversation: ${describeRoundJob(task)}`,
     'Nobody else works from your plan, so write it for yourself and for the human who reads it.',
     'While you plan you can read the code and run commands, but you cannot change files: Shinsa refuses edits until the plan is in.',
     describeTaskLink(task),
@@ -189,7 +189,7 @@ function joinLines(lines: string[]) {
 export function describeRound(task: Task, repo: Repo | null, bases: Task[], before: number) {
   return [
     joinLines([
-      `Your role: the agent for this round. You planned it and you carry it out yourself: ${describeRoundJob(task)}`,
+      `Your role: the agent for this task, in one conversation across all of its rounds. You planned this round and you carry it out yourself: ${describeRoundJob(task)}`,
       'Your conversation may no longer hold this round, so here is where it stands. Run `git status`, `git log` and `git diff` to see the work so far.',
       describeTaskLink(task),
       describeRounds(task),
@@ -222,12 +222,16 @@ function describeReviewScope(task: Task, repo: Repo | null, stacked: string | nu
   return `Diff the branch against ${repo?.defaultBranch ?? 'the default branch'} and read every change.`;
 }
 
-export function resolveReviewerPrompt(task: Task, repo: Repo | null, bases: Task[]) {
+const REVIEW_AGAIN =
+  'You reviewed earlier work on this task in this conversation. Judge this review on its own: check that your earlier blocking findings are fixed, read the new commits as closely as the first time, and never pass something because you passed it before.';
+
+export function resolveReviewerPrompt(task: Task, repo: Repo | null, bases: Task[], again = false) {
   const stacked = bases.find((base) => base.branch && isStacked(base));
   return [
     resolveHouseRules('reviewer'),
     '',
     'Your role: reviewer. You did not write this code. Review it against the request, the plan and the repository rules. Do not edit code.',
+    again ? REVIEW_AGAIN : '',
     describeTaskLink(task),
     describeRounds(task),
     describeRepository(repo),

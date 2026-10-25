@@ -236,7 +236,8 @@ describe('a long task that keeps its sessions across rounds', () => {
     }
     const reviewers = turns.filter((turn) => turn.purpose === 'review');
     expect(reviewers.length).toBeGreaterThanOrEqual(ROUNDS);
-    expect(reviewers.every((turn) => turn.resume === null)).toBe(true);
+    expect(reviewers[0]?.resume).toBeNull();
+    expect(reviewers.slice(1).every((turn) => turn.resume === reviewers[0]?.sessionId)).toBe(true);
     expect(reviewers.every((turn) => turn.disallowed.join() === 'Edit,Write,NotebookEdit')).toBe(true);
 
     const runs = Object.values(w.state.runs).filter((run) => run.taskId === taskId);

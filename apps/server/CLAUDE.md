@@ -63,6 +63,8 @@ src/
 │   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
 │   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
 │   │                    human-only `shinsa` commands, read from the surface), what `read_task` reads (reading.ts),
+│   │                    the other open work in a task's repository and the files two tasks both change
+│   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
 │   │                    the MCP servers and skills each session last ran with, its pin (extension-sets.ts)
 │   ├── manage/          The surface as every task agent's tools (docs/engine.md → Agents manage Shinsa): tools.ts
 │   │                    (one tool per spec but the human-only ones and those with an `agentTool`, such as
@@ -135,11 +137,15 @@ src/
 │                        the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
 │                        the working copy, `git grep`), task-refs.ts (a task's head, base and commits, also once its
 │                        worktree is gone), objects.ts (ObjectCache, the 64 MB cache of what a commit addresses),
-│                        diff.ts (commit to commit, and the working copy against a base)
+│                        diff.ts (commit to commit, and the working copy against a base), changed-files.ts (the
+│                        files a task's branch committed since its base plus what its checkout has not committed)
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
-│                        (types.ts: prepare, claim, commit, push, remove), worktrees.ts, main-checkout.ts and
-│                        gitbutler.ts (a branch per task through `but`, one writing agent at a time, stacked on
-│                        another task's branch when its commit needs that branch's lines), but.ts (the
+│                        (types.ts: prepare, claim, commit, push, remove, writeEdit, listConflicted, update: `but
+│                        pull` for GitButler only), worktrees.ts,
+│                        main-checkout.ts and gitbutler.ts (a branch per task through `but`, one writing agent at a
+│                        time, stacked on another task's branch when its commit needs that branch's lines, taken out
+│                        of its stack before it is unapplied, never pushed while a commit on it is conflicted:
+│                        ConflictedBranchError), but.ts (the
 │                        `but` runner, isGitButlerWorkspace), ledger.ts (which uncommitted paths are whose, in
 │                        data/workspaces/), lock.ts (WorkspaceLock), index.ts (Workspaces.resolve, the setup check's
 │                        describeWorkspaceProblem, listWorkspaceSupport for GET /api/repos/workspaces)
@@ -178,8 +184,10 @@ src/
 ├── briefing/            The Home guide, debounced
 └── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts,
-                         static.ts, paths.ts (resolveInside, assertRepoPath), code.ts (the Code tab's routes:
-                         refs, paths, tree, blob, raw images, search and diff)
+                         static.ts, paths.ts (resolveInside, resolveWritableInside, assertRepoPath), code.ts (the
+                         Code tab's routes: refs, paths, tree, blob, raw images, search and diff; a GitButler task's
+                         working copy is the files it owns in the ledger, from disk, over its branch), edits.ts (POST
+                         /api/tasks/<id>/file: saving a file you edit, against the text the editor expects on disk)
 ```
 
 `test/` has one folder per source folder and a test file per module with behaviour of its own; a few modules are
@@ -234,14 +242,18 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   never reads MCP config on its own, Claude runs with `strictMcpConfig`), and the PreToolUse guard in
   `agents/providers/claude/guard.ts`. The rules themselves are in
   `agents/policy.ts`, so every provider enforces the same ones; a run is read-only by core's `isReadOnlyRun` (a
-  read-only role, or the round agent while it plans), which reaches the provider as `AgentSessionInput.readOnly`.
-- **One session, two kinds of access.** The round agent plans, builds every phase, fixes and runs the operation as
-  separate runs on one resumed session, so its access changes between turns without changing its prompt-cache
-  prefix: Claude keeps the same tools for every turn of an `agent` session and, while it plans, denies `Edit`,
-  `Write`, `NotebookEdit` and `MultiEdit` through a PreToolUse hook (`listPlanningHooks` in `guard.ts`, one matcher
-  per tool), never through `permissionMode: 'plan'` or `disallowedTools`, which only a role that is always read-only
-  gets; Codex resumes the same thread in the `read-only` sandbox (`approvalPolicy: never`) to plan and with
-  `danger-full-access` and `untrusted` to build.
+  read-only role, or the task's agent while it plans), which reaches the provider as `AgentSessionInput.readOnly`.
+- **One session per task, two kinds of access.** The task's agent plans, builds every phase, fixes, runs the
+  operation and answers, investigates or researches in later rounds as separate runs on one resumed session, so its
+  access changes between turns without changing its prompt-cache prefix (`docs/engine.md` → Caching): Claude keeps
+  the same tools and system prompt for every turn of the task's session (`excludeDynamicSections` and `snapshot` on
+  the preset) and, while a turn only reads, denies `Edit`, `Write`, `NotebookEdit` and `MultiEdit` through a
+  PreToolUse hook (`listReadOnlyHooks` in `guard.ts`, one matcher per tool, naming the turn's hand-over), never
+  through `permissionMode: 'plan'` or `disallowedTools`, which only the reviewer and delegated read-only roles get;
+  Codex resumes the same thread in the `read-only` sandbox (`approvalPolicy: never`) to plan and with
+  `danger-full-access` and `untrusted` to build. A resumed turn in another directory than the session's last one
+  (a round after a merge, an answer in the repository) is told where it works now (`resolveMovedNote`, from
+  `run.attempt`'s `cwd`).
 - **Where a run works follows its role** (`#resolveCwd` in `agents/supervisor.ts`): the answerer in the repository
   itself, the researcher in the task's worktree when it has one and otherwise the repository, every other role in the
   task's worktree. Edits a read-only run leaves (the agent's while it plans included) are set aside, never in the

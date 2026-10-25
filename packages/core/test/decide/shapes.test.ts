@@ -241,12 +241,31 @@ describe('an investigation', () => {
     expect(harness.activeRun(taskId)).toMatchObject({ purpose: 'build', sessionId: 'session-investigate' });
   });
 
-  test('when the inquiry ran on another model, the Agent starts fresh with the full brief and the result', () => {
+  test('when the inquiry ran on the same provider but another model, the Agent resumes its session on its own model', () => {
     const harness = createHarness();
     harness.send({ type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } });
     const taskId = start(harness, { shape: 'investigate' });
     passSetup(harness, taskId);
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'investigator', model: 'sonnet' });
+    linkSession(harness, taskId, 'session-investigate');
+    deliver(harness, taskId, 'investigate', PROPOSAL);
+    approve(harness, taskId);
+    passSetup(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({
+      role: 'agent',
+      purpose: 'plan',
+      resume: true,
+      sessionId: 'session-investigate',
+      model: 'opus',
+    });
+  });
+
+  test('when the inquiry ran on another provider, the Agent starts fresh with the full brief and the result', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { agentProviders: { answerer: 'codex' } } });
+    const taskId = start(harness, { shape: 'investigate' });
+    passSetup(harness, taskId);
+    expect(harness.activeRun(taskId)).toMatchObject({ role: 'investigator', provider: 'codex' });
     linkSession(harness, taskId, 'session-investigate');
     deliver(harness, taskId, 'investigate', PROPOSAL);
     approve(harness, taskId);
@@ -259,7 +278,9 @@ describe('an investigation', () => {
       sessionId: null,
       model: 'opus',
     });
-    expect(agent.prompt).toContain('Your role: the agent for this round.');
+    expect(agent.prompt).toContain(
+      'Your role: the agent for this task, in one conversation across all of its rounds.'
+    );
     expect(agent.prompt).toContain('The diagnosis from the investigation:\nThe investigate result.');
     expect(agent.prompt).toContain('The human approved going on after that:\nStream the export in chunks.');
   });
@@ -400,7 +421,9 @@ describe('research', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'research' });
     verifySetup(harness, taskId);
-    expect(() => deliver(harness, taskId, 'investigate')).toThrow('A researcher cannot do that.');
+    expect(() => deliver(harness, taskId, 'investigate')).toThrow(
+      'You are researching: hand the report over with `submit_report`.'
+    );
   });
 });
 

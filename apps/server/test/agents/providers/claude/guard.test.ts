@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { HookInput } from '@anthropic-ai/claude-agent-sdk';
 import {
   guardCommand,
-  listPlanningHooks,
+  listReadOnlyHooks,
   resolveCommandVerdict,
 } from '../../../../src/agents/providers/claude/guard.ts';
 
@@ -35,6 +35,50 @@ describe('the command guard', () => {
       'gh pr view 3',
     ]) {
       expect(denied(command)).toBe(false);
+    }
+  });
+
+  test('brings the base branch in by merging, never by rebasing', () => {
+    for (const command of ['git pull', 'git pull --rebase origin main', 'cd app && git pull -r']) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
+    }
+    for (const command of [
+      'git fetch origin main && git merge origin/main',
+      'git merge --no-edit origin/main',
+      'git pull --no-rebase origin main',
+      'git merge --abort',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
+    }
+  });
+
+  test('in a GitButler workspace the agent only reads and resolves conflicted commits in place', () => {
+    for (const command of [
+      'but commit -b feat/x -m x',
+      'but push feat/x',
+      'but pull',
+      'but resolve 1a2b3c4',
+      'but resolve finish',
+      'but resolve --ai',
+      'cd app && but move feat/x --above fix/y',
+      'but --json unapply feat/x',
+      'but -C /tmp/app discard nk',
+      'git status; but undo',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
+    }
+    for (const command of [
+      'but status --json',
+      'but diff',
+      'but show feat/x',
+      'but --json resolve conflicts feat/x',
+      "printf 'a\\n' | but resolve apply a.txt:1 --commit feat/x",
+      'but resolve apply a.txt --commit feat/x --theirs',
+      'but resolve status',
+      'but --help',
+      'echo "nothing but tests"',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
     }
   });
 
@@ -141,9 +185,9 @@ describe('the command guard', () => {
   });
 });
 
-describe('the planning guard', () => {
+describe('the read-only guard', () => {
   test('one matcher per edit tool, each refusing the edit until the plan is in', async () => {
-    const matchers = listPlanningHooks();
+    const matchers = listReadOnlyHooks('agent');
     expect(matchers.map((matcher) => matcher.matcher)).toEqual([
       'Edit',
       'Write',
@@ -165,5 +209,22 @@ describe('the planning guard', () => {
     }
     expect(await run({ hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: {} })).toEqual({});
     expect(await run({ hook_event_name: 'PostToolUse', tool_name: 'Edit', tool_input: {} })).toEqual({});
+  });
+
+  test('an answer or research step on the task’s session is refused edits with its own hand-over named', async () => {
+    const signal = new AbortController().signal;
+    const refusal = async (role: 'answerer' | 'researcher' | 'investigator') => {
+      const hook = listReadOnlyHooks(role)[0]?.hooks[0];
+      const verdict = await hook?.(
+        { hook_event_name: 'PreToolUse', tool_name: 'Edit', tool_input: {} } as unknown as HookInput,
+        undefined,
+        { signal }
+      );
+      return (verdict as { hookSpecificOutput?: { permissionDecisionReason?: string } }).hookSpecificOutput
+        ?.permissionDecisionReason;
+    };
+    expect(await refusal('answerer')).toContain('`answer`');
+    expect(await refusal('researcher')).toContain('`submit_report`');
+    expect(await refusal('investigator')).toBe('This step only reads: Shinsa refuses edits.');
   });
 });

@@ -10,6 +10,7 @@ export const SHINSA_TOOL_NAMES = [
   'attach_evidence',
   'find_tasks',
   'read_task',
+  'list_repository_work',
   'note',
   'wait_for',
   'suggest_tasks',
@@ -89,7 +90,7 @@ const DELEGATE_TOOLS: readonly ShinsaToolName[] = [
   'note',
 ];
 
-const READ_TOOLS: readonly ShinsaToolName[] = ['read_task'];
+const READ_TOOLS: readonly ShinsaToolName[] = ['read_task', 'list_repository_work'];
 
 const DELEGATION_TOOLS: readonly ShinsaToolName[] = [
   'delegate_task',
@@ -138,7 +139,13 @@ export function isHandOverTool(name: ShinsaToolName) {
   return HAND_OVER_TOOLS.has(name);
 }
 
-export function listToolNames(role: RunRole, depth = 0): ShinsaToolName[] {
+export const TASK_SESSION_ROLES: readonly RunRole[] = ['agent', 'answerer', 'investigator', 'researcher'];
+
+export function isTaskSessionRole(role: RunRole) {
+  return TASK_SESSION_ROLES.includes(role);
+}
+
+export function listCallableToolNames(role: RunRole, depth = 0): ShinsaToolName[] {
   if (depth > 0 || !isStepRole(role)) {
     return [...DELEGATE_TOOLS, ...(depth < DELEGATION_LIMITS.depth ? DELEGATION_TOOLS : [])];
   }
@@ -152,6 +159,15 @@ export function listToolNames(role: RunRole, depth = 0): ShinsaToolName[] {
   ];
 }
 
+const TASK_SESSION_TOOLS: readonly ShinsaToolName[] = SHINSA_TOOL_NAMES.filter((tool) =>
+  TASK_SESSION_ROLES.some((role) => listCallableToolNames(role).includes(tool))
+);
+
+export function listToolNames(role: RunRole, depth = 0): ShinsaToolName[] {
+  if (depth === 0 && isTaskSessionRole(role)) return [...TASK_SESSION_TOOLS];
+  return listCallableToolNames(role, depth);
+}
+
 export function hasTool(run: Run, tool: ShinsaToolName) {
-  return listToolNames(run.role, run.delegation?.depth ?? 0).includes(tool);
+  return listCallableToolNames(run.role, run.delegation?.depth ?? 0).includes(tool);
 }

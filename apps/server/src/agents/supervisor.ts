@@ -214,6 +214,7 @@ export class RunSupervisor {
       minuteMs: options.minuteMs ?? MINUTE_MS,
       manage: options.manage ?? null,
       workspaces: this.workspaces,
+      dataDir: config.dataDir,
     });
     this.#manages = options.manage !== undefined;
     this.#deliveries = new Deliveries({
@@ -501,6 +502,7 @@ export class RunSupervisor {
         model: this.#resolveModel(turn),
         resumed: plan.resume !== null,
         handoff: plan.record,
+        cwd: turn.cwd,
         ...(account ? { account } : {}),
       },
       { id: `run.attempt:${attemptId}` }
@@ -754,16 +756,16 @@ export class RunSupervisor {
     await Promise.allSettled(earlier.map((active) => active.session?.cancel()));
   }
 
-  async steer(runId: string, text: string, cause?: string) {
+  async steer(runId: string, text: string, cause?: string, from?: 'shinsa') {
     const run = this.#engine.state.runs[runId];
     if (!run) return;
     const active = this.#active.get(runId);
     if (run.endedAt === null && active && isSteerable(active)) {
       if (!active.session) {
-        active.queued.push(text);
+        (from ? active.resteered : active.queued).push(text);
         return;
       }
-      if (active.session.steer(text)) return;
+      if (active.session.steer(text, from)) return;
     }
     await this.#engine.dispatch(
       { type: 'message.deliver', taskId: run.taskId, text },

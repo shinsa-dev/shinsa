@@ -71,9 +71,9 @@ function createSessions(
       finish: (outcome = 'completed', extra = {}) => done.resolve({ outcome, summary: outcome, ...extra }),
       session: {
         done: done.promise,
-        steer: (text) => {
+        steer: (text, from) => {
           if (options.refuseSteer) return false;
-          fake.steers.push(text);
+          fake.steers.push(from ? `${from}: ${text}` : text);
           return true;
         },
         cancel: () => {
@@ -948,6 +948,7 @@ describe('hand-overs', () => {
       'No task task-9. `find_tasks` lists the tasks.'
     );
     expect(call('read_task')).rejects.toThrow('task_id is required.');
+    expect(await call('list_repository_work')).toStartWith('No other open task works in ');
     expect(call('launch_rockets')).rejects.toThrow('Unknown tool launch_rockets.');
     done();
     await running;
@@ -1626,6 +1627,24 @@ describe('steering windows', () => {
     sessions.started[1]?.finish();
     await Promise.all([first, second]);
     expect(dispatched.filter((command) => command.type === 'message.deliver')).toEqual([]);
+  });
+
+  test('a note from Shinsa reaches the agent as Shinsa’s, before the session starts or during it', async () => {
+    const sessions = createSessions();
+    const { supervisor } = setup(withTask(createTempDir(), [createRun(), createRun({ id: 'run-2' })]), {
+      startSession: sessions.startSession,
+    });
+    const first = supervisor.execute('run-1');
+    await until('the first session', () => sessions.started.length === 1);
+    await supervisor.steer('run-1', 'Another task changes a.ts.', undefined, 'shinsa');
+    const second = supervisor.execute('run-2');
+    await supervisor.steer('run-2', 'Queued note.', undefined, 'shinsa');
+    sessions.started[0]?.finish();
+    await until('the second session', () => sessions.started.length === 2);
+    expect(sessions.started[0]?.steers).toEqual(['shinsa: Another task changes a.ts.']);
+    expect(sessions.started[1]?.steers).toEqual(['shinsa: Queued note.']);
+    sessions.started[1]?.finish();
+    await Promise.all([first, second]);
   });
 
   test('a queued message the session will not take, and steers it never answered, come back as the next turn', async () => {

@@ -36,7 +36,7 @@ import {
   type Task,
 } from '../../src/index.ts';
 import { IMPACT, PLAN } from '../harness.ts';
-import { assertAgentInvariants, assertOneSessionPerRound } from './agent-invariants.ts';
+import { assertAgentInvariants, assertOneSessionPerTask } from './agent-invariants.ts';
 import {
   assertDelegationInvariants,
   assertDelegationProgress,
@@ -347,6 +347,25 @@ function listPullRequestReads(state: ShinsaState, task: Task, random: Random): S
   return [{ type: 'pull_request.record', taskId: task.id, pullRequest: randomPullRequest(random) }];
 }
 
+function listWorkingCopyCommands(task: Task, random: Random): ShinsaCommand[] {
+  if (isTaskSettled(task) || !task.worktreePath) return [];
+  const commands: ShinsaCommand[] = [];
+  if (chance(random, 0.04))
+    commands.push({
+      type: 'task.record_edit',
+      taskId: task.id,
+      path: 'src/a.ts',
+      changed: chance(random, 0.7),
+    });
+  if (chance(random, 0.02) && task.branch)
+    commands.push({ type: 'task.record_conflict', taskId: task.id, branch: task.branch });
+  if (task.stage === 'checking' && chance(random, 0.3))
+    commands.push({ type: 'task.commit_edits', taskId: task.id, treeHash: null });
+  if (task.stage === 'shipping' && chance(random, 0.5))
+    commands.push({ type: 'task.record_workspace_update', taskId: task.id, guidance: null });
+  return commands;
+}
+
 function listSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   const commands: ShinsaCommand[] = [];
   const taskIds = Object.keys(state.tasks);
@@ -375,6 +394,7 @@ function listSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[]
       commands.push({ type: 'effect.fail', taskId, title: 'Effect failed', detail: 'x' });
     if (task.worktreePath && isTaskSettled(task)) commands.push({ type: 'worktree.gone', taskId });
     if (chance(random, 0.03)) commands.push({ type: 'message.deliver', taskId, text: 'Missed steer.' });
+    commands.push(...listWorkingCopyCommands(task, random));
   }
   commands.push({ type: 'runs.dispatch' });
   return commands;
@@ -427,6 +447,7 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
         approvePlans: chance(random, 0.5),
         maxFixRounds: pick(random, [null, 1, 3]) ?? null,
         agentModels: chance(random, 0.5) ? { answerer: 'sonnet' } : {},
+        agentProviders: chance(random, 0.3) ? { answerer: 'codex' } : {},
       },
     });
   }
@@ -938,7 +959,7 @@ function simulate(
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
       const stamped = { ...event, seq: state.seq + 1, at: now } as ShinsaEvent;
-      assertOneSessionPerRound(state, stamped, `seed ${seed}, step ${step}, after ${command.type}`);
+      assertOneSessionPerTask(state, stamped, `seed ${seed}, step ${step}, after ${command.type}`);
       log.push(stamped);
       state = applyEvent(state, stamped);
     }

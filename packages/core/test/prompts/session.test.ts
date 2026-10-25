@@ -5,16 +5,19 @@ import {
   resolveAnsweredReply,
   resolveAnswerPrompt,
   resolveContinuePrompt,
+  resolveMovedNote,
   resolveQuestionResumePrompt,
   resolveSteerPrompt,
   resolveSupersededReply,
   resolveWithdrawnReply,
+  selectSessionCwd,
 } from '../../src/index.ts';
 import {
   resolveFreshSessionNudge,
   resolveRecoveryNudge,
   resolveUsageResumeNudge,
 } from '../../src/prompts/session.ts';
+import { createHarness, createTask, linkSession } from '../harness.ts';
 
 describe('the restart prompt', () => {
   test('tells the agent to carry on and to re-check the edit or command it was in the middle of', () => {
@@ -93,5 +96,40 @@ describe('session prompts', () => {
     expect(readAnsweredReply(resolveAnsweredReply('Blue', false))).toBe('Blue');
     expect(readAnsweredReply(resolveAnsweredReply('Blue', true))).toBe('Blue');
     expect(readAnsweredReply('Blue')).toBe('Blue');
+  });
+});
+
+describe('where a session works', () => {
+  test('reads the directory the session last ran in from its attempts, leaving out the run asking', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    linkSession(harness, taskId, 'task-session');
+    const runId = harness.activeRun(taskId).id;
+    const attempt = (attemptId: string, cwd?: string) =>
+      harness.send({
+        type: 'run.attempt',
+        runId,
+        attemptId,
+        provider: 'claude',
+        model: 'opus',
+        resumed: false,
+        handoff: null,
+        ...(cwd ? { cwd } : {}),
+      });
+    expect(selectSessionCwd(harness.state, 'task-session', 'other')).toBeNull();
+    attempt(`${runId}:1`, '/wt/first');
+    attempt(`${runId}:2`);
+    attempt(`${runId}:3`, '/wt/second');
+    expect(harness.state.runs[runId]?.attempts?.map((entry) => entry.cwd)).toEqual([
+      '/wt/first',
+      undefined,
+      '/wt/second',
+    ]);
+    expect(selectSessionCwd(harness.state, 'task-session', 'other')).toBe('/wt/second');
+    expect(selectSessionCwd(harness.state, 'task-session', runId)).toBeNull();
+    expect(selectSessionCwd(harness.state, 'another-session', 'other')).toBeNull();
+    expect(resolveMovedNote('/wt/third')).toBe(
+      'You now work in `/wt/third`, not where this conversation started. Run every command and read every file there.'
+    );
   });
 });

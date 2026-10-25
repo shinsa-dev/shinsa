@@ -1,3 +1,5 @@
+import type { ShinsaState } from '../state/project.ts';
+
 export function resolveContinuePrompt() {
   return [
     'Shinsa restarted while you were working, so your process was stopped in the middle of your step and is now back up.',
@@ -75,4 +77,20 @@ export function resolveUsageResumeNudge() {
     'Your previous turn stopped because the usage limit was reached. The limit has reset.',
     'Continue where you left off and finish the step with the hand-over tool.',
   ].join('\n');
+}
+
+export function resolveMovedNote(cwd: string) {
+  return `You now work in \`${cwd}\`, not where this conversation started. Run every command and read every file there.`;
+}
+
+export function selectSessionCwd(state: ShinsaState, sessionId: string, exceptRunId: string) {
+  let latest: { cwd: string; startedAt: number } | null = null;
+  for (const run of Object.values(state.runs)) {
+    if (run.sessionId !== sessionId || run.id === exceptRunId) continue;
+    for (const attempt of run.attempts ?? []) {
+      if (attempt.cwd && (!latest || attempt.startedAt >= latest.startedAt))
+        latest = { cwd: attempt.cwd, startedAt: attempt.startedAt };
+    }
+  }
+  return latest?.cwd ?? null;
 }

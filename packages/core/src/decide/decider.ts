@@ -1,21 +1,23 @@
 import { RUN_AGENT_ROLE, resolveAgentModel, resolveAgentProvider } from '../agent-models/index.ts';
 import {
+  describeHumanEdits,
   type Gate,
   type GateCause,
   type GateType,
   isAgentQuestion,
   isDelegatedRun,
-  isLaterRound,
-  isOfCurrentRound,
   isPausingGate,
+  isTaskSessionRole,
   isTaskSettled,
   type Run,
   type RunAccount,
   type RunFailure,
+  type RunFailureClass,
   type RunOutcome,
   type RunPurpose,
   type RunRole,
   resolveRoundStamp,
+  TASK_SESSION_ROLES,
   type Task,
   type TaskStage,
 } from '../domain/index.ts';
@@ -28,6 +30,7 @@ import { listChildRuns, listLiveChildRuns } from '../state/delegations.ts';
 import { applyEvent, type ShinsaState } from '../state/project.ts';
 import { findTask, listActiveRuns, listOpenGates, resolveTaskProject } from '../state/queries.ts';
 import { resolveRecoveryFingerprint } from './fingerprints.ts';
+import { tellOverlaps } from './overlaps.ts';
 
 export interface DecideContext {
   now: number;
@@ -83,6 +86,15 @@ const CASCADE_SUMMARY = 'Stopped because the agent that delegated it finished it
 
 export function quoteTitles(tasks: Task[]) {
   return tasks.map((task) => `“${task.title}”`).join(', ');
+}
+
+const SESSION_ENDING_FAILURES: ReadonlySet<RunFailureClass> = new Set<RunFailureClass>([
+  'context_window_full',
+  'image_error',
+]);
+
+function endsSession(run: Run) {
+  return run.failure !== undefined && run.failure !== null && SESSION_ENDING_FAILURES.has(run.failure.class);
 }
 
 function resolveInheritedSession(from: Run): Partial<Run> {
@@ -144,28 +156,26 @@ export class Decider {
     this.emit({ type: 'task.staged', taskId, stage, reason, ...(by ? { by } : {}) });
   }
 
-  resumeRound(task: Task, roles: RunRole[]) {
-    return isLaterRound(task) ? this.lastRun(task.id, roles) : null;
-  }
-
-  rootRun(taskId: string) {
-    const agent = this.lastRun(taskId, ['agent']);
-    const inquiry = this.lastRun(taskId, ['answerer', 'investigator', 'researcher']);
-    if (!inquiry || !isOfCurrentRound(this.task(taskId), inquiry)) return agent;
-    if (agent && agent.startedAt >= inquiry.startedAt) return agent;
-    const sameSettings =
-      inquiry.provider === resolveAgentProvider(this.state.settings, RUN_AGENT_ROLE.agent) &&
-      inquiry.model === resolveAgentModel(this.state.settings, RUN_AGENT_ROLE.agent);
-    return sameSettings ? inquiry : null;
-  }
-
-  lastRun(taskId: string, roles: RunRole[]) {
+  taskSession(taskId: string, role: RunRole): Run | null {
+    const roles = isTaskSessionRole(role) ? TASK_SESSION_ROLES : [role];
+    const runs = Object.values(this.state.runs).filter(
+      (run) => run.taskId === taskId && !isDelegatedRun(run) && run.sessionId !== null
+    );
+    const ended = new Set(runs.filter(endsSession).map((run) => run.sessionId));
     let latest: Run | null = null;
-    for (const run of Object.values(this.state.runs)) {
-      if (run.taskId !== taskId || !roles.includes(run.role) || isDelegatedRun(run)) continue;
+    for (const run of runs) {
+      if (!roles.includes(run.role) || ended.has(run.sessionId)) continue;
       if (!latest || run.startedAt >= latest.startedAt) latest = run;
     }
-    return latest;
+    if (!latest || RUN_AGENT_ROLE[latest.role] === RUN_AGENT_ROLE[role]) return latest;
+    return latest.provider === resolveAgentProvider(this.state.settings, RUN_AGENT_ROLE[role])
+      ? latest
+      : null;
+  }
+
+  resumableFrom(run: Run | null) {
+    if (!run || run.sessionId || isDelegatedRun(run)) return run;
+    return this.taskSession(run.taskId, run.role);
   }
 
   endRun(run: Run, outcome: RunOutcome, summary: string | null, failure: RunFailure | null = null) {
@@ -249,7 +259,7 @@ export class Decider {
       !resumeFrom && needsRoundBrief({ role, ...placement })
         ? resolveRoundBrief(this.state, task, placement, prompt)
         : prompt;
-    const appended = `${resumeFrom ? '' : resolveProjectContext(this.state, task)}${adoption.note}`;
+    const appended = `${resumeFrom ? '' : resolveProjectContext(this.state, task)}${adoption.note}${this.#tellEdits(task.id)}${tellOverlaps(this, task.id, role)}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,
@@ -276,6 +286,13 @@ export class Decider {
     };
     this.emit({ type: 'run.started', run });
     return run;
+  }
+
+  #tellEdits(taskId: string) {
+    const untold = this.task(taskId).untoldEdits ?? [];
+    if (untold.length === 0) return '';
+    this.emit({ type: 'task.edits_told', taskId });
+    return `\n\n${describeHumanEdits(untold)}`;
   }
 
   bindNextRun(taskId: string, account: RunAccount) {

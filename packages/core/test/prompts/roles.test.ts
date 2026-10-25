@@ -140,7 +140,9 @@ describe('the round agent’s session', () => {
     const taskId = createTask(harness, { request: 'Ship the API' });
     readyWorktree(harness, taskId);
     const planning = harness.activeRun(taskId);
-    expect(planning.prompt).toContain('Your role: the agent for this round. You plan it, then carry it out');
+    expect(planning.prompt).toContain(
+      'Your role: the agent for this task, in one conversation across all of its rounds. You plan this round, then carry it out'
+    );
     expect(planning.prompt).toContain('you cannot change files: Shinsa refuses edits until the plan is in.');
     harness.send({ type: 'run.link', runId: planning.id, sessionId: 'round-1', provider: 'claude' });
     proposePlan(harness, taskId);
@@ -210,6 +212,7 @@ describe('reading another task', () => {
       expect(prompt).toContain(
         'call `read_task` with an id from `find_tasks`. It reads; it never changes the task.'
       );
+      expect(prompt).toContain('whether an agent works on them now, call `list_repository_work`.');
     }
   });
 });

@@ -147,7 +147,9 @@ describe('stampRunPrompts', () => {
   const prompts = listPrompts(timeline);
 
   it('briefs the planning run with the full planning prompt', () => {
-    expect(prompts.get('plan')).toContain('Your role: the agent for this round. You plan it');
+    expect(prompts.get('plan')).toContain(
+      'Your role: the agent for this task, in one conversation across all of its rounds. You plan this round'
+    );
     expect(prompts.get('plan')?.startsWith(resolveHouseRules('agent'))).toBe(true);
   });
 

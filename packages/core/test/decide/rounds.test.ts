@@ -764,7 +764,7 @@ describe('what each round keeps', () => {
     expect(prompt).toContain('This is round 2');
   });
 
-  test('a later round’s agent resumes the session the round agent last used, the reviewer starts fresh', () => {
+  test('a later round’s agent resumes the session the round agent last used; a reviewer with no session yet starts fresh', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     newIdea(harness, taskId, 'Next');
