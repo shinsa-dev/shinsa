@@ -12,7 +12,7 @@
     "check-types": "tsc --noEmit",
     "dev": "bun run build && bun scripts/dev.ts",
     "icon": "bun scripts/icon.ts",
-    "package": "bun run build && electron-builder --mac --arm64 --publish never && codesign --force --deep --sign - release/mac-arm64/Shinsa.app",
+    "package": "bun run build && electron-builder --mac --arm64 --publish never -c.mac.identity=null && codesign --force --deep --sign - release/mac-arm64/Shinsa.app",
     "test": "bun test"
   },
   "devDependencies": {
