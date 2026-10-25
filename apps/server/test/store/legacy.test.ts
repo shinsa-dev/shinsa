@@ -1,0 +1,369 @@
+import { Database } from 'bun:sqlite';
+import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
+import { createState } from '@shinsa/core';
+import { Engine } from '../../src/runtime/engine.ts';
+import { EventLog } from '../../src/store/index.ts';
+import { listLegacyBriefings, listLegacyRewrites, type StoredEventRow } from '../../src/store/legacy.ts';
+import { createTempDir } from '../helpers/index.ts';
+
+const TASK = 'task-1';
+
+function legacyRun(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'run-1',
+    taskId: TASK,
+    role: 'planner',
+    status: 'queued',
+    phaseIndex: null,
+    prompt: 'Plan the task.',
+    resume: false,
+    provider: 'claude',
+    model: 'opus',
+    sessionId: null,
+    startedAt: 1,
+    endedAt: null,
+    outcome: null,
+    summary: null,
+    ...overrides,
+  };
+}
+
+function rowsOf(...events: Record<string, unknown>[]): StoredEventRow[] {
+  return events.map((event, index) => ({
+    seq: index + 1,
+    type: String(event.type),
+    payload: JSON.stringify(event),
+  }));
+}
+
+function rewrite(...events: Record<string, unknown>[]) {
+  return listLegacyRewrites(rowsOf(...events)).map((row) => ({
+    seq: row.seq,
+    type: row.type,
+    event: JSON.parse(row.payload) as Record<string, unknown>,
+  }));
+}
+
+function rewriteRun(run: Record<string, unknown>, ...before: Record<string, unknown>[]) {
+  const rewritten = rewrite(...before, { type: 'run.started', run });
+  return (rewritten.at(-1)?.event.run ?? null) as Record<string, unknown> | null;
+}
+
+const OLD_LOG: Record<string, unknown>[] = [
+  {
+    type: 'settings.changed',
+    settings: { defaultProvider: 'claude', worktreesDirectory: '/tmp/worktrees', fastMode: false },
+  },
+  {
+    type: 'task.created',
+    taskId: TASK,
+    repoId: null,
+    priority: 'normal',
+    specFirst: false,
+    origin: null,
+    auto: { review: false, merge: false },
+    request: 'what projects do you know',
+  },
+  { type: 'task.staged', taskId: TASK, stage: 'planning', reason: 'Planning started' },
+  { type: 'run.started', run: legacyRun() },
+  { type: 'run.ended', runId: 'run-1', outcome: 'completed', summary: null },
+  { type: 'worktree.created', taskId: TASK, path: '/tmp/worktree', branch: 'docs/projects' },
+  { type: 'task.staged', taskId: TASK, stage: 'operating', reason: 'Operation started' },
+  { type: 'run.started', run: legacyRun({ id: 'run-2', role: 'operator' }) },
+  { type: 'run.ended', runId: 'run-2', outcome: 'completed', summary: null },
+  { type: 'run.started', run: legacyRun({ id: 'run-3', role: 'answerer' }) },
+  { type: 'task.answered', taskId: TASK, answer: 'Two projects.', runId: 'run-3' },
+];
+
+function writeLegacyLog(events: Record<string, unknown>[]) {
+  const path = join(createTempDir(), 'shinsa.sqlite');
+  new EventLog(path).close();
+  const db = new Database(path);
+  const insert = db.prepare('INSERT INTO events (seq, at, type, payload) VALUES (?, ?, ?, ?)');
+  for (const row of rowsOf(...events)) insert.run(row.seq, 1000 + row.seq, row.type, row.payload);
+  db.close();
+  return path;
+}
+
+describe('rewriting events an older Shinsa wrote', () => {
+  test('top-level planner, builder, fixer, shipper and operator runs become the task agent with a purpose', () => {
+    const purposes = Object.fromEntries(
+      ['planner', 'builder', 'fixer', 'shipper', 'operator'].map((role) => {
+        const run = rewriteRun(legacyRun({ role }));
+        return [role, `${run?.role}/${run?.purpose}`];
+      })
+    );
+    expect(purposes).toEqual({
+      planner: 'agent/plan',
+      builder: 'agent/build',
+      fixer: 'agent/fix',
+      shipper: 'agent/fix',
+      operator: 'agent/operate',
+    });
+  });
+
+  test('an agent run without a purpose takes it from its stage, else from whether it builds a phase', () => {
+    const staged = (stage: string) => ({ type: 'task.staged', taskId: TASK, stage, reason: '' });
+    const agent = legacyRun({ role: 'agent' });
+    expect(rewriteRun(agent, staged('fixing'))?.purpose).toBe('fix');
+    expect(rewriteRun(agent, staged('checking'))?.purpose).toBe('plan');
+    expect(rewriteRun(agent)?.purpose).toBe('plan');
+    expect(rewriteRun({ ...agent, phaseIndex: 0 })?.purpose).toBe('build');
+    expect(rewriteRun({ ...agent, taskId: 7 }, staged('fixing'))?.purpose).toBe('plan');
+    expect(rewriteRun({ ...agent, purpose: 'operate' })).toBeNull();
+    expect(rewriteRun({ ...agent, purpose: 'ship' })?.purpose).toBe('plan');
+  });
+
+  test('delegated helpers keep a helper role, and no helper or inquiry run keeps a purpose', () => {
+    const delegation = { parentRunId: 'run-1', depth: 1 };
+    expect(rewriteRun(legacyRun({ delegation }))).toBeNull();
+    expect(rewriteRun(legacyRun({ role: 'fixer', purpose: 'fix', delegation }))).toEqual(
+      legacyRun({ role: 'builder', delegation })
+    );
+    expect(rewriteRun(legacyRun({ role: 'reviewer', purpose: 'build', delegation }))).toEqual(
+      legacyRun({ role: 'reviewer', delegation })
+    );
+    expect(rewriteRun(legacyRun({ role: 'researcher', purpose: 'plan' }))).toEqual(
+      legacyRun({ role: 'researcher' })
+    );
+    expect(rewriteRun(legacyRun({ role: 'answerer' }))).toBeNull();
+  });
+
+  test('a run of a role Shinsa never had, or with no run at all, is left for the health check', () => {
+    expect(rewriteRun(legacyRun({ role: 'wizard' }))).toBeNull();
+    expect(rewriteRun(legacyRun({ role: 42 }))).toBeNull();
+    expect(rewriteRun(legacyRun({ role: 'toString' }))).toBeNull();
+    expect(rewrite({ type: 'run.started', run: null })).toEqual([]);
+  });
+
+  test('answers, plan-first flags, removed settings and worktrees without a mode take the current shape', () => {
+    expect(rewrite(...OLD_LOG).map((row) => [row.seq, row.type])).toEqual([
+      [1, 'settings.changed'],
+      [2, 'task.created'],
+      [4, 'run.started'],
+      [6, 'worktree.created'],
+      [8, 'run.started'],
+      [11, 'task.delivered'],
+    ]);
+    const [settings, created, , worktree, , answered] = rewrite(...OLD_LOG).map((row) => row.event);
+    expect(settings?.settings).toEqual({ defaultProvider: 'claude', fastMode: false });
+    expect(created).toMatchObject({ planFirst: false });
+    expect(created).not.toHaveProperty('specFirst');
+    expect(worktree).toMatchObject({ workspace: 'worktrees' });
+    expect(answered).toEqual({
+      type: 'task.delivered',
+      taskId: TASK,
+      step: 'answer',
+      body: 'Two projects.',
+      runId: 'run-3',
+    });
+    expect(rewrite({ ...OLD_LOG[1], specFirst: true, planFirst: false })[0]?.event).toMatchObject({
+      planFirst: false,
+    });
+    expect(rewrite({ type: 'task.answered', taskId: TASK, answer: 'Yes.' })[0]?.event.runId).toBeNull();
+  });
+
+  test('events already in the current shape, and rows it cannot read, are left alone', () => {
+    const current = [
+      { type: 'settings.changed', settings: null },
+      { type: 'task.created', taskId: TASK, planFirst: true },
+      { type: 'task.staged', taskId: 7, stage: 'planning' },
+      { type: 'worktree.created', taskId: TASK, workspace: 'gitbutler' },
+      { type: 'project.removed', projectId: 'p' },
+    ];
+    expect(rewrite(...current)).toEqual([]);
+    const unreadable: StoredEventRow[] = [
+      { seq: 1, type: 'task.answered', payload: 'not json' },
+      { seq: 2, type: 'task.answered', payload: '[1]' },
+      { seq: 3, type: 'task.answered', payload: '{"type":"task.delivered"}' },
+    ];
+    expect(listLegacyRewrites(unreadable)).toEqual([]);
+  });
+});
+
+describe('the event log on boot', () => {
+  test('rewrites an old log once, drops the snapshot it stood on and replays with no problems', () => {
+    const path = writeLegacyLog(OLD_LOG);
+    const log = new EventLog(path);
+    const stale = { ...createState(), seq: 11 };
+    log.writeSnapshot({ seq: 11, version: 'v', payload: JSON.stringify(stale), problems: [] }, 1);
+    expect(log.selectSnapshot('v')).toMatchObject({ ok: true, seq: 11 });
+    const engine = new Engine(log);
+    expect(engine.problems).toEqual([]);
+    expect(log.selectSnapshot('v')).toBeNull();
+    expect(
+      Object.values(engine.state.runs).map((run) => `${run.id}:${run.role}/${run.purpose ?? '-'}`)
+    ).toEqual(['run-1:agent/plan', 'run-2:agent/operate', 'run-3:answerer/-']);
+    expect(engine.state.tasks[TASK]?.result).toMatchObject({ step: 'answer', body: 'Two projects.' });
+    expect(log.replaceLegacyEvents()).toBe(0);
+    log.close();
+  });
+
+  test('runs once per log, and keeps the snapshot of a log with nothing to rewrite', () => {
+    const path = writeLegacyLog([{ type: 'project.removed', projectId: 'p' }]);
+    const log = new EventLog(path);
+    log.writeSnapshot(
+      { seq: 1, version: 'v', payload: JSON.stringify({ ...createState(), seq: 1 }), problems: [] },
+      1
+    );
+    expect(log.replaceLegacyEvents()).toBe(0);
+    expect(log.selectSnapshot('v')).toMatchObject({ ok: true, seq: 1 });
+    log.close();
+    const db = new Database(path);
+    db.run('INSERT INTO events (seq, at, type, payload) VALUES (2, 2, ?, ?)', [
+      'task.answered',
+      JSON.stringify({ type: 'task.answered', taskId: TASK, answer: 'Late.', runId: null }),
+    ]);
+    db.close();
+    const reopened = new EventLog(path);
+    expect(reopened.replaceLegacyEvents()).toBe(0);
+    reopened.close();
+  });
+});
+
+function readStoredLog(path: string) {
+  const db = new Database(path);
+  const rows = db.query('SELECT seq, type, payload FROM events ORDER BY seq').all();
+  const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version;
+  const briefings = db.query('SELECT * FROM briefings').all();
+  const snapshots = db.query('SELECT seq FROM snapshots').all();
+  db.close();
+  return { rows, version, briefings, snapshots };
+}
+
+describe('inspecting an old log', () => {
+  const guide = { now: null, next: [], running: 'No agent is working right now.', note: null };
+
+  test('reads it in the new shape with no problems, and never writes it', () => {
+    const path = writeLegacyLog([
+      ...OLD_LOG,
+      { type: 'briefing.written', projectId: null, text: 'Guide.', briefing: guide },
+    ]);
+    const seeded = new EventLog(path);
+    seeded.writeBriefing('work', { text: 'Kept.', at: 1, briefing: null });
+    seeded.writeBriefing(null, { text: 'Replaced.', at: 1, briefing: null });
+    seeded.writeSnapshot({ seq: 11, version: 'v', payload: JSON.stringify(createState()), problems: [] }, 1);
+    seeded.close();
+    const before = readStoredLog(path);
+    const log = new EventLog(path);
+    const inspected = new Engine(log, { readOnly: true, stateVersion: 'v' });
+    expect(inspected.problems).toEqual([]);
+    expect(inspected.state.seq).toBe(12);
+    expect(
+      Object.values(inspected.state.runs).map((run) => `${run.id}:${run.role}/${run.purpose ?? '-'}`)
+    ).toEqual(['run-1:agent/plan', 'run-2:agent/operate', 'run-3:answerer/-']);
+    expect(inspected.state.tasks[TASK]?.result).toMatchObject({ step: 'answer', body: 'Two projects.' });
+    expect(inspected.state.briefings['*']).toEqual({ text: 'Guide.', at: 1012, briefing: guide });
+    expect(inspected.state.briefings.work).toMatchObject({ text: 'Kept.' });
+    expect(log.readEvents().events.some((event) => (event.type as string) === 'briefing.written')).toBe(
+      false
+    );
+    expect(log.listEventsBetween(1, 1)[0]).toMatchObject({ settings: { fastMode: false } });
+    expect(log.selectSnapshot('v')).toBeNull();
+    log.close();
+    expect(readStoredLog(path)).toEqual(before);
+  });
+
+  test('a log already in the new shape reads as it is', () => {
+    const path = writeLegacyLog([{ type: 'project.removed', projectId: 'p' }]);
+    const log = new EventLog(path);
+    expect(log.applyLegacyView()).toBe(0);
+    expect(log.replaceLegacyEvents()).toBe(0);
+    expect(log.applyLegacyView()).toBe(0);
+    log.close();
+  });
+
+  test('a log in the agent shape with briefings only hides them', () => {
+    const path = writeLegacyLog([
+      { type: 'task.answered', taskId: TASK, answer: 'Left as it was.', runId: null },
+      { type: 'briefing.written', projectId: 'work', text: 'Read.' },
+    ]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 1');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.applyLegacyView()).toBe(1);
+    expect(log.readEvents().events.map((event) => event.type as string)).toEqual(['task.answered']);
+    expect(log.listBriefings()).toEqual([
+      { projectId: 'work', stored: { text: 'Read.', at: 1002, briefing: null } },
+    ]);
+    log.close();
+  });
+});
+
+describe('moving briefings out of the event log', () => {
+  const guide = { now: null, next: [], running: 'No agent is working right now.', note: null };
+  const briefing = (seq: number, event: Record<string, unknown>) => ({
+    seq,
+    at: 1000 + seq,
+    payload: JSON.stringify({ type: 'briefing.written', ...event }),
+  });
+
+  test('keeps the newest guide per project, stamped with its row’s time', () => {
+    expect(
+      listLegacyBriefings([
+        briefing(1, { projectId: null, text: 'Old.', briefing: guide }),
+        briefing(2, { projectId: 'work', text: 'Plain text only.' }),
+        briefing(3, { text: 'No project means the whole queue.', briefing: guide }),
+        briefing(4, { projectId: 'work', text: 42 }),
+        { seq: 5, at: 1005, payload: 'not json' },
+      ])
+    ).toEqual([
+      { projectId: null, stored: { text: 'No project means the whole queue.', at: 1003, briefing: guide } },
+      { projectId: 'work', stored: { text: 'Plain text only.', at: 1002, briefing: null } },
+    ]);
+  });
+
+  test('a log with briefings moves the newest into their own table once, with their receipts and the snapshot', () => {
+    const path = writeLegacyLog([
+      ...OLD_LOG,
+      { type: 'briefing.written', projectId: null, text: 'First.' },
+      { type: 'briefing.written', projectId: null, text: 'Second.', briefing: guide },
+    ]);
+    const db = new Database(path);
+    db.run(
+      "INSERT INTO receipts (id, type, target, fingerprint, status, code, error, first_seq, last_seq, at) VALUES ('briefing:*:3', 'briefing.write', 'projectId:*', 'f', 'accepted', NULL, NULL, 13, 13, 1)"
+    );
+    db.close();
+    const log = new EventLog(path);
+    log.writeSnapshot(
+      { seq: 11, version: 'v', payload: JSON.stringify({ ...createState(), seq: 11 }), problems: [] },
+      1
+    );
+    const engine = new Engine(log);
+    expect(engine.problems).toEqual([]);
+    expect(engine.state.seq).toBe(13);
+    expect(engine.state.briefings['*']).toEqual({ text: 'Second.', at: 1013, briefing: guide });
+    expect(log.readEvents().events.some((event) => (event.type as string) === 'briefing.written')).toBe(
+      false
+    );
+    expect(log.selectReceipt('briefing:*:3')).toBeNull();
+    expect(log.selectSnapshot('v')).toBeNull();
+    expect(log.replaceLegacyEvents()).toBe(0);
+    log.close();
+    const reopened = new EventLog(path);
+    const snapshotted = new Engine(reopened, { stateVersion: 'v2' });
+    expect(snapshotted.state.seq).toBe(13);
+    expect(snapshotted.writeSnapshot()).toBe(true);
+    expect(reopened.selectSnapshot('v2')).toMatchObject({ ok: true, seq: 13 });
+    reopened.close();
+  });
+
+  test('a log already in the agent shape only has its briefings moved', () => {
+    const path = writeLegacyLog([
+      { type: 'task.answered', taskId: TASK, answer: 'Left as it was.', runId: null },
+      { type: 'briefing.written', projectId: 'work', text: 'Moved.' },
+    ]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 1');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    expect(log.readEvents().events.map((event) => event.type as string)).toEqual(['task.answered']);
+    expect(log.listBriefings()).toEqual([
+      { projectId: 'work', stored: { text: 'Moved.', at: 1002, briefing: null } },
+    ]);
+    log.close();
+  });
+});

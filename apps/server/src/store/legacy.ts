@@ -1,0 +1,160 @@
+import {
+  type Briefing,
+  DEFAULT_WORKSPACE_MODE,
+  DELEGATE_ROLES,
+  type RunPurpose,
+  type RunRole,
+  type StoredBriefing,
+} from '@shinsa/core';
+
+export interface StoredEventRow {
+  seq: number;
+  type: string;
+  payload: string;
+}
+
+export interface LegacyBriefingRow {
+  seq: number;
+  at: number;
+  payload: string;
+}
+
+export interface ProjectBriefing {
+  projectId: string | null;
+  stored: StoredBriefing;
+}
+
+type Payload = Record<string, unknown>;
+
+const ROLE_PURPOSE = new Map<unknown, RunPurpose>([
+  ['planner', 'plan'],
+  ['builder', 'build'],
+  ['fixer', 'fix'],
+  ['shipper', 'fix'],
+  ['operator', 'operate'],
+]);
+
+const STAGE_PURPOSE = new Map<unknown, RunPurpose>([
+  ['planning', 'plan'],
+  ['building', 'build'],
+  ['fixing', 'fix'],
+  ['operating', 'operate'],
+]);
+
+const RUN_PURPOSES: readonly unknown[] = [...STAGE_PURPOSE.values()];
+
+const INQUIRY_ROLES: readonly unknown[] = ['reviewer', 'answerer', 'investigator', 'researcher'];
+
+export const LEGACY_EVENT_TYPES = [
+  'task.answered',
+  'task.created',
+  'task.staged',
+  'settings.changed',
+  'worktree.created',
+  'run.started',
+];
+
+function isRecord(value: unknown): value is Payload {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function withoutKeys(value: Payload, keys: readonly string[]) {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
+}
+
+function resolveAgentPurpose(run: Payload, stage: string | undefined): RunPurpose {
+  if (RUN_PURPOSES.includes(run.purpose)) return run.purpose as RunPurpose;
+  const fromStage = STAGE_PURPOSE.get(stage);
+  if (fromStage) return fromStage;
+  return typeof run.phaseIndex === 'number' ? 'build' : 'plan';
+}
+
+function resolveDelegatedRun(run: Payload): Payload {
+  const role = (DELEGATE_ROLES as readonly unknown[]).includes(run.role) ? run.role : 'builder';
+  return { ...withoutKeys(run, ['purpose']), role };
+}
+
+function resolveTopLevelRun(run: Payload, stage: string | undefined): Payload {
+  if (INQUIRY_ROLES.includes(run.role)) return withoutKeys(run, ['purpose']);
+  if (run.role === 'agent') return { ...run, purpose: resolveAgentPurpose(run, stage) };
+  const purpose = ROLE_PURPOSE.get(run.role);
+  if (!purpose) return run;
+  return { ...run, role: 'agent' satisfies RunRole, purpose };
+}
+
+function resolveRun(run: Payload, stage: string | undefined) {
+  if (isRecord(run.delegation)) return resolveDelegatedRun(run);
+  return resolveTopLevelRun(run, stage);
+}
+
+function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
+  switch (event.type) {
+    case 'task.answered': {
+      const { answer, ...rest } = event;
+      return { ...rest, type: 'task.delivered', step: 'answer', body: answer, runId: event.runId ?? null };
+    }
+    case 'task.created': {
+      if (!('specFirst' in event)) return event;
+      const { specFirst, ...rest } = event;
+      return { ...rest, planFirst: event.planFirst ?? specFirst };
+    }
+    case 'task.staged':
+      if (typeof event.taskId === 'string' && typeof event.stage === 'string') {
+        stages.set(event.taskId, event.stage);
+      }
+      return event;
+    case 'settings.changed':
+      if (!isRecord(event.settings)) return event;
+      return { ...event, settings: withoutKeys(event.settings, ['worktreesDirectory']) };
+    case 'worktree.created':
+      if ('workspace' in event) return event;
+      return { ...event, workspace: DEFAULT_WORKSPACE_MODE };
+    case 'run.started': {
+      if (!isRecord(event.run)) return event;
+      const taskId = typeof event.run.taskId === 'string' ? event.run.taskId : '';
+      return { ...event, run: resolveRun(event.run, stages.get(taskId)) };
+    }
+    default:
+      return event;
+  }
+}
+
+function parsePayload(payload: string): Payload | null {
+  try {
+    const value: unknown = JSON.parse(payload);
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function listLegacyRewrites(rows: Iterable<StoredEventRow>): StoredEventRow[] {
+  const stages = new Map<string, string>();
+  const rewrites: StoredEventRow[] = [];
+  for (const row of rows) {
+    const event = parsePayload(row.payload);
+    if (!event || event.type !== row.type) continue;
+    const current = resolveEvent(event, stages);
+    const payload = JSON.stringify(current);
+    if (payload === row.payload) continue;
+    rewrites.push({ seq: row.seq, type: String(current.type), payload });
+  }
+  return rewrites;
+}
+
+function resolveLegacyBriefing(row: LegacyBriefingRow): ProjectBriefing | null {
+  const event = parsePayload(row.payload);
+  if (!event || typeof event.text !== 'string') return null;
+  const projectId = typeof event.projectId === 'string' ? event.projectId : null;
+  const briefing = isRecord(event.briefing) ? (event.briefing as unknown as Briefing) : null;
+  return { projectId, stored: { text: event.text, at: row.at, briefing } };
+}
+
+export function listLegacyBriefings(rows: Iterable<LegacyBriefingRow>): ProjectBriefing[] {
+  const newest = new Map<string | null, ProjectBriefing>();
+  for (const row of rows) {
+    const briefing = resolveLegacyBriefing(row);
+    if (briefing) newest.set(briefing.projectId, briefing);
+  }
+  return [...newest.values()];
+}
