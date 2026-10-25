@@ -6,6 +6,7 @@ import {
   type ClientMessage,
   type ServerMessage,
   type ShinsaState,
+  serializeState,
   type UserCommand,
 } from '@shinsa/core';
 import { act } from '@testing-library/react';
@@ -65,6 +66,7 @@ const server: FakeServer = {
 
 function push(message: ServerMessage) {
   server.socket?.emit('message', { data: JSON.stringify(message) });
+  connection.flush();
 }
 
 const globals = globalThis as { WebSocket: unknown };
@@ -109,7 +111,7 @@ export function releaseAcks(error: { code: string; message: string } | null = nu
 
 export function pushState(state: ShinsaState) {
   act(() => {
-    push({ type: 'state', state });
+    push({ type: 'state', state: state && serializeState(state) });
   });
 }
 
@@ -121,7 +123,12 @@ export function pushAccounts(accounts: AccountsSnapshot) {
 
 export function pushTranscript(runId: string, entries: ChatEntry[], reset = true) {
   act(() => {
-    push({ type: 'transcript', runId, entries, reset });
+    push({
+      type: 'transcript',
+      runId,
+      entries,
+      start: reset ? 0 : connection.selectTranscript(runId).length,
+    });
   });
 }
 

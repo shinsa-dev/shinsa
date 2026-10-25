@@ -22,7 +22,7 @@ import {
 import { log } from '../src/log/index.ts';
 import { EffectRunner, Engine } from '../src/runtime/index.ts';
 import { type Shinsa, startShinsa } from '../src/serve.ts';
-import { EventLog } from '../src/store/index.ts';
+import { EventLog, resolveStateVersion } from '../src/store/index.ts';
 import { createGitRepo, createTempDir, createTestConfig, overrideEnv, until } from './helpers/index.ts';
 
 setDefaultTimeout(30_000);
@@ -128,6 +128,31 @@ describe('startShinsa', () => {
       for (const spy of spies) spy.mockRestore();
     }
     expect(order).toEqual(['syncs stopped', 'effects aborted', 'effects settled', 'log closed']);
+  });
+
+  test('a server keeps a snapshot of the state under this code’s version, and the next start replays only what follows it', async () => {
+    const config = createTestConfig(createTempDir());
+    const options = {
+      models,
+      triage: () => Promise.resolve(null),
+      resolveLogin: () => Promise.resolve(null),
+    };
+    const first = await startShinsa(config, options);
+    await first.engine.dispatch({ type: 'task.create', request: 'Keep me', repoId: null });
+    const seq = first.engine.state.seq;
+    await first.stop();
+    const reader = new EventLog(config.databasePath);
+    expect(reader.selectSnapshot(resolveStateVersion() ?? '')).toMatchObject({ ok: true, seq });
+    reader.close();
+    const reads = spyOn(EventLog.prototype, 'readEvents');
+    try {
+      const second = await startShinsa(config, options);
+      started.push(second);
+      expect(reads.mock.calls[0]?.[0]).toBe(seq);
+      expect(Object.values(second.engine.state.tasks).map((task) => task.request)).toEqual(['Keep me']);
+    } finally {
+      reads.mockRestore();
+    }
   });
 
   test('a task with nowhere to work stops at the "Could not start the task" gate', async () => {

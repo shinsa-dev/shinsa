@@ -211,14 +211,9 @@ export class Briefings {
       log.info('[Briefing] Dropped a briefing that was written after the server stopped', { seq: state.seq });
       return;
     }
-    await this.#engine.dispatch(
-      {
-        type: 'briefing.write',
-        projectId: queue.focusProjectId,
-        text: serializeBriefing(briefing, this.#engine.state),
-        briefing,
-      },
-      { id: `briefing:${queue.focusProjectId ?? '*'}:${state.seq}` }
-    );
+    await this.#engine.writeBriefing(queue.focusProjectId, {
+      text: serializeBriefing(briefing, this.#engine.state),
+      briefing,
+    });
   }
 }

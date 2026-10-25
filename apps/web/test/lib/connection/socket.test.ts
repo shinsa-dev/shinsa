@@ -1,10 +1,19 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { ChatEntry, ClientMessage, ServerMessage, UserCommand } from '@shinsa/core';
+import {
+  type ChatEntry,
+  type ClientMessage,
+  decide,
+  resolveStatePatch,
+  type ServerMessage,
+  type ShinsaState,
+  type UserCommand,
+} from '@shinsa/core';
 import { act, renderHook } from '@testing-library/react';
 import {
   Connection,
   connection,
   sendCommand,
+  TRANSCRIPT_CACHE_LIMIT,
   useConnection,
   useDesktopConnected,
   useTranscript,
@@ -54,6 +63,7 @@ function setup() {
     retry: (reconnect, delayMs) => {
       retries.push({ reconnect, delayMs });
     },
+    schedule: (flush) => flush(),
   });
   const latest = () => {
     const socket = sockets.at(-1);
@@ -223,6 +233,202 @@ describe('Connection', () => {
   });
 });
 
+describe('Connection state', () => {
+  function seeded(seq = 4) {
+    return createShinsaState({
+      tasks: [createTask({ id: 't1', stage: 'triage', priority: 'normal' })],
+      patch: { seq },
+    });
+  }
+
+  function patchFor(state: ShinsaState, command: UserCommand) {
+    const decision = decide(state, command, { now: 10, newId: () => 'n1' });
+    return { next: decision.state, patch: resolveStatePatch(state, decision.state, decision.changes) };
+  }
+
+  it('applies each patch to the state it has, and keeps every entry the patch leaves alone', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const state = createShinsaState({
+      tasks: [createTask({ id: 't1', stage: 'triage' }), createTask({ id: 't2', stage: 'triage' })],
+      patch: { seq: 4 },
+    });
+    latest().receive({ type: 'state', state });
+    const before = subject.snapshot().state;
+    const { next, patch } = patchFor(state, { type: 'task.prioritize', taskId: 't1', priority: 'high' });
+    latest().receive({ type: 'state.patch', patch });
+    const after = subject.snapshot().state;
+    expect(after?.tasks.t1?.priority).toBe('high');
+    expect(after?.seq).toBe(next.seq);
+    expect(after?.tasks.t2).toBe(before?.tasks.t2);
+  });
+
+  it('skips a patch it already has, asks for the whole state after a gap, and waits for it', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    latest().receive({ type: 'state.patch', patch: { from: 0, to: 1, fields: {}, records: {} } });
+    expect(subject.snapshot().state).toBeNull();
+    const state = seeded();
+    latest().receive({ type: 'state', state });
+    latest().receive({ type: 'state.patch', patch: { from: 3, to: 4, fields: {}, records: {} } });
+    expect(subject.snapshot().state).toEqual(state);
+    latest().receive({ type: 'state.patch', patch: { from: 6, to: 7, fields: {}, records: {} } });
+    expect(latest().sent.at(-1)).toEqual({ type: 'state.sync' });
+    latest().receive({ type: 'state.patch', patch: { from: 4, to: 5, fields: {}, records: {} } });
+    expect(subject.snapshot().state?.seq).toBe(4);
+    const fresh = seeded(7);
+    latest().receive({ type: 'state', state: fresh });
+    expect(subject.snapshot().state).toEqual(fresh);
+  });
+
+  it('applies a patch that changes the state without a new event, such as a new Home guide', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const state = seeded();
+    latest().receive({ type: 'state', state });
+    const stored = { text: 'Nothing needs you right now.', at: 9, briefing: null };
+    const guide = {
+      from: state.seq,
+      to: state.seq,
+      fields: {},
+      records: { briefings: { '*': { put: stored } } },
+    };
+    latest().receive({ type: 'state.patch', patch: guide });
+    expect(subject.snapshot().state?.briefings['*']).toEqual(stored);
+    expect(subject.snapshot().state?.seq).toBe(state.seq);
+    expect(latest().sent.at(-1)).not.toEqual({ type: 'state.sync' });
+  });
+
+  it('applies what arrives within a frame once, on the next frame', () => {
+    const frames: (() => void)[] = [];
+    const sockets: FakeSocket[] = [];
+    const subject = new Connection({
+      openSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+      retry: () => undefined,
+      schedule: (flush) => {
+        frames.push(flush);
+      },
+    });
+    const listener = mock(() => {});
+    subject.subscribe(listener);
+    subject.start();
+    sockets[0]?.open();
+    const state = seeded();
+    sockets[0]?.receive({ type: 'state', state });
+    const { patch } = patchFor(state, { type: 'task.prioritize', taskId: 't1', priority: 'high' });
+    sockets[0]?.receive({ type: 'state.patch', patch });
+    sockets[0]?.receive({ type: 'transcript', runId: 'r1', entries: [entry('a')], start: 0 });
+    expect(frames).toHaveLength(1);
+    expect(subject.snapshot().state).toBeNull();
+    const calls = listener.mock.calls.length;
+    frames[0]?.();
+    frames[0]?.();
+    expect(subject.snapshot().state?.tasks.t1?.priority).toBe('high');
+    expect(subject.selectTranscript('r1')).toEqual([entry('a')]);
+    expect(listener.mock.calls.length).toBe(calls + 1);
+  });
+
+  it('shows a safe command at once, keeps it through the server’s change, and drops it on the answer', async () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const state = seeded();
+    latest().receive({ type: 'state', state });
+    const command: UserCommand = { type: 'task.prioritize', taskId: 't1', priority: 'urgent' };
+    const sent = subject.command(command);
+    expect(subject.snapshot().state?.tasks.t1?.priority).toBe('urgent');
+    const [id = ''] = commandIds(latest());
+    const { patch } = patchFor(state, command);
+    latest().receive({ type: 'state.patch', patch });
+    expect(subject.snapshot().state?.tasks.t1?.priority).toBe('urgent');
+    latest().receive({ type: 'ack', id, error: null });
+    await sent;
+    expect(subject.snapshot().state?.tasks.t1?.priority).toBe('urgent');
+    expect(subject.snapshot().state?.seq).toBe(patch.to);
+  });
+
+  it('takes a safe command back when the server refuses it or the connection is lost under it', async () => {
+    const { subject, retries, latest } = setup();
+    subject.start();
+    latest().open();
+    latest().receive({ type: 'state', state: seeded() });
+    const refused = subject.command({ type: 'task.prioritize', taskId: 't1', priority: 'low' });
+    expect(subject.snapshot().state?.tasks.t1?.priority).toBe('low');
+    const [id = ''] = commandIds(latest());
+    latest().receive({ type: 'ack', id, error: { code: 'nope', message: 'No.' } });
+    await expect(refused).rejects.toThrow('No.');
+    expect(subject.snapshot().state?.tasks.t1?.priority).toBe('normal');
+    const lost = subject.command({ type: 'task.prioritize', taskId: 't1', priority: 'high' });
+    for (let drop = 0; drop < 3; drop += 1) {
+      latest().close();
+      retries.at(-1)?.reconnect();
+      latest().open();
+    }
+    await expect(lost).rejects.toThrow('Lost the connection to Shinsa.');
+    expect(subject.snapshot().state?.tasks.t1?.priority).toBe('normal');
+  });
+
+  it('sends other commands without guessing their outcome, and a safe one before any state as it is', async () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    const early = subject.command({ type: 'task.prioritize', taskId: 't1', priority: 'high' });
+    expect(subject.snapshot().state).toBeNull();
+    const state = seeded();
+    latest().receive({ type: 'state', state });
+    const listener = mock(() => {});
+    subject.subscribe(listener);
+    const other = subject.command({ type: 'task.create', request: 'Later', repoId: null });
+    expect(listener).not.toHaveBeenCalled();
+    for (const id of commandIds(latest())) latest().receive({ type: 'ack', id, error: null });
+    await Promise.all([early, other]);
+  });
+});
+
+describe('the frame the connection waits for', () => {
+  it('is the next animation frame, or a short timer when the page is hidden and frames stop', () => {
+    const frames: FrameRequestCallback[] = [];
+    const animation = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return 1;
+    });
+    const timers: (() => void)[] = [];
+    const timeout = spyOn(globalThis, 'setTimeout').mockImplementation(((run: () => void) => {
+      timers.push(run);
+      return 0;
+    }) as unknown as typeof setTimeout);
+    const sockets: FakeSocket[] = [];
+    const subject = new Connection({
+      openSocket: () => {
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+      retry: () => undefined,
+    });
+    subject.start();
+    sockets[0]?.open();
+    const first = createShinsaState({ patch: { seq: 1 } });
+    sockets[0]?.receive({ type: 'state', state: first });
+    frames[0]?.(0);
+    expect(subject.snapshot().state).toEqual(first);
+    timers[0]?.();
+    const second = createShinsaState({ patch: { seq: 2 } });
+    sockets[0]?.receive({ type: 'state', state: second });
+    timers[1]?.();
+    expect(subject.snapshot().state).toEqual(second);
+    animation.mockRestore();
+    timeout.mockRestore();
+  });
+});
+
 describe('Connection surfaces', () => {
   it('says which surface it is before anything else, on every socket', () => {
     const { subject, retries, latest } = setup();
@@ -274,13 +480,13 @@ describe('Connection transcripts', () => {
     latest().open();
     const releaseFirst = subject.watchTranscript('r1');
     const releaseSecond = subject.watchTranscript('r1');
-    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1', from: 0 }]);
     releaseFirst();
     expect(latest().sent).toHaveLength(2);
     releaseSecond();
     expect(latest().sent).toEqual([
       HELLO,
-      { type: 'transcript.subscribe', runId: 'r1' },
+      { type: 'transcript.subscribe', runId: 'r1', from: 0 },
       { type: 'transcript.unsubscribe', runId: 'r1' },
     ]);
   });
@@ -293,7 +499,7 @@ describe('Connection transcripts', () => {
     subject.watchTranscript('r1');
     release();
     release();
-    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1', from: 0 }]);
   });
 
   it('ignores a message from the server that is not JSON', () => {
@@ -311,7 +517,7 @@ describe('Connection transcripts', () => {
     subject.start();
     expect(latest().sent).toEqual([]);
     latest().open();
-    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1', from: 0 }]);
   });
 
   it('re-subscribes open transcripts after a reconnect, and not released ones', () => {
@@ -324,31 +530,108 @@ describe('Connection transcripts', () => {
     latest().close();
     retries.at(-1)?.reconnect();
     latest().open();
-    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1' }]);
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1', from: 0 }]);
   });
 
-  it('appends entries and replaces them on a reset', () => {
+  it('appends entries where they belong and replaces them when the server starts over', () => {
     const { subject, latest } = setup();
     const listener = mock(() => {});
     subject.subscribeTranscripts(listener);
     subject.start();
     latest().open();
-    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('a')], reset: false });
-    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('b')], reset: false });
-    expect(subject.selectTranscript('r1')).toEqual([entry('a'), entry('b')]);
-    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('c')], reset: true });
-    expect(subject.selectTranscript('r1')).toEqual([entry('c')]);
-    expect(listener).toHaveBeenCalledTimes(3);
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('a')], start: 0 });
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('b')], start: 1 });
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('b'), entry('c')], start: 1 });
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('a')], start: 0 });
+    expect(subject.selectTranscript('r1')).toEqual([entry('a')]);
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('b')], start: 1 });
+    const kept = subject.selectTranscript('r1');
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('b')], start: 1 });
+    expect(subject.selectTranscript('r1')).toBe(kept);
+    expect(listener).toHaveBeenCalledTimes(6);
+  });
+
+  it('asks again from where it is when entries arrive with a gap before them', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    subject.watchTranscript('r1');
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('a')], start: 0 });
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('d')], start: 3 });
+    expect(subject.selectTranscript('r1')).toEqual([entry('a')]);
+    expect(latest().sent.at(-1)).toEqual({ type: 'transcript.subscribe', runId: 'r1', from: 1 });
+  });
+
+  it('asks only for the entries it does not have after a reconnect', () => {
+    const { subject, retries, latest } = setup();
+    subject.start();
+    latest().open();
+    subject.watchTranscript('r1');
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('a'), entry('b')], start: 0 });
+    latest().close();
+    retries.at(-1)?.reconnect();
+    latest().open();
+    expect(latest().sent).toEqual([HELLO, { type: 'transcript.subscribe', runId: 'r1', from: 2 }]);
   });
 
   it('keeps transcripts of different runs apart', () => {
     const { subject, latest } = setup();
     subject.start();
     latest().open();
-    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('a')], reset: true });
-    latest().receive({ type: 'transcript', runId: 'r2', entries: [entry('b')], reset: true });
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('a')], start: 0 });
+    latest().receive({ type: 'transcript', runId: 'r2', entries: [entry('b')], start: 0 });
     expect(subject.selectTranscript('r1')).toEqual([entry('a')]);
     expect(subject.selectTranscript('r2')).toEqual([entry('b')]);
+  });
+
+  it('drops the transcripts read longest ago past its limit, never a watched one', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    subject.watchTranscript('watched');
+    latest().receive({ type: 'transcript', runId: 'watched', entries: [entry('w')], start: 0 });
+    for (let index = 0; index < TRANSCRIPT_CACHE_LIMIT; index += 1) {
+      latest().receive({ type: 'transcript', runId: `r${index}`, entries: [entry('a')], start: 0 });
+    }
+    expect(subject.selectTranscript('watched')).toEqual([entry('w')]);
+    expect(subject.selectTranscript('r0')).toEqual([]);
+    expect(subject.selectTranscript('r1')).toEqual([entry('a')]);
+  });
+
+  it('counts a released transcript as read last, so it outlives older ones', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    latest().receive({ type: 'transcript', runId: 'first', entries: [entry('f')], start: 0 });
+    for (let index = 1; index < TRANSCRIPT_CACHE_LIMIT; index += 1) {
+      latest().receive({ type: 'transcript', runId: `r${index}`, entries: [entry('a')], start: 0 });
+    }
+    subject.watchTranscript('first')();
+    latest().receive({ type: 'transcript', runId: 'last', entries: [entry('l')], start: 0 });
+    expect(subject.selectTranscript('first')).toEqual([entry('f')]);
+    expect(subject.selectTranscript('r1')).toEqual([]);
+    expect(subject.selectTranscript('last')).toEqual([entry('l')]);
+  });
+
+  it('keeps every watched transcript even past its limit', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    for (let index = 0; index <= TRANSCRIPT_CACHE_LIMIT; index += 1) {
+      subject.watchTranscript(`r${index}`);
+      latest().receive({ type: 'transcript', runId: `r${index}`, entries: [entry('a')], start: 0 });
+    }
+    expect(subject.selectTranscript('r0')).toEqual([entry('a')]);
+    expect(subject.selectTranscript(`r${TRANSCRIPT_CACHE_LIMIT}`)).toEqual([entry('a')]);
+  });
+
+  it('drops entries with a gap for a run nobody watches instead of asking again', () => {
+    const { subject, latest } = setup();
+    subject.start();
+    latest().open();
+    latest().receive({ type: 'transcript', runId: 'r1', entries: [entry('d')], start: 3 });
+    expect(subject.selectTranscript('r1')).toEqual([]);
+    expect(latest().sent).toEqual([HELLO]);
   });
 
   it('returns the same empty list for a run it has nothing for', () => {

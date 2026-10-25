@@ -107,7 +107,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 ## Naming decisions
 
 All nineteen are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
-command, stored shape and route uses the current one, and a log written before a rename does not replay.
+command, stored shape and route uses the current one. Old shapes already in the user's log are rewritten once on start
+(`apps/server/src/store/legacy.ts`, `docs/engine.md` → State in memory), so code never reads them.
 
 1. **Plan, not spec**: `Plan`, `PlanDocument`, `PlanRevision`, `PlanFile`, `PlanQuestion`, `Task.plan`, `planFirst`,
    `planHistory`, `planAnswers`, stage `awaiting_plan`, events `plan.*`, activity kind `plan`, `shinsa do --plan-first`.
@@ -410,7 +411,7 @@ the merge gate, so an open pull request is never left without one.
 | `status?` | `queued` \| `running` \| `waiting` | `waiting`: its turn ended while its delegations work |
 | `purpose?` | `plan` \| `build` \| `fix` \| `operate` | set on every run of the round's agent (`agent`) and no other: what this run does, which hand-over it may call (`PURPOSE_HAND_OVERS`) and whether it may edit (`plan` is read-only, `isReadOnlyRun`) |
 | `phaseIndex?` | number \| null | the plan phase a build run builds |
-| `prompt?`, `rolePrompt?`, `resume?` | | the brief; the brief before Shinsa appended the project and any adoption note, or before it put the round brief in front of an agent run that has no session to resume (its short instruction), which a recovery or a usage resume starts from; whether it resumes an earlier session. `resolveRunBrief(state, run)` gives the full brief of a resumed agent run for a session that cannot hold the round |
+| `prompt?`, `rolePrompt?`, `resume?` | | the brief; the brief before Shinsa appended the project and any adoption note, or before it put the round brief in front of an agent run that has no session to resume (its short instruction), which a recovery or a usage resume starts from; whether it resumes an earlier session. `resolveRunBrief(state, run)` gives the full brief of a resumed agent run for a session that cannot hold the round. Neither prompt goes to the page (The socket) |
 | `provider`, `model` | string, string \| null | where it started |
 | `sessionId`, `sessionProvider?`, `sessionLost?` | | the provider session, who owns it, whether it is gone |
 | `startedAt`, `endedAt`, `outcome`, `summary` | | `completed`, `failed`, `cancelled` |
@@ -773,7 +774,6 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |
 | `provider.record_sign_in` | the accounts service | a provider's own sign-in is back: answers its open Sign in gates that name no account |
-| `briefing.write` | `briefing/` | stores the Home guide |
 | `delegation.record_delivery`, `delegation.release` | `agents/deliveries.ts` | a delivery claim was taken, or released |
 | `delegation.wake_policy` | `agents/tools/orchestration.ts` | a `wait` call that timed out switches to waking |
 | `delegations.recover` | the supervisor at boot | releases claims and waits, claims again |
@@ -791,7 +791,6 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `project.written`, `project.removed` | a project is written, removed |
 | `focus.changed` | the focus changes |
 | `settings.changed` | settings change (the whole settings object) |
-| `briefing.written` | the Home guide is stored (`projectId`) |
 | `task.created` | a task is created (`request`, `planFirst`; with its handle when it has a project) |
 | `task.triaged` | triage set title, repository (or none), size, branch, handle, pipeline, decisions (always) |
 | `task.repo_bound` | a task with no repository got the one the setup check found (`repoId`, and `projectId` when it had none) |
@@ -875,7 +874,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record` |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
 | `workspace.update` | replay_safe | `task:<id>` | `task.record_workspace_update` once `but pull` updated the task's GitButler workspace (`guidance` is carried through) |
-| `briefing.request` | replay_safe | `briefing` | `briefing.write` |
+| `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
 | `run.cancel` | process_bound | `cancel:<id>` | `run.end` |
@@ -965,18 +964,47 @@ or `browser` (a tab, Floaty).
 | --- | --- |
 | `hello { surface }` | Names the page's surface; the first message on every socket |
 | `command { id, command }` | A `UserCommand`; answered by `ack` with the same id |
-| `transcript.subscribe { runId }` / `transcript.unsubscribe { runId }` | Follow a run's transcript, or stop |
+| `state.sync` | Send the whole state again: a patch did not fit the state the page holds |
+| `transcript.subscribe { runId, from }` / `transcript.unsubscribe { runId }` | Follow a run's transcript from entry `from` (the number the page holds), or stop |
 
 | Server → page (`ServerMessage`) | When |
 | --- | --- |
-| `state { state }` | On connect and after every change |
-| `ack { id, error }` | After a command; `error` is `{ code, message }` or null |
-| `transcript { runId, entries, reset }` | On subscribing (`reset: true`, every entry so far) and for each new entry |
+| `state { state }` | On connect, and on `state.sync`: the state as the page holds it (`WireState`, below) |
+| `state.patch { patch }` | After every change: a `StatePatch` from log position `from` to `to` |
+| `ack { id, error }` | After a command, after its patch; `error` is `{ code, message }` or null |
+| `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
 
 `isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
 sound, shows no notification and puts no count in its title or Floaty's tags.
+
+The page never gets a run's prompts. The state on the socket is a `WireState` (`packages/core/src/protocol/runs.ts`;
+`serializeState` makes one): the state with every run a `WireRun` (`serializeRun`), which is the `Run` without
+`prompt` and `rolePrompt` and with `fixFocus` on a fix whose instruction Shinsa recognises. The prompts are about
+14 KB per run and nothing on the page shows them: the brief a run was given is the first entry of its transcript.
+
+| `fixFocus` | What the fix is for, from the first words of its instruction (`resolveFixFocus`, `packages/core/src/prompts/focus.ts`) |
+| --- | --- |
+| `checks` | The checks failed |
+| `review` | The agent review found problems |
+| `changes` | The human asked for changes (`revise` on the review gate, with or without verdicts on findings) |
+| `pull_request` | The pull request needs work |
+| `conflicts` | GitButler left conflicted commits, or the human updated the workspace for a conflicting pull request |
+
+A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolveStatePatch` makes one,
+`applyStatePatch` applies one, or answers null when its `from` is not the state's `seq`; a patch carries runs as
+`WireRun`s too, and an entry none of whose fields changed is left out):
+
+| Field | Holds |
+| --- | --- |
+| `from`, `to` | The log position the patch applies to and the one it reaches; equal for a change that is not an event (a new Home guide, `docs/engine.md` → The briefing) |
+| `fields` | `focus`, `settings`, `onBehalfActions` when they changed, each a `ValueChange` |
+| `records` | Per record of the state (`tasks`, `runs`, `gates`, `repos`, `projects`, `taskNumbers`, `evidence`, `briefings`, `schedules`, `sessionUsage`), the entries that changed by id, each an `EntryChange` |
+
+An `EntryChange` is `{ put }` (a new or replaced entry), `{ remove: true }` or `{ fields, unset }` (the fields whose
+value changed, each a `ValueChange`, and the ones that went away). A `ValueChange` is `{ put }` or `{ drop, append }`:
+a list that lost `drop` entries at its start and gained `append` at its end, the way a task's activity grows.
 
 ## Where it lives
 
@@ -1003,6 +1031,8 @@ sound, shows no notification and puts no count in its title or Floaty's tags.
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
 | Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/server/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
+| State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
+| State snapshots | `apps/server/src/store/snapshot.ts`, `apps/server/src/store/event-log.ts` |
 | Event log, receipts, outbox | `apps/server/src/store/event-log.ts`, `apps/server/src/runtime/engine.ts` |
 | Effect handlers | `apps/server/src/runtime/effects.ts` |
 | Agent tools (MCP) | `apps/server/src/agents/tools/`; the loader tools `apps/server/src/extensions/loader.ts` |

@@ -1,6 +1,7 @@
 import { isAgentQuestion, isPausingGate } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { describeDecision } from './activity.ts';
+import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 import { applyVerdicts } from './reviews.ts';
 import { record, updateGate } from './write.ts';
@@ -12,7 +13,7 @@ type GateEvent = Extract<
 
 function applyGateOpened(state: ShinsaState, event: EventOf<'gate.opened'>) {
   const gate = { ...event.gate };
-  state.gates[gate.id] = gate;
+  writeEntry(state, 'gates', gate.id, gate);
   if (isAgentQuestion(gate)) {
     record(state, gate.taskId, event.at, {
       actor: 'agent',

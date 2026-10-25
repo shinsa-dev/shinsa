@@ -84,4 +84,49 @@ describe('run events', () => {
     });
     expect(plain.runs['run-1']).not.toHaveProperty('failure');
   });
+
+  test('a run whose role or purpose the current model does not have is refused, never stored', () => {
+    const base = stateWith().runs;
+    const run = (patch: Record<string, unknown>) =>
+      ({ ...stateWith({ id: 'new' }).runs.new, ...patch }) as Run;
+    const delegation = stateWith({
+      delegation: {
+        parentRunId: 'run-0',
+        depth: 1,
+        requestKey: 'k',
+        title: 't',
+        brief: 'b',
+        mode: 'wait',
+        wake: 'settled_only',
+        isolation: 'shared',
+        baseCommit: null,
+        delivery: 'none',
+        question: null,
+        requestedAt: 1,
+      },
+    }).runs['run-1']?.delegation;
+    const refused = [
+      [run({ role: 'operator' }), 'run_role_unknown', 'a run of its own'],
+      [run({ role: 'planner', purpose: undefined }), 'run_role_unknown', 'a run of its own'],
+      [run({ role: 'answerer', delegation }), 'run_role_unknown', 'a delegated run'],
+      [run({ purpose: undefined }), 'run_purpose_unknown', 'no known purpose'],
+      [run({ purpose: 'ship' }), 'run_purpose_unknown', 'no known purpose'],
+      [run({ role: 'reviewer' }), 'run_purpose_unexpected', 'cannot have a purpose'],
+    ] as const;
+    for (const [started, code, message] of refused) {
+      const state = stateWith();
+      const refusal = (() => {
+        try {
+          apply(state, { type: 'run.started', run: started });
+          return null;
+        } catch (error) {
+          return error;
+        }
+      })();
+      expect(refusal).toMatchObject({ code, message: expect.stringContaining(message) });
+      expect(state.runs).toEqual(base);
+    }
+    const helper = run({ role: 'builder', purpose: undefined, delegation });
+    expect(apply(stateWith(), { type: 'run.started', run: helper }).runs.new?.role).toBe('builder');
+  });
 });

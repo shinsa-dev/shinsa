@@ -62,6 +62,62 @@ describe('transcripts', () => {
   });
 });
 
+describe('reading a transcript', () => {
+  function entryLine(id: string, text: string) {
+    return `${JSON.stringify({ v: 2, id, at: 1, type: 'agent', phase: 'interim', text })}\n`;
+  }
+
+  test('reads from a position, from the start when the position is past the end, and keeps a half-written last line', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
+    const path = join(dir, 'run-1.jsonl');
+    writeFileSync(path, `${entryLine('a', 'one')}${entryLine('b', 'two')}`);
+    const transcripts = new Transcripts(dir);
+    expect(transcripts.readEntries('run-1', 1).entries.map((entry) => entry.id)).toEqual(['b']);
+    expect(transcripts.readEntries('run-1', 1).start).toBe(1);
+    expect(transcripts.readEntries('run-1', 9)).toMatchObject({
+      start: 0,
+      entries: [{ id: 'a' }, { id: 'b' }],
+    });
+    appendFileSync(path, '{"v":2,"id":"c"');
+    expect(transcripts.listEntries('run-1').map((entry) => entry.type)).toEqual(['agent', 'agent', 'error']);
+    const torn = transcripts.listEntries('run-1').at(-1);
+    expect(torn?.id).toBe(
+      `unreadable-${Buffer.byteLength(`${entryLine('a', 'one')}${entryLine('b', 'two')}`)}`
+    );
+    expect(transcripts.readEntries('missing', 0)).toEqual({ entries: [], start: 0 });
+  });
+
+  test('a list it hands out is the caller’s to change', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
+    writeFileSync(join(dir, 'run-1.jsonl'), `${entryLine('a', 'one')}${entryLine('b', 'two')}`);
+    const transcripts = new Transcripts(dir);
+    transcripts.listEntries('run-1').reverse();
+    expect(transcripts.listEntries('run-1').map((entry) => entry.id)).toEqual(['a', 'b']);
+  });
+
+  test('keeps a few recent transcripts read, every followed one, and numbers new entries after what it read', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
+    const transcripts = new Transcripts(dir);
+    const starts: [string, number | null][] = [];
+    transcripts.subscribe((runId, _entries, start) => starts.push([runId, start]));
+    writeFileSync(join(dir, 'followed.jsonl'), entryLine('f', 'followed'));
+    const unfollow = transcripts.follow('followed');
+    for (let index = 0; index < 12; index += 1) {
+      writeFileSync(join(dir, `run-${index}.jsonl`), entryLine(`e${index}`, 'x'));
+      expect(transcripts.listEntries(`run-${index}`)).toHaveLength(1);
+    }
+    transcripts.record('followed', { type: 'agent', phase: 'interim', text: 'next' });
+    transcripts.record('run-11', { type: 'agent', phase: 'interim', text: 'next' });
+    transcripts.record('run-0', { type: 'agent', phase: 'interim', text: 'next' });
+    expect(starts).toEqual([
+      ['followed', 1],
+      ['run-11', 1],
+      ['run-0', null],
+    ]);
+    unfollow();
+  });
+});
+
 describe('following a transcript', () => {
   function createWatched(pollMs?: number) {
     const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));

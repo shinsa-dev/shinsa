@@ -180,7 +180,7 @@ function listTitleSpans(text: string, catalog: ReferenceCatalog, exclude: Readon
     });
   }
   for (const task of tasks) {
-    if (task.title.length < MIN_BARE_TITLE) continue;
+    if (task.title.length < MIN_BARE_TITLE || !text.includes(task.title)) continue;
     const pattern = new RegExp(`(?<![\\w-])${escapeRegExp(task.title)}(?![\\w-])`, 'g');
     for (const match of text.matchAll(pattern)) {
       spans.push({

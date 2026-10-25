@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   resolveChecksFixPrompt,
   resolveConflictFixPrompt,
+  resolveFixFocus,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
   resolveReviewFixPrompt,
@@ -24,17 +25,14 @@ const remark = {
 };
 
 describe('fix prompts', () => {
-  test('each fix prompt opens with the words the web labels its run by', () => {
-    expect(resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }])).toStartWith(
-      'The checks failed'
-    );
-    expect(resolveReviewFixPrompt([finding])).toStartWith('The agent review found');
-    expect(resolveHumanFixPrompt('Rename it.', [])).toStartWith('The human looked at the work');
-    expect(resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, [])).toStartWith(
-      'The human looked at the work'
-    );
-    expect(resolvePullRequestFixPrompt(pullRequest({ number: 42 }))).toStartWith('Pull request #42');
-    expect(resolveConflictFixPrompt('feat/banner')).toStartWith('GitButler left');
+  test('each fix prompt opens with the words its run’s focus is read from', () => {
+    const focusOf = (prompt: string) => resolveFixFocus({ purpose: 'fix', prompt });
+    expect(focusOf(resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]))).toBe('checks');
+    expect(focusOf(resolveReviewFixPrompt([finding]))).toBe('review');
+    expect(focusOf(resolveHumanFixPrompt('Rename it.', []))).toBe('changes');
+    expect(focusOf(resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, []))).toBe('changes');
+    expect(focusOf(resolvePullRequestFixPrompt(pullRequest({ number: 42 })))).toBe('pull_request');
+    expect(focusOf(resolveConflictFixPrompt('feat/banner'))).toBe('conflicts');
   });
 
   test('a fix of the work says the checks and the review follow it', () => {

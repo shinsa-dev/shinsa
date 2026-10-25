@@ -50,7 +50,10 @@ src/
 ├── effects/         ShinsaEffect, EFFECT_RECOVERY (process-bound or replay-safe), effect keys (dedupe) and lanes
 │                    (ordering)
 ├── state/           project.ts (createState, applyEvent, replayEventLog: replay that skips and reports an event it
-│                    cannot apply), write.ts (the shared writes the folds use; applyOnBehalf: an event sent on your
+│                    cannot apply, from an empty state or a snapshot), draft.ts (createDraft and sealDraft: the
+│                    copy-on-write state decide works on, and the ids it wrote; writeEntry and removeEntry, the only
+│                    way a fold writes a record; STATE_RECORDS and STATE_FIELDS name every part of the state),
+│                    write.ts (the shared writes the folds use; applyOnBehalf: an event sent on your
 │                    behalf marks the activity it records), activity.ts (the wording of a task's activity),
 │                    queries.ts (list*, find/select, isDependencyOf, isWaitingOnAnswer, isRunWaiting,
 │                    resolveTaskProject, selectTaskByReference, selectStackTarget, selectStackedOnTask and
@@ -65,7 +68,7 @@ src/
 │                    and pull request, where a merged pull request marks every round still shipped on it merged,
 │                    rounds when a task rests, closes or reopens for a follow-up)
 ├── decide/          decide() (index.ts): one exhaustive switch over the command, then releaseWaiting,
-│   │                startQueuedRounds, enforceLiveness and dispatchRuns, over a Decider (decider.ts) that works on a clone and emits
+│   │                startQueuedRounds, enforceLiveness and dispatchRuns, over a Decider (decider.ts) that works on a draft and emits
 │   │                events and effects (taskSession: the one session every run of a task resumes, whatever its
 │   │                kind of work, and the reviewer's own; resumableFrom for a run that failed before it had one);
 │   │                equality.ts (isSameValue)
@@ -165,7 +168,8 @@ src/
 │                    plans (steps.ts, from the schema), each role's prompt (roles.ts: the round agent's planning prompt,
 │                    its short phase and operation instructions and the round brief) and the context it describes
 │                    (context.ts), the full brief a resumed agent run sends when its session cannot hold the round
-│                    (root.ts: resolveRunBrief), fix prompts, session prompts (restart,
+│                    (root.ts: resolveRunBrief), fix prompts, what a fix is for (focus.ts: resolveFixFocus, from the fix
+│                    prompts' first words), session prompts (restart,
 │                    steer, answer, superseded, usage resume), monitor prompts (waits.ts), the delegated agent's and
 │                    the delivery prompts (orchestration.ts), the budgeted context handoff (handoff.ts), the
 │                    rules for managing Shinsa every role gets (manage.ts, MANAGE_RULES), the follow-up on a finished
@@ -173,7 +177,10 @@ src/
 │                    run is told about, and the repository outside it the task works in, if any (project.ts,
 │                    resolveProjectContext)
 ├── progress/        The steps a task shows on its page, and an ended round's (resolveRoundProgress)
-└── protocol/        WebSocket messages, diff parsing, the accounts snapshot (accounts.ts), MCP servers, plugins and
+└── protocol/        WebSocket messages, state patches (patch.ts: resolveStatePatch, applyStatePatch), the state as
+                     the socket sends it (runs.ts: WireRun and WireState, runs without their prompts; serializeRun,
+                     serializeState), diff parsing,
+                     the accounts snapshot (accounts.ts), MCP servers, plugins and
                      skills (extensions.ts: the snapshot, scopes, token estimates, what a run loaded, the context
                      optimizer's settings and isUnused), the
                      onboarding API types (onboarding.ts)
@@ -198,6 +205,11 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
   input. Never store a shared constant into state by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
 - **No old logs.** Shinsa has never shipped, so there is nothing to replay but logs the current code wrote: rename or
   remove an event or a field outright, with no reader for the old shape and no default that only an old log needs.
+  The server rewrites old shapes in the user's log once on start (`apps/server/src/store/legacy.ts`), so core
+  never sees them.
+- **Nothing runs on import.** `package.json` says `"sideEffects": false`, so a bundler keeps only what a caller
+  imports: the desktop app's main bundle, which needs only `ENGINE_PROTOCOL`, holds that one module instead of the
+  whole domain. A module that registers something or writes a global when imported would be dropped silently.
 - **Validate before emitting.** A command that is not allowed throws `DomainError` and leaves no events. Anything
   that arrives from outside the server (`UserCommand` over HTTP or the socket) goes through `parseUserCommand` first,
   so `decide` only ever sees well-typed fields: a wrong type, an unknown setting or repository field, a priority or
@@ -265,12 +277,16 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     reviewer resumes the reviewer's own session the same way; checked as each `run.started` is applied;
   - on your behalf (a walk of commands sent on your behalf): nothing sent on your behalf closes a gate, and none
     moves a task waiting at one to merged or done;
-  - replaying the log reproduces the state, and the same input gives the same decision.
+  - replaying the log reproduces the state, and the same input gives the same decision;
+  - `decide` never changes the state it is given; the state it returns equals applying its events one by one, entry
+    by entry for every id it reports changed (and as a whole at the end of the walk); and the state patch of every
+    command, sent through JSON and applied to a copy kept on the side, gives the same state, so a page that only
+    ever gets patches holds what the server holds.
 
 ## Tests
 
 `bun test` here enforces 100% line and function coverage (`bunfig.toml`). The property test runs each walk (the base
 one, outages, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
-seeds of 400 random commands, in about two minutes; when it fails it names the seed, the step and the command. Set
+seeds of 400 random commands, in about three minutes; when it fails it names the seed, the step and the command. Set
 `SHINSA_SEEDS` to sweep wider before landing a change to `decide` (`SHINSA_SEEDS=1000 bun test
 test/decide/invariants.test.ts` takes about an hour).

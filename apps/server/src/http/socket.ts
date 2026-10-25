@@ -1,9 +1,12 @@
 import {
+  type ChatEntry,
   type ClientMessage,
   DomainError,
   isSurface,
+  resolveStatePatch,
   type ServerMessage,
   type Surface,
+  serializeState,
   type UserCommand,
 } from '@shinsa/core';
 import type { ServerWebSocket } from 'bun';
@@ -27,6 +30,12 @@ function send(socket: Socket, message: ServerMessage) {
 
 const MAX_ID = 200;
 
+const TRANSCRIPT_PAGE = 500;
+
+function isIndex(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 function isId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_ID;
 }
@@ -45,16 +54,22 @@ function parseClientMessage(raw: string | Buffer): ClientMessage | null {
     runId?: unknown;
     command?: unknown;
     surface?: unknown;
+    from?: unknown;
   };
   if (fields.type === 'hello' && isSurface(fields.surface)) return { type: 'hello', surface: fields.surface };
+  if (fields.type === 'state.sync') return { type: 'state.sync' };
   if (fields.type === 'command' && isId(fields.id)) {
     return { type: 'command', id: fields.id, command: fields.command as UserCommand };
   }
-  if (
-    (fields.type === 'transcript.subscribe' || fields.type === 'transcript.unsubscribe') &&
-    isId(fields.runId)
-  ) {
-    return { type: fields.type, runId: fields.runId };
+  if (fields.type === 'transcript.subscribe' && isId(fields.runId)) {
+    return {
+      type: 'transcript.subscribe',
+      runId: fields.runId,
+      from: isIndex(fields.from) ? fields.from : 0,
+    };
+  }
+  if (fields.type === 'transcript.unsubscribe' && isId(fields.runId)) {
+    return { type: 'transcript.unsubscribe', runId: fields.runId };
   }
   return null;
 }
@@ -84,19 +99,29 @@ export function createSocketHub(
     broadcast({ type: 'accounts', accounts: snapshot })
   );
 
-  const unsubscribeState = engine.subscribe((state) => broadcast({ type: 'state', state }));
+  const unsubscribeState = engine.subscribe((state, { previous, changes }) => {
+    if (sockets.size === 0) return;
+    broadcast({ type: 'state.patch', patch: resolveStatePatch(previous, state, changes) });
+  });
 
-  const unsubscribeTranscripts = transcripts.subscribe((runId, entries) => {
-    const payload = JSON.stringify({
-      type: 'transcript',
-      runId,
-      entries,
-      reset: false,
-    } satisfies ServerMessage);
+  const unsubscribeTranscripts = transcripts.subscribe((runId, entries, start) => {
+    if (start === null) return;
+    const payload = JSON.stringify({ type: 'transcript', runId, entries, start } satisfies ServerMessage);
     for (const socket of sockets) {
       if (socket.data.transcripts.has(runId)) socket.send(payload);
     }
   });
+
+  function sendTranscript(socket: Socket, runId: string, entries: ChatEntry[], start: number) {
+    for (let index = 0; index === 0 || index < entries.length; index += TRANSCRIPT_PAGE) {
+      send(socket, {
+        type: 'transcript',
+        runId,
+        entries: entries.slice(index, index + TRANSCRIPT_PAGE),
+        start: start + index,
+      });
+    }
+  }
 
   async function handleMessage(socket: Socket, message: ClientMessage) {
     switch (message.type) {
@@ -114,17 +139,17 @@ export function createSocketHub(
         }
         return;
       }
-      case 'transcript.subscribe':
+      case 'state.sync':
+        send(socket, { type: 'state', state: serializeState(engine.state) });
+        return;
+      case 'transcript.subscribe': {
         if (!socket.data.transcripts.has(message.runId)) {
           socket.data.transcripts.set(message.runId, transcripts.follow(message.runId));
         }
-        send(socket, {
-          type: 'transcript',
-          runId: message.runId,
-          entries: transcripts.listEntries(message.runId),
-          reset: true,
-        });
+        const read = transcripts.readEntries(message.runId, message.from);
+        sendTranscript(socket, message.runId, read.entries, read.start);
         return;
+      }
       case 'transcript.unsubscribe':
         socket.data.transcripts.get(message.runId)?.();
         socket.data.transcripts.delete(message.runId);
@@ -135,7 +160,7 @@ export function createSocketHub(
   return {
     open(socket: Socket) {
       sockets.add(socket);
-      send(socket, { type: 'state', state: engine.state });
+      send(socket, { type: 'state', state: serializeState(engine.state) });
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
       send(socket, { type: 'surfaces', desktop: desktopConnected });
     },

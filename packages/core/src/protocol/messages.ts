@@ -1,7 +1,8 @@
 import type { ChatEntry } from '../chat/protocol.ts';
 import type { UserCommand } from '../commands/index.ts';
-import type { ShinsaState } from '../state/project.ts';
 import type { AccountsSnapshot } from './accounts.ts';
+import type { StatePatch } from './patch.ts';
+import type { WireState } from './runs.ts';
 
 export const SURFACES = ['desktop', 'browser'] as const;
 
@@ -10,13 +11,15 @@ export type Surface = (typeof SURFACES)[number];
 export type ClientMessage =
   | { type: 'hello'; surface: Surface }
   | { type: 'command'; id: string; command: UserCommand }
-  | { type: 'transcript.subscribe'; runId: string }
+  | { type: 'state.sync' }
+  | { type: 'transcript.subscribe'; runId: string; from: number }
   | { type: 'transcript.unsubscribe'; runId: string };
 
 export type ServerMessage =
-  | { type: 'state'; state: ShinsaState }
+  | { type: 'state'; state: WireState }
+  | { type: 'state.patch'; patch: StatePatch }
   | { type: 'ack'; id: string; error: { code: string; message: string } | null }
-  | { type: 'transcript'; runId: string; entries: ChatEntry[]; reset: boolean }
+  | { type: 'transcript'; runId: string; entries: ChatEntry[]; start: number }
   | { type: 'accounts'; accounts: AccountsSnapshot }
   | { type: 'surfaces'; desktop: boolean };
 

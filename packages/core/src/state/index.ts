@@ -9,11 +9,13 @@ export {
   resolveCohort,
   selectRootRun,
 } from './delegations.ts';
+export type { StateChanges } from './draft.ts';
 export {
   applyEvent,
   briefingKey,
   createState,
   type ReplayFailure,
+  replaceBriefing,
   replayEventLog,
   resolveNextHandle,
   type ShinsaState,

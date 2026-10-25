@@ -1,4 +1,3 @@
-import type { Briefing } from '../briefing/types.ts';
 import type {
   ConfigProblem,
   DeliveringStep,
@@ -223,7 +222,6 @@ type SystemCommand =
   | { type: 'pull_request.read_failed'; taskId: string; detail: string }
   | { type: 'checks.record'; taskId: string; results: ReportCheck[] }
   | { type: 'effect.fail'; taskId: string; title: string; detail: string }
-  | { type: 'briefing.write'; projectId: string | null; text: string; briefing?: Briefing }
   | { type: 'message.deliver'; taskId: string; text: string }
   | { type: 'message.receive'; taskId: string; text: string }
   | ({ type: 'message.route'; taskId: string; messageId: string } & MessageRoute)

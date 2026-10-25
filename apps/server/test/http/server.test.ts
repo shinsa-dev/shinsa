@@ -3,10 +3,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   type AgentModel,
+  applyStatePatch,
   ENGINE_PROTOCOL,
   KNOWN_AGENT_PROVIDERS,
   type OnboardingChat,
   type ServerMessage,
+  serializeState,
 } from '@shinsa/core';
 import { type ModelSource, Transcripts } from '../../src/agents/index.ts';
 import type { ServerConfig } from '../../src/config/index.ts';
@@ -424,7 +426,7 @@ describe('the socket', () => {
     expect((await call('/ws', { headers: { origin: 'http://localhost:5181' } })).status).toBe(400);
   });
 
-  test('state on connect and on every change, acks for commands, transcripts on subscription', async () => {
+  test('state on connect, a patch on every change, acks for commands, transcripts on subscription', async () => {
     const { base, engine, transcripts } = await start();
     const unfollowed: string[] = [];
     const follow = transcripts.follow.bind(transcripts);
@@ -465,20 +467,40 @@ describe('the socket', () => {
       ['c2', 'command_forbidden'],
       ['c3', expect.any(String)],
     ]);
-    expect(
-      client.messages.some(
-        (message) => message.type === 'state' && Object.keys(message.state.tasks).length === 1
-      )
-    ).toBe(true);
+    const first = client.messages.find((message) => message.type === 'state');
+    let state = first?.type === 'state' ? first.state : null;
+    for (const message of client.messages) {
+      if (message.type === 'state.patch' && state) state = applyStatePatch(state, message.patch);
+    }
+    expect(Object.keys(state?.tasks ?? {})).toHaveLength(1);
+    expect(state).toEqual(JSON.parse(JSON.stringify(serializeState(engine.state))));
+    client.socket.send(JSON.stringify({ type: 'state.sync' }));
+    await until(
+      'the state again',
+      () => client.messages.filter((message) => message.type === 'state').length === 2
+    );
 
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'before' });
     client.socket.send(JSON.stringify({ type: 'transcript.subscribe', runId: 'run-1' }));
-    client.socket.send(JSON.stringify({ type: 'transcript.subscribe', runId: 'run-1' }));
-    await until('the transcript', () => client.messages.some((message) => message.type === 'transcript'));
+    client.socket.send(JSON.stringify({ type: 'transcript.subscribe', runId: 'run-1', from: 1 }));
+    await until(
+      'the transcript',
+      () => client.messages.filter((message) => message.type === 'transcript').length === 2
+    );
+    expect(
+      client.messages.flatMap((message) =>
+        message.type === 'transcript' ? [[message.start, message.entries.length]] : []
+      )
+    ).toEqual([
+      [0, 1],
+      [1, 0],
+    ]);
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'live' });
     transcripts.record('run-2', { type: 'agent', phase: 'interim', text: 'other run' });
     await until('the live entry', () =>
-      client.messages.some((message) => message.type === 'transcript' && message.reset === false)
+      client.messages.some(
+        (message) => message.type === 'transcript' && message.start === 1 && message.entries.length === 1
+      )
     );
     client.socket.send(JSON.stringify({ type: 'transcript.unsubscribe', runId: 'run-1' }));
     client.socket.send(JSON.stringify({ type: 'transcript.subscribe', runId: 'run-3' }));
@@ -546,8 +568,8 @@ describe('the socket', () => {
 
   test('a socket message that fails after parsing is logged', async () => {
     const { base, transcripts } = await start();
-    const original = transcripts.listEntries.bind(transcripts);
-    transcripts.listEntries = () => {
+    const original = transcripts.readEntries.bind(transcripts);
+    transcripts.readEntries = () => {
       throw new Error('disk gone');
     };
     const error = spyOn(logger, 'error');
@@ -562,7 +584,7 @@ describe('the socket', () => {
       client.socket.close();
     } finally {
       error.mockRestore();
-      transcripts.listEntries = original;
+      transcripts.readEntries = original;
     }
   });
 });

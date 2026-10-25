@@ -5,6 +5,7 @@ import {
   type GateType,
   hasArmedWait,
   isDecisionGate,
+  isTaskSettled,
   PRIORITY_RANK,
   resolveAttentionLimit,
   type Task,
@@ -12,11 +13,10 @@ import {
 } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
-  listActiveRuns,
-  listDependents,
   listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
+  resolveActiveRunTasks,
   resolveTaskProject,
   selectCheckoutHolder,
 } from '../state/queries.ts';
@@ -45,8 +45,8 @@ const WORKING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_merge',
 ]);
 
-function isMoving(state: ShinsaState, task: Task) {
-  return WORKING_STAGES.has(task.stage) || hasArmedWait(task) || listActiveRuns(state, task.id).length > 0;
+function isMoving(task: Task, running: ReadonlySet<string>) {
+  return WORKING_STAGES.has(task.stage) || hasArmedWait(task) || running.has(task.id);
 }
 
 export function resolveFocusProject(state: ShinsaState, now: number) {
@@ -87,15 +87,26 @@ function compareGates(a: QueuedGate, b: QueuedGate) {
   );
 }
 
+function countDependents(state: ShinsaState) {
+  const counts = new Map<string, number>();
+  for (const task of Object.values(state.tasks)) {
+    if (isTaskSettled(task)) continue;
+    for (const id of new Set(task.waitsOn)) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
 function listQueuedGates(state: ShinsaState): QueuedGate[] {
-  return listOpenGates(state).flatMap((gate) => {
+  const open = listOpenGates(state);
+  const dependents = open.length > 0 ? countDependents(state) : new Map<string, number>();
+  return open.flatMap((gate) => {
     const task = state.tasks[gate.taskId];
     if (!task) return [];
     const base = {
       gate,
       task,
       projectId: resolveTaskProject(state, task),
-      unblocks: listDependents(state, task.id).length,
+      unblocks: dependents.get(task.id) ?? 0,
     };
     return [{ ...base, reason: describeReason(base) }];
   });
@@ -105,12 +116,13 @@ export function resolveQueue(state: ShinsaState, now: number): Queue {
   const entries = listQueuedGates(state);
   const tasksWithGates = new Set(entries.map((entry) => entry.task.id));
 
+  const running = resolveActiveRunTasks(state);
   const working: Task[] = [];
   const waiting: Task[] = [];
   for (const task of Object.values(state.tasks)) {
     if (tasksWithGates.has(task.id) || !isInFocus(state, task, now)) continue;
     if (listWaitsOn(state, task).length > 0) waiting.push(task);
-    else if (isMoving(state, task)) working.push(task);
+    else if (isMoving(task, running)) working.push(task);
   }
 
   const ready = entries.filter((entry) => isInFocus(state, entry.task, now)).sort(compareGates);

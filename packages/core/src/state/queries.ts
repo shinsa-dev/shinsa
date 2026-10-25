@@ -31,6 +31,22 @@ export function listActiveRuns(state: ShinsaState, taskId?: string) {
   return listLiveRuns(state, taskId).filter((run) => !run.delegation);
 }
 
+export function resolveActiveRunTasks(state: ShinsaState) {
+  const tasks = new Set<string>();
+  for (const run of Object.values(state.runs)) {
+    if (run.endedAt === null && !run.delegation) tasks.add(run.taskId);
+  }
+  return tasks;
+}
+
+export function resolveMovingTasks(state: ShinsaState) {
+  const tasks = resolveActiveRunTasks(state);
+  for (const gate of Object.values(state.gates)) {
+    if (gate.status === 'open') tasks.add(gate.taskId);
+  }
+  return tasks;
+}
+
 export function listRunningRuns(state: ShinsaState, taskId?: string) {
   return listActiveRuns(state, taskId).filter((run) => run.status !== 'queued');
 }

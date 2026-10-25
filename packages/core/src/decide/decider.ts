@@ -27,6 +27,7 @@ import { resolveAdoptionNote } from '../prompts/orchestration.ts';
 import { resolveProjectContext } from '../prompts/project.ts';
 import { listTaskBases, needsRoundBrief, resolveRoundBrief } from '../prompts/root.ts';
 import { listChildRuns, listLiveChildRuns } from '../state/delegations.ts';
+import { createDraft, type StateChanges } from '../state/draft.ts';
 import { applyEvent, type ShinsaState } from '../state/project.ts';
 import { findTask, listActiveRuns, listOpenGates, resolveTaskProject } from '../state/queries.ts';
 import { tellHeldConflict } from './conflicts.ts';
@@ -44,6 +45,8 @@ export interface Decision {
   events: ShinsaEventInput[];
   effects: ShinsaEffect[];
   cancellations: EffectCancellation[];
+  state: ShinsaState;
+  changes: StateChanges;
 }
 
 interface StartRunOptions {
@@ -115,7 +118,7 @@ export class Decider {
   readonly context: DecideContext;
 
   constructor(state: ShinsaState, context: DecideContext) {
-    this.state = structuredClone(state);
+    this.state = createDraft(state);
     this.context = context;
   }
 

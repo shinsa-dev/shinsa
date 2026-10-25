@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { isTaskLive } from '../../src/decide/liveness.ts';
 import {
   applyEvent,
+  applyStatePatch,
   type ConfigProblem,
   createState,
   DomainError,
@@ -29,11 +30,16 @@ import {
   replayEventLog,
   resolveCurrentRound,
   resolveQueue,
+  resolveStatePatch,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
+  type StateChanges,
+  type StatePatch,
   selectCheckoutHolder,
+  serializeState,
   type Task,
+  type WireState,
 } from '../../src/index.ts';
 import { IMPACT, PLAN } from '../harness.ts';
 import { assertAgentInvariants, assertOneSessionPerTask } from './agent-invariants.ts';
@@ -909,6 +915,22 @@ function selectSideCommand(
   }
 }
 
+function assertSameChanges(state: ShinsaState, copies: ShinsaState[], changes: StateChanges, type: string) {
+  const plain = (value: unknown): unknown =>
+    value === undefined ? value : JSON.parse(JSON.stringify(value));
+  for (const copy of copies) {
+    expect(copy.seq).toBe(state.seq);
+    for (const key of ['focus', 'settings', 'onBehalfActions'] as const) {
+      expect(copy[key], `${key} after ${type}`).toEqual(plain(state[key]) as never);
+    }
+    for (const [key, ids] of Object.entries(changes) as [keyof StateChanges, string[]][]) {
+      for (const id of ids) {
+        expect(copy[key][id], `${key}.${id} after ${type}`).toEqual(plain(state[key][id]) as never);
+      }
+    }
+  }
+}
+
 function simulate(
   seed: number,
   steps: number,
@@ -942,6 +964,8 @@ function simulate(
     at: 0,
   });
   const log: ShinsaEvent[] = [{ type: 'repo.registered', repo: state.repos.repo!, seq: 1, at: 0 }];
+  let client = JSON.parse(JSON.stringify(serializeState(state))) as WireState;
+  let replayed = JSON.parse(JSON.stringify(state)) as ShinsaState;
   let counter = 0;
   let outageCounter = 0;
   const apply = (
@@ -964,11 +988,16 @@ function simulate(
     const prior = state;
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
-      const stamped = { ...event, seq: state.seq + 1, at: now } as ShinsaEvent;
-      assertOneSessionPerTask(state, stamped, `seed ${seed}, step ${step}, after ${command.type}`);
+      const stamped = { ...event, seq: replayed.seq + 1, at: now } as ShinsaEvent;
+      assertOneSessionPerTask(replayed, stamped, `seed ${seed}, step ${step}, after ${command.type}`);
       log.push(stamped);
-      state = applyEvent(state, stamped);
+      replayed = applyEvent(replayed, stamped);
     }
+    state = decision.state;
+    const patch = JSON.parse(JSON.stringify(resolveStatePatch(prior, state, decision.changes))) as StatePatch;
+    client = applyStatePatch(client, patch) ?? createState();
+    assertSameChanges(state, [replayed], decision.changes, command.type);
+    assertSameChanges(serializeState(state), [client], decision.changes, command.type);
     try {
       assertInvariants(state, now);
       assertDelegationProgress(prior, state, command.type);
@@ -992,6 +1021,7 @@ function simulate(
     observe(state);
   }
   expect(replayEventLog(log).state).toEqual(state);
+  expect(client).toEqual(JSON.parse(JSON.stringify(serializeState(state))));
   return state;
 }
 

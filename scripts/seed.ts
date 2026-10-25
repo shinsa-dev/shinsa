@@ -871,23 +871,6 @@ function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
 
   push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
   for (const task of tasks) pushTask(task, push);
-  push(NOW - 3 * MINUTE, {
-    type: 'briefing.written',
-    projectId: null,
-    text: 'Start with “Run the embedded chat on MCP v2”: it is ready for review, and the tool calls work waits on it. Then “Refuse to duplicate code-first paywalls” and “Rewrite the framework command registry”.',
-    briefing: {
-      now: {
-        taskId: 'task-embedded-chat',
-        why: 'Built and checked, and “Let the embedded chat call paywall tools” waits on it, so reviewing it first frees that work',
-      },
-      next: [
-        { taskId: 'task-duplicate', why: 'Pull request #4531 is clean and ready to merge' },
-        { taskId: 'task-command-registry', why: 'The plan needs your approval before building starts' },
-      ],
-      running: 'Agents are working on the remaining tasks.',
-      note: null,
-    },
-  });
   return stampTaskHandles(
     timeline.sort((a, b) => a.at - b.at),
     projects,
@@ -2157,6 +2140,22 @@ function seed() {
     log.commitCommand({ events: [event], effects: [], cancellations: [], fromSeq: seq, at, receipt: null });
     seq += 1;
   }
+  log.writeBriefing(null, {
+    at: NOW - 3 * MINUTE,
+    text: 'Start with “Run the embedded chat on MCP v2”: it is ready for review, and the tool calls work waits on it. Then “Refuse to duplicate code-first paywalls” and “Rewrite the framework command registry”.',
+    briefing: {
+      now: {
+        taskId: 'task-embedded-chat',
+        why: 'Built and checked, and “Let the embedded chat call paywall tools” waits on it, so reviewing it first frees that work',
+      },
+      next: [
+        { taskId: 'task-duplicate', why: 'Pull request #4531 is clean and ready to merge' },
+        { taskId: 'task-command-registry', why: 'The plan needs your approval before building starts' },
+      ],
+      running: 'Agents are working on the remaining tasks.',
+      note: null,
+    },
+  });
   log.close();
   writeFileSync(
     join(DATA, 'config.json'),

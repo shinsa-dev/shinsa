@@ -39,7 +39,7 @@ import { EffectRunner, Engine, MonitorClock, type StateClockOptions } from './ru
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
 import { createServiceControl } from './service/index.ts';
-import { EventLog, EvidenceStore } from './store/index.ts';
+import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
 import {
@@ -85,7 +85,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
   const store = new ConfigStore(config.configPath, config.machine);
   prepareDataDir(config);
   const eventLog = new EventLog(config.databasePath);
-  const engine = new Engine(eventLog, { readOnly: config.inspect });
+  const engine = new Engine(eventLog, { readOnly: config.inspect, stateVersion: resolveStateVersion() });
   const transcripts = new Transcripts(config.transcriptsDir);
   const evidence = new EvidenceStore(config.evidenceDir);
   const eunoe = new EunoeProxy({

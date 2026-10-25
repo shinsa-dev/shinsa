@@ -1,3 +1,4 @@
+export type { FixFocus } from '../prompts/index.ts';
 export type {
   AccountDuplicate,
   AccountImport,
@@ -106,6 +107,14 @@ export type {
   RootSuggestions,
 } from './onboarding.ts';
 export { resolveDisplayPath } from './onboarding.ts';
+export {
+  applyStatePatch,
+  type EntryChange,
+  resolveStatePatch,
+  type StatePatch,
+  type ValueChange,
+} from './patch.ts';
+export { serializeRun, serializeState, type WireRun, type WireState } from './runs.ts';
 export type {
   ProgramId,
   ProgramVersion,

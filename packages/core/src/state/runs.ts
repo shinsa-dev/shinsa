@@ -1,7 +1,16 @@
 import { addUsage } from '../costs/index.ts';
-import type { Run, RunSilence } from '../domain/index.ts';
+import {
+  DELEGATE_ROLES,
+  DomainError,
+  isDelegatedRun,
+  type Run,
+  type RunPurpose,
+  type RunRole,
+  type RunSilence,
+} from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { applyDelegationStarted } from './delegations.ts';
+import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 import { updateRun } from './write.ts';
 
@@ -27,15 +36,39 @@ type RunEvent = Extract<
 
 const QUIET: RunSilence = { since: null, snoozedUntil: null, dismissed: false };
 
+const TOP_LEVEL_ROLES: readonly RunRole[] = ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'];
+
+const RUN_PURPOSES: readonly (RunPurpose | undefined)[] = ['plan', 'build', 'fix', 'operate'];
+
+function assertRunShape(run: Run) {
+  const delegated = isDelegatedRun(run);
+  const roles: readonly RunRole[] = delegated ? DELEGATE_ROLES : TOP_LEVEL_ROLES;
+  if (!roles.includes(run.role)) {
+    throw new DomainError(
+      'run_role_unknown',
+      `Run ${run.id} has the role "${run.role}", which ${delegated ? 'a delegated run' : 'a run of its own'} cannot have.`
+    );
+  }
+  if (run.role === 'agent' && !RUN_PURPOSES.includes(run.purpose)) {
+    throw new DomainError('run_purpose_unknown', `Agent run ${run.id} has no known purpose.`);
+  }
+  if (run.role !== 'agent' && run.purpose !== undefined) {
+    throw new DomainError(
+      'run_purpose_unexpected',
+      `Run ${run.id} is a ${run.role} and cannot have a purpose.`
+    );
+  }
+}
+
 function applyRunLinked(state: ShinsaState, event: EventOf<'run.linked'>) {
   const run = state.runs[event.runId];
   if (!run) return;
-  state.runs[event.runId] = {
+  writeEntry(state, 'runs', event.runId, {
     ...run,
     sessionId: event.sessionId,
     sessionProvider: event.provider,
     ...(run.sessionLost ? { sessionLost: false } : {}),
-  };
+  });
 }
 
 function applyRunAttempted(state: ShinsaState, event: EventOf<'run.attempted'>) {
@@ -71,7 +104,8 @@ function applyRunMetered(state: ShinsaState, event: EventOf<'run.metered'>) {
       ? {}
       : { weeklyPercent: (run?.weeklyPercent ?? 0) + event.weeklyPercent }),
   });
-  if (event.sessionId && event.sessionUsage) state.sessionUsage[event.sessionId] = event.sessionUsage;
+  if (event.sessionId && event.sessionUsage)
+    writeEntry(state, 'sessionUsage', event.sessionId, event.sessionUsage);
 }
 
 function updateSilence(state: ShinsaState, runId: string, patch: Partial<RunSilence>) {
@@ -81,8 +115,9 @@ function updateSilence(state: ShinsaState, runId: string, patch: Partial<RunSile
 }
 
 function applyRunStarted(state: ShinsaState, started: Run, at: number) {
+  assertRunShape(started);
   const run: Run = { ...started };
-  state.runs[run.id] = run;
+  writeEntry(state, 'runs', run.id, run);
   applyDelegationStarted(state, run, at);
 }
 

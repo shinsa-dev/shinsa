@@ -1,4 +1,3 @@
-import type { Briefing } from '../briefing/types.ts';
 import type { TaskCreator } from '../domain/delegations.ts';
 import type {
   ConfigProblem,
@@ -226,12 +225,6 @@ type EventBody =
       taskId: string;
       watch: PullRequestWatch;
       changes: PullRequestWatchChange[];
-    }
-  | {
-      type: 'briefing.written';
-      projectId: string | null;
-      text: string;
-      briefing?: Briefing;
     }
   | { type: 'plan.approved'; taskId: string; version: number }
   | { type: 'review.escalated'; taskId: string; escalation: ReviewEscalation }

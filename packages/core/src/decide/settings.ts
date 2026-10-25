@@ -265,12 +265,3 @@ export function changeSettings(decider: Decider, command: CommandOf<'settings.ch
   decider.emit({ type: 'settings.changed', settings });
   releaseBudgetHolds(decider);
 }
-
-export function writeBriefing(decider: Decider, command: CommandOf<'briefing.write'>) {
-  decider.emit({
-    type: 'briefing.written',
-    projectId: command.projectId,
-    text: command.text,
-    ...(command.briefing ? { briefing: command.briefing } : {}),
-  });
-}

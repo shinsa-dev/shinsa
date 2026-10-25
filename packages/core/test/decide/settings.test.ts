@@ -453,14 +453,3 @@ describe('settings', () => {
     expect(harness.activeRun(taskId)).toMatchObject({ provider: 'codex', model: 'gpt-6-astra' });
   });
 });
-
-describe('the guide', () => {
-  test('a written guide is stored per project, with its structure when there is one', () => {
-    const harness = createHarness();
-    const briefing = { now: null, next: [], running: 'No agent is working right now.', note: null };
-    harness.send({ type: 'briefing.write', projectId: null, text: 'Nothing needs you.', briefing });
-    harness.send({ type: 'briefing.write', projectId: 'work', text: 'Plain.' });
-    expect(harness.state.briefings['*']?.briefing).toEqual(briefing);
-    expect(harness.state.briefings.work).toMatchObject({ text: 'Plain.', briefing: null });
-  });
-});

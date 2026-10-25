@@ -1,4 +1,5 @@
 import { isAgentCommand, type ShinsaCommand } from '../commands/index.ts';
+import { sealDraft } from '../state/draft.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
   bindAccount,
@@ -64,7 +65,6 @@ import {
   removeProject,
   removeRepo,
   updateRepo,
-  writeBriefing,
   writeProject,
 } from './settings.ts';
 import { recordDelivery, recordReshape } from './shapes.ts';
@@ -108,8 +108,6 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return changeFocus(decider, command);
     case 'settings.change':
       return changeSettings(decider, command);
-    case 'briefing.write':
-      return writeBriefing(decider, command);
     case 'task.create':
       return createTask(decider, command);
     case 'task.triage':
@@ -287,5 +285,12 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   dispatchRuns(decider);
   assertGatesStayOpen(decider, state);
   if (context.onBehalf) recordOnBehalfAction(decider, command);
-  return { events: decider.events, effects: decider.effects, cancellations: decider.cancellations };
+  const changes = sealDraft(decider.state);
+  return {
+    events: decider.events,
+    effects: decider.effects,
+    cancellations: decider.cancellations,
+    state: decider.events.length > 0 ? decider.state : state,
+    changes,
+  };
 }

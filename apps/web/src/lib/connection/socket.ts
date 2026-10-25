@@ -1,20 +1,23 @@
-import type {
-  AccountsSnapshot,
-  ChatEntry,
-  ClientMessage,
-  ServerMessage,
-  ShinsaState,
-  Surface,
-  UserCommand,
+import {
+  type AccountsSnapshot,
+  applyStatePatch,
+  type ChatEntry,
+  type ClientMessage,
+  type ServerMessage,
+  type StatePatch,
+  type Surface,
+  type UserCommand,
+  type WireState,
 } from '@shinsa/core';
 import { useEffect, useSyncExternalStore } from 'react';
+import { applyOptimistic, isOptimistic } from '@/lib/connection/optimistic.ts';
 import { resolveSurface } from '@/lib/desktop.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 type ConnectionStatus = 'connecting' | 'open' | 'closed';
 
 interface Snapshot {
-  state: ShinsaState | null;
+  state: WireState | null;
   status: ConnectionStatus;
 }
 
@@ -25,17 +28,29 @@ interface Pending {
   drops: number;
 }
 
+interface TranscriptChunk {
+  start: number;
+  entries: ChatEntry[];
+}
+
+type Scheduler = (flush: () => void) => void;
+
 interface ConnectionOptions {
   openSocket: () => WebSocket;
   retry: (reconnect: () => void, delayMs: number) => void;
   surface?: () => Surface;
+  schedule?: Scheduler;
 }
 
 const RETRY_STEPS_MS = [250, 1000, 2000, 5000];
 
 const MAX_RESENDS = 2;
 
+const HIDDEN_FRAME_MS = 32;
+
 const NO_ENTRIES: ChatEntry[] = [];
+
+export const TRANSCRIPT_CACHE_LIMIT = 24;
 
 function openShinsaSocket() {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -46,6 +61,11 @@ function retryLater(reconnect: () => void, delayMs: number) {
   setTimeout(reconnect, delayMs);
 }
 
+function scheduleFrame(flush: () => void) {
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => flush());
+  setTimeout(flush, HIDDEN_FRAME_MS);
+}
+
 function parseServerMessage(data: string) {
   try {
     return JSON.parse(data) as ServerMessage;
@@ -54,9 +74,22 @@ function parseServerMessage(data: string) {
   }
 }
 
+function mergeTranscript(entries: ChatEntry[], chunk: TranscriptChunk): ChatEntry[] | null {
+  if (chunk.start === 0) return chunk.entries;
+  if (chunk.start > entries.length) return null;
+  const fresh = chunk.entries.slice(entries.length - chunk.start);
+  return fresh.length === 0 ? entries : [...entries, ...fresh];
+}
+
 export class Connection {
   #socket: WebSocket | null = null;
   #snapshot: Snapshot = { state: null, status: 'connecting' };
+  #confirmed: WireState | null = null;
+  #incomingState: WireState | null | undefined = undefined;
+  #incomingPatches: StatePatch[] = [];
+  readonly #incomingTranscripts = new Map<string, TranscriptChunk[]>();
+  #flushing = false;
+  #syncing = false;
   #attempt = 0;
   #accounts: AccountsSnapshot | null = null;
   #desktopConnected = false;
@@ -66,6 +99,7 @@ export class Connection {
   readonly #accountsSignal = createSignal();
   readonly #surfacesSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
+  readonly #optimistic = new Map<string, UserCommand>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
   readonly #transcriptRefs = new Map<string, number>();
 
@@ -82,9 +116,10 @@ export class Connection {
     this.#socket = socket;
     socket.addEventListener('open', () => {
       this.#attempt = 0;
+      this.#syncing = true;
       this.#update({ status: 'open' });
       this.#send({ type: 'hello', surface: (this.#options.surface ?? resolveSurface)() });
-      for (const runId of this.#transcriptRefs.keys()) this.#send({ type: 'transcript.subscribe', runId });
+      for (const runId of this.#transcriptRefs.keys()) this.#subscribeTranscript(runId);
       for (const pending of this.#pending.values()) this.#send(pending.message);
     });
     socket.addEventListener('message', (event) => {
@@ -131,6 +166,10 @@ export class Connection {
       }
       const message: ClientMessage = { type: 'command', id: crypto.randomUUID(), command };
       this.#pending.set(message.id, { message, resolve, reject, drops: 0 });
+      if (isOptimistic(command) && this.#confirmed) {
+        this.#optimistic.set(message.id, command);
+        this.#publishState();
+      }
       this.#send(message);
     });
   }
@@ -138,7 +177,8 @@ export class Connection {
   watchTranscript(runId: string) {
     const count = this.#transcriptRefs.get(runId) ?? 0;
     this.#transcriptRefs.set(runId, count + 1);
-    if (count === 0) this.#send({ type: 'transcript.subscribe', runId });
+    this.#touchTranscript(runId);
+    if (count === 0) this.#subscribeTranscript(runId);
     let released = false;
     return () => {
       if (released) return;
@@ -150,7 +190,98 @@ export class Connection {
       }
       this.#transcriptRefs.delete(runId);
       this.#send({ type: 'transcript.unsubscribe', runId });
+      this.#touchTranscript(runId);
+      this.#evictTranscripts();
     };
+  }
+
+  flush() {
+    this.#flushing = false;
+    if (this.#flushState()) this.#publishState();
+    if (this.#flushTranscripts()) this.#transcriptSignal.publish();
+  }
+
+  #scheduleFlush() {
+    if (this.#flushing) return;
+    this.#flushing = true;
+    (this.#options.schedule ?? scheduleFrame)(() => {
+      if (this.#flushing) this.flush();
+    });
+  }
+
+  #flushState() {
+    const patches = this.#incomingPatches;
+    const full = this.#incomingState !== undefined;
+    let base = full ? (this.#incomingState ?? null) : this.#confirmed;
+    if (full) this.#syncing = false;
+    this.#incomingState = undefined;
+    this.#incomingPatches = [];
+    for (const patch of patches) {
+      if (!base || this.#syncing) break;
+      if (patch.to < base.seq || (patch.to === base.seq && patch.from < patch.to)) continue;
+      const next = applyStatePatch(base, patch);
+      if (!next) {
+        this.#syncing = true;
+        this.#send({ type: 'state.sync' });
+        break;
+      }
+      base = next;
+    }
+    if (base === this.#confirmed) return false;
+    this.#confirmed = base;
+    return true;
+  }
+
+  #flushTranscripts() {
+    if (this.#incomingTranscripts.size === 0) return false;
+    for (const [runId, chunks] of this.#incomingTranscripts) {
+      let entries = this.selectTranscript(runId);
+      for (const chunk of chunks) {
+        const merged = mergeTranscript(entries, chunk);
+        if (!merged) {
+          if (this.#transcriptRefs.has(runId)) this.#subscribeTranscript(runId, entries.length);
+          break;
+        }
+        entries = merged;
+      }
+      if (entries !== NO_ENTRIES) this.#replaceTranscript(runId, entries);
+    }
+    this.#incomingTranscripts.clear();
+    this.#evictTranscripts();
+    return true;
+  }
+
+  #replaceTranscript(runId: string, entries: ChatEntry[]) {
+    this.#transcripts.delete(runId);
+    this.#transcripts.set(runId, entries);
+  }
+
+  #touchTranscript(runId: string) {
+    const entries = this.#transcripts.get(runId);
+    if (entries) this.#replaceTranscript(runId, entries);
+  }
+
+  #evictTranscripts() {
+    let excess = this.#transcripts.size - TRANSCRIPT_CACHE_LIMIT;
+    for (const runId of this.#transcripts.keys()) {
+      if (excess <= 0) return;
+      if (this.#transcriptRefs.has(runId)) continue;
+      this.#transcripts.delete(runId);
+      excess -= 1;
+    }
+  }
+
+  #publishState() {
+    const confirmed = this.#confirmed;
+    const state =
+      confirmed && this.#optimistic.size > 0
+        ? applyOptimistic(confirmed, this.#optimistic.values())
+        : confirmed;
+    this.#update({ state });
+  }
+
+  #subscribeTranscript(runId: string, from = this.selectTranscript(runId).length) {
+    this.#send({ type: 'transcript.subscribe', runId, from });
   }
 
   #dropPending() {
@@ -158,8 +289,13 @@ export class Connection {
       pending.drops += 1;
       if (pending.drops <= MAX_RESENDS) continue;
       this.#pending.delete(id);
+      this.#settleOptimistic(id);
       pending.reject(new Error('Lost the connection to Shinsa.'));
     }
+  }
+
+  #settleOptimistic(id: string) {
+    if (this.#optimistic.delete(id)) this.#publishState();
   }
 
   #update(patch: Partial<Snapshot>) {
@@ -174,20 +310,29 @@ export class Connection {
   #receive(message: ServerMessage) {
     switch (message.type) {
       case 'state':
-        this.#update({ state: message.state });
+        this.#incomingState = message.state;
+        this.#incomingPatches = [];
+        this.#scheduleFlush();
+        return;
+      case 'state.patch':
+        this.#incomingPatches.push(message.patch);
+        this.#scheduleFlush();
         return;
       case 'ack': {
         const pending = this.#pending.get(message.id);
         this.#pending.delete(message.id);
         if (!pending) return;
+        this.flush();
+        this.#settleOptimistic(message.id);
         if (message.error) pending.reject(new Error(message.error.message));
         else pending.resolve();
         return;
       }
       case 'transcript': {
-        const existing = message.reset ? [] : (this.#transcripts.get(message.runId) ?? []);
-        this.#transcripts.set(message.runId, [...existing, ...message.entries]);
-        this.#transcriptSignal.publish();
+        const chunks = this.#incomingTranscripts.get(message.runId) ?? [];
+        chunks.push({ start: message.start, entries: message.entries });
+        this.#incomingTranscripts.set(message.runId, chunks);
+        this.#scheduleFlush();
         return;
       }
       case 'accounts':

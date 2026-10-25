@@ -1,27 +1,28 @@
 import {
-  applyEvent,
+  type Briefing,
+  briefingKey,
   type Decision,
   DomainError,
   decide,
   PROCESS_BOUND_EFFECTS,
-  type ReplayFailure,
+  replaceBriefing,
   replayEventLog,
   type ShinsaCommand,
   type ShinsaEffect,
   type ShinsaEvent,
   type ShinsaState,
+  type StateChanges,
 } from '@shinsa/core';
 import { createReadOnlyError } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
-import type {
-  CancelledEffect,
-  CommandReceipt,
-  EventLog,
-  StoredEffect,
-  UnreadableEvent,
-} from '../store/index.ts';
+import type { CancelledEffect, CommandReceipt, EventLog, LogProblem, StoredEffect } from '../store/index.ts';
 
-type StateListener = (state: ShinsaState) => void;
+export interface StateChange {
+  previous: ShinsaState;
+  changes: StateChanges;
+}
+
+type StateListener = (state: ShinsaState, change: StateChange) => void;
 
 export interface EffectContext {
   key: string;
@@ -54,7 +55,16 @@ const IDLE_POLL_MS = 30_000;
 
 const TARGET_FIELDS = ['taskId', 'runId', 'gateId', 'repoId', 'projectId'] as const;
 
-export type LogProblem = (ReplayFailure | UnreadableEvent) & { kind: 'unreadable' | 'unappliable' };
+const SNAPSHOT_EVERY = 2_000;
+
+const SNAPSHOT_QUIET_MS = 3_000;
+
+export interface EngineOptions {
+  readOnly?: boolean;
+  stateVersion?: string | null;
+  snapshotEvery?: number;
+  snapshotQuietMs?: number;
+}
 
 export function resolveBackoff(attempt: number) {
   return Math.min(MAX_BACKOFF_MS, 100 * 2 ** (attempt - 1));
@@ -94,25 +104,86 @@ export class Engine {
   #effectHandler: EffectHandler = () => Promise.resolve();
   #exhaustedHandler: ExhaustedHandler = () => Promise.resolve();
   #timer: ReturnType<typeof setTimeout> | null = null;
+  #snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+  #snapshotSeq = 0;
   #started = false;
   #stopped = false;
 
   readonly readOnly: boolean;
+  readonly #stateVersion: string | null;
+  readonly #snapshotEvery: number;
+  readonly #snapshotQuietMs: number;
 
-  constructor(eventLog: EventLog, options: { readOnly?: boolean } = {}) {
+  constructor(eventLog: EventLog, options: EngineOptions = {}) {
     this.#log = eventLog;
     this.readOnly = options.readOnly ?? false;
-    const read = eventLog.readEvents();
-    const replay = replayEventLog(read.events);
-    this.#state = replay.state;
-    this.#state.seq = Math.max(this.#state.seq, read.lastSeq);
-    this.#problems = [
+    this.#stateVersion = options.stateVersion ?? null;
+    this.#snapshotEvery = options.snapshotEvery ?? SNAPSHOT_EVERY;
+    this.#snapshotQuietMs = options.snapshotQuietMs ?? SNAPSHOT_QUIET_MS;
+    if (this.readOnly) {
+      const rewritten = eventLog.applyLegacyView();
+      if (rewritten > 0)
+        log.info('[Engine] Reading events an older Shinsa wrote in their new shape', { rewritten });
+    } else {
+      const rewritten = eventLog.replaceLegacyEvents();
+      if (rewritten > 0) log.info('[Engine] Rewrote events an older Shinsa wrote', { rewritten });
+    }
+    const snapshot = this.#readSnapshot();
+    const read = eventLog.readEvents(snapshot?.seq ?? 0);
+    const replay = replayEventLog(read.events, snapshot?.state);
+    replay.state.seq = Math.max(replay.state.seq, read.lastSeq);
+    this.#state = eventLog
+      .listBriefings()
+      .reduce((state, { projectId, stored }) => replaceBriefing(state, projectId, stored), replay.state);
+    this.#snapshotSeq = snapshot?.seq ?? 0;
+    const found = [
       ...read.unreadable.map((problem) => ({ ...problem, kind: 'unreadable' as const })),
       ...replay.failures.map((problem) => ({ ...problem, kind: 'unappliable' as const })),
-    ].sort((a, b) => a.seq - b.seq);
-    for (const problem of this.#problems) {
+    ];
+    for (const problem of found) {
       log.error('[Engine] An event in the log could not be replayed; it was skipped', { ...problem });
     }
+    this.#problems = [...(snapshot?.problems ?? []), ...found].sort((a, b) => a.seq - b.seq);
+  }
+
+  #readSnapshot() {
+    if (this.#stateVersion === null) return null;
+    const snapshot = this.#log.selectSnapshot(this.#stateVersion);
+    if (!snapshot || snapshot.ok) return snapshot;
+    log.info('[Engine] The state snapshot does not match this log or this version; replaying the whole log', {
+      seq: snapshot.seq,
+      reason: snapshot.reason,
+    });
+    return null;
+  }
+
+  writeSnapshot() {
+    if (this.#snapshotTimer) clearTimeout(this.#snapshotTimer);
+    this.#snapshotTimer = null;
+    if (this.#stateVersion === null || this.readOnly || this.#state.seq === this.#snapshotSeq) return false;
+    try {
+      const written = this.#log.writeSnapshot(
+        {
+          seq: this.#state.seq,
+          version: this.#stateVersion,
+          payload: JSON.stringify(this.#state),
+          problems: [...this.#problems],
+        },
+        Date.now()
+      );
+      if (written) this.#snapshotSeq = this.#state.seq;
+      return written;
+    } catch (error) {
+      log.warn('[Engine] Could not write the state snapshot', { error: describeError(error) });
+      return false;
+    }
+  }
+
+  #scheduleSnapshot(threshold: number) {
+    if (this.#stateVersion === null || this.readOnly) return;
+    if (this.#state.seq - this.#snapshotSeq < threshold) return;
+    if (this.#snapshotTimer) clearTimeout(this.#snapshotTimer);
+    this.#snapshotTimer = setTimeout(() => this.writeSnapshot(), this.#snapshotQuietMs);
   }
 
   get state() {
@@ -139,6 +210,7 @@ export class Engine {
   }
 
   start() {
+    this.#scheduleSnapshot(1);
     const reconciled = this.#log.reconcileAfterRestart(Date.now());
     if (reconciled.requeued + reconciled.cancelled.length + reconciled.failed > 0) {
       log.info('[Engine] Recovered the effect outbox after a restart', {
@@ -156,6 +228,7 @@ export class Engine {
     this.#stopped = true;
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = null;
+    this.writeSnapshot();
     for (const controller of this.#controllers.values()) controller.abort();
   }
 
@@ -179,6 +252,25 @@ export class Engine {
       () => undefined
     );
     return next;
+  }
+
+  writeBriefing(projectId: string | null, written: { text: string; briefing: Briefing }) {
+    if (this.#stopped) return Promise.reject(new Error('Shinsa is shutting down.'));
+    if (this.readOnly) return Promise.reject(createReadOnlyError());
+    const next = this.#tail.then(() => this.#recordBriefing(projectId, written));
+    this.#tail = next.then(
+      () => undefined,
+      () => undefined
+    );
+    return next;
+  }
+
+  #recordBriefing(projectId: string | null, written: { text: string; briefing: Briefing }) {
+    const stored = { ...written, at: Date.now() };
+    this.#log.writeBriefing(projectId, stored);
+    const previous = this.#state;
+    this.#state = replaceBriefing(previous, projectId, stored);
+    this.#notify({ previous, changes: { briefings: [briefingKey(projectId)] } });
   }
 
   hasReceipt(id: string) {
@@ -233,8 +325,12 @@ export class Engine {
       at: now,
       receipt: identity,
     });
-    for (const event of committed.events) this.#state = applyEvent(this.#state, event);
-    if (committed.events.length > 0) this.#notify();
+    if (committed.events.length > 0) {
+      const previous = this.#state;
+      this.#state = decision.state;
+      this.#notify({ previous, changes: decision.changes });
+      this.#scheduleSnapshot(this.#snapshotEvery);
+    }
     this.#cancelRunning(committed.cancelled);
     if (decision.effects.length > 0) queueMicrotask(() => this.#pump());
     return committed.events;
@@ -246,10 +342,10 @@ export class Engine {
     }
   }
 
-  #notify() {
+  #notify(change: StateChange) {
     for (const listener of this.#listeners) {
       try {
-        listener(this.#state);
+        listener(this.#state, change);
       } catch (error) {
         log.error('[Engine] A state listener threw', { error: describeError(error) });
       }

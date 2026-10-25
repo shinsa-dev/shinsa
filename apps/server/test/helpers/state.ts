@@ -1,4 +1,5 @@
 import {
+  type Briefing,
   createState,
   type Gate,
   type Repo,
@@ -115,6 +116,14 @@ export interface StubEngine {
   respond: (predicate: (command: ShinsaCommand) => boolean, events: ShinsaEvent[]) => void;
   update: (patch: (state: ShinsaState) => void) => void;
   notify: () => void;
+  briefed: StubBriefing[];
+  refuseBriefing: (predicate: () => boolean) => void;
+}
+
+interface StubBriefing {
+  projectId: string | null;
+  text: string;
+  briefing: Briefing;
 }
 
 export function createStubEngine(patch: (state: ShinsaState) => void = () => undefined): StubEngine {
@@ -125,6 +134,8 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
   const rejections: { predicate: (command: ShinsaCommand) => boolean; error: Error }[] = [];
   const responses: { predicate: (command: ShinsaCommand) => boolean; events: ShinsaEvent[] }[] = [];
   const listeners = new Set<(state: ShinsaState) => void>();
+  const briefed: StubBriefing[] = [];
+  const briefingRefusals: (() => boolean)[] = [];
   const stub = {
     state,
     subscribe: (listener: (state: ShinsaState) => void) => {
@@ -141,6 +152,11 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
       const response = responses.find((candidate) => candidate.predicate(command));
       return Promise.resolve(response?.events ?? []);
     },
+    writeBriefing: (projectId: string | null, written: { text: string; briefing: Briefing }) => {
+      briefed.push({ projectId, ...written });
+      if (briefingRefusals.some((refused) => refused())) return Promise.reject(new Error('rejected'));
+      return Promise.resolve();
+    },
   };
   return {
     engine: stub as unknown as Engine,
@@ -153,5 +169,7 @@ export function createStubEngine(patch: (state: ShinsaState) => void = () => und
     notify: () => {
       for (const listener of listeners) listener(state);
     },
+    briefed,
+    refuseBriefing: (predicate) => briefingRefusals.push(predicate),
   };
 }

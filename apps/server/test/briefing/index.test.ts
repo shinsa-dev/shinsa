@@ -242,22 +242,22 @@ describe('the model answer', () => {
 });
 
 describe('Briefings', () => {
-  test('a burst of requests writes one briefing', async () => {
-    const { engine, state: live, dispatched, commandIds } = createStubEngine();
+  test('a burst of requests writes one briefing, kept for the focus project', async () => {
+    const { engine, state: live, briefed } = createStubEngine();
     const briefings = new Briefings(engine, { ask: silent, debounceMs: 10 });
     briefings.schedule();
     briefings.schedule();
-    await until('the briefing', () => dispatched.length === 1);
-    live.seq = 1;
+    await until('the briefing', () => briefed.length === 1);
+    live.focus = { projectId: 'a1', until: null };
     briefings.schedule();
-    await until('the next briefing', () => dispatched.length === 2);
+    await until('the next briefing', () => briefed.length === 2);
     briefings.stop();
-    expect(commandIds).toEqual(['briefing:*:0', 'briefing:*:1']);
-    expect(dispatched[0]).toMatchObject({ type: 'briefing.write', projectId: null });
+    expect(briefed.map((written) => written.projectId)).toEqual([null, 'a1']);
+    expect(briefed[0]).toMatchObject({ text: expect.any(String), briefing: { now: null, next: [] } });
   });
 
   test('nothing is written once the briefings stop, not even a write already waiting on the model', async () => {
-    const { engine, dispatched, update } = createStubEngine();
+    const { engine, briefed, update } = createStubEngine();
     jest.useFakeTimers();
     try {
       const idle = new Briefings(engine, { ask: silent });
@@ -286,39 +286,17 @@ describe('Briefings', () => {
     answers[0]?.(null);
     await until('the write to be dropped', () => dropped.mock.calls.length > 0);
     dropped.mockRestore();
-    expect(dispatched).toEqual([]);
-  });
-
-  test('a briefing is written under an id from the state it was computed from and the focus', async () => {
-    const {
-      engine,
-      state: live,
-      dispatched,
-      commandIds,
-    } = createStubEngine((draft) => {
-      draft.seq = 7;
-    });
-    const briefings = new Briefings(engine, { ask: silent, debounceMs: 1 });
-    briefings.schedule();
-    await until('the first briefing', () => dispatched.length === 1);
-    briefings.schedule();
-    await until('the repeat', () => dispatched.length === 2);
-    live.seq = 9;
-    live.focus = { projectId: 'a1', until: null };
-    briefings.schedule();
-    await until('the next briefing', () => dispatched.length === 3);
-    briefings.stop();
-    expect(commandIds).toEqual(['briefing:*:7', 'briefing:*:7', 'briefing:a1:9']);
+    expect(briefed).toEqual([]);
   });
 
   test('a briefing that cannot be written is logged and the next one still runs', async () => {
-    const { engine, dispatched, reject } = createStubEngine();
-    reject(() => dispatched.length === 1);
+    const { engine, briefed, refuseBriefing } = createStubEngine();
+    refuseBriefing(() => briefed.length === 1);
     const briefings = new Briefings(engine, { ask: silent, debounceMs: 5 });
     briefings.schedule();
-    await until('the first attempt', () => dispatched.length === 1);
+    await until('the first attempt', () => briefed.length === 1);
     briefings.schedule();
-    await until('the second attempt', () => dispatched.length === 2);
+    await until('the second attempt', () => briefed.length === 2);
     briefings.stop();
   });
 });

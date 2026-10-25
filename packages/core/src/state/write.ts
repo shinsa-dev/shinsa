@@ -1,4 +1,5 @@
 import { type Activity, type Gate, type Run, resolveRoundStamp, type Task } from '../domain/index.ts';
+import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 
 type ActivityEntry = Pick<Activity, 'actor' | 'kind' | 'text'> &
@@ -27,23 +28,23 @@ export function record(state: ShinsaState, taskId: string, at: number, entry: Ac
     ...task.activity,
     { detail: null, evidenceId: null, ...entry, ...onBehalf, ...resolveRoundStamp(task), at },
   ];
-  state.tasks[taskId] = { ...task, activity: activity.slice(-ACTIVITY_LIMIT) };
+  writeEntry(state, 'tasks', taskId, { ...task, activity: activity.slice(-ACTIVITY_LIMIT) });
 }
 
 export function updateTask(state: ShinsaState, taskId: string, at: number, patch: Partial<Task>) {
   const task = state.tasks[taskId];
   if (!task) return;
-  state.tasks[taskId] = { ...task, ...patch, updatedAt: at };
+  writeEntry(state, 'tasks', taskId, { ...task, ...patch, updatedAt: at });
 }
 
 export function updateRun(state: ShinsaState, runId: string, patch: Partial<Run>) {
   const run = state.runs[runId];
   if (!run) return;
-  state.runs[runId] = { ...run, ...patch };
+  writeEntry(state, 'runs', runId, { ...run, ...patch });
 }
 
 export function updateGate(state: ShinsaState, gateId: string, patch: Partial<Gate>) {
   const gate = state.gates[gateId];
   if (!gate) return;
-  state.gates[gateId] = { ...gate, ...patch };
+  writeEntry(state, 'gates', gateId, { ...gate, ...patch });
 }

@@ -70,11 +70,14 @@ export class SilenceWatch {
 
   async check() {
     const now = this.#now();
-    const state = this.#engine.state;
     const live = new Set<string>();
-    for (const run of listLiveRuns(state)) {
+    for (const run of listLiveRuns(this.#engine.state)) {
       live.add(run.id);
-      if (run.status === 'queued' || isRunWaiting(state, run) || (run.silence && run.silence.since !== null))
+      if (
+        run.status === 'queued' ||
+        isRunWaiting(this.#engine.state, run) ||
+        (run.silence && run.silence.since !== null)
+      )
         continue;
       const last = this.#lastOutput.get(run.id) ?? this.#seed(run);
       if (now - last < SILENCE_MINUTES.suspicious * MINUTE_MS) continue;

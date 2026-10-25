@@ -2,8 +2,11 @@ import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
   applySearchLine,
+  CODE_READ_LIMIT,
+  CODE_SEARCH_LIMIT,
   holdLoaded,
   requestFileWrite,
+  requestTaskRefs,
   resolveCodeUrl,
   resolveRawUrl,
   resolveReadVersion,
@@ -114,6 +117,32 @@ describe('useCodeRead', () => {
     expect(result.current).toEqual({ status: 'ready', value: { content: 'one' } });
     act(() => answer('/api/tasks/live/blob?ref=working&v=2', Response.json({ content: 'two' })));
     await waitFor(() => expect(result.current).toEqual({ status: 'ready', value: { content: 'two' } }));
+  });
+
+  it('shows the last answer of a read at once in a new view, even for a newer version', async () => {
+    serve(() => Response.json({ content: 'one' }));
+    const first = renderHook(() => useCodeRead('/api/tasks/swr/refs', 'a'));
+    await waitFor(() => expect(first.result.current.status).toBe('ready'));
+    first.unmount();
+    const { answer } = deferred();
+    const fresh = renderHook(() => useCodeRead('/api/tasks/swr/refs', 'b'));
+    expect(fresh.result.current).toEqual({ status: 'ready', value: { content: 'one' } });
+    act(() => answer('/api/tasks/swr/refs?v=b', Response.json({ content: 'two' })));
+    await waitFor(() => expect(fresh.result.current).toEqual({ status: 'ready', value: { content: 'two' } }));
+  });
+
+  it('keeps the reads used last and forgets the oldest past the limit', async () => {
+    const fetch = serve((url) => Response.json({ url }));
+    const task = createTask({ id: 'lru' });
+    const first = await requestTaskRefs(task);
+    for (let index = 0; index < CODE_READ_LIMIT; index += 1) {
+      if (index === CODE_READ_LIMIT / 2) await requestTaskRefs(task);
+      await requestTaskRefs(createTask({ id: `lru-${index}` }));
+    }
+    expect(await requestTaskRefs(task)).toEqual(first);
+    expect(fetch).toHaveBeenCalledTimes(CODE_READ_LIMIT + 1);
+    await requestTaskRefs(createTask({ id: 'lru-0' }));
+    expect(fetch).toHaveBeenCalledTimes(CODE_READ_LIMIT + 2);
   });
 
   it('shows loading for another read and ignores the first one answering late', async () => {
@@ -349,6 +378,53 @@ describe('useRepoSearch', () => {
       streamOf([{ kind: 'failed', code: 'x', message: 'late' }])
     );
     await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+  });
+
+  it('keeps the last results on screen while the next search runs', async () => {
+    serve(() =>
+      streamOf([
+        { kind: 'matches', matches: [match(1)] },
+        { kind: 'done', result: { ref: SHA, matches: [], truncated: false, timedOut: false } },
+      ])
+    );
+    const task = createTask({ id: 'stream-hold' });
+    const view = renderHook(({ query }) => useRepoSearch(task, SHA, { ...search, query }), {
+      initialProps: { query: 'first' },
+    });
+    await waitFor(() => expect(view.result.current.searching).toBe(false));
+    const { answer } = deferred();
+    view.rerender({ query: 'second' });
+    expect(view.result.current).toEqual({
+      loaded: {
+        status: 'ready',
+        value: { ref: SHA, matches: [match(1)], truncated: false, timedOut: false },
+      },
+      searching: true,
+    });
+    act(() =>
+      answer(
+        `${resolveSearchUrl(task, SHA, { ...search, query: 'second' })}`,
+        streamOf([{ kind: 'done', result: { ref: SHA, matches: [], truncated: false, timedOut: false } }])
+      )
+    );
+    await waitFor(() => expect(view.result.current.searching).toBe(false));
+    expect(view.result.current.loaded).toMatchObject({ value: { matches: [] } });
+  });
+
+  it('keeps only the last few finished searches', async () => {
+    const fetch = serve(() =>
+      streamOf([{ kind: 'done', result: { ref: SHA, matches: [], truncated: false, timedOut: false } }])
+    );
+    const task = createTask({ id: 'stream-many' });
+    for (let index = 0; index <= CODE_SEARCH_LIMIT; index += 1) {
+      const view = renderHook(() => useRepoSearch(task, SHA, { ...search, query: `q${index}` }));
+      await waitFor(() => expect(view.result.current.searching).toBe(false));
+      view.unmount();
+    }
+    const oldest = renderHook(() => useRepoSearch(task, SHA, { ...search, query: 'q0' }));
+    expect(oldest.result.current.searching).toBe(true);
+    await waitFor(() => expect(oldest.result.current.searching).toBe(false));
+    expect(fetch).toHaveBeenCalledTimes(CODE_SEARCH_LIMIT + 2);
   });
 
   it('adds streamed matches in order and takes the ending from the last line', () => {

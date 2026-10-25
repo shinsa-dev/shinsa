@@ -34,6 +34,7 @@ import {
   describeStage,
 } from './activity.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
+import { removeEntry, writeEntry } from './draft.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
@@ -91,11 +92,15 @@ export function briefingKey(projectId: string | null) {
   return projectId ?? '*';
 }
 
+export function replaceBriefing(state: ShinsaState, projectId: string | null, stored: StoredBriefing) {
+  return { ...state, briefings: { ...state.briefings, [briefingKey(projectId)]: stored } };
+}
+
 function recordHandle(state: ShinsaState, handle: string) {
   const parsed = parseTaskHandle(handle);
   if (!parsed) return;
   const [key = NO_PROJECT_KEY, number = '0'] = parsed.split('-');
-  state.taskNumbers[key] = Math.max(state.taskNumbers[key] ?? 0, Number(number));
+  writeEntry(state, 'taskNumbers', key, Math.max(state.taskNumbers[key] ?? 0, Number(number)));
 }
 
 export function resolveNextHandle(state: ShinsaState, projectId: string | null) {
@@ -448,7 +453,7 @@ function applyChecksRecorded(state: ShinsaState, event: EventOf<'checks.recorded
 }
 
 function applyEvidenceAttached(state: ShinsaState, event: EventOf<'evidence.attached'>) {
-  state.evidence[event.evidence.id] = event.evidence;
+  writeEntry(state, 'evidence', event.evidence.id, event.evidence);
   record(state, event.evidence.taskId, event.at, {
     actor: 'agent',
     kind: 'evidence',
@@ -467,8 +472,7 @@ type WorkspaceEvent = Extract<
       | 'project.written'
       | 'project.removed'
       | 'focus.changed'
-      | 'settings.changed'
-      | 'briefing.written';
+      | 'settings.changed';
   }
 >;
 
@@ -476,16 +480,22 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
   switch (event.type) {
     case 'repo.registered':
     case 'repo.updated':
-      state.repos[event.repo.id] = { ...event.repo, checkCommands: [...event.repo.checkCommands] };
+      writeEntry(state, 'repos', event.repo.id, {
+        ...event.repo,
+        checkCommands: [...event.repo.checkCommands],
+      });
       return;
     case 'repo.removed':
-      delete state.repos[event.repoId];
+      removeEntry(state, 'repos', event.repoId);
       return;
     case 'project.written':
-      state.projects[event.project.id] = { ...event.project, folders: [...event.project.folders] };
+      writeEntry(state, 'projects', event.project.id, {
+        ...event.project,
+        folders: [...event.project.folders],
+      });
       return;
     case 'project.removed':
-      delete state.projects[event.projectId];
+      removeEntry(state, 'projects', event.projectId);
       return;
     case 'focus.changed':
       state.focus = { ...event.focus };
@@ -493,18 +503,11 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
     case 'settings.changed':
       state.settings = structuredClone(event.settings);
       return;
-    case 'briefing.written':
-      state.briefings[briefingKey(event.projectId)] = {
-        text: event.text,
-        at: event.at,
-        briefing: event.briefing ?? null,
-      };
-      return;
   }
 }
 
 function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
-  state.tasks[event.taskId] = { ...createTask(event), ...resolveLineage(event) };
+  writeEntry(state, 'tasks', event.taskId, { ...createTask(event), ...resolveLineage(event) });
   if (event.handle) recordHandle(state, event.handle);
   recordCourierTask(state, event);
   applyScheduledTask(state, event);
@@ -525,7 +528,6 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'project.removed':
     case 'focus.changed':
     case 'settings.changed':
-    case 'briefing.written':
       applyWorkspaceEvent(state, event);
       break;
     case 'task.created':
@@ -746,8 +748,8 @@ export interface ReplayFailure {
   error: string;
 }
 
-export function replayEventLog(events: Iterable<ShinsaEvent>) {
-  let state = createState();
+export function replayEventLog(events: Iterable<ShinsaEvent>, from: ShinsaState = createState()) {
+  let state = from;
   const failures: ReplayFailure[] = [];
   for (const event of events) {
     try {

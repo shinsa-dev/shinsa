@@ -3,6 +3,7 @@ import {
   applyEvent,
   createSettings,
   createState,
+  replaceBriefing,
   replayEventLog,
   resolveFallbackBriefing,
   type ShinsaEvent,
@@ -18,26 +19,20 @@ import {
   reachShipping,
 } from '../harness.ts';
 
-describe('briefing events', () => {
-  test('store the structured guide per project', () => {
+describe('briefings', () => {
+  test('replacing one stores the guide per project and leaves the state it came from as it was', () => {
     const guide = resolveFallbackBriefing(queueOf(ready), NOW);
-    const withGuide = applyEvent(createState(), {
-      type: 'briefing.written',
-      projectId: null,
+    const empty = createState();
+    const withGuide = replaceBriefing(empty, null, {
       text: 'Start with the chat.',
-      briefing: guide,
-      seq: 1,
       at: NOW,
+      briefing: guide,
     });
     expect(withGuide.briefings['*']).toEqual({ text: 'Start with the chat.', at: NOW, briefing: guide });
-    const plain = applyEvent(createState(), {
-      type: 'briefing.written',
-      projectId: 'project-1',
-      text: 'Start with the chat.',
-      seq: 1,
-      at: NOW,
-    });
-    expect(plain.briefings['project-1']).toEqual({ text: 'Start with the chat.', at: NOW, briefing: null });
+    expect(empty.briefings).toEqual({});
+    const both = replaceBriefing(withGuide, 'project-1', { text: 'Plain.', at: NOW, briefing: null });
+    expect(Object.keys(both.briefings)).toEqual(['*', 'project-1']);
+    expect(both.tasks).toBe(withGuide.tasks);
   });
 });
 
