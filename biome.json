@@ -134,7 +134,7 @@
       }
     },
     {
-      "includes": ["packages/ui/src/**", "apps/web/src/**"],
+      "includes": ["packages/ui/src/**", "apps/web/src/**", "apps/marketing/src/**"],
       "linter": {
         "rules": {
           "nursery": {
@@ -145,6 +145,17 @@
                 "functions": ["cn", "cva", "clsx"]
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.astro"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off"
           }
         }
       }
@@ -213,7 +224,7 @@
     }
   ],
   "files": {
-    "includes": ["**", "!.claude", "!**/dist", "!packages/ui/src/styles/globals.css"]
+    "includes": ["**", "!.claude", "!**/dist", "!**/.astro", "!packages/ui/src/styles/globals.css"]
   },
   "javascript": {
     "formatter": {

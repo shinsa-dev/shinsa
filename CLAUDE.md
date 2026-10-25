@@ -19,6 +19,8 @@ apps/web/         → @shinsa/web     React 19 + Vite + Tailwind 4, laid out lik
                                     <domain>/, hooks/, lib/). Renders server state; owns nothing. See apps/web/CLAUDE.md
 apps/desktop/     → @shinsa/desktop Shinsa for Mac: an Electron window that loads the UI from `shinsa serve` and adds the Dock
                                     badge, notifications, `shinsa://` links and the menu. See apps/desktop/CLAUDE.md
+apps/marketing/   → @shinsa/marketing The one-page site: Astro, static, whose demos are the web app's own components on
+                                    sample data, against a stand-in server in the browser. See apps/marketing/CLAUDE.md
 packages/core/    → @shinsa/core    Pure domain, one folder per concern under src/ (domain, agent-models, events,
                                     commands, effects, state, decide, accounts, costs, schedules, queue, briefing,
                                     report, chat, prompts, progress, protocol); tests under test/ at 100% coverage.
@@ -94,6 +96,7 @@ web ──WebSocket──► shinsa serve
 | `bun check-types` | TypeScript in every workspace and `scripts/` |
 | `bun run test` | Unit tests (Bun) in every workspace plus `scripts/*.test.ts` (`bun run test:scripts`, the root `bunfig.toml`); each workspace and `scripts/` fails below 100% line and function coverage |
 | `bunx knip` / `bun deps` | Dead code / workspace dependency drift |
+| `bun run --cwd apps/marketing dev` | The site on :5182 (`build`, `preview` likewise; Astro runs under Bun) |
 | `bun run seed` | Seeded state to look at: writes `~/.shinsa-seed` (`SHINSA_SEED_DIR` overrides it) and prints the command that serves it under `SHINSA_INSPECT`; `SHINSA_SEED_SESSION` (a Claude session `.jsonl`) replaces one task's synthetic transcript |
 
 Everything Shinsa keeps lives in `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa`): `config.json`, the Claude accounts

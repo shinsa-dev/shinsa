@@ -1,0 +1,92 @@
+<div aria-hidden='true' class='board-grid pointer-events-none absolute inset-0 z-0'></div>
+<div aria-hidden='true' class='board pointer-events-none absolute top-0 left-0 z-0 w-full overflow-hidden' data-board></div>
+
+<script>
+  import { type Board, resolveBoard, resolveSignal } from '../../lib/board';
+
+  const root = document.documentElement;
+  const host = document.querySelector<HTMLElement>('[data-board]');
+  let board: Board | null = null;
+  let signals: SVGPathElement[] = [];
+  let chipGroups: SVGGElement[] = [];
+  let frame = 0;
+
+  function listChips() {
+    return [...document.querySelectorAll<HTMLElement>('[data-chip]')].map((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left + window.scrollX),
+        right: Math.round(rect.right + window.scrollX),
+        top: Math.round(rect.top + window.scrollY),
+        bottom: Math.round(rect.bottom + window.scrollY),
+      };
+    });
+  }
+
+  function serializeBoard(next: Board, chipCount: number) {
+    const traces = next.traces.map((d) => `<path class='board-trace' d='${d}' />`).join('');
+    const pads = next.pads
+      .map((pad) => `<rect class='board-pad' x='${pad.x}' y='${pad.y}' width='${pad.width}' height='${pad.height}' rx='1.5' />`)
+      .join('');
+    const vias = next.vias.map((via) => `<circle class='board-via' cx='${via.x}' cy='${via.y}' r='2.5' />`).join('');
+    const pins = Array.from({ length: chipCount }, (_, chip) => {
+      const marks = next.pins
+        .filter((pin) => pin.chip === chip)
+        .map((pin) => `<rect class='board-pin' x='${pin.x - 3}' y='${pin.y - 1.5}' width='6' height='3' rx='1' />`)
+        .join('');
+      return `<g data-chip-pins='${chip}'>${marks}</g>`;
+    }).join('');
+    const buses = next.buses
+      .map((bus) => `<path class='board-signal' d='${bus.d}' pathLength='1' />`)
+      .join('');
+    return `${traces}${pads}${vias}${buses}${pins}`;
+  }
+
+  function syncSignals() {
+    frame = 0;
+    if (!board) return;
+    const center = window.scrollY + window.innerHeight * 0.55;
+    for (const [index, bus] of board.buses.entries()) {
+      const path = signals[index];
+      if (!path) continue;
+      const progress = resolveSignal(bus, center);
+      path.style.strokeDashoffset = String(0.16 - progress * 1.16);
+      path.style.opacity = progress > 0 && progress < 1 ? '1' : '0';
+    }
+    const chips = document.querySelectorAll<HTMLElement>('[data-chip]');
+    for (const [index, group] of chipGroups.entries()) {
+      const rect = chips[index]?.getBoundingClientRect();
+      const lit = rect ? rect.top < window.innerHeight * 0.75 && rect.bottom > window.innerHeight * 0.25 : false;
+      group.toggleAttribute('data-lit', lit);
+    }
+    root.toggleAttribute('data-scrolled', window.scrollY > 4);
+  }
+
+  function requestSync() {
+    if (frame === 0) frame = requestAnimationFrame(syncSignals);
+  }
+
+  function drawBoard() {
+    if (!host) return;
+    const width = document.documentElement.clientWidth;
+    const height = document.documentElement.scrollHeight;
+    const chips = listChips();
+    board = resolveBoard(chips, width);
+    host.style.height = `${height}px`;
+    host.innerHTML = `<svg width='${width}' height='${height}' viewBox='0 0 ${width} ${height}'>${serializeBoard(board, chips.length)}</svg>`;
+    signals = [...host.querySelectorAll<SVGPathElement>('.board-signal')];
+    chipGroups = [...host.querySelectorAll<SVGGElement>('[data-chip-pins]')];
+    syncSignals();
+  }
+
+  let pending = 0;
+  function requestDraw() {
+    clearTimeout(pending);
+    pending = window.setTimeout(drawBoard, 120);
+  }
+
+  drawBoard();
+  new ResizeObserver(requestDraw).observe(document.body);
+  window.addEventListener('scroll', requestSync, { passive: true });
+  window.addEventListener('resize', requestDraw);
+</script>

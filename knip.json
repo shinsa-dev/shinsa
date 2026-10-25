@@ -17,6 +17,9 @@
     "apps/server": {
       "entry": ["test/**/*.test.ts", "test/e2e/soak/child.ts", "test/helpers/mcp/stdio-server.ts"],
       "ignoreDependencies": ["@chroxify/eunoe"]
+    },
+    "apps/marketing": {
+      "ignoreDependencies": ["@shinsa/web", "tailwindcss"]
     }
   }
 }

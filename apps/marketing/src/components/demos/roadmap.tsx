@@ -1,0 +1,15 @@
+import * as React from 'react';
+import { TasksPage } from '@/routes/tasks.tsx';
+import { createHomeScene } from '../../lib/scene.ts';
+import { DemoRoot, Window } from './frame.tsx';
+
+export function RoadmapDemo() {
+  const [state] = React.useState(() => createHomeScene(Date.now()));
+  return (
+    <DemoRoot>
+      <Window title='All tasks' inert>
+        <TasksPage state={state} />
+      </Window>
+    </DemoRoot>
+  );
+}

@@ -28,6 +28,7 @@ const ROOTS = [
   'apps/web/test',
   'apps/desktop/src',
   'apps/desktop/test',
+  'apps/marketing/src',
   'packages',
   'scripts',
 ];
@@ -39,7 +40,13 @@ const BANNED_VERB_PATTERN = /^(get|fetch|load|set|delete|destroy)[A-Z]/;
 const VERB_CATALOG =
   'find*, select*, list*, count*, resolve*, create*, update*, upsert*, write*, replace*, remove*, assert*, serialize*, parse*, validate*, describe*, request*, sync*, apply*, record*, is*, has*, needs*';
 
-const VERB_CHECK_ROOTS = ['apps/server/src', 'apps/web/src', 'apps/desktop/src', 'packages/core'];
+const VERB_CHECK_ROOTS = [
+  'apps/server/src',
+  'apps/web/src',
+  'apps/desktop/src',
+  'apps/marketing/src',
+  'packages/core',
+];
 
 const COMMENT_CHECK_EXCLUDED_ROOTS = ['packages/ui'];
 
@@ -194,7 +201,7 @@ const SHORTCUT_FILES = [
 ];
 
 const SHORTCUT_MESSAGE =
-  'A global keyboard shortcut. ⌘K is the only shortcut, and the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open; both live in hooks/use-command-key.ts and hooks/use-code-keys.ts (docs/design.md → Where Shinsa differs, 14)';
+  'A global keyboard shortcut. ⌘K is the only shortcut, the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G and the Review tab J and K while they are open; they live in hooks/use-command-key.ts, hooks/use-code-keys.ts and hooks/use-review-keys.ts (docs/design.md → Where Shinsa differs, 14)';
 
 const TIME_CHECK_ROOTS = ['apps/web/src'];
 

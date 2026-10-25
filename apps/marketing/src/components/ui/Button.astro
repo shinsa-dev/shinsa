@@ -1,0 +1,26 @@
+---
+import { buttonVariants } from '@shinsa/ui/components/button';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
+import { cn } from '@shinsa/ui/lib/utils';
+
+interface Props {
+  href: string;
+  variant?: 'primary' | 'secondary' | 'outline';
+  icon?: IconName;
+  external?: boolean;
+  class?: string;
+}
+
+const { href, variant = 'primary', icon, external = false, class: className } = Astro.props;
+---
+
+<a
+  href={href}
+  target={external ? '_blank' : undefined}
+  rel={external ? 'noreferrer' : undefined}
+  data-icon={icon ? 'inline-start' : undefined}
+  class={cn(buttonVariants({ variant }), className)}
+>
+  {icon && <Icon name={icon} />}
+  <slot />
+</a>

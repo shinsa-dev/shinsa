@@ -1,0 +1,124 @@
+@import "../../../web/src/app.css";
+
+@source "../";
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 3.5rem;
+}
+
+astro-island {
+  display: contents;
+}
+
+.demo-window {
+  --window-scale: min(1, tan(atan2(100cqw, var(--window-w))));
+  height: calc(var(--window-extra) + 37px + var(--window-h) * var(--window-scale));
+}
+
+.demo-window-content {
+  width: var(--window-w);
+  height: var(--window-h);
+  transform: scale(var(--window-scale));
+}
+
+body {
+  background: var(--background);
+  color: var(--fg-3);
+}
+
+.board-grid {
+  background-image: radial-gradient(circle, var(--bg-4) 0.9px, transparent 1.2px);
+  background-size: 16px 16px;
+  mask-image: linear-gradient(to right, black, transparent 18%, transparent 82%, black);
+  opacity: 0.7;
+}
+
+.board svg {
+  display: block;
+}
+
+.board-trace {
+  fill: none;
+  stroke: var(--bg-4);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+.board-pad {
+  fill: var(--bg-3);
+  stroke: var(--bg-4);
+  stroke-width: 1;
+}
+
+.board-via {
+  fill: var(--background);
+  stroke: var(--bg-4);
+  stroke-width: 1.25;
+}
+
+.board-pin {
+  fill: var(--bg-4);
+  transition: fill 0.6s ease;
+}
+
+[data-lit] > .board-pin {
+  fill: color-mix(in oklch, var(--primary) 70%, var(--bg-4));
+}
+
+.board-signal {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-dasharray: 0.16 2;
+  stroke-dashoffset: 0.16;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  filter: drop-shadow(0 0 3px color-mix(in oklch, var(--primary) 55%, transparent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .board-signal {
+    display: none;
+  }
+}
+
+.demo-static,
+.demo-static * {
+  pointer-events: none;
+}
+
+.demo-static [data-live],
+.demo-static [data-live] * {
+  pointer-events: auto;
+}
+
+.demo-hero [data-live],
+.demo-hero [data-live] * {
+  cursor: default;
+}
+
+@keyframes try-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 45%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+}
+
+.demo-try [data-live] [data-slot="button"].text-primary-foreground:not(:disabled) {
+  animation: try-pulse 1.8s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-try [data-live] [data-slot="button"] {
+    animation: none;
+  }
+}

@@ -1,0 +1,13 @@
+---
+import Button from '../components/ui/Button.astro';
+import Site from '../layouts/Site.astro';
+import { site } from '../lib/site';
+---
+
+<Site title='Page not found · Shinsa' description={site.description} noindex>
+  <section class='flex min-h-[60svh] flex-col items-center justify-center gap-4 px-6 py-24 text-center'>
+    <h1 class='font-medium text-3xl text-fg-4 tracking-tight'>This page does not exist.</h1>
+    <p class='text-fg-2'>The link may be old, or the address has a typo.</p>
+    <Button href='/'>Go to the home page</Button>
+  </section>
+</Site>

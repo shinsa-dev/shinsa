@@ -1,0 +1,32 @@
+{
+  "name": "@shinsa/marketing",
+  "license": "UNLICENSED",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun --bun astro build",
+    "check-types": "bun --bun astro sync && tsc --noEmit",
+    "dev": "bun --bun astro dev --port 5182",
+    "preview": "bun --bun astro preview --port 5182"
+  },
+  "dependencies": {
+    "@astrojs/react": "^6.0.6",
+    "@astrojs/sitemap": "^3.7.4",
+    "@shinsa/core": "workspace:*",
+    "@shinsa/ui": "workspace:*",
+    "@shinsa/web": "workspace:*",
+    "astro": "^7.4.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "satori": "^0.33.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2"
+  }
+}

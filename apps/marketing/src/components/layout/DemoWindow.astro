@@ -1,0 +1,11 @@
+---
+import { resolveWindowStyle, type WindowSize } from '../../lib/window-size';
+
+type Props = WindowSize;
+
+const style = resolveWindowStyle(Astro.props);
+---
+
+<div class='demo-window' style={style}>
+  <slot />
+</div>

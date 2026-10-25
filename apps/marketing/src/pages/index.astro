@@ -1,0 +1,60 @@
+---
+import { GatesDemo } from '../components/demos/gates';
+import { GuardDemo } from '../components/demos/guard';
+import { HeroDemo } from '../components/demos/hero';
+import { KindsDemo } from '../components/demos/kinds';
+import { LoopDemo } from '../components/demos/loop';
+import { ReviewDemo } from '../components/demos/review';
+import { RoadmapDemo } from '../components/demos/roadmap';
+import { Toasts } from '../components/demos/toasts';
+import DemoWindow from '../components/layout/DemoWindow.astro';
+import Section from '../components/layout/Section.astro';
+import Closing from '../components/sections/Closing.astro';
+import Hero from '../components/sections/Hero.astro';
+import Site from '../layouts/Site.astro';
+import { sections } from '../lib/content';
+import { listGuardedCommands } from '../lib/guard';
+import { site } from '../lib/site';
+
+const guarded = await listGuardedCommands();
+---
+
+<Site title={site.title} description={site.description}>
+  <Hero>
+    <DemoWindow width={1080} height={680}>
+      <HeroDemo client:load />
+    </DemoWindow>
+  </Hero>
+  <Section copy={sections.gates}>
+    <DemoWindow width={1040} height={640} reserve={370} extra={44}>
+      <GatesDemo client:visible={{ rootMargin: '400px' }} />
+    </DemoWindow>
+  </Section>
+  <Section copy={sections.kinds}>
+    <div class='h-[530px] md:h-[562px]'>
+      <KindsDemo client:visible={{ rootMargin: '400px' }} />
+    </div>
+  </Section>
+  <Section copy={sections.review}>
+    <DemoWindow width={1120} height={660} reserve={320}>
+      <ReviewDemo client:visible={{ rootMargin: '400px' }} />
+    </DemoWindow>
+  </Section>
+  <Section copy={sections.roadmap}>
+    <DemoWindow width={1080} height={640} reserve={320}>
+      <RoadmapDemo client:visible={{ rootMargin: '400px' }} />
+    </DemoWindow>
+  </Section>
+  <Section copy={sections.loop}>
+    <div class='h-[556px] md:h-[588px]'>
+      <LoopDemo client:visible={{ rootMargin: '400px' }} />
+    </div>
+  </Section>
+  <Section copy={sections.guard}>
+    <div class='h-[492px] md:h-[524px]'>
+      <GuardDemo client:visible={{ rootMargin: '400px' }} commands={guarded} />
+    </div>
+  </Section>
+  <Closing />
+  <Toasts client:only='react' />
+</Site>
