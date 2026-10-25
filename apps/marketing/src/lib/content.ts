@@ -2,7 +2,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 
 export const hero = {
   headline: 'Hand over the work. Keep the decisions.',
-  text: 'Shinsa runs Claude Code and Codex from your request to a merged pull request. You step in only for what needs a person: the review, the merge and the odd question.',
+  text: 'Shinsa runs Claude Code and Codex on your own machine, from your request to a merged pull request, checking their work at every step. You step in only for what needs a person: the review, the merge and the odd question.',
   primary: 'Download for Mac',
   secondary: 'View on GitHub',
 };
