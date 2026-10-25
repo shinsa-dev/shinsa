@@ -170,9 +170,11 @@ not chat text.
   others are running; one that depends on others waits, costing nothing, until they have merged.
   Priority and what a decision unblocks only decide how high it sits in Needs you (`docs/engine.md`
   → Scheduling).
-- **The pull request loop.** CI failures, review-bot comments and conflicts go back to the round's agent until
+- **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
-  request watch, Merge queues).
+  request watch, Merge queues). A conflict is resolved by merging the base in, never by rebasing, and one GitButler
+  leaves when a task below a stack is cancelled is resolved in place in your workspace (`docs/engine.md` → The pull
+  request watch → Conflicts, Where agents work → GitButler).
 - **The briefing** says which decision to take now and why, the two or three after it, what agents
   are doing, and gives a heads-up when something is stuck (`docs/engine.md` → The briefing).
 - **Notes.** Agents keep notes on a task (`note`), so nothing depends on you remembering it.
@@ -295,6 +297,7 @@ The Mac app (`apps/desktop`) is a window around `shinsa serve` with the Dock bad
 links; while it is connected it is the one surface that notifies (`docs/plans/desktop-plan.md`, phases 0 to 2).
 Planned, not built: shipping it signed with updates, other providers (Cursor), and dev-server and simulator
 previews per worktree.
+Remote access (deferred): `docs/plans/remote-plan.md`.
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and
   the command's receipt committed in one SQLite transaction, side effects run from the outbox after
@@ -329,8 +332,9 @@ previews per worktree.
   Shinsa's own transcripts; an agent that needs one later, or that you name one to ("use the Maple MCP"), loads it
   mid-run (`load_mcp_server`, `load_skill`). Each run's chat
   says what it loaded and what it left out (`docs/engine.md` → MCP servers, plugins and skills).
-- **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote
-  access later through Tailscale.
+- **Local first.** Shinsa runs on your machine and keeps its own Claude accounts; no cloud. Remote access, deferred
+  until the desktop app replaces Kanna and the IDE, is planned through a Cloudflare tunnel under a Shinsa domain,
+  with a phone surface without code views; Tailscale was the alternative considered (`docs/plans/remote-plan.md`).
 
 ## 7. Codebase
 
@@ -411,7 +415,7 @@ Built and verified end to end against a scratch repository:
   findings inline, line comments, Previous spot and Next spot to step. Its changes view is a file tree
   and the full diff. Since 2026-10-24 Code is a workbench (Review, Changes, Files and Search, tabs, ⌘P quick open,
   find, go to line, a ref picker) on CodeMirror, reading every file from git at a pinned commit, so a merged task
-  keeps its code; edits become suggested changes sent with Request changes (`docs/design.md`, 32;
+  keeps its code; since 2026-10-25 you edit it directly (Direct editing in the Code tab, below; `docs/design.md`, 32;
   `docs/engine.md` → The Code tab's reads).
 - **Desktop shell.** Home and the queue button show the same queue: Needs you, In progress and Waiting on
   another task, all within the focus project (switching the focus is how you see other work). ⌘K's Next and Previous task that needs you step through the
@@ -674,23 +678,66 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   that changes files works at a time and only what it changed goes on its branch (`docs/engine.md` → Where agents
   work; what is left is `docs/plans/gitbutler-plan.md`).
 
-### One root agent per round (2026-10-24)
+### One agent per task (2026-10-24)
 
-- **One agent holds a round.** A round that plans has one agent, the Agent: one conversation that plans the round
-  without changing files, then builds every phase in order, takes every fix (failed checks, the agent review's
-  blocking findings, your messages and line comments, CI and review comments on the pull request) and runs the
-  round's operation. Each phase is still committed when the agent hands it over, but the next phase is the same
-  conversation's next turn with a short instruction, so what it learned while planning and in earlier phases stays
-  with it. There is no fixer and no separate operator any more.
-- **A separate agent only where context must stay apart.** The reviewer starts fresh and read-only, so it never judges
-  the work from inside the head that wrote it; checks stay commands; the agent delegates only work whose context
-  should stay apart (a review or a test of its own work) or that is truly independent and runs in parallel, never one
-  agent per phase. Answers, investigations and research stay single agents (`docs/engine.md` → Agents, which has the
-  why).
-- **It survives restarts and lost sessions.** A restart resumes the round's conversation; one that cannot go on starts
-  fresh with a brief of the round so far: the plan, every finished phase with its summary and the step it is on.
+- **One agent holds the task.** A task has one agent, the Agent, and one conversation for its whole life. Planning is
+  its round zero; then it builds every phase in order, takes every fix (failed checks, the agent review's blocking
+  findings, your messages and line comments, CI and review comments on the pull request) and runs the operation, and
+  every later round (new work, feedback, an answer or an investigation, the change you OK after it) is the same
+  conversation's next turn. Each phase is still committed when the agent hands it over, but the next phase is a short
+  instruction to the same conversation, so what it learned while planning, in earlier phases and in earlier rounds
+  stays with it. There is no fixer and no separate operator any more.
+- **A separate agent only where context must stay apart.** The reviewer reads only and never shares the Agent's
+  conversation, so it never judges the work from inside the head that wrote it; checks stay commands; the agent
+  delegates only work whose context should stay apart (a review or a test of its own work) or that is truly
+  independent and runs in parallel, never one agent per phase (`docs/engine.md` → Agents, which has the why).
+- **It survives restarts and lost sessions.** A restart resumes the task's conversation; one that cannot go on (its
+  context is full, the provider lost it, you changed its provider or model) starts fresh with a brief of the task so
+  far: the plan, every finished phase with its summary and the step it is on.
 - **Settings follow.** One conversation needs one provider and one model, so Settings → Agents → Models has an Agent
   row (plans, builds and fixes) instead of separate Planner, Builder and Fixer rows.
+
+### One agent session per task, cached (2026-10-25)
+
+- **Per task, not per round.** Every round and every kind of work on a task continues the task's one session: an
+  answer round after a change, the change after an answer, a retried step, a scheduled round, a round from a kept
+  split-off, a round after a merge on a new branch, a run moved to another account, a restart. A fresh one only when
+  the old one cannot go on (`docs/engine.md` → Agents).
+- **The reviewer keeps a session of its own per task**, resumed by every review, so it remembers what it asked to be
+  fixed; each review is told to judge the new commits on their own.
+- **Cache first.** What a long session costs is mostly its prompt cache, so nothing that changes between turns goes
+  into an agent's system prompt or tool list; every kind of work on the task sees the same tools, and read-only steps
+  are enforced without removing tools (`docs/engine.md` → Caching, measured by `test/e2e/prompt-cache.test.ts`).
+- **Other work in the repository.** Agents can list the other open tasks in their repository, with their branches,
+  stacks, changed files and whether an agent works on them now, and the Agent is told once when another task changes
+  the same files (`docs/engine.md` → Other work in the repository).
+- **Conflicts resolve themselves.** A pull request that conflicts with its base (main moved, or a stacked base merged
+  or moved) and a GitButler branch left conflicted when the task below it was cancelled go to the task's Agent as a
+  fix in its own session; a GitButler commit refused for another task's lines stacks on that task. The agent asks you
+  only what it cannot resolve itself (`docs/engine.md` → The pull request watch → Conflicts).
+- **Disabled commands say why.** A ⌘K command or option that cannot run now is shown greyed with the reason as its
+  hint (`docs/design.md`, 14).
+
+### Direct editing in the Code tab (2026-10-25)
+
+- **You edit the code where you read it.** At Head of the branch or the Working copy of an open task the editor is
+  simply editable: typing edits, ⌘Z undoes, and each pause saves the file to the task's working copy (the worktree,
+  or your checkout in GitButler and main-checkout mode). There is no Suggest a change and no suggestions; line
+  comments are words only. Shinsa still makes every commit: your edits go into the round's next commit; approving
+  the review with edits no commit took yet commits them and runs the checks again before the push, and approving the
+  merge with them pushes them and merges once CI passes. The agent is told which files you edited, at once if it is
+  working and in its next turn either way. In GitButler the working copy shows the files the task owns from disk and
+  the rest from its branch, so a reload shows your edit. A merged or finished task, an earlier commit and the base are read-only, with a
+  one-line reason. A file that changed on disk under you keeps your unsaved edit when it touched other lines, and
+  otherwise shows the disk version with a notice (`docs/engine.md` → Your edits).
+- **Side by side first.** A diff opens side by side with its new side editable; unified is the toggle and is
+  remembered. Each side scrolls sideways under its own pinned line numbers, folded "N unchanged lines" are no place
+  for the cursor, and a comment box for a long selection fits the visible pane. Open in editor left the toolbar:
+  Shinsa is the editor (the task's ⌘K and menu still open the checkout elsewhere).
+- **GitButler stacks, decided.** Shinsa stacks a task only onto a branch it created. Cancelling a task another is
+  stacked on first takes its branch out of the stack, so the task above stays applied with its own commits and its
+  pull request goes back to the default branch; while the task below is open, the task above keeps waiting on it and
+  that dependency cannot be removed (the Waits on menu shows it as "Stacked on “‹title›”").
 
 ## 11. Open questions
 

@@ -46,14 +46,14 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | CI run | One CI check GitHub reports on the pull request | `CiRun`, `CiState` (stored as `PullRequest.checkRuns`, `PullRequest.checks`) | CI |
 | check-in | A monitor's next look at what it waits for | `Monitor.nextCheckAt`, `monitor.check_in_now` | "Check in now", "Check-in 2 of 10" |
 | setup verification | Shinsa verifying the repository, the default branch and the checks before a task's first agent | `config.verify`, `VERIFYING_SETUP`, gate type `configuration` | "Setup incomplete", "Verify again" |
-| review | Reading a change: the agent review (a fresh reviewer, soft gate) or your review (hard gate) | steps `agent_review`, `your_review` | Agent review, Review |
+| review | Reading a change: the agent review (the reviewer, on its own session, soft gate) or your review (hard gate) | steps `agent_review`, `your_review` | Agent review, Review |
 | finding | One problem the reviewer reports, blocking or a suggestion, at a file and line | `ReviewFinding` | finding |
 | diagnosis | What an investigation hands over: what it found and why | `report_diagnosis`, `TaskResult` step `investigate` | Diagnosis |
 | judgement call | A choice the agent made in a phase, with its reason | `JudgementCall` | Judgement calls |
 | spot | A line range the work report points you at, ranked critical, high or normal | `CodeSpot` | spot |
 | ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
 | line comment | A comment you leave on a line or range of the new or the removed side, sent with Request changes | `ReviewComment` (`gate.answer`'s `comments`), `LineComment` in the web's draft (`lib/review/draft.ts`, adds its id and commit) | Your comments |
-| suggested change | An edit you make in the Code tab, kept in your review as a line comment that carries the original lines and their replacement, and sent with Request changes; it is never written to the worktree | `ReviewComment.suggestion`, `SuggestedChange` | "Suggest a change", "Suggested change" |
+| your edits | A file you change in the Code tab: saved to the task's working copy as you type, committed with the round's next commit, and named to the agent's next turn | `FileWrite`, `Task.editedPaths`, `Task.untoldEdits`, `task.record_edit`, `task.edited` | "Edited ‹path›", "Saving…" |
 | proposal | An inquiry's request to turn the task into a change or an operation, decided at your OK | `ChangeProposal`, gate type `proposal` | "Your OK", "What it would change" |
 | result | What an answer, an investigation, research or an operation hands over (the answer, the diagnosis, the report, the outcome) | `TaskResult` | Answer, Diagnosis, Report, Outcome |
 | delegation | Work a running step hands to another agent: a run of the same task with a parent run, never a new task | `RunDelegation` on `Run` | Delegations |
@@ -207,7 +207,12 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `worktreePath` | string \| null | the task's worktree; for a GitButler or main-checkout task, the repository itself |
 | `workspace?` | `WorkspaceMode` | where the task works, taken from its repository when it set up (`worktree.requested`) and kept |
 | `returnBranch?` | string | main checkout: the branch the checkout was on when the task took it, where it goes back when the task settles |
-| `stackedOn?` | `TaskStack` (`taskId`, `branch`) | GitButler: the other task whose branch this task's branch is stacked on (`task.stack`); its pull request targets that branch while that task's pull request is open (`resolvePullRequestBase`) |
+| `stackedOn?` | `TaskStack` (`taskId`, `branch`) | GitButler: the other task whose branch this task's branch is stacked on (`task.stack`); its pull request targets that branch while that task's pull request is open (`resolvePullRequestBase`); while that task is open the dependency on it cannot be removed (`dependency_stacked`), and cleared by `task.unstacked` when it settles without a merge |
+| `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
+| `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: the checks run again before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
+| `heldConflict?` | string \| null | a branch GitButler left conflicted while the task could not take a fix (planning, reviewing, checking, merging); the fix starts where its next review or merge gate would open (`task.conflict_held`) |
+| `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
+| `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
 
 **Checks, review and fixes**
@@ -218,7 +223,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `findings` | `ReviewFinding[]` | the last agent review |
 | `dismissedFindings?` | `ReviewFinding[]` (last 30) | findings you dismissed, never reported again |
 | `fixRounds` | number | automatic fix rounds used |
-| `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| null | what the current fix is for |
+| `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| null | what the current fix is for (`conflict`: commits GitButler left conflicted on the task's branch) |
 | `fixSignature`, `stalledFixes`, `fixFingerprints?` | | repeat detection: the same failures after the same tree |
 | `recoveries`, `recoveryFingerprint?` | number, string | the recovery budget and the durable state it is keyed to |
 
@@ -421,7 +426,8 @@ the merge gate, so an open pull request is never left without one.
 | `round?` | number | the round it works for (Rounds, above) |
 
 `RunAttempt`: `attemptId`, `provider`, `model`, `resumed`, `handoff` (`provider_switch` or `session_restore`, entry
-counts), `startedAt`, `account`.
+counts), `startedAt`, `account`, `cwd` (the directory the attempt ran in: a resumed turn in another directory than
+the session's last one is told where it works now, `resolveMovedNote`).
 
 Which agent role's settings (provider, model, speed) each run role uses is one table, `RUN_AGENT_ROLE`
 (`packages/core/src/agent-models/index.ts`):
@@ -436,8 +442,9 @@ Which agent role's settings (provider, model, speed) each run role uses is one t
 | `planner` (delegated) | agent | yes | its parent's checkout, or its own | its final reply |
 | `builder` (delegated) | agent | no | its parent's checkout, or its own | its final reply |
 
-Every run of a round's agent resumes the task's last agent session (`Decider.agentRun`), so one session plans,
-builds, fixes and operates; `AgentRole` has no planner, builder or fixer, since one session runs on one provider and
+Every run of a task's agent, answerer, investigator or researcher resumes the task's one session
+(`Decider.taskSession`), so one session plans, builds, fixes, operates and answers across every round; the reviewer
+resumes its own; `AgentRole` has no planner, builder or fixer, since one session runs on one provider and
 one model. The classifier (triage) and the writer (the Home guide) are agent roles with quick calls and no tools,
 never runs. A delegated run takes `planner`, `builder` or `reviewer` (`DelegateRole`) and no hand-over tool.
 
@@ -539,7 +546,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `openedAt`, `answeredAt`, `decision`, `response` | | your answer and its words |
 | `planVersion?` | number | the plan version a plan gate is for |
 | `choices?`, `recommendation?` | | a question's one-click answers |
-| `cause?` | `budget` \| `monitor` | why a failure gate opened, when not plain recovery |
+| `cause?` | `budget` \| `monitor` \| `workspace_update` | why a failure gate opened, when not plain recovery; `workspace_update` is a GitButler pull request that conflicts with its base, whose approve runs `but pull` |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
@@ -689,13 +696,12 @@ webhook-secret`, `accounts sign-in`, `sign-in-code`, `import` and `remove`, `mcp
 | `path` | string | the file, relative to the repository |
 | `side` | `new` \| `old` | the head's lines, or the removed lines of the base |
 | `line`, `endLine` | number, number \| null | the first line and, for a range, the last (after `line`) |
-| `text` | string | your words; may be empty only with a suggestion |
-| `suggestion` | `{ original, replacement }` \| null | a suggested change: the exact text of lines `line`…`endLine` and what replaces them, always whole lines (an added line is anchored to the line before it), only on the `new` side |
+| `text` | string | your words, never empty |
 
 `parseUserCommand` checks the shape; `decide` refuses comments anywhere but a `revise` at a review or merge gate
-(`comments_invalid`, `comments_conflict`) and a comment whose range, words or quoted lines do not hold together. The
-agent's fix prompt (`resolveHumanFixPrompt`, `resolveVerdictFixPrompt`) lists each comment with its path and lines, and
-quotes a suggested change's original and replacement verbatim, each in a fence longer than any backtick run in it.
+(`comments_invalid`, `comments_conflict`) and a comment whose range or words do not hold together. The agent's fix
+prompt (`resolveHumanFixPrompt`, `resolveVerdictFixPrompt`) lists each comment with its path, lines and words. A
+comment carries no code: to change the code yourself you edit it (`docs/engine.md` → Your edits).
 A `revise` with verdicts (Fix N findings at a review with findings) carries them too. The comments are kept on the
 `gate.answered` event (`comments`, left out when there are none) and on its decision's `Activity` entry
 (`Activity.comments`), so the task's activity lists them under the decision.
@@ -729,6 +735,7 @@ role without the tool (`hasTool`).
 | `agent.delete_schedule` | `delete_schedule` | deletes one |
 
 The delegation tools name a delegation by `delegation_id`. Reads with no command: `find_tasks`, `read_task`,
+`list_repository_work`,
 `list_schedules`, and `delegation_status` for a delegation still working.
 
 ### System commands
@@ -742,6 +749,11 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
 | `task.stack` | the hand-over commit (`agents/tool-calls.ts`) | GitButler stacked the task's branch on another task's (`branch`): records it and makes the task wait on that task |
+| `task.record_conflict` | the worktree removal and push effects | GitButler left commits on the task's branch (`branch`) conflicted: steers its Agent, starts a fix (`fixFor: 'conflict'`) at the review gate, the merge gate or while shipping, or holds it for the next of those gates (`task.conflict_held`) |
+| `task.record_workspace_update` | the `workspace.update` effect, after `but pull` | `guidance`: your words from the gate, if any; starts the conflict fix in the Agent's session |
+| `task.record_edit` | the file route after a save from the Code tab (`http/edits.ts`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
+| `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
+| `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
 | `checks.record` | `checks.run` effect | records a round of checks |
 | `pull_request.record` | open, merge and watch effects | records a pull request read |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
@@ -804,6 +816,14 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
 | `worktree.created`, `worktree.removed` | the worktree, branch or checkout was made (with its `workspace`, and `returnBranch` for a main checkout), given back |
 | `task.stacked` | the task's branch was stacked on another task's (`onTaskId`, `branch`) |
+| `task.unstacked` | the task it was stacked on (`fromTaskId`) settled without a merge, so its branch left that stack; clears `stackedOn` |
+| `task.edited` | you saved `path` from the Code tab (`changed`), or put it back the way it was committed; keeps `editedPaths` and `untoldEdits` |
+| `task.edits_told` | a new run's prompt named the files in `untoldEdits`; clears it |
+| `task.overlapped` | the task and another open one (`otherTaskId`) both change `paths`, none of them recorded before; adds them to `overlaps` and its `untold` |
+| `task.overlaps_told` | a steer or a new Agent run's prompt named the untold overlaps; clears every `untold` |
+| `task.edits_committed` | Shinsa committed your edits before a push or the checks; clears `editedPaths` |
+| `task.edits_approved` | `gate`: the review or merge you approved with uncommitted edits (`approvedEdits`), or null once the checks or CI it waited for passed |
+| `task.conflict_held` | `branch`: a conflict kept for the task's next review or merge gate, or null once an Agent at work was told |
 | `plan.proposed`, `plan.answered`, `plan.approved` | a plan version was proposed; you answered it; approved |
 | `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`) |
 | `work.submitted` | the work report was assembled (`sections`, `judgementCalls`) |
@@ -848,16 +868,17 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `worktree.create` | replay_safe | `task:<id>` | `worktree.ready` |
 | `worktree.remove` | replay_safe | `task:<id>` | `worktree.gone` |
 | `scratch.remove` | replay_safe | `task:<id>` | none: deletes `data/scratch/<id>` once the task's runs stop, if it is still settled |
-| `checks.run` | replay_safe | `task:<id>` | `checks.record` |
+| `checks.run` | replay_safe | `task:<id>` | `task.commit_edits` first when the review was approved with edits, then `checks.record` |
 | `pull_request.open` | replay_safe | `task:<id>` | `pull_request.record_push`, `pull_request.record` |
 | `pull_request.push` | replay_safe | `task:<id>` | `pull_request.record_push` |
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record` |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
+| `workspace.update` | replay_safe | `task:<id>` | `task.record_workspace_update` once `but pull` updated the task's GitButler workspace (`guidance` is carried through) |
 | `briefing.request` | replay_safe | `briefing` | `briefing.write` |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
 | `run.cancel` | process_bound | `cancel:<id>` | `run.end` |
-| `run.steer` | process_bound | `steer:<id>` | `message.deliver` when it is too late to steer |
+| `run.steer` | process_bound | `steer:<id>` | `message.deliver` when it is too late to steer; `from: 'shinsa'` steers a note of Shinsa's (an overlap, a conflict) instead of your words |
 | `question.resolve` | process_bound | `gate:<id>` | none: releases the waiting `ask` call |
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
@@ -866,7 +887,10 @@ Any effect that gives up sends `effect.fail`; it opens a failure gate when its k
 
 ## Agent tools
 
-Per role, from `listToolNames` (`domain/tools.ts`); this table is the one list, and other docs link here. Every
+Per role, who may call what, from `listCallableToolNames` (`domain/tools.ts`); this table is the one list, and other
+docs link here. What a session is served is `listToolNames`: the agent, answerer, investigator and researcher share
+the task's one session, so each is served the union of their columns, and a served tool that is not the run's own is
+refused with `wrong_step` naming the hand-over to use (`docs/engine.md` → Caching). Every
 non-delegated task run also gets one management tool per surface spec that is not `humanOnly` (`tasks_list`,
 `tasks_message`, `settings_set`…; `agents/manage/tools.ts`), except `tasks_create`: a task agent files a task with
 `create_task`.
@@ -885,6 +909,7 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `ask` | ✓ | | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `attach_evidence` | ✓ | ✓ | | ✓ | | ✓ | ✓ |
 | `find_tasks`, `read_task`, `note` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `list_repository_work` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `wait_for` | ✓ | | | ✓ | | | |
 | `suggest_tasks` (`split_off`) | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `delegate_task`, `delegation_status`, `delegation_cancel`, `delegation_answer` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
@@ -893,9 +918,10 @@ non-delegated task run also gets one management tool per surface spec that is no
 | `set_schedule`, `list_schedules`, `delete_schedule` | ✓ | ✓ | ✓ | ✓ | ✓ | | |
 | `request_secret` | ✓ | | ✓ | ✓ | ✓ | | |
 
-Hand-over tools (the first nine rows, `isHandOverTool`) end the step. The agent has every one of its tools in every
-run, since its session's tool list must not change between turns (the prompt cache), and may call only the hand-over
-its purpose names (`PURPOSE_HAND_OVERS`, the word after ✓); another is refused with `wrong_step`. A delegated
+Hand-over tools (the first nine rows, `isHandOverTool`) end the step. Every task-session role is served every tool of
+the union in every run, since the session's tool list must not change between turns (the prompt cache); the agent
+may call only the hand-over its purpose names (`PURPOSE_HAND_OVERS`, the word after ✓), and another is refused with
+`wrong_step`. A delegated
 `planner` or `builder` has only the delegated tools. The reviewer cannot ask you anything.
 
 Three more tools come from the server, not from `listToolNames`, and only in a run the context optimizer left
@@ -984,6 +1010,7 @@ sound, shows no notification and puts no count in its title or Floaty's tags.
 | Shell policy | `apps/server/src/agents/policy.ts` |
 | Composer hint | `apps/web/src/lib/tasks/messages.ts` |
 | The Code tab's reads: `TaskRefs`, `RepoPaths`, `RepoTree`, `FileContent`, `SearchResult`, `TaskDiff`, `CODE_LIMITS` | `packages/core/src/protocol/code.ts`, `protocol/messages.ts`; served by `apps/server/src/http/code.ts` (`docs/engine.md` → The Code tab's reads) |
+| Saving a file from the Code tab: `FileWrite`, `FileWritten`, `FileChanged` | `packages/core/src/protocol/code.ts`; served by `apps/server/src/http/edits.ts` (`docs/engine.md` → Your edits) |
 
 ## Open protocol questions
 

@@ -43,11 +43,21 @@ web ──WebSocket──► shinsa serve
   pull request; a new idea in the chat starts the next round on the same branch, worktree and agent sessions, shipped
   onto the open pull request or stacked on it. Merge ends a round, not the task; you (or an agent, once nothing is open)
   mark the task done (`docs/engine.md` → Rounds).
-- **One root agent per round; a separate agent only for isolated context** (the engine's first rule,
-  `docs/engine.md` → Agents). A round's Agent (`RunRole` `agent`) is one provider session that plans read-only, builds
-  every phase, takes every fix and runs the operation; its runs differ only by `purpose`. The reviewer stays fresh,
-  checks stay commands, and delegation is only for work whose context must stay apart or that runs truly in parallel.
-  Never add a role per step or per problem type.
+- **One agent session per task; a separate agent only for isolated context** (the engine's first rule,
+  `docs/engine.md` → Agents). A task's Agent (`RunRole` `agent`) is one provider session for the task's whole life:
+  planning is its round zero, then it builds every phase, takes every fix and runs the operation, and every later round
+  and kind of work (an answer, an investigation, research) resumes the same session (`Decider.taskSession`); an Agent's
+  runs differ only by `purpose`. A fresh session only when the old one cannot go on (context full, lost, image error,
+  provider changed); a changed model resumes the session on the new model. The reviewer keeps a session of its own per task, checks stay commands, and delegation is
+  only for work whose context must stay apart or that runs truly in parallel. Never add a role per step or per problem
+  type.
+- **Cache first: an agent session's prefix never changes** (`docs/engine.md` → Caching). The system prompt and the
+  tool list are byte-identical across every turn, purpose, kind of work and round of a session: no time, stage, round,
+  account, setting, task list, id, port or token in them; everything that changes goes into the user turn, at its
+  tail. Every task-session role is served one tool list (`listToolNames`) and `decide` refuses what a role may not
+  call; read-only steps use hooks, never `disallowedTools`; the extension set is decided once per session. Quick calls
+  keep a fixed system prompt and put the call's data in the user prompt. A change that breaks this fails
+  `providers/claude/session.test.ts` and `test/e2e/prompt-cache.test.ts`.
 - **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → setup verification → planning → building → checking → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets ("kind of task" on screen, shape in code) and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
 - **The hand-over protocol** (`packages/core/src/report/`): plans, phase hand-overs, fixes, review findings and
   inquiry results have fixed fields with hard length limits. The tools publish the limits in their schemas;
@@ -62,7 +72,7 @@ web ──WebSocket──► shinsa serve
   role has which tool is `listToolNames` (`packages/core/src/domain/tools.ts`), tabled in `docs/protocol.md` → Agent
   tools. Every task agent also has the command surface as tools (`tasks_done`, `tasks_prioritize`…) but the human-only
   specs: what it does to another task is logged as on your behalf from its task (`docs/engine.md` → Agents manage
-  Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/server/src/agents/policy.ts` (no commit, push, rebase, `reset --hard`, `gh pr create|merge`, checkout of the default branch or a human-only `shinsa` command), through a PreToolUse hook for Claude.
+  Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/server/src/agents/policy.ts` (no commit, push, rebase, `git pull` without `--no-rebase`, `reset --hard`, `gh pr create|merge`, checkout of the default branch, a `but` command beyond reads and in-place conflict resolution, or a human-only `shinsa` command), through a PreToolUse hook for Claude.
 - **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge` Shinsa
   takes; GitHub branch protection is what stops a shell from taking another (`docs/engine.md` → Who can change Shinsa).
 - **Some decisions are human-only**: closing any gate, the settings in `HUMAN_ONLY_SETTINGS` and a repository's
