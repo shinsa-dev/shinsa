@@ -96,15 +96,6 @@ packages/
 
 How Shinsa works inside is in [`docs/`](docs): start with [`docs/spec.md`](docs/spec.md).
 
-## Roadmap
-
-- [ ] The Mac app as the whole product: the engine installs with it and keeps working in the background
-- [ ] Signed releases that update themselves
-- [ ] Shinsa from anywhere: a hosted dashboard that reaches your Mac
-- [ ] A phone app for the decisions
-- [ ] More agents beside Claude Code and Codex
-- [ ] A live preview per task: its dev server or simulator
-
 ## License
 
 [MIT](LICENSE)
