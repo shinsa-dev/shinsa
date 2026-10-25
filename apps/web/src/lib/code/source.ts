@@ -19,3 +19,7 @@ export function resolveFileSource(file: CodeFileRef, diff: TaskDiff | null): Fil
     change,
   };
 }
+
+export function hasOneSide(source: FileSource) {
+  return source.change !== null && (source.headPath === null || source.basePath === null);
+}

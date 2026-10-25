@@ -4,6 +4,8 @@ import {
   DomainError,
   resolveImageType,
   resolvePullRequestBase,
+  type SearchLine,
+  type SearchMatch,
   type SearchResult,
   selectTaskByReference,
   type TaskDiff,
@@ -26,6 +28,7 @@ import {
 } from '../git/files.ts';
 import { ObjectCache } from '../git/objects.ts';
 import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
+import { describeError } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { LedgerStore } from '../workspaces/ledger.ts';
 import { assertRepoPath, resolveInside } from './paths.ts';
@@ -217,26 +220,46 @@ export function createCodeRoutes(
     return Promise.resolve(absolute ? readWorkingBytes(absolute) : null);
   }
 
-  async function search(found: CodeTask, ref: ResolvedRef, query: SearchQuery, signal: AbortSignal) {
-    if (ref.kind === 'working') return searchFiles(ref.worktree, null, query, signal);
+  async function search(
+    found: CodeTask,
+    ref: ResolvedRef,
+    query: SearchQuery,
+    signal: AbortSignal,
+    onMatches?: (matches: SearchMatch[]) => void
+  ) {
+    if (ref.kind === 'working') return searchFiles(ref.worktree, null, query, signal, onMatches);
+    if (ref.kind === 'commit') return searchFiles(found.repoPath, ref.sha, query, signal, onMatches);
     const committed = await searchFiles(found.repoPath, ref.sha, query, signal);
-    if (ref.kind === 'commit') return committed;
     if (ref.owned.size === 0) return { ...committed, ref: WORKING_REF };
     return mergeOwnedMatches(committed, await searchFiles(ref.worktree, null, query, signal), ref.owned);
   }
 
-  async function resolveOwnedDiff(found: CodeTask, base: string, ref: ResolvedRef & { kind: 'owned' }) {
-    const committed = await resolveCommitDiff(found.repoPath, base, ref.sha);
-    if (ref.owned.size === 0) return committed;
-    const working = await resolveWorkingDiff(ref.worktree, base, [...ref.owned]);
+  async function resolveOwnedDiff(
+    found: CodeTask,
+    base: string,
+    ref: ResolvedRef & { kind: 'owned' },
+    paths: string[] | null
+  ) {
+    const committed = await resolveCommitDiff(found.repoPath, base, ref.sha, undefined, paths);
+    const owned = [...ref.owned].filter((path) => paths === null || paths.includes(path));
+    if (owned.length === 0) return committed;
+    const working = await resolveWorkingDiff(ref.worktree, base, owned);
     return [...committed.filter((file) => !ref.owned.has(file.path)), ...working].sort((a, b) =>
       a.path.localeCompare(b.path)
     );
   }
 
+  function readDiffPaths(url: URL) {
+    const path = url.searchParams.get('path');
+    if (path === null) return null;
+    const previous = url.searchParams.get('previous');
+    return [...(previous ? [assertRepoPath(previous)] : []), assertRepoPath(path)];
+  }
+
   async function resolveDiff(found: CodeTask, url: URL, signal: AbortSignal): Promise<TaskDiff> {
     const baseParam = url.searchParams.get('base');
     const headParam = url.searchParams.get('head');
+    const paths = readDiffPaths(url);
     let refs: TaskRefs | null = null;
     if (!baseParam || !headParam) refs = await resolveRefs(found, signal);
     const base = await assertCommit(found.repoPath, baseParam || refs?.base || refs?.head || '', signal);
@@ -246,13 +269,13 @@ export function createCodeRoutes(
       signal
     );
     if (head.kind === 'working')
-      return { base, head: WORKING_REF, files: await resolveWorkingDiff(head.worktree, base) };
+      return { base, head: WORKING_REF, files: await resolveWorkingDiff(head.worktree, base, paths, signal) };
     if (head.kind === 'owned')
-      return { base, head: WORKING_REF, files: await resolveOwnedDiff(found, base, head) };
+      return { base, head: WORKING_REF, files: await resolveOwnedDiff(found, base, head, paths) };
     const files = await cache.read(
-      `${found.repoPath}\0diff\0${base}\0${head.sha}`,
-      () => resolveCommitDiff(found.repoPath, base, head.sha, signal),
-      (value) => value.reduce((sum, file) => sum + file.patch.length, 0)
+      `${found.repoPath}\0diff\0${base}\0${head.sha}\0${paths?.join('\0') ?? ''}`,
+      () => resolveCommitDiff(found.repoPath, base, head.sha, signal, paths),
+      (value) => value.reduce((sum, file) => sum + file.patch.length + file.path.length, 0)
     );
     return { base, head: head.sha, files };
   }
@@ -282,6 +305,37 @@ export function createCodeRoutes(
     const named = url.searchParams.get('ref');
     const ref = await resolveRef(found, named, request.signal);
     return respondCached(request, ref.kind === 'commit' && ref.sha === named, () => read(ref));
+  }
+
+  function respondSearchStream(found: CodeTask, request: Request, url: URL, query: SearchQuery) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start: async (controller) => {
+        const send = (line: SearchLine) => controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+        try {
+          const ref = await resolveRef(found, url.searchParams.get('ref'), request.signal);
+          const streamed = ref.kind !== 'owned';
+          const result = await search(
+            found,
+            ref,
+            query,
+            request.signal,
+            streamed ? (matches) => send({ kind: 'matches', matches }) : undefined
+          );
+          if (!streamed) send({ kind: 'matches', matches: result.matches });
+          send({ kind: 'done', result: { ...result, matches: [] } });
+        } catch (error) {
+          const code = error instanceof DomainError ? error.code : 'search_failed';
+          send({ kind: 'failed', code, message: describeError(error) });
+        }
+        controller.close();
+      },
+    });
+    return Promise.resolve(
+      new Response(stream, {
+        headers: { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-store' },
+      })
+    );
   }
 
   async function respondRaw(found: CodeTask, request: Request, url: URL) {
@@ -319,6 +373,8 @@ export function createCodeRoutes(
     route('raw', respondRaw),
     route('search', (found, request, url) => {
       const query = readSearch(url);
+      if (request.headers.get('accept')?.includes('application/x-ndjson'))
+        return respondSearchStream(found, request, url, query);
       return respondWith(found, request, url, (ref) => search(found, ref, query, request.signal));
     }),
     route('diff', (found, request, url) => {

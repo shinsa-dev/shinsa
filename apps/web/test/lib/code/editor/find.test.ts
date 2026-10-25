@@ -38,6 +38,20 @@ describe('the find panel', () => {
     expect(heard).toBe(before);
   });
 
+  it('opens with or without the replace row and switches it, keeping the replacement through query changes', () => {
+    const host = new FindHost();
+    const view = createView('cat cat', [], () => true, host);
+    host.open(view, true);
+    expect(host.read()).toMatchObject({ replace: true, panel: { view } });
+    host.showReplace(false);
+    expect(host.read().replace).toBe(false);
+    updateFindQuery(view, 'cat', { ...OPTIONS, replace: 'dog' });
+    updateFindQuery(view, 'ca', OPTIONS);
+    expect(readFindQuery(view.state).replace).toBe('dog');
+    host.open(view, false);
+    expect(host.read().replace).toBe(false);
+  });
+
   it('ignores the end of a panel it no longer holds', () => {
     const host = new FindHost();
     const first = host.createPanel(createView('a', []));
@@ -54,6 +68,7 @@ describe('the find panel', () => {
     updateFindQuery(view, 'cat', { caseSensitive: true, wholeWord: true, regex: false });
     expect(readFindQuery(view.state)).toEqual({
       text: 'cat',
+      replace: '',
       caseSensitive: true,
       wholeWord: true,
       regex: false,

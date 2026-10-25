@@ -1,16 +1,21 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
+  applySearchLine,
+  holdLoaded,
   requestFileWrite,
   resolveCodeUrl,
   resolveRawUrl,
   resolveReadVersion,
   resolveRefsVersion,
+  resolveSearchUrl,
   useCodeRead,
   useFileContent,
+  useFileDiff,
   useRepoPaths,
   useRepoSearch,
   useRepoTree,
+  useRepoTrees,
   useTaskDiff,
   useTaskRefs,
 } from '@/lib/connection/code.ts';
@@ -23,7 +28,7 @@ afterEach(() => {
 });
 
 function serve(respond: (url: string) => Response | Promise<Response>) {
-  const fetch = mock(async (url: string) => respond(url));
+  const fetch = mock(async (url: string, _init?: RequestInit) => respond(url));
   globalThis.fetch = fetch as unknown as typeof globalThis.fetch;
   return fetch;
 }
@@ -174,6 +179,7 @@ describe('the code reads', () => {
     renderHook(() => useRepoTree(task, 'working', 'src'));
     renderHook(() => useFileContent(task, SHA, 'src/a.ts'));
     renderHook(() => useTaskDiff(task, SHA, 'working'));
+    renderHook(() => useFileDiff(task, SHA, SHA, 'src/a.ts'));
     renderHook(() =>
       useRepoSearch(task, SHA, {
         query: 'needle',
@@ -183,13 +189,14 @@ describe('the code reads', () => {
         glob: ' *.ts ',
       })
     );
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(6));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(7));
     expect(fetch.mock.calls.map(([url]) => url).sort()).toEqual(
       [
         `/api/tasks/reads/refs?v=${encodeURIComponent(resolveRefsVersion(task))}`,
         `/api/tasks/reads/paths?ref=${SHA}`,
         '/api/tasks/reads/tree?ref=working&dir=src&v=9',
         `/api/tasks/reads/blob?ref=${SHA}&path=src%2Fa.ts`,
+        `/api/tasks/reads/diff?base=${SHA}&head=${SHA}&path=src%2Fa.ts`,
         `/api/tasks/reads/diff?base=${SHA}&head=working&v=9`,
         `/api/tasks/reads/search?ref=${SHA}&q=needle&regex=1&case=1&word=1&glob=*.ts`,
       ].sort()
@@ -204,11 +211,13 @@ describe('the code reads', () => {
     expect(renderHook(() => useFileContent(task, null, 'a.ts')).result.current.status).toBe('idle');
     expect(renderHook(() => useTaskDiff(task, null, SHA)).result.current.status).toBe('idle');
     expect(renderHook(() => useTaskDiff(task, SHA, null)).result.current.status).toBe('idle');
+    expect(renderHook(() => useFileDiff(task, null, SHA, 'a.ts')).result.current.status).toBe('idle');
+    expect(renderHook(() => useFileDiff(task, SHA, null, 'a.ts')).result.current.status).toBe('idle');
     const search = { query: '', regex: false, caseSensitive: false, wholeWord: false, glob: '' };
-    expect(renderHook(() => useRepoSearch(task, SHA, search)).result.current.status).toBe('idle');
-    expect(renderHook(() => useRepoSearch(task, null, { ...search, query: 'x' })).result.current.status).toBe(
-      'idle'
-    );
+    expect(renderHook(() => useRepoSearch(task, SHA, search)).result.current.loaded.status).toBe('idle');
+    expect(
+      renderHook(() => useRepoSearch(task, null, { ...search, query: 'x' })).result.current.loaded.status
+    ).toBe('idle');
     expect(fetch).not.toHaveBeenCalled();
   });
 });
@@ -227,5 +236,153 @@ describe('requestFileWrite', () => {
     await expect(requestFileWrite('t1', write)).rejects.toThrow('This task is merged.');
     serve(() => new Response('not json', { status: 409 }));
     await expect(requestFileWrite('t1', write)).rejects.toThrow('Shinsa answered with status 409.');
+  });
+});
+
+describe('holdLoaded', () => {
+  it('keeps what is on screen while the next read loads, and takes anything else as it comes', () => {
+    const shown = { status: 'ready', value: 1 } as const;
+    expect(holdLoaded(shown, { status: 'loading' })).toBe(shown);
+    expect(holdLoaded<number>({ status: 'idle' }, { status: 'loading' })).toEqual({ status: 'loading' });
+    expect(holdLoaded(shown, { status: 'ready', value: 2 })).toEqual({ status: 'ready', value: 2 });
+    expect(holdLoaded(shown, { status: 'error', message: 'x' })).toEqual({ status: 'error', message: 'x' });
+  });
+});
+
+function streamOf(lines: unknown[]) {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const line of lines) controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+      controller.close();
+    },
+  });
+  return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } });
+}
+
+describe('useRepoSearch', () => {
+  const search = { query: 'needle', regex: false, caseSensitive: false, wholeWord: false, glob: '' };
+  const match = (line: number) => ({ path: 'a.ts', line, column: 1, text: 'needle' });
+
+  it('shows matches as they stream in, then how the search ended, and keeps the finished search', async () => {
+    const fetch = serve(() =>
+      streamOf([
+        { kind: 'matches', matches: [match(1)] },
+        { kind: 'matches', matches: [match(2)] },
+        { kind: 'done', result: { ref: SHA, matches: [], truncated: true, timedOut: false } },
+      ])
+    );
+    const task = createTask({ id: 'stream-1' });
+    const first = renderHook(() => useRepoSearch(task, SHA, search));
+    expect(first.result.current).toEqual({ loaded: { status: 'loading' }, searching: true });
+    await waitFor(() => expect(first.result.current.searching).toBe(false));
+    expect(first.result.current.loaded).toEqual({
+      status: 'ready',
+      value: { ref: SHA, matches: [match(1), match(2)], truncated: true, timedOut: false },
+    });
+    expect(fetch.mock.calls[0]?.[1]).toEqual({ headers: { accept: 'application/x-ndjson' } });
+    const again = renderHook(() => useRepoSearch(task, SHA, search));
+    expect(again.result.current.loaded.status).toBe('ready');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the matches found so far while the search goes on', async () => {
+    const encoder = new TextEncoder();
+    let finish = () => {};
+    serve(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                encoder.encode(`${JSON.stringify({ kind: 'matches', matches: [match(5)] })}\n`)
+              );
+              finish = () => {
+                controller.enqueue(
+                  encoder.encode(
+                    JSON.stringify({
+                      kind: 'done',
+                      result: { ref: SHA, matches: [], truncated: false, timedOut: false },
+                    })
+                  )
+                );
+                controller.close();
+              };
+            },
+          })
+        )
+    );
+    const view = renderHook(() => useRepoSearch(createTask({ id: 'stream-5' }), SHA, search));
+    await waitFor(() =>
+      expect(view.result.current).toMatchObject({
+        loaded: { value: { matches: [match(5)] } },
+        searching: true,
+      })
+    );
+    act(() => finish());
+    await waitFor(() => expect(view.result.current.searching).toBe(false));
+  });
+
+  it('says why a search failed, from the server’s line or the connection', async () => {
+    serve(() => streamOf([{ kind: 'failed', code: 'read_failed', message: 'Bad pattern.' }]));
+    const failed = renderHook(() => useRepoSearch(createTask({ id: 'stream-2' }), SHA, search));
+    await waitFor(() =>
+      expect(failed.result.current).toEqual({
+        loaded: { status: 'error', message: 'Bad pattern.' },
+        searching: false,
+      })
+    );
+    serve(() => Response.json({ error: { message: 'No such task.' } }, { status: 404 }));
+    const refused = renderHook(() => useRepoSearch(createTask({ id: 'stream-3' }), SHA, search));
+    await waitFor(() =>
+      expect(refused.result.current.loaded).toEqual({ status: 'error', message: 'No such task.' })
+    );
+  });
+
+  it('stops listening once the page leaves', async () => {
+    const { answer } = deferred();
+    const task = createTask({ id: 'stream-4' });
+    const view = renderHook(() => useRepoSearch(task, SHA, search));
+    view.unmount();
+    answer(
+      `${resolveSearchUrl(task, SHA, search)}`,
+      streamOf([{ kind: 'failed', code: 'x', message: 'late' }])
+    );
+    await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+  });
+
+  it('adds streamed matches in order and takes the ending from the last line', () => {
+    const empty = { ref: SHA, matches: [], truncated: false, timedOut: false };
+    const grown = applySearchLine(empty, { kind: 'matches', matches: [match(3)] });
+    expect(applySearchLine(grown, { kind: 'done', result: { ...empty, timedOut: true } })).toEqual({
+      ...empty,
+      matches: [match(3)],
+      timedOut: true,
+    });
+  });
+});
+
+describe('useRepoTrees', () => {
+  it('reads every open folder once and says which failed', async () => {
+    const fetch = serve((url) =>
+      url.includes('dir=bad')
+        ? Response.json({ error: { message: 'Gone.' } }, { status: 404 })
+        : Response.json({ ref: SHA, dir: '', entries: [] })
+    );
+    const task = createTask({ id: 'trees' });
+    const view = renderHook(({ dirs }) => useRepoTrees(task, SHA, dirs), {
+      initialProps: { dirs: ['', 'bad'] },
+    });
+    expect(view.result.current.get('')).toEqual({ status: 'loading' });
+    await waitFor(() =>
+      expect(view.result.current.get('bad')).toEqual({ status: 'error', message: 'Gone.' })
+    );
+    expect(view.result.current.get('')).toEqual({
+      status: 'ready',
+      value: { ref: SHA, dir: '', entries: [] },
+    });
+    view.rerender({ dirs: [''] });
+    view.unmount();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

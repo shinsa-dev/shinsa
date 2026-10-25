@@ -16,11 +16,22 @@ export interface GitReadOptions {
   maxBytes?: number;
   signal?: AbortSignal;
   literal?: boolean;
+  env?: Record<string, string>;
+  maxLines?: number;
+  onData?: (chunk: Uint8Array) => void;
 }
 
 const READ_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat' };
 
 const DECODER = new TextDecoder();
+
+const NEWLINE = 10;
+
+function countLines(chunk: Uint8Array) {
+  let lines = 0;
+  for (let index = chunk.indexOf(NEWLINE); index >= 0; index = chunk.indexOf(NEWLINE, index + 1)) lines += 1;
+  return lines;
+}
 
 function joinChunks(chunks: Uint8Array[], length: number) {
   const bytes = new Uint8Array(length);
@@ -36,7 +47,7 @@ function failed(stderr: string, code = 127): GitRead {
   return { ok: false, code, bytes: new Uint8Array(), stderr, timedOut: false, truncated: false };
 }
 
-function spawnGit(args: string[], cwd: string, literal: boolean) {
+function spawnGit(args: string[], cwd: string, literal: boolean, extra: Record<string, string> = {}) {
   try {
     return Bun.spawn(['git', '-c', 'core.quotePath=false', ...args], {
       cwd,
@@ -44,7 +55,7 @@ function spawnGit(args: string[], cwd: string, literal: boolean) {
       stdout: 'pipe',
       stderr: 'pipe',
       detached: true,
-      env: { ...Bun.env, ...READ_ENV, GIT_LITERAL_PATHSPECS: literal ? '1' : '0' },
+      env: { ...Bun.env, ...READ_ENV, ...extra, GIT_LITERAL_PATHSPECS: literal ? '1' : '0' },
     });
   } catch (error) {
     return describeError(error);
@@ -53,7 +64,7 @@ function spawnGit(args: string[], cwd: string, literal: boolean) {
 
 export async function readGit(args: string[], cwd: string, options: GitReadOptions = {}): Promise<GitRead> {
   if (options.signal?.aborted) return failed('The read was cancelled.', 130);
-  const child = spawnGit(args, cwd, options.literal ?? true);
+  const child = spawnGit(args, cwd, options.literal ?? true, options.env);
   if (typeof child === 'string') return failed(child);
   const limit = options.maxBytes ?? Number.POSITIVE_INFINITY;
   let timedOut = false;
@@ -66,12 +77,16 @@ export async function readGit(args: string[], cwd: string, options: GitReadOptio
   options.signal?.addEventListener('abort', stop, { once: true });
   const chunks: Uint8Array[] = [];
   let length = 0;
+  let lines = 0;
+  const lineLimit = options.maxLines ?? Number.POSITIVE_INFINITY;
   try {
     const stderr = new Response(child.stderr).text();
     for await (const chunk of child.stdout) {
       chunks.push(chunk);
       length += chunk.length;
-      if (length > limit) {
+      options.onData?.(chunk);
+      if (lineLimit !== Number.POSITIVE_INFINITY) lines += countLines(chunk);
+      if (length > limit || lines > lineLimit) {
         truncated = true;
         stop();
         break;

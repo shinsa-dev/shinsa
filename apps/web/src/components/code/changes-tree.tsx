@@ -5,8 +5,9 @@ import { TooltipLabel } from '@shinsa/ui/components/tooltip';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { TREE_LIST, TreeRow } from '@/components/code/tree-row.tsx';
+import { TREE_LIST, TREE_ROW_HEIGHT, TreeRow } from '@/components/code/tree-row.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
 import {
@@ -160,55 +161,55 @@ export function ChangesTree({
       </div>
       {rows.length === 0 && <p className='py-1 ps-1 text-2xs text-fg-2'>Every file is viewed.</p>}
       <div role='tree' aria-label='Changed files' className='flex flex-col'>
-        {rows.map((row) => {
-          if (row.kind === 'directory') {
+        <VirtualRows items={rows} rowHeight={TREE_ROW_HEIGHT} keyOf={(row) => `${row.kind}:${row.path}`}>
+          {(row) => {
+            if (row.kind === 'directory') {
+              return (
+                <TreeRow
+                  depth={row.depth}
+                  guide={pickGuideLevel(guide, row.path)}
+                  expanded={!collapsed.has(row.path)}
+                  icon={resolveFolderIcon(row.path, !collapsed.has(row.path))}
+                  label={row.path}
+                  onOpen={() => {
+                    const next = new Set(collapsed);
+                    if (next.has(row.path)) next.delete(row.path);
+                    else next.add(row.path);
+                    setCollapsed(next);
+                  }}
+                >
+                  <Truncate className='flex-1 text-fg-2'>{row.name}</Truncate>
+                </TreeRow>
+              );
+            }
+            const selected = row.path === activePath;
+            const muted = viewed.has(row.path) && !selected;
             return (
               <TreeRow
-                key={`d:${row.path}`}
                 depth={row.depth}
                 guide={pickGuideLevel(guide, row.path)}
-                expanded={!collapsed.has(row.path)}
-                icon={resolveFolderIcon(row.path, !collapsed.has(row.path))}
+                selected={selected}
                 label={row.path}
-                onOpen={() => {
-                  const next = new Set(collapsed);
-                  if (next.has(row.path)) next.delete(row.path);
-                  else next.add(row.path);
-                  setCollapsed(next);
-                }}
+                icon={resolveFileIcon(row.path)}
+                className={cn(muted && 'file-icons-muted text-fg-1')}
+                onOpen={() => onOpen(row.path)}
+                end={
+                  row.file && (
+                    <FileEnd
+                      file={row.file}
+                      comments={commentCounts.get(row.path) ?? 0}
+                      viewed={viewed.has(row.path)}
+                      muted={muted}
+                      onToggleViewed={() => onToggleViewed(row.path)}
+                    />
+                  )
+                }
               >
-                <Truncate className='flex-1 text-fg-2'>{row.name}</Truncate>
+                <Truncate className='flex-1'>{row.name}</Truncate>
               </TreeRow>
             );
-          }
-          const selected = row.path === activePath;
-          const muted = viewed.has(row.path) && !selected;
-          return (
-            <TreeRow
-              key={`f:${row.path}`}
-              depth={row.depth}
-              guide={pickGuideLevel(guide, row.path)}
-              selected={selected}
-              label={row.path}
-              icon={resolveFileIcon(row.path)}
-              className={cn(muted && 'file-icons-muted text-fg-1')}
-              onOpen={() => onOpen(row.path)}
-              end={
-                row.file && (
-                  <FileEnd
-                    file={row.file}
-                    comments={commentCounts.get(row.path) ?? 0}
-                    viewed={viewed.has(row.path)}
-                    muted={muted}
-                    onToggleViewed={() => onToggleViewed(row.path)}
-                  />
-                )
-              }
-            >
-              <Truncate className='flex-1'>{row.name}</Truncate>
-            </TreeRow>
-          );
-        })}
+          }}
+        </VirtualRows>
       </div>
     </div>
   );

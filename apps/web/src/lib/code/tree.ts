@@ -1,4 +1,5 @@
-import type { DiffFile } from '@shinsa/core';
+import type { DiffFile, RepoEntry, RepoTree } from '@shinsa/core';
+import type { Loaded } from '@/lib/connection/code.ts';
 
 export interface TreeRow {
   kind: 'directory' | 'file';
@@ -124,3 +125,32 @@ export const FILE_STATUS: Record<DiffFile['status'], { letter: string; name: str
   modified: { letter: 'M', name: 'Modified', className: 'text-fg-2' },
   renamed: { letter: 'R', name: 'Renamed', className: 'text-fg-2' },
 };
+
+export type RepoRow =
+  | { kind: 'entry'; entry: RepoEntry; depth: number; open: boolean }
+  | { kind: 'loading'; dir: string; depth: number }
+  | { kind: 'error'; dir: string; depth: number; message: string };
+
+export function listRepoRows(
+  folders: ReadonlyMap<string, Loaded<RepoTree>>,
+  expanded: ReadonlySet<string>,
+  dir = '',
+  depth = 0
+): RepoRow[] {
+  const loaded = folders.get(dir);
+  if (loaded?.status === 'error') return [{ kind: 'error', dir, depth, message: loaded.message }];
+  if (loaded?.status !== 'ready') return [{ kind: 'loading', dir, depth }];
+  return loaded.value.entries.flatMap((entry): RepoRow[] => {
+    const open = entry.kind === 'directory' && expanded.has(entry.path);
+    const row: RepoRow = { kind: 'entry', entry, depth, open };
+    return open ? [row, ...listRepoRows(folders, expanded, entry.path, depth + 1)] : [row];
+  });
+}
+
+export function listOpenFolders(expanded: ReadonlySet<string>) {
+  return ['', ...[...expanded].sort()];
+}
+
+export function isTreeSettled(rows: readonly RepoRow[]) {
+  return rows.every((row) => row.kind !== 'loading');
+}

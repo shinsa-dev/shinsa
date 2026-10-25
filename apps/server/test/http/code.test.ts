@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CODE_LIMITS, type ShinsaState, type TaskDiff, type TaskRefs } from '@shinsa/core';
+import { CODE_LIMITS, type SearchLine, type ShinsaState, type TaskDiff, type TaskRefs } from '@shinsa/core';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { createWorktree, removeWorktree } from '../../src/git/index.ts';
@@ -188,6 +188,48 @@ describe('code reads', () => {
       (await call(`diff?base=${baseSha}&head=${head}`, { headers: { 'if-none-match': tag } })).status
     ).toBe(304);
     expect((await call(`diff?base=main&head=${head}`)).status).toBe(400);
+  });
+
+  test('a diff names one file with its whole patch, by its path and the path it was renamed from', async () => {
+    const { call, json, head, baseSha, worktree } = await startWithTask();
+    const one = await json<TaskDiff>(`diff?base=${baseSha}&head=${head}&path=src/app.ts`);
+    expect(one.files.map((file) => [file.path, file.patchOmitted, file.patch.includes('value = 2')])).toEqual(
+      [['src/app.ts', false, true]]
+    );
+    await git(worktree, 'mv', 'big.txt', 'moved.txt');
+    await git(worktree, 'commit', '-q', '-m', 'refactor: move');
+    const moved = await git(worktree, 'rev-parse', 'HEAD');
+    const renamed = await json<TaskDiff>(
+      `diff?base=${baseSha}&head=${moved}&path=moved.txt&previous=big.txt`
+    );
+    expect(renamed.files).toMatchObject([{ path: 'moved.txt', previousPath: 'big.txt', status: 'renamed' }]);
+    const working = await json<TaskDiff>(`diff?base=${baseSha}&head=working&path=src/app.ts`);
+    expect(working.files.map((file) => file.path)).toEqual(['src/app.ts']);
+    expect((await call(`diff?base=${baseSha}&head=${head}&path=../x`)).status).toBe(400);
+  });
+
+  test('streams a search as lines of matches and a last line with how it ended', async () => {
+    const { call, head } = await startWithTask();
+    const lines = async (path: string) =>
+      (await (await call(path, { headers: { accept: 'application/x-ndjson' } })).text())
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as SearchLine);
+    const found = await lines(`search?ref=${head}&q=value`);
+    expect(found.at(-1)).toMatchObject({
+      kind: 'done',
+      result: { ref: head, truncated: false, timedOut: false },
+    });
+    expect(
+      found.flatMap((line) => (line.kind === 'matches' ? line.matches : [])).map((match) => match.path)
+    ).toEqual(['src/app.ts']);
+    expect((await lines('search?ref=working&q=value')).at(-1)).toMatchObject({ kind: 'done' });
+    expect(await lines(`search?ref=${'f'.repeat(40)}&q=value`)).toEqual([
+      { kind: 'failed', code: 'ref_unknown', message: 'The repository has no such commit.' },
+    ]);
+    expect(await lines('search?ref=working&q=(&regex=1&case=1')).toMatchObject([
+      { kind: 'failed', code: 'read_failed' },
+    ]);
   });
 
   test('searches at a commit and in the working copy, and refuses a search with nothing to find', async () => {

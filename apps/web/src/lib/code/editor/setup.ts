@@ -1,5 +1,5 @@
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import type { LanguageSupport } from '@codemirror/language';
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { codeFolding, type LanguageSupport } from '@codemirror/language';
 import {
   closeSearchPanel,
   findNext,
@@ -8,15 +8,22 @@ import {
   highlightSelectionMatches,
   openSearchPanel,
   search,
+  searchKeymap,
 } from '@codemirror/search';
 import { type Compartment, EditorState, type Extension } from '@codemirror/state';
-import { drawSelection, EditorView, highlightSpecialChars, keymap, type Panel } from '@codemirror/view';
+import {
+  drawSelection,
+  EditorView,
+  highlightSpecialChars,
+  keymap,
+  type Panel,
+  rectangularSelection,
+} from '@codemirror/view';
 import { commentGutter } from './annotations.ts';
+import { createEditorKeymap, type EditorActions, selectionHistory } from './commands.ts';
 import { CODE_THEME } from './theme.ts';
 
 export const CODE_KEYMAP = [
-  { key: 'Mod-f', run: openSearchPanel, scope: 'editor search-panel', preventDefault: true },
-  { key: 'Mod-g', run: gotoLine, preventDefault: true },
   { key: 'F3', run: findNext, shift: findPrevious, scope: 'editor search-panel', preventDefault: true },
   { key: 'Escape', run: closeSearchPanel, scope: 'editor search-panel' },
 ];
@@ -26,6 +33,22 @@ export interface EditorSetup {
   editable: Compartment;
   onLine: (line: number, view: EditorView) => boolean;
   findPanel: (view: EditorView) => Panel;
+  actions?: () => EditorActions;
+}
+
+const DEFAULT_ACTIONS: EditorActions = {
+  save: () => undefined,
+  openFind: (view) => {
+    openSearchPanel(view);
+  },
+};
+
+export function isAddingCursor(event: Pick<MouseEvent, 'altKey' | 'shiftKey'>) {
+  return event.altKey && !event.shiftKey;
+}
+
+export function isColumnSelection(event: Pick<MouseEvent, 'altKey' | 'shiftKey'>) {
+  return event.altKey && event.shiftKey;
 }
 
 export function resolveEditable(editable: boolean): Extension {
@@ -33,15 +56,28 @@ export function resolveEditable(editable: boolean): Extension {
 }
 
 export function createEditorExtensions(setup: EditorSetup): Extension[] {
+  const actions = setup.actions ?? (() => DEFAULT_ACTIONS);
   return [
     CODE_THEME,
     setup.language ?? [],
     highlightSpecialChars(),
     drawSelection(),
+    EditorState.allowMultipleSelections.of(true),
+    EditorView.clickAddsSelectionRange.of(isAddingCursor),
+    rectangularSelection({ eventFilter: isColumnSelection }),
     history(),
+    codeFolding(),
+    selectionHistory,
     search({ top: true, createPanel: setup.findPanel }),
     highlightSelectionMatches(),
-    keymap.of([...CODE_KEYMAP, ...historyKeymap, ...defaultKeymap]),
+    keymap.of([
+      ...createEditorKeymap(actions),
+      ...CODE_KEYMAP,
+      indentWithTab,
+      ...historyKeymap,
+      ...searchKeymap,
+      ...defaultKeymap,
+    ]),
     commentGutter(setup.onLine),
     setup.editable.of(resolveEditable(false)),
   ];

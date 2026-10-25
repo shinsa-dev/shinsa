@@ -1,4 +1,4 @@
-import { getSearchQuery, SearchQuery, setSearchQuery } from '@codemirror/search';
+import { getSearchQuery, openSearchPanel, SearchQuery, setSearchQuery } from '@codemirror/search';
 import type { EditorState } from '@codemirror/state';
 import type { EditorView, Panel, ViewUpdate } from '@codemirror/view';
 import type { SearchOptions } from '@/lib/code/search.ts';
@@ -10,9 +10,15 @@ export interface FindPanel {
   view: EditorView;
 }
 
+export interface FindSnapshot {
+  panel: FindPanel | null;
+  replace: boolean;
+  version: number;
+}
+
 export class FindHost {
   readonly #listeners = new Set<() => void>();
-  #snapshot: { panel: FindPanel | null; version: number } = { panel: null, version: 0 };
+  #snapshot: FindSnapshot = { panel: null, replace: false, version: 0 };
 
   createPanel = (view: EditorView): Panel => {
     const dom = document.createElement('div');
@@ -40,25 +46,42 @@ export class FindHost {
 
   read = () => this.#snapshot;
 
+  open = (view: EditorView, replace: boolean) => {
+    this.#snapshot = { ...this.#snapshot, replace };
+    openSearchPanel(view);
+    this.#publish(this.#snapshot.panel);
+  };
+
+  showReplace = (replace: boolean) => {
+    this.#snapshot = { ...this.#snapshot, replace };
+    this.#publish(this.#snapshot.panel);
+  };
+
   #publish(panel: FindPanel | null) {
-    this.#snapshot = { panel, version: this.#snapshot.version + 1 };
+    this.#snapshot = { ...this.#snapshot, panel, version: this.#snapshot.version + 1 };
     for (const listener of this.#listeners) listener();
   }
 }
 
-export function readFindQuery(state: EditorState): { text: string } & SearchOptions {
+export function readFindQuery(state: EditorState): { text: string; replace: string } & SearchOptions {
   const query = getSearchQuery(state);
   return {
     text: query.search,
+    replace: query.replace,
     caseSensitive: query.caseSensitive,
     wholeWord: query.wholeWord,
     regex: query.regexp,
   };
 }
 
-export function updateFindQuery(view: EditorView, text: string, options: SearchOptions) {
+export function updateFindQuery(
+  view: EditorView,
+  text: string,
+  options: SearchOptions & { replace?: string }
+) {
   const query = new SearchQuery({
     search: text,
+    replace: options.replace ?? getSearchQuery(view.state).replace,
     caseSensitive: options.caseSensitive,
     wholeWord: options.wholeWord,
     regexp: options.regex,

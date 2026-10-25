@@ -27,6 +27,15 @@ directly**: the file saves to the task's working copy as you type and goes into 
 - **Side by side by default (2026-10-25).** Unified is the remembered toggle (`shinsa.code-unified`); each side
   scrolls under pinned line numbers; folds are no cursor stop (`lib/code/editor/collapsed.ts`); notes fit the side
   they sit in; Open in editor left the toolbar.
+- **Big changes and VS Code keys (2026-10-25).** The diff answer is a summary with patches for small files only
+  (`patchOmitted`; a named file is read whole with `path=`), the trees and search results are virtual lists, a
+  search streams NDJSON and folds case into the pattern instead of `-i`, the editor is built after the tree paints
+  and hidden until measured, a file over 1 MB or with a line over 10,000 characters waits behind Open anyway, and
+  switching refs or modes measures zero layout shift and no task over 50ms on a 4,503-file paywall-next diff and a
+  100,000-file synthetic repository. The editor has VS Code's editing keys from CodeMirror's commands
+  (`lib/code/editor/commands.ts`), listed in ⌘K's Editor group, with find and replace and ⌘S. A save no longer
+  rebuilds the editor (the cause of "the file locks after one edit": the read moved to the working copy and the
+  pane unmounted the editor while it loaded).
 - **One set of code colours.** Chat code fences, tool output and snippets run Shiki on a theme of TextMate scopes
   mapped to the `--code-*` tokens the CodeMirror editor reads (`lib/code/highlight.ts`); the GitHub themes and
   `.code-token` are gone.

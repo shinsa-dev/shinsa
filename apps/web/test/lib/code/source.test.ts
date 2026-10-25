@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { DiffFile, TaskDiff } from '@shinsa/core';
-import { resolveFileSource } from '@/lib/code/source.ts';
+import { hasOneSide, resolveFileSource } from '@/lib/code/source.ts';
 
 function file(path: string, status: DiffFile['status'], previousPath: string | null = null): DiffFile {
   return {
@@ -47,5 +47,16 @@ describe('resolveFileSource', () => {
       change: null,
     });
     expect(resolveFileSource({ kind: 'diff', path: 'same.ts' }, null).change).toBeNull();
+  });
+});
+
+describe('hasOneSide', () => {
+  it('is true for a whole file added or deleted, and false for a change on both sides or no diff', () => {
+    const open = (path: string, kind: 'diff' | 'file' = 'diff') => resolveFileSource({ kind, path }, DIFF);
+    expect(hasOneSide(open('added.ts'))).toBe(true);
+    expect(hasOneSide(open('gone.ts'))).toBe(true);
+    expect(hasOneSide(open('new.ts'))).toBe(false);
+    expect(hasOneSide(open('same.ts'))).toBe(false);
+    expect(hasOneSide(open('same.ts', 'file'))).toBe(false);
   });
 });

@@ -3,9 +3,9 @@ import { diff, MergeView } from '@codemirror/merge';
 import { Annotation, Compartment, EditorState, type Extension, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { CommentSide } from '@shinsa/core';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
+import { CodeLoading } from '@/components/code/code-loading.tsx';
 import { FindBar } from '@/components/code/editor/find-bar.tsx';
 import { COLLAPSE } from '@/lib/code/collapse.ts';
 import {
@@ -16,23 +16,20 @@ import {
   setAnnotations,
 } from '@/lib/code/editor/annotations.ts';
 import { followHorizontalScroll, skipCollapsedLines } from '@/lib/code/editor/collapsed.ts';
+import { selectEditorCommand } from '@/lib/code/editor/commands.ts';
 import { FindHost } from '@/lib/code/editor/find.ts';
 import { requestLanguage } from '@/lib/code/editor/language.ts';
-import {
-  createEditorExtensions,
-  gotoLine,
-  openSearchPanel,
-  resolveEditable,
-} from '@/lib/code/editor/setup.ts';
+import { createEditorExtensions, gotoLine, resolveEditable } from '@/lib/code/editor/setup.ts';
 import { SlotRegistry } from '@/lib/code/editor/slots.ts';
 import { codeHighlight } from '@/lib/code/editor/theme.ts';
-import { revealLine, unifiedDiff } from '@/lib/code/editor/unified.ts';
+import { DIFF_CONFIG, MAX_PARSED_ORIGINAL, revealLine, unifiedDiff } from '@/lib/code/editor/unified.ts';
 import type { CodeNote, CodeSpotMark } from '@/lib/code/notes.ts';
 import { resolveCommentRange } from '@/lib/code/notes.ts';
 
 export interface EditorHandle {
   openFind: () => void;
   openGotoLine: () => void;
+  run: (id: string) => void;
   readText: () => string;
   replaceText: (text: string) => void;
 }
@@ -55,6 +52,7 @@ export interface CodeEditorProps {
   reveal: EditorReveal | null;
   onComment: ((side: CommentSide, line: number, endLine: number | null) => void) | null;
   onEdit: () => void;
+  onSave: () => void;
   renderNote: (note: CodeNote) => React.ReactNode;
   handle: React.Ref<EditorHandle>;
 }
@@ -137,9 +135,13 @@ export default function CodeEditor(props: CodeEditorProps) {
   const support = language?.support ?? null;
   const diffing = original !== null;
 
+  const [built, setBuilt] = React.useState(0);
+  const languageSlot = React.useMemo(() => new Compartment(), []);
+
   React.useLayoutEffect(() => {
     const host = parent.current;
     if (!host || !ready) return;
+    host.style.visibility = 'hidden';
     const comment = (side: CommentSide) => (line: number, view: EditorView) => {
       const onComment = latest.current.onComment;
       if (!onComment) return false;
@@ -155,52 +157,79 @@ export default function CodeEditor(props: CodeEditorProps) {
     });
     const base = (side: CommentSide, extra: Extension[]) =>
       createEditorExtensions({
-        language: support,
+        language: null,
         editable: side === 'new' ? editableSlot : new Compartment(),
         onLine: comment(side),
         findPanel: findHost.createPanel,
-      }).concat(skipCollapsedLines, followHorizontalScroll, extra);
-    const initial = latestAnnotations.current;
-    if (diffing && split) {
-      const merge = new MergeView({
-        a: { doc: original, extensions: base('old', [SPLIT_THEME, annotationsField(registry, initial.a)]) },
-        b: {
-          doc: text.current,
-          extensions: base('new', [SPLIT_THEME, annotationsField(registry, initial.b), onChange]),
-        },
-        parent: host,
-        collapseUnchanged: { margin: COLLAPSE.margin, minSize: COLLAPSE.minSize },
-        gutter: true,
-      });
-      merge.dom.style.height = '100%';
-      merge.dom.style.overflow = 'auto';
-      views.current = { a: merge.a, b: merge.b, destroy: () => merge.destroy() };
-    } else {
-      const extensions = [...base('new', [annotationsField(registry, initial.b), onChange])];
-      if (diffing) {
-        extensions.push(
-          unifiedDiff({
-            original,
-            tree: support ? support.language.parser.parse(original) : null,
-            highlighter: codeHighlight,
-            registry,
-            collapse: true,
-            annotations: initial.b,
-            onOldLine: (line) => latest.current.onComment?.('old', line, null),
-          })
-        );
+        actions: () => ({ save: () => latest.current.onSave(), openFind: findHost.open }),
+      }).concat(languageSlot.of([]), skipCollapsedLines, followHorizontalScroll, extra);
+    const build = () => {
+      const initial = latestAnnotations.current;
+      if (diffing && split) {
+        const merge = new MergeView({
+          a: { doc: original, extensions: base('old', [SPLIT_THEME, annotationsField(registry, initial.a)]) },
+          b: {
+            doc: text.current,
+            extensions: base('new', [SPLIT_THEME, annotationsField(registry, initial.b), onChange]),
+          },
+          parent: host,
+          collapseUnchanged: { margin: COLLAPSE.margin, minSize: COLLAPSE.minSize },
+          diffConfig: DIFF_CONFIG,
+          gutter: true,
+        });
+        merge.dom.style.height = '100%';
+        merge.dom.style.overflow = 'auto';
+        views.current = { a: merge.a, b: merge.b, destroy: () => merge.destroy() };
+      } else {
+        const extensions = [...base('new', [annotationsField(registry, initial.b), onChange])];
+        if (diffing) {
+          extensions.push(
+            unifiedDiff({
+              original,
+              tree:
+                support && original.length <= MAX_PARSED_ORIGINAL
+                  ? support.language.parser.parse(original)
+                  : null,
+              highlighter: codeHighlight,
+              registry,
+              collapse: true,
+              annotations: initial.b,
+              onOldLine: (line) => latest.current.onComment?.('old', line, null),
+            })
+          );
+        }
+        const view = new EditorView({
+          state: EditorState.create({ doc: text.current, extensions }),
+          parent: host,
+        });
+        views.current = { a: null, b: view, destroy: () => view.destroy() };
       }
-      const view = new EditorView({
-        state: EditorState.create({ doc: text.current, extensions }),
-        parent: host,
+      setBuilt((count) => count + 1);
+    };
+    const colour = () => {
+      const current = views.current;
+      if (!current) return;
+      for (const view of [current.a, current.b])
+        view?.dispatch({ effects: languageSlot.reconfigure(support ?? []) });
+      current.b.requestMeasure({
+        read: () => null,
+        write: () => {
+          host.style.visibility = '';
+        },
       });
-      views.current = { a: null, b: view, destroy: () => view.destroy() };
-    }
+    };
+    let colouring: ReturnType<typeof setTimeout> | undefined;
+    const building = setTimeout(() => {
+      build();
+      colouring = setTimeout(colour, 0);
+    }, 0);
     return () => {
+      clearTimeout(building);
+      clearTimeout(colouring);
       views.current?.destroy();
       views.current = null;
     };
-  }, [ready, support, original, split, diffing, registry, editableSlot, findHost]);
+  }, [ready, support, original, split, diffing, registry, editableSlot, findHost, languageSlot]);
 
   React.useEffect(() => {
     const current = views.current;
@@ -208,17 +237,17 @@ export default function CodeEditor(props: CodeEditorProps) {
     const value = JSON.parse(annotationsKey) as ReturnType<typeof splitAnnotations>;
     current.b.dispatch({ effects: setAnnotations.of(value.b) });
     current.a?.dispatch({ effects: setAnnotations.of(value.a) });
-  }, [annotationsKey, ready, original, split]);
+  }, [annotationsKey, ready, original, split, built]);
 
   React.useEffect(() => {
     views.current?.b.dispatch({ effects: editableSlot.reconfigure(resolveEditable(editable)) });
-  }, [editable, editableSlot, ready, original, split]);
+  }, [editable, editableSlot, ready, original, split, built]);
 
   React.useEffect(() => {
     const current = views.current;
     if (!current || !reveal) return;
     revealIn(reveal.side === 'old' && current.a ? current.a : current.b, reveal.line);
-  }, [reveal?.key, ready, original, split]);
+  }, [reveal?.key, ready, original, split, built]);
 
   React.useLayoutEffect(() => {
     const measure = () => {
@@ -230,18 +259,26 @@ export default function CodeEditor(props: CodeEditorProps) {
     const observer = new ResizeObserver(measure);
     for (const slot of slots.values()) observer.observe(slot);
     return () => observer.disconnect();
-  }, [slots]);
+  }, [slots, built]);
 
   React.useImperativeHandle(
     handle,
     () => ({
       openFind: () => {
         const view = views.current?.b;
-        if (view) openSearchPanel(view);
+        if (view) findHost.open(view, false);
       },
       openGotoLine: () => {
         const view = views.current?.b;
         if (view) gotoLine(view);
+      },
+      run: (id) => {
+        const current = views.current;
+        const command = selectEditorCommand(id);
+        if (!current || !command) return;
+        const view = current.a?.hasFocus ? current.a : current.b;
+        view.focus();
+        command.run(view, { save: () => latest.current.onSave(), openFind: findHost.open });
       },
       readText: () => text.current,
       replaceText: (next) => {
@@ -250,18 +287,27 @@ export default function CodeEditor(props: CodeEditorProps) {
         if (view) replaceDoc(view, next);
       },
     }),
-    []
+    [findHost]
   );
 
   return (
     <div className='relative flex min-h-0 flex-1 flex-col'>
       {!ready && (
-        <div className='flex items-center gap-2 p-3 font-sans text-fg-2 text-xs'>
-          <Spinner size='sm' /> Opening {path}
+        <div className='absolute inset-0 flex'>
+          <CodeLoading label={`Opening ${path}…`} />
         </div>
       )}
       <div ref={parent} className='@container min-h-0 flex-1' />
-      {find.panel && createPortal(<FindBar view={find.panel.view} />, find.panel.dom)}
+      {find.panel &&
+        createPortal(
+          <FindBar
+            view={find.panel.view}
+            replace={find.replace}
+            canReplace={editable}
+            onReplace={findHost.showReplace}
+          />,
+          find.panel.dom
+        )}
       {notes.map((note) => {
         const slot = slots.get(note.key);
         return slot ? (

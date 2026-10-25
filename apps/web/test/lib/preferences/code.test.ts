@@ -30,6 +30,22 @@ describe('code preferences', () => {
     expect(renderHook(() => useExplorerWidth()).result.current.width).toBe(280);
   });
 
+  it('never makes the file list narrower than its header needs, up to the widest it may be', () => {
+    localStorage.setItem('shinsa.code-explorer-width', '200');
+    const { result, rerender } = renderHook(({ floor }) => useExplorerWidth(floor), {
+      initialProps: { floor: 236.2 },
+    });
+    expect(result.current.width).toBe(237);
+    rerender({ floor: 900 });
+    expect(result.current.width).toBe(480);
+    rerender({ floor: 150 });
+    expect(result.current.width).toBe(200);
+    localStorage.removeItem('shinsa.code-explorer-width');
+    rerender({ floor: 300 });
+    act(() => result.current.resetWidth());
+    expect(result.current.width).toBe(300);
+  });
+
   it('marks files viewed per task and head, and unmarks them', () => {
     const { result } = renderHook(() => useViewedFiles('t1', 'h1'));
     expect([...result.current]).toEqual([]);

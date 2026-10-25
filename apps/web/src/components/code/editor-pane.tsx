@@ -2,9 +2,9 @@ import { type FileContent, type Task, type TaskRefs, WORKING_REF } from '@shinsa
 import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
+import { CodeLoading } from '@/components/code/code-loading.tsx';
 import type { EditorHandle, EditorReveal } from '@/components/code/editor/code-editor.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
@@ -17,8 +17,14 @@ import { isEditedPath, resolveEditState } from '@/lib/code/edits.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import { type CodeNote, type Composer, listFileNotes, listSpotMarks } from '@/lib/code/notes.ts';
-import { listKeptLines, resolvePaneContent } from '@/lib/code/pane.ts';
-import type { FileSource } from '@/lib/code/source.ts';
+import {
+  holdPaneContent,
+  listKeptLines,
+  type PaneContent,
+  resolvePaneContent,
+  resolveTextGuard,
+} from '@/lib/code/pane.ts';
+import { type FileSource, hasOneSide } from '@/lib/code/source.ts';
 import { resolveRawUrl, useFileContent } from '@/lib/connection/code.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
@@ -45,11 +51,7 @@ function CodeEditor(props: React.ComponentProps<EditorModule['default']>) {
 }
 
 function Waiting({ path }: { path: string }) {
-  return (
-    <div className='flex items-center gap-2 p-3 text-fg-2 text-xs'>
-      <Spinner size='sm' /> Opening {path}
-    </div>
-  );
+  return <CodeLoading label={`Opening ${path}…`} />;
 }
 
 function ImageView({
@@ -63,12 +65,15 @@ function ImageView({
   path: string;
   label: string;
 }) {
+  const [loaded, setLoaded] = React.useState(false);
   return (
     <figure className='flex min-w-0 flex-1 flex-col items-center gap-2 p-4'>
       <figcaption className='text-2xs text-fg-2'>{label}</figcaption>
       <img
         src={resolveRawUrl(task.id, gitRef, path)}
         alt={path}
+        onLoad={() => setLoaded(true)}
+        style={{ visibility: loaded ? 'visible' : 'hidden' }}
         className='max-h-[60vh] max-w-full rounded-lg border border-border bg-[length:16px_16px] bg-[repeating-conic-gradient(var(--bg-2)_0_25%,transparent_0_50%)] object-contain'
       />
     </figure>
@@ -76,7 +81,7 @@ function ImageView({
 }
 
 function describeAbsence(content: FileContent, path: string) {
-  if (content.tooLarge) return `${path} is ${formatBytes(content.size)}, too large to show here.`;
+  if (content.tooLarge) return `${path} is ${formatBytes(content.size)}, too large to show as text.`;
   if (content.binary) return `${path} is a binary file, so there is no text to show.`;
   return `There is no ${path} at this point in the history.`;
 }
@@ -215,13 +220,16 @@ export function EditorPane({
   const base = useFileContent(task, refs.base, source.basePath);
   const [composer, setComposer] = React.useState<Composer | null>(null);
   const diffing = source.change !== null;
-  const content = resolvePaneContent({
-    headPath: source.headPath,
-    basePath: source.basePath,
-    diffing,
-    head,
-    base,
-  });
+  const oneSide = hasOneSide(source);
+  const shown = React.useRef<PaneContent | null>(null);
+  const content = holdPaneContent(
+    shown.current,
+    resolvePaneContent({ headPath: source.headPath, basePath: source.basePath, diffing, head, base })
+  );
+  shown.current = content;
+  const [opened, setOpened] = React.useState(false);
+  const guard =
+    content.kind === 'text' && !opened ? resolveTextGuard(path, [content.content, content.original]) : null;
   const saver = useFileSaver({
     taskId: task.id,
     path: edit.editable ? source.headPath : null,
@@ -270,23 +278,35 @@ export function EditorPane({
       <PaneToolbar
         source={source}
         split={split}
-        showLayout={diffing && content.kind === 'text'}
+        showLayout={diffing && !oneSide && content.kind === 'text'}
         saving={saver.state.saving}
         toolbar={toolbar}
         onSplit={onSplit}
       />
-      {content.kind === 'text' && notice && <PaneNotice text={notice} readOnly={!editable} />}
+      {content.kind === 'text' && notice && !guard && <PaneNotice text={notice} readOnly={!editable} />}
+      {guard && (
+        <EmptyState
+          size='sm'
+          icon='IconFileText'
+          title='Opening this file may slow the page'
+          description={guard}
+        >
+          <Button variant='secondary' size='sm' onClick={() => setOpened(true)}>
+            Open anyway
+          </Button>
+        </EmptyState>
+      )}
       {content.kind === 'waiting' && <Waiting path={path} />}
       {content.kind === 'failed' && <p className='p-3 text-fg-2 text-xs'>{content.message}</p>}
       {content.kind === 'absent' && (
         <NoText task={task} refs={refs} gitRef={gitRef} source={source} head={content.head} />
       )}
-      {content.kind === 'text' && (
+      {content.kind === 'text' && !guard && (
         <CodeEditor
           path={path}
           content={saver.start ?? content.content}
           original={content.original}
-          split={diffing && split}
+          split={diffing && split && !oneSide}
           editable={editable}
           notes={notes}
           spots={spots}
@@ -294,6 +314,7 @@ export function EditorPane({
           reveal={reveal}
           onComment={draft.enabled ? (side, line, endLine) => setComposer({ side, line, endLine }) : null}
           onEdit={saver.edit}
+          onSave={saver.save}
           renderNote={renderNote}
           handle={handle}
         />

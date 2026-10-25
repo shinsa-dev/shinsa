@@ -9,8 +9,8 @@ const VIEWED_PREFIX = 'shinsa.viewed.';
 
 const viewed = createSignal();
 
-export function useExplorerWidth() {
-  return usePaneWidth('shinsa.code-explorer-width', EXPLORER_WIDTH);
+export function useExplorerWidth(floor = 0) {
+  return usePaneWidth('shinsa.code-explorer-width', EXPLORER_WIDTH, floor);
 }
 
 export function useUnifiedDiff() {

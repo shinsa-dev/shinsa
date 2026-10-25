@@ -11,6 +11,15 @@ describe('readGit', () => {
     expect(splitRecords(read.bytes)).toEqual([' spaced.txt', 'README.md']);
   });
 
+  test('stops after a number of lines and says it cut the output', async () => {
+    const { path } = await createGitRepo({ remote: false, files: { 'lines.txt': 'a\n'.repeat(5_000) } });
+    const read = await readGit(['cat-file', 'blob', 'HEAD:lines.txt'], path, { maxLines: 3 });
+    expect(read).toMatchObject({ ok: true, truncated: true });
+    expect(decodeText(read.bytes).split('\n').length).toBeGreaterThan(3);
+    const whole = await readGit(['cat-file', 'blob', 'HEAD:lines.txt'], path, { env: { GIT_PAGER: 'cat' } });
+    expect(whole.truncated).toBe(false);
+  });
+
   test('stops at the byte limit and says it cut the output', async () => {
     const { path } = await createGitRepo({ remote: false, files: { 'big.txt': 'x'.repeat(200_000) } });
     const read = await readGit(['cat-file', 'blob', 'HEAD:big.txt'], path, { maxBytes: 10 });

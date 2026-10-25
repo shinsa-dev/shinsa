@@ -13,6 +13,7 @@ function describeRefusal(body: unknown, code: number) {
 
 async function send(path: string, body: unknown, accept?: string) {
   try {
+    if (body === undefined && accept) return await fetch(path, { headers: { accept } });
     if (body === undefined) return await fetch(path);
     return await fetch(path, {
       method: 'POST',

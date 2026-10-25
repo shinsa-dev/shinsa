@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { DIFF_PATCH_LIMITS } from '@shinsa/core';
 import { createWorktree, resolveCommitDiff, resolveWorkingDiff } from '../../src/git/index.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 
@@ -58,6 +59,24 @@ describe('resolveCommitDiff', () => {
     });
     expect(files.find((file) => file.path === 'logo.png')).toMatchObject({ status: 'added', binary: true });
     expect(await resolveCommitDiff(path, head, head)).toEqual([]);
+  });
+
+  test('leaves out the patch of a file too large to send with the list, and reads it when named', async () => {
+    const { path } = await createGitRepo({ remote: false, files: { 'small.ts': 'a\n' } });
+    const base = await git(path, 'rev-parse', 'HEAD');
+    writeFileSync(join(path, 'long.ts'), 'x\n'.repeat(DIFF_PATCH_LIMITS.fileLines + 1));
+    writeFileSync(join(path, 'small.ts'), 'b\n');
+    await git(path, 'add', '-A');
+    await git(path, 'commit', '-q', '-m', 'feat: long');
+    const head = await git(path, 'rev-parse', 'HEAD');
+    const files = await resolveCommitDiff(path, base, head);
+    expect(files.map((file) => [file.path, file.patchOmitted, file.additions])).toEqual([
+      ['long.ts', true, DIFF_PATCH_LIMITS.fileLines + 1],
+      ['small.ts', false, 1],
+    ]);
+    const [named] = await resolveCommitDiff(path, base, head, undefined, ['long.ts']);
+    expect(named).toMatchObject({ path: 'long.ts', patchOmitted: false });
+    expect(await resolveCommitDiff(path, base, head, undefined, [])).toEqual([]);
   });
 
   test('a commit the repository lacks is a refusal, not a crash', async () => {

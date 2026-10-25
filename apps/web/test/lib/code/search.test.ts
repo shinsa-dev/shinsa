@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import type { SearchResult } from '@shinsa/core';
-import { describeSearchResult, groupMatches, listKeyedParts, splitMatchText } from '@/lib/code/search.ts';
+import {
+  describeSearchResult,
+  groupMatches,
+  listKeyedParts,
+  listResultRows,
+  resolveResultKey,
+  splitMatchText,
+} from '@/lib/code/search.ts';
 
 const MATCHES = [
   { path: 'a.ts', line: 1, column: 1, text: 'hello' },
@@ -91,5 +98,12 @@ describe('listKeyedParts', () => {
       '2',
       '3',
     ]);
+  });
+});
+
+describe('listResultRows', () => {
+  it('lists each file then its matches, leaving out the matches of a folded file, each with a stable key', () => {
+    const rows = listResultRows(groupMatches(MATCHES), new Set(['b.ts']));
+    expect(rows.map(resolveResultKey)).toEqual(['f:a.ts', 'm:a.ts:1:1', 'm:a.ts:9:3', 'f:b.ts']);
   });
 });

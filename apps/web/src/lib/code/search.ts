@@ -9,8 +9,29 @@ export interface MatchGroup {
 
 export function groupMatches(matches: readonly SearchMatch[]): MatchGroup[] {
   const groups = new Map<string, SearchMatch[]>();
-  for (const match of matches) groups.set(match.path, [...(groups.get(match.path) ?? []), match]);
+  for (const match of matches) {
+    const grouped = groups.get(match.path);
+    if (grouped) grouped.push(match);
+    else groups.set(match.path, [match]);
+  }
   return [...groups].map(([path, grouped]) => ({ path, matches: grouped }));
+}
+
+export type ResultRow =
+  | { kind: 'file'; group: MatchGroup; open: boolean }
+  | { kind: 'match'; match: SearchMatch };
+
+export function listResultRows(groups: readonly MatchGroup[], folded: ReadonlySet<string>): ResultRow[] {
+  return groups.flatMap((group): ResultRow[] => {
+    const open = !folded.has(group.path);
+    const file: ResultRow = { kind: 'file', group, open };
+    return open ? [file, ...group.matches.map((match): ResultRow => ({ kind: 'match', match }))] : [file];
+  });
+}
+
+export function resolveResultKey(row: ResultRow) {
+  if (row.kind === 'file') return `f:${row.group.path}`;
+  return `m:${row.match.path}:${row.match.line}:${row.match.column}`;
 }
 
 export function describeSearchResult(result: SearchResult) {

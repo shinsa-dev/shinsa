@@ -23,6 +23,10 @@ import { type LineRange, listCollapsedRanges, selectRangeAt } from '@/lib/code/c
 import { type EditorAnnotations, SlotWidget, selectAnnotations } from './annotations.ts';
 import type { SlotRegistry } from './slots.ts';
 
+export const DIFF_CONFIG = { scanLimit: 500, timeout: 20 } as const;
+
+export const MAX_PARSED_ORIGINAL = 100_000;
+
 export interface UnifiedDiffOptions {
   original: string;
   tree: Tree | null;
@@ -264,7 +268,7 @@ export function unifiedDiff(options: UnifiedDiffOptions): Extension {
   const field = StateField.define<UnifiedState>({
     create(state) {
       const a = Text.of(options.original.split('\n'));
-      const chunks = Chunk.build(a, state.doc);
+      const chunks = Chunk.build(a, state.doc, DIFF_CONFIG);
       const expanded = new Set<number>();
       const collapsed = resolveCollapsed(
         state.doc,
@@ -279,7 +283,7 @@ export function unifiedDiff(options: UnifiedDiffOptions): Extension {
     update(value, transaction: Transaction) {
       const doc = transaction.state.doc;
       const chunks = transaction.docChanged
-        ? Chunk.updateB(value.chunks, value.a, doc, transaction.changes)
+        ? Chunk.updateB(value.chunks, value.a, doc, transaction.changes, DIFF_CONFIG)
         : value.chunks;
       const annotations = selectAnnotations(transaction.effects) ?? value.annotations;
       const expanded = new Set(value.expanded);

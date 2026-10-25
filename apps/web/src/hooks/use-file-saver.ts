@@ -62,5 +62,8 @@ export function useFileSaver(input: {
       current.latest = buffer.current?.readText() ?? current.latest;
       current.saver.edit();
     },
+    save: () => {
+      if (current) void current.saver.flush();
+    },
   };
 }

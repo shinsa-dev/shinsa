@@ -12,6 +12,7 @@ import {
   readCommitFile,
   readWorkingBytes,
   readWorkingFile,
+  resolveGrepPattern,
   searchFiles,
 } from '../../src/git/files.ts';
 import { ObjectCache } from '../../src/git/objects.ts';
@@ -215,6 +216,40 @@ describe('searchFiles', () => {
     });
     expect(found).toMatchObject({ ref: WORKING_REF, truncated: false, timedOut: false });
     expect(found.matches.map((match) => match.path)).toEqual(['notes.txt']);
+  });
+
+  test('folds the case of a plain search into the pattern, escaping what a pattern would read', () => {
+    const base = { regex: false, caseSensitive: false };
+    expect(resolveGrepPattern({ ...base, query: 'Use.state(é)' })).toEqual({
+      flags: ['-E', '--no-ignore-case'],
+      pattern: '[uU][sS][eE]\\.[sS][tT][aA][tT][eE]\\([éÉ]\\)',
+    });
+    expect(resolveGrepPattern({ ...base, query: 'a1 ß' }).pattern).toBe('[aA]1 ß');
+    expect(resolveGrepPattern({ ...base, caseSensitive: true, query: 'A.' })).toEqual({
+      flags: ['-F', '--no-ignore-case'],
+      pattern: 'A.',
+    });
+    expect(resolveGrepPattern({ regex: true, caseSensitive: false, query: 'a+' }).flags).toEqual([
+      '-E',
+      '-i',
+    ]);
+    expect(resolveGrepPattern({ regex: true, caseSensitive: true, query: 'a+' }).flags).toEqual([
+      '-E',
+      '--no-ignore-case',
+    ]);
+  });
+
+  test('a plain search for symbols finds them as they are', async () => {
+    const { path } = await createGitRepo({ remote: false, files: { 'a.ts': 'call(x[0]).then?.()\n' } });
+    const sha = await git(path, 'rev-parse', 'HEAD');
+    const found = await searchFiles(path, sha, {
+      query: '(X[0]).THEN?.(',
+      regex: false,
+      caseSensitive: false,
+      wholeWord: false,
+      glob: null,
+    });
+    expect(found.matches.map((match) => match.path)).toEqual(['a.ts']);
   });
 
   test('stops at the match limit and says so', async () => {

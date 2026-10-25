@@ -1,78 +1,24 @@
-import type { DiffFile, RepoEntry, Task } from '@shinsa/core';
-import { Spinner } from '@shinsa/ui/components/spinner';
+import type { DiffFile, Task } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { StatusLetter } from '@/components/code/changes-tree.tsx';
-import { TREE_LIST, TreeRow } from '@/components/code/tree-row.tsx';
+import { CodeLoading } from '@/components/code/code-loading.tsx';
+import { TREE_LIST, TREE_ROW_HEIGHT, TreeRow } from '@/components/code/tree-row.tsx';
+import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
-import { type ActiveGuide, listAncestors, pickGuideLevel, resolveActiveGuide } from '@/lib/code/tree.ts';
-import { useRepoTree } from '@/lib/connection/code.ts';
+import {
+  isTreeSettled,
+  listAncestors,
+  listOpenFolders,
+  listRepoRows,
+  pickGuideLevel,
+  type RepoRow,
+  resolveActiveGuide,
+} from '@/lib/code/tree.ts';
+import { useRepoTrees } from '@/lib/connection/code.ts';
 
-interface FileTreeContext {
-  task: Task;
-  gitRef: string;
-  activePath: string | null;
-  guide: ActiveGuide | null;
-  changed: ReadonlyMap<string, DiffFile>;
-  expanded: ReadonlySet<string>;
-  onToggle: (path: string) => void;
-  onOpen: (path: string) => void;
-}
-
-function EntryRow({ entry, depth, context }: { entry: RepoEntry; depth: number; context: FileTreeContext }) {
-  if (entry.kind === 'directory') {
-    const open = context.expanded.has(entry.path);
-    return (
-      <>
-        <TreeRow
-          depth={depth}
-          guide={pickGuideLevel(context.guide, entry.path)}
-          expanded={open}
-          icon={resolveFolderIcon(entry.path, open)}
-          label={entry.path}
-          onOpen={() => context.onToggle(entry.path)}
-        >
-          <Truncate className='flex-1'>{entry.name}</Truncate>
-        </TreeRow>
-        {open && <Folder dir={entry.path} depth={depth + 1} context={context} />}
-      </>
-    );
-  }
-  const change = context.changed.get(entry.path);
-  return (
-    <TreeRow
-      depth={depth}
-      guide={pickGuideLevel(context.guide, entry.path)}
-      selected={entry.path === context.activePath}
-      label={entry.path}
-      icon={entry.kind === 'submodule' ? 'IconFolders' : resolveFileIcon(entry.path)}
-      end={change && <StatusLetter status={change.status} />}
-      onOpen={() => context.onOpen(entry.path)}
-    >
-      <Truncate className='flex-1'>{entry.name}</Truncate>
-    </TreeRow>
-  );
-}
-
-function Folder({ dir, depth, context }: { dir: string; depth: number; context: FileTreeContext }) {
-  const loaded = useRepoTree(context.task, context.gitRef, dir);
-  if (loaded.status === 'error') {
-    return (
-      <p className='py-1 text-2xs text-fg-2' style={{ paddingInlineStart: 24 + depth * 8 }}>
-        {loaded.message}
-      </p>
-    );
-  }
-  if (loaded.status !== 'ready') {
-    return (
-      <div className='flex h-5.5 items-center' style={{ paddingInlineStart: 22 + depth * 8 }}>
-        <Spinner size='sm' />
-      </div>
-    );
-  }
-  return loaded.value.entries.map((entry) => (
-    <EntryRow key={entry.path} entry={entry} depth={depth} context={context} />
-  ));
+function resolveRowKey(row: RepoRow) {
+  return row.kind === 'entry' ? `e:${row.entry.path}` : `${row.kind}:${row.dir}`;
 }
 
 export function FileTree({
@@ -99,25 +45,66 @@ export function FileTree({
       return missing.length === 0 ? current : new Set([...current, ...missing]);
     });
   }, [activePath]);
-  const context: FileTreeContext = {
-    task,
-    gitRef,
-    activePath,
-    guide: resolveActiveGuide(activePath),
-    changed,
-    expanded,
-    onOpen,
-    onToggle: (path) =>
-      setExpanded((current) => {
-        const next = new Set(current);
-        if (next.has(path)) next.delete(path);
-        else next.add(path);
-        return next;
-      }),
-  };
+  const folders = useRepoTrees(task, gitRef, listOpenFolders(expanded));
+  const listed = listRepoRows(folders, expanded);
+  const settled = React.useRef<{ ref: string; rows: RepoRow[] } | null>(null);
+  if (isTreeSettled(listed)) settled.current = { ref: gitRef, rows: listed };
+  const guide = resolveActiveGuide(activePath);
+  if (!settled.current) return <CodeLoading label='Reading the files…' />;
+  const { ref: shownRef, rows } = settled.current;
+  const toggle = (path: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
   return (
     <div role='tree' aria-label='Files' className={TREE_LIST}>
-      <Folder dir='' depth={0} context={context} />
+      <VirtualRows key={shownRef} items={rows} rowHeight={TREE_ROW_HEIGHT} keyOf={resolveRowKey}>
+        {(row) => {
+          if (row.kind === 'loading') return null;
+          if (row.kind === 'error') {
+            return (
+              <p
+                className='truncate py-1 text-2xs text-fg-2'
+                style={{ paddingInlineStart: 24 + row.depth * 8 }}
+              >
+                {row.message}
+              </p>
+            );
+          }
+          const { entry } = row;
+          if (entry.kind === 'directory') {
+            return (
+              <TreeRow
+                depth={row.depth}
+                guide={pickGuideLevel(guide, entry.path)}
+                expanded={row.open}
+                icon={resolveFolderIcon(entry.path, row.open)}
+                label={entry.path}
+                onOpen={() => toggle(entry.path)}
+              >
+                <Truncate className='flex-1'>{entry.name}</Truncate>
+              </TreeRow>
+            );
+          }
+          const change = changed.get(entry.path);
+          return (
+            <TreeRow
+              depth={row.depth}
+              guide={pickGuideLevel(guide, entry.path)}
+              selected={entry.path === activePath}
+              label={entry.path}
+              icon={entry.kind === 'submodule' ? 'IconFolders' : resolveFileIcon(entry.path)}
+              end={change && <StatusLetter status={change.status} />}
+              onOpen={() => onOpen(entry.path)}
+            >
+              <Truncate className='flex-1'>{entry.name}</Truncate>
+            </TreeRow>
+          );
+        }}
+      </VirtualRows>
     </div>
   );
 }

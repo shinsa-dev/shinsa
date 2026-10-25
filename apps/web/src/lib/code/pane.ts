@@ -1,6 +1,7 @@
 import type { FileContent } from '@shinsa/core';
 import type { CodeNote, CodeSpotMark } from '@/lib/code/notes.ts';
 import type { Loaded } from '@/lib/connection/code.ts';
+import { formatBytes } from '@/lib/format/count.ts';
 
 export type PaneContent =
   | { kind: 'waiting' }
@@ -37,6 +38,10 @@ export function resolvePaneContent(input: {
   return { kind: 'text', content, original };
 }
 
+export function holdPaneContent(shown: PaneContent | null, next: PaneContent): PaneContent {
+  return next.kind === 'waiting' && shown?.kind === 'text' ? shown : next;
+}
+
 export function listKeptLines(
   notes: readonly CodeNote[],
   spots: readonly CodeSpotMark[],
@@ -48,4 +53,25 @@ export function listKeptLines(
     ...spots.flatMap((spot) => [spot.from, spot.to]),
     ...(line ? [line, end ?? line] : []),
   ];
+}
+
+export const TEXT_GUARD = { bytes: 1024 * 1024, lineLength: 10_000 } as const;
+
+function measureLongestLine(text: string) {
+  let longest = 0;
+  let start = 0;
+  for (let end = text.indexOf('\n'); end >= 0; end = text.indexOf('\n', start)) {
+    longest = Math.max(longest, end - start);
+    start = end + 1;
+  }
+  return Math.max(longest, text.length - start);
+}
+
+export function resolveTextGuard(path: string, texts: readonly (string | null)[]) {
+  const size = Math.max(...texts.map((text) => text?.length ?? 0));
+  if (size > TEXT_GUARD.bytes) return `${path} is ${formatBytes(size)}, too large to show as text.`;
+  const line = Math.max(...texts.map((text) => (text ? measureLongestLine(text) : 0)));
+  if (line > TEXT_GUARD.lineLength)
+    return `${path} has a line of ${line.toLocaleString('en-US')} characters, too long to show as text.`;
+  return null;
 }

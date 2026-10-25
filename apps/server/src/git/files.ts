@@ -257,6 +257,23 @@ function resolvePathspec(glob: string | null) {
   return [`:(glob)${glob.includes('/') ? glob : `**/${glob}`}`];
 }
 
+const ERE_SPECIAL = /[\\^$.|?*+()[\]{}]/g;
+
+export function resolveGrepPattern(search: Pick<SearchQuery, 'query' | 'regex' | 'caseSensitive'>) {
+  if (search.regex)
+    return { flags: ['-E', search.caseSensitive ? '--no-ignore-case' : '-i'], pattern: search.query };
+  if (search.caseSensitive) return { flags: ['-F', '--no-ignore-case'], pattern: search.query };
+  const pattern = [...search.query]
+    .map((character) => {
+      const lower = character.toLowerCase();
+      const upper = character.toUpperCase();
+      if (lower !== upper && lower.length === 1 && upper.length === 1) return `[${lower}${upper}]`;
+      return character.replace(ERE_SPECIAL, '\\$&');
+    })
+    .join('');
+  return { flags: ['-E', '--no-ignore-case'], pattern };
+}
+
 function parseMatch(record: string, sha: string | null): SearchMatch | null {
   const [location = '', line = '', column = '', ...rest] = record.split('\0');
   const path = sha && location.startsWith(`${sha}:`) ? location.slice(sha.length + 1) : location;
@@ -265,12 +282,30 @@ function parseMatch(record: string, sha: string | null): SearchMatch | null {
   return { path, line: number, column: Number(column) || 1, text: rest.join('\0').slice(0, MATCH_TEXT) };
 }
 
+function createMatchReader(sha: string | null, onMatches: (matches: SearchMatch[]) => void) {
+  const decoder = new TextDecoder();
+  let pending = '';
+  let sent = 0;
+  return (chunk: Uint8Array) => {
+    const lines = `${pending}${decoder.decode(chunk, { stream: true })}`.split('\n');
+    pending = lines.pop() ?? '';
+    const matches = lines
+      .map((record) => parseMatch(record, sha))
+      .filter((match): match is SearchMatch => match !== null)
+      .slice(0, Math.max(0, CODE_LIMITS.matches - sent));
+    sent += matches.length;
+    if (matches.length > 0) onMatches(matches);
+  };
+}
+
 export async function searchFiles(
   cwd: string,
   sha: string | null,
   search: SearchQuery,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  onMatches?: (matches: SearchMatch[]) => void
 ): Promise<SearchResult> {
+  const grep = resolveGrepPattern(search);
   const args = [
     'grep',
     '-n',
@@ -279,16 +314,21 @@ export async function searchFiles(
     '-z',
     '--no-color',
     '--full-name',
-    search.caseSensitive ? '--no-ignore-case' : '-i',
-    search.regex ? '-E' : '-F',
+    ...grep.flags,
     ...(search.wholeWord ? ['-w'] : []),
     '-e',
-    search.query,
+    grep.pattern,
     ...(sha ? [sha] : ['--untracked']),
     '--',
     ...resolvePathspec(search.glob),
   ];
-  const read = await readGit(args, cwd, { signal, literal: false, maxBytes: SEARCH_BYTES });
+  const read = await readGit(args, cwd, {
+    signal,
+    literal: false,
+    maxBytes: SEARCH_BYTES,
+    maxLines: CODE_LIMITS.matches,
+    onData: onMatches ? createMatchReader(sha, onMatches) : undefined,
+  });
   if (!read.ok && !read.timedOut && read.code !== 1) assertRead(read, 'the search');
   const lines = decodeText(read.bytes).split('\n');
   if (read.timedOut || read.truncated) lines.pop();

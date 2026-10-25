@@ -96,6 +96,7 @@ const FIELDS = [
 const PATCH_FIELDS = [
   'mergeMethod',
   'maxFixRounds',
+  'delegationLimit',
   'attentionLimit',
   'approvePlans',
   'defaultModel',
@@ -187,6 +188,7 @@ function createBody(random: Random, state: ShinsaState) {
 function assertWellFormed(state: ShinsaState) {
   expect(MERGE_METHODS.has(state.settings.mergeMethod)).toBe(true);
   expect(state.settings.maxFixRounds === null || Number.isInteger(state.settings.maxFixRounds)).toBe(true);
+  expect(Number.isInteger(state.settings.delegationLimit ?? 1)).toBe(true);
   expect(Number.isInteger(state.settings.attentionLimit ?? 1)).toBe(true);
   expect(['boolean', 'undefined'].includes(typeof state.settings.approvePlans)).toBe(true);
   expect(state.settings.defaultModel === null || typeof state.settings.defaultModel === 'string').toBe(true);

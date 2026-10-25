@@ -15,8 +15,15 @@ function readWidth(key: string, bounds: PaneBounds) {
   return Number.isFinite(stored) && stored > 0 ? clampWidth(stored, bounds) : bounds.initial;
 }
 
-export function usePaneWidth(key: string, bounds: PaneBounds) {
-  const [width, setWidth] = React.useState(() => readWidth(key, bounds));
+function resolvePaneBounds(bounds: PaneBounds, floor: number): PaneBounds {
+  const min = Math.min(bounds.max, Math.max(bounds.min, Math.ceil(floor)));
+  return { min, max: bounds.max, initial: Math.max(bounds.initial, min) };
+}
+
+export function usePaneWidth(key: string, given: PaneBounds, floor = 0) {
+  const bounds = resolvePaneBounds(given, floor);
+  const [stored, setWidth] = React.useState(() => readWidth(key, given));
+  const width = clampWidth(stored, bounds);
   const endDrag = React.useRef<(() => void) | null>(null);
 
   const startResize = (event: React.PointerEvent<HTMLElement>) => {
@@ -48,7 +55,7 @@ export function usePaneWidth(key: string, bounds: PaneBounds) {
 
   const resetWidth = () => {
     localStorage.removeItem(key);
-    setWidth(bounds.initial);
+    setWidth(given.initial);
   };
 
   React.useEffect(() => () => endDrag.current?.(), []);

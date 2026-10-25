@@ -11,6 +11,8 @@ const GUIDE = 7;
 
 export const TREE_LIST = 'flex flex-col px-1 py-1';
 
+export const TREE_ROW_HEIGHT = 22;
+
 export const TREE_HOVER_GROUP = 'group/tree';
 
 export function TreeRow({

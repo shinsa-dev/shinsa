@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import type { FileContent } from '@shinsa/core';
-import { listKeptLines, resolvePaneContent } from '@/lib/code/pane.ts';
+import {
+  holdPaneContent,
+  listKeptLines,
+  resolvePaneContent,
+  resolveTextGuard,
+  TEXT_GUARD,
+} from '@/lib/code/pane.ts';
 import type { Loaded } from '@/lib/connection/code.ts';
 
 function ready(content: string | null, overrides: Partial<FileContent> = {}): Loaded<FileContent> {
@@ -106,5 +112,31 @@ describe('listKeptLines', () => {
       )
     ).toEqual([4, 10, 12, 20, 20]);
     expect(listKeptLines([], [], null, null)).toEqual([]);
+  });
+});
+
+describe('holdPaneContent', () => {
+  it('keeps the text on screen while the same file is read again, and takes anything else as it comes', () => {
+    const text = { kind: 'text', content: 'a', original: null } as const;
+    const waiting = { kind: 'waiting' } as const;
+    expect(holdPaneContent(text, waiting)).toBe(text);
+    expect(holdPaneContent(null, waiting)).toBe(waiting);
+    expect(holdPaneContent(text, { kind: 'failed', message: 'x' })).toEqual({ kind: 'failed', message: 'x' });
+    expect(holdPaneContent({ kind: 'absent', head: null }, waiting)).toBe(waiting);
+  });
+});
+
+describe('resolveTextGuard', () => {
+  it('stops a file too large or with a line too long before it reaches the editor', () => {
+    expect(resolveTextGuard('a.ts', ['short\nlines\n', null])).toBeNull();
+    expect(resolveTextGuard('a.ts', ['x'.repeat(TEXT_GUARD.bytes + 1)])).toBe(
+      'a.ts is 1.0 MB, too large to show as text.'
+    );
+    expect(resolveTextGuard('min.js', [`a\n${'x'.repeat(TEXT_GUARD.lineLength + 1)}\nb`, 'old'])).toBe(
+      'min.js has a line of 10,001 characters, too long to show as text.'
+    );
+    expect(resolveTextGuard('min.js', ['new', `${'y'.repeat(TEXT_GUARD.lineLength + 5)}`])).toContain(
+      '10,005'
+    );
   });
 });

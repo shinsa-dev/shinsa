@@ -72,6 +72,20 @@ describe('useFileSaver', () => {
     );
     expect(result.current.start).toBe('x');
     act(() => result.current.edit());
+    act(() => result.current.save());
     expect(result.current.state).toEqual({ saving: false, notice: null, refusal: null });
+  });
+
+  it('saves at once when asked, without waiting for a pause in the typing', async () => {
+    const fetch = serve(() => Response.json({ path: 'a.ts', changed: true }));
+    const buffer = createBuffer('one');
+    const { result, unmount } = renderHook(() =>
+      useFileSaver({ taskId: 'hook-4', path: 'a.ts', text: 'one', buffer: { current: buffer } })
+    );
+    buffer.text = 'one!';
+    act(() => result.current.edit());
+    act(() => result.current.save());
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1), { timeout: 300 });
+    unmount();
   });
 });

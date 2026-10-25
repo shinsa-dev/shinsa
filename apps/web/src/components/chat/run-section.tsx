@@ -25,6 +25,14 @@ const LINE_ROW = cn(ROW, CHAT_INSET);
 
 const PROSE_ROW = cn(ROW, CHAT_PROSE_INSET);
 
+const SECTION_EDGES =
+  'mb-3 [&>:first-child]:mt-0 [&>:first-child]:pt-0 [&>:last-child]:mb-0 [&>:last-child]:pb-0';
+
+function resolveSectionTop(first: boolean, opening: boolean) {
+  if (first) return 'mt-2';
+  return opening ? 'mt-6' : 'mt-5';
+}
+
 const NO_MESSAGES: HumanMessage[] = [];
 
 const NO_EVIDENCE: never[] = [];
@@ -201,10 +209,15 @@ export function RunSection({
     <RunEvidenceScope runId={run.id}>
       <section
         id={`run-${run.id}`}
-        className={cn('corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl', SELECTED_WASH)}
+        className={cn(
+          'corner-superellipse/1.125 flex scroll-mt-4 flex-col rounded-xl',
+          SECTION_EDGES,
+          resolveSectionTop(first, opening !== null),
+          SELECTED_WASH
+        )}
       >
         {opening && (
-          <div className={cn(ROW, !first && 'mt-4')}>
+          <div className={ROW}>
             <UserMessage
               text={opening.text}
               attachments={opening.attachments}

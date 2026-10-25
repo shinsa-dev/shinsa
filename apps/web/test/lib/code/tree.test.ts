@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import type { DiffFile } from '@shinsa/core';
+import type { DiffFile, RepoTree } from '@shinsa/core';
 import {
   FILE_STATUS,
   findActiveGuide,
+  isTreeSettled,
   listAncestors,
   listChangeRows,
+  listOpenFolders,
+  listRepoRows,
   listShownChanges,
   pickGuideLevel,
   resolveActiveGuide,
@@ -12,6 +15,7 @@ import {
   resolveFileName,
   sumChanges,
 } from '@/lib/code/tree.ts';
+import type { Loaded } from '@/lib/connection/code.ts';
 
 function file(path: string, overrides: Partial<DiffFile> = {}): DiffFile {
   return {
@@ -118,5 +122,46 @@ describe('listShownChanges', () => {
 
   it('keeps the open file even when it is viewed', () => {
     expect(listShownChanges(files, viewed, true, 'b.ts').map((each) => each.path)).toEqual(['b.ts', 'c.ts']);
+  });
+});
+
+describe('listRepoRows', () => {
+  const entry = (path: string, kind: 'file' | 'directory') => ({
+    name: path.slice(path.lastIndexOf('/') + 1),
+    path,
+    kind,
+    size: null,
+  });
+  const ready = (dir: string, entries: ReturnType<typeof entry>[]) =>
+    [dir, { status: 'ready', value: { ref: 'r', dir, entries } }] as const;
+
+  it('flattens the open folders in order, with a row for a folder still reading or that failed', () => {
+    const folders = new Map([
+      ready('', [
+        entry('src', 'directory'),
+        entry('docs', 'directory'),
+        entry('bad', 'directory'),
+        entry('a.ts', 'file'),
+      ]),
+      ready('src', [entry('src/b.ts', 'file')]),
+      ['bad', { status: 'error', message: 'Gone.' }],
+    ] as [string, Loaded<RepoTree>][]);
+    const rows = listRepoRows(folders, new Set(['src', 'docs', 'bad']));
+    expect(
+      rows.map((row) =>
+        row.kind === 'entry' ? `${row.depth}:${row.entry.path}:${row.open}` : `${row.kind}:${row.dir}`
+      )
+    ).toEqual([
+      '0:src:true',
+      '1:src/b.ts:false',
+      '0:docs:true',
+      'loading:docs',
+      '0:bad:true',
+      'error:bad',
+      '0:a.ts:false',
+    ]);
+    expect(isTreeSettled(rows)).toBe(false);
+    expect(isTreeSettled(rows.filter((row) => row.kind !== 'loading'))).toBe(true);
+    expect(listOpenFolders(new Set(['src', 'docs']))).toEqual(['', 'docs', 'src']);
   });
 });

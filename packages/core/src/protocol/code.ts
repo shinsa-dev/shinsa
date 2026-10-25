@@ -86,6 +86,11 @@ export interface SearchResult {
   timedOut: boolean;
 }
 
+export type SearchLine =
+  | { kind: 'matches'; matches: SearchMatch[] }
+  | { kind: 'done'; result: SearchResult }
+  | { kind: 'failed'; code: string; message: string };
+
 const IMAGE_TYPES: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
