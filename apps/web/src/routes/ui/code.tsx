@@ -112,7 +112,7 @@ function DiffEditor({ split }: { split: boolean }) {
         content={SAMPLE_CODE_AFTER}
         original={SAMPLE_CODE_BEFORE}
         split={split}
-        editable={false}
+        editable
         notes={split ? [] : NOTES}
         spots={SAMPLE_CODE_SPOTS}
         keep={listKeptLines(NOTES, SAMPLE_CODE_SPOTS, null, null)}
@@ -217,11 +217,11 @@ export function CodeSpecimens() {
         </div>
         <FileEditor />
       </Specimen>
-      <Specimen label='CodeEditor · a diff, unified: removed lines above where they were, changed words washed, unchanged lines folded, a spot’s bar, a blocking finding and a suggestion inline, your comment with a suggested change'>
-        <DiffEditor split={false} />
-      </Specimen>
-      <Specimen label='CodeEditor · the same diff side by side (the old file on the left)'>
+      <Specimen label='CodeEditor · a diff side by side, the default: the old file on the left, the new side editable (type to try it; in a task each edit saves to the working copy)'>
         <DiffEditor split />
+      </Specimen>
+      <Specimen label='CodeEditor · the same diff unified: removed lines above where they were, changed words washed, unchanged lines folded (the cursor skips them), a spot’s bar, a blocking finding and a non-blocking one inline, your comment'>
+        <DiffEditor split={false} />
       </Specimen>
       <Specimen label='QuickOpenDialog · Go to file (⌘P): every path at the ref, the open tabs first, the matched letters in the accent'>
         <QuickOpenSpecimen />

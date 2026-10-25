@@ -56,6 +56,22 @@ export interface FileContent {
   image: string | null;
 }
 
+export interface FileWrite {
+  path: string;
+  content: string;
+  base: string | null;
+}
+
+export interface FileWritten {
+  path: string;
+  changed: boolean;
+}
+
+export interface FileChanged {
+  error: { code: 'file_changed'; message: string };
+  content: string | null;
+}
+
 export interface SearchMatch {
   path: string;
   line: number;

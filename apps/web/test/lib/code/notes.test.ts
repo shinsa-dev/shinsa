@@ -30,7 +30,6 @@ function comment(overrides: Partial<LineComment>): LineComment {
     endLine: null,
     ref: 'h',
     text: 'x',
-    suggestion: null,
     ...overrides,
   };
 }
@@ -77,8 +76,8 @@ describe('listCommentNotes', () => {
         comment({ id: '2', ref: 'other' }),
         comment({ id: '3', ref: null, side: 'old' }),
         comment({ id: '4', path: 'b.ts' }),
-        comment({ id: '5', line: 7, endLine: 9, suggestion: { original: 'a\nb\nc', replacement: '' } }),
-        comment({ id: '6', line: 7, suggestion: { original: 'a', replacement: 'b' } }),
+        comment({ id: '5', line: 7, endLine: 9 }),
+        comment({ id: '6', line: 7 }),
       ],
       'a.ts',
       'h'

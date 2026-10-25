@@ -1,5 +1,8 @@
 import {
+  type FileChanged,
   type FileContent,
+  type FileWrite,
+  type FileWritten,
   type RepoPaths,
   type RepoTree,
   type SearchResult,
@@ -9,8 +12,9 @@ import {
   WORKING_REF,
 } from '@shinsa/core';
 import * as React from 'react';
+import type { FileSave } from '@/lib/code/edits.ts';
 import { describeFailure } from '@/lib/connection/commands.ts';
-import { requestJson } from '@/lib/connection/http.ts';
+import { requestJson, requestJsonOrConflict } from '@/lib/connection/http.ts';
 
 export type Loaded<T> =
   | { status: 'idle' }
@@ -188,4 +192,10 @@ export function useRepoSearch(task: Task, ref: string | null, search: CodeSearch
 
 export function resolveRawUrl(taskId: string, ref: string, path: string) {
   return resolveCodeUrl(taskId, 'raw', { ref, path });
+}
+
+export async function requestFileWrite(taskId: string, write: FileWrite): Promise<FileSave> {
+  const answer = await requestJsonOrConflict<FileWritten, FileChanged>(resolveCodeUrl(taskId, 'file'), write);
+  if (answer.conflict) return { kind: 'changed', content: answer.value.content };
+  return { kind: 'saved', changed: answer.value.changed };
 }

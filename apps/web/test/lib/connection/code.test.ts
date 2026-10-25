@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import {
+  requestFileWrite,
   resolveCodeUrl,
   resolveRawUrl,
   resolveReadVersion,
@@ -209,5 +210,22 @@ describe('the code reads', () => {
       'idle'
     );
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('requestFileWrite', () => {
+  it('saves a file, hands back the disk when it changed under you, and throws a refusal', async () => {
+    const write = { path: 'src/a.ts', content: 'b', base: 'a' };
+    const fetch = serve(() => Response.json({ path: 'src/a.ts', changed: true }));
+    expect(await requestFileWrite('t 1', write)).toEqual({ kind: 'saved', changed: true });
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/tasks/t%201/file');
+    serve(() =>
+      Response.json({ error: { code: 'file_changed', message: 'x' }, content: 'theirs' }, { status: 409 })
+    );
+    expect(await requestFileWrite('t1', write)).toEqual({ kind: 'changed', content: 'theirs' });
+    serve(() => Response.json({ error: { message: 'This task is merged.' } }, { status: 400 }));
+    await expect(requestFileWrite('t1', write)).rejects.toThrow('This task is merged.');
+    serve(() => new Response('not json', { status: 409 }));
+    await expect(requestFileWrite('t1', write)).rejects.toThrow('Shinsa answered with status 409.');
   });
 });

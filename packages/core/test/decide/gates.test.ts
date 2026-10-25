@@ -310,13 +310,12 @@ describe('verdicts on review findings', () => {
 });
 
 describe('line comments with a request for changes', () => {
-  const suggestion: ReviewComment = {
+  const comment: ReviewComment = {
     path: 'src/a.ts',
     side: 'new',
     line: 2,
     endLine: 3,
-    text: '',
-    suggestion: { original: 'let a;\nlet b;', replacement: 'const a = 1;' },
+    text: 'Make these one constant.',
   };
 
   function reviewGate() {
@@ -326,18 +325,18 @@ describe('line comments with a request for changes', () => {
     return { harness, taskId, gate: harness.openGate(taskId) };
   }
 
-  test('the agent gets each comment, and a suggested change with the lines it replaces and the replacement', () => {
+  test('the agent gets each comment with its path, lines and words', () => {
     const { harness, taskId, gate } = reviewGate();
     harness.send({
       type: 'gate.answer',
       gateId: gate.id,
       decision: 'revise',
       response: null,
-      comments: [suggestion, { ...suggestion, line: 9, endLine: null, text: 'Why?', suggestion: null }],
+      comments: [comment, { ...comment, line: 9, endLine: null, text: 'Why?' }],
     });
     const prompt = readInstruction(harness.activeRun(taskId));
     expect(prompt).toStartWith('The human looked at the work and left line comments.');
-    expect(prompt).toContain('Replace:\n```\nlet a;\nlet b;\n```\nwith:\n```\nconst a = 1;\n```');
+    expect(prompt).toContain('- src/a.ts, lines 2-3: Make these one constant.');
     expect(prompt).toContain('- src/a.ts, line 9: Why?');
   });
 
@@ -349,7 +348,7 @@ describe('line comments with a request for changes', () => {
         gateId: gate.id,
         decision: 'approve',
         response: null,
-        comments: [suggestion],
+        comments: [comment],
       })
     ).toThrow('Line comments go to the agent when you request changes.');
     harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null, comments: [] });
@@ -365,38 +364,25 @@ describe('line comments with a request for changes', () => {
         gateId: planned.openGate(taskId).id,
         decision: 'revise',
         response: 'x',
-        comments: [suggestion],
+        comments: [comment],
       })
     ).toThrow('Only a review takes line comments.');
   });
 
-  test('refuses a comment whose lines, words or suggested change do not hold together', () => {
+  test('refuses a comment whose lines or words do not hold together', () => {
     const { harness, gate } = reviewGate();
-    const send = (comment: ReviewComment) =>
+    const send = (sent: ReviewComment) =>
       refusalOf(() =>
         harness.send({
           type: 'gate.answer',
           gateId: gate.id,
           decision: 'revise',
           response: null,
-          comments: [comment],
+          comments: [sent],
         })
       );
-    expect(send({ ...suggestion, endLine: 2 })).toBe(
-      'The comment on src/a.ts must end on a line after line 2.'
-    );
-    expect(send({ ...suggestion, text: ' ', suggestion: null })).toBe(
-      'The comment on src/a.ts has no words.'
-    );
-    expect(send({ ...suggestion, side: 'old' })).toBe(
-      'A suggested change on src/a.ts must be on the new side.'
-    );
-    expect(send({ ...suggestion, endLine: 4 })).toBe(
-      'The suggested change on src/a.ts must quote the 3 lines it replaces.'
-    );
-    expect(send({ ...suggestion, endLine: null })).toBe(
-      'The suggested change on src/a.ts must quote the line it replaces.'
-    );
+    expect(send({ ...comment, endLine: 2 })).toBe('The comment on src/a.ts must end on a line after line 2.');
+    expect(send({ ...comment, text: ' ' })).toBe('The comment on src/a.ts has no words.');
   });
 });
 

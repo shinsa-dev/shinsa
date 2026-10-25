@@ -31,6 +31,17 @@ export async function requestJson<T>(path: string, body?: unknown): Promise<T> {
   return answer as T;
 }
 
+export async function requestJsonOrConflict<T, C>(
+  path: string,
+  body: unknown
+): Promise<{ conflict: false; value: T } | { conflict: true; value: C }> {
+  const response = await send(path, body);
+  const answer = await readBody(response);
+  if (response.status === 409 && answer !== null) return { conflict: true, value: answer as C };
+  if (!response.ok || answer === null) throw new Error(describeRefusal(answer, response.status));
+  return { conflict: false, value: answer as T };
+}
+
 export async function requestText(path: string): Promise<string> {
   const response = await send(path, undefined);
   if (!response.ok) throw new Error(describeRefusal(await readBody(response), response.status));

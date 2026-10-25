@@ -5,7 +5,7 @@ import { GIT_NETWORK_TIMEOUT_MS, resolveFreeBranch, resolveStartPoint } from '..
 import { log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 import { isGitButlerWorkspace } from './but.ts';
-import { NO_CLAIM, requireCheckout, type WorkspaceStrategy } from './types.ts';
+import { NO_CLAIM, refuseUpdate, requireCheckout, type WorkspaceStrategy } from './types.ts';
 import { commitCheckout } from './worktrees.ts';
 
 async function resolveCurrentBranch(path: string, signal?: AbortSignal) {
@@ -107,5 +107,18 @@ export class MainCheckoutStrategy implements WorkspaceStrategy {
 
   claim() {
     return Promise.resolve(NO_CLAIM);
+  }
+
+  async writeEdit(repo: Repo, task: Task, _path: string, write: () => boolean) {
+    await assertOnBranch(repo.path, requireCheckout(task).branch);
+    write();
+  }
+
+  listConflicted() {
+    return Promise.resolve([]);
+  }
+
+  update() {
+    return refuseUpdate();
   }
 }

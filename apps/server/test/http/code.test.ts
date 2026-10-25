@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { symlinkSync, writeFileSync } from 'node:fs';
+import { rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, type ShinsaState, type TaskDiff, type TaskRefs } from '@shinsa/core';
 import type { ModelSource } from '../../src/agents/index.ts';
@@ -7,7 +7,9 @@ import { Transcripts } from '../../src/agents/index.ts';
 import { createWorktree, removeWorktree } from '../../src/git/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
+import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
+import { GitButlerStrategy } from '../../src/workspaces/gitbutler.ts';
 import {
   createGitRepo,
   createTempDir,
@@ -16,6 +18,7 @@ import {
   git,
   writeFiles,
 } from '../helpers/index.ts';
+import { createTask } from '../helpers/state.ts';
 
 const running: (() => Promise<void>)[] = [];
 
@@ -237,5 +240,120 @@ describe('code reads', () => {
     const task = state.tasks[taskId];
     if (task) state.tasks[taskId] = { ...task, repoId: null };
     expect((await fetch(`${base}/api/tasks/${taskId}/paths`)).status).toBe(404);
+  });
+});
+
+async function startWithButlerTask() {
+  const config = createTestConfig(createTempDir());
+  const engine = new Engine(new EventLog(config.databasePath));
+  const http = startServer({
+    engine,
+    config,
+    transcripts: new Transcripts(config.transcriptsDir),
+    evidence: new EvidenceStore(config.evidenceDir),
+    models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
+    onboarding: createTestOnboarding(engine, config).onboarding,
+  });
+  running.push(http.stop);
+  const made = await createGitRepo({
+    files: { 'src/app.ts': 'export const value = 1;\n', 'src/other.ts': 'export const other = 1;\n' },
+  });
+  const baseSha = await git(made.path, 'rev-parse', 'HEAD');
+  await runCommandOrThrow(['but', 'setup', '--json'], made.path);
+  const repo = { ...made.repo, workspace: 'gitbutler' as const, checkCommands: [] };
+  const strategy = new GitButlerStrategy(config.dataDir);
+  await engine.dispatch({ type: 'repo.register', repo, projectName: null });
+  const repoId = Object.keys(engine.state.repos)[0] ?? '';
+  await engine.dispatch({ type: 'task.create', request: 'Change the value', repoId });
+  const taskId = Object.keys(engine.state.tasks)[0] ?? '';
+  await engine.dispatch({
+    type: 'task.triage',
+    taskId,
+    title: 'Change the value',
+    repoId,
+    size: 'small',
+    branch: 'feat/value',
+    waitsOn: [],
+  });
+  const registered = { ...repo, id: repoId };
+  const checkout = await strategy.prepare(
+    registered,
+    createTask({ id: taskId, branch: 'feat/value', worktreePath: null })
+  );
+  await engine.dispatch({ type: 'worktree.ready', taskId, path: checkout.path, branch: checkout.branch });
+  const task = engine.state.tasks[taskId] ?? createTask();
+  const release = await strategy.claim(registered, task);
+  writeFiles(made.path, { 'src/app.ts': 'export const value = 2;\n' });
+  await strategy.commit(registered, task, 'feat: phase one');
+  await release();
+  const base = `http://127.0.0.1:${http.server.port}`;
+  const json = async <T>(path: string) =>
+    (await (await fetch(`${base}/api/tasks/${taskId}/${path}`)).json()) as T;
+  return { engine, strategy, repo: registered, task, path: made.path, baseSha, json };
+}
+
+describe('code reads in a GitButler workspace', () => {
+  test('files the task owns are read from disk, so your edit shows after a reload, and the rest from its branch', async () => {
+    const { strategy, repo, task, path, baseSha, json } = await startWithButlerTask();
+    const head = await git(path, 'rev-parse', 'feat/value');
+    expect(await json<TaskRefs>('refs')).toMatchObject({ head, base: baseSha, working: true, dirty: false });
+
+    await strategy.writeEdit(repo, task, 'src/app.ts', () => {
+      writeFileSync(join(path, 'src/app.ts'), 'export const value = 3;\n');
+      return true;
+    });
+    await strategy.writeEdit(repo, task, 'src/added.ts', () => {
+      writeFileSync(join(path, 'src/added.ts'), 'export const added = true;\n');
+      return true;
+    });
+    writeFiles(path, { 'src/other.ts': 'export const other = 9;\n', 'notes.txt': 'mine\n' });
+
+    expect(await json<TaskRefs>('refs')).toMatchObject({ head, working: true, dirty: true });
+    expect(await json('blob?ref=working&path=src/app.ts')).toMatchObject({
+      ref: 'working',
+      content: 'export const value = 3;\n',
+    });
+    expect(await json('blob?ref=working&path=src/other.ts')).toMatchObject({
+      ref: 'working',
+      content: 'export const other = 1;\n',
+    });
+    expect((await json<{ paths: string[] }>('paths?ref=working')).paths).toEqual([
+      'README.md',
+      'src/added.ts',
+      'src/app.ts',
+      'src/other.ts',
+    ]);
+    expect(
+      (await json<{ entries: { name: string }[] }>('tree?ref=working&dir=src')).entries.map((e) => e.name)
+    ).toEqual(['added.ts', 'app.ts', 'other.ts']);
+    const found = await json<{ matches: { path: string }[] }>('search?ref=working&q=export');
+    expect(found.matches.map((match) => match.path)).toEqual(['src/added.ts', 'src/app.ts', 'src/other.ts']);
+    expect((await json<{ matches: unknown[] }>('search?ref=working&q=other%20%3D%209')).matches).toEqual([]);
+    const diff = await json<TaskDiff>('diff');
+    expect(diff.head).toBe('working');
+    expect(diff.files.map((file) => [file.path, file.patch.includes('value = 3')])).toEqual([
+      ['src/added.ts', false],
+      ['src/app.ts', true],
+    ]);
+
+    await strategy.writeEdit(repo, task, 'src/added.ts', () => {
+      rmSync(join(path, 'src/added.ts'));
+      return true;
+    });
+    await strategy.writeEdit(repo, task, 'src/app.ts', () => {
+      rmSync(join(path, 'src/app.ts'));
+      return true;
+    });
+    expect((await json<{ paths: string[] }>('paths?ref=working')).paths).toEqual([
+      'README.md',
+      'src/other.ts',
+    ]);
+  });
+
+  test('with nothing of its own uncommitted, the working copy is the branch', async () => {
+    const { json, path } = await startWithButlerTask();
+    writeFiles(path, { 'src/other.ts': 'export const other = 9;\n' });
+    expect((await json<TaskDiff>('diff')).files.map((file) => file.path)).toEqual(['src/app.ts']);
+    expect((await json<{ matches: unknown[] }>('search?ref=working&q=other%20%3D%209')).matches).toEqual([]);
   });
 });

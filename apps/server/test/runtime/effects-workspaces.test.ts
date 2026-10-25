@@ -137,4 +137,80 @@ describe('effects where agents work', () => {
     expect(dispatched[0]).toMatchObject({ type: 'pull_request.record_push', taskId: 'task-1', sha });
     await runner.stop();
   });
+
+  test('your uncommitted edits from the Code tab are committed before the push', async () => {
+    const { repo, path, origin } = await createGitRepo();
+    await git(path, 'checkout', '-q', '-b', 'fix/tab-scroll');
+    writeFiles(path, { 'a.txt': 'a, by you\n' });
+    const { runner, dispatched } = setup(
+      {
+        stage: 'shipping',
+        worktreePath: path,
+        workspace: 'main_checkout',
+        editedPaths: ['a.txt'],
+        pullRequest: {
+          number: 7,
+          url: 'https://github.com/acme/app/pull/7',
+          state: 'open',
+        } as Task['pullRequest'],
+      },
+      { ...repo, workspace: 'main_checkout' }
+    );
+    await runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
+    expect(await git(origin, 'show', 'refs/heads/fix/tab-scroll:a.txt')).toBe('a, by you');
+    expect(await git(path, 'log', '-1', '--format=%s')).toBe('fix: apply the edits made in the Code tab');
+    expect(dispatched[0]).toEqual({
+      type: 'task.commit_edits',
+      taskId: 'task-1',
+      treeHash: await git(path, 'rev-parse', 'HEAD^{tree}'),
+    });
+    expect(dispatched[1]).toMatchObject({ type: 'pull_request.record_push' });
+    await runner.stop();
+  });
+
+  test('edits approved at the review are committed before the checks run, and only then', async () => {
+    const { repo, path } = await createGitRepo();
+    await git(path, 'checkout', '-q', '-b', 'fix/tab-scroll');
+    writeFiles(path, { 'a.txt': 'a, by you\n' });
+    const checked = { ...repo, workspace: 'main_checkout' as const, checkCommands: ['true'] };
+    const task = {
+      stage: 'checking',
+      worktreePath: path,
+      workspace: 'main_checkout',
+      editedPaths: ['a.txt'],
+    };
+    const approved = setup({ ...task, approvedEdits: 'review' } as Partial<Task>, checked);
+    await approved.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 0 }, createContext());
+    expect(approved.dispatched.map((command) => command.type)).toEqual([
+      'task.commit_edits',
+      'checks.record',
+    ]);
+    expect(await git(path, 'log', '-1', '--format=%s')).toBe('fix: apply the edits made in the Code tab');
+
+    writeFiles(path, { 'a.txt': 'a, by you again\n' });
+    const plain = setup(task as Partial<Task>, checked);
+    await plain.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 0 }, createContext());
+    expect(plain.dispatched.map((command) => command.type)).toEqual(['checks.record']);
+    expect(await git(path, 'status', '--porcelain')).toBe('M a.txt');
+  });
+
+  test('updating a GitButler workspace runs `but pull`, then hands the task back to its agent', async () => {
+    const { repo, path } = await createGitRepo();
+    await runCommandOrThrow(['but', 'setup', '--json'], path);
+    const butler = { ...repo, workspace: 'gitbutler' as const };
+    const shipping = setup(
+      { stage: 'shipping', worktreePath: path, workspace: 'gitbutler', branch: 'fix/tab-scroll' },
+      butler
+    );
+    await shipping.runner.apply(
+      { kind: 'workspace.update', taskId: 'task-1', guidance: 'Keep both.' },
+      createContext()
+    );
+    expect(shipping.dispatched).toEqual([
+      { type: 'task.record_workspace_update', taskId: 'task-1', guidance: 'Keep both.' },
+    ]);
+    const moved = setup({ stage: 'fixing', worktreePath: path, workspace: 'gitbutler' }, butler);
+    await moved.runner.apply({ kind: 'workspace.update', taskId: 'task-1', guidance: null }, createContext());
+    expect(moved.dispatched).toEqual([]);
+  });
 });

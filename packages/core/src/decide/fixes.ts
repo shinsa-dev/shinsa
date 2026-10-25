@@ -3,8 +3,10 @@ import type { FixReason, ReviewEscalation, ReviewEscalationReason, Task } from '
 import { resolveAgentPrompt, resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
+import { applyEditsApproval } from './edits.ts';
 import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
 import { openReviewGate, startReview } from './lifecycle.ts';
+import { shipReviewedWork } from './pull-requests.ts';
 
 const MAX_STALLED_FIXES = 2;
 
@@ -17,6 +19,7 @@ const FIX_STAGE_REASON: Record<FixReason, string> = {
   review: 'fixing review findings',
   you: 'making your changes',
   pull_request: 'fixing the pull request',
+  conflict: 'resolving conflicts',
 };
 
 type FixStop = { reason: Exclude<ReviewEscalationReason, 'rounds'>; stalled: number; limit: number };
@@ -105,7 +108,7 @@ export function startFix(
   decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
   decider.startRun(decider.task(taskId), 'agent', resolveAgentPrompt(prompt), {
     purpose: 'fix',
-    resumeFrom: decider.rootRun(taskId),
+    resumeFrom: decider.taskSession(taskId, 'agent'),
   });
 }
 
@@ -113,7 +116,8 @@ function reactToChecks(decider: Decider, taskId: string, results: ReportCheck[])
   const failed = results.filter((check) => check.outcome === 'fail');
   if (failed.length === 0) {
     decider.progressed(taskId);
-    startReview(decider, taskId);
+    if (applyEditsApproval(decider, taskId, 'review')) shipReviewedWork(decider, taskId);
+    else startReview(decider, taskId);
     return;
   }
   startFix(

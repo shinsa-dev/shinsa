@@ -24,15 +24,13 @@ describe('an activity row', () => {
                 line: 4,
                 endLine: 6,
                 text: 'Keep the guard.',
-                suggestion: null,
               },
               {
                 path: 'src/b.ts',
                 side: 'new',
                 line: 2,
                 endLine: null,
-                text: '',
-                suggestion: { original: 'let a;', replacement: 'const a = 1;' },
+                text: 'Make it a constant.',
               },
             ],
           }}
@@ -42,6 +40,6 @@ describe('an activity row', () => {
     expect(view.getByText('src/a.ts:4-6')).toBeTruthy();
     expect(view.getByText('Keep the guard.')).toBeTruthy();
     expect(view.getByText('src/b.ts:2')).toBeTruthy();
-    expect(view.getByText('Suggested change')).toBeTruthy();
+    expect(view.getByText('Make it a constant.')).toBeTruthy();
   });
 });

@@ -5,17 +5,17 @@ import {
   toggleViewedFile,
   useExplorerWidth,
   useHideViewed,
-  useSplitDiff,
+  useUnifiedDiff,
   useViewedFiles,
 } from '@/lib/preferences/code.ts';
 
 describe('code preferences', () => {
-  it('remembers the diff layout', () => {
-    const { result } = renderHook(() => useSplitDiff());
+  it('shows diffs side by side until you pick unified, and remembers it', () => {
+    const { result } = renderHook(() => useUnifiedDiff());
     expect(result.current[0]).toBe(false);
     act(() => result.current[1]());
     expect(result.current[0]).toBe(true);
-    expect(localStorage.getItem('shinsa.code-split')).toBe('true');
+    expect(localStorage.getItem('shinsa.code-unified')).toBe('true');
   });
 
   it('remembers whether viewed files are hidden', () => {

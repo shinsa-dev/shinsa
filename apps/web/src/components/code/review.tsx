@@ -216,8 +216,7 @@ function Comments({ onSelect }: { onSelect: (path: string, line: number, side: '
             >
               {describeCommentPlace(comment)}
             </button>
-            {comment.text && <span className='text-fg-4'>{comment.text}</span>}
-            {comment.suggestion && <span className='text-fg-2'>Suggested change</span>}
+            <span className='text-fg-4'>{comment.text}</span>
           </li>
         ))}
       </ul>

@@ -115,17 +115,13 @@ export const SAMPLE_CODE_FINDINGS: ReviewFinding[] = [
 
 export const SAMPLE_CODE_COMMENTS: LineComment[] = [
   {
-    id: 'sample-suggestion',
+    id: 'sample-comment',
     path: SAMPLE_CODE_PATH,
     side: 'new',
     line: 28,
     endLine: null,
     ref: null,
-    text: 'Sort without the copy.',
-    suggestion: {
-      original: '  return [...spots].sort((a, b) => ORDER[a.attention] - ORDER[b.attention]);',
-      replacement: '  return spots.toSorted((a, b) => ORDER[a.attention] - ORDER[b.attention]);',
-    },
+    text: 'Sort without the copy: toSorted keeps the list as it was.',
   },
 ];
 
@@ -142,7 +138,7 @@ export const SAMPLE_CODE_PATHS = [
   'apps/web/src/lib/code/tabs.ts',
   'apps/web/src/lib/code/tree.ts',
   'apps/web/src/lib/code/location.ts',
-  'apps/web/src/lib/code/suggestion.ts',
+  'apps/web/src/lib/code/edits.ts',
   'apps/web/src/lib/code/editor/theme.ts',
   'apps/web/src/lib/code/editor/unified.ts',
   'apps/web/src/components/code/workbench.tsx',

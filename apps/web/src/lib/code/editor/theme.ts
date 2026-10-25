@@ -51,6 +51,7 @@ const codeTheme = EditorView.theme({
     color: 'var(--fg-4)',
     backgroundColor: 'transparent',
     fontSize: 'var(--text-2xs)',
+    containerType: 'inline-size',
   },
   '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '18px', overflow: 'auto' },
   '.cm-content': { padding: '4px 0', caretColor: 'var(--fg-4)' },
@@ -61,7 +62,7 @@ const codeTheme = EditorView.theme({
     backgroundColor: 'var(--primary-a2) !important',
   },
   '.cm-gutters': {
-    backgroundColor: 'transparent',
+    backgroundColor: 'var(--background)',
     color: 'var(--fg-2)',
     border: 'none',
     fontVariantNumeric: 'tabular-nums',
@@ -93,7 +94,7 @@ const codeTheme = EditorView.theme({
     color: 'var(--fg-2)',
     fontFamily: 'var(--font-sans)',
     fontSize: 'var(--text-2xs)',
-    padding: '3px 8px',
+    padding: '3px 8px 3px calc(8px + var(--scroll-left, 0px))',
     cursor: 'pointer',
   },
   '.cm-collapsedLines:before, .cm-collapsedLines:after': { content: 'none', display: 'none' },
@@ -139,7 +140,12 @@ const codeTheme = EditorView.theme({
     backgroundImage: 'none',
     color: 'var(--fg-4)',
   },
-  '.cm-note-slot': { padding: '6px 8px', fontFamily: 'var(--font-sans)', whiteSpace: 'normal' },
+  '.cm-note-slot': {
+    padding: '6px 8px',
+    fontFamily: 'var(--font-sans)',
+    whiteSpace: 'normal',
+    transform: 'translateX(var(--scroll-left, 0px))',
+  },
 });
 
 export const CODE_THEME = [codeTheme, syntaxHighlighting(codeHighlight)];

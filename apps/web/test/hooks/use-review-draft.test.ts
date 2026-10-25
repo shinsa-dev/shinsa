@@ -27,7 +27,6 @@ describe('useReviewDraft', () => {
           endLine: null,
           ref: null,
           text: 'Check this.',
-          suggestion: null,
         },
       ],
       addComment: () => undefined,

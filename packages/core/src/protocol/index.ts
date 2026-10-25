@@ -18,7 +18,10 @@ export type {
 } from './accounts.ts';
 export {
   CODE_LIMITS,
+  type FileChanged,
   type FileContent,
+  type FileWrite,
+  type FileWritten,
   isCommitSha,
   type RefCommit,
   type RepoEntry,

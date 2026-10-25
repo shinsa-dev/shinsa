@@ -3,6 +3,7 @@ import {
   type FindingVerdict,
   type Gate,
   type GateDecision,
+  hasStep,
   isTaskSettled,
   type ReviewComment,
   resolveGateDefinition,
@@ -11,11 +12,13 @@ import { resolveHumanFixPrompt, resolveVerdictFixPrompt } from '../prompts/index
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { answerConfiguration, assertConfigurationAnswer } from './config.ts';
+import { updateWorkspace } from './conflicts.ts';
 import { acknowledgeBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
+import { hasUncommittedEdits, recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
-import { settleTask, startPlanning } from './lifecycle.ts';
-import { requestPush } from './pull-requests.ts';
+import { settleTask, startChecks, startPlanning } from './lifecycle.ts';
+import { requestPush, shipReviewedWork, startMerge } from './pull-requests.ts';
 import { retryTask } from './retry.ts';
 import { assertSecretAnswer } from './secrets.ts';
 import { answerOperation, answerProposal, startAfterPlan } from './shapes.ts';
@@ -108,15 +111,7 @@ function describeCommentProblem(comment: ReviewComment) {
   if (comment.endLine !== null && comment.endLine <= comment.line) {
     return `The comment on ${comment.path} must end on a line after line ${comment.line}.`;
   }
-  if (!comment.suggestion) {
-    return comment.text.trim() ? null : `The comment on ${comment.path} has no words.`;
-  }
-  if (comment.side === 'old') return `A suggested change on ${comment.path} must be on the new side.`;
-  const count = (comment.endLine ?? comment.line) - comment.line + 1;
-  if (comment.suggestion.original.split('\n').length !== count) {
-    return `The suggested change on ${comment.path} must quote the ${count === 1 ? 'line' : `${count} lines`} it replaces.`;
-  }
-  return null;
+  return comment.text.trim() ? null : `The comment on ${comment.path} has no words.`;
 }
 
 function assertComments(gate: Gate, decision: GateDecision, comments?: ReviewComment[]) {
@@ -143,6 +138,10 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
     settleTask(decider, gate.taskId, 'cancelled', 'cancelled after a failure');
     return;
   }
+  if (gate.cause === 'workspace_update') {
+    updateWorkspace(decider, gate.taskId, decision === 'reply' ? response : null);
+    return;
+  }
   decider.resetRecoveries(gate.taskId);
   acknowledgeBudget(decider, gate);
   retryTask(decider, gate.taskId, decision === 'reply' ? response : null);
@@ -150,8 +149,22 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
 
 function approveReview(decider: Decider, taskId: string) {
   clearFixLoop(decider, taskId);
-  const reason = decider.task(taskId).pullRequest ? 'pushing the changes' : 'opening the pull request';
-  decider.stage(taskId, 'shipping', reason);
+  const task = decider.task(taskId);
+  if (hasUncommittedEdits(task) && hasStep(task, 'checks')) {
+    recordEditsApproval(decider, taskId, 'review');
+    startChecks(decider, taskId, 'committing your edits and running the checks');
+    return;
+  }
+  shipReviewedWork(decider, taskId);
+}
+
+function approveMerge(decider: Decider, taskId: string) {
+  if (!hasUncommittedEdits(decider.task(taskId))) {
+    startMerge(decider, taskId);
+    return;
+  }
+  recordEditsApproval(decider, taskId, 'merge');
+  decider.stage(taskId, 'shipping', 'pushing your edits');
   requestPush(decider, taskId);
 }
 
@@ -195,10 +208,7 @@ function answerDecision(
     approveReview(decider, taskId);
     return;
   }
-  if (gate.type === 'merge') {
-    decider.stage(taskId, 'awaiting_merge', 'merging');
-    decider.run({ kind: 'pull_request.merge', taskId });
-  }
+  if (gate.type === 'merge') approveMerge(decider, taskId);
 }
 
 export function answerGate(

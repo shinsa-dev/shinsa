@@ -1,5 +1,5 @@
 import { existsSync, realpathSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { DomainError } from '@shinsa/core';
 
 function isInside(root: string, path: string) {
@@ -13,6 +13,17 @@ export function resolveInside(root: string, relative: string): string | null {
   if (!isInside(base, target) || target === base) return null;
   if (!existsSync(target)) return target;
   return isInside(base, realpathSync(target)) ? target : null;
+}
+
+function resolveExistingAncestor(path: string): string {
+  return existsSync(path) ? path : resolveExistingAncestor(dirname(path));
+}
+
+export function resolveWritableInside(root: string, relative: string): string | null {
+  const target = resolveInside(root, relative);
+  if (!target) return null;
+  const base = realpathSync(root);
+  return isInside(base, realpathSync(resolveExistingAncestor(dirname(target)))) ? target : null;
 }
 
 const MAX_PATH_LENGTH = 4096;

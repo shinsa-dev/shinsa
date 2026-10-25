@@ -1,27 +1,25 @@
-import type { FileContent, Task, TaskRefs } from '@shinsa/core';
+import { type FileContent, type Task, type TaskRefs, WORKING_REF } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import { Icon, type IconName } from '@shinsa/ui/components/icon';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
-import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import type { EditorHandle, EditorReveal } from '@/components/code/editor/code-editor.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
-import { Choice } from '@/components/controls/choice.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
+import { useFileSaver } from '@/hooks/use-file-saver.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
+import { isEditedPath, resolveEditState } from '@/lib/code/edits.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import { type CodeNote, type Composer, listFileNotes, listSpotMarks } from '@/lib/code/notes.ts';
 import { listKeptLines, resolvePaneContent } from '@/lib/code/pane.ts';
 import type { FileSource } from '@/lib/code/source.ts';
-import { resolveSuggestion } from '@/lib/code/suggestion.ts';
 import { resolveRawUrl, useFileContent } from '@/lib/connection/code.ts';
-import { openWorktree } from '@/lib/connection/worktree.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 import type { ReviewTarget } from '@/lib/review/targets.ts';
 
@@ -45,11 +43,6 @@ function CodeEditor(props: React.ComponentProps<EditorModule['default']>) {
   if (!module) return <Waiting path={props.path} />;
   return <module.default {...props} />;
 }
-
-const LAYOUTS = [
-  { value: 'unified', label: 'Unified' },
-  { value: 'split', label: 'Side by side' },
-] as const;
 
 function Waiting({ path }: { path: string }) {
   return (
@@ -128,56 +121,36 @@ function NoText({
   );
 }
 
-function ToolbarAction({ label, icon, onClick }: { label: string; icon: IconName; onClick: () => void }) {
+function LayoutToggle({ split, onToggle }: { split: boolean; onToggle: () => void }) {
+  const label = split ? 'Show unified' : 'Show side by side';
   return (
-    <>
-      <Button variant='secondary' size='sm' icon={icon} onClick={onClick} className='max-xl:hidden'>
-        {label}
-      </Button>
-      <Hint label={label}>
-        <Button
-          variant='secondary'
-          size='icon-sm'
-          icon={icon}
-          aria-label={label}
-          onClick={onClick}
-          className='xl:hidden'
-        />
-      </Hint>
-    </>
+    <Hint label={label}>
+      <Button
+        variant='secondary'
+        size='icon-sm'
+        icon={split ? 'IconLayoutTopBottom' : 'IconLayoutColumn'}
+        aria-label={label}
+        onClick={onToggle}
+        className='max-md:hidden'
+      />
+    </Hint>
   );
 }
 
 function PaneToolbar({
-  task,
-  refs,
   source,
-  line,
   split,
   showLayout,
-  canSuggest,
-  editing,
-  changed,
+  saving,
   toolbar,
   onSplit,
-  onEdit,
-  onDiscard,
-  onSuggest,
 }: {
-  task: Task;
-  refs: TaskRefs;
   source: FileSource;
-  line: number | null;
   split: boolean;
   showLayout: boolean;
-  canSuggest: boolean;
-  editing: boolean;
-  changed: boolean;
+  saving: boolean;
   toolbar: React.ReactNode;
   onSplit: () => void;
-  onEdit: () => void;
-  onDiscard: () => void;
-  onSuggest: () => void;
 }) {
   const path = source.file.path;
   return (
@@ -194,51 +167,18 @@ function PaneToolbar({
         <DiffStats added={source.change.additions} removed={source.change.deletions} />
       )}
       <span className='flex-1' />
-      {showLayout && (
-        <>
-          <Choice
-            label='Diff layout'
-            items={[...LAYOUTS]}
-            value={split ? 'split' : 'unified'}
-            onValueChange={(value) => {
-              if ((value === 'split') !== split) onSplit();
-            }}
-            className='max-xl:hidden'
-          />
-          <Hint label={split ? 'Show unified' : 'Show side by side'}>
-            <Button
-              variant='secondary'
-              size='icon-sm'
-              icon='IconColumnWideHalf'
-              aria-label='Show side by side'
-              aria-pressed={split}
-              onClick={onSplit}
-              className={cn('max-md:hidden xl:hidden', split && 'bg-bg-a3 text-fg-4')}
-            />
-          </Hint>
-        </>
-      )}
-      {canSuggest && !editing && (
-        <ToolbarAction label='Suggest a change' icon='IconPencil' onClick={onEdit} />
-      )}
-      {editing && (
-        <>
-          <Button variant='secondary' size='sm' onClick={onDiscard}>
-            Discard
-          </Button>
-          <Button size='sm' disabled={!changed} onClick={onSuggest}>
-            Add the suggestion
-          </Button>
-        </>
-      )}
-      {task.worktreePath && refs.working && !editing && (
-        <ToolbarAction
-          label='Open in editor'
-          icon='IconCode'
-          onClick={() => void openWorktree(task.id, 'editor', source.headPath ?? path, line ?? undefined)}
-        />
-      )}
+      {saving && <span className='shrink-0 text-2xs text-fg-2'>Saving…</span>}
+      {showLayout && <LayoutToggle split={split} onToggle={onSplit} />}
     </Toolbar>
+  );
+}
+
+function PaneNotice({ text, readOnly }: { text: string; readOnly: boolean }) {
+  return (
+    <p className='flex shrink-0 items-center gap-1.5 border-border border-b px-3 py-1.5 text-2xs text-fg-2'>
+      <Icon name={readOnly ? 'IconLock' : 'IconCircleInfo'} size='sm' />
+      <Truncate>{text}</Truncate>
+    </p>
   );
 }
 
@@ -267,10 +207,13 @@ export function EditorPane({
 }) {
   const draft = useReviewDraft();
   const path = source.file.path;
-  const head = useFileContent(task, gitRef, source.headPath);
+  const edit = resolveEditState({ task, refs, gitRef, headPath: source.headPath });
+  const live = edit.editable && refs.working && isEditedPath(task, source.headPath);
+  const pinnedRead = useFileContent(task, gitRef, source.headPath);
+  const liveRead = useFileContent(task, live ? WORKING_REF : null, live ? source.headPath : null);
+  const head = live ? liveRead : pinnedRead;
   const base = useFileContent(task, refs.base, source.basePath);
   const [composer, setComposer] = React.useState<Composer | null>(null);
-  const [editing, setEditing] = React.useState<{ changed: boolean } | null>(null);
   const diffing = source.change !== null;
   const content = resolvePaneContent({
     headPath: source.headPath,
@@ -279,7 +222,14 @@ export function EditorPane({
     head,
     base,
   });
-  const headText = content.kind === 'text' ? content.content : null;
+  const saver = useFileSaver({
+    taskId: task.id,
+    path: edit.editable ? source.headPath : null,
+    text: content.kind === 'text' ? content.content : null,
+    buffer: handle,
+  });
+  const editable = edit.editable && saver.state.refusal === null;
+  const notice = saver.state.refusal ?? saver.state.notice ?? edit.reason;
   const pinned = gitRef === refs.head;
   const notes = listFileNotes({
     path,
@@ -315,35 +265,17 @@ export function EditorPane({
     );
   }
 
-  function suggest() {
-    const original = headText ?? '';
-    const resolved = resolveSuggestion(original, handle.current?.readText() ?? original);
-    if (resolved) draft.addComment({ path, ref: gitRef, text: '', ...resolved });
-    handle.current?.resetText();
-    setEditing(null);
-  }
-
   return (
     <section className='flex min-h-0 min-w-0 flex-1 flex-col'>
       <PaneToolbar
-        task={task}
-        refs={refs}
         source={source}
-        line={location.line}
         split={split}
         showLayout={diffing && content.kind === 'text'}
-        canSuggest={draft.enabled && pinned && content.kind === 'text' && source.headPath !== null}
-        editing={editing !== null}
-        changed={editing?.changed ?? false}
+        saving={saver.state.saving}
         toolbar={toolbar}
         onSplit={onSplit}
-        onEdit={() => setEditing({ changed: false })}
-        onDiscard={() => {
-          handle.current?.resetText();
-          setEditing(null);
-        }}
-        onSuggest={suggest}
       />
+      {content.kind === 'text' && notice && <PaneNotice text={notice} readOnly={!editable} />}
       {content.kind === 'waiting' && <Waiting path={path} />}
       {content.kind === 'failed' && <p className='p-3 text-fg-2 text-xs'>{content.message}</p>}
       {content.kind === 'absent' && (
@@ -352,20 +284,16 @@ export function EditorPane({
       {content.kind === 'text' && (
         <CodeEditor
           path={path}
-          content={content.content}
+          content={saver.start ?? content.content}
           original={content.original}
-          split={diffing && split && editing === null}
-          editable={editing !== null}
+          split={diffing && split}
+          editable={editable}
           notes={notes}
           spots={spots}
           keep={listKeptLines(notes, spots, location.line, location.end)}
           reveal={reveal}
-          onComment={
-            draft.enabled && editing === null
-              ? (side, line, endLine) => setComposer({ side, line, endLine })
-              : null
-          }
-          onEdit={(changed) => setEditing((current) => (current ? { changed } : current))}
+          onComment={draft.enabled ? (side, line, endLine) => setComposer({ side, line, endLine }) : null}
+          onEdit={saver.edit}
           renderNote={renderNote}
           handle={handle}
         />

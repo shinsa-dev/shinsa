@@ -76,14 +76,13 @@ describe('finding verdicts', () => {
       line: 2,
       endLine: null,
       text: 'Here.',
-      suggestion: null,
     };
     expect(resolveVerdictAnswer(FINDINGS, { 0: 'fix' }, [comment])).toEqual({
       verdicts: [
         { index: 0, verdict: 'fix', note: null },
         { index: 1, verdict: 'dismiss', note: null },
       ],
-      comments: [{ path: 'a.ts', side: 'new', line: 2, endLine: null, text: 'Here.', suggestion: null }],
+      comments: [{ path: 'a.ts', side: 'new', line: 2, endLine: null, text: 'Here.' }],
     });
     expect(resolveVerdictAnswer(FINDINGS, {}, [comment])).toEqual({
       verdicts: [

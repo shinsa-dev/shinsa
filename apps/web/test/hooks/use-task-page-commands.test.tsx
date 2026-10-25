@@ -67,7 +67,9 @@ describe('useTaskPageCommands', () => {
   it('carries the review draft into the decision and clears it once sent', async () => {
     const { result } = renderHook(() => usePage(), { wrapper: Draft });
     act(() => result.current.draft.addComment({ path: 'src/a.ts', line: 1, text: 'Rename this' }));
-    expect(find(result.current.sections, 'task.t1.gate.g1.approve').disabled).toBe(true);
+    expect(find(result.current.sections, 'task.t1.gate.g1.approve').disabled).toBe(
+      'Send or clear your comments first'
+    );
     const revise = find(result.current.sections, 'task.t1.gate.g1.revise');
     expect(revise.label).toBe('Request changes with 1 comment');
     await act(async () => {
@@ -78,12 +80,10 @@ describe('useTaskPageCommands', () => {
       gateId: 'g1',
       decision: 'revise',
       response: 'Small things',
-      comments: [
-        { path: 'src/a.ts', side: 'new', line: 1, endLine: null, text: 'Rename this', suggestion: null },
-      ],
+      comments: [{ path: 'src/a.ts', side: 'new', line: 1, endLine: null, text: 'Rename this' }],
     });
     expect(result.current.draft.comments).toEqual([]);
-    expect(find(result.current.sections, 'task.t1.gate.g1.approve').disabled).toBe(false);
+    expect(find(result.current.sections, 'task.t1.gate.g1.approve').disabled).toBeUndefined();
   });
 
   it('drops the sections when the page unmounts', () => {

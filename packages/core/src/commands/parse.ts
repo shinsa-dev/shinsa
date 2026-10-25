@@ -24,7 +24,6 @@ import type {
   FindingVerdictKind,
   GateDecision,
   ReviewComment,
-  SuggestedChange,
   TaskMode,
   TaskPriority,
 } from '../domain/types.ts';
@@ -180,26 +179,18 @@ function readVerdicts(value: unknown): FindingVerdict[] {
   });
 }
 
-function readSuggestedChange(value: unknown): SuggestedChange | null {
-  if (value === null || value === undefined) return null;
-  const fields = readObject(value, 'suggestion');
-  readKnownKeys(fields, ['original', 'replacement'], 'A suggested change');
-  return { original: readText(fields, 'original'), replacement: readText(fields, 'replacement') };
-}
-
 function readComments(value: unknown): ReviewComment[] {
   if (!Array.isArray(value)) refuse('comments must be a list.');
   if (value.length > MAX_COMMENTS) refuse(`comments has more than ${MAX_COMMENTS} entries.`);
   return value.map((item) => {
     const fields = readObject(item, 'A comment');
-    readKnownKeys(fields, ['path', 'side', 'line', 'endLine', 'text', 'suggestion'], 'A comment');
+    readKnownKeys(fields, ['path', 'side', 'line', 'endLine', 'text'], 'A comment');
     return {
       path: readId(fields, 'path', MAX_PATH),
       side: readChoice(fields, 'side', SIDES),
       line: readCount(fields, 'line'),
       endLine: fields.endLine === null || fields.endLine === undefined ? null : readCount(fields, 'endLine'),
       text: readText(fields, 'text'),
-      suggestion: readSuggestedChange(fields.suggestion),
     };
   });
 }

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { EditorView } from '@codemirror/view';
 import type { DiffFile, Task, TaskDiff, TaskRefs, WorkReport } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -89,6 +90,7 @@ const REPORT: WorkReport = {
 
 const realFetch = globalThis.fetch;
 const requests: string[] = [];
+const writes: unknown[] = [];
 
 function respond(url: URL) {
   const ref = url.searchParams.get('ref');
@@ -122,6 +124,7 @@ function respond(url: URL) {
       image: null,
     });
   }
+  if (name === 'file') return Response.json({ path: 'README.md', changed: true });
   if (name === 'search') {
     return Response.json({
       ref,
@@ -135,9 +138,11 @@ function respond(url: URL) {
 
 beforeEach(() => {
   requests.length = 0;
-  globalThis.fetch = (async (input: RequestInfo | URL) => {
+  writes.length = 0;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://localhost');
     requests.push(`${url.pathname.split('/').at(-1)}${url.search}`);
+    if (init?.body) writes.push(JSON.parse(String(init.body)));
     return respond(url);
   }) as typeof fetch;
 });
@@ -383,6 +388,41 @@ describe('search and quick open', () => {
     renderCode(nextTask(), '&mode=files');
     await screen.findByRole('tree', { name: 'Files' });
     expect(screen.getByRole('combobox', { name: 'Show the code at' })).toBeDefined();
+  });
+});
+
+describe('editing in place', () => {
+  it('shows a diff side by side first, and unified once you pick it, remembered', async () => {
+    renderCode(nextTask());
+    fireEvent.click(await screen.findByRole('button', { name: 'Show unified' }));
+    expect(localStorage.getItem('shinsa.code-unified')).toBe('true');
+    fireEvent.click(await screen.findByRole('button', { name: 'Show side by side' }));
+    expect(localStorage.getItem('shinsa.code-unified')).toBe('false');
+  });
+
+  it('saves what you type to the working copy, with no mode to switch on', async () => {
+    renderCode(nextTask({ worktreePath: '/w', stage: 'awaiting_review' }), '&mode=files&file=README.md');
+    const line = await findLine('# Sample');
+    const view = EditorView.findFromDOM(line as HTMLElement);
+    if (!view) throw new Error('No editor');
+    act(() => view.dispatch({ changes: { from: 0, insert: 'Hello ' }, userEvent: 'input.type' }));
+    await waitFor(
+      () => expect(writes).toEqual([{ path: 'README.md', content: 'Hello # Sample\n', base: '# Sample\n' }]),
+      { timeout: 5_000 }
+    );
+    expect(screen.queryByText(/read-only/)).toBeNull();
+  });
+
+  it('says why an earlier commit or a task with no checkout is read-only', async () => {
+    renderCode(
+      nextTask({ worktreePath: '/w', stage: 'awaiting_review' }),
+      `&mode=files&file=README.md&ref=${BASE}`
+    );
+    expect(
+      await screen.findByText(
+        'This is an earlier commit, so it is read-only. Pick Head of the branch to edit.'
+      )
+    ).toBeDefined();
   });
 });
 

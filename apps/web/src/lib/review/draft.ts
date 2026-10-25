@@ -1,4 +1,4 @@
-import type { ReviewComment, SuggestedChange } from '@shinsa/core';
+import type { ReviewComment } from '@shinsa/core';
 import * as React from 'react';
 
 export interface LineComment extends ReviewComment {
@@ -6,8 +6,8 @@ export interface LineComment extends ReviewComment {
   ref: string | null;
 }
 
-export type DraftComment = Omit<LineComment, 'id' | 'side' | 'endLine' | 'ref' | 'suggestion'> &
-  Partial<Pick<LineComment, 'side' | 'endLine' | 'ref' | 'suggestion'>>;
+export type DraftComment = Omit<LineComment, 'id' | 'side' | 'endLine' | 'ref'> &
+  Partial<Pick<LineComment, 'side' | 'endLine' | 'ref'>>;
 
 export interface ReviewDraft {
   enabled: boolean;
@@ -38,13 +38,7 @@ export function createLineComment(comment: DraftComment, id: string): LineCommen
     endLine: comment.endLine && comment.endLine > comment.line ? comment.endLine : null,
     ref: comment.ref ?? null,
     text: comment.text,
-    suggestion: comment.suggestion ?? null,
   };
-}
-
-function isSuggestedChange(value: unknown) {
-  const change = value as Partial<SuggestedChange> | null;
-  return value === null || (typeof change?.original === 'string' && typeof change.replacement === 'string');
 }
 
 function isComment(value: unknown): value is LineComment {
@@ -53,7 +47,7 @@ function isComment(value: unknown): value is LineComment {
     typeof comment?.id === 'string' &&
     typeof comment.path === 'string' &&
     typeof comment.line === 'number' &&
-    isSuggestedChange(comment.suggestion ?? null)
+    typeof comment.text === 'string'
   );
 }
 
@@ -85,12 +79,5 @@ export function describeCommentLines(comment: Pick<LineComment, 'side' | 'line' 
 }
 
 export function serializeComments(comments: readonly LineComment[]): ReviewComment[] {
-  return comments.map(({ path, side, line, endLine, text, suggestion }) => ({
-    path,
-    side,
-    line,
-    endLine,
-    text,
-    suggestion,
-  }));
+  return comments.map(({ path, side, line, endLine, text }) => ({ path, side, line, endLine, text }));
 }

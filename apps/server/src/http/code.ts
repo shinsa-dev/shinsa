@@ -4,6 +4,7 @@ import {
   DomainError,
   resolveImageType,
   resolvePullRequestBase,
+  type SearchResult,
   selectTaskByReference,
   type TaskDiff,
   type TaskRefs,
@@ -26,6 +27,7 @@ import {
 import { ObjectCache } from '../git/objects.ts';
 import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import type { Engine } from '../runtime/engine.ts';
+import type { LedgerStore } from '../workspaces/ledger.ts';
 import { assertRepoPath, resolveInside } from './paths.ts';
 import type { ApiRoute } from './routes.ts';
 
@@ -33,9 +35,13 @@ interface CodeTask {
   task: NonNullable<Engine['state']['tasks'][string]>;
   repoPath: string;
   worktree: string | null;
+  workspace: string | null;
 }
 
-type ResolvedRef = { kind: 'commit'; sha: string } | { kind: 'working'; worktree: string };
+type ResolvedRef =
+  | { kind: 'commit'; sha: string }
+  | { kind: 'working'; worktree: string }
+  | { kind: 'owned'; sha: string; worktree: string; owned: ReadonlySet<string> };
 
 const IMMUTABLE = 'private, max-age=31536000, immutable';
 
@@ -81,18 +87,74 @@ function readSearch(url: URL): SearchQuery {
   };
 }
 
-export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): ApiRoute[] {
+function isOnDisk(worktree: string, path: string) {
+  const absolute = resolveInside(worktree, path);
+  return absolute !== null && existsSync(absolute);
+}
+
+function resolveSharedCheckout(task: CodeTask['task']) {
+  if (task.workspace !== 'gitbutler' || !task.worktreePath) return null;
+  return existsSync(task.worktreePath) ? task.worktreePath : null;
+}
+
+function mergeOwnedMatches(
+  committed: SearchResult,
+  working: SearchResult,
+  owned: ReadonlySet<string>
+): SearchResult {
+  const matches = [
+    ...committed.matches.filter((match) => !owned.has(match.path)),
+    ...working.matches.filter((match) => owned.has(match.path)),
+  ].sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+  return {
+    ref: WORKING_REF,
+    matches: matches.slice(0, CODE_LIMITS.matches),
+    truncated: committed.truncated || working.truncated || matches.length > CODE_LIMITS.matches,
+    timedOut: committed.timedOut || working.timedOut,
+  };
+}
+
+function isWorkingRef(ref: ResolvedRef) {
+  return ref.kind !== 'commit';
+}
+
+export function createCodeRoutes(
+  engine: Engine,
+  ledgers: LedgerStore,
+  cache = new ObjectCache()
+): ApiRoute[] {
   function selectCodeTask(reference: string): CodeTask | null {
     const task = selectTaskByReference(engine.state, reference);
     const repo = task?.repoId ? engine.state.repos[task.repoId] : undefined;
     if (!task || !repo || !existsSync(repo.path)) return null;
-    return { task, repoPath: repo.path, worktree: resolveTaskCheckout(task) };
+    return {
+      task,
+      repoPath: repo.path,
+      worktree: resolveTaskCheckout(task),
+      workspace: resolveSharedCheckout(task),
+    };
   }
 
-  function resolveRefs(found: CodeTask, signal: AbortSignal) {
+  function listOwnedPaths(found: CodeTask) {
+    const owners = ledgers.read(found.task.repoId ?? '').owners;
+    return new Set(
+      Object.entries(owners)
+        .filter(([, owner]) => owner.taskId === found.task.id)
+        .map(([path]) => path)
+    );
+  }
+
+  async function resolveRefs(found: CodeTask, signal: AbortSignal): Promise<TaskRefs> {
     const repo = engine.state.repos[found.task.repoId ?? ''];
     if (!repo) throw new DomainError('code_unavailable', 'This task has no repository.');
-    return resolveTaskRefs(repo, found.task, resolvePullRequestBase(engine.state, found.task), signal);
+    const refs = await resolveTaskRefs(
+      repo,
+      found.task,
+      resolvePullRequestBase(engine.state, found.task),
+      signal
+    );
+    if (!found.workspace) return refs;
+    return { ...refs, working: true, dirty: listOwnedPaths(found).size > 0 };
   }
 
   async function resolveRef(
@@ -100,6 +162,10 @@ export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): Api
     value: string | null,
     signal: AbortSignal
   ): Promise<ResolvedRef> {
+    if (value === WORKING_REF && found.workspace) {
+      const { head } = await resolveRefs(found, signal);
+      return { kind: 'owned', sha: head, worktree: found.workspace, owned: listOwnedPaths(found) };
+    }
     if (value === WORKING_REF) {
       if (!found.worktree) throw new DomainError('ref_invalid', 'This task has no working copy any more.');
       return { kind: 'working', worktree: found.worktree };
@@ -108,31 +174,64 @@ export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): Api
     return { kind: 'commit', sha: await assertCommit(found.repoPath, sha, signal) };
   }
 
-  function listPaths(found: CodeTask, ref: ResolvedRef, signal: AbortSignal) {
-    if (ref.kind === 'working') return listWorkingPaths(ref.worktree, signal);
+  function listCommitPathsCached(found: CodeTask, sha: string, signal: AbortSignal) {
     return cache.read(
-      `${found.repoPath}\0paths\0${ref.sha}`,
-      () => listCommitPaths(found.repoPath, ref.sha, signal),
+      `${found.repoPath}\0paths\0${sha}`,
+      () => listCommitPaths(found.repoPath, sha, signal),
       (value) => value.paths.reduce((sum, path) => sum + path.length, 0)
     );
   }
 
-  async function readTree(found: CodeTask, ref: ResolvedRef, dir: string, signal: AbortSignal) {
-    if (ref.kind === 'working') return listWorkingTree(await listWorkingPaths(ref.worktree, signal), dir);
-    return listCommitTree(found.repoPath, ref.sha, dir, signal);
+  async function listPaths(found: CodeTask, ref: ResolvedRef, signal: AbortSignal) {
+    if (ref.kind === 'working') return listWorkingPaths(ref.worktree, signal);
+    const listed = await listCommitPathsCached(found, ref.sha, signal);
+    if (ref.kind === 'commit') return listed;
+    const paths = new Set(listed.paths);
+    for (const path of ref.owned) {
+      if (isOnDisk(ref.worktree, path)) paths.add(path);
+      else paths.delete(path);
+    }
+    return { ref: WORKING_REF, paths: [...paths].sort(), truncated: listed.truncated };
   }
 
-  function readFile(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
+  async function readTree(found: CodeTask, ref: ResolvedRef, dir: string, signal: AbortSignal) {
+    if (ref.kind === 'commit') return listCommitTree(found.repoPath, ref.sha, dir, signal);
+    return listWorkingTree(await listPaths(found, ref, signal), dir);
+  }
+
+  async function readFile(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
     if (ref.kind === 'commit') return readCommitFile(found.repoPath, ref.sha, path, cache, signal);
+    if (ref.kind === 'owned' && !ref.owned.has(path)) {
+      return { ...(await readCommitFile(found.repoPath, ref.sha, path, cache, signal)), ref: WORKING_REF };
+    }
     const absolute = resolveInside(ref.worktree, path);
     if (!absolute) throw new DomainError('path_invalid', 'That path leaves the working copy.');
-    return Promise.resolve(readWorkingFile(absolute, path));
+    return readWorkingFile(absolute, path);
   }
 
   function readBytes(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
-    if (ref.kind === 'commit') return readCommitBytes(found.repoPath, ref.sha, path, signal);
+    if (ref.kind === 'commit' || (ref.kind === 'owned' && !ref.owned.has(path))) {
+      return readCommitBytes(found.repoPath, ref.sha, path, signal);
+    }
     const absolute = resolveInside(ref.worktree, path);
     return Promise.resolve(absolute ? readWorkingBytes(absolute) : null);
+  }
+
+  async function search(found: CodeTask, ref: ResolvedRef, query: SearchQuery, signal: AbortSignal) {
+    if (ref.kind === 'working') return searchFiles(ref.worktree, null, query, signal);
+    const committed = await searchFiles(found.repoPath, ref.sha, query, signal);
+    if (ref.kind === 'commit') return committed;
+    if (ref.owned.size === 0) return { ...committed, ref: WORKING_REF };
+    return mergeOwnedMatches(committed, await searchFiles(ref.worktree, null, query, signal), ref.owned);
+  }
+
+  async function resolveOwnedDiff(found: CodeTask, base: string, ref: ResolvedRef & { kind: 'owned' }) {
+    const committed = await resolveCommitDiff(found.repoPath, base, ref.sha);
+    if (ref.owned.size === 0) return committed;
+    const working = await resolveWorkingDiff(ref.worktree, base, [...ref.owned]);
+    return [...committed.filter((file) => !ref.owned.has(file.path)), ...working].sort((a, b) =>
+      a.path.localeCompare(b.path)
+    );
   }
 
   async function resolveDiff(found: CodeTask, url: URL, signal: AbortSignal): Promise<TaskDiff> {
@@ -143,11 +242,13 @@ export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): Api
     const base = await assertCommit(found.repoPath, baseParam || refs?.base || refs?.head || '', signal);
     const head = await resolveRef(
       found,
-      headParam || (found.worktree ? WORKING_REF : (refs?.head ?? null)),
+      headParam || (found.worktree || found.workspace ? WORKING_REF : (refs?.head ?? null)),
       signal
     );
     if (head.kind === 'working')
       return { base, head: WORKING_REF, files: await resolveWorkingDiff(head.worktree, base) };
+    if (head.kind === 'owned')
+      return { base, head: WORKING_REF, files: await resolveOwnedDiff(found, base, head) };
     const files = await cache.read(
       `${found.repoPath}\0diff\0${base}\0${head.sha}`,
       () => resolveCommitDiff(found.repoPath, base, head.sha, signal),
@@ -195,7 +296,7 @@ export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): Api
         'Content-Type': type,
         'Content-Security-Policy': "default-src 'none'",
         'X-Content-Type-Options': 'nosniff',
-        'Cache-Control': ref.kind === 'working' ? 'no-store' : IMMUTABLE,
+        'Cache-Control': isWorkingRef(ref) ? 'no-store' : IMMUTABLE,
       },
     });
   }
@@ -217,12 +318,8 @@ export function createCodeRoutes(engine: Engine, cache = new ObjectCache()): Api
     }),
     route('raw', respondRaw),
     route('search', (found, request, url) => {
-      const search = readSearch(url);
-      return respondWith(found, request, url, (ref) =>
-        ref.kind === 'working'
-          ? searchFiles(ref.worktree, null, search, request.signal)
-          : searchFiles(found.repoPath, ref.sha, search, request.signal)
-      );
+      const query = readSearch(url);
+      return respondWith(found, request, url, (ref) => search(found, ref, query, request.signal));
     }),
     route('diff', (found, request, url) => {
       const head = url.searchParams.get('head');

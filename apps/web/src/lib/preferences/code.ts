@@ -13,8 +13,8 @@ export function useExplorerWidth() {
   return usePaneWidth('shinsa.code-explorer-width', EXPLORER_WIDTH);
 }
 
-export function useSplitDiff() {
-  return useStoredToggle('shinsa.code-split', false);
+export function useUnifiedDiff() {
+  return useStoredToggle('shinsa.code-unified', false);
 }
 
 export function useHideViewed() {

@@ -2,38 +2,14 @@ import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { CodeDiff } from '@/components/text/code-diff.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
 
 const NOTE =
-  'flex max-w-[min(36rem,calc(100cqw-5rem))] flex-col gap-1.5 rounded-lg px-3 py-2 font-sans text-xs';
+  'flex max-w-[min(36rem,calc(100cqw-6rem))] flex-col gap-1.5 rounded-lg px-3 py-2 font-sans text-xs';
 
 const FINDING_SURFACE = { red: 'bg-red-a1', amber: 'bg-amber-a1' } as const;
-
-function SuggestionLines({ comment }: { comment: LineComment }) {
-  const { suggestion, path } = comment;
-  const source = React.useMemo(
-    () =>
-      suggestion && {
-        kind: 'files' as const,
-        path,
-        before: suggestion.original,
-        after: suggestion.replacement,
-      },
-    [suggestion, path]
-  );
-  if (!source) return null;
-  return (
-    <div className='flex flex-col gap-px'>
-      <span className='text-2xs text-fg-2'>Suggested change</span>
-      <div className='overflow-hidden rounded-md bg-background py-1'>
-        <CodeDiff source={source} />
-      </div>
-    </div>
-  );
-}
 
 function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: (() => void) | null }) {
   return (
@@ -53,8 +29,7 @@ function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: ((
           </button>
         )}
       </div>
-      {comment.text && <p className='whitespace-pre-wrap text-fg-4'>{comment.text}</p>}
-      <SuggestionLines comment={comment} />
+      <p className='whitespace-pre-wrap break-words text-fg-4'>{comment.text}</p>
     </div>
   );
 }

@@ -200,6 +200,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     roots,
     resolveLogin: services.resolveLogin,
     classify: services.classify,
+    workspaces: services.runs.workspaces,
   });
 }
 

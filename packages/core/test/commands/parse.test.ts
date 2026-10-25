@@ -450,34 +450,20 @@ describe('parseUserCommand for the process commands', () => {
 describe('parseUserCommand for line comments', () => {
   const answer = { type: 'gate.answer', gateId: 'g', decision: 'revise', response: null } as const;
 
-  test('reads each comment with its suggested change, original and replacement', () => {
+  test('reads each comment with its side, lines and words', () => {
     expect(
       parseUserCommand({
         ...answer,
         comments: [
-          {
-            path: 'src/a.ts',
-            side: 'new',
-            line: 3,
-            endLine: 4,
-            text: '',
-            suggestion: { original: 'a\nb', replacement: 'c' },
-          },
+          { path: 'src/a.ts', side: 'new', line: 3, endLine: 4, text: 'Name it.' },
           { path: 'src/b.ts', side: 'old', line: 9, text: 'Keep it.' },
         ],
       })
     ).toEqual({
       ...answer,
       comments: [
-        {
-          path: 'src/a.ts',
-          side: 'new',
-          line: 3,
-          endLine: 4,
-          text: '',
-          suggestion: { original: 'a\nb', replacement: 'c' },
-        },
-        { path: 'src/b.ts', side: 'old', line: 9, endLine: null, text: 'Keep it.', suggestion: null },
+        { path: 'src/a.ts', side: 'new', line: 3, endLine: 4, text: 'Name it.' },
+        { path: 'src/b.ts', side: 'old', line: 9, endLine: null, text: 'Keep it.' },
       ],
     });
   });
@@ -498,12 +484,7 @@ describe('parseUserCommand for line comments', () => {
         'path is longer than 1024 characters.',
       ],
       [{ ...answer, comments: [{ ...comment, author: 'me' }] }, 'A comment cannot change author.'],
-      [{ ...answer, comments: [{ ...comment, suggestion: 'x' }] }, 'suggestion must be an object.'],
-      [
-        { ...answer, comments: [{ ...comment, suggestion: { original: 'a', text: 'b' } }] },
-        'A suggested change cannot change text.',
-      ],
-      [{ ...answer, comments: [{ ...comment, suggestion: { original: 'a' } }] }, 'replacement must be text.'],
+      [{ ...answer, comments: [{ ...comment, suggestion: 'x' }] }, 'A comment cannot change suggestion.'],
     ];
     for (const [input, message] of refused) {
       expect(() => parseUserCommand(input)).toThrow(message);

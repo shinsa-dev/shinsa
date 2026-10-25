@@ -20,7 +20,7 @@ import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
 import { runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
-import { removeIsolatedWorktrees } from '../git/index.ts';
+import { removeIsolatedWorktrees, syncRemoteBranch } from '../git/index.ts';
 import {
   createPullRequest,
   mergePullRequest,
@@ -40,7 +40,7 @@ import {
 } from '../repos/index.ts';
 import { resolveRepoProject, type TriageResolver } from '../triage/index.ts';
 import type { RepositoryFinder } from '../triage/message.ts';
-import { describeWorkspaceProblem, Workspaces } from '../workspaces/index.ts';
+import { ConflictedBranchError, describeWorkspaceProblem, Workspaces } from '../workspaces/index.ts';
 import type { EffectContext, Engine } from './engine.ts';
 
 export interface EffectRunnerOptions {
@@ -62,6 +62,7 @@ const FAILURE_TITLE: Partial<Record<ShinsaEffect['kind'], string>> = {
   'pull_request.open': 'Could not open the pull request',
   'pull_request.push': 'Could not push the fixes',
   'pull_request.merge': 'Could not merge the pull request',
+  'workspace.update': 'Could not update the workspace',
 };
 
 const NO_TRIAGE = 'Shinsa could not read the request, so the task has no title or kind of work yet.';
@@ -139,7 +140,7 @@ export class EffectRunner {
       case 'run.cancel':
         return this.#runs.cancel(effect.runId);
       case 'run.steer':
-        return this.#runs.steer(effect.runId, effect.text, context.key);
+        return this.#runs.steer(effect.runId, effect.text, context.key, effect.from);
       case 'question.resolve':
         return this.#runs.resolveQuestion(effect.gateId);
       case 'checks.run':
@@ -152,6 +153,8 @@ export class EffectRunner {
         return this.#merge(effect.taskId, context);
       case 'pull_request.watch':
         return this.#watch(effect.taskId, context);
+      case 'workspace.update':
+        return this.#updateWorkspace(effect.taskId, effect.guidance, context);
       case 'worktree.remove':
         return this.#removeWorktree(effect.taskId, context);
       case 'scratch.remove':
@@ -247,8 +250,28 @@ export class EffectRunner {
       return null;
     }
     if (!read || signal.aborted) return null;
-    if (force || hasPullRequestNews(task, read)) await this.#recordRead(taskId, read);
+    if (force || hasPullRequestNews(task, read)) {
+      await this.#syncConflictBase(repo, taskId, read.pullRequest, signal);
+      await this.#recordRead(taskId, read);
+    }
     return read.pullRequest;
+  }
+
+  async #syncConflictBase(repo: Repo, taskId: string, pullRequest: PullRequest, signal: AbortSignal) {
+    if (pullRequest.mergeable !== false || !pullRequest.base) return;
+    let error: string;
+    try {
+      const result = await syncRemoteBranch(repo, pullRequest.base, signal);
+      if (result.ok || signal.aborted) return;
+      error = result.stderr;
+    } catch (thrown) {
+      error = describeError(thrown);
+    }
+    log.warn('[Watch] Could not fetch the base of a conflicting pull request; the agent fetches it', {
+      taskId,
+      base: pullRequest.base,
+      error,
+    });
   }
 
   async #recordRead(taskId: string, read: PullRequestRead) {
@@ -403,6 +426,7 @@ export class EffectRunner {
     const { task, repo } = this.#requireTask(taskId);
     if (task.stage !== 'checking' || !task.worktreePath) return;
     await this.#runs.quiesce(taskId);
+    if (task.approvedEdits === 'review') await this.#commitEdits(task, repo, context);
     const planChecks = task.plan?.document?.checks ?? [];
     const release = await this.#workspaces.resolve(task).claim(repo, task, context.signal);
     let results: Awaited<ReturnType<typeof runChecks>>;
@@ -422,12 +446,46 @@ export class EffectRunner {
     const taskId = task.id;
     await this.#runs.quiesce(taskId);
     if (context.signal.aborted) return false;
-    const sha = await this.#workspaces.resolve(task).push(repo, task, context.signal);
+    await this.#commitEdits(task, repo, context);
+    let sha: string;
+    try {
+      sha = await this.#workspaces.resolve(task).push(repo, task, context.signal);
+    } catch (error) {
+      if (!(error instanceof ConflictedBranchError)) throw error;
+      await this.#engine.dispatch(
+        { type: 'task.record_conflict', taskId, branch: error.branch },
+        { id: `${context.key}:task.record_conflict` }
+      );
+      return false;
+    }
     await this.#engine.dispatch(
       { type: 'pull_request.record_push', taskId, sha },
       { id: `${context.key}:pull_request.record_push:${sha}` }
     );
     return true;
+  }
+
+  async #commitEdits(task: Task, repo: Repo, context: EffectContext) {
+    if ((task.editedPaths ?? []).length === 0) return;
+    const commit = await this.#workspaces
+      .resolve(task)
+      .commit(repo, task, 'fix: apply the edits made in the Code tab');
+    await this.#engine.dispatch(
+      { type: 'task.commit_edits', taskId: task.id, treeHash: commit.treeHash },
+      { id: `${context.key}:task.commit_edits:${commit.treeHash ?? 'none'}` }
+    );
+  }
+
+  async #updateWorkspace(taskId: string, guidance: string | null, context: EffectContext) {
+    const { task, repo } = this.#requireTask(taskId);
+    if (task.stage !== 'shipping') return;
+    await this.#runs.quiesce(taskId);
+    await this.#workspaces.resolve(task).update(repo, context.signal);
+    if (context.signal.aborted) return;
+    await this.#engine.dispatch(
+      { type: 'task.record_workspace_update', taskId, guidance },
+      { id: `${context.key}:task.record_workspace_update` }
+    );
   }
 
   async #openPullRequest(taskId: string, context: EffectContext) {
@@ -521,6 +579,28 @@ export class EffectRunner {
       log.warn('[Effects] Could not remove a worktree', { taskId, error: describeError(error) });
     }
     await this.#engine.dispatch({ type: 'worktree.gone', taskId }, { id: `${context.key}:worktree.gone` });
+    await this.#recordConflicts(task, repo, context);
+  }
+
+  async #recordConflicts(removed: Task, repo: Repo, context: EffectContext) {
+    let conflicted: string[];
+    try {
+      conflicted = await this.#workspaces.resolve(removed).listConflicted(repo);
+    } catch (error) {
+      log.warn('[Effects] Could not read which branches are conflicted', {
+        taskId: removed.id,
+        error: describeError(error),
+      });
+      return;
+    }
+    for (const task of Object.values(this.#engine.state.tasks)) {
+      const branch = task.branch;
+      if (task.repoId !== repo.id || isTaskSettled(task) || !branch || !conflicted.includes(branch)) continue;
+      await this.#engine.dispatch(
+        { type: 'task.record_conflict', taskId: task.id, branch },
+        { id: `${context.key}:task.record_conflict:${task.id}` }
+      );
+    }
   }
 
   #isReopened(taskId: string) {

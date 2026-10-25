@@ -107,6 +107,24 @@ export function listOwnedPaths(ledger: WorkspaceLedger, taskId: string, dirty: D
     .sort();
 }
 
+export function adoptPath(
+  ledger: WorkspaceLedger,
+  taskId: string,
+  path: string,
+  dirty: DirtyState
+): WorkspaceLedger {
+  const owners = { ...ledger.owners };
+  const hash = dirty[path];
+  if (hash === undefined) delete owners[path];
+  else owners[path] = { taskId, hash };
+  return { ...ledger, owners };
+}
+
+export function selectOtherOwner(ledger: WorkspaceLedger, taskId: string, path: string) {
+  const owner = ledger.owners[path];
+  return owner && owner.taskId !== taskId ? owner.taskId : null;
+}
+
 export function recordCommitted(
   ledger: WorkspaceLedger,
   taskId: string,

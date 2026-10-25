@@ -1,6 +1,6 @@
 import type { LanguageSupport } from '@codemirror/language';
-import { MergeView } from '@codemirror/merge';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import { diff, MergeView } from '@codemirror/merge';
+import { Annotation, Compartment, EditorState, type Extension, Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { CommentSide } from '@shinsa/core';
 import { Spinner } from '@shinsa/ui/components/spinner';
@@ -15,6 +15,7 @@ import {
   resolveSelectedLines,
   setAnnotations,
 } from '@/lib/code/editor/annotations.ts';
+import { followHorizontalScroll, skipCollapsedLines } from '@/lib/code/editor/collapsed.ts';
 import { FindHost } from '@/lib/code/editor/find.ts';
 import { requestLanguage } from '@/lib/code/editor/language.ts';
 import {
@@ -33,7 +34,7 @@ export interface EditorHandle {
   openFind: () => void;
   openGotoLine: () => void;
   readText: () => string;
-  resetText: () => void;
+  replaceText: (text: string) => void;
 }
 
 export interface EditorReveal {
@@ -53,7 +54,7 @@ export interface CodeEditorProps {
   keep: number[];
   reveal: EditorReveal | null;
   onComment: ((side: CommentSide, line: number, endLine: number | null) => void) | null;
-  onEdit: (changed: boolean) => void;
+  onEdit: () => void;
   renderNote: (note: CodeNote) => React.ReactNode;
   handle: React.Ref<EditorHandle>;
 }
@@ -64,7 +65,23 @@ interface Views {
   destroy: () => void;
 }
 
-const SPLIT_THEME = EditorView.theme({ '&': { height: 'auto' }, '.cm-scroller': { overflow: 'visible' } });
+const SPLIT_THEME = EditorView.theme({
+  '&': { height: 'auto' },
+  '.cm-scroller': { overflowX: 'auto', overflowY: 'hidden' },
+});
+
+const fromDisk = Annotation.define<boolean>();
+
+function replaceDoc(view: EditorView, text: string) {
+  const current = view.state.doc.toString();
+  if (current === text) return;
+  const changes = diff(current, text).map((change) => ({
+    from: change.fromA,
+    to: change.toA,
+    insert: text.slice(change.fromB, change.toB),
+  }));
+  view.dispatch({ changes, annotations: [fromDisk.of(true), Transaction.addToHistory.of(false)] });
+}
 
 function splitAnnotations(notes: CodeNote[], spots: CodeSpotMark[], keep: number[], split: boolean) {
   const anchors = (side: CommentSide) =>
@@ -111,6 +128,7 @@ export default function CodeEditor(props: CodeEditorProps) {
   const editableSlot = React.useMemo(() => new Compartment(), []);
   const latest = React.useRef(props);
   latest.current = props;
+  const text = React.useRef(content);
   const annotations = splitAnnotations(notes, spots, keep, split);
   const annotationsKey = JSON.stringify(annotations);
   const latestAnnotations = React.useRef(annotations);
@@ -130,7 +148,10 @@ export default function CodeEditor(props: CodeEditorProps) {
       return true;
     };
     const onChange = EditorView.updateListener.of((update) => {
-      if (update.docChanged) latest.current.onEdit(update.state.doc.toString() !== latest.current.content);
+      if (!update.docChanged) return;
+      text.current = update.state.doc.toString();
+      if (update.transactions.some((transaction) => !transaction.annotation(fromDisk)))
+        latest.current.onEdit();
     });
     const base = (side: CommentSide, extra: Extension[]) =>
       createEditorExtensions({
@@ -138,13 +159,13 @@ export default function CodeEditor(props: CodeEditorProps) {
         editable: side === 'new' ? editableSlot : new Compartment(),
         onLine: comment(side),
         findPanel: findHost.createPanel,
-      }).concat(extra);
+      }).concat(skipCollapsedLines, followHorizontalScroll, extra);
     const initial = latestAnnotations.current;
     if (diffing && split) {
       const merge = new MergeView({
         a: { doc: original, extensions: base('old', [SPLIT_THEME, annotationsField(registry, initial.a)]) },
         b: {
-          doc: content,
+          doc: text.current,
           extensions: base('new', [SPLIT_THEME, annotationsField(registry, initial.b), onChange]),
         },
         parent: host,
@@ -169,14 +190,17 @@ export default function CodeEditor(props: CodeEditorProps) {
           })
         );
       }
-      const view = new EditorView({ state: EditorState.create({ doc: content, extensions }), parent: host });
+      const view = new EditorView({
+        state: EditorState.create({ doc: text.current, extensions }),
+        parent: host,
+      });
       views.current = { a: null, b: view, destroy: () => view.destroy() };
     }
     return () => {
       views.current?.destroy();
       views.current = null;
     };
-  }, [ready, support, content, original, split, diffing, registry, editableSlot, findHost]);
+  }, [ready, support, original, split, diffing, registry, editableSlot, findHost]);
 
   React.useEffect(() => {
     const current = views.current;
@@ -184,17 +208,17 @@ export default function CodeEditor(props: CodeEditorProps) {
     const value = JSON.parse(annotationsKey) as ReturnType<typeof splitAnnotations>;
     current.b.dispatch({ effects: setAnnotations.of(value.b) });
     current.a?.dispatch({ effects: setAnnotations.of(value.a) });
-  }, [annotationsKey, ready, content, original, split]);
+  }, [annotationsKey, ready, original, split]);
 
   React.useEffect(() => {
     views.current?.b.dispatch({ effects: editableSlot.reconfigure(resolveEditable(editable)) });
-  }, [editable, editableSlot, ready, content, original, split]);
+  }, [editable, editableSlot, ready, original, split]);
 
   React.useEffect(() => {
     const current = views.current;
     if (!current || !reveal) return;
     revealIn(reveal.side === 'old' && current.a ? current.a : current.b, reveal.line);
-  }, [reveal?.key, ready, content, original, split]);
+  }, [reveal?.key, ready, original, split]);
 
   React.useLayoutEffect(() => {
     const measure = () => {
@@ -219,13 +243,14 @@ export default function CodeEditor(props: CodeEditorProps) {
         const view = views.current?.b;
         if (view) gotoLine(view);
       },
-      readText: () => views.current?.b.state.doc.toString() ?? content,
-      resetText: () => {
+      readText: () => text.current,
+      replaceText: (next) => {
+        text.current = next;
         const view = views.current?.b;
-        if (view) view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+        if (view) replaceDoc(view, next);
       },
     }),
-    [content]
+    []
   );
 
   return (

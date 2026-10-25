@@ -341,7 +341,6 @@ describe('review rounds that escalate to you', () => {
       line: 4,
       endLine: null,
       text: 'Keep the guard here.',
-      suggestion: null,
     };
     harness.send({
       type: 'gate.answer',

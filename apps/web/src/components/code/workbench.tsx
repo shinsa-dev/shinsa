@@ -33,7 +33,7 @@ import {
   toggleViewedFile,
   useExplorerWidth,
   useHideViewed,
-  useSplitDiff,
+  useUnifiedDiff,
   useViewedFiles,
 } from '@/lib/preferences/code.ts';
 import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
@@ -91,7 +91,8 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const narrow = useMediaQuery('(max-width: 767px)');
   const mac = useCodeKeyLabel();
   const width = useExplorerWidth();
-  const [split, toggleSplit] = useSplitDiff();
+  const [unified, toggleSplit] = useUnifiedDiff();
+  const split = !unified;
   const [hideViewed, toggleHideViewed] = useHideViewed();
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -243,7 +244,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       <div className='flex min-h-0 min-w-0 flex-1 flex-col'>
         {active ? (
           <EditorPane
-            key={resolveFileKey(active.file)}
+            key={`${resolveFileKey(active.file)}@${gitRef}`}
             task={task}
             refs={refs}
             gitRef={gitRef}

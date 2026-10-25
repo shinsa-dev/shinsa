@@ -27,7 +27,11 @@ export async function resolveCommitDiff(
   return parseUnifiedDiff(decodeText(read.bytes));
 }
 
-export async function resolveWorkingDiff(worktree: string, base: string): Promise<DiffFile[]> {
+export async function resolveWorkingDiff(
+  worktree: string,
+  base: string,
+  paths: readonly string[] | null = null
+): Promise<DiffFile[]> {
   const index = await runCommandOrThrow(
     ['git', 'rev-parse', '--path-format=absolute', '--git-path', 'index'],
     worktree
@@ -42,9 +46,9 @@ export async function resolveWorkingDiff(worktree: string, base: string): Promis
     }
     await runCommandOrThrow(['git', 'add', '-A', '--intent-to-add'], worktree, { env });
     const text = await runCommandOrThrow(
-      ['git', '-c', 'core.quotePath=false', ...DIFF_ARGS, base, '--'],
+      ['git', '-c', 'core.quotePath=false', ...DIFF_ARGS, base, '--', ...(paths ?? [])],
       worktree,
-      { env }
+      { env: { ...env, GIT_LITERAL_PATHSPECS: '1' } }
     );
     return parseUnifiedDiff(text);
   } finally {

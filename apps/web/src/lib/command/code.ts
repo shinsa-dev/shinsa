@@ -82,7 +82,7 @@ export function listCodeCommands(context: CodeCommandContext): CommandSection {
         kind: 'run',
         id: `${id}.split`,
         label: context.split ? 'Show diffs unified' : 'Show diffs side by side',
-        icon: 'IconColumnWideHalf',
+        icon: context.split ? 'IconLayoutTopBottom' : 'IconLayoutColumn',
         keywords: ['diff', 'split', 'side by side', 'unified', 'layout'],
         run: context.toggleSplit,
       }

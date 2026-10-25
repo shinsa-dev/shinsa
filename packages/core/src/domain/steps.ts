@@ -445,7 +445,10 @@ const HARD_GATES = {
       'each agent finding',
     ],
     decisions: [
-      { decision: 'approve', does: 'Pushes the branch and opens the pull request.' },
+      {
+        decision: 'approve',
+        does: 'Pushes the branch and opens the pull request; edits you made in the Code tab are committed and checked first.',
+      },
       { decision: 'revise', does: 'The agent works on your words or the findings you kept.' },
       CANCEL,
     ],
@@ -459,7 +462,10 @@ const HARD_GATES = {
     title: 'Merge',
     shows: ['the final diff', 'CI and the bot verdicts', 'what changed since your review'],
     decisions: [
-      { decision: 'approve', does: 'Merges the pull request.' },
+      {
+        decision: 'approve',
+        does: 'Merges the pull request; edits you made in the Code tab are pushed first, and it merges once CI passes.',
+      },
       { decision: 'revise', does: 'The agent works on your words.' },
       CANCEL,
     ],

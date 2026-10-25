@@ -38,8 +38,8 @@ Only these, and they win over anything below:
    the quiet-agent note, the suggested tasks and delegations panels, the chat's delegation cards and report rows,
    notice rows and context meter, the schedule and notification rows, the MCP, plugin and skill
    rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
-   chat fence beside the editor, a diff unified with a spot, a blocking finding, a suggestion finding and a comment
-   with its suggested change inline, the same diff side by side, and Go to file on `QuickOpenDialog`, 32). A piece that reads live state has a
+   chat fence beside the editor, a diff side by side with its new side editable, the same diff unified with a spot,
+   a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32). A piece that reads live state has a
    presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
    `AccountChoiceList`, `ContextGauge`, `HealthCard`, `NotificationGroup`, `ScheduleRow`), and every action
    there takes a callback, so `/ui` never opens the connection or sends anything: an action only shows a
@@ -435,6 +435,15 @@ Only these, and they win over anything below:
       message field), `choice` (a value list, current one checked) or `search` (types the query
       into the page's own search). Context sections sort first (`RANK.context`), then the queue
       (`RANK.next`), then the global ones.
+    - **Disabled always says why.** A command or a choice's option is disabled only with a reason:
+      `disabled` is that reason as a string (`CommandBase.disabled`, `ChoiceOption.disabled`; there is no
+      boolean). The row is greyed, cannot be run or picked by click or Enter, keyboard navigation skips it, and
+      the reason replaces its hint (a flattened option's heading too) while it is disabled. Typing never ranks a
+      group by a disabled match, the first highlighted row is the first enabled one, and a choice page opens on
+      the current value only when it is enabled (`isDisabled`, `resolveFirstValue` in `lib/command/menu.ts`).
+      The reasons are plain sentences: "Send or clear your comments first" on Approve the changes, "Updating…"
+      on an update that runs, "Unavailable: needs usage credits" on Fast, why GitButler is not set up yet on
+      Where agents work, and "Kept until it merges or is cancelled" on the task a task is stacked on.
     - **On a task page** (`TaskHeader` calls `useTaskPageCommands`, so Sidebar and Cards share
       it) the task leads: its decision first, each named for what it does (Approve the plan /
       Revise the plan, Approve the changes / Review the changes / Request changes, Merge #N or
@@ -615,7 +624,9 @@ Only these, and they win over anything below:
       choice, `value` a list, every current one checked, "Stop waiting"). Several at once is the
       normal case: every list adds or removes one task and never replaces the others. Before building
       starts the label is Wait for another task; once building has started it is Merge after
-      another task, because that is all a new dependency can still do.
+      another task, because that is all a new dependency can still do. The task a GitButler task is stacked on
+      shows ticked and disabled as "Stacked on “‹title›”"; Stop waiting keeps it, and is not offered when it is the
+      only one (core refuses removing it while the stack stands, `docs/engine.md` → Where agents work).
     - **Status tones** come from `lib/tasks/status.ts` and `lib/format/tone.ts`, nowhere else:
       Needs your answer blue, Paused orange, Changes to review amber, Plan to approve purple,
       Ready to merge green, working stages blue, Waiting on another task neutral; Setup incomplete and Sign in
@@ -936,8 +947,8 @@ Only these, and they win over anything below:
       (model `w-40`, speed `w-30`), so values and chevrons line up in columns. Where fast mode needs usage credits
       the provider's accounts do not have (`resolveSpeedAvailability` over core's `resolveFastModeAvailability`),
       the select reads Standard and its Fast option is disabled with a muted "Unavailable: needs usage credits"
-      after the label (`SelectField` items take `disabled` and a `hint`), and ⌘K's speed choices offer Standard
-      only: the agents run at standard speed whatever was stored, and Fast comes back by itself once credits are
+      after the label (`SelectField` items take `disabled`, the reason it shows in place of the `hint`), and
+      ⌘K's speed choices show Fast disabled with the same reason: the agents run at standard speed whatever was stored, and Fast comes back by itself once credits are
       there. No default model is Haiku. When the roles differ the selects read "Set per role". Per role is
       secondary and starts folded, unless the roles differ; it opens the group's `SETTINGS_SHELF` straight under
       the row, one row per role core's `AGENT_ROLES` has (Agent, "Plans, builds and fixes each round in one
@@ -1365,9 +1376,10 @@ Only these, and they win over anything below:
       the tab was hovered.
     - **Shape.** An explorer column on the left (280px by default, resizable from 200 to 480 by the same handle as the
       rail, the width kept in `shinsa.code-explorer-width`; below `md` it is a sheet opened from the toolbar's
-      Show the files, closed by picking a file, Escape or a click outside). Below `xl` the toolbar's Unified / Side by
-      side, Suggest a change and Open in editor become icon buttons with their names as tooltips) and the editor on
-      the right: the 36px `Toolbar` (the file's icon, its path and diff counts), then the code. There are no editor
+      Show the files, closed by picking a file, Escape or a click outside) and the editor on the right: the 36px
+      `Toolbar` (the file's icon, its path and diff counts, "Saving…" while an edit is on its way, and on a diff the
+      layout toggle), then the code. The toolbar has no Open in editor: Shinsa is where you read and edit the code
+      (the task's ⌘K and its menu still open the checkout in your editor). There are no editor
       tabs: one file is open at a time, and you switch from the file list, the review, a search result or ⌘P. The
       column's header is the mode `Choice` (Review, Changes, Files; one mode shows as its plain label), the
       search button (`icon-sm`, pressed while Search is open) and the ref picker under them: a `SelectField`
@@ -1386,8 +1398,9 @@ Only these, and they win over anything below:
     - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
       each file with a red risk dot with its reason, your comment count, the diff counts (or Binary), its status
       letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
-      kit's `Checkbox` at `sm` (14px, an `fg-1` edge, `rounded-checkbox`; ticked, filled `primary-4` with a white
-      check). A viewed row reads as done, greyed to the disabled step: its name, status letter, counts, comment
+      kit's `Checkbox` at `sm` (14px, a quiet `icon-1` edge that turns `fg-1` on hover, `rounded-checkbox`; ticked,
+      filled `primary-4` with a white check centred over the whole box, border included, so it sits true at 14px as
+      at 16px), with no tooltip: the box says what it does. A viewed row reads as done, greyed to the disabled step: its name, status letter, counts, comment
       count and risk dot all `fg-1`, its icon in `icon-1` even when the language mark is coloured
       (`file-icons-muted`); the open file keeps its selected look whether viewed or not. "2 files · 1 viewed"
       heads the tree beside the total counts and the Hide viewed files toggle (`icon-xs`, an eye; remembered in
@@ -1433,30 +1446,50 @@ Only these, and they win over anything below:
       `icon-xs` buttons with 14px glyphs inside the right end of the field. Off they are the field's quiet ink, on
       they are `primary-text` on a `primary-a2` fill, so the state reads without hovering. The file search and the
       editor's find bar share the field.
-    - **The editor is CodeMirror 6**, read-only, coloured from the `--code-*` tokens (`globals.css`: keyword purple,
+    - **The editor is CodeMirror 6**, coloured from the `--code-*` tokens (`globals.css`: keyword purple,
       string green, number orange, comment `fg-2`, function `primary-text`, type amber, property blue, tag red,
       punctuation `fg-3`; the diff washes `--code-added`/`--code-removed` and their strong steps for changed words),
       12px ABC Areal Mono on an 18px line, so both themes need no override. Every other highlighted code (chat code
       fences, tool output and snippets) runs Shiki on one theme of its own (`lib/code/highlight.ts`,
       TextMate scopes mapped to the same `--code-*` variables, no GitHub themes), so a fence and the editor read the
-      same colours in both themes; the two parsers can still disagree on a token's kind. A diff tab is unified by default: removed
-      lines sit above where they were, highlighted from a parse of the whole old file (so a removed line inside a
-      block comment reads as a comment), numbered in red in the gutter; changed words are washed, unchanged stretches
-      of four lines or more fold into "N unchanged lines" (a click opens them). Unified or Side by side (the
-      toolbar's `Choice`, hidden below `md`) is remembered (`shinsa.code-split`); side by side is CodeMirror's merge
-      view with the old file on the left. A binary file shows nothing as text, and an image before and after on a
+      same colours in both themes; the two parsers can still disagree on a token's kind. A diff opens side by side:
+      CodeMirror's merge view with the old file on the left. Unified is the toggle (an `icon-sm` button at the
+      toolbar's end, hidden below `md`, showing the layout it switches to: `IconLayoutTopBottom` "Show unified",
+      `IconLayoutColumn` "Show side by side"; ⌘K has it too), remembered in `shinsa.code-unified`. Unified puts
+      removed lines above where they were, highlighted from a parse of the whole old file (so a removed line inside a
+      block comment reads as a comment), numbered in red in the gutter. Changed words are washed, and unchanged
+      stretches of four lines or more fold into "N unchanged lines": a click opens them, and they are no place for the
+      cursor, so the arrow keys step over a fold (`lib/code/editor/collapsed.ts`, a transaction filter that moves a
+      cursor landing in a folded block widget past it in the direction it was going; a selection or an edit is left
+      alone). Each side scrolls sideways on its own: its line numbers stay pinned at its left on the page background
+      and the code slides under them, while the fold labels and the notes under lines follow the scroll
+      (`--scroll-left`), so they stay in view. A binary file shows nothing as text, and an image before and after on a
       checkerboard; a file over 2 MB says its size.
+    - **You edit directly.** The file at Head of the branch or the Working copy of an open task is editable: typing
+      edits, there is no mode to turn on and nothing to confirm, and ⌘Z undoes. In a diff the new side is the editable
+      one (the right side side by side, the whole editor unified) and the diff follows each keystroke. Each pause
+      (600ms) saves the file to the task's working copy (`lib/code/edits.ts`, `FileSaver`; `hooks/use-file-saver.ts`;
+      `POST /api/tasks/<id>/file`, `docs/engine.md` → Your edits), "Saving…" shows in the toolbar meanwhile, and a file
+      you leave or close is saved at once. A save names the text it expects on disk; when the file changed there (an
+      agent writing, another window), the editor takes the disk version: your unsaved edit is kept when it touches
+      other lines, and otherwise the disk version shows with "This file changed on disk where you were typing, so it
+      shows the new version." in a one-line strip under the toolbar (`IconCircleInfo`, `text-2xs` `fg-2`). Once you
+      edited a file, the Code tab reads it from the working copy, so a reload shows your edit and not the commit
+      (`isEditedPath`; in GitButler the working copy is the files the task owns read from disk and the rest from its
+      branch, `docs/engine.md` → Your edits). Elsewhere the
+      editor is read-only and the same strip (`IconLock`) says why: an earlier commit or the base ("This is an earlier
+      commit, so it is read-only. Pick Head of the branch to edit."), a merged task, a finished one, one with no checkout
+      (`resolveEditRefusal`, core), or the server's refusal of a save. Shinsa still makes every commit: your edits go
+      into the round's next commit, and the agent hears which files you edited (`docs/engine.md` → Your edits).
     - **Inline.** Findings sit under their last line in their tone (`red-a1` blocking, `amber-a1` a suggestion), each
       spot's lines carry a 2px bar in its attention tone and the selected one the `primary-a1` wash. At a review or
       merge gate a click on a line number opens a comment box under it (on the selected lines when the click is in a
       selection); a removed line's number does the same for the removed line, and its comment sits under the removed
       block. A comment is `primary-a1` with Remove; it is kept per gate in localStorage, anchored to the commit it was
-      made at, and goes with Request changes. Suggest a change makes the file editable at the head; Add the suggestion
-      keeps the edit as a comment with the changed lines (removed and added, as a small `CodeDiff`, 33) and puts the
-      file back.
-      A suggestion always replaces whole lines (an added line takes the line before it along), and it reaches the
-      agent with its path, lines, the original text and the replacement (`docs/protocol.md` → Line comments).
-      Nothing is written to the worktree: Shinsa owns every commit.
+      made at, and goes with Request changes. A comment is words only; to change the code, edit it (above). The comment
+      box and every note under a line are at most 36rem wide and never wider than the side they sit in less its
+      gutter (`100cqw - 6rem`, each editor being its own inline-size container), so a box for a long selection wraps
+      inside the visible pane instead of running off it.
     - **Keys.** While the Code tab is open, and only then, it binds ⌘P (Go to file), ⇧⌘F (Search in files), ⌘F
       (find in the open file) and ⌘G (go to line), Ctrl elsewhere (`hooks/use-code-keys.ts`,
       `lib/code/keys.ts`). Each is also a ⌘K command with its key at the right, so the menu stays the one complete
@@ -1472,12 +1505,11 @@ Only these, and they win over anything below:
       reads), so a merged task whose worktree is gone keeps its code, a review never shifts while an agent types, and
       nothing is read again because the task changed in some other way.
 33. **Two ways to show code: the Code tab is an editor, every other diff is `@pierre/diffs`.** The Code tab (32)
-    stays CodeMirror 6, its merge view included: it edits (suggested changes), finds, goes to a line, folds and
+    stays CodeMirror 6, its merge view included: it edits, finds, goes to a line, folds and
     holds a 10k-line file, which a diff renderer does not. Every small diff anywhere else goes through one wrapper,
     `CodeDiff` (`components/text/code-diff.tsx`), on `@pierre/diffs` (diffs.com): the chat's Edit and Write rows
     (a write is a new file, every line added), the spots in a phase hand-over card and on the Overview's What
-    changed, a review finding's code (in the chat's review card and the fix gate's findings), and a suggested change
-    in a Code tab comment. Never hand-build `+`/`−` rows or a second diff renderer.
+    changed, and a review finding's code (in the chat's review card and the fix gate's findings). Never hand-build `+`/`−` rows or a second diff renderer.
     - **Lazy.** `CodeDiff` itself is a few lines in the entry bundle; the library loads with
       `components/text/code-diff-view.tsx` the first time a diff is shown (its own chunk, about 81 KB gzipped, and
       the Shiki grammars it shares with the code fences), and the language's grammar is loaded before the first
@@ -1489,7 +1521,7 @@ Only these, and they win over anything below:
       header, no border and no background of its own: the card it sits in (the chat's detail block, the change
       snippet's frame, the comment) is the chrome.
     - **Unified, folded at 14 lines.** Always unified. A diff over 16 rows shows 14 and "Show N more lines"
-      (`resolveDiffClamp`, the chat's own button). A snippet (an edit's old and new text, a suggestion) has no line
+      (`resolveDiffClamp`, the chat's own button). A snippet (an edit's old and new text) has no line
       numbers and marks lines `+`/`−`, since its numbers would not be the file's; a whole file or a slice of the
       task's diff is numbered with a 2px bar on changed lines. A binary file says "A binary file, not shown as
       text.", a renamed one "Renamed from ‹path›." above its lines, identical text "No line changed."

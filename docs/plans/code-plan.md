@@ -9,20 +9,29 @@ a tab strip, and one editor area where every tab is a file or a diff. Build it o
 default, `@codemirror/merge` for diffs, `@codemirror/search` for find and go to line). Read every file from git
 objects at a pinned commit, not from the worktree's working copy, so code stays viewable after the worktree is gone and
 a review never shifts under you while an agent keeps typing. Search runs on the server with `git grep` (no extra
-binary). Editing is in scope only as **suggested changes**: you edit in place, the edit becomes a suggestion in your
-review draft and goes to the agent with Request changes. Direct commits by you come later, behind a question below.
+binary). Editing was first planned as suggested changes sent with Request changes; since 2026-10-25 you **edit
+directly**: the file saves to the task's working copy as you type and goes into the round's next commit (below).
 
 ## Done since the plan
 
-- **Suggested changes reach the agent whole.** `gate.answer` carries line comments as data (`comments`,
-  `ReviewComment` with `suggestion: { original, replacement }`); core writes the fixer's prompt with the path, the
-  lines, the original text and the replacement, verbatim (`docs/protocol.md` → Line comments). A suggestion always
-  replaces whole lines.
+- **Line comments reach the agent whole.** `gate.answer` carries them as data (`comments`, `ReviewComment`: path,
+  side, lines, words); core writes them into the agent's fix prompt (`docs/protocol.md` → Line comments).
+- **Direct editing (2026-10-25), replacing suggested changes.** The editor at Head of the branch or the Working copy
+  of an open task is editable with no mode; each pause saves through `POST /api/tasks/<id>/file` with the text it
+  expects on disk (a 409 hands back the disk's text, merged with your unsaved edit when the lines differ), through
+  each workspace strategy (`writeEdit`; GitButler records the path as the task's in its ledger). Core keeps
+  `editedPaths` and `untoldEdits`: the agent is steered at once and told again in its next turn; approving the review
+  with edits no hand-over took commits them and runs the checks again, and approving the merge with them pushes them
+  and merges once CI passes (`docs/engine.md` → Your edits). Suggestions are gone
+  everywhere (`ReviewComment.suggestion`, the web's Suggest a change and Add the suggestion, the prompt lines).
+- **Side by side by default (2026-10-25).** Unified is the remembered toggle (`shinsa.code-unified`); each side
+  scrolls under pinned line numbers; folds are no cursor stop (`lib/code/editor/collapsed.ts`); notes fit the side
+  they sit in; Open in editor left the toolbar.
 - **One set of code colours.** Chat code fences, tool output and snippets run Shiki on a theme of TextMate scopes
   mapped to the `--code-*` tokens the CodeMirror editor reads (`lib/code/highlight.ts`); the GitHub themes and
   `.code-token` are gone.
 - **`/ui` specimens for the editor** (`routes/ui/code.tsx`): the code tokens, a chat fence beside the editor, a diff
-  unified with a finding, a comment and its suggested change inline, the same diff side by side, and Go to file.
+  side by side with its new side editable, the same diff unified with a finding and a comment inline, and Go to file.
 
 ## What is weak today (the user has not reviewed this UI)
 
@@ -84,7 +93,7 @@ read-mostly, 900px-window app. `@pierre/diffs` is the strong runner-up for the d
 second stack. Phase 0 spikes both on the seed's large diff before committing.
 
 Settled since: the Code tab, its merge view included, stays CodeMirror, and `@pierre/diffs` took every small diff
-outside it (chat edits and writes, change snippets for spots and findings, suggested changes), through one lazily
+outside it (chat edits and writes, change snippets for spots and findings), through one lazily
 loaded wrapper, `CodeDiff` (`docs/design.md`, Where Shinsa differs, 33).
 
 Highlighting: CodeMirror's Lezer grammars (lazy per language via `@codemirror/language-data`), coloured by one
@@ -162,19 +171,19 @@ exist, so the menu stays the one complete place.
 - Docs in the same change: `docs/design.md` (a Code tab section: workbench, modes, tabs, the keys), `docs/spec.md`,
   `docs/engine.md` (the endpoints), `apps/web/CLAUDE.md` layout table.
 
-## Editing: read-mostly, edits become suggestions
+## Editing: direct, in the working copy (decided 2026-10-25)
 
-Why not full editing: Shinsa owns every commit (`complete_phase`, `complete_fix`) and the event log has to say who
-changed what; the agent may be running in the same worktree; and the review gate already has a path for "change
-this": the draft that Request changes sends. So:
+The plan first kept the editor read-mostly, with edits as suggestions sent with Request changes, because Shinsa owns
+every commit and an agent may be working in the same checkout. You chose direct editing instead, so:
 
-1. **Phase 5, suggestions.** In a diff or file tab at a review gate, Edit makes the buffer writable. Saving does not
-   touch disk: the edit is stored in the review draft as a `suggestion` (path, range, replacement), shown as a
-   comment with a mini diff, and goes to the agent with Request changes; the agent's prompt says to apply it as
-   written unless it breaks something. `lib/review/draft.ts` `LineComment` grows `endLine?` and `suggestion?`.
-2. **Later, if you want it: Commit as you.** At a gate (no agent running), write the buffer to the worktree and record
-   a human commit through a new command and effect (`task.commit_edit` → `git commit --author=<you>`), so the log
-   shows it. Not in this plan's phases.
+1. **Typing edits.** At Head of the branch or the Working copy of an open task the editor is editable with no mode,
+   in a diff on its new side; ⌘Z undoes. Each pause saves the file to the task's working copy, through the
+   workspace strategy, with the text the editor expects on disk, so it never overwrites an agent's write it has not
+   seen (the editor merges or shows the disk version instead).
+2. **Shinsa still commits.** Your edits go into the round's next commit; approving the review commits any no
+   hand-over took before it pushes; the merge gate waits for them. The agent is told which files you edited.
+3. **Not built:** commits authored as you (`git commit --author`), and a per-file record of who wrote which line
+   while an agent edits the same file.
 
 ## Phases and acceptance checks
 
@@ -194,8 +203,8 @@ this": the draft that Request changes sends. So:
 4. **Search in files (1-2 days).** Panel in the explorer column, streamed results grouped by file, click opens at the
    line, case and regex toggles. Pass: a search over the seed repo returns in < 1 s; a regex that runs away is cut at
    5 s with a message; results at a past ref match `git grep` at that ref.
-5. **Suggested changes (2 days).** As above. Pass: a suggestion survives reload (draft is persisted), shows in Your
-   comments with its diff, and reaches the fix agent's prompt verbatim.
+5. **Editing (done 2026-10-25, direct instead of suggestions).** Pass: typing at the head saves to the working copy,
+   survives a reload, reaches the next commit, and the agent's next turn names the file.
 
 ## Seed data for trying it (`scripts/seed-code.ts`, new, called from `scripts/seed.ts`)
 
@@ -236,9 +245,9 @@ TS, TSX, CSS, Markdown and JSON). On it:
 
 1. May the Code tab bind ⌘P, ⌘⇧F, ⌘F and ⌘G while it is open (an exception to "⌘K is the only shortcut"), or
    should all of it go through ⌘K?
-2. Editing: is "edits become suggestions sent with Request changes" enough, or do you also want Commit as you?
+2. ~~Editing: suggestions or Commit as you?~~ Answered 2026-10-25: direct editing, Shinsa commits.
 3. Should Files mode exist on tasks without code changes (questions, investigations), browsing the repository at its
    default branch, or only on tasks with a Code tab?
-4. Default diff layout: unified (today) or split, and should the choice be remembered per user?
+4. ~~Default diff layout?~~ Answered 2026-10-25: side by side, unified is the remembered toggle.
 5. Is it fine for the seed to snapshot this repository's own code as `shinsa-sample`, or do you prefer a pinned
    public repository cloned at seed time (needs the network)?

@@ -61,13 +61,15 @@ src/
 │                        status, the account named with its provider, Run on account items)
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
-│                        sound and notification, a menu item's answer (use-menu-answer), review draft, ⌘K key…)
+│                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, state, acks,
     │                    transcripts, whether the desktop app is connected, reconnect), commands.ts
     │                    (sendCommandWithToast, requestWithToast, copyText), http.ts (requestJson: a JSON
     │                    request whose refusal becomes the server's message), code.ts (the Code tab's reads: refs, paths, tree, blob,
-    │                    search and diff, cached by commit, never read again for an unrelated task event), models.ts, worktree.ts (open in editor / terminal / Finder), onboarding.ts
+    │                    search and diff, cached by commit, never read again for an unrelated task event, and requestFileWrite, the one
+    │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / terminal / Finder), onboarding.ts
     │                    (the onboarding status, folders, suggestions and the setup chat over HTTP),
     │                    projects.ts (/api/repos/local, adding a repository or a folder to a project),
     │                    accounts.ts (useAccounts over the snapshot the socket holds, /api/accounts/* changes,
@@ -95,16 +97,18 @@ src/
     ├── code/            The Code tab: location.ts (every view position in the URL: mode, file, line, ref, spot,
     │                    search), tree.ts, file-icons.ts (the icon of a file or folder), prefetch.ts (the Code tab's reads ahead of a
     │                    click), rank.ts (quick open), search.ts, refs.ts (the ref picker), source.ts, notes.ts
-    │                    (findings, comments and spots on a file), suggestion.ts (an edit as a suggested change
-    │                    of whole lines, with the original text it replaces),
+    │                    (findings, comments and spots on a file), edits.ts (editing in place: whether the open
+    │                    file is editable and why not, the FileSaver that saves each pause against the text on
+    │                    disk, the line merge with a disk change, what you saved per read),
     │                    collapse.ts, pane.ts, keys.ts (⌘P, ⇧⌘F, ⌘F, ⌘G); editor/ (CodeMirror: the Shinsa theme,
     │                    languages, the unified diff with removed lines highlighted in context, note slots, the
-    │                    comment gutter, find.ts: the find bar's panel and match count); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
+    │                    comment gutter, find.ts: the find bar's panel and match count, collapsed.ts: the cursor
+    │                    stepping over folded lines and the sideways scroll the folds and notes follow); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
     │                    the task diff, notes, the 14-line fold), diff-theme.ts (`@pierre/diffs` on the `--code-*`
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)
-    ├── review/          Review targets, the fallback report, the line-comment draft (sides, ranges, suggested
-    │                    changes, kept in localStorage per gate; serializeComments is what `gate.answer` sends
+    ├── review/          Review targets, the fallback report, the line-comment draft (sides, ranges, kept in
+    │                    localStorage per gate; serializeComments is what `gate.answer` sends
     │                    as `comments`), finding places
     ├── overview/        Now card titles, progress steps, activity glyphs, evidence kinds, waits,
     │                    questions, verdicts, plan versions, plan parameters, the operation gate and its notes, setup
@@ -171,7 +175,8 @@ files after it.
   function in `lib/` with a test. A component used by one route still lives in `components/<domain>/` when the
   route file would otherwise grow past a screenful.
 - **⌘K is the only shortcut, but for the Code tab.** Pages add commands with `useRegisterCommands(sections)` while
-  mounted (`docs/design.md`, 14). While the Code tab is open it binds ⌘P, ⇧⌘F, ⌘F and ⌘G (`hooks/use-code-keys.ts`),
+  mounted (`docs/design.md`, 14). A command or choice option is disabled only with its reason (`disabled: '…'`, a
+  string shown in place of the hint); there is no boolean. While the Code tab is open it binds ⌘P, ⇧⌘F, ⌘F and ⌘G (`hooks/use-code-keys.ts`),
   each also a ⌘K command; `bun lint:conventions` rejects a global key listener anywhere else.
 - **One owner per shared piece.** The visual ones (tones, times, cards, check marks, task actions, dependencies)
   are listed in `docs/design.md`, 15. In code, besides those: gate replies go through `lib/tasks/gates.ts`, what a message does (every composer's

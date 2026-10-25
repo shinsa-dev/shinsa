@@ -37,15 +37,13 @@ export function StatusLetter({ status, muted = false }: { status: DiffFile['stat
 
 function ViewedBox({ viewed, onToggle }: { viewed: boolean; onToggle: () => void }) {
   return (
-    <Hint label={viewed ? 'Viewed. Click to mark as not viewed' : 'Mark as viewed'}>
-      <Checkbox
-        size='sm'
-        aria-label='Viewed'
-        checked={viewed}
-        onCheckedChange={onToggle}
-        onClick={(event) => event.stopPropagation()}
-      />
-    </Hint>
+    <Checkbox
+      size='sm'
+      aria-label='Viewed'
+      checked={viewed}
+      onCheckedChange={onToggle}
+      onClick={(event) => event.stopPropagation()}
+    />
   );
 }
 
