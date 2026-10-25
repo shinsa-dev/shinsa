@@ -2658,7 +2658,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   code the page shows is pasted back (`code\r`). After 5 s without a link Shinsa presses Enter once (a menu), after
   30 s it gives up with the keychain hint, after 16 minutes the whole sign-in stops. When `claude` exits,
   `claude auth status --json` must report the account signed in, or the sign-in fails; a new account whose first
-  sign-in fails, or whose email is already an account, is removed again. Claude Code writes the keychain entry
+  sign-in fails, or whose login is already an account (One login, one account, below), is removed again. Claude Code writes the keychain entry
   itself, named `Claude Code-credentials-<first 8 hex of sha256(NFC(config dir))>`. Success dispatches
   `account.signed_in`.
 - **Importing.** `GET /api/accounts` offers your Claude Code login while it is signed in and no account is your
@@ -2666,10 +2666,25 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   `claude-swap` when `cswap` is missing, cached 10 minutes) whose email is not an account. Importing your login only
   records it. Importing from claude-swap reads `cswap export - --account <email>`, writes `{ claudeAiOauth }` to the
   new folder's `.credentials.json` (mode 600) and `oauthAccount` into its `.claude.json` (Claude Code moves it into
-  its keychain entry on first use), and keeps the account only if `claude auth status` then reports that email. The
+  its keychain entry on first use), and keeps the account only if `claude auth status` then reports that email; a
+  login that is already an account, your Claude Code login included, is refused (`account_exists`). The
   web tells you to take it out of claude-swap (or turn off its auto-switch): refresh tokens are single-use, so two
   tools refreshing one login break it. The first start with no account list adds your signed-in Claude Code login as
   the default account.
+- **One login, one account** (`isSameIdentity`, `AccountStore.resolveDuplicates` in `accounts/store.ts`). A login is
+  its email and organization, compared without case; an organization that is not known yet matches any, and the same
+  email in another organization is another login. Your Claude Code login follows whatever `~/.claude` is signed in
+  as, so switching it (with claude-swap, or `claude auth login`) can make it the same login as an account Shinsa
+  already has, or the other way round. Two accounts with one login are never two rows and never two candidates:
+  their refresh token is single-use, so two copies refreshing sign each other out, and their usage is one quota
+  counted twice. Shinsa keeps one, worked out on every read from `accounts.json` as it stands (nothing is rewritten or
+  removed): your Claude Code login first, since its token never forks, then the default account, then the one listed
+  first. The other is a duplicate. It is left out of the snapshot's `accounts` and listed in its `duplicates`
+  (`{ id, email, keptId }`, a line under the accounts in Settings → Agent usage and an info log the first time), its
+  usage is not read, and leasing never picks it: a task or run bound to it, or a previous attempt on it, gets the
+  kept account, and the kept account is the default when the duplicate is. Shinsa never signs a duplicate out,
+  which could revoke the login it shares. Once the logins differ again (your Claude Code login switched back), both
+  are accounts as before, with their own settings.
 - **Usage** (`accounts/usage.ts`, `accounts/limits.ts`). `GET https://api.anthropic.com/api/oauth/usage` with the
   account's OAuth token (from the keychain through `/usr/bin/security find-generic-password -w`, else
   `.credentials.json`) and `anthropic-beta: oauth-2025-04-20`. The `limits` array wins: `session` is "5-hour
@@ -2738,8 +2753,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   retries with your words as guidance, reject cancels; a message is a `reply`), only by you, and `account.signed_in` (a
   successful sign-in) answers every open Sign in gate of that account and retries those tasks. `account.removed` releases the tasks bound to a removed account and retries its
   Sign in gates on the pool.
-- **The API** (`accounts/routes.ts`): `GET /api/accounts` → `AccountsSnapshot` (`{ accounts, login, imports, providers
-  }`, `packages/core/src/protocol/accounts.ts`), also pushed on every socket as `{ type: 'accounts' }` on connect and
+- **The API** (`accounts/routes.ts`): `GET /api/accounts` → `AccountsSnapshot` (`{ accounts, login, imports, duplicates,
+  providers }`, `packages/core/src/protocol/accounts.ts`), also pushed on every socket as `{ type: 'accounts' }` on connect and
   on every change. `POST /api/accounts/refresh`, `/login` (`{ accountId? }`; none signs in a new account),
   `/login/code` (`{ loginId, code }`), `/login/cancel` (`{ loginId }`; on a finished sign-in it clears it), `/import`
   (`{ origin: 'claude' | 'cswap', email }`), `/update` (`{ accountId, patch: { isDefault?: true, paused?, switchAt?,

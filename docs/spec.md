@@ -246,7 +246,9 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   switch threshold). Each run uses the account with room (a task can be pinned to one, and a step
   rerun on the account you choose); a turn the limit rejects moves to another account, and when
   none has room the task waits for the reset and carries on by itself. A signed-out account asks
-  you to sign in instead of failing the task (`docs/engine.md` → Accounts and usage limits).
+  you to sign in instead of failing the task. One login is one account: when your Claude Code login
+  switches to a login Shinsa already has, Shinsa shows it once, runs it from your Claude Code login
+  and says so (`docs/engine.md` → Accounts and usage limits).
 - **Codex too.** Everything above works for agents on Codex, on its one login for now: its usage
   windows (read the way CodexBar reads them), a cost for every run that counts toward the usage
   and cost limits per task, waiting for its limit to reset and carrying on, a sign-in gate,

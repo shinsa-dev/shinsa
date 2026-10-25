@@ -6,6 +6,7 @@ import { Cswap } from '../../src/accounts/cswap.ts';
 import { Accounts, createOnboardingAccounts } from '../../src/accounts/index.ts';
 import type { LoginProcess, LoginSpawner } from '../../src/accounts/login.ts';
 import { resolveKeychainService } from '../../src/accounts/paths.ts';
+import type { StoredAccount } from '../../src/accounts/store.ts';
 import type { RunRejection } from '../../src/agents/index.ts';
 import type { ProviderUsageReading, ProviderUsageSource } from '../../src/agents/providers/index.ts';
 import { log } from '../../src/log/index.ts';
@@ -166,12 +167,12 @@ function windows(session: number, weekly: number, fable = 0, resetsAt = '2030-01
   };
 }
 
-async function addAccount(world: World, email: string, used: number) {
+async function addAccount(world: World, email: string, used: number, orgName?: string) {
   const before = new Set(world.accounts.store.list().map((existing) => existing.id));
   await world.accounts.startLogin(null);
   const account = world.accounts.store.list().find((candidate) => !before.has(candidate.id));
   if (!account?.configDir) throw new Error('no account was created');
-  world.statuses.set(account.configDir, { loggedIn: true, email, subscriptionType: 'max' });
+  world.statuses.set(account.configDir, { loggedIn: true, email, orgName, subscriptionType: 'max' });
   world.login(account.configDir, `token-${email}`);
   world.usage.set(`token-${email}`, windows(used, used));
   world.processes.at(-1)?.exit(0);
@@ -576,6 +577,102 @@ describe('importing logins', () => {
     expect(() => world.accounts.importAccount('elsewhere', 'a@b.com')).toThrow(
       'Import your Claude Code login or an account from claude-swap.'
     );
+  });
+});
+
+describe('one login, one account', () => {
+  async function addClaudeLogin(world: World, email: string, orgName: string) {
+    world.statuses.set('default', { loggedIn: true, email, orgName, subscriptionType: 'max' });
+    world.login(null, `token-${email}-claude`);
+    world.usage.set(`token-${email}-claude`, windows(40, 40));
+    await world.accounts.refresh();
+    await world.accounts.importAccount('claude', email);
+    return world.accounts.store.list().find((account) => account.origin === 'claude') as StoredAccount;
+  }
+
+  test('your Claude Code login switching to an account Shinsa has shows one account and runs only on your login', async () => {
+    const world = createWorld({ registry: true });
+    const mine = await addClaudeLogin(world, 'me@example.com', 'Acme');
+    const work = await addAccount(world, 'work@example.com', 10, 'Acme');
+    world.accounts.update(work.id, { isDefault: true });
+    expect(world.accounts.snapshot().accounts.map((account) => account.id)).toEqual([mine.id, work.id]);
+    expect(world.accounts.snapshot().duplicates).toEqual([]);
+
+    const info = spyOn(log, 'info');
+    world.statuses.set('default', { loggedIn: true, email: 'WORK@example.com', orgName: 'acme' });
+    world.login(null, 'token-work@example.com-claude');
+    world.usage.set('token-work@example.com-claude', windows(20, 20));
+    const snapshot = await world.accounts.refresh();
+    expect(snapshot.accounts).toHaveLength(1);
+    expect(snapshot.accounts[0]).toMatchObject({ id: mine.id, email: 'WORK@example.com', isDefault: true });
+    expect(snapshot.duplicates).toEqual([{ id: work.id, email: 'work@example.com', keptId: mine.id }]);
+    expect(
+      info.mock.calls.filter(([message]) => String(message).startsWith('[Accounts] Two accounts hold'))
+    ).toEqual([
+      [
+        '[Accounts] Two accounts hold the same login; Shinsa uses one and leaves the other alone',
+        { accountId: work.id, keptId: mine.id, email: 'work@example.com' },
+      ],
+    ]);
+    info.mockRestore();
+
+    expect(await lease(world)).toMatchObject({ id: mine.id, configDir: null });
+    const bound = { id: work.id, email: work.email };
+    expect(await lease(world, { bound })).toMatchObject({ id: mine.id, reason: null });
+    expect(await lease(world, { previous: bound })).toMatchObject({ id: mine.id, reason: null });
+    world.stub.update((state) => {
+      state.runs['run-1'] = createRun({ account: bound });
+    });
+    expect(reject(world, mine.id, { resetAt: world.now + HOUR })).toMatchObject({
+      retry: false,
+      failure: { resetAt: world.now + HOUR },
+    });
+
+    const reads = world.secretReads.length;
+    await world.accounts.refresh();
+    expect(world.secretReads.slice(reads)).toEqual([resolveKeychainService(world.shared)]);
+
+    world.statuses.set('default', { loggedIn: true, email: 'me@example.com', orgName: 'Acme' });
+    const back = await world.accounts.refresh();
+    expect(back.accounts.map((account) => account.id)).toEqual([mine.id, work.id]);
+    expect(back.accounts.map((account) => account.isDefault)).toEqual([false, true]);
+    expect(back.duplicates).toEqual([]);
+  });
+
+  test('an account already held by your Claude Code login is neither offered nor imported from claude-swap', async () => {
+    const world = createWorld({ registry: true });
+    await addClaudeLogin(world, 'me@example.com', 'Acme');
+    const login = {
+      email: 'me@example.com',
+      credentials: { claudeAiOauth: { accessToken: 'a', refreshToken: 'r', expiresAt: 1 } },
+      config: { oauthAccount: { emailAddress: 'me@example.com', organizationName: 'Acme' } },
+    };
+    world.setCswap({ accounts: [{ email: 'me@example.com' }] }, { accounts: [login] });
+    await world.accounts.refresh();
+    expect(world.accounts.snapshot().imports).toEqual([]);
+    await expect(world.accounts.importAccount('cswap', 'ME@example.com')).rejects.toThrow(
+      'ME@example.com is already in your accounts.'
+    );
+    expect(world.accounts.store.list()).toHaveLength(1);
+  });
+
+  test('the same email in another organization is another account, and a new sign-in to one you have is refused', async () => {
+    const world = createWorld({ registry: true });
+    const mine = await addClaudeLogin(world, 'me@example.com', 'Acme');
+    const team = await addAccount(world, 'me@example.com', 10, 'Team');
+    expect(world.accounts.snapshot().accounts.map((account) => account.id)).toEqual([mine.id, team.id]);
+
+    await world.accounts.startLogin(null);
+    const twin = world.accounts.store.list().find((account) => ![mine.id, team.id].includes(account.id));
+    world.statuses.set(twin?.configDir as string, {
+      loggedIn: true,
+      email: 'me@example.com',
+      orgName: 'Team',
+    });
+    world.processes.at(-1)?.exit(0);
+    await until('the duplicate to fail', () => world.accounts.logins.current()?.phase === 'failed');
+    expect(world.accounts.snapshot().login?.message).toBe('me@example.com is already in your accounts.');
+    await until('the duplicate to be removed', () => world.accounts.store.list().length === 2);
   });
 });
 

@@ -105,9 +105,10 @@ export class AccountRotation {
   #listCandidates(knownResets: boolean): AccountCandidate[] {
     const { store, limits, signIns, state } = this.#options;
     const threshold = resolveAccountSwitchAt(state().settings);
-    return store.list().map((account) => ({
+    const duplicates = store.resolveDuplicates();
+    return store.listDistinct().map((account) => ({
       id: account.id,
-      isDefault: store.defaultAccountId === account.id,
+      isDefault: store.isDefault(account.id, duplicates),
       paused: account.paused,
       signIn: signIns.get(account.id)?.signIn ?? 'unknown',
       usage: limits.snapshot(account.id),
@@ -116,16 +117,21 @@ export class AccountRotation {
     }));
   }
 
+  #resolveKept(id: string | null) {
+    if (id === null) return null;
+    return this.#options.store.resolveDuplicates().get(id) ?? id;
+  }
+
   lease(request: AccountLeaseRequest): AccountLease | null {
     const { store, limits } = this.#options;
-    const ids = store.list().map((stored) => stored.id);
+    const ids = store.listDistinct().map((stored) => stored.id);
     if (ids.length === 0) return null;
     const stale = ids.filter((id) => !limits.isFresh(id));
     if (stale.length > 0) void limits.refresh(stale);
     const picked = pickAccount({
       accounts: this.#listCandidates(false),
-      bound: request.bound?.id ?? null,
-      previous: request.previous?.id ?? null,
+      bound: this.#resolveKept(request.bound?.id ?? null),
+      previous: this.#resolveKept(request.previous?.id ?? null),
       model: request.model,
       exclude: new Set(request.exclude),
       now: this.#options.now(),
@@ -176,7 +182,7 @@ export class AccountRotation {
     }
     if (failure.class === 'auth') return { retry: false, failure: refined };
     const candidates = bound
-      ? this.#listCandidates(true).filter((candidate) => candidate.id === bound.id)
+      ? this.#listCandidates(true).filter((candidate) => candidate.id === this.#resolveKept(bound.id))
       : this.#listCandidates(true);
     const resetAt = resolvePoolResetAt(candidates, model, now) ?? failure.resetAt;
     return { retry: false, failure: { ...refined, resetAt } };

@@ -76,6 +76,7 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
     ],
     login: null,
     imports: [],
+    duplicates: [{ id: 'copy', email: 'christo@example.com', keptId: 'side' }],
     providers: [createSampleProviderLogins(now)[0] as ProviderLogin],
   };
 }

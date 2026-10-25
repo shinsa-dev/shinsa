@@ -49,6 +49,8 @@ export interface AccountStoreOptions {
 
 export type AccountDetails = Partial<Pick<StoredAccount, 'email' | 'organization' | 'plan'>>;
 
+export type AccountIdentity = Pick<StoredAccount, 'email' | 'organization'>;
+
 type Fields = Record<string, unknown>;
 
 const ORIGINS = new Set<AccountOrigin>(['claude', 'login', 'cswap']);
@@ -91,6 +93,16 @@ function parseRegistry(value: unknown): Registry {
   const fallback = accounts[0]?.id ?? null;
   const defaultAccountId = accounts.some((account) => account.id === preferred) ? preferred : fallback;
   return { version: 1, defaultAccountId, accounts };
+}
+
+function isSameText(a: string, b: string) {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+function isSameIdentity(a: AccountIdentity, b: AccountIdentity) {
+  if (!a.email || !b.email || !isSameText(a.email, b.email)) return false;
+  if (!a.organization || !b.organization) return true;
+  return isSameText(a.organization, b.organization);
 }
 
 function isLink(path: string) {
@@ -173,9 +185,41 @@ export class AccountStore {
     return account;
   }
 
-  selectByEmail(email: string) {
-    const wanted = email.toLowerCase();
-    return this.list().find((account) => account.email?.toLowerCase() === wanted) ?? null;
+  selectByIdentity(identity: AccountIdentity, exceptId: string | null = null) {
+    return (
+      this.list().find((account) => account.id !== exceptId && isSameIdentity(account, identity)) ?? null
+    );
+  }
+
+  resolveDuplicates() {
+    const { accounts, defaultAccountId } = this.#registry;
+    const rank = (account: StoredAccount) => {
+      if (account.origin === 'claude') return 0;
+      return account.id === defaultAccountId ? 1 : 2;
+    };
+    const preferred = accounts
+      .map((account, index) => ({ account, index }))
+      .sort((a, b) => rank(a.account) - rank(b.account) || a.index - b.index)
+      .map(({ account }) => account);
+    const kept: StoredAccount[] = [];
+    const duplicates = new Map<string, string>();
+    for (const account of preferred) {
+      const keeper = kept.find((candidate) => isSameIdentity(candidate, account));
+      if (keeper) duplicates.set(account.id, keeper.id);
+      else kept.push(account);
+    }
+    return duplicates;
+  }
+
+  listDistinct() {
+    const duplicates = this.resolveDuplicates();
+    return this.list().filter((account) => !duplicates.has(account.id));
+  }
+
+  isDefault(id: string, duplicates = this.resolveDuplicates()) {
+    const preferred = this.#registry.defaultAccountId;
+    if (preferred === null) return false;
+    return preferred === id || duplicates.get(preferred) === id;
   }
 
   create(origin: AccountOrigin, details: AccountDetails = {}) {

@@ -225,12 +225,16 @@ describe('account store', () => {
     expect(readJson(join(fresh, '.claude.json'))).toEqual({ theme: 'light' });
   });
 
-  test('accounts are found by id or by email in any case', () => {
+  test('accounts are found by id or by their email and organization in any case', () => {
     const { store } = createStore();
-    store.create('login', { email: 'Me@X.dev' });
+    store.create('login', { email: 'Me@X.dev', organization: 'Acme' });
     store.create('login');
-    expect(store.selectByEmail('me@x.DEV')?.id).toBe('acc1');
-    expect(store.selectByEmail('none@x.dev')).toBeNull();
+    expect(store.selectByIdentity({ email: 'me@x.DEV', organization: 'ACME' })?.id).toBe('acc1');
+    expect(store.selectByIdentity({ email: 'me@x.dev', organization: null })?.id).toBe('acc1');
+    expect(store.selectByIdentity({ email: 'me@x.dev', organization: 'Other' })).toBeNull();
+    expect(store.selectByIdentity({ email: 'me@x.dev', organization: 'Acme' }, 'acc1')).toBeNull();
+    expect(store.selectByIdentity({ email: 'none@x.dev', organization: null })).toBeNull();
+    expect(store.selectByIdentity({ email: null, organization: null })).toBeNull();
     expect(store.find('acc2').id).toBe('acc2');
     expectDomainError(
       () => store.find('gone'),
@@ -468,5 +472,42 @@ describe('account store', () => {
     const account = store.create('login');
     expect(account.id).toMatch(/^[0-9a-f]{8}$/);
     expect(account.addedAt).toBeGreaterThan(0);
+  });
+
+  test('an account with the login of another is a duplicate of it, and your Claude Code login is the one kept', () => {
+    const { store } = createStore({ ids: ['copy', 'other', 'mine', 'org'] });
+    store.create('cswap', { email: 'me@x.dev', organization: 'Acme' });
+    store.create('cswap', { email: 'you@x.dev', organization: 'Acme' });
+    store.create('claude', { email: 'ME@x.dev', organization: 'acme' });
+    store.create('login', { email: 'me@x.dev', organization: 'Elsewhere' });
+    expect(store.defaultAccountId).toBe('copy');
+    expect([...store.resolveDuplicates()]).toEqual([['copy', 'mine']]);
+    expect(store.listDistinct().map((account) => account.id)).toEqual(['other', 'mine', 'org']);
+    expect(store.isDefault('mine')).toBe(true);
+    expect(store.isDefault('copy')).toBe(true);
+    expect(store.isDefault('other')).toBe(false);
+    store.update('mine', { email: 'new@x.dev' });
+    expect(store.resolveDuplicates().size).toBe(0);
+    expect(store.isDefault('mine')).toBe(false);
+  });
+
+  test('of two copies Shinsa keeps the default, then the one listed first', () => {
+    const { store } = createStore({ ids: ['first', 'second', 'third'] });
+    store.create('login', { email: 'me@x.dev' });
+    store.create('cswap', { email: 'me@x.dev', organization: 'Acme' });
+    store.create('cswap', { email: 'me@x.dev', organization: 'Acme' });
+    expect([...store.resolveDuplicates()]).toEqual([
+      ['second', 'first'],
+      ['third', 'first'],
+    ]);
+    store.updateDefault('third');
+    expect([...store.resolveDuplicates()]).toEqual([
+      ['first', 'third'],
+      ['second', 'third'],
+    ]);
+    store.remove('first');
+    store.remove('second');
+    store.remove('third');
+    expect(store.isDefault('third')).toBe(false);
   });
 });

@@ -93,8 +93,6 @@ export class AccountImports {
 
   async #importCswap(email: string) {
     const { store } = this.#options;
-    if (store.selectByEmail(email))
-      throw new DomainError('account_exists', `${email} is already in your accounts.`);
     const login = await this.#options.cswap.export(email);
     if (!login) {
       throw new DomainError(
@@ -104,6 +102,8 @@ export class AccountImports {
     }
     const organization =
       typeof login.oauthAccount?.organizationName === 'string' ? login.oauthAccount.organizationName : null;
+    if (store.selectByIdentity({ email, organization }))
+      throw new DomainError('account_exists', `${email} is already in your accounts.`);
     const account = store.create('cswap', { email, organization });
     const configDir = account.configDir as string;
     writeFileSync(join(configDir, '.credentials.json'), JSON.stringify(login.credentials), { mode: 0o600 });

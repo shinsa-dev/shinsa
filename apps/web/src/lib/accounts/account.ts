@@ -1,4 +1,5 @@
 import {
+  type AccountDuplicate,
   type AccountImport,
   type AccountSummary,
   type AccountSwitchReason,
@@ -155,6 +156,14 @@ export function describeImported(entry: AccountImport) {
     description:
       'Remove it from claude-swap or turn off claude-swap’s auto-switch, so only Shinsa refreshes this login.',
   };
+}
+
+export function describeDuplicate(duplicate: AccountDuplicate, accounts: AccountSummary[]) {
+  const kept = accounts.find((account) => account.id === duplicate.keptId);
+  if (kept?.origin === 'claude') {
+    return `Your Claude Code login is now ${duplicate.email}, which is also one of your accounts. Shinsa runs it from your Claude Code login and leaves the other copy alone.`;
+  }
+  return `${duplicate.email} is in your accounts twice. Shinsa runs it from one copy and leaves the other alone.`;
 }
 
 export function describeImport(entry: AccountImport) {

@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import {
+  type AccountDuplicate,
   type AccountSummary,
   type AccountsSnapshot,
   type ChatNotice,
@@ -99,6 +100,7 @@ export class Accounts {
   readonly #newLogins = new Set<string>();
   readonly #listeners = new Set<(snapshot: AccountsSnapshot) => void>();
   #last = '';
+  #duplicates = new Set<string>();
   #timer: ReturnType<typeof setInterval> | null = null;
   #unsubscribers: (() => void)[] = [];
   #stopped = false;
@@ -201,7 +203,7 @@ export class Accounts {
   }
 
   #listIds() {
-    return this.store.list().map((account) => account.id);
+    return this.store.listDistinct().map((account) => account.id);
   }
 
   async #status(env: Env): Promise<AuthStatus> {
@@ -333,7 +335,21 @@ export class Accounts {
     const serialized = JSON.stringify(snapshot);
     if (serialized === this.#last) return;
     this.#last = serialized;
+    this.#recordDuplicates(snapshot.duplicates ?? []);
     for (const listener of this.#listeners) listener(snapshot);
+  }
+
+  #recordDuplicates(duplicates: AccountDuplicate[]) {
+    const ids = new Set(duplicates.map((duplicate) => duplicate.id));
+    for (const duplicate of duplicates) {
+      if (this.#duplicates.has(duplicate.id)) continue;
+      log.info('[Accounts] Two accounts hold the same login; Shinsa uses one and leaves the other alone', {
+        accountId: duplicate.id,
+        keptId: duplicate.keptId,
+        email: duplicate.email,
+      });
+    }
+    this.#duplicates = ids;
   }
 
   #countRuns() {
@@ -349,7 +365,8 @@ export class Accounts {
     const runs = this.#countRuns();
     const now = this.#now();
     const model = resolveAgentModel(this.#engine.state.settings, 'agent', CLAUDE_PROVIDER);
-    const accounts = this.store.list().map((account): AccountSummary => {
+    const duplicates = this.store.resolveDuplicates();
+    const accounts = this.store.listDistinct().map((account): AccountSummary => {
       const signIn = this.#signIns.get(account.id);
       const usage = this.limits.snapshot(account.id);
       const marked = this.#rotation.resolveSpentUntil(account.id);
@@ -359,7 +376,7 @@ export class Accounts {
         organization: account.organization,
         plan: account.plan,
         origin: account.origin,
-        isDefault: this.store.defaultAccountId === account.id,
+        isDefault: this.store.isDefault(account.id, duplicates),
         paused: account.paused,
         switchAt: account.switchAt,
         signIn: signIn?.signIn ?? 'unknown',
@@ -373,8 +390,17 @@ export class Accounts {
       accounts,
       login: this.logins.current(),
       imports: this.#imports.list(),
+      duplicates: this.#listDuplicates(duplicates),
       providers: this.#listProviderSummaries(),
     };
+  }
+
+  #listDuplicates(duplicates: Map<string, string>): AccountDuplicate[] {
+    return this.store.list().flatMap((account) => {
+      const keptId = duplicates.get(account.id);
+      if (!keptId || !account.email) return [];
+      return [{ id: account.id, email: account.email, keptId }];
+    });
   }
 
   lease(request: AccountLeaseRequest): Promise<AccountLease | null> {
@@ -489,8 +515,8 @@ export class Accounts {
     if (status.signIn !== 'signed_in') {
       return { ok: false, message: 'Sign-in finished, but Claude still reports this account as signed out.' };
     }
-    const twin = status.email ? this.store.selectByEmail(status.email) : null;
-    if (twin && twin.id !== accountId && this.#newLogins.has(accountId)) {
+    const twin = this.store.selectByIdentity(status, accountId);
+    if (twin && this.#newLogins.has(accountId)) {
       return { ok: false, message: `${status.email} is already in your accounts.` };
     }
     this.store.update(accountId, {

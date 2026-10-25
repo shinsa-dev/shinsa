@@ -1,4 +1,5 @@
 export type {
+  AccountDuplicate,
   AccountImport,
   AccountLogin,
   AccountLoginPhase,

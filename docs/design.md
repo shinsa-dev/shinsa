@@ -923,7 +923,9 @@ Only these, and they win over anything below:
       exact time on hover), a `h-1.5` `rounded-full` `bg-bg-a2` bar filled in the usage tone (`UsageBar`) and the
       `UsagePercent` (`tabular-nums`, amber from 75%, red from 90%); without windows the server's detail is a
       muted line, "No usage reported yet." before the first read. Importing from claude-swap confirms with a
-      toast that says to take the login out of claude-swap, since refresh tokens are single-use.
+      toast that says to take the login out of claude-swap, since refresh tokens are single-use. A login in your
+      accounts twice shows once; after the accounts, a muted `SettingsEmpty` row says which copy Shinsa runs it from
+      (`describeDuplicate`: "Your Claude Code login is now ‹email›, which is also one of your accounts. …").
       Every provider with a sign-in of its own (Codex today) follows in the same `UsageAccountBlock`
       (`ProviderLoginBlock` in `providers.tsx`; the header from `resolveProviderHeader`, Claude's from
       `resolveAccountHeader`), so its row reads like an account's: the provider and its account (`AccountName`,

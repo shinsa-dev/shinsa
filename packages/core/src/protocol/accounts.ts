@@ -77,10 +77,17 @@ export interface ProviderLogin {
   usage?: AccountUsage;
 }
 
+export interface AccountDuplicate {
+  id: string;
+  email: string;
+  keptId: string;
+}
+
 export interface AccountsSnapshot {
   accounts: AccountSummary[];
   login: AccountLogin | null;
   imports: AccountImport[];
+  duplicates?: AccountDuplicate[];
   providers?: ProviderLogin[];
 }
 

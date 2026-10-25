@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   describeBinding,
   describeDefaultChanged,
+  describeDuplicate,
   describeImport,
   describeImported,
   describeRemoval,
@@ -99,6 +100,19 @@ describe('binding a task to an account', () => {
 });
 
 describe('imports and switches', () => {
+  it('says which copy of a login added twice Shinsa runs on', () => {
+    const accounts = [
+      createAccount({ id: 'mine', origin: 'claude' }),
+      createAccount({ id: 'first', origin: 'login' }),
+    ];
+    expect(describeDuplicate({ id: 'copy', email: 'me@example.com', keptId: 'mine' }, accounts)).toBe(
+      'Your Claude Code login is now me@example.com, which is also one of your accounts. Shinsa runs it from your Claude Code login and leaves the other copy alone.'
+    );
+    expect(describeDuplicate({ id: 'copy', email: 'me@example.com', keptId: 'first' }, accounts)).toBe(
+      'me@example.com is in your accounts twice. Shinsa runs it from one copy and leaves the other alone.'
+    );
+  });
+
   it('names each login it can import', () => {
     expect(describeImport({ origin: 'claude', email: 'me@example.com', plan: 'max' })).toEqual({
       label: 'Use your Claude Code login',

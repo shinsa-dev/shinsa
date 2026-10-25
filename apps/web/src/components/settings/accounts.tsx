@@ -23,6 +23,7 @@ import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import {
   ACCOUNT_LABEL,
   describeDefaultChanged,
+  describeDuplicate,
   describeImport,
   describeRemoval,
   MOVE_ACTION,
@@ -271,7 +272,7 @@ export function AccountsGroup({
   settings: Settings;
   actions: AccountActions;
 }) {
-  const { accounts, imports, providers = [] } = snapshot;
+  const { accounts, imports, duplicates = [], providers = [] } = snapshot;
   return (
     <SettingsGroup
       title={ACCOUNT_LABEL.section}
@@ -299,6 +300,9 @@ export function AccountsGroup({
           settings={settings}
           actions={actions}
         />
+      ))}
+      {duplicates.map((duplicate) => (
+        <SettingsEmpty key={duplicate.id}>{describeDuplicate(duplicate, accounts)}</SettingsEmpty>
       ))}
       {providers.map((login) => (
         <ProviderLoginBlock key={login.provider} login={login} onRefresh={actions.refresh} />
