@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+        working-directory: apps/desktop
+      - run: >-
+          bunx electron-builder --mac dmg --arm64 --publish never
+          -c.mac.identity=-
+          -c.dmg.artifactName=Shinsa-mac-arm64.dmg
+          -c.extraMetadata.version=${GITHUB_REF_NAME#v}
+        working-directory: apps/desktop
+      - run: gh release create "$GITHUB_REF_NAME" apps/desktop/release/Shinsa-mac-arm64.dmg --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

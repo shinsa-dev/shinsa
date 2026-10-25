@@ -67,3 +67,11 @@ src/
   `apps/web` where it belongs.
 - A demo shows only what Shinsa does today. When a behaviour changes, its demo and copy change with it.
 - Copy follows the `copy` skill: sentence case, no em dashes, no selling words.
+
+## Deploy
+
+A push to `main` that touches the site, the web app or core runs `.github/workflows/deploy-site.yml`: it builds `dist`
+and `wrangler deploy`s it as static assets to the `shinsa-site` Worker (`wrangler.jsonc`), on `shinsa.dev` and
+`www.shinsa.dev`, with the repository's `CLOUDFLARE_API_TOKEN` secret. There is no server and no analytics.
+`/download` is a redirect in `public/_redirects` to the latest GitHub release's `Shinsa-mac-arm64.dmg`, so the site
+never changes for a release and GitHub counts the downloads.

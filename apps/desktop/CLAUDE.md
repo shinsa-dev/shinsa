@@ -61,9 +61,12 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
 | Command | Description |
 |---|---|
 | `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app, as `.electron/Shinsa.app`, on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
-| `bun run package` | `release/mac-arm64/Shinsa.app`, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`); not run in CI |
+| `bun run package` | `release/mac-arm64/Shinsa.app`, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`) |
 | `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo (`scripts/icon.ts`) |
 | `bun test` | The `lib/` tests, 100% line and function coverage |
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`: on a macOS runner it builds `Shinsa-mac-arm64.dmg`, signed ad
+hoc and versioned from the tag, and publishes it as that tag's GitHub release, where `shinsa.dev/download` points.
 
 The root `bun dev` skips this package (`--filter=!@shinsa/desktop`), so it never opens a window by itself.
