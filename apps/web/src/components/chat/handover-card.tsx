@@ -325,6 +325,7 @@ export function HandoverCard({
     case 'attach_evidence':
     case 'find_tasks':
     case 'read_task':
+    case 'list_repository_work':
     case 'note':
     case 'wait_for':
       return <InsetToolRow call={call} live={live} />;

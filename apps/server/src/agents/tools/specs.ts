@@ -287,6 +287,12 @@ export const TOOL_SPECS = {
       required: ['task_id'],
     },
   },
+  list_repository_work: {
+    name: 'list_repository_work',
+    description:
+      'List the other open tasks in the repository this task works in, as ready shinsa:// markdown links: each with its stage, its branch, what that branch is stacked on, the files it changed (committed or not) and whether an agent works on it now. Use it before you change files another task may be changing. It only reads.',
+    inputSchema: { type: 'object', properties: {} },
+  },
   note: {
     name: 'note',
     description:

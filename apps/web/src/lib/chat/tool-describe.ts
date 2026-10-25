@@ -131,6 +131,7 @@ type PlainShinsaTool =
   | 'complete_fix'
   | 'report_review'
   | 'read_task'
+  | 'list_repository_work'
   | 'answer'
   | 'report_diagnosis'
   | 'submit_report'
@@ -146,6 +147,7 @@ const PLAIN_SHINSA: Record<PlainShinsaTool, { icon: IconName; verb: string }> = 
   complete_fix: { icon: 'IconSend', verb: 'Handed over the fix' },
   report_review: { icon: 'IconShieldCheck', verb: 'Reported the review' },
   read_task: { icon: 'IconFileText', verb: 'Read a task' },
+  list_repository_work: { icon: 'IconFolders', verb: 'Listed the other work in the repository' },
   answer: { icon: 'IconSend', verb: 'Handed over the answer' },
   report_diagnosis: { icon: 'IconSend', verb: 'Reported the diagnosis' },
   submit_report: { icon: 'IconSend', verb: 'Wrote the report' },
@@ -316,6 +318,7 @@ const PRESENT_VERB: Record<string, string> = {
   'Looked up tasks:': 'Looking up tasks:',
   'Looked up tasks': 'Looking up tasks',
   'Read a task': 'Reading a task',
+  'Listed the other work in the repository': 'Listing the other work in the repository',
   'Left a note:': 'Leaving a note:',
   'Scheduled a check-in:': 'Scheduling a check-in:',
   'Handed over the answer': 'Handing over the answer',
@@ -365,6 +368,10 @@ const GROUP_PHRASES: Record<ToolGroupKey, (count: number) => string> = {
   attach_evidence: (count) => `attached ${formatCount(count, 'piece of evidence', 'pieces of evidence')}`,
   find_tasks: (count) => (count === 1 ? 'looked up tasks once' : `looked up tasks ${count} times`),
   read_task: (count) => `read ${formatCount(count, 'task', 'tasks')}`,
+  list_repository_work: (count) =>
+    count === 1
+      ? 'listed the other work in the repository'
+      : `listed the other work in the repository ${count} times`,
   note: (count) => `left ${formatCount(count, 'note', 'notes')}`,
   wait_for: () => 'scheduled a check-in',
   suggest_tasks: () => 'suggested tasks',

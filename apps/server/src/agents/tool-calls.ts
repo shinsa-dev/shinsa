@@ -17,12 +17,14 @@ import type { Engine } from '../runtime/engine.ts';
 import type { ScheduleToolCall } from '../schedules/index.ts';
 import type { EvidenceStore } from '../store/index.ts';
 import type { Workspaces } from '../workspaces/index.ts';
+import { LedgerStore } from '../workspaces/ledger.ts';
 import { awaitDelegation } from './delegations.ts';
 import { assertProtocol, HANDED_OVER, readString, resolveCommitMessage, storeEvidence } from './handover.ts';
 import { createManageClient, isSurfaceTool, type ManageAccess, readSurfaceToolCall } from './manage/index.ts';
 import type { ProviderRegistry } from './providers/index.ts';
 import type { Questions } from './questions.ts';
 import { resolveTaskReading } from './reading.ts';
+import { RepositoryWork } from './repository-work.ts';
 import { handleOrchestrationTool } from './tools/orchestration.ts';
 import { handleProcessTool } from './tools/process.ts';
 import type { Transcripts } from './transcripts/index.ts';
@@ -45,6 +47,7 @@ interface ToolCallsOptions {
   minuteMs: number;
   manage: ManageAccess | null;
   workspaces: Workspaces;
+  dataDir: string;
 }
 
 interface ToolCall {
@@ -65,9 +68,11 @@ type HandOverTool = 'propose_plan' | 'complete_phase' | 'complete_fix' | 'report
 
 export class ToolCalls {
   readonly #options: ToolCallsOptions;
+  readonly #work: RepositoryWork;
 
   constructor(options: ToolCallsOptions) {
     this.#options = options;
+    this.#work = new RepositoryWork(options.engine, new LedgerStore(options.dataDir));
   }
 
   handle(name: string, call: ToolCall): Promise<string> {
@@ -91,6 +96,8 @@ export class ToolCalls {
         );
       case 'read_task':
         return this.#readTask(input);
+      case 'list_repository_work':
+        return this.#work.describe(this.#findCurrent(runId, attemptId).task.id, signal);
       case 'note':
         return this.#note(call, dispatch);
       default:
@@ -139,6 +146,7 @@ export class ToolCalls {
       );
     try {
       if (commit.stackedOn) await dispatch({ type: 'task.stack', taskId: task.id, branch: commit.stackedOn });
+      await this.#work.recordOverlaps(task.id, [], call.signal);
       return await dispatch({ ...command, treeHash: commit.treeHash });
     } catch (error) {
       await commit.undo();
@@ -151,7 +159,12 @@ export class ToolCalls {
     switch (name) {
       case 'propose_plan': {
         const { document, changeSummary } = assertProtocol(validatePlanHandOver(input));
-        this.#findCurrent(runId, attemptId);
+        const { task } = this.#findCurrent(runId, attemptId);
+        await this.#work.recordOverlaps(
+          task.id,
+          document.files.map((file) => file.path),
+          call.signal
+        );
         await dispatch({ type: 'agent.propose_plan', runId, attemptId, document, changeSummary });
         break;
       }

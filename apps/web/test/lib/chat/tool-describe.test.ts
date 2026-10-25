@@ -232,6 +232,7 @@ describe('describeTool', () => {
     expect(shinsa('find_tasks', { query: 'login' })).toBe('Looked up tasks: login');
     expect(shinsa('find_tasks')).toBe('Looked up tasks');
     expect(shinsa('read_task', { task_id: 't1' })).toBe('Read a task');
+    expect(shinsa('list_repository_work')).toBe('Listed the other work in the repository');
     expect(shinsa('note', { note: 'Remember' })).toBe('Left a note: Remember');
     expect(shinsa('wait_for', { notes: 'The deploy' })).toBe('Scheduled a check-in: The deploy');
     expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }, { title: 'b' }] })).toBe('Suggested 2 tasks');
@@ -351,6 +352,7 @@ describe('resolveRunningLabel', () => {
           'attach_evidence',
           'find_tasks',
           'read_task',
+          'list_repository_work',
           'note',
           'delegate_task',
           'delegation_status',
@@ -437,6 +439,10 @@ describe('resolveGroupPhrase', () => {
     ]);
     expect(phrase('note', 2)).toBe('Left 2 notes');
     expect(phrase('read_task', 2)).toBe('Read 2 tasks');
+    expect([phrase('list_repository_work', 1), phrase('list_repository_work', 2)]).toEqual([
+      'Listed the other work in the repository',
+      'Listed the other work in the repository 2 times',
+    ]);
     expect([phrase('wait_for', 1), phrase('suggest_tasks', 1), phrase('answer', 1)]).toEqual([
       'Scheduled a check-in',
       'Suggested tasks',
