@@ -18,8 +18,6 @@
     <a href="#download">Download</a>
     ·
     <a href="#development">Development</a>
-    ·
-    <a href="#roadmap">Roadmap</a>
 </p>
 
 <p>
