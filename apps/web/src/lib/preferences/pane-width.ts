@@ -20,7 +20,7 @@ function resolvePaneBounds(bounds: PaneBounds, floor: number): PaneBounds {
   return { min, max: bounds.max, initial: Math.max(bounds.initial, min) };
 }
 
-export function usePaneWidth(key: string, given: PaneBounds, floor = 0) {
+export function usePaneWidth(key: string, given: PaneBounds, floor = 0, direction: 1 | -1 = 1) {
   const bounds = resolvePaneBounds(given, floor);
   const [stored, setWidth] = React.useState(() => readWidth(key, given));
   const width = clampWidth(stored, bounds);
@@ -32,7 +32,7 @@ export function usePaneWidth(key: string, given: PaneBounds, floor = 0) {
     const startWidth = width;
     let latest = startWidth;
     const onMove = (move: PointerEvent) => {
-      latest = clampWidth(startWidth + move.clientX - startX, bounds);
+      latest = clampWidth(startWidth + (move.clientX - startX) * direction, bounds);
       setWidth(latest);
     };
     const onEnd = () => {

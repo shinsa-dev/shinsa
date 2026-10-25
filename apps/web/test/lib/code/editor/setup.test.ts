@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { EditorState } from '@codemirror/state';
 import { runScopeHandlers } from '@codemirror/view';
+import { indentFolding } from '@/lib/code/editor/folding.ts';
 import {
   CODE_KEYMAP,
   gotoLine,
@@ -9,7 +10,7 @@ import {
   openSearchPanel,
   resolveEditable,
 } from '@/lib/code/editor/setup.ts';
-import { CODE_THEME, codeHighlight } from '@/lib/code/editor/theme.ts';
+import { CODE_THEME } from '@/lib/code/editor/theme.ts';
 import { createView } from './support.ts';
 
 describe('the editor setup', () => {
@@ -44,8 +45,18 @@ describe('the editor setup', () => {
     expect(view.dom.querySelector('.cm-find')).not.toBeNull();
   });
 
-  it('colours code from the Shinsa tokens', () => {
-    expect(CODE_THEME).toHaveLength(2);
-    expect(codeHighlight.module?.getRules()).toContain('var(--code-keyword)');
+  it('colours TextMate tokens from the Shinsa tokens, in both themes', () => {
+    expect(CODE_THEME).toHaveLength(1);
+    const view = createView('a', []);
+    const rules = [...document.querySelectorAll('style')].map((style) => style.textContent).join('\n');
+    expect(rules).toContain('var(--code-keyword)');
+    expect(rules).toContain('font-style: italic');
+    expect(view.dom.querySelector('.cm-foldGutter')).not.toBeNull();
+  });
+
+  it('draws plain fold markers when no page gave its own', () => {
+    const view = createView('a {\n  b\n}', [indentFolding]);
+    const markers = [...view.dom.querySelectorAll('.cm-foldGutter span')].map((marker) => marker.className);
+    expect(markers).toContain('cm-fold-open');
   });
 });

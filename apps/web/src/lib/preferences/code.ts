@@ -1,3 +1,4 @@
+import type { IconName } from '@shinsa/ui/components/icon';
 import { useSyncExternalStore } from 'react';
 import { usePaneWidth } from '@/lib/preferences/pane-width.ts';
 import { useStoredToggle } from '@/lib/preferences/stored-flag.ts';
@@ -7,10 +8,36 @@ const EXPLORER_WIDTH = { min: 200, max: 480, initial: 280 } as const;
 
 const VIEWED_PREFIX = 'shinsa.viewed.';
 
+const SIDE_KEY = 'shinsa.code-explorer-side';
+
 const viewed = createSignal();
 
-export function useExplorerWidth(floor = 0) {
-  return usePaneWidth('shinsa.code-explorer-width', EXPLORER_WIDTH, floor);
+const sides = createSignal();
+
+export type ExplorerSide = 'left' | 'right';
+
+export const EXPLORER_SIDE_TITLE = 'File list';
+
+export const EXPLORER_SIDES: { value: ExplorerSide; label: string; icon: IconName }[] = [
+  { value: 'left', label: 'Left', icon: 'IconSidebarSimpleLeftWide' },
+  { value: 'right', label: 'Right', icon: 'IconSidebarSimpleRightWide' },
+];
+
+export function readExplorerSide(): ExplorerSide {
+  return localStorage.getItem(SIDE_KEY) === 'right' ? 'right' : 'left';
+}
+
+export function writeExplorerSide(side: ExplorerSide) {
+  localStorage.setItem(SIDE_KEY, side);
+  sides.publish();
+}
+
+export function useExplorerSide() {
+  return useSyncExternalStore(sides.subscribe, readExplorerSide);
+}
+
+export function useExplorerWidth(floor = 0, side: ExplorerSide = 'left') {
+  return usePaneWidth('shinsa.code-explorer-width', EXPLORER_WIDTH, floor, side === 'left' ? 1 : -1);
 }
 
 export function useUnifiedDiff() {

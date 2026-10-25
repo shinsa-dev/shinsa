@@ -3,6 +3,17 @@ import type { CodeNote, CodeSpotMark } from '@/lib/code/notes.ts';
 import type { Loaded } from '@/lib/connection/code.ts';
 import { formatBytes } from '@/lib/format/count.ts';
 
+export interface PairSource {
+  key: string;
+  path: string;
+  content: string;
+  original: string;
+}
+
+export function resolvePaneKey(ref: string, file: { kind: string; path: string }) {
+  return `${ref}\0${file.path}\0${file.kind}`;
+}
+
 export type PaneContent =
   | { kind: 'waiting' }
   | { kind: 'failed'; message: string }

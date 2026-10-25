@@ -2,10 +2,15 @@ import { describe, expect, it } from 'bun:test';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { NO_ANNOTATIONS, setAnnotations } from '@/lib/code/editor/annotations.ts';
-import { requestLanguage } from '@/lib/code/editor/language.ts';
 import { SlotRegistry } from '@/lib/code/editor/slots.ts';
-import { codeHighlight } from '@/lib/code/editor/theme.ts';
-import { listLineSegments, revealLine, unifiedDiff } from '@/lib/code/editor/unified.ts';
+import type { TokenSet } from '@/lib/code/editor/tokens.ts';
+import {
+  listLineSegments,
+  listTokenRanges,
+  revealLine,
+  setOriginalTokens,
+  unifiedDiff,
+} from '@/lib/code/editor/unified.ts';
 import { createView } from './support.ts';
 
 const ORIGINAL = [
@@ -28,16 +33,24 @@ const CURRENT = [
   '',
 ].join('\n');
 
-const language = await requestLanguage('a.js');
+const COMMENT = 1;
 
-function createDiff(onOldLine: (line: number) => void = () => {}, annotations = NO_ANNOTATIONS) {
-  if (!language) throw new Error('No grammar');
+const TOKENS: TokenSet = {
+  classes: ['', 'tm-code-comment'],
+  lines: ORIGINAL.split('\n').map((line, index) =>
+    index < 3 ? Uint32Array.from([line.length, COMMENT]) : Uint32Array.from([line.length, 0])
+  ),
+};
+
+function createDiff(
+  onOldLine: (line: number) => void = () => {},
+  annotations = NO_ANNOTATIONS,
+  tokens: TokenSet | null = TOKENS
+) {
   return createView(CURRENT, [
-    language,
     unifiedDiff({
       original: ORIGINAL,
-      tree: language.language.parser.parse(ORIGINAL),
-      highlighter: codeHighlight,
+      tokens,
       registry: new SlotRegistry(),
       collapse: true,
       annotations,
@@ -52,7 +65,7 @@ describe('unifiedDiff', () => {
     const removed = [...view.dom.querySelectorAll('.cm-deletedLine')].map((line) => line.textContent);
     expect(removed).toEqual(['old comment line', 'const a = 1;']);
     const comment = view.dom.querySelector('.cm-deletedLine span');
-    expect(comment?.className).not.toBe('');
+    expect(comment?.className).toContain('tm-code-comment');
     expect(view.dom.querySelectorAll('.cm-insertedLine').length).toBe(2);
     expect([...view.dom.querySelectorAll('.cm-insertedText')].map((text) => text.textContent)).toContain('2');
     expect([...view.dom.querySelectorAll('.cm-deletedText')].map((text) => text.textContent)).toContain('1');
@@ -111,8 +124,7 @@ describe('unifiedDiff', () => {
       doc: 'b\n',
       extensions: unifiedDiff({
         original: 'a\n',
-        tree: null,
-        highlighter: codeHighlight,
+        tokens: null,
         registry: new SlotRegistry(),
         collapse: false,
         annotations: NO_ANNOTATIONS,
@@ -126,8 +138,7 @@ describe('unifiedDiff', () => {
     const empty = createView('x', [
       unifiedDiff({
         original: '',
-        tree: null,
-        highlighter: codeHighlight,
+        tokens: null,
         registry: new SlotRegistry(),
         collapse: false,
         annotations: NO_ANNOTATIONS,
@@ -138,8 +149,7 @@ describe('unifiedDiff', () => {
     const blank = createView('', [
       unifiedDiff({
         original: '\n\nx',
-        tree: null,
-        highlighter: codeHighlight,
+        tokens: null,
         registry: new SlotRegistry(),
         collapse: false,
         annotations: NO_ANNOTATIONS,
@@ -147,6 +157,25 @@ describe('unifiedDiff', () => {
       }),
     ]);
     expect(blank.dom.querySelectorAll('.cm-deletedLine br').length).toBe(2);
+  });
+});
+
+describe('the old side tokens', () => {
+  it('colours removed lines once their tokens arrive', () => {
+    const view = createDiff(() => {}, NO_ANNOTATIONS, null);
+    expect(view.dom.querySelector('.cm-deletedLine span')?.className).not.toContain('tm-code-comment');
+    view.dispatch({ effects: setOriginalTokens.of(TOKENS) });
+    expect(view.dom.querySelector('.cm-deletedLine span')?.className).toContain('tm-code-comment');
+  });
+
+  it('reads a line of tokens as classed ranges from where the line starts', () => {
+    expect(listTokenRanges(null, 1, 0)).toEqual([]);
+    expect(listTokenRanges({ classes: [''], lines: [] }, 1, 0)).toEqual([]);
+    const tokens: TokenSet = { classes: ['', 'a', 'b'], lines: [Uint32Array.from([3, 1, 5, 0, 9, 2, 9, 1])] };
+    expect(listTokenRanges(tokens, 1, 10)).toEqual([
+      { from: 10, to: 13, classes: 'a' },
+      { from: 15, to: 19, classes: 'b' },
+    ]);
   });
 });
 

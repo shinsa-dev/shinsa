@@ -11,6 +11,7 @@ export default defineConfig({
     alias: [{ find: /^@\//, replacement: `${resolve(import.meta.dirname, 'src')}/` }],
     dedupe: ['react', 'react-dom'],
   },
+  worker: { format: 'es' },
   server: {
     proxy: {
       '/api': SERVER,

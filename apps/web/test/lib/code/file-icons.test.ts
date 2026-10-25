@@ -37,7 +37,10 @@ describe('resolveFileIcon', () => {
     expect(resolveFileIcon('README.md')).toBe('IconFileTypeReadme');
     expect(resolveFileIcon('LICENSE')).toBe('IconFileTypeLicense');
     expect(resolveFileIcon('CHANGELOG.md')).toBe('IconHistory');
-    expect(resolveFileIcon('CLAUDE.md')).toBe('IconFileTypeAgents');
+    expect(resolveFileIcon('CLAUDE.md')).toBe('IconFileTypeClaude');
+    expect(resolveFileIcon('apps/api/AGENTS.md')).toBe('IconFileTypeAgents');
+    expect(resolveFileIcon('.husky/pre-commit')).toBe('IconFileTypeShell');
+    expect(resolveFileIcon('.husky/_/h')).toBe('IconFileText');
     expect(resolveFileIcon('.env.local')).toBe('IconFileTypeEnv');
     expect(resolveFileIcon('biome.json')).toBe('IconSettingsGear1');
     expect(resolveFileIcon('vite.config.ts')).toBe('IconSettingsGear1');
@@ -75,7 +78,7 @@ describe('resolveFileIcon', () => {
 
 describe('resolveFolderIcon', () => {
   it('opens and closes, and tones the folders that say what they hold', () => {
-    expect(resolveFolderIcon('apps/web', false)).toBe('IconFolder1');
+    expect(resolveFolderIcon('apps/web', false)).toBe('IconFolder1Filled');
     expect(resolveFolderIcon('apps/web', true)).toBe('IconFolderOpen');
     expect(resolveFolderIcon('apps/web/src', false)).toBe('IconFolderSource');
     expect(resolveFolderIcon('apps/web/src', true)).toBe('IconFolderOpenSource');

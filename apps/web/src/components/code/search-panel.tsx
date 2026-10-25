@@ -1,11 +1,11 @@
 import type { Task } from '@shinsa/core';
 import { Input } from '@shinsa/ui/components/input';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { SearchField } from '@/components/code/search-field.tsx';
 import { TREE_LIST, TREE_ROW_HEIGHT, TreeRow } from '@/components/code/tree-row.tsx';
 import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
+import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
@@ -38,6 +38,7 @@ export function SearchPanel({
   inputRef,
   onChange,
   onOpen,
+  onPrefetch,
 }: {
   task: Task;
   gitRef: string;
@@ -45,6 +46,7 @@ export function SearchPanel({
   inputRef: React.Ref<HTMLInputElement>;
   onChange: (search: CodeSearch) => void;
   onOpen: (path: string, line: number) => void;
+  onPrefetch: (path: string) => void;
 }) {
   const [draft, setDraft] = React.useState<CodeSearch>({
     query: location.query,
@@ -83,11 +85,7 @@ export function SearchPanel({
           onChange={(event) => update({ glob: event.target.value })}
         />
       </div>
-      {searching && (
-        <div className='flex items-center gap-2 px-2.5 py-1.5 text-2xs text-fg-2'>
-          <Spinner size='sm' /> Searching
-        </div>
-      )}
+      {searching && <LoadingLine label='Searching' className='px-2.5 py-1.5 text-2xs' />}
       {loaded.status === 'error' && <p className='px-2.5 py-1.5 text-2xs text-red-text'>{loaded.message}</p>}
       {loaded.status === 'ready' && !searching && (
         <p aria-live='polite' className='px-2.5 pt-1.5 text-2xs text-fg-2'>
@@ -123,6 +121,7 @@ export function SearchPanel({
                 label={`${row.match.path} line ${row.match.line}`}
                 end={<span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{row.match.line}</span>}
                 onOpen={() => onOpen(row.match.path, row.match.line)}
+                onPrefetch={() => onPrefetch(row.match.path)}
               >
                 <Truncate className='flex-1 font-mono'>
                   {listKeyedParts(splitMatchText(row.match.text.trim(), delayed.query, delayed)).map(

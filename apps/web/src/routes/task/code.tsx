@@ -3,6 +3,7 @@ import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { CodeLoading } from '@/components/code/code-loading.tsx';
 import { requestCodeEditor } from '@/components/code/editor-pane.tsx';
 import { Workbench } from '@/components/code/workbench.tsx';
+import { tokenClient } from '@/lib/code/editor/tokens.ts';
 import { useTaskRefs } from '@/lib/connection/code.ts';
 import type { ExplorerMode } from '@/lib/tasks/tabs.ts';
 
@@ -20,6 +21,7 @@ export function CodeTab({ task, modes }: { task: Task; modes: ExplorerMode[] }) 
 }
 
 export async function prefetchCodeEditor(path: string | null) {
+  tokenClient.warm();
   const editor = await requestCodeEditor();
   if (path) await editor.requestLanguage(path);
 }

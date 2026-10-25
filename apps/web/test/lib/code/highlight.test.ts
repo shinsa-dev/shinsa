@@ -4,6 +4,7 @@ import {
   requestTokens,
   resolveFenceLanguage,
   resolveLanguage,
+  resolveTaggedTokens,
   useLanguageTokens,
   useTokens,
 } from '@/lib/code/highlight.ts';
@@ -13,7 +14,7 @@ describe('resolveLanguage', () => {
     expect(resolveLanguage('apps/web/src/main.ts')).toBe('typescript');
     expect(resolveLanguage('src/App.TSX')).toBe('tsx');
     expect(resolveLanguage('config/settings.yml')).toBe('yaml');
-    expect(resolveLanguage('scripts/setup.zsh')).toBe('bash');
+    expect(resolveLanguage('scripts/setup.zsh')).toBe('shellscript');
   });
 
   it('recognises Dockerfiles by name and by extension', () => {
@@ -26,8 +27,8 @@ describe('resolveLanguage', () => {
     expect(resolveLanguage('')).toBeNull();
   });
 
-  it('leaves files without an extension plain, even when the name looks like one', () => {
-    expect(resolveLanguage('Makefile')).toBeNull();
+  it('knows files without an extension by name, and leaves the rest plain', () => {
+    expect(resolveLanguage('Makefile')).toBe('make');
     expect(resolveLanguage('bin/go')).toBeNull();
     expect(resolveLanguage('include/c')).toBeNull();
   });
@@ -41,9 +42,9 @@ describe('resolveFenceLanguage', () => {
     expect(resolveFenceLanguage('Dockerfile')).toBe('docker');
   });
 
-  it('reads terminal fences as bash and keeps diffs', () => {
-    expect(resolveFenceLanguage('shell')).toBe('bash');
-    expect(resolveFenceLanguage('console')).toBe('bash');
+  it('reads terminal fences as shell scripts and keeps diffs', () => {
+    expect(resolveFenceLanguage('shell')).toBe('shellscript');
+    expect(resolveFenceLanguage('console')).toBe('shellscript');
     expect(resolveFenceLanguage('diff')).toBe('diff');
   });
 
@@ -80,6 +81,33 @@ describe('requestTokens', () => {
     expect(markdown?.[0]?.find((token) => token.content === 'https://example.com')?.style?.color).toBe(
       'var(--code-function)'
     );
+  });
+
+  it('colours Better Comments tags as the editor does, keeping the margin star of a doc comment', async () => {
+    const tokens = await requestTokens(
+      ['// ! Careful', '/**', ' * ! @param name The name', ' * TODO cover it', ' */', '//// old'].join('\n'),
+      'typescript'
+    );
+    const read = (line: number) => tokens?.[line]?.map((token) => [token.content, token.style?.color]);
+    expect(read(0)).toEqual([['// ! Careful', 'var(--code-comment-alert)']]);
+    expect(read(2)).toEqual([
+      [' * ', 'var(--code-comment)'],
+      ['! @param name The name', 'var(--code-comment-alert)'],
+    ]);
+    expect(read(3)).toEqual([
+      [' * ', 'var(--code-comment)'],
+      ['TODO cover it', 'var(--code-comment-todo)'],
+    ]);
+    expect(tokens?.[5]?.[0]?.style).toEqual({
+      color: 'var(--code-comment-strike)',
+      textDecoration: 'line-through',
+    });
+    expect(
+      resolveTaggedTokens([[{ content: '/*' }], [{ content: ' x ', color: 'var(--code-comment)' }]])
+    ).toEqual([
+      [{ content: '/*', style: undefined }],
+      [{ content: ' x ', style: { color: 'var(--code-comment)' } }],
+    ]);
   });
 
   it('reuses the same work for the same code and language', () => {

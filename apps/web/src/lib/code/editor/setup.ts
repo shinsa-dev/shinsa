@@ -1,5 +1,5 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { codeFolding, type LanguageSupport } from '@codemirror/language';
+import type { LanguageSupport } from '@codemirror/language';
 import {
   closeSearchPanel,
   findNext,
@@ -21,6 +21,7 @@ import {
 } from '@codemirror/view';
 import { commentGutter } from './annotations.ts';
 import { createEditorKeymap, type EditorActions, selectionHistory } from './commands.ts';
+import { createFolding, type FoldMarkers } from './folding.ts';
 import { CODE_THEME } from './theme.ts';
 
 export const CODE_KEYMAP = [
@@ -34,7 +35,16 @@ export interface EditorSetup {
   onLine: (line: number, view: EditorView) => boolean;
   findPanel: (view: EditorView) => Panel;
   actions?: () => EditorActions;
+  markers?: FoldMarkers;
 }
+
+const PLAIN_MARKERS: FoldMarkers = {
+  create: (open) => {
+    const dom = document.createElement('span');
+    dom.className = open ? 'cm-fold-open' : 'cm-fold-closed';
+    return dom;
+  },
+};
 
 const DEFAULT_ACTIONS: EditorActions = {
   save: () => undefined,
@@ -66,7 +76,6 @@ export function createEditorExtensions(setup: EditorSetup): Extension[] {
     EditorView.clickAddsSelectionRange.of(isAddingCursor),
     rectangularSelection({ eventFilter: isColumnSelection }),
     history(),
-    codeFolding(),
     selectionHistory,
     search({ top: true, createPanel: setup.findPanel }),
     highlightSelectionMatches(),
@@ -79,6 +88,7 @@ export function createEditorExtensions(setup: EditorSetup): Extension[] {
       ...defaultKeymap,
     ]),
     commentGutter(setup.onLine),
+    createFolding(setup.markers ?? PLAIN_MARKERS),
     setup.editable.of(resolveEditable(false)),
   ];
 }

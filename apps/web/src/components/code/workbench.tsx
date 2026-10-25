@@ -3,8 +3,9 @@ import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Sheet, SheetContent, SheetTitle } from '@shinsa/ui/components/sheet';
 import { useMediaQuery } from '@shinsa/ui/hooks/use-media-query';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import type { EditorHandle } from '@/components/code/editor/code-editor.tsx';
+import type { EditorHandle, EditorSessionHolder } from '@/components/code/editor/code-editor.tsx';
 import { EditorPane } from '@/components/code/editor-pane.tsx';
 import { Explorer, type ExplorerProps } from '@/components/code/explorer.tsx';
 import { QuickOpen } from '@/components/code/quick-open.tsx';
@@ -13,6 +14,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { useCodeKeyLabel, useCodeKeys } from '@/hooks/use-code-keys.ts';
 import { useCodeLocation } from '@/hooks/use-code-location.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
+import { TOKEN_PRIORITY } from '@/lib/code/editor/tokens.ts';
 import { resolveEditState } from '@/lib/code/edits.ts';
 import { type CodeKey, describeCodeKey } from '@/lib/code/keys.ts';
 import {
@@ -24,6 +26,15 @@ import {
   resolveOpenPatch,
   resolveSearchPatch,
 } from '@/lib/code/location.ts';
+import { CODE_MARKS, markCode } from '@/lib/code/marks.ts';
+import {
+  prefetchAncestors,
+  prefetchFile,
+  prefetchFolder,
+  prefetchOtherRefs,
+  prefetchPair,
+  scheduleIdle,
+} from '@/lib/code/prefetch.ts';
 import { resolveViewRef } from '@/lib/code/refs.ts';
 import { resolveFileSource } from '@/lib/code/source.ts';
 import { listCodeCommands } from '@/lib/command/code.ts';
@@ -32,14 +43,18 @@ import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { holdLoaded, type Loaded, useTaskDiff } from '@/lib/connection/code.ts';
 import {
   toggleViewedFile,
+  useExplorerSide,
   useExplorerWidth,
   useHideViewed,
   useUnifiedDiff,
   useViewedFiles,
+  writeExplorerSide,
 } from '@/lib/preferences/code.ts';
 import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
 import { listFindingTargets, listReviewTargets } from '@/lib/review/targets.ts';
 import type { ExplorerMode } from '@/lib/tasks/tabs.ts';
+
+const INSTANT = '[&_*]:transition-none! [&_*::before]:transition-none! [&_*::after]:transition-none!';
 
 export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; modes: ExplorerMode[] }) {
   const { location, apply } = useCodeLocation(modes);
@@ -47,7 +62,8 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const narrow = useMediaQuery('(max-width: 767px)');
   const mac = useCodeKeyLabel();
   const [explorerFloor, setExplorerFloor] = React.useState(0);
-  const width = useExplorerWidth(explorerFloor);
+  const side = useExplorerSide();
+  const width = useExplorerWidth(explorerFloor, side);
   const [unified, toggleSplit] = useUnifiedDiff();
   const split = !unified;
   const [hideViewed, toggleHideViewed] = useHideViewed();
@@ -55,6 +71,14 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const [sheetOpen, setSheetOpen] = React.useState(false);
   const searchInput = React.useRef<HTMLInputElement>(null);
   const editor = React.useRef<EditorHandle>(null);
+  const session = React.useRef<EditorSessionHolder['current']>(null);
+  React.useEffect(
+    () => () => {
+      session.current?.destroy();
+      session.current = null;
+    },
+    []
+  );
   const gitRef = resolveViewRef(location.ref, refs);
   const reviewing = modes.includes('changes');
   const shownDiff = React.useRef<Loaded<TaskDiff>>({ status: 'idle' });
@@ -82,9 +106,33 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const active = location.active ? resolveFileSource(location.active, diffValue) : null;
   const changed = React.useMemo(() => new Set(diffValue?.files.map((file) => file.path) ?? []), [diffValue]);
 
+  const ahead = React.useRef({ task, refs, diffValue });
+  ahead.current = { task, refs, diffValue };
+  const activeFile = location.active;
+  const activeKey = activeFile ? resolveFileKey(activeFile) : '';
+  const diffReady = diffValue !== null;
+  React.useEffect(
+    () =>
+      scheduleIdle(() => {
+        const { task: current, refs: currentRefs, diffValue: currentDiff } = ahead.current;
+        prefetchOtherRefs(current, currentRefs, gitRef, activeFile, currentDiff, reviewing);
+        if (activeFile) prefetchAncestors(current, gitRef, activeFile.path);
+      }),
+    [activeKey, gitRef, reviewing, diffReady]
+  );
+
   function open(file: CodeFileRef, options: OpenOptions = {}) {
+    markCode(CODE_MARKS.open, file.path);
+    prefetchFile(task, refs, gitRef, file, diffValue, TOKEN_PRIORITY.visible);
     apply(resolveOpenPatch(file, options));
     setSheetOpen(false);
+  }
+
+  function prefetchOpen(file: CodeFileRef) {
+    prefetchFile(task, refs, gitRef, file, diffValue);
+    if (split && file.kind === 'diff') {
+      prefetchPair(task, refs, gitRef, file, diffValue, (source) => session.current?.prefetchPair(source));
+    }
   }
 
   function openLine(path: string, line: number) {
@@ -120,11 +168,13 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
       mac,
       split,
       hideViewed,
+      side,
       hasEditor: active !== null,
       applyMode,
       run: (key) => run[key](),
       toggleSplit,
       toggleHideViewed,
+      toggleSide: () => writeExplorerSide(side === 'left' ? 'right' : 'left'),
     }),
     ...(active
       ? [
@@ -155,6 +205,9 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     onMatch: openLine,
     onSearch: (search) => apply(resolveSearchPatch(search), { replace: true }),
     onToggleViewed: (path) => toggleViewedFile(task.id, gitRef, path),
+    onPrefetch: prefetchOpen,
+    onPrefetchPath: (path) => prefetchOpen({ kind: changed.has(path) ? 'diff' : 'file', path }),
+    onPrefetchFolder: (dir) => prefetchFolder(task, gitRef, dir),
   };
 
   const explorerButton = narrow ? (
@@ -170,22 +223,26 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   ) : null;
 
   return (
-    <div className='flex min-h-0 min-w-0 flex-1'>
+    <div className={cn('flex min-h-0 min-w-0 flex-1', INSTANT, side === 'right' && 'flex-row-reverse')}>
       {narrow ? (
         <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side='left' showCloseButton={false} className='gap-0 p-0'>
+          <SheetContent side={side} showCloseButton={false} className={cn('gap-0 p-0', INSTANT)}>
             <SheetTitle className='sr-only'>Files</SheetTitle>
             <Explorer {...explorer} />
           </SheetContent>
         </Sheet>
       ) : (
         <aside
-          className='relative flex shrink-0 flex-col border-border border-r'
+          className={cn(
+            'relative flex shrink-0 flex-col border-border',
+            side === 'left' ? 'border-r' : 'border-l'
+          )}
           style={{ width: width.width }}
         >
           <Explorer {...explorer} onFloor={setExplorerFloor} />
           <ResizeHandle
             label='Resize the file list'
+            edge={side === 'left' ? 'right' : 'left'}
             onPointerDown={width.startResize}
             onDoubleClick={width.resetWidth}
           />
@@ -204,6 +261,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
             split={split}
             onSplit={toggleSplit}
             handle={editor}
+            session={session}
             toolbar={explorerButton}
           />
         ) : (
@@ -230,6 +288,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
           setQuickOpen(false);
           open({ kind: changed.has(path) ? 'diff' : 'file', path });
         }}
+        onPrefetch={explorer.onPrefetchPath}
       />
     </div>
   );

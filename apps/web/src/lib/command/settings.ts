@@ -26,6 +26,12 @@ import { restartOnboarding } from '@/lib/connection/onboarding.ts';
 import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
 import { updateNotifications } from '@/lib/notifications/settings.ts';
+import {
+  EXPLORER_SIDE_TITLE,
+  EXPLORER_SIDES,
+  type ExplorerSide,
+  writeExplorerSide,
+} from '@/lib/preferences/code.ts';
 import type { AlertPreference, NotificationPreferences, SoundId } from '@/lib/preferences/notifications.ts';
 import {
   AGENT_GROUPS,
@@ -457,7 +463,8 @@ export function listSettingsSections(
   providers: AgentProviderInfo[],
   notifications: NotificationPreferences,
   snapshot: AccountsSnapshot | null = null,
-  workspaces: WorkspaceChoices = { repos: [], support: null }
+  workspaces: WorkspaceChoices = { repos: [], support: null },
+  explorerSide: ExplorerSide = 'left'
 ): CommandSection[] {
   return [
     { id: 'settings.sections', heading: 'Jump to', rank: RANK.context, commands: listJumpCommands() },
@@ -472,6 +479,9 @@ export function listSettingsSections(
         ...listRoleChoices(settings, providers, snapshot),
         ...listUsageChoices(settings, snapshot),
         ...listWorkspaceChoices(workspaces),
+        settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>
+          writeExplorerSide(value === 'right' ? 'right' : 'left')
+        ),
       ],
     },
     {

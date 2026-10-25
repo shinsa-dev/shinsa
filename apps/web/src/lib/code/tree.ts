@@ -73,11 +73,12 @@ export function findActiveGuide(rows: readonly TreeRow[], activePath: string | n
   const index = rows.findIndex((each) => each.kind === 'file' && each.path === activePath);
   const open = rows[index];
   if (!open || open.depth === 0) return null;
-  const parent = rows
-    .slice(0, index)
-    .reverse()
-    .find((each) => each.kind === 'directory' && each.depth === open.depth - 1);
-  return parent ? { dir: parent.path, level: parent.depth } : null;
+  for (let at = index - 1; at >= 0; at -= 1) {
+    const parent = rows[at];
+    if (parent?.kind === 'directory' && parent.depth === open.depth - 1)
+      return { dir: parent.path, level: parent.depth };
+  }
+  return null;
 }
 
 export function resolveActiveGuide(activePath: string | null): ActiveGuide | null {
@@ -96,6 +97,12 @@ export function listShownChanges(
   activePath: string | null
 ) {
   return hideViewed ? files.filter((file) => file.path === activePath || !viewed.has(file.path)) : files;
+}
+
+export function listNeighbourPaths(paths: readonly string[], active: string | null, before = 1, after = 2) {
+  const index = active === null ? -1 : paths.indexOf(active);
+  if (index < 0) return [];
+  return [...paths.slice(index + 1, index + 1 + after), ...paths.slice(Math.max(0, index - before), index)];
 }
 
 export function listAncestors(path: string) {

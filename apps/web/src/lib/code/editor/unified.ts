@@ -15,22 +15,16 @@ import {
   lineNumberWidgetMarker,
   WidgetType,
 } from '@codemirror/view';
-import { type Highlighter, highlightTree } from '@lezer/highlight';
-
-type Tree = Parameters<typeof highlightTree>[0];
-
 import { type LineRange, listCollapsedRanges, selectRangeAt } from '@/lib/code/collapse.ts';
 import { type EditorAnnotations, SlotWidget, selectAnnotations } from './annotations.ts';
 import type { SlotRegistry } from './slots.ts';
+import type { TokenSet } from './tokens.ts';
 
 export const DIFF_CONFIG = { scanLimit: 500, timeout: 20 } as const;
 
-export const MAX_PARSED_ORIGINAL = 100_000;
-
 export interface UnifiedDiffOptions {
   original: string;
-  tree: Tree | null;
-  highlighter: Highlighter;
+  tokens: TokenSet | null;
   registry: SlotRegistry;
   collapse: boolean;
   annotations: EditorAnnotations;
@@ -43,10 +37,13 @@ interface UnifiedState {
   expanded: ReadonlySet<number>;
   annotations: EditorAnnotations;
   collapsed: readonly LineRange[];
+  tokens: TokenSet | null;
   decorations: DecorationSet;
 }
 
 export const revealLine = StateEffect.define<number>();
+
+export const setOriginalTokens = StateEffect.define<TokenSet>();
 
 interface Segment {
   from: number;
@@ -54,16 +51,17 @@ interface Segment {
   classes: string;
 }
 
-function listTokenRanges(tree: Tree | null, highlighter: Highlighter, from: number, to: number) {
+export function listTokenRanges(tokens: TokenSet | null, number: number, from: number) {
   const ranges: Segment[] = [];
-  if (!tree) return ranges;
-  highlightTree(
-    tree,
-    highlighter,
-    (start, end, classes) => ranges.push({ from: start, to: end, classes }),
-    from,
-    to
-  );
+  const line = tokens?.lines[number - 1];
+  if (!tokens || !line) return ranges;
+  let start = from;
+  for (let index = 0; index < line.length; index += 2) {
+    const end = from + (line[index] ?? 0);
+    const classes = tokens.classes[line[index + 1] ?? 0];
+    if (classes && end > start) ranges.push({ from: start, to: end, classes });
+    start = Math.max(start, end);
+  }
   return ranges;
 }
 
@@ -94,8 +92,7 @@ class DeletionWidget extends WidgetType {
   constructor(
     readonly chunk: Chunk,
     readonly a: Text,
-    readonly tree: Tree | null,
-    readonly highlighter: Highlighter
+    readonly tokens: TokenSet | null
   ) {
     super();
   }
@@ -107,7 +104,7 @@ class DeletionWidget extends WidgetType {
   }
 
   override eq(other: DeletionWidget) {
-    return other.chunk === this.chunk && other.tree === this.tree;
+    return other.chunk === this.chunk && other.tokens === this.tokens;
   }
 
   toDOM() {
@@ -120,7 +117,7 @@ class DeletionWidget extends WidgetType {
       const line = this.a.line(number);
       const row = dom.appendChild(document.createElement('div'));
       row.className = 'cm-deletedLine';
-      const tokens = listTokenRanges(this.tree, this.highlighter, line.from, line.to);
+      const tokens = listTokenRanges(this.tokens, number, line.from);
       for (const segment of listLineSegments(line.text, line.from, tokens, changes)) {
         const span = row.appendChild(document.createElement('span'));
         if (segment.classes) span.className = segment.classes;
@@ -206,13 +203,13 @@ function selectChunkOfOldLine(a: Text, chunks: readonly Chunk[], line: number) {
 function buildDecorations(
   doc: Text,
   value: Omit<UnifiedState, 'decorations'>,
-  options: Pick<UnifiedDiffOptions, 'tree' | 'highlighter' | 'registry'>
+  options: Pick<UnifiedDiffOptions, 'registry'>
 ) {
   const ranges: Range<Decoration>[] = [];
   for (const chunk of value.chunks) {
     const at = Math.min(chunk.fromB, doc.length);
     if (chunk.toA > chunk.fromA) {
-      const widget = new DeletionWidget(chunk, value.a, options.tree, options.highlighter);
+      const widget = new DeletionWidget(chunk, value.a, value.tokens);
       ranges.push(Decoration.widget({ block: true, side: -2, widget }).range(doc.lineAt(at).from));
     }
     if (chunk.toB <= chunk.fromB) continue;
@@ -277,7 +274,14 @@ export function unifiedDiff(options: UnifiedDiffOptions): Extension {
         options.annotations.keep,
         options.collapse
       );
-      const value = { a, chunks, expanded, annotations: options.annotations, collapsed };
+      const value = {
+        a,
+        chunks,
+        expanded,
+        annotations: options.annotations,
+        collapsed,
+        tokens: options.tokens,
+      };
       return { ...value, decorations: buildDecorations(state.doc, value, options) };
     },
     update(value, transaction: Transaction) {
@@ -287,16 +291,21 @@ export function unifiedDiff(options: UnifiedDiffOptions): Extension {
         : value.chunks;
       const annotations = selectAnnotations(transaction.effects) ?? value.annotations;
       const expanded = new Set(value.expanded);
+      let tokens = value.tokens;
       for (const effect of transaction.effects) {
+        if (effect.is(setOriginalTokens)) tokens = effect.value;
         if (!effect.is(revealLine)) continue;
         const range = selectRangeAt(value.collapsed, effect.value);
         if (range) expanded.add(range.from);
       }
       const changed =
-        chunks !== value.chunks || annotations !== value.annotations || expanded.size !== value.expanded.size;
+        chunks !== value.chunks ||
+        annotations !== value.annotations ||
+        expanded.size !== value.expanded.size ||
+        tokens !== value.tokens;
       if (!changed) return value;
       const collapsed = resolveCollapsed(doc, chunks, expanded, annotations.keep, options.collapse);
-      const next = { a: value.a, chunks, expanded, annotations, collapsed };
+      const next = { a: value.a, chunks, expanded, annotations, collapsed, tokens };
       return { ...next, decorations: buildDecorations(doc, next, options) };
     },
     provide: (state) => EditorView.decorations.from(state, (value) => value.decorations),

@@ -12,6 +12,7 @@ import {
   type TaskRefs,
   WORKING_REF,
 } from '@shinsa/core';
+import { CatFilePool } from '../git/blobs.ts';
 import { resolveCommitDiff, resolveWorkingDiff } from '../git/diff.ts';
 import {
   assertCommit,
@@ -124,7 +125,8 @@ function isWorkingRef(ref: ResolvedRef) {
 export function createCodeRoutes(
   engine: Engine,
   ledgers: LedgerStore,
-  cache = new ObjectCache()
+  cache = new ObjectCache(),
+  blobs = new CatFilePool()
 ): ApiRoute[] {
   function selectCodeTask(reference: string): CodeTask | null {
     const task = selectTaskByReference(engine.state, reference);
@@ -198,14 +200,25 @@ export function createCodeRoutes(
   }
 
   async function readTree(found: CodeTask, ref: ResolvedRef, dir: string, signal: AbortSignal) {
-    if (ref.kind === 'commit') return listCommitTree(found.repoPath, ref.sha, dir, signal);
+    if (ref.kind === 'commit') {
+      const sha = ref.sha;
+      return cache.read(
+        `${found.repoPath}\0tree\0${sha}\0${dir}`,
+        () => listCommitTree(found.repoPath, sha, dir, signal, blobs.select(found.repoPath)),
+        (value) => value.entries.reduce((sum, entry) => sum + entry.path.length + 32, 0)
+      );
+    }
     return listWorkingTree(await listPaths(found, ref, signal), dir);
   }
 
   async function readFile(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
-    if (ref.kind === 'commit') return readCommitFile(found.repoPath, ref.sha, path, cache, signal);
+    const reader = blobs.select(found.repoPath);
+    if (ref.kind === 'commit') return readCommitFile(found.repoPath, ref.sha, path, cache, signal, reader);
     if (ref.kind === 'owned' && !ref.owned.has(path)) {
-      return { ...(await readCommitFile(found.repoPath, ref.sha, path, cache, signal)), ref: WORKING_REF };
+      return {
+        ...(await readCommitFile(found.repoPath, ref.sha, path, cache, signal, reader)),
+        ref: WORKING_REF,
+      };
     }
     const absolute = resolveInside(ref.worktree, path);
     if (!absolute) throw new DomainError('path_invalid', 'That path leaves the working copy.');
@@ -214,7 +227,7 @@ export function createCodeRoutes(
 
   function readBytes(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
     if (ref.kind === 'commit' || (ref.kind === 'owned' && !ref.owned.has(path))) {
-      return readCommitBytes(found.repoPath, ref.sha, path, signal);
+      return readCommitBytes(found.repoPath, ref.sha, path, signal, blobs.select(found.repoPath));
     }
     const absolute = resolveInside(ref.worktree, path);
     return Promise.resolve(absolute ? readWorkingBytes(absolute) : null);

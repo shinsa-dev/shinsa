@@ -6,6 +6,7 @@ import {
   isTreeSettled,
   listAncestors,
   listChangeRows,
+  listNeighbourPaths,
   listOpenFolders,
   listRepoRows,
   listShownChanges,
@@ -63,6 +64,17 @@ describe('listChangeRows', () => {
     ]);
     expect(rows[0]).toMatchObject({ kind: 'directory', file: null });
     expect(rows.at(-1)?.file?.path).toBe('README.md');
+  });
+});
+
+describe('listNeighbourPaths', () => {
+  it('lists the next two and the previous file around the open one', () => {
+    const paths = ['a', 'b', 'c', 'd', 'e'];
+    expect(listNeighbourPaths(paths, 'c')).toEqual(['d', 'e', 'b']);
+    expect(listNeighbourPaths(paths, 'a')).toEqual(['b', 'c']);
+    expect(listNeighbourPaths(paths, 'e', 2, 1)).toEqual(['c', 'd']);
+    expect(listNeighbourPaths(paths, 'z')).toEqual([]);
+    expect(listNeighbourPaths(paths, null)).toEqual([]);
   });
 });
 

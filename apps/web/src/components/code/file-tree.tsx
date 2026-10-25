@@ -1,21 +1,27 @@
 import type { DiffFile, Task } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
+import { flushSync } from 'react-dom';
 import { StatusLetter } from '@/components/code/changes-tree.tsx';
 import { CodeLoading } from '@/components/code/code-loading.tsx';
 import { TREE_LIST, TREE_ROW_HEIGHT, TreeRow } from '@/components/code/tree-row.tsx';
 import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
+import { CODE_MARKS, markCode, measureCode } from '@/lib/code/marks.ts';
+import { scheduleIdle } from '@/lib/code/prefetch.ts';
 import {
   isTreeSettled,
   listAncestors,
+  listNeighbourPaths,
   listOpenFolders,
   listRepoRows,
   pickGuideLevel,
   type RepoRow,
   resolveActiveGuide,
 } from '@/lib/code/tree.ts';
-import { useRepoTrees } from '@/lib/connection/code.ts';
+import { requestRepoTree, useRepoTrees } from '@/lib/connection/code.ts';
+
+const FOLDER_PREFETCH_LIMIT = 64;
 
 function resolveRowKey(row: RepoRow) {
   return row.kind === 'entry' ? `e:${row.entry.path}` : `${row.kind}:${row.dir}`;
@@ -27,12 +33,16 @@ export function FileTree({
   activePath,
   changes,
   onOpen,
+  onPrefetch,
+  onPrefetchFolder,
 }: {
   task: Task;
   gitRef: string;
   activePath: string | null;
   changes: readonly DiffFile[];
   onOpen: (path: string) => void;
+  onPrefetch: (path: string) => void;
+  onPrefetchFolder: (dir: string) => void;
 }) {
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(
     () => new Set(listAncestors(activePath ?? ''))
@@ -50,15 +60,59 @@ export function FileTree({
   const settled = React.useRef<{ ref: string; rows: RepoRow[] } | null>(null);
   if (isTreeSettled(listed)) settled.current = { ref: gitRef, rows: listed };
   const guide = resolveActiveGuide(activePath);
+  const files = settled.current?.rows.flatMap((row) =>
+    row.kind === 'entry' && row.entry.kind === 'file' ? [row.entry.path] : []
+  );
+  const neighbours = listNeighbourPaths(files ?? [], activePath).join('\n');
+  const latestPrefetch = React.useRef(onPrefetch);
+  latestPrefetch.current = onPrefetch;
+  React.useEffect(
+    () =>
+      scheduleIdle(() => {
+        for (const path of neighbours.split('\n')) if (path) latestPrefetch.current(path);
+      }),
+    [neighbours]
+  );
+  const closedFolders = (settled.current?.rows ?? [])
+    .flatMap((row) =>
+      row.kind === 'entry' && row.entry.kind === 'directory' && !row.open ? [row.entry.path] : []
+    )
+    .slice(0, FOLDER_PREFETCH_LIMIT)
+    .join('\n');
+  const latestFolderPrefetch = React.useRef(onPrefetchFolder);
+  latestFolderPrefetch.current = onPrefetchFolder;
+  React.useEffect(
+    () =>
+      scheduleIdle(() => {
+        for (const dir of closedFolders.split('\n')) if (dir) latestFolderPrefetch.current(dir);
+      }),
+    [closedFolders]
+  );
+  const toggled = React.useRef<string | null>(null);
+  const shownRows = settled.current?.rows;
+  React.useLayoutEffect(() => {
+    if (toggled.current) measureCode(CODE_MARKS.toggled, toggled.current);
+    toggled.current = null;
+  }, [shownRows]);
   if (!settled.current) return <CodeLoading label='Reading the files…' />;
   const { ref: shownRef, rows } = settled.current;
-  const toggle = (path: string) =>
-    setExpanded((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
+  const toggle = (path: string) => {
+    markCode(CODE_MARKS.toggle, path);
+    toggled.current = path;
+    const flip = () =>
+      setExpanded((current) => {
+        const next = new Set(current);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+    if (expanded.has(path)) {
+      flip();
+      return;
+    }
+    const show = () => flushSync(flip);
+    requestRepoTree(task, gitRef, path).then(show, show);
+  };
   return (
     <div role='tree' aria-label='Files' className={TREE_LIST}>
       <VirtualRows key={shownRef} items={rows} rowHeight={TREE_ROW_HEIGHT} keyOf={resolveRowKey}>
@@ -84,6 +138,7 @@ export function FileTree({
                 icon={resolveFolderIcon(entry.path, row.open)}
                 label={entry.path}
                 onOpen={() => toggle(entry.path)}
+                onPrefetch={() => onPrefetchFolder(entry.path)}
               >
                 <Truncate className='flex-1'>{entry.name}</Truncate>
               </TreeRow>
@@ -99,6 +154,7 @@ export function FileTree({
               icon={entry.kind === 'submodule' ? 'IconFolders' : resolveFileIcon(entry.path)}
               end={change && <StatusLetter status={change.status} />}
               onOpen={() => onOpen(entry.path)}
+              onPrefetch={() => onPrefetch(entry.path)}
             >
               <Truncate className='flex-1'>{entry.name}</Truncate>
             </TreeRow>

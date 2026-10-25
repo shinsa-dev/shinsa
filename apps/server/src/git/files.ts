@@ -13,6 +13,7 @@ import {
   type SearchResult,
   WORKING_REF,
 } from '@shinsa/core';
+import { type CatFile, isBatchName } from './blobs.ts';
 import type { ObjectCache } from './objects.ts';
 import { decodeText, type GitRead, readGit, splitRecords } from './read.ts';
 
@@ -45,15 +46,23 @@ function assertRead(read: GitRead, what: string) {
   );
 }
 
+const VERIFIED_LIMIT = 10_000;
+
+const verified = new Set<string>();
+
 export async function assertCommit(repoPath: string, sha: string, signal?: AbortSignal) {
   if (!isCommitSha(sha))
     throw new DomainError(
       'ref_invalid',
       `Name a commit by its full id, or “${WORKING_REF}” for the working copy.`
     );
+  const key = `${repoPath}\0${sha}`;
+  if (verified.has(key)) return sha;
   const read = await readGit(['cat-file', '-t', sha], repoPath, { signal });
   if (!read.ok || decodeText(read.bytes).trim() !== 'commit')
     throw new DomainError('ref_unknown', 'The repository has no such commit.');
+  if (verified.size >= VERIFIED_LIMIT) verified.clear();
+  verified.add(key);
   return sha;
 }
 
@@ -124,12 +133,51 @@ function listTreeRecords(read: GitRead) {
     .filter((record): record is TreeRecord => record !== null);
 }
 
+const TREE_MODES: Record<string, RepoEntryKind> = {
+  '40000': 'directory',
+  '160000': 'submodule',
+  [SYMLINK_MODE]: 'symlink',
+};
+
+export function parseTreeObject(bytes: Uint8Array, dir: string, idBytes: number) {
+  const records: { entry: RepoEntry; object: string }[] = [];
+  const prefix = dir ? `${dir}/` : '';
+  let at = 0;
+  while (at < bytes.length) {
+    const space = bytes.indexOf(32, at);
+    const end = bytes.indexOf(0, space);
+    if (space < 0 || end < 0) break;
+    const mode = decodeText(bytes.subarray(at, space));
+    const name = decodeText(bytes.subarray(space + 1, end));
+    const object = Buffer.from(bytes.subarray(end + 1, end + 1 + idBytes)).toString('hex');
+    at = end + 1 + idBytes;
+    const kind = TREE_MODES[mode] ?? 'file';
+    records.push({ entry: { name, path: `${prefix}${name}`, kind, size: null }, object });
+  }
+  return records;
+}
+
+async function listBatchTree(sha: string, dir: string, reader: CatFile): Promise<RepoTree> {
+  const info = await reader.info(`${sha}:${dir}`);
+  if (info?.type !== 'tree') return { ref: sha, dir, entries: [] };
+  const records = parseTreeObject(await reader.contents(info.object), dir, info.object.length / 2);
+  const sizes = await Promise.all(
+    records.map((record) =>
+      record.entry.kind === 'file' || record.entry.kind === 'symlink' ? reader.info(record.object) : null
+    )
+  );
+  const entries = records.map((record, index) => ({ ...record.entry, size: sizes[index]?.size ?? null }));
+  return { ref: sha, dir, entries: sortEntries(entries) };
+}
+
 export async function listCommitTree(
   repoPath: string,
   sha: string,
   dir: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  reader?: CatFile
 ): Promise<RepoTree> {
+  if (reader && isBatchName(`${sha}:${dir}`)) return listBatchTree(sha, dir, reader);
   const args = ['ls-tree', '-z', '--long', '--full-tree', sha, ...(dir ? ['--', `${dir}/`] : [])];
   const read = assertRead(await readGit(args, repoPath, { signal, maxBytes: LIST_BYTES }), 'the folder');
   return { ref: sha, dir, entries: sortEntries(listTreeRecords(read).map((record) => record.entry)) };
@@ -185,7 +233,18 @@ function describeAbsent(ref: string, path: string, size: number, tooLarge: boole
   };
 }
 
-async function selectBlob(repoPath: string, sha: string, path: string, signal?: AbortSignal) {
+async function selectBlob(
+  repoPath: string,
+  sha: string,
+  path: string,
+  signal?: AbortSignal,
+  reader?: CatFile
+) {
+  const name = `${sha}:${path}`;
+  if (reader && isBatchName(name)) {
+    const info = await reader.info(name);
+    return info?.type === 'blob' ? { object: info.object, size: info.size } : null;
+  }
   const read = assertRead(
     await readGit(['ls-tree', '-z', '--long', '--full-tree', sha, '--', path], repoPath, { signal }),
     path
@@ -195,7 +254,8 @@ async function selectBlob(repoPath: string, sha: string, path: string, signal?: 
   return { object: record.object, size: record.entry.size ?? 0 };
 }
 
-async function readObject(repoPath: string, object: string, signal?: AbortSignal) {
+async function readObject(repoPath: string, object: string, signal?: AbortSignal, reader?: CatFile) {
+  if (reader) return reader.contents(object);
   const read = await readGit(['cat-file', 'blob', object], repoPath, {
     signal,
     maxBytes: CODE_LIMITS.blobBytes,
@@ -208,23 +268,30 @@ export async function readCommitFile(
   sha: string,
   path: string,
   cache: ObjectCache,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  reader?: CatFile
 ): Promise<FileContent> {
-  const blob = await selectBlob(repoPath, sha, path, signal);
+  const blob = await selectBlob(repoPath, sha, path, signal, reader);
   if (!blob) return describeAbsent(sha, path, 0, false);
   if (blob.size > CODE_LIMITS.blobBytes) return describeAbsent(sha, path, blob.size, true);
   const bytes = await cache.read(
     `${repoPath}\0blob\0${blob.object}`,
-    () => readObject(repoPath, blob.object, signal),
+    () => readObject(repoPath, blob.object, signal, reader),
     (value) => value.length
   );
   return describeBytes(sha, path, bytes, blob.size);
 }
 
-export async function readCommitBytes(repoPath: string, sha: string, path: string, signal?: AbortSignal) {
-  const blob = await selectBlob(repoPath, sha, path, signal);
+export async function readCommitBytes(
+  repoPath: string,
+  sha: string,
+  path: string,
+  signal?: AbortSignal,
+  reader?: CatFile
+) {
+  const blob = await selectBlob(repoPath, sha, path, signal, reader);
   if (!blob || blob.size > CODE_LIMITS.blobBytes) return null;
-  return readObject(repoPath, blob.object, signal);
+  return readObject(repoPath, blob.object, signal, reader);
 }
 
 function statPath(absolute: string) {

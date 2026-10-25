@@ -10,10 +10,12 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { VirtualRows } from '@/components/settings/virtual-rows.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
+import { scheduleIdle } from '@/lib/code/prefetch.ts';
 import {
   FILE_STATUS,
   findActiveGuide,
   listChangeRows,
+  listNeighbourPaths,
   listShownChanges,
   pickGuideLevel,
   sumChanges,
@@ -43,6 +45,7 @@ function ViewedBox({ viewed, onToggle }: { viewed: boolean; onToggle: () => void
       aria-label='Viewed'
       checked={viewed}
       onCheckedChange={onToggle}
+      onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
     />
   );
@@ -103,6 +106,61 @@ function FileEnd({
   );
 }
 
+interface FileRowActions {
+  open: (path: string) => void;
+  prefetch: (path: string) => void;
+  toggleViewed: (path: string) => void;
+}
+
+const ChangeFileRow = React.memo(function ChangedFileRow({
+  path,
+  name,
+  depth,
+  guide,
+  selected,
+  file,
+  comments,
+  viewed,
+  actions,
+}: {
+  path: string;
+  name: string;
+  depth: number;
+  guide: number | undefined;
+  selected: boolean;
+  file: DiffFile | null;
+  comments: number;
+  viewed: boolean;
+  actions: FileRowActions;
+}) {
+  const muted = viewed && !selected;
+  return (
+    <TreeRow
+      depth={depth}
+      guide={guide}
+      selected={selected}
+      label={path}
+      icon={resolveFileIcon(path)}
+      className={cn(muted && 'file-icons-muted text-fg-1')}
+      onOpen={() => actions.open(path)}
+      onPrefetch={() => actions.prefetch(path)}
+      end={
+        file && (
+          <FileEnd
+            file={file}
+            comments={comments}
+            viewed={viewed}
+            muted={muted}
+            onToggleViewed={() => actions.toggleViewed(path)}
+          />
+        )
+      }
+    >
+      <Truncate className='flex-1'>{name}</Truncate>
+    </TreeRow>
+  );
+});
+
 function HideViewedToggle({ hidden, onToggle }: { hidden: boolean; onToggle: () => void }) {
   const label = hidden ? 'Show viewed files' : 'Hide viewed files';
   return (
@@ -127,6 +185,7 @@ export function ChangesTree({
   viewed,
   onToggleViewed,
   onOpen,
+  onPrefetch,
 }: {
   diff: TaskDiff;
   activePath: string | null;
@@ -134,6 +193,7 @@ export function ChangesTree({
   viewed: ReadonlySet<string>;
   onToggleViewed: (path: string) => void;
   onOpen: (path: string) => void;
+  onPrefetch: (path: string) => void;
 }) {
   const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
   const [hideViewed, toggleHideViewed] = useHideViewed();
@@ -143,8 +203,30 @@ export function ChangesTree({
   );
   const rows = React.useMemo(() => listChangeRows(shown, collapsed), [shown, collapsed]);
   const guide = findActiveGuide(rows, activePath);
-  const totals = sumChanges(diff.files);
-  const seen = diff.files.filter((file) => viewed.has(file.path)).length;
+  const paths = React.useMemo(() => rows.flatMap((row) => (row.kind === 'file' ? [row.path] : [])), [rows]);
+  const neighbours = listNeighbourPaths(paths, activePath).join('\n');
+  const latest = React.useRef({ onOpen, onPrefetch, onToggleViewed });
+  latest.current = { onOpen, onPrefetch, onToggleViewed };
+  const actions = React.useMemo<FileRowActions>(
+    () => ({
+      open: (path) => latest.current.onOpen(path),
+      prefetch: (path) => latest.current.onPrefetch(path),
+      toggleViewed: (path) => latest.current.onToggleViewed(path),
+    }),
+    []
+  );
+  React.useEffect(
+    () =>
+      scheduleIdle(() => {
+        for (const path of neighbours.split('\n')) if (path) actions.prefetch(path);
+      }),
+    [neighbours, actions]
+  );
+  const totals = React.useMemo(() => sumChanges(diff.files), [diff.files]);
+  const seen = React.useMemo(
+    () => diff.files.filter((file) => viewed.has(file.path)).length,
+    [diff.files, viewed]
+  );
   const hiddenCount = diff.files.length - shown.length;
   if (diff.files.length === 0) {
     return <p className='px-3 py-2.5 text-2xs text-fg-2'>Nothing on this branch differs from its base.</p>;
@@ -182,31 +264,18 @@ export function ChangesTree({
                 </TreeRow>
               );
             }
-            const selected = row.path === activePath;
-            const muted = viewed.has(row.path) && !selected;
             return (
-              <TreeRow
+              <ChangeFileRow
+                path={row.path}
+                name={row.name}
                 depth={row.depth}
                 guide={pickGuideLevel(guide, row.path)}
-                selected={selected}
-                label={row.path}
-                icon={resolveFileIcon(row.path)}
-                className={cn(muted && 'file-icons-muted text-fg-1')}
-                onOpen={() => onOpen(row.path)}
-                end={
-                  row.file && (
-                    <FileEnd
-                      file={row.file}
-                      comments={commentCounts.get(row.path) ?? 0}
-                      viewed={viewed.has(row.path)}
-                      muted={muted}
-                      onToggleViewed={() => onToggleViewed(row.path)}
-                    />
-                  )
-                }
-              >
-                <Truncate className='flex-1'>{row.name}</Truncate>
-              </TreeRow>
+                selected={row.path === activePath}
+                file={row.file}
+                comments={commentCounts.get(row.path) ?? 0}
+                viewed={viewed.has(row.path)}
+                actions={actions}
+              />
             );
           }}
         </VirtualRows>

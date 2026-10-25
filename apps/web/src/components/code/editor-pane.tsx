@@ -5,7 +5,11 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import * as React from 'react';
 import { CodeLoading } from '@/components/code/code-loading.tsx';
-import type { EditorHandle, EditorReveal } from '@/components/code/editor/code-editor.tsx';
+import type {
+  EditorHandle,
+  EditorReveal,
+  EditorSessionHolder,
+} from '@/components/code/editor/code-editor.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -22,6 +26,7 @@ import {
   listKeptLines,
   type PaneContent,
   resolvePaneContent,
+  resolvePaneKey,
   resolveTextGuard,
 } from '@/lib/code/pane.ts';
 import { type FileSource, hasOneSide } from '@/lib/code/source.ts';
@@ -197,6 +202,7 @@ export function EditorPane({
   split,
   onSplit,
   handle,
+  session,
   toolbar,
 }: {
   task: Task;
@@ -208,6 +214,7 @@ export function EditorPane({
   split: boolean;
   onSplit: () => void;
   handle: React.RefObject<EditorHandle | null>;
+  session?: EditorSessionHolder;
   toolbar: React.ReactNode;
 }) {
   const draft = useReviewDraft();
@@ -230,11 +237,19 @@ export function EditorPane({
   const [opened, setOpened] = React.useState(false);
   const guard =
     content.kind === 'text' && !opened ? resolveTextGuard(path, [content.content, content.original]) : null;
+  const buffer = React.useRef<EditorHandle | null>(null);
+  const handles = React.useCallback(
+    (value: EditorHandle | null) => {
+      buffer.current = value;
+      handle.current = value;
+    },
+    [handle]
+  );
   const saver = useFileSaver({
     taskId: task.id,
     path: edit.editable ? source.headPath : null,
     text: content.kind === 'text' ? content.content : null,
-    buffer: handle,
+    buffer,
   });
   const editable = edit.editable && saver.state.refusal === null;
   const notice = saver.state.refusal ?? saver.state.notice ?? edit.reason;
@@ -304,6 +319,8 @@ export function EditorPane({
       {content.kind === 'text' && !guard && (
         <CodeEditor
           path={path}
+          docKey={resolvePaneKey(gitRef, source.file)}
+          {...(session ? { session } : {})}
           content={saver.start ?? content.content}
           original={content.original}
           split={diffing && split && !oneSide}
@@ -316,7 +333,7 @@ export function EditorPane({
           onEdit={saver.edit}
           onSave={saver.save}
           renderNote={renderNote}
-          handle={handle}
+          handle={handles}
         />
       )}
     </section>

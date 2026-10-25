@@ -8,9 +8,10 @@ import {
   CommandItem,
   CommandList,
 } from '@shinsa/ui/components/command';
-import { Spinner } from '@shinsa/ui/components/spinner';
 import * as React from 'react';
+import { LoadingLine } from '@/components/status/loading-line.tsx';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
+import { scheduleIdle } from '@/lib/code/prefetch.ts';
 import { rankPaths, splitHits } from '@/lib/code/rank.ts';
 import { listKeyedParts } from '@/lib/code/search.ts';
 import { resolveDirectory, resolveFileName } from '@/lib/code/tree.ts';
@@ -36,19 +37,30 @@ export function QuickOpenDialog({
   recent,
   onOpenChange,
   onPick,
+  onPrefetch,
 }: {
   loaded: Loaded<{ paths: readonly string[] }>;
   open: boolean;
   recent: readonly string[];
   onOpenChange: (open: boolean) => void;
   onPick: (path: string) => void;
+  onPrefetch?: (path: string) => void;
 }) {
   const [query, setQuery] = React.useState('');
-  const paths = loaded.status === 'ready' ? loaded.value.paths : [];
+  const paths = loaded.status === 'ready' ? loaded.value.paths : null;
+  const recentKey = recent.join('\n');
   const ranked = React.useMemo(
-    () => rankPaths(paths, query, QUICK_OPEN_LIMIT, recent),
-    [paths, query, recent]
+    () =>
+      open && paths ? rankPaths(paths, query, QUICK_OPEN_LIMIT, recentKey ? recentKey.split('\n') : []) : [],
+    [open, paths, query, recentKey]
   );
+  const first = ranked[0]?.path ?? null;
+  const latestPrefetch = React.useRef(onPrefetch);
+  latestPrefetch.current = onPrefetch;
+  React.useEffect(() => {
+    if (!first) return;
+    return scheduleIdle(() => latestPrefetch.current?.(first));
+  }, [first]);
   return (
     <CommandDialog
       open={open}
@@ -68,9 +80,7 @@ export function QuickOpenDialog({
         />
         <CommandList>
           {loaded.status === 'loading' && (
-            <div className='flex items-center gap-2 px-2 py-1.5 text-fg-2 text-xs'>
-              <Spinner size='sm' /> Reading the files
-            </div>
+            <LoadingLine label='Reading the files' className='px-2 py-1.5 text-xs' />
           )}
           {loaded.status === 'error' && <p className='px-2 py-1.5 text-red-text text-xs'>{loaded.message}</p>}
           {loaded.status === 'ready' && <CommandEmpty>No file matches.</CommandEmpty>}
@@ -108,6 +118,7 @@ export function QuickOpen({
   recent,
   onOpenChange,
   onPick,
+  onPrefetch,
 }: {
   task: Task;
   gitRef: string;
@@ -115,6 +126,7 @@ export function QuickOpen({
   recent: readonly string[];
   onOpenChange: (open: boolean) => void;
   onPick: (path: string) => void;
+  onPrefetch: (path: string) => void;
 }) {
   const loaded = useRepoPaths(task, gitRef);
   return (
@@ -124,6 +136,7 @@ export function QuickOpen({
       recent={recent}
       onOpenChange={onOpenChange}
       onPick={onPick}
+      onPrefetch={onPrefetch}
     />
   );
 }

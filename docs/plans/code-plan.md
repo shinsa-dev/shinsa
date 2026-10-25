@@ -39,6 +39,15 @@ directly**: the file saves to the task's working copy as you type and goes into 
 - **One set of code colours.** Chat code fences, tool output and snippets run Shiki on a theme of TextMate scopes
   mapped to the `--code-*` tokens the CodeMirror editor reads (`lib/code/highlight.ts`); the GitHub themes and
   `.code-token` are gone.
+- **Instant, VS Code highlighting and folding (2026-10-25).** A tree row acts on the mouse press, hovering or focusing
+  a row reads its file and tokenizes it, opening a file prefetches its neighbours, one CodeMirror view per Code tab
+  swaps each file's state in (24 kept), and nothing in the tab animates: a warm or prefetched file is on screen about
+  5 ms after the press, the next frame. Highlighting is VS Code's TextMate grammars through Shiki in a worker, plain
+  text first and the tokens a moment later (cached by text), with VS Code's choice of language by name, folder,
+  extension and shebang (`lib/code/grammar.ts`); folding is VS Code's gutter over the syntax tree or the indentation.
+  Closed folders are solid, open ones outlined, AGENTS.md has a generic AI mark. The file list can sit on the right
+  (Settings → Appearance → File list). The server reads blobs through one `git cat-file --batch-command` per
+  repository. Before and after: `docs/performance.md` → Code tab.
 - **`/ui` specimens for the editor** (`routes/ui/code.tsx`): the code tokens, a chat fence beside the editor, a diff
   side by side with its new side editable, the same diff unified with a finding and a comment inline, and Go to file.
 
@@ -105,9 +114,10 @@ Settled since: the Code tab, its merge view included, stays CodeMirror, and `@pi
 outside it (chat edits and writes, change snippets for spots and findings), through one lazily
 loaded wrapper, `CodeDiff` (`docs/design.md`, Where Shinsa differs, 33).
 
-Highlighting: CodeMirror's Lezer grammars (lazy per language via `@codemirror/language-data`), coloured by one
-`HighlightStyle` mapped to new `--code-*` tokens in `packages/ui`. Chat code fences keep Shiki but switch to
-`createCssVariablesTheme` over the same `--code-*` variables, so both read the same colours.
+Highlighting: first CodeMirror's Lezer grammars coloured by one `HighlightStyle` on the `--code-*` tokens, with Shiki
+for chat code fences. Settled since 2026-10-25: the editor highlights with VS Code's TextMate grammars too (Shiki's
+grammars and Oniguruma in a worker, applied as CodeMirror decorations), on the one theme of TextMate scopes the chat
+uses, so both read the same tokens; Lezer stays for folding, indentation and comments, loaded when the browser is idle.
 
 ## Workbench shape
 

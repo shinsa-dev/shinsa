@@ -26,7 +26,7 @@ const FILE_NAMES: Record<string, IconName> = {
   '.gitattributes': 'IconFileTypeGit',
   '.gitmodules': 'IconFileTypeGit',
   '.gitkeep': 'IconFileTypeGit',
-  'claude.md': 'IconFileTypeAgents',
+  'claude.md': 'IconFileTypeClaude',
   'agents.md': 'IconFileTypeAgents',
   makefile: 'IconSettingsGear1',
   '.editorconfig': 'IconSettingsGear1',
@@ -205,10 +205,13 @@ const FOLDER_KINDS: Record<string, FolderKind> = {
   '.husky': 'Git',
 };
 
+const HOOK = /(^|\/)\.(husky|git\/hooks)\/[^/_.][^/.]*$/;
+
 export function resolveFileIcon(path: string): IconName {
   const name = resolveFileName(path).toLowerCase();
   const known = FILE_NAMES[name] ?? NAME_PATTERNS.find(([pattern]) => pattern.test(name))?.[1];
   if (known) return known;
+  if (HOOK.test(path)) return 'IconFileTypeShell';
   const dot = name.lastIndexOf('.');
   return (dot > 0 ? EXTENSIONS[name.slice(dot + 1)] : undefined) ?? 'IconFileText';
 }
@@ -217,6 +220,6 @@ export function resolveFolderIcon(path: string, open: boolean): IconName {
   const kind = FOLDER_KINDS[resolveFileName(path).toLowerCase()];
   const icons = kind
     ? KIND_FOLDERS[kind]
-    : { closed: 'IconFolder1' as const, open: 'IconFolderOpen' as const };
+    : { closed: 'IconFolder1Filled' as const, open: 'IconFolderOpen' as const };
   return open ? icons.open : icons.closed;
 }

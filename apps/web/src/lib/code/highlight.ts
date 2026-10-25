@@ -1,79 +1,73 @@
 import * as React from 'react';
-import type { ThemeRegistration } from 'shiki';
+import { COMMENT_COLOR, COMMENT_TAGS, type CommentSpan, scanCommentLine } from '@/lib/code/comment-tags.ts';
+import { CODE_THEME, resolveFenceGrammar, resolveGrammar } from '@/lib/code/grammar.ts';
+
+export { CODE_THEME };
 
 export interface Token {
   content: string;
   style: React.CSSProperties | undefined;
 }
 
-const EXTENSION_LANGUAGE: Record<string, string> = {
-  ts: 'typescript',
-  mts: 'typescript',
-  cts: 'typescript',
-  tsx: 'tsx',
-  js: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  jsx: 'jsx',
-  json: 'json',
-  jsonc: 'jsonc',
-  md: 'markdown',
-  mdx: 'mdx',
-  css: 'css',
-  scss: 'scss',
-  html: 'html',
-  vue: 'vue',
-  svelte: 'svelte',
-  astro: 'astro',
-  py: 'python',
-  rb: 'ruby',
-  go: 'go',
-  rs: 'rust',
-  swift: 'swift',
-  kt: 'kotlin',
-  java: 'java',
-  c: 'c',
-  h: 'c',
-  cpp: 'cpp',
-  cs: 'csharp',
-  php: 'php',
-  sql: 'sql',
-  sh: 'bash',
-  bash: 'bash',
-  zsh: 'bash',
-  fish: 'fish',
-  yml: 'yaml',
-  yaml: 'yaml',
-  toml: 'toml',
-  graphql: 'graphql',
-  gql: 'graphql',
-  prisma: 'prisma',
-  dockerfile: 'docker',
-};
-
 export function resolveLanguage(path: string) {
-  const name = path.split('/').at(-1)?.toLowerCase() ?? '';
-  if (name === 'dockerfile') return 'docker';
-  const dot = name.lastIndexOf('.');
-  if (dot < 0) return null;
-  return EXTENSION_LANGUAGE[name.slice(dot + 1)] ?? null;
+  return resolveGrammar(path);
 }
 
-const FENCE_ALIASES: Record<string, string> = {
-  shell: 'bash',
-  console: 'bash',
-  terminal: 'bash',
-  text: '',
-  txt: '',
-  plaintext: '',
-  diff: 'diff',
-};
-
 export function resolveFenceLanguage(fence: string | null) {
-  if (!fence) return null;
-  const name = fence.toLowerCase();
-  if (name in FENCE_ALIASES) return FENCE_ALIASES[name] || null;
-  return EXTENSION_LANGUAGE[name] ?? name;
+  return resolveFenceGrammar(fence);
+}
+
+export interface ThemedToken {
+  content: string;
+  color?: string | undefined;
+  fontStyle?: number | undefined;
+}
+
+function isPlainComment(token: ThemedToken) {
+  return token.color === COMMENT_COLOR && !token.fontStyle;
+}
+
+function resolveTokenStyle(token: ThemedToken): React.CSSProperties | undefined {
+  return token.color ? { color: token.color } : undefined;
+}
+
+function tagLine(tokens: readonly ThemedToken[], plainBlock: boolean, first: boolean) {
+  const line = tokens.map((token) => token.content).join('');
+  const spans: CommentSpan[] = [];
+  let at = 0;
+  for (const token of tokens) {
+    const last = spans.at(-1);
+    const to = at + token.content.length;
+    if (isPlainComment(token) && last?.to === at) last.to = to;
+    else if (isPlainComment(token)) spans.push({ from: at, to });
+    at = to;
+  }
+  const scan = scanCommentLine(line, spans, plainBlock, first);
+  const plain = tokens.map((token) => ({ content: token.content, style: resolveTokenStyle(token) }));
+  if (!scan.tagged) return { tokens: plain, plainBlock: scan.plainBlock };
+  const tag = COMMENT_TAGS[scan.tagged.tag];
+  const kept: Token[] = [];
+  let end = 0;
+  for (const token of plain) {
+    const room = scan.tagged.from - end;
+    if (room <= 0) break;
+    kept.push(room < token.content.length ? { ...token, content: token.content.slice(0, room) } : token);
+    end += token.content.length;
+  }
+  kept.push({
+    content: line.slice(scan.tagged.from),
+    style: tag.style,
+  });
+  return { tokens: kept, plainBlock: scan.plainBlock };
+}
+
+export function resolveTaggedTokens(lines: readonly (readonly ThemedToken[])[]): Token[][] {
+  let plainBlock = false;
+  return lines.map((tokens, index) => {
+    const tagged = tagLine(tokens, plainBlock, index === 0);
+    plainBlock = tagged.plainBlock;
+    return tagged.tokens;
+  });
 }
 
 interface Highlighted {
@@ -86,80 +80,11 @@ const CACHE_LIMIT = 200;
 
 const MAX_HIGHLIGHTED_CHARACTERS = 400_000;
 
+const IDLE_TIMEOUT_MS = 200;
+
 const cache = new Map<string, Promise<Token[][] | null>>();
 
-const SCOPE_TOKENS: Record<string, string[]> = {
-  keyword: [
-    'keyword',
-    'storage.type',
-    'storage.modifier',
-    'keyword.operator.new',
-    'keyword.operator.expression',
-    'keyword.operator.logical.python',
-    'variable.language',
-  ],
-  string: [
-    'string',
-    'string.regexp',
-    'constant.character',
-    'punctuation.definition.string',
-    'markup.inline.raw',
-    'markup.fenced_code',
-  ],
-  number: ['constant.numeric', 'constant.language', 'support.constant'],
-  comment: ['comment', 'punctuation.definition.comment', 'string.quoted.docstring'],
-  function: [
-    'entity.name.function',
-    'support.function',
-    'meta.function-call entity.name.function',
-    'variable.function',
-  ],
-  type: [
-    'entity.name.type',
-    'entity.name.class',
-    'entity.name.namespace',
-    'entity.other.inherited-class',
-    'support.type',
-    'support.class',
-    'storage.type.primitive',
-  ],
-  property: [
-    'variable.other.property',
-    'variable.other.object.property',
-    'support.type.property-name',
-    'meta.object-literal.key',
-    'entity.other.attribute-name',
-  ],
-  tag: ['entity.name.tag', 'markup.heading', 'entity.name.section', 'punctuation.definition.heading'],
-  punctuation: ['punctuation', 'meta.brace', 'keyword.operator', 'storage.type.function.arrow'],
-  meta: ['meta.decorator', 'punctuation.decorator', 'meta.preprocessor', 'keyword.control.directive'],
-};
-
-export const CODE_THEME: ThemeRegistration = {
-  name: 'shinsa-code',
-  type: 'light',
-  colors: { 'editor.foreground': 'var(--fg-4)', 'editor.background': 'transparent' },
-  tokenColors: [
-    ...Object.entries(SCOPE_TOKENS).map(([token, scope]) => ({
-      scope,
-      settings: { foreground: `var(--code-${token})` },
-    })),
-    { scope: 'meta.template.expression', settings: { foreground: 'var(--fg-4)' } },
-    {
-      scope: 'markup.underline.link',
-      settings: { foreground: 'var(--code-function)', fontStyle: 'underline' },
-    },
-    {
-      scope: ['markup.inserted', 'punctuation.definition.inserted'],
-      settings: { foreground: 'var(--green-text)' },
-    },
-    {
-      scope: ['markup.deleted', 'punctuation.definition.deleted'],
-      settings: { foreground: 'var(--red-text)' },
-    },
-    { scope: 'invalid', settings: { foreground: 'var(--red-text)' } },
-  ],
-};
+const resolved = new Map<string, Token[][] | null>();
 
 async function tokenize(code: string, language: string): Promise<Token[][] | null> {
   const { codeToTokens } = await import('shiki');
@@ -167,19 +92,39 @@ async function tokenize(code: string, language: string): Promise<Token[][] | nul
     lang: language as Parameters<typeof codeToTokens>[1]['lang'],
     theme: CODE_THEME,
   });
-  return result.tokens.map((line) =>
-    line.map((token) => ({ content: token.content, style: token.color ? { color: token.color } : undefined }))
-  );
+  return resolveTaggedTokens(result.tokens);
+}
+
+function resolveKey(code: string, language: string) {
+  return `${language}\u0000${code}`;
 }
 
 export function requestTokens(code: string, language: string) {
-  const key = `${language}\u0000${code}`;
+  const key = resolveKey(code, language);
   const known = cache.get(key);
   if (known) return known;
-  const pending = tokenize(code, language).catch(() => null);
+  const pending = tokenize(code, language)
+    .catch(() => null)
+    .then((tokens) => {
+      if (cache.has(key)) resolved.set(key, tokens);
+      return tokens;
+    });
   cache.set(key, pending);
-  if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value ?? '');
+  if (cache.size > CACHE_LIMIT) {
+    const oldest = cache.keys().next().value ?? '';
+    cache.delete(oldest);
+    resolved.delete(oldest);
+  }
   return pending;
+}
+
+function scheduleIdle(work: () => void) {
+  if (typeof requestIdleCallback === 'function') {
+    const handle = requestIdleCallback(work, { timeout: IDLE_TIMEOUT_MS });
+    return () => cancelIdleCallback(handle);
+  }
+  const timer = setTimeout(work);
+  return () => clearTimeout(timer);
 }
 
 export function useTokens(code: string | null, path: string) {
@@ -190,14 +135,20 @@ export function useLanguageTokens(code: string | null, language: string | null) 
   const [highlighted, setHighlighted] = React.useState<Highlighted | null>(null);
   React.useEffect(() => {
     if (code === null || !language || code.length > MAX_HIGHLIGHTED_CHARACTERS) return;
+    if (resolved.has(resolveKey(code, language))) return;
     let alive = true;
-    void requestTokens(code, language).then((tokens) => {
-      if (alive) setHighlighted({ code, language, tokens });
+    const cancel = scheduleIdle(() => {
+      void requestTokens(code, language).then((tokens) => {
+        if (alive) setHighlighted({ code, language, tokens });
+      });
     });
     return () => {
       alive = false;
+      cancel();
     };
   }, [code, language]);
-  if (!highlighted || highlighted.code !== code || highlighted.language !== language) return null;
-  return highlighted.tokens;
+  if (highlighted && highlighted.code === code && highlighted.language === language)
+    return highlighted.tokens;
+  if (code === null || !language) return null;
+  return resolved.get(resolveKey(code, language)) ?? null;
 }

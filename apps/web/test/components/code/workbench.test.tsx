@@ -358,6 +358,17 @@ describe('editing in place', () => {
     expect(localStorage.getItem('shinsa.code-unified')).toBe('false');
   });
 
+  it('builds a changed file’s side by side view while its row is hovered, and shows it on the press', async () => {
+    renderCode(nextTask(), '&mode=changes&file=docs/beta.txt&diff=1');
+    await findLine('guard');
+    const tree = await screen.findByRole('tree', { name: 'Changed files' });
+    fireEvent.pointerEnter(within(tree).getByRole('treeitem', { name: 'docs/alpha.txt' }));
+    await act(() => Bun.sleep(400));
+    fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs/alpha.txt' }));
+    await findLine('two');
+    expect(document.querySelector('.cm-mergeView')).not.toBeNull();
+  });
+
   it('saves what you type to the working copy, with no mode to switch on', async () => {
     renderCode(nextTask({ worktreePath: '/w', stage: 'awaiting_review' }), '&mode=files&file=README.md');
     const line = await findLine('# Sample');

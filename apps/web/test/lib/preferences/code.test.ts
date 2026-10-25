@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
+import type * as React from 'react';
 import {
+  readExplorerSide,
   readViewedFiles,
   toggleViewedFile,
+  useExplorerSide,
   useExplorerWidth,
   useHideViewed,
   useUnifiedDiff,
   useViewedFiles,
+  writeExplorerSide,
 } from '@/lib/preferences/code.ts';
 
 describe('code preferences', () => {
@@ -24,6 +28,32 @@ describe('code preferences', () => {
     act(() => result.current[1]());
     expect(result.current[0]).toBe(true);
     expect(localStorage.getItem('shinsa.code-hide-viewed')).toBe('true');
+  });
+
+  it('keeps the file list on the left until you move it, and remembers the side', () => {
+    const { result } = renderHook(() => useExplorerSide());
+    expect(result.current).toBe('left');
+    act(() => writeExplorerSide('right'));
+    expect(result.current).toBe('right');
+    expect(readExplorerSide()).toBe('right');
+    act(() => writeExplorerSide('left'));
+    expect(localStorage.getItem('shinsa.code-explorer-side')).toBe('left');
+  });
+
+  it('widens a file list on the right as you drag its edge to the left', () => {
+    const { result } = renderHook(() => useExplorerWidth(0, 'right'));
+    act(() =>
+      result.current.startResize({
+        clientX: 500,
+        preventDefault: () => {},
+      } as React.PointerEvent<HTMLElement>)
+    );
+    act(() => {
+      dispatchEvent(new PointerEvent('pointermove', { clientX: 440 }));
+      dispatchEvent(new PointerEvent('pointerup'));
+    });
+    expect(result.current.width).toBe(340);
+    localStorage.removeItem('shinsa.code-explorer-width');
   });
 
   it('starts the file list at its default width', () => {

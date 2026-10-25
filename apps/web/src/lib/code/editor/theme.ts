@@ -1,6 +1,6 @@
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { EditorView } from '@codemirror/view';
-import { tags } from '@lezer/highlight';
+import { COMMENT_TAGS } from '@/lib/code/comment-tags.ts';
+import { listThemeColors, resolveColorClass } from '@/lib/code/grammar.ts';
 
 const TONES = ['neutral', 'blue', 'amber', 'orange', 'green', 'red', 'purple'] as const;
 
@@ -20,30 +20,21 @@ function listSpotTones() {
   );
 }
 
-export const codeHighlight = HighlightStyle.define([
-  {
-    tag: [tags.keyword, tags.controlKeyword, tags.moduleKeyword, tags.operatorKeyword],
-    color: 'var(--code-keyword)',
-  },
-  { tag: [tags.string, tags.special(tags.string), tags.character, tags.regexp], color: 'var(--code-string)' },
-  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: 'var(--code-number)' },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: 'var(--code-comment)' },
-  {
-    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
-    color: 'var(--code-function)',
-  },
-  {
-    tag: [tags.typeName, tags.className, tags.namespace, tags.definition(tags.typeName)],
-    color: 'var(--code-type)',
-  },
-  { tag: [tags.propertyName, tags.attributeName], color: 'var(--code-property)' },
-  { tag: [tags.tagName, tags.heading], color: 'var(--code-tag)' },
-  { tag: [tags.punctuation, tags.bracket, tags.operator, tags.separator], color: 'var(--code-punctuation)' },
-  { tag: [tags.meta, tags.processingInstruction, tags.annotation], color: 'var(--code-meta)' },
-  { tag: tags.link, color: 'var(--code-function)', textDecoration: 'underline' },
-  { tag: tags.strong, fontWeight: '600' },
-  { tag: tags.invalid, color: 'var(--red-text)' },
-]);
+function listTokenStyles() {
+  const styles: Record<string, Record<string, string>> = {};
+  for (const color of listThemeColors()) {
+    const className = resolveColorClass(color);
+    if (className) styles[`.${className}`] = { color };
+  }
+  for (const tag of Object.values(COMMENT_TAGS)) styles[`.${tag.className}`] = { ...tag.style };
+  return {
+    ...styles,
+    '.tm-italic': { fontStyle: 'italic' },
+    '.tm-bold': { fontWeight: '600' },
+    '.tm-underline': { textDecoration: 'underline' },
+    '.tm-strike': { textDecoration: 'line-through' },
+  };
+}
 
 const codeTheme = EditorView.theme({
   '&': {
@@ -67,7 +58,32 @@ const codeTheme = EditorView.theme({
     border: 'none',
     fontVariantNumeric: 'tabular-nums',
   },
-  '.cm-lineNumbers .cm-gutterElement': { padding: '0 8px 0 16px', minWidth: '48px', cursor: 'pointer' },
+  '.cm-lineNumbers .cm-gutterElement': { padding: '0 4px 0 16px', minWidth: '44px', cursor: 'pointer' },
+  '.cm-foldGutter .cm-gutterElement': {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '16px',
+    color: 'var(--fg-2)',
+    cursor: 'pointer',
+  },
+  '.cm-foldGutter .cm-gutterElement:hover': { color: 'var(--fg-4)' },
+  '.cm-fold-open, .cm-fold-closed': { display: 'flex' },
+  '.cm-fold-open': { visibility: 'hidden', transform: 'rotate(90deg)' },
+  '.cm-gutters:hover .cm-fold-open': { visibility: 'visible' },
+  '.cm-foldPlaceholder': {
+    display: 'inline-block',
+    margin: '0 4px',
+    padding: '0 4px',
+    border: 'none',
+    borderRadius: '3px',
+    backgroundColor: 'var(--bg-a2)',
+    color: 'var(--fg-2)',
+    lineHeight: '16px',
+    cursor: 'pointer',
+  },
+  '.cm-foldPlaceholder:hover': { backgroundColor: 'var(--bg-a3)', color: 'var(--fg-4)' },
+  ...listTokenStyles(),
   '.cm-lineNumbers .cm-gutterElement:hover': { color: 'var(--primary-text)' },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },
   '.cm-insertedLine, &.cm-merge-b .cm-changedLine': { backgroundColor: 'var(--code-added)' },
@@ -148,4 +164,4 @@ const codeTheme = EditorView.theme({
   },
 });
 
-export const CODE_THEME = [codeTheme, syntaxHighlighting(codeHighlight)];
+export const CODE_THEME = [codeTheme];

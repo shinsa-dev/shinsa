@@ -26,6 +26,7 @@ import { useExtensions } from '@/lib/connection/extensions.ts';
 import { useAgentProviders } from '@/lib/connection/models.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { useWorkspaceSupport } from '@/lib/connection/workspaces.ts';
+import { useExplorerSide } from '@/lib/preferences/code.ts';
 import { useNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { resolveHashSectionId } from '@/lib/settings.ts';
 import {
@@ -108,8 +109,9 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const scroller = React.useRef<HTMLDivElement>(null);
   const repos = Object.values(state.repos);
   const support = useWorkspaceSupport(resolveRepoKey(repos));
+  const explorerSide = useExplorerSide();
   useRegisterCommands(
-    listSettingsSections(state.settings, providers, notifications, accounts, { repos, support })
+    listSettingsSections(state.settings, providers, notifications, accounts, { repos, support }, explorerSide)
   );
   const extensions = useExtensions();
   const extensionsRead = extensions.snapshot !== null || extensions.failure !== null;

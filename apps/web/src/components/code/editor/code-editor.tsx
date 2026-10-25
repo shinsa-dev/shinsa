@@ -1,30 +1,20 @@
-import type { LanguageSupport } from '@codemirror/language';
-import { diff, MergeView } from '@codemirror/merge';
-import { Annotation, Compartment, EditorState, type Extension, Transaction } from '@codemirror/state';
+import { diff } from '@codemirror/merge';
+import { Transaction } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { CommentSide } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
-import { CodeLoading } from '@/components/code/code-loading.tsx';
 import { FindBar } from '@/components/code/editor/find-bar.tsx';
-import { COLLAPSE } from '@/lib/code/collapse.ts';
-import {
-  annotationsField,
-  type EditorAnnotations,
-  NO_ANNOTATIONS,
-  resolveSelectedLines,
-  setAnnotations,
-} from '@/lib/code/editor/annotations.ts';
-import { followHorizontalScroll, skipCollapsedLines } from '@/lib/code/editor/collapsed.ts';
+import { NO_ANNOTATIONS, setAnnotations } from '@/lib/code/editor/annotations.ts';
 import { selectEditorCommand } from '@/lib/code/editor/commands.ts';
-import { FindHost } from '@/lib/code/editor/find.ts';
 import { requestLanguage } from '@/lib/code/editor/language.ts';
-import { createEditorExtensions, gotoLine, resolveEditable } from '@/lib/code/editor/setup.ts';
-import { SlotRegistry } from '@/lib/code/editor/slots.ts';
-import { codeHighlight } from '@/lib/code/editor/theme.ts';
-import { DIFF_CONFIG, MAX_PARSED_ORIGINAL, revealLine, unifiedDiff } from '@/lib/code/editor/unified.ts';
+import { EditorSession, fromDisk } from '@/lib/code/editor/session.ts';
+import { gotoLine, resolveEditable } from '@/lib/code/editor/setup.ts';
+import { revealLine } from '@/lib/code/editor/unified.ts';
+import { CODE_MARKS, measureCode } from '@/lib/code/marks.ts';
 import type { CodeNote, CodeSpotMark } from '@/lib/code/notes.ts';
-import { resolveCommentRange } from '@/lib/code/notes.ts';
+import type { PairSource } from '@/lib/code/pane.ts';
 
 export interface EditorHandle {
   openFind: () => void;
@@ -40,8 +30,13 @@ export interface EditorReveal {
   side: CommentSide;
 }
 
+export interface EditorSessionHolder {
+  current: { destroy: () => void; prefetchPair: (source: PairSource) => void } | null;
+}
+
 export interface CodeEditorProps {
   path: string;
+  docKey?: string;
   content: string;
   original: string | null;
   split: boolean;
@@ -55,20 +50,8 @@ export interface CodeEditorProps {
   onSave: () => void;
   renderNote: (note: CodeNote) => React.ReactNode;
   handle: React.Ref<EditorHandle>;
+  session?: EditorSessionHolder;
 }
-
-interface Views {
-  a: EditorView | null;
-  b: EditorView;
-  destroy: () => void;
-}
-
-const SPLIT_THEME = EditorView.theme({
-  '&': { height: 'auto' },
-  '.cm-scroller': { overflowX: 'auto', overflowY: 'hidden' },
-});
-
-const fromDisk = Annotation.define<boolean>();
 
 function replaceDoc(view: EditorView, text: string) {
   const current = view.state.doc.toString();
@@ -84,25 +67,9 @@ function replaceDoc(view: EditorView, text: string) {
 function splitAnnotations(notes: CodeNote[], spots: CodeSpotMark[], keep: number[], split: boolean) {
   const anchors = (side: CommentSide) =>
     notes.filter((note) => note.side === side).map((note) => ({ key: note.key, line: note.line }));
-  const b: EditorAnnotations = { notes: anchors('new'), oldNotes: split ? [] : anchors('old'), spots, keep };
-  const a: EditorAnnotations = { ...NO_ANNOTATIONS, notes: anchors('old') };
+  const b = { notes: anchors('new'), oldNotes: split ? [] : anchors('old'), spots, keep };
+  const a = { ...NO_ANNOTATIONS, notes: anchors('old') };
   return { a, b };
-}
-
-function useLanguage(path: string) {
-  const [language, setLanguage] = React.useState<{ path: string; support: LanguageSupport | null } | null>(
-    null
-  );
-  React.useEffect(() => {
-    let alive = true;
-    void requestLanguage(path).then((support) => {
-      if (alive) setLanguage({ path, support });
-    });
-    return () => {
-      alive = false;
-    };
-  }, [path]);
-  return language?.path === path ? language : null;
 }
 
 function revealIn(view: EditorView, line: number) {
@@ -114,197 +81,128 @@ function revealIn(view: EditorView, line: number) {
   });
 }
 
+function useSession(holder: EditorSessionHolder | undefined) {
+  const own = React.useRef<EditorSession | null>(null);
+  const target = (holder ?? own) as { current: EditorSession | null };
+  target.current ??= new EditorSession({ language: requestLanguage });
+  React.useEffect(() => {
+    if (holder) return;
+    return () => {
+      own.current?.destroy();
+      own.current = null;
+    };
+  }, [holder]);
+  return target.current;
+}
+
 export default function CodeEditor(props: CodeEditorProps) {
-  const { path, content, original, split, editable, notes, spots, keep, reveal, handle } = props;
-  const language = useLanguage(path);
+  const { path, original, split, editable, notes, spots, keep, reveal, handle } = props;
+  const diffing = original !== null;
+  const docKey = props.docKey ?? `${path}\0${diffing ? 'diff' : 'file'}`;
+  const session = useSession(props.session);
+  session.latest = props;
   const parent = React.useRef<HTMLDivElement>(null);
-  const views = React.useRef<Views | null>(null);
-  const registry = React.useMemo(() => new SlotRegistry(), []);
-  const slots = React.useSyncExternalStore(registry.subscribe, registry.read);
-  const findHost = React.useMemo(() => new FindHost(), []);
-  const find = React.useSyncExternalStore(findHost.subscribe, findHost.read);
-  const editableSlot = React.useMemo(() => new Compartment(), []);
+  const chevron = React.useRef<HTMLSpanElement>(null);
   const latest = React.useRef(props);
   latest.current = props;
-  const text = React.useRef(content);
-  const annotations = splitAnnotations(notes, spots, keep, split);
-  const annotationsKey = JSON.stringify(annotations);
-  const latestAnnotations = React.useRef(annotations);
-  latestAnnotations.current = annotations;
-  const ready = language !== null;
-  const support = language?.support ?? null;
-  const diffing = original !== null;
-
-  const [built, setBuilt] = React.useState(0);
-  const languageSlot = React.useMemo(() => new Compartment(), []);
+  const slots = React.useSyncExternalStore(session.registry.subscribe, session.registry.read);
+  const find = React.useSyncExternalStore(session.findHost.subscribe, session.findHost.read);
+  const annotationsKey = JSON.stringify(splitAnnotations(notes, spots, keep, split && diffing));
+  const latestAnnotations = React.useRef(annotationsKey);
+  latestAnnotations.current = annotationsKey;
 
   React.useLayoutEffect(() => {
     const host = parent.current;
-    if (!host || !ready) return;
-    host.style.visibility = 'hidden';
-    const comment = (side: CommentSide) => (line: number, view: EditorView) => {
-      const onComment = latest.current.onComment;
-      if (!onComment) return false;
-      const range = resolveCommentRange(line, resolveSelectedLines(view));
-      onComment(side, range.line, range.endLine);
-      return true;
-    };
-    const onChange = EditorView.updateListener.of((update) => {
-      if (!update.docChanged) return;
-      text.current = update.state.doc.toString();
-      if (update.transactions.some((transaction) => !transaction.annotation(fromDisk)))
-        latest.current.onEdit();
+    session.chevronMarkup = chevron.current?.innerHTML ?? '';
+    if (!host) return;
+    session.show(host, {
+      key: docKey,
+      path,
+      content: latest.current.content,
+      original,
+      split: split && original !== null,
+      annotations: JSON.parse(latestAnnotations.current) as ReturnType<typeof splitAnnotations>,
     });
-    const base = (side: CommentSide, extra: Extension[]) =>
-      createEditorExtensions({
-        language: null,
-        editable: side === 'new' ? editableSlot : new Compartment(),
-        onLine: comment(side),
-        findPanel: findHost.createPanel,
-        actions: () => ({ save: () => latest.current.onSave(), openFind: findHost.open }),
-      }).concat(languageSlot.of([]), skipCollapsedLines, followHorizontalScroll, extra);
-    const build = () => {
-      const initial = latestAnnotations.current;
-      if (diffing && split) {
-        const merge = new MergeView({
-          a: { doc: original, extensions: base('old', [SPLIT_THEME, annotationsField(registry, initial.a)]) },
-          b: {
-            doc: text.current,
-            extensions: base('new', [SPLIT_THEME, annotationsField(registry, initial.b), onChange]),
-          },
-          parent: host,
-          collapseUnchanged: { margin: COLLAPSE.margin, minSize: COLLAPSE.minSize },
-          diffConfig: DIFF_CONFIG,
-          gutter: true,
-        });
-        merge.dom.style.height = '100%';
-        merge.dom.style.overflow = 'auto';
-        views.current = { a: merge.a, b: merge.b, destroy: () => merge.destroy() };
-      } else {
-        const extensions = [...base('new', [annotationsField(registry, initial.b), onChange])];
-        if (diffing) {
-          extensions.push(
-            unifiedDiff({
-              original,
-              tree:
-                support && original.length <= MAX_PARSED_ORIGINAL
-                  ? support.language.parser.parse(original)
-                  : null,
-              highlighter: codeHighlight,
-              registry,
-              collapse: true,
-              annotations: initial.b,
-              onOldLine: (line) => latest.current.onComment?.('old', line, null),
-            })
-          );
-        }
-        const view = new EditorView({
-          state: EditorState.create({ doc: text.current, extensions }),
-          parent: host,
-        });
-        views.current = { a: null, b: view, destroy: () => view.destroy() };
-      }
-      setBuilt((count) => count + 1);
-    };
-    const colour = () => {
-      const current = views.current;
-      if (!current) return;
-      for (const view of [current.a, current.b])
-        view?.dispatch({ effects: languageSlot.reconfigure(support ?? []) });
-      current.b.requestMeasure({
-        read: () => null,
-        write: () => {
-          host.style.visibility = '';
-        },
-      });
-    };
-    let colouring: ReturnType<typeof setTimeout> | undefined;
-    const building = setTimeout(() => {
-      build();
-      colouring = setTimeout(colour, 0);
-    }, 0);
-    return () => {
-      clearTimeout(building);
-      clearTimeout(colouring);
-      views.current?.destroy();
-      views.current = null;
-    };
-  }, [ready, support, original, split, diffing, registry, editableSlot, findHost, languageSlot]);
-
-  React.useEffect(() => {
-    const current = views.current;
-    if (!current) return;
-    const value = JSON.parse(annotationsKey) as ReturnType<typeof splitAnnotations>;
-    current.b.dispatch({ effects: setAnnotations.of(value.b) });
-    current.a?.dispatch({ effects: setAnnotations.of(value.a) });
-  }, [annotationsKey, ready, original, split, built]);
-
-  React.useEffect(() => {
-    views.current?.b.dispatch({ effects: editableSlot.reconfigure(resolveEditable(editable)) });
-  }, [editable, editableSlot, ready, original, split, built]);
-
-  React.useEffect(() => {
-    const current = views.current;
-    if (!current || !reveal) return;
-    revealIn(reveal.side === 'old' && current.a ? current.a : current.b, reveal.line);
-  }, [reveal?.key, ready, original, split, built]);
+    measureCode(CODE_MARKS.shown, path);
+  }, [session, docKey, path, original, split]);
 
   React.useLayoutEffect(() => {
-    const measure = () => {
-      views.current?.b.requestMeasure();
-      views.current?.a?.requestMeasure();
+    const host = parent.current;
+    return () => {
+      if (host) session.hide(host);
     };
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
+  }, [session]);
+
+  React.useLayoutEffect(() => {
+    const views = session.views;
+    if (!views || session.current !== docKey) return;
+    const value = JSON.parse(annotationsKey) as ReturnType<typeof splitAnnotations>;
+    views.b.dispatch({ effects: setAnnotations.of(value.b) });
+    views.a?.dispatch({ effects: setAnnotations.of(value.a) });
+  }, [session, annotationsKey, docKey, original, split]);
+
+  React.useLayoutEffect(() => {
+    if (session.current !== docKey) return;
+    session.views?.b.dispatch({ effects: session.editable.reconfigure(resolveEditable(editable)) });
+  }, [session, editable, docKey, original, split]);
+
+  React.useLayoutEffect(() => {
+    const views = session.views;
+    if (!views || !reveal || session.current !== docKey) return;
+    revealIn(reveal.side === 'old' && views.a ? views.a : views.b, reveal.line);
+  }, [session, reveal?.key, docKey, original, split]);
+
+  React.useLayoutEffect(() => {
+    if (typeof ResizeObserver === 'undefined' || slots.size === 0) return;
+    const observer = new ResizeObserver(() => {
+      session.views?.b.requestMeasure();
+      session.views?.a?.requestMeasure();
+    });
     for (const slot of slots.values()) observer.observe(slot);
     return () => observer.disconnect();
-  }, [slots, built]);
+  }, [session, slots]);
 
   React.useImperativeHandle(
     handle,
     () => ({
       openFind: () => {
-        const view = views.current?.b;
-        if (view) findHost.open(view, false);
+        const view = session.selectView(docKey);
+        if (view) session.findHost.open(view, false);
       },
       openGotoLine: () => {
-        const view = views.current?.b;
+        const view = session.selectView(docKey);
         if (view) gotoLine(view);
       },
       run: (id) => {
-        const current = views.current;
+        const views = session.views;
         const command = selectEditorCommand(id);
-        if (!current || !command) return;
-        const view = current.a?.hasFocus ? current.a : current.b;
+        if (!views || !command || session.current !== docKey) return;
+        const view = views.a?.hasFocus ? views.a : views.b;
         view.focus();
-        command.run(view, { save: () => latest.current.onSave(), openFind: findHost.open });
+        command.run(view, { save: () => session.latest.onSave(), openFind: session.findHost.open });
       },
-      readText: () => text.current,
+      readText: () => session.readText(docKey) ?? latest.current.content,
       replaceText: (next) => {
-        text.current = next;
-        const view = views.current?.b;
+        const view = session.selectView(docKey);
         if (view) replaceDoc(view, next);
       },
     }),
-    [findHost]
+    [session, docKey]
   );
 
   return (
     <div className='relative flex min-h-0 flex-1 flex-col'>
-      {!ready && (
-        <div className='absolute inset-0 flex'>
-          <CodeLoading label={`Opening ${path}…`} />
-        </div>
-      )}
-      <div ref={parent} className='@container min-h-0 flex-1' />
+      <span ref={chevron} hidden>
+        <Icon name='IconChevronRightSmall' />
+      </span>
+      <div ref={parent} className='@container flex min-h-0 flex-1 flex-col' />
       {find.panel &&
         createPortal(
           <FindBar
             view={find.panel.view}
             replace={find.replace}
             canReplace={editable}
-            onReplace={findHost.showReplace}
+            onReplace={session.findHost.showReplace}
           />,
           find.panel.dom
         )}

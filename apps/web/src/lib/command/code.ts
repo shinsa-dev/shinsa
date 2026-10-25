@@ -1,6 +1,7 @@
 import { type CodeKey, describeCodeKey } from '@/lib/code/keys.ts';
 import type { CodeMode } from '@/lib/code/location.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
+import type { ExplorerSide } from '@/lib/preferences/code.ts';
 import { CODE_MODE, type ExplorerMode } from '@/lib/tasks/tabs.ts';
 
 export interface CodeCommandContext {
@@ -10,11 +11,13 @@ export interface CodeCommandContext {
   mac: boolean;
   split: boolean;
   hideViewed: boolean;
+  side: ExplorerSide;
   hasEditor: boolean;
   applyMode: (mode: CodeMode) => void;
   run: (key: CodeKey) => void;
   toggleSplit: () => void;
   toggleHideViewed: () => void;
+  toggleSide: () => void;
 }
 
 export function listCodeCommands(context: CodeCommandContext): CommandSection {
@@ -46,6 +49,14 @@ export function listCodeCommands(context: CodeCommandContext): CommandSection {
       trailing: describeCodeKey('search', context.mac),
       keywords: ['grep', 'find', 'text', 'everywhere'],
       run: () => context.run('search'),
+    },
+    {
+      kind: 'run',
+      id: `${id}.side`,
+      label: context.side === 'left' ? 'Move the file list to the right' : 'Move the file list to the left',
+      icon: context.side === 'left' ? 'IconSidebarSimpleRightWide' : 'IconSidebarSimpleLeftWide',
+      keywords: ['file list', 'explorer', 'tree', 'side', 'left', 'right', 'layout'],
+      run: context.toggleSide,
     },
   ];
   if (context.modes.includes('changes')) {

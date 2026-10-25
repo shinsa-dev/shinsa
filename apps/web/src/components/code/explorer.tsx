@@ -11,7 +11,7 @@ import { TREE_HOVER_GROUP } from '@/components/code/tree-row.tsx';
 import { Choice } from '@/components/controls/choice.tsx';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import type { CodeLocation, CodeMode } from '@/lib/code/location.ts';
+import type { CodeFileRef, CodeLocation, CodeMode } from '@/lib/code/location.ts';
 import { listRefChoices } from '@/lib/code/refs.ts';
 import type { CodeSearch, Loaded } from '@/lib/connection/code.ts';
 import { CODE_MODE, type ExplorerMode } from '@/lib/tasks/tabs.ts';
@@ -33,6 +33,9 @@ export interface ExplorerProps {
   onMatch: (path: string, line: number) => void;
   onSearch: (search: CodeSearch) => void;
   onToggleViewed: (path: string) => void;
+  onPrefetch: (file: CodeFileRef) => void;
+  onPrefetchPath: (path: string) => void;
+  onPrefetchFolder: (dir: string) => void;
   onFloor?: (width: number) => void;
 }
 
@@ -54,6 +57,7 @@ function ExplorerBody(props: ExplorerProps) {
         inputRef={props.searchInput}
         onChange={props.onSearch}
         onOpen={props.onMatch}
+        onPrefetch={props.onPrefetchPath}
       />
     );
   }
@@ -65,6 +69,8 @@ function ExplorerBody(props: ExplorerProps) {
         activePath={activePath}
         changes={diff.status === 'ready' ? diff.value.files : []}
         onOpen={props.onFile}
+        onPrefetch={(path) => props.onPrefetch({ kind: 'file', path })}
+        onPrefetchFolder={props.onPrefetchFolder}
       />
     );
   }
@@ -78,6 +84,7 @@ function ExplorerBody(props: ExplorerProps) {
       viewed={props.viewed}
       onToggleViewed={props.onToggleViewed}
       onOpen={props.onChange}
+      onPrefetch={(path) => props.onPrefetch({ kind: 'diff', path })}
     />
   );
 }

@@ -2,12 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CODE_LIMITS, WORKING_REF } from '@shinsa/core';
+import { CatFile } from '../../src/git/blobs.ts';
 import {
   assertCommit,
   listCommitPaths,
   listCommitTree,
   listWorkingPaths,
   listWorkingTree,
+  parseTreeObject,
   readCommitBytes,
   readCommitFile,
   readWorkingBytes,
@@ -40,6 +42,7 @@ async function createSampleRepo() {
 describe('assertCommit', () => {
   test('accepts a commit of this repository and nothing else', async () => {
     const { path, sha } = await createSampleRepo();
+    expect(await assertCommit(path, sha)).toBe(sha);
     expect(await assertCommit(path, sha)).toBe(sha);
     await expect(assertCommit(path, 'main')).rejects.toMatchObject({ code: 'ref_invalid' });
     await expect(assertCommit(path, '--output=/tmp/x')).rejects.toMatchObject({ code: 'ref_invalid' });
@@ -74,6 +77,29 @@ describe('listing files', () => {
     const src = await listCommitTree(path, sha, 'src');
     expect(src.entries.map((entry) => entry.path)).toEqual(['src/lib', 'src/app.ts']);
     expect((await listCommitTree(path, sha, 'missing')).entries).toEqual([]);
+    const reader = new CatFile(path);
+    expect(await listCommitTree(path, sha, '', undefined, reader)).toEqual(root);
+    expect(await listCommitTree(path, sha, 'src', undefined, reader)).toEqual(src);
+    expect((await listCommitTree(path, sha, 'missing', undefined, reader)).entries).toEqual([]);
+    expect((await listCommitTree(path, sha, 'big.txt', undefined, reader)).entries).toEqual([]);
+    expect((await listCommitTree(path, sha, 'a\nb', undefined, reader)).entries).toEqual([]);
+    reader.close();
+  });
+
+  test('reads a tree object’s entries, a submodule among them, and stops at a broken one', () => {
+    const object = 'ab'.repeat(20);
+    const id = Buffer.from(object, 'hex');
+    const bytes = Buffer.concat([
+      Buffer.from('160000 vendor\0'),
+      id,
+      Buffer.from('100644 a.ts\0'),
+      id,
+      Buffer.from('100644 broken'),
+    ]);
+    expect(parseTreeObject(new Uint8Array(bytes), 'lib', 20)).toEqual([
+      { entry: { name: 'vendor', path: 'lib/vendor', kind: 'submodule', size: null }, object },
+      { entry: { name: 'a.ts', path: 'lib/a.ts', kind: 'file', size: null }, object },
+    ]);
   });
 
   test('the working copy lists untracked files and leaves out deleted and ignored ones', async () => {
@@ -128,6 +154,27 @@ describe('reading a file', () => {
     expect(await readCommitFile(path, sha, 'nope.ts', cache)).toMatchObject({ missing: true });
     expect(await readCommitBytes(path, sha, 'logo.png')).toEqual(PNG);
     expect(await readCommitBytes(path, sha, 'big.txt')).toBeNull();
+  });
+
+  test('reads the same through one long-lived git, and falls back for a name it cannot send', async () => {
+    const { path, sha } = await createSampleRepo();
+    const cache = new ObjectCache();
+    const reader = new CatFile(path);
+    expect(await readCommitFile(path, sha, 'src/app.ts', cache, undefined, reader)).toMatchObject({
+      content: 'export const greeting = "hello";\nexport const other = "Hello";\n',
+    });
+    expect(await readCommitFile(path, sha, 'big.txt', cache, undefined, reader)).toMatchObject({
+      tooLarge: true,
+    });
+    expect(await readCommitFile(path, sha, 'link.ts', cache, undefined, reader)).toMatchObject({
+      content: 'src/app.ts',
+    });
+    expect(await readCommitFile(path, sha, 'src', cache, undefined, reader)).toMatchObject({ missing: true });
+    expect(await readCommitFile(path, sha, 'a\nb', cache, undefined, reader)).toMatchObject({
+      missing: true,
+    });
+    expect(await readCommitBytes(path, sha, 'logo.png', undefined, reader)).toEqual(PNG);
+    reader.close();
   });
 
   test('reads the working copy as it is on disk', async () => {
