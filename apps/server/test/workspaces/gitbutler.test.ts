@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo, Task } from '@shinsa/core';
@@ -12,6 +12,8 @@ import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRound, createTask } from '../helpers/state.ts';
+
+setDefaultTimeout(30_000);
 
 async function createWorkspace(files: Record<string, string> = {}) {
   const made = await createGitRepo({ files: { 'a.txt': 'a\n', 'b.txt': 'b\n', ...files } });

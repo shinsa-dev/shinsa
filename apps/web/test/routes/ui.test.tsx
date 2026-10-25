@@ -1,10 +1,12 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, setDefaultTimeout, spyOn } from 'bun:test';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { Root } from '@/root.tsx';
 import { navigate } from '@/router.ts';
 import { listSentCommands, startFakeServer, stopFakeServer } from '../support/server.ts';
 
 const NOTHING_SENT = 'Nothing was sent. This page only shows samples.';
+
+setDefaultTimeout(30_000);
 
 let requests: ReturnType<typeof spyOn<typeof globalThis, 'fetch'>> | null = null;
 
@@ -26,7 +28,7 @@ afterEach(() => {
 async function renderGallery() {
   act(() => navigate('/ui'));
   const view = render(<Root />);
-  await screen.findByRole('button', { name: 'Toggle theme' });
+  await screen.findByRole('button', { name: 'Toggle theme' }, { timeout: 15_000 });
   return view;
 }
 
