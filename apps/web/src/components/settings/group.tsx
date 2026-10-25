@@ -3,7 +3,8 @@ import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { SectionChevron, SectionLabel } from '@/components/layout/page/section-label.tsx';
+import { SectionLabel } from '@/components/layout/page/section-label.tsx';
+import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { resolveSectionId } from '@/lib/settings.ts';
@@ -112,23 +113,19 @@ export function FoldingBlock({
   const open = expanded || forcedOpen;
   return (
     <div className='flex flex-col'>
-      <button
-        type='button'
-        aria-expanded={open}
-        onClick={() => setExpanded((value) => !value)}
-        className={cn(
-          BLOCK_HEADER,
-          'cursor-pointer text-left text-xs transition-colors hover:text-fg-4 active:text-fg-4'
-        )}
+      <DisclosureHeader
+        open={open}
+        onToggle={() => setExpanded((value) => !value)}
+        strip='block'
+        chevron='glyph'
+        className='gap-1.5 pl-2 text-xs'
       >
         {status && (
           <Icon size='sm' name={status.icon} className={cn('-translate-y-px', TONE_TEXT[status.tone])} />
         )}
         <span className='min-w-0 truncate font-medium text-fg-4'>{title}</span>
         <span className={TOKEN_TEXT}>{detail}</span>
-        <span className='flex-1' />
-        <SectionChevron open={open} className='shrink-0' />
-      </button>
+      </DisclosureHeader>
       {open && <div className={SETTINGS_SHELF}>{children}</div>}
     </div>
   );

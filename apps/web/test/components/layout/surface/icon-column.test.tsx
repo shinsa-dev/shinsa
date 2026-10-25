@@ -12,6 +12,7 @@ import {
   ICON_SLOT,
   ICON_SLOT_GAP,
 } from '@/components/layout/surface/card.ts';
+import { resolveDisclosureStrip } from '@/components/layout/surface/disclosure.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
 import { createRun } from '../../../support/state.ts';
@@ -51,7 +52,9 @@ describe('one icon column per card', () => {
     const view = renderPhaseCard();
     const header = view.container.querySelector('h3') as HTMLElement;
     const body = header.nextElementSibling as HTMLElement;
-    expect(header.className).toContain(CARD_INSET);
+    expect(spacing(header.className, /\bps-(\d+(?:\.\d+)?)\b/)).toBe(
+      spacing(CARD_INSET, /px-(\d+(?:\.\d+)?)/)
+    );
     expect(header.className).toContain(ICON_SLOT_GAP);
     expect(spacing(body.className, /\bp-(\d+(?:\.\d+)?)\b/)).toBe(spacing(CARD_INSET, /px-(\d+(?:\.\d+)?)/));
     const slots = [...view.container.querySelectorAll('[data-icon-slot]')];
@@ -65,8 +68,11 @@ describe('one icon column per card', () => {
         <p>Row</p>
       </Panel>
     );
-    const header = view.container.querySelector('h2') as HTMLElement;
-    for (const token of CARD_HEADER.split(' ')) expect(header.className).toContain(token);
+    const header = view.container.querySelector('h2 [data-disclosure-header]') as HTMLElement;
+    const classes = header.className.split(' ');
+    const replaced = new Set(['pe-3', 'h-9']);
+    for (const token of CARD_HEADER.split(' ')) if (!replaced.has(token)) expect(classes).toContain(token);
+    for (const token of resolveDisclosureStrip('band', 'box').split(' ')) expect(classes).toContain(token);
     expect(header.firstElementChild?.className).toBe(ICON_SLOT);
   });
 

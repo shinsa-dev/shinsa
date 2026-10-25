@@ -40,7 +40,7 @@ function DelegationRow({
             <button
               type='button'
               onClick={() => onOpen(view.run.id)}
-              className='flex min-w-0 flex-1 cursor-pointer text-left font-medium text-fg-4 text-xs transition-colors duration-150 hover:text-primary-text active:text-primary-text'
+              className='flex min-w-0 flex-1 cursor-pointer text-left font-medium text-fg-4 text-xs hover:text-primary-text active:text-primary-text'
             >
               <Truncate>{view.title}</Truncate>
             </button>
@@ -71,7 +71,7 @@ export function DelegationsPanel({
     <Panel
       title='Delegations'
       icon='IconAgents'
-      action={summary && <span className='font-normal text-2xs text-fg-2 tabular-nums'>{summary}</span>}
+      meta={summary && <span className='font-normal text-2xs text-fg-2 tabular-nums'>{summary}</span>}
     >
       <ul className='flex flex-col divide-y divide-border'>
         {tree.map(({ view, depth }) => (

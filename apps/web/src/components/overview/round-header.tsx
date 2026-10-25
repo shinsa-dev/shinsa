@@ -2,7 +2,7 @@ import type { PullRequest, Round, RoundPullRequest, RoundShipping, Task } from '
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { SelectField } from '@/components/controls/select-field.tsx';
-import { SectionChevron } from '@/components/layout/page/section-label.tsx';
+import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { GlyphLabel, INLINE_TILE, SMART_LINK } from '@/components/links/link.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
@@ -85,30 +85,29 @@ export function RoundHeader({
   const status = describeRoundStatus(round);
   const pullRequest = selectRoundPullRequest(task, round);
   return (
-    <div className='flex min-w-0 items-center gap-2'>
-      <button
-        type='button'
-        aria-expanded={open}
-        onClick={onToggle}
-        className='group/round flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-start text-xs outline-none'
-      >
-        <StatusTile icon={ROUND_ICON} tone={status.tone} />
-        <span className='shrink-0 font-medium text-fg-4 tabular-nums'>Round {round.number}</span>
-        <Truncate className='min-w-0 text-fg-3 transition-colors duration-150 group-hover/round:text-fg-4 group-active/round:text-fg-4'>
-          {round.title}
-        </Truncate>
-        <span className={cn('shrink-0 text-2xs', TONE_TEXT[status.tone])}>{status.label}</span>
-        <SectionChevron
-          open={open}
-          className='text-fg-3 group-hover/round:text-fg-4 group-active/round:text-fg-4'
-        />
-      </button>
-      {pullRequest && <RoundPullRequestLink pullRequest={pullRequest} />}
-      <RoundShippingSelect
-        task={task}
-        round={round}
-        {...(onShippingChange ? { onChange: onShippingChange } : {})}
-      />
-    </div>
+    <DisclosureHeader
+      open={open}
+      onToggle={onToggle}
+      label={`round ${round.number}`}
+      action={
+        <>
+          {pullRequest && <RoundPullRequestLink pullRequest={pullRequest} />}
+          <RoundShippingSelect
+            task={task}
+            round={round}
+            {...(onShippingChange ? { onChange: onShippingChange } : {})}
+          />
+        </>
+      }
+      className='gap-2 text-xs'
+    >
+      <StatusTile icon={ROUND_ICON} tone={status.tone} />
+      <span className='shrink-0 font-medium text-fg-4 tabular-nums'>Round {round.number}</span>
+      <Truncate className='min-w-0 text-fg-3 group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4'>
+        {round.title}
+      </Truncate>
+      <span className={cn('shrink-0 text-2xs', TONE_TEXT[status.tone])}>{status.label}</span>
+      <DisclosureChevron className='text-fg-3 group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4' />
+    </DisclosureHeader>
   );
 }

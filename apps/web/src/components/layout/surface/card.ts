@@ -7,7 +7,7 @@ export const ICON_SLOT_GAP = 'gap-1.25';
 export const CARD_INSET = 'px-3';
 
 export const CARD_HEADER =
-  'flex h-9 shrink-0 items-center gap-1.25 bg-bg-a1 px-3 font-medium text-fg-4 text-xs';
+  'flex h-9 shrink-0 items-center gap-1.25 bg-bg-a1 ps-3 pe-3 font-medium text-fg-4 text-xs';
 
 export const CHAT_COLUMN = '[--chat-inset:--spacing(3.25)]';
 

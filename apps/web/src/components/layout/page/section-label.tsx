@@ -1,15 +1,18 @@
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 
 const SECTION_LABEL = 'flex shrink-0 items-center gap-1.5 font-medium text-2xs text-fg-2 leading-4';
+
+const ACTIONS = 'flex shrink-0 items-center gap-0.5';
 
 export function SectionChevron({ open, className }: { open: boolean; className?: string }) {
   return (
     <Icon
       name='IconChevronDownSmall'
       size='sm'
-      className={cn('transition-[opacity,rotate,color] duration-150', !open && '-rotate-90', className)}
+      className={cn('transition-[rotate] duration-150', !open && '-rotate-90', className)}
     />
   );
 }
@@ -35,25 +38,27 @@ export function SectionLabel({
       {count !== undefined && <span className='font-normal text-fg-2 tabular-nums'>{count}</span>}
     </>
   );
+  if (onToggle) {
+    return (
+      <DisclosureHeader
+        as='h2'
+        open={open}
+        onToggle={onToggle}
+        action={action && <span className={ACTIONS}>{action}</span>}
+        className={cn(SECTION_LABEL, 'h-6 gap-1.5 hover:text-fg-4 active:text-fg-4', className)}
+      >
+        {label}
+        <DisclosureChevron />
+      </DisclosureHeader>
+    );
+  }
   return (
     <h2 className={cn(SECTION_LABEL, 'h-6', className)}>
-      {onToggle ? (
-        <button
-          type='button'
-          aria-expanded={open}
-          onClick={onToggle}
-          className='flex h-6 cursor-pointer items-center gap-1.5 rounded-control-sm outline-none transition-colors duration-150 hover:text-fg-4 active:text-fg-4'
-        >
-          {label}
-          <SectionChevron open={open} />
-        </button>
-      ) : (
-        label
-      )}
+      {label}
       {action && (
         <>
           <span className='flex-1' />
-          <span className='flex shrink-0 items-center gap-0.5'>{action}</span>
+          <span className={ACTIONS}>{action}</span>
         </>
       )}
     </h2>
