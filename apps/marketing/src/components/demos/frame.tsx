@@ -28,7 +28,7 @@ export function Window({
   return (
     <div
       className={cn(
-        'corner-superellipse/1.125 flex h-full flex-col overflow-hidden rounded-2xl bg-background shadow-lg ring-1 ring-bg-4/70 dark:ring-bg-3',
+        'corner-superellipse/1.125 flex h-full flex-col overflow-hidden rounded-2xl bg-background ring-1 ring-bg-4/70 dark:ring-bg-3',
         className
       )}
     >
