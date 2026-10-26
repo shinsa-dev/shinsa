@@ -4,7 +4,7 @@ import { Transcripts } from '../../src/agents/index.ts';
 import { type CliIo, runCli } from '../../src/cli/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
-import { createTestOnboarding } from '../helpers/index.ts';
+import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -47,6 +47,7 @@ async function shinsa(port: string, ...args: string[]) {
     engine: { bundled: false, uid: 0, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
+    terminal: createTestTerminal(),
   };
   const code = await runCli(args, io);
   return { code, text: out.join('\n'), errors };
@@ -207,7 +208,7 @@ describe('the command line drives the whole lifecycle of a task', () => {
     expect(w.state.projects).toEqual({});
 
     expect((await shinsa(port, 'health')).text).toMatch(/^Healthy\./);
-    expect((await shinsa(port, 'tasks', '--help')).text).toContain('shinsa tasks create');
+    expect((await shinsa(port, 'tasks', '--help')).text).toContain('  create        Create a task.');
     expect((await shinsa(port, 'tasks', 'create', '--help')).text).toContain('--plan-first');
   });
 });

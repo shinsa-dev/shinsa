@@ -1,4 +1,5 @@
 import type { ShinsaToolName, UserCommand } from '@shinsa/core';
+import { type Display, describeMark, PLAIN_DISPLAY } from '../terminal/index.ts';
 import type { CommandReceipt, SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
 
@@ -17,7 +18,7 @@ export interface SurfaceSpec {
   command?: UserCommand['type'];
   humanOnly?: boolean;
   agentTool?: ShinsaToolName;
-  run: (client: SurfaceClient, values: Values) => Promise<SurfaceResult>;
+  run: (client: SurfaceClient, values: Values, display?: Display) => Promise<SurfaceResult>;
 }
 
 interface CommandDefinition {
@@ -37,7 +38,7 @@ interface ReadDefinition<T> {
   fields: FieldSpec[];
   humanOnly?: boolean;
   request: (values: Values, client: SurfaceClient) => string | Promise<string>;
-  format: (data: T, values: Values) => string;
+  format: (data: T, values: Values, display: Display) => string;
 }
 
 interface ActionDefinition {
@@ -45,7 +46,7 @@ interface ActionDefinition {
   summary: string;
   fields: FieldSpec[];
   humanOnly?: boolean;
-  act: (client: SurfaceClient, values: Values) => Promise<SurfaceResult>;
+  act: (client: SurfaceClient, values: Values, display: Display) => Promise<SurfaceResult>;
 }
 
 export function describeTaskLink(client: SurfaceClient, receipt: CommandReceipt) {
@@ -62,11 +63,16 @@ export function defineCommand(definition: CommandDefinition): SurfaceSpec {
     command: definition.command,
     ...(definition.humanOnly ? { humanOnly: true } : {}),
     ...(definition.agentTool ? { agentTool: definition.agentTool } : {}),
-    run: async (client, values) => {
+    run: async (client, values, display = PLAIN_DISPLAY) => {
       const receipt = await client.send(await definition.build(values, client));
-      const done = definition.done?.(values, receipt) ?? 'Done.';
+      const done = describeMark(
+        display.style,
+        'success',
+        'check',
+        definition.done?.(values, receipt) ?? 'Done.'
+      );
       const link = describeTaskLink(client, receipt);
-      return { data: receipt, text: link ? `${done}\n${link}` : done };
+      return { data: receipt, text: link ? `${done}\n${display.style.dim(link)}` : done };
     },
   };
 }
@@ -78,9 +84,9 @@ export function defineRead<T>(definition: ReadDefinition<T>): SurfaceSpec {
     fields: definition.fields,
     access: 'read',
     ...(definition.humanOnly ? { humanOnly: true } : {}),
-    run: async (client, values) => {
+    run: async (client, values, display = PLAIN_DISPLAY) => {
       const data = await client.read<T>(await definition.request(values, client));
-      return { data, text: definition.format(data, values) };
+      return { data, text: definition.format(data, values, display) };
     },
   };
 }
@@ -92,7 +98,7 @@ export function defineAction(definition: ActionDefinition): SurfaceSpec {
     fields: definition.fields,
     access: 'write',
     ...(definition.humanOnly ? { humanOnly: true } : {}),
-    run: definition.act,
+    run: (client, values, display = PLAIN_DISPLAY) => definition.act(client, values, display),
   };
 }
 

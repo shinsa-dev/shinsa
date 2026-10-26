@@ -9,10 +9,12 @@ import {
   type SurfaceSpec,
   selectSpec,
 } from '../surface/index.ts';
+import { type Display, selectClosest } from '../terminal/index.ts';
 import { createSurfaceClient, type EngineWake } from './api.ts';
 
 export interface SurfaceIo {
   base: string;
+  display: Display;
   write: (line?: string) => void;
   wake?: EngineWake;
 }
@@ -30,13 +32,13 @@ async function runSpec(spec: SurfaceSpec, args: string[], io: SurfaceIo) {
   try {
     const parsed = readArgv(spec.fields, args);
     if (parsed.help) {
-      io.write(describeUsage(spec));
+      io.write(describeUsage(spec, io.display));
       return 0;
     }
     const client = {
       ...createSurfaceClient(io.base, parsed.idempotencyKey ?? `cli:${Bun.randomUUIDv7()}`, io.wake),
     };
-    const result = await spec.run(client, parsed.values);
+    const result = await spec.run(client, parsed.values, io.display);
     if (json) writeJson(io, result.data);
     else io.write(result.text);
     return 0;
@@ -57,12 +59,15 @@ export function runSurface(words: string[], io: SurfaceIo, specs: SurfaceSpec[] 
   const found = selectSpec(words, specs);
   if (!found) {
     if (isHelp(words.slice(1))) {
-      io.write(describeGroup(group, specs));
+      io.write(describeGroup(group, specs, io.display));
       return Promise.resolve(0);
     }
+    const actions = listGroup(group, specs).map((spec) => spec.path.slice(1).join(' '));
+    const closest = selectClosest(words[1] ?? '', actions);
+    const hint = closest ? `Did you mean \`shinsa ${group} ${closest}\`? ` : '';
     throw new DomainError(
       'command_unknown',
-      `No command shinsa ${words.slice(0, 2).join(' ')}. Run \`shinsa ${group} --help\`.`
+      `No command shinsa ${words.slice(0, 2).join(' ')}. ${hint}Run \`shinsa ${group} --help\` for its commands.`
     );
   }
   return runSpec(found.spec, found.rest, io);

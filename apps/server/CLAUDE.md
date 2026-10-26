@@ -20,8 +20,9 @@ src/
 │                        the login shell's environment first unless started from a terminal, exits 0 when launchd
 │                        started it and finds the lock held, and in the bundle writes data/engine.log and puts its
 │                        bin/ on PATH; waking the engine through `launchctl kickstart`); help.ts the top-level
-│                        commands as one table (EVERYDAY_COMMANDS, ENGINE_COMMANDS) that USAGE, each command's
-│                        --help and docs/cli.md's generated half (replaceReference) come from; commands.ts open
+│                        commands as one table (OPEN_COMMANDS, ENGINE_COMMANDS) that the help (describeHelp,
+│                        describeHelpAll), each command's --help and docs/cli.md's generated half
+│                        (replaceReference) come from; commands.ts open
 │                        (the app, a task, or a folder's project) / do / import / status; engine.ts start / stop /
 │                        restart / version through launchctl on the bundle's job (EngineControl, readHealth,
 │                        HUMAN_ONLY_ENGINE_COMMANDS); logs.ts `shinsa logs`; app.ts the app's bundle id, the
@@ -29,6 +30,13 @@ src/
 │                        --json, the idempotency key); api.ts the HTTP client and the surface client, which wake the
 │                        engine once when it does not answer; session.ts reads a Claude Code session for
 │                        `shinsa import`
+├── terminal/            How the command line draws (docs/cli.md → How it looks): style.ts (when there is colour and
+│                        which symbols: TTY, NO_COLOR, FORCE_COLOR, TERM; the 16-colour tones; code in backticks),
+│                        text.ts (visible width, wrapping, truncation, ~ for home, splitHint for an error's hint),
+│                        layout.ts (Display, aligned lists, tables that fit the width, usage lines, fields),
+│                        closest.ts (did you mean), spinner.ts (progress on a terminal's stderr), index.ts
+│                        (resolveTerminal: the process's Terminal). The surface's formatters take a Display too; an
+│                        agent's tool gets PLAIN_DISPLAY
 ├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
 │                        install.ts (version, commit, install path, the server entry, resolveHealth for
 │                        /api/health), lock.ts (data/serve.lock: atomic create, the live-holder check, takeover,

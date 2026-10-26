@@ -1,12 +1,23 @@
 import type { TaskPriority } from '@shinsa/core';
-import { type CommandReceipt, describeRunning } from '../surface/index.ts';
+import { describeVersion, type ServerHealth } from '../instance/index.ts';
+import { type CommandReceipt, describeQueue, describeUptime, QUEUE_EMPTY } from '../surface/index.ts';
+import {
+  type Display,
+  describeFields,
+  describeInline,
+  describeMark,
+  describeParagraph,
+  shortenHome,
+} from '../terminal/index.ts';
 import type { ApiClient } from './api.ts';
 import { HOME_LINK, isPathArgument, resolvePathArgument, resolveTaskLink } from './app.ts';
-import { ENGINE_STOPPED, readHealth } from './engine.ts';
+import { readHealth } from './engine.ts';
 import { describeSession, readSession } from './session.ts';
 
 export interface CommandIo {
   api: ApiClient;
+  display: Display;
+  home: string | undefined;
   cwd: string;
   write: (line?: string) => void;
   openApp: (link: string) => Promise<void>;
@@ -48,13 +59,18 @@ function resolvePriority(flags: Set<string>): TaskPriority {
 
 function writeTaskLink(io: CommandIo, receipt: CommandReceipt) {
   const ref = receipt.handle ?? receipt.taskId;
-  if (ref) io.write(`${io.api.base}/tasks/${ref}`);
+  if (ref) io.write(io.display.style.dim(`${io.api.base}/tasks/${ref}`));
+}
+
+function writeDone(io: CommandIo, text: string) {
+  io.write(describeMark(io.display.style, 'success', 'check', text));
 }
 
 export async function createTask(args: string[], io: CommandIo) {
   const { flags, positional } = parseArgs(args);
   const request = positional.join(' ').trim();
-  if (!request) throw new Error('Say what should be done: shinsa do "fix the scroll in tab groups"');
+  if (!request)
+    throw new Error('Say what should be done, such as `shinsa do "fix the scroll in tab groups"`.');
   const result = await io.api.sendCommand({
     type: 'task.create',
     request,
@@ -63,14 +79,14 @@ export async function createTask(args: string[], io: CommandIo) {
     planFirst: flags.has('--plan-first'),
     origin: io.cwd,
   });
-  io.write('Started. Shinsa brings it back when it needs a decision.');
+  writeDone(io, 'Started. Shinsa brings it back when it needs a decision.');
   writeTaskLink(io, result);
 }
 
 export async function importSession(args: string[], io: CommandIo) {
   const { flags, values, positional } = parseArgs(args);
   const [target] = positional;
-  if (!target) throw new Error('Name the session: shinsa import <session.jsonl | session-id>');
+  if (!target) throw new Error('Name the session by its file or id, such as `shinsa import 0b9c2f4e-6a8d`.');
   const session = readSession(target, io.projectsDir);
   const result = await io.api.sendCommand({
     type: 'task.create',
@@ -80,7 +96,7 @@ export async function importSession(args: string[], io: CommandIo) {
     planFirst: true,
     origin: values.get('--in') ?? session.cwd ?? io.cwd,
   });
-  io.write(`Imported ${session.path}`);
+  writeDone(io, `Imported ${shortenHome(session.path, io.home)}`);
   io.write('It starts with a plan for you to approve, so nothing builds until you have looked.');
   writeTaskLink(io, result);
 }
@@ -91,11 +107,56 @@ function describeDamage(count: number) {
     : `It skipped ${count} damaged entries in its log at start. \`shinsa health\` lists them.`;
 }
 
+function describeStopped(display: Display) {
+  const { style } = display;
+  return [
+    describeMark(style, 'danger', 'dot', `${style.bold('Stopped')}  The engine is not running.`),
+    ...describeParagraph(
+      display,
+      '`shinsa start` starts it, and so does opening the Shinsa app.',
+      style.symbols ? 2 : 0,
+      'dim'
+    ),
+  ];
+}
+
+function describeEngineBlock(health: ServerHealth, io: CommandIo) {
+  const { display } = io;
+  const { style } = display;
+  const indent = style.symbols ? 2 : 0;
+  return [
+    describeMark(style, 'success', 'dot', `${style.bold('Running')}  Shinsa ${describeVersion(health)}`),
+    ...describeFields(
+      display,
+      [
+        ['Uptime', describeUptime(health.uptimeMs)],
+        ['Address', io.api.base],
+        ['Process', String(health.pid)],
+        ['Engine', shortenHome(health.installPath, io.home)],
+        ['Data', shortenHome(health.dataDir, io.home)],
+      ],
+      indent
+    ),
+    ...(health.ok
+      ? []
+      : [
+          '',
+          describeMark(
+            style,
+            'warning',
+            'warning',
+            describeInline(style, describeDamage(health.problems.length))
+          ),
+        ]),
+  ];
+}
+
 export async function printStatus(args: string[], io: CommandIo) {
   const json = parseArgs(args).flags.has('--json');
   const health = await readHealth(io.api.base);
   if (!health) {
-    io.write(json ? JSON.stringify({ engine: null, queue: null }, null, 2) : ENGINE_STOPPED);
+    if (json) io.write(JSON.stringify({ engine: null, queue: null }, null, 2));
+    else for (const line of describeStopped(io.display)) io.write(line);
     return 1;
   }
   const summary = await io.api.readQueue();
@@ -103,22 +164,14 @@ export async function printStatus(args: string[], io: CommandIo) {
     io.write(JSON.stringify({ engine: health, queue: summary }, null, 2));
     return 0;
   }
-  io.write(describeRunning(health));
-  if (!health.ok) io.write(describeDamage(health.problems.length));
-  io.write();
-  io.write(summary.briefing ?? 'No briefing yet.');
-  if (summary.decisions.length > 0) {
-    io.write();
-    io.write(`Needs you (${summary.decisions.length})`);
-    for (const entry of summary.decisions) {
-      io.write(`  ${entry.label.padEnd(9)} ${entry.title}  ${entry.url}`);
-    }
-  }
-  if (summary.working.length > 0) {
-    io.write();
-    io.write(`Agents working (${summary.working.length})`);
-    for (const entry of summary.working) io.write(`  ${entry.label.padEnd(9)} ${entry.title}`);
-  }
+  const queue = describeQueue(summary, io.display);
+  const briefing = summary.briefing ?? (queue.length === 0 ? QUEUE_EMPTY : null);
+  const lines = [
+    ...describeEngineBlock(health, io),
+    ...(briefing ? ['', ...describeParagraph(io.display, briefing)] : []),
+    ...(queue.length > 0 ? ['', ...queue] : []),
+  ];
+  for (const line of lines) io.write(line);
   return 0;
 }
 

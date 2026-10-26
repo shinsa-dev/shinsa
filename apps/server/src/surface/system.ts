@@ -7,10 +7,19 @@ import type {
   OnboardingStatus,
   ProgramVersion,
   QueueSummary,
+  QueueSummaryEntry,
   UpdateOutcome,
   VersionsSnapshot,
 } from '@shinsa/core';
 import { describeVersion, type ServerHealth } from '../instance/index.ts';
+import {
+  type Display,
+  describeHeading,
+  describeInline,
+  describeMark,
+  describeTable,
+  type Tone,
+} from '../terminal/index.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import { findAccount, resolveOptionalAccount } from './resolve.ts';
 import { defineAction, defineRead, readValue, type SurfaceSpec } from './spec.ts';
@@ -36,6 +45,16 @@ const UPTIME_UNITS = [
 interface Prerequisites {
   ready: boolean;
   checks: { label: string; ok: boolean; detail: string; fix: string | null }[];
+}
+
+function describeCheck(check: Prerequisites['checks'][number], display: Display) {
+  const { style } = display;
+  const fix = check.fix ? ` ${style.dim(`(${describeInline(style, check.fix)})`)}` : '';
+  const text = `${check.label}: ${check.detail}${fix}`;
+  if (style.symbols) {
+    return describeMark(style, check.ok ? 'success' : 'danger', check.ok ? 'check' : 'cross', text);
+  }
+  return `${check.ok ? 'ok  ' : 'fail'} ${text}`;
 }
 
 function describeAccount(account: AccountSummary) {
@@ -91,14 +110,46 @@ function formatVersions(snapshot: VersionsSnapshot) {
   ].join('\n');
 }
 
-function describeUptime(ms: number) {
+export function describeUptime(ms: number) {
   const unit = UPTIME_UNITS.find((candidate) => ms >= candidate.ms);
   if (!unit) return 'under a minute';
   const count = Math.floor(ms / unit.ms);
   return `${count} ${unit.label}${count === 1 ? '' : 's'}`;
 }
 
-export function describeRunning(health: ServerHealth) {
+const PAUSED_KINDS: ReadonlySet<QueueSummaryEntry['kind']> = new Set(['failure', 'configuration', 'sign_in']);
+
+function resolveDecisionTone(entry: QueueSummaryEntry): Tone {
+  if (PAUSED_KINDS.has(entry.kind)) return 'danger';
+  return entry.kind === 'merge' ? 'success' : 'warning';
+}
+
+function describeQueueRow(entry: QueueSummaryEntry, tone: Tone, url: boolean) {
+  const handle = entry.handle ?? entry.taskId.slice(0, 8);
+  const row = [{ text: handle, tone: 'bold' as const }, { text: entry.label, tone }, entry.title];
+  return url ? [...row, { text: entry.url, tone: 'dim' as const }] : row;
+}
+
+export function describeQueue(summary: QueueSummary, display: Display) {
+  const decisions = summary.decisions.map((entry) =>
+    describeQueueRow(entry, resolveDecisionTone(entry), true)
+  );
+  const working = summary.working.map((entry) => describeQueueRow(entry, 'accent', false));
+  const lines = describeTable(display, { rows: [...decisions, ...working], fixed: [0, 1, 3], indent: 2 });
+  return [
+    ...(decisions.length > 0
+      ? [describeHeading(display, 'Needs you', decisions.length), ...lines.slice(0, decisions.length)]
+      : []),
+    ...(decisions.length > 0 && working.length > 0 ? [''] : []),
+    ...(working.length > 0
+      ? [describeHeading(display, 'Agents working', working.length), ...lines.slice(decisions.length)]
+      : []),
+  ];
+}
+
+export const QUEUE_EMPTY = 'Nothing needs you, and no agent is working.';
+
+function describeRunning(health: ServerHealth) {
   return `Shinsa ${describeVersion(health)} from ${health.installPath}, pid ${health.pid}, up ${describeUptime(health.uptimeMs)}. Data in ${health.dataDir}.`;
 }
 
@@ -302,13 +353,10 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     summary: 'What needs a decision, and what agents are working on.',
     fields: [],
     request: () => '/api/queue',
-    format: (summary) =>
-      [
-        `Needs you (${summary.decisions.length})`,
-        ...summary.decisions.map((entry) => `  ${entry.label.padEnd(9)} ${entry.title}  ${entry.url}`),
-        `Agents working (${summary.working.length})`,
-        ...summary.working.map((entry) => `  ${entry.label.padEnd(9)} ${entry.title}`),
-      ].join('\n'),
+    format: (summary, _values, display) => {
+      const lines = describeQueue(summary, display);
+      return lines.length > 0 ? lines.join('\n') : QUEUE_EMPTY;
+    },
   }),
   defineRead<{ actions: (OnBehalfAction & { byTask?: string | null })[] }>({
     path: ['activity'],
@@ -342,12 +390,7 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
     summary: 'Check the tools Shinsa needs: git, gh, claude and bun.',
     fields: [],
     request: () => '/api/onboarding/prerequisites',
-    format: (result) =>
-      result.checks
-        .map(
-          (check) =>
-            `${check.ok ? 'ok  ' : 'fail'} ${check.label}: ${check.detail}${check.fix ? ` (${check.fix})` : ''}`
-        )
-        .join('\n'),
+    format: (result, _values, display) =>
+      result.checks.map((check) => describeCheck(check, display)).join('\n'),
   }),
 ];

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { USAGE } from '../src/cli/index.ts';
+import { describeHelp } from '../src/cli/help.ts';
 import { createServerInstance, LOCK_FILE, resolveBootedAt, SERVICE_MARKER } from '../src/instance/index.ts';
 import { createTempDir } from './helpers/index.ts';
 
@@ -11,9 +11,12 @@ const SPAWN_TIMEOUT_MS = 20_000;
 
 describe('the shinsa binary', () => {
   test('runs the CLI and exits with its code', async () => {
-    const help = Bun.spawnSync(['bun', MAIN, 'help']);
+    const { COLUMNS: _columns, FORCE_COLOR: _force, ...piped } = process.env;
+    const help = Bun.spawnSync(['bun', MAIN, 'help'], { env: piped });
     expect(help.exitCode).toBe(0);
-    expect(help.stdout.toString().trim()).toBe(USAGE);
+    expect(help.stdout.toString().trim()).toBe(describeHelp());
+    const colored = Bun.spawnSync(['bun', MAIN, 'help'], { env: { ...piped, FORCE_COLOR: '1' } });
+    expect(colored.stdout.toString()).toContain('\u001b[1mUsage\u001b[22m');
     const unknown = Bun.spawnSync(['bun', MAIN, 'nope']);
     expect(unknown.exitCode).toBe(1);
   });
@@ -41,6 +44,6 @@ describe('the shinsa binary', () => {
     );
     const terminal = Bun.spawnSync(['bun', MAIN, 'engine'], { env, timeout: SPAWN_TIMEOUT_MS });
     expect(terminal.exitCode).toBe(1);
-    expect(terminal.stderr.toString()).toContain(`shinsa engine: Shinsa is already running on ${dataDir}`);
+    expect(terminal.stderr.toString()).toContain(`Error: Shinsa is already running on ${dataDir}`);
   });
 });

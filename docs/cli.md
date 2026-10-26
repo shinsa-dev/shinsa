@@ -39,6 +39,45 @@ What Shinsa takes:
 - **`do` stays `do`.** It hands over any kind of work (a change, a question, an investigation), so a noun such as
   `new` or `create` would undersell it; `shinsa tasks create` is the long form with every option.
 
+## How it looks
+
+The output is set the way gh, Bun, uv and Vercel set theirs: a terminal gets a little colour and structure, and a
+pipe gets the same words as plain text. One module draws it all, `apps/server/src/terminal/` (no dependency), and every
+command takes its `Display` (a style and a width) from it.
+
+- **When there is colour.** Colour and symbols only when the stream is a terminal. `FORCE_COLOR` turns colour on
+  (and symbols with it, even into a pipe) or, as `0` or `false`, off, and wins over everything; `NO_COLOR` (not
+  empty) and `TERM=dumb` turn it off; `TERM=dumb` also drops the symbols, and `TERM=linux` draws ASCII ones (`*`,
+  `v`, `x`, `...`). Standard output and standard error are decided apart, so `shinsa status 2>&1 | less` stays plain
+  while errors in the terminal are red. `--json` is never styled.
+- **The 16 terminal colours only**, so the user's theme decides the exact shade on a dark or a light background:
+  bold for headings, the names that matter (`Running`, a task's handle) and the error prefix; dim for what is
+  secondary (labels, paths, timestamps, URLs, hints); cyan as the accent for commands, flags and code in backticks
+  (the backticks go); green for done and ready to merge; yellow for what waits on you and warnings; red for paused,
+  stopped and errors; blue only for a log's `info`. No 256-colour or RGB codes.
+- **Width.** A terminal's width (`COLUMNS` overrides it) wraps help and paragraphs with a hanging indent under their
+  column, puts a description below its term when the column would be narrower than 32, and fits tables by shrinking
+  their widest column first, cut with an ellipsis; a task's handle never shrinks, and neither do the queue's labels
+  and links. A pipe has no width: nothing wraps or is cut, so `grep` sees whole lines.
+- **Help** (`shinsa`, `shinsa <group>`, `--help` on any command): a bold heading per section, terms in the accent
+  with their arguments dim, descriptions aligned in one column across the whole page, and the version dim after the
+  line that says what Shinsa is.
+- **`status`** opens with the engine's state (a green dot and Running, or a red dot and Stopped with the command that
+  starts it), then its version, uptime, address, pid, install path and data folder as dim labels with `~` for the home
+  folder, then the Home guide, then Needs you and Agents working as one aligned table: handle, label coloured by
+  what kind of decision it is, title, link. With nothing to show it says "Nothing needs you, and no agent is working."
+  `shinsa queue` prints the same table, and `shinsa tasks list` a table with Task, Title, Status and Repository.
+- **Outcomes** are one line: a green check before what happened, the details dim after it (`✔ Started the engine in
+  1.2s. Shinsa 0.4.2, pid 812.`). `start`, `stop` and `restart` show a spinner on standard error while they wait,
+  and only on a terminal.
+- **Errors** are `Error:` in bold red and the message, then a dim line with what to do: the first sentence of the
+  message that names a command and everything after it (`splitHint`). An unknown command, group action or option
+  names the closest one (`Did you mean shinsa status?`): a word a slip or two of the keys away, or the only command
+  that starts with what you typed, when that is three letters or more.
+- **`logs`**: the time dim, the level coloured, the `[Area]` bold, each field's key dim.
+
+The text an agent's management tool gets is the same as a pipe's: plain, unwrapped, no symbols.
+
 ## Where commands go
 
 Every command talks to the engine on the configured host (`SHINSA_HOST` or `hostname` in `config.json`; 127.0.0.1

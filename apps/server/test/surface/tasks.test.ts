@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { BASE, createAccountsSnapshot, createFakeClient, createTaskDetail, runSpec } from './fixtures.ts';
+import { PLAIN_STYLE } from '../../src/terminal/index.ts';
+import {
+  BASE,
+  COLOR_DISPLAY,
+  createAccountsSnapshot,
+  createFakeClient,
+  createTaskDetail,
+  runSpec,
+} from './fixtures.ts';
 
 const DETAIL = createTaskDetail();
 
@@ -18,12 +26,21 @@ describe('tasks list', () => {
     const fake = createFakeClient({
       '/api/tasks': {
         tasks: [
-          { id: 'task-1', title: 'Fix the scroll', status: 'Building', decision: null, repo: 'app' },
+          {
+            id: 'task-1',
+            handle: 'SW-1',
+            title: 'Fix the scroll',
+            status: 'building',
+            stage: 'building',
+            decision: null,
+            repo: 'app',
+          },
           {
             id: 'task-2',
             title: 'Add search',
-            status: 'Review',
-            decision: { title: 'Review the changes' },
+            status: 'changes to review',
+            stage: 'awaiting_review',
+            decision: { type: 'review', title: 'Review the changes' },
             repo: null,
           },
         ],
@@ -31,9 +48,84 @@ describe('tasks list', () => {
     });
     const result = await runSpec(fake, ['tasks', 'list']);
     expect(fake.reads).toEqual(['/api/tasks']);
-    expect(result.text).toBe(
-      'task-1  Fix the scroll  (Building · app)\ntask-2  Add search  (Review the changes)'
+    expect(result.text.split('\n')).toEqual([
+      'Task    Title           Status              Repository',
+      'SW-1    Fix the scroll  building            app',
+      'task-2  Add search      Review the changes',
+    ]);
+  });
+
+  test('in a terminal the table has dim headers, a status coloured by what it waits for, and fits the width', async () => {
+    const tasks = [
+      {
+        id: 'a',
+        handle: 'SW-1',
+        title: 'Merged work',
+        status: 'merged',
+        stage: 'merged',
+        decision: null,
+        repo: null,
+      },
+      {
+        id: 'b',
+        handle: 'SW-2',
+        title: 'Cancelled',
+        status: 'cancelled',
+        stage: 'cancelled',
+        decision: null,
+        repo: null,
+      },
+      {
+        id: 'c',
+        handle: 'SW-3',
+        title: 'Broke',
+        status: 'fixing',
+        stage: 'fixing',
+        decision: { type: 'failure', title: 'Out of fix rounds' },
+        repo: null,
+      },
+      {
+        id: 'd',
+        handle: 'SW-4',
+        title: 'Asks',
+        status: 'answering',
+        stage: 'answering',
+        decision: { type: 'question', title: 'Which?' },
+        repo: null,
+      },
+      {
+        id: 'e',
+        handle: 'SW-5',
+        title: 'Works',
+        status: 'building',
+        stage: 'building',
+        decision: null,
+        repo: null,
+      },
+    ];
+    const fake = createFakeClient({ '/api/tasks': { tasks } });
+    const lines = (await runSpec(fake, ['tasks', 'list'], COLOR_DISPLAY)).text.split('\n');
+    expect(lines[0]).toBe(
+      '\u001b[2mTask\u001b[22m  \u001b[2mTitle\u001b[22m        \u001b[2mStatus\u001b[22m'
     );
+    expect(lines.slice(1).map((line) => line.split('  ').at(-1)?.trim())).toEqual([
+      '\u001b[32mmerged\u001b[39m',
+      '\u001b[2mcancelled\u001b[22m',
+      '\u001b[31mOut of fix rounds\u001b[39m',
+      '\u001b[33mWhich?\u001b[39m',
+      '\u001b[36mbuilding\u001b[39m',
+    ]);
+    const narrow = await runSpec(
+      createFakeClient({
+        '/api/tasks': { tasks: [{ ...tasks[4], title: 'A title much longer than the terminal is wide' }] },
+      }),
+      ['tasks', 'list'],
+      { style: PLAIN_STYLE, width: 40 }
+    );
+    expect(narrow.text.split('\n')).toEqual([
+      'Task  Title                     Status',
+      'SW-5  A title much longer tha…  building',
+    ]);
   });
 
   test('passes its filters to the server and says when nothing matches', async () => {

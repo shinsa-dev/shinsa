@@ -11,7 +11,7 @@ import { startServer } from '../../src/http/index.ts';
 import { createProjectChanges } from '../../src/projects/routes.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
 import { createClassifier, createCommandRouter } from '../../src/triage/message.ts';
-import { createTestOnboarding } from '../helpers/index.ts';
+import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
 import { type AgentContext, World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -73,6 +73,7 @@ async function shinsa(...args: string[]) {
     engine: { bundled: false, uid: 0, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
+    terminal: createTestTerminal(),
   };
   expect(await runCli(args, io)).toBe(0);
   return out.join('\n');

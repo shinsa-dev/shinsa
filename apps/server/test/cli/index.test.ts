@@ -5,7 +5,7 @@ import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { NOT_RUNNING } from '../../src/cli/api.ts';
 import { ENGINE_STOPPED } from '../../src/cli/engine.ts';
-import { USAGE_ALL } from '../../src/cli/help.ts';
+import { describeHelp, describeHelpAll } from '../../src/cli/help.ts';
 import {
   type CliIo,
   createProcessIo,
@@ -13,7 +13,6 @@ import {
   kickEngine,
   runCli,
   trimEngineLog,
-  USAGE,
   writeOutputTo,
 } from '../../src/cli/index.ts';
 import { startServer } from '../../src/http/index.ts';
@@ -27,16 +26,20 @@ import { log } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Shinsa } from '../../src/serve.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
+import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
 import {
   createTempDir,
   createTestConfig,
   createTestOnboarding,
+  createTestTerminal,
   overrideEnv,
   until,
   writeFiles,
 } from '../helpers/index.ts';
 
 setDefaultTimeout(30_000);
+
+const COLOR = { style: createStyle({ color: true, symbols: UNICODE_SYMBOLS }), width: 100 };
 
 const stops: (() => Promise<void>)[] = [];
 
@@ -79,6 +82,7 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
     engine: { bundled: false, uid: 501, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
+    terminal: createTestTerminal(),
     ...overrides,
   };
   return { io, out, errors, opened };
@@ -89,20 +93,42 @@ describe('help and unknown commands', () => {
     for (const command of ['help', '--help', '-h']) {
       const { io, out } = createIo('1');
       expect(await runCli([command], io)).toBe(0);
-      expect(out).toEqual([USAGE]);
+      expect(out).toEqual([describeHelp()]);
     }
     for (const command of ['launch', 'serve']) {
       const { io, out, errors } = createIo('1');
       expect(await runCli([command], io)).toBe(1);
       expect(out).toEqual([]);
-      expect(errors).toEqual([`No command shinsa ${command}. Run \`shinsa help\` for the list.`]);
+      expect(errors).toEqual([`Error: No command shinsa ${command}.`, 'Run `shinsa help` for the list.']);
     }
+    const typo = createIo('1');
+    expect(await runCli(['statsu'], typo.io)).toBe(1);
+    expect(typo.errors).toEqual([
+      'Error: No command shinsa statsu.',
+      'Did you mean `shinsa status`? Run `shinsa help` for the list.',
+    ]);
+    const colored = createIo('1', { terminal: createTestTerminal(COLOR) });
+    await runCli(['tsks'], colored.io);
+    expect(colored.errors).toEqual([
+      '\u001b[31m\u001b[1mError:\u001b[22m\u001b[39m No command shinsa tsks.',
+      '\u001b[2mDid you mean \u001b[36mshinsa tasks\u001b[39m? Run \u001b[36mshinsa help\u001b[39m for the list.\u001b[22m',
+    ]);
+  });
+
+  test('help in a terminal is styled, and help piped stays plain', async () => {
+    const colored = createIo('1', { terminal: createTestTerminal(COLOR) });
+    await runCli(['help'], colored.io);
+    expect(colored.out).toEqual([describeHelp(COLOR)]);
+    expect(colored.out[0]).toContain('\u001b[1m');
+    const plain = createIo('1');
+    await runCli(['help'], plain.io);
+    expect(plain.out[0]).not.toContain('\u001b');
   });
 
   test('help takes a command or a group, --all lists everything, and --help works on every command', async () => {
     const all = createIo('1');
     expect(await runCli(['help', '--all'], all.io)).toBe(0);
-    expect(all.out).toEqual([USAGE_ALL]);
+    expect(all.out).toEqual([describeHelpAll()]);
     const topic = createIo('1');
     expect(await runCli(['help', 'do'], topic.io)).toBe(0);
     expect(await runCli(['do', '--help'], topic.io)).toBe(0);
@@ -113,10 +139,10 @@ describe('help and unknown commands', () => {
     );
     expect(topic.out[1]).toBe(topic.out[0]);
     expect(topic.out[2]).toStartWith('Stop the engine cleanly.');
-    expect(topic.out[3]).toStartWith('shinsa tasks\n');
+    expect(topic.out[3]).toStartWith('List, open and create tasks;');
     const unknown = createIo('1');
     expect(await runCli(['help', 'launch'], unknown.io)).toBe(1);
-    expect(unknown.errors).toEqual(['No command shinsa launch. Run `shinsa help` for the list.']);
+    expect(unknown.errors).toEqual(['Error: No command shinsa launch.', 'Run `shinsa help` for the list.']);
   });
 });
 
@@ -156,14 +182,14 @@ describe('the engine commands', () => {
     expect(await runCli(['restart'], io)).toBe(0);
     expect(await runCli(['stop'], io)).toBe(0);
     expect(out.slice(0, 3)).toEqual([
-      'The engine is already running: Shinsa 0.0.0, pid 7.',
-      'shinsa 0.0.0',
-      'Engine: Shinsa 0.0.0, pid 7, protocol 3',
+      'The engine is already running. Shinsa 0.0.0, pid 7.',
+      'Command  0.0.0',
+      'Engine   0.0.0, pid 7, protocol 3',
     ]);
     expect(JSON.parse(out[5] ?? '')).toMatchObject({ engine: { pid: 7 } });
     expect(out.slice(6)).toEqual([
-      'Restarted the engine: Shinsa 0.0.0, pid 8.',
-      'Stopped the engine. Runs it cut off resume when it starts again: `shinsa start`, the Shinsa app or any command that needs it.',
+      expect.stringMatching(/^Restarted the engine in \d+(?:ms|\.\ds)\. Shinsa 0\.0\.0, pid 8\.$/),
+      expect.stringMatching(/^Stopped the engine in \d+(?:ms|\.\ds)\. Runs it cut off resume/),
     ]);
     expect(calls.map((call) => call[0])).toEqual(['print', 'kickstart', 'print', 'kill']);
     expect(errors).toEqual([]);
@@ -174,7 +200,11 @@ describe('the engine commands', () => {
       engine: { bundled: true, uid: 501, launchctl: () => Promise.resolve({ ok: true, output: '' }) },
     });
     expect(await runCli(['restart', '--when-idle'], io)).toBe(1);
-    expect(errors).toEqual([`shinsa restart: ${ENGINE_STOPPED}`]);
+    expect(errors).toEqual([
+      'Error: The engine is not running.',
+      '`shinsa start` starts it, and so does opening the Shinsa app.',
+    ]);
+    expect(errors.join(' ')).toBe(`Error: ${ENGINE_STOPPED}`);
   });
 
   test('logs reads the engine log in the data folder', async () => {
@@ -239,14 +269,14 @@ describe('shinsa engine', () => {
     });
     expect(await runCli(['engine'], running.io)).toBe(1);
     expect(running.errors).toEqual([
-      'shinsa engine: Shinsa is already running on /data: http://127.0.0.1:5180 (pid 4242, version 0.0.0 (aaaaaaa)). Stop it first, or set SHINSA_HOME to another folder.',
+      'Error: Shinsa is already running on /data: http://127.0.0.1:5180 (pid 4242, version 0.0.0 (aaaaaaa)). Stop it first, or set SHINSA_HOME to another folder.',
     ]);
     const broken = createIo('1', {
       env: { [SERVICE_MARKER]: '1' },
       runEngine: () => Promise.reject(new Error('port taken')),
     });
     expect(await runCli(['engine'], broken.io)).toBe(1);
-    expect(broken.errors).toEqual(['shinsa engine: port taken']);
+    expect(broken.errors).toEqual(['Error: port taken']);
   });
 });
 
@@ -266,6 +296,12 @@ describe('shinsa do', () => {
       'Started. Shinsa brings it back when it needs a decision.',
       `http://127.0.0.1:${port}/tasks/${task?.id}`,
     ]);
+    const colored = createIo(port, { terminal: createTestTerminal(COLOR) });
+    await runCli(['do', 'one', 'more'], colored.io);
+    expect(colored.out[0]).toBe(
+      '\u001b[32m✔\u001b[39m Started. Shinsa brings it back when it needs a decision.'
+    );
+    expect(colored.out[1]).toStartWith('\u001b[2mhttp://');
     await runCli(['do', 'another', '--high'], io);
     expect(Object.values(engine.state.tasks).map((candidate) => candidate.priority)).toContain('high');
   });
@@ -275,8 +311,10 @@ describe('shinsa do', () => {
     expect(await runCli(['do'], io)).toBe(1);
     expect(await runCli(['do', 'x'], io)).toBe(1);
     expect(await runCli(['status'], { ...io, env: { SHINSA_PORT: 'abc' } })).toBe(1);
-    expect(errors[0]).toBe('shinsa do: Say what should be done: shinsa do "fix the scroll in tab groups"');
-    expect(errors[1]).toBe(`shinsa do: ${NOT_RUNNING}`);
+    expect(errors[0]).toBe(
+      'Error: Say what should be done, such as `shinsa do "fix the scroll in tab groups"`.'
+    );
+    expect(errors[1]).toBe(`Error: ${NOT_RUNNING}`);
     expect(errors[2]).toContain('SHINSA_PORT must be a whole number');
   });
 
@@ -293,7 +331,7 @@ describe('shinsa do', () => {
       expect(first.errors[0]).toContain('answered 502 without JSON');
       const second = createIo(String(failing.port));
       expect(await runCli(['do', 'x'], second.io)).toBe(1);
-      expect(second.errors[0]).toBe('shinsa do: Describe what you want done.');
+      expect(second.errors[0]).toBe('Error: Describe what you want done.');
     } finally {
       plain.stop(true);
       failing.stop(true);
@@ -347,8 +385,8 @@ describe('shinsa import', () => {
     expect(await runCli(['import'], io)).toBe(1);
     expect(await runCli(['import', 'x', '--in'], io)).toBe(1);
     expect(errors).toEqual([
-      'shinsa import: Name the session: shinsa import <session.jsonl | session-id>',
-      'shinsa import: --in needs a value.',
+      'Error: Name the session by its file or id, such as `shinsa import 0b9c2f4e-6a8d`.',
+      'Error: --in needs a value.',
     ]);
   });
 });
@@ -360,7 +398,7 @@ describe('shinsa status and open', () => {
     problems: [],
     version: '0.0.0',
     commit: null,
-    installPath: '/app',
+    installPath: '/Users/you/Shinsa.app',
     pid: 42,
     protocol: 3,
     dataDir: '/data',
@@ -379,8 +417,19 @@ describe('shinsa status and open', () => {
       port: 0,
       fetch: routeStatus({
         briefing: 'Review the search first.',
-        decisions: [{ label: 'Review', title: 'Add search', url: 'http://x/tasks/1' }],
-        working: [{ label: 'Building', title: 'Fix scroll' }],
+        decisions: [
+          {
+            taskId: 't1',
+            handle: 'SW-1',
+            label: 'Review',
+            kind: 'review',
+            title: 'Add search',
+            url: 'http://x/tasks/SW-1',
+          },
+        ],
+        working: [
+          { taskId: 't2', handle: 'SW-2', label: 'building', kind: 'building', title: 'Fix scroll', url: '' },
+        ],
       }),
     });
     const empty = Bun.serve({
@@ -395,28 +444,39 @@ describe('shinsa status and open', () => {
       const { io, out } = createIo(String(queue.port));
       expect(await runCli(['status'], io)).toBe(0);
       expect(out).toEqual([
-        'Shinsa 0.0.0 from /app, pid 42, up 2 hours. Data in /data.',
+        'Running  Shinsa 0.0.0',
+        'Uptime   2 hours',
+        `Address  http://127.0.0.1:${queue.port}`,
+        'Process  42',
+        'Engine   ~/Shinsa.app',
+        'Data     /data',
         '',
         'Review the search first.',
         '',
-        'Needs you (1)',
-        '  Review    Add search  http://x/tasks/1',
+        'Needs you  1',
+        '  SW-1  Review    Add search  http://x/tasks/SW-1',
         '',
-        'Agents working (1)',
-        '  Building  Fix scroll',
+        'Agents working  1',
+        '  SW-2  building  Fix scroll',
+      ]);
+      const colored = createIo(String(queue.port), { terminal: createTestTerminal(COLOR) });
+      await runCli(['status'], colored.io);
+      expect(colored.out.slice(0, 2)).toEqual([
+        '\u001b[32m●\u001b[39m \u001b[1mRunning\u001b[22m  Shinsa 0.0.0',
+        '  \u001b[2mUptime\u001b[22m   2 hours',
       ]);
       const quiet = createIo(String(empty.port));
       await runCli(['status'], quiet.io);
-      expect(quiet.out.slice(1, 4)).toEqual([
+      expect(quiet.out.slice(6)).toEqual([
+        '',
         'It skipped 1 damaged entry in its log at start. `shinsa health` shows it.',
         '',
-        'No briefing yet.',
+        'Nothing needs you, and no agent is working.',
       ]);
-      expect(quiet.out.at(-1)).toBe('No briefing yet.');
-      const worse = createIo(String(damaged.port));
+      const worse = createIo(String(damaged.port), { terminal: createTestTerminal(COLOR) });
       await runCli(['status'], worse.io);
-      expect(worse.out[1]).toBe(
-        'It skipped 2 damaged entries in its log at start. `shinsa health` lists them.'
+      expect(worse.out[7]).toBe(
+        '\u001b[33m▲\u001b[39m It skipped 2 damaged entries in its log at start. \u001b[36mshinsa health\u001b[39m lists them.'
       );
       const json = createIo(String(queue.port));
       expect(await runCli(['status', '--json'], json.io)).toBe(0);
@@ -438,8 +498,17 @@ describe('shinsa status and open', () => {
     });
     expect(await runCli(['status'], io)).toBe(1);
     expect(await runCli(['status', '--json'], io)).toBe(1);
-    expect(out[0]).toBe(ENGINE_STOPPED);
-    expect(JSON.parse(out[1] ?? '')).toEqual({ engine: null, queue: null });
+    expect(out.slice(0, 2)).toEqual([
+      'Stopped  The engine is not running.',
+      '`shinsa start` starts it, and so does opening the Shinsa app.',
+    ]);
+    expect(JSON.parse(out[2] ?? '')).toEqual({ engine: null, queue: null });
+    const colored = createIo('1', { terminal: createTestTerminal(COLOR) });
+    expect(await runCli(['status'], colored.io)).toBe(1);
+    expect(colored.out).toEqual([
+      '\u001b[31m●\u001b[39m \u001b[1mStopped\u001b[22m  The engine is not running.',
+      '  \u001b[2m\u001b[36mshinsa start\u001b[39m starts it, and so does opening the Shinsa app.\u001b[22m',
+    ]);
     expect(woken).toBe(false);
   });
 
@@ -452,7 +521,8 @@ describe('shinsa status and open', () => {
     try {
       const { io, out } = createIo(String(server.port));
       expect(await runCli(['status'], { ...io, env: { ...io.env, SHINSA_HOST: '::1' } })).toBe(0);
-      expect(out[2]).toBe('On IPv6.');
+      expect(out[1]).toBe(`Uptime   ${'2 hours'}`);
+      expect(out[7]).toBe('On IPv6.');
     } finally {
       server.stop(true);
     }
@@ -659,10 +729,14 @@ describe('managing Shinsa from the command line', () => {
     for (const args of [['tasks'], ['tasks', '--help'], ['tasks', 'help'], ['tasks', 'launch', '-h']]) {
       const { io, out } = createIo('1');
       expect(await runCli(args, io)).toBe(0);
-      expect(out[0]?.split('\n').slice(0, 3)).toEqual([
-        'shinsa tasks',
+      expect(out[0]?.split('\n').slice(0, 7)).toEqual([
+        'List, open and create tasks; message, retry, reprioritize, cancel or finish one.',
         '',
-        `  shinsa ${'tasks list'.padEnd(26)} List tasks, most recently changed first.`,
+        'Usage',
+        '  shinsa tasks <command> [arguments] [--json]',
+        '',
+        'Commands',
+        `  ${'list'.padEnd(14)}List tasks, most recently changed first.`,
       ]);
     }
   });
@@ -710,7 +784,7 @@ describe('managing Shinsa from the command line', () => {
     const { port } = startTestServer();
     const plain = createIo(port);
     expect(await runCli(['tasks', 'show', 'nope'], plain.io)).toBe(1);
-    expect(plain.errors).toEqual(['shinsa tasks: No task nope. `shinsa tasks list` lists them.']);
+    expect(plain.errors).toEqual(['Error: No task nope.', '`shinsa tasks list` lists them.']);
     const json = createIo(port);
     expect(await runCli(['tasks', 'show', 'nope', '--json'], json.io)).toBe(1);
     expect(JSON.parse(json.out[0] ?? '')).toEqual({
@@ -732,6 +806,15 @@ describe('managing Shinsa from the command line', () => {
   test('an unknown command in a group says how to see the group', async () => {
     const { io, errors } = createIo('1');
     expect(await runCli(['tasks', 'launch', 'now'], io)).toBe(1);
-    expect(errors).toEqual(['shinsa tasks: No command shinsa tasks launch. Run `shinsa tasks --help`.']);
+    expect(errors).toEqual([
+      'Error: No command shinsa tasks launch.',
+      'Run `shinsa tasks --help` for its commands.',
+    ]);
+    const typo = createIo('1');
+    expect(await runCli(['tasks', 'lsit'], typo.io)).toBe(1);
+    expect(typo.errors).toEqual([
+      'Error: No command shinsa tasks lsit.',
+      'Did you mean `shinsa tasks list`? Run `shinsa tasks --help` for its commands.',
+    ]);
   });
 });

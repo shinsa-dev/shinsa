@@ -140,6 +140,12 @@ describe('reading the command line', () => {
     expect(refusal(() => readArgv(FIELDS, ['--colour', 'red'])).message).toBe(
       'Unknown option --colour. Add --help to see the options.'
     );
+    expect(refusal(() => readArgv(FIELDS, ['--lmit', '3'])).message).toBe(
+      'Unknown option --lmit. Did you mean --limit? Add --help to see the options.'
+    );
+    expect(refusal(() => readArgv(FIELDS, ['--jsno'])).message).toBe(
+      'Unknown option --jsno. Did you mean --json? Add --help to see the options.'
+    );
     expect(refusal(() => readArgv(FIELDS, ['--no-repo'])).message).toBe(
       'Unknown option --no-repo. Add --help to see the options.'
     );

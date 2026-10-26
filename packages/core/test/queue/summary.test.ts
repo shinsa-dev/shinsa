@@ -19,11 +19,32 @@ describe('resolveQueueSummary', () => {
     const working = createTask(harness, { request: 'Plan me' });
     const summary = resolveQueueSummary(harness.state, 0, 'http://localhost:5180');
     expect(summary.decisions).toEqual([
-      { taskId: review, title: 'Review me', label: 'Review', url: 'http://localhost:5180/tasks/SUP-1' },
-      { taskId: paused, title: 'Pause me', label: 'Paused', url: 'http://localhost:5180/tasks/SUP-2' },
+      {
+        taskId: review,
+        handle: 'SUP-1',
+        title: 'Review me',
+        label: 'Review',
+        kind: 'review',
+        url: 'http://localhost:5180/tasks/SUP-1',
+      },
+      {
+        taskId: paused,
+        handle: 'SUP-2',
+        title: 'Pause me',
+        label: 'Paused',
+        kind: 'failure',
+        url: 'http://localhost:5180/tasks/SUP-2',
+      },
     ]);
     expect(summary.working).toEqual([
-      { taskId: working, title: 'Plan me', label: 'planning', url: 'http://localhost:5180/tasks/SUP-3' },
+      {
+        taskId: working,
+        handle: 'SUP-3',
+        title: 'Plan me',
+        label: 'planning',
+        kind: 'planning',
+        url: 'http://localhost:5180/tasks/SUP-3',
+      },
     ]);
     expect(summary.briefing).toStartWith('Start with “Review me”: built and checked');
   });
@@ -34,6 +55,7 @@ describe('resolveQueueSummary', () => {
     const taskId = Object.keys(harness.state.tasks)[0] ?? '';
     const summary = resolveQueueSummary(harness.state, 0, 'http://localhost:5180');
     expect(summary.working.map((entry) => entry.url)).toEqual([`http://localhost:5180/tasks/${taskId}`]);
+    expect(summary.working.map((entry) => entry.handle)).toEqual([null]);
   });
 
   test('a task whose setup needs fixing is listed as paused', () => {

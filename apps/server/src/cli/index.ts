@@ -1,5 +1,6 @@
 import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
+import { DomainError } from '@shinsa/core';
 import { resolveConfig, resolveServerAddress } from '../config/index.ts';
 import { resolveServerUrl } from '../http/index.ts';
 import {
@@ -19,6 +20,14 @@ import {
   isStartedFromTerminal,
   mergePathLists,
 } from '../shell/login.ts';
+import { listSectionGroups } from '../surface/index.ts';
+import {
+  describeInline,
+  resolveTerminal,
+  selectClosest,
+  splitHint,
+  type Terminal,
+} from '../terminal/index.ts';
 import { createApiClient } from './api.ts';
 import { APP_BUNDLE_ID, isPathArgument, resolveEngineTarget, resolveLinkPage } from './app.ts';
 import { type CommandIo, createTask, importSession, openApp, parseArgs, printStatus } from './commands.ts';
@@ -31,11 +40,9 @@ import {
   startEngine,
   stopEngine,
 } from './engine.ts';
-import { describeCliUsage, selectCliCommand, USAGE, USAGE_ALL } from './help.ts';
+import { CLI_COMMANDS, describeCliUsage, describeHelp, describeHelpAll, selectCliCommand } from './help.ts';
 import { ENGINE_LOG, printLogs } from './logs.ts';
 import { isSurfaceGroup, runSurface } from './surface.ts';
-
-export { USAGE } from './help.ts';
 
 export interface CliIo {
   env: Record<string, string | undefined>;
@@ -48,6 +55,7 @@ export interface CliIo {
   engine: EngineControl;
   runEngine: (env: Record<string, string | undefined>) => Promise<Shinsa>;
   onShutdown: (stop: () => Promise<void>) => void;
+  terminal: Terminal;
   projectsDir?: string;
 }
 
@@ -198,12 +206,15 @@ export function createProcessIo(options: ProcessOptions = {}): CliIo {
     engine: { bundled: IS_BUNDLED, uid: UID, launchctl: runLaunchctl },
     runEngine: (env) => runEngineWithLoginEnv(env, isTerminal, bundle),
     onShutdown: stopOnSignal,
+    terminal: resolveTerminal(Bun.env, process.stdout, process.stderr),
   };
 }
 
 function createCommandIo(io: CliIo): CommandIo {
   return {
     api: createApiClient(resolveBase(io.env), io.wakeEngine),
+    display: io.terminal.display,
+    home: io.terminal.home,
     cwd: io.cwd,
     write: io.write,
     openApp: io.openApp,
@@ -231,7 +242,13 @@ async function runEngine(io: CliIo) {
 }
 
 function createEngineIo(io: CliIo): EngineIo {
-  return { ...io.engine, base: resolveBase(io.env), write: io.write };
+  return {
+    ...io.engine,
+    base: resolveBase(io.env),
+    display: io.terminal.display,
+    write: io.write,
+    startProgress: io.terminal.startProgress,
+  };
 }
 
 function isHelp(args: string[]) {
@@ -240,17 +257,18 @@ function isHelp(args: string[]) {
 
 function printHelp(args: string[], io: CliIo) {
   const [topic] = args;
+  const { display } = io.terminal;
   if (!topic) {
-    io.write(USAGE);
+    io.write(describeHelp(display));
     return 0;
   }
   if (topic === '--all') {
-    io.write(USAGE_ALL);
+    io.write(describeHelpAll(display));
     return 0;
   }
   const command = selectCliCommand(topic);
   if (command) {
-    io.write(describeCliUsage(command));
+    io.write(describeCliUsage(command, display));
     return 0;
   }
   return routeCommand(topic, ['--help'], io);
@@ -279,7 +297,7 @@ async function routeTopLevel(command: string, args: string[], io: CliIo) {
       await restartEngine(createEngineIo(io), parseArgs(args).flags.has('--when-idle'));
       return 0;
     case 'logs':
-      printLogs(args, io);
+      printLogs(args, { env: io.env, display: io.terminal.display, write: io.write });
       return 0;
     default:
       await printVersion(createEngineIo(io), parseArgs(args).flags.has('--json'));
@@ -294,7 +312,7 @@ async function routeCommand(command: string, args: string[], io: CliIo): Promise
   const known = selectCliCommand(command);
   if (known && known.name !== '.') {
     if (isHelp(args)) {
-      io.write(describeCliUsage(known));
+      io.write(describeCliUsage(known, io.terminal.display));
       return 0;
     }
     return routeTopLevel(command, args, io);
@@ -306,12 +324,31 @@ async function routeCommand(command: string, args: string[], io: CliIo): Promise
   if (isSurfaceGroup(command)) {
     return runSurface([command, ...args], {
       base: resolveBase(io.env),
+      display: io.terminal.display,
       write: io.write,
       wake: io.wakeEngine,
     });
   }
-  io.writeError(`No command shinsa ${command}. Run \`shinsa help\` for the list.`);
-  return 1;
+  throw new DomainError('command_unknown', describeUnknown(command));
+}
+
+const TOP_LEVEL_WORDS = [
+  ...CLI_COMMANDS.map((command) => command.name).filter((name) => name !== '.'),
+  'help',
+  ...listSectionGroups(),
+];
+
+function describeUnknown(command: string) {
+  const closest = selectClosest(command, TOP_LEVEL_WORDS);
+  const hint = closest ? ` Did you mean \`shinsa ${closest}\`?` : '';
+  return `No command shinsa ${command}.${hint} Run \`shinsa help\` for the list.`;
+}
+
+function writeFailure(io: CliIo, error: unknown) {
+  const style = io.terminal.errorStyle;
+  const { message, hint } = splitHint(describeError(error));
+  io.writeError(`${style.danger(style.bold('Error:'))} ${describeInline(style, message)}`);
+  if (hint) io.writeError(style.dim(describeInline(style, hint)));
 }
 
 export async function runCli(args: string[], io: CliIo = createProcessIo()): Promise<number> {
@@ -319,7 +356,7 @@ export async function runCli(args: string[], io: CliIo = createProcessIo()): Pro
   try {
     return await routeCommand(command, rest, io);
   } catch (error) {
-    io.writeError(`shinsa ${command}: ${describeError(error)}`);
+    writeFailure(io, error);
     return 1;
   }
 }

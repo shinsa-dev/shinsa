@@ -10,6 +10,14 @@ import { Roots } from '../../src/repos/index.ts';
 import type { Engine } from '../../src/runtime/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import type { EventLog } from '../../src/store/index.ts';
+import {
+  type Display,
+  NO_PROGRESS,
+  PLAIN_DISPLAY,
+  PLAIN_STYLE,
+  type Progress,
+  type Terminal,
+} from '../../src/terminal/index.ts';
 import { createConfigAt } from './config.ts';
 
 const created: string[] = [];
@@ -148,5 +156,17 @@ export function createTestOnboarding(engine: Engine, config: ServerConfig, run: 
         importAccount: () => Promise.resolve(),
       },
     }),
+  };
+}
+
+export function createTestTerminal(
+  display: Display = PLAIN_DISPLAY,
+  startProgress: (text: string) => Progress = () => NO_PROGRESS
+): Terminal {
+  return {
+    display,
+    errorStyle: display.style.color ? display.style : PLAIN_STYLE,
+    home: '/Users/you',
+    startProgress,
   };
 }

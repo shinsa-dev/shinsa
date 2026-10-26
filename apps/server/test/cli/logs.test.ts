@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { describeLogLine, printLogs } from '../../src/cli/logs.ts';
+import { PLAIN_DISPLAY } from '../../src/terminal/index.ts';
+import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
 import { createTempDir, writeFiles } from '../helpers/index.ts';
 
-function createLogsIo(home: string) {
+const COLOR = createStyle({ color: true, symbols: UNICODE_SYMBOLS });
+
+function createLogsIo(home: string, display = PLAIN_DISPLAY) {
   const out: string[] = [];
-  return { io: { env: { SHINSA_HOME: home }, write: (line = '') => out.push(line) }, out };
+  return { io: { env: { SHINSA_HOME: home }, display, write: (line = '') => out.push(line) }, out };
 }
 
 const ENTRIES = [
@@ -33,6 +37,17 @@ describe('reading a log line', () => {
     expect(describeLogLine('[1,2]')).toBe('[1,2]');
     expect(describeLogLine('null')).toBe('null');
     expect(describeLogLine('plain text')).toBe('plain text');
+    expect(describeLogLine('{"level":"trace","message":"x"}')).toBe('trace  x');
+  });
+
+  test('in a terminal the time is dim, the level takes its colour and the area is bold', () => {
+    expect(describeLogLine(ENTRIES[3] ?? '', COLOR)).toBe(
+      '\u001b[2m2026-10-26 09:00:05\u001b[22m  \u001b[33mwarn \u001b[39m  \u001b[1m[Accounts]\u001b[22m Could not check your Claude Code login  \u001b[2merror=\u001b[22mClaude Code is not installed.  \u001b[2mretry=\u001b[22m{"in":30}'
+    );
+    expect(describeLogLine('{"level":"error","message":"Boom"}', COLOR)).toBe(
+      '\u001b[31merror\u001b[39m  Boom'
+    );
+    expect(describeLogLine('{"level":"trace","message":"x"}', COLOR)).toBe('\u001b[2mtrace\u001b[22m  x');
   });
 });
 

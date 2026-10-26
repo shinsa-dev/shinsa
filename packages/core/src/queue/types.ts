@@ -1,4 +1,4 @@
-import type { Gate, Task } from '../domain/index.ts';
+import type { Gate, GateType, Task, TaskStage } from '../domain/index.ts';
 
 export interface QueuedGate {
   gate: Gate;
@@ -26,8 +26,10 @@ export interface QueueStep {
 
 export interface QueueSummaryEntry {
   taskId: string;
+  handle: string | null;
   title: string;
   label: string;
+  kind: GateType | TaskStage;
   url: string;
 }
 

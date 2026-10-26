@@ -41,7 +41,7 @@ describe('shinsa engine on a data directory another one holds', () => {
     const second = serve(home);
     expect(await second.exited).toBe(1);
     expect(await new Response(second.stderr).text()).toContain(
-      `shinsa engine: Shinsa is already running on ${dataDir}: ${holder?.url} (pid ${first.pid}, version 0.0.0`
+      `Error: Shinsa is already running on ${dataDir}: ${holder?.url} (pid ${first.pid}, version 0.0.0`
     );
 
     first.kill('SIGTERM');

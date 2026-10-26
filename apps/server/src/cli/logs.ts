@@ -2,6 +2,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DomainError } from '@shinsa/core';
 import { resolveConfig } from '../config/index.ts';
+import {
+  type Display,
+  PLAIN_STYLE,
+  paintTone,
+  type Style,
+  stripStyles,
+  type Tone,
+} from '../terminal/index.ts';
 import { parseArgs } from './commands.ts';
 
 export const ENGINE_LOG = 'engine.log';
@@ -10,14 +18,28 @@ const DEFAULT_LINES = 50;
 
 export interface LogsIo {
   env: Record<string, string | undefined>;
+  display: Display;
   write: (line?: string) => void;
 }
+
+const LEVEL_TONES: Record<string, Tone> = {
+  debug: 'dim',
+  info: 'info',
+  warn: 'warning',
+  error: 'danger',
+};
+
+const AREA = /^\[[^\]]+\]/;
 
 function describeField(value: unknown) {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
-export function describeLogLine(line: string) {
+function describeMessage(style: Style, message: string) {
+  return message.replace(AREA, (area) => style.bold(area));
+}
+
+export function describeLogLine(line: string, style: Style = PLAIN_STYLE) {
   let entry: unknown;
   try {
     entry = JSON.parse(line);
@@ -26,10 +48,19 @@ export function describeLogLine(line: string) {
   }
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return line;
   const { at, level, message, ...fields } = entry as Record<string, unknown>;
-  const time = typeof at === 'string' ? at.replace('T', ' ').slice(0, 19) : '';
-  const extra = Object.entries(fields).map(([key, value]) => `${key}=${describeField(value)}`);
-  return [time, describeField(level ?? '').padEnd(5), describeField(message ?? ''), ...extra]
-    .filter((part) => part.trim())
+  const time = typeof at === 'string' ? style.dim(at.replace('T', ' ').slice(0, 19)) : '';
+  const levelText = describeField(level ?? '');
+  const tone = LEVEL_TONES[levelText] ?? 'dim';
+  const extra = Object.entries(fields).map(
+    ([key, value]) => `${style.dim(`${key}=`)}${describeField(value)}`
+  );
+  return [
+    time,
+    levelText ? paintTone(style, tone, levelText.padEnd(5)) : '',
+    describeMessage(style, describeField(message ?? '')),
+    ...extra,
+  ]
+    .filter((part) => stripStyles(part).trim())
     .join('  ');
 }
 
@@ -59,5 +90,5 @@ export function printLogs(args: string[], io: LogsIo) {
     .split('\n')
     .filter((line) => line.trim())
     .slice(-count);
-  for (const line of lines) io.write(flags.has('--json') ? line : describeLogLine(line));
+  for (const line of lines) io.write(flags.has('--json') ? line : describeLogLine(line, io.display.style));
 }

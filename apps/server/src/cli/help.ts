@@ -1,4 +1,23 @@
-import { describeSections, describeSurface, serializeReference } from '../surface/index.ts';
+import { describeVersion } from '../instance/index.ts';
+import {
+  describeSections,
+  describeSurface,
+  listSectionGroups,
+  SURFACE,
+  serializeReference,
+} from '../surface/index.ts';
+import {
+  type Display,
+  describeCommandTerm,
+  describeHeading,
+  describeList,
+  describeParagraph,
+  describeUsageLines,
+  PLAIN_DISPLAY,
+  resolveTermWidth,
+  splitUsage,
+} from '../terminal/index.ts';
+import { type CommandVersion, resolveCommandVersion } from './engine.ts';
 
 interface CliOption {
   flag: string;
@@ -137,69 +156,104 @@ const EXAMPLES = [
   'shinsa restart --when-idle',
 ];
 
-const USAGE_WIDTH = 28;
-
 export function selectCliCommand(name: string) {
   return CLI_COMMANDS.find((command) => command.name === name) ?? null;
 }
 
-function stripTicks(text: string) {
-  return text.replaceAll('`', '');
+function resolveCommandHead(command: CliCommand) {
+  return command.usage.split(' [-')[0] ?? '';
 }
 
-function describeCommandLines(commands: CliCommand[]) {
-  return commands.map(
-    (command) =>
-      `  ${(command.usage.split(' [-')[0] ?? '').padEnd(USAGE_WIDTH)} ${stripTicks(command.summary)}`
-  );
-}
-
-function describeTopLevel() {
+function describeCommandSection(display: Display, title: string, commands: CliCommand[], termWidth: number) {
   return [
-    'Shinsa hands coding work to agents and brings back only the decisions.',
+    describeHeading(display, title),
+    ...describeList(
+      display,
+      commands.map((command) => ({
+        term: describeCommandTerm(display, resolveCommandHead(command)),
+        text: command.summary,
+      })),
+      { termWidth }
+    ),
     '',
-    'Open Shinsa and hand it work',
-    ...describeCommandLines(OPEN_COMMANDS),
+  ];
+}
+
+function describeBanner(display: Display, version: CommandVersion) {
+  const { style } = display;
+  return [
+    ...describeParagraph(
+      display,
+      `${style.bold('Shinsa')} hands coding work to agents and brings back only the decisions. ${style.dim(`(${describeVersion(version)})`)}`
+    ),
     '',
-    'Check and control the background engine',
-    ...describeCommandLines(ENGINE_COMMANDS),
+    describeHeading(display, 'Usage'),
+    ...describeUsageLines(display, ['shinsa'], ['<command>', '[arguments]', '[--json]']),
+    '',
+  ];
+}
+
+function resolveTopTermWidth(extra: string[]) {
+  return resolveTermWidth([...CLI_COMMANDS.map(resolveCommandHead), ...extra]);
+}
+
+function describeTopLevel(display: Display, termWidth: number) {
+  return [
+    ...describeCommandSection(display, 'Open Shinsa and hand it work', OPEN_COMMANDS, termWidth),
+    ...describeCommandSection(display, 'Check and control the background engine', ENGINE_COMMANDS, termWidth),
+  ];
+}
+
+export function describeHelp(display: Display = PLAIN_DISPLAY, version = resolveCommandVersion()) {
+  const termWidth = resolveTopTermWidth(listSectionGroups());
+  return [
+    ...describeBanner(display, version),
+    ...describeTopLevel(display, termWidth),
+    ...describeSections(display, termWidth),
+    describeHeading(display, 'Examples'),
+    ...EXAMPLES.map((example) => `  ${example}`),
+    '',
+    ...describeParagraph(
+      display,
+      'Run `shinsa <group>` for its commands, and add --help to any command for its arguments. --json prints any answer as JSON, and `shinsa help --all` lists every command.'
+    ),
   ].join('\n');
 }
 
-export const USAGE = [
-  describeTopLevel(),
-  '',
-  describeSections(),
-  '',
-  'Examples',
-  ...EXAMPLES.map((example) => `  ${example}`),
-  '',
-  'Run `shinsa <group>` for its commands, and add --help to any command for its arguments.',
-  '--json prints any answer as JSON. `shinsa help --all` lists every command.',
-].join('\n');
-
-export const USAGE_ALL = [
-  describeTopLevel(),
-  '',
-  'Everything else',
-  describeSurface(),
-  '',
-  'Add --help to any command for its arguments, --json for JSON.',
-].join('\n');
-
-export function describeCliUsage(command: CliCommand) {
+export function describeHelpAll(display: Display = PLAIN_DISPLAY, version = resolveCommandVersion()) {
+  const commands = SURFACE.map((spec) => `shinsa ${spec.path.join(' ')}`);
+  const termWidth = resolveTopTermWidth(commands);
   return [
-    stripTicks(command.summary),
+    ...describeBanner(display, version),
+    ...describeTopLevel(display, termWidth),
+    describeHeading(display, 'Everything else'),
+    ...describeSurface(display, termWidth),
     '',
-    'Usage',
-    `  ${command.usage}`,
+    ...describeParagraph(display, 'Add --help to any command for its arguments, --json for JSON.'),
+  ].join('\n');
+}
+
+export function describeCliUsage(command: CliCommand, display: Display = PLAIN_DISPLAY) {
+  const { head, args } = splitUsage(command.usage);
+  return [
+    ...describeParagraph(display, command.summary),
     '',
-    stripTicks(command.detail),
+    describeHeading(display, 'Usage'),
+    ...describeUsageLines(display, head, args),
+    '',
+    ...describeParagraph(display, command.detail),
     ...(command.options.length > 0
-      ? ['', 'Options', ...command.options.map((option) => `  ${option.flag.padEnd(22)} ${option.text}`)]
+      ? [
+          '',
+          describeHeading(display, 'Options'),
+          ...describeList(
+            display,
+            command.options.map((option) => ({ term: display.style.accent(option.flag), text: option.text }))
+          ),
+        ]
       : []),
     '',
-    'Examples',
+    describeHeading(display, 'Examples'),
     ...command.examples.map((example) => `  ${example}`),
   ].join('\n');
 }

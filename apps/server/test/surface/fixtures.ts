@@ -1,5 +1,7 @@
 import type { UserCommand } from '@shinsa/core';
 import { readArgv, type SurfaceClient, type SurfaceSpec, selectSpec } from '../../src/surface/index.ts';
+import type { Display } from '../../src/terminal/index.ts';
+import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
 
 type Responder = unknown | ((path: string, body?: unknown) => unknown);
 
@@ -49,11 +51,16 @@ export function findSpec(words: string[]): SurfaceSpec {
   return found.spec;
 }
 
-export function runSpec(fake: FakeClient, words: string[]) {
+export function runSpec(fake: FakeClient, words: string[], display?: Display) {
   const found = selectSpec(words);
   if (!found) throw new Error(`No spec for ${words.join(' ')}`);
-  return found.spec.run(fake.client, readArgv(found.spec.fields, found.rest).values);
+  return found.spec.run(fake.client, readArgv(found.spec.fields, found.rest).values, display);
 }
+
+export const COLOR_DISPLAY: Display = {
+  style: createStyle({ color: true, symbols: UNICODE_SYMBOLS }),
+  width: null,
+};
 
 export function createTaskDetail(overrides: Record<string, unknown> = {}) {
   return {

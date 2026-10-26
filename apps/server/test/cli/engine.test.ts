@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import {
+  describeDuration,
   ENGINE_STOPPED,
   type EngineIo,
   printVersion,
@@ -10,6 +11,10 @@ import {
   stopEngine,
 } from '../../src/cli/engine.ts';
 import { resolveBundle } from '../../src/instance/index.ts';
+import { NO_PROGRESS, PLAIN_DISPLAY } from '../../src/terminal/index.ts';
+import { createStyle, UNICODE_SYMBOLS } from '../../src/terminal/style.ts';
+
+const COLOR = { style: createStyle({ color: true, symbols: UNICODE_SYMBOLS }), width: 80 };
 
 const TARGET = 'gui/501/studio.overclock.shinsa.engine';
 
@@ -65,8 +70,14 @@ function startFakeEngine(initial: Partial<FakeEngine> = {}) {
 function createEngineIo(base: string, engine: FakeEngine | null, overrides: Partial<EngineIo> = {}) {
   const out: string[] = [];
   const calls: string[][] = [];
+  const progress: string[] = [];
   const io: EngineIo = {
     base,
+    display: PLAIN_DISPLAY,
+    startProgress: (text) => {
+      progress.push(text);
+      return { stop: () => progress.push('stopped') };
+    },
     bundled: true,
     uid: 501,
     waitMs: 2000,
@@ -80,7 +91,7 @@ function createEngineIo(base: string, engine: FakeEngine | null, overrides: Part
     },
     ...overrides,
   };
-  return { io, out, calls };
+  return { io, out, calls, progress };
 }
 
 describe('reading the engine', () => {
@@ -96,13 +107,25 @@ describe('reading the engine', () => {
 describe('shinsa start', () => {
   test('asks launchd to start the job and waits until the engine answers', async () => {
     const { engine, base } = startFakeEngine({ pid: null });
-    const { io, out, calls } = createEngineIo(base, engine);
+    const { io, out, calls, progress } = createEngineIo(base, engine);
     await startEngine(io);
     expect(calls).toEqual([
       ['print', TARGET],
       ['kickstart', TARGET],
     ]);
-    expect(out).toEqual(['Started the engine: Shinsa 0.0.0, pid 200.']);
+    expect(progress).toEqual(['Starting the engine', 'stopped']);
+    expect(out).toEqual([
+      expect.stringMatching(/^Started the engine in \d+(?:ms|\.\ds)\. Shinsa 0\.0\.0, pid 200\.$/),
+    ]);
+  });
+
+  test('in a terminal the result is one line with a check mark and the details dimmed', async () => {
+    const { engine, base } = startFakeEngine({ pid: null });
+    const { io, out } = createEngineIo(base, engine, { display: COLOR, startProgress: () => NO_PROGRESS });
+    await startEngine(io);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toStartWith('\u001b[32m✔\u001b[39m Started the engine in ');
+    expect(out[0]).toEndWith('. \u001b[2mShinsa 0.0.0, pid 200.\u001b[22m');
   });
 
   test('a running engine is left alone', async () => {
@@ -110,7 +133,7 @@ describe('shinsa start', () => {
     const { io, out, calls } = createEngineIo(base, engine, { bundled: false });
     await startEngine(io);
     expect(calls).toEqual([]);
-    expect(out).toEqual(['The engine is already running: Shinsa 0.0.0, pid 100.']);
+    expect(out).toEqual(['The engine is already running. Shinsa 0.0.0, pid 100.']);
   });
 
   test('refuses a shinsa outside the app, or an app that never set the engine up', async () => {
@@ -137,6 +160,7 @@ describe('shinsa start', () => {
     await expect(startEngine(silent.io)).rejects.toThrow(
       'The engine did not answer within 1 second. `shinsa logs` shows why.'
     );
+    expect(silent.progress).toEqual(['Starting the engine', 'stopped']);
   });
 });
 
@@ -150,7 +174,9 @@ describe('shinsa stop', () => {
       ['kill', 'SIGTERM', TARGET],
     ]);
     expect(out).toEqual([
-      'Stopped the engine. Runs it cut off resume when it starts again: `shinsa start`, the Shinsa app or any command that needs it.',
+      expect.stringMatching(
+        /^Stopped the engine in \d+(?:ms|\.\ds)\. Runs it cut off resume when it starts again: `shinsa start`, the Shinsa app or any command that needs it\.$/
+      ),
     ]);
   });
 
@@ -176,7 +202,9 @@ describe('shinsa restart', () => {
       ['print', TARGET],
       ['kickstart', '-k', TARGET],
     ]);
-    expect(out).toEqual(['Restarted the engine: Shinsa 0.0.0, pid 101.']);
+    expect(out).toEqual([
+      expect.stringMatching(/^Restarted the engine in \d+(?:ms|\.\ds)\. Shinsa 0\.0\.0, pid 101\.$/),
+    ]);
   });
 
   test('with --when-idle the engine restarts itself once no agent is mid-turn', async () => {
@@ -188,7 +216,9 @@ describe('shinsa restart', () => {
     const now = createEngineIo(idle.base, idle.engine);
     await restartEngine(now.io, true);
     expect(now.calls).toEqual([['print', TARGET]]);
-    expect(now.out).toEqual(['Restarted the engine: Shinsa 0.0.0, pid 101.']);
+    expect(now.out).toEqual([
+      expect.stringMatching(/^Restarted the engine in \d+(?:ms|\.\ds)\. Shinsa 0\.0\.0, pid 101\.$/),
+    ]);
     const stopped = startFakeEngine({ pid: null });
     await expect(restartEngine(createEngineIo(stopped.base, null).io, true)).rejects.toThrow(ENGINE_STOPPED);
   });
@@ -199,10 +229,16 @@ describe('shinsa version', () => {
     const { base } = startFakeEngine();
     const running = createEngineIo(base, null, { bundled: false });
     await printVersion(running.io, false);
-    expect(running.out).toEqual(['shinsa 0.0.0', 'Engine: Shinsa 0.0.0, pid 100, protocol 3']);
+    expect(running.out).toEqual(['Command  0.0.0', 'Engine   0.0.0, pid 100, protocol 3']);
     const down = createEngineIo('http://127.0.0.1:1', null);
     await printVersion(down.io, false);
-    expect(down.out).toEqual(['shinsa 0.0.0', 'Engine: not running']);
+    expect(down.out).toEqual(['Command  0.0.0', 'Engine   Not running']);
+    const colored = createEngineIo('http://127.0.0.1:1', null, { display: COLOR });
+    await printVersion(colored.io, false);
+    expect(colored.out).toEqual([
+      '\u001b[2mCommand\u001b[22m  0.0.0',
+      '\u001b[2mEngine\u001b[22m   \u001b[31m●\u001b[39m Not running',
+    ]);
   });
 
   test('says when the app’s engine runs another version, and prints both as JSON', async () => {
@@ -222,8 +258,9 @@ describe('shinsa version', () => {
     const behind = createEngineIo(base, null);
     await printVersion(behind.io, false, bundle);
     expect(behind.out).toEqual([
-      'shinsa 0.5.0 (bbbbbbb)',
-      'Engine: Shinsa 0.4.2, pid 100, protocol 3',
+      'Command  0.5.0 (bbbbbbb)',
+      'Engine   0.4.2, pid 100, protocol 3',
+      '',
       'The engine runs another version than the app carries. `shinsa restart` starts the app’s.',
     ]);
     const json = createEngineIo(base, null);
@@ -232,5 +269,13 @@ describe('shinsa version', () => {
       command: { version: '0.5.0' },
       engine: { version: '0.4.2', pid: 100 },
     });
+  });
+});
+
+describe('durations', () => {
+  test('under a second in milliseconds, longer in seconds with one decimal', () => {
+    expect(describeDuration(-5)).toBe('0ms');
+    expect(describeDuration(420.4)).toBe('420ms');
+    expect(describeDuration(1250)).toBe('1.3s');
   });
 });

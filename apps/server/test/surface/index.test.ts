@@ -14,6 +14,7 @@ import {
   selectSpec,
   serializeReference,
 } from '../../src/surface/index.ts';
+import { PLAIN_DISPLAY, PLAIN_STYLE } from '../../src/terminal/index.ts';
 import { BASE, createFakeClient, findSpec, runSpec } from './fixtures.ts';
 
 describe('the surface covers every command', () => {
@@ -131,11 +132,20 @@ describe('help text', () => {
     ]);
     expect(usage[5]).toBe('Arguments');
     expect(usage[6]).toBe(
-      `  ${'<request>'.padEnd(22)} What should be done. The first line becomes the title.`
+      `  ${'<request>'.padEnd(14)}What should be done. The first line becomes the title.`
     );
     expect(usage[7]).toBe(
-      `  ${'--repo'.padEnd(22)} The repository (name or id). Triage picks one when left out.`
+      `  ${'--repo'.padEnd(14)}The repository (name or id). Triage picks one when left out.`
     );
+    const narrow = describeUsage(findSpec(['tasks', 'create']), { style: PLAIN_STYLE, width: 60 }).split(
+      '\n'
+    );
+    expect(narrow.slice(3, 6)).toEqual([
+      '  shinsa tasks create <request...> [--repo <text>]',
+      '                      [--project <text>]',
+      '                      [--priority <urgent|high|normal|low>]',
+    ]);
+    expect(narrow.every((line) => line.length <= 60)).toBe(true);
   });
 
   test('required flags and optional positionals are marked, and a spec without arguments has no list', () => {
@@ -155,20 +165,29 @@ describe('help text', () => {
 
   test('a group lists its commands with their summaries and how to learn more', () => {
     expect(describeGroup('focus').split('\n')).toEqual([
-      'shinsa focus',
+      'Show only one project’s work, for a while or until you clear it.',
       '',
-      `  shinsa ${'focus show'.padEnd(26)} Show the project you are focused on.`,
-      `  shinsa ${'focus set'.padEnd(26)} Focus on one project: Shinsa shows only its work.`,
-      `  shinsa ${'focus clear'.padEnd(26)} Stop focusing on one project.`,
+      'Usage',
+      '  shinsa focus <command> [arguments] [--json]',
+      '',
+      'Commands',
+      '  show   Show the project you are focused on.',
+      '  set    Focus on one project: Shinsa shows only its work.',
+      '  clear  Stop focusing on one project.',
       '',
       'Add --help to any of them for its arguments, --json for machine-readable output.',
     ]);
+    const unlisted: SurfaceSpec = { ...findSpec(['usage']), path: ['later', 'now'] };
+    expect(describeGroup('later', [unlisted]).split('\n')[0]).toBe('shinsa later');
   });
 
-  test('the surface lists one line per spec', () => {
-    const lines = describeSurface().split('\n');
-    expect(lines).toHaveLength(SURFACE.length);
-    expect(lines[0]).toBe(`  shinsa ${'tasks list'.padEnd(26)} List tasks, most recently changed first.`);
+  test('the surface lists one line per spec, aligned to the width it is given', () => {
+    const lines = describeSurface(PLAIN_DISPLAY);
+    expect(lines.filter((line) => line.startsWith('  shinsa '))).toHaveLength(SURFACE.length);
+    expect(lines[0]).toBe(`  ${'shinsa tasks list'.padEnd(32)}List tasks, most recently changed first.`);
+    expect(describeSurface(PLAIN_DISPLAY, 18)[0]).toBe(
+      `  ${'shinsa tasks list'.padEnd(20)}List tasks, most recently changed first.`
+    );
   });
 });
 

@@ -1,4 +1,12 @@
 import { USER_COMMAND_TYPES, type UserCommand } from '@shinsa/core';
+import {
+  type Display,
+  describeHeading,
+  describeList,
+  describeParagraph,
+  describeUsageLines,
+  PLAIN_DISPLAY,
+} from '../terminal/index.ts';
 import { CONFIG_SPECS } from './config.ts';
 import { EXTENSION_SPECS } from './extensions.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
@@ -12,7 +20,7 @@ import { WORK_SPECS } from './work.ts';
 export { type CommandReceipt, resolveCommandKey, type SurfaceClient } from './client.ts';
 export { readArgv, readToolInput, resolveInputSchema, type Values } from './fields.ts';
 export type { SurfaceSpec } from './spec.ts';
-export { describeRunning } from './system.ts';
+export { describeQueue, describeUptime, QUEUE_EMPTY } from './system.ts';
 
 const COMMAND_SPEC: SurfaceSpec = {
   path: ['command'],
@@ -81,37 +89,72 @@ function describeArgument(field: FieldSpec) {
   return field.required ? `${flag}${value}` : `[${flag}${value}]`;
 }
 
-export function describeUsage(spec: SurfaceSpec) {
-  const fields = spec.fields;
-  const usage = ['shinsa', ...spec.path, ...fields.map(describeArgument), '[--json]'].join(' ');
-  const options = fields.map(
-    (field) =>
-      `  ${(field.positional ? `<${field.name}>` : serializeFlag(field.name)).padEnd(22)} ${field.description}`
-  );
+function describeArgumentTerm(display: Display, field: FieldSpec) {
+  return display.style.accent(field.positional ? `<${field.name}>` : serializeFlag(field.name));
+}
+
+export function describeUsage(spec: SurfaceSpec, display: Display = PLAIN_DISPLAY) {
+  const options = spec.fields.map((field) => ({
+    term: describeArgumentTerm(display, field),
+    text: field.description,
+  }));
   return [
-    spec.summary,
+    ...describeParagraph(display, spec.summary),
     '',
-    'Usage',
-    `  ${usage}`,
-    ...(options.length > 0 ? ['', 'Arguments', ...options] : []),
+    describeHeading(display, 'Usage'),
+    ...describeUsageLines(
+      display,
+      ['shinsa', ...spec.path],
+      [...spec.fields.map(describeArgument), '[--json]']
+    ),
+    ...(options.length > 0
+      ? ['', describeHeading(display, 'Arguments'), ...describeList(display, options)]
+      : []),
   ].join('\n');
 }
 
-export function describeGroup(group: string, specs: SurfaceSpec[] = SURFACE) {
-  const lines = listGroup(group, specs).map(
-    (spec) => `  shinsa ${spec.path.join(' ').padEnd(26)} ${spec.summary}`
-  );
+function selectGroupSummary(group: string) {
+  for (const section of SURFACE_SECTIONS) {
+    const found = section.groups.find(([name]) => name === group);
+    if (found) return found[1];
+  }
+  return null;
+}
+
+export function describeGroup(
+  group: string,
+  specs: SurfaceSpec[] = SURFACE,
+  display: Display = PLAIN_DISPLAY
+) {
+  const entries = listGroup(group, specs).map((spec) => ({
+    term: display.style.accent(spec.path.slice(1).join(' ')),
+    text: spec.summary,
+  }));
   return [
-    `shinsa ${group}`,
+    ...describeParagraph(display, selectGroupSummary(group) ?? `shinsa ${group}`),
     '',
-    ...lines,
+    describeHeading(display, 'Usage'),
+    ...describeUsageLines(display, ['shinsa', group], ['<command>', '[arguments]', '[--json]']),
     '',
-    'Add --help to any of them for its arguments, --json for machine-readable output.',
+    describeHeading(display, 'Commands'),
+    ...describeList(display, entries),
+    '',
+    ...describeParagraph(
+      display,
+      'Add --help to any of them for its arguments, --json for machine-readable output.'
+    ),
   ].join('\n');
 }
 
-export function describeSurface(specs: SurfaceSpec[] = SURFACE) {
-  return specs.map((spec) => `  shinsa ${spec.path.join(' ').padEnd(26)} ${spec.summary}`).join('\n');
+export function describeSurface(display: Display, termWidth?: number, specs: SurfaceSpec[] = SURFACE) {
+  return describeList(
+    display,
+    specs.map((spec) => ({
+      term: display.style.accent(`shinsa ${spec.path.join(' ')}`),
+      text: spec.summary,
+    })),
+    termWidth === undefined ? {} : { termWidth }
+  );
 }
 
 interface SurfaceSection {
@@ -175,18 +218,28 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
 ];
 
 export function listUncatalogedGroups(specs: SurfaceSpec[] = SURFACE) {
-  const cataloged = new Set(SURFACE_SECTIONS.flatMap((section) => section.groups.map(([group]) => group)));
+  const cataloged = new Set(listSectionGroups());
   return listGroups(specs).filter((group) => !cataloged.has(group));
 }
 
-export function describeSections(sections: readonly SurfaceSection[] = SURFACE_SECTIONS) {
-  return sections
-    .map((section) =>
-      [section.title, ...section.groups.map(([group, summary]) => `  ${group.padEnd(14)} ${summary}`)].join(
-        '\n'
-      )
-    )
-    .join('\n\n');
+export function describeSections(
+  display: Display,
+  termWidth: number,
+  sections: readonly SurfaceSection[] = SURFACE_SECTIONS
+) {
+  return sections.flatMap((section) => [
+    describeHeading(display, section.title),
+    ...describeList(
+      display,
+      section.groups.map(([group, summary]) => ({ term: display.style.accent(group), text: summary })),
+      { termWidth }
+    ),
+    '',
+  ]);
+}
+
+export function listSectionGroups(sections: readonly SurfaceSection[] = SURFACE_SECTIONS) {
+  return sections.flatMap((section) => section.groups.map(([group]) => group));
 }
 
 export function listAgentSpecs(specs: SurfaceSpec[] = SURFACE) {

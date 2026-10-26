@@ -8,6 +8,7 @@ import {
   resolveTaskLink,
 } from '../../src/cli/app.ts';
 import { type CommandIo, openApp } from '../../src/cli/commands.ts';
+import { PLAIN_DISPLAY } from '../../src/terminal/index.ts';
 
 function createRepo(fields: Partial<Repo>): Repo {
   return {
@@ -36,6 +37,8 @@ function createIo(repos: Repo[], root: string | null) {
       readQueue: () => Promise.reject(new Error('not in this test')),
       readRepos: () => Promise.resolve({ repos }),
     },
+    display: PLAIN_DISPLAY,
+    home: undefined,
     cwd: '/code/shop/src',
     write: (line = '') => out.push(line),
     openApp: (link) => {

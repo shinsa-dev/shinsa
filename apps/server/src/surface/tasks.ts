@@ -7,6 +7,7 @@ import {
   TASK_PRIORITIES,
   type TaskDiff,
 } from '@shinsa/core';
+import { type Display, describeTable, type Tone } from '../terminal/index.ts';
 import type { FieldSpec, Values } from './fields.ts';
 import {
   findAccount,
@@ -47,10 +48,30 @@ interface ChatPage {
   next: number | null;
 }
 
-function describeTaskLine(task: TaskView) {
-  const state = task.decision ? task.decision.title : task.status;
-  const repo = task.repo ? ` · ${task.repo}` : '';
-  return `${task.handle ?? task.id}  ${task.title}  (${state}${repo})`;
+const PAUSED_GATES: ReadonlySet<string> = new Set(['failure', 'configuration', 'sign_in']);
+
+const SETTLED_TONES: Partial<Record<TaskView['stage'], Tone>> = {
+  merged: 'success',
+  done: 'success',
+  cancelled: 'dim',
+};
+
+function resolveTaskTone(task: TaskView): Tone {
+  if (task.decision) return PAUSED_GATES.has(task.decision.type) ? 'danger' : 'warning';
+  return SETTLED_TONES[task.stage] ?? 'accent';
+}
+
+function formatTasks(tasks: TaskView[], display: Display) {
+  if (tasks.length === 0) return 'No tasks.';
+  const repos = tasks.some((task) => task.repo);
+  const rows = tasks.map((task) => [
+    { text: task.handle ?? task.id, tone: 'bold' as const },
+    task.title,
+    { text: task.decision ? task.decision.title : task.status, tone: resolveTaskTone(task) },
+    ...(repos ? [{ text: task.repo ?? '', tone: 'dim' as const }] : []),
+  ]);
+  const headers = ['Task', 'Title', 'Status', ...(repos ? ['Repository'] : [])];
+  return describeTable(display, { headers, rows }).join('\n');
 }
 
 function describeEntry(entry: ChatPage['entries'][number], roles: Map<string, string>) {
@@ -143,7 +164,7 @@ export const TASK_SPECS: SurfaceSpec[] = [
       const query = params.toString();
       return query ? `/api/tasks?${query}` : '/api/tasks';
     },
-    format: ({ tasks }) => (tasks.length === 0 ? 'No tasks.' : tasks.map(describeTaskLine).join('\n')),
+    format: ({ tasks }, _values, display) => formatTasks(tasks, display),
   }),
   defineRead<TaskDetail>({
     path: ['tasks', 'show'],

@@ -1,4 +1,5 @@
 import { DomainError } from '@shinsa/core';
+import { selectClosest } from '../terminal/index.ts';
 
 type FieldKind = 'text' | 'number' | 'integer' | 'boolean' | 'choice' | 'list' | 'json';
 
@@ -112,7 +113,10 @@ function readFlag(fields: FieldSpec[], arg: string): FlagRead {
   const negated = flag.startsWith('--no-') ? selectFlagField(fields, `--${flag.slice(5)}`) : null;
   if (negated?.kind === 'boolean' && inline !== null) refuse(`${flag} takes no value.`);
   if (negated?.kind === 'boolean') return { field: negated, raw: null, negated: true };
-  return refuse(`Unknown option ${flag}. Add --help to see the options.`);
+  const flags = fields.filter((field) => !field.positional).map((field) => serializeFlag(field.name));
+  const closest = flag.startsWith('--no-') ? null : selectClosest(flag, [...flags, '--json']);
+  const hint = closest ? ` Did you mean ${closest}?` : '';
+  return refuse(`Unknown option ${flag}.${hint} Add --help to see the options.`);
 }
 
 function describeArgument(field: FieldSpec) {

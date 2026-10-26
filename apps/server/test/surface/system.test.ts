@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ProgramVersion, VersionsSnapshot } from '@shinsa/core';
-import { createAccountsSnapshot, createFakeClient, runSpec } from './fixtures.ts';
+import { COLOR_DISPLAY, createAccountsSnapshot, createFakeClient, runSpec } from './fixtures.ts';
 
 const SNAPSHOT = createAccountsSnapshot();
 
@@ -218,13 +218,61 @@ describe('the server', () => {
     const fake = createFakeClient({
       '/api/queue': {
         briefing: null,
-        decisions: [{ label: 'Review', title: 'Add search', url: 'http://x/tasks/1' }],
-        working: [{ label: 'Building', title: 'Fix scroll' }],
+        decisions: [
+          {
+            taskId: 't1',
+            handle: 'SW-1',
+            label: 'Review',
+            kind: 'review',
+            title: 'Add search',
+            url: 'http://x/tasks/SW-1',
+          },
+          {
+            taskId: 't2',
+            handle: 'SW-2',
+            label: 'Merge',
+            kind: 'merge',
+            title: 'Ship it',
+            url: 'http://x/tasks/SW-2',
+          },
+          {
+            taskId: 't3',
+            handle: 'SW-3',
+            label: 'Paused',
+            kind: 'failure',
+            title: 'Broke',
+            url: 'http://x/tasks/SW-3',
+          },
+        ],
+        working: [
+          {
+            taskId: '01234567-89ab',
+            handle: null,
+            label: 'building',
+            kind: 'building',
+            title: 'Fix scroll',
+            url: 'http://x/tasks/0',
+          },
+        ],
       },
     });
-    expect((await runSpec(fake, ['queue'])).text).toBe(
-      'Needs you (1)\n  Review    Add search  http://x/tasks/1\nAgents working (1)\n  Building  Fix scroll'
-    );
+    expect((await runSpec(fake, ['queue'])).text.split('\n')).toEqual([
+      'Needs you  3',
+      '  SW-1      Review    Add search  http://x/tasks/SW-1',
+      '  SW-2      Merge     Ship it     http://x/tasks/SW-2',
+      '  SW-3      Paused    Broke       http://x/tasks/SW-3',
+      '',
+      'Agents working  1',
+      '  01234567  building  Fix scroll',
+    ]);
+    const colored = (await runSpec(fake, ['queue'], COLOR_DISPLAY)).text.split('\n');
+    expect(colored[0]).toBe('\u001b[1mNeeds you\u001b[22m  \u001b[2m3\u001b[22m');
+    expect(colored[1]).toContain('\u001b[33mReview\u001b[39m');
+    expect(colored[2]).toContain('\u001b[32mMerge\u001b[39m');
+    expect(colored[3]).toContain('\u001b[31mPaused\u001b[39m');
+    expect(colored[6]).toContain('\u001b[36mbuilding\u001b[39m');
+    const quiet = createFakeClient({ '/api/queue': { briefing: null, decisions: [], working: [] } });
+    expect((await runSpec(quiet, ['queue'])).text).toBe('Nothing needs you, and no agent is working.');
   });
 
   test('activity lists what agents did on your behalf and from which task, or that nothing happened yet', async () => {
@@ -264,6 +312,10 @@ describe('the server', () => {
     expect((await runSpec(fake, ['setup', 'check'])).text).toBe(
       'ok   git: 2.50\nfail gh: not found (brew install gh)'
     );
+    expect((await runSpec(fake, ['setup', 'check'], COLOR_DISPLAY)).text.split('\n')).toEqual([
+      '\u001b[32m✔\u001b[39m git: 2.50',
+      '\u001b[31m✖\u001b[39m gh: not found \u001b[2m(brew install gh)\u001b[22m',
+    ]);
     const unfinished = createFakeClient({ '/api/onboarding': status(false) });
     expect((await runSpec(unfinished, ['setup', 'status'])).text).toContain('Setup is not finished.');
   });

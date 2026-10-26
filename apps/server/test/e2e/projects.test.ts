@@ -8,7 +8,7 @@ import { type CliIo, runCli } from '../../src/cli/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EvidenceStore } from '../../src/store/index.ts';
-import { createTestOnboarding } from '../helpers/index.ts';
+import { createTestOnboarding, createTestTerminal } from '../helpers/index.ts';
 import { World } from './harness.ts';
 
 setDefaultTimeout(30_000);
@@ -52,6 +52,7 @@ async function open() {
       engine: { bundled: false, uid: 0, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
       runEngine: () => Promise.reject(new Error('not in this test')),
       onShutdown: () => undefined,
+      terminal: createTestTerminal(),
     };
     const code = await runCli(args, io);
     return { code, text: out.join('\n') };

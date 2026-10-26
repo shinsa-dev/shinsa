@@ -6,6 +6,14 @@ import {
   type ServerHealth,
   type ShinsaBundle,
 } from '../instance/index.ts';
+import {
+  type Display,
+  describeFields,
+  describeInline,
+  describeMark,
+  type Progress,
+  type Tone,
+} from '../terminal/index.ts';
 import { createSurfaceClient } from './api.ts';
 import { resolveEngineTarget } from './app.ts';
 
@@ -23,7 +31,14 @@ export interface EngineControl {
 
 export interface EngineIo extends EngineControl {
   base: string;
+  display: Display;
   write: (line?: string) => void;
+  startProgress: (text: string) => Progress;
+}
+
+export interface CommandVersion {
+  version: string;
+  commit: string | null;
 }
 
 export const HUMAN_ONLY_ENGINE_COMMANDS = ['stop', 'restart', 'engine'] as const;
@@ -49,6 +64,27 @@ export async function readHealth(base: string): Promise<ServerHealth | null> {
 
 function describeEngine(health: ServerHealth) {
   return `Shinsa ${describeVersion(health)}, pid ${health.pid}`;
+}
+
+export function describeDuration(ms: number) {
+  return ms < 1000 ? `${Math.max(0, Math.round(ms))}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+function writeOutcome(io: EngineIo, tone: Tone, symbol: 'check' | 'dot', text: string, detail: string) {
+  const { style } = io.display;
+  const tail = detail ? ` ${style.dim(describeInline(style, detail))}` : '';
+  io.write(describeMark(style, tone, symbol, `${text}${tail}`));
+}
+
+async function withProgress<T>(io: EngineIo, text: string, work: () => Promise<T>) {
+  const progress = io.startProgress(text);
+  const started = Date.now();
+  try {
+    const result = await work();
+    return { result, took: describeDuration(Date.now() - started) };
+  } finally {
+    progress.stop();
+  }
 }
 
 function describeWait(io: EngineControl) {
@@ -101,28 +137,36 @@ async function assertEngineJob(io: EngineControl) {
 export async function startEngine(io: EngineIo) {
   const running = await readHealth(io.base);
   if (running) {
-    io.write(`The engine is already running: ${describeEngine(running)}.`);
+    writeOutcome(io, 'success', 'dot', 'The engine is already running.', `${describeEngine(running)}.`);
     return;
   }
   await assertEngineJob(io);
-  await runLaunchctl(io, ['kickstart', resolveEngineTarget(io.uid)]);
-  const health = await waitForEngine(io, () => true);
-  io.write(`Started the engine: ${describeEngine(health)}.`);
+  const { result: health, took } = await withProgress(io, 'Starting the engine', async () => {
+    await runLaunchctl(io, ['kickstart', resolveEngineTarget(io.uid)]);
+    return waitForEngine(io, () => true);
+  });
+  writeOutcome(io, 'success', 'check', `Started the engine in ${took}.`, `${describeEngine(health)}.`);
 }
 
 export async function stopEngine(io: EngineIo) {
   await assertEngineJob(io);
   if (!(await readHealth(io.base))) {
-    io.write('The engine is not running.');
+    writeOutcome(io, 'dim', 'dot', 'The engine is not running.', '');
     return;
   }
-  await runLaunchctl(io, ['kill', 'SIGTERM', resolveEngineTarget(io.uid)]);
-  const stopped = await waitFor(io, async () => ((await readHealth(io.base)) ? null : true));
-  if (!stopped) {
-    throw new Error(`The engine is still stopping after ${describeWait(io)}. \`shinsa logs\` shows why.`);
-  }
-  io.write(
-    'Stopped the engine. Runs it cut off resume when it starts again: `shinsa start`, the Shinsa app or any command that needs it.'
+  const { took } = await withProgress(io, 'Stopping the engine', async () => {
+    await runLaunchctl(io, ['kill', 'SIGTERM', resolveEngineTarget(io.uid)]);
+    const stopped = await waitFor(io, async () => ((await readHealth(io.base)) ? null : true));
+    if (!stopped) {
+      throw new Error(`The engine is still stopping after ${describeWait(io)}. \`shinsa logs\` shows why.`);
+    }
+  });
+  writeOutcome(
+    io,
+    'success',
+    'check',
+    `Stopped the engine in ${took}.`,
+    'Runs it cut off resume when it starts again: `shinsa start`, the Shinsa app or any command that needs it.'
   );
 }
 
@@ -134,17 +178,18 @@ export async function restartEngine(io: EngineIo, whenIdle: boolean) {
     const client = createSurfaceClient(io.base, `cli:${Bun.randomUUIDv7()}`);
     const answer = await client.post<{ restarting: boolean }>('/api/engine/restart', { when: 'idle' });
     if (!answer.restarting) {
-      io.write('The engine restarts once no agent is mid-turn.');
+      writeOutcome(io, 'info', 'dot', 'The engine restarts once no agent is mid-turn.', '');
       return;
     }
-  } else {
-    await runLaunchctl(io, ['kickstart', '-k', resolveEngineTarget(io.uid)]);
   }
-  const health = await waitForEngine(io, (answer) => answer.pid !== before?.pid);
-  io.write(`Restarted the engine: ${describeEngine(health)}.`);
+  const { result: health, took } = await withProgress(io, 'Restarting the engine', async () => {
+    if (!whenIdle) await runLaunchctl(io, ['kickstart', '-k', resolveEngineTarget(io.uid)]);
+    return waitForEngine(io, (answer) => answer.pid !== before?.pid);
+  });
+  writeOutcome(io, 'success', 'check', `Restarted the engine in ${took}.`, `${describeEngine(health)}.`);
 }
 
-export function resolveCommandVersion(bundle: ShinsaBundle | null = BUNDLE) {
+export function resolveCommandVersion(bundle: ShinsaBundle | null = BUNDLE): CommandVersion {
   const instance = createServerInstance(bundle?.commit ?? null, 0, bundle);
   return { version: instance.version, commit: instance.commit };
 }
@@ -156,13 +201,32 @@ export async function printVersion(io: EngineIo, json: boolean, bundle: ShinsaBu
     io.write(JSON.stringify({ command, engine }, null, 2));
     return;
   }
-  io.write(`shinsa ${describeVersion(command)}`);
-  if (!engine) {
-    io.write('Engine: not running');
-    return;
+  const { style } = io.display;
+  const engineLine = engine
+    ? `${describeVersion(engine)}, ${style.dim(`pid ${engine.pid}, protocol ${engine.protocol}`)}`
+    : describeMark(style, 'danger', 'dot', 'Not running');
+  for (const line of describeFields(
+    io.display,
+    [
+      ['Command', describeVersion(command)],
+      ['Engine', engineLine],
+    ],
+    0
+  )) {
+    io.write(line);
   }
-  io.write(`Engine: ${describeEngine(engine)}, protocol ${engine.protocol}`);
-  if (io.bundled && engine.version !== command.version) {
-    io.write('The engine runs another version than the app carries. `shinsa restart` starts the app’s.');
+  if (engine && io.bundled && engine.version !== command.version) {
+    io.write();
+    io.write(
+      describeMark(
+        style,
+        'warning',
+        'warning',
+        describeInline(
+          style,
+          'The engine runs another version than the app carries. `shinsa restart` starts the app’s.'
+        )
+      )
+    );
   }
 }
