@@ -75,7 +75,7 @@ describe('listHumanMessages', () => {
     expect(listHumanMessages(createTask({ id: 't' }))).toEqual([]);
   });
 
-  it('shows a message Shinsa received but has not routed, and one still on its way, as pending', () => {
+  it('shows a message still on its way as sending and one Shinsa has not routed yet as queued', () => {
     const task = createTask({
       id: 't',
       activity: [activity({ at: 1_000, kind: 'message', detail: 'Use tabs' })],
@@ -89,14 +89,50 @@ describe('listHumanMessages', () => {
       ])
     ).toEqual([
       { at: 1_000, text: 'Use tabs' },
-      { at: 9_000, text: 'Also add search', pending: true },
-      { at: 10_000, text: 'And dark mode', pending: true },
+      { at: 9_000, text: 'Also add search', status: 'queued' },
+      { at: 10_000, text: 'And dark mode', status: 'sending' },
     ]);
     expect(listHumanMessages(task, [{ at: 7_000, text: 'Use tabs' }])).toContainEqual({
       at: 7_000,
       text: 'Use tabs',
-      pending: true,
+      status: 'sending',
     });
+  });
+
+  it('matches each landed message to one sent message, so a repeated message stays sending until it lands too', () => {
+    const task = createTask({ id: 't', inbox: [{ id: 'm1', at: 1_000, text: 'test' }] });
+    expect(
+      listHumanMessages(task, [
+        { at: 900, text: 'test' },
+        { at: 1_100, text: 'test' },
+      ])
+    ).toEqual([
+      { at: 1_000, text: 'test', status: 'queued' },
+      { at: 1_100, text: 'test', status: 'sending' },
+    ]);
+  });
+
+  it('notes a message that needs no reply, and keeps one that could not be delivered with the reason', () => {
+    const task = createTask({
+      id: 't',
+      activity: [
+        activity({ at: 1, kind: 'asked', detail: 'Answer this' }),
+        activity({ at: 2, kind: 'message', detail: 'Thanks', noted: true }),
+        activity({
+          at: 3,
+          actor: 'shinsa',
+          kind: 'failure',
+          detail: 'This task is finished.\n\nYour message: More?',
+          undelivered: { text: 'More?', reason: 'This task is finished.' },
+        }),
+      ],
+      inbox: [{ id: 'm1', at: 4, text: 'Answer this' }],
+    });
+    expect(listFollowUpMessages(task)).toEqual([
+      { at: 2, text: 'Thanks', status: 'noted' },
+      { at: 3, text: 'More?', status: 'undelivered', reason: 'This task is finished.' },
+      { at: 4, text: 'Answer this', status: 'queued' },
+    ]);
   });
 });
 
@@ -128,6 +164,15 @@ describe('resolveRunMessages', () => {
     const { byRun } = resolveRunMessages([done, second], [{ at: 150, text: 'hey!' }]);
     expect(byRun.get('a')).toEqual([]);
     expect(byRun.get('b')).toEqual([{ at: 150, text: 'hey!' }]);
+    const unanswered = resolveRunMessages(
+      [done, second],
+      [
+        { at: 150, text: 'thanks', status: 'noted' },
+        { at: 160, text: 'More?', status: 'undelivered', reason: 'This task is finished.' },
+      ]
+    );
+    expect(unanswered.byRun.get('a')?.map((message) => message.text)).toEqual(['thanks', 'More?']);
+    expect(unanswered.byRun.get('b')).toEqual([]);
     const waiting = resolveRunMessages([done], [{ at: 150, text: 'hey!' }]);
     expect(waiting.byRun.get('a')).toEqual([{ at: 150, text: 'hey!' }]);
   });
@@ -155,15 +200,20 @@ describe('resolveTimeline', () => {
     expect(only(items, 'human').every((item) => item.attachments.length === 0)).toBe(true);
   });
 
-  it('marks a message that is still on its way as pending', () => {
+  it('keeps each message’s status, and the reason one was not delivered', () => {
     const items = resolveTimeline(
       [],
       [
         { at: 5, text: 'sent' },
-        { at: 6, text: 'on its way', pending: true },
+        { at: 6, text: 'on its way', status: 'sending' },
+        { at: 7, text: 'refused', status: 'undelivered', reason: 'This task is finished.' },
       ]
     );
-    expect(only(items, 'human').map((item) => item.pending ?? false)).toEqual([false, true]);
+    expect(only(items, 'human').map(({ status, reason }) => ({ status, reason }))).toEqual([
+      { status: undefined, reason: undefined },
+      { status: 'sending', reason: undefined },
+      { status: 'undelivered', reason: 'This task is finished.' },
+    ]);
   });
 
   it('leaves a subagent’s own steps and the run notices out of the main timeline', () => {

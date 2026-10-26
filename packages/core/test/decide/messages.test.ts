@@ -214,7 +214,7 @@ describe('the inbox', () => {
     const [message] = harness.task(taskId).inbox ?? [];
     expect(message).toMatchObject({ text: 'Use the new API.' });
     const messageId = message?.id ?? '';
-    harness.send({ type: 'message.route', taskId, messageId, kind: 'feedback' });
+    harness.send({ type: 'message.route', taskId, messageIds: [messageId], kind: 'feedback' });
     expect(harness.task(taskId).inbox).toEqual([]);
     expect(harness.lastEffect('run.steer')).toEqual({
       kind: 'run.steer',
@@ -225,7 +225,9 @@ describe('the inbox', () => {
       kind: 'message',
       detail: 'Use the new API.',
     });
-    expect(harness.send({ type: 'message.route', taskId, messageId, kind: 'feedback' }).events).toEqual([]);
+    expect(
+      harness.send({ type: 'message.route', taskId, messageIds: [messageId], kind: 'feedback' }).events
+    ).toEqual([]);
 
     const settled = createTask(harness, { request: 'Finished' });
     shipAndMerge(harness, settled);
@@ -244,7 +246,7 @@ describe('the inbox', () => {
     harness.send({
       type: 'message.route',
       taskId,
-      messageId: first?.id ?? '',
+      messageIds: [first?.id ?? ''],
       kind: 'new_round',
       title: 'Add an export button',
       why: 'New work.',
@@ -259,7 +261,7 @@ describe('the inbox', () => {
     harness.send({
       type: 'message.drop',
       taskId,
-      messageId: second?.id ?? '',
+      messageIds: [second?.id ?? ''],
       reason: 'This task is finished.',
     });
     expect(harness.task(taskId).inbox).toEqual([]);
@@ -268,8 +270,62 @@ describe('the inbox', () => {
       kind: 'failure',
       text: 'Could not deliver your message',
       detail: 'This task is finished.\n\nYour message: Also dark mode',
+      undelivered: { text: 'Also dark mode', reason: 'This task is finished.' },
     });
-    expect(harness.send({ type: 'message.drop', taskId, messageId: 'gone', reason: 'x' }).events).toEqual([]);
+    expect(harness.send({ type: 'message.drop', taskId, messageIds: ['gone'], reason: 'x' }).events).toEqual(
+      []
+    );
+  });
+
+  test('messages routed together reach the agent as one message, and each stays in the chat on its own', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const run = harness.activeRun(taskId);
+    harness.send({ type: 'message.receive', taskId, text: 'Use the new API.' });
+    harness.send({ type: 'message.receive', taskId, text: 'And keep the old one working.' });
+    harness.send({ type: 'message.receive', taskId, text: 'Later' });
+    const [first, second, later] = harness.task(taskId).inbox ?? [];
+    const routed = harness.send({
+      type: 'message.route',
+      taskId,
+      messageIds: [second?.id ?? '', first?.id ?? ''],
+      kind: 'feedback',
+    });
+    expect(routed.effects.filter((effect) => effect.kind === 'run.steer')).toEqual([
+      { kind: 'run.steer', runId: run.id, text: 'Use the new API.\n\nAnd keep the old one working.' },
+    ]);
+    expect(harness.task(taskId).inbox?.map((message) => message.id)).toEqual([later?.id ?? '']);
+    expect(
+      harness.task(taskId).activity.flatMap((entry) => (entry.kind === 'message' ? [entry.detail] : []))
+    ).toEqual(['Use the new API.', 'And keep the old one working.']);
+  });
+
+  test('messages that need nothing are noted in the chat, and new work from several messages is one round', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    harness.send({ type: 'message.receive', taskId, text: 'Thanks' });
+    harness.send({ type: 'message.receive', taskId, text: 'Looks good' });
+    const thanks = (harness.task(taskId).inbox ?? []).map((message) => message.id);
+    harness.send({ type: 'message.route', taskId, messageIds: thanks, kind: 'acknowledge' });
+    expect(harness.task(taskId).activity.slice(-2)).toMatchObject([
+      { kind: 'message', detail: 'Thanks', noted: true },
+      { kind: 'message', detail: 'Looks good', noted: true },
+    ]);
+
+    harness.send({ type: 'message.receive', taskId, text: 'Add an export button' });
+    harness.send({ type: 'message.receive', taskId, text: 'as CSV' });
+    const work = (harness.task(taskId).inbox ?? []).map((message) => message.id);
+    harness.send({ type: 'message.route', taskId, messageIds: work, kind: 'new_round', shape: 'change' });
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(2);
+    expect(harness.task(taskId).rounds?.at(-1)).toMatchObject({
+      status: 'waiting',
+      request: 'Add an export button\n\nas CSV',
+    });
+    expect(
+      harness
+        .task(taskId)
+        .activity.flatMap((entry) => (entry.kind === 'round' && entry.detail ? [entry.detail] : []))
+    ).toEqual(['Add an export button', 'as CSV']);
   });
 });
 

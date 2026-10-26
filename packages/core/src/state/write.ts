@@ -3,7 +3,9 @@ import { writeEntry } from './draft.ts';
 import type { ShinsaState } from './project.ts';
 
 type ActivityEntry = Pick<Activity, 'actor' | 'kind' | 'text'> &
-  Partial<Pick<Activity, 'detail' | 'evidenceId' | 'runId' | 'gateType' | 'comments'>>;
+  Partial<
+    Pick<Activity, 'detail' | 'evidenceId' | 'runId' | 'gateType' | 'comments' | 'noted' | 'undelivered'>
+  >;
 
 const ACTIVITY_LIMIT = 200;
 

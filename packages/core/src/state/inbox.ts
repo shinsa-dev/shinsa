@@ -35,6 +35,7 @@ export function applyInboxEvent(state: ShinsaState, event: InboxEvent) {
         kind: 'failure',
         text: 'Could not deliver your message',
         detail: `${event.reason}\n\nYour message: ${message.text}`,
+        undelivered: { text: message.text, reason: event.reason },
       });
     }
   }

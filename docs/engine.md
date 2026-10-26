@@ -515,21 +515,41 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/server/sr
   code on a task with no repository binds one as it starts (A task without a repository, above).
 - **Accepted at once, routed after.** A message you write is accepted before anything is classified
   (`routeUserCommand` on the socket and `POST /api/commands`): it becomes `message.receive`, which core checks and keeps
-  in the task's `inbox`, and the acknowledgement and the state push carry it straight away, so the chat shows it as
-  sent while the classifier still reads it (the web also shows it from the moment you press send, until the state has
-  it: `lib/tasks/outbox.ts`). `MessageInbox` (`triage/inbox.ts`) then asks the classifier for every message in an
-  inbox at once and routes them in the order they were sent (`message.route`, command id `message.route:<message>`).
-  The classifier's answer is a typed decision (`choice` of `acknowledge`, `feedback`, `new_round` or `separate_task`,
+  in the task's `inbox`, and the acknowledgement and the state push carry it straight away. `MessageInbox`
+  (`triage/inbox.ts`) then routes each task's inbox, one task at a time and in the order sent: it takes everything
+  waiting in the inbox, asks the classifier once about all of it (the texts joined by a blank line), read against the
+  task as it is at that moment, and routes it as one (`message.route` with `messageIds`, command id
+  `message.route:<ids>`). Messages that arrive while the classifier reads wait for the next pass, which reads the task
+  as the first pass left it: a message sent while the follow-up it started is running steers that agent rather than
+  being read as a message to a resting task. The classifier's answer is a typed decision (`choice` of `acknowledge`,
+  `feedback`, `new_round` or `separate_task`,
   each with what it means where the task is), plus a why (asked first), a title and, for new work, the kind of work (the
   six shapes); it travels on `message.route` and is recorded with it, so replay never asks the model. `feedback` keeps
   the behaviour of What a message does (below): it steers, revises, sends back, fixes or follows up. `acknowledge` is
   only recorded. `new_round` queues the next round. `separate_task` becomes a split-off suggestion (below). When the
-  model is off or fails, the message is feedback. A message the task can no
-  longer take by the time it is routed (it was closed meanwhile) is dropped with core's reason (`message.drop`), which
-  the activity shows. A message still in an inbox at shutdown is routed on the next start. An agent's
+  model is off, fails or does not answer within 30 s (`CLASSIFY_TIMEOUT_MS`), the messages are feedback. Messages the
+  task can no longer take by the time they are routed (it was closed meanwhile) are dropped with core's reason
+  (`message.drop`), and a route that breaks for any other reason is dropped too ("Shinsa could not deliver it. Send
+  it again."), so a message never waits in an inbox for ever. Messages still in an inbox at shutdown are routed on
+  the next start. An agent's
   `tasks_message` without `as` is classified before it is dispatched, since the agent waits for the result. The
   receipt is taken over the command as you sent it, so the same command id resent after a reconnect is answered from
   its receipt and never accepted twice.
+- **Queued messages.** Several messages in a row reach the task in order, never lost and never stuck:
+  - **Routed together, delivered as one.** Messages routed in one pass are one delivery: one steer, one follow-up, one
+    fix or one new round whose request is their texts in order, so a burst of short messages is one turn of the agent,
+    not one turn each. The chat still shows each as its own bubble (one `task.messaged` each).
+  - **While an agent turn runs**, a delivered message steers it (`run.steer`): Claude folds it into the running turn
+    and Codex sends it with `turn/steer`. When the turn can no longer take it (it is ending, or the provider cannot
+    steer), it is the agent's next turn (`message.deliver`), and a steer the agent never answered comes back in
+    `undelivered` and is delivered as the next turn after `run.end` (Steering by prompt id, below). Messages sent
+    while the run waits to start are held and steered in once its session exists.
+  - **After the agent is idle**, a message starts the next turn at once: a follow-up on a resting task, a fix, a
+    revised plan or a new round, as What a message does (below) says.
+  - **Every message ends in a state you can see** (`docs/design.md`, 9): "Sending" until the server accepts it,
+    "Queued" while it waits in the inbox, then delivered (no line), noted as needing no reply (`acknowledge`, the
+    activity entry's `noted`), or not delivered with the reason (the drop's activity entry keeps the text and the
+    reason as `undelivered`).
 - **One active round, and when the next one starts.** A new round waits (`round.queued`, round status `waiting`, at
   most five waiting) and
   starts by itself once the current round rests (`startQueuedRounds`, after every command, like `releaseWaiting`):

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
+import { describeMessageStatus, resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { listOutboxMessages } from '@/lib/tasks/outbox.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
@@ -86,5 +86,24 @@ describe('sendTaskMessage', () => {
       'Verifying the setup again.'
     );
     commands.restore();
+  });
+});
+
+describe('describeMessageStatus', () => {
+  it('says where a message is until the agent has it, and why one was not delivered', () => {
+    expect(describeMessageStatus({})).toBeNull();
+    expect(describeMessageStatus({ status: 'sending' })).toEqual({ text: 'Sending', tone: 'waiting' });
+    expect(describeMessageStatus({ status: 'queued' })).toEqual({ text: 'Queued', tone: 'waiting' });
+    expect(describeMessageStatus({ status: 'noted' })).toEqual({
+      text: 'Noted. It needs no reply.',
+      tone: 'quiet',
+    });
+    expect(
+      describeMessageStatus({ status: 'undelivered', reason: 'This task is finished. Start a new one.' })
+    ).toEqual({ text: 'Not delivered. This task is finished. Start a new one.', tone: 'refused' });
+    expect(describeMessageStatus({ status: 'undelivered' })).toEqual({
+      text: 'Not delivered.',
+      tone: 'refused',
+    });
   });
 });

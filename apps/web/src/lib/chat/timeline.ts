@@ -18,10 +18,13 @@ import {
 } from '@shinsa/core';
 import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-describe.ts';
 
+export type MessageStatus = 'sending' | 'queued' | 'noted' | 'undelivered';
+
 export interface HumanMessage {
   at: number;
   text: string;
-  pending?: boolean;
+  status?: MessageStatus;
+  reason?: string;
 }
 
 export interface ToolCall {
@@ -37,7 +40,10 @@ export interface ToolCall {
 
 export type TimelineItem =
   | { kind: 'instructions'; key: string; at: number; text: string; first: boolean }
-  | { kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[]; pending?: boolean }
+  | ({ kind: 'human'; key: string; at: number; text: string; attachments: ChatAttachment[] } & Pick<
+      HumanMessage,
+      'status' | 'reason'
+    >)
   | { kind: 'agent'; key: string; at: number; text: string; phase: 'interim' | 'final' }
   | { kind: 'tools'; key: string; at: number; calls: ToolCall[] }
   | { kind: 'handover'; key: string; at: number; call: ToolCall }
@@ -77,42 +83,70 @@ export interface RunTurn {
 function listMessagesOf(task: Task, kinds: readonly string[]): HumanMessage[] {
   return task.activity
     .filter((entry) => entry.actor === 'you' && kinds.includes(entry.kind))
-    .flatMap((entry) => (entry.detail ? [{ at: entry.at, text: entry.detail }] : []));
+    .flatMap((entry) => {
+      if (!entry.detail) return [];
+      return [{ at: entry.at, text: entry.detail, ...(entry.noted ? { status: 'noted' as const } : {}) }];
+    });
+}
+
+function listUndelivered(task: Task): HumanMessage[] {
+  return task.activity.flatMap((entry) => {
+    if (!entry.undelivered) return [];
+    const { text, reason } = entry.undelivered;
+    return [{ at: entry.at, text, status: 'undelivered' as const, reason }];
+  });
 }
 
 const SENT_WINDOW_MS = 5_000;
 
-function isLanded(sent: HumanMessage, landed: HumanMessage[]) {
-  return landed.some(
-    (message) => message.text.trim() === sent.text.trim() && message.at >= sent.at - SENT_WINDOW_MS
-  );
+function listUnsent(sending: HumanMessage[], landed: HumanMessage[]) {
+  const unclaimed = [...landed];
+  return sending.filter((sent) => {
+    const index = unclaimed.findIndex(
+      (message) => message.text.trim() === sent.text.trim() && message.at >= sent.at - SENT_WINDOW_MS
+    );
+    if (index === -1) return true;
+    unclaimed.splice(index, 1);
+    return false;
+  });
 }
 
 export function listHumanMessages(task: Task, sending: HumanMessage[] = []): HumanMessage[] {
-  const received = (task.inbox ?? []).map(({ at, text }) => ({ at, text, pending: true }));
-  const landed = [...listMessagesOf(task, ['asked', 'message']), ...received];
-  const unsent = sending
-    .filter((message) => !isLanded(message, landed))
-    .map(({ at, text }) => ({ at, text, pending: true }));
+  const queued = (task.inbox ?? []).map(({ at, text }) => ({ at, text, status: 'queued' as const }));
+  const landed = [...listMessagesOf(task, ['asked', 'message']), ...listUndelivered(task), ...queued];
+  const unsent = listUnsent(sending, landed).map(({ at, text }) => ({
+    at,
+    text,
+    status: 'sending' as const,
+  }));
   return [...landed, ...unsent].sort((left, right) => left.at - right.at);
+}
+
+function isWaiting(message: HumanMessage) {
+  return message.status === 'sending' || message.status === 'queued';
 }
 
 export function listFollowUpMessages(task: Task, sending: HumanMessage[] = []): HumanMessage[] {
   const asked = new Set(listMessagesOf(task, ['asked']).map((message) => message.at));
-  return listHumanMessages(task, sending).filter((message) => message.pending || !asked.has(message.at));
+  return listHumanMessages(task, sending).filter((message) => isWaiting(message) || !asked.has(message.at));
 }
 
-function selectMessageOwner(runs: Run[], at: number) {
-  const latest = runs.filter((run) => run.startedAt <= at).at(-1);
-  if (!latest || latest.endedAt === null || latest.endedAt >= at) return latest;
-  return runs.find((run) => run.startedAt > at) ?? latest;
+function isUnanswered(message: HumanMessage) {
+  return message.status === 'noted' || message.status === 'undelivered';
+}
+
+function selectMessageOwner(runs: Run[], message: HumanMessage) {
+  const latest = runs.filter((run) => run.startedAt <= message.at).at(-1);
+  if (!latest || latest.endedAt === null || latest.endedAt >= message.at || isUnanswered(message))
+    return latest;
+  return runs.find((run) => run.startedAt > message.at) ?? latest;
 }
 
 export function resolveRunMessages(runs: Run[], messages: HumanMessage[]) {
   const preamble: HumanMessage[] = [];
   const byRun = new Map<string, HumanMessage[]>(runs.map((run) => [run.id, []]));
   for (const message of messages) {
-    const owner = selectMessageOwner(runs, message.at);
+    const owner = selectMessageOwner(runs, message);
     if (owner) byRun.get(owner.id)?.push(message);
     else preamble.push(message);
   }
@@ -300,14 +334,15 @@ export function resolveTimeline(entries: ChatEntry[], messages: HumanMessage[]):
   for (const [index, part] of mergeByTime(entries, messages).entries()) {
     if (part.type === 'human') {
       builder.group = null;
-      const { at, text, pending } = part.message;
+      const { at, text, status, reason } = part.message;
       builder.items.push({
         kind: 'human',
         key: `human-${at}-${index}`,
         at,
         text,
         attachments: [],
-        ...(pending ? { pending } : {}),
+        ...(status ? { status } : {}),
+        ...(reason ? { reason } : {}),
       });
     } else if (!isSubagentEvent(part.entry)) {
       applyEntry(builder, part.entry);

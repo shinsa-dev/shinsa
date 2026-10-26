@@ -246,10 +246,17 @@ export function ChatSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='UserMessage · delivered, and delivering while Shinsa decides what the message is'>
+      <Specimen label='UserMessage · delivered, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           <UserMessage text='Use the cheaper plan.' />
-          <UserMessage text='Also add search to the settings page.' pending />
+          <UserMessage text='Also add search to the settings page.' status='sending' />
+          <UserMessage text='And dark mode.' status='queued' />
+          <UserMessage text='Thanks!' status='noted' />
+          <UserMessage
+            text='One more thing.'
+            status='undelivered'
+            reason='This task is finished. Start a new one.'
+          />
         </div>
       </Specimen>
       <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (open a row for why)'>

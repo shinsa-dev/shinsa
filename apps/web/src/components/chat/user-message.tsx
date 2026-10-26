@@ -8,6 +8,8 @@ import { SHIMMER_LINE } from '@/components/chat/chat-line.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { describeAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
+import type { HumanMessage } from '@/lib/chat/timeline.ts';
+import { describeMessageStatus } from '@/lib/tasks/messages.ts';
 
 const CLAMP_LINES = 12;
 
@@ -51,15 +53,37 @@ function Attachments({ attachments }: { attachments: ChatAttachment[] }) {
   );
 }
 
+function MessageStatus(message: Pick<HumanMessage, 'status' | 'reason'>) {
+  const line = describeMessageStatus(message);
+  if (!line) return null;
+  if (line.tone === 'waiting') {
+    return (
+      <span className='px-1 text-2xs'>
+        <ShimmeringText text={line.text} className={SHIMMER_LINE} />
+      </span>
+    );
+  }
+  return (
+    <span
+      className={cn(
+        'max-w-4/5 px-1 text-right text-2xs',
+        line.tone === 'refused' ? 'text-red-text' : 'text-fg-2'
+      )}
+    >
+      {line.text}
+    </span>
+  );
+}
+
 export function UserMessage({
   text,
   attachments = [],
-  pending = false,
+  status,
+  reason,
 }: {
   text: string;
   attachments?: ChatAttachment[];
-  pending?: boolean;
-}) {
+} & Pick<HumanMessage, 'status' | 'reason'>) {
   const [expanded, setExpanded] = React.useState(false);
   const body = text.trim();
   if (!body && attachments.length === 0) return null;
@@ -84,11 +108,7 @@ export function UserMessage({
           {expanded ? 'Show less' : 'Show more'}
         </button>
       )}
-      {pending && (
-        <span className='px-1 text-2xs'>
-          <ShimmeringText text='Delivering' className={SHIMMER_LINE} />
-        </span>
-      )}
+      <MessageStatus status={status} reason={reason} />
     </div>
   );
 }

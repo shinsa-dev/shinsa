@@ -1,4 +1,4 @@
-import type { CommandOf } from '../commands/index.ts';
+import type { CommandOf, MessageRoute } from '../commands/index.ts';
 import {
   DomainError,
   type Gate,
@@ -12,6 +12,7 @@ import {
   type Task,
   type TaskStage,
 } from '../domain/index.ts';
+import type { EventOf } from '../events/index.ts';
 import { resolveHumanFixPrompt } from '../prompts/index.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates, listRunningRuns } from '../state/queries.ts';
@@ -180,8 +181,13 @@ function deliverMessage(decider: Decider, task: Task, delivery: Delivery, text: 
   }
 }
 
-function resolveMessageKind(command: CommandOf<'task.message'>, task: Task, scheduled: boolean): MessageKind {
-  if (command.kind) return command.kind;
+interface MessageSend extends MessageRoute {
+  taskId: string;
+  texts: string[];
+}
+
+function resolveMessageKind(send: MessageSend, task: Task, scheduled: boolean): MessageKind {
+  if (send.kind) return send.kind;
   return scheduled && isTaskResting(task) ? 'new_round' : 'feedback';
 }
 
@@ -189,14 +195,23 @@ function isOnlyRecorded(kind: MessageKind, delivery: MessageDelivery) {
   return kind === 'acknowledge' && delivery.effect !== 'supersede_question';
 }
 
-function startNewWork(decider: Decider, task: Task, command: CommandOf<'task.message'>, text: string) {
-  const number = resolveNextRoundNumber(task);
-  decider.emit({ type: 'task.messaged', taskId: task.id, text, kind: 'new_round', round: number });
+function recordMessages(
+  decider: Decider,
+  taskId: string,
+  texts: string[],
+  fields: Partial<EventOf<'task.messaged'>>
+) {
+  for (const text of texts) decider.emit({ type: 'task.messaged', taskId, text, ...fields });
+}
+
+function startNewWork(decider: Decider, task: Task, send: MessageSend, texts: string[], request: string) {
+  const round = resolveNextRoundNumber(task);
+  recordMessages(decider, task.id, texts, { kind: 'new_round', round });
   queueRound(decider, task.id, {
-    request: text,
-    title: command.title ?? null,
-    why: command.why ?? null,
-    shape: command.shape ?? null,
+    request,
+    title: send.title ?? null,
+    why: send.why ?? null,
+    shape: send.shape ?? null,
   });
 }
 
@@ -209,35 +224,42 @@ function assertMessageAccepted(state: ShinsaState, task: Task, text: string) {
   return delivery;
 }
 
+function sendMessages(decider: Decider, send: MessageSend, scheduleId: string | null) {
+  const task = decider.task(send.taskId);
+  const texts = send.texts.map((sent) => sent.trim()).filter((sent) => sent.length > 0);
+  const text = texts.join('\n\n');
+  const delivery = assertMessageAccepted(decider.state, task, text);
+  const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
+  const scheduled = scheduleId ? { scheduleId } : {};
+  if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
+    recordMessages(decider, task.id, texts, scheduled);
+    return;
+  }
+  const kind = resolveMessageKind(send, task, scheduleId !== null);
+  if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
+    recordMessages(decider, task.id, texts, { kind });
+    suggestSplitOff(decider, task.id, text, send.title ?? null, send.why ?? null);
+    return;
+  }
+  if (kind === 'new_round' || kind === 'separate_task') {
+    startNewWork(decider, task, send, texts, text);
+    return;
+  }
+  if (isOnlyRecorded(kind, delivery)) {
+    recordMessages(decider, task.id, texts, { kind });
+    return;
+  }
+  recordMessages(decider, task.id, texts, scheduled);
+  deliverMessage(decider, decider.task(task.id), delivery, text);
+}
+
 export function messageTask(
   decider: Decider,
   command: CommandOf<'task.message'>,
   scheduleId: string | null = null
 ) {
-  const task = decider.task(command.taskId);
-  const text = command.text.trim();
-  const delivery = assertMessageAccepted(decider.state, task, text);
-  const sentForYou = decider.context.onBehalf === true || scheduleId !== null;
-  if (sentForYou && listOpenGates(decider.state, task.id).length > 0) {
-    decider.emit({ type: 'task.messaged', taskId: task.id, text, ...(scheduleId ? { scheduleId } : {}) });
-    return;
-  }
-  const kind = resolveMessageKind(command, task, scheduleId !== null);
-  if (kind === 'separate_task' && hasRoomForSuggestion(task)) {
-    decider.emit({ type: 'task.messaged', taskId: task.id, text, kind });
-    suggestSplitOff(decider, task.id, text, command.title ?? null, command.why ?? null);
-    return;
-  }
-  if (kind === 'new_round' || kind === 'separate_task') {
-    startNewWork(decider, task, command, text);
-    return;
-  }
-  if (isOnlyRecorded(kind, delivery)) {
-    decider.emit({ type: 'task.messaged', taskId: task.id, text, kind });
-    return;
-  }
-  decider.emit({ type: 'task.messaged', taskId: task.id, text, ...(scheduleId ? { scheduleId } : {}) });
-  deliverMessage(decider, decider.task(task.id), delivery, text);
+  const { type: _type, text, ...route } = command;
+  sendMessages(decider, { ...route, texts: [text] }, scheduleId);
 }
 
 export function redeliverMessage(decider: Decider, command: CommandOf<'message.deliver'>) {
@@ -253,16 +275,23 @@ export function receiveMessage(decider: Decider, command: CommandOf<'message.rec
   decider.emit({ type: 'task.message_received', taskId: task.id, messageId: decider.context.newId(), text });
 }
 
+function listInboxMessages(decider: Decider, taskId: string, messageIds: string[]) {
+  const wanted = new Set(messageIds);
+  return (decider.state.tasks[taskId]?.inbox ?? []).filter((message) => wanted.has(message.id));
+}
+
 export function routeMessage(decider: Decider, command: CommandOf<'message.route'>) {
-  const { taskId, messageId, ...route } = command;
-  const message = decider.state.tasks[taskId]?.inbox?.find((candidate) => candidate.id === messageId);
-  if (!message) return;
-  decider.emit({ type: 'task.message_routed', taskId, messageId });
-  messageTask(decider, { ...route, type: 'task.message', taskId, text: message.text });
+  const { type: _type, taskId, messageIds, ...route } = command;
+  const messages = listInboxMessages(decider, taskId, messageIds);
+  if (messages.length === 0) return;
+  for (const message of messages)
+    decider.emit({ type: 'task.message_routed', taskId, messageId: message.id });
+  sendMessages(decider, { ...route, taskId, texts: messages.map((message) => message.text) }, null);
 }
 
 export function dropMessage(decider: Decider, command: CommandOf<'message.drop'>) {
-  const { taskId, messageId, reason } = command;
-  if (!decider.state.tasks[taskId]?.inbox?.some((candidate) => candidate.id === messageId)) return;
-  decider.emit({ type: 'task.message_dropped', taskId, messageId, reason });
+  const { taskId, messageIds, reason } = command;
+  for (const message of listInboxMessages(decider, taskId, messageIds)) {
+    decider.emit({ type: 'task.message_dropped', taskId, messageId: message.id, reason });
+  }
 }

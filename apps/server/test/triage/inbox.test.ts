@@ -40,20 +40,58 @@ function readMessages(engine: Engine, taskId: string) {
 }
 
 describe('the message inbox', () => {
-  test('classifies every message at once and routes them in the order they were sent', async () => {
+  test('routes messages in the order they were sent, and the ones sent meanwhile together after them', async () => {
     const { engine, taskId } = await openEngine();
     const { asked, classify } = deferredClassifier();
     const inbox = new MessageInbox(engine, classify);
     inbox.start();
     await receive(engine, taskId, 'First');
+    await until('the first message to be classified', () => asked.length === 1);
     await receive(engine, taskId, 'Second');
-    await until('both messages to be classified', () => asked.length === 2);
-    asked[1]?.answer(null);
+    await receive(engine, taskId, 'Third');
     asked[0]?.answer(null);
+    await until('the next messages to be classified', () => asked.length === 2);
+    expect(asked.map((question) => question.text)).toEqual(['First', 'Second\n\nThird']);
+    asked[1]?.answer(null);
     await inbox.settle();
     inbox.stop();
-    expect(readMessages(engine, taskId)).toEqual(['First', 'Second']);
+    expect(readMessages(engine, taskId)).toEqual(['First', 'Second', 'Third']);
     expect(engine.state.tasks[taskId]?.inbox).toEqual([]);
+  });
+
+  test('a classifier that never answers holds the messages only until its time is up', async () => {
+    const { engine, taskId } = await openEngine();
+    const warn = spyOn(log, 'warn');
+    const inbox = new MessageInbox(engine, () => new Promise(() => undefined), { classifyTimeoutMs: 20 });
+    inbox.start();
+    await receive(engine, taskId, 'test');
+    await receive(engine, taskId, 'hey!');
+    await until('the inbox to empty', () => engine.state.tasks[taskId]?.inbox?.length === 0);
+    await inbox.settle();
+    inbox.stop();
+    expect(readMessages(engine, taskId)).toEqual(['test', 'hey!']);
+    expect(warn.mock.calls.some(([, fields]) => String(fields?.error).includes('within 20 ms'))).toBe(true);
+    warn.mockRestore();
+  });
+
+  test('a route that breaks for a reason the task did not give is dropped, so the message is never left waiting', async () => {
+    const { engine, taskId } = await openEngine();
+    const error = spyOn(log, 'error');
+    const inbox = new MessageInbox(engine, () =>
+      Promise.resolve({ ...NEW_ROUND, shape: 'unknown' as MessageClass['shape'] })
+    );
+    inbox.start();
+    await receive(engine, taskId, 'Also add search');
+    await until('the inbox to empty', () => engine.state.tasks[taskId]?.inbox?.length === 0);
+    await inbox.settle();
+    inbox.stop();
+    expect(engine.state.tasks[taskId]?.activity.at(-1)).toMatchObject({
+      kind: 'failure',
+      undelivered: { text: 'Also add search', reason: 'Shinsa could not deliver it. Send it again.' },
+      detail: 'Shinsa could not deliver it. Send it again.\n\nYour message: Also add search',
+    });
+    expect(error.mock.calls.some(([message]) => String(message).includes('dropping it'))).toBe(true);
+    error.mockRestore();
   });
 
   test('a classifier that throws leaves the message feedback', async () => {

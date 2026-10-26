@@ -115,7 +115,8 @@ Only these, and they win over anything below:
      answers. A delegated agent never gets a header of its own: it is a card inside the turn of the agent that
      delegated it, with the same role mark (26). The chat renders the chat protocol (`docs/engine.md`), never a
      provider's tool names. A message you send after a run ended belongs to the run that answers it
-     (`resolveRunMessages`), and a finished run's summary is never repeated under a message the next run has not
+     (`resolveRunMessages`); one no agent answers (noted as needing no reply, or not delivered) stays under the run
+     before it, and a finished run's summary is never repeated under a message the next run has not
      picked up yet (`resolveClosing`).
    - **While a run works** it shows one live card (`rounded-xl`, `bg-card`): the agent's latest
      interim message (13px, four lines at most) over a quiet `text-2xs` line with a pulse, the
@@ -270,9 +271,14 @@ Only these, and they win over anything below:
 9. **Acting never moves you.** There is no previous/next stepper on the task page; the queue
    button and ⌘K are how you move between tasks. Approving,
    merging, answering, replying or cancelling stays on the task and confirms with a toast. A chat message you
-   send shows as your bubble at once, with "Delivering" in `text-2xs` under it while Shinsa decides what it
-   is (`UserMessage`'s `pending`), shimmering for as long as it shows, the same `ShimmeringText` and `SHIMMER_LINE`
-   as the live card's "Starting"; the line goes when it is delivered.
+   send shows as your bubble at once, and a `text-2xs` line under it says where it is until the agent has it
+   (`UserMessage`'s `status`, worded by `describeMessageStatus` in `lib/tasks/messages.ts`): "Sending" until the
+   server has accepted it, then "Queued" while it waits its turn in the task's inbox, both shimmering, the same
+   `ShimmeringText` and `SHIMMER_LINE` as the live card's "Starting"; the line goes when it is delivered. Every
+   message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for one
+   the classifier read as needing nothing (no agent runs for it), or "Not delivered. ‹reason›" in `text-red-text`
+   for one the task could no longer take, which stays in the chat. Several messages sent while one is read reach
+   the agent together, as one message (`docs/engine.md` → Rounds, Queued messages).
 10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
     constant, `LAYOUT_NAMES` (`lib/preferences/layout.ts`: label, a one-line hint and the icon, read by Settings
     → Appearance, where each layout's choice shows its hint as a tooltip, and by ⌘K's Switch layout): **Desk** for

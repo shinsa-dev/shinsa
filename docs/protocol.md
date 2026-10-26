@@ -192,7 +192,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `priority` | `urgent` \| `high` \| `normal` \| `low` | how high its decisions sit in Needs you; never what runs |
 | `waitsOn` | string[] | task ids it waits on |
 | `note` | string \| null | the latest `note` an agent kept |
-| `activity` | `Activity[]` | what happened, newest last; a gate's entry names its `gateType`, and a decision sent with line comments keeps them (`comments`) |
+| `activity` | `Activity[]` | what happened, newest last; a gate's entry names its `gateType`, and a decision sent with line comments keeps them (`comments`); a message of yours that needed nothing is `noted`, and one dropped from the inbox keeps its `undelivered` text and reason |
 
 **Plan and build**
 
@@ -632,9 +632,12 @@ suggestions). The server sets `kind` from the classifier, unless the message alr
 (`triage/message.ts`, `docs/engine.md` → Rounds). Yours is accepted first and classified after: the server turns it
 into `message.receive`, which checks it like `task.message` (`message_required`, `task_settled`) and keeps it in the
 task's `inbox` (`task.message_received`); the classifier's answer comes back as `message.route` with the same `kind`,
-`title`, `why` and `shape` (`MessageRoute`), which takes it out of the inbox (`task.message_routed`) and delivers it
-exactly as `task.message` would. One the task can no longer take by then is dropped with core's refusal
-(`message.drop`, `task.message_dropped`, a failure entry in the activity). An agent's `tasks_message` is classified
+`title`, `why` and `shape` (`MessageRoute`) and the ids of the messages it routes (`messageIds`, every message
+waiting in the inbox when it was read, in the order sent), which takes them out of the inbox (one
+`task.message_routed` each) and delivers them exactly as one `task.message` with their texts joined by a blank line
+would, while the chat keeps each as its own `task.messaged`. Messages the task can no longer take by then are dropped
+with core's refusal (`message.drop` with `messageIds`, a `task.message_dropped` each, a failure entry in the
+activity that keeps the text and the reason as `undelivered`). An agent's `tasks_message` is classified
 before it is dispatched, since the agent waits for the answer.
 
 ## Commands
@@ -769,7 +772,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `run.silence` | `agents/silence.ts` | marks or clears a quiet run |
 | `message.deliver` | the supervisor, `agents/questions.ts` | redelivers a message a session never took |
 | `message.receive` | `routeUserCommand`, for your `task.message` without a `kind` | accepts the message into the task's inbox |
-| `message.route`, `message.drop` | `triage/inbox.ts` | delivers an inbox message with the classifier's answer, or drops one core refused, with the reason |
+| `message.route`, `message.drop` | `triage/inbox.ts` | delivers the messages waiting in an inbox, together, with the classifier's answer, or drops the ones core refused, with the reason |
 | `monitor.fire` | `MonitorClock` | wakes a monitor |
 | `usage_wait.resume` | `UsageResumeClock` | resumes a step after the reset |
 | `account.signed_in`, `account.removed` | the accounts service | answers that account's Sign in gates; releases bound tasks |

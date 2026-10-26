@@ -88,7 +88,8 @@ function TurnView({
           <UserMessage
             text={turn.human.text}
             attachments={turn.human.attachments}
-            pending={turn.human.pending === true}
+            status={turn.human.status}
+            reason={turn.human.reason}
           />
         </div>
       )}
@@ -225,7 +226,8 @@ export const RunSection = React.memo(function RunSectionView({
             <UserMessage
               text={opening.text}
               attachments={opening.attachments}
-              pending={opening.pending === true}
+              status={opening.status}
+              reason={opening.reason}
             />
           </div>
         )}

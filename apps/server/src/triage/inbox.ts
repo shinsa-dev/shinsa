@@ -3,18 +3,27 @@ import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { type MessageClassifier, resolveMessageRoute } from './message.ts';
 
+const CLASSIFY_TIMEOUT_MS = 30_000;
+
+const UNDELIVERED_REASON = 'Shinsa could not deliver it. Send it again.';
+
+interface InboxOptions {
+  classifyTimeoutMs?: number;
+}
+
 export class MessageInbox {
   readonly #engine: Engine;
   readonly #classify: MessageClassifier;
+  readonly #classifyTimeoutMs: number;
   readonly #working = new Map<string, Promise<void>>();
   readonly #failed = new Set<string>();
-  readonly #tails = new Map<string, Promise<void>>();
   #unsubscribe: (() => void) | null = null;
   #stopped = false;
 
-  constructor(engine: Engine, classify: MessageClassifier) {
+  constructor(engine: Engine, classify: MessageClassifier, options: InboxOptions = {}) {
     this.#engine = engine;
     this.#classify = classify;
+    this.#classifyTimeoutMs = options.classifyTimeoutMs ?? CLASSIFY_TIMEOUT_MS;
   }
 
   start() {
@@ -25,10 +34,8 @@ export class MessageInbox {
   sync() {
     if (this.#stopped) return;
     for (const task of Object.values(this.#engine.state.tasks)) {
-      for (const message of task.inbox ?? []) {
-        if (this.#working.has(message.id) || this.#failed.has(message.id)) continue;
-        this.#working.set(message.id, this.#take(task, message));
-      }
+      if (this.#working.has(task.id) || this.#listWaiting(task.id).length === 0) continue;
+      this.#working.set(task.id, this.#drain(task.id));
     }
   }
 
@@ -42,64 +49,80 @@ export class MessageInbox {
     this.#unsubscribe = null;
   }
 
-  async #take(task: Task, message: InboxMessage) {
-    const taskId = task.id;
-    const route = this.#resolveRoute(task, message);
-    const routed = (this.#tails.get(taskId) ?? Promise.resolve()).then(async () =>
-      this.#deliver(taskId, message, await route)
-    );
-    this.#tails.set(taskId, routed);
+  #listWaiting(taskId: string) {
+    return (this.#engine.state.tasks[taskId]?.inbox ?? []).filter((message) => !this.#failed.has(message.id));
+  }
+
+  async #drain(taskId: string) {
     try {
-      await routed;
+      for (;;) {
+        const task = this.#engine.state.tasks[taskId];
+        const batch = this.#listWaiting(taskId);
+        if (this.#stopped || !task || batch.length === 0) return;
+        await this.#deliver(taskId, batch, await this.#resolveRoute(task, batch));
+      }
     } finally {
-      this.#working.delete(message.id);
-      if (this.#tails.get(taskId) === routed) this.#tails.delete(taskId);
+      this.#working.delete(taskId);
     }
   }
 
-  async #resolveRoute(task: Task, message: InboxMessage): Promise<MessageRoute> {
+  async #resolveRoute(task: Task, batch: InboxMessage[]): Promise<MessageRoute> {
+    const text = batch.map((message) => message.text).join('\n\n');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`The classifier did not answer within ${this.#classifyTimeoutMs} ms.`)),
+        this.#classifyTimeoutMs
+      );
+    });
     try {
-      return resolveMessageRoute(await this.#classify(task, message.text));
+      return resolveMessageRoute(await Promise.race([this.#classify(task, text), timeout]));
     } catch (error) {
       log.warn(
         '[Inbox] Could not classify a message; it goes to the task unclassified, as a follow-up when the task rests',
-        {
-          taskId: task.id,
-          messageId: message.id,
-          error: describeError(error),
-        }
+        { taskId: task.id, messageIds: batch.map((message) => message.id), error: describeError(error) }
       );
       return {};
+    } finally {
+      clearTimeout(timer);
     }
   }
 
-  async #deliver(taskId: string, message: InboxMessage, route: MessageRoute) {
+  async #deliver(taskId: string, batch: InboxMessage[], route: MessageRoute) {
+    const messageIds = batch.map((message) => message.id);
     if (this.#stopped) {
-      log.info('[Inbox] Left a message in the inbox for the next start', { taskId, messageId: message.id });
+      log.info('[Inbox] Left messages in the inbox for the next start', { taskId, messageIds });
       return;
     }
     try {
       await this.#engine.dispatch(
-        { type: 'message.route', taskId, messageId: message.id, ...route },
-        { id: `message.route:${message.id}` }
+        { type: 'message.route', taskId, messageIds, ...route },
+        { id: `message.route:${messageIds.join(',')}` }
       );
     } catch (error) {
-      await this.#drop(taskId, message, error);
+      await this.#drop(taskId, messageIds, error);
     }
   }
 
-  async #drop(taskId: string, message: InboxMessage, refusal: unknown) {
+  async #drop(taskId: string, messageIds: string[], refusal: unknown) {
+    const reason = refusal instanceof DomainError ? refusal.message : UNDELIVERED_REASON;
+    if (!(refusal instanceof DomainError)) {
+      log.error('[Inbox] Could not route a message; dropping it', {
+        taskId,
+        messageIds,
+        error: describeError(refusal),
+      });
+    }
     try {
-      if (!(refusal instanceof DomainError)) throw refusal;
       await this.#engine.dispatch(
-        { type: 'message.drop', taskId, messageId: message.id, reason: refusal.message },
-        { id: `message.drop:${message.id}` }
+        { type: 'message.drop', taskId, messageIds, reason },
+        { id: `message.drop:${messageIds.join(',')}` }
       );
     } catch (error) {
-      this.#failed.add(message.id);
+      for (const messageId of messageIds) this.#failed.add(messageId);
       log.error('[Inbox] Could not route a message; it stays in the inbox until the next start', {
         taskId,
-        messageId: message.id,
+        messageIds,
         error: describeError(error),
       });
     }

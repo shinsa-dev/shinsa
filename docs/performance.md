@@ -643,7 +643,7 @@ the real data, 18 before (9 not allowed), none after. The page's JS heap after t
 collections, stays at about 26 MB on the seed (25.9 before, 26.1 after) and 19.7 MB on the real data.
 
 Not loading states, and unchanged: a busy `Button` (an action you started), the live agent's shimmering lines
-("Delivering", a running tool, "Waiting for the result…"), "Working out
+("Sending" and "Queued" under a message, a running tool, "Waiting for the result…"), "Working out
 the steps" on the progress track, and an update's toast.
 
 ### What changed and why

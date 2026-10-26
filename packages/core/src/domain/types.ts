@@ -340,6 +340,13 @@ export interface Activity {
   byTask?: string | null;
   comments?: ReviewComment[];
   round?: number;
+  noted?: boolean;
+  undelivered?: UndeliveredMessage;
+}
+
+export interface UndeliveredMessage {
+  text: string;
+  reason: string;
 }
 
 export interface TaskStack {

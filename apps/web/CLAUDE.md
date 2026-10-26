@@ -193,9 +193,12 @@ files after it.
 
 - **The server is the source of truth.** Components read `ShinsaState` from `useConnection()` and act through
   `sendCommand` / `sendCommandWithToast`; there are no optimistic writes, and acting never navigates
-  (`docs/design.md`, Where Shinsa differs, 9). The one exception is a chat message you send: it shows as delivering
+  (`docs/design.md`, Where Shinsa differs, 9). The one exception is a chat message you send: it shows as sending
   from the moment you press send (`lib/tasks/outbox.ts`, `useOutbox`) until the state has it in the task's `inbox`,
-  and leaves the outbox when the server answers either way (`docs/engine.md` → Rounds).
+  and leaves the outbox when the server answers either way; each sent message is matched to one message that
+  landed, so a repeated message stays sending until it lands too. In the inbox it shows as queued, then as
+  delivered, noted (needs no reply) or not delivered with the reason (`listHumanMessages` in `lib/chat/timeline.ts`,
+  `describeMessageStatus` in `lib/tasks/messages.ts`; `docs/engine.md` → Rounds).
 - **Setup is the server's steps.** The steps, their order, what each answer saves, going back and the accounts it
   imports all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders
   `GET /api/onboarding/flow` and sends what you pick, a folder path you add, Back or a step you open

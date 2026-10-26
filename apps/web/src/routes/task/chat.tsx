@@ -62,7 +62,11 @@ function TranscriptBlockView({
     case 'message':
       return (
         <div className={ROW}>
-          <UserMessage text={block.message.text} pending={block.message.pending === true} />
+          <UserMessage
+            text={block.message.text}
+            status={block.message.status}
+            reason={block.message.reason}
+          />
         </div>
       );
     case 'round':

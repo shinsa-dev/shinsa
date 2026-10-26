@@ -12,10 +12,21 @@ describe('UserMessage', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('shimmers Delivering under a message on its way to the server', () => {
-    const view = render(<UserMessage text='Ship it' pending />);
-    expect(view.container.querySelector('.sr-only')?.textContent).toBe('Delivering');
-    view.unmount();
+  it('shimmers Sending and Queued while a message waits, and says plainly when it needs no reply or was not delivered', () => {
+    const sending = render(<UserMessage text='Ship it' status='sending' />);
+    expect(sending.container.querySelector('.sr-only')?.textContent).toBe('Sending');
+    sending.unmount();
+    const queued = render(<UserMessage text='Ship it' status='queued' />);
+    expect(queued.container.querySelector('.sr-only')?.textContent).toBe('Queued');
+    queued.unmount();
+    const noted = render(<UserMessage text='Thanks' status='noted' />);
+    expect(noted.container.textContent).toBe('ThanksNoted. It needs no reply.');
+    noted.unmount();
+    const refused = render(
+      <UserMessage text='More?' status='undelivered' reason='This task is finished. Start a new one.' />
+    );
+    expect(refused.container.textContent).toBe('More?Not delivered. This task is finished. Start a new one.');
+    refused.unmount();
     const delivered = render(<UserMessage text='Ship it' />);
     expect(delivered.container.textContent).toBe('Ship it');
   });

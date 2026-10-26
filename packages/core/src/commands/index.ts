@@ -224,8 +224,8 @@ type SystemCommand =
   | { type: 'effect.fail'; taskId: string; title: string; detail: string }
   | { type: 'message.deliver'; taskId: string; text: string }
   | { type: 'message.receive'; taskId: string; text: string }
-  | ({ type: 'message.route'; taskId: string; messageId: string } & MessageRoute)
-  | { type: 'message.drop'; taskId: string; messageId: string; reason: string }
+  | ({ type: 'message.route'; taskId: string; messageIds: string[] } & MessageRoute)
+  | { type: 'message.drop'; taskId: string; messageIds: string[]; reason: string }
   | { type: 'runs.dispatch' }
   | { type: 'monitor.fire'; taskId: string; monitorId: string; attempt: number }
   | { type: 'run.meter'; runId: string; usage: RunUsage; sessionId?: string | null; weeklyPercent?: number }

@@ -197,7 +197,11 @@ src/
 │                        work, or another task, as a typed decision read against each round's outcome) and
 │                        routeUserCommand, which the socket and POST /api/commands send every command through: your
 │                        message is accepted into the task's inbox at once (message.receive) and inbox.ts
-│                        (MessageInbox) classifies and routes it after, in order; the receipt is taken over the
+│                        (MessageInbox) classifies and routes it after, one task at a time and in order:
+│                        everything waiting in a task's inbox is classified together against the task as it is
+│                        then and routed as one (message.route with messageIds), a classifier that does not
+│                        answer within 30 s routes it unclassified, and a route that breaks is dropped with a
+│                        reason, so no message waits for ever; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
 │                        which classifies before it dispatches; a new round or a kept suggestion that names no kind
 │                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a

@@ -33,9 +33,17 @@ describe('transcript blocks', () => {
       ['a', true],
       ['b', false],
     ]);
-    const blocks = listTranscriptBlocks(task, runs, [{ at: 5, text: 'hi' }], false);
-    expect(blocks.map((block) => block.key)).toEqual(['message-5-2', 'a', 'b']);
-    expect(blocks[1]).toMatchObject({ kind: 'run', first: false });
+    const blocks = listTranscriptBlocks(
+      task,
+      runs,
+      [
+        { at: 5, text: 'hi' },
+        { at: 5, text: 'hi' },
+      ],
+      false
+    );
+    expect(blocks.map((block) => block.key)).toEqual(['message-5-0', 'message-5-1', 'a', 'b']);
+    expect(blocks[2]).toMatchObject({ kind: 'run', first: false });
   });
 
   it('puts each round’s divider before its runs, every round’s first run leading', () => {

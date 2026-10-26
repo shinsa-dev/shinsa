@@ -378,6 +378,7 @@ function applyMessaged(state: ShinsaState, event: EventOf<'task.messaged'>) {
       ? `Sent instructions from ${describeSchedule(state, scheduleId)}`
       : describeMessage(event),
     detail: event.text,
+    ...(event.kind === 'acknowledge' ? { noted: true } : {}),
   });
 }
 

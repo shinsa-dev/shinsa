@@ -1,4 +1,5 @@
 import { type MessageEffect, resolveMessageEffect, type ShinsaState, type Task } from '@shinsa/core';
+import type { HumanMessage, MessageStatus } from '@/lib/chat/timeline.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { sendThroughOutbox } from '@/lib/tasks/outbox.ts';
 
@@ -76,4 +77,24 @@ export function sendTaskMessage(task: Task, hint: MessageHint, text: string) {
   return sendThroughOutbox(task.id, text, () =>
     sendCommandWithToast({ type: 'task.message', taskId: task.id, text }, hint.sent)
   );
+}
+
+export interface MessageStatusLine {
+  text: string;
+  tone: 'waiting' | 'quiet' | 'refused';
+}
+
+const STATUS_LINES: Record<Exclude<MessageStatus, 'undelivered'>, MessageStatusLine> = {
+  sending: { text: 'Sending', tone: 'waiting' },
+  queued: { text: 'Queued', tone: 'waiting' },
+  noted: { text: 'Noted. It needs no reply.', tone: 'quiet' },
+};
+
+export function describeMessageStatus({
+  status,
+  reason,
+}: Pick<HumanMessage, 'status' | 'reason'>): MessageStatusLine | null {
+  if (!status) return null;
+  if (status === 'undelivered') return { text: `Not delivered. ${reason ?? ''}`.trim(), tone: 'refused' };
+  return STATUS_LINES[status];
 }

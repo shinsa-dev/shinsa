@@ -21,9 +21,9 @@ export function listTranscriptBlocks(
   preamble: HumanMessage[],
   rounds: boolean
 ): TranscriptBlock[] {
-  const blocks: TranscriptBlock[] = preamble.map((message) => ({
+  const blocks: TranscriptBlock[] = preamble.map((message, index) => ({
     kind: 'message',
-    key: `message-${message.at}-${message.text.length}`,
+    key: `message-${message.at}-${index}`,
     message,
   }));
   if (!rounds) {

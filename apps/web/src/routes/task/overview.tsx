@@ -127,9 +127,10 @@ function ActivityPanel({
   return (
     <Panel title='Activity' icon='IconClock'>
       <ol className='flex flex-col'>
-        {entries.slice(0, shown).map((entry) => (
+        {entries.slice(0, shown).map((entry, index) => (
           <ActivityRow
-            key={`${entry.at}-${entry.kind}-${entry.text}`}
+            // biome-ignore lint/suspicious/noArrayIndexKey: entries can share a time and kind; the place counted from the oldest tells them apart
+            key={`${entry.at}-${entry.kind}-${entries.length - index}`}
             entry={entry}
             state={state}
             onOpenRun={onOpenRun}
