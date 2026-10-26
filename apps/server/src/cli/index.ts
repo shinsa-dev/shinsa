@@ -29,7 +29,7 @@ import {
   type Terminal,
 } from '../terminal/index.ts';
 import { createApiClient } from './api.ts';
-import { APP_BUNDLE_ID, isPathArgument, resolveEngineTarget, resolveLinkPage } from './app.ts';
+import { APP_BUNDLE_ID, isPathArgument, ownsEngineJob, resolveEngineTarget, resolveLinkPage } from './app.ts';
 import { type CommandIo, createTask, importSession, openApp, parseArgs, printStatus } from './commands.ts';
 import {
   type EngineControl,
@@ -94,8 +94,14 @@ async function runLaunchctl(args: string[]) {
 
 const UID = process.getuid?.() ?? 0;
 
-export async function kickEngine() {
-  return (await runLaunchctl(['kickstart', resolveEngineTarget(UID)])).ok;
+export async function kickEngine(
+  launchctl = runLaunchctl,
+  ownsJob: (printed: string) => boolean = ownsEngineJob
+) {
+  const target = resolveEngineTarget(UID);
+  const printed = await launchctl(['print', target]);
+  if (!printed.ok || !ownsJob(printed.output)) return false;
+  return (await launchctl(['kickstart', target])).ok;
 }
 
 export interface WakeOptions {
@@ -203,7 +209,7 @@ export function createProcessIo(options: ProcessOptions = {}): CliIo {
     openApp: createOpenApp(base),
     readRepoRoot,
     wakeEngine: createWakeEngine(base),
-    engine: { bundled: IS_BUNDLED, uid: UID, launchctl: runLaunchctl },
+    engine: { bundled: IS_BUNDLED, uid: UID, launchctl: runLaunchctl, ownsJob: ownsEngineJob },
     runEngine: (env) => runEngineWithLoginEnv(env, isTerminal, bundle),
     onShutdown: stopOnSignal,
     terminal: resolveTerminal(Bun.env, process.stdout, process.stderr),

@@ -1,10 +1,18 @@
 import { describe, expect, test } from 'bun:test';
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Repo, UserCommand } from '@shinsa/core';
 import {
+  isJobProgram,
   isPathArgument,
+  ownsEngineJob,
+  parseEngineJob,
+  readAppBundleId,
   resolveEngineTarget,
   resolveLinkPage,
   resolvePathArgument,
+  resolveRealPath,
   resolveTaskLink,
 } from '../../src/cli/app.ts';
 import { type CommandIo, openApp } from '../../src/cli/commands.ts';
@@ -83,5 +91,83 @@ describe('shinsa <folder>', () => {
     expect(sent).toEqual([]);
     expect(out).toEqual([]);
     expect(opened).toEqual(['shinsa://home']);
+  });
+});
+
+describe('which engine job this shinsa may control', () => {
+  const APP = '/Applications/Shinsa.app';
+  const PROGRAM = `${APP}/Contents/Resources/engine/bin/shinsa`;
+  const REGISTERED = [
+    'gui/501/studio.overclock.shinsa.engine = {',
+    '\tprogram identifier = Contents/Resources/engine/bin/shinsa (mode: 2)',
+    '\tparent bundle identifier = studio.overclock.shinsa',
+  ].join('\n');
+  const WRITTEN = `gui/501/studio.overclock.shinsa.engine = {\n\tprogram = ${PROGRAM}\n`;
+  const identity = (program: string, ids: Record<string, string> = { [APP]: 'studio.overclock.shinsa' }) => ({
+    program,
+    real: (path: string) => path.replace('/private', ''),
+    readBundleId: (app: string) => ids[app] ?? null,
+  });
+
+  test('reads both kinds of job launchd prints', () => {
+    expect(parseEngineJob(REGISTERED)).toEqual({
+      program: null,
+      relative: 'Contents/Resources/engine/bin/shinsa',
+      bundleId: 'studio.overclock.shinsa',
+    });
+    expect(parseEngineJob(WRITTEN)).toEqual({ program: PROGRAM, relative: null, bundleId: null });
+  });
+
+  test('a job the app registered belongs only to the program in that app', () => {
+    const job = parseEngineJob(REGISTERED);
+    expect(isJobProgram(job, identity(PROGRAM))).toBe(true);
+    expect(isJobProgram(job, identity('/tmp/Copy.app/Contents/Resources/engine/bin/shinsa'))).toBe(false);
+    expect(isJobProgram(job, identity('/tmp/shinsa/apps/server/dist/engine/bin/shinsa'))).toBe(false);
+    const testCopy = { [APP]: 'studio.overclock.shinsa.test' };
+    expect(isJobProgram(job, identity(PROGRAM, testCopy))).toBe(false);
+  });
+
+  test('a job written with a full path belongs only to that program, followed through links', () => {
+    const job = parseEngineJob(WRITTEN);
+    expect(isJobProgram(job, identity(PROGRAM))).toBe(true);
+    expect(isJobProgram({ ...job, program: `/private${PROGRAM}` }, identity(PROGRAM))).toBe(true);
+    expect(isJobProgram(job, identity('/tmp/shinsa/apps/server/dist/engine/bin/shinsa'))).toBe(false);
+    expect(isJobProgram({ program: null, relative: null, bundleId: null }, identity(PROGRAM))).toBe(false);
+  });
+});
+
+describe('reading who this shinsa is on disk', () => {
+  test('follows links to the real program, and keeps a path that does not exist', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'shinsa-real-')));
+    writeFileSync(join(dir, 'shinsa'), '');
+    symlinkSync(join(dir, 'shinsa'), join(dir, 'link'));
+    expect(resolveRealPath(join(dir, 'link'))).toBe(join(dir, 'shinsa'));
+    expect(resolveRealPath(join(dir, 'missing'))).toBe(join(dir, 'missing'));
+  });
+
+  test('reads an app’s bundle id with plutil, and nothing when the plist or the tool is missing or fails', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'shinsa-app-')));
+    const app = join(dir, 'Shinsa.app');
+    mkdirSync(join(app, 'Contents'), { recursive: true });
+    writeFileSync(join(app, 'Contents', 'Info.plist'), '<plist/>');
+    const answering = join(dir, 'plutil');
+    writeFileSync(answering, '#!/bin/sh\necho studio.overclock.shinsa\n');
+    chmodSync(answering, 0o755);
+    const failing = join(dir, 'plutil-fails');
+    writeFileSync(failing, '#!/bin/sh\nexit 1\n');
+    chmodSync(failing, 0o755);
+    expect(readAppBundleId(app, answering)).toBe('studio.overclock.shinsa');
+    expect(readAppBundleId(app, failing)).toBeNull();
+    expect(readAppBundleId(app, join(dir, 'no-plutil'))).toBeNull();
+    expect(readAppBundleId(join(dir, 'Other.app'), answering)).toBeNull();
+  });
+
+  test('owns a job that runs this very program, and no job that names nothing', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'shinsa-own-')));
+    const program = join(dir, 'shinsa');
+    writeFileSync(program, '');
+    expect(ownsEngineJob(`\tprogram = ${program}\n`, program)).toBe(true);
+    expect(ownsEngineJob(`\tprogram = ${join(dir, 'other')}\n`, program)).toBe(false);
+    expect(ownsEngineJob('state = running', program)).toBe(false);
   });
 });

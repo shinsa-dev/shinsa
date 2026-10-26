@@ -26,6 +26,7 @@ export interface EngineControl {
   bundled: boolean;
   uid: number;
   launchctl: (args: string[]) => Promise<LaunchctlResult>;
+  ownsJob: (printed: string) => boolean;
   waitMs?: number;
 }
 
@@ -130,6 +131,12 @@ async function assertEngineJob(io: EngineControl) {
     throw new DomainError(
       'engine_not_installed',
       'The engine is not set up yet. Open the Shinsa app once and it sets it up.'
+    );
+  }
+  if (!io.ownsJob(printed.output)) {
+    throw new DomainError(
+      'engine_not_this_app',
+      'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.'
     );
   }
 }

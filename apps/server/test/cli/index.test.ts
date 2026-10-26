@@ -79,7 +79,12 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
     },
     readRepoRoot: () => Promise.resolve(null),
     wakeEngine: () => Promise.resolve(false),
-    engine: { bundled: false, uid: 501, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
+    engine: {
+      bundled: false,
+      uid: 501,
+      ownsJob: () => true,
+      launchctl: () => Promise.resolve({ ok: false, output: '' }),
+    },
     runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
     terminal: createTestTerminal(),
@@ -166,6 +171,7 @@ describe('the engine commands', () => {
       engine: {
         bundled: true,
         uid: 501,
+        ownsJob: () => true,
         waitMs: 2000,
         launchctl: (args) => {
           calls.push(args);
@@ -197,7 +203,12 @@ describe('the engine commands', () => {
 
   test('restart --when-idle asks the engine itself, which has to be running', async () => {
     const { io, errors } = createIo('1', {
-      engine: { bundled: true, uid: 501, launchctl: () => Promise.resolve({ ok: true, output: '' }) },
+      engine: {
+        bundled: true,
+        uid: 501,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: true, output: '' }),
+      },
     });
     expect(await runCli(['restart', '--when-idle'], io)).toBe(1);
     expect(errors).toEqual([
@@ -675,6 +686,15 @@ describe('waking the engine', () => {
       false
     );
     expect(await kickEngine()).toBe(false);
+    const calls: string[] = [];
+    const launchctl = (args: string[]) => {
+      calls.push(args[0] ?? '');
+      return Promise.resolve({ ok: true, output: 'program = /Applications/Shinsa.app/x' });
+    };
+    expect(await kickEngine(launchctl, () => false)).toBe(false);
+    expect(calls).toEqual(['print']);
+    expect(await kickEngine(launchctl, () => true)).toBe(true);
+    expect(calls).toEqual(['print', 'print', 'kickstart']);
   });
 
   test('the engine the app starts writes to its log file and finds the shinsa command on its PATH', async () => {

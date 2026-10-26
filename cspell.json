@@ -81,6 +81,7 @@
     "pipfile",
     "pipx",
     "PKCE",
+    "plutil",
     "podfile",
     "rakefile",
     "reprioritize",

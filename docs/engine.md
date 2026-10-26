@@ -3022,7 +3022,12 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   stopped until a start, the app, a command that needs it or the next login), `shinsa restart` is `launchctl
   kickstart -k` and `shinsa restart --when-idle` is `POST /api/engine/restart` with `when: idle`; each waits up to
   20 s for the engine to answer, stop answering or answer with a new pid. All three refuse, with
-  `engine_unmanaged`, from a `shinsa` outside the bundle, and with `engine_not_installed` when launchd has no job.
+  `engine_unmanaged`, from a `shinsa` that is not a bundled build, with `engine_not_installed` when launchd has no
+  job, and with `engine_not_this_app` from any bundled `shinsa` other than the one the job runs: `launchctl print`
+  names the program, either by full path (the job the app writes itself, compared after following links) or relative
+  to the app with its bundle id (the job `SMAppService` registered, so this `shinsa` must sit at that path inside an
+  app with that id, read with `plutil`). So a build in a scratch folder or a test copy of the app never stops or
+  restarts your engine; the wake before a command that needs the engine checks the same before `kickstart`.
   `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
   (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
 - **Folders macOS keeps private.** The engine is a background process, so it cannot answer macOS's consent prompts

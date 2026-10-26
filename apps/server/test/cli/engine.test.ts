@@ -80,6 +80,7 @@ function createEngineIo(base: string, engine: FakeEngine | null, overrides: Part
     },
     bundled: true,
     uid: 501,
+    ownsJob: () => true,
     waitMs: 2000,
     write: (line = '') => out.push(line),
     launchctl: (args) => {
@@ -147,6 +148,23 @@ describe('shinsa start', () => {
     await expect(startEngine(missing.io)).rejects.toThrow(
       'The engine is not set up yet. Open the Shinsa app once and it sets it up.'
     );
+  });
+
+  test('leaves alone an engine another copy of Shinsa runs, and never calls launchd past print', async () => {
+    const { base } = startFakeEngine({ pid: 100 });
+    const other = createEngineIo(
+      base,
+      { pid: 100, version: '0.0.0', restartWhenIdle: false },
+      { ownsJob: () => false }
+    );
+    const message =
+      'This shinsa is not the one inside the Shinsa app that runs your engine, so it leaves that engine alone. Use `shinsa` from your PATH, which the app keeps pointing at itself.';
+    await expect(stopEngine(other.io)).rejects.toThrow(message);
+    await expect(restartEngine(other.io, false)).rejects.toThrow(message);
+    const stopped = startFakeEngine({ pid: null });
+    const elsewhere = createEngineIo(stopped.base, null, { ownsJob: () => false });
+    await expect(startEngine(elsewhere.io)).rejects.toThrow(message);
+    expect([...other.calls, ...elsewhere.calls].every((call) => call[0] === 'print')).toBe(true);
   });
 
   test('says when launchd refuses, and when the engine never answers', async () => {

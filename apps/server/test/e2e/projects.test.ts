@@ -49,7 +49,12 @@ async function open() {
       openApp: () => Promise.resolve(),
       readRepoRoot: () => Promise.resolve(null),
       wakeEngine: () => Promise.resolve(false),
-      engine: { bundled: false, uid: 0, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
+      engine: {
+        bundled: false,
+        uid: 0,
+        ownsJob: () => true,
+        launchctl: () => Promise.resolve({ ok: false, output: '' }),
+      },
       runEngine: () => Promise.reject(new Error('not in this test')),
       onShutdown: () => undefined,
       terminal: createTestTerminal(),
