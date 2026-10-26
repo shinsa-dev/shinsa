@@ -1,4 +1,5 @@
 ---
+import { CodeDemo } from '../components/demos/code';
 import { GatesDemo } from '../components/demos/gates';
 import { GuardDemo } from '../components/demos/guard';
 import { HeroDemo } from '../components/demos/hero';
@@ -36,8 +37,13 @@ const guarded = await listGuardedCommands();
     </div>
   </Section>
   <Section copy={sections.review}>
-    <DemoWindow width={1120} height={660} narrow={560} reserve={320}>
+    <DemoWindow width={1040} height={700} narrow={640} reserve={340}>
       <ReviewDemo client:visible={{ rootMargin: '400px' }} />
+    </DemoWindow>
+  </Section>
+  <Section copy={sections.code}>
+    <DemoWindow width={1120} height={660} narrow={560} reserve={320}>
+      <CodeDemo client:visible={{ rootMargin: '400px' }} />
     </DemoWindow>
   </Section>
   <Section copy={sections.roadmap}>

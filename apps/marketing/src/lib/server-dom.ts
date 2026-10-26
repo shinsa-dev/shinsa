@@ -41,6 +41,8 @@ function installServerDom() {
     matchMedia: createMediaQuery,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
+    innerWidth: 1440,
+    innerHeight: 1000,
   });
 }
 

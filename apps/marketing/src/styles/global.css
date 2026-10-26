@@ -108,6 +108,15 @@ body {
   pointer-events: auto;
 }
 
+.demo-pre pre {
+  pointer-events: auto;
+  touch-action: pan-x pan-y;
+}
+
+.demo-scroll [data-slot="scroll-area-viewport"] {
+  pointer-events: auto;
+}
+
 .demo-hero [data-live],
 .demo-hero [data-live] * {
   cursor: default;

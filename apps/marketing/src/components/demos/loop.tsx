@@ -3,7 +3,7 @@ import { ActivityRow } from '@/components/overview/activity-row.tsx';
 import { PullRequestBadge } from '@/components/roadmap/pull-request-badge.tsx';
 import { StatusText } from '@/components/status/text.tsx';
 import { createLoopState, LOOP_ENTRIES } from '../../lib/loop-scene.ts';
-import { useFocus } from './focus.ts';
+import { FIRST_STEP_MS, useFocus } from './focus.ts';
 import { DemoRoot, Stage } from './frame.tsx';
 
 const STEP_MS = 1600;
@@ -12,6 +12,7 @@ export function LoopDemo() {
   const [now] = React.useState(Date.now);
   const [shown, setShown] = React.useState(1);
   const { ref, focused } = useFocus<HTMLDivElement>();
+  const started = React.useRef(false);
   const { state, task } = React.useMemo(() => createLoopState(now, shown), [now, shown]);
 
   React.useEffect(() => {
@@ -21,7 +22,14 @@ export function LoopDemo() {
       return;
     }
     const last = shown >= LOOP_ENTRIES.length;
-    const timer = setTimeout(() => setShown(last ? 1 : shown + 1), last ? STEP_MS * 3 : STEP_MS);
+    const delay = started.current ? STEP_MS : FIRST_STEP_MS;
+    const timer = setTimeout(
+      () => {
+        started.current = true;
+        setShown(last ? 1 : shown + 1);
+      },
+      last ? STEP_MS * 3 : delay
+    );
     return () => clearTimeout(timer);
   }, [focused, shown]);
 
@@ -37,7 +45,7 @@ export function LoopDemo() {
               <PullRequestBadge task={task} />
             </span>
           </div>
-          <ol className='flex h-[420px] flex-col overflow-hidden'>
+          <ol className='mask-b-from-85% flex h-[420px] flex-col overflow-hidden'>
             {entries.map((entry) => (
               <ActivityRow key={entry.text} entry={entry} state={state} onOpenRun={() => undefined} />
             ))}

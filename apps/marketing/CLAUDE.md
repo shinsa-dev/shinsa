@@ -7,20 +7,20 @@ time so the static HTML already holds them (the hero hydrates on load, the rest 
 The demos are not drawings of Shinsa: they render `apps/web`'s own components (the `@/` alias points at
 `apps/web/src`) from sample state built with `apps/web/src/routes/ui/samples.ts`. `lib/demo-server.ts` stands in for
 `shinsa engine` in the browser: it answers the web's one WebSocket (acks every command and hands it to the demo that
-listens, streams transcripts) and `/api/tasks/<id>/<read>` from the in-memory repository in `lib/demo-repo.ts`, so
+listens, streams transcripts) and `/api/tasks/<id>/<read>` from the in-memory repositories in `lib/demo-repo.ts` (one per task: Shinsa's for the Review demo, Northwind's for the rest), so
 the real cards, toasts, live feeds and the Code workbench work unchanged. It also keeps the page's path fixed while the
 web's router writes its query (`?tab=chat`, the Code tab's position), and supplies `crypto.randomUUID` where the
 browser withholds it on plain HTTP (a Tailscale preview). Nothing leaves the page.
 
 Rendering the web app at build time needs three things. `astro.config.mjs` imports `lib/server-dom.ts` first, which
 gives the build process the browser globals the web's modules read when they load (`location`, `history`,
-`localStorage`, `matchMedia`); it has to run before any page chunk, so it lives in the config, not in a component. A
+`localStorage`, `matchMedia`, and a 1440×1000 window so row windows such as All tasks' render their rows); it has to run before any page chunk, so it lives in the config, not in a component. A
 plugin in the config points every `react` import at `lib/react-snapshots.ts`, whose `useSyncExternalStore` uses the
 client snapshot as the server one, since React refuses to render or hydrate that hook without it and the web app never
-passes one. And the server half of the stand-in (`installDemoApi`) runs at build too, so `review.tsx` can load the
+passes one. And the server half of the stand-in (`installDemoApi`) runs at build too, so `code.tsx` and `review.tsx` can load the
 workbench's reads with a top-level await before it renders, in the build and in the browser alike: `review-prime.ts`
 reads every folder and file at both commits and the diff, and the stand-in answers at once, so the Code tab never
-shows a loading state. Keep a demo's first
+shows a loading state. The stand-in calls `connection.flush()` after it opens, since the connection otherwise applies state on the next frame and the build would render the composer without its project. Keep a demo's first
 render a function of its sample state: anything read from the clock or the URL during render shows up as a hydration
 mismatch.
 
@@ -45,14 +45,24 @@ src/
   components/ui/Button.astro  An anchor with the kit's buttonVariants
   components/demos/         One island per demo: hero (Home), gates (the real task page, walked through its gates by
                             your answers, with its chat),
-                            kinds (the six kinds of task, cycling until you pick one), review (the Code workbench), roadmap (All tasks), loop (the
+                            kinds (the six kinds of task, cycling until you pick one), review (the Review tab: the
+                            walkthrough, judgement calls, risks and testing, with the Evidence section first; static but for
+                            its point index, its evidence and scrolling), code (the Code workbench, side by side and
+                            editable: the stand-in keeps your saves in memory), roadmap (All tasks), loop (the
                             pull request activity), guard (agent commands and the policy's verdicts); frame.tsx holds
                             DemoRoot (installs the stand-in server), Window and Stage; focus.ts (`useFocus`) plays a demo only
-                            while it is the main thing on screen (70% of it in view, or 60% of the screen)
+                            while it is the main thing on screen (half of it in view, or 45% of the screen), and its first step comes 300ms after
   lib/content.ts            Every headline and paragraph on the page, the principles and the feature grid
   lib/site.ts               Name, URL, description, the download and GitHub links
   lib/scene.ts              The sample project (Northwind) and the Home and roadmap state
-  lib/*-scene.ts            One file of sample state per demo; onboarding-code.ts is the change the review shows
+  lib/*-scene.ts            One file of sample state per demo. onboarding-code.ts is the Northwind change the gates and
+                            Code demos show. tint-scene.ts is the Review demo's task, a real Shinsa change (SW-214, the
+                            tinted kind icons and pull request badges on All tasks): its code is the commit's real files,
+                            snapshotted as text in src/assets/shinsa-change/ (before, after and a few unchanged
+                            neighbours, read with `?raw` through tint-code.ts, so nothing lints or type-checks them), and
+                            evidence-scene.ts its evidence: shots of Shinsa's own All tasks page in public/evidence/
+                            (1280px light and dark, before recreated with the commit's old classes), a hover recording,
+                            the roadmap tests' real run and the checks, and a dev-server link
   lib/og.tsx                The share image (`/og.png`, 1200×630): Satori and resvg at build time, in Areal from
                             `src/assets/fonts/` (static Regular and Medium cut from the kit's variable font, since Satori
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
@@ -72,8 +82,13 @@ src/
 
 ## Deploy
 
-A push to `main` that touches the site, the web app or core runs `.github/workflows/deploy-site.yml`: it builds `dist`
-and `wrangler deploy`s it as static assets to the `shinsa-site` Worker (`wrangler.jsonc`), on `shinsa.dev` and
-`www.shinsa.dev`, with the repository's `CLOUDFLARE_API_TOKEN` secret. There is no server and no analytics.
+Cloudflare Workers Builds deploys the site from the Git repository; there is no workflow and no API token in the
+repository. The `shinsa-marketing` Worker (`wrangler.jsonc`) serves `dist` as static assets on `shinsa.dev` and
+`www.shinsa.dev`. Its build settings, set in the Cloudflare dashboard: root directory `apps/marketing`, build command
+`bun install --frozen-lockfile && bun run build` (the install runs at the workspace root, since the site builds the
+web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `main`, and preview command
+`bun run deploy:preview` (`wrangler preview`) on every other branch. A preview is its own copy of the Worker on
+workers.dev with a URL per branch and per deployment (`"previews": {}` turns it on; the site has no bindings, so the
+block is empty). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There is no server and no analytics.
 `/download` is a redirect in `public/_redirects` to the latest GitHub release's `Shinsa-mac-arm64.dmg`, so the site
 never changes for a release and GitHub counts the downloads.

@@ -28,7 +28,12 @@ export const sections = {
   review: {
     id: 'review',
     title: 'Review the change, not the diff.',
-    text: 'The agent hands over a work report: what it did, phase by phase, pointing at the lines that need your eyes, ranked by risk. A second agent reviews it first, with fresh context.',
+    text: 'The agent that built it walks you through it: how it works, the key code explained, the calls it made and what it turned down, what to read carefully and how to test it. Proof comes first: before and after shots in both themes, a recording, the test run, a preview link.',
+  },
+  code: {
+    id: 'code',
+    title: 'An IDE in every task.',
+    text: 'The Code tab is a full editor, not a diff viewer: the changes side by side, a file tree, ⌘P to any file, search across the repository, at any commit. Edit a line and it saves to the task’s working copy, so you rarely need to open your own editor. Shinsa still makes every commit.',
   },
   roadmap: {
     id: 'roadmap',
@@ -50,7 +55,7 @@ export const sections = {
 export const principles = [
   {
     title: 'Runs on your machine',
-    text: 'One local server and a Mac app. Your repositories never leave your disk, and there is no cloud.',
+    text: 'Fully local. Your tasks and everything your agents produce stay on your Mac. No account, no telemetry.',
   },
   {
     title: 'Your agents, your accounts',
@@ -88,9 +93,9 @@ export const features: { icon: IconName; title: string; text: string }[] = [
     text: 'Say which project you are on. Decisions from the others wait quietly until you switch.',
   },
   {
-    icon: 'IconCamera1',
-    title: 'Evidence',
-    text: 'Agents attach screenshots in both themes, recordings, and tests that failed before the change and pass after it.',
+    icon: 'IconServer',
+    title: 'Services',
+    text: 'Your dev servers start with one press and keep running when you close the window. Shinsa finds them for you.',
   },
   {
     icon: 'IconBranch',
@@ -108,14 +113,14 @@ export const features: { icon: IconName; title: string; text: string }[] = [
     text: 'An agent can start, prioritise and order tasks for you. The decisions at your gates stay yours.',
   },
   {
-    icon: 'IconConsole',
-    title: 'A command line',
-    text: 'The shinsa command does everything the app does, for you and for agents in your own terminal.',
+    icon: 'IconKeyboard',
+    title: 'A command line and ⌘K',
+    text: 'The shinsa command does everything the app does, for you and for agents. ⌘K reaches every task and action.',
   },
   {
-    icon: 'IconKeyboard',
-    title: 'One shortcut',
-    text: '⌘K reaches every task, every action and the next decision that needs you.',
+    icon: 'IconConsole',
+    title: 'A terminal per project',
+    text: 'Tabs per project, in your shell, with a Mac terminal’s keys. A command an agent needs from you runs in one press.',
   },
   {
     icon: 'IconWindow',

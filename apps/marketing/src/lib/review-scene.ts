@@ -20,13 +20,16 @@ export const REVIEW_FINDINGS: ReviewFinding[] = [
     severity: 'blocking',
     file: 'src/onboarding/draft-store.ts',
     line: lineOf(DRAFT_STORE_AFTER, 'db.storeDrafts.delete'),
+    title: 'The draft outlives a failed delete',
     message:
       'The draft is deleted after the store is inserted, outside a transaction. If the delete fails, finishing again creates a second store.',
+    fix: 'Insert the store and delete the draft in one `db.transaction`.',
   },
   {
     severity: 'suggestion',
     file: 'src/onboarding/progress-dots.tsx',
     line: lineOf(PROGRESS_DOTS_AFTER, 'aria-label'),
+    title: 'Label the whole progress row',
     message: 'The step label is on the list; on the wrapper it would also cover the Back button.',
   },
 ];
@@ -49,6 +52,9 @@ export const REVIEW_REPORT: WorkReport = {
           file: 'src/onboarding/steps.ts',
           ...span(STEPS_AFTER, 'export function validateStep', 'return problems;'),
           attention: 'high',
+          title: 'Each step validates on its own',
+          explain:
+            'The old form checked all 14 fields on submit. Now each step checks only its own answers, so step one can be saved with payments still empty.',
           why: 'Validation moved here from the form; an empty name or no payment provider is refused.',
         },
         {
@@ -68,12 +74,18 @@ export const REVIEW_REPORT: WorkReport = {
           file: 'src/onboarding/draft-store.ts',
           ...span(DRAFT_STORE_AFTER, 'export async function saveStep', 'return { saved: true'),
           attention: 'critical',
+          title: 'Saving a step',
+          explain:
+            'A step is validated, then merged into the owner’s draft with the list of finished steps. Nothing is written when validation fails.',
           why: 'Writes the draft. A step is saved only after it validates.',
         },
         {
           file: 'src/onboarding/draft-store.ts',
           ...span(DRAFT_STORE_AFTER, 'export async function createStore', 'return store.id'),
           attention: 'critical',
+          title: 'Turning the draft into a store',
+          explain:
+            'Once all three steps are finished, the answers become a store and the draft is removed. Before that it refuses.',
           why: 'Creates the store from the draft and deletes the draft.',
         },
         {
@@ -92,6 +104,8 @@ export const REVIEW_REPORT: WorkReport = {
           file: 'src/onboarding/resume.ts',
           ...span(RESUME_AFTER, 'export async function resolveResumeStep', "return next?.id ?? 'shipping'"),
           attention: 'high',
+          title: 'Where a returning owner lands',
+          explain: 'The first step not in the draft’s finished list. You chose this during the build.',
           why: 'Decides where a returning owner lands, which you answered during the build.',
         },
         {
@@ -110,9 +124,67 @@ export const REVIEW_REPORT: WorkReport = {
       file: 'src/onboarding/draft-store.ts',
       line: lineOf(DRAFT_STORE_AFTER, 'where: { ownerId } });'),
       reason: 'An owner who switches devices halfway still resumes.',
+      alternatives: [
+        { option: 'A draft in localStorage', rejected: 'Lost on another device or a cleared browser.' },
+      ],
+    },
+    {
+      call: 'Validated per step, not again at the end',
+      file: 'src/onboarding/steps.ts',
+      line: lineOf(STEPS_AFTER, 'export function validateStep'),
+      reason: 'Every step is checked when it is saved, so the last step only checks that all three exist.',
+      alternatives: [
+        {
+          option: 'Validate the whole draft before creating the store',
+          rejected: 'The same rules twice, in two places that can drift.',
+        },
+      ],
     },
   ],
+  walkthrough: {
+    approach:
+      'Split the one long form into three routes that share a draft per owner. Each step validates and saves on its own; the store is created from the draft once every step is done.',
+    flow: 'Opening onboarding asks `resolveResumeStep` where to land, renders that step, and `saveStep` writes the answers to `storeDrafts` on Continue. Finishing the third step calls `createStore`, which turns the draft into a store and removes the draft.',
+    risks: [
+      {
+        risk: 'A failed delete leaves a draft behind, and finishing again would create a second store.',
+        file: 'src/onboarding/draft-store.ts',
+        line: lineOf(DRAFT_STORE_AFTER, 'export async function createStore'),
+        end: lineOf(DRAFT_STORE_AFTER, 'return store.id'),
+      },
+    ],
+    testing: {
+      automated: [
+        '`draft-store.test.ts` covers resuming after a reload, refusing an empty store name and creating the store only at the end.',
+      ],
+      manual: [
+        {
+          action: 'Open onboarding, fill in step one and reload.',
+          target: { kind: 'url', value: 'http://localhost:5173/onboarding' },
+          expect: 'You land on Payments with step one kept.',
+        },
+        {
+          action: 'Leave the store name empty and press Continue.',
+          target: null,
+          expect: 'Continue refuses and nothing is saved.',
+        },
+        {
+          action: 'Finish all three steps.',
+          target: null,
+          expect: 'One store, and the draft is gone.',
+        },
+      ],
+    },
+  },
 };
+
+const REVIEW_DISAGREEMENTS = [
+  {
+    call: 'Validated per step, not again at the end',
+    reason:
+      'A draft written before a rule changed would skip the new rule. One check in `createStore` would catch it.',
+  },
+];
 
 export function createReviewTask(now: number): Task {
   return createSampleTask(now, {
@@ -124,10 +196,12 @@ export function createReviewTask(now: number): Task {
     stage: 'awaiting_review',
     stageReason: 'changes to review',
     branch: 'feat/onboarding-steps',
+    worktreePath: '~/.config/shinsa/data/worktrees/northwind-web/NW-155',
     pipeline: ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge'],
     plan: { version: 1, body: '', document: ONBOARDING_PLAN, proposedAt: now - 40 * MINUTE },
     report: REVIEW_REPORT,
     findings: REVIEW_FINDINGS,
+    reviewDisagreements: REVIEW_DISAGREEMENTS,
     checkResults: REVIEW_CHECKS,
     pullRequest: null,
   });

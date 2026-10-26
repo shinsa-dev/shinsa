@@ -1,5 +1,5 @@
 {
-  "name": "shinsa-site",
+  "name": "shinsa-marketing",
   "account_id": "e8563b02f2bf2b6a136f2781445a486f",
   "compatibility_date": "2026-10-01",
   "assets": {
@@ -12,5 +12,6 @@
     { "pattern": "www.shinsa.dev", "custom_domain": true }
   ],
   "workers_dev": false,
-  "preview_urls": false
+  "preview_urls": true,
+  "previews": {}
 }

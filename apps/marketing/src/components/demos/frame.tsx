@@ -36,7 +36,7 @@ export function Window({
         <span className='size-2.5 rounded-full bg-bg-4' />
         <span className='size-2.5 rounded-full bg-bg-4' />
         <span className='size-2.5 rounded-full bg-bg-4' />
-        <span className='absolute inset-x-0 text-center text-2xs text-fg-2'>{title}</span>
+        <span className='absolute inset-x-16 truncate text-center text-2xs text-fg-2'>{title}</span>
       </div>
       <div className='relative min-h-0 flex-1 overflow-hidden'>
         <div className='demo-window-content absolute top-0 left-0 origin-top-left' inert={inert}>

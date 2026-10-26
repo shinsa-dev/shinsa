@@ -7,6 +7,8 @@
   "scripts": {
     "build": "bun --bun astro build",
     "check-types": "bun --bun astro sync && tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "deploy:preview": "wrangler preview",
     "dev": "bun --bun astro dev --port 5182",
     "preview": "bun --bun astro preview --port 5182"
   },
@@ -27,6 +29,7 @@
     "@types/react-dom": "^19.2.3",
     "satori": "^0.33.5",
     "tailwindcss": "^4.3.3",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "^4.153.0"
   }
 }

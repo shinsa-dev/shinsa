@@ -3,12 +3,13 @@ import {
   type ChatEntry,
   type ChatEvent,
   type ClientMessage,
+  type FileWrite,
   type ServerMessage,
   type ShinsaState,
   type UserCommand,
 } from '@shinsa/core';
 import { connection } from '@/lib/connection/socket.ts';
-import { answerCodeRead } from './demo-repo.ts';
+import { answerCodeRead, recordFileWrite } from './demo-repo.ts';
 import { createHomeScene } from './scene.ts';
 
 type CommandListener = (command: UserCommand) => void;
@@ -18,8 +19,6 @@ const transcripts = new Map<string, ChatEntry[]>();
 const sockets = new Set<DemoSocket>();
 let entryCount = 0;
 let installed = false;
-
-const UNIFIED_KEY = 'shinsa.code-unified';
 
 class DemoSocket extends EventTarget {
   readyState = 0;
@@ -77,8 +76,9 @@ function isShinsaSocket(url: string | URL) {
 }
 
 function answerApi(url: URL): Response {
-  const code = /^\/api\/tasks\/[^/]+\/([a-z]+)$/.exec(url.pathname);
-  const body = code?.[1] ? answerCodeRead(code[1], url.searchParams) : null;
+  const code = /^\/api\/tasks\/([^/]+)\/([a-z]+)$/.exec(url.pathname);
+  const body =
+    code?.[1] && code[2] ? answerCodeRead(decodeURIComponent(code[1]), code[2], url.searchParams) : null;
   if (body === null) {
     return Response.json(
       { error: { code: 'demo', message: 'This page only shows samples.' } },
@@ -97,6 +97,12 @@ export function installDemoApi() {
   const demoFetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
     if (url.origin !== location.origin || !url.pathname.startsWith('/api/')) return native(input, init);
+    if (init?.method === 'POST' && url.pathname.endsWith('/file')) {
+      const taskId = decodeURIComponent(url.pathname.split('/')[3] ?? '');
+      return Promise.resolve(
+        Response.json(recordFileWrite(taskId, JSON.parse(String(init.body)) as FileWrite))
+      );
+    }
     return Promise.resolve(answerApi(url));
   };
   globalThis.fetch = Object.assign(demoFetch, { preconnect: globalThis.fetch.preconnect });
@@ -145,12 +151,12 @@ export function installDemoConnection() {
   connection.start();
   const state = createHomeScene(Date.now());
   for (const socket of sockets) socket.open(state);
+  connection.flush();
 }
 
 export function installDemoServer() {
   if (installed) return;
   installed = true;
-  if (localStorage.getItem(UNIFIED_KEY) === null) localStorage.setItem(UNIFIED_KEY, 'true');
   installUuid();
   installHistoryGuard();
   installDemoApi();

@@ -9,6 +9,14 @@ import { DemoRoot, Stage } from './frame.tsx';
 
 const DWELL_MS = 2800;
 
+function centreSelectedTab(root: HTMLElement | null) {
+  const tab = root?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+  const list = tab?.parentElement;
+  if (!tab || !list || list.scrollWidth <= list.clientWidth) return;
+  const offset = tab.getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft;
+  list.scrollTo({ left: offset - (list.clientWidth - tab.offsetWidth) / 2, behavior: 'smooth' });
+}
+
 function nextKind(kind: TaskShape) {
   return KIND_ORDER[(KIND_ORDER.indexOf(kind) + 1) % KIND_ORDER.length]!;
 }
@@ -20,6 +28,9 @@ export function KindsDemo() {
   const [hovered, setHovered] = React.useState(false);
   const { ref, focused } = useFocus<HTMLDivElement>();
   const scene = scenes[kind];
+  const tabs = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => centreSelectedTab(tabs.current), [kind]);
 
   React.useEffect(() => {
     if (picked || hovered || !focused) return;
@@ -30,15 +41,17 @@ export function KindsDemo() {
 
   return (
     <DemoRoot>
-      <Stage className='flex h-full flex-col items-center gap-8'>
+      <Stage className='flex h-full flex-col items-center gap-8 max-sm:gap-6'>
         <Tabs
+          ref={tabs}
+          className='min-w-0 max-w-full'
           value={kind}
           onValueChange={(value) => {
             setPicked(true);
             setKind(value as TaskShape);
           }}
         >
-          <TabsList className='max-w-full overflow-x-auto'>
+          <TabsList className='justify-center-safe max-w-full overflow-x-auto [scrollbar-width:none]'>
             {KIND_ORDER.map((shape) => (
               <TabsTrigger key={shape} value={shape}>
                 {SHAPE_LABEL[shape]}
@@ -56,7 +69,7 @@ export function KindsDemo() {
             <p className='text-base text-fg-4'>“{scene.task.title}”</p>
             <p className='text-fg-2 text-sm'>{KIND_ENDS[kind]}</p>
           </div>
-          <div className='min-h-0 flex-1 overflow-hidden text-left' inert>
+          <div className='demo-static demo-pre min-h-0 flex-1 overflow-hidden text-left'>
             <NowCard
               state={state}
               task={scene.task}

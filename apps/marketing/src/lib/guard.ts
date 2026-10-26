@@ -14,7 +14,7 @@ const COMMANDS = [
   'bun run test src/onboarding',
   'git diff --stat',
   'git commit -am "split onboarding"',
-  'git push origin feat/onboarding-steps',
+  'git push origin HEAD',
   'gh pr merge 821 --squash',
   'git checkout main',
   'git reset --hard HEAD~3',
