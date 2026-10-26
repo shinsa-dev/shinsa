@@ -98,7 +98,7 @@ export function serializeEngineAgent(
     '  <key>ProgramArguments</key>',
     '  <array>',
     `    ${serializeString(executable)}`,
-    `    ${serializeString('serve')}`,
+    `    ${serializeString('engine')}`,
     '  </array>',
     '  <key>EnvironmentVariables</key>',
     '  <dict>',

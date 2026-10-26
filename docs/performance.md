@@ -77,10 +77,10 @@ the original log are the same (checked by comparing them key by key on the `/tmp
   the page asks from the position it holds, pages of 500 entries keep each message short, and entries apply once per
   frame.
 
-### Second pass: snapshots in `shinsa serve`, runs without their prompts, the guide beside the log
+### Second pass: snapshots in `shinsa engine`, runs without their prompts, the guide beside the log
 
 - **How it is measured.** Boot: `Engine` construction on copies (`sqlite3 .backup`) of the 50k log, seven runs each,
-  median, the file cache warm; and a real `shinsa serve` on a `/tmp` copy (fake `claude`, `gh`, `eunoe` and login
+  median, the file cache warm; and a real `shinsa engine` on a `/tmp` copy (fake `claude`, `gh`, `eunoe` and login
   shell from `apps/server/test/helpers/bin`, `SHINSA_QUICK=off`) timed from spawn to `/api/health` and to the first
   state on a socket, then left idle 4.5 s before it is stopped, three or four runs. The first state: `bench.ts`
   (which now also reports the state as the page gets it, `client.wireStateBytes` and `client.wireStateParseMs`),
@@ -88,8 +88,8 @@ the original log are the same (checked by comparing them key by key on the `/tmp
 
 | Measure | Real data before | Real data after | 50k events before | 50k events after |
 | --- | --- | --- | --- | --- |
-| A real `shinsa serve` writes a snapshot | never | 3 s after boot, and on stop | never | 3 s after boot, and on stop |
-| Engine boot in `shinsa serve` | replay | from the snapshot | 73.7 ms (50,000 events, the first start), then 68.8 ms (34,700 after pruning) | 25.9 ms from the snapshot (5 ms of it hashing core's source) |
+| A real `shinsa engine` writes a snapshot | never | 3 s after boot, and on stop | never | 3 s after boot, and on stop |
+| Engine boot in `shinsa engine` | replay | from the snapshot | 73.7 ms (50,000 events, the first start), then 68.8 ms (34,700 after pruning) | 25.9 ms from the snapshot (5 ms of it hashing core's source) |
 | Spawn to `/api/health` | | | 274 to 288 ms | 250 to 257 ms |
 | First state on connect | 354 KB | 100 KB | 18.5 MB | 2.43 MB |
 | Connect to the first state in the page | 5.1 ms | 4.7 ms | 48.7 ms | 14.8 ms |
@@ -104,7 +104,7 @@ by key (compared on a `/tmp` copy, and again on the 50k log), and the live serve
 
 Measured again on a 50k log generated afresh with the same script (its state is 20.4 MB, with more task activity
 than the log above): the engine boots in 54 ms replaying the log and 21 ms from the snapshot (5 ms of it hashing
-core's source); a real `shinsa serve` reaches `/api/health` in 443 ms on its first start (it replays, then writes the
+core's source); a real `shinsa engine` reaches `/api/health` in 443 ms on its first start (it replays, then writes the
 snapshot 3 s later) and in 240 to 255 ms on the next starts, which boot from it. The first state on connect is
 4.25 MB where the whole state is 20.3 MB: the runs are 0.73 MB of it without their prompts, and most of the rest is
 the tasks' activity (2.36 MB, the last entries of each task). On a `/tmp` copy of the user's data the first state is
@@ -142,7 +142,7 @@ paint, scroll and take a keystroke, on a production build in a real browser.
   six interim messages, 15 tool calls (300-line reads, 200-line command output, 20-to-24-line edits) and a final
   markdown reply with a 12-line code fence and a task link; the last run is live. Second, the user's own data copied
   to `/tmp` (5 tasks, 19 runs; its chats are short, so it shows the floor, not the long-chat case).
-- **The page.** `vite build` of the web app, served by `vite preview` against `shinsa serve` with `SHINSA_INSPECT=1`,
+- **The page.** `vite build` of the web app, served by `vite preview` against `shinsa engine` with `SHINSA_INSPECT=1`,
   in headless Chromium driven over the DevTools protocol by `bun scripts/perf/content-measure.ts <url>`
   (`content-cdp.ts`, `content-probe.ts`). Each scenario runs in three fresh browsers; the table shows the median.
   Navigation is the router's own `pushState`, timed to the frame after the content is in the DOM. Frames are
@@ -272,7 +272,7 @@ Settings), ⌘K, what a state push re-renders, and how fast the Mac app starts.
   relative to the moment of `spawn`: navigation start, the first paint, and Home's composer in the DOM. Run 1
   starts from an empty cache, the median is over the later runs.
 - **Builds.** "Before" is `git archive HEAD` built on its own; "after" is the same tree with only this pass's files
-  copied in, so other work in progress is in neither. Both were served by `shinsa serve` in inspect mode
+  copied in, so other work in progress is in neither. Both were served by `shinsa engine` in inspect mode
   (`SHINSA_INSPECT=1`, `SHINSA_WEB_DIR`) from copies in `/tmp`: the seed (`~/.shinsa-seed`, 46 tasks) and the user's
   own data (`sqlite3 .backup`, 12 tasks). Numbers are medians in ms on an Apple silicon Mac with other agents'
   builds and tests running beside them; headless Chromium paints at 60 Hz, so about 10 ms is one frame and the
@@ -388,7 +388,7 @@ did after the shared tooltip, against 947 before the kept pages and 796 before t
   button's scale changed, through 150 ms transitions, so a quick click showed half a press. All of it now changes in
   the frame of the press, as hover does (`docs/design.md` → Motion).
 - **Start-up.** The first health check now leaves before Electron is ready, V8 keeps a code cache from the first
-  run (`v8CacheOptions: 'bypassHeatCheck'`), and `shinsa serve` sends hashed assets as immutable and the page as
+  run (`v8CacheOptions: 'bypassHeatCheck'`), and `shinsa engine` sends hashed assets as immutable and the page as
   `no-cache`, so a relaunch reads the bundle from disk instead of downloading 1.6 MB again. None of it showed above
   the noise of a launch on this machine.
 
@@ -437,7 +437,7 @@ and on two large repositories.
   into the second and third (it clones, never touches the original).
 - **The bench.** `bun scripts/perf/code-tab.ts --base <server> --task <handle> --folder <dir> --tree <folders>
   [--files <paths>]` drives headless Chrome over the DevTools protocol (`scripts/perf/code-cdp.ts`, the page side in
-  `code-probe.ts`), at 1280 × 900, against a production build served by an inspect-mode `shinsa serve` on a copy of
+  `code-probe.ts`), at 1280 × 900, against a production build served by an inspect-mode `shinsa engine` on a copy of
   the seed. It presses tree rows with real mouse events: **cold** is a file nothing has read (no hover, not next to an
   open file), **warm** a file opened before, **prefetched** a file hovered for 400 ms first. **Work** is the User
   Timing measure from the press to the editor's commit (`shinsa:code-open` → `shinsa:code-shown`, only in the new
@@ -611,7 +611,7 @@ and each of its tabs, the Code tab's trees, ⌘P, the ref picker and search, All
   way: `NODE_ENV=production bun run --cwd apps/web build --mode production`, seed to a scratch directory, serve it
   on a free port, then the warm-up and the checked walk.
 - **Data.** A fresh `bun run seed` copy and a copy of the user's own data (`sqlite3 .backup`, 318 events, tasks
-  with no changes, so its Code tab is Files only), each served by an inspect-mode `shinsa serve` from a
+  with no changes, so its Code tab is Files only), each served by an inspect-mode `shinsa engine` from a
   production build: "before" is the tree as this pass found it, "after" the same tree with this pass. Apple M4
   Pro, Chrome for Testing headless, other agents' builds running beside it.
 

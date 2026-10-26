@@ -1,7 +1,7 @@
 # @shinsa/desktop
 
-Shinsa for Mac: an Electron window around `shinsa serve`, never the other way round. The server runs on its own (a
-launchd service, `shinsa service`); the app finds it, loads the UI from its URL and adds only what a page cannot do:
+Shinsa for Mac: an Electron window around the engine, never the other way round. The engine (`shinsa engine`, from the
+bundle) runs on its own as a launchd job the app registers; the app finds it, loads the UI from its URL and adds only what a page cannot do:
 the Dock badge, notifications that open the task, `shinsa://` links, the menu and the window. Quitting the app never
 stops the server. What it looks like and how it behaves is `docs/design.md` → Where Shinsa differs, 31; the plan
 behind it is `docs/plans/desktop-plan.md`.
@@ -60,9 +60,11 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
   why on the status page. While the window shows Shinsa it checks the engine every 5 s; three misses in a row bring
   the status page back, and the page opens Shinsa again by itself once the engine answers. There is no dialog.
 - **Restarting** the engine is `launchctl kickstart -k` (the status page's Start engine, Shinsa → Restart Engine); the
-  engine restarts itself for an update (`POST /api/engine/restart`).
+  engine restarts itself for an update (`POST /api/engine/restart`). `shinsa start`, `stop` and `restart` do the same
+  from a terminal, on the same job (`docs/cli.md` → The engine).
 - **The `shinsa` command**: Shinsa → Install the shinsa Command… links `Contents/Resources/engine/bin/shinsa` into
-  `/usr/local/bin` with one administrator prompt, as VS Code does.
+  `/usr/local/bin` with one administrator prompt, as VS Code does. The job runs that executable as `shinsa engine`
+  (`serializeEngineAgent`, and the checked-in `resources/LaunchAgents` plist a test compares with it).
 - Which server: `SHINSA_URL` (an origin) wins; unpackaged, the Vite dev server on 5181; packaged, `SHINSA_PORT`, then
   `port` in Shinsa's `config.json`, then 5180, always on 127.0.0.1.
 - The app is "Shinsa" everywhere, packaged or not (`app.setName`, the first menu, the About panel). The menu bar and

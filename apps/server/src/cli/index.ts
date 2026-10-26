@@ -19,11 +19,23 @@ import {
   isStartedFromTerminal,
   mergePathLists,
 } from '../shell/login.ts';
-import { describeSurface } from '../surface/index.ts';
 import { createApiClient } from './api.ts';
 import { APP_BUNDLE_ID, isPathArgument, resolveEngineTarget, resolveLinkPage } from './app.ts';
-import { type CommandIo, createTask, importSession, openApp, printStatus } from './commands.ts';
+import { type CommandIo, createTask, importSession, openApp, parseArgs, printStatus } from './commands.ts';
+import {
+  type EngineControl,
+  type EngineIo,
+  printVersion,
+  readHealth,
+  restartEngine,
+  startEngine,
+  stopEngine,
+} from './engine.ts';
+import { describeCliUsage, selectCliCommand, USAGE, USAGE_ALL } from './help.ts';
+import { ENGINE_LOG, printLogs } from './logs.ts';
 import { isSurfaceGroup, runSurface } from './surface.ts';
+
+export { USAGE } from './help.ts';
 
 export interface CliIo {
   env: Record<string, string | undefined>;
@@ -33,35 +45,19 @@ export interface CliIo {
   openApp: (link: string) => Promise<void>;
   readRepoRoot: (dir: string) => Promise<string | null>;
   wakeEngine: () => Promise<boolean>;
-  serve: (env: Record<string, string | undefined>) => Promise<Shinsa>;
+  engine: EngineControl;
+  runEngine: (env: Record<string, string | undefined>) => Promise<Shinsa>;
   onShutdown: (stop: () => Promise<void>) => void;
   projectsDir?: string;
 }
-
-export const USAGE = `shinsa: a control plane for coding agents
-
-Usage
-  shinsa [folder]         Open the Shinsa app; with a folder (shinsa .), on the project it belongs to
-  shinsa open [task]      Open the app, or one task in it (SW-142, an id or a title)
-  shinsa do <request>     Hand Shinsa a piece of work. Options: --plan-first (approve a plan before building), --urgent, --high
-  shinsa import <session> Turn a Claude Code session (.jsonl path or id) into a task. --in <dir> picks the repo
-  shinsa status           What needs a decision, and what agents are working on
-  shinsa help             This text
-
-The Mac app runs Shinsa's engine in the background; these commands talk to it.
-
-Managing Shinsa (add --help to any for its arguments, --json for JSON)
-${describeSurface()}
-
-Agents can call these too: \`shinsa do\` from inside any project hands work over to Shinsa.`;
-
-const ENGINE_LOG = 'engine.log';
 
 const ENGINE_LOG_MAX_BYTES = 8 * 1024 * 1024;
 
 const WAKE_WAIT_MS = 20_000;
 
 const WAKE_POLL_MS = 250;
+
+const IS_BUNDLED = Boolean(BUNDLE) && process.platform === 'darwin';
 
 const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
@@ -83,21 +79,15 @@ async function readRepoRoot(dir: string) {
   return result.ok ? result.stdout.trim() || null : null;
 }
 
-async function isAnswering(base: string) {
-  try {
-    const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1000) });
-    return response.ok;
-  } catch {
-    return false;
-  }
+async function runLaunchctl(args: string[]) {
+  const result = await runCommand(['launchctl', ...args], process.cwd());
+  return { ok: result.ok, output: `${result.stdout}${result.stderr}` };
 }
 
+const UID = process.getuid?.() ?? 0;
+
 export async function kickEngine() {
-  const kicked = await runCommand(
-    ['launchctl', 'kickstart', resolveEngineTarget(process.getuid?.() ?? 0)],
-    process.cwd()
-  );
-  return kicked.ok;
+  return (await runLaunchctl(['kickstart', resolveEngineTarget(UID)])).ok;
 }
 
 export interface WakeOptions {
@@ -108,13 +98,13 @@ export interface WakeOptions {
 
 export function createWakeEngine(
   base: string,
-  options: WakeOptions = { bundled: Boolean(BUNDLE) && process.platform === 'darwin', kick: kickEngine }
+  options: WakeOptions = { bundled: IS_BUNDLED, kick: kickEngine }
 ) {
   return async () => {
     if (!options.bundled || !(await options.kick())) return false;
     const deadline = Date.now() + (options.waitMs ?? WAKE_WAIT_MS);
     while (Date.now() < deadline) {
-      if (await isAnswering(base)) return true;
+      if (await readHealth(base)) return true;
       await Bun.sleep(WAKE_POLL_MS);
     }
     return false;
@@ -166,7 +156,7 @@ interface ProcessOptions {
   bundle?: ShinsaBundle | null;
 }
 
-async function serveWithLoginEnv(
+async function runEngineWithLoginEnv(
   env: Record<string, string | undefined>,
   isTerminal: () => boolean,
   bundle: ShinsaBundle | null
@@ -205,7 +195,8 @@ export function createProcessIo(options: ProcessOptions = {}): CliIo {
     openApp: createOpenApp(base),
     readRepoRoot,
     wakeEngine: createWakeEngine(base),
-    serve: (env) => serveWithLoginEnv(env, isTerminal, bundle),
+    engine: { bundled: IS_BUNDLED, uid: UID, launchctl: runLaunchctl },
+    runEngine: (env) => runEngineWithLoginEnv(env, isTerminal, bundle),
     onShutdown: stopOnSignal,
   };
 }
@@ -221,10 +212,10 @@ function createCommandIo(io: CliIo): CommandIo {
   };
 }
 
-async function serve(io: CliIo) {
+async function runEngine(io: CliIo) {
   const byService = isStartedByService(io.env);
   try {
-    const shinsa = await io.serve(io.env);
+    const shinsa = await io.runEngine(io.env);
     io.onShutdown(shinsa.stop);
     return 0;
   } catch (error) {
@@ -239,15 +230,34 @@ async function serve(io: CliIo) {
   }
 }
 
-async function routeCommand(command: string, args: string[], io: CliIo) {
+function createEngineIo(io: CliIo): EngineIo {
+  return { ...io.engine, base: resolveBase(io.env), write: io.write };
+}
+
+function isHelp(args: string[]) {
+  return args.includes('--help') || args.includes('-h');
+}
+
+function printHelp(args: string[], io: CliIo) {
+  const [topic] = args;
+  if (!topic) {
+    io.write(USAGE);
+    return 0;
+  }
+  if (topic === '--all') {
+    io.write(USAGE_ALL);
+    return 0;
+  }
+  const command = selectCliCommand(topic);
+  if (command) {
+    io.write(describeCliUsage(command));
+    return 0;
+  }
+  return routeCommand(topic, ['--help'], io);
+}
+
+async function routeEveryday(command: string, args: string[], io: CliIo) {
   switch (command) {
-    case 'serve':
-      return serve(io);
-    case 'help':
-    case '--help':
-    case '-h':
-      io.write(USAGE);
-      return 0;
     case 'do':
       await createTask(args, createCommandIo(io));
       return 0;
@@ -255,26 +265,53 @@ async function routeCommand(command: string, args: string[], io: CliIo) {
       await importSession(args, createCommandIo(io));
       return 0;
     case 'status':
-      await printStatus(createCommandIo(io));
-      return 0;
+      return printStatus(args, createCommandIo(io));
     case 'open':
       await openApp(args, createCommandIo(io));
       return 0;
+    case 'start':
+      await startEngine(createEngineIo(io));
+      return 0;
+    case 'stop':
+      await stopEngine(createEngineIo(io));
+      return 0;
+    case 'restart':
+      await restartEngine(createEngineIo(io), parseArgs(args).flags.has('--when-idle'));
+      return 0;
+    case 'logs':
+      printLogs(args, io);
+      return 0;
     default:
-      if (isPathArgument(command)) {
-        await openApp([command], createCommandIo(io));
-        return 0;
-      }
-      if (isSurfaceGroup(command)) {
-        return runSurface([command, ...args], {
-          base: resolveBase(io.env),
-          write: io.write,
-          wake: io.wakeEngine,
-        });
-      }
-      io.write(USAGE);
-      return 1;
+      await printVersion(createEngineIo(io), parseArgs(args).flags.has('--json'));
+      return 0;
   }
+}
+
+async function routeCommand(command: string, args: string[], io: CliIo): Promise<number> {
+  if (command === 'engine') return runEngine(io);
+  if (command === 'help' || command === '--help' || command === '-h') return printHelp(args, io);
+  if (command === '--version' || command === '-v') return routeEveryday('version', args, io);
+  const known = selectCliCommand(command);
+  if (known && known.name !== '.') {
+    if (isHelp(args)) {
+      io.write(describeCliUsage(known));
+      return 0;
+    }
+    return routeEveryday(command, args, io);
+  }
+  if (isPathArgument(command)) {
+    await openApp([command], createCommandIo(io));
+    return 0;
+  }
+  if (isSurfaceGroup(command)) {
+    return runSurface([command, ...args], {
+      base: resolveBase(io.env),
+      write: io.write,
+      wake: io.wakeEngine,
+    });
+  }
+  io.writeError(`No command shinsa ${command}. Run \`shinsa help\` for the list.`);
+  return 1;
 }
 
 export async function runCli(args: string[], io: CliIo = createProcessIo()): Promise<number> {

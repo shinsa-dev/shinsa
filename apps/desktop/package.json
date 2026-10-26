@@ -5,7 +5,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Shinsa for Mac: a window around shinsa serve",
+  "description": "Shinsa for Mac: the app around the Shinsa engine",
   "main": "dist/main.cjs",
   "scripts": {
     "build": "bun build src/main/index.ts --outfile dist/main.cjs --target node --format cjs --external electron && bun build src/preload/index.ts --outfile dist/preload.cjs --target browser --format cjs --external electron",

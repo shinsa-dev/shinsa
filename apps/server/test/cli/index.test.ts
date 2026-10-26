@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { NOT_RUNNING } from '../../src/cli/api.ts';
+import { ENGINE_STOPPED } from '../../src/cli/engine.ts';
+import { USAGE_ALL } from '../../src/cli/help.ts';
 import {
   type CliIo,
   createProcessIo,
@@ -74,7 +76,8 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
     },
     readRepoRoot: () => Promise.resolve(null),
     wakeEngine: () => Promise.resolve(false),
-    serve: () => Promise.reject(new Error('not in this test')),
+    engine: { bundled: false, uid: 501, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
+    runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
     ...overrides,
   };
@@ -82,19 +85,106 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
 }
 
 describe('help and unknown commands', () => {
-  test('help prints the usage, an unknown command prints it and fails', async () => {
+  test('help prints the usage, and an unknown command says where the list is', async () => {
     for (const command of ['help', '--help', '-h']) {
       const { io, out } = createIo('1');
       expect(await runCli([command], io)).toBe(0);
       expect(out).toEqual([USAGE]);
     }
-    const { io, out } = createIo('1');
-    expect(await runCli(['launch'], io)).toBe(1);
-    expect(out).toEqual([USAGE]);
+    for (const command of ['launch', 'serve']) {
+      const { io, out, errors } = createIo('1');
+      expect(await runCli([command], io)).toBe(1);
+      expect(out).toEqual([]);
+      expect(errors).toEqual([`No command shinsa ${command}. Run \`shinsa help\` for the list.`]);
+    }
+  });
+
+  test('help takes a command or a group, --all lists everything, and --help works on every command', async () => {
+    const all = createIo('1');
+    expect(await runCli(['help', '--all'], all.io)).toBe(0);
+    expect(all.out).toEqual([USAGE_ALL]);
+    const topic = createIo('1');
+    expect(await runCli(['help', 'do'], topic.io)).toBe(0);
+    expect(await runCli(['do', '--help'], topic.io)).toBe(0);
+    expect(await runCli(['stop', '-h'], topic.io)).toBe(0);
+    expect(await runCli(['help', 'tasks'], topic.io)).toBe(0);
+    expect(topic.out[0]).toStartWith('Hand Shinsa a piece of work.\n\nUsage\n  shinsa do <request...>');
+    expect(topic.out[1]).toBe(topic.out[0]);
+    expect(topic.out[2]).toStartWith('Stop the engine.');
+    expect(topic.out[3]).toStartWith('shinsa tasks\n');
+    const unknown = createIo('1');
+    expect(await runCli(['help', 'launch'], unknown.io)).toBe(1);
+    expect(unknown.errors).toEqual(['No command shinsa launch. Run `shinsa help` for the list.']);
   });
 });
 
-describe('shinsa serve', () => {
+describe('the engine commands', () => {
+  function startHealth(state: { pid: number | null }) {
+    const server = Bun.serve({
+      port: 0,
+      fetch: () =>
+        state.pid === null
+          ? new Response('stopped', { status: 503 })
+          : Response.json({ version: '0.0.0', commit: null, pid: state.pid, protocol: 3 }),
+    });
+    stops.push(() => Promise.resolve(server.stop(true)));
+    return String(server.port);
+  }
+
+  test('start, stop, restart and version reach the engine through launchd', async () => {
+    const state: { pid: number | null } = { pid: 7 };
+    const calls: string[][] = [];
+    const { io, out, errors } = createIo(startHealth(state), {
+      engine: {
+        bundled: true,
+        uid: 501,
+        waitMs: 2000,
+        launchctl: (args) => {
+          calls.push(args);
+          if (args[1] === '-k') state.pid = 8;
+          if (args[0] === 'kill') state.pid = null;
+          return Promise.resolve({ ok: true, output: '' });
+        },
+      },
+    });
+    expect(await runCli(['start'], io)).toBe(0);
+    expect(await runCli(['version'], io)).toBe(0);
+    expect(await runCli(['--version'], io)).toBe(0);
+    expect(await runCli(['-v', '--json'], io)).toBe(0);
+    expect(await runCli(['restart'], io)).toBe(0);
+    expect(await runCli(['stop'], io)).toBe(0);
+    expect(out.slice(0, 3)).toEqual([
+      'The engine is already running: Shinsa 0.0.0, pid 7.',
+      'shinsa 0.0.0',
+      'Engine: Shinsa 0.0.0, pid 7, protocol 3',
+    ]);
+    expect(JSON.parse(out[5] ?? '')).toMatchObject({ engine: { pid: 7 } });
+    expect(out.slice(6)).toEqual([
+      'Restarted the engine: Shinsa 0.0.0, pid 8.',
+      'Stopped the engine. Runs it cut off resume when it starts again: `shinsa start`, the Shinsa app or any command that needs it.',
+    ]);
+    expect(calls.map((call) => call[0])).toEqual(['print', 'kickstart', 'print', 'kill']);
+    expect(errors).toEqual([]);
+  });
+
+  test('restart --when-idle asks the engine itself, which has to be running', async () => {
+    const { io, errors } = createIo('1', {
+      engine: { bundled: true, uid: 501, launchctl: () => Promise.resolve({ ok: true, output: '' }) },
+    });
+    expect(await runCli(['restart', '--when-idle'], io)).toBe(1);
+    expect(errors).toEqual([`shinsa restart: ${ENGINE_STOPPED}`]);
+  });
+
+  test('logs reads the engine log in the data folder', async () => {
+    const home = createTempDir();
+    writeFiles(home, { 'data/engine.log': 'started\n' });
+    const { io, out } = createIo('1', { env: { SHINSA_HOME: home } });
+    expect(await runCli(['logs'], io)).toBe(0);
+    expect(out).toEqual(['started']);
+  });
+});
+
+describe('shinsa engine', () => {
   test('stops on shutdown', async () => {
     let stopped = false;
     let registered: (() => Promise<void>) | null = null;
@@ -105,12 +195,12 @@ describe('shinsa serve', () => {
       },
     } as Shinsa;
     const { io } = createIo('1', {
-      serve: () => Promise.resolve(shinsa),
+      runEngine: () => Promise.resolve(shinsa),
       onShutdown: (stop) => {
         registered = stop;
       },
     });
-    expect(await runCli(['serve'], io)).toBe(0);
+    expect(await runCli(['engine'], io)).toBe(0);
     await (registered as unknown as () => Promise<void>)();
     expect(stopped).toBe(true);
   });
@@ -128,9 +218,9 @@ describe('shinsa serve', () => {
     try {
       const { io, errors } = createIo('1', {
         env: { [SERVICE_MARKER]: '1' },
-        serve: () => Promise.reject(new ServerRunningError('/data', holder)),
+        runEngine: () => Promise.reject(new ServerRunningError('/data', holder)),
       });
-      expect(await runCli(['serve'], io)).toBe(0);
+      expect(await runCli(['engine'], io)).toBe(0);
       expect(errors).toEqual([]);
       expect(warn).toHaveBeenCalledWith(
         '[Serve] Another Shinsa holds this data directory, so the service stays stopped',
@@ -142,17 +232,19 @@ describe('shinsa serve', () => {
   });
 
   test('from a terminal the same lock is an error, and so is any other failure under the service', async () => {
-    const running = createIo('1', { serve: () => Promise.reject(new ServerRunningError('/data', holder)) });
-    expect(await runCli(['serve'], running.io)).toBe(1);
+    const running = createIo('1', {
+      runEngine: () => Promise.reject(new ServerRunningError('/data', holder)),
+    });
+    expect(await runCli(['engine'], running.io)).toBe(1);
     expect(running.errors).toEqual([
-      'shinsa serve: Shinsa is already running on /data: http://127.0.0.1:5180 (pid 4242, version 0.0.0 (aaaaaaa)). Stop it first, or set SHINSA_HOME to another folder.',
+      'shinsa engine: Shinsa is already running on /data: http://127.0.0.1:5180 (pid 4242, version 0.0.0 (aaaaaaa)). Stop it first, or set SHINSA_HOME to another folder.',
     ]);
     const broken = createIo('1', {
       env: { [SERVICE_MARKER]: '1' },
-      serve: () => Promise.reject(new Error('port taken')),
+      runEngine: () => Promise.reject(new Error('port taken')),
     });
-    expect(await runCli(['serve'], broken.io)).toBe(1);
-    expect(broken.errors).toEqual(['shinsa serve: port taken']);
+    expect(await runCli(['engine'], broken.io)).toBe(1);
+    expect(broken.errors).toEqual(['shinsa engine: port taken']);
   });
 });
 
@@ -195,7 +287,7 @@ describe('shinsa do', () => {
     });
     try {
       const first = createIo(String(plain.port));
-      expect(await runCli(['status'], first.io)).toBe(1);
+      expect(await runCli(['do', 'x'], first.io)).toBe(1);
       expect(first.errors[0]).toContain('answered 502 without JSON');
       const second = createIo(String(failing.port));
       expect(await runCli(['do', 'x'], second.io)).toBe(1);
@@ -260,24 +352,49 @@ describe('shinsa import', () => {
 });
 
 describe('shinsa status and open', () => {
-  test('status lists the briefing, the decisions and the agents at work', async () => {
+  const HEALTH = {
+    ok: true,
+    seq: 3,
+    problems: [],
+    version: '0.0.0',
+    commit: null,
+    installPath: '/app',
+    pid: 42,
+    protocol: 3,
+    dataDir: '/data',
+    uptimeMs: 7_200_000,
+  };
+
+  function routeStatus(queue: unknown, health: unknown = HEALTH) {
+    return (request: Request) =>
+      Response.json(new URL(request.url).pathname === '/api/health' ? health : queue);
+  }
+
+  const QUIET = { briefing: null, decisions: [], working: [] };
+
+  test('status names the engine, then the briefing, the decisions and the agents at work', async () => {
     const queue = Bun.serve({
       port: 0,
-      fetch: () =>
-        Response.json({
-          briefing: 'Review the search first.',
-          decisions: [{ label: 'Review', title: 'Add search', url: 'http://x/tasks/1' }],
-          working: [{ label: 'Building', title: 'Fix scroll' }],
-        }),
+      fetch: routeStatus({
+        briefing: 'Review the search first.',
+        decisions: [{ label: 'Review', title: 'Add search', url: 'http://x/tasks/1' }],
+        working: [{ label: 'Building', title: 'Fix scroll' }],
+      }),
     });
     const empty = Bun.serve({
       port: 0,
-      fetch: () => Response.json({ briefing: null, decisions: [], working: [] }),
+      fetch: routeStatus(QUIET, { ...HEALTH, ok: false, problems: [{}] }),
+    });
+    const damaged = Bun.serve({
+      port: 0,
+      fetch: routeStatus(QUIET, { ...HEALTH, ok: false, problems: [{}, {}] }),
     });
     try {
       const { io, out } = createIo(String(queue.port));
       expect(await runCli(['status'], io)).toBe(0);
       expect(out).toEqual([
+        'Shinsa 0.0.0 from /app, pid 42, up 2 hours. Data in /data.',
+        '',
         'Review the search first.',
         '',
         'Needs you (1)',
@@ -288,23 +405,52 @@ describe('shinsa status and open', () => {
       ]);
       const quiet = createIo(String(empty.port));
       await runCli(['status'], quiet.io);
-      expect(quiet.out[0]).toBe('No briefing yet.');
+      expect(quiet.out.slice(1, 4)).toEqual([
+        'It skipped 1 damaged entry in its log at start. `shinsa health` shows it.',
+        '',
+        'No briefing yet.',
+      ]);
+      expect(quiet.out.at(-1)).toBe('No briefing yet.');
+      const worse = createIo(String(damaged.port));
+      await runCli(['status'], worse.io);
+      expect(worse.out[1]).toBe(
+        'It skipped 2 damaged entries in its log at start. `shinsa health` lists them.'
+      );
+      const json = createIo(String(queue.port));
+      expect(await runCli(['status', '--json'], json.io)).toBe(0);
+      expect(JSON.parse(json.out[0] ?? '')).toMatchObject({ engine: { pid: 42 }, queue: { working: [{}] } });
     } finally {
       queue.stop(true);
       empty.stop(true);
+      damaged.stop(true);
     }
+  });
+
+  test('status says the engine is not running, and never starts it', async () => {
+    let woken = false;
+    const { io, out } = createIo('1', {
+      wakeEngine: () => {
+        woken = true;
+        return Promise.resolve(true);
+      },
+    });
+    expect(await runCli(['status'], io)).toBe(1);
+    expect(await runCli(['status', '--json'], io)).toBe(1);
+    expect(out[0]).toBe(ENGINE_STOPPED);
+    expect(JSON.parse(out[1] ?? '')).toEqual({ engine: null, queue: null });
+    expect(woken).toBe(false);
   });
 
   test('reaches the server on the host it is configured on', async () => {
     const server = Bun.serve({
       hostname: '::1',
       port: 0,
-      fetch: () => Response.json({ briefing: 'On IPv6.', decisions: [], working: [] }),
+      fetch: routeStatus({ briefing: 'On IPv6.', decisions: [], working: [] }),
     });
     try {
       const { io, out } = createIo(String(server.port));
       expect(await runCli(['status'], { ...io, env: { ...io.env, SHINSA_HOST: '::1' } })).toBe(0);
-      expect(out[0]).toBe('On IPv6.');
+      expect(out[2]).toBe('On IPv6.');
     } finally {
       server.stop(true);
     }
@@ -360,11 +506,11 @@ describe('the process io', () => {
     }
   });
 
-  test('serve reads the login shell’s environment first, so the agents find the user’s tools', async () => {
+  test('the engine reads the login shell’s environment first, so the agents find the user’s tools', async () => {
     const restore = overrideEnv({ FAKE_LOGIN_SHELL_EXPORT: '1', FAKE_LOGIN_VAR: undefined });
     const path = process.env.PATH;
     try {
-      const shinsa = await createProcessIo({ isTerminal: () => false }).serve({
+      const shinsa = await createProcessIo({ isTerminal: () => false }).runEngine({
         SHINSA_DATA_DIR: join(createTempDir(), 'data'),
         SHINSA_PORT: '0',
         SHINSA_INSPECT: '1',
@@ -378,12 +524,12 @@ describe('the process io', () => {
     }
   });
 
-  test('serve started from a terminal keeps the terminal’s environment and reads no login shell', async () => {
+  test('the engine started from a terminal keeps the terminal’s environment and reads no login shell', async () => {
     const restore = overrideEnv({ FAKE_LOGIN_SHELL_EXPORT: '1', FAKE_LOGIN_VAR: undefined });
     const path = process.env.PATH;
     const info = spyOn(log, 'info').mockImplementation(() => undefined);
     try {
-      const shinsa = await createProcessIo({ isTerminal: () => true }).serve({
+      const shinsa = await createProcessIo({ isTerminal: () => true }).runEngine({
         SHINSA_DATA_DIR: join(createTempDir(), 'data'),
         SHINSA_PORT: '0',
         SHINSA_INSPECT: '1',
@@ -400,10 +546,10 @@ describe('the process io', () => {
     }
   });
 
-  test('serve drops the service’s marker, so nothing it runs thinks launchd started it', async () => {
+  test('the engine drops the service’s marker, so nothing it runs thinks launchd started it', async () => {
     const restore = overrideEnv({ [SERVICE_MARKER]: '1' });
     try {
-      const shinsa = await createProcessIo({ isTerminal: () => true }).serve({
+      const shinsa = await createProcessIo({ isTerminal: () => true }).runEngine({
         SHINSA_DATA_DIR: join(createTempDir(), 'data'),
         SHINSA_PORT: '0',
         SHINSA_INSPECT: '1',
@@ -415,11 +561,11 @@ describe('the process io', () => {
     }
   });
 
-  test('serve starts Shinsa from the environment and a signal stops it', async () => {
+  test('the engine starts Shinsa from the environment and a signal stops it', async () => {
     const exit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
     try {
       const io = createProcessIo();
-      const shinsa = await io.serve({
+      const shinsa = await io.runEngine({
         SHINSA_DATA_DIR: join(createTempDir(), 'data'),
         SHINSA_PORT: '0',
         SHINSA_INSPECT: '1',
@@ -471,7 +617,7 @@ describe('waking the engine', () => {
     const path = process.env.PATH;
     const restore = overrideEnv({ [SERVICE_MARKER]: '1' });
     try {
-      const shinsa = await createProcessIo({ isTerminal: () => true, bundle }).serve({
+      const shinsa = await createProcessIo({ isTerminal: () => true, bundle }).runEngine({
         [SERVICE_MARKER]: '1',
         SHINSA_DATA_DIR: dataDir,
         SHINSA_PORT: '0',
@@ -585,9 +731,5 @@ describe('managing Shinsa from the command line', () => {
     const { io, errors } = createIo('1');
     expect(await runCli(['tasks', 'launch', 'now'], io)).toBe(1);
     expect(errors).toEqual(['shinsa tasks: No command shinsa tasks launch. Run `shinsa tasks --help`.']);
-  });
-
-  test('the usage lists every managing command', () => {
-    expect(USAGE).toContain(`  shinsa ${'schedules write'.padEnd(26)} Create a schedule`);
   });
 });

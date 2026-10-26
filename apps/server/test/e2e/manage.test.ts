@@ -70,7 +70,8 @@ async function shinsa(...args: string[]) {
     openApp: () => Promise.resolve(),
     readRepoRoot: () => Promise.resolve(null),
     wakeEngine: () => Promise.resolve(false),
-    serve: () => Promise.reject(new Error('not in this test')),
+    engine: { bundled: false, uid: 0, launchctl: () => Promise.resolve({ ok: false, output: '' }) },
+    runEngine: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
   };
   expect(await runCli(args, io)).toBe(0);

@@ -31,7 +31,7 @@ describe('the shinsa binary', () => {
     };
     writeFileSync(join(dataDir, LOCK_FILE), JSON.stringify(holder));
     const env = { ...process.env, SHINSA_HOME: home, HOME: home, SHINSA_PORT: '0' };
-    const service = Bun.spawnSync(['bun', MAIN, 'serve'], {
+    const service = Bun.spawnSync(['bun', MAIN, 'engine'], {
       env: { ...env, [SERVICE_MARKER]: '1' },
       timeout: SPAWN_TIMEOUT_MS,
     });
@@ -39,8 +39,8 @@ describe('the shinsa binary', () => {
     expect(`${service.stdout}${service.stderr}`).toContain(
       `"message":"[Serve] Another Shinsa holds this data directory, so the service stays stopped","dataDir":"${dataDir}","pid":${process.pid}`
     );
-    const terminal = Bun.spawnSync(['bun', MAIN, 'serve'], { env, timeout: SPAWN_TIMEOUT_MS });
+    const terminal = Bun.spawnSync(['bun', MAIN, 'engine'], { env, timeout: SPAWN_TIMEOUT_MS });
     expect(terminal.exitCode).toBe(1);
-    expect(terminal.stderr.toString()).toContain(`shinsa serve: Shinsa is already running on ${dataDir}`);
+    expect(terminal.stderr.toString()).toContain(`shinsa engine: Shinsa is already running on ${dataDir}`);
   });
 });

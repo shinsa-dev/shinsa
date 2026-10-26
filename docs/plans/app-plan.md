@@ -3,7 +3,7 @@
 **Decided 2026-10-25; phases 1 to 3 built 2026-10-26** (Phases, below, says what each one holds and what is left).
 On your Mac, Shinsa is one app. There is no server to start, no port to know and
 no web page to open. The engine still runs as its own process, out of sight, because some work has to go on while
-the app is closed. This plan replaces the parts of `docs/plans/desktop-plan.md` that treat `shinsa serve` as
+the app is closed. This plan replaces the parts of `docs/plans/desktop-plan.md` that treat `shinsa engine` as
 something you run, and it is the local half of `docs/plans/remote-plan.md`.
 
 ## What you see
@@ -19,7 +19,8 @@ something you run, and it is the local half of `docs/plans/remote-plan.md`.
   about your work is stored in the cloud.
 - **The `shinsa` command is for doing things, not for running Shinsa.** `shinsa .` opens the app on the project
   you are in, the way `code .` opens an editor. `shinsa do "…"` starts a task, and the existing groups (`tasks`,
-  `reviews`, `schedules`…) stay for you and for agents. `serve`, `service` and `open` go away.
+  `reviews`, `schedules`…) stay for you and for agents. `serve` and `service` go away; the engine's controls are
+  `shinsa start`, `stop`, `restart`, `logs`, `status` and `version` (`docs/cli.md`).
 
 ## Why the engine still runs on its own
 
@@ -89,9 +90,11 @@ Shinsa.app/Contents/
   the folder is in (or say Shinsa has not worked there yet); `shinsa open <task>` opens it on a task.
 - Every other command talks to the engine. If it does not answer, the command asks launchd to start it
   (`launchctl kickstart`), waits for it, then carries on; otherwise it says to open the Shinsa app.
-- Removed: `service install|uninstall|status|restart|logs`, and `open` in the browser. `serve` stays as the engine's
-  own command, which launchd and `bun dev` run; it is not in the help. The app keeps what `service` was for: the
-  status page shows why the engine is not running and its log, and Shinsa → Restart Engine restarts it.
+- Removed: `serve`, `service install|uninstall|status|restart|logs`, and `open` in the browser. The engine's own
+  entry is `shinsa engine`, which launchd and `bun dev` run; it is not in the help. The app keeps what `service` was
+  for (the status page shows why the engine is not running and its log, and Shinsa → Restart Engine restarts it),
+  and so does the command line, Tailscale's and Docker Desktop's way (`docs/cli.md` → How it is shaped): `shinsa
+  status`, `start`, `stop`, `restart [--when-idle]`, `logs` and `version`, on the bundle's job.
 
 ### Versions and updates
 
@@ -119,7 +122,7 @@ Shinsa.app/Contents/
     **Restart now** (runs resume on their own sessions afterwards) or **When agents are idle**.
   - **An engine on a newer protocol** (an app put back to an older version): the banner asks you to update the app,
     with **Update Shinsa**. A newer engine on the same protocol only gets the header's Update button.
-  - The engine restarts itself through launchd (`launchctl kickstart -k`, as `shinsa service restart`), and only
+  - The engine restarts itself through launchd (`launchctl kickstart -k`, as `shinsa restart`), and only
     when it runs as the background service; otherwise the banner says to stop and start it. A development build
     (version `0.0.0`) is compared by protocol only, so running from source never restarts anything.
   - The engine is restart-safe by construction (`docs/engine.md` → Recovery): the event log holds everything, and a
@@ -207,7 +210,7 @@ warning sign the next time the app opens.
 
 ## What goes away
 
-- `shinsa serve` as something you run, and the CLI's default of running it (built: `shinsa` opens the app).
+- `shinsa engine` as something you run, and the CLI's default of running it (built: `shinsa` opens the app).
 - `shinsa service`, and `shinsa open` in the browser (built).
 - The desktop app's "Shinsa is not running" page and its Start Shinsa dialog (built: the app starts the engine itself
   and shows the status page only when it cannot).
@@ -228,7 +231,7 @@ warning sign the next time the app opens.
    running, `kill -9` brings it back in a second, a restart comes back on its own, a taken port shows its page, and a
    job macOS lost is registered again. Left for a signed build: an update installed over a running engine.
 3. **The command line** (built). `shinsa`, `shinsa .`, `shinsa open <task>`, waking the engine, Install the shinsa
-   Command…, the removals above.
+   Command…, the removals above, and the engine's controls (`start`, `stop`, `restart`, `logs`, `version`).
 4. **Signed releases.** The Developer ID certificate and notarization secrets, after which auto-update installs
    (the updater and the release workflow are already built).
 5. **Remote.** `docs/plans/remote-plan.md`, with the Unix socket, and the hosted dashboard deployed from `apps/web`.

@@ -101,18 +101,18 @@ describe('the engine log', () => {
       '{"level":"warn","error":3}',
       '{not json',
       '',
-      'shinsa serve: Failed to start server. Is port 5199 in use?',
-      'shinsa serve: Failed to start server. Is port 5199 in use?',
+      'shinsa engine: Failed to start server. Is port 5199 in use?',
+      'shinsa engine: Failed to start server. Is port 5199 in use?',
     ].join('\n');
     expect(resolveLogTail(log)).toBe(
       [
         '[Accounts] Could not check: offline',
         '[Serve] Could not stop',
         '{not json',
-        'shinsa serve: Failed to start server. Is port 5199 in use?',
+        'shinsa engine: Failed to start server. Is port 5199 in use?',
       ].join('\n')
     );
-    expect(resolveLogTail(log, 1)).toBe('shinsa serve: Failed to start server. Is port 5199 in use?');
+    expect(resolveLogTail(log, 1)).toBe('shinsa engine: Failed to start server. Is port 5199 in use?');
     expect(selectBusyPort(log)).toBe(5199);
     expect(selectBusyPort('fine')).toBeNull();
   });

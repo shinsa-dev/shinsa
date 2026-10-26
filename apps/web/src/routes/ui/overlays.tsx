@@ -311,7 +311,9 @@ export function OverlaySpecimens() {
         <Button
           variant='outline'
           onClick={() =>
-            toast.error('Unable to reach Shinsa', { description: 'Check that shinsa serve is running.' })
+            toast.error('Unable to reach Shinsa', {
+              description: 'Run shinsa status to see whether the engine is running.',
+            })
           }
         >
           Error

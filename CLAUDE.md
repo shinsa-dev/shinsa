@@ -5,7 +5,7 @@ A control plane for coding agents. Agents do the work end to end; the human only
 ## Project structure
 
 ```
-apps/server/      → @shinsa/server  The engine and the `shinsa` command. The engine (`shinsa serve`, which the Mac app
+apps/server/      → @shinsa/server  The engine and the `shinsa` command. The engine (`shinsa engine`, which the Mac app
                                     runs in the background from a compiled bundle, scripts/build-engine.ts) runs the event log
                                     (SQLite), effect outbox, agent runs (behind a provider interface: the Claude
                                     Agent SDK and Codex), accounts, the MCP servers, plugins and skills agents load,
@@ -34,7 +34,7 @@ docs/                               spec.md, engine.md, protocol.md, design.md, 
 ## How it works
 
 ```
-web ──WebSocket──► shinsa serve
+web ──WebSocket──► shinsa engine
                     Engine.dispatch(command)
                       └─ decide(state, command) ─► events + effects      (packages/core, pure)
                          events → SQLite log → the decided state → a patch to every socket
@@ -94,8 +94,8 @@ web ──WebSocket──► shinsa serve
 
 | Command | Description |
 |---|---|
-| `bun dev` | `shinsa serve` on :5180 and the web app on :5181 (proxies `/api` and `/ws`) |
-| `bun run build` then `bun start` | Production: `shinsa serve` serves `apps/web/dist` on :5180 |
+| `bun dev` | `shinsa engine` on :5180 and the web app on :5181 (proxies `/api` and `/ws`) |
+| `bun run build` then `bun start` | Production: `shinsa engine` serves `apps/web/dist` on :5180 |
 | `bun lint` | Biome (with the Grit plugins), `bun lint:conventions` (`scripts/lint-conventions.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
 | `bun format` | Biome's formatter only (`bun format:fix` writes) |
 | `bun check-types` | TypeScript in every workspace and `scripts/` |

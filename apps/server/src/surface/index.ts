@@ -12,6 +12,7 @@ import { WORK_SPECS } from './work.ts';
 export { type CommandReceipt, resolveCommandKey, type SurfaceClient } from './client.ts';
 export { readArgv, readToolInput, resolveInputSchema, type Values } from './fields.ts';
 export type { SurfaceSpec } from './spec.ts';
+export { describeRunning } from './system.ts';
 
 const COMMAND_SPEC: SurfaceSpec = {
   path: ['command'],
@@ -113,6 +114,81 @@ export function describeSurface(specs: SurfaceSpec[] = SURFACE) {
   return specs.map((spec) => `  shinsa ${spec.path.join(' ').padEnd(26)} ${spec.summary}`).join('\n');
 }
 
+interface SurfaceSection {
+  title: string;
+  groups: readonly (readonly [group: string, summary: string])[];
+}
+
+const SURFACE_SECTIONS: readonly SurfaceSection[] = [
+  {
+    title: 'Work',
+    groups: [
+      ['tasks', 'List, show, create and steer tasks.'],
+      ['plans', 'Approve, revise or reject a plan.'],
+      ['reviews', 'Approve, revise or reject the changes of a task.'],
+      ['merges', 'Merge the pull request of a task, or decline to.'],
+      ['questions', 'Answer an agent’s question.'],
+      ['operations', 'Run or skip the operation of a change that merged.'],
+      ['gates', 'Answer any decision by its id, or give a secret an agent asked for.'],
+      ['rounds', 'Choose how a round ships.'],
+      ['runs', 'Snooze or dismiss the warning about a quiet agent.'],
+      ['delegations', 'List or stop the work a step handed to other agents.'],
+      ['suggestions', 'Accept, keep or dismiss the tasks agents suggest.'],
+    ],
+  },
+  {
+    title: 'Automations',
+    groups: [['schedules', 'Tasks that start on a schedule or from a webhook.']],
+  },
+  {
+    title: 'Projects and setup',
+    groups: [
+      ['projects', 'The projects your repositories and folders belong to.'],
+      ['focus', 'Show only one project’s work.'],
+      ['repos', 'The repositories Shinsa works in.'],
+      ['folders', 'The folders Shinsa looks in for repositories.'],
+      ['accounts', 'The Claude accounts agents run on.'],
+      ['settings', 'Read and change settings.'],
+      ['setup', 'Where setup stands, and the tools Shinsa needs.'],
+    ],
+  },
+  {
+    title: 'Integrations',
+    groups: [
+      ['mcp', 'The MCP servers agents can use.'],
+      ['skills', 'The skills agents can load.'],
+      ['plugins', 'The Claude Code plugins agents run with.'],
+    ],
+  },
+  {
+    title: 'Inside Shinsa',
+    groups: [
+      ['queue', 'What needs a decision, and what agents are working on.'],
+      ['activity', 'What agents did on your behalf.'],
+      ['usage', 'How much of each account’s usage limits is used.'],
+      ['providers', 'The agent providers and their models.'],
+      ['versions', 'Claude Code, Codex and the Agent SDK, and their updates.'],
+      ['health', 'Whether the engine loaded its log cleanly.'],
+      ['command', 'Send any command by its type and fields.'],
+    ],
+  },
+];
+
+export function listUncatalogedGroups(specs: SurfaceSpec[] = SURFACE) {
+  const cataloged = new Set(SURFACE_SECTIONS.flatMap((section) => section.groups.map(([group]) => group)));
+  return listGroups(specs).filter((group) => !cataloged.has(group));
+}
+
+export function describeSections(sections: readonly SurfaceSection[] = SURFACE_SECTIONS) {
+  return sections
+    .map((section) =>
+      [section.title, ...section.groups.map(([group, summary]) => `  ${group.padEnd(14)} ${summary}`)].join(
+        '\n'
+      )
+    )
+    .join('\n\n');
+}
+
 export function listAgentSpecs(specs: SurfaceSpec[] = SURFACE) {
   return specs.filter((spec) => !spec.humanOnly && !spec.agentTool);
 }
@@ -138,7 +214,7 @@ function serializeSpecReference(spec: SurfaceSpec) {
   const usage = ['shinsa', ...spec.path, ...fields.map(describeArgument), '[--json]'].join(' ');
   const sends = spec.command ? ` Sends \`${spec.command}\`.` : '';
   return [
-    `### shinsa ${spec.path.join(' ')}`,
+    `#### shinsa ${spec.path.join(' ')}`,
     '',
     spec.summary,
     '',
@@ -155,17 +231,14 @@ function serializeSpecReference(spec: SurfaceSpec) {
 
 export function serializeReference(specs: SurfaceSpec[] = SURFACE) {
   const groups = listGroups(specs).map((group) =>
-    [`## ${group}`, ...listGroup(group, specs).map(serializeSpecReference)].join('\n\n')
+    [`### ${group}`, ...listGroup(group, specs).map(serializeSpecReference)].join('\n\n')
   );
-  return `${[
-    '# The `shinsa` command line',
+  return [
+    '## The groups',
     '',
-    'Generated from the specs in `apps/server/src/surface` by `bun run --cwd apps/server docs:cli`; a test fails when',
-    'this file and the specs differ. How the surface works is `docs/engine.md` → The command surface.',
+    'Generated from the specs in `apps/server/src/surface`. How the surface works is `docs/engine.md` → The command',
+    'surface.',
     '',
-    'Every command talks to the running server on the configured host (`SHINSA_HOST` or `hostname` in `config.json`;',
-    '127.0.0.1 when the server listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180).',
-    'When the Mac app runs the engine and it is not answering, a command asks launchd to start it and waits for it.',
     '`--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as',
     '`{ "error": { "code", "message" } }` with exit code 1. A task is named by its handle (SW-142), its id, the start of',
     'its id or its exact title; an account by id or email; a repository by name or id; a project by key, name or id.',
@@ -174,8 +247,6 @@ export function serializeReference(specs: SurfaceSpec[] = SURFACE) {
     'marked yours alone has no tool (`docs/engine.md` → Who can change Shinsa), and `tasks create` has none either:',
     'an agent files a task with `create_task`, which files it once however often the call is repeated.',
     '',
-    ...groups.flatMap((group) => [group, '']),
-  ]
-    .join('\n')
-    .trimEnd()}\n`;
+    groups.join('\n\n'),
+  ].join('\n');
 }

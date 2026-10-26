@@ -1,11 +1,192 @@
 # The `shinsa` command line
 
-Generated from the specs in `apps/server/src/surface` by `bun run --cwd apps/server docs:cli`; a test fails when
-this file and the specs differ. How the surface works is `docs/engine.md` → The command surface.
+You never have to run the command line. The Shinsa app sets up the engine, keeps it running in the background as a
+login item (`docs/engine.md` → The engine in the background) and does everything the command line does. The
+`shinsa` command is for doing things from a terminal, and for agents, which get the same surface as tools.
 
-Every command talks to the running server on the configured host (`SHINSA_HOST` or `hostname` in `config.json`;
-127.0.0.1 when the server listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180).
-When the Mac app runs the engine and it is not answering, a command asks launchd to start it and waits for it.
+## How it is shaped
+
+Shinsa is built like Tailscale and Docker Desktop: an app, a daemon that always runs, and a command line that talks
+to the daemon. The two set the pattern; Shinsa takes what works from each.
+
+| | Tailscale | Docker Desktop | Shinsa |
+| --- | --- | --- | --- |
+| The daemon | `tailscaled`, its own binary, run by systemd or the macOS app | `dockerd`, run by the app inside its VM | the app's own engine, the same binary as the command, run by launchd as a login item |
+| Running the daemon by hand | `tailscaled` is not a `tailscale` command | not a `docker` command | not in the help: `shinsa engine` exists only for the launchd job and `bun dev` |
+| Daemon controls | `up`, `down`, `status` (exits 1 when stopped), `version` (with `--daemon`) | `docker desktop start`, `stop`, `restart`, `status`, `logs`, `version`, `update` | `start`, `stop`, `restart` (also `--when-idle`), `status`, `logs`, `version`, at the top level |
+| Everyday work | one flat list of verbs (`ping`, `ssh`, `file`, `serve`) | `docker --help` puts Common Commands first, then Management Commands (`container`, `image`, `system`…) | Everyday first (`.`, `open`, `do`, `import`, `status`), then the groups by section |
+| When the daemon is down | commands fail and say so | commands fail and say so | a command that needs the engine starts it through launchd and carries on; only `status` and `version` report without starting it |
+| Machine output | `--json` on some commands | `--format json` on some commands | `--json` on every command, with errors as JSON too |
+
+What Shinsa takes:
+
+- **The daemon is not a user command.** Tailscale and Docker never ask you to start their daemon from their CLI;
+  their app or the system's service manager does. Shinsa's engine is the same executable as the command, so it keeps
+  an entry for launchd (`shinsa engine`), left out of the help and refused in an agent's shell, as `stop` and
+  `restart` are, since the engine is what runs the agent.
+- **Lifecycle at the top level, like Tailscale.** There are five controls, too few for a group of their own (Docker
+  needs `docker desktop` because `docker start` already starts a container). They are `start` and `stop` rather than
+  Tailscale's `up` and `down`, which connect and disconnect while `tailscaled` keeps running; Shinsa has nothing
+  between running and stopped.
+- **The help is Docker's.** The everyday commands come first, then the engine, then every group in one line under
+  its section, examples, and how to go deeper (`shinsa <group>`, `--help`, `shinsa help --all`). Every command,
+  everyday ones included, prints its usage, what it does, its options and examples under `--help`.
+- **`version` names both sides**, like `docker version`'s Client and Server: this command's version and the engine's,
+  and says when the engine runs another version than the app carries.
+- **Better than either:** a command never fails because the engine is asleep (it starts it and waits), `restart
+  --when-idle` waits until no agent is mid-turn, and the whole surface is also every task agent's tools, generated
+  from the same specs.
+- **`do` stays `do`.** It hands over any kind of work (a change, a question, an investigation), so a noun such as
+  `new` or `create` would undersell it; `shinsa tasks create` is the long form with every option.
+
+## Where commands go
+
+Every command talks to the engine on the configured host (`SHINSA_HOST` or `hostname` in `config.json`; 127.0.0.1
+when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180). When the Mac
+app runs the engine and it is not answering, a command asks launchd to start it and waits for it; `status` and
+`version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app installs (Shinsa → Install
+the shinsa Command…), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
+
+<!-- Everything below is generated from apps/server/src/cli and apps/server/src/surface by `bun run --cwd apps/server docs:cli`, and a test fails when it falls behind. -->
+
+## Everyday commands
+
+### shinsa [folder]
+
+Open the app, on the project of a folder: `shinsa .` for this one. Alone it opens the app on Home. With a folder it focuses the app on the project of the repository the folder is in, or says that Shinsa has not worked there yet.
+
+```
+shinsa [folder]
+$ shinsa
+$ shinsa .
+$ shinsa ~/Developer/shop
+```
+
+### shinsa open
+
+Open the app on a task: SW-142, its id or its title. Without a task it opens the app on Home; a folder works as it does for `shinsa <folder>`.
+
+```
+shinsa open [task]
+$ shinsa open SW-142
+```
+
+### shinsa do
+
+Hand Shinsa a piece of work. The folder you run it in tells triage where the work is. Shinsa classifies the request, plans it and builds it, and brings it back when it needs a decision.
+
+```
+shinsa do <request...> [--plan-first] [--urgent | --high]
+$ shinsa do "fix the scroll in tab groups"
+$ shinsa do "add search to the docs" --plan-first
+```
+
+| Option | What it does |
+| --- | --- |
+| `--plan-first` | Wait for you to approve a plan before building. |
+| `--urgent` | Put it ahead of everything else. |
+| `--high` | Put it ahead of normal work. |
+
+### shinsa import
+
+Turn a Claude Code session into a task. Takes a session file (.jsonl) or a session id. The task starts with a plan for you to approve, so nothing builds until you have looked.
+
+```
+shinsa import <session> [--in <folder>] [--urgent | --high]
+$ shinsa import 0b9c2f4e-6a8d
+$ shinsa import ~/session.jsonl --in ~/Developer/shop
+```
+
+| Option | What it does |
+| --- | --- |
+| `--in <folder>` | Work in this folder instead of the one the session ran in. |
+| `--urgent` | Put it ahead of everything else. |
+| `--high` | Put it ahead of normal work. |
+
+### shinsa status
+
+Whether the engine is running, and what needs you. Shows the engine’s version and data folder, the Home guide, the decisions waiting for you and what agents are working on. Exits with 1 when the engine is not running, and never starts it.
+
+```
+shinsa status [--json]
+$ shinsa status
+```
+
+| Option | What it does |
+| --- | --- |
+| `--json` | Print the answer as JSON. |
+
+## The engine
+
+### shinsa start
+
+Start the engine. Asks launchd to start the engine the Shinsa app set up, and waits until it answers. Any other command that needs the engine starts it the same way.
+
+```
+shinsa start
+$ shinsa start
+```
+
+### shinsa stop
+
+Stop the engine. Agents resume when it starts again. Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in.
+
+```
+shinsa stop
+$ shinsa stop
+```
+
+Yours alone: an agent’s shell may not run it, since the engine runs the agent.
+
+### shinsa restart
+
+Restart the engine, now or once agents are idle. Restarts the engine and waits until the new one answers. Runs it cuts off resume on their own sessions.
+
+```
+shinsa restart [--when-idle]
+$ shinsa restart
+$ shinsa restart --when-idle
+```
+
+| Option | What it does |
+| --- | --- |
+| `--when-idle` | Wait until no agent is mid-turn, then restart. |
+
+Yours alone: an agent’s shell may not run it, since the engine runs the agent.
+
+### shinsa logs
+
+Show the end of the engine’s log. Reads `engine.log` in the data folder, one line per entry: the time in UTC, the level, the message and its fields.
+
+```
+shinsa logs [--lines <count>] [--json]
+$ shinsa logs
+$ shinsa logs --lines 200
+```
+
+| Option | What it does |
+| --- | --- |
+| `--lines <count>` | How many lines, 50 by default. |
+| `--json` | Print the lines as the engine wrote them. |
+
+### shinsa version
+
+Show the version of this command and of the engine. Also `shinsa --version`. Says when the engine runs another version than the app carries.
+
+```
+shinsa version [--json]
+$ shinsa version
+```
+
+| Option | What it does |
+| --- | --- |
+| `--json` | Print the answer as JSON. |
+
+## The groups
+
+Generated from the specs in `apps/server/src/surface`. How the surface works is `docs/engine.md` → The command
+surface.
+
 `--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as
 `{ "error": { "code", "message" } }` with exit code 1. A task is named by its handle (SW-142), its id, the start of
 its id or its exact title; an account by id or email; a repository by name or id; a project by key, name or id.
@@ -14,9 +195,9 @@ dashes, taking the same fields in snake_case; what it does is logged as on your 
 marked yours alone has no tool (`docs/engine.md` → Who can change Shinsa), and `tasks create` has none either:
 an agent files a task with `create_task`, which files it once however often the call is repeated.
 
-## tasks
+### tasks
 
-### shinsa tasks list
+#### shinsa tasks list
 
 List tasks, most recently changed first.
 
@@ -33,7 +214,7 @@ Every task agent's tool: `tasks_list` (reads).
 | `--repo` | text, optional | Only tasks in this repository (name or id). |
 | `--limit` | integer, optional | At most this many tasks (50 by default). |
 
-### shinsa tasks show
+#### shinsa tasks show
 
 Show a task: its state, plan, open decisions and recent activity.
 
@@ -47,7 +228,7 @@ Every task agent's tool: `tasks_show` (reads).
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa tasks chat
+#### shinsa tasks chat
 
 Read a task's chat: your messages, the agents' replies and, on request, their tool calls.
 
@@ -65,7 +246,7 @@ Every task agent's tool: `tasks_chat` (reads).
 | `--after` | integer, optional | Entries after this index, oldest first. |
 | `--limit` | integer, optional | At most this many entries (50 by default; the latest without after). |
 
-### shinsa tasks diff
+#### shinsa tasks diff
 
 List the files a task changed against its base branch.
 
@@ -79,7 +260,7 @@ Every task agent's tool: `tasks_diff` (reads).
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa tasks create
+#### shinsa tasks create
 
 Create a task. Shinsa classifies it, plans it and builds it.
 
@@ -100,7 +281,7 @@ Not a task agent's tool: an agent uses `create_task` instead. Sends `task.create
 | `--after` | list, optional | Tasks it waits on before it starts. |
 | `--account` | text, optional | Run it on this Claude account (id or email). |
 
-### shinsa tasks message
+#### shinsa tasks message
 
 Send a message to a task's agent. At an open decision it is your feedback, never an approval.
 
@@ -116,7 +297,7 @@ Every task agent's tool: `tasks_message`. Sends `task.message`.
 | `<text>` | text, required | The message. |
 | `--as` | choice, optional | feedback on the current round (a follow-up on a finished one), acknowledge for a message that needs nothing, new_round for new work in this task, or separate_task to suggest it as its own task. Left out, Shinsa decides. |
 
-### shinsa tasks retry
+#### shinsa tasks retry
 
 Restart a paused task's current step with a fresh fix budget.
 
@@ -131,7 +312,7 @@ Every task agent's tool: `tasks_retry`. Sends `task.retry`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `--account` | text, optional | Run the step on this account (id or email). |
 
-### shinsa tasks rerun
+#### shinsa tasks rerun
 
 Run the current step again on a chosen Claude account.
 
@@ -146,7 +327,7 @@ Every task agent's tool: `tasks_rerun`. Sends `task.retry`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<account>` | text, required | The account (id or email). |
 
-### shinsa tasks cancel
+#### shinsa tasks cancel
 
 Cancel a task. Its agents stop and its worktree is removed.
 
@@ -160,7 +341,7 @@ Every task agent's tool: `tasks_cancel`. Sends `task.cancel`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa tasks done
+#### shinsa tasks done
 
 Mark a task as done without merging it.
 
@@ -174,7 +355,7 @@ Every task agent's tool: `tasks_done`. Sends `task.complete`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa tasks prioritize
+#### shinsa tasks prioritize
 
 Change how soon a task reaches you.
 
@@ -189,7 +370,7 @@ Every task agent's tool: `tasks_prioritize`. Sends `task.prioritize`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<priority>` | choice, required | low, normal, high or urgent. |
 
-### shinsa tasks wait-on
+#### shinsa tasks wait-on
 
 Make a task wait on other tasks. The list replaces the tasks it waits on now.
 
@@ -204,7 +385,7 @@ Every task agent's tool: `tasks_wait_on`. Sends `task.wait_on`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<waitsOn>` | list, required | The tasks it waits on. |
 
-### shinsa tasks stop-waiting
+#### shinsa tasks stop-waiting
 
 Stop a task waiting on other tasks.
 
@@ -218,7 +399,7 @@ Every task agent's tool: `tasks_stop_waiting`. Sends `task.wait_on`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa tasks bind
+#### shinsa tasks bind
 
 Run a task on one Claude account, or on any account again.
 
@@ -233,7 +414,7 @@ Every task agent's tool: `tasks_bind`. Sends `task.bind_account`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<account>` | text, required | The account (id or email), or any. |
 
-### shinsa tasks check-in-now
+#### shinsa tasks check-in-now
 
 Fire a waiting agent's next check-in now.
 
@@ -247,7 +428,7 @@ Every task agent's tool: `tasks_check_in_now`. Sends `monitor.check_in_now`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa tasks resume-now
+#### shinsa tasks resume-now
 
 Resume a task that waits for a usage limit to reset, now.
 
@@ -261,7 +442,7 @@ Every task agent's tool: `tasks_resume_now`. Sends `usage_wait.resume_now`.
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa tasks auto-resume
+#### shinsa tasks auto-resume
 
 Choose whether a task waiting for a usage limit resumes by itself at the reset.
 
@@ -276,7 +457,7 @@ Every task agent's tool: `tasks_auto_resume`. Sends `usage_wait.change`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<resume>` | boolean, required | true to resume at the reset, false to wait for you. |
 
-### shinsa tasks open
+#### shinsa tasks open
 
 Open a task's worktree in your editor, a terminal or Finder.
 
@@ -291,9 +472,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<in>` | choice, optional | editor (the default), terminal or finder. |
 
-## rounds
+### rounds
 
-### shinsa rounds ship
+#### shinsa rounds ship
 
 Choose how a round ships: onto the task’s open pull request, or as its own stacked pull request.
 
@@ -309,9 +490,9 @@ Every task agent's tool: `rounds_ship`. Sends `round.ship`.
 | `<round>` | integer, required | The round number, from `shinsa tasks show`. |
 | `<how>` | choice, required | onto_pull_request or stacked. |
 
-## gates
+### gates
 
-### shinsa gates answer
+#### shinsa gates answer
 
 Answer any open decision by its gate id.
 
@@ -329,7 +510,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `--plan-version` | integer, optional | The plan version you read, for a plan. |
 | `--verdicts` | json, optional | Review verdicts: [{"index":0,"verdict":"fix","note":null}]. |
 
-### shinsa gates secret
+#### shinsa gates secret
 
 Give an agent the secret it asked for. It goes to the secret store, never to the chat.
 
@@ -344,7 +525,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<gate>` | text, required | The gate id, from `shinsa tasks show`. |
 | `<value>` | text, required | The secret. |
 
-### shinsa gates decline-secret
+#### shinsa gates decline-secret
 
 Decline to give an agent the secret it asked for.
 
@@ -358,9 +539,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<gate>` | text, required | The gate id, from `shinsa tasks show`. |
 
-## plans
+### plans
 
-### shinsa plans approve
+#### shinsa plans approve
 
 Approve the plan of a task, so building starts.
 
@@ -374,7 +555,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa plans revise
+#### shinsa plans revise
 
 Ask the agent to revise the plan.
 
@@ -389,7 +570,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<feedback>` | text, required | What should change. |
 
-### shinsa plans reject
+#### shinsa plans reject
 
 Reject the plan and cancel the task.
 
@@ -403,9 +584,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-## reviews
+### reviews
 
-### shinsa reviews approve
+#### shinsa reviews approve
 
 Approve the changes of a task, so Shinsa opens the pull request.
 
@@ -419,7 +600,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa reviews revise
+#### shinsa reviews revise
 
 Request changes; the agent makes them.
 
@@ -434,7 +615,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<feedback>` | text, required | What should change. |
 
-### shinsa reviews reject
+#### shinsa reviews reject
 
 Reject the changes and cancel the task.
 
@@ -448,7 +629,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa reviews verdicts
+#### shinsa reviews verdicts
 
 Decide each finding of an escalated review: fix it or dismiss it. Dismissing all of them approves.
 
@@ -465,9 +646,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `--dismiss` | list, optional | Finding numbers to dismiss (from 0). |
 | `--note` | text, optional | A note for the agent. |
 
-## merges
+### merges
 
-### shinsa merges approve
+#### shinsa merges approve
 
 Merge the pull request of a task.
 
@@ -481,7 +662,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa merges reject
+#### shinsa merges reject
 
 Do not merge; cancel the task.
 
@@ -495,9 +676,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-## operations
+### operations
 
-### shinsa operations run
+#### shinsa operations run
 
 Run the operation of a change that merged. Notes replace the ones saved on the operation.
 
@@ -512,7 +693,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<notes>` | text, optional | Notes for the agent. |
 
-### shinsa operations finish
+#### shinsa operations finish
 
 Finish a task whose change merged without running its operation.
 
@@ -526,9 +707,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-## questions
+### questions
 
-### shinsa questions answer
+#### shinsa questions answer
 
 Answer an agent's question on a task.
 
@@ -543,9 +724,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<answer>` | text, required | Your answer. |
 
-## suggestions
+### suggestions
 
-### shinsa suggestions list
+#### shinsa suggestions list
 
 List the tasks agents suggested on a task.
 
@@ -559,7 +740,7 @@ Every task agent's tool: `suggestions_list` (reads).
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
-### shinsa suggestions accept
+#### shinsa suggestions accept
 
 Add a suggested task to the roadmap.
 
@@ -575,7 +756,7 @@ Every task agent's tool: `suggestions_accept`. Sends `suggestion.accept`.
 | `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 | `--after-this` | boolean, optional | Start it only after this task merges. |
 
-### shinsa suggestions dismiss
+#### shinsa suggestions dismiss
 
 Dismiss a suggested task.
 
@@ -590,7 +771,7 @@ Every task agent's tool: `suggestions_dismiss`. Sends `suggestion.dismiss`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 
-### shinsa suggestions keep
+#### shinsa suggestions keep
 
 Keep a suggested task in this task instead, as its next round.
 
@@ -605,9 +786,9 @@ Every task agent's tool: `suggestions_keep`. Sends `suggestion.keep`.
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<suggestion>` | text, required | The suggested task id, from `shinsa suggestions list`. |
 
-## runs
+### runs
 
-### shinsa runs snooze
+#### shinsa runs snooze
 
 Snooze the warning about an agent that has gone quiet.
 
@@ -622,7 +803,7 @@ Every task agent's tool: `runs_snooze`. Sends `run.snooze_silence`.
 | `<run>` | text, required | The run id, from `shinsa tasks show --json` or `shinsa delegations list`. |
 | `--minutes` | integer, optional | For this many minutes (30 by default). |
 
-### shinsa runs dismiss
+#### shinsa runs dismiss
 
 Dismiss the quiet-agent warning for the rest of a run.
 
@@ -636,9 +817,9 @@ Every task agent's tool: `runs_dismiss`. Sends `run.dismiss_silence`.
 | --- | --- | --- |
 | `<run>` | text, required | The run id, from `shinsa tasks show --json` or `shinsa delegations list`. |
 
-## delegations
+### delegations
 
-### shinsa delegations list
+#### shinsa delegations list
 
 List the delegations: work agents handed to other agents.
 
@@ -652,7 +833,7 @@ Every task agent's tool: `delegations_list` (reads).
 | --- | --- | --- |
 | `--task` | text, optional | Only this task (id, start of the id, or exact title). |
 
-### shinsa delegations stop
+#### shinsa delegations stop
 
 Stop a delegation and every delegation it started.
 
@@ -666,9 +847,9 @@ Every task agent's tool: `delegations_stop`. Sends `delegation.cancel`.
 | --- | --- | --- |
 | `<run>` | text, required | The run id, from `shinsa tasks show --json` or `shinsa delegations list`. |
 
-## schedules
+### schedules
 
-### shinsa schedules list
+#### shinsa schedules list
 
 List the schedules: what each sends, when, and whether it is on.
 
@@ -678,7 +859,7 @@ shinsa schedules list [--json]
 
 Every task agent's tool: `schedules_list` (reads).
 
-### shinsa schedules write
+#### shinsa schedules write
 
 Create a schedule, or change one with --id: it starts a new task or messages a task once, on an interval, daily or when its webhook is called.
 
@@ -712,7 +893,7 @@ Every task agent's tool: `schedules_write`. Sends `schedule.write`.
 | `--max-runs` | integer, optional | Stop after this many runs. |
 | `--time-zone` | text, optional | IANA time zone for --daily-at. The machine’s by default. |
 
-### shinsa schedules enable
+#### shinsa schedules enable
 
 Turn a paused schedule back on.
 
@@ -726,7 +907,7 @@ Every task agent's tool: `schedules_enable`. Sends `schedule.enable`.
 | --- | --- | --- |
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 
-### shinsa schedules disable
+#### shinsa schedules disable
 
 Pause a schedule.
 
@@ -740,7 +921,7 @@ Every task agent's tool: `schedules_disable`. Sends `schedule.enable`.
 | --- | --- | --- |
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 
-### shinsa schedules delete
+#### shinsa schedules delete
 
 Delete a schedule. A webhook schedule’s URL stops working.
 
@@ -754,7 +935,7 @@ Every task agent's tool: `schedules_delete`. Sends `schedule.remove`.
 | --- | --- | --- |
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 
-### shinsa schedules webhook
+#### shinsa schedules webhook
 
 Show a webhook schedule's URL and its signature check.
 
@@ -768,7 +949,7 @@ Every task agent's tool: `schedules_webhook` (reads).
 | --- | --- | --- |
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 
-### shinsa schedules webhook-secret
+#### shinsa schedules webhook-secret
 
 Set the signing secret a webhook schedule checks requests against. It stays in Shinsa's secret store.
 
@@ -783,9 +964,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<schedule>` | text, required | The schedule id, from `shinsa schedules list`. |
 | `<secret>` | text, required | The signing secret. |
 
-## settings
+### settings
 
-### shinsa settings get
+#### shinsa settings get
 
 Show every setting, or one.
 
@@ -799,7 +980,7 @@ Every task agent's tool: `settings_get` (reads).
 | --- | --- | --- |
 | `<key>` | text, optional | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode. |
 
-### shinsa settings set
+#### shinsa settings set
 
 Change a setting. The value is JSON (true, 3, null, {"agent":"codex"}) or plain text.
 
@@ -814,9 +995,9 @@ Every task agent's tool: `settings_set`. Sends `settings.change`.
 | `<key>` | text, required | One of defaultProvider, defaultModel, maxFixRounds, delegationLimit, mergeMethod, attentionLimit, approvePlans, agentModels, agentProviders, agentFastModes, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, idleCompaction, compactionLeadMinutes, compaction, fastMode. Only the human changes approvePlans, mergeMethod, taskBudgetUsd, taskUsageLimit, autoResume, snoozeLimited, accountSwitchAt, fastMode, agentFastModes, delegationLimit. |
 | `<value>` | text, required | The new value. |
 
-## projects
+### projects
 
-### shinsa projects list
+#### shinsa projects list
 
 List the projects, each with its key and repositories.
 
@@ -826,7 +1007,7 @@ shinsa projects list [--json]
 
 Every task agent's tool: `projects_list` (reads).
 
-### shinsa projects show
+#### shinsa projects show
 
 Show a project: its description, repositories and folders.
 
@@ -840,7 +1021,7 @@ Every task agent's tool: `projects_show` (reads).
 | --- | --- | --- |
 | `<project>` | text, required | The project: its key, name or id. |
 
-### shinsa projects write
+#### shinsa projects write
 
 Create a project, or change one with --id.
 
@@ -859,7 +1040,7 @@ Every task agent's tool: `projects_write`. Sends `project.write`.
 | `--description` | text, optional | What the project is. Agents read it. |
 | `--folders` | list, optional | Folders whose repositories all belong to it, replacing the ones it has. Repeat the option for each. |
 
-### shinsa projects remove
+#### shinsa projects remove
 
 Remove a project. Its repositories and tasks keep working without one.
 
@@ -873,7 +1054,7 @@ Every task agent's tool: `projects_remove`. Sends `project.remove`.
 | --- | --- | --- |
 | `<project>` | text, required | The project: its key, name or id. |
 
-### shinsa projects add-repo
+#### shinsa projects add-repo
 
 Put a repository in a project, registering it if no agent has worked there yet.
 
@@ -888,7 +1069,7 @@ Every task agent's tool: `projects_add_repo`.
 | `<project>` | text, required | The project: its key, name or id. |
 | `<path>` | text, required | A full path, or one starting with ~/. |
 
-### shinsa projects add-folder
+#### shinsa projects add-folder
 
 Add a folder to a project: every repository in it belongs to the project.
 
@@ -903,9 +1084,9 @@ Every task agent's tool: `projects_add_folder`.
 | `<project>` | text, required | The project: its key, name or id. |
 | `<path>` | text, required | A full path, or one starting with ~/. |
 
-## focus
+### focus
 
-### shinsa focus show
+#### shinsa focus show
 
 Show the project you are focused on.
 
@@ -915,7 +1096,7 @@ shinsa focus show [--json]
 
 Every task agent's tool: `focus_show` (reads).
 
-### shinsa focus set
+#### shinsa focus set
 
 Focus on one project: Shinsa shows only its work.
 
@@ -930,7 +1111,7 @@ Every task agent's tool: `focus_set`. Sends `focus.change`.
 | `<project>` | text, required | The project: its key, name or id. |
 | `--hours` | number, optional | Only for this many hours. |
 
-### shinsa focus clear
+#### shinsa focus clear
 
 Stop focusing on one project.
 
@@ -940,9 +1121,9 @@ shinsa focus clear [--json]
 
 Every task agent's tool: `focus_clear`. Sends `focus.change`.
 
-## repos
+### repos
 
-### shinsa repos list
+#### shinsa repos list
 
 List the repositories agents have worked in.
 
@@ -952,7 +1133,7 @@ shinsa repos list [--json]
 
 Every task agent's tool: `repos_list` (reads).
 
-### shinsa repos update
+#### shinsa repos update
 
 Change a repository's name, default branch, project, check commands or where agents work.
 
@@ -972,7 +1153,7 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--waive-checks` | boolean, optional | Work without checks. Only the human changes it. |
 | `--workspace` | choice, optional | Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it. |
 
-### shinsa repos remove
+#### shinsa repos remove
 
 Forget a repository. Nothing on disk changes.
 
@@ -986,9 +1167,9 @@ Every task agent's tool: `repos_remove`. Sends `repo.remove`.
 | --- | --- | --- |
 | `<repo>` | text, required | The repository (name or id). |
 
-## folders
+### folders
 
-### shinsa folders list
+#### shinsa folders list
 
 List the folders Shinsa looks in for repositories.
 
@@ -998,7 +1179,7 @@ shinsa folders list [--json]
 
 Every task agent's tool: `folders_list` (reads).
 
-### shinsa folders suggest
+#### shinsa folders suggest
 
 Find the folders on this machine that hold git repositories.
 
@@ -1012,7 +1193,7 @@ Every task agent's tool: `folders_suggest` (reads).
 | --- | --- | --- |
 | `--refresh` | boolean, optional | Scan again instead of using the last scan. |
 
-### shinsa folders add
+#### shinsa folders add
 
 Add a folder Shinsa looks in for repositories.
 
@@ -1026,7 +1207,7 @@ Every task agent's tool: `folders_add`.
 | --- | --- | --- |
 | `<path>` | text, required | A full path, or one starting with ~/. |
 
-### shinsa folders remove
+#### shinsa folders remove
 
 Stop looking in a folder for repositories.
 
@@ -1040,9 +1221,9 @@ Every task agent's tool: `folders_remove`.
 | --- | --- | --- |
 | `<path>` | text, required | A full path, or one starting with ~/. |
 
-## accounts
+### accounts
 
-### shinsa accounts list
+#### shinsa accounts list
 
 List the Claude accounts agents run on.
 
@@ -1052,7 +1233,7 @@ shinsa accounts list [--json]
 
 Every task agent's tool: `accounts_list` (reads).
 
-### shinsa accounts refresh
+#### shinsa accounts refresh
 
 Check every account’s sign-in and usage again.
 
@@ -1062,7 +1243,7 @@ shinsa accounts refresh [--json]
 
 Every task agent's tool: `accounts_refresh`.
 
-### shinsa accounts sign-in
+#### shinsa accounts sign-in
 
 Sign in to a Claude account in the browser. Then pass the code with sign-in-code.
 
@@ -1076,7 +1257,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<account>` | text, optional | An account to sign in again (id or email). |
 
-### shinsa accounts sign-in-code
+#### shinsa accounts sign-in-code
 
 Finish a sign-in with the code the browser showed.
 
@@ -1091,7 +1272,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<login>` | text, required | The sign-in id. |
 | `<code>` | text, required | The code. |
 
-### shinsa accounts import
+#### shinsa accounts import
 
 Import a Claude login from Claude Code or claude-swap.
 
@@ -1106,7 +1287,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `<origin>` | choice, required | claude or cswap. |
 | `<email>` | text, required | The login’s email. |
 
-### shinsa accounts update
+#### shinsa accounts update
 
 Make an account the default, leave it out of new work, move it, or set when Shinsa switches away from it.
 
@@ -1124,7 +1305,7 @@ Every task agent's tool: `accounts_update`.
 | `--switch-at` | integer, optional | Switch away at this usage percentage; 0 uses the setting. |
 | `--position` | integer, optional | Its place in the list, from 0. |
 
-### shinsa accounts remove
+#### shinsa accounts remove
 
 Remove an account from Shinsa. Your own Claude Code login is never signed out.
 
@@ -1138,9 +1319,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<account>` | text, required | The account (id or email). |
 
-## usage
+### usage
 
-### shinsa usage
+#### shinsa usage
 
 Show how much of each usage limit every account has used, and when it resets.
 
@@ -1150,9 +1331,9 @@ shinsa usage [--json]
 
 Every task agent's tool: `usage` (reads).
 
-## providers
+### providers
 
-### shinsa providers
+#### shinsa providers
 
 List the agent providers and their models.
 
@@ -1162,9 +1343,9 @@ shinsa providers [--json]
 
 Every task agent's tool: `providers` (reads).
 
-## versions
+### versions
 
-### shinsa versions list
+#### shinsa versions list
 
 Show the installed Claude Code and Codex, the latest of each and the Claude Agent SDK Shinsa runs.
 
@@ -1174,7 +1355,7 @@ shinsa versions list [--json]
 
 Every task agent's tool: `versions_list` (reads).
 
-### shinsa versions update
+#### shinsa versions update
 
 Update Claude Code or Codex with its own updater.
 
@@ -1188,9 +1369,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<program>` | choice, required | claude or codex. |
 
-## health
+### health
 
-### shinsa health
+#### shinsa health
 
 Check that Shinsa loaded its log cleanly, and which Shinsa is running.
 
@@ -1200,9 +1381,9 @@ shinsa health [--json]
 
 Every task agent's tool: `health` (reads).
 
-## queue
+### queue
 
-### shinsa queue
+#### shinsa queue
 
 What needs a decision, and what agents are working on.
 
@@ -1212,9 +1393,9 @@ shinsa queue [--json]
 
 Every task agent's tool: `queue` (reads).
 
-## activity
+### activity
 
-### shinsa activity
+#### shinsa activity
 
 What agents did on your behalf, oldest first.
 
@@ -1224,9 +1405,9 @@ shinsa activity [--json]
 
 Every task agent's tool: `activity` (reads).
 
-## setup
+### setup
 
-### shinsa setup status
+#### shinsa setup status
 
 Where setup stands, and where Shinsa keeps its data.
 
@@ -1236,7 +1417,7 @@ shinsa setup status [--json]
 
 Every task agent's tool: `setup_status` (reads).
 
-### shinsa setup check
+#### shinsa setup check
 
 Check the tools Shinsa needs: git, gh, claude and bun.
 
@@ -1246,9 +1427,9 @@ shinsa setup check [--json]
 
 Every task agent's tool: `setup_check` (reads).
 
-## mcp
+### mcp
 
-### shinsa mcp list
+#### shinsa mcp list
 
 List the MCP servers agents can load, with their health and roughly what their tools cost.
 
@@ -1258,7 +1439,7 @@ shinsa mcp list [--json]
 
 Every task agent's tool: `mcp_list` (reads).
 
-### shinsa mcp check
+#### shinsa mcp check
 
 Connect to every MCP server that is on, or one, and list its tools.
 
@@ -1272,7 +1453,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<server>` | text, optional | The MCP server (its id or name). |
 
-### shinsa mcp add
+#### shinsa mcp add
 
 Add an MCP server agents load everywhere: a command on this machine, or an HTTP address.
 
@@ -1289,7 +1470,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | `--sse` | boolean, optional | The address speaks SSE rather than streamable HTTP. |
 | `<command>` | text, optional | The command that starts it, with its arguments (after -- when one starts with --). |
 
-### shinsa mcp remove
+#### shinsa mcp remove
 
 Remove an MCP server you added in Shinsa.
 
@@ -1303,7 +1484,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<server>` | text, required | The MCP server (its id or name). |
 
-### shinsa mcp on
+#### shinsa mcp on
 
 Turn an MCP server on for agents.
 
@@ -1317,7 +1498,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<server>` | text, required | The MCP server (its id or name). |
 
-### shinsa mcp off
+#### shinsa mcp off
 
 Turn an MCP server off for agents.
 
@@ -1331,7 +1512,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<server>` | text, required | The MCP server (its id or name). |
 
-### shinsa mcp sign-in
+#### shinsa mcp sign-in
 
 Sign in to a remote MCP server in the browser; Shinsa keeps the sign-in.
 
@@ -1345,7 +1526,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<server>` | text, required | The MCP server (its id or name). |
 
-### shinsa mcp sign-out
+#### shinsa mcp sign-out
 
 Forget Shinsa’s sign-in to a remote MCP server.
 
@@ -1359,9 +1540,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<server>` | text, required | The MCP server (its id or name). |
 
-## skills
+### skills
 
-### shinsa skills list
+#### shinsa skills list
 
 List the skills agents can load, on or off, with roughly what each costs.
 
@@ -1371,7 +1552,7 @@ shinsa skills list [--json]
 
 Every task agent's tool: `skills_list` (reads).
 
-### shinsa skills on
+#### shinsa skills on
 
 Turn a skill on for agents.
 
@@ -1385,7 +1566,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<skill>` | text, required | The skill (its id or name). |
 
-### shinsa skills off
+#### shinsa skills off
 
 Turn a skill off for agents.
 
@@ -1399,9 +1580,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<skill>` | text, required | The skill (its id or name). |
 
-## plugins
+### plugins
 
-### shinsa plugins list
+#### shinsa plugins list
 
 List the Claude Code plugins agents can load, with what each brings.
 
@@ -1411,7 +1592,7 @@ shinsa plugins list [--json]
 
 Every task agent's tool: `plugins_list` (reads).
 
-### shinsa plugins on
+#### shinsa plugins on
 
 Turn a plugin on for agents.
 
@@ -1425,7 +1606,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<plugin>` | text, required | The plugin (its id or name). |
 
-### shinsa plugins off
+#### shinsa plugins off
 
 Turn a plugin off for agents.
 
@@ -1439,9 +1620,9 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<plugin>` | text, required | The plugin (its id or name). |
 
-## command
+### command
 
-### shinsa command
+#### shinsa command
 
 Send any command Shinsa understands, by its type and fields. The other commands are friendlier.
 

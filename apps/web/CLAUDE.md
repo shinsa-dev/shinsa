@@ -1,6 +1,6 @@
 # @shinsa/web
 
-The web app: React 19, Vite and Tailwind 4, laid out like Buzzkit's dashboard. It renders the state `shinsa serve`
+The web app: React 19, Vite and Tailwind 4, laid out like Buzzkit's dashboard. It renders the state `shinsa engine`
 pushes over one WebSocket and owns nothing: every action is a `UserCommand` through `sendCommand`, and the next state
 push is the answer. `docs/design.md` is the source of truth for everything visual (its "Where Shinsa differs"
 wins over the rest); `/ui` renders every token, kit component, shared building block and feature piece in both
@@ -235,7 +235,7 @@ files after it.
 
 | Command | Description |
 |---|---|
-| `bun dev` | Vite on :5181, proxying `/api` and `/ws` to `shinsa serve` on `SHINSA_PORT` (default 5180) |
+| `bun dev` | Vite on :5181, proxying `/api` and `/ws` to `shinsa engine` on `SHINSA_PORT` (default 5180) |
 | `bun test` | Bun with happy-dom and Testing Library; fails below 100% line and function coverage of `src/**/*.ts` (`.tsx` is covered by behaviour tests, not counted) |
 | `bun run check-types` | `tsc` over `src`, `test` and `vite.config.ts` |
-| `bun run build` | The production bundle in `dist/`, served by `shinsa serve` |
+| `bun run build` | The production bundle in `dist/`, served by `shinsa engine` |

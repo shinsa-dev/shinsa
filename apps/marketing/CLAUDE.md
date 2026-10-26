@@ -6,7 +6,7 @@ time so the static HTML already holds them (the hero hydrates on load, the rest 
 
 The demos are not drawings of Shinsa: they render `apps/web`'s own components (the `@/` alias points at
 `apps/web/src`) from sample state built with `apps/web/src/routes/ui/samples.ts`. `lib/demo-server.ts` stands in for
-`shinsa serve` in the browser: it answers the web's one WebSocket (acks every command and hands it to the demo that
+`shinsa engine` in the browser: it answers the web's one WebSocket (acks every command and hands it to the demo that
 listens, streams transcripts) and `/api/tasks/<id>/<read>` from the in-memory repository in `lib/demo-repo.ts`, so
 the real cards, toasts, live feeds and the Code workbench work unchanged. It also keeps the page's path fixed while the
 web's router writes its query (`?tab=chat`, the Code tab's position), and supplies `crypto.randomUUID` where the

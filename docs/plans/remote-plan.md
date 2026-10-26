@@ -9,7 +9,7 @@ absolute. Reference: Kanna's cloud mode, `/Users/christo/Developer/Projects/kann
 
 ## Decision in one paragraph
 
-Reach the whole local `shinsa serve` (HTTP and the `/ws` socket) from a phone or another machine through a **named
+Reach the whole local `shinsa engine` (HTTP and the `/ws` socket) from a phone or another machine through a **named
 Cloudflare tunnel** under a Shinsa domain, the way Kanna does it: the machine runs `cloudflared` with a token for its
 own tunnel, a small hosted service on the Shinsa domain signs you in and forwards HTTP, and the browser's socket
 connects straight to the tunnel with a short-lived token. The server stays the only place state lives; nothing is
@@ -95,7 +95,7 @@ traffic in clear text; the security model below keeps secrets off the tunnel for
 **Change:**
 
 - **The daemon owns it, not a launch flag.** Kanna brings the tunnel up from the CLI. Shinsa's daemon runs as a
-  launchd user agent (`docs/plans/desktop-plan.md`), so the remote runtime starts with `shinsa serve` when
+  launchd user agent (`docs/plans/desktop-plan.md`), so the remote runtime starts with `shinsa engine` when
   `remote.json` says enabled, and the background service keeps it up through a closed window and a reboot.
 - **One person, so a smaller hosted side.** Kanna's control plane serves accounts with fleets of machines. Shinsa's
   hosted side (a Cloudflare Worker on the Shinsa domain, its own private repo) needs: sign-in for one person with a

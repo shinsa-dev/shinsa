@@ -129,6 +129,27 @@ describe('the command guard', () => {
     });
   });
 
+  test('keeps stopping and restarting the engine, which runs the agent, out of its shell', () => {
+    for (const command of ['shinsa stop', 'shinsa restart --when-idle', 'cd /tmp && shinsa engine']) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
+    }
+    for (const command of [
+      'shinsa status',
+      'shinsa start',
+      'shinsa logs --lines 20',
+      'shinsa version',
+      'shinsa stopwatch',
+    ]) {
+      expect({ command, denied: denied(command) }).toEqual({ command, denied: false });
+    }
+    expect(resolveCommandVerdict('shinsa stop', 'main')).toMatchObject({
+      hookSpecificOutput: {
+        permissionDecisionReason:
+          'Only the human stops or restarts Shinsa’s engine: it is what runs you. Tell them why it needs a restart.',
+      },
+    });
+  });
+
   test('keeps the settings and repository fields only the human changes out of the agent’s shell, and leaves the rest open', () => {
     for (const command of [
       'shinsa settings set approvePlans true',

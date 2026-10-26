@@ -13,7 +13,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>shinsa</string>
-    <string>serve</string>
+    <string>engine</string>
   </array>
   <key>EnvironmentVariables</key>
   <dict>

@@ -1,4 +1,5 @@
 import { HUMAN_ONLY_SETTINGS } from '@shinsa/core';
+import { HUMAN_ONLY_ENGINE_COMMANDS } from '../cli/engine.ts';
 import { SURFACE } from '../surface/index.ts';
 
 interface ForbiddenCommand {
@@ -24,6 +25,11 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
       pattern: new RegExp(String.raw`\bshinsa\s+(?:${HUMAN_ONLY_COMMANDS.join('|')})(?![\w-])`),
       reason:
         'Only the human runs this command: it decides at a gate, gives a secret, signs in, changes accounts, MCP servers, skills or plugins, opens a task in the browser or sends a raw command. Tell them what you need; it waits for them in Shinsa.',
+    },
+    {
+      pattern: new RegExp(String.raw`\bshinsa\s+(?:${HUMAN_ONLY_ENGINE_COMMANDS.join('|')})(?![\w-])`),
+      reason:
+        'Only the human stops or restarts Shinsa’s engine: it is what runs you. Tell them why it needs a restart.',
     },
     {
       pattern: new RegExp(

@@ -238,9 +238,13 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   "‹handle› agent (on your behalf)". The decisions at your gates are yours alone: no agent has a
   tool or a command for them, and one asked to do it points you to the gate (the list is
   `docs/engine.md` → Who can change Shinsa).
-- **The command line.** `shinsa <group> <action>` drives the running server the same way: every
-  command the web sends, plus reads, accounts, folders and the health check, each with `--help` and
-  `--json` (`docs/cli.md`). Agents in your own terminal can use it too.
+- **The command line.** Nobody has to use it: the app runs the engine and does everything. For a
+  terminal, `shinsa .` opens the app on the project you are in, `shinsa do "…"` hands work over,
+  `shinsa status` says whether the engine runs and what needs you, `shinsa start`, `stop`,
+  `restart`, `logs` and `version` look after the engine, and `shinsa <group> <action>` drives
+  everything else the same way: every command the web sends, plus reads, accounts, folders and the
+  health check, each with `--help` and `--json`. Shaped like Tailscale's and Docker's
+  (`docs/cli.md`). Agents in your own terminal can use it too.
 - **Claude accounts.** Shinsa runs agents on several Claude logins of its own (Settings → Agent usage:
   sign in, import your Claude Code login or claude-swap's accounts, default, order, per-account
   switch threshold). Each run uses the account with room (a task can be pinned to one, and a step
@@ -283,7 +287,7 @@ Review is where Shinsa earns its name. It replaces "open GitHub, read the diff t
 ## 6. Architecture
 
 ```
-Browser ──WebSocket──► shinsa serve (Bun, on your machine)
+Browser ──WebSocket──► shinsa engine (Bun, on your machine)
                          ├─ orchestration: command → event → effect
                          │    (SQLite event log, effect outbox, command receipts)
                          ├─ triage and the briefing (quick model calls)
@@ -434,12 +438,12 @@ Built and verified end to end against a scratch repository:
 - **No repositories to manage.** Shinsa finds git repositories on the machine, registers one the
   first time it works there and files it into a project: the one whose folder holds it, the task's
   while that project has no repository yet, or one named after its GitHub owner.
-- **`shinsa` CLI.** The server is `shinsa serve`; `shinsa do "<request>"`, `shinsa import` (bring a
+- **`shinsa` CLI.** The server is `shinsa engine`; `shinsa do "<request>"`, `shinsa import` (bring a
   Claude Code session in as a task), `shinsa status` and `shinsa open` let people and agents hand work
   over from any project.
 - **Design.** Blue is the one accent (primary buttons included), the Feedbase mark is the logo,
   controls are more compact and less rounded, the secondary button has real contrast.
-- **Next:** an Electron desktop app around `shinsa serve` (the old Shinsa's `apps/desktop` shape),
+- **Next:** an Electron desktop app around `shinsa engine` (the old Shinsa's `apps/desktop` shape),
   dev-server previews in review, the PR half against a real GitHub repository.
 
 ### Third pass (2026-10-22): the roadmap

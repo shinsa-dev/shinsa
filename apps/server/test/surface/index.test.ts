@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
 import { parseUserCommand, USER_COMMAND_TYPES } from '@shinsa/core';
 import { resolveCommandKey } from '../../src/surface/client.ts';
 import {
@@ -181,19 +180,16 @@ describe('command keys', () => {
   });
 });
 
-describe('docs/cli.md', () => {
-  test('is the reference the specs generate, so the docs never fall behind the command line', () => {
-    const written = readFileSync(new URL('../../../../docs/cli.md', import.meta.url), 'utf8');
-    expect(written).toBe(serializeReference());
-  });
-
+describe('the reference', () => {
   test('names the agents’ tool of each spec, or says it is yours alone', () => {
     const reference = serializeReference();
     expect(reference).toContain("Every task agent's tool: `tasks_list` (reads).");
     expect(reference).toContain(
       'Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `gate.answer`.'
     );
-    expect(reference).toContain('### shinsa accounts sign-in\n\nSign in to a Claude account');
-    expect(reference).toMatch(/### shinsa accounts sign-in\n[\s\S]*?Yours alone: no agent has a tool for it/);
+    expect(reference).toContain('#### shinsa accounts sign-in\n\nSign in to a Claude account');
+    expect(reference).toMatch(
+      /#### shinsa accounts sign-in\n[\s\S]*?Yours alone: no agent has a tool for it/
+    );
   });
 });

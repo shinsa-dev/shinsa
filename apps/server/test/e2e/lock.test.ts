@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 function serve(home: string) {
-  const child = Bun.spawn(['bun', MAIN, 'serve'], {
+  const child = Bun.spawn(['bun', MAIN, 'engine'], {
     env: { ...process.env, HOME: home, SHINSA_HOME: home, SHINSA_PORT: '0' },
     stdout: 'pipe',
     stderr: 'pipe',
@@ -27,7 +27,7 @@ function serve(home: string) {
   return child;
 }
 
-describe('shinsa serve on a data directory another one holds', () => {
+describe('shinsa engine on a data directory another one holds', () => {
   test('refuses with the running one’s address, and starts once that one stopped', async () => {
     const home = createTempDir();
     const dataDir = join(home, 'data');
@@ -41,7 +41,7 @@ describe('shinsa serve on a data directory another one holds', () => {
     const second = serve(home);
     expect(await second.exited).toBe(1);
     expect(await new Response(second.stderr).text()).toContain(
-      `shinsa serve: Shinsa is already running on ${dataDir}: ${holder?.url} (pid ${first.pid}, version 0.0.0`
+      `shinsa engine: Shinsa is already running on ${dataDir}: ${holder?.url} (pid ${first.pid}, version 0.0.0`
     );
 
     first.kill('SIGTERM');

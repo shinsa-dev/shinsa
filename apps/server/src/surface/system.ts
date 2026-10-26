@@ -98,7 +98,7 @@ function describeUptime(ms: number) {
   return `${count} ${unit.label}${count === 1 ? '' : 's'}`;
 }
 
-function describeRunning(health: ServerHealth) {
+export function describeRunning(health: ServerHealth) {
   return `Shinsa ${describeVersion(health)} from ${health.installPath}, pid ${health.pid}, up ${describeUptime(health.uptimeMs)}. Data in ${health.dataDir}.`;
 }
 

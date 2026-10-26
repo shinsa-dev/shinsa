@@ -1,7 +1,7 @@
 # @shinsa/server
 
 The local server and the `shinsa` command. Everything with I/O lives here; every decision lives in `@shinsa/core`.
-One package on purpose: `shinsa serve` is the server, and the client commands are a hundred lines of HTTP calls
+One package on purpose: `shinsa engine` is the server, and the client commands are a few hundred lines of HTTP calls
 that share its config and types, so a separate `apps/cli` would only add a workspace to keep in step. How the
 engine behaves (receipts, the outbox, the pull request watch, providers, the agent loop, accounts, schedules,
 restarts) is `docs/engine.md`; this file is where things live and the rules for writing code here.
@@ -15,14 +15,20 @@ src/
 │                        plus `shinsa eunoe …`, which runs Eunoe from the one executable
 ├── serve.ts             startShinsa: takes the data directory's lock (not in inspect mode, which is read-only and
 │                        starts nothing), wires the pieces, recovers in-flight work, returns { url, engine, stop }
-├── cli/                 index.ts routes the commands (`serve` reads the login shell's environment first unless
-│                        started from a terminal, exits 0 when launchd started it and finds the lock held, and in the
-│                        bundle writes data/engine.log and puts its bin/ on PATH; waking the engine through
-│                        `launchctl kickstart`); commands.ts open (the app, a task, or a folder's project) / do /
-│                        import / status; app.ts the app's bundle id, the engine's label and `shinsa://` links;
-│                        surface.ts every `shinsa <group> <action>` (help, --json, the idempotency key); api.ts the
-│                        HTTP client and the surface client, which wake the engine once when it does not answer;
-│                        session.ts reads a Claude Code session for `shinsa import`
+├── cli/                 The command line (docs/cli.md: why it is shaped like Tailscale's and Docker's).
+│                        index.ts routes the commands (`engine`, hidden from the help, runs the engine: it reads
+│                        the login shell's environment first unless started from a terminal, exits 0 when launchd
+│                        started it and finds the lock held, and in the bundle writes data/engine.log and puts its
+│                        bin/ on PATH; waking the engine through `launchctl kickstart`); help.ts the top-level
+│                        commands as one table (EVERYDAY_COMMANDS, ENGINE_COMMANDS) that USAGE, each command's
+│                        --help and docs/cli.md's generated half (replaceReference) come from; commands.ts open
+│                        (the app, a task, or a folder's project) / do / import / status; engine.ts start / stop /
+│                        restart / version through launchctl on the bundle's job (EngineControl, readHealth,
+│                        HUMAN_ONLY_ENGINE_COMMANDS); logs.ts `shinsa logs`; app.ts the app's bundle id, the
+│                        engine's label and `shinsa://` links; surface.ts every `shinsa <group> <action>` (help,
+│                        --json, the idempotency key); api.ts the HTTP client and the surface client, which wake the
+│                        engine once when it does not answer; session.ts reads a Claude Code session for
+│                        `shinsa import`
 ├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
 │                        install.ts (version, commit, install path, the server entry, resolveHealth for
 │                        /api/health), lock.ts (data/serve.lock: atomic create, the live-holder check, takeover,
@@ -51,7 +57,7 @@ src/
 │                        reads the login shell's environment once (`-lic`, then `-lc` when that prints nothing, plus
 │                        `fish -lc` when the interactive shell handed off to fish) and
 │                        merges it into the server's, and
-│                        isStartedFromTerminal (a TTY on stdin or stdout) decides whether `serve` needs it
+│                        isStartedFromTerminal (a TTY on stdin or stdout) decides whether `shinsa engine` needs it
 ├── store/               EventLog (event-log.ts: the SQLite events, effects, receipts, snapshots and briefings (the
 │                        Home guide) tables; readEvents reports a damaged row instead of throwing and reads from a
 │                        position; replaceLegacyEvents, the one-time rewrite of older events and move of briefings
@@ -328,7 +334,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   back in `stop()` after the log is closed, or at once when the server cannot start listening. Code that starts a
   second engine on a data directory in one process (a test that simulates a restart) stops the first through
   `stop()`, or builds the pieces itself as `test/e2e/harness.ts` does.
-- **Spawned programs inherit the server's environment**, which `shinsa serve` fills in from the login shell before
+- **Spawned programs inherit the server's environment**, which `shinsa engine` fills in from the login shell before
   anything starts; never read the shell profile again elsewhere, and pass a command's own variables through
   `runCommand`'s `env`.
 

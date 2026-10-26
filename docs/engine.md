@@ -1239,8 +1239,8 @@ and the run supervisor.
 
 Everything you can do in Shinsa is one list of specs, `SURFACE` in `apps/server/src/surface/`, and both the command
 line and every task agent's management tools are generated from it, so neither can fall behind the other. The full reference is
-`docs/cli.md`, written from the same specs by `bun run --cwd apps/server docs:cli` (`serializeReference`); a test
-fails when the file and the specs differ.
+`docs/cli.md`, whose reference half is written from the same specs by `bun run --cwd apps/server docs:cli`
+(`replaceReference`, `serializeReference`); a test fails when the file and the specs differ.
 
 - **A spec** (`surface/spec.ts`) has a path (`['tasks', 'create']`, the words after `shinsa`), a summary, typed fields
   (`surface/fields.ts`: text, number, integer, boolean, choice, list, JSON; positional or a flag), whether it reads or
@@ -1272,6 +1272,14 @@ fails when the file and the specs differ.
 - **When the engine is down**: in the Mac app's bundle, a command the engine does not answer asks launchd to start it
   (`launchctl kickstart`) and waits up to 20 s for it, then tries once more; otherwise it says to open the Shinsa app
   (`apps/server/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background).
+  `shinsa status` and `shinsa version` only report, and never start it.
+- **Around the surface** (`apps/server/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`, `import`,
+  `status`) and the engine's controls (`start`, `stop`, `restart`, `logs`, `version`) are the top level, one table in
+  `cli/help.ts` that the help, each command's `--help` and `docs/cli.md` are written from; why it is shaped like
+  Tailscale's and Docker's is `docs/cli.md` → How it is shaped. `shinsa engine` runs the engine itself, for the
+  launchd job and `bun dev`; it is left out of the help, and an agent's shell may not run it, `stop` or `restart`
+  (`HUMAN_ONLY_ENGINE_COMMANDS`, `agents/policy.ts`). `docs/cli.md` is hand-written above its marker and generated
+  below it (`replaceReference`).
 - **Not here at all**: what only the browser keeps (the layout, the theme, notifications and sounds) and the setup
   chat, which `shinsa folders` and `shinsa settings` cover.
 
@@ -1365,7 +1373,7 @@ are no keys, codes or cookies: a key an agent's shell can read (or unset its way
 agent with a shell can already run `gh pr merge` or `git push` without asking Shinsa at all. So the server says
 plainly what protects what.
 
-- **The address.** `shinsa serve` binds to `127.0.0.1` (`SHINSA_HOST` changes it), so nothing off the machine
+- **The address.** `shinsa engine` binds to `127.0.0.1` (`SHINSA_HOST` changes it), so nothing off the machine
   reaches it.
 - **Other websites.** `http/guard.ts` refuses a Host that is not loopback, `SHINSA_HOST` or `SHINSA_ALLOWED_HOSTS`
   (DNS rebinding), an Origin from anywhere else and `Sec-Fetch-Site: cross-site`, an `/api` request other than a GET
@@ -1387,7 +1395,9 @@ plainly what protects what.
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
-  - opening a worktree in an editor (`tasks open`).
+  - opening a worktree in an editor (`tasks open`);
+  - stopping, restarting or running the engine (`shinsa stop`, `restart`, `engine`: `HUMAN_ONLY_ENGINE_COMMANDS` in
+    `cli/engine.ts`, refused in an agent's shell like the rest, since the engine is what runs the agent).
 
   They are decisions only you make, need you at the keyboard, or would put a secret through a model. Their surface
   specs are `humanOnly`, so `listAgentSpecs` leaves them out of every agent's tools, the prompt says they wait for you
@@ -1616,7 +1626,7 @@ truth, and a snapshot only saves replaying it.
   so a change to how events fold into state never reads an old snapshot; where those files cannot be read the version
   is null and the engine replays the whole log every boot and writes no snapshot. A snapshot is written 3 s after a
   boot that replayed events past it, 3 s after the last of 2,000 events since the last one (so a burst of work is never
-  stalled by the write), and when the engine stops. `shinsa serve` builds its engine with the version, so every
+  stalled by the write), and when the engine stops. `shinsa engine` builds its engine with the version, so every
   server keeps one; inspect mode never writes one, and an engine without a version (most tests) neither. A snapshot is
   only a shortcut: one that cannot be written is logged and left for the next. Anchoring on the newest row at or
   before its position lets a log whose last rows were moved out (below) still take one.
@@ -2908,14 +2918,15 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   machine must reproduce it, it is an event; if it only describes this machine, it is `config.json`.
 - **A broken config.json** never stops Shinsa: the server reads it once at start, copies unreadable JSON to
   `config.json.unreadable-<time>` once and uses the defaults; a field of the wrong type is dropped. Each problem is
-  logged once. `shinsa do`, `import`, `status` and `open` only read the port and never copy the file. An unreadable
+  logged once. `shinsa do`, `import`, `status`, `open` and the engine's controls only read the port and never copy
+  the file. An unreadable
   `secrets.json` (or one without its salt) is kept aside the same way as `secrets.json.unreadable-<time>`, logged, and
   an empty store is used.
 
 ### One server per data directory
 
 Two servers on one data directory would both run every effect: two agents per run, two pushes, two merges. So
-`shinsa serve` takes `data/serve.lock` before it opens the event log (`apps/server/src/instance/lock.ts`). The lock
+`shinsa engine` takes `data/serve.lock` before it opens the event log (`apps/server/src/instance/lock.ts`). The lock
 is created atomically (written to a draft file, then hard-linked into place, which fails when the lock exists) and
 records the holder: pid, port, URL, version, commit, install path, when it started and when the machine booted. A
 second server finds a live holder and refuses to start with `server_running`, naming it: "Shinsa is already running
@@ -2935,14 +2946,14 @@ An engine launchd started (its job sets `SHINSA_SERVICE=1`) that finds a live ho
 warning naming the data directory and the holder's pid, URL and version, and exits 0. launchd's `KeepAlive` restarts
 only a failed exit, so the engine stays stopped instead of starting again every 5 s while the other Shinsa runs; the
 app's Start engine (or Shinsa → Restart Engine) starts it once that one has stopped. From a terminal the refusal stays an error and
-exit code 1. `shinsa serve` removes `SHINSA_SERVICE` from its own environment as it starts, so nothing it runs (an
+exit code 1. `shinsa engine` removes `SHINSA_SERVICE` from its own environment as it starts, so nothing it runs (an
 agent starting a Shinsa of its own) inherits it.
 
 ### The login shell environment
 
 An app opened from the Dock and a launchd service start with a bare environment (`PATH=/usr/bin:/bin:/usr/sbin:/sbin`,
 none of the variables the shell profile sets), so the agents would not find `gh`, `claude`, `codex` or Homebrew's
-`git`. `shinsa serve` reads the user's login shell once at start (`apps/server/src/shell/login.ts`): `$SHELL -lic`
+`git`. `shinsa engine` reads the user's login shell once at start (`apps/server/src/shell/login.ts`): `$SHELL -lic`
 (zsh when `SHELL` is unset) printing a marker and `env -0`, in the home folder, with a 5 s timeout that kills the
 shell's whole process group and `DISABLE_AUTO_UPDATE=true` so oh-my-zsh does not prompt. Whatever the profile prints
 before the marker is ignored. An interactive shell that prints no marker is read again as a plain login shell,
@@ -2958,7 +2969,7 @@ has is kept, one it lacks is added, and `PATH` keeps the server's own entries fi
 When neither attempt can be read (missing, hung, failed, no marker) the server logs both and starts anyway, with
 `~/.bun/bin`, `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin` appended to `PATH` where they exist. A
 server started from a terminal (stdin or stdout is a TTY, `isStartedFromTerminal`) skips the shell and logs that it
-did: the terminal already has the user's environment. Only the `shinsa serve` command does this; `startShinsa`
+did: the terminal already has the user's environment. Only the `shinsa engine` command does this; `startShinsa`
 (tests, the soak child) never runs a shell.
 
 ### The engine in the background
@@ -2974,7 +2985,7 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   `instance/bundle.ts` as `BUNDLE`, null when running from source): a compiled engine cannot read core's sources or
   the SDK's `package.json`. `shinsa eunoe …` runs Eunoe from the same executable, so the proxy needs no second Bun.
   Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
-- **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa serve` from the bundle
+- **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa engine` from the bundle
   (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a
   restart exit brings it back, a clean stop stays stopped), `ThrottleInterval` 5 s and `ProcessType` `Interactive`. The
   app registers it as a login item (`SMAppService`), so macOS lists it under Login Items as Shinsa; where that is
@@ -2987,6 +2998,14 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
 - **Restarting.** A restart (`POST /api/engine/restart`, below) stops the engine cleanly and exits with 75
   (`EX_TEMPFAIL`, `EXIT_RESTART`); launchd starts the bundle's program again, which after an app update is the new
   version.
+- **By hand** (`apps/server/src/cli/engine.ts`, `docs/cli.md` → The engine). `shinsa start` is `launchctl
+  kickstart` on the job, `shinsa stop` is `launchctl kill SIGTERM` (a clean stop exits 0, so `KeepAlive` leaves it
+  stopped until a start, the app, a command that needs it or the next login), `shinsa restart` is `launchctl
+  kickstart -k` and `shinsa restart --when-idle` is `POST /api/engine/restart` with `when: idle`; each waits up to
+  20 s for the engine to answer, stop answering or answer with a new pid. All three refuse, with
+  `engine_unmanaged`, from a `shinsa` outside the bundle, and with `engine_not_installed` when launchd has no job.
+  `shinsa logs` prints the end of `data/engine.log`, each JSON line as its UTC time, level, message and fields
+  (`--json` as written). `shinsa status` and `shinsa version` read `/api/health` without starting anything.
 - **Folders macOS keeps private.** The engine is a background process, so it cannot answer macOS's consent prompts
   well: discovery in the bundle skips `~/Desktop`, `~/Documents` and `~/Downloads` (`createDiscoverer`), and a folder
   chosen at setup that the engine may not read is refused with `roots_unreadable`, which says to give Shinsa Full Disk
@@ -3396,7 +3415,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks and the setup chat.
 - **Running in the background.** `test/instance/lock.test.ts` covers the lock (a live holder refused, each kind of
   stale lock taken over, a contended takeover, an unreadable lock) and `test/serve.test.ts` the same through
-  `startShinsa`; `test/e2e/lock.test.ts` runs real `shinsa serve` processes on one data directory (the second is
+  `startShinsa`; `test/e2e/lock.test.ts` runs real `shinsa engine` processes on one data directory (the second is
   refused with the first's address, a clean stop frees the lock, a `kill -9` leaves one the next server takes over).
   `test/shell/login.test.ts` reads the environment from a fake login shell (`test/helpers/bin/login-shell`, which
   every test's `SHELL` points at) that prints noise, hangs or fails on request, and a fake fish
@@ -3410,7 +3429,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   status screen until the port is free.
 - **Real agents.** `bun run --cwd apps/server test:live` runs a change, an Ask task, an investigation and a support
   question through real Claude agents on a throwaway repository (GitHub stays faked). It costs real tokens, so it is not part of `bun test`. The real eunoe is
-  checked by hand: `shinsa serve` on a throwaway `SHINSA_HOME` with `SHINSA_EUNOE_PORT` on a spare port, one task, and
+  checked by hand: `shinsa engine` on a throwaway `SHINSA_HOME` with `SHINSA_EUNOE_PORT` on a spare port, one task, and
   `data/eunoe/requests.jsonl` showing the run's requests.
 
 Not covered by automated tests: GitHub's real JSON (the fake `gh` mirrors its shape) and the real Claude Agent SDK

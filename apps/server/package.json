@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "check-types": "tsc --noEmit",
-    "dev": "bun --watch src/main.ts serve",
-    "docs:cli": "bun -e \"import { serializeReference } from './src/surface/index.ts'; await Bun.write('../../docs/cli.md', serializeReference())\"",
-    "start": "bun src/main.ts serve",
+    "dev": "bun --watch src/main.ts engine",
+    "docs:cli": "bun -e \"import { replaceReference } from './src/cli/help.ts'; const doc = Bun.file('../../docs/cli.md'); await Bun.write(doc, replaceReference(await doc.text()))\"",
+    "start": "bun src/main.ts engine",
     "test": "bun test --coverage",
     "test:live": "bun test/live/smoke.ts"
   },

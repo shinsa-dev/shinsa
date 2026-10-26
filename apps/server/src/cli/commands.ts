@@ -1,7 +1,8 @@
 import type { TaskPriority } from '@shinsa/core';
-import type { CommandReceipt } from '../surface/index.ts';
+import { type CommandReceipt, describeRunning } from '../surface/index.ts';
 import type { ApiClient } from './api.ts';
 import { HOME_LINK, isPathArgument, resolvePathArgument, resolveTaskLink } from './app.ts';
+import { ENGINE_STOPPED, readHealth } from './engine.ts';
 import { describeSession, readSession } from './session.ts';
 
 export interface CommandIo {
@@ -19,9 +20,9 @@ interface ParsedArgs {
   positional: string[];
 }
 
-const VALUE_FLAGS = new Set(['--in']);
+const VALUE_FLAGS = new Set(['--in', '--lines']);
 
-function parseArgs(args: string[]): ParsedArgs {
+export function parseArgs(args: string[]): ParsedArgs {
   const parsed: ParsedArgs = { flags: new Set(), values: new Map(), positional: [] };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] ?? '';
@@ -84,15 +85,41 @@ export async function importSession(args: string[], io: CommandIo) {
   writeTaskLink(io, result);
 }
 
-export async function printStatus(io: CommandIo) {
+function describeDamage(count: number) {
+  return count === 1
+    ? 'It skipped 1 damaged entry in its log at start. `shinsa health` shows it.'
+    : `It skipped ${count} damaged entries in its log at start. \`shinsa health\` lists them.`;
+}
+
+export async function printStatus(args: string[], io: CommandIo) {
+  const json = parseArgs(args).flags.has('--json');
+  const health = await readHealth(io.api.base);
+  if (!health) {
+    io.write(json ? JSON.stringify({ engine: null, queue: null }, null, 2) : ENGINE_STOPPED);
+    return 1;
+  }
   const summary = await io.api.readQueue();
+  if (json) {
+    io.write(JSON.stringify({ engine: health, queue: summary }, null, 2));
+    return 0;
+  }
+  io.write(describeRunning(health));
+  if (!health.ok) io.write(describeDamage(health.problems.length));
+  io.write();
   io.write(summary.briefing ?? 'No briefing yet.');
-  io.write();
-  io.write(`Needs you (${summary.decisions.length})`);
-  for (const entry of summary.decisions) io.write(`  ${entry.label.padEnd(9)} ${entry.title}  ${entry.url}`);
-  io.write();
-  io.write(`Agents working (${summary.working.length})`);
-  for (const entry of summary.working) io.write(`  ${entry.label.padEnd(9)} ${entry.title}`);
+  if (summary.decisions.length > 0) {
+    io.write();
+    io.write(`Needs you (${summary.decisions.length})`);
+    for (const entry of summary.decisions) {
+      io.write(`  ${entry.label.padEnd(9)} ${entry.title}  ${entry.url}`);
+    }
+  }
+  if (summary.working.length > 0) {
+    io.write();
+    io.write(`Agents working (${summary.working.length})`);
+    for (const entry of summary.working) io.write(`  ${entry.label.padEnd(9)} ${entry.title}`);
+  }
+  return 0;
 }
 
 export async function openApp(args: string[], io: CommandIo) {

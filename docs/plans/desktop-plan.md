@@ -6,7 +6,7 @@ absolute. References: T3 Code `/tmp/refs/t3code/apps/desktop` (commit a12d6ed9),
 
 ## Decision in one paragraph
 
-**Electron**, as a thin shell around the daemon, never the other way round. The daemon (`shinsa serve`) runs as a
+**Electron**, as a thin shell around the daemon, never the other way round. The daemon (`shinsa engine`) runs as a
 **launchd user agent** so it lives through the window closing, the app quitting, a crash and a reboot; the app
 finds it, starts it if needed, and loads the UI **from the daemon's own URL** (`http://127.0.0.1:5180`), so the
 app, a browser tab and Floaty always show the same version. The app adds only what a page cannot do: dock badge,
@@ -179,7 +179,7 @@ apps/desktop/                 @shinsa/desktop
      service while the window is open (the page's own reconnecting socket covers a server restart).
    - Start-up speed (2026-10-25): the first health check is sent before `app.whenReady`, the window waits for
      `ready-to-show`, background throttling is off, V8 keeps a code cache from the first run
-     (`v8CacheOptions: 'bypassHeatCheck'`), and `shinsa serve` marks the hashed `/assets/*` immutable, so a
+     (`v8CacheOptions: 'bypassHeatCheck'`), and `shinsa engine` marks the hashed `/assets/*` immutable, so a
      relaunch reads the bundle and its compiled code from disk. Measured with `scripts/perf/shell-startup.ts`
      (`docs/performance.md` → Shell and navigation): about 0.3 s from launch to the page's navigation, 0.42 s to
      first paint and 0.48 s to Home on an M-series Mac, dominated by Electron's own boot.
