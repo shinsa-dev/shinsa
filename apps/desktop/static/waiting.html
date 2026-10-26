@@ -25,6 +25,11 @@
           --primary: #3b8eff;
         }
       }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
       html,
       body {
         height: 100%;
@@ -46,7 +51,7 @@
         place-content: center;
         height: 100%;
         padding: 0 32px;
-        max-width: 28rem;
+        max-width: calc(28rem + 64px);
         margin: 0 auto;
         gap: 8px;
       }
@@ -63,7 +68,6 @@
         color: var(--muted);
       }
       .spinner {
-        box-sizing: border-box;
         flex: none;
         width: 13px;
         height: 13px;
@@ -112,7 +116,7 @@
       }
       pre {
         margin: 8px 0 0;
-        max-height: 180px;
+        max-height: 196px;
         overflow: auto;
         padding: 8px 10px;
         border-radius: 8px;
