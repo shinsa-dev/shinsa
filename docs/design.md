@@ -1409,12 +1409,16 @@ Only these, and they win over anything below:
     - **`shinsa://` links** open in the window, from any app or from inside the page: `shinsa://task/LOC-4` (a
       handle or an id) opens the task, `shinsa://tasks`, `shinsa://settings` and `shinsa://` their pages, anything
       else Home. Links to other sites open in the default browser.
-    - **Shinsa is not running**: the window shows one quiet page ("Shinsa is not running", the address, and how to
-      start it) and opens Shinsa by itself as soon as the server answers; the packaged app also offers Start Shinsa
-      once a launch (`shinsa service restart`, then `shinsa service install`), with the last lines of the output if
-      it does not start.
+    - **The engine's status page**: the app starts its own engine, so there is no dialog and nothing to run. While the
+      engine starts the window shows one quiet page with a small spinner ("Starting Shinsa"); when it cannot run, the
+      same page says why and offers the fix, the first button `primary`: Allow Shinsa to run in the background (Open
+      Login Items, Try again), Port 5180 is taken, The engine keeps stopping (Start engine, Copy details, with the
+      engine log's warnings and errors under it), or The engine is not running (Start engine, Open Privacy & Security,
+      Copy details). The page opens Shinsa by itself as soon as the engine answers, and the window switches to it if
+      the engine stops answering for 15 s while you work (`apps/desktop/src/lib/engine.ts`,
+      `static/waiting.html`).
     - **The window**: closing it hides it (the page keeps its socket, so the badge and notifications go on), the
-      Dock icon or Window → Shinsa brings it back, ⌘Q quits the app and never stops the server. Its size and place
+      Dock icon or Window → Shinsa brings it back, ⌘Q quits the app and never stops the engine. Its size and place
       are kept and restored onto a connected display, 900 × 1100 by default. The menu is macOS's own (Settings… ⌘,
       opens `/settings`; View has Reload ⌘R, zoom, full screen; Go has Back, Forward and Home); no other shortcut
       and no menu bar icon.

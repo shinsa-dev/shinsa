@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { describeServer, parseHealth } from '../../src/lib/health.ts';
+import { describeServer, parseHealth, parseHealthText } from '../../src/lib/health.ts';
 
 describe('parseHealth', () => {
   it('reads the version when the server reports one', () => {
@@ -17,6 +17,13 @@ describe('parseHealth', () => {
     expect(parseHealth(null)).toBeNull();
     expect(parseHealth('ok')).toBeNull();
     expect(parseHealth({ status: 'ok' })).toBeNull();
+  });
+});
+
+describe('parseHealthText', () => {
+  it('reads the health from the response body, and nothing from a body that is not JSON', () => {
+    expect(parseHealthText('{"ok":true,"version":"0.4.0"}')).toEqual({ version: '0.4.0' });
+    expect(parseHealthText('<html>')).toBeNull();
   });
 });
 

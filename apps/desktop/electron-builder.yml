@@ -7,6 +7,12 @@ files:
   - dist/**
   - static/**
   - package.json
+extraResources:
+  - from: ../server/dist/engine
+    to: engine
+extraFiles:
+  - from: resources/LaunchAgents
+    to: Library/LaunchAgents
 protocols:
   - name: Shinsa
     schemes:
@@ -18,6 +24,9 @@ mac:
   icon: icon.icns
   category: public.app-category.developer-tools
   minimumSystemVersion: "14.0"
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
 publish:
   provider: github
   owner: shinsa-dev

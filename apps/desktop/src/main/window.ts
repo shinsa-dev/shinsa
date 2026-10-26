@@ -2,8 +2,13 @@ import { join } from 'node:path';
 import { app, BrowserWindow, type IpcMainEvent, nativeTheme, screen, shell } from 'electron';
 import { MIN_SIZE, resolveWindowBounds } from '../lib/bounds.ts';
 import { CHANNELS, type DesktopWindowState } from '../lib/bridge.ts';
+import {
+  ENGINE_ACTION_LABEL,
+  type EngineAction,
+  type EngineScreenView,
+  parseEngineAction,
+} from '../lib/engine.ts';
 import { isAppUrl, type Navigation, resolveHistoryStep, resolveNavigation } from '../lib/navigation.ts';
-import { describeWaiting } from '../lib/service.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
 
 type Page = 'none' | 'app' | 'waiting';
@@ -28,10 +33,12 @@ export class MainWindow {
   #pending = '/';
   #quitting = false;
   #onLoadFailed: () => void;
+  #onEngineAction: (action: EngineAction) => void;
 
-  constructor(origin: string, onLoadFailed: () => void) {
+  constructor(origin: string, onLoadFailed: () => void, onEngineAction: (action: EngineAction) => void) {
     this.origin = origin;
     this.#onLoadFailed = onLoadFailed;
+    this.#onEngineAction = onEngineAction;
     const display = screen.getPrimaryDisplay();
     this.win = new BrowserWindow({
       ...resolveWindowBounds(
@@ -80,6 +87,12 @@ export class MainWindow {
   #watchContents() {
     const contents = this.win.webContents;
     contents.on('will-navigate', (details) => {
+      const action = this.#page === 'waiting' ? parseEngineAction(details.url) : null;
+      if (action) {
+        details.preventDefault();
+        this.#onEngineAction(action);
+        return;
+      }
       const navigation = resolveNavigation(details.url, this.origin);
       if (navigation.kind === 'app' && this.#page === 'app') return;
       details.preventDefault();
@@ -128,13 +141,23 @@ export class MainWindow {
     return isLoaded(this.win.loadURL(new URL(path, this.origin).toString()));
   }
 
-  showWaiting() {
+  showWaiting(view: EngineScreenView) {
     this.#page = 'waiting';
     return isLoaded(
       this.win.loadFile(join(app.getAppPath(), 'static', 'waiting.html'), {
-        query: { url: this.origin, hint: describeWaiting(app.isPackaged) },
+        query: {
+          title: view.title,
+          text: view.text,
+          detail: view.detail,
+          busy: view.busy ? '1' : '',
+          actions: view.actions.map((action) => `${action}:${ENGINE_ACTION_LABEL[action]}`).join('|'),
+        },
       })
     );
+  }
+
+  get showsWaiting() {
+    return this.#page === 'waiting';
   }
 
   open(path: string) {

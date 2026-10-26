@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="color-scheme" content="light dark" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
     <title>Shinsa</title>
     <style>
       :root {
@@ -11,13 +12,17 @@
         --fg: #18181b;
         --muted: #71717a;
         --code: #f4f4f5;
+        --line: #e4e4e7;
+        --primary: #0a72ef;
       }
       @media (prefers-color-scheme: dark) {
         :root {
           --bg: #101012;
           --fg: #f4f4f5;
           --muted: #a1a1aa;
-          --code: #1f1f23;
+          --code: #1a1a1d;
+          --line: #27272a;
+          --primary: #3b8eff;
         }
       }
       html,
@@ -41,11 +46,14 @@
         place-content: center;
         height: 100%;
         padding: 0 32px;
-        max-width: 26rem;
+        max-width: 28rem;
         margin: 0 auto;
-        gap: 6px;
+        gap: 8px;
       }
       h1 {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         margin: 0;
         font-size: 14px;
         font-weight: 500;
@@ -54,25 +62,93 @@
         margin: 0;
         color: var(--muted);
       }
-      code {
-        font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+      .spinner {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 1.5px solid var(--line);
+        border-top-color: var(--muted);
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner {
+          animation: none;
+        }
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .actions:empty {
+        display: none;
+      }
+      .actions a {
+        padding: 4px 10px;
+        border-radius: 7px;
+        font-weight: 500;
+        text-decoration: none;
+        color: var(--fg);
         background: var(--code);
-        padding: 1px 4px;
-        border-radius: 4px;
+        box-shadow: inset 0 0 0 1px var(--line);
+        cursor: default;
+      }
+      .actions a:first-child {
+        color: #ffffff;
+        background: var(--primary);
+        box-shadow: none;
+      }
+      .actions a:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      pre {
+        margin: 8px 0 0;
+        max-height: 180px;
+        overflow: auto;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: var(--code);
+        color: var(--muted);
+        font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+        -webkit-user-select: text;
+        user-select: text;
       }
     </style>
   </head>
   <body>
     <div class="drag"></div>
-    <main>
-      <h1>Shinsa is not running</h1>
-      <p>Nothing answers at <code id="url"></code> yet. The window opens Shinsa as soon as it does.</p>
-      <p id="hint"></p>
+    <main role="status" aria-live="polite">
+      <h1><span class="spinner" id="spinner" hidden></span><span id="title">Shinsa</span></h1>
+      <p id="text"></p>
+      <div class="actions" id="actions"></div>
+      <pre id="detail" hidden></pre>
     </main>
     <script>
       const params = new URLSearchParams(location.search);
-      document.getElementById('url').textContent = params.get('url') ?? '';
-      document.getElementById('hint').textContent = params.get('hint') ?? '';
+      document.getElementById('title').textContent = params.get('title') ?? 'Shinsa';
+      document.getElementById('text').textContent = params.get('text') ?? '';
+      document.getElementById('spinner').hidden = params.get('busy') !== '1';
+      const detail = params.get('detail') ?? '';
+      const pre = document.getElementById('detail');
+      pre.textContent = detail;
+      pre.hidden = detail === '';
+      const actions = document.getElementById('actions');
+      for (const entry of (params.get('actions') ?? '').split('|').filter(Boolean)) {
+        const split = entry.indexOf(':');
+        const link = document.createElement('a');
+        link.href = `shinsa://engine/${entry.slice(0, split)}`;
+        link.textContent = entry.slice(split + 1);
+        actions.append(link);
+      }
     </script>
   </body>
 </html>

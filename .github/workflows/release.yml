@@ -44,6 +44,13 @@ jobs:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run build
+        working-directory: apps/web
+      - name: Build the engine
+        env:
+          SHINSA_VERSION: ${{ steps.version.outputs.version }}
+        run: bun apps/server/scripts/build-engine.ts
+      - run: apps/server/dist/engine/bin/shinsa help
+      - run: bun run build
         working-directory: apps/desktop
       - name: Build, sign and notarize
         working-directory: apps/desktop

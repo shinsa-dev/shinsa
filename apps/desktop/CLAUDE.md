@@ -51,6 +51,18 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
   centred. Change `scripts/icon.ts`, never the outputs, and run `bun run icon` (needs `rsvg-convert` from Homebrew's
   librsvg, and `iconutil`). The unpackaged app sets `resources/icon.png` as its Dock icon.
 - **Logic in `lib/`, Electron in `main/`.** Anything that decides goes in `lib/` with a test; `main/` wires it.
+- **The engine is the app's to run.** Packaged, the app removes the old `shinsa service` LaunchAgent once
+  (`studio.overclock.shinsa`, so two engines never share a data folder), then registers the bundle's job with
+  `app.setLoginItemSettings({ type: 'agentService' })` (`SMAppService`). macOS's records can say enabled while launchd
+  has no job, so the app checks `launchctl print`, registers again when it is missing, and where registration is
+  refused writes the same job to `~/Library/LaunchAgents` with the program's full path (carrying `SHINSA_HOME` and
+  `SHINSA_DATA_DIR`) and bootstraps it. It waits up to 25 s for the engine, kicking it after 3 s, and otherwise shows
+  why on the status page. While the window shows Shinsa it checks the engine every 5 s; three misses in a row bring
+  the status page back, and the page opens Shinsa again by itself once the engine answers. There is no dialog.
+- **Restarting** the engine is `launchctl kickstart -k` (the status page's Start engine, Shinsa → Restart Engine); the
+  engine restarts itself for an update (`POST /api/engine/restart`).
+- **The `shinsa` command**: Shinsa → Install the shinsa Command… links `Contents/Resources/engine/bin/shinsa` into
+  `/usr/local/bin` with one administrator prompt, as VS Code does.
 - Which server: `SHINSA_URL` (an origin) wins; unpackaged, the Vite dev server on 5181; packaged, `SHINSA_PORT`, then
   `port` in Shinsa's `config.json`, then 5180, always on 127.0.0.1.
 - The app is "Shinsa" everywhere, packaged or not (`app.setName`, the first menu, the About panel). The menu bar and
@@ -60,14 +72,16 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
   icon changes (`.electron/Shinsa.json`).
 - Unpackaged keeps its own userData (`~/Library/Application Support/Shinsa Dev`) and registers no URL scheme; pass a
   link as an argument to try one (`bun run dev shinsa://task/LOC-4` while it runs).
-- Bundle id `studio.overclock.shinsa`, scheme `shinsa`, Apple Silicon only, unsigned (ad hoc) for now.
+- Bundle id `studio.overclock.shinsa`, scheme `shinsa`, Apple Silicon only, unsigned (ad hoc) until the Developer
+  ID secrets are set. `SHINSA_APP_ID` changes the id the app uses for its job, its old service and its userData, for a
+  test copy beside the real app (below).
 
 ## Commands
 
 | Command | Description |
 |---|---|
 | `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app, as `.electron/Shinsa.app`, on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
-| `bun run package` | `release/mac-arm64/Shinsa.app`, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`) |
+| `bun run package` | Builds the web app and the engine (`SHINSA_VERSION` sets its version), then `release/mac-arm64/Shinsa.app` with the engine and its job inside, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`) |
 | `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo (`scripts/icon.ts`) |
 | `bun test` | The `lib/` tests, 100% line and function coverage |
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
@@ -83,3 +97,26 @@ points. The version lives in the tag, never in `package.json`. The plan for the 
 `docs/plans/app-plan.md` → Versions and updates.
 
 The root `bun dev` skips this package (`--filter=!@shinsa/desktop`), so it never opens a window by itself.
+
+## Testing the packaged app
+
+Never on the real app's identity: its first launch takes over the engine you use. Make a copy with its own bundle id
+and job, pointed at a scratch folder, and run it with the same id:
+
+```sh
+T="/tmp/ShinsaTest/Shinsa Test.app"; mkdir -p /tmp/ShinsaTest /tmp/shinsa-e2e
+cp -R release/mac-arm64/Shinsa.app "$T"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier studio.overclock.shinsa.test" "$T/Contents/Info.plist"
+A="$T/Contents/Library/LaunchAgents"; P="$A/studio.overclock.shinsa.test.engine.plist"
+mv "$A/studio.overclock.shinsa.engine.plist" "$P"
+/usr/libexec/PlistBuddy -c "Set :Label studio.overclock.shinsa.test.engine" \
+  -c "Set :AssociatedBundleIdentifiers:0 studio.overclock.shinsa.test" \
+  -c "Add :EnvironmentVariables:SHINSA_HOME string /tmp/shinsa-e2e" "$P"
+codesign --force --deep --sign - "$T"
+echo '{"port":5199}' > /tmp/shinsa-e2e/config.json
+SHINSA_APP_ID=studio.overclock.shinsa.test SHINSA_HOME=/tmp/shinsa-e2e "$T/Contents/MacOS/Shinsa"
+```
+
+Then quit it and see the engine still answer on 5199, `kill -9` the engine and see it back, take the port and see the
+status page, and `launchctl bootout gui/$(id -u)/studio.overclock.shinsa.test.engine` when done.
+
