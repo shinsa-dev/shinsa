@@ -29,9 +29,9 @@ Only these, and they win over anything below:
    and are kept as reference only. Shinsa's own composites live in `apps/web/src/components/<domain>`.
    The shared building blocks (page heading, toolbar, section label, list row, card, panel, step number,
    choice, select field, copy button, options trigger, info popover, status tiles and marks, times, code text,
-   the health banner's card, the setup chat's choice buttons and checks, the confirm dialog, Home's composer) are on
+   the health banner's card, the choice buttons, the confirm dialog, Home's composer) are on
    `/ui` under Shinsa composites (smart links are not), and so are the feature pieces, each in
-   every state from sample data: accounts (usage bars and figures, the usage menu, account status, the
+   every state from sample data: the setup steps and the finished page (`routes/ui/onboarding.tsx`, 24), accounts (usage bars and figures, the usage menu, account status, the
    percent and sign-in dialogs at each phase, the Run on account choices and the run label's account), the
    overview's now cards on `NowFrame` (setup, sign-in, usage wait, wait, secret, paused for a failure, a cost
    limit and a wait out of checks, a question with choices, an escalated review's verdicts, a revised plan),
@@ -54,7 +54,7 @@ Only these, and they win over anything below:
    (`ScrollArea`'s `fade`, on by default, or `ScrollFade`), 24px at whichever edge still hides content, never a
    gradient overlay, so it needs no colour and works on every surface. Every page whose body scrolls under a header
    uses `PageScroll` (`components/layout/page/page-scroll.tsx`, a `ScrollArea` with the fade): Home, Settings and
-   the task's Overview. The task chat and the setup chat keep their own `ScrollArea` with the fade on, so their
+   the task's Overview. The task chat keeps its own `ScrollArea` with the fade on, so its
    content fades under the header at the top and into the composer at the bottom; the composer draws no gradient of
    its own. **Scrolling never repaints the fade.** The mask sits on a still box around the scroller
    (`data-fade-scope`), not on the scroller, so it is painted once and the content scrolls under it on the
@@ -290,7 +290,8 @@ Only these, and they win over anything below:
     `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
-    open (34), and Enter sends in every input. The Mac app's menu adds Go → Back ⌘[, Forward ⌘] and Home
+    open (34), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and
+    Space while it has focus, as any list box does (24). The Mac app's menu adds Go → Back ⌘[, Forward ⌘] and Home
     ⇧⌘H (31); those are the app's, not the page's.
 11. **No focus states.** Nothing marks keyboard focus: no ring, outline, border recolour or wash
     (Shape & depth → No focus states). Focus rules below are paywall-next reference only.
@@ -594,7 +595,7 @@ Only these, and they win over anything below:
       control. The page heading is the open tab's name ("General", "Agents"), never "Settings".
     - **Settings is titles only**: the group label and each row's title with its control (a 40px
       row). There are no section or row descriptions (`SettingsGroup` and `SettingRow` take none), so a
-      title and its options must say what a setting does on their own ("Setup questions" with Run setup again).
+      title and its options must say what a setting does on their own ("Setup steps" with Run setup again).
       The one exception is Agents → Models, whose agent groups and roles each carry a one-sentence line, since
       "Task agents" or "Researcher" cannot say on its own which work it covers (26).
       A row may still show data under or beside its name (an account's reset time, a schedule's summary, a
@@ -785,26 +786,56 @@ Only these, and they win over anything below:
     busy submit can't fire twice. It is never `disabled`.
 23. **The kit's icon-only buttons carry their tooltip**, as 13 requires: the dialog and sheet close
     X ("Close").
-24. **Setup is a chat, built from the task chat's pieces.** `/onboarding` (`routes/onboarding.tsx`) is the
-    task chat's column: Shinsa's lines are `AgentText`, a problem with your answer is `ErrorLine`, your answers are
-    `UserMessage` bubbles, every item a `ROW`, and the `Composer` sits at the bottom. The heading is `PageHeading`
-    ("Set up Shinsa", "Question 2 of 6") inset to the rows' text. The options under the latest question are
-    `ChoiceButton`s (`controls/choice-buttons.tsx`): `outline` `sm` buttons in a wrapping row (`gap-1.5`), a
-    muted detail after the label ("12 repositories"). Selection is colour alone, never a mark: a selected option is
-    the same button in the `primary` variant (its detail at 70% opacity), so nothing moves when it changes. No
-    option of a one-answer question is selected when it is asked, a saved value included; where several can be
-    picked (folders) the folders already chosen start selected, a pick toggles `primary` with `aria-pressed`, and a
-    primary `sm` button below sends them. Check results (accounts,
-    tools) are one `CARD` list of `CheckOutcomeIcon` rows, label over detail (`gap-px`) and the fix in `fg-3`. An
-    optional check that fails (codex and its sign-in: Codex is a second provider, not a requirement) is a skipped
-    row, never a fail, and never holds setup back.
-    While an answer is read your text shows as a bubble with a shimmering "Reading your answer…" under it.
-    Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS`
-    ones marked as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts, checked when chosen);
-    Settings → Setup and ⌘K's Run setup again restart the chat on the server, then open `/onboarding`; opening
-    `/onboarding` while the server's chat is finished (setup done and not restarted) goes Home instead. The top bar
-    (and the Sidebar rail) hides the usage glance and Focus on `/onboarding`. No folder path is ever written into
-    the UI.
+24. **Setup is one calm step at a time.** `/onboarding` (`routes/onboarding.tsx`, the pieces in
+    `components/onboarding/`) shows the server's setup steps (`docs/engine.md` → The setup steps) one at a time in
+    one column (`ONBOARDING_COLUMN`: `max-w-xl`, `px-6`, 64px from the top from `md` up), and everything in it
+    starts on the column's left edge: the steps along the top, the title, the body and the footer, with no inset of
+    their own (the old chat's heading sat 12px in from its rows). It is a focus page in its own shell
+    (`OnboardingShell`): a 44px drag bar with the logo in a browser and the traffic lights in the app, the connection
+    status and the Update button, and nothing that leads elsewhere: no Home button or logo link, no rail, no queue,
+    no usage glance, no Focus, and ⌘K is not mounted (the menu is closed on the way in). While `GET /api/onboarding`
+    says setup is not complete, every route but `/onboarding` replaces itself with `/onboarding`
+    (`resolveOnboardingRedirect`, in `root.tsx`), so a link, the address bar, the back button or the app's menu all
+    land on setup. A run you started again from Settings (Settings → Setup, ⌘K's Run setup again, `restartOnboarding`)
+    is not locked: setup is already complete, and each step's footer has Close setup beside its button, which goes to
+    Settings.
+    - **The steps along the top** (`OnboardingStepper`): a numbered 20px dot and the step's label for each step,
+      joined by hairlines. The current step's dot is the accent with a white number and its label `fg-4`
+      (`faux-medium`); a step you answered shows the accent check on `bg-a2` and is a button that opens it, with its
+      answer as the tooltip ("Opus 5.5"); a step you reached but have not answered again (after going back) is a
+      numbered button; the rest are `fg-2`. Below `sm` only the current step keeps its label.
+    - **Each step** is the title (`text-lg` medium `fg-4`, the question itself: "How should pull requests be
+      merged?"), one line of description in `text-sm` `fg-2`, the body, a refused answer's reason as an `ErrorLine`,
+      and the footer behind a hairline: Back (`secondary`, the arrow left) on the left and the primary button on the
+      right, the step's own label ("Continue", "Skip for now", "Finish setup", "Finish anyway") with the arrow at its
+      end. It enters with a 1rem slide and a fade (280ms, the strong ease-out; from the left when you went back),
+      only a fade under reduced motion.
+    - **Options** are one `CARD` list (`OptionList`, a `listbox`): rows of at least 48px on a 14px inset, a radio
+      dot (the accent when chosen) or a `Checkbox` for folders, the label in `text-sm` medium over its meaning in
+      `text-xs` `fg-2`, the recommended one with a quiet "Recommended" badge. Clicking a one-answer option answers it
+      at once and moves on, with a spinner in the row while it saves; nothing starts chosen on a step you have not
+      answered, so there is no Continue until you go back to one you have, where your answer is chosen and Continue
+      keeps it. The list takes focus when the step opens: the arrows, Home and End move a highlight (the hover wash,
+      `aria-activedescendant`) and Enter or Space picks, so setup runs from the keyboard alone; these keys belong to
+      the list, not the page (10).
+    - **Folders** pick several: the found folders with their repository counts, the folders you chose already
+      checked (the one with the most repositories on a first run), and under the list a field to add any other
+      folder by its path, which joins the list checked. Continue is off with nothing checked.
+    - **Accounts** are already imported when the step opens (the server does it, never a question): one `CARD`
+      list of your Claude accounts from the socket, each with its email, where it came from and its plan ("Your
+      Claude Code login · Max plan", "From claude-swap"), "Added" on the ones this setup imported, Sign in again on
+      a signed-out one, and a remove button (`ConfirmDialog` with `describeRemoval`'s words). The card's footer band
+      has Add another account (Sign in to Claude with none), which opens the sign-in dialog. An import that failed
+      is an amber line under the card.
+    - **Tools** are one `CARD` list of checks (`OnboardingChecks`): the `CheckOutcomeIcon`, the tool's name, its
+      version or state at the right in `fg-2`, the fix under it in `fg-3`, and Check again in the footer band. An
+      optional check that fails (codex and its sign-in) is a skipped row, never a fail, and never holds setup back.
+    - **Finished** (`OnboardingFinished`) is the accent check on a 40px tile, "Shinsa is ready", what you set up
+      as a two-column `CARD` list (Folders, Model, Merging, Plans, Accounts) and Go to Home. Opening `/onboarding`
+      once the server's run is finished (setup done and not started again) goes Home instead.
+    Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS` ones marked
+    as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts,
+    checked when chosen). No folder path is ever written into the code; the ones on screen come from the server.
 
 25. **Process states share the now card and the panels.** Every new waiting state is one of the
     Overview's existing pieces, never a new surface (`components/overview/`, built on `NowFrame`
@@ -825,7 +856,7 @@ Only these, and they win over anything below:
       the version on screen.
     - **Questions with choices** (`question-choices.tsx`): `outline` `sm` buttons in a wrapping
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
-      same pattern as the setup chat's options. One click answers; the box placeholder becomes
+      same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes
       "Or write your own answer."
     - **Review verdicts** (`finding-verdicts.tsx`): each finding is a row (severity in
       `red-text` or `fg-2`, the file as a mono chip, the message) with a Fix / Dismiss `Choice`

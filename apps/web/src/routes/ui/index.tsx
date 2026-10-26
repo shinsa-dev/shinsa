@@ -17,6 +17,7 @@ import { ChatSpecimens } from './chat.tsx';
 import { CodeSpecimens } from './code.tsx';
 import { CompositeSpecimens } from './composites.tsx';
 import { INPUT_SECTIONS, InputSpecimens } from './inputs.tsx';
+import { OnboardingSpecimens } from './onboarding.tsx';
 import { OVERLAY_SECTIONS, OverlaySpecimens } from './overlays.tsx';
 import { OverviewSpecimens } from './overview.tsx';
 import { ReviewSpecimens } from './review.tsx';
@@ -31,6 +32,7 @@ const SECTIONS = [
   ...OVERLAY_SECTIONS,
   ...SURFACE_SECTIONS,
   { id: 'shinsa', label: 'Shinsa composites' },
+  { id: 'shinsa-setup', label: 'Setup' },
   { id: 'shinsa-accounts', label: 'Accounts' },
   { id: 'shinsa-overview', label: 'Overview cards' },
   { id: 'shinsa-chat', label: 'Chat' },
@@ -167,6 +169,14 @@ export function UiPage() {
           className='flex-col items-start gap-8'
         >
           <CompositeSpecimens />
+        </Section>
+        <Section
+          id='shinsa-setup'
+          title='Shinsa composites · setup'
+          description='Each kind of setup step and the finished page, from apps/web/src/components/onboarding, on sample steps. Every action only shows a toast.'
+          className='flex-col items-start gap-8'
+        >
+          <OnboardingSpecimens />
         </Section>
         <Section
           id='shinsa-accounts'

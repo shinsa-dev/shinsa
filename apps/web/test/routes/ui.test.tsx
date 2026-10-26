@@ -130,7 +130,13 @@ describe('the /ui gallery', () => {
     await renderGallery();
     const shinsa = findSection('shinsa');
     expect(shinsa.getByRole('button', { name: 'Rebase' }).getAttribute('aria-pressed')).toBeNull();
-    expect(shinsa.getByText('gh is not signed in.')).toBeTruthy();
+    const setup = findSection('shinsa-setup');
+    expect(setup.getByRole('heading', { name: 'Where do you keep your repositories?' })).toBeTruthy();
+    expect(setup.getByRole('option', { name: /~\/Developer/ }).getAttribute('aria-selected')).toBe('true');
+    expect(setup.getByRole('option', { name: /Squash/ }).getAttribute('aria-selected')).toBe('true');
+    expect(setup.getByText('Added')).toBeTruthy();
+    expect(setup.getByText('Not signed in.')).toBeTruthy();
+    expect(setup.getByRole('heading', { name: 'Shinsa is ready' })).toBeTruthy();
     expect(shinsa.getByRole('button', { name: 'Remove account' })).toBeTruthy();
     for (const name of ['Project', 'When to start', 'Priority']) {
       expect(shinsa.getByRole('combobox', { name })).toBeTruthy();
@@ -151,6 +157,12 @@ describe('the /ui gallery', () => {
     const [refresh] = findSection('shinsa-settings').getAllByRole('button', { name: 'Refresh usage' });
     if (refresh) fireEvent.click(refresh);
     fireEvent.click(overview.getByRole('button', { name: 'Keep v1 for one more release Recommended' }));
+    const setup = findSection('shinsa-setup');
+    fireEvent.click(setup.getByRole('option', { name: /Rebase/ }));
+    fireEvent.click(setup.getAllByRole('button', { name: /Back/ })[0] as HTMLElement);
+    fireEvent.click(setup.getByRole('button', { name: 'Check again' }));
+    fireEvent.click(setup.getByRole('button', { name: 'Add another account' }));
+    fireEvent.click(setup.getByRole('button', { name: /Go to Home/ }));
     fireEvent.click(
       findSection('shinsa-chat').getByRole('button', {
         name: 'Stop “Review the session cleanup” and what it delegated',

@@ -1064,8 +1064,8 @@ describe('changing and removing accounts', () => {
   });
 });
 
-describe('the setup chat', () => {
-  test('setup lists the accounts, offers the imports, imports one and starts a sign-in', async () => {
+describe('setup', () => {
+  test('lists the accounts and the imports it can add, and imports one', async () => {
     const world = createWorld({ registry: true });
     world.statuses.set('default', { loggedIn: true, email: 'me@example.com', subscriptionType: 'max' });
     await world.accounts.refresh();
@@ -1073,18 +1073,9 @@ describe('the setup chat', () => {
     expect(await actions.listImports()).toEqual([{ origin: 'claude', email: 'me@example.com', plan: 'max' }]);
     await actions.importAccount('claude', 'me@example.com');
     expect(await source()).toEqual([
-      {
-        id: world.accounts.store.list()[0]?.id ?? '',
-        signedIn: true,
-        detail: 'Signed in, Max plan.',
-        label: 'me@example.com',
-      },
+      { id: world.accounts.store.list()[0]?.id ?? '', email: 'me@example.com', signedIn: true },
     ]);
-    expect(actions.isSigningIn()).toBe(false);
-    await actions.startLogin(null);
-    expect(actions.isSigningIn()).toBe(true);
-    world.processes.at(-1)?.exit(1);
-    await until('the sign-in to end', () => !actions.isSigningIn());
+    expect(await actions.listImports()).toEqual([]);
   });
 });
 

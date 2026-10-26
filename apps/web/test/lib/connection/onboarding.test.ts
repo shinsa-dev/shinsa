@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import {
   refreshOnboardingStatus,
   replyToOnboarding,
-  requestOnboardingChat,
+  requestOnboardingFlow,
   requestRootSuggestions,
   resetOnboardingStatus,
   restartOnboarding,
@@ -13,9 +13,9 @@ import {
 import { useRoute } from '@/router.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import {
-  createChat,
+  createFlow,
   createOnboardingStatus,
-  createPrompt,
+  createStep,
   createSuggestions,
   startFakeOnboarding,
 } from '../../support/onboarding.ts';
@@ -88,24 +88,24 @@ describe('the onboarding status', () => {
   });
 });
 
-describe('the setup chat requests', () => {
-  it('reads the chat, sends a reply and refreshes the status after it', async () => {
-    const chat = createChat(createPrompt());
+describe('the setup requests', () => {
+  it('reads the setup, sends a reply and refreshes the status after it', async () => {
+    const flow = createFlow(createStep());
     fake = startFakeOnboarding({
-      'GET /api/onboarding/chat': { answer: chat },
-      'POST /api/onboarding/chat': { answer: createChat(null) },
+      'GET /api/onboarding/flow': { answer: flow },
+      'POST /api/onboarding/flow': { answer: createFlow(null) },
       'GET /api/onboarding': { answer: createOnboardingStatus() },
       'GET /api/onboarding/roots?refresh=1': { answer: createSuggestions([['/Users/me/Developer', 2]]) },
     });
-    expect(await requestOnboardingChat()).toEqual(chat);
+    expect(await requestOnboardingFlow()).toEqual(flow);
     const answered = await act(() =>
-      replyToOnboarding({ type: 'choose', questionId: 'merge', values: ['squash'] })
+      replyToOnboarding({ type: 'answer', stepId: 'merge', values: ['squash'] })
     );
-    expect(answered.prompt).toBeNull();
+    expect(answered.step).toBeNull();
     expect(fake.requests[1]).toEqual({
-      path: '/api/onboarding/chat',
+      path: '/api/onboarding/flow',
       method: 'POST',
-      body: { type: 'choose', questionId: 'merge', values: ['squash'] },
+      body: { type: 'answer', stepId: 'merge', values: ['squash'] },
     });
     await waitFor(() => expect(fake?.requests.at(-1)?.path).toBe('/api/onboarding'));
     expect((await requestRootSuggestions()).suggestions[0]?.repoCount).toBe(2);
@@ -114,12 +114,12 @@ describe('the setup chat requests', () => {
   it('says what went wrong when the server answers without a reason', async () => {
     fake = startFakeOnboarding({});
     globalThis.fetch = (async () => new Response('gateway down', { status: 502 })) as unknown as typeof fetch;
-    await expect(requestOnboardingChat()).rejects.toThrow('Shinsa answered with status 502.');
+    await expect(requestOnboardingFlow()).rejects.toThrow('Shinsa answered with status 502.');
   });
 
   it('starts setup again and opens it, or says why it could not', async () => {
     fake = startFakeOnboarding({
-      'POST /api/onboarding/chat': { answer: createChat(createPrompt()) },
+      'POST /api/onboarding/flow': { answer: createFlow(createStep()) },
       'GET /api/onboarding': { answer: createOnboardingStatus() },
     });
     const route = renderHook(() => useRoute());
@@ -128,7 +128,7 @@ describe('the setup chat requests', () => {
     await waitFor(() => expect(route.result.current).toEqual({ name: 'onboarding' }));
     fake.stop();
     fake = startFakeOnboarding({
-      'POST /api/onboarding/chat': { status: 400, answer: { error: { message: 'Busy.' } } },
+      'POST /api/onboarding/flow': { status: 400, answer: { error: { message: 'Busy.' } } },
     });
     await restartOnboarding();
     expect(toasts.error).toHaveBeenCalledWith('Busy.');

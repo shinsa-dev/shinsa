@@ -1,8 +1,9 @@
 import type {
-  OnboardingChat,
-  OnboardingMessage,
-  OnboardingPrompt,
+  OnboardingFlow,
+  OnboardingOption,
   OnboardingStatus,
+  OnboardingStep,
+  OnboardingStepId,
   RootSuggestions,
 } from '@shinsa/core';
 
@@ -45,32 +46,56 @@ export function createSuggestions(paths: [string, number][]): RootSuggestions {
   };
 }
 
-let count = 0;
+const STEP_LABELS: [OnboardingStepId, string][] = [
+  ['roots', 'Folders'],
+  ['model', 'Model'],
+  ['merge', 'Merging'],
+  ['plans', 'Plans'],
+  ['accounts', 'Accounts'],
+  ['prerequisites', 'Tools'],
+];
 
-export function createMessage(overrides: Partial<OnboardingMessage> = {}): OnboardingMessage {
-  count += 1;
-  return { id: `m${count}`, from: 'shinsa', text: 'Hello.', problem: false, checks: [], ...overrides };
+export function createOption(overrides: Partial<OnboardingOption> = {}): OnboardingOption {
+  return { value: 'squash', label: 'Squash', detail: null, chosen: false, recommended: false, ...overrides };
 }
 
-export function createPrompt(overrides: Partial<OnboardingPrompt> = {}): OnboardingPrompt {
+export function createStep(overrides: Partial<OnboardingStep> = {}): OnboardingStep {
   return {
-    questionId: 'merge',
-    step: 3,
-    steps: 6,
-    mode: 'answer',
+    id: 'merge',
+    title: 'How should pull requests be merged?',
+    description: 'Shinsa merges a pull request only after you approve the merge.',
     multiple: false,
-    choices: [
-      { value: 'squash', label: 'Squash', detail: null, chosen: true },
-      { value: 'rebase', label: 'Rebase', detail: null, chosen: false },
+    options: [
+      createOption({ detail: 'Every pull request lands as one commit.', recommended: true }),
+      createOption({ value: 'rebase', label: 'Rebase', detail: 'No merge commit.' }),
     ],
-    submitLabel: null,
-    placeholder: 'Pick an option or answer in your own words',
+    checks: [],
+    ready: true,
+    imported: [],
+    notes: [],
+    problem: null,
+    submitLabel: 'Continue',
     ...overrides,
   };
 }
 
-export function createChat(prompt: OnboardingPrompt | null, messages = [createMessage()]): OnboardingChat {
-  return { messages, prompt };
+export function createFlow(
+  step: OnboardingStep | null,
+  overrides: Partial<OnboardingFlow> = {}
+): OnboardingFlow {
+  const index = step ? STEP_LABELS.findIndex(([id]) => id === step.id) : STEP_LABELS.length;
+  return {
+    steps: STEP_LABELS.map(([id, label], position) => ({
+      id,
+      label,
+      summary: position < index ? `${label} answer` : null,
+      reached: position <= index,
+    })),
+    index,
+    step,
+    revisit: false,
+    ...overrides,
+  };
 }
 
 export function startFakeOnboarding(routes: Record<string, FakeRoute>) {

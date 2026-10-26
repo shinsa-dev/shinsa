@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useCommandMenuOpen } from '@/lib/command/registry.ts';
+import { resetOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { Root } from '@/root.tsx';
 import { navigate, updateSearchParams } from '@/router.ts';
-import { createOnboardingStatus, startFakeOnboarding } from './support/onboarding.ts';
+import { createFlow, createOnboardingStatus, createStep, startFakeOnboarding } from './support/onboarding.ts';
 import { pushState, startFakeServer, stopFakeServer } from './support/server.ts';
 import { createShinsaState, createTask } from './support/state.ts';
 
@@ -30,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  act(() => resetOnboardingStatus());
   stopFakeServer();
   fake?.stop();
   fake = null;
@@ -89,5 +92,50 @@ describe('pages you have been to stay ready', () => {
     act(() => updateSearchParams({ tab: null }));
     expect(overview?.isConnected).toBe(true);
     expect(isShown(overview ?? null)).toBe(true);
+  });
+});
+
+describe('setup comes first', () => {
+  function lockSetup() {
+    fake?.stop();
+    fake = startFakeOnboarding({
+      'GET /api/health': { answer: { ok: true, seq: 1, problems: [] } },
+      'GET /api/onboarding': { answer: createOnboardingStatus({}, false) },
+      'GET /api/onboarding/flow': { answer: createFlow(createStep({ id: 'roots', options: [] })) },
+    });
+    act(() => resetOnboardingStatus());
+  }
+
+  function MenuState() {
+    return <output aria-label='Command menu'>{useCommandMenuOpen() ? 'open' : 'closed'}</output>;
+  }
+
+  it('sends every page to setup until it is complete, with no way home and no command menu', async () => {
+    lockSetup();
+    render(
+      <>
+        <Root />
+        <MenuState />
+      </>
+    );
+    pushState(STATE);
+    await waitFor(() => expect(location.pathname).toBe('/onboarding'));
+    for (const path of ['/tasks', '/settings', '/tasks/SW-1']) {
+      act(() => navigate(path));
+      await waitFor(() => expect(location.pathname).toBe('/onboarding'));
+    }
+    expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Shinsa/ })).toBeNull();
+    fireEvent.keyDown(window, { key: 'k', metaKey: true });
+    expect(screen.getByRole('status', { name: 'Command menu' }).textContent).toBe('closed');
+  });
+
+  it('opens setup again from Settings once it is complete, and lets you leave it', async () => {
+    render(<Root />);
+    pushState(STATE);
+    act(() => navigate('/onboarding'));
+    expect(location.pathname).toBe('/onboarding');
+    act(() => navigate('/tasks'));
+    expect(location.pathname).toBe('/tasks');
   });
 });

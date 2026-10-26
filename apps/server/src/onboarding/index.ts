@@ -12,14 +12,13 @@ import type { JsonObject } from '../http/body.ts';
 import type { Roots } from '../repos/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { AccountActions, AccountSource } from './accounts.ts';
-import { type Interpreter, OnboardingConversation } from './chat.ts';
+import { OnboardingSetup } from './flow.ts';
 import { type CommandRunner, resolvePrerequisites } from './prerequisites.ts';
-import { ONBOARDING_QUESTIONS, type SetupPatch } from './questions.ts';
 import { resolveChosenRoots } from './roots.ts';
+import { ONBOARDING_STEPS, type SetupPatch } from './steps.ts';
 
 export type { AccountActions, AccountSource, ClaudeAccount } from './accounts.ts';
 export { createSummaryAccountSource } from './accounts.ts';
-export type { Interpreter } from './chat.ts';
 export type { CommandRunner } from './prerequisites.ts';
 
 export interface OnboardingContext {
@@ -31,8 +30,6 @@ export interface OnboardingContext {
   models: ModelSource;
   accounts: AccountSource;
   accountActions: AccountActions;
-  interpret: Interpreter;
-  clarify: Interpreter;
 }
 
 const MODEL_ID = /^[\w.[\]-]{1,100}$/;
@@ -63,32 +60,29 @@ function resolveDefaults(fields: JsonObject): Partial<Settings> {
 
 export class Onboarding {
   readonly #context: OnboardingContext;
-  readonly chat: OnboardingConversation;
+  readonly setup: OnboardingSetup;
 
   constructor(context: OnboardingContext) {
     this.#context = context;
-    this.chat = new OnboardingConversation({
+    this.setup = new OnboardingSetup({
       path: join(context.config.dataDir, 'onboarding.json'),
-      questions: ONBOARDING_QUESTIONS,
-      interpret: context.interpret,
-      clarify: context.clarify,
+      steps: ONBOARDING_STEPS,
+      accountActions: context.accountActions,
       isCompleted: () => context.store.config.onboardedAt !== null,
       readOnly: context.config.inspect,
       complete: async () => {
         await this.complete();
       },
-      resolveContext: () =>
-        Promise.resolve({
-          userHome: context.config.userHome,
-          settings: context.engine.state.settings,
-          roots: context.roots.configured,
-          suggestRoots: () => this.listSuggestions(false),
-          listModels: () => context.models.listModels(),
-          listAccounts: context.accounts,
-          accountActions: context.accountActions,
-          checkPrerequisites: () => this.resolvePrerequisites(),
-          save: (patch, commandId) => this.#saveAnswer(patch, commandId),
-        }),
+      resolveContext: () => ({
+        userHome: context.config.userHome,
+        settings: context.engine.state.settings,
+        roots: context.roots.configured,
+        suggestRoots: () => this.listSuggestions(false),
+        listModels: () => context.models.listModels(),
+        listAccounts: context.accounts,
+        checkPrerequisites: () => this.resolvePrerequisites(),
+        save: (patch, commandId) => this.#saveAnswer(patch, commandId),
+      }),
     });
   }
 
@@ -153,7 +147,7 @@ export class Onboarding {
     return resolvePrerequisites(this.#context.config.userHome, this.#context.run);
   }
 
-  async #saveAnswer(patch: SetupPatch, commandId: string | undefined) {
+  async #saveAnswer(patch: SetupPatch, commandId: string) {
     await this.applySetup({ ...patch, roots: patch.roots ?? this.#context.store.config.roots }, commandId);
   }
 }

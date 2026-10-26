@@ -6,7 +6,7 @@ import {
   applyStatePatch,
   ENGINE_PROTOCOL,
   KNOWN_AGENT_PROVIDERS,
-  type OnboardingChat,
+  type OnboardingFlow,
   type ServerMessage,
   serializeState,
 } from '@shinsa/core';
@@ -171,7 +171,7 @@ describe('the onboarding endpoints', () => {
     expect(await refused.json()).toEqual({
       error: { code: 'roots_invalid', message: 'nope is not a full path.' },
     });
-    for (const path of ['/api/onboarding/setup', '/api/onboarding/chat']) {
+    for (const path of ['/api/onboarding/setup', '/api/onboarding/flow']) {
       expect(await (await post(path, [])).json()).toEqual({
         error: { code: 'body_invalid', message: 'The request body must be an object.' },
       });
@@ -181,23 +181,28 @@ describe('the onboarding endpoints', () => {
     expect(await (await post('/api/onboarding/complete', {})).json()).toMatchObject({ completed: true });
   });
 
-  test('run the setup chat: the first question, an answer, a fallback when the model is off, a stale reply', async () => {
+  test('run the setup: the first step, an answer, going back, a refused answer and a stale one', async () => {
     const { call, post, config } = await start({ config: { roots: [] } });
-    const opened = (await (await call('/api/onboarding/chat')).json()) as OnboardingChat;
-    expect(opened.prompt).toMatchObject({ questionId: 'roots', step: 1, steps: 6, choices: [] });
+    const opened = (await (await call('/api/onboarding/flow')).json()) as OnboardingFlow;
+    expect(opened).toMatchObject({ index: 0, step: { id: 'roots', multiple: true, options: [] } });
     const model = (await (
-      await post('/api/onboarding/chat', { type: 'say', questionId: 'roots', text: config.home })
-    ).json()) as OnboardingChat;
-    expect(model.prompt?.questionId).toBe('model');
-    const fallback = (await (
-      await post('/api/onboarding/chat', { type: 'say', questionId: 'model', text: 'the clever one' })
-    ).json()) as OnboardingChat;
-    expect(fallback.messages.at(-1)).toMatchObject({ problem: true });
-    expect(fallback.prompt?.questionId).toBe('model');
-    const stale = await post('/api/onboarding/chat', { type: 'choose', questionId: 'roots', values: ['x'] });
+      await post('/api/onboarding/flow', { type: 'answer', stepId: 'roots', values: [config.home] })
+    ).json()) as OnboardingFlow;
+    expect(model.step?.id).toBe('model');
+    const back = (await (
+      await post('/api/onboarding/flow', { type: 'open', stepId: 'roots' })
+    ).json()) as OnboardingFlow;
+    expect(back.step?.options).toEqual([
+      { value: config.home, label: '~', detail: null, chosen: true, recommended: false },
+    ]);
+    const refused = (await (
+      await post('/api/onboarding/flow', { type: 'answer', stepId: 'roots', values: ['/no/such'] })
+    ).json()) as OnboardingFlow;
+    expect(refused.step).toMatchObject({ id: 'roots', problem: '/no/such is not a folder on this machine.' });
+    const stale = await post('/api/onboarding/flow', { type: 'answer', stepId: 'merge', values: ['squash'] });
     expect(stale.status).toBe(400);
     expect(await stale.json()).toEqual({
-      error: { code: 'question_stale', message: 'That question was already answered.' },
+      error: { code: 'step_stale', message: 'That step is no longer open. Answer the step on screen.' },
     });
   });
 });

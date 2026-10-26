@@ -11,7 +11,9 @@ themes, from sample data.
 ```
 src/
 ├── main.tsx             Mounts Root; applies the stored theme and a `?layout=` override before the first paint
-├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the layout switch (Cards or Sidebar shell)
+├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
+│                        /onboarding until setup is complete, resolveOnboardingRedirect), the shell switch (Cards,
+│                        Sidebar, or setup's own OnboardingShell on /onboarding, which has no ⌘K)
 │                        and the route switch, which keeps the pages you have been to mounted and hidden in
 │                        React's Activity and renders Home, All tasks and Settings ahead at idle
 │                        (lib/kept-views.ts, docs/design.md 35); starts the connection unless the route is /ui
@@ -21,7 +23,7 @@ src/
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
 ├── routes/              One file per page: home.tsx, tasks.tsx (the roadmap), settings.tsx, onboarding.tsx
-│   │                    (the setup chat)
+│   │                    (the setup steps)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -30,8 +32,8 @@ src/
 │   │                    reads on hover and ⌘K highlight, the queue's at idle, Settings' at idle; docs/design.md 36)
 │   └── ui/              The showcase: index.tsx (the page, the section nav in page order, the theme switch),
 │                        section.tsx (Section, Specimen), tokens.tsx, inputs.tsx, overlays.tsx and surfaces.tsx
-│                        (the kit), composites.tsx (Shinsa's shared building blocks, the setup pieces and the
-│                        composer), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), code.tsx (the editor, its diffs and Go to
+│                        (the kit), composites.tsx (Shinsa's shared building blocks and the
+│                        composer), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), code.tsx (the editor, its diffs and Go to
 │                        file) and settings.tsx (the feature pieces in
 │                        each state), samples.ts, sample-accounts.ts, sample-delegations.ts, sample-extensions.ts,
 │                        sample-versions.ts, sample-code.ts and sample-overview.ts (their sample data; samples.ts also has the toast every action
@@ -54,7 +56,7 @@ src/
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
-│                        onboarding (checks, choices), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
+│                        onboarding (shell, stepper, the step and its footer, the option list, accounts, checks, finished), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
 │                        Settings' tabs use, the list row, the logo link home and home-link.tsx (the Home button
 │                        that replaces it in the Mac app), page/ column, heading, toolbar, section
 │                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
@@ -89,7 +91,7 @@ src/
     │                    search and diff, cached by commit in a bounded least-recently-used cache, the last answer shown
     │                    while a newer version loads, never read again for an unrelated task event, and requestFileWrite, the one
     │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / terminal / Finder), onboarding.ts
-    │                    (the onboarding status, folders, suggestions and the setup chat over HTTP),
+    │                    (the onboarding status, folders, suggestions and the setup steps over HTTP),
     │                    projects.ts (/api/repos/local, adding a repository or a folder to a project),
     │                    accounts.ts (useAccounts over the snapshot the socket holds, /api/accounts/* changes,
     │                    the sign-in dialog state), health.ts (/api/health on start and after each reconnect,
@@ -194,13 +196,14 @@ files after it.
   (`docs/design.md`, Where Shinsa differs, 9). The one exception is a chat message you send: it shows as delivering
   from the moment you press send (`lib/tasks/outbox.ts`, `useOutbox`) until the state has it in the task's `inbox`,
   and leaves the outbox when the server answers either way (`docs/engine.md` → Rounds).
-- **Setup is the server's chat.** The questions, their order and what an answer means all live on the server
-  (`docs/engine.md` → The setup chat); `routes/onboarding.tsx` only renders `GET /api/onboarding/chat` and sends
-  what you pick or type (how it looks: `docs/design.md`, 24). Home redirects to `/onboarding` while
-  `GET /api/onboarding` says it is not complete, and `/onboarding` goes Home when the chat it loads is finished
-  (`useOnboardingChat`). Run setup again (Settings → Setup, ⌘K) is `restartOnboarding`: it restarts the chat on
-  the server first, so the page opens on an open question; there is no URL flag. No folder path is written into
-  the web.
+- **Setup is the server's steps.** The steps, their order, what each answer saves, going back and the accounts it
+  imports all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders
+  `GET /api/onboarding/flow` and sends what you pick, a folder path you add, Back or a step you open
+  (`useOnboardingFlow`; how it looks: `docs/design.md`, 24). Until `GET /api/onboarding` says setup is complete,
+  every route replaces itself with `/onboarding`, and `/onboarding` has no way out: its own shell, no Home button
+  and no ⌘K. `/onboarding` goes Home when the run it loads is finished. Run setup again (Settings → Setup, ⌘K) is
+  `restartOnboarding`: it starts a new run on the server first, so the page opens on its first step; there is no
+  URL flag. No folder path is written into the web.
 - **URL state is the view state.** The task tab (`?tab=review|code|chat`), the Review tab's place (`?spot=`), the Code
   tab's whole workbench (`lib/code/location.ts`: `?mode=changes|files|search`, `file`, `diff`, `line`, `end`, `ref`,
   `spot`, `q`,

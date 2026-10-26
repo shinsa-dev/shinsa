@@ -627,13 +627,6 @@ export function createOnboardingAccounts(accounts: Accounts): {
       importAccount: async (origin, email) => {
         await accounts.importAccount(origin, email);
       },
-      startLogin: async (accountId) => {
-        await accounts.startLogin(accountId);
-      },
-      isSigningIn: () => {
-        const login = accounts.logins.current();
-        return login !== null && login.phase !== 'done' && login.phase !== 'failed';
-      },
     },
   };
 }

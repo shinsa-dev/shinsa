@@ -6,11 +6,13 @@ import { SignInDialog } from '@/components/accounts/sign-in-dialog.tsx';
 import { CommandMenu } from '@/components/command/menu.tsx';
 import { CardsShell } from '@/components/layout/cards/shell.tsx';
 import { SidebarShell } from '@/components/layout/sidebar/shell.tsx';
+import { OnboardingShell } from '@/components/onboarding/shell.tsx';
 import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
+import { writeCommandMenuOpen } from '@/lib/command/registry.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { connection, useConnection } from '@/lib/connection/socket.ts';
 import {
@@ -21,6 +23,7 @@ import {
   resolvePageKey,
   updateKeptViews,
 } from '@/lib/kept-views.ts';
+import { resolveOnboardingRedirect } from '@/lib/onboarding.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
 import { type Route, replaceRoute, resolveRouteTaskId, useRoute, useSearchString } from '@/router.ts';
 import { HomePage } from '@/routes/home.tsx';
@@ -57,10 +60,6 @@ const PageView = React.memo(function PageContent({ state, route }: { state: Shin
 }, isSamePage);
 
 function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
-  const onboarding = useOnboardingStatus();
-  React.useEffect(() => {
-    if (route.name === 'home' && onboarding?.completed === false) replaceRoute('/onboarding');
-  }, [route, onboarding]);
   const warm = useIdle();
   const settled = useIdleValue(state);
   const search = useSearchString();
@@ -99,12 +98,17 @@ function Loading() {
   );
 }
 
-function Workspace({ route }: { route: Exclude<Route, { name: 'ui' }> }) {
+function resolveShell(route: PageRoute, layout: ReturnType<typeof useLayoutPreference>) {
+  if (route.name === 'onboarding') return OnboardingShell;
+  return layout === 'cards' ? CardsShell : SidebarShell;
+}
+
+function Workspace({ route }: { route: PageRoute }) {
   const { state } = useConnection();
   const layout = useLayoutPreference();
   React.useEffect(() => connection.start(), []);
   if (!state) return <Loading />;
-  const Shell = layout === 'cards' ? CardsShell : SidebarShell;
+  const Shell = resolveShell(route, layout);
   return (
     <Shell state={state}>
       <HealthBanner />
@@ -116,11 +120,19 @@ function Workspace({ route }: { route: Exclude<Route, { name: 'ui' }> }) {
   );
 }
 
-function App({ route }: { route: Exclude<Route, { name: 'ui' }> }) {
+function App({ route }: { route: PageRoute }) {
+  const onboarding = useOnboardingStatus();
+  const redirect = resolveOnboardingRedirect(route, onboarding);
+  React.useEffect(() => {
+    if (redirect) replaceRoute(redirect);
+  }, [redirect]);
+  React.useEffect(() => {
+    if (route.name === 'onboarding') writeCommandMenuOpen(false);
+  }, [route.name]);
   return (
     <>
       <Workspace route={route} />
-      <CommandMenu />
+      {route.name !== 'onboarding' && redirect === null && <CommandMenu />}
       <SignInDialog />
     </>
   );

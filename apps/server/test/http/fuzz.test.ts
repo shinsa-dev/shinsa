@@ -166,7 +166,7 @@ const PATHS = [
   '/api/commands',
   '/api/onboarding/setup',
   '/api/onboarding/complete',
-  '/api/onboarding/chat',
+  '/api/onboarding/flow',
   '/api/tasks/%2e%2e/blob?path=../../etc/passwd',
   '/api/tasks/x/search?q=%00&glob=-x',
   '/api/tasks/x/open',

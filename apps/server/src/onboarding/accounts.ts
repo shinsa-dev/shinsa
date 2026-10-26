@@ -1,10 +1,9 @@
-import { type AccountImport, type AccountSummary, resolvePlanLabel } from '@shinsa/core';
+import type { AccountImport, AccountSummary } from '@shinsa/core';
 
 export interface ClaudeAccount {
   id: string;
+  email: string | null;
   signedIn: boolean;
-  detail: string;
-  label?: string;
 }
 
 export type AccountSource = () => Promise<ClaudeAccount[]>;
@@ -12,15 +11,6 @@ export type AccountSource = () => Promise<ClaudeAccount[]>;
 export interface AccountActions {
   listImports: () => Promise<AccountImport[]>;
   importAccount: (origin: AccountImport['origin'], email: string) => Promise<void>;
-  startLogin: (accountId: string | null) => Promise<void>;
-  isSigningIn: () => boolean;
-}
-
-function describeAccount(account: AccountSummary) {
-  if (account.signIn === 'signed_out') return 'Needs you to sign in again.';
-  if (account.signIn === 'unknown') return account.signInDetail ?? 'Not checked yet.';
-  const plan = resolvePlanLabel(account.plan);
-  return plan ? `Signed in, ${plan} plan.` : 'Signed in.';
 }
 
 export function createSummaryAccountSource(list: () => AccountSummary[]): AccountSource {
@@ -28,9 +18,8 @@ export function createSummaryAccountSource(list: () => AccountSummary[]): Accoun
     Promise.resolve(
       list().map((account) => ({
         id: account.id,
+        email: account.email,
         signedIn: account.signIn === 'signed_in',
-        detail: describeAccount(account),
-        label: account.email ?? 'Claude account',
       }))
     );
 }

@@ -191,7 +191,7 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
     ],
   },
   { title: 'Appearance', icon: 'IconSun', keywords: ['theme', 'layout', 'dark', 'light'] },
-  { title: 'Setup', icon: 'IconArrowRotateClockwise', keywords: ['onboarding', 'setup chat'] },
+  { title: 'Setup', icon: 'IconArrowRotateClockwise', keywords: ['onboarding', 'setup steps'] },
 ];
 
 const SAVED = 'Saved.';
@@ -494,7 +494,7 @@ export function listSettingsSections(
           id: 'settings.setup.restart',
           label: 'Run setup again',
           icon: 'IconArrowRotateClockwise',
-          keywords: ['onboarding', 'setup chat', 'folders', 'start over'],
+          keywords: ['onboarding', 'setup steps', 'folders', 'start over'],
           run: () => void restartOnboarding(),
         },
       ],

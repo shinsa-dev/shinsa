@@ -1,4 +1,5 @@
 import type { Settings } from '../domain/settings.ts';
+import type { AccountImport } from './accounts.ts';
 
 export interface OnboardingStatus {
   completed: boolean;
@@ -25,7 +26,7 @@ export interface RootSuggestions {
   truncated: boolean;
 }
 
-export type OnboardingQuestionId = 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
+export type OnboardingStepId = 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
 
 export interface OnboardingCheck {
   id: string;
@@ -36,40 +37,45 @@ export interface OnboardingCheck {
   optional?: boolean;
 }
 
-export interface OnboardingMessage {
-  id: string;
-  from: 'shinsa' | 'you';
-  text: string;
-  problem: boolean;
-  checks: OnboardingCheck[];
-}
-
-export interface OnboardingChoice {
+export interface OnboardingOption {
   value: string;
   label: string;
   detail: string | null;
   chosen: boolean;
+  recommended: boolean;
 }
 
-export interface OnboardingPrompt {
-  questionId: OnboardingQuestionId;
-  step: number;
-  steps: number;
-  mode: 'answer' | 'confirm';
+export interface OnboardingStepEntry {
+  id: OnboardingStepId;
+  label: string;
+  summary: string | null;
+  reached: boolean;
+}
+
+export interface OnboardingStep {
+  id: OnboardingStepId;
+  title: string;
+  description: string;
   multiple: boolean;
-  choices: OnboardingChoice[];
-  submitLabel: string | null;
-  placeholder: string;
+  options: OnboardingOption[];
+  checks: OnboardingCheck[];
+  ready: boolean;
+  imported: AccountImport[];
+  notes: string[];
+  problem: string | null;
+  submitLabel: string;
 }
 
-export interface OnboardingChat {
-  messages: OnboardingMessage[];
-  prompt: OnboardingPrompt | null;
+export interface OnboardingFlow {
+  steps: OnboardingStepEntry[];
+  index: number;
+  step: OnboardingStep | null;
+  revisit: boolean;
 }
 
 export type OnboardingReply =
-  | { type: 'choose'; questionId: OnboardingQuestionId; values: string[] }
-  | { type: 'say'; questionId: OnboardingQuestionId; text: string }
+  | { type: 'answer'; stepId: OnboardingStepId; values: string[] }
+  | { type: 'open'; stepId: OnboardingStepId }
   | { type: 'restart' };
 
 export function resolveDisplayPath(path: string, userHome: string) {

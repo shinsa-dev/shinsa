@@ -62,7 +62,7 @@ describe('startShinsa', () => {
     for (const path of [
       '/api/commands',
       '/api/accounts/login',
-      '/api/onboarding/chat',
+      '/api/onboarding/flow',
       '/api/schedules/s-1/webhook',
     ]) {
       const refused = await fetch(`${shinsa.url}${path}`, {

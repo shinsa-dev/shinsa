@@ -1,4 +1,4 @@
-import { type OnboardingCheck, PROJECT_COLORS, TASK_PRIORITIES } from '@shinsa/core';
+import { PROJECT_COLORS, TASK_PRIORITIES } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { DropdownMenu } from '@shinsa/ui/components/dropdown-menu';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
@@ -17,7 +17,6 @@ import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { CARD, COMPOSER_FOOTER } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
-import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { InfoHeader, InfoPopover, InfoRow, InfoSection } from '@/components/overlays/info-popover.tsx';
 import { CheckMark, CheckOutcomeIcon, SelectedMark } from '@/components/status/check-mark.tsx';
@@ -76,18 +75,6 @@ const SAMPLE_CODE = `export function resolveQueueStep(order: string[], taskId: s
   return { previousId: order[index - 1] ?? null, nextId: order[index + 1] ?? null };
 }`;
 
-const SAMPLE_CHECKS: OnboardingCheck[] = [
-  { id: 'git', label: 'git', ok: true, detail: 'git 2.47.0', fix: null },
-  {
-    id: 'gh',
-    label: 'GitHub CLI',
-    ok: false,
-    detail: 'gh is not signed in.',
-    fix: 'Run `gh auth login`, then check again.',
-  },
-  { id: 'codex', label: 'Codex', ok: false, detail: 'Not installed.', fix: null, optional: true },
-];
-
 function ConfirmSpecimen() {
   const dialog = useDialogState<'remove'>();
   return (
@@ -126,11 +113,11 @@ function ComposerSpecimen() {
   );
 }
 
-function SetupSpecimens() {
+function ChoiceSpecimens() {
   const [picked, setPicked] = React.useState<string | null>(null);
   return (
     <>
-      <Specimen label='ChoiceButtons · one answer: none starts picked; several answers: pressed while picked'>
+      <Specimen label='ChoiceButtons · an agent’s question: none starts picked; several answers: pressed while picked'>
         <ChoiceButtons>
           {['Squash', 'Rebase', 'Merge commit'].map((label) => (
             <ChoiceButton key={label} option={{ label }} onClick={() => void acknowledgeSample()} />
@@ -146,11 +133,6 @@ function SetupSpecimens() {
             />
           ))}
         </ChoiceButtons>
-      </Specimen>
-      <Specimen label='OnboardingChecks · passed, failed with its fix, optional and missing'>
-        <div className='w-full max-w-xl'>
-          <OnboardingChecks checks={SAMPLE_CHECKS} />
-        </div>
       </Specimen>
       <Specimen label='ConfirmDialog · every remove asks first'>
         <ConfirmSpecimen />
@@ -329,7 +311,7 @@ export function CompositeSpecimens() {
           ))}
         </div>
       </Specimen>
-      <SetupSpecimens />
+      <ChoiceSpecimens />
       {health && (
         <Specimen label='HealthCard · the health banner, two damaged log entries; hover Details'>
           <div className='w-full max-w-xl'>

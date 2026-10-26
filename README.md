@@ -71,8 +71,8 @@ bun install
 bun dev
 ```
 
-`bun dev` starts Shinsa's engine on :5180 and the interface on http://localhost:5181. A short setup chat asks which
-folders hold your repositories; then describe the first task. To work on the Mac app, run `bun run dev` in
+`bun dev` starts Shinsa's engine on :5180 and the interface on http://localhost:5181. Six short setup steps ask which
+folders hold your repositories and how agents work; then describe the first task. To work on the Mac app, run `bun run dev` in
 `apps/desktop` while `bun dev` is running. Keep a scratch data directory while developing:
 `SHINSA_HOME=/tmp/shinsa-dev bun dev`.
 

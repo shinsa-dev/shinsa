@@ -6,9 +6,9 @@ import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx
 import { refreshOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import {
-  createChat,
+  createFlow,
   createOnboardingStatus,
-  createPrompt,
+  createStep,
   createSuggestions,
   startFakeOnboarding,
 } from '../../support/onboarding.ts';
@@ -42,7 +42,7 @@ async function renderFolders(status: OnboardingStatus, saved: (body: unknown) =>
         ['/Users/me/oss', 1],
       ]),
     },
-    'POST /api/onboarding/chat': { answer: createChat(createPrompt()) },
+    'POST /api/onboarding/flow': { answer: createFlow(createStep()) },
   });
   await act(() => refreshOnboardingStatus());
   return render(
@@ -142,7 +142,7 @@ describe('the Folders settings', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Run setup again' }));
     });
     await waitFor(() => expect(location.pathname).toBe('/onboarding'));
-    expect(fake?.requests.find((request) => request.path === '/api/onboarding/chat')?.body).toEqual({
+    expect(fake?.requests.find((request) => request.path === '/api/onboarding/flow')?.body).toEqual({
       type: 'restart',
     });
   });

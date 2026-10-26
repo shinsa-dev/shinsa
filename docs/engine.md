@@ -102,7 +102,7 @@ another provider drops the model it had, unless the same change names one (switc
 is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the right names from the first paint;
 `GET /api/providers` then replaces them with each provider's live catalog (`listModels`: the Claude SDK's
 `supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
-serves the default provider's list for the setup chat.
+serves the default provider's list, the one setup's Model step offers.
 
 **Checks are not an agent.** Shinsa runs the repository's check commands itself (`apps/server/src/checks`:
 the configured commands, otherwise `lint`, `check-types`, `typecheck` and `test` from
@@ -1715,8 +1715,8 @@ keeps beside its events (`store/event-log.ts`).
     /api/projects/<id>/repos` or `/folders`, or an agent's tool): `repo:<path>:<seq>` (the log position, so
     registering a path again after `repo.remove` is a new command); the project change it makes gets a fresh id.
     Webhook deliveries: `webhook:<schedule>:<delivery>`, and `webhook:<schedule>:<delivery>:fail` for one core
-    refused. A setup-chat answer:
-    `setup:<chat>:<question>:<hash of what it saves>`. `POST /api/onboarding/setup` has no cause to name and gets a
+    refused. A setup answer:
+    `setup:<run>:<step>:<n>`, `n` the answers that run saved before it. `POST /api/onboarding/setup` has no cause to name and gets a
     fresh id, like any request without an `Idempotency-Key`.
 
   A pull request read (`pull_request.record`, `pull_request.read_failed`) carries no fixed id: each read is new
@@ -2437,8 +2437,8 @@ work nothing.
 
 **Quick calls** (`agents/quick`). One-shot calls go through `createQuickCalls(registry, readSettings, readFastMode)`,
 bound to the server's `ProviderRegistry` (there is no other registry and no default: every caller is handed its
-call), which gives two: `classify` on the classifier's model (triage, the message classifier and the setup chat's
-interpreter) and `write` on the writer's (the briefing and the setup chat's follow-up question).
+call), which gives two: `classify` on the classifier's model (triage and the message classifier) and `write` on the
+writer's (the briefing).
 `requestQuickStructured` walks every registered provider, the one the role runs on first and the others in
 registry order, and asks each for schema-checked output (`completeStructured`, 20 s) and then for a text answer with
 the schema spelled out; a provider without `completeStructured` or the `structuredOutput` capability is asked in text
@@ -2547,7 +2547,7 @@ role can differ from it: `settings.agentFastModes` holds a true or false per age
 else the global switch. The supervisor passes the run's role's value (`RUN_AGENT_ROLE`) to every session of a provider whose capabilities include `fastMode`, delegated children (their own role) and
 idle compactions (the run's role) included (`resolveSessionOptions`, which also carries the compaction setting,
 takes the role, or none for the global value);
-and quick calls pass it per provider, the classifier's for triage and the setup chat, the writer's for the
+and quick calls pass it per provider, the classifier's for triage, the writer's for the
 briefing. Claude gets `settings.fastMode` in the flag-settings layer, true or
 false: the CLI allows fast mode in Agent SDK sessions only when that layer says true, and an explicit false keeps a
 user-level `settings.json` from turning it on unseen (Kanna's `agent.ts`). Claude Code's own subagents run inside
@@ -2634,9 +2634,8 @@ whole conversation again. These rules are hard rules (CLAUDE.md), each held by a
   (`REVIEW_AGAIN` in `resolveReviewerPrompt`); its scope stays the round's own commits.
 - **Delegated agents** start a session of their own (that is why they exist: isolated context). Their system prompt
   and tools are as stable as any session's, and the brief is the user turn.
-- **Quick calls** (triage, the message classifier, the briefing, the setup chat) have fixed system prompts
-  (`TRIAGE_SYSTEM`, `MESSAGE_SYSTEM`, `ROUND_SHAPE_SYSTEM`, `REPOSITORY_SYSTEM`, `BRIEFING_SYSTEM`, the setup chat's
-  interpreter) with everything about the call in the user prompt, and no tools but a structured-output schema. Each is
+- **Quick calls** (triage, the message classifier, the briefing) have fixed system prompts
+  (`TRIAGE_SYSTEM`, `MESSAGE_SYSTEM`, `ROUND_SHAPE_SYSTEM`, `REPOSITORY_SYSTEM`, `BRIEFING_SYSTEM`) with everything about the call in the user prompt, and no tools but a structured-output schema. Each is
   one request well under the provider's minimum cacheable prompt, so nothing is cached and nothing is lost; they are
   kept static-first anyway so a longer one would cache.
 - **What still changes the prefix**, each once: a session that starts (the first turn of a task, of a reviewer, of a
@@ -2864,7 +2863,7 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
     │                  serve.pid and serve.log (The agent loop → Compaction and fast mode)
     ├── secrets.json   Webhook tokens and signing secrets, one-use secret refs and MCP sign-ins (mode 600; never in
     │                  the log)
-    ├── onboarding.json  The setup chat so far, so a reload or a restart picks it up where it was
+    ├── onboarding.json  The run of setup so far, so a reload or a restart picks it up on the same step
     ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
     │                  and boot time (One server per data directory, below)
     └── engine.log     The bundled engine's output under launchd (The engine in the background, below)
@@ -2884,8 +2883,8 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   is refused with `inspect_read_only` ("Shinsa is in inspect mode and only shows this data. Start it without
   SHINSA_INSPECT to change anything."): the engine refuses any dispatch (`Engine.readOnly`), the socket answers a
   `command` with that error in its ack, and HTTP answers 403 to every request under `/api/` that is not a `GET`, to a
-  schedule's webhook and to an MCP sign-in's callback. The setup chat shows its first question without writing
-  `onboarding.json`. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
+  schedule's webhook and to an MCP sign-in's callback. Setup shows its first step without writing
+  `onboarding.json` and imports no account. It lists the Claude accounts without reading their logins or usage (Accounts and usage limits,
   above). It takes no lock on the data directory (One server per data directory, below), so it can serve the data of
   a Shinsa that is running, on another port; it shows the log as it was when it started.
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
@@ -3074,107 +3073,88 @@ limit).
 **`POST /api/onboarding/complete`** with `{}`: marks onboarding done (`onboardedAt`), once; answers like
 `GET /api/onboarding`. Refused with `roots_required` until folders are saved.
 
-### The setup chat
+### The setup steps
 
-The web's setup is a chat the server runs (`apps/server/src/onboarding/chat.ts`), over a fixed, ordered list of
-questions defined in code (`questions.ts`): `roots` (the repository folders, "Which repository folders should Shinsa
-use?" in the words of Settings → Projects → Repository folders; discovered folders with their repository counts as
-options, several at once), `model` (the default model, from the provider's catalog), `merge` (the merge method),
-`plans` (plan approval for large tasks), `accounts` (the Claude account agents work under) and `prerequisites` (git,
-gh and its login, claude and its login, bun, and optionally codex and its login, each with its fix). Nothing a person
-types or a model says can add, drop or reorder a question: an answer only ever becomes values for the question on
-screen, or a skip that keeps what that question has saved.
+The web's setup is a short run of steps the server keeps (`apps/server/src/onboarding/flow.ts`), over a fixed,
+ordered list defined in code (`steps.ts`): `roots` (the repository folders, "Where do you keep your repositories?";
+discovered folders with their repository counts, several at once, and any other folder by its path), `model` (the
+default model, from the provider's catalog, or each role's own), `merge` (the merge method), `plans` (plan approval
+for large tasks), `accounts` (the Claude accounts agents work under) and `prerequisites` (git, gh and its login,
+claude and its login, bun, and optionally codex and its login, each with its fix). Each step has a short label for
+the steps along the top (Folders, Model, Merging, Plans, Accounts, Tools), a title and a one-line description.
+Nothing you send can add, drop or reorder a step: a reply only ever answers the step on screen or opens one you
+have reached.
 
-- **Picking an option** (`{ type: 'choose', questionId, values }`) is checked against that question and saved
-  straight away. `roots` takes paths (each validated like `POST /setup`); the other questions take exactly one of
-  their options.
-- **A free answer** (`{ type: 'say', questionId, text }`, at most 2,000 characters) is read without the model
-  first (`onboarding/answers.ts`), in this order. Anything read this way is saved at once, with no confirmation;
-  a question that confirms states what it saved instead ("Pull requests are squashed into one commit when you
-  merge them."):
-  - **Skipping**: "skip", "later", "no preference", "you decide", "keep it as is", "the default" and the like.
-    Each question says what a skip keeps (`Question.skip`): `roots` the folders already chosen, `model`, `merge`
-    and `plans` the saved setting (with no default model saved, `model` moves on and says each role keeps its own
-    model), and `accounts` and `prerequisites` continue. A `roots` question with no folders chosen yet refuses the skip
-    ("This question needs an answer.").
-  - **Yes or no on its own** ("yes please", "sure thing", "looks good", "nope"): the option whose value is `yes` or
-    `no`, or, for yes, a first option `continue` ("Use these accounts", "Finish setup"). A yes to a question with
-    neither (`model`, `merge`) keeps what it has saved, like a skip; a yes where `continue` is not first (signed out
-    of every account) and any other no go on to the model.
-  - **An option by name**: the option's value or label, after leading and trailing filler ("use", "I'd like",
-    "please", "thanks"), or one option named alone at the start of a sentence ("squash merges", "yes always
-    approve plans", "no, only when I ask"); two options named, or a negation (not, don't, but, instead…), goes to
-    the model. For `roots`, paths starting with `/` or `~`, or the folders' own names ("the projects and superwall
-    folders").
+- **Answering** (`{ type: 'answer', stepId, values }`) is checked against the step on screen and saved at once:
+  `roots` takes paths (each validated like `POST /setup`, `~/` allowed), `model`, `merge` and `plans` exactly one of
+  their options (`model`'s `:roles` saves no default model, so each role keeps its own), and `accounts` and
+  `prerequisites` take `continue`. A saved answer moves to the next step; the last one completes setup. An answer
+  the step refuses (a folder that is not there, one macOS keeps private, an option that is not listed) stays on the
+  step with the reason as its `problem`, which the next reply clears. There are no free answers to read and no
+  model call: an answer is a pick, or for folders a path.
+- **Going back** (`{ type: 'open', stepId }`) opens any step up to the furthest one you reached (`furthest`), so
+  you can change an answer you gave: a step you have answered lists that answer `chosen`, a new answer replaces it
+  (with a command id of its own, so going back to the first answer saves it again), and you carry on from the step
+  after it. The later steps keep their answers, shown again `chosen` when you get to them, and the steps along the
+  top carry each answered step's summary ("~/Developer and 1 more", "Opus 5.5", "Squash", "Plan first", "2
+  accounts"). A step you have not reached is refused with `step_unreached`, and an answer for a step that is not the
+  one on screen with `step_stale`.
+- **Nothing is chosen for you on a step you have not answered**, a saved or default setting included: the options
+  carry no `chosen` until you answer the step, and `merge`'s Squash and `plans`' Show me the plan first are marked
+  `recommended` instead. `roots` is the exception, as it picks several at once: the folders already in
+  `config.json` start chosen, and with none, the found folder with the most repositories does.
+- **Accounts are imported, not asked about.** When the `accounts` step is shown, setup imports every login
+  `AccountActions.listImports` offers (your Claude Code login and each claude-swap account, Accounts and usage
+  limits above) whose email is not already one of your accounts, through the same import Settings uses. An email
+  counts as the same account whatever its organization says, as `AccountStore`'s identity rule does when one side
+  has none, so setup never adds a second copy. Each login is tried once per run of setup (`tried`, by origin and
+  email): one you remove afterwards is not imported again when you come back to the step. The step lists what it
+  imported (`imported`) and why an import failed (`notes`, the import's own message); the accounts themselves, with
+  removing one, signing in again and adding another, are the web's (`/api/accounts/*`). Under `SHINSA_INSPECT`
+  nothing is imported. With no account signed in the step's button says Skip for now.
+- **Saving** goes through the same code as the endpoints above: each answer is `POST /setup`'s `applySetup`
+  (folders to `config.json`, the rest as `settings.change`), and the last step is `complete`. The `settings.change`
+  carries an id from the answer it saves (`setup:<run>:<step>:<n>`, the run's id kept in `onboarding.json` and new
+  on a restart, `n` the count of answers saved so far), so the same answer sent again after a crash is answered from
+  its receipt while a later answer to the same step is not.
+- **Persistence.** The run of setup lives in `data/onboarding.json` (version 2, written atomically: the step on
+  screen, the furthest step reached, the answers saved, the logins tried and imported, the last problem), so a
+  reload or a server restart resumes it on the same step. A file that cannot be read or is not one this version
+  wrote, or a finished run while `onboardedAt` is empty, starts a new one. Replies run one at a time.
+- **Run setup again** (`{ type: 'restart' }`, what Settings → General → Setup and ⌘K's Run setup again send before
+  opening `/onboarding`) starts a new run. When setup was done before, the run is a revisit (`revisit: true`): every
+  step is reached and shows the current settings `chosen`, so you can open any of them, and the web offers Close
+  setup.
 
-  Anything else goes to a quick model call (the classifier model, Quick calls above) told the question and its
-  options, and never to follow instructions in the answer. A question that takes one option asks for a typed
-  choice, `{ choice }`, among that question's option values plus `keep` ("the answer skips the question, has no
-  preference, leaves it to Shinsa or asks to keep the current setting or the default", read as a skip) and
-  `unclear` ("the answer fits none of the options, or could mean more than one of them"), so the model can only
-  return a real option; `roots` asks for `{ understood, values }`. Each option goes to the model with what it means
-  (`Asked.meanings`), not just its label, and the model is told an answer may describe an option instead of naming
-  it: a model's catalog description ("Efficient for routine tasks", so "the cheaper sonnet one" or "the fastest one"
-  is read), what each merge method does ("one commit per pull request") and what each plan answer does ("only when
-  I ask" is No). With labels alone the model read such answers as `unclear`, which was most of the "I could not
-  tell what you meant" replies. `readInterpretation` reads the shape its question asks for: `unclear`, an option
-  that is not on the list or the other shape is an unclear answer. For one, the chat asks the writer model (a
-  second quick call, `clarify`, injected like `interpret`) for one short follow-up of at most 240 characters that
-  names each option in everyday words and asks which one ("Opus 5.5 is the strongest, Sonnet 5.5 is cheaper and
-  quick. Which one?"), told the question, each option with its meaning and the answer, and never to follow
-  instructions in it; dashes become commas. When that call fails, is off (`SHINSA_QUICK=off`) or returns nothing
-  usable, and for an unclear answer during a confirmation, the reply is the fixed "I could not tell what you
-  meant." with the question's retry line. Its values go through the same
-  check as a picked option. A valid answer is echoed back in Shinsa's own words ("You keep your repositories in
-  ~/Developer (12 repositories). Is that right?") and waits for Yes or No (picked, or typed in your own words: "yes
-  please", "yep, that's right", "not quite"); the `accounts` and `prerequisites` steps act at once instead
-  (continue or check again). An answer that fails the check is re-asked with the reason; a model that is off,
-  fails or returns something unreadable leaves the options on screen and says so. A new answer typed during a
-  confirmation replaces the one being confirmed once it is understood; the same answer again saves it, and one
-  that cannot be read leaves the confirmation open ("Pick Yes or No, or answer the question again.").
-- **Nothing is chosen for you.** No option of a one-answer question (`model`, `merge`, `plans`, `accounts`,
-  `prerequisites`) is marked `chosen`, even when it is the saved or default value: the chat asks, so nothing is
-  picked until you pick it. The saved value is what a skip keeps, and a `model` saved outside the catalog is still
-  listed so it can be kept. `roots` marks the folders already in `config.json`, because only you put them there and
-  the question picks several at once.
-- **Saving** goes through the same code as the endpoints above: each confirmed answer is `POST /setup`'s
-  `applySetup` (folders to `config.json`, the rest as `settings.change`), and the end of the list is `complete`.
-  The chat's `settings.change` carries an id from the answer it saves (`setup:<chat>:<question>:<hash of the
-  patch>`, the chat's id kept in `onboarding.json` and new on a restart), so the same answer sent again after a
-  crash is answered from its receipt.
-- **Accounts** come from an `AccountSource` (`accounts.ts`): `startShinsa` lists Shinsa's accounts
-  (`createOnboardingAccounts`), each a check with its email, and passes `AccountActions`, so the question also offers
-  "Sign in again as ‹email›" for each signed-out account (its check points at that choice), "Use your Claude Code
-  login", "Import from claude-swap" for each importable account and "Sign in with another account" (Claude opens a
-  browser window; the question is asked again and says so). Under `SHINSA_INSPECT` it offers none of those, only
-  Use these accounts (Skip for now when no account is signed in) and Check again.
-- **Persistence and order.** The chat lives in `data/onboarding.json` (written atomically, the latest 300
-  messages), so a reload or a server restart resumes it mid-question or mid-confirmation. A file that cannot be
-  read, or a finished chat while `onboardedAt` is empty, starts a new one. Replies run one at a time; one for a
-  question that already moved on is refused with `question_stale`.
-
-**`GET /api/onboarding/chat`**: the chat, started on the first call. A finished chat (`prompt: null`) stays
-finished while setup is done, so the web goes Home when it opens one; a restart reopens it.
+**`GET /api/onboarding/flow`**: the run of setup, started on the first call. A finished run (`step: null`) stays
+finished while setup is done, so the web goes Home when it opens one; a restart reopens it. The step on screen is
+read fresh on every call (the folders, the model catalog, the accounts, the tool checks), so reading it again is
+how the tools are checked again.
 
 ```ts
 {
-  messages: { id: string; from: 'shinsa' | 'you'; text: string; problem: boolean; checks: Check[] }[];
-  prompt: {                       // null once setup is done
-    questionId: 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
-    step: number; steps: number;  // "Question 2 of 6"
-    mode: 'answer' | 'confirm';
-    multiple: boolean;            // roots: pick several, then submitLabel
-    choices: { value: string; label: string; detail: string | null; chosen: boolean }[];
-    submitLabel: string | null;
-    placeholder: string;
+  steps: { id: StepId; label: string; summary: string | null; reached: boolean }[];
+  index: number;                   // the step on screen; steps.length once setup is done
+  step: {                          // null once setup is done
+    id: 'roots' | 'model' | 'merge' | 'plans' | 'accounts' | 'prerequisites';
+    title: string;
+    description: string;
+    multiple: boolean;             // roots: pick several
+    options: { value: string; label: string; detail: string | null; chosen: boolean; recommended: boolean }[];
+    checks: Check[];               // prerequisites
+    ready: boolean;                // prerequisites: every required tool is there
+    imported: AccountImport[];     // accounts: what this run imported
+    notes: string[];               // accounts: imports that failed
+    problem: string | null;        // why the last answer was refused
+    submitLabel: string;           // "Continue", "Skip for now", "Finish setup", "Finish anyway"
   } | null;
+  revisit: boolean;                // setup was done before this run
 }
 ```
 
-**`POST /api/onboarding/chat`** with a reply (`choose`, `say`, or `{ type: 'restart' }` to start over, which
-Settings → General → Setup and ⌘K's Run setup again do before opening `/onboarding`): answers with the chat. Codes: `body_invalid`, `question_invalid`, `values_invalid`,
-`text_invalid`, `reply_invalid`, `question_stale`, `setup_finished`. A problem with the answer itself is not an
-error: it comes back as a message with `problem: true`.
+**`POST /api/onboarding/flow`** with a reply (`answer`, `open` or `restart`): answers with the run. Codes:
+`body_invalid`, `step_invalid`, `values_invalid`, `reply_invalid`, `step_stale`, `step_unreached`,
+`setup_finished`. A problem with the answer itself is not an error: it comes back as the step's `problem`.
 
 ## The socket
 
@@ -3412,7 +3392,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   loopback one is taken); `test/agents/providers/claude/guard.test.ts` the shell policy, human-only `shinsa`
   commands included.
 - **Configuration and setup.** `test/config/` covers the layout and `config.json`; `test/onboarding/`
-  and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks and the setup chat.
+  and `test/repos/` the onboarding endpoints, discovery, the prerequisite checks and the setup steps.
 - **Running in the background.** `test/instance/lock.test.ts` covers the lock (a live holder refused, each kind of
   stale lock taken over, a contended takeover, an unreadable lock) and `test/serve.test.ts` the same through
   `startShinsa`; `test/e2e/lock.test.ts` runs real `shinsa engine` processes on one data directory (the second is

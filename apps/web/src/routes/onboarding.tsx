@@ -1,124 +1,71 @@
-import type { OnboardingMessage, OnboardingPrompt } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
-import { ScrollArea } from '@shinsa/ui/components/scroll-area';
-import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { cn } from '@shinsa/ui/lib/utils';
-import { ROW } from '@/components/chat/run-section.tsx';
-import { AgentText, ErrorLine } from '@/components/chat/turn-detail.tsx';
-import { UserMessage } from '@/components/chat/user-message.tsx';
-import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
-import { PageHeading } from '@/components/layout/page/heading.tsx';
-import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
-import { OnboardingChoices } from '@/components/onboarding/choices.tsx';
+import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
+import { OnboardingFinished } from '@/components/onboarding/finished.tsx';
+import { ONBOARDING_COLUMN, OnboardingStepView } from '@/components/onboarding/step.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
-import { Composer } from '@/components/task/composer.tsx';
-import { useOnboardingChat } from '@/hooks/use-onboarding-chat.ts';
-import { useStickToBottom } from '@/hooks/use-stick-to-bottom.ts';
-import { describeOnboardingStep } from '@/lib/onboarding.ts';
+import { useOnboardingFlow } from '@/hooks/use-onboarding-flow.ts';
+import { removeAccount, startSignIn, useAccounts } from '@/lib/connection/accounts.ts';
+import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { navigate } from '@/router.ts';
 
-function MessageRow({ message }: { message: OnboardingMessage }) {
-  if (message.from === 'you') {
+const ACCOUNT_ACTIONS = {
+  signIn: (accountId: string | null) => void startSignIn(accountId),
+  remove: (accountId: string) => void removeAccount(accountId),
+};
+
+function OnboardingContent() {
+  const { flow, failure, pending, direction, answer, open, refresh, retry } = useOnboardingFlow();
+  const accounts = useAccounts();
+  const status = useOnboardingStatus();
+  if (failure) {
     return (
-      <div className={ROW}>
-        <UserMessage text={message.text} />
+      <EmptyState
+        icon='IconExclamationCircle'
+        title='Setup could not load'
+        description={failure}
+        className='min-h-80'
+      >
+        <Button variant='outline' size='sm' onClick={retry}>
+          Try again
+        </Button>
+      </EmptyState>
+    );
+  }
+  if (!flow) {
+    return (
+      <div className='grid min-h-80 place-items-center'>
+        <LoadingSpinner label='Reading the setup' />
       </div>
     );
   }
+  if (!flow.step) return <OnboardingFinished flow={flow} onHome={() => navigate('/')} />;
   return (
-    <div className={cn(ROW, 'flex flex-col gap-3')}>
-      {message.problem ? <ErrorLine text={message.text} /> : <AgentText text={message.text} />}
-      {message.checks.length > 0 && <OnboardingChecks checks={message.checks} />}
-    </div>
-  );
-}
-
-function PendingRows({ text }: { text: string }) {
-  return (
-    <>
-      <div className={ROW}>
-        <UserMessage text={text} />
-      </div>
-      <div className={cn(ROW, 'text-2xs text-fg-2')}>
-        <ShimmeringText text='Reading your answer…' className='block' />
-      </div>
-    </>
-  );
-}
-
-function Finished() {
-  return (
-    <div className={ROW}>
-      <Button size='sm' icon='IconArrowRight' onClick={() => navigate('/')}>
-        Go to Home
-      </Button>
-    </div>
+    <OnboardingStepView
+      key={`${flow.index}:${flow.step.id}`}
+      flow={flow}
+      step={flow.step}
+      pending={pending}
+      direction={direction}
+      userHome={status?.paths.userHome ?? ''}
+      accounts={{ list: accounts?.accounts ?? [], actions: ACCOUNT_ACTIONS }}
+      actions={{
+        answer: (stepId, values, key) => void answer(stepId, values, key),
+        open: (stepId) => void open(stepId),
+        refresh: () => void refresh(),
+      }}
+      onClose={flow.revisit ? () => navigate('/settings') : undefined}
+    />
   );
 }
 
 export function OnboardingPage() {
-  const { chat, failure, pending, pick, retry } = useOnboardingChat();
-  const { scroller, content, onScroll } = useStickToBottom(null);
-  const prompt: OnboardingPrompt | null = chat?.prompt ?? null;
-  const lastId = chat?.messages.at(-1)?.id ?? '';
-
   return (
-    <div className='flex min-h-0 flex-1 flex-col'>
-      <ScrollArea
-        viewportRef={scroller}
-        onScroll={onScroll}
-        className='min-h-0 flex-1'
-        viewportClassName='overscroll-y-contain'
-      >
-        <div ref={content} className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col pb-6')}>
-          <PageHeading
-            title='Set up Shinsa'
-            description={chat ? describeOnboardingStep(prompt) : undefined}
-            className='px-3 pb-4'
-          />
-          {failure && (
-            <EmptyState
-              icon='IconExclamationCircle'
-              title='Setup could not load'
-              description={failure}
-              className='min-h-60'
-            >
-              <Button variant='outline' size='sm' onClick={retry}>
-                Try again
-              </Button>
-            </EmptyState>
-          )}
-          {!chat && !failure && (
-            <div className='grid min-h-60 place-items-center'>
-              <LoadingSpinner label='Reading the setup' />
-            </div>
-          )}
-          {chat?.messages.map((message) => (
-            <MessageRow key={message.id} message={message} />
-          ))}
-          {pending !== null && <PendingRows text={pending} />}
-          {prompt && pending === null && prompt.choices.length > 0 && (
-            <div className={ROW}>
-              <OnboardingChoices
-                key={lastId}
-                prompt={prompt}
-                onPick={(values, label) =>
-                  void pick({ type: 'choose', questionId: prompt.questionId, values }, label)
-                }
-              />
-            </div>
-          )}
-          {chat && !prompt && <Finished />}
-        </div>
-      </ScrollArea>
-      {prompt && (
-        <Composer
-          placeholder={prompt.placeholder}
-          submitLabel='Send answer'
-          onSubmit={(text) => pick({ type: 'say', questionId: prompt.questionId, text }, text)}
-        />
-      )}
-    </div>
+    <PageScroll>
+      <div className={cn(ONBOARDING_COLUMN, 'pt-8 pb-16 md:pt-16')}>
+        <OnboardingContent />
+      </div>
+    </PageScroll>
   );
 }

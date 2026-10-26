@@ -95,14 +95,14 @@ export {
   type TaskDiff,
 } from './messages.ts';
 export type {
-  OnboardingChat,
   OnboardingCheck,
-  OnboardingChoice,
-  OnboardingMessage,
-  OnboardingPrompt,
-  OnboardingQuestionId,
+  OnboardingFlow,
+  OnboardingOption,
   OnboardingReply,
   OnboardingStatus,
+  OnboardingStep,
+  OnboardingStepEntry,
+  OnboardingStepId,
   RootSuggestion,
   RootSuggestions,
 } from './onboarding.ts';

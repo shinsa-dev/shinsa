@@ -30,11 +30,7 @@ function setup() {
     accountActions: {
       listImports: () => Promise.resolve([]),
       importAccount: () => Promise.resolve(),
-      startLogin: () => Promise.resolve(),
-      isSigningIn: () => false,
     },
-    interpret: () => Promise.resolve(null),
-    clarify: () => Promise.resolve(null),
   });
   return { root, config, engine, store, developer, onboarding };
 }

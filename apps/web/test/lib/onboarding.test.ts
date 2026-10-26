@@ -1,17 +1,133 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  describeOnboardingStep,
+  describeAccountSource,
+  describeStepPosition,
+  isHighlightKey,
+  isImportedNow,
+  listChosenValues,
   listFolderRows,
   listFolderSuggestions,
+  listSetupSummary,
   resolveCheckOutcome,
+  resolveFolderOptions,
+  resolveNextHighlight,
+  resolveOnboardingRedirect,
+  resolveStepDirection,
+  resolveStepState,
+  resolveSubmitValues,
   resolveToggledRoots,
 } from '@/lib/onboarding.ts';
-import { createOnboardingStatus, createPrompt, createSuggestions } from '../support/onboarding.ts';
+import { createAccount } from '../support/accounts.ts';
+import {
+  createFlow,
+  createOnboardingStatus,
+  createOption,
+  createStep,
+  createSuggestions,
+} from '../support/onboarding.ts';
 
-describe('describeOnboardingStep', () => {
-  it('counts the questions, and says when setup is done', () => {
-    expect(describeOnboardingStep(createPrompt({ step: 2, steps: 6 }))).toBe('Question 2 of 6');
-    expect(describeOnboardingStep(null)).toBe('Setup is done.');
+describe('the setup lock', () => {
+  it('sends every page but setup to /onboarding until setup is complete, and nothing once it is', () => {
+    const open = createOnboardingStatus({}, false);
+    expect(resolveOnboardingRedirect({ name: 'home' }, open)).toBe('/onboarding');
+    expect(resolveOnboardingRedirect({ name: 'tasks' }, open)).toBe('/onboarding');
+    expect(resolveOnboardingRedirect({ name: 'task', reference: 'SW-1' }, open)).toBe('/onboarding');
+    expect(resolveOnboardingRedirect({ name: 'settings' }, open)).toBe('/onboarding');
+    expect(resolveOnboardingRedirect({ name: 'onboarding' }, open)).toBeNull();
+    expect(resolveOnboardingRedirect({ name: 'tasks' }, createOnboardingStatus())).toBeNull();
+    expect(resolveOnboardingRedirect({ name: 'tasks' }, null)).toBeNull();
+  });
+});
+
+describe('the steps', () => {
+  it('counts the step you are on, and the last one once setup is done', () => {
+    expect(describeStepPosition(createFlow(createStep()))).toBe('Step 3 of 6');
+    expect(describeStepPosition(createFlow(null))).toBe('Step 6 of 6');
+  });
+
+  it('slides back only when you go to an earlier step', () => {
+    expect(resolveStepDirection(null, 0)).toBe('forward');
+    expect(resolveStepDirection(1, 2)).toBe('forward');
+    expect(resolveStepDirection(3, 1)).toBe('back');
+  });
+
+  it('marks each step done, current, reached ahead of you or not reached yet', () => {
+    const flow = createFlow(createStep({ id: 'model' }));
+    const [folders, model, merge] = flow.steps;
+    expect(resolveStepState(folders as never, 0, 1)).toBe('done');
+    expect(resolveStepState(model as never, 1, 1)).toBe('current');
+    expect(resolveStepState(merge as never, 2, 1)).toBe('upcoming');
+    expect(resolveStepState({ id: 'merge', label: 'Merging', summary: null, reached: true }, 2, 1)).toBe(
+      'ahead'
+    );
+    expect(resolveStepState({ id: 'merge', label: 'Merging', summary: 'Squash', reached: true }, 2, 1)).toBe(
+      'done'
+    );
+  });
+
+  it('starts with your earlier answer picked, and sends continue for a step without options', () => {
+    const step = createStep({ options: [createOption({ chosen: true }), createOption({ value: 'rebase' })] });
+    expect(listChosenValues(step)).toEqual(['squash']);
+    expect(resolveSubmitValues(step, ['rebase'])).toEqual(['rebase']);
+    expect(resolveSubmitValues(createStep({ id: 'roots', options: [] }), ['/a'])).toEqual(['/a']);
+    expect(resolveSubmitValues(createStep({ id: 'accounts', options: [] }), [])).toEqual(['continue']);
+  });
+
+  it('lists what you set up, leaving out the steps without an answer to show', () => {
+    expect(listSetupSummary(createFlow(createStep({ id: 'plans' })))).toEqual([
+      { id: 'roots', label: 'Folders', summary: 'Folders answer' },
+      { id: 'model', label: 'Model', summary: 'Model answer' },
+      { id: 'merge', label: 'Merging', summary: 'Merging answer' },
+    ]);
+  });
+});
+
+describe('the option list keys', () => {
+  it('moves the highlight with the arrows, Home and End, and starts from either end', () => {
+    expect(isHighlightKey('ArrowDown')).toBe(true);
+    expect(isHighlightKey('Tab')).toBe(false);
+    expect(resolveNextHighlight(-1, 'ArrowDown', 3)).toBe(0);
+    expect(resolveNextHighlight(-1, 'ArrowUp', 3)).toBe(2);
+    expect(resolveNextHighlight(0, 'ArrowDown', 3)).toBe(1);
+    expect(resolveNextHighlight(2, 'ArrowDown', 3)).toBe(2);
+    expect(resolveNextHighlight(1, 'ArrowUp', 3)).toBe(0);
+    expect(resolveNextHighlight(0, 'ArrowUp', 3)).toBe(0);
+    expect(resolveNextHighlight(1, 'Home', 3)).toBe(0);
+    expect(resolveNextHighlight(1, 'End', 3)).toBe(2);
+  });
+});
+
+describe('resolveFolderOptions', () => {
+  it('adds the folders you typed, picked, after the ones Shinsa found, and never twice', () => {
+    const developer = createOption({ value: '/Users/me/Developer', label: '~/Developer' });
+    const found = [developer];
+    expect(
+      resolveFolderOptions(found, ['/Users/me/code', '/Users/me/Developer', '~/oss'], '/Users/me')
+    ).toEqual([
+      developer,
+      { value: '/Users/me/code', label: '~/code', detail: null, chosen: true, recommended: false },
+      { value: '~/oss', label: '~/oss', detail: null, chosen: true, recommended: false },
+    ]);
+  });
+});
+
+describe('the accounts step', () => {
+  it('says where each account came from and its plan, or that it is signed out', () => {
+    expect(describeAccountSource(createAccount({ id: 'a', origin: 'claude', plan: 'max' }))).toBe(
+      'Your Claude Code login · Max plan'
+    );
+    expect(describeAccountSource(createAccount({ id: 'b', origin: 'cswap', plan: null }))).toBe(
+      'From claude-swap'
+    );
+    expect(describeAccountSource(createAccount({ id: 'c', origin: 'login', signIn: 'signed_out' }))).toBe(
+      'Signed in through Shinsa · Signed out'
+    );
+  });
+
+  it('marks the accounts setup imported just now', () => {
+    const imported = [{ origin: 'cswap' as const, email: 'Work@acme.dev', plan: null }];
+    expect(isImportedNow(createAccount({ id: 'a', email: 'work@acme.dev' }), imported)).toBe(true);
+    expect(isImportedNow(createAccount({ id: 'b', email: null }), imported)).toBe(false);
   });
 });
 

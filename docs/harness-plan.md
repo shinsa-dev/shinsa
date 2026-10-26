@@ -165,7 +165,7 @@ The last column says where the build differs from the plan on purpose, in one li
 | 4 Steering | Built | server `providers/claude/session.ts` (`PromptLedger`), `supervisor.ts` | A message in the stop window is delivered as the next run, which waits for the stopping one (up to 60 s) |
 | 5 Executable discovery | Built | server `providers/claude/executable.ts` | `CLAUDE_EXECUTABLE` is trusted without a version check, since a wrapper may not answer `--version` |
 | 6 Transcript normaliser | Built | server `providers/claude/recorder.ts`, `session.ts`; web `lib/chat/timeline.ts`, `notices.ts`, `context.ts` (handoff and compaction rows, the context meter) | |
-| 7 Quick calls | Built | server `agents/quick/index.ts` (`createQuickCalls`: every registered provider, the default first), `quick/decide.ts` (typed `choice` and `choices` questions, used by triage's size and dependencies, the briefing's picks and the setup chat's single-option answers), `triage/`, `briefing/`, `onboarding/` | |
+| 7 Quick calls | Built | server `agents/quick/index.ts` (`createQuickCalls`: every registered provider, the default first), `quick/decide.ts` (typed `choice` and `choices` questions, used by triage's size and dependencies, the briefing's picks), `triage/`, `briefing/`, `onboarding/` | |
 | 8 Attempts | Built | core `decide/runs.ts` (`isStaleAttempt`); server `supervisor.ts` | |
 | 9 Providers | Built | server `agents/providers/types.ts` (`ProviderCapabilities`: every flag has a reader), `providers/index.ts` (`ProviderRegistry`), `agents/turns.ts` (handoff on a switch); core `agent-models/index.ts` (`resolveAgentProvider`, a provider per role) | A switch takes effect at the run's next execution, never inside a live turn |
 | 10 Codex | Built | server `agents/providers/codex/` (`client.ts` the JSON-RPC client, `session.ts`, `classify.ts`, `map.ts`, `mcp.ts` the HTTP MCP endpoint, `complete.ts`, `models.ts`, `login.ts`, `executable.ts`), `providers/instructions.ts`, `providers/versions.ts`; web `components/settings/agents.tsx` (provider and model per role), `settings/providers.tsx` (the Codex section); test `helpers/bin/codex` (a scripted fake app server), `e2e/codex.test.ts` | A resume Codex refuses is `session_lost` and restored through Shinsa's handoff, not Kanna's silent `thread/start`; writing roles run `untrusted` so the command policy can decline, where Kanna runs `never`; `thread/fork` is not used (Shinsa never forks a run); one Codex login, no rotation |
@@ -211,7 +211,7 @@ The last column says where the build differs from the plan on purpose, in one li
 
 | Item | Status | Where it lives | Built differently, on purpose |
 | --- | --- | --- | --- |
-| Setup chat | Built | server `onboarding/questions.ts`, `chat.ts`, `prerequisites.ts`, `repos/discover.ts`; web `routes/onboarding.tsx` | Accounts and prerequisites act at once and answers that name an option are taken as is, so only other free answers are echoed for confirmation |
+| Setup steps | Built | server `onboarding/steps.ts`, `flow.ts`, `prerequisites.ts`, `repos/discover.ts`; web `routes/onboarding.tsx`, `components/onboarding/` | One step at a time, any earlier one open to change; Claude logins imported without asking; every other route locked until setup is complete |
 
 ### WS6 Orchestration and delegation
 

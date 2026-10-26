@@ -495,7 +495,7 @@ lives; `docs/engine.md` has the behaviour.
 - A lost session is restored from Shinsa's own transcript within a budget; work a restart
   interrupted is resumed once, and a crash spends the recovery budget instead of looping.
 - Messages reach a running agent by prompt id; runs use your own `claude`, at a minimum version.
-- Quick calls (triage, the briefing, the setup chat) ask for structured output with a fallback across
+- Quick calls (triage, the briefing) ask for structured output with a fallback across
   every provider, and take their judgements as typed choices among named options.
 - One provider interface with capability flags; Claude was the only provider then (Codex followed on 2026-10-23).
 - In the chat: a notice when a conversation is handed over to a fresh session, and a meter for how
@@ -527,8 +527,9 @@ watch, Merge queues, Health):
   waiting, not failed.
 - The web shows a banner when the server skipped a damaged event at boot.
 
-**WS5 Onboarding** (`docs/engine.md` → The setup chat): a chat on first run, with a fixed list of
-questions answered by a pick or in your own words, and the prerequisites checked.
+**WS5 Onboarding** (`docs/engine.md` → The setup steps): six steps on first run, one at a time, each
+answered with a pick (folders also by path), any earlier one open to change, your Claude logins imported
+for you, and the prerequisites checked. Nothing else opens until setup is complete.
 
 **WS6 Delegation** (`docs/engine.md` → Delegation): a working agent hands self-contained work to
 other agents and gets the results pushed back into its turn; it can file tasks of its own

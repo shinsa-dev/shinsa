@@ -282,14 +282,14 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
     },
     {
       method: 'GET',
-      pattern: /^\/api\/onboarding\/chat$/,
-      respond: async () => respondJson(await onboarding.chat.resolve()),
+      pattern: /^\/api\/onboarding\/flow$/,
+      respond: async () => respondJson(await onboarding.setup.resolve()),
     },
     {
       method: 'POST',
-      pattern: /^\/api\/onboarding\/chat$/,
+      pattern: /^\/api\/onboarding\/flow$/,
       respond: async (_match, request) =>
-        respondJson(await onboarding.chat.reply(await readJsonObject(request))),
+        respondJson(await onboarding.setup.reply(await readJsonObject(request))),
     },
   ];
 }

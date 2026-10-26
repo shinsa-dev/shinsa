@@ -148,7 +148,7 @@ export function FolderSettings() {
 export function SetupSettings() {
   return (
     <SettingsGroup title='Setup'>
-      <SettingRow title='Setup questions'>
+      <SettingRow title='Setup steps'>
         <Button
           variant='secondary'
           size='sm'

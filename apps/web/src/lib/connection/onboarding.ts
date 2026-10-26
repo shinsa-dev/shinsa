@@ -1,4 +1,4 @@
-import type { OnboardingChat, OnboardingReply, OnboardingStatus, RootSuggestions } from '@shinsa/core';
+import type { OnboardingFlow, OnboardingReply, OnboardingStatus, RootSuggestions } from '@shinsa/core';
 import * as React from 'react';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
@@ -47,14 +47,14 @@ export function requestRootSuggestions() {
   return requestJson<RootSuggestions>('/api/onboarding/roots?refresh=1');
 }
 
-export function requestOnboardingChat() {
-  return requestJson<OnboardingChat>('/api/onboarding/chat');
+export function requestOnboardingFlow() {
+  return requestJson<OnboardingFlow>('/api/onboarding/flow');
 }
 
 export async function replyToOnboarding(reply: OnboardingReply) {
-  const chat = await requestJson<OnboardingChat>('/api/onboarding/chat', reply);
+  const flow = await requestJson<OnboardingFlow>('/api/onboarding/flow', reply);
   await refreshOnboardingStatus();
-  return chat;
+  return flow;
 }
 
 export async function restartOnboarding() {

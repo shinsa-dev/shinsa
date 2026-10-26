@@ -132,7 +132,6 @@ export function createTestOnboarding(engine: Engine, config: ServerConfig, run: 
   const roots = new Roots(config.roots, store, config.userHome, () =>
     Promise.resolve({ candidates: [], truncated: false })
   );
-  const interpret = () => Promise.resolve(null);
   return {
     store,
     roots,
@@ -147,11 +146,7 @@ export function createTestOnboarding(engine: Engine, config: ServerConfig, run: 
       accountActions: {
         listImports: () => Promise.resolve([]),
         importAccount: () => Promise.resolve(),
-        startLogin: () => Promise.resolve(),
-        isSigningIn: () => false,
       },
-      interpret,
-      clarify: interpret,
     }),
   };
 }

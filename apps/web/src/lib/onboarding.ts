@@ -1,11 +1,18 @@
 import {
+  type AccountImport,
+  type AccountSummary,
   type OnboardingCheck,
-  type OnboardingPrompt,
+  type OnboardingFlow,
+  type OnboardingOption,
   type OnboardingStatus,
+  type OnboardingStep,
+  type OnboardingStepEntry,
   type RootSuggestion,
   resolveDisplayPath,
+  resolvePlanLabel,
 } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
+import type { Route } from '@/router.ts';
 
 interface FolderRow {
   path: string;
@@ -18,11 +25,6 @@ interface FolderSuggestion {
   label: string;
   detail: string;
   chosen: boolean;
-}
-
-export function describeOnboardingStep(prompt: OnboardingPrompt | null) {
-  if (!prompt) return 'Setup is done.';
-  return `Question ${prompt.step} of ${prompt.steps}`;
 }
 
 export function listFolderRows(status: OnboardingStatus): FolderRow[] {
@@ -57,4 +59,93 @@ export function resolveToggledRoots(configured: string[], path: string) {
 export function resolveCheckOutcome(check: OnboardingCheck) {
   if (check.ok) return 'pass';
   return check.optional ? 'skipped' : 'fail';
+}
+
+export type StepDirection = 'forward' | 'back';
+
+export type HighlightKey = 'ArrowDown' | 'ArrowUp' | 'Home' | 'End';
+
+const HIGHLIGHT_KEYS = new Set<string>(['ArrowDown', 'ArrowUp', 'Home', 'End']);
+
+const ACCOUNT_ORIGIN: Record<AccountSummary['origin'], string> = {
+  claude: 'Your Claude Code login',
+  cswap: 'From claude-swap',
+  login: 'Signed in through Shinsa',
+};
+
+export function resolveOnboardingRedirect(route: Route, status: OnboardingStatus | null) {
+  if (status?.completed !== false || route.name === 'onboarding') return null;
+  return '/onboarding';
+}
+
+export function describeStepPosition(flow: OnboardingFlow) {
+  return `Step ${Math.min(flow.index + 1, flow.steps.length)} of ${flow.steps.length}`;
+}
+
+export function resolveStepDirection(before: number | null, after: number): StepDirection {
+  return before !== null && after < before ? 'back' : 'forward';
+}
+
+export function listChosenValues(step: OnboardingStep) {
+  return step.options.filter((option) => option.chosen).map((option) => option.value);
+}
+
+export function isHighlightKey(key: string): key is HighlightKey {
+  return HIGHLIGHT_KEYS.has(key);
+}
+
+export function resolveNextHighlight(current: number, key: HighlightKey, count: number) {
+  if (key === 'Home' || (current < 0 && key === 'ArrowDown')) return 0;
+  if (key === 'End' || (current < 0 && key === 'ArrowUp')) return count - 1;
+  if (key === 'ArrowDown') return Math.min(current + 1, count - 1);
+  return Math.max(current - 1, 0);
+}
+
+export function resolveFolderOptions(options: OnboardingOption[], typed: string[], userHome: string) {
+  const known = new Set(options.map((option) => option.value));
+  const added = typed
+    .filter((path) => !known.has(path))
+    .map((path) => ({
+      value: path,
+      label: resolveDisplayPath(path, userHome),
+      detail: null,
+      chosen: true,
+      recommended: false,
+    }));
+  return [...options, ...added];
+}
+
+export function isImportedNow(account: AccountSummary, imported: AccountImport[]) {
+  return imported.some((entry) => entry.email.toLowerCase() === account.email?.toLowerCase());
+}
+
+export function describeAccountSource(account: AccountSummary) {
+  const plan = resolvePlanLabel(account.plan);
+  const parts = [ACCOUNT_ORIGIN[account.origin]];
+  if (account.signIn === 'signed_out') parts.push('Signed out');
+  else if (plan) parts.push(`${plan} plan`);
+  return parts.join(' · ');
+}
+
+export type StepState = 'done' | 'current' | 'ahead' | 'upcoming';
+
+export function resolveStepState(entry: OnboardingStepEntry, index: number, current: number): StepState {
+  if (index === current) return 'current';
+  if (!entry.reached) return 'upcoming';
+  return index < current || entry.summary !== null ? 'done' : 'ahead';
+}
+
+export const SUBMIT_KEY = 'submit';
+
+export const REFRESH_KEY = 'refresh';
+
+export function resolveSubmitValues(step: OnboardingStep, values: string[]) {
+  if (step.id === 'roots' || step.options.length > 0) return values;
+  return ['continue'];
+}
+
+export function listSetupSummary(flow: OnboardingFlow) {
+  return flow.steps.flatMap((entry) =>
+    entry.summary === null ? [] : [{ id: entry.id, label: entry.label, summary: entry.summary }]
+  );
 }

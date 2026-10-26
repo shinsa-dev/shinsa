@@ -118,10 +118,10 @@ src/
 │   ├── transcripts/     Per-run JSONL transcripts, live listeners with each entry's position, tailing a file another
 │   │                    writer appends to, reading only the bytes appended since; the entries of followed and
 │   │                    recently read runs stay in memory
-│   └── quick/           One-shot calls (triage, briefing, the setup chat) on the classifier and writer models:
+│   └── quick/           One-shot calls (triage, the briefing) on the classifier and writer models:
 │                        structured output with a fallback across the registry's providers, the default one
 │                        first (index.ts, createQuickCalls), the typed decision questions (decide.ts: choice and
-│                        choices) triage, the briefing and the setup chat answer
+│                        choices) triage and the briefing answer
 ├── accounts/            Claude accounts and usage limits: store.ts (accounts.json, one CLAUDE_CONFIG_DIR per
 │                        account, shared entries linked), paths.ts (folders, the Claude config dir and
 │                        resolveAccountEnv, the environment every command for an account runs with), login.ts
@@ -181,10 +181,9 @@ src/
 │                        (setup verification before a task's first agent)
 ├── onboarding/          Status, folder suggestions, saving the setup (index.ts, roots.ts), the prerequisite checks
 │                        (prerequisites.ts: git, gh, claude, bun, and codex and its sign-in as optional), the setup
-│                        chat: the fixed questions (questions.ts),
-│                        the conversation, its saved state and the follow-up the writer model writes for an unclear
-│                        answer (chat.ts), reading an answer without the model (answers.ts: yes or no, a skip, an
-│                        option by name), the Claude accounts it offers (accounts.ts)
+│                        steps: the fixed list, what each shows and saves (steps.ts), the run of setup, going back,
+│                        its saved state and the Claude logins it imports (flow.ts), the accounts it reads and the
+│                        imports it runs (accounts.ts)
 ├── projects/            routes.ts: GET /api/repos/local (repositories in the chosen folders and every project's
 │                        folders, registered or not), POST /api/projects/<id>/repos and /folders, and
 │                        createProjectChanges, which those routes and the management client share; folders.ts
@@ -352,7 +351,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `createConfigAt`), so no test runs the real ones, and nothing reaches the real launchd. `test/helpers/mcp` has an MCP server over HTTP (`http.ts`) and over stdio (`stdio-server.ts`). The Claude adapter takes a `ClaudeRuntime` (`runQuery`,
   `resolveExecutable`; `createFakeRuntime` in `test/helpers/query.ts`). Inject fakes through the optional last
   parameters (`startSession`, `providers`, `triage`, `resolveLogin`, `ask`, `runQuery`, `launch`, `discover`,
-  `runPrerequisite`, `accounts`, `interpret`, `clarify`, `accountOptions`).
+  `runPrerequisite`, `accounts`, `accountOptions`).
 - **A test leaves no process running.** Every fake `gh`, `codex` and `eunoe` and the MCP stdio fake registers itself
   with the preload, and a test that ends with one still running fails (the stray is killed): stop and await the work that runs it (`await runner.stop()`,
   `engine.settle()`). The fake `gh` gives up on a state folder that is gone and breaks a lock its killed holder left

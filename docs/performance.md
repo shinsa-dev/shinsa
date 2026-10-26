@@ -633,7 +633,7 @@ and each of its tabs, the Code tab's trees, ⌘P, the ref picker and search, All
 | "Loading…" (text evidence) | `components/overview/evidence-item.tsx` | each time its card mounted (not in the walk) | kept once read (32 texts); "Reading the evidence" after 300 ms |
 | "Checking the versions…", the integrations' first read | `components/settings/versions.tsx`, `integrations.tsx` | first Settings visit, until `/api/versions` and `/api/extensions` answer (not seen on these machines) | read at idle after start |
 | A task's chat, empty until its transcript arrives | `routes/task/chat.tsx` (no indicator) | first Chat visit, one frame or more | the last two runs' transcripts are read on hover and at idle on the task page |
-| Setup chat's first read | `routes/onboarding.tsx` | while `/api/onboarding/chat` answers | after 300 ms |
+| Setup's first read | `routes/onboarding.tsx` | while `/api/onboarding/flow` answers | after 300 ms |
 | Sign-in's wait for Claude | `components/accounts/sign-in-dialog.tsx` | until the sign-in starts | after 300 ms (the work is Claude's) |
 | `/ui`'s chunk | `root.tsx` (`Suspense`) | the catalog page only | after 300 ms |
 
@@ -643,7 +643,7 @@ the real data, 18 before (9 not allowed), none after. The page's JS heap after t
 collections, stays at about 26 MB on the seed (25.9 before, 26.1 after) and 19.7 MB on the real data.
 
 Not loading states, and unchanged: a busy `Button` (an action you started), the live agent's shimmering lines
-("Delivering", a running tool, "Waiting for the result…", the setup chat's "Reading your answer…"), "Working out
+("Delivering", a running tool, "Waiting for the result…"), "Working out
 the steps" on the progress track, and an update's toast.
 
 ### What changed and why

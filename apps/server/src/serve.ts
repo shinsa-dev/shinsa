@@ -33,7 +33,7 @@ import {
   type ServerInstance,
 } from './instance/index.ts';
 import { describeError, log } from './log/index.ts';
-import { type AccountSource, type CommandRunner, type Interpreter, Onboarding } from './onboarding/index.ts';
+import { type AccountSource, type CommandRunner, Onboarding } from './onboarding/index.ts';
 import { createProjectChanges } from './projects/routes.ts';
 import {
   createDiscoverer,
@@ -68,8 +68,6 @@ export interface ShinsaOptions {
   discover?: Discoverer;
   runPrerequisite?: CommandRunner;
   accounts?: AccountSource;
-  interpret?: Interpreter;
-  clarify?: Interpreter;
   accountOptions?: Omit<AccountsOptions, 'engine' | 'config'>;
   scheduleClock?: StateClockOptions;
   timeZone?: string;
@@ -213,8 +211,6 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
       run: options.runPrerequisite,
       accounts: options.accounts ?? onboardingAccounts.source,
       accountActions: onboardingAccounts.actions,
-      interpret: options.interpret ?? services.quick.classify,
-      clarify: options.clarify ?? services.quick.write,
     }),
     accounts,
     schedules: services.schedules,
