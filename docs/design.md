@@ -1214,8 +1214,9 @@ Only these, and they win over anything below:
       banner, the same `CARD` row, shown only in the desktop app while its version and the engine's differ
       (`docs/plans/app-plan.md` → Versions and updates). An `fg-2` `IconArrowsRepeat` while it waits or restarts
       ("The engine restarts into Shinsa 0.5.0 once agents are idle."), the orange triangle when you must act ("Shinsa
-      0.5.0 needs its engine restarted. Agents are working, so choose when."), and `sm` buttons at the end: the first
-      `primary` (Restart now, Update Shinsa), the second `secondary` (When agents are idle). No dismiss: it goes when
+      0.5.0 needs its engine restarted."), and `sm` buttons at the end, the last `primary` as macOS orders them: one
+      alone (Restart now, Update Shinsa) is `primary`; of two, Restart now is `secondary` and When agents are idle
+      `primary`. No dismiss: it goes when
       the versions match. `/ui` shows `EngineCard` in its three states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and

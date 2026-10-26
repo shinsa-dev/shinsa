@@ -71,7 +71,7 @@ export function resolveEngineView(
     };
   }
   if (fit.required) {
-    const text = `Shinsa ${build.version} needs its engine restarted. Agents are working, so choose when.`;
+    const text = `Shinsa ${build.version} needs its engine restarted.`;
     return {
       banner: { tone: 'warning', text, actions: ['restart_now', 'restart_idle'] },
       automatic: null,

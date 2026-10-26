@@ -45,7 +45,7 @@ export function EngineCard({
         <Button
           key={action}
           size='sm'
-          variant={index === 0 ? 'primary' : 'secondary'}
+          variant={index === banner.actions.length - 1 ? 'primary' : 'secondary'}
           className='shrink-0'
           onClick={() => onAction(action)}
         >

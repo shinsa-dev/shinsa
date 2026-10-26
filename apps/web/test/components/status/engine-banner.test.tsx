@@ -53,7 +53,10 @@ describe('the engine banner', () => {
   it('lets you choose when agents are working and the protocol changed', async () => {
     await showEngine({ version: '0.4.0', protocol: 1, busy: true }, { restarting: false });
     expect(listRestarts()).toEqual([]);
-    fireEvent.click(screen.getByRole('button', { name: 'When agents are idle' }));
+    const idle = screen.getByRole('button', { name: 'When agents are idle' });
+    expect(idle.className).toContain('before:bg-primary');
+    expect(screen.getByRole('button', { name: 'Restart now' }).className).not.toContain('before:bg-primary');
+    fireEvent.click(idle);
     fireEvent.click(screen.getByRole('button', { name: 'Restart now' }));
     await waitFor(() => expect(listRestarts()).toEqual([{ when: 'idle' }, { when: 'now' }]));
   });

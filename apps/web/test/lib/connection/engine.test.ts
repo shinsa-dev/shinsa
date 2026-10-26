@@ -79,7 +79,7 @@ describe('resolveEngineView', () => {
     expect(choose.automatic).toBeNull();
     expect(choose.banner).toEqual({
       tone: 'warning',
-      text: 'Shinsa 0.5.0 needs its engine restarted. Agents are working, so choose when.',
+      text: 'Shinsa 0.5.0 needs its engine restarted.',
       actions: ['restart_now', 'restart_idle'],
     });
   });
