@@ -1386,8 +1386,8 @@ Only these, and they win over anything below:
       while content (the chat, the overview, code) stays selectable.
     - **Home, not the wordmark.** A Mac app's toolbar carries its controls, not its name (the menu bar and the
       Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
-      (`components/layout/home-link.tsx`) renders `HomeButton` there (secondary `icon-sm`, `IconHome`, `aria-label`
-      Home, the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
+      (`components/layout/home-link.tsx`) renders `HomeButton` there (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
+      `IconHomeRoundDoorFilled` in `fg-4` with `aria-current="page"`; the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
       header and the compact bar alike. The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
       the page's own history (`MainWindow.step`, which never steps onto the waiting page,
       `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for

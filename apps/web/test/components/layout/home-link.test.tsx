@@ -42,11 +42,14 @@ describe('the way home', () => {
       </TooltipProvider>
     );
     const home = screen.getByRole('button', { name: 'Home' });
+    expect(home.textContent).toBe('Home');
+    expect(home.getAttribute('aria-current')).toBeNull();
     expect(screen.queryByText('Shinsa')).toBeNull();
     expect(await findTooltipText(home)).toBe('Home⇧⌘H');
     act(() => fireEvent.click(home));
     expect(location.pathname).toBe('/');
     expect(navigated).toBe(1);
+    expect(screen.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('leads the Cards top bar in the Mac app', () => {
@@ -58,7 +61,7 @@ describe('the way home', () => {
       </TooltipProvider>
     );
     const bar = screen.getByRole('banner');
-    expect(bar.querySelector('button')?.getAttribute('aria-label')).toBe('Home');
+    expect(bar.querySelector('button')?.textContent).toBe('Home');
     expect(bar.textContent).not.toContain('Shinsa');
   });
 });
