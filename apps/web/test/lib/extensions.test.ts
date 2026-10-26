@@ -66,7 +66,7 @@ import { createExtensions, createPlugin, createServer, createSkill } from '../su
 import { createProject, createRepo, createShinsaState } from '../support/state.ts';
 
 const PLACES: ExtensionPlaces = {
-  projects: [{ id: 'sw', name: 'Superwall' }],
+  projects: [{ id: 'sw', name: 'Superwall', color: 'blue' }],
   repos: [{ path: '/code/paywall-next', name: 'paywall-next' }],
 };
 
@@ -190,7 +190,7 @@ describe('where a server is used', () => {
       repos: [createRepo({ id: 'b', name: 'shinsa' }), createRepo({ id: 'a', name: 'paywall' })],
     });
     expect(resolveExtensionPlaces(state)).toEqual({
-      projects: [{ id: 'sw', name: 'Superwall' }],
+      projects: [{ id: 'sw', name: 'Superwall', color: 'blue' }],
       repos: [
         { path: '/Users/you/Developer/a', name: 'paywall' },
         { path: '/Users/you/Developer/b', name: 'shinsa' },
@@ -240,10 +240,11 @@ describe('where a server is used', () => {
       'Only in paywall-next',
     ]);
     expect(listScopeItems(PLACES, { kind: 'project', project: 'sw' })).toHaveLength(3);
+    expect(listScopeItems(PLACES, { kind: 'everywhere' })[1]).toMatchObject({ dot: 'blue' });
     expect(listScopeItems(PLACES, { kind: 'project', project: 'gone' }).at(-1)).toEqual({
       value: 'project:gone',
       label: 'Only in a project that is gone',
-      icon: 'IconLayersTwo',
+      dot: 'gray',
     });
     expect(listScopeItems(PLACES, { kind: 'repo', path: '/code/old' }).at(-1)).toEqual({
       value: 'repo:/code/old',

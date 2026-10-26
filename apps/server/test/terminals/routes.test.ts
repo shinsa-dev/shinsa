@@ -276,7 +276,13 @@ describe('services over HTTP', () => {
       `/api/services/suggestions?projectId=${projectId}`
     );
     expect(suggestions).toEqual([
-      { name: 'api', cwd: join(repoPath, 'apps/api'), command: 'npm run dev', source: 'package' },
+      {
+        name: 'api',
+        cwd: join(repoPath, 'apps/api'),
+        command: 'npm run dev',
+        source: 'package',
+        recommended: true,
+      },
     ]);
     const added = await post('/api/services', {
       projectId,
@@ -290,7 +296,25 @@ describe('services over HTTP', () => {
     const left = await read<{ suggestions: ServiceSuggestion[] }>(
       `/api/services/suggestions?projectId=${projectId}`
     );
-    expect(left.suggestions).toHaveLength(1);
+    expect(left.suggestions).toEqual([]);
+    terminals.addService(projectId, {
+      name: 'gateway',
+      cwd: join(repoPath, 'apps/api'),
+      command: 'npm run dev',
+      env: {},
+    });
+    terminals.updateService(service.id, {
+      name: 'renamed',
+      cwd: service.cwd,
+      command: service.command,
+      env: service.env,
+    });
+    const same = await read<{ suggestions: ServiceSuggestion[] }>(
+      `/api/services/suggestions?projectId=${projectId}`
+    );
+    expect(same.suggestions).toEqual([]);
+    for (const each of terminals.snapshot().services)
+      if (each.id !== service.id) terminals.removeService(each.id);
 
     const started = (await (await post(`/api/services/${service.id}/start`, {}, null)).json()) as {
       terminal: TerminalInfo;
@@ -321,6 +345,30 @@ describe('services over HTTP', () => {
       await post(`/api/services/${service.id}/remove`, {})
     ).json()) as TerminalsSnapshot;
     expect(removed).toMatchObject({ services: [], terminals: [] });
+  });
+
+  test('adds several services at once, checking every one before it adds any', async () => {
+    const { post, projectId, repoPath, terminals } = await start();
+    const one = { name: 'api', path: repoPath, command: 'bun run dev', env: {} };
+    const refusal = async (body: unknown) =>
+      ((await (await post('/api/services/batch', body)).json()) as { error: { code: string } }).error.code;
+    expect(await refusal({ projectId, services: [] })).toBe('body_invalid');
+    expect(await refusal({ projectId, services: 'api' })).toBe('body_invalid');
+    expect(await refusal({ projectId, services: [one, 3] })).toBe('body_invalid');
+    expect(await refusal({ projectId, services: [one, { ...one, name: 'API' }] })).toBe('service_name_taken');
+    expect(await refusal({ projectId, services: [one, { ...one, name: 'web', path: '/etc' }] })).toBe(
+      'service_place_invalid'
+    );
+    expect(terminals.snapshot().services).toEqual([]);
+    for (let index = 0; index < 31; index += 1)
+      terminals.addService(projectId, { name: `s${index}`, cwd: repoPath, command: 'x', env: {} });
+    expect(await refusal({ projectId, services: [one, { ...one, name: 'web' }] })).toBe('service_limit');
+    for (const service of terminals.snapshot().services) terminals.removeService(service.id);
+    const added = (await (
+      await post('/api/services/batch', { projectId, services: [one, { ...one, name: 'web' }] })
+    ).json()) as { added: ServiceDefinition[] } & TerminalsSnapshot;
+    expect(added.added.map((service) => service.name)).toEqual(['api', 'web']);
+    expect(added.services.map((service) => service.name)).toEqual(['api', 'web']);
   });
 
   test('refuses a bad service, a folder outside the project and a change without the page', async () => {

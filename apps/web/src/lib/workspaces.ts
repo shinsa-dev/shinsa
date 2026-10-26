@@ -33,7 +33,7 @@ const WORKSPACE_COPY: Record<WorkspaceMode, Omit<WorkspaceItem, 'value' | 'disab
   main_checkout: {
     label: 'Main checkout',
     hint: 'Agents work in this checkout on a branch Shinsa makes, one task at a time.',
-    icon: 'IconFolderGit',
+    icon: 'IconFolder1',
   },
 };
 

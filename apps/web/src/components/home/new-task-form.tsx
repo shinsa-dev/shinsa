@@ -5,7 +5,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { COMPOSER_FIELD, COMPOSER_FOOTER } from '@/components/layout/surface/card.ts';
-import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
+import { ProjectOption } from '@/components/status/project-dot.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useConnection } from '@/lib/connection/socket.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
@@ -34,15 +34,6 @@ function listProjectTasks(state: ShinsaState, project: string) {
   );
 }
 
-function ProjectOption({ item }: { item: NewTaskProjectItem }) {
-  return (
-    <>
-      <ProjectDotIcon color={item.color} />
-      <span className='truncate'>{item.label}</span>
-    </>
-  );
-}
-
 function ProjectField({
   items,
   value,
@@ -62,12 +53,12 @@ function ProjectField({
       }}
     >
       <SelectTrigger aria-label='Project' size='sm' variant='ghost' className='w-fit min-w-0 max-w-56'>
-        <SelectValue>{() => shown && <ProjectOption item={shown} />}</SelectValue>
+        <SelectValue>{() => shown && <ProjectOption color={shown.color} name={shown.label} />}</SelectValue>
       </SelectTrigger>
       <SelectContent align='start' alignItemWithTrigger={false}>
         {items.map((item) => (
           <SelectItem key={item.value} value={item.value}>
-            <ProjectOption item={item} />
+            <ProjectOption color={item.color} name={item.label} />
           </SelectItem>
         ))}
       </SelectContent>

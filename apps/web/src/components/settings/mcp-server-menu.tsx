@@ -14,6 +14,7 @@ import {
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { SelectedMark } from '@/components/status/check-mark.tsx';
+import { ProjectOption } from '@/components/status/project-dot.tsx';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
 import {
   describeScopeChanged,
@@ -44,7 +45,7 @@ function ScopeSubmenu({
   label: string;
   empty: string;
   current: string;
-  places: { value: string; name: string }[];
+  places: { value: string; name: string; dot?: string }[];
   onPick: (value: string) => void;
 }) {
   return (
@@ -58,7 +59,7 @@ function ScopeSubmenu({
         <DropdownMenuRadioGroup value={current} onValueChange={(value) => onPick(String(value))}>
           {places.map((place) => (
             <DropdownMenuRadioItem key={place.value} value={place.value} closeOnClick>
-              {place.name}
+              {place.dot ? <ProjectOption color={place.dot} name={place.name} /> : place.name}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
@@ -87,6 +88,7 @@ function ScopeItems({ server, places, actions }: MenuProps) {
         places={places.projects.map((project) => ({
           value: serializeScope({ kind: 'project', project: project.id }),
           name: project.name,
+          dot: project.color,
         }))}
         onPick={pick}
       />

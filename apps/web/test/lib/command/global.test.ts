@@ -69,7 +69,7 @@ describe('listGlobalSections', () => {
 });
 
 describe('the focus choice', () => {
-  it('lists all work and every project by name, on all work by default', () => {
+  it('lists all work and every project by name with its dot, on all work by default', () => {
     const focus = find(
       listGlobalSections(focused(null), { name: 'home' }, 'system', 'cards'),
       'focus.switch'
@@ -78,7 +78,7 @@ describe('the focus choice', () => {
     expect(focus.hint).toBe('All work');
     expect(focus.value).toBe('all');
     expect(focus.options.map((option) => [option.value, option.label, option.dot])).toEqual([
-      ['all', 'All work', undefined],
+      ['all', 'All work', 'gray'],
       ['api', 'API', 'green'],
       ['web', 'Web', 'blue'],
     ]);

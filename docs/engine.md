@@ -1420,7 +1420,7 @@ running when the window closes or the app quits, and a page that comes back find
   150 ms (its prompt; at most 5 s, so a busy program cannot hold it), types the command, and presses Enter 30 ms later
   as a key of its own. A shell such as fish does not run a line whose Enter arrives in the same read as the text, and a
   command written before the shell's first prompt is lost or mangled, so both waits matter.
-- **The look is Shinsa's.** The engine sends no appearance: the page draws every terminal in the `--terminal-*` tokens
+- **The look is Shinsa's.** The engine sends no appearance: the page draws every terminal in the `--terminal-*` tokens (the Code tab's colours)
   and the Code tab's mono font (`docs/design.md`, 37). Reading Ghostty's config was removed on 2026-10-26.
 
 ### Services
@@ -1454,14 +1454,27 @@ then only watched (`docs/design.md`, 37). It is a terminal under the hood, so ev
   engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; plain
   shells come back as `stopped`, as before. Inspect mode starts nothing.
 - **Found for you.** `GET /api/services/suggestions?projectId=` (`detect.ts`, `listServiceSuggestions`) reads each of
-  the project's repositories and folders: the `dev` script of every workspace the root `package.json` names
-  (`workspaces` as a list or `{ packages }`, and `pnpm-workspace.yaml`; `dir/*` patterns and exact folders, `!`
-  patterns skipped), named after its package without the scope (`@shop/api` is "api"); the root's own `dev` script,
-  "all" when there are workspaces and the package's name otherwise; each `Procfile` line; and `docker compose up` when
-  a Compose file is there. The command uses the package manager the lockfile names (`bun.lock`, `pnpm-lock.yaml`,
-  `yarn.lock`, `package-lock.json`), else `packageManager`, else npm. Two of one name are told apart by their folder.
-  It leaves out what you already added and offers 24 at most. Nothing is added or started until you press it.
-- **Adding and changing.** `POST /api/services { projectId, name, path, command, env }`, `/api/services/<id>/update`
+  the project's repositories and folders, fast enough to run when the Add services dialog opens (a few file reads,
+  no process): the run script of every workspace the root `package.json` names (`workspaces` as a list or
+  `{ packages }`, and `pnpm-workspace.yaml`; `dir/*` patterns and exact folders, `!` patterns skipped), or of
+  `apps/*`, `packages/*` and `services/*` when it names none (Turbo and Nx layouts), named after its package without
+  the scope (`@shop/api` is "api"); the run script is `dev`, else `start`, else `serve`. The root's own script is
+  "all" when there are workspaces and the package's name otherwise. Then a `deno.json` task (when there is no
+  `package.json`), `bin/dev`, else each `Procfile.dev` line, else each `Procfile` line; each Docker Compose service
+  as `docker compose up <name>` (`docker compose up` when none is read); `cargo run` for a crate with
+  `src/main.rs` (not a Cargo workspace); `go run .` and `go run ./cmd/<name>` for a Go module; `python manage.py
+  runserver` for Django; and `make dev` (or `run`, `serve`, `start`) only when nothing else was found there. The
+  package command uses the package manager the lockfile names (`bun.lock`, `pnpm-lock.yaml`, `yarn.lock`,
+  `package-lock.json`, `npm-shrinkwrap.json`), else `packageManager`, else npm. Each suggestion says whether it is
+  `recommended`: everything is, but the root script that runs all the workspaces ("all", which would start them
+  twice) and a workspace under `packages/`, `libs/` or `lib/` (a library's watcher, not a server). Two of one name
+  are told apart by their folder. It leaves out what you already added (a service of the project with the same
+  folder and command, or with the same name, which could not be added again) and offers 24 at most. Nothing is
+  added or started until you press it.
+- **Adding and changing.** `POST /api/services { projectId, name, path, command, env }`, `POST /api/services/batch
+  { projectId, services: [{ name, path, command, env }…] }` (what the dialog sends for the suggestions you tick:
+  every one is checked, names unique among them too, and the limit counted, before any is added; the answer is
+  the snapshot with the new ones as `added`), `/api/services/<id>/update`
   (the same fields; a running service keeps its old command until it restarts, and its tab takes the new name) and
   `/remove` (stops it and closes its tab) need a browser's Origin, like every terminal change: a definition is a
   command that runs as you. Start, stop and restart do not, so `shinsa services start|stop|restart` work from your own

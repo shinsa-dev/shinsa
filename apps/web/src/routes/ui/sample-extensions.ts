@@ -46,7 +46,7 @@ function createSampleSkill(
 }
 
 export const SAMPLE_PLACES: ExtensionPlaces = {
-  projects: [{ id: 'superwall', name: 'Superwall' }],
+  projects: [{ id: 'superwall', name: 'Superwall', color: 'blue' }],
   repos: [{ path: '/Users/me/code/paywall-next', name: 'paywall-next' }],
 };
 

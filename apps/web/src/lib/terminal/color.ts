@@ -10,6 +10,8 @@ const RGB = new RegExp(
   'i'
 );
 
+const FADED = /^color-mix\(\s*in\s+[a-z]+\s*,\s*(.+?)\s+([\d.]+)%\s*,\s*transparent\s*\)$/i;
+
 function readNumber(text: string | undefined, percentOf = 1) {
   if (text === undefined) return null;
   const value = Number.parseFloat(text);
@@ -52,9 +54,19 @@ function parseHex(text: string) {
   return `#${full.toLowerCase()}`;
 }
 
+function resolveFaded(color: string, percent: string) {
+  const hex = resolveCssColor(color);
+  if (!hex) return null;
+  const alpha = (hex.length === 9 ? Number.parseInt(hex.slice(7), 16) / 255 : 1) * (Number(percent) / 100);
+  const byte = Math.round(clamp(alpha) * 255);
+  return `${hex.slice(0, 7)}${byte.toString(16).padStart(2, '0')}`;
+}
+
 export function resolveCssColor(value: string): string | null {
   const text = value.trim();
   if (text.startsWith('#')) return parseHex(text);
+  const faded = FADED.exec(text);
+  if (faded) return resolveFaded(faded[1] ?? '', faded[2] ?? '');
   const oklch = OKLCH.exec(text);
   if (oklch) {
     const [lightness, chroma, hue] = [

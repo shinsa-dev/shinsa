@@ -298,7 +298,7 @@ function ProjectTerminals({
         <EmptyState
           icon='IconConsole'
           title={`No terminals in ${project.name}`}
-          description='A terminal runs your own shell in one of the project’s folders, and keeps running when you close Shinsa. Services you start show here too.'
+          description='A terminal keeps running when you close Shinsa.'
         >
           <NewTerminalButton groups={groups} fallback={fallback} label='Open a terminal' wide onOpen={open} />
         </EmptyState>

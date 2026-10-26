@@ -10,7 +10,7 @@ import { RANK, useRegisterCommands, writeCommandMenuOpen } from '@/lib/command/r
 import { type LineComment, type ReviewDraft, ReviewDraftContext } from '@/lib/review/draft.ts';
 import { navigate } from '@/router.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createGate, createShinsaState, createTask } from '../../support/state.ts';
+import { createGate, createProject, createShinsaState, createTask } from '../../support/state.ts';
 
 Element.prototype.scrollIntoView = () => {};
 
@@ -206,6 +206,34 @@ describe('pages', () => {
     await choose('Light');
     expect(localStorage.getItem('shinsa.theme')).toBe('light');
     await waitFor(() => expect(isMenuOpen()).toBe(false));
+  });
+
+  it('shows each project’s dot on the focus choice', async () => {
+    showState(
+      createShinsaState({
+        tasks,
+        projects: [
+          createProject({ id: 'p1', name: 'Superwall', color: 'blue' }),
+          createProject({ id: 'p2', name: 'Basket', color: 'green' }),
+        ],
+      })
+    );
+    renderMenu();
+    await pressCommandK();
+    await type('switch focus');
+    await choose(/^Switch focus project/);
+    expect(
+      screen
+        .getAllByRole('option')
+        .map((option) => [
+          option.textContent,
+          option.querySelector('[data-project-dot]')?.getAttribute('data-project-dot'),
+        ])
+    ).toEqual([
+      ['All work', 'gray'],
+      ['Basket', 'green'],
+      ['Superwall', 'blue'],
+    ]);
   });
 
   it('jumps to a task through the Tasks page, opening on the first task', async () => {

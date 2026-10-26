@@ -5,18 +5,22 @@ import {
   type ServiceSuggestion,
   type ServiceView,
   type TerminalInfo,
+  type TerminalPlace,
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { DropdownMenu } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
+import * as React from 'react';
 import { ProjectMenuTrigger } from '@/components/focus/menu.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
-import { ServiceSuggestions, ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
+import { ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
+import { ServicePicker } from '@/components/services/service-dialog.tsx';
 import { type ServiceHandlers, ServiceRow } from '@/components/services/service-row.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
+import { listRecommendedPicks, togglePick } from '@/lib/terminal/services.ts';
 import type { PlaceGroup } from '@/lib/terminal/tabs.ts';
 import { readDocumentVariable, resolveTerminalTheme } from '@/lib/terminal/theme.ts';
 import { acknowledgeSample } from './samples.ts';
@@ -82,9 +86,45 @@ const TERMINALS: TerminalInfo[] = [
 ];
 
 const SUGGESTIONS: ServiceSuggestion[] = [
-  { name: 'admin', cwd: '~/Developer/shop/apps/admin', command: 'bun run dev', source: 'package' },
-  { name: 'worker', cwd: '~/Developer/shop', command: 'bun apps/api/worker.ts', source: 'procfile' },
+  {
+    name: 'api',
+    cwd: '~/Developer/shop/apps/api',
+    command: 'bun run dev',
+    source: 'package',
+    recommended: true,
+  },
+  {
+    name: 'web',
+    cwd: '~/Developer/shop/apps/web',
+    command: 'bun run dev',
+    source: 'package',
+    recommended: true,
+  },
+  {
+    name: 'db',
+    cwd: '~/Developer/shop',
+    command: 'docker compose up db',
+    source: 'compose',
+    recommended: true,
+  },
+  { name: 'all', cwd: '~/Developer/shop', command: 'bun run dev', source: 'package', recommended: false },
 ];
+
+const SHOP_PLACES: TerminalPlace[] = [
+  { path: '~/Developer/shop', label: 'shop', kind: 'repository', taskId: null },
+];
+
+function ServicePickerSample() {
+  const [picked, setPicked] = React.useState(() => listRecommendedPicks(SUGGESTIONS));
+  return (
+    <ServicePicker
+      suggestions={SUGGESTIONS}
+      places={SHOP_PLACES}
+      picked={picked}
+      onToggle={(key) => setPicked((current) => togglePick(current, key))}
+    />
+  );
+}
 
 const HANDLERS: ServiceHandlers = {
   start: acknowledgeSample,
@@ -190,7 +230,7 @@ export function TerminalSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='The Services popover · a project’s services, what Shinsa found in it, and its footer'>
+      <Specimen label='The Services popover · a project’s services and its footer'>
         <div className='flex w-96 flex-col overflow-hidden rounded-lg border border-border bg-popover'>
           <ServicesPanel
             groups={[{ project: PROJECT, views: VIEWS.slice(0, 3) }]}
@@ -199,7 +239,7 @@ export function TerminalSpecimens() {
             footer={
               <>
                 <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={acknowledgeSample}>
-                  Add a service…
+                  Add services…
                 </Button>
                 <span className='flex-1' />
                 <Button variant='secondary' size='sm' icon='IconConsole' onClick={acknowledgeSample}>
@@ -207,14 +247,7 @@ export function TerminalSpecimens() {
                 </Button>
               </>
             }
-          >
-            <ServiceSuggestions
-              suggestions={SUGGESTIONS}
-              root='~/Developer/shop'
-              onAdd={acknowledgeSample}
-              onEdit={acknowledgeSample}
-            />
-          </ServicesPanel>
+          />
         </div>
       </Specimen>
       <Specimen label='The Services popover · a project with none yet'>
@@ -225,17 +258,15 @@ export function TerminalSpecimens() {
             handlers={HANDLERS}
             footer={
               <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={acknowledgeSample}>
-                Add a service…
+                Add services…
               </Button>
             }
-          >
-            <ServiceSuggestions
-              suggestions={SUGGESTIONS.slice(0, 1)}
-              root='~/Developer/shop'
-              onAdd={acknowledgeSample}
-              onEdit={acknowledgeSample}
-            />
-          </ServicesPanel>
+          />
+        </div>
+      </Specimen>
+      <Specimen label='Add services · what Shinsa found, the recommended ones ticked'>
+        <div className='w-105'>
+          <ServicePickerSample />
         </div>
       </Specimen>
       <Specimen label='The Terminal page’s project picker, the Focus menu’s trigger'>
@@ -292,7 +323,7 @@ export function TerminalSpecimens() {
         <EmptyState
           icon='IconConsole'
           title='No terminals in Shop'
-          description='A terminal runs your own shell in one of the project’s folders, and keeps running when you close Shinsa. Services you start show here too.'
+          description='A terminal keeps running when you close Shinsa.'
         >
           <NewTerminalButton
             groups={GROUPS}

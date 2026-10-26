@@ -89,7 +89,8 @@ export function InputSpecimens() {
           <Button size='default'>Default</Button>
           <Button size='lg'>Large</Button>
         </Specimen>
-        <Specimen label='icon-only · one per size'>
+        <Specimen label='icon-only · one per size, icon-2xs only inside a 24px row such as a terminal tab'>
+          <Button size='icon-2xs' variant='secondary' icon='IconCrossSmall' aria-label='Close' />
           <Button size='icon-xs' icon='IconPlusMedium' aria-label='Add' />
           <Button size='icon-sm' icon='IconBell' aria-label='Notify' />
           <Button size='icon' variant='outline' icon='IconFiles' aria-label='Copy' />

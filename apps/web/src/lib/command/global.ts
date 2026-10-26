@@ -36,7 +36,7 @@ function createFocusSwitch(state: ShinsaState): Command {
     heading: 'Focus on',
     value: focus?.id ?? 'all',
     options: [
-      { value: 'all', label: 'All work', keywords: ['focus', 'everything'] },
+      { value: 'all', label: 'All work', keywords: ['focus', 'everything'], dot: 'gray' },
       ...listProjects(state).map((project) => ({
         value: project.id,
         label: project.name,

@@ -14,6 +14,7 @@ export function ProjectDot({
   const dot = (
     <span
       aria-hidden
+      data-project-dot={color}
       className={cn('size-2 shrink-0 rounded-full', className)}
       style={{ background: color === 'gray' ? 'var(--fg-2)' : `var(--${color}-4, var(--fg-2))` }}
     />
@@ -37,5 +38,14 @@ export function ProjectDotIcon({ color }: { color: string }) {
     <span className='grid size-3.5 shrink-0 place-items-center'>
       <ProjectDot color={color} />
     </span>
+  );
+}
+
+export function ProjectOption({ color, name }: { color: string; name: string }) {
+  return (
+    <>
+      <ProjectDotIcon color={color} />
+      <span className='truncate'>{name}</span>
+    </>
   );
 }

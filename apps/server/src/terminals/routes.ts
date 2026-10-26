@@ -130,11 +130,37 @@ function readServiceInput(
   return { name, cwd, command, env: readEnv(body) };
 }
 
+function readServiceBatch(
+  body: JsonObject,
+  others: ServiceDefinition[],
+  places: TerminalPlace[],
+  home: string
+): ServiceInput[] {
+  const list = body.services;
+  if (!Array.isArray(list) || list.length === 0 || list.length > SERVICE_LIMITS.services)
+    throw new DomainError(
+      'body_invalid',
+      `Send “services” as a list of 1 to ${SERVICE_LIMITS.services} services.`
+    );
+  const inputs: ServiceInput[] = [];
+  for (const each of list) {
+    if (!each || typeof each !== 'object' || Array.isArray(each))
+      throw new DomainError('body_invalid', 'Send each service as an object.');
+    const taken = [...others, ...inputs.map((input) => ({ ...input, id: '', projectId: '' }))];
+    inputs.push(readServiceInput(each as JsonObject, taken, places, home));
+  }
+  return inputs;
+}
+
 function listNewSuggestions(places: TerminalPlace[], services: ServiceDefinition[]): ServiceSuggestion[] {
   const roots = places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
   return listServiceSuggestions(roots).filter(
     (suggestion) =>
-      !services.some((service) => service.cwd === suggestion.cwd && service.command === suggestion.command)
+      !services.some(
+        (service) =>
+          service.name.toLowerCase() === suggestion.name.toLowerCase() ||
+          (service.cwd === suggestion.cwd && service.command === suggestion.command)
+      )
   );
 }
 
@@ -209,6 +235,22 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
           readServiceInput(body, others(projectId, null), places, home)
         );
         return { service, ...terminals.snapshot() };
+      }),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/services\/batch$/,
+      respond: guarded((_match, body) => {
+        const projectId = readText(body, 'projectId', 200);
+        const places = projectOf(projectId);
+        const inputs = readServiceBatch(body, others(projectId, null), places, home);
+        if (terminals.snapshot().services.length + inputs.length > SERVICE_LIMITS.services)
+          throw new DomainError(
+            'service_limit',
+            `Shinsa keeps ${SERVICE_LIMITS.services} services at most. Remove some to add these.`
+          );
+        const added = inputs.map((input) => terminals.addService(projectId, input));
+        return { added, ...terminals.snapshot() };
       }),
     },
     {

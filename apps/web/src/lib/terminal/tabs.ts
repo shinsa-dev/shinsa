@@ -19,8 +19,8 @@ const PLACE_HEADINGS: Record<TerminalPlaceKind, string> = {
 };
 
 export const PLACE_ICONS: Record<TerminalPlaceKind, IconName> = {
-  repository: 'IconFolderGit',
-  folder: 'IconFolder1',
+  repository: 'IconFolder1',
+  folder: 'IconFolders',
   worktree: 'IconBranch',
 };
 

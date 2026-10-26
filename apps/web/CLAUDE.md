@@ -59,7 +59,7 @@ src/
 │                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, accounts, checks, finished),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
 │                        services (menu.tsx: Services beside Home and in the rail, its popover and trigger label;
-│                        service-row.tsx: a service's row, tile and run buttons; service-dialog.tsx: add and edit;
+│                        service-row.tsx: a service's row, tile and run buttons; service-dialog.tsx: Add services (what the engine found, ticked, and the form under Advanced) and Edit;
 │                        use-service-actions.tsx: the handlers and their dialogs), focus (menu.tsx: the Focus menu and
 │                        the project trigger and rows the Terminal page's picker shares), layout (cards/ and sidebar/ shells, the nav item both the rail and
 │                        Settings' tabs use, the list row and its LIST_ROW classes, the logo link home and home-link.tsx (the Home button
@@ -149,8 +149,8 @@ src/
     ├── terminal/        Terminals and services (docs/design.md, 37): view.ts (TerminalView: one xterm.js per terminal,
     │                    kept outside React, its socket and reconnect, its WebGL renderer kept for the six shown last,
     │                    fit only when the pane's size changed, find, clear, the font size; resolveTerminalView),
-    │                    theme.ts (the xterm.js options and theme on the `--terminal-*` tokens and `--font-mono`),
-    │                    color.ts (OKLCH and rgb to hex), keys.ts (a Mac terminal's keys, and the page's ⌘T and ⌘W),
+    │                    theme.ts (the xterm.js options and theme on the `--terminal-*` tokens, the Code tab's `--code-*` colours, and `--font-mono`),
+    │                    color.ts (OKLCH, rgb and a colour faded to transparent, to hex), keys.ts (a Mac terminal's keys, and the page's ⌘T and ⌘W),
     │                    replies.ts (the questions the engine answers instead), tabs.ts (the project, tabs, places,
     │                    order and words), services.ts (a service's glyph, state words, the trigger's label, which
     │                    projects the menu shows, the form and its checks), command.ts (a shell block's command for

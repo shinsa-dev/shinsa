@@ -1,41 +1,35 @@
-import type { Project, ServiceDefinition, ServiceSuggestion } from '@shinsa/core';
+import { listTerminalPlaces, type ServiceDefinition, type ShinsaState } from '@shinsa/core';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
-import { ServiceDialog } from '@/components/services/service-dialog.tsx';
+import { AddServicesDialog, EditServiceDialog } from '@/components/services/service-dialog.tsx';
 import type { ServiceHandlers } from '@/components/services/service-row.tsx';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import {
   openServiceTerminal,
   removeService,
   requestServiceAdd,
+  requestServicesAdd,
   requestServiceUpdate,
   restartService,
   startService,
   stopService,
+  useTerminals,
 } from '@/lib/connection/terminals.ts';
+import { listProjects } from '@/lib/projects.ts';
 import {
   createServiceDraft,
   describeServiceRemove,
-  type ServiceDialogMode,
-  type ServiceDraft,
+  describeServicesAdded,
+  listServicePlaces,
+  resolveServiceDialog,
 } from '@/lib/terminal/services.ts';
 
-interface Editing {
-  mode: ServiceDialogMode;
-  draft: ServiceDraft;
-  projectId: string;
-  serviceId: string | null;
-}
-
-export function useServiceActions({
-  projects,
-  onNavigate,
-}: {
-  projects: Project[];
-  onNavigate?: () => void;
-}) {
-  const editing = useDialogState<Editing>();
+export function useServiceActions({ state, onNavigate }: { state: ShinsaState; onNavigate?: () => void }) {
+  const adding = useDialogState<string>();
+  const editing = useDialogState<ServiceDefinition>();
   const removing = useDialogState<ServiceDefinition>();
+  const home = useTerminals()?.home ?? null;
+  const listPlaces = (projectId: string) => listServicePlaces(listTerminalPlaces(state, projectId));
 
   const handlers: ServiceHandlers = {
     start: (view) => void startService(view.service.id),
@@ -46,46 +40,44 @@ export function useServiceActions({
       openServiceTerminal(project.key, view.terminal.id);
       onNavigate?.();
     },
-    edit: (view) =>
-      editing.show({
-        mode: 'edit',
-        draft: createServiceDraft(view.service, null),
-        projectId: view.service.projectId,
-        serviceId: view.service.id,
-      }),
+    edit: (view) => editing.show(view.service),
     remove: (view) => removing.show(view.service),
   };
 
-  const add = (projectId: string, from: ServiceSuggestion | null, path: string | null) =>
-    editing.show({ mode: 'add', draft: createServiceDraft(from, path), projectId, serviceId: null });
-
-  const addSuggestion = (projectId: string, suggestion: ServiceSuggestion) =>
-    requestWithToast(
-      () =>
-        requestServiceAdd(projectId, {
-          name: suggestion.name,
-          cwd: suggestion.cwd,
-          command: suggestion.command,
-          env: {},
-        }),
-      `Added ${suggestion.name}.`
-    );
+  const add = (projectId: string) => adding.show(projectId);
 
   const dialogs = (
     <>
+      {adding.value && (
+        <AddServicesDialog
+          control={adding.control}
+          projects={listProjects(state)}
+          projectId={adding.value}
+          home={home}
+          listPlaces={listPlaces}
+          onAdd={(projectId, inputs) =>
+            requestWithToast(
+              () => requestServicesAdd(projectId, inputs),
+              describeServicesAdded(inputs.map((input) => input.name))
+            )
+          }
+          onAddOne={(projectId, input) =>
+            requestWithToast(
+              () => requestServiceAdd(projectId, input),
+              resolveServiceDialog('add', input.name).done
+            )
+          }
+        />
+      )}
       {editing.value && (
-        <ServiceDialog
+        <EditServiceDialog
           control={editing.control}
-          mode={editing.value.mode}
-          draft={editing.value.draft}
-          projects={projects}
-          projectId={editing.value.projectId}
-          onSave={(projectId, input, done) => {
-            const serviceId = editing.value?.serviceId;
-            return requestWithToast(() => {
-              if (serviceId) return requestServiceUpdate(serviceId, input);
-              return requestServiceAdd(projectId, input);
-            }, done);
+          draft={createServiceDraft(editing.value)}
+          places={listPlaces(editing.value.projectId)}
+          home={home}
+          onSave={(input, done) => {
+            const id = editing.value?.id ?? '';
+            return requestWithToast(() => requestServiceUpdate(id, input), done);
           }}
         />
       )}
@@ -103,5 +95,5 @@ export function useServiceActions({
     </>
   );
 
-  return { handlers, add, addSuggestion, dialogs };
+  return { handlers, add, dialogs };
 }

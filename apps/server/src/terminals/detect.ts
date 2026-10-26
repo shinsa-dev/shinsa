@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
-import type { ServiceSuggestion } from '@shinsa/core';
+import type { ServiceSource, ServiceSuggestion } from '@shinsa/core';
 
 interface PackageFile {
   name: string | null;
@@ -17,11 +17,20 @@ const LOCKFILES: [string, PackageManager][] = [
   ['pnpm-lock.yaml', 'pnpm'],
   ['yarn.lock', 'yarn'],
   ['package-lock.json', 'npm'],
+  ['npm-shrinkwrap.json', 'npm'],
 ];
 
 const COMPOSE_FILES = ['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml'];
 
-const DEV_SCRIPT = 'dev';
+const DENO_FILES = ['deno.json', 'deno.jsonc'];
+
+const RUN_SCRIPTS = ['dev', 'start', 'serve'];
+
+const MAKE_TARGETS = ['dev', 'run', 'serve', 'start'];
+
+const CONVENTIONAL_WORKSPACES = ['apps/*', 'packages/*', 'services/*'];
+
+const LIBRARY_FOLDERS = new Set(['packages', 'libs', 'lib']);
 
 const SUGGESTION_LIMIT = 24;
 
@@ -43,6 +52,13 @@ function isFolder(path: string) {
   }
 }
 
+function listFolders(parent: string) {
+  if (!isFolder(parent)) return [];
+  return readdirSync(parent)
+    .sort()
+    .filter((entry) => !SKIPPED_FOLDERS.has(entry) && isFolder(join(parent, entry)));
+}
+
 function readStrings(value: unknown) {
   return Array.isArray(value) ? value.filter((each): each is string => typeof each === 'string') : [];
 }
@@ -53,27 +69,37 @@ function readWorkspaces(value: unknown) {
   return [];
 }
 
-export function parsePackageFile(text: string | null): PackageFile | null {
+function readStringRecord(value: unknown) {
+  const record: Record<string, string> = {};
+  if (!value || typeof value !== 'object') return record;
+  for (const [key, each] of Object.entries(value)) if (typeof each === 'string') record[key] = each;
+  return record;
+}
+
+function parseJsonObject(text: string | null) {
   if (text === null) return null;
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    const parsed: unknown = JSON.parse(text);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
   } catch {
     return null;
   }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const fields = parsed as Record<string, unknown>;
-  const scripts: Record<string, string> = {};
-  if (fields.scripts && typeof fields.scripts === 'object') {
-    for (const [key, value] of Object.entries(fields.scripts))
-      if (typeof value === 'string') scripts[key] = value;
-  }
+}
+
+export function parsePackageFile(text: string | null): PackageFile | null {
+  const fields = parseJsonObject(text);
+  if (!fields) return null;
   return {
     name: typeof fields.name === 'string' ? fields.name : null,
-    scripts,
+    scripts: readStringRecord(fields.scripts),
     workspaces: readWorkspaces(fields.workspaces),
     packageManager: typeof fields.packageManager === 'string' ? fields.packageManager : null,
   };
+}
+
+export function parseDenoTasks(text: string | null) {
+  const fields = parseJsonObject(text);
+  return fields ? readStringRecord(fields.tasks) : {};
 }
 
 export function parsePnpmWorkspaces(text: string | null) {
@@ -100,6 +126,42 @@ export function parseProcfile(text: string | null) {
   });
 }
 
+export function parseComposeServices(text: string | null) {
+  if (text === null) return [];
+  const names: string[] = [];
+  let indent: string | null = null;
+  let inServices = false;
+  for (const line of text.split('\n')) {
+    if (/^services\s*:\s*(?:#.*)?$/.test(line)) {
+      inServices = true;
+      continue;
+    }
+    if (/^\S/.test(line)) inServices = false;
+    const entry = inServices ? /^(\s+)([A-Za-z0-9._-]+)\s*:\s*(?:#.*)?$/.exec(line) : null;
+    if (!(entry?.[1] && entry[2])) continue;
+    indent ??= entry[1];
+    if (entry[1] === indent) names.push(entry[2]);
+  }
+  return names;
+}
+
+export function parseMakeTarget(text: string | null) {
+  if (text === null) return null;
+  const targets = new Set(
+    text.split('\n').flatMap((line) => {
+      const match = /^([A-Za-z0-9_.-]+)\s*:(?!=)/.exec(line);
+      return match?.[1] ? [match[1]] : [];
+    })
+  );
+  return MAKE_TARGETS.find((target) => targets.has(target)) ?? null;
+}
+
+export function parseCargoName(text: string | null) {
+  if (text === null || /^\[workspace\]/m.test(text)) return null;
+  const section = /^\[package\]([\s\S]*?)(?:^\[|$(?![\s\S]))/m.exec(text)?.[1] ?? '';
+  return /^\s*name\s*=\s*"([^"]+)"/m.exec(section)?.[1] ?? '';
+}
+
 function resolvePackageManager(root: string, file: PackageFile): PackageManager {
   const locked = LOCKFILES.find(([name]) => existsSync(join(root, name)));
   if (locked) return locked[1];
@@ -118,11 +180,7 @@ export function expandWorkspaces(root: string, patterns: string[]) {
       continue;
     }
     const parent = join(root, star[1] ?? '');
-    if (!isFolder(parent)) continue;
-    for (const entry of readdirSync(parent).sort()) {
-      const folder = join(parent, entry);
-      if (!SKIPPED_FOLDERS.has(entry) && isFolder(folder)) folders.push(folder);
-    }
+    for (const entry of listFolders(parent)) folders.push(join(parent, entry));
   }
   return [...new Set(folders)];
 }
@@ -132,48 +190,125 @@ function resolveServiceName(file: PackageFile | null, folder: string) {
   return named || basename(folder);
 }
 
-function describeScript(manager: PackageManager) {
-  return `${manager} run ${DEV_SCRIPT}`;
+function resolveRunScript(file: PackageFile) {
+  return RUN_SCRIPTS.find((script) => file.scripts[script]) ?? null;
+}
+
+function isLibraryFolder(root: string, folder: string) {
+  return LIBRARY_FOLDERS.has(relative(root, folder).split('/')[0] ?? '');
+}
+
+function createSuggestion(
+  name: string,
+  cwd: string,
+  command: string,
+  source: ServiceSource,
+  recommended = true
+): ServiceSuggestion {
+  return { name, cwd, command, source, recommended };
+}
+
+function listWorkspacePatterns(root: string, file: PackageFile) {
+  const declared = [...file.workspaces, ...parsePnpmWorkspaces(readText(join(root, 'pnpm-workspace.yaml')))];
+  return declared.length > 0 ? declared : CONVENTIONAL_WORKSPACES;
 }
 
 function listPackageSuggestions(root: string): ServiceSuggestion[] {
   const file = parsePackageFile(readText(join(root, 'package.json')));
   if (!file) return [];
   const manager = resolvePackageManager(root, file);
-  const patterns = [...file.workspaces, ...parsePnpmWorkspaces(readText(join(root, 'pnpm-workspace.yaml')))];
   const suggestions: ServiceSuggestion[] = [];
-  for (const folder of expandWorkspaces(root, patterns)) {
+  for (const folder of expandWorkspaces(root, listWorkspacePatterns(root, file))) {
     const workspace = parsePackageFile(readText(join(folder, 'package.json')));
-    if (!workspace?.scripts[DEV_SCRIPT]) continue;
-    suggestions.push({
-      name: resolveServiceName(workspace, folder),
-      cwd: folder,
-      command: describeScript(manager),
-      source: 'package',
-    });
+    const script = workspace ? resolveRunScript(workspace) : null;
+    if (!script) continue;
+    suggestions.push(
+      createSuggestion(
+        resolveServiceName(workspace, folder),
+        folder,
+        `${manager} run ${script}`,
+        'package',
+        !isLibraryFolder(root, folder)
+      )
+    );
   }
-  if (file.scripts[DEV_SCRIPT])
-    suggestions.push({
-      name: suggestions.length > 0 ? 'all' : resolveServiceName(file, root),
-      cwd: root,
-      command: describeScript(manager),
-      source: 'package',
-    });
-  return suggestions;
+  const script = resolveRunScript(file);
+  if (!script) return suggestions;
+  const whole = suggestions.length > 0;
+  return [
+    ...suggestions,
+    createSuggestion(
+      whole ? 'all' : resolveServiceName(file, root),
+      root,
+      `${manager} run ${script}`,
+      'package',
+      !whole
+    ),
+  ];
+}
+
+function listDenoSuggestions(root: string): ServiceSuggestion[] {
+  if (existsSync(join(root, 'package.json'))) return [];
+  const file = DENO_FILES.find((name) => existsSync(join(root, name)));
+  if (!file) return [];
+  const tasks = parseDenoTasks(readText(join(root, file)));
+  const task = RUN_SCRIPTS.find((name) => tasks[name]);
+  return task ? [createSuggestion(basename(root), root, `deno task ${task}`, 'deno')] : [];
 }
 
 function listProcfileSuggestions(root: string): ServiceSuggestion[] {
-  return parseProcfile(readText(join(root, 'Procfile'))).map(({ name, command }) => ({
-    name,
-    cwd: root,
-    command,
-    source: 'procfile',
-  }));
+  if (existsSync(join(root, 'bin/dev'))) return [createSuggestion(basename(root), root, 'bin/dev', 'script')];
+  const file = ['Procfile.dev', 'Procfile'].find((name) => existsSync(join(root, name))) ?? 'Procfile';
+  return parseProcfile(readText(join(root, file))).map(({ name, command }) =>
+    createSuggestion(name, root, command, 'procfile')
+  );
 }
 
 function listComposeSuggestions(root: string): ServiceSuggestion[] {
-  if (!COMPOSE_FILES.some((name) => existsSync(join(root, name)))) return [];
-  return [{ name: 'compose', cwd: root, command: 'docker compose up', source: 'compose' }];
+  const file = COMPOSE_FILES.find((name) => existsSync(join(root, name)));
+  if (!file) return [];
+  const services = parseComposeServices(readText(join(root, file)));
+  if (services.length === 0) return [createSuggestion('compose', root, 'docker compose up', 'compose')];
+  return services.map((name) => createSuggestion(name, root, `docker compose up ${name}`, 'compose'));
+}
+
+function listCargoSuggestions(root: string): ServiceSuggestion[] {
+  if (!existsSync(join(root, 'src/main.rs'))) return [];
+  const name = parseCargoName(readText(join(root, 'Cargo.toml')));
+  return name === null ? [] : [createSuggestion(name || basename(root), root, 'cargo run', 'cargo')];
+}
+
+function listGoSuggestions(root: string): ServiceSuggestion[] {
+  if (!existsSync(join(root, 'go.mod'))) return [];
+  const commands = listFolders(join(root, 'cmd'))
+    .filter((entry) => existsSync(join(root, 'cmd', entry, 'main.go')))
+    .map((entry) => createSuggestion(entry, root, `go run ./cmd/${entry}`, 'go'));
+  if (existsSync(join(root, 'main.go')))
+    return [createSuggestion(basename(root), root, 'go run .', 'go'), ...commands];
+  return commands;
+}
+
+function listDjangoSuggestions(root: string): ServiceSuggestion[] {
+  if (!existsSync(join(root, 'manage.py'))) return [];
+  return [createSuggestion(basename(root), root, 'python manage.py runserver', 'django')];
+}
+
+function listMakeSuggestions(root: string): ServiceSuggestion[] {
+  const target = parseMakeTarget(readText(join(root, 'Makefile')));
+  return target ? [createSuggestion(basename(root), root, `make ${target}`, 'make')] : [];
+}
+
+function listRootSuggestions(root: string): ServiceSuggestion[] {
+  const found = [
+    ...listPackageSuggestions(root),
+    ...listDenoSuggestions(root),
+    ...listProcfileSuggestions(root),
+    ...listComposeSuggestions(root),
+    ...listCargoSuggestions(root),
+    ...listGoSuggestions(root),
+    ...listDjangoSuggestions(root),
+  ];
+  return found.length > 0 ? found : listMakeSuggestions(root);
 }
 
 function resolveUniqueNames(suggestions: ServiceSuggestion[], roots: string[]) {
@@ -188,10 +323,5 @@ function resolveUniqueNames(suggestions: ServiceSuggestion[], roots: string[]) {
 }
 
 export function listServiceSuggestions(roots: string[]): ServiceSuggestion[] {
-  const suggestions = roots.flatMap((root) => [
-    ...listPackageSuggestions(root),
-    ...listProcfileSuggestions(root),
-    ...listComposeSuggestions(root),
-  ]);
-  return resolveUniqueNames(suggestions, roots).slice(0, SUGGESTION_LIMIT);
+  return resolveUniqueNames(roots.flatMap(listRootSuggestions), roots).slice(0, SUGGESTION_LIMIT);
 }

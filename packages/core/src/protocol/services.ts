@@ -9,13 +9,23 @@ export interface ServiceDefinition {
   env: Record<string, string>;
 }
 
-export type ServiceSource = 'package' | 'procfile' | 'compose';
+export type ServiceSource =
+  | 'package'
+  | 'deno'
+  | 'procfile'
+  | 'script'
+  | 'compose'
+  | 'cargo'
+  | 'go'
+  | 'django'
+  | 'make';
 
 export interface ServiceSuggestion {
   name: string;
   cwd: string;
   command: string;
   source: ServiceSource;
+  recommended: boolean;
 }
 
 export type ServiceState = 'stopped' | 'starting' | 'running' | 'exited' | 'failed';

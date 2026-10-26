@@ -1,9 +1,8 @@
-import { listTerminalPlaces, type ServiceSuggestion, type ServiceView, type ShinsaState } from '@shinsa/core';
+import type { ServiceView, ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
-import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
@@ -11,13 +10,12 @@ import { type ServiceHandlers, ServiceRow } from '@/components/services/service-
 import { useServiceActions } from '@/components/services/use-service-actions.tsx';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
 import { useNow } from '@/hooks/use-now.ts';
-import { requestServiceSuggestions, startAllServices, useTerminals } from '@/lib/connection/terminals.ts';
+import { startAllServices, useTerminals } from '@/lib/connection/terminals.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { listProjects } from '@/lib/projects.ts';
 import {
   describeServicesTrigger,
-  describeSuggestionSource,
   listServiceGroups,
+  resolveServicesAddTarget,
   resolveServicesProjects,
   SERVICES_ACTIVE_ICON,
   SERVICES_ICON,
@@ -25,65 +23,6 @@ import {
 } from '@/lib/terminal/services.ts';
 import { resolveTerminalEntry, resolveTerminalProject } from '@/lib/terminal/tabs.ts';
 import { navigate, useRoute, useSearchParam } from '@/router.ts';
-
-function useSuggestions(projectId: string | null, open: boolean, revision: number) {
-  const [suggestions, setSuggestions] = React.useState<ServiceSuggestion[]>([]);
-  React.useEffect(() => {
-    if (!(open && projectId)) return;
-    let current = true;
-    requestServiceSuggestions(projectId).then(
-      (found) => {
-        if (current) setSuggestions(found);
-      },
-      () => {
-        if (current) setSuggestions([]);
-      }
-    );
-    return () => {
-      current = false;
-    };
-  }, [projectId, open, revision]);
-  return projectId ? suggestions : [];
-}
-
-export function ServiceSuggestions({
-  suggestions,
-  root,
-  onAdd,
-  onEdit,
-}: {
-  suggestions: ServiceSuggestion[];
-  root: string | null;
-  onAdd: (suggestion: ServiceSuggestion) => void;
-  onEdit: (suggestion: ServiceSuggestion) => void;
-}) {
-  if (suggestions.length === 0) return null;
-  return (
-    <section className='flex flex-col gap-px border-border border-t px-1 py-1.5'>
-      <p className='px-1.5 pb-1 font-medium text-2xs text-fg-2'>Found in the project</p>
-      {suggestions.map((suggestion) => (
-        <div
-          key={`${suggestion.cwd} ${suggestion.command}`}
-          className='flex items-center gap-2 rounded-control py-0.5 ps-1.5 pe-1'
-        >
-          <button
-            type='button'
-            onClick={() => onEdit(suggestion)}
-            className='flex min-w-0 flex-1 cursor-pointer flex-col gap-px text-left outline-none'
-          >
-            <Truncate className='text-fg-4 text-xs'>{suggestion.name}</Truncate>
-            <Truncate className='font-mono text-2xs text-fg-2'>
-              {describeSuggestionSource(suggestion, root)}
-            </Truncate>
-          </button>
-          <Button variant='secondary' size='xs' icon='IconPlusMedium' onClick={() => onAdd(suggestion)}>
-            Add
-          </Button>
-        </div>
-      ))}
-    </section>
-  );
-}
 
 function GroupHeader({ group }: { group: ServiceGroup }) {
   const stopped = group.views.filter((view) => view.state !== 'running' && view.state !== 'starting');
@@ -144,13 +83,11 @@ export function ServicesPanel({
   now,
   handlers,
   footer,
-  children,
 }: {
   groups: ServiceGroup[];
   now: number;
   handlers: ServiceHandlers;
   footer: React.ReactNode;
-  children?: React.ReactNode;
 }) {
   return (
     <>
@@ -161,10 +98,7 @@ export function ServicesPanel({
         >
           <GroupHeader group={group} />
           {group.views.length === 0 ? (
-            <p className='px-2.5 pb-2 text-2xs text-fg-2'>
-              No services in {group.project.name} yet. Add the command you start it with, such as its dev
-              server, and start it here with one press.
-            </p>
+            <p className='px-2.5 pb-2 text-2xs text-fg-2'>No services yet.</p>
           ) : (
             <HoverHighlight className='flex flex-col gap-px px-1'>
               {group.views.map((view) => (
@@ -180,12 +114,7 @@ export function ServicesPanel({
           )}
         </section>
       ))}
-      {groups.length === 0 && (
-        <p className='px-2.5 py-2 text-2xs text-fg-2'>
-          No services yet. Add the command you start a project with, such as its dev server.
-        </p>
-      )}
-      {children}
+      {groups.length === 0 && <p className='px-2.5 py-2 text-2xs text-fg-2'>No services yet.</p>}
       <div className='flex items-center gap-1 border-border border-t p-1.5'>{footer}</div>
     </>
   );
@@ -208,16 +137,13 @@ export function ServicesMenu({
   const terminalProject = resolveTerminalProject(state, useSearchParam('project'), now);
   const scope = resolveServicesProjects(state, onTerminal ? (terminalProject?.id ?? null) : null, now);
   const groups = listServiceGroups(snapshot, scope, now);
-  const single = scope.length === 1 ? (scope[0] ?? null) : null;
-  const root = single ? (listTerminalPlaces(state, single.id)[0]?.path ?? null) : null;
-  const suggestions = useSuggestions(single?.id ?? null, open, snapshot?.services.length ?? 0);
   const close = () => setOpen(false);
   const leave = () => {
     close();
     onNavigate?.();
   };
-  const actions = useServiceActions({ projects: listProjects(state), onNavigate: leave });
-  const addTarget = single ?? scope[0] ?? null;
+  const actions = useServiceActions({ state, onNavigate: leave });
+  const addTarget = resolveServicesAddTarget(scope, groups);
 
   return (
     <>
@@ -270,10 +196,10 @@ export function ServicesMenu({
                     icon='IconPlusMedium'
                     onClick={() => {
                       close();
-                      actions.add(addTarget.id, null, root);
+                      actions.add(addTarget.id);
                     }}
                   >
-                    Add a service…
+                    Add services…
                   </Button>
                 )}
                 <span className='flex-1' />
@@ -291,19 +217,7 @@ export function ServicesMenu({
                 </Button>
               </>
             }
-          >
-            {single && (
-              <ServiceSuggestions
-                suggestions={suggestions}
-                root={root}
-                onAdd={(suggestion) => void actions.addSuggestion(single.id, suggestion)}
-                onEdit={(suggestion) => {
-                  close();
-                  actions.add(single.id, suggestion, null);
-                }}
-              />
-            )}
-          </ServicesPanel>
+          />
         </PopoverContent>
       </Popover>
       {actions.dialogs}

@@ -11,6 +11,7 @@ import {
   reorderTerminals,
   requestServiceAdd,
   requestServiceSuggestions,
+  requestServicesAdd,
   requestServiceUpdate,
   requestTerminalCreate,
   requestTerminalForeground,
@@ -137,7 +138,13 @@ describe('services', () => {
     let fetch = serve({ program: 'vim' });
     expect(await requestTerminalForeground('one')).toEqual({ program: 'vim' });
     expect(fetch.mock.calls[0]?.[0]).toBe('/api/terminals/one/foreground');
-    const suggestion = { name: 'web', cwd: '/web', command: 'bun run dev', source: 'package' as const };
+    const suggestion = {
+      name: 'web',
+      cwd: '/web',
+      command: 'bun run dev',
+      source: 'package' as const,
+      recommended: true,
+    };
     fetch = serve({ suggestions: [suggestion] });
     expect(await requestServiceSuggestions('shop')).toEqual([suggestion]);
     expect(fetch.mock.calls[0]?.[0]).toBe('/api/services/suggestions?projectId=shop');
@@ -151,6 +158,15 @@ describe('services', () => {
       body: { projectId: 'shop', name: 'api', path: API.cwd, command: 'bun run dev', env: { PORT: '4000' } },
     });
     expect(connection.selectTerminals()?.services).toEqual([API]);
+    fetch = serve({ added: [API], ...createTerminalsSnapshot([], [API]) });
+    expect(await requestServicesAdd('shop', [INPUT])).toEqual([API]);
+    expect(readCall(fetch)).toEqual({
+      url: '/api/services/batch',
+      body: {
+        projectId: 'shop',
+        services: [{ name: 'api', path: API.cwd, command: 'bun run dev', env: { PORT: '4000' } }],
+      },
+    });
     fetch = serve(createTerminalsSnapshot([], [API]));
     await requestServiceUpdate('api', INPUT);
     expect(readCall(fetch).url).toBe('/api/services/api/update');

@@ -58,6 +58,7 @@ const buttonVariants = cva(
         default:
           'h-6.5 gap-1.5 rounded-control px-2.5 text-xs [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2 data-[icon=inline-start]:pl-2',
         lg: 'h-7.5 gap-1.5 rounded-control px-3 text-sm [--icon-size:var(--icon-size-md)] data-[icon=inline-end]:pr-2.5 data-[icon=inline-start]:pl-2.5',
+        'icon-2xs': 'size-4.5 rounded-sm px-0 [--icon-size:var(--icon-size-sm)]',
         'icon-xs': 'size-5.5 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]',
         'icon-sm': 'size-6 rounded-control-sm px-0 [--icon-size:var(--icon-size-sm)]',
         icon: 'size-6.5 rounded-control px-0 [--icon-size:var(--icon-size-md)]',

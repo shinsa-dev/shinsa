@@ -208,13 +208,17 @@ export function resolveServerMenu(server: McpServerSummary): ServerMenu {
 }
 
 export interface ExtensionPlaces {
-  projects: { id: string; name: string }[];
+  projects: { id: string; name: string; color: string }[];
   repos: { path: string; name: string }[];
 }
 
 export function resolveExtensionPlaces(state: ShinsaState): ExtensionPlaces {
   return {
-    projects: listProjects(state).map((project) => ({ id: project.id, name: project.name })),
+    projects: listProjects(state).map((project) => ({
+      id: project.id,
+      name: project.name,
+      color: project.color,
+    })),
     repos: Object.values(state.repos)
       .map((repo) => ({ path: repo.path, name: repo.name }))
       .sort((a, b) => a.name.localeCompare(b.name)),
@@ -259,7 +263,8 @@ export function parseScope(value: string): ExtensionScope {
 export interface ScopeItem {
   value: string;
   label: string;
-  icon: IconName;
+  icon?: IconName;
+  dot?: string;
 }
 
 export function listScopeItems(places: ExtensionPlaces, current: ExtensionScope): ScopeItem[] {
@@ -268,7 +273,7 @@ export function listScopeItems(places: ExtensionPlaces, current: ExtensionScope)
     ...places.projects.map((project) => ({
       value: serializeScope({ kind: 'project', project: project.id }),
       label: `Only in the ${project.name} project`,
-      icon: 'IconLayersTwo' as const,
+      dot: project.color,
     })),
     ...places.repos.map((repo) => ({
       value: serializeScope({ kind: 'repo', path: repo.path }),
@@ -283,7 +288,7 @@ export function listScopeItems(places: ExtensionPlaces, current: ExtensionScope)
     {
       value,
       label: resolveScopeText(current, places) ?? value,
-      icon: current.kind === 'project' ? 'IconLayersTwo' : 'IconFolder1',
+      ...(current.kind === 'project' ? { dot: 'gray' } : { icon: 'IconFolder1' as const }),
     },
   ];
 }

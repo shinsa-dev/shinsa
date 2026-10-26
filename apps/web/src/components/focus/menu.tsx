@@ -12,7 +12,7 @@ import {
 } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
-import { ProjectDot, ProjectDotIcon } from '@/components/status/project-dot.tsx';
+import { ProjectDot, ProjectOption } from '@/components/status/project-dot.tsx';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { resolveFocusUntil, selectFocus } from '@/lib/focus.ts';
 import { listProjects } from '@/lib/projects.ts';
@@ -59,8 +59,7 @@ export function ProjectMenuTrigger({
 export function ProjectRadioItems({ projects }: { projects: Project[] }) {
   return projects.map((project) => (
     <DropdownMenuRadioItem key={project.id} value={project.id}>
-      <ProjectDotIcon color={project.color} />
-      {project.name}
+      <ProjectOption color={project.color} name={project.name} />
     </DropdownMenuRadioItem>
   ));
 }
@@ -88,8 +87,7 @@ export function FocusMenu({ state, compact = false }: { state: ShinsaState; comp
         >
           <DropdownMenuLabel>Focus on</DropdownMenuLabel>
           <DropdownMenuRadioItem value={ALL_WORK}>
-            <ProjectDotIcon color='gray' />
-            All work
+            <ProjectOption color='gray' name='All work' />
           </DropdownMenuRadioItem>
           <ProjectRadioItems projects={projects} />
         </DropdownMenuRadioGroup>

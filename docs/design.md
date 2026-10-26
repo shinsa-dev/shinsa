@@ -625,7 +625,12 @@ Only these, and they win over anything below:
     - **A project's dot lines up with menu icons**: in any menu or select the dot sits in a 14px box
       (`ProjectDotIcon` in `components/status/project-dot.tsx`), the size of a menu icon, so the label after it
       starts where every other item's label does (the focus menu, the new-task project picker, ⌘K's choices, a
-      project's Colour menu).
+      project's Colour menu). Every place you pick a project shows the dot before each name, in the trigger and in
+      every option, through one renderer, `ProjectOption`: the Focus menu and the Terminal page's picker
+      (`ProjectRadioItems`), the new-task composer, any `SelectField` whose items carry a `dot` (the Add services
+      dialog, an MCP server's Where agents use it), the MCP menu's Use in a project and ⌘K's choices (an option's
+      `dot`; All work is grey, as in the Focus menu). `test/components/status/project-option.test.tsx` and ⌘K's
+      focus choice in `test/components/command/menu.test.tsx` fail when one renders a project without it.
     - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
       card surface. A card pads the same on all four sides; the shared `Card` slot carries no
       padding of its own, so nothing doubles up. Settings groups are `p-1.5` (`SettingsCard`, which setup's cards use too; 6px on every side,
@@ -782,7 +787,8 @@ Only these, and they win over anything below:
     Read every `icon-tertiary`, 80%, 70% or 55% icon rule, and every icon size other than 14, 16
     and 20, below as this: the kit has no `icon-tertiary` and no icon opacity.
 20. **The kit's control ramp is a step denser than paywall-next's.** Button `xs` 22 / `sm` 24 /
-    `default` 26 / `lg` 30 (icon sizes the same squares), `Input` and `SelectTrigger` 26,
+    `default` 26 / `lg` 30 (icon sizes the same squares, plus `icon-2xs` 18, only for a close mark inside a 24px
+    row such as a terminal tab), `Input` and `SelectTrigger` 26,
     the tab lists 26 (`default` and `ghost`) and 32 (`underline`, no size prop), menu, select and command rows 24, `Badge` 18 / 20, glyphs
     `sm` (14px) in `xs` and `sm` controls, rows and badges and `md` (16px) from `default` up. Read the Sizing tables below with these heights.
 21. **Invalid** is a 1px `red-4` ring on `Input` and `Textarea`. `FieldError` announces the message
@@ -1110,10 +1116,10 @@ Only these, and they win over anything below:
       `ConfirmDialog` and `PercentDialog` keep their text. A busy button stays busy until the dialog
       is gone, `ConfirmDialog` runs its action once it has closed, and ⌘K resets to the root after it
       has faded, not while.
-    - **A dialog's description is `fg-3`**, a step under the `fg-4` title, set once in the kit's
-      `DialogDescription` and `AlertDialogDescription`: the title leads by colour as well as size and weight, and
-      the sentence under it still reads as something to act on (`fg-3`, not the muted `fg-2` of a footnote). A
-      link inside it turns `fg-4` on hover.
+    - **A dialog's description is `fg-2`**, two steps under the `fg-4` title, set once in the kit's
+      `DialogDescription` and `AlertDialogDescription` (and `SheetDescription`, already `fg-2`), so every dialog,
+      confirm dialog and sheet follows: the title and the fields lead, and the sentence under the title is the
+      quiet context. A link inside it turns `fg-4` on hover.
     - **The usage menu, Agent usage** (`usage-menu.tsx`, `aria-label` "Agent usage"): an `sm` secondary button with
       `IconGauge` and the figure of what the next run uses, in the usage tone from 75%: when the agent runs on a
       provider with a reading of its own (Codex) its 5-hour window, otherwise the Claude account picked by the same
@@ -1339,7 +1345,7 @@ Only these, and they win over anything below:
       ‹files›", "Only in the ‹name› project", "Only in ‹repo›", "Overridden by Shinsa’s ‹name›", "Its plugin is
       off", "Not used in 30 days"), whose tooltip is the command and its arguments or the URL.
     - **The MCP dialog** (`server-dialog.tsx`) is the dialog that takes a typed value (26), its description in
-      `fg-3` under the title like every dialog's (`DialogDescription`): How Shinsa
+      `fg-2` under the title like every dialog's (`DialogDescription`): How Shinsa
       reaches it (Command on this machine, HTTP, Server-sent events), Name, then Command, Arguments (one per line) and
       Environment (`NAME=value` lines), or URL and Headers (`Name: value` lines), and Where agents use it
       (Everywhere, one project, one repository). Editing shows the saved keys with empty values and "Leave a value
@@ -1859,11 +1865,19 @@ Only these, and they win over anything below:
       state in its tone ("Running for 12m", "Failed with code 1") and the command; then Start (`IconPlay`), or
       Restart (`IconArrowRotateClockwise`) and Stop (`IconStop`) while it runs, Open terminal (`IconConsole`) once it
       has one, and `•••` with Edit… and Remove (behind a `ConfirmDialog`). A group header has Start all when two or
-      more are stopped. Under the list, Found in the project lists what Shinsa detected and you have not added, each
-      with Add (adds it as found) and the row itself opens it in the form first. The footer has Add a service… (the
-      form: project when there are several, name, folder, command, environment as `NAME=value` lines,
-      `ServiceDialog`) and Terminal, which goes to the Terminal page. The rows tick every second, since the running
-      time is in them.
+      more are stopped. A project with none says only "No services yet.". The footer has Add services… and
+      Terminal, which goes to the Terminal page. The rows tick every second, since the running time is in them.
+    - **Add services** (`AddServicesDialog` in `service-dialog.tsx`): the title, one muted sentence, the Project
+      select (with dots) when there are several, then what the engine found in that project (`docs/engine.md` →
+      Services → Found for you) as one card of rows in the setup steps' option look (`ServicePicker`: `LIST_ROW`, a
+      checkbox in the icon slot, the name over the command in mono and its folder by the project's place, "bun run
+      dev in shop/apps/api"). The recommended ones start ticked, so the common case is one press of the primary
+      "Add 2 services" (disabled at none); what you already added is not listed. While it reads, "Looking for
+      services" after 300ms. When nothing is found it says "No services found in ‹project›." and the form is open.
+      Otherwise the form sits under an Advanced disclosure (`DisclosureHeader`, closed): Name, Folder (a select of
+      the project's repositories and folders and the folders the suggestions run in, never a typed path), Command
+      and Environment as `NAME=value` lines, with its own secondary Add service. Edit… on a service is the same
+      four fields in `EditServiceDialog`.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
@@ -1875,9 +1889,9 @@ Only these, and they win over anything below:
       rows (`ProjectMenuTrigger`, `ProjectRadioItems` in `components/focus/menu.tsx`): the project's dot, its name and
       the chevron, a radio list of every project with its dot. A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
-    - **Tabs** (`tab-bar.tsx`). A tab is a 28px row: its mark, the label (the name you gave it, else the shell's
+    - **Tabs** (`tab-bar.tsx`). A tab is a 24px row, the height of the project picker beside it: its mark, the label (the name you gave it, else the shell's
       title, else the folder's name; a service's tab is its name; `resolveTerminalLabel` in core), and a close button
-      (`icon-xs`, 22px) inset 3px from the tab's top, bottom and end, revealed on hover and always on the active tab.
+      (`icon-2xs`, 18px) inset 3px from the tab's top, bottom and end, revealed on hover and always on the active tab.
       A shell's mark is `IconConsole`; a service's is its state's glyph in its tone, so a service tab reads apart from
       a shell and shows whether it runs. The active tab is `bg-bg-a2`, `fg-4`, `faux-medium`; an ended shell's label
       is `fg-2`. The tooltip names the folder and how it ended, or a service's state and command. Double-click
@@ -1888,7 +1902,8 @@ Only these, and they win over anything below:
       this terminal?" names it ("vim is still running in “Dev server”."). A running service asks "Stop api?" with
       Stop and close. The tab to the right is shown next.
     - **New terminal.** One click opens it in the project's only place; with several, a menu lists Repositories,
-      Folders and Task worktrees (`IconFolderGit`, `IconFolder1`, `IconBranch`), each by name. ⌘K has the same as a
+      Folders and Task worktrees (`IconFolder1`, `IconFolders`, `IconBranch`, as Settings → Projects marks them:
+      plain icons in the row's grey ink, never the Code tab's tinted folder marks), each by name. ⌘K has the same as a
       page. ⌘T opens one where the tab in front is, else in the project's first place.
     - **Ended.** A shell that exited, or that a restart of the engine ended, keeps its last screen, and a bar under it
       says which ("The shell exited with code 1.", "Shinsa’s engine restarted, so this shell ended. Its last output is
@@ -1896,9 +1911,13 @@ Only these, and they win over anything below:
       `IconArrowRotateClockwise`), which starts a new shell, or the service again, below the old output and gives it
       the keyboard.
     - **The look is Shinsa's.** The Code tab's mono font (`--font-mono`, ABC Areal Mono) at its size, 12px, with
-      1.25 line height, a block cursor that does not blink, and the `--terminal-*` tokens in `app.css` (the page
-      background, `fg-4` text, the accent cursor, a translucent accent selection and an ANSI palette on the `*-text`
-      tokens, light and dark). Colours reach xterm.js as hex, converted from the tokens' OKLCH
+      1.25 line height, a block cursor that does not blink, and the Code tab's colours: the `--terminal-*` tokens in
+      `app.css` are the editor's own (its `--background`, `fg-4` text and cursor, its `primary-a2` selection), and
+      the ANSI palette is the `--code-*` syntax tokens (red `--code-tag`, green `--code-string`, yellow
+      `--code-type`, blue `--code-function`, magenta `--code-keyword`, cyan `--code-property`, white
+      `--code-punctuation`, bright black `--code-comment`, bright yellow `--code-number`, bright white
+      `--code-meta`, black the text, `bg-4` in dark), so `ls`, git and a fish prompt read like the editor's syntax.
+      Colours reach xterm.js as hex, converted from the tokens' OKLCH and `color-mix(…, transparent)`
       (`lib/terminal/color.ts`), and the theme switches with the page's. ⌘+ and ⌘− change the size a step (9 to
       24px) and ⌘0 puts it back, for every terminal (`lib/preferences/terminal.ts`).
     - **Rendering.** xterm.js 6 with its WebGL renderer, Unicode 11 widths (CJK and emoji take two cells), clickable
@@ -1937,7 +1956,7 @@ Only these, and they win over anything below:
       the Terminal page New terminal, Find in the scrollback, Clear the scrollback (⌘L), Start the shell again, Rename,
       Close, the service in front's Restart and Stop, and every other tab.
     - `/ui` shows the Services trigger in each state, in the bar and the rail, a service row in each state, the
-      popover with what was found and empty, the project picker, the tabs with services, renaming, the ended bars,
+      popover with services and empty, the Add services list with the recommended ones ticked, the project picker, the tabs with services, renaming, the ended bars,
       the empty page with the place menu and the `--terminal-*` colours; the terminal itself needs the engine.
 
 , a

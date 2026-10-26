@@ -102,6 +102,23 @@ export async function requestServiceAdd(projectId: string, input: ServiceInput) 
   return service;
 }
 
+export async function requestServicesAdd(projectId: string, inputs: ServiceInput[]) {
+  const { added, ...snapshot } = await requestJson<TerminalsSnapshot & { added: ServiceDefinition[] }>(
+    '/api/services/batch',
+    {
+      projectId,
+      services: inputs.map((input) => ({
+        name: input.name,
+        path: input.cwd,
+        command: input.command,
+        env: input.env,
+      })),
+    }
+  );
+  connection.replaceTerminals(snapshot);
+  return added;
+}
+
 export function requestServiceUpdate(id: string, input: ServiceInput) {
   return requestTerminals(servicePath(id, 'update'), {
     name: input.name,

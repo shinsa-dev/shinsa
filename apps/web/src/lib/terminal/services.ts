@@ -10,6 +10,7 @@ import {
   type ServiceSuggestion,
   type ServiceView,
   type ShinsaState,
+  type TerminalPlace,
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
@@ -76,6 +77,12 @@ export function listServiceGroups(
   });
 }
 
+export function resolveServicesAddTarget(scope: Project[], groups: ServiceGroup[]) {
+  if (scope.length === 1) return scope[0] ?? null;
+  if (groups.length === 1) return groups[0]?.project ?? null;
+  return scope[0] ?? null;
+}
+
 export interface ServiceDraft {
   name: string;
   path: string;
@@ -93,17 +100,9 @@ export function serializeServiceEnv(env: Record<string, string>) {
     .join('\n');
 }
 
-export function createServiceDraft(
-  from: ServiceDefinition | ServiceSuggestion | null,
-  path: string | null
-): ServiceDraft {
-  if (!from) return { name: '', path: path ?? '', command: '', env: '' };
-  return {
-    name: from.name,
-    path: from.cwd,
-    command: from.command,
-    env: 'env' in from ? serializeServiceEnv(from.env) : '',
-  };
+export function createServiceDraft(from: ServiceDefinition | null): ServiceDraft {
+  if (!from) return { name: '', path: '', command: '', env: '' };
+  return { name: from.name, path: from.cwd, command: from.command, env: serializeServiceEnv(from.env) };
 }
 
 export function parseServiceEnv(text: string): { env: Record<string, string> } | { error: string } {
@@ -143,9 +142,67 @@ export function validateServiceDraft(
   return { ok: true, input: { name, cwd: path, command, env: parsed.env } };
 }
 
-export function describeSuggestionSource(suggestion: ServiceSuggestion, root: string | null) {
-  const where = root && suggestion.cwd.startsWith(`${root}/`) ? suggestion.cwd.slice(root.length + 1) : null;
-  return where ? `${suggestion.command} in ${where}` : suggestion.command;
+export interface ServiceFolder {
+  value: string;
+  label: string;
+}
+
+export function listServicePlaces(places: TerminalPlace[]) {
+  return places.filter((place) => place.kind !== 'worktree');
+}
+
+export function describeServiceFolder(path: string, places: TerminalPlace[]) {
+  const place = places.find((each) => path === each.path || path.startsWith(`${each.path}/`));
+  if (!place) return path;
+  return path === place.path ? place.label : `${place.label}/${path.slice(place.path.length + 1)}`;
+}
+
+export function listServiceFolders(
+  places: TerminalPlace[],
+  suggestions: ServiceSuggestion[],
+  home: string | null,
+  current: string | null
+): ServiceFolder[] {
+  const paths = places.map((place) => place.path);
+  if (paths.length === 0 && home) paths.push(home);
+  for (const suggestion of suggestions) paths.push(suggestion.cwd);
+  if (current) paths.push(current);
+  return [...new Set(paths)].map((path) => ({
+    value: path,
+    label: path === home && places.length === 0 ? 'Home folder' : describeServiceFolder(path, places),
+  }));
+}
+
+export function resolveSuggestionKey(suggestion: ServiceSuggestion) {
+  return `${suggestion.cwd}\n${suggestion.command}`;
+}
+
+export function listRecommendedPicks(suggestions: ServiceSuggestion[]) {
+  return suggestions.filter((each) => each.recommended).map(resolveSuggestionKey);
+}
+
+export function togglePick(picked: string[], key: string) {
+  return picked.includes(key) ? picked.filter((each) => each !== key) : [...picked, key];
+}
+
+export function listPickedInputs(suggestions: ServiceSuggestion[], picked: string[]): ServiceInput[] {
+  return suggestions
+    .filter((each) => picked.includes(resolveSuggestionKey(each)))
+    .map((each) => ({ name: each.name, cwd: each.cwd, command: each.command, env: {} }));
+}
+
+export function describeAddServices(count: number) {
+  if (count === 0) return 'Add services';
+  return count === 1 ? 'Add 1 service' : `Add ${count} services`;
+}
+
+export function describeServicesAdded(names: string[]) {
+  if (names.length <= 2) return `Added ${names.join(' and ')}.`;
+  return `Added ${names.length} services.`;
+}
+
+export function describeNoSuggestions(projectName: string) {
+  return `No services found in ${projectName}.`;
 }
 
 export type ServiceDialogMode = 'add' | 'edit';
@@ -159,9 +216,8 @@ export function resolveServiceDialog(mode: ServiceDialogMode, name: string) {
       done: 'Saved. Restart it to run the new command.',
     };
   return {
-    title: 'Add a service',
-    description:
-      'A service is a command you keep running for a project, such as its dev server. It runs in a terminal of its own, in your login shell.',
+    title: 'Add services',
+    description: 'Each runs in a terminal of its own, in your login shell.',
     action: 'Add service',
     done: `Added ${name}.`,
   };
@@ -172,11 +228,7 @@ export const SERVICE_FIELDS: Record<
   { label: string; placeholder: string; note: string | null }
 > = {
   name: { label: 'Name', placeholder: 'api', note: null },
-  path: {
-    label: 'Folder',
-    placeholder: '/Users/you/Developer/shop/apps/api',
-    note: 'One of the project’s folders, or a folder inside one.',
-  },
+  path: { label: 'Folder', placeholder: '', note: null },
   command: { label: 'Command', placeholder: 'bun run dev', note: null },
   env: {
     label: 'Environment',

@@ -221,8 +221,9 @@ src/
 │                        typing a command at the prompt), xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to
 │                        `@xterm/headless` in tsconfig, so the DOM types never reach the engine),
 │                        store.ts (data/terminals/: the terminals, their screens and services.json), detect.ts (the
-│                        services found in a project's folders: workspace dev scripts, a Procfile, Docker Compose),
-│                        routes.ts (/api/terminals, the foreground check, /api/services and /ws/terminals/<id>),
+│                        services found in a project's folders: workspace scripts, Deno, bin/dev and Procfile lines, each
+│                        Compose service, Cargo, Go, Django, make),
+│                        routes.ts (/api/terminals, the foreground check, /api/services with its batch add, and /ws/terminals/<id>),
 │                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
 │                        services: add, update, remove, start, stop, restart, resume after a restart);
 │                        pty.ts also reads the program in front of a shell (readForegroundProgram)

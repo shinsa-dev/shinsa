@@ -24,6 +24,12 @@ describe('resolveCssColor', () => {
     expect(resolveCssColor('rgb(100%, 0%, 0%)')).toBe('#ff0000');
   });
 
+  it('reads a colour faded into transparent, as the alpha tokens are written', () => {
+    expect(resolveCssColor('color-mix(in oklch, oklch(0.6 0.215 256) 14%, transparent)')).toBe('#007bfc24');
+    expect(resolveCssColor('color-mix(in oklch, #ff000080 50%, transparent)')).toBe('#ff000040');
+    expect(resolveCssColor('color-mix(in oklch, var(--x) 14%, transparent)')).toBeNull();
+  });
+
   it('gives up on anything else', () => {
     expect(resolveCssColor('')).toBeNull();
     expect(resolveCssColor('var(--fg-4)')).toBeNull();

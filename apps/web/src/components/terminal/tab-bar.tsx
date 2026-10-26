@@ -10,7 +10,7 @@ import { describeServiceState, SERVICE_GLYPHS } from '@/lib/terminal/services.ts
 import { describeTerminalTab, moveTerminal } from '@/lib/terminal/tabs.ts';
 
 const TAB =
-  'group/tab corner-superellipse/1.125 relative flex h-7 min-w-0 max-w-56 shrink-0 items-center gap-1.5 rounded-control ps-2 pe-0.75 text-fg-3 text-xs outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-[active=true]:bg-bg-a2 data-[active=true]:text-fg-4 data-[active=true]:faux-medium data-[dragging=true]:opacity-50';
+  'group/tab corner-superellipse/1.125 relative flex h-6 min-w-0 max-w-56 shrink-0 items-center gap-1.5 rounded-control-sm ps-2 pe-0.75 text-fg-3 text-xs outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-[active=true]:bg-bg-a2 data-[active=true]:text-fg-4 data-[active=true]:faux-medium data-[dragging=true]:opacity-50';
 
 function RenameField({
   terminal,
@@ -129,7 +129,7 @@ function TerminalTab({
       <Hint label='Close terminal'>
         <Button
           variant='secondary'
-          size='icon-xs'
+          size='icon-2xs'
           icon='IconCrossSmall'
           aria-label='Close terminal'
           className={cn('opacity-0 group-hover/tab:opacity-100', active && 'opacity-100')}
