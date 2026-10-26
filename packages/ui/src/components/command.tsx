@@ -25,6 +25,17 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
   );
 }
 
+/**
+ * ⌘K opens many times an hour, so it comes and goes in a blink rather than at a
+ * dialog's pace (`DIALOG_MOTION`, 150ms in, 100ms out): 75ms in from a scale of
+ * 0.98 and 75ms out, its scrim in step. Merged over the dialog's own motion, so
+ * reduced motion still keeps only the fade.
+ */
+const COMMAND_MOTION =
+  'duration-75 data-ending-style:duration-75 starting:scale-98 data-starting-style:scale-98 data-ending-style:scale-98';
+
+const COMMAND_SCRIM_MOTION = 'duration-75 data-ending-style:duration-75';
+
 function CommandDialog({
   title = 'Command menu',
   description = 'Search for a page or an action.',
@@ -43,8 +54,10 @@ function CommandDialog({
     <Dialog {...props}>
       <DialogContent
         finalFocus={finalFocus}
+        overlayClassName={COMMAND_SCRIM_MOTION}
         className={cn(
-          'top-[max(3rem,14vh)] translate-y-0 gap-0 overflow-hidden rounded-popup bg-popover p-0 *:data-[slot=command]:bg-transparent sm:max-w-[520px]',
+          'top-[max(3rem,14vh)] w-[min(32.5rem,calc(100vw-2rem))] translate-y-0 gap-0 overflow-hidden rounded-popup bg-popover p-0 *:data-[slot=command]:bg-transparent',
+          COMMAND_MOTION,
           className
         )}
       >

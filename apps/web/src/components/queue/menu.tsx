@@ -2,7 +2,9 @@ import { resolveQueue, type ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { COMPACT_POPOVER, COMPACT_POPOVER_INSET } from '@/components/layout/compact-section.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { describeNeedsCount } from '@/lib/queue.ts';
 
@@ -30,12 +32,13 @@ export function QueueMenu({ state, activeTaskId }: { state: ShinsaState; activeT
         align='start'
         sideOffset={6}
         collisionAvoidance={{ fallbackAxisSide: 'none' }}
-        className='max-h-(--available-height) w-80 gap-0 overflow-y-auto p-0 [--glyph-ring:var(--color-popover)]'
+        className={cn(COMPACT_POPOVER, 'overflow-y-auto')}
       >
         <TaskQueue
           state={state}
           variant='compact'
           activeTaskId={activeTaskId}
+          className={COMPACT_POPOVER_INSET}
           onNavigate={() => setOpen(false)}
         />
       </PopoverContent>

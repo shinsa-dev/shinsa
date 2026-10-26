@@ -58,12 +58,24 @@ src/
 │                        render only the rows in view through virtual-rows.tsx),
 │                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, accounts, checks, finished),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
-│                        services (menu.tsx: Services beside Home and in the rail, its popover and trigger label;
-│                        service-row.tsx: a service's row, tile and run buttons; service-dialog.tsx: Add services (what the engine found, ticked, and the form under Advanced) and Edit;
-│                        use-service-actions.tsx: the handlers and their dialogs), focus (menu.tsx: the Focus menu and
+│                        services (menu.tsx: Services beside Tasks and in the rail, its popover (SERVICES_PANEL, the
+│                        queue popover's COMPACT_POPOVER: the list as tall as its content, the forms at one height)
+│                        whose views are the list drawn as the compact queue (each project a CompactSection, its
+│                        play button that starts them all), Manage with its inline removal, Add services, the custom
+│                        form and a service's form, the always-there footer (Manage, Add…, Terminal) and the trigger
+│                        label; panel-views.tsx: Add services (what the engine found, ticked, with Custom service…),
+│                        the custom and edit forms, the views' header (12px at the top, as at the side), body and
+│                        footer, the found list's boxes the kit's outline Checkbox; service-form.tsx: the form's
+│                        fields with Environment under Advanced and when a field shows its problem; service-row.tsx: a
+│                        service's row, tile and run buttons (Restart and Stop 1px apart, as on the Terminal page),
+│                        and Manage's row, which a press ticks (an outline Checkbox), with its bare edit button;
+│                        use-service-actions.ts: the row handlers and the panel's server calls), focus (menu.tsx: the Focus menu and
 │                        the project trigger and rows the Terminal page's picker shares), layout (cards/ and sidebar/ shells, the nav item both the rail and
-│                        Settings' tabs use, the list row and its LIST_ROW classes, the logo link home and home-link.tsx (the Home button
-│                        that replaces it in the Mac app), page/ column, heading, toolbar, section
+│                        Settings' tabs use, the list row and its LIST_ROW classes, compact-section.tsx (the compact queue's section and
+│                        popover classes, which the Services popover's list shares; the fold chevron right after a
+│                        header's counts, its action at the end), the logo link home and home-link.tsx (the Home button
+│                        that replaces it in the Mac app), nav-button.tsx (NavButton: the Cards top bar's Home, Tasks and
+│                        icon-only Settings, filled on their own page), page/ column, heading, toolbar, section
 │                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
 │                        status (tiles, glyphs, tones in text, check marks, priority, the health and engine banners, the Update button,
 │                        loading-line.tsx: LoadingLine and LoadingSpinner, the waits that show only after 300ms), links (TaskLink, PrLink,
@@ -149,11 +161,16 @@ src/
     ├── terminal/        Terminals and services (docs/design.md, 37): view.ts (TerminalView: one xterm.js per terminal,
     │                    kept outside React, its socket and reconnect, its WebGL renderer kept for the six shown last,
     │                    fit only when the pane's size changed, find, clear, the font size; resolveTerminalView),
-    │                    theme.ts (the xterm.js options and theme on the `--terminal-*` tokens, the Code tab's `--code-*` colours, and `--font-mono`),
+    │                    theme.ts (the xterm.js options and theme on the `--terminal-*` tokens, the Code tab's `--code-*` colours, its find
+    │                    colours, and `--font-mono`), scrollbar.ts (xterm.js's scrollbar shown only on its strip and while
+    │                    scrolling, as `ScrollArea`'s is; app.css draws its thumb),
     │                    color.ts (OKLCH, rgb and a colour faded to transparent, to hex), keys.ts (a Mac terminal's keys, and the page's ⌘T and ⌘W),
     │                    replies.ts (the questions the engine answers instead), tabs.ts (the project, tabs, places,
-    │                    order and words), services.ts (a service's glyph, state words, the trigger's label, which
-    │                    projects the menu shows, the form and its checks), command.ts (a shell block's command for
+    │                    order and words), services.ts (a service's glyph and its filled twin for the tab in front,
+    │                    state words, the trigger's label, which projects the menu shows and each one's counts, the
+    │                    empty popover's words, the service in front, starting all, the form, its checks and when a field
+    │                    shows its problem, the removal words), services-panel.ts (the Services popover's views,
+    │                    how they move, which one shows and its height, and ⌘K's request to open it on Add services or Manage), command.ts (a shell block's command for
     │                    Run in terminal)
     ├── review/          The Review tab (report.ts: what needs your attention and in what order, the walkthrough's
     │                    sections, the other changed files, the review card's items; keys.ts: J and K; places.ts:

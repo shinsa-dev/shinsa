@@ -248,11 +248,11 @@ describe('Terminals services', () => {
     expect(terminal.name).toBe('backend');
     terminals.updateService(service.id, { ...SERVICE, name: 'server', command: 'bun start' });
     expect(terminals.find(terminal.id).info.name).toBe('server');
-    terminals.removeService(service.id);
+    terminals.removeServices([service.id]);
     expect(fake.spawned[0]?.hungUp).toBe(true);
     expect(terminals.snapshot()).toMatchObject({ services: [], terminals: [] });
     expect(() => terminals.findService(service.id)).toThrow('That service is not there anymore.');
-    terminals.removeService(terminals.addService('p1', SERVICE).id);
+    terminals.removeServices([terminals.addService('p1', SERVICE).id]);
     await terminals.stopService(terminals.addService('p1', SERVICE).id);
   });
 

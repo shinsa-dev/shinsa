@@ -20,13 +20,13 @@ import { ProjectMenuTrigger, ProjectRadioItems } from '@/components/focus/menu.t
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
-import { ServiceRunButtons } from '@/components/services/service-row.tsx';
+import { ServiceActionButton, ServiceRunButtons } from '@/components/services/service-row.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
 import { TerminalFindBar, TerminalPane, useTerminalView } from '@/components/terminal/terminal-pane.tsx';
-import { useNow } from '@/hooks/use-now.ts';
+import { useMinute } from '@/hooks/use-minute.ts';
 import { useTerminalKeys } from '@/hooks/use-terminal-keys.ts';
 import { isMacPlatform } from '@/lib/code/keys.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
@@ -40,6 +40,7 @@ import {
   requestTerminalForeground,
   restartService,
   restartTerminal,
+  startAllServices,
   startService,
   stopService,
   useTerminals,
@@ -47,7 +48,12 @@ import {
 import { useColorScheme } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
 import { describeFindKey } from '@/lib/terminal/keys.ts';
-import { describeServiceClose } from '@/lib/terminal/services.ts';
+import {
+  describeServiceClose,
+  describeStartAll,
+  listStoppedServices,
+  resolveActiveService,
+} from '@/lib/terminal/services.ts';
 import {
   describeTerminalClose,
   groupTerminalPlaces,
@@ -147,7 +153,7 @@ function ProjectPicker({ state, project }: { state: ShinsaState; project: Projec
             replaceRoute(resolveTerminalPath(state.projects[String(id)]?.key ?? String(id)))
           }
         >
-          <ProjectRadioItems projects={projects} />
+          <ProjectRadioItems projects={projects} closeOnClick />
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -164,11 +170,11 @@ function ProjectTerminals({
   snapshot: TerminalsSnapshot;
 }) {
   const mac = React.useMemo(() => isMacPlatform(navigator.platform), []);
-  const now = useNow();
   const terminals = listProjectTerminals(snapshot, project.id);
-  const services = listProjectServices(snapshot, project.id, now);
+  const services = listProjectServices(snapshot, project.id, Date.now());
   const active = resolveActiveTerminal(terminals, useSearchParam('terminal'));
-  const activeService = services.find((view) => view.terminal?.id === active?.id) ?? null;
+  const activeService = resolveActiveService(services, active);
+  const stopped = listStoppedServices(services);
   const views = useKeptViews(snapshot, active, mac);
   const activeView = views.find((view) => view.id === active?.id) ?? null;
   const groups = groupTerminalPlaces(state, project.id);
@@ -263,7 +269,6 @@ function ProjectTerminals({
           <TerminalTabs
             terminals={terminals}
             services={services}
-            now={now}
             activeId={active?.id ?? null}
             renamingId={renaming}
             onSelect={select}
@@ -275,6 +280,7 @@ function ProjectTerminals({
         )}
         <NewTerminalButton groups={groups} fallback={fallback} onOpen={open} />
         {activeService && <ActiveServiceButtons view={activeService} />}
+        {!activeService && stopped.length > 0 && <StartAllButton project={project} />}
         {activeView && (
           <Hint label='Find in the scrollback' shortcut={describeFindKey(mac)}>
             <Button
@@ -318,6 +324,18 @@ function ProjectTerminals({
   );
 }
 
+function StartAllButton({ project }: { project: Project }) {
+  return (
+    <span className='flex shrink-0 items-center border-border border-s ps-1.5'>
+      <ServiceActionButton
+        label={describeStartAll(project)}
+        icon='IconPlay'
+        onClick={() => void startAllServices(project.id)}
+      />
+    </span>
+  );
+}
+
 function ActiveServiceButtons({ view }: { view: ServiceView }) {
   return (
     <span className='flex shrink-0 items-center gap-px border-border border-s ps-1.5'>
@@ -335,7 +353,7 @@ export function TerminalPage({ state }: { state: ShinsaState }) {
   const snapshot = useTerminals();
   const search = useSearchString();
   React.useEffect(() => rememberTerminalPath(`/terminal${search}`), [search]);
-  const project = resolveTerminalProject(state, useSearchParam('project'), useNow());
+  const project = resolveTerminalProject(state, useSearchParam('project'), useMinute());
   if (!snapshot)
     return (
       <div className='grid flex-1 place-items-center'>

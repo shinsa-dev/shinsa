@@ -56,9 +56,15 @@ export function ProjectMenuTrigger({
   );
 }
 
-export function ProjectRadioItems({ projects }: { projects: Project[] }) {
+export function ProjectRadioItems({
+  projects,
+  closeOnClick = false,
+}: {
+  projects: Project[];
+  closeOnClick?: boolean;
+}) {
   return projects.map((project) => (
-    <DropdownMenuRadioItem key={project.id} value={project.id}>
+    <DropdownMenuRadioItem key={project.id} value={project.id} closeOnClick={closeOnClick}>
       <ProjectOption color={project.color} name={project.name} />
     </DropdownMenuRadioItem>
   ));

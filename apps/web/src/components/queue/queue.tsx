@@ -3,10 +3,10 @@ import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { CompactSection, CompactSections } from '@/components/layout/compact-section.tsx';
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
 import { TaskMeta } from '@/components/status/text.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
@@ -75,7 +75,7 @@ export function WideSections({ children }: { children: React.ReactNode }) {
   return <div className='flex flex-col gap-6'>{children}</div>;
 }
 
-function CompactSection({
+function QueueCompactSection({
   section,
   activeTaskId,
   children,
@@ -90,31 +90,21 @@ function CompactSection({
   );
   const count = section.items.length;
   return (
-    <section className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'>
-      <DisclosureHeader
-        open={open}
-        onToggle={onToggle}
-        strip='line'
-        chevron='glyph'
-        chevronClassName='opacity-0 group-hover/disclosure:opacity-100'
-        className='w-full gap-2 rounded-control ps-1.5 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
-      >
-        <span className='grid size-5 shrink-0 place-items-center'>
-          <Icon
-            size='sm'
-            name={section.icon}
-            className={cn(section.tone !== 'neutral' && TONE_TEXT[section.tone])}
-          />
-        </span>
-        <span className='min-w-0 truncate'>{section.title}</span>
-        <span className='font-normal tabular-nums'>{count}</span>
-      </DisclosureHeader>
-      {open && (
-        <div className='flex flex-col pt-0.5'>
-          {count === 0 ? <p className='py-1 ps-8.5 pe-2.5 text-2xs text-fg-2'>{section.empty}</p> : children}
-        </div>
-      )}
-    </section>
+    <CompactSection
+      open={open}
+      onToggle={onToggle}
+      leading={
+        <Icon
+          size='sm'
+          name={section.icon}
+          className={cn(section.tone !== 'neutral' && TONE_TEXT[section.tone])}
+        />
+      }
+      title={section.title}
+      count={count}
+    >
+      {count === 0 ? <p className='py-1 ps-8.5 pe-2.5 text-2xs text-fg-2'>{section.empty}</p> : children}
+    </CompactSection>
   );
 }
 
@@ -155,9 +145,9 @@ function QueueSectionView({
   ));
   if (variant === 'compact') {
     return (
-      <CompactSection section={section} activeTaskId={activeTaskId}>
+      <QueueCompactSection section={section} activeTaskId={activeTaskId}>
         {rows}
-      </CompactSection>
+      </QueueCompactSection>
     );
   }
   return (
@@ -177,12 +167,14 @@ export function TaskQueue({
   variant,
   activeTaskId = null,
   sections = listQueueSections(state, resolveQueue(state, Date.now()), null),
+  className,
   onNavigate = () => {},
 }: {
   state: ShinsaState;
   variant: Variant;
   activeTaskId?: string | null;
   sections?: QueueSection[];
+  className?: string;
   onNavigate?: () => void;
 }) {
   const views = sections.map((section) => (
@@ -195,6 +187,6 @@ export function TaskQueue({
       onNavigate={onNavigate}
     />
   ));
-  if (variant === 'compact') return <HoverHighlight className='flex flex-col'>{views}</HoverHighlight>;
+  if (variant === 'compact') return <CompactSections className={className}>{views}</CompactSections>;
   return <>{views}</>;
 }

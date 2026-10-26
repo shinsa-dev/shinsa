@@ -1,4 +1,5 @@
 import {
+  isServiceActive,
   isServiceEnvKey,
   listProjectServices,
   type Project,
@@ -10,6 +11,7 @@ import {
   type ServiceSuggestion,
   type ServiceView,
   type ShinsaState,
+  type TerminalInfo,
   type TerminalPlace,
   type TerminalsSnapshot,
 } from '@shinsa/core';
@@ -18,12 +20,12 @@ import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { listProjects } from '@/lib/projects.ts';
 
-export const SERVICE_GLYPHS: Record<ServiceState, { icon: IconName; tone: Tone }> = {
-  stopped: { icon: 'IconStop', tone: 'neutral' },
-  starting: { icon: 'IconHourglass', tone: 'blue' },
-  running: { icon: 'IconPlay', tone: 'green' },
-  exited: { icon: 'IconStop', tone: 'neutral' },
-  failed: { icon: 'IconExclamationCircle', tone: 'red' },
+export const SERVICE_GLYPHS: Record<ServiceState, { icon: IconName; activeIcon: IconName; tone: Tone }> = {
+  stopped: { icon: 'IconCircleDashed', activeIcon: 'IconCircleDashedFilled', tone: 'neutral' },
+  starting: { icon: 'IconHourglass', activeIcon: 'IconHourglassFilled', tone: 'blue' },
+  running: { icon: 'IconPlay', activeIcon: 'IconPlayFilled', tone: 'green' },
+  exited: { icon: 'IconCircleDashed', activeIcon: 'IconCircleDashedFilled', tone: 'neutral' },
+  failed: { icon: 'IconExclamationCircle', activeIcon: 'IconExclamationCircleFilled', tone: 'red' },
 };
 
 const SERVICE_STATE_LABELS: Record<ServiceState, string> = {
@@ -57,6 +59,45 @@ export function describeServicesTrigger(views: ServiceView[]): { label: string; 
   if (starting > 0) return { label: `${starting} starting`, tone: 'blue' };
   if (running > 0) return { label: `${running} running`, tone: 'neutral' };
   return { label: 'Services', tone: 'neutral' };
+}
+
+export function describeServiceGroup(views: ServiceView[]): { label: string; tone: Tone }[] {
+  const { running, starting, failed } = resolveServicesSummary(views);
+  const parts: { label: string; tone: Tone }[] = [];
+  if (failed > 0) parts.push({ label: `${failed} failed`, tone: 'red' });
+  if (starting > 0) parts.push({ label: `${starting} starting`, tone: 'blue' });
+  if (running > 0) parts.push({ label: `${running} running`, tone: 'neutral' });
+  if (parts.length === 0 && views.length > 0)
+    parts.push({ label: `${views.length} stopped`, tone: 'neutral' });
+  return parts;
+}
+
+export function resolveServiceGroupFlag(projectId: string) {
+  return `shinsa.services-open.${projectId}`;
+}
+
+export function listStoppedServices(views: ServiceView[]) {
+  return views.filter((view) => !isServiceActive(view));
+}
+
+export function canStartAll(views: ServiceView[]) {
+  return listStoppedServices(views).length > 1;
+}
+
+export function describeStartAll(project: Project) {
+  return `Start all services in ${project.name}`;
+}
+
+export function resolveActiveService(services: ServiceView[], active: TerminalInfo | null) {
+  if (!active) return null;
+  return services.find((view) => view.terminal?.id === active.id) ?? null;
+}
+
+export function describeServicesEmpty(project: Project | null) {
+  return {
+    title: project ? `No services in ${project.name} yet` : 'No services yet',
+    description: 'A service is a command you keep running for a project, like its dev server.',
+  };
 }
 
 export function resolveServicesProjects(state: ShinsaState, current: string | null, now: number) {
@@ -191,6 +232,12 @@ export function listPickedInputs(suggestions: ServiceSuggestion[], picked: strin
     .map((each) => ({ name: each.name, cwd: each.cwd, command: each.command, env: {} }));
 }
 
+export function listAllPicks(suggestions: ServiceSuggestion[], picked: string[]) {
+  const keys = suggestions.map(resolveSuggestionKey);
+  const all = keys.every((key) => picked.includes(key));
+  return { label: all ? 'Deselect all' : 'Select all', picks: all ? [] : keys };
+}
+
 export function describeAddServices(count: number) {
   if (count === 0) return 'Add services';
   return count === 1 ? 'Add 1 service' : `Add ${count} services`;
@@ -202,12 +249,12 @@ export function describeServicesAdded(names: string[]) {
 }
 
 export function describeNoSuggestions(projectName: string) {
-  return `No services found in ${projectName}.`;
+  return `No services found in ${projectName}. Name the command that starts one and the folder it runs in.`;
 }
 
-export type ServiceDialogMode = 'add' | 'edit';
+export type ServiceFormMode = 'add' | 'custom' | 'edit';
 
-export function resolveServiceDialog(mode: ServiceDialogMode, name: string) {
+export function resolveServiceForm(mode: ServiceFormMode, name: string) {
   if (mode === 'edit')
     return {
       title: `Edit ${name || 'the service'}`,
@@ -216,11 +263,23 @@ export function resolveServiceDialog(mode: ServiceDialogMode, name: string) {
       done: 'Saved. Restart it to run the new command.',
     };
   return {
-    title: 'Add services',
-    description: 'Each runs in a terminal of its own, in your login shell.',
+    title: mode === 'custom' ? 'Add a service' : 'Add services',
+    description:
+      mode === 'custom'
+        ? 'Name the command that starts it and the folder it runs in.'
+        : 'Each runs in a terminal of its own.',
     action: 'Add service',
     done: `Added ${name}.`,
   };
+}
+
+export type ServiceErrors = Partial<Record<ServiceField, string>>;
+
+export function resolveShownErrors(errors: ServiceErrors, left: ServiceField[], submitted: boolean) {
+  if (submitted) return errors;
+  return Object.fromEntries(
+    Object.entries(errors).filter(([field]) => left.includes(field as ServiceField))
+  ) as ServiceErrors;
 }
 
 export const SERVICE_FIELDS: Record<
@@ -237,8 +296,27 @@ export const SERVICE_FIELDS: Record<
   },
 };
 
-export function describeServiceRemove(service: ServiceDefinition) {
-  return `Shinsa stops “${service.name}” if it runs and forgets it. Its terminal closes.`;
+export function describeServicesRemove(services: ServiceDefinition[]) {
+  const [only] = services;
+  if (only && services.length === 1)
+    return {
+      question: `Remove ${only.name}?`,
+      note: 'It stops and its terminal closes.',
+      done: `Removed ${only.name}.`,
+    };
+  return {
+    question: `Remove ${services.length} services?`,
+    note: 'They stop and their terminals close.',
+    done:
+      services.length === 2
+        ? `Removed ${services.map((service) => service.name).join(' and ')}.`
+        : `Removed ${services.length} services.`,
+  };
+}
+
+export function describeRemoveServices(count: number) {
+  if (count === 0) return 'Remove services';
+  return count === 1 ? 'Remove 1 service' : `Remove ${count} services`;
 }
 
 export function describeServiceClose(service: ServiceDefinition) {

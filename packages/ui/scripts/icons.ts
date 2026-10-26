@@ -41,6 +41,31 @@ const OPTICAL_SCALE: Record<string, number> = {
 };
 
 /**
+ * Icons that sit side by side in the top bar and must draw the same size,
+ * scaled with their stroke kept at every other icon's weight. The Agent usage
+ * gauge sets the size: its ink (stroke included) is 20 of the 24 units tall,
+ * 11.67px at 14px. Each of the others is scaled until its ink is as tall,
+ * unless that would bring its ink, or its filled twin's, within half a unit of
+ * the box's sides, where the svg clips it; then it is as large as that allows.
+ * Settings' gear spans 18 x 16.17 units and is as tall as the gauge (1.1132);
+ * Services' server spans 18 x 14, and as tall it would be 25 units wide (1.15).
+ * Home (16 x 16.06) and Tasks (17 x 15) are set by eye under that, at 1.025 and
+ * 1.15: as tall as the gauge the house read a pixel large and the list, wide
+ * and dotted, far too large. A filled twin takes its
+ * outline's scale, so the icon keeps its size when it fills.
+ */
+const MATCHED_SCALE: Record<string, number> = {
+  IconHomeRoundDoor: 1.025,
+  IconHomeRoundDoorFilled: 1.025,
+  IconListBullets: 1.15,
+  IconListBulletsFilled: 1.15,
+  IconServer: 1.15,
+  IconServerFilled: 1.15,
+  IconSettingsGear4: 1.1132,
+  IconSettingsGear4Filled: 1.1132,
+};
+
+/**
  * Central's chevrons draw small in their box (a `Small` one spans 8 of the 24
  * units, a `Medium` one 12, where a Central icon spans about 18), so at the
  * same size a chevron reads a step smaller than the icon beside it. Every
@@ -169,6 +194,11 @@ export function renderIconMarkup(name: string, radius: IconRadius): string {
   if (chevron) {
     const weight = Number((2 / chevron).toFixed(4));
     return scaleAbout(stroked.replaceAll('stroke-width="2"', `stroke-width="${weight}"`), chevron);
+  }
+  const matched = MATCHED_SCALE[name];
+  if (matched) {
+    const weight = Number((2 / matched).toFixed(4));
+    return scaleAbout(stroked.replaceAll('stroke-width="2"', `stroke-width="${weight}"`), matched);
   }
   const scale = OPTICAL_SCALE[name];
   return withOffset(name, scale ? scaleAbout(stroked, scale) : stroked);

@@ -2,6 +2,7 @@
 
 import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog';
 import { Button } from '@shinsa/ui/components/button';
+import { DIALOG_MOTION, DIALOG_SCRIM_MOTION } from '@shinsa/ui/components/dialog';
 
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -22,8 +23,10 @@ function AlertDialogOverlay({ className, ...props }: AlertDialogPrimitive.Backdr
   return (
     <AlertDialogPrimitive.Backdrop
       data-slot='alert-dialog-overlay'
+      data-reduced-motion='fade'
       className={cn(
-        'fixed inset-0 isolate z-50 bg-black/10 transition-opacity duration-200 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:bg-black/55',
+        'fixed inset-0 isolate z-50 bg-black/10 dark:bg-black/55',
+        DIALOG_SCRIM_MOTION,
         className
       )}
       {...props}
@@ -43,10 +46,11 @@ function AlertDialogContent({
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Popup
         data-slot='alert-dialog-content'
+        data-reduced-motion='fade'
         data-size={size}
         className={cn(
-          'group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-[420px]',
-          'transition-[opacity,scale] duration-200 data-ending-style:scale-95 data-starting-style:scale-95 data-ending-style:opacity-0 data-starting-style:opacity-0',
+          'group/alert-dialog-content corner-superellipse/1.125 fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2 gap-3 overflow-y-auto rounded-xl bg-background p-4 text-fg-3 shadow-md outline-none data-[size=default]:w-[min(26.25rem,calc(100vw-2rem))] data-[size=sm]:w-[min(20rem,calc(100vw-2rem))]',
+          DIALOG_MOTION,
           className
         )}
         {...props}

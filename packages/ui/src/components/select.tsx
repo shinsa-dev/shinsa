@@ -111,7 +111,7 @@ function SelectTrigger({
         'enabled:active:before:inset-x-(--press-inset-x) enabled:active:before:inset-y-(--press-inset-y)',
         variant === 'ghost'
           ? 'enabled:active:before:bg-bg-a2/70 enabled:hover:before:bg-bg-a2/70 aria-expanded:before:bg-bg-a2'
-          : 'before:bg-bg-2 enabled:active:before:bg-bg-3/80 enabled:hover:before:bg-bg-3/80 aria-expanded:before:bg-bg-3/80',
+          : 'before:bg-input enabled:active:before:bg-input-hover/80 enabled:hover:before:bg-input-hover/80 aria-expanded:before:bg-input-hover/80',
         'outline-none',
         'disabled:cursor-not-allowed disabled:opacity-50',
         'data-placeholder:text-fg-2',

@@ -152,6 +152,21 @@ function readServiceBatch(
   return inputs;
 }
 
+function readServiceIds(body: JsonObject) {
+  const ids = body.ids;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > SERVICE_LIMITS.services ||
+    ids.some((id) => typeof id !== 'string')
+  )
+    throw new DomainError(
+      'body_invalid',
+      `Send “ids” as a list of 1 to ${SERVICE_LIMITS.services} service ids.`
+    );
+  return [...new Set(ids as string[])];
+}
+
 function listNewSuggestions(places: TerminalPlace[], services: ServiceDefinition[]): ServiceSuggestion[] {
   const roots = places.filter((place) => place.kind !== 'worktree').map((place) => place.path);
   return listServiceSuggestions(roots).filter(
@@ -255,6 +270,13 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
     },
     {
       method: 'POST',
+      pattern: /^\/api\/services\/remove$/,
+      respond: guarded((_match, body) => {
+        terminals.removeServices(readServiceIds(body));
+      }),
+    },
+    {
+      method: 'POST',
       pattern: /^\/api\/services\/start-all$/,
       respond: async (_match, request) => {
         const projectId = readText(await readJsonObject(request), 'projectId', 200);
@@ -275,13 +297,6 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
           service.id,
           readServiceInput(body, others(service.projectId, service.id), projectOf(service.projectId), home)
         );
-      }),
-    },
-    {
-      method: 'POST',
-      pattern: /^\/api\/services\/([^/]+)\/remove$/,
-      respond: guarded((match) => {
-        terminals.removeService(id(match));
       }),
     },
     {

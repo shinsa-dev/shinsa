@@ -324,12 +324,14 @@ export class Terminals {
     return service;
   }
 
-  removeService(id: string) {
+  removeServices(ids: string[]) {
     this.#assertWritable();
-    this.findService(id);
-    const session = this.#serviceSession(id);
-    if (session) this.#closeSession(session);
-    this.#services.delete(id);
+    for (const id of ids) this.findService(id);
+    for (const id of ids) {
+      const session = this.#serviceSession(id);
+      if (session) this.#closeSession(session);
+      this.#services.delete(id);
+    }
     this.#saveServices();
     this.#changed();
   }

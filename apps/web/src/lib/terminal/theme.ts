@@ -1,4 +1,5 @@
 import type { TerminalColors } from '@shinsa/core';
+import type { ISearchDecorationOptions } from '@xterm/addon-search';
 import type { ITerminalOptions, ITheme } from '@xterm/xterm';
 import { resolveCssColor } from '@/lib/terminal/color.ts';
 
@@ -50,10 +51,23 @@ export function resolveTerminalTheme(read: VariableReader): ITheme {
   set('cursor', 'cursor');
   set('cursorAccent', 'cursor-text');
   set('selectionBackground', 'selection');
+  set('selectionInactiveBackground', 'selection');
   ANSI_NAMES.forEach((name, index) => {
     set(name, `ansi-${index}`);
   });
   return theme;
+}
+
+export function resolveFindDecorations(read: VariableReader): ISearchDecorationOptions | undefined {
+  const match = readToken(read, 'find-match');
+  const active = readToken(read, 'find-active');
+  if (!(match && active)) return undefined;
+  return {
+    matchBackground: match,
+    matchOverviewRuler: match,
+    activeMatchBackground: active,
+    activeMatchColorOverviewRuler: active,
+  };
 }
 
 export function resolveTerminalFont(read: VariableReader) {

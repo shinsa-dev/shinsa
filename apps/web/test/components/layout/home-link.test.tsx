@@ -64,4 +64,36 @@ describe('the way home', () => {
     expect(bar.querySelector('button')?.textContent).toBe('Home');
     expect(bar.textContent).not.toContain('Shinsa');
   });
+
+  it('goes to Tasks and Settings from the Cards top bar, each marked while you are there', async () => {
+    act(() => navigate('/'));
+    render(
+      <TooltipProvider>
+        <CardsTopBar state={STATE} />
+      </TooltipProvider>
+    );
+    const bar = screen.getByRole('banner');
+    expect([...bar.querySelectorAll('button')].map((button) => button.textContent).slice(0, 3)).toEqual([
+      'Shinsa',
+      'Tasks',
+      'Services',
+    ]);
+    const tasks = screen.getByRole('button', { name: 'Tasks' });
+    expect(tasks.getAttribute('aria-current')).toBeNull();
+    act(() => fireEvent.click(tasks));
+    expect(location.pathname).toBe('/tasks');
+    expect(screen.getByRole('button', { name: 'Tasks' }).getAttribute('aria-current')).toBe('page');
+    const settings = screen.getByRole('button', { name: 'Settings' });
+    expect(settings.textContent).toBe('');
+    expect(await findTooltipText(settings)).toBe('Settings');
+    const buttons: HTMLElement[] = [...bar.querySelectorAll('button')];
+    const after = buttons.slice(buttons.indexOf(settings) + 1);
+    expect(after.map((button) => button.getAttribute('aria-label') ?? button.textContent).at(-1)).toBe(
+      'FocusAll work'
+    );
+    expect(after.length).toBeLessThanOrEqual(2);
+    act(() => fireEvent.click(settings));
+    expect(location.pathname).toBe('/settings');
+    expect(screen.getByRole('button', { name: 'Settings' }).getAttribute('aria-current')).toBe('page');
+  });
 });

@@ -259,6 +259,7 @@
   --destructive: var(--red-4);
   --border: var(--bg-3);
   --input: var(--bg-2);
+  --input-hover: var(--bg-3);
   --ring: var(--primary-2);
 
   /* The sidebar's surface references a token, so it flips with the theme
@@ -419,6 +420,15 @@
   --popover: var(--bg-2);
 }
 
+/* A field (Input, Textarea, a default SelectTrigger) fills a step above the
+   surface under it. A dark popover is already bg-2, the field's own step, so
+   there the fill would vanish and the field read as bare text: inside one it
+   fills a step higher. */
+.dark [data-slot="popover-content"] {
+  --input: var(--bg-3);
+  --input-hover: var(--bg-4);
+}
+
 /* ── Theme mapping ───────────────────────────────────────────────────────── */
 @theme inline {
   --font-sans: "ABC Areal", ui-sans-serif, system-ui, sans-serif;
@@ -561,6 +571,7 @@
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-input-hover: var(--input-hover);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
 
@@ -986,9 +997,11 @@
  * Unlayered on purpose: it has to beat sonner's injected stylesheet too.
  *
  * Exempt: `.animate-spin`, because a spinner that stops spinning stops
- * communicating progress — the one animation carrying meaning on its own. */
+ * communicating progress — the one animation carrying meaning on its own;
+ * and `[data-reduced-motion="fade"]` (dialogs and their scrims), which drop
+ * their scale under reduced motion and keep only their fade. */
 @media (prefers-reduced-motion: reduce) {
-  *:not(.animate-spin),
+  *:not(.animate-spin, [data-reduced-motion="fade"]),
   *:not(.animate-spin)::before,
   *:not(.animate-spin)::after {
     /* biome-ignore-start lint/complexity/noImportantStyles: a user's OS-level

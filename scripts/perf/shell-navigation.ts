@@ -50,6 +50,37 @@ function listTabSteps() {
 
 const TERMINAL_DONE = `location.pathname === '/terminal' && __shell.terminals > 0 && __shell.terminalsWaiting === 0 && [...document.querySelectorAll('.xterm')].some((terminal) => terminal.offsetParent && terminal.querySelector('.xterm-screen canvas'))`;
 
+const TERMINAL_TAB = (index: number) =>
+  `[...document.querySelectorAll('[aria-label="Terminals"] [role=tab]')].filter((tab) => tab.offsetParent)[${index}]`;
+
+const TERMINAL_SHOWN = `[...document.querySelectorAll('.xterm')].some((terminal) => terminal.offsetParent && terminal.querySelector('.xterm-screen canvas'))`;
+
+function terminalTabStep(from: number, to: number): Step {
+  return {
+    label: `Terminal tab ${from + 1} → ${to + 1}`,
+    target: TERMINAL_TAB(to),
+    done: `${TERMINAL_TAB(to)}?.getAttribute('aria-selected') === 'true' && ${TERMINAL_SHOWN}`,
+  };
+}
+
+const PROJECT_PICKER = `[...document.querySelectorAll('main button[aria-haspopup=menu]')].find((button) => button.offsetParent)`;
+
+const [FIRST_PROJECT = 'Blog', SECOND_PROJECT = 'Shop'] = (Bun.env.SHELL_PERF_PROJECTS ?? 'Blog,Shop').split(
+  ','
+);
+
+function terminalProjectStep(from: string, to: string): Step {
+  return {
+    label: `Terminal ${from} → ${to}`,
+    open: {
+      target: PROJECT_PICKER,
+      done: `!!__shell.byText('[role=menuitemradio]', '${to}')`,
+    },
+    target: `__shell.byText('[role=menuitemradio]', '${to}')`,
+    done: `${PROJECT_PICKER}?.textContent === '${to}' && ${TERMINAL_SHOWN}`,
+  };
+}
+
 const TERMINAL_STEPS: Step[] = [
   {
     label: 'Home → Terminal',
@@ -60,6 +91,11 @@ const TERMINAL_STEPS: Step[] = [
     target: `document.querySelector('[data-terminal-entry]') || document.querySelector('header button[aria-label="Terminal"]')`,
     done: TERMINAL_DONE,
   },
+  terminalProjectStep(FIRST_PROJECT, SECOND_PROJECT),
+  terminalTabStep(0, 1),
+  terminalTabStep(1, 2),
+  terminalTabStep(2, 0),
+  terminalProjectStep(SECOND_PROJECT, FIRST_PROJECT),
   { label: 'Terminal → Home', target: HOME, done: HOME_DONE },
 ];
 
@@ -75,13 +111,13 @@ const NAVIGATION_STEPS: Step[] = [
   {
     label: 'Home → All tasks',
     pushes: 'State push on All tasks',
-    target: `document.querySelector('main button[aria-label="All tasks"]')`,
+    target: `__shell.byText('header button', 'Tasks') || __shell.byText('nav [data-highlight-item]', 'All tasks')`,
     done: `location.pathname === '/tasks'`,
   },
   { label: 'All tasks → Home', target: HOME, done: HOME_DONE },
   {
     label: 'Home → Settings',
-    target: `document.querySelector('main button[aria-label="Settings"]')`,
+    target: `document.querySelector('header button[aria-label="Settings"]') || __shell.byText('nav [data-highlight-item]', 'Settings')`,
     done: `location.pathname === '/settings'`,
   },
   { label: 'Settings → Home', pushes: 'State push on Home', target: HOME, done: HOME_DONE },
@@ -171,6 +207,13 @@ async function closeMenu(target: ShellPage) {
   await waitFor(target, `!document.querySelector('[cmdk-input]')`);
 }
 
+async function closeOpenMenu(target: ShellPage) {
+  await target.evaluate(
+    `document.querySelector('[role=menu][data-open]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`
+  );
+  await waitFor(target, `!document.querySelector('[role=menu][data-open]')`);
+}
+
 function openBrowser() {
   if (ATTACH) return attach(ATTACH);
   return launchChrome(1440, 1000);
@@ -203,6 +246,7 @@ for (let lap = 0; lap < LAPS; lap += 1) {
         ...(await page.evaluate<{ settledAt: number; maxGap: number }>(`__shell.settle(${SETTLE_MS})`)),
       });
     if (step.key) await closeMenu(page);
+    if (step.open) await closeOpenMenu(page);
     await page.evaluate('__shell.idle(250)');
     for (let push = 0; measured && step.pushes && push < PUSHES_PER_PAGE; push += 1) {
       pushes.push({ label: step.pushes, ...(await page.evaluate<Measured>('__shell.push()')) });

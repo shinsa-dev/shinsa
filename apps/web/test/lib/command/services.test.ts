@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { SERVICE_LIMITS } from '@shinsa/core';
+import { act, renderHook } from '@testing-library/react';
 import { listServiceSections } from '@/lib/command/services.ts';
+import { useServicesPanelRequest } from '@/lib/terminal/services-panel.ts';
 import { createProject, createShinsaState, NOW } from '../../support/state.ts';
 import { createService, createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
@@ -20,9 +22,14 @@ const STATE = createShinsaState({
 const LATER = NOW + SERVICE_LIMITS.startingMs + 1;
 
 describe('listServiceSections', () => {
-  it('has nothing without services', () => {
-    expect(listServiceSections(STATE, createTerminalsSnapshot(), NOW)).toEqual([]);
-    expect(listServiceSections(STATE, null, NOW)).toEqual([]);
+  it('only adds services while there are none, and has nothing without a project', () => {
+    const labels = (state: typeof STATE) =>
+      listServiceSections(state, createTerminalsSnapshot(), NOW).flatMap((section) =>
+        section.commands.map((command) => command.label)
+      );
+    expect(labels(STATE)).toEqual(['Add services…']);
+    expect(listServiceSections(STATE, null, NOW)[0]?.commands).toHaveLength(1);
+    expect(labels(createShinsaState({}))).toEqual([]);
   });
 
   it('starts, stops and restarts each service, and starts all of a project’s that are stopped', () => {
@@ -40,14 +47,19 @@ describe('listServiceSections', () => {
     const [section] = listServiceSections(STATE, snapshot, LATER);
     const commands = section?.commands ?? [];
     expect(commands.map((command) => command.label)).toEqual([
-      'Start all of Shop’s services',
+      'Start all services in Shop',
+      'Add services…',
+      'Manage services…',
       'Start site',
       'Restart api',
       'Stop api',
       'Start web',
       'Start worker',
     ]);
-    for (const command of commands) if (command.kind === 'run') command.run();
+    const opened = mock((_mode: string) => undefined);
+    renderHook(() => useServicesPanelRequest(opened));
+    for (const command of commands) if (command.kind === 'run') act(() => command.run());
+    expect(opened.mock.calls.map(([mode]) => mode)).toEqual(['add', 'manage']);
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
       '/api/services/start-all',
       '/api/services/site/start',

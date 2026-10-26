@@ -221,10 +221,11 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   when you close the window or quit the app, and a reload shows each terminal as it was. Agents never type into it; an
   agent that needs you to run a command puts it in its question, and Run in terminal runs it when you press it.
 - **Services.** What you usually start in a terminal by hand (a project's `apps/api` and `apps/web` dev servers),
-  started with one press from Services, beside Home, and then only watched: the entry says "2 running" or "1 failed",
+  started with one press from Services, beside Home and Tasks, and then only watched: the entry says "2 running" or "1 failed",
   and its popover lists each service's state, how long it has run, Start, Stop, Restart and its terminal. Shinsa
-  offers the ones it finds (each workspace's `dev` script, a `Procfile`, Docker Compose) and you add, edit or remove
-  any. Each runs in a terminal tab of its own, owned by the engine like every terminal, and starts again by itself
+  offers the ones it finds (each workspace's `dev` script, a `Procfile`, Docker Compose) and you add any, all inside
+  the popover with no dialog; its Manage edits one or removes several at once, and one press starts all of a
+  project's that are not running. Each runs in a terminal tab of its own, owned by the engine like every terminal, and starts again by itself
   when the engine restarts. Also `shinsa services list|start|stop|restart` and ⌘K.
 - **All tasks: the roadmap.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains

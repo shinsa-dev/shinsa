@@ -128,8 +128,8 @@ export function requestServiceUpdate(id: string, input: ServiceInput) {
   });
 }
 
-export function removeService(id: string) {
-  return requestWithToast(() => requestTerminals(servicePath(id, 'remove'), {}));
+export function requestServicesRemove(ids: string[]) {
+  return requestTerminals('/api/services/remove', { ids });
 }
 
 async function requestServiceRun(id: string, action: 'start' | 'restart') {

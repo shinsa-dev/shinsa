@@ -148,8 +148,10 @@ async function walkTask(page: ShellPage, prefix: string, handle: string) {
     page,
     `${prefix}Home → All tasks`,
     async () =>
-      (await click(page, `document.querySelector('main button[aria-label="All tasks"]')`)) &&
-      waitFor(page, `location.pathname === '/tasks'`)
+      (await click(
+        page,
+        `[...document.querySelectorAll('header button')].find((button) => button.textContent === 'Tasks')`
+      )) && waitFor(page, `location.pathname === '/tasks'`)
   );
   await step(page, `${prefix}All tasks → task`, async () => {
     const row = `__loading.rendered('main [role=button]').find((row) => [...row.querySelectorAll('span')].some((part) => __loading.textOf(part) === ${JSON.stringify(handle)}))`;
@@ -216,7 +218,7 @@ async function walk(width: number) {
     page,
     `${prefix}Home → Settings`,
     async () =>
-      (await click(page, `document.querySelector('main button[aria-label="Settings"]')`)) &&
+      (await click(page, `document.querySelector('header button[aria-label="Settings"]')`)) &&
       waitFor(page, `location.pathname === '/settings'`)
   );
   await goHome(page, prefix);

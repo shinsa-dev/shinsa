@@ -1,48 +1,167 @@
-import type { ServiceView, ShinsaState } from '@shinsa/core';
+import type { Project, ServiceDefinition, ServiceView, ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
+import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Popover, PopoverContent, PopoverTrigger } from '@shinsa/ui/components/popover';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import {
+  COMPACT_POPOVER,
+  COMPACT_POPOVER_INSET,
+  CompactSection,
+  CompactSections,
+} from '@/components/layout/compact-section.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
-import { type ServiceHandlers, ServiceRow } from '@/components/services/service-row.tsx';
-import { useServiceActions } from '@/components/services/use-service-actions.tsx';
+import {
+  AddServicesView,
+  CustomServiceView,
+  EditServiceView,
+  PANEL_FOOTER,
+  type ServicesPanelActions,
+} from '@/components/services/panel-views.tsx';
+import {
+  ManagedServiceRow,
+  ServiceActionButton,
+  type ServiceHandlers,
+  ServiceRow,
+} from '@/components/services/service-row.tsx';
+import { useServiceActions } from '@/components/services/use-service-actions.ts';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
 import { useNow } from '@/hooks/use-now.ts';
-import { startAllServices, useTerminals } from '@/lib/connection/terminals.ts';
+import { useTerminals } from '@/lib/connection/terminals.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { useStoredToggle } from '@/lib/preferences/stored-flag.ts';
+import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
+  canStartAll,
+  describeRemoveServices,
+  describeServiceGroup,
+  describeServicesEmpty,
+  describeServicesRemove,
   describeServicesTrigger,
+  describeStartAll,
   listServiceGroups,
+  resolveServiceGroupFlag,
   resolveServicesAddTarget,
   resolveServicesProjects,
   SERVICES_ACTIVE_ICON,
   SERVICES_ICON,
   type ServiceGroup,
+  togglePick,
 } from '@/lib/terminal/services.ts';
+import {
+  createServicesPanel,
+  listPickedServices,
+  reduceServicesPanel,
+  resolveServicesPanelHeight,
+  resolveShownServicesView,
+  type ServicesPanelAction,
+  type ServicesPanelHeight,
+  type ServicesPanelState,
+  type ServicesPanelView,
+  selectEditedService,
+  useServicesPanelRequest,
+} from '@/lib/terminal/services-panel.ts';
 import { resolveTerminalEntry, resolveTerminalProject } from '@/lib/terminal/tabs.ts';
 import { navigate, useRoute, useSearchParam } from '@/router.ts';
 
-function GroupHeader({ group }: { group: ServiceGroup }) {
-  const stopped = group.views.filter((view) => view.state !== 'running' && view.state !== 'starting');
+function GroupSummary({ views }: { views: ServiceView[] }) {
+  return describeServiceGroup(views).map((part) => (
+    <span key={part.label} className={cn('truncate', part.tone !== 'neutral' && TONE_TEXT[part.tone])}>
+      {part.label}
+    </span>
+  ));
+}
+
+function ServiceGroupSection({
+  group,
+  now,
+  handlers,
+  manage,
+}: {
+  group: ServiceGroup;
+  now: number;
+  handlers: ServiceHandlers;
+  manage: ManageControl | null;
+}) {
+  const [open, toggle] = useStoredToggle(resolveServiceGroupFlag(group.project.id), true);
   return (
-    <div className='flex h-8 items-center gap-2 ps-2.5 pe-1.5'>
-      <ProjectDot color={group.project.color} />
-      <span className='min-w-0 flex-1 truncate font-medium text-fg-3 text-xs'>{group.project.name}</span>
-      {stopped.length > 1 && (
-        <Button
-          variant='secondary'
-          size='xs'
-          icon='IconPlay'
-          onClick={() => void startAllServices(group.project.id)}
-        >
-          Start all
-        </Button>
+    <CompactSection
+      open={open}
+      onToggle={toggle}
+      label={group.project.name}
+      leading={<ProjectDot color={group.project.color} />}
+      title={group.project.name}
+      count={<GroupSummary views={group.views} />}
+      action={
+        !manage &&
+        canStartAll(group.views) && (
+          <ServiceActionButton
+            label={describeStartAll(group.project)}
+            icon='IconPlay'
+            onClick={() => handlers.startAll(group.project)}
+          />
+        )
+      }
+    >
+      {group.views.map((view) =>
+        manage ? (
+          <ManagedServiceRow
+            key={view.service.id}
+            view={view}
+            now={now}
+            picked={manage.picked.includes(view.service.id)}
+            onPick={() => manage.onPick(togglePick(manage.picked, view.service.id))}
+            onEdit={() => manage.onEdit(view.service.id)}
+          />
+        ) : (
+          <ServiceRow
+            key={view.service.id}
+            view={view}
+            project={group.project}
+            now={now}
+            handlers={handlers}
+          />
+        )
       )}
-    </div>
+    </CompactSection>
   );
 }
+
+interface ManageControl {
+  picked: string[];
+  onPick: (picked: string[]) => void;
+  onEdit: (serviceId: string) => void;
+}
+
+function ServicesEmpty({
+  project,
+  onCreateProject,
+}: {
+  project: Project | null;
+  onCreateProject: (() => void) | null;
+}) {
+  const copy = describeServicesEmpty(project);
+  return (
+    <EmptyState icon={SERVICES_ICON} size='sm' title={copy.title} description={copy.description}>
+      {onCreateProject && (
+        <Button size='sm' icon='IconPlusMedium' onClick={onCreateProject}>
+          Create a project…
+        </Button>
+      )}
+    </EmptyState>
+  );
+}
+
+export const SERVICES_PANEL = cn(
+  COMPACT_POPOVER,
+  'flex w-88 max-w-[calc(100vw-1rem)] flex-col overflow-hidden'
+);
+
+const VIEW_HEIGHT: Record<ServicesPanelHeight, string> = {
+  content: '',
+  fixed: 'h-[min(var(--available-height),28rem)]',
+};
 
 export function ServicesTriggerLabel({
   views,
@@ -78,44 +197,228 @@ export function ServicesTriggerLabel({
   );
 }
 
-export function ServicesPanel({
-  groups,
-  now,
-  handlers,
-  footer,
+function ListFooter({
+  onAdd,
+  onManage,
+  onTerminal,
 }: {
-  groups: ServiceGroup[];
-  now: number;
-  handlers: ServiceHandlers;
-  footer: React.ReactNode;
+  onAdd: (() => void) | null;
+  onManage: (() => void) | null;
+  onTerminal: () => void;
 }) {
   return (
-    <>
-      {groups.map((group, index) => (
-        <section
-          key={group.project.id}
-          className={cn('flex flex-col pb-1', index > 0 && 'border-border border-t')}
+    <div className={PANEL_FOOTER}>
+      <Button
+        variant='secondary'
+        size='sm'
+        icon='IconSettingsSliderHor'
+        disabled={!onManage}
+        onClick={onManage ?? undefined}
+      >
+        Manage
+      </Button>
+      <Button
+        variant='secondary'
+        size='sm'
+        icon='IconPlusMedium'
+        disabled={!onAdd}
+        onClick={onAdd ?? undefined}
+      >
+        Add…
+      </Button>
+      <span className='flex-1' />
+      <Button variant='secondary' size='sm' icon='IconConsole' data-terminal-entry='' onClick={onTerminal}>
+        Terminal
+      </Button>
+    </div>
+  );
+}
+
+function ManageFooter({
+  picked,
+  confirming,
+  onConfirm,
+  onRemove,
+  onDone,
+}: {
+  picked: ServiceDefinition[];
+  confirming: boolean;
+  onConfirm: (on: boolean) => void;
+  onRemove: () => Promise<boolean>;
+  onDone: () => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  if (confirming && picked.length > 0) {
+    const copy = describeServicesRemove(picked);
+    return (
+      <div className={PANEL_FOOTER}>
+        <span className='flex min-w-0 flex-1 flex-col ps-1.5'>
+          <span className='truncate text-fg-4 text-xs'>{copy.question}</span>
+          <span className='truncate text-2xs text-fg-2'>{copy.note}</span>
+        </span>
+        <Button variant='secondary' size='sm' onClick={() => onConfirm(false)}>
+          Cancel
+        </Button>
+        <Button
+          variant='destructive'
+          size='sm'
+          loading={busy}
+          onClick={async () => {
+            setBusy(true);
+            await onRemove();
+            setBusy(false);
+          }}
         >
-          <GroupHeader group={group} />
-          {group.views.length === 0 ? (
-            <p className='px-2.5 pb-2 text-2xs text-fg-2'>No services yet.</p>
-          ) : (
-            <HoverHighlight className='flex flex-col gap-px px-1'>
-              {group.views.map((view) => (
-                <ServiceRow
-                  key={view.service.id}
-                  view={view}
-                  project={group.project}
-                  now={now}
-                  handlers={handlers}
-                />
-              ))}
-            </HoverHighlight>
-          )}
-        </section>
-      ))}
-      {groups.length === 0 && <p className='px-2.5 py-2 text-2xs text-fg-2'>No services yet.</p>}
-      <div className='flex items-center gap-1 border-border border-t p-1.5'>{footer}</div>
+          Remove
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <div className={PANEL_FOOTER}>
+      <Button
+        variant='destructive'
+        size='sm'
+        icon='IconTrashCan'
+        disabled={picked.length === 0}
+        onClick={() => onConfirm(true)}
+      >
+        {describeRemoveServices(picked.length)}
+      </Button>
+      <span className='flex-1' />
+      <Button variant='secondary' size='sm' onClick={onDone}>
+        Done
+      </Button>
+    </div>
+  );
+}
+
+interface ServicesPanelProps {
+  groups: ServiceGroup[];
+  scope: Project[];
+  now: number;
+  handlers: ServiceHandlers;
+  actions: ServicesPanelActions;
+  panel: ServicesPanelState;
+  onPanel: (action: ServicesPanelAction) => void;
+  onCreateProject: () => void;
+  onTerminal: () => void;
+}
+
+export function ServicesPanel(props: ServicesPanelProps) {
+  const { groups, scope, panel } = props;
+  const views = groups.flatMap((group) => group.views);
+  const addProject = panel.projectId ?? resolveServicesAddTarget(scope, groups)?.id ?? null;
+  const edited = selectEditedService(views, panel.editing);
+  const shown = resolveShownServicesView(panel, addProject !== null, edited !== null);
+  return (
+    <div className={cn('flex min-h-0 flex-col', VIEW_HEIGHT[resolveServicesPanelHeight(shown)])}>
+      <ServicesPanelContent {...props} shown={shown} addProject={addProject} edited={edited} />
+    </div>
+  );
+}
+
+function ServicesPanelContent({
+  groups,
+  scope,
+  now,
+  handlers,
+  actions,
+  panel,
+  onPanel,
+  onCreateProject,
+  onTerminal,
+  shown,
+  addProject,
+  edited,
+}: ServicesPanelProps & {
+  shown: ServicesPanelView;
+  addProject: string | null;
+  edited: ServiceDefinition | null;
+}) {
+  const views = groups.flatMap((group) => group.views);
+  const empty = views.length === 0;
+  const addTarget = resolveServicesAddTarget(scope, groups);
+  const onAdd = addTarget && (() => onPanel({ type: 'open', mode: 'add', projectId: addTarget.id }));
+  const picked = listPickedServices(views, panel.picked);
+
+  if (shown === 'add' && addProject)
+    return (
+      <AddServicesView
+        projects={scope}
+        projectId={addProject}
+        actions={actions}
+        onProject={(projectId) => onPanel({ type: 'project', projectId })}
+        onCustom={() => onPanel({ type: 'custom' })}
+        onBack={() => onPanel({ type: 'back' })}
+        onDone={() => onPanel({ type: 'done' })}
+      />
+    );
+  if (shown === 'custom' && addProject)
+    return (
+      <CustomServiceView
+        projectId={addProject}
+        actions={actions}
+        onBack={() => onPanel({ type: 'back' })}
+        onDone={() => onPanel({ type: 'done' })}
+      />
+    );
+  if (shown === 'edit' && edited)
+    return <EditServiceView service={edited} actions={actions} onBack={() => onPanel({ type: 'back' })} />;
+
+  async function removePicked() {
+    const removed = await actions.remove(picked);
+    if (removed) onPanel({ type: 'removed' });
+    return removed;
+  }
+
+  const manage =
+    panel.manage && !empty
+      ? {
+          picked: panel.picked,
+          onPick: (next: string[]) => onPanel({ type: 'pick', picked: next }),
+          onEdit: (serviceId: string) => onPanel({ type: 'edit', serviceId }),
+        }
+      : null;
+  return (
+    <>
+      {empty ? (
+        <div className='px-3 py-6'>
+          <ServicesEmpty
+            project={groups.length === 1 ? (groups[0]?.project ?? null) : null}
+            onCreateProject={onAdd ? null : onCreateProject}
+          />
+        </div>
+      ) : (
+        <div className='min-h-0 overflow-y-auto'>
+          <CompactSections className={COMPACT_POPOVER_INSET}>
+            {groups.map((group) => (
+              <ServiceGroupSection
+                key={group.project.id}
+                group={group}
+                now={now}
+                handlers={handlers}
+                manage={manage}
+              />
+            ))}
+          </CompactSections>
+        </div>
+      )}
+      {manage ? (
+        <ManageFooter
+          picked={picked}
+          confirming={panel.confirming}
+          onConfirm={(on) => onPanel({ type: 'confirm', on })}
+          onRemove={removePicked}
+          onDone={() => onPanel({ type: 'manage', on: false })}
+        />
+      ) : (
+        <ListFooter
+          onAdd={onAdd}
+          onManage={empty ? null : () => onPanel({ type: 'manage', on: true })}
+          onTerminal={onTerminal}
+        />
+      )}
     </>
   );
 }
@@ -130,6 +433,9 @@ export function ServicesMenu({
   onNavigate?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [panel, dispatch] = React.useReducer(reduceServicesPanel, null, () =>
+    createServicesPanel('list', null)
+  );
   const route = useRoute();
   const onTerminal = route.name === 'terminal';
   const snapshot = useTerminals();
@@ -137,90 +443,78 @@ export function ServicesMenu({
   const terminalProject = resolveTerminalProject(state, useSearchParam('project'), now);
   const scope = resolveServicesProjects(state, onTerminal ? (terminalProject?.id ?? null) : null, now);
   const groups = listServiceGroups(snapshot, scope, now);
-  const close = () => setOpen(false);
   const leave = () => {
-    close();
+    setOpen(false);
     onNavigate?.();
   };
-  const actions = useServiceActions({ state, onNavigate: leave });
-  const addTarget = resolveServicesAddTarget(scope, groups);
+  const { handlers, actions } = useServiceActions({ state, onNavigate: leave });
+
+  useServicesPanelRequest((mode) => {
+    dispatch({ type: 'open', mode, projectId: resolveServicesAddTarget(scope, groups)?.id ?? null });
+    setOpen(true);
+  });
 
   return (
-    <>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          render={
-            variant === 'rail' ? (
-              <button
-                type='button'
-                data-services-trigger=''
-                data-active={onTerminal}
-                aria-current={onTerminal ? 'page' : undefined}
-                className={NAV_ITEM}
-              />
-            ) : (
-              <Button
-                variant='secondary'
-                size='sm'
-                data-services-trigger=''
-                aria-current={onTerminal ? 'page' : undefined}
-                icon={{ name: 'IconChevronDownSmall', position: 'inline-end' }}
-                className={cn('pl-1.5', onTerminal ? 'text-fg-4' : 'text-fg-3')}
-              />
-            )
-          }
-        >
-          <ServicesTriggerLabel
-            views={groups.flatMap((group) => group.views)}
-            active={onTerminal}
-            variant={variant}
-          />
-        </PopoverTrigger>
-        <PopoverContent
-          align='start'
-          side={variant === 'rail' ? 'right' : 'bottom'}
-          sideOffset={6}
-          collisionAvoidance={{ fallbackAxisSide: 'none' }}
-          className='max-h-(--available-height) w-96 max-w-[calc(100vw-1rem)] gap-0 overflow-y-auto p-0 [--glyph-ring:var(--color-popover)]'
-        >
-          <ServicesPanel
-            groups={groups}
-            now={now}
-            handlers={actions.handlers}
-            footer={
-              <>
-                {addTarget && (
-                  <Button
-                    variant='secondary'
-                    size='sm'
-                    icon='IconPlusMedium'
-                    onClick={() => {
-                      close();
-                      actions.add(addTarget.id);
-                    }}
-                  >
-                    Add services…
-                  </Button>
-                )}
-                <span className='flex-1' />
-                <Button
-                  variant='secondary'
-                  size='sm'
-                  icon='IconConsole'
-                  data-terminal-entry=''
-                  onClick={() => {
-                    leave();
-                    navigate(resolveTerminalEntry());
-                  }}
-                >
-                  Terminal
-                </Button>
-              </>
-            }
-          />
-        </PopoverContent>
-      </Popover>
-      {actions.dialogs}
-    </>
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(shown) => {
+        if (!shown) dispatch({ type: 'open', mode: 'list', projectId: null });
+      }}
+    >
+      <PopoverTrigger
+        render={
+          variant === 'rail' ? (
+            <button
+              type='button'
+              data-services-trigger=''
+              data-active={onTerminal}
+              aria-current={onTerminal ? 'page' : undefined}
+              className={NAV_ITEM}
+            />
+          ) : (
+            <Button
+              variant='secondary'
+              size='sm'
+              data-services-trigger=''
+              aria-current={onTerminal ? 'page' : undefined}
+              icon={{ name: 'IconChevronDownSmall', position: 'inline-end' }}
+              className={cn('pl-1.5', onTerminal ? 'text-fg-4' : 'text-fg-3')}
+            />
+          )
+        }
+      >
+        <ServicesTriggerLabel
+          views={groups.flatMap((group) => group.views)}
+          active={onTerminal}
+          variant={variant}
+        />
+      </PopoverTrigger>
+      <PopoverContent
+        align='start'
+        side={variant === 'rail' ? 'right' : 'bottom'}
+        sideOffset={6}
+        collisionAvoidance={{ fallbackAxisSide: 'none' }}
+        className={SERVICES_PANEL}
+      >
+        <ServicesPanel
+          groups={groups}
+          scope={scope}
+          now={now}
+          handlers={handlers}
+          actions={actions}
+          panel={panel}
+          onPanel={dispatch}
+          onCreateProject={() => {
+            leave();
+            navigate(resolveSettingsPath('projects'));
+          }}
+          onTerminal={() => {
+            leave();
+            navigate(resolveTerminalEntry());
+          }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }

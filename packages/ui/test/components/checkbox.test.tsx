@@ -16,4 +16,22 @@ describe('Checkbox', () => {
     expect(view.getByRole('checkbox', { name: 'Viewed' }).className).toContain('size-3.5');
     expect(box.querySelector('[data-slot=icon]')).not.toBeNull();
   });
+
+  it('fills with the accent when ticked, or, as an outline, has no fill until it is ticked', () => {
+    const view = render(
+      <>
+        <Checkbox aria-label='Filled' checked />
+        <Checkbox aria-label='Outlined' variant='outline' checked />
+      </>
+    );
+    const filled = view.getByRole('checkbox', { name: 'Filled' }).className.split(' ');
+    expect(filled).toEqual(expect.arrayContaining(['bg-background', 'data-checked:bg-primary-4']));
+    const outlined = view.getByRole('checkbox', { name: 'Outlined' });
+    expect(outlined.dataset.variant).toBe('outline');
+    const classes = outlined.className.split(' ');
+    expect(classes).toEqual(
+      expect.arrayContaining(['bg-transparent', 'data-checked:border-primary-4', 'data-checked:bg-primary-4'])
+    );
+    expect(classes).not.toContain('bg-background');
+  });
 });

@@ -1,15 +1,12 @@
 import { isServiceActive, type Project, type ServiceView } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@shinsa/ui/components/dropdown-menu';
+import { Checkbox } from '@shinsa/ui/components/checkbox';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
+import type * as React from 'react';
+import { LIST_ROW, LIST_ROW_LINES, LIST_ROW_META, LIST_ROW_TITLE } from '@/components/layout/list-row.tsx';
+import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -19,29 +16,28 @@ export interface ServiceHandlers {
   start: (view: ServiceView) => void;
   stop: (view: ServiceView) => void;
   restart: (view: ServiceView) => void;
+  startAll: (project: Project) => void;
   open: (view: ServiceView, project: Project) => void;
-  edit: (view: ServiceView, project: Project) => void;
-  remove: (view: ServiceView) => void;
 }
 
-function ServiceGlyph({ view, now }: { view: ServiceView; now: number }) {
-  return <StatusTile {...SERVICE_GLYPHS[view.state]} label={describeServiceState(view, now)} />;
-}
+const REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
 
-function ActionButton({
+export function ServiceActionButton({
   label,
   icon,
   size = 'icon-sm',
+  variant = 'secondary',
   onClick,
 }: {
   label: string;
   icon: IconName;
   size?: 'icon-xs' | 'icon-sm';
-  onClick: () => void;
+  variant?: 'secondary' | 'bare';
+  onClick: React.MouseEventHandler<HTMLButtonElement>;
 }) {
   return (
     <Hint label={label}>
-      <Button variant='secondary' size={size} icon={icon} aria-label={label} onClick={onClick} />
+      <Button variant={variant} size={size} icon={icon} aria-label={label} onClick={onClick} />
     </Hint>
   );
 }
@@ -61,16 +57,16 @@ export function ServiceRunButtons({
 }) {
   const name = view.service.name;
   if (!isServiceActive(view))
-    return <ActionButton label={`Start ${name}`} icon='IconPlay' size={size} onClick={onStart} />;
+    return <ServiceActionButton label={`Start ${name}`} icon='IconPlay' size={size} onClick={onStart} />;
   return (
     <>
-      <ActionButton
+      <ServiceActionButton
         label={`Restart ${name}`}
         icon='IconArrowRotateClockwise'
         size={size}
         onClick={onRestart}
       />
-      <ActionButton label={`Stop ${name}`} icon='IconStop' size={size} onClick={onStop} />
+      <ServiceActionButton label={`Stop ${name}`} icon='IconStop' size={size} onClick={onStop} />
     </>
   );
 }
@@ -86,50 +82,98 @@ export function ServiceRow({
   now: number;
   handlers: ServiceHandlers;
 }) {
-  const { terminal } = view;
   const glyph = SERVICE_GLYPHS[view.state];
+  const state = describeServiceState(view, now);
+  const name = view.service.name;
+  const active = isServiceActive(view);
   return (
-    <div data-highlight-item='' className='flex items-center gap-2 rounded-control py-1 ps-1.5 pe-1'>
-      <ServiceGlyph view={view} now={now} />
+    <div data-highlight-item='' className='group/service flex items-center gap-1 rounded-control pe-1'>
       <button
         type='button'
-        disabled={!terminal}
+        disabled={!view.terminal}
+        aria-label={view.terminal ? `Open the terminal of ${name}` : name}
         onClick={() => handlers.open(view, project)}
-        className='flex min-w-0 flex-1 cursor-pointer flex-col gap-px text-left outline-none disabled:cursor-default'
+        className={cn(LIST_ROW, LIST_ROW_LINES, 'min-w-0 flex-1 ps-1.5 disabled:cursor-default')}
       >
-        <Truncate className='text-fg-4 text-xs'>{view.service.name}</Truncate>
-        <Truncate className='text-2xs text-fg-2'>
-          <span className={cn(glyph.tone !== 'neutral' && TONE_TEXT[glyph.tone])}>
-            {describeServiceState(view, now)}
-          </span>{' '}
-          · {view.service.command}
-        </Truncate>
+        <StatusTile icon={glyph.icon} tone={glyph.tone} label={state} />
+        <ServiceLines view={view} now={now} />
       </button>
-      <span className='flex shrink-0 items-center'>
-        <ServiceRunButtons
-          view={view}
-          onStart={() => handlers.start(view)}
-          onStop={() => handlers.stop(view)}
-          onRestart={() => handlers.restart(view)}
-        />
-        {terminal && (
-          <ActionButton
-            label='Open terminal'
-            icon='IconConsole'
-            onClick={() => handlers.open(view, project)}
+      {active ? (
+        <span className={cn('flex shrink-0 items-center gap-px', REVEAL)}>
+          <ServiceActionButton
+            label={`Restart ${name}`}
+            icon='IconArrowRotateClockwise'
+            onClick={() => handlers.restart(view)}
           />
-        )}
-        <DropdownMenu>
-          <OptionsTrigger label={`More for ${view.service.name}`} />
-          <DropdownMenuContent align='end' className='min-w-44'>
-            <DropdownMenuItem onClick={() => handlers.edit(view, project)}>Edit…</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant='destructive' onClick={() => handlers.remove(view)}>
-              Remove
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          <ServiceActionButton label={`Stop ${name}`} icon='IconStop' onClick={() => handlers.stop(view)} />
+        </span>
+      ) : (
+        <ServiceActionButton label={`Start ${name}`} icon='IconPlay' onClick={() => handlers.start(view)} />
+      )}
+    </div>
+  );
+}
+
+function ServiceLines({ view, now }: { view: ServiceView; now: number }) {
+  const glyph = SERVICE_GLYPHS[view.state];
+  return (
+    <span className='flex min-w-0 flex-1 flex-col gap-px'>
+      <Truncate className={LIST_ROW_TITLE}>{view.service.name}</Truncate>
+      <Truncate className={LIST_ROW_META}>
+        <span className={cn(glyph.tone !== 'neutral' && TONE_TEXT[glyph.tone])}>
+          {describeServiceState(view, now)}
+        </span>
+        {' · '}
+        <span className='font-mono'>{view.service.command}</span>
+      </Truncate>
+    </span>
+  );
+}
+
+export function ManagedServiceRow({
+  view,
+  now,
+  picked,
+  onPick,
+  onEdit,
+}: {
+  view: ServiceView;
+  now: number;
+  picked: boolean;
+  onPick: () => void;
+  onEdit: () => void;
+}) {
+  const name = view.service.name;
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the checkbox inside takes the keys
+    // biome-ignore lint/a11y/noStaticElementInteractions: the whole row ticks its checkbox
+    <div
+      data-highlight-item=''
+      onClick={onPick}
+      className='group/service flex cursor-pointer items-center gap-1 rounded-control pe-1'
+    >
+      <span className={cn(LIST_ROW, LIST_ROW_LINES, 'min-w-0 flex-1 ps-1.5')}>
+        <span className={ICON_SLOT}>
+          <Checkbox
+            size='sm'
+            variant='outline'
+            checked={picked}
+            aria-label={`Select ${name}`}
+            onClick={(event) => event.stopPropagation()}
+            onCheckedChange={onPick}
+          />
+        </span>
+        <ServiceLines view={view} now={now} />
       </span>
+      <ServiceActionButton
+        label={`Edit ${name}`}
+        icon='IconPencil'
+        variant='bare'
+        onClick={(event) => {
+          event.stopPropagation();
+          onEdit();
+        }}
+      />
     </div>
   );
 }

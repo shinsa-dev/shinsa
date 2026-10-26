@@ -10,17 +10,25 @@ import {
 import { Button } from '@shinsa/ui/components/button';
 import { DropdownMenu } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
+import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ProjectMenuTrigger } from '@/components/focus/menu.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
-import { ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
-import { ServicePicker } from '@/components/services/service-dialog.tsx';
+import { SERVICES_PANEL, ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
+import type { ServicesPanelActions } from '@/components/services/panel-views.tsx';
 import { type ServiceHandlers, ServiceRow } from '@/components/services/service-row.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
-import { listRecommendedPicks, togglePick } from '@/lib/terminal/services.ts';
+import type { ServiceGroup } from '@/lib/terminal/services.ts';
+import {
+  createServicesPanel,
+  reduceServicesPanel,
+  type ServicesPanelAction,
+  type ServicesPanelState,
+} from '@/lib/terminal/services-panel.ts';
 import type { PlaceGroup } from '@/lib/terminal/tabs.ts';
 import { readDocumentVariable, resolveTerminalTheme } from '@/lib/terminal/theme.ts';
 import { acknowledgeSample } from './samples.ts';
@@ -114,25 +122,69 @@ const SHOP_PLACES: TerminalPlace[] = [
   { path: '~/Developer/shop', label: 'shop', kind: 'repository', taskId: null },
 ];
 
-function ServicePickerSample() {
-  const [picked, setPicked] = React.useState(() => listRecommendedPicks(SUGGESTIONS));
+const PANEL_ACTIONS: ServicesPanelActions = {
+  home: '~',
+  focusForms: false,
+  listPlaces: () => SHOP_PLACES,
+  listSuggestions: async () => SUGGESTIONS,
+  add: async () => true,
+  addOne: async () => true,
+  update: async () => true,
+  remove: async () => true,
+};
+
+function PanelSample({
+  groups,
+  scope = groups.map((group) => group.project),
+  start,
+}: {
+  groups: ServiceGroup[];
+  scope?: Project[];
+  start: ServicesPanelAction[];
+}) {
+  const [panel, dispatch] = React.useReducer(
+    reduceServicesPanel,
+    start,
+    (actions): ServicesPanelState => actions.reduce(reduceServicesPanel, createServicesPanel('list', 'shop'))
+  );
   return (
-    <ServicePicker
-      suggestions={SUGGESTIONS}
-      places={SHOP_PLACES}
-      picked={picked}
-      onToggle={(key) => setPicked((current) => togglePick(current, key))}
-    />
+    <div
+      className={cn(
+        SERVICES_PANEL,
+        'overflow-hidden rounded-lg border border-border bg-popover [--available-height:28rem]'
+      )}
+    >
+      <ServicesPanel
+        groups={groups}
+        scope={scope}
+        now={NOW}
+        handlers={HANDLERS}
+        actions={PANEL_ACTIONS}
+        panel={panel}
+        onPanel={dispatch}
+        onCreateProject={acknowledgeSample}
+        onTerminal={acknowledgeSample}
+      />
+    </div>
   );
 }
+
+const BLOG: Project = { ...PROJECT, id: 'blog', name: 'Blog', key: 'BLOG', color: 'blue' };
+
+const NOTES: Project = { ...PROJECT, id: 'notes', name: 'Notes', key: 'NOTE', color: 'orange' };
+
+const GROUPS_MANY: ServiceGroup[] = [
+  { project: BLOG, views: VIEWS.slice(0, 1) },
+  { project: NOTES, views: VIEWS.slice(3, 5) },
+  { project: PROJECT, views: VIEWS },
+];
 
 const HANDLERS: ServiceHandlers = {
   start: acknowledgeSample,
   stop: acknowledgeSample,
   restart: acknowledgeSample,
+  startAll: acknowledgeSample,
   open: acknowledgeSample,
-  edit: acknowledgeSample,
-  remove: acknowledgeSample,
 };
 
 const GROUPS: PlaceGroup[] = [
@@ -223,50 +275,59 @@ export function TerminalSpecimens() {
           </button>
         </div>
       </Specimen>
-      <Specimen label='ServiceRow · running, starting, failed, exited and never started'>
-        <div className='flex w-96 flex-col gap-px rounded-lg border border-border p-1'>
+      <Specimen label='ServiceRow · running, starting, failed, exited and never started (hover a running row for Restart and Stop)'>
+        <HoverHighlight className='flex w-88 flex-col gap-px rounded-lg border border-border p-1'>
           {VIEWS.map((view) => (
             <ServiceRow key={view.service.id} view={view} project={PROJECT} now={NOW} handlers={HANDLERS} />
           ))}
+        </HoverHighlight>
+      </Specimen>
+      <Specimen label='The Services popover · three projects, each folding from its header, the play button that starts all where two or more are stopped'>
+        <PanelSample groups={GROUPS_MANY} start={[]} />
+      </Specimen>
+      <Specimen label='The Services popover · a project with none yet, and no project at all'>
+        <div className='flex flex-wrap items-start gap-3'>
+          <PanelSample groups={[{ project: PROJECT, views: [] }]} start={[]} />
+          <PanelSample groups={[]} start={[]} />
         </div>
       </Specimen>
-      <Specimen label='The Services popover · a project’s services and its footer'>
-        <div className='flex w-96 flex-col overflow-hidden rounded-lg border border-border bg-popover'>
-          <ServicesPanel
-            groups={[{ project: PROJECT, views: VIEWS.slice(0, 3) }]}
-            now={NOW}
-            handlers={HANDLERS}
-            footer={
-              <>
-                <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={acknowledgeSample}>
-                  Add services…
-                </Button>
-                <span className='flex-1' />
-                <Button variant='secondary' size='sm' icon='IconConsole' onClick={acknowledgeSample}>
-                  Terminal
-                </Button>
-              </>
-            }
+      <Specimen label='The Services popover · Manage, two ticked, and asking before it removes them'>
+        <div className='flex flex-wrap items-start gap-3'>
+          <PanelSample
+            groups={GROUPS_MANY}
+            start={[
+              { type: 'manage', on: true },
+              { type: 'pick', picked: VIEWS.slice(3, 5).map((view) => view.service.id) },
+            ]}
+          />
+          <PanelSample
+            groups={GROUPS_MANY}
+            start={[
+              { type: 'manage', on: true },
+              { type: 'pick', picked: VIEWS.slice(3, 5).map((view) => view.service.id) },
+              { type: 'confirm', on: true },
+            ]}
           />
         </div>
       </Specimen>
-      <Specimen label='The Services popover · a project with none yet'>
-        <div className='flex w-96 flex-col overflow-hidden rounded-lg border border-border bg-popover'>
-          <ServicesPanel
-            groups={[{ project: PROJECT, views: [] }]}
-            now={NOW}
-            handlers={HANDLERS}
-            footer={
-              <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={acknowledgeSample}>
-                Add services…
-              </Button>
-            }
+      <Specimen label='The Services popover · Add services with the project picker, the custom form and editing a service'>
+        <div className='flex flex-wrap items-start gap-3'>
+          <PanelSample
+            groups={GROUPS_MANY}
+            scope={[PROJECT, BLOG, NOTES]}
+            start={[{ type: 'open', mode: 'add', projectId: 'shop' }]}
           />
-        </div>
-      </Specimen>
-      <Specimen label='Add services · what Shinsa found, the recommended ones ticked'>
-        <div className='w-105'>
-          <ServicePickerSample />
+          <PanelSample
+            groups={GROUPS_MANY}
+            start={[{ type: 'open', mode: 'add', projectId: 'shop' }, { type: 'custom' }]}
+          />
+          <PanelSample
+            groups={GROUPS_MANY}
+            start={[
+              { type: 'manage', on: true },
+              { type: 'edit', serviceId: VIEWS[0]?.service.id ?? '' },
+            ]}
+          />
         </div>
       </Specimen>
       <Specimen label='The Terminal page’s project picker, the Focus menu’s trigger'>

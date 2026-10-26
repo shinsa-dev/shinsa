@@ -314,7 +314,7 @@ describe('services over HTTP', () => {
     );
     expect(same.suggestions).toEqual([]);
     for (const each of terminals.snapshot().services)
-      if (each.id !== service.id) terminals.removeService(each.id);
+      if (each.id !== service.id) terminals.removeServices([each.id]);
 
     const started = (await (await post(`/api/services/${service.id}/start`, {}, null)).json()) as {
       terminal: TerminalInfo;
@@ -342,7 +342,7 @@ describe('services over HTTP', () => {
     expect(terminals.find(started.terminal.id).info.status).toBe('running');
 
     const removed = (await (
-      await post(`/api/services/${service.id}/remove`, {})
+      await post('/api/services/remove', { ids: [service.id] })
     ).json()) as TerminalsSnapshot;
     expect(removed).toMatchObject({ services: [], terminals: [] });
   });
@@ -363,12 +363,34 @@ describe('services over HTTP', () => {
     for (let index = 0; index < 31; index += 1)
       terminals.addService(projectId, { name: `s${index}`, cwd: repoPath, command: 'x', env: {} });
     expect(await refusal({ projectId, services: [one, { ...one, name: 'web' }] })).toBe('service_limit');
-    for (const service of terminals.snapshot().services) terminals.removeService(service.id);
+    for (const service of terminals.snapshot().services) terminals.removeServices([service.id]);
     const added = (await (
       await post('/api/services/batch', { projectId, services: [one, { ...one, name: 'web' }] })
     ).json()) as { added: ServiceDefinition[] } & TerminalsSnapshot;
     expect(added.added.map((service) => service.name)).toEqual(['api', 'web']);
     expect(added.services.map((service) => service.name)).toEqual(['api', 'web']);
+  });
+
+  test('removes several services at once, finding every one before it removes any', async () => {
+    const { post, projectId, repoPath, terminals } = await start();
+    const add = (name: string) =>
+      terminals.addService(projectId, { name, cwd: repoPath, command: 'sleep 30', env: {} });
+    const [api, web, docs] = [add('api'), add('web'), add('docs')];
+    const started = terminals.startService(api.id, 'repository');
+    const refusal = async (body: unknown, origin: string | null = ORIGIN) =>
+      ((await (await post('/api/services/remove', body, origin)).json()) as { error: { code: string } }).error
+        .code;
+    expect(await refusal({ ids: [] })).toBe('body_invalid');
+    expect(await refusal({ ids: 'api' })).toBe('body_invalid');
+    expect(await refusal({ ids: [api.id, 3] })).toBe('body_invalid');
+    expect(await refusal({ ids: [api.id, 'gone'] })).toBe('service_not_found');
+    expect(await refusal({ ids: [api.id] }, null)).toBe('browser_only');
+    expect(terminals.snapshot().services).toHaveLength(3);
+    const removed = (await (
+      await post('/api/services/remove', { ids: [api.id, web.id, api.id] })
+    ).json()) as TerminalsSnapshot;
+    expect(removed.services.map((service) => service.id)).toEqual([docs?.id]);
+    expect(removed.terminals.map((terminal) => terminal.id)).not.toContain(started.id);
   });
 
   test('refuses a bad service, a folder outside the project and a change without the page', async () => {

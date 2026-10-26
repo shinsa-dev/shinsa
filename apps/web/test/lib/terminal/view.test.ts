@@ -324,8 +324,12 @@ describe('TerminalView', () => {
     host.remove();
   });
 
-  it('finds in the scrollback, counts the results and clears them when closed', async () => {
-    const { view } = createView();
+  it('finds in the scrollback in the Code tab’s find colours, counts the results and clears them when closed', async () => {
+    const tokens: Record<string, string> = {
+      '--terminal-find-match': '#ffcc0026',
+      '--terminal-find-active': '#ffcc00',
+    };
+    const { view } = createView({ read: (name) => tokens[name] ?? '' });
     const host = document.createElement('div');
     document.body.append(host);
     view.mount(host);
@@ -333,6 +337,7 @@ describe('TerminalView', () => {
     const changes: number[] = [];
     const stop = view.subscribe(() => changes.push(1));
     expect(view.find('ready', { caseSensitive: false, wholeWord: false, regex: false })).toBe(true);
+    expect(view.results).toEqual({ index: 0, count: 2 });
     expect(view.find('ready', { caseSensitive: false, wholeWord: false, regex: false }, true)).toBe(true);
     expect(view.find('', { caseSensitive: false, wholeWord: false, regex: false })).toBe(false);
     expect(view.results).toBeNull();

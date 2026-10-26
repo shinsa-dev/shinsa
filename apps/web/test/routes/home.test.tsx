@@ -95,6 +95,13 @@ describe('HomePage', () => {
     ]);
   });
 
+  it('leaves the way to All tasks and Settings to the top bar', () => {
+    renderHome();
+    expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'All tasks' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
+
   it('shows each task in one section, so a finished or moving task never repeats under Recent conversations', () => {
     renderHome();
     const conversations = header(/^Recent conversations/).closest('section') as HTMLElement;

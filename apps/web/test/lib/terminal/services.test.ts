@@ -1,25 +1,36 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveServiceView, SERVICE_LIMITS } from '@shinsa/core';
 import {
+  canStartAll,
   createServiceDraft,
   describeAddServices,
   describeNoSuggestions,
+  describeRemoveServices,
   describeServiceClose,
   describeServiceFolder,
-  describeServiceRemove,
+  describeServiceGroup,
   describeServiceState,
   describeServicesAdded,
+  describeServicesEmpty,
+  describeServicesRemove,
   describeServicesTrigger,
+  describeStartAll,
+  listAllPicks,
   listPickedInputs,
   listRecommendedPicks,
   listServiceFolders,
   listServiceGroups,
   listServicePlaces,
+  listStoppedServices,
   parseServiceEnv,
-  resolveServiceDialog,
+  resolveActiveService,
+  resolveServiceForm,
+  resolveServiceGroupFlag,
   resolveServicesAddTarget,
   resolveServicesProjects,
+  resolveShownErrors,
   resolveSuggestionKey,
+  SERVICE_GLYPHS,
   serializeServiceEnv,
   togglePick,
   validateServiceDraft,
@@ -73,6 +84,65 @@ describe('describeServicesTrigger', () => {
     expect(describeServicesTrigger([running, starting])).toEqual({ label: '1 starting', tone: 'blue' });
     expect(describeServicesTrigger([running, running])).toEqual({ label: '2 running', tone: 'neutral' });
     expect(describeServicesTrigger([view(null)])).toEqual({ label: 'Services', tone: 'neutral' });
+  });
+});
+
+describe('a project’s services in the menu', () => {
+  const running = view({ id: 'r', startedAt: NOW });
+  const starting = view({ id: 's', startedAt: LATER });
+  const failed = view({ id: 'f', status: 'exited', exitCode: 1, endedAt: NOW });
+  const stopped = view(null);
+
+  it('counts what failed, starts and runs, in their tones, else how many are stopped', () => {
+    expect(describeServiceGroup([running, failed, starting, running])).toEqual([
+      { label: '1 failed', tone: 'red' },
+      { label: '1 starting', tone: 'blue' },
+      { label: '2 running', tone: 'neutral' },
+    ]);
+    expect(describeServiceGroup([stopped, stopped])).toEqual([{ label: '2 stopped', tone: 'neutral' }]);
+    expect(describeServiceGroup([])).toEqual([]);
+  });
+
+  it('offers Start all when two or more are not running, and starts the ones that are not', () => {
+    expect(canStartAll([running, stopped])).toBe(false);
+    expect(canStartAll([failed, stopped, running])).toBe(true);
+    expect(listStoppedServices([failed, starting, stopped, running])).toEqual([failed, stopped]);
+    expect(describeStartAll(createProject({ id: 'shop', name: 'Shop' }))).toBe('Start all services in Shop');
+  });
+
+  it('runs the service whose tab is in front, and none when a shell or no tab is', () => {
+    const tab = createTerminal({ id: 'r', serviceId: 'api' });
+    expect(resolveActiveService([stopped, running], tab)).toBe(running);
+    expect(resolveActiveService([stopped, running], createTerminal({ id: 'shell' }))).toBeNull();
+    expect(resolveActiveService([stopped, running], null)).toBeNull();
+  });
+
+  it('keeps each project’s fold apart', () => {
+    expect(resolveServiceGroupFlag('shop')).toBe('shinsa.services-open.shop');
+  });
+
+  it('says what a service is when there are none, naming the project in view', () => {
+    expect(describeServicesEmpty(null)).toEqual({
+      title: 'No services yet',
+      description: 'A service is a command you keep running for a project, like its dev server.',
+    });
+    expect(describeServicesEmpty(createProject({ id: 'shop', name: 'Shop' })).title).toBe(
+      'No services in Shop yet'
+    );
+  });
+
+  it('draws a stopped service as idle, never as a box', () => {
+    expect(SERVICE_GLYPHS.stopped).toEqual({
+      icon: 'IconCircleDashed',
+      activeIcon: 'IconCircleDashedFilled',
+      tone: 'neutral',
+    });
+    expect(SERVICE_GLYPHS.exited.icon).toBe('IconCircleDashed');
+  });
+
+  it('fills every state’s glyph on the tab in front', () => {
+    for (const glyph of Object.values(SERVICE_GLYPHS))
+      expect(String(glyph.activeIcon)).toBe(`${glyph.icon}Filled`);
   });
 });
 
@@ -159,11 +229,28 @@ describe('the service form', () => {
     ).toMatchObject({ ok: false, errors: { name: `Keep the name to ${SERVICE_LIMITS.name} characters.` } });
   });
 
-  it('words the dialog for adding and editing, and the confirmations', () => {
-    expect(resolveServiceDialog('add', 'api')).toMatchObject({ title: 'Add services', done: 'Added api.' });
-    expect(resolveServiceDialog('edit', 'api')).toMatchObject({ title: 'Edit api', action: 'Save' });
-    expect(resolveServiceDialog('edit', '').title).toBe('Edit the service');
-    expect(describeServiceRemove(API)).toContain('“api”');
+  it('words the forms for adding and editing, and the confirmations', () => {
+    expect(resolveServiceForm('add', 'api')).toMatchObject({ title: 'Add services', done: 'Added api.' });
+    expect(resolveServiceForm('custom', '')).toMatchObject({
+      title: 'Add a service',
+      description: 'Name the command that starts it and the folder it runs in.',
+      action: 'Add service',
+    });
+    expect(resolveServiceForm('edit', 'api')).toMatchObject({ title: 'Edit api', action: 'Save' });
+    expect(resolveServiceForm('edit', '').title).toBe('Edit the service');
+    expect(describeServicesRemove([API])).toEqual({
+      question: 'Remove api?',
+      note: 'It stops and its terminal closes.',
+      done: 'Removed api.',
+    });
+    const web = createService({ id: 'web' });
+    const docs = createService({ id: 'docs' });
+    expect(describeServicesRemove([API, web])).toEqual({
+      question: 'Remove 2 services?',
+      note: 'They stop and their terminals close.',
+      done: 'Removed api and web.',
+    });
+    expect(describeServicesRemove([API, web, docs]).done).toBe('Removed 3 services.');
     expect(describeServiceClose(API)).toContain('“api” stops');
   });
 
@@ -206,6 +293,30 @@ describe('the service form', () => {
     expect(describeServicesAdded(['api'])).toBe('Added api.');
     expect(describeServicesAdded(['api', 'web'])).toBe('Added api and web.');
     expect(describeServicesAdded(['a', 'b', 'c'])).toBe('Added 3 services.');
-    expect(describeNoSuggestions('Shop')).toBe('No services found in Shop.');
+    expect(describeNoSuggestions('Shop')).toBe(
+      'No services found in Shop. Name the command that starts one and the folder it runs in.'
+    );
+  });
+
+  it('selects every suggestion, or none once all are ticked', () => {
+    const all = { ...WEB, name: 'all', cwd: '/shop', recommended: false };
+    const keys = [resolveSuggestionKey(WEB), resolveSuggestionKey(all)];
+    expect(listAllPicks([WEB, all], [keys[0] ?? ''])).toEqual({ label: 'Select all', picks: keys });
+    expect(listAllPicks([WEB, all], keys)).toEqual({ label: 'Deselect all', picks: [] });
+  });
+
+  it('shows a field’s problem only once you have left it after typing, or tried to add', () => {
+    const errors = { name: 'Give the service a name.', command: 'Give the command that starts it.' };
+    expect(resolveShownErrors(errors, [], false)).toEqual({});
+    expect(resolveShownErrors(errors, ['command'], false)).toEqual({ command: errors.command });
+    expect(resolveShownErrors(errors, [], true)).toEqual(errors);
+  });
+});
+
+describe('managing services', () => {
+  it('counts the ones you ticked on the remove button', () => {
+    expect(describeRemoveServices(0)).toBe('Remove services');
+    expect(describeRemoveServices(1)).toBe('Remove 1 service');
+    expect(describeRemoveServices(3)).toBe('Remove 3 services');
   });
 });

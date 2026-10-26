@@ -254,13 +254,17 @@ Only these, and they win over anything below:
    it. One-line previews (`InlineMarkdown`, inside rows and buttons) show references as plain
    medium text instead of nested links. On Home, `GuideText` keeps "pull request #N" written as
    "the pull request" and does not link numbers, since the task card already shows it.
-   **The compact queue.** The sidebar and the queue button render the queue `compact`: collapsible `h-6` headers (the whole header folds; its chevron, shown on hover, 5px from the top, bottom and end) with a 14px icon in a 20px slot, the same rows
+   **The compact queue.** The sidebar and the queue button render the queue `compact`: collapsible `h-6` headers (the whole header folds; its chevron, shown on hover, 5px from the top and bottom and right after the count, 6px from it, never at the header's end: the chevron belongs to what it folds, and the end is where a section's action goes) with a 14px icon in a 20px slot, the same rows
    without the age. Every leading icon in the sidebar (nav items, the Focus dot, section icons,
    row tiles) sits in a 20px slot 6px in from the row (`ps-1.5`), so their centres share
    one vertical axis. Open and closed sections are shared by both through `localStorage`, and a
    section can always be collapsed, the one holding the task on screen included. Until you have
    toggled a section yourself it opens when it holds the task on screen; after that your choice
-   wins everywhere (`useStoredToggle` with `resolveSectionDefault` from `lib/queue.ts`).
+   wins everywhere (`useStoredToggle` with `resolveSectionDefault` from `lib/queue.ts`). A section is
+   `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
+   (37), and the queue popover is `COMPACT_POPOVER` (320px, as tall as its content up to the room under the button,
+   then it scrolls) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
+   sits as far from the popover's top as from its side; the sidebar keeps its own spacing.
    - **A proposed change is a decision.** When an answer, an investigation or a report proposes a change, its
      gate (your OK, gate type `proposal`) sits in Needs you as Change to approve, purple with `IconFileEdit` like a plan, since
      it decides what gets built (`lib/tasks/status.ts`). Investigating, Researching and Running the operation are
@@ -287,12 +291,30 @@ Only these, and they win over anything below:
     Desk is the default. Renaming them is that one constant; the code, the `?layout=` param and this file keep
     `cards` and `sidebar`.
     Cards (the default) has no rail: a top
-    bar with a "3 need you" button that opens the compact queue, and task pages centred on the
-    same axis as Home (see 12). The button sits at the top left, right after the Shinsa logo (the Home
-    button in the Mac app, 31), because that corner is navigation and nothing on the right (Focus) moves when it comes and
+    bar with the navigation on the left (the Shinsa logo, the Home button in the Mac app, 31; Tasks; Services, 37;
+    and a "3 need you" button that opens the compact queue) and Update, Settings, Agent usage and Focus on the right,
+    and task pages centred on the same axis as Home (see 12). Tasks (`NavButton` in `components/layout/nav-button.tsx`,
+    secondary `sm`, `IconListBullets` and the word Tasks, the look of the Home button) opens All tasks; Settings is the
+    same button with the cog alone (`icon-sm`, `IconSettingsGear4`, the tooltip "Settings"), right before Agent usage,
+    its gear drawn as tall as the usage gauge beside it. **The bar's icons draw at one size**, the Agent usage
+    gauge's: `MATCHED_SCALE` in `packages/ui/scripts/icons.ts` scales an icon about its centre and divides its
+    stroke by the same, keeping every icon's weight, until its ink (stroke included) is as tall as the gauge's, 20 of
+    the 24 units, unless that would bring its ink within half a unit of the box's sides, where the svg clips it; then
+    it is as large as that allows; Home and Tasks are set by eye a little under that, since at the gauge's height the
+    house read a pixel too large and the bulleted list, wide and dotted, far too large. A filled twin takes its outline's scale, so a button keeps its icon's size on its
+    own page. Measured in the browser at 14px, the ink box, width × height (before → after):
+    Home `IconHomeRoundDoor` 10.50 × 10.53 → 10.76 × 10.79 (1.025); Tasks `IconListBullets` 10.50 × 8.75 → 12.08 ×
+    10.06 (1.15); Services `IconServer` 11.67 × 9.33 → 13.24 × 10.56 (1.15, its width
+    at the box's edge); Settings `IconSettingsGear4` 12.86 × 11.67 (1.1132, unchanged); Agent usage `IconGauge`
+    11.67 × 11.67 (the reference, unscaled). The queue button's `IconInboxEmpty` (12.83 × 9.33) and Focus's project
+    dot (8 × 8) are not part of the matched set: the queue button is a labelled count, Focus a colour, not a place.
+    The scale applies wherever the icon draws (the rail's rows, the Overview tab's house), never per call site;
+    each shows its filled icon in `fg-4` with `aria-current="page"` on its own page (19), and Home has no buttons of
+    its own for them. The queue button sits after Services, because that corner is navigation and nothing on the right (Focus) moves when it comes and
     goes; it shows on every task page at every width, and it is the only place Cards lists the
     queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
-    the queue; it never hides. From
+    the queue; it never hides. Its nav names the same places as Desk's bar, in the same words: New task (Home), Tasks,
+    Services and Settings, each filled on its own page. From
     `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
@@ -627,8 +649,8 @@ Only these, and they win over anything below:
       starts where every other item's label does (the focus menu, the new-task project picker, ⌘K's choices, a
       project's Colour menu). Every place you pick a project shows the dot before each name, in the trigger and in
       every option, through one renderer, `ProjectOption`: the Focus menu and the Terminal page's picker
-      (`ProjectRadioItems`), the new-task composer, any `SelectField` whose items carry a `dot` (the Add services
-      dialog, an MCP server's Where agents use it), the MCP menu's Use in a project and ⌘K's choices (an option's
+      (`ProjectRadioItems`), the new-task composer, any `SelectField` whose items carry a `dot` (the Services popover’s
+      Add services, an MCP server's Where agents use it), the MCP menu's Use in a project and ⌘K's choices (an option's
       `dot`; All work is grey, as in the Focus menu). `test/components/status/project-option.test.tsx` and ⌘K's
       focus choice in `test/components/command/menu.test.tsx` fail when one renders a project without it.
     - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
@@ -786,13 +808,36 @@ Only these, and they win over anything below:
     rejects each of these and a hand-drawn `<svg>`, in `packages/ui` too.
     Read every `icon-tertiary`, 80%, 70% or 55% icon rule, and every icon size other than 14, 16
     and 20, below as this: the kit has no `icon-tertiary` and no icon opacity.
+    **Where you are shows filled.** A tab or navigation item that carries an icon swaps it for Central's filled twin
+    (the same name with `Filled`) while it is the current one, and only then: the rail's rows (`NavItem` takes
+    `icon` and `activeIcon`, both required, so a new row cannot leave it out: New task `IconPlusMediumFilled`, All
+    tasks `IconListBulletsFilled`, Settings `IconSettingsGear4Filled`), the Cards top bar's buttons (`NavButton`,
+    the same two names required: Home in the Mac app `IconHomeRoundDoorFilled`, Tasks `IconListBulletsFilled`,
+    Settings `IconSettingsGear4Filled`), Services while you are on the Terminal page (`IconServerFilled`) and the
+    terminal tab in front: a shell's `IconConsoleFilled`, and a service's state glyph filled in its tone
+    (`SERVICE_GLYPHS`' `activeIcon`: `IconPlayFilled`, `IconHourglassFilled`, `IconExclamationCircleFilled`,
+    `IconCircleDashedFilled`), so the tab in front reads the same whether it holds a shell or a service. A glyph that
+    says a state anywhere else keeps its outline (a service row's tile, a status tile), and filled never means on or
+    off. Both names are written out at the call
+    site, since the generator reads icon names from source. This replaces Iconography → Outline, not filled, for
+    those places.
 20. **The kit's control ramp is a step denser than paywall-next's.** Button `xs` 22 / `sm` 24 /
     `default` 26 / `lg` 30 (icon sizes the same squares, plus `icon-2xs` 18, only for a close mark inside a 24px
     row such as a terminal tab), `Input` and `SelectTrigger` 26,
     the tab lists 26 (`default` and `ghost`) and 32 (`underline`, no size prop), menu, select and command rows 24, `Badge` 18 / 20, glyphs
     `sm` (14px) in `xs` and `sm` controls, rows and badges and `md` (16px) from `default` up. Read the Sizing tables below with these heights.
 21. **Invalid** is a 1px `red-4` ring on `Input` and `Textarea`. `FieldError` announces the message
-    (`role="alert"`), each distinct message once.
+    (`role="alert"`), each distinct message once. A field (`Input`, `Textarea`, a default `SelectTrigger`) is filled,
+    never bordered, and fills with the `--input` token (`bg-input`, its hover `--input-hover`): `bg-2`, a step above
+    the page, a card and a dialog. A dark popover is itself `bg-2`, so inside one (`.dark
+    [data-slot="popover-content"]` in `globals.css`) a field fills `bg-3` and hovers `bg-4`; without that it drew as
+    bare text (the Services popover's form, measured: popover and field both `oklch(0.228 …)`, now the field
+    `oklch(0.257 …)`). Never a border or a call-site fill to make a field show.
+    `Checkbox` is `filled` (the default: the page's fill at rest, an accent fill and a white check once ticked) or
+    `outline` (no fill at rest, only its edge; ticked it fills like `filled`), the second for a list of boxes inside a popover (the Services
+    popover's Manage and Add services). `Button` `bare` is an icon-only action with no wash at all, only its glyph
+    going `fg-2` to `fg-4` under the pointer and while pressed, for a quiet action in a row that washes on its own
+    (Manage's edit pencil); everywhere else an icon button is `secondary`.
 22. **Busy buttons stay themselves.** `Button loading` keeps its colours and width, swaps its icon
     (or, without one, adds a leading spinner), sets `aria-busy` and ignores presses and keys, so a
     busy submit can't fire twice. It is never `disabled`.
@@ -1443,9 +1488,9 @@ Only these, and they win over anything below:
       while content (the chat, the overview, code) stays selectable.
     - **Home, not the wordmark.** A Mac app's toolbar carries its controls, not its name (the menu bar and the
       Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
-      (`components/layout/home-link.tsx`) renders `HomeButton` there (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
+      (`components/layout/home-link.tsx`) renders a `NavButton` there, as Tasks and Settings are (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
       `IconHomeRoundDoorFilled` in `fg-4` with `aria-current="page"`; the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
-      header and the compact bar alike. In the Cards top bar the wordmark, which has no padding of its own, keeps 8px after it (`brandClassName`, `me-2`), so what it draws sits as far from Services as every other pair in the bar sits apart: about 19px between what one button draws and the next, Home in the app and usage and Focus on the right included. The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
+      header and the compact bar alike. In the Cards top bar the wordmark, which has no padding of its own, keeps 8px after it (`brandClassName`, `me-2`), so what it draws sits as far from Tasks as every other pair in the bar sits apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
       the page's own history (`MainWindow.step`, which never steps onto the waiting page,
       `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for
       indent and outdent while it has focus, since the page sees the key before the menu does.
@@ -1852,48 +1897,117 @@ Only these, and they win over anything below:
     agents leave to you: your own dev servers, an interactive sign-in, a command an agent asked you to run. It replaces
     opening another terminal app for those, so it has the keys a Mac terminal has, in Shinsa's look.
     - **Services, beside Home.** Most of the time you do not want a shell, you want a project's dev servers running
-      and to know they still are. Desk's top bar has Services right after Home (`ServicesMenu`, the look of the queue
+      and to know they still are. Desk's top bar has Services right after Tasks (`ServicesMenu`, the look of the queue
       button: `secondary sm`, icon and label, a trailing chevron, a popover from its start edge); Shelf has it as a
-      row of the rail under All tasks, its popover to the right. Its icon is `IconServer`, `IconServerFilled` while you
+      row of the rail under Tasks, its popover to the right. Its icon is `IconServer`, `IconServerFilled` while you
       are on the Terminal page. Its label says what matters at a glance, the worst first: "1 failed" in red text, "1
       starting" in blue, "2 running" in the button's own ink, else "Services" (`describeServicesTrigger`). There is no
       status dot: state is a `StatusTile` and a tone in text.
-    - **The popover** (`ServicesPanel`, 384px) lists the services of the project you are in (the Terminal page's
-      project there, else the focus project, else every project with one, grouped by project with its dot and name).
-      A row (`ServiceRow`) is the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting `IconHourglass`
-      blue, failed `IconExclamationCircle` red, stopped and exited `IconStop` neutral), the name, and a line with the
-      state in its tone ("Running for 12m", "Failed with code 1") and the command; then Start (`IconPlay`), or
-      Restart (`IconArrowRotateClockwise`) and Stop (`IconStop`) while it runs, Open terminal (`IconConsole`) once it
-      has one, and `•••` with Edit… and Remove (behind a `ConfirmDialog`). A group header has Start all when two or
-      more are stopped. A project with none says only "No services yet.". The footer has Add services… and
-      Terminal, which goes to the Terminal page. The rows tick every second, since the running time is in them.
-    - **Add services** (`AddServicesDialog` in `service-dialog.tsx`): the title, one muted sentence, the Project
-      select (with dots) when there are several, then what the engine found in that project (`docs/engine.md` →
-      Services → Found for you) as one card of rows in the setup steps' option look (`ServicePicker`: `LIST_ROW`, a
-      checkbox in the icon slot, the name over the command in mono and its folder by the project's place, "bun run
-      dev in shop/apps/api"). The recommended ones start ticked, so the common case is one press of the primary
-      "Add 2 services" (disabled at none); what you already added is not listed. While it reads, "Looking for
-      services" after 300ms. When nothing is found it says "No services found in ‹project›." and the form is open.
-      Otherwise the form sits under an Advanced disclosure (`DisclosureHeader`, closed): Name, Folder (a select of
-      the project's repositories and folders and the folders the suggestions run in, never a typed path), Command
-      and Environment as `NAME=value` lines, with its own secondary Add service. Edit… on a service is the same
-      four fields in `EditServiceDialog`.
+    - **The popover** (`ServicesPanel`, 352px, `w-88`, wider than the queue's 320px for the commands in mono, the
+      forms and the removal question in the footer) lists the services of the project you are in (the Terminal
+      page's project there, else the focus project, else every project with one), **drawn as the compact queue
+      is** (the queue button's popover): the list is built from the same pieces, `CompactSections` and
+      `CompactSection` (`components/layout/compact-section.tsx`, which the compact queue renders too), so each project
+      is a queue section (`px-2 py-1.5`, a hairline between sections) whose header is the queue's: 24px, the project's
+      dot in the 20px icon slot, its name (`text-2xs` medium `fg-2`, `fg-4` under the pointer) and its counts in normal
+      weight, worst first and in their tones ("1 failed", "1 starting", "3 running", else "4 stopped";
+      `describeServiceGroup`), and the queue's fold chevron, revealed on hover, right after the counts (6px after "1 running"). The whole header folds the project,
+      as a queue section folds, and each project remembers its fold (`resolveServiceGroupFlag`). When two or more of
+      the project's services are not running, the header ends with a play button (`icon-sm`, `IconPlay`, no text,
+      the tooltip "Start all services in ‹project›", `describeStartAll`; the section's action, so a press on it never
+      folds) that starts every one that is not; the header then ends 4px in (`pe-1`), as a row does, so the play
+      button stands in the column of each row's last button, while the chevron stays after the counts. The rows follow one
+      another with no gap, as the queue's do. The list's top is inset 6px more than a section's own padding
+      (`COMPACT_POPOVER_INSET`, the queue popover's too), so the first header's dot sits as far from the top as from
+      the side (measured: 20px and 20px; the header box 12px from the top, 8px from the side). A row
+      (`ServiceRow`) is a `ListRow`: the state's tile (`SERVICE_GLYPHS`: running `IconPlay` green, starting
+      `IconHourglass` blue, failed `IconExclamationCircle` red, stopped and exited `IconCircleDashed` neutral, an idle
+      mark that never reads as a checkbox), the name over the state in its tone ("Running for 12m", "Failed with code
+      1") and the command in mono. Pressing the row opens its terminal once it has one. The row's actions sit at its
+      end, `icon-sm`: Start (`IconPlay`) is always there on a service that does not run; Restart
+      (`IconArrowRotateClockwise`) and Stop (`IconStop`) show on a running one while the row is under the pointer (the
+      shared highlight's `data-hovered`), 1px apart (`gap-px`), as the same pair is on the Terminal page's toolbar and
+      as adjacent ghost buttons in an `InputGroup` addon are: each hover wash is its own edge, so the pair reads as one
+      set (measured: 1px between Restart and Stop, each 24px). A row has no `•••`: editing and removing are Manage's. Measured in the
+      browser: the header's play button and every row's last button at the same x, 12px from the popover's end and
+      24px wide.
+    - **Its height is its content's, like the queue's.** The list sizes to what it lists up to the room under the
+      trigger (`max-h-(--available-height)`, `COMPACT_POPOVER`, the queue popover's classes) and then scrolls,
+      its footer staying put. Add services, the custom form and a service's form keep one height of their own,
+      `min(28rem, the room under the trigger)` (`resolveServicesPanelHeight`: `content` for the list, `fixed` for
+      the rest), so a view that loads, opens Advanced or shows a problem never moves the popover's edges; going
+      from the list to one of them moves only its bottom edge, once, since the top and the width are the
+      trigger's. Manage keeps the list's height: its rows are the list's rows with a checkbox and an edit button in
+      place of the tile and the run buttons, and it has no header of its own.
+    - **The footer is always there** (`PANEL_FOOTER`, 41px with its hairline, 8px in on every side, measured: each
+      24px button 8px from the footer's top, bottom and sides): Manage (`IconSettingsSliderHor`, disabled while the
+      popover lists no service), Add… (`IconPlusMedium`, disabled when there is no project to add to) and, at its
+      end, Terminal, which goes to the Terminal page. With no services the body is the kit's `EmptyState` (`sm`,
+      `IconServer`): "No services in ‹project› yet" (or "No services yet"), "A service is a command you keep running
+      for a project, like its dev server.", with the footer's Add… to add some, and Create a project… in the empty
+      state itself when there is no project. The rows tick every second, since the running time is in them.
+    - **Everything happens in the popover, never in a dialog.** Adding, editing and removing services are views of
+      the same popover (`lib/terminal/services-panel.ts`: `reduceServicesPanel` moves between the list, Manage, Add
+      services, the custom form and a service's form, and `resolveShownServicesView` falls back to the list when a
+      view lacks what it needs; `components/services/panel-views.tsx` draws them). It goes back to the list once it
+      has closed (`onOpenChangeComplete`), so the next open starts there. ⌘K's Add services… and Manage services…
+      open the mounted Services menu straight on that view (`requestServicesPanel`).
+    - **Add services** (Add… in the footer) turns the popover into what the engine found (`docs/engine.md` →
+      Services → Found for you): a header with "Add services", one muted sentence and, when several projects are in
+      view, the Project select (ghost, `sm`, with dots) at its end. Every view's header (Add services, the custom
+      form, a service's form) is padded 12px at the top, bottom and start (`py-3 ps-3`), so its title starts as far
+      from the popover's top as from its side (measured in all three: 12px and 12px; it had been 6px from the top),
+      and 6px at the end, which the ghost select's own 6px inset brings to 12px to its glyph. Then a `SectionLabel` "Found in the project" with the
+      count and Select all (or Deselect all); the found ones as `ListRow`s (`ServicePicker`: a checkbox in the icon
+      slot, `outline` like Manage's, the name over the command in mono and its folder by the project's place, "bun run dev in
+      shop/apps/api"); and last Custom service… (`IconPlusMedium`). The recommended ones start ticked, so the common
+      case is one press of the primary "Add 2 services" (disabled at none) beside Back; what you already added is not
+      listed. While it reads, "Looking for services" after 300ms. Once added, the popover is the list again.
+    - **The form** (Custom service…, "Add a service"; or a service's, "Edit ‹name›") is short: Name, Folder (a
+      select of the project's repositories and folders, never a typed path) and Command, with Environment
+      (`NAME=value` lines) folded under Advanced (open by itself when the service has variables or the field has a
+      problem). Its fields are the kit's `Field` and `FieldLabel`, as in every Shinsa form (the project and MCP
+      server dialogs), its Name, Folder, Command and Environment the kit's `Input`, `SelectTrigger` and `Textarea` as
+      they are in Settings and every dialog: filled, never bordered (21). In a dark popover those had drawn as bare
+      text, since the popover's surface is `bg-2`, the fields' own fill; the kit now fills a field a step above
+      whatever popover it sits in, so they read as fields in both themes. The form sets the dialog's ink, `fg-3`, so
+      its labels read as theirs do (measured: 13px,
+      weight 450, `fg-3` in both; in the popover they had been `fg-4`). The footer has Back and the primary (Add
+      service, or Save). When nothing is found Add services opens on the form, its sentence says "No services found
+      in ‹project›. Name the command that starts one and the folder it runs in." and Back goes to the list. **A field
+      shows its problem only once you have typed in it and left it, or tried to add** (`resolveShownErrors`); from
+      then on it follows what you type, so fixing it clears it at once.
+    - **Manage** (the footer's Manage, or ⌘K's Manage services…) keeps the list and turns it into one you pick
+      from: each row's tile becomes a checkbox in the same slot and pressing anywhere on the row ticks it or clears
+      it (`ManagedServiceRow`; the kit's `Checkbox` `outline`: an empty box at rest, since a filled box on every row of
+      a popover outweighs the rows, and the accent fill once ticked); editing has its own
+      button at the row's end, where the run buttons were (`icon-sm`, `IconPencil`, "Edit ‹name›", always shown, the
+      kit's `bare` button: no wash at all, only the pencil going from `fg-2` to `fg-4` under the pointer, since the
+      row under it already washes), which opens the service's form in place (Back or Save comes back
+      with the ticks kept). The play buttons go. The footer has the destructive "Remove 2 services" (Remove services,
+      disabled, at none) and Done. Remove asks in the footer itself, with no dialog: "Remove 2 services?" over "They
+      stop and their terminals close.", Cancel and Remove; Remove removes them all in one call (`POST
+      /api/services/remove`) and clears the ticks, and a refusal keeps them.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
       the task's worktree (its repository when it has none), in its project, and go there.
     - **Shape.** The page fills the space under the top bar edge to edge, with no column: a 36px `Toolbar` with the
-      project picker, the tabs, New terminal (`icon-sm`, `IconPlusMedium`), the active service's Restart and Stop (or
-      Start) after a divider, and Find in the scrollback (`IconMagnifyingGlass`), then the terminal on its own
+      project picker, the tabs, New terminal (`icon-sm`, `IconPlusMedium`), after a divider the active service's
+      Restart and Stop (or Start) when a service's tab is in front, else, while any of the project's services is not
+      running, one play button that starts them all ("Start all services in ‹project›"; a shell's tab or no tab is
+      in front, `resolveActiveService`), and Find in the scrollback (`IconMagnifyingGlass`), then the terminal on its own
       background, 8px from the top and 12px from the left. The project picker is the Focus menu's own trigger and
       rows (`ProjectMenuTrigger`, `ProjectRadioItems` in `components/focus/menu.tsx`): the project's dot, its name and
-      the chevron, a radio list of every project with its dot. A project with no terminal shows the `EmptyState` with
+      the chevron, a radio list of every project with its dot, which closes on the one you pick (the Focus menu's
+      stays open for how long to keep it). A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
     - **Tabs** (`tab-bar.tsx`). A tab is a 24px row, the height of the project picker beside it: its mark, the label (the name you gave it, else the shell's
       title, else the folder's name; a service's tab is its name; `resolveTerminalLabel` in core), and a close button
       (`icon-2xs`, 18px) inset 3px from the tab's top, bottom and end, revealed on hover and always on the active tab.
-      A shell's mark is `IconConsole`; a service's is its state's glyph in its tone, so a service tab reads apart from
-      a shell and shows whether it runs. The active tab is `bg-bg-a2`, `fg-4`, `faux-medium`; an ended shell's label
+      A shell's mark is `IconConsole`, `IconConsoleFilled` on the tab in front (19, the filled rule); a service's is
+      its state's glyph in its tone, filled on the tab in front too (`IconPlayFilled`…), so a service tab reads apart
+      from a shell and shows whether it runs. The active tab is `bg-bg-a2`, `fg-4`, `faux-medium`; an ended shell's label
       is `fg-2`. The tooltip names the folder and how it ended, or a service's state and command. Double-click
       renames in place (Enter keeps it, Escape puts the old name back, an empty name goes back to the title); drag a
       tab onto another to put it there; the middle button closes it.
@@ -1917,8 +2031,16 @@ Only these, and they win over anything below:
       `--code-type`, blue `--code-function`, magenta `--code-keyword`, cyan `--code-property`, white
       `--code-punctuation`, bright black `--code-comment`, bright yellow `--code-number`, bright white
       `--code-meta`, black the text, `bg-4` in dark), so `ls`, git and a fish prompt read like the editor's syntax.
-      Colours reach xterm.js as hex, converted from the tokens' OKLCH and `color-mix(…, transparent)`
-      (`lib/terminal/color.ts`), and the theme switches with the page's. ⌘+ and ⌘− change the size a step (9 to
+      The selection is the same whether or not the terminal has focus, as in the editor, and find marks its matches in
+      the Code tab's find colours (`--terminal-find-match` the editor's `amber-a2`, `--terminal-find-active` its
+      `amber-a4`). Nothing comes from xterm.js's, Ghostty's or iTerm's defaults but the 256-colour cube above the
+      sixteen, which is the standard xterm one every terminal shares. Colours reach xterm.js as hex, converted from
+      the tokens' OKLCH and `color-mix(…, transparent)` (`lib/terminal/color.ts`), and the theme switches with the
+      page's. **The scrollbar is the app's** (6): xterm.js 6 draws VS Code's, which `app.css` restyles to
+      `ScrollArea`'s thumb (5px of `fg-a1` at 60%, 3px from the right and 4px from the ends, 7px and full strength
+      under the pointer or while dragged, on a 14px strip), and `lib/terminal/scrollbar.ts` makes it show as that
+      one does: while it scrolls and while the pointer is on its strip, never just because the pointer is over the
+      terminal, fading 200ms after half a second. ⌘+ and ⌘− change the size a step (9 to
       24px) and ⌘0 puts it back, for every terminal (`lib/preferences/terminal.ts`).
     - **Rendering.** xterm.js 6 with its WebGL renderer, Unicode 11 widths (CJK and emoji take two cells), clickable
       links (plain URLs and OSC 8, opened in your browser), 5,000 lines of scrollback, fit to its pane when the pane's
@@ -1952,11 +2074,12 @@ Only these, and they win over anything below:
       `console`, where only the `$` lines count) gets a Run in terminal button (`secondary xs`, `IconConsole`) beside
       its copy button, and nowhere else (`CommandRunnerProvider` in `text/code-fence.tsx`). Pressing it opens a
       terminal in the task's folder and runs the command; nothing runs without it.
-    - **⌘K.** Services (Start all services, and Start, Restart or Stop each service of the project in focus), and on
+    - **⌘K.** Services (Start all services, Add services…, Manage services…, and Start, Restart or Stop each service of the project
+      in focus), and on
       the Terminal page New terminal, Find in the scrollback, Clear the scrollback (⌘L), Start the shell again, Rename,
       Close, the service in front's Restart and Stop, and every other tab.
     - `/ui` shows the Services trigger in each state, in the bar and the rail, a service row in each state, the
-      popover with services and empty, the Add services list with the recommended ones ticked, the project picker, the tabs with services, renaming, the ended bars,
+      popover with three projects, with a project's none and with no project, Manage with two ticked and asking before it removes them, Add services with the project picker, the custom form and a service's form, the project picker, the tabs with services, renaming, the ended bars,
       the empty page with the place menu and the `--terminal-*` colours; the terminal itself needs the engine.
 
 , a
@@ -4292,10 +4415,11 @@ menu and toast share one surface: `bg-popover` with the one border
 (`border-border`), 3px corners, no shadow. The fill runs under the border (no
 `bg-clip-padding`), so the translucent edge composites over the popover fill
 and reads the same over any page. Modal overlays dim the page with `bg-scrim`,
-never blur; the scrim only fades. Dialogs enter and exit at scale 0.98 +
-opacity over 200ms; popovers, tooltips and preview cards over 150ms (see
-Motion); sheets slide 32px over 250ms on the drawer curve; list popups and
-the command palette appear instantly. Floating popups sit 4px from their
+never blur; the scrim only fades. Dialogs enter at scale 0.96 + opacity over
+150ms and leave over 100ms, the command palette at 0.98 over 75ms and out in
+75ms; popovers, tooltips and
+preview cards over 150ms (see Motion); sheets slide 32px over 250ms on the
+drawer curve; list popups appear instantly. Floating popups sit 4px from their
 anchor (`sideOffset` 4).
 
 - **Dialog / alert dialog / sheet.** One 20px outer inset (buzzkit's
@@ -4783,7 +4907,8 @@ component names a role, never a number:
 | State feedback | none                                  | 0ms   | hover, press, focus, open, selection, a highlighted menu row — fill, border, text, icon colour, seams, a hover-revealed control, and the press itself: a button's or select trigger's fill deflating (`inset`), the link button's, ghost tab's and checkbox's press `scale`, a pressed highlight's deflate |
 | Movement       | `duration-move`                       | 200ms | tab / segmented / filter-tab indicators, chevron turns, accordion and collapsible height, sidebar collapse, the icon swap |
 | Popup          | `duration-popup`                      | 150ms | popover, tooltip, preview card (enter at scale 0.98 + opacity)                                                            |
-| Dialog         | `duration-dialog`                     | 200ms | dialog, alert dialog and their scrims                                                                                     |
+| Dialog         | `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION` | 150ms in, 100ms out | dialog, alert dialog and their scrims (enter at scale 0.96 + opacity, `ease-out`)                                         |
+| ⌘K             | `COMMAND_MOTION`, `COMMAND_SCRIM_MOTION` | 75ms in, 75ms out | the command menu and its scrim (enter at scale 0.98 + opacity, `ease-out`)                                              |
 | Sheet          | `duration-sheet` + `ease-drawer`      | 250ms | sheets and their scrim                                                                                                    |
 | Toast          | literal                               | 500ms | stacking toasts (unchanged)                                                                                               |
 
@@ -4821,16 +4946,37 @@ Rules:
   keyboard-highlighted row with no transition, so it never trails the pointer
   or the arrow keys. Only a selection that changes on a click slides: the
   segmented control's pill and the underline tabs' line. The command palette
-  opens and closes with no transition, and list popups open instantly.
+  enters like every dialog, and list popups open instantly.
 - **Hover is colour, not motion.** No hover scale or translate. The only press
   shapes are the fixed `inset` deflate and the scale of the link button, a
   ghost tab, a checkbox and the image viewer's round buttons, and they land at
   once, never eased.
 - **Tooltips:** 150ms in, and instant (`data-instant`, no transition) when
   moving between adjacent triggers.
+- **Dialogs enter visibly** (since 2026-10-26; `DIALOG_MOTION` in the kit's
+  `dialog.tsx`, shared by `alert-dialog.tsx`): a fade with a scale from
+  0.96 over 150ms `ease-out`, out in 100ms, the scrim fading with it. A dialog
+  mounted already open (every `useDialogState` dialog) never gets base-ui's
+  `data-starting-style`, which is why they used to appear in one frame; the
+  `starting:` variant (`@starting-style`) gives them the same entry. Each size
+  has a fixed width (`min(420px, 100vw − 2rem)`, `sm` 320px, ⌘K 520px), never
+  one its content decides, so nothing that loads late changes it. Measured in
+  the browser: opacity 0 → 1 and scale 0.96 → 1 over the first 150ms, the
+  width 420px from the first frame.
+- **⌘K comes and goes in a blink** (since 2026-10-26; `COMMAND_MOTION` and
+  `COMMAND_SCRIM_MOTION` in the kit's `command.tsx`, merged over the dialog's
+  motion through `DialogContent`'s `overlayClassName` for the scrim). You open
+  it many times an hour, so it does not wait on a dialog's pace: 75ms in from a
+  scale of 0.98 and 75ms out, its scrim in step; every other dialog keeps 150ms in
+  and 100ms out. Both directions are written out (`duration-75
+  data-ending-style:duration-75`), since the dialog's own `data-ending-style:duration-100`
+  would otherwise win the close. Under reduced motion it keeps only its fade, like a dialog.
+  Measured in the browser: `transition-duration` 0.075s on the menu and its
+  scrim while it opens and while it closes.
 - **Reduced motion** is global: under `prefers-reduced-motion: reduce` every
-  element keeps only colour, fill, opacity and filter transitions, so overlays
-  fade instead of scaling or sliding and indicators jump. Looping movement
+  transition and animation is cut to nothing, except a spinner and the dialogs
+  and their scrims (`data-reduced-motion="fade"`), which drop their scale and
+  keep their fade. Looping movement
   opts out with `motion-reduce:animate-none` (skeleton, progress shimmer).
 
 Skeleton sweep 2s, shimmer 1.5s. The one attention effect is `variant-flash`:

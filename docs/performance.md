@@ -123,6 +123,28 @@ it, and `/api/health` answers `ok` with no problems in 209 to 216 ms.
   and reaches the page as a patch at the same log position; the first start moved the old rows out once
   (`docs/engine.md` → State in memory).
 
+**Third pass: the inline Services popover (2026-10-26).** The same steps after the Services popover took over Add
+services and Manage from their dialogs, against `cf3625c` (the second pass, before it), each served built by its
+own engine on a copy of one seeded data directory: Basket and Superwall with three running services each, 8 laps,
+median ms of laps 2 to 8 (`SHELL_PERF_PROJECTS=Basket,Superwall`; the 4× column is two runs each, interleaved):
+
+| Step | 1× before | 1× after | 4× before | 4× after |
+| --- | --- | --- | --- | --- |
+| Home → Terminal | 12.3 | 12.2 | 44.9, 47.7 | 42.7, 47.4 |
+| Basket → Superwall | 12.8 | 12.8 | 31.9, 31.8 | 42.3, 44.6 |
+| Tab 1 → 2 | 11.2 | 11.8 | 22.0, 21.0 | 20.4, 21.3 |
+| Tab 2 → 3 | 11.6 | 11.7 | 19.6, 21.1 | 20.0, 22.6 |
+| Tab 3 → 1 | 11.8 | 11.3 | 23.5, 20.8 | 22.3, 22.2 |
+| Superwall → Basket | 12.6 | 12.7 | 32.6, 31.4 | 45.8, 46.8 |
+| Terminal → Home | 14.0 | 14.5 | 55.5, 55.5 | 54.1, 57.3 |
+
+Every revisit and every tab switch lands within a frame at full speed, as before; the popover's views render only
+while it is open, so the Terminal page does no more work for them. The project steps at 4× are the picker closing
+in the same frame as the switch (54 more components, the menu's), which `cf3625c` left open until the script
+closed it after measuring, as the second pass describes; the switch itself is unchanged.
+`SHELL_PERF_PROJECTS` names the two projects the steps switch between (default `Blog,Shop`), and a switch is done
+once the picker shows the project's name, so any project works whatever its key.
+
 ### What is left
 
 - Accounts still go whole on every change (a few KB, deduplicated by content).
@@ -394,7 +416,7 @@ did after the shared tooltip, against 947 before the kept pages and 796 before t
 
 ### The Terminal page (2026-10-26)
 
-`SHELL_PERF_STEPS=terminal bun scripts/perf/shell-navigation.ts <origin>` runs only Home → Terminal and back: the
+`SHELL_PERF_STEPS=terminal bun scripts/perf/shell-navigation.ts <origin>` runs only the Terminal page (Home → Terminal and back, and since the second pass below its project and tab switches): the
 click on the Terminal button (before) or on Services → Terminal (after, `open` clicks the trigger first and waits
 for its popover), until the terminal in front has its WebGL canvas and every terminal socket the page opened has had
 its screen (`live`; the probe counts `/ws/terminals/` sockets). `SHELL_PERF_SETTLE_MS=600` also records how long
@@ -418,6 +440,35 @@ change, so showing a kept terminal does no layout work. In headless Chromium at 
 60 Hz floor on a revisit; the difference is the first visit and the throttled runs, and the WebGL context a hidden
 terminal no longer rebuilds. The first visit is still xterm.js opening into the page (about 60 ms, two long tasks at
 4×): it needs a visible element to measure its font, so it cannot be done hidden.
+
+**Tabs and projects (second pass, 2026-10-26).** `SHELL_PERF_STEPS=terminal` now also switches project (Blog → Shop
+and back, through the page's project picker) and steps through three tabs, each until the terminal in front has its
+canvas. On two engines with the same three projects (Shop with two running services and two shells of 6,000 lines),
+8 laps, built, median ms of the revisits (laps 2 to 8):
+
+| Step | 1× before | 1× after | 4× before | 4× after |
+| --- | --- | --- | --- | --- |
+| Home → Terminal | 15.5 | 13.3 | 37.1–41.3 | 34.6 |
+| Blog → Shop | 9.9 | 12.0 | 29.0–31.4 | 36.4 |
+| Tab 1 → 2 | 9.9 | 9.6 | 16.8–21.1 | 18.9 |
+| Tab 2 → 3 | 8.7 | 10.5 | 16.9–18.1 | 17.2 |
+| Tab 3 → 1 | 9.5 | 11.4 | 16.9–19.1 | 17.6 |
+| Shop → Blog | 9.8 | 11.8 | 24.5–26.4 | 34.0 |
+| Terminal → Home | 11.9 | 12.9 | 21.2–22.5 | 22.6 |
+
+Every step is within a frame of the click at full speed, a tab switch within one at 4×. Two things changed:
+
+- **The page re-rendered every second.** `ProjectTerminals` and `TerminalPage` read the per-second clock (`useNow`)
+  for the services' running times, so the whole page, every tab with its two tooltips, the toolbar and the picker,
+  rendered again each second, about 100 components, and a click could land on that work. Now only a service tab's
+  label reads the clock (`ServiceTabLabel` in `tab-bar.tsx`), the page reads `Date.now()` when it renders anyway and
+  the project's focus fallback the minute clock: 24 components a second while the page sits there (counted in the
+  dev build over 3 s), the Services trigger's included.
+- **Picking a project left its menu open.** The picker's radio items kept the Focus menu's behaviour (stay open to
+  pick how long), so after picking a project the menu sat over the page and the next click only closed it: a switch
+  took two clicks. The picker now closes on the pick (`ProjectRadioItems closeOnClick`). Its close runs in the same
+  frame as the switch, which is why the project steps at 4× read a few ms more than before, when the script had to
+  close the menu itself after measuring.
 
 ### What is left
 

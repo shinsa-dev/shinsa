@@ -17,6 +17,8 @@
   --terminal-cursor: var(--fg-4);
   --terminal-cursor-text: var(--background);
   --terminal-selection: var(--primary-a2);
+  --terminal-find-match: var(--amber-a2);
+  --terminal-find-active: var(--amber-a4);
   --terminal-ansi-0: var(--fg-4);
   --terminal-ansi-1: var(--code-tag);
   --terminal-ansi-2: var(--code-string);
@@ -38,6 +40,41 @@
 .dark {
   --terminal-ansi-0: var(--bg-4);
   --terminal-ansi-15: var(--fg-4);
+}
+
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider:hover,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active {
+  background: transparent;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider::before {
+  content: "";
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-end: 3px;
+  width: 5px;
+  border-radius: 9999px;
+  background: var(--fg-a1);
+  opacity: 0.6;
+  transition:
+    opacity 150ms,
+    width 200ms;
+}
+
+.xterm .xterm-scrollable-element > .scrollbar.vertical:hover > .slider::before,
+.xterm .xterm-scrollable-element > .scrollbar.vertical:active > .slider::before,
+.xterm .xterm-scrollable-element > .scrollbar.vertical > .slider.active::before {
+  width: 7px;
+  opacity: 1;
+}
+
+.xterm .xterm-scrollable-element > .visible {
+  transition: opacity 200ms;
+}
+
+.xterm .xterm-scrollable-element > .invisible.fade {
+  transition: opacity 200ms 500ms;
 }
 
 .prose-shinsa {

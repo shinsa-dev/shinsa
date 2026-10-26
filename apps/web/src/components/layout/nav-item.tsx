@@ -6,13 +6,13 @@ export const NAV_ITEM =
 export function NavItem({
   label,
   icon,
-  activeIcon = icon,
+  activeIcon,
   active,
   onClick,
 }: {
   label: string;
   icon: IconName;
-  activeIcon?: IconName;
+  activeIcon: IconName;
   active: boolean;
   onClick: () => void;
 }) {

@@ -36,6 +36,7 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
           <NavItem
             label='New task'
             icon='IconPlusMedium'
+            activeIcon='IconPlusMediumFilled'
             active={route.name === 'home'}
             onClick={() => {
               requestNewTaskOnHome();
@@ -43,7 +44,7 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
             }}
           />
           <NavItem
-            label='All tasks'
+            label='Tasks'
             icon='IconListBullets'
             activeIcon='IconListBulletsFilled'
             active={route.name === 'tasks'}
@@ -54,8 +55,8 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
           )}
           <NavItem
             label='Settings'
-            icon='IconSettingsGear1'
-            activeIcon='IconSettingsGear1Filled'
+            icon='IconSettingsGear4'
+            activeIcon='IconSettingsGear4Filled'
             active={route.name === 'settings'}
             onClick={() => go('/settings')}
           />

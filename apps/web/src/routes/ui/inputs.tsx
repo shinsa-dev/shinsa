@@ -96,6 +96,9 @@ export function InputSpecimens() {
           <Button size='icon' variant='outline' icon='IconFiles' aria-label='Copy' />
           <Button size='icon-lg' variant='outline' icon='IconSettingsGear1' aria-label='Settings' />
         </Specimen>
+        <Specimen label='bare · no wash, only the glyph brightens, for a quiet action in a row that washes on its own'>
+          <Button size='icon-sm' variant='bare' icon='IconPencil' aria-label='Edit' />
+        </Specimen>
         <Specimen label='loading · the spinner takes the icon’s place, the label stays, the button disables itself'>
           <Button loading>Approve</Button>
           <Button loading icon='IconPlusMedium'>
@@ -430,7 +433,7 @@ export function InputSpecimens() {
       <Section
         id='controls'
         title='Switch & Checkbox'
-        description='Contentless controls scale fully on press; they have no label that could shift. A checkbox is an fg-1 edge until ticked, then the accent with a white check; sm (14px) sits in a dense row.'
+        description='Contentless controls scale fully on press; they have no label that could shift. A checkbox is an fg-1 edge until ticked, then the accent with a white check; sm (14px) sits in a dense row; outline never fills, for a list of boxes in a popover.'
         className='flex-col items-start gap-6'
       >
         <Specimen label='switch'>
@@ -464,6 +467,16 @@ export function InputSpecimens() {
           <div className='flex items-center gap-2'>
             <Checkbox id='ds-c5' disabled />
             <Label htmlFor='ds-c5'>Disabled</Label>
+          </div>
+        </Specimen>
+        <Specimen label='checkbox · outline'>
+          <div className='flex items-center gap-2'>
+            <Checkbox id='ds-c6' size='sm' variant='outline' defaultChecked />
+            <Label htmlFor='ds-c6'>Checked</Label>
+          </div>
+          <div className='flex items-center gap-2'>
+            <Checkbox id='ds-c7' size='sm' variant='outline' />
+            <Label htmlFor='ds-c7'>Unchecked</Label>
           </div>
         </Specimen>
       </Section>

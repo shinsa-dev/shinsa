@@ -6,12 +6,12 @@ import {
   openServiceTerminal,
   openTaskTerminal,
   openTerminal,
-  removeService,
   renameTerminal,
   reorderTerminals,
   requestServiceAdd,
   requestServiceSuggestions,
   requestServicesAdd,
+  requestServicesRemove,
   requestServiceUpdate,
   requestTerminalCreate,
   requestTerminalForeground,
@@ -181,13 +181,14 @@ describe('services', () => {
     fetch = serve(createTerminalsSnapshot([terminal], [API]));
     expect(await stopService('api')).toBe(true);
     expect(await startAllServices('shop')).toBe(true);
-    expect(await removeService('api')).toBe(true);
+    await requestServicesRemove(['api', 'web']);
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
       '/api/services/api/stop',
       '/api/services/start-all',
-      '/api/services/api/remove',
+      '/api/services/remove',
     ]);
     expect(readCall(fetch, 1).body).toEqual({ projectId: 'shop' });
+    expect(readCall(fetch, 2).body).toEqual({ ids: ['api', 'web'] });
   });
 
   it('opens a service’s terminal on its tab', () => {

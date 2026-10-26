@@ -1,10 +1,11 @@
-import { resolveTerminalLabel, type ServiceView, type TerminalInfo } from '@shinsa/core';
+import { resolveServiceView, resolveTerminalLabel, type ServiceView, type TerminalInfo } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { useNow } from '@/hooks/use-now.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeServiceState, SERVICE_GLYPHS } from '@/lib/terminal/services.ts';
 import { describeTerminalTab, moveTerminal } from '@/lib/terminal/tabs.ts';
@@ -43,17 +44,75 @@ function RenameField({
   );
 }
 
-function TabMark({ service, ended }: { service: ServiceView | null; ended: boolean }) {
-  if (!service) return <Icon name='IconConsole' size='sm' />;
+function TabMark({
+  service,
+  ended,
+  active,
+}: {
+  service: ServiceView | null;
+  ended: boolean;
+  active: boolean;
+}) {
+  if (!service) return <Icon name={active ? 'IconConsoleFilled' : 'IconConsole'} size='sm' />;
   const glyph = SERVICE_GLYPHS[service.state];
   return (
     <Icon
-      name={glyph.icon}
+      name={active ? glyph.activeIcon : glyph.icon}
       size='sm'
       className={cn(
         glyph.tone !== 'neutral' && TONE_TEXT[glyph.tone],
         ended && glyph.tone === 'neutral' && 'text-fg-2'
       )}
+    />
+  );
+}
+
+function TabLabel({
+  label,
+  detail,
+  service,
+  ended,
+  active,
+}: {
+  label: string;
+  detail: string;
+  service: ServiceView | null;
+  ended: boolean;
+  active: boolean;
+}) {
+  return (
+    <Hint label={label} detail={detail}>
+      <span className={cn('flex w-fit min-w-0 items-center gap-1.5', ended && 'text-fg-2')}>
+        <TabMark service={service} ended={ended} active={active} />
+        <span className='truncate'>{label}</span>
+      </span>
+    </Hint>
+  );
+}
+
+function ServiceTabLabel({
+  label,
+  service,
+  now: fixed,
+  ended,
+  active,
+}: {
+  label: string;
+  service: ServiceView;
+  now: number | undefined;
+  ended: boolean;
+  active: boolean;
+}) {
+  const live = useNow();
+  const now = fixed ?? live;
+  const view = resolveServiceView(service.service, service.terminal, now);
+  return (
+    <TabLabel
+      label={label}
+      detail={`${describeServiceState(view, now)} · ${view.service.command}`}
+      service={view}
+      ended={ended}
+      active={active}
     />
   );
 }
@@ -72,7 +131,7 @@ function TerminalTab({
 }: {
   terminal: TerminalInfo;
   service: ServiceView | null;
-  now: number;
+  now: number | undefined;
   active: boolean;
   dragging: boolean;
   onSelect: () => void;
@@ -113,19 +172,17 @@ function TerminalTab({
       }}
       className={TAB}
     >
-      <Hint
-        label={label}
-        detail={
-          service
-            ? `${describeServiceState(service, now)} · ${service.service.command}`
-            : describeTerminalTab(terminal)
-        }
-      >
-        <span className={cn('flex w-fit min-w-0 items-center gap-1.5', ended && 'text-fg-2')}>
-          <TabMark service={service} ended={ended} />
-          <span className='truncate'>{label}</span>
-        </span>
-      </Hint>
+      {service ? (
+        <ServiceTabLabel label={label} service={service} now={now} ended={ended} active={active} />
+      ) : (
+        <TabLabel
+          label={label}
+          detail={describeTerminalTab(terminal)}
+          service={null}
+          ended={ended}
+          active={active}
+        />
+      )}
       <Hint label='Close terminal'>
         <Button
           variant='secondary'
@@ -157,7 +214,7 @@ export function TerminalTabs({
 }: {
   terminals: TerminalInfo[];
   services: ServiceView[];
-  now: number;
+  now?: number;
   activeId: string | null;
   renamingId: string | null;
   onSelect: (terminal: TerminalInfo) => void;

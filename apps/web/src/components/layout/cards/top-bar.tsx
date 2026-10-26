@@ -3,6 +3,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
 import { FocusMenu } from '@/components/focus/menu.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
+import { NavButton } from '@/components/layout/nav-button.tsx';
 import { CARDS_FRAME } from '@/components/layout/page/column.ts';
 import { QueueMenu } from '@/components/queue/menu.tsx';
 import { ServicesMenu } from '@/components/services/menu.tsx';
@@ -17,13 +18,26 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
     <header data-window-drag className='shrink-0 select-none desktop:ps-16'>
       <div className={cn(CARDS_FRAME, 'flex h-11 items-center gap-1')}>
         <HomeLink brandClassName='me-2' />
-        {route.name !== 'onboarding' && <ServicesMenu state={state} />}
+        {route.name !== 'onboarding' && (
+          <>
+            <NavButton page='tasks' label='Tasks' icon='IconListBullets' activeIcon='IconListBulletsFilled' />
+            <ServicesMenu state={state} />
+          </>
+        )}
         {route.name === 'task' && <QueueMenu state={state} activeTaskId={activeTaskId} />}
         <ConnectionStatus />
         <span className='flex-1' />
         <UpdateButton />
         {route.name !== 'onboarding' && (
           <>
+            <NavButton
+              page='settings'
+              label='Settings'
+              icon='IconSettingsGear4'
+              activeIcon='IconSettingsGear4Filled'
+              iconOnly
+              className='me-0.5'
+            />
             <UsageMenu state={state} />
             <div className='max-sm:hidden'>
               <FocusMenu state={state} compact />

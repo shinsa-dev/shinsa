@@ -14,9 +14,11 @@ import {
 import { createSignal } from '@/lib/signal.ts';
 import { resolveTerminalKey, type TerminalKey } from '@/lib/terminal/keys.ts';
 import { silenceEngineAnswers } from '@/lib/terminal/replies.ts';
+import { followScrollbarHover } from '@/lib/terminal/scrollbar.ts';
 import {
   type ColorScheme,
   readDocumentVariable,
+  resolveFindDecorations,
   resolveReplyColors,
   resolveTerminalOptions,
   type VariableReader,
@@ -66,13 +68,6 @@ const ENCODER = new TextEncoder();
 
 const FORM_FEED = '\u000c';
 
-const FIND_DECORATIONS = {
-  matchOverviewRuler: '#888888',
-  activeMatchColorOverviewRuler: '#2f6fec',
-  matchBackground: '#ffd25e66',
-  activeMatchBackground: '#ff9f0a',
-};
-
 function openTerminalSocket(path: string): TerminalSocket {
   const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
   return new WebSocket(`${protocol}://${location.host}${path}`);
@@ -120,6 +115,7 @@ export class TerminalView {
   #disposed = false;
   #renderer: IDisposable | null = null;
   #stopObserving: (() => void) | null = null;
+  #stopHover: (() => void) | null = null;
   #findOpen = false;
   #results: FindResults | null = null;
   #scheme: ColorScheme;
@@ -288,6 +284,7 @@ export class TerminalView {
     const element = this.terminal.element;
     if (!element) this.terminal.open(host);
     else if (element.parentElement !== host) host.append(element);
+    if (this.terminal.element) this.#stopHover ??= followScrollbarHover(this.terminal.element);
     this.#renderer ??= (this.#options.loadRenderer ?? createWebglRenderer)(this.terminal);
     shown.delete(this.id);
     shown.set(this.id, this);
@@ -343,7 +340,10 @@ export class TerminalView {
       this.#signal.publish();
       return false;
     }
-    const search = { ...options, decorations: FIND_DECORATIONS };
+    const search = {
+      ...options,
+      decorations: resolveFindDecorations(this.#options.read ?? readDocumentVariable),
+    };
     return previous ? this.#search.findPrevious(query, search) : this.#search.findNext(query, search);
   }
 
@@ -365,6 +365,7 @@ export class TerminalView {
     this.unmount();
     this.releaseRenderer();
     this.#stopFontSize();
+    this.#stopHover?.();
     this.#socket?.close();
     this.terminal.dispose();
   }

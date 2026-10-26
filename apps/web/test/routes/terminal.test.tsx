@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, spyOn } from 'bun:test';
 import type { TerminalsSnapshot } from '@shinsa/core';
+import { Icon } from '@shinsa/ui/components/icon';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { connection } from '@/lib/connection/socket.ts';
@@ -12,6 +13,7 @@ import {
   createTerminalState,
   createTerminalsSnapshot,
 } from '../support/terminals.ts';
+import { waitForGone } from '../support/wait.ts';
 
 class QuietSocket {
   binaryType = 'blob';
@@ -132,6 +134,20 @@ describe('the terminal page', () => {
     await waitFor(() => expect(readPosts().map(([url]) => url)).toContain('/api/terminals/svc/close'));
   });
 
+  it('fills the state glyph of the service tab in front, and keeps the others outlined', () => {
+    const services = [createService({ id: 'api' }), createService({ id: 'web' })];
+    const terminals = ['api', 'web'].map((id) =>
+      createTerminal({ id: `t-${id}`, name: id, serviceId: id, startedAt: 0 })
+    );
+    visit('/terminal?project=SH&terminal=t-api');
+    show(createTerminalsSnapshot(terminals, services));
+    const glyph = (name: 'IconPlay' | 'IconPlayFilled') =>
+      render(<Icon name={name} size='sm' />).container.querySelector('svg')?.innerHTML;
+    const [api, web] = screen.getAllByRole('tab').map((tab) => tab.querySelector('svg')?.innerHTML);
+    expect(api).toBe(glyph('IconPlayFilled'));
+    expect(web).toBe(glyph('IconPlay'));
+  });
+
   it('starts a stopped service again from the bar under its output', async () => {
     const service = createService({ id: 'api' });
     const terminal = createTerminal({
@@ -149,6 +165,30 @@ describe('the terminal page', () => {
     await waitFor(() => expect(readPosts()[0]?.[0]).toBe('/api/services/api/start'));
     fireEvent.click(screen.getByRole('button', { name: 'Start api' }));
     await waitFor(() => expect(readPosts()[1]?.[0]).toBe('/api/services/api/start'));
+  });
+
+  it('starts all the project’s stopped services from the toolbar while a shell or no tab is in front', async () => {
+    const services = [createService({ id: 'api' }), createService({ id: 'web' })];
+    visit('/terminal?project=SH&terminal=shell');
+    const page = show(createTerminalsSnapshot([SHELL], services));
+    expect(screen.queryByRole('button', { name: 'Start api' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Start all services in Shop' }));
+    await waitFor(() => expect(readPosts()[0]).toEqual(['/api/services/start-all', { projectId: 'shop' }]));
+    page.unmount();
+    visit('/terminal?project=SH');
+    show(createTerminalsSnapshot([], services));
+    expect(screen.queryByRole('button', { name: 'Start api' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Start all services in Shop' })).toBeTruthy();
+  });
+
+  it('shows the page of the project you pick and closes the picker', async () => {
+    visit('/terminal?project=SH');
+    show(createTerminalsSnapshot([SERVER, createTerminal({ id: 'docs', projectId: 'docs' })]));
+    fireEvent.click(screen.getByRole('button', { name: /Shop/ }));
+    const docs = await screen.findByRole('menuitemradio', { name: 'Docs' });
+    fireEvent.click(docs);
+    await waitFor(() => expect(location.search).toBe('?project=DO'));
+    await waitForGone(() => screen.queryByRole('menu'));
   });
 
   it('opens a new tab where the one in front is with ⌘T, and closes it with ⌘W', async () => {

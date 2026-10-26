@@ -25,6 +25,20 @@ describe('Button', () => {
     expect(view.getByRole('button', { name: 'Alone' }).dataset.icon).toBeUndefined();
   });
 
+  it('has a bare look with no wash at all, only its glyph brightening under the pointer and the press', () => {
+    const view = render(<Button variant='bare' size='icon-sm' icon='IconPencil' aria-label='Edit' />);
+    const classes = view.getByRole('button', { name: 'Edit' }).className.split(' ');
+    expect(classes).toEqual(
+      expect.arrayContaining([
+        'text-fg-2',
+        'before:hidden',
+        'not-disabled:hover:text-fg-4',
+        'not-disabled:active:text-fg-4',
+      ])
+    );
+    expect(classes.filter((name) => /(?:hover|active|pressed\]):before:bg-/.test(name))).toEqual([]);
+  });
+
   describe('while loading', () => {
     it('stays enabled and announces itself busy with a spinner in place of the icon', () => {
       const view = render(

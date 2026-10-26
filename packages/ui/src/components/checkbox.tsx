@@ -6,6 +6,8 @@ import { cn } from '@shinsa/ui/lib/utils';
 
 type CheckboxSize = 'sm' | 'md';
 
+type CheckboxVariant = 'filled' | 'outline';
+
 const SIZE_CLASS: Record<CheckboxSize, string> = {
   sm: 'size-3.5',
   md: 'size-4',
@@ -17,21 +19,37 @@ const SIZE_CLASS: Record<CheckboxSize, string> = {
 // a dense row stays easy to hit. The check is centred over the whole box, border
 // included: at 14px the box's inside is 12px, and a 14px glyph placed there
 // would sit 1px right and low.
+// `outline` has no fill at rest, only its edge, for a list of boxes inside a
+// popover, where a filled box on every row reads heavier than the rows
+// themselves; ticked it fills like `filled`.
+const VARIANT_CLASS: Record<CheckboxVariant, string> = {
+  filled: [
+    'bg-background text-primary-foreground',
+    'data-checked:border-primary-4 data-checked:bg-primary-4',
+  ].join(' '),
+  outline: [
+    'bg-transparent text-primary-foreground',
+    'data-checked:border-primary-4 data-checked:bg-primary-4',
+  ].join(' '),
+};
+
 function Checkbox({
   size = 'md',
+  variant = 'filled',
   className,
   ...props
-}: CheckboxPrimitive.Root.Props & { size?: CheckboxSize }) {
+}: CheckboxPrimitive.Root.Props & { size?: CheckboxSize; variant?: CheckboxVariant }) {
   return (
     <CheckboxPrimitive.Root
       data-slot='checkbox'
+      data-variant={variant}
       className={cn(
-        'peer relative inline-grid shrink-0 place-items-center rounded-checkbox border border-icon-1 bg-background text-primary-foreground outline-none',
+        'peer relative inline-grid shrink-0 place-items-center rounded-checkbox border border-icon-1 outline-none',
         'not-data-disabled:cursor-pointer after:absolute after:-inset-1.5',
         'not-data-disabled:not-data-checked:hover:border-fg-1 not-data-disabled:not-data-checked:active:border-fg-1',
         'not-data-disabled:active:scale-95 not-data-disabled:[label:active_&]:scale-95',
-        'data-checked:border-primary-4 data-checked:bg-primary-4',
         'data-disabled:cursor-not-allowed data-disabled:opacity-45',
+        VARIANT_CLASS[variant],
         SIZE_CLASS[size],
         className
       )}

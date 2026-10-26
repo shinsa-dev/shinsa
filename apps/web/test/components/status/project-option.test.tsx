@@ -9,7 +9,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { FocusMenu, ProjectMenuTrigger, ProjectRadioItems } from '@/components/focus/menu.tsx';
 import { NewTaskForm } from '@/components/home/new-task-form.tsx';
-import { AddServicesDialog } from '@/components/services/service-dialog.tsx';
+import { AddServicesView } from '@/components/services/panel-views.tsx';
 import { pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createProject, createShinsaState } from '../../support/state.ts';
 
@@ -93,19 +93,28 @@ describe('every project picker shows each project’s dot', () => {
     expectEveryDot(await screen.findAllByRole('option'), { ...COLORS, 'No project': 'gray' });
   });
 
-  it('in the Add services dialog', async () => {
+  it('in the Services popover’s Add services', async () => {
     render(
-      <AddServicesDialog
-        control={{ open: true, onOpenChange: () => undefined, onOpenChangeComplete: () => undefined }}
+      <AddServicesView
         projects={PROJECTS}
         projectId='p1'
-        home='/home'
-        listPlaces={() => []}
-        onAdd={async () => true}
-        onAddOne={async () => true}
+        actions={{
+          home: '/home',
+          focusForms: true,
+          listPlaces: () => [],
+          listSuggestions: async () => [],
+          add: async () => true,
+          addOne: async () => true,
+          update: async () => true,
+          remove: async () => true,
+        }}
+        onProject={() => undefined}
+        onCustom={() => undefined}
+        onBack={() => undefined}
+        onDone={() => undefined}
       />
     );
-    await screen.findByText('No services found in Superwall.');
+    await screen.findByText(/^No services found in Superwall\./);
     const trigger = screen.getByRole('combobox', { name: 'Project' });
     expect(trigger.querySelector('[data-project-dot]')?.getAttribute('data-project-dot')).toBe('blue');
     fireEvent.click(trigger);

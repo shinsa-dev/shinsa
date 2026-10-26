@@ -37,7 +37,7 @@ const HEADERS = [
   'components/text/change-snippet.tsx',
   'components/settings/group.tsx',
   'components/roadmap/group.tsx',
-  'components/queue/queue.tsx',
+  'components/layout/compact-section.tsx',
   'components/layout/page/section-label.tsx',
   'components/chat/live-card.tsx',
   'components/chat/delegation-card.tsx',

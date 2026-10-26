@@ -113,7 +113,7 @@ function listGoCommands(route: Route): Command[] {
       kind: 'go',
       id: 'go.settings',
       label: 'Settings',
-      icon: 'IconSettingsGear1',
+      icon: 'IconSettingsGear4',
       current: route.name === 'settings',
       keywords: ['preferences', 'config', 'options', 'projects', 'models'],
       to: '/settings',

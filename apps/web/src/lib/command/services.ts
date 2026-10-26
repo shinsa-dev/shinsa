@@ -2,7 +2,8 @@ import type { ServiceView, ShinsaState, TerminalsSnapshot } from '@shinsa/core';
 import { type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { listServiceCommands } from '@/lib/command/terminal.ts';
 import { restartService, startAllServices, startService, stopService } from '@/lib/connection/terminals.ts';
-import { listServiceGroups, resolveServicesProjects } from '@/lib/terminal/services.ts';
+import { describeStartAll, listServiceGroups, resolveServicesProjects } from '@/lib/terminal/services.ts';
+import { requestServicesPanel } from '@/lib/terminal/services-panel.ts';
 
 const ACTIONS = {
   startService: (view: ServiceView) => void startService(view.service.id),
@@ -15,9 +16,10 @@ export function listServiceSections(
   snapshot: TerminalsSnapshot | null,
   now: number
 ): CommandSection[] {
-  const groups = listServiceGroups(snapshot, resolveServicesProjects(state, null, now), now);
+  const scope = resolveServicesProjects(state, null, now);
+  const groups = listServiceGroups(snapshot, scope, now);
   const views = groups.flatMap((group) => group.views);
-  if (views.length === 0) return [];
+  if (scope.length === 0) return [];
   const startAll = groups.flatMap((group) => {
     const stopped = group.views.filter((view) => view.state !== 'running' && view.state !== 'starting');
     if (stopped.length < 2) return [];
@@ -25,19 +27,40 @@ export function listServiceSections(
       {
         kind: 'run' as const,
         id: `service.start-all.${group.project.id}`,
-        label: groups.length > 1 ? `Start all of ${group.project.name}’s services` : 'Start all services',
+        label: groups.length > 1 ? describeStartAll(group.project) : 'Start all services',
         icon: 'IconPlay' as const,
         keywords: ['services', 'dev', 'servers', 'run'],
         run: () => void startAllServices(group.project.id),
       },
     ];
   });
+  const add = {
+    kind: 'run' as const,
+    id: 'service.add',
+    label: 'Add services…',
+    icon: 'IconPlusMedium' as const,
+    keywords: ['services', 'new', 'dev', 'servers', 'find'],
+    run: () => requestServicesPanel('add'),
+  };
+  const manage = {
+    kind: 'run' as const,
+    id: 'service.manage',
+    label: 'Manage services…',
+    icon: 'IconSettingsSliderHor' as const,
+    keywords: ['services', 'remove', 'delete', 'edit', 'change'],
+    run: () => requestServicesPanel('manage'),
+  };
   return [
     {
       id: 'services',
       heading: 'Services',
       rank: RANK.global,
-      commands: [...startAll, ...listServiceCommands(views, ACTIONS)],
+      commands: [
+        ...startAll,
+        add,
+        ...(views.length > 0 ? [manage] : []),
+        ...listServiceCommands(views, ACTIONS),
+      ],
     },
   ];
 }

@@ -1454,7 +1454,7 @@ then only watched (`docs/design.md`, 37). It is a terminal under the hood, so ev
   engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; plain
   shells come back as `stopped`, as before. Inspect mode starts nothing.
 - **Found for you.** `GET /api/services/suggestions?projectId=` (`detect.ts`, `listServiceSuggestions`) reads each of
-  the project's repositories and folders, fast enough to run when the Add services dialog opens (a few file reads,
+  the project's repositories and folders, fast enough to run when the Services popover turns to Add services (a few file reads,
   no process): the run script of every workspace the root `package.json` names (`workspaces` as a list or
   `{ packages }`, and `pnpm-workspace.yaml`; `dir/*` patterns and exact folders, `!` patterns skipped), or of
   `apps/*`, `packages/*` and `services/*` when it names none (Turbo and Nx layouts), named after its package without
@@ -1472,11 +1472,13 @@ then only watched (`docs/design.md`, 37). It is a terminal under the hood, so ev
   folder and command, or with the same name, which could not be added again) and offers 24 at most. Nothing is
   added or started until you press it.
 - **Adding and changing.** `POST /api/services { projectId, name, path, command, env }`, `POST /api/services/batch
-  { projectId, services: [{ name, path, command, env }…] }` (what the dialog sends for the suggestions you tick:
+  { projectId, services: [{ name, path, command, env }…] }` (what Add services sends for the suggestions you tick:
   every one is checked, names unique among them too, and the limit counted, before any is added; the answer is
   the snapshot with the new ones as `added`), `/api/services/<id>/update`
-  (the same fields; a running service keeps its old command until it restarts, and its tab takes the new name) and
-  `/remove` (stops it and closes its tab) need a browser's Origin, like every terminal change: a definition is a
+  (the same fields; a running service keeps its old command until it restarts, and its tab takes the new name)
+  and `POST /api/services/remove { ids }` (what Manage sends for the ones you tick, one id or many: every id is found
+  before any is removed, each running one stopped and its tab closed, and the answer is the snapshot) need a
+  browser's Origin, like every terminal change: a definition is a
   command that runs as you. Start, stop and restart do not, so `shinsa services start|stop|restart` work from your own
   terminal.
 - **Agents.** No tool reaches a service, `shinsa services` is human-only, and `agents/policy.ts` refuses a shell

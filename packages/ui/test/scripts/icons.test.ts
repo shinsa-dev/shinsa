@@ -123,6 +123,30 @@ describe('renderIconMarkup', () => {
     expect(renderIconMarkup('IconChevronDoubleRight', '0')).not.toContain('scale(');
   });
 
+  it('draws the Settings gear as tall as the usage gauge beside it, at the same stroke weight', () => {
+    const gear = renderIconMarkup('IconSettingsGear4', '2');
+    expect(gear).toStartWith('<g transform="translate(12 12) scale(1.1132) translate(-12 -12)">');
+    expect(gear).toContain('stroke-width="1.7966"');
+    expect(renderIconMarkup('IconSettingsGear4Filled', '2')).toStartWith(
+      '<g transform="translate(12 12) scale(1.1132) translate(-12 -12)">'
+    );
+    expect(renderIconMarkup('IconGauge', '2')).not.toContain('scale(');
+  });
+
+  it('draws Home, Tasks and Services at their matched scales, each filled twin at its outline’s scale', () => {
+    for (const [name, scale] of [
+      ['IconHomeRoundDoor', '1.025'],
+      ['IconListBullets', '1.15'],
+      ['IconServer', '1.15'],
+    ] as const) {
+      const transform = `<g transform="translate(12 12) scale(${scale}) translate(-12 -12)">`;
+      expect(renderIconMarkup(name, '3')).toStartWith(transform);
+      expect(renderIconMarkup(`${name}Filled`, '3')).toStartWith(transform);
+    }
+    expect(renderIconMarkup('IconHomeRoundDoor', '3')).toContain('stroke-width="1.9512"');
+    expect(renderIconMarkup('IconInboxEmpty', '3')).not.toContain('scale(');
+  });
+
   it('uses our own artwork for custom marks', () => {
     expect(renderIconMarkup('IconPriorityHigh', '0')).toStartWith('<g fill="currentColor"><rect');
     expect(renderIconMarkup('IconWholeWord', '3')).toContain('stroke="currentColor"');

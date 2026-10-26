@@ -44,6 +44,10 @@ const buttonVariants = cva(
           'before:shadow-control-destructive',
           'not-disabled:hover:before:bg-red-4/90 not-disabled:active:before:bg-red-4/90',
         ].join(' '),
+        // An icon-only button with no wash at all: only its glyph brightens on
+        // hover, for a quiet action that sits in a row which already has its
+        // own hover (a row's edit pencil).
+        bare: 'text-fg-2 before:hidden not-disabled:hover:text-fg-4 not-disabled:active:text-fg-4',
         // No background to scale, so the content itself takes the press.
         link: [
           'text-primary-text before:hidden not-disabled:hover:opacity-80 not-disabled:active:opacity-80',

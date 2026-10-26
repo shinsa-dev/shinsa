@@ -74,4 +74,11 @@ describe('globals.css', () => {
     for (const { tone } of Object.values(TONED_ICON_SOURCES)) expect(FILE_TINTS).toContain(tone);
     expect(css).toContain('@utility file-icons-muted {\n  --file-icon-ink: currentColor;');
   });
+
+  it('fills a field a step above a dark popover, which already sits on the field’s own step', () => {
+    expect(readBlock('.dark')).toContain('--popover: var(--bg-2);');
+    expect(readBlock(':root')).toContain('--input: var(--bg-2);');
+    expect(readBlock('.dark [data-slot="popover-content"]')).toContain('--input: var(--bg-3);');
+    expect(readBlock('.dark [data-slot="popover-content"]')).toContain('--input-hover: var(--bg-4);');
+  });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   readDocumentVariable,
+  resolveFindDecorations,
   resolveReplyColors,
   resolveTerminalFont,
   resolveTerminalOptions,
@@ -12,6 +13,8 @@ const TOKENS: Record<string, string> = {
   '--terminal-foreground': 'oklch(0 0 0)',
   '--terminal-cursor': '#2f6fec',
   '--terminal-selection': 'oklch(0.6 0.215 256 / 0.22)',
+  '--terminal-find-match': '#ffcc0026',
+  '--terminal-find-active': '#ffcc00',
   '--terminal-ansi-1': '#ff0000',
   '--terminal-ansi-15': 'not a colour',
 };
@@ -25,8 +28,21 @@ describe('resolveTerminalTheme', () => {
       foreground: '#000000',
       cursor: '#2f6fec',
       selectionBackground: '#007bfc38',
+      selectionInactiveBackground: '#007bfc38',
       red: '#ff0000',
     });
+  });
+});
+
+describe('resolveFindDecorations', () => {
+  it('marks matches in the Code tab’s find colours, and leaves them to xterm without the tokens', () => {
+    expect(resolveFindDecorations(read)).toEqual({
+      matchBackground: '#ffcc0026',
+      matchOverviewRuler: '#ffcc0026',
+      activeMatchBackground: '#ffcc00',
+      activeMatchColorOverviewRuler: '#ffcc00',
+    });
+    expect(resolveFindDecorations(() => '')).toBeUndefined();
   });
 });
 

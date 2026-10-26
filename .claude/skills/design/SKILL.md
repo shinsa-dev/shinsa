@@ -48,6 +48,10 @@ Checklist:
       is the same size and ink, chevrons and spinners included.
 - [ ] Icons are Central (`<Icon name='Icon…' />`), never a hand-drawn `<svg>`; run
       `bun run --cwd packages/ui generate:icons` after using a new name.
+- [ ] A tab or nav item with an icon shows the icon's filled twin (`…Filled`) while it is the current one, and the
+      outline otherwise (`NavItem`'s and `NavButton`'s `activeIcon`, Home, Tasks, Settings, Services, the terminal tab
+      in front, a service's tab included, whose state glyph fills in its tone; docs/design.md → Where Shinsa differs,
+      19). A state glyph anywhere but the tab in front (a row's tile, a status tile) keeps its outline.
 - [ ] Icon-only buttons name their action in an `aria-label` and the same tooltip.
 - [ ] No keyboard shortcut but ⌘K, and the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (lint fails on a global
       key listener anywhere else; docs/design.md → Where Shinsa differs, 32).
@@ -55,4 +59,21 @@ Checklist:
       `w-fit`, never a block across a full-width row (lint fails; docs/design.md → Where Shinsa differs, 13).
 - [ ] A new tooltip goes through `Hint`, `TimeAgo`/`Duration`, `Truncate` or `useTooltipTrigger`; never a
       tooltip root per row. The page has one (`TooltipProvider` in `root.tsx`).
+- [ ] No dialog where a view in place does: a popover turns to its next view (the Services popover's Add, Manage
+      and forms), a removal asks in its own footer. A list popover is as tall as its content and scrolls past the room
+      it has (the queue's and Services' `COMPACT_POPOVER`); a view that loads or grows in place (a form) keeps one
+      height, so nothing it does moves the popover's edges. A dialog that is still needed is the kit's `Dialog` or
+      `AlertDialog` as it is: its entry (`DIALOG_MOTION`) and fixed width come with it; only ⌘K is quicker
+      (`COMMAND_MOTION`, docs/design.md → Motion).
+- [ ] A popover list grouped in sections is the compact queue's (`CompactSections`, `CompactSection`), never a
+      look-alike; a footer's padding is the same on every side and a view's header starts as far from the top as
+      from the side (measure them). A section header's fold chevron sits right after its text and counts, never at
+      the end, which is the action's.
+- [ ] A field is the kit's `Input`, `Textarea` or `SelectTrigger`, filled with `bg-input` (raised a step inside a
+      dark popover by `globals.css`), never given a border or a fill of its own to make it show.
+- [ ] Inside a popover a list of boxes is `Checkbox variant='outline'`; a quiet action in a row that washes on its
+      own is `Button variant='bare'`; adjacent icon buttons in a row are 1px apart (`gap-px`), like an `InputGroup`
+      addon's (docs/design.md → Where Shinsa differs, 21 and 37).
+- [ ] An icon that sits beside others at one size but draws smaller in Central's box is matched in
+      `MATCHED_SCALE` (`packages/ui/scripts/icons.ts`), never sized at the call site; measure its ink.
 - [ ] Looked at it on `/ui` and in the app, light and dark, desktop and ~900px.
