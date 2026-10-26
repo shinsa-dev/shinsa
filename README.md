@@ -59,7 +59,7 @@ Shinsa is a Mac app for Apple Silicon: [shinsa.dev/download](https://shinsa.dev/
 release. It needs git, the GitHub CLI signed in (`gh auth login`) and Claude Code signed in; Codex is optional.
 
 Open it and it sets up its engine in the background: agents and schedules keep running when the window is closed or
-the app is quit, and the app updates itself. Shinsa → Install the shinsa Command… adds `shinsa` to your terminal:
+the app is quit, and the app updates itself. It also puts `shinsa` on your terminal's PATH, in zsh, bash and fish:
 `shinsa .` opens Shinsa on the project you are in, and `shinsa do "…"` hands it work.
 
 ## Development

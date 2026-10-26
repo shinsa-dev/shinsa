@@ -256,7 +256,7 @@ function printHelp(args: string[], io: CliIo) {
   return routeCommand(topic, ['--help'], io);
 }
 
-async function routeEveryday(command: string, args: string[], io: CliIo) {
+async function routeTopLevel(command: string, args: string[], io: CliIo) {
   switch (command) {
     case 'do':
       await createTask(args, createCommandIo(io));
@@ -290,14 +290,14 @@ async function routeEveryday(command: string, args: string[], io: CliIo) {
 async function routeCommand(command: string, args: string[], io: CliIo): Promise<number> {
   if (command === 'engine') return runEngine(io);
   if (command === 'help' || command === '--help' || command === '-h') return printHelp(args, io);
-  if (command === '--version' || command === '-v') return routeEveryday('version', args, io);
+  if (command === '--version' || command === '-v') return routeTopLevel('version', args, io);
   const known = selectCliCommand(command);
   if (known && known.name !== '.') {
     if (isHelp(args)) {
       io.write(describeCliUsage(known));
       return 0;
     }
-    return routeEveryday(command, args, io);
+    return routeTopLevel(command, args, io);
   }
   if (isPathArgument(command)) {
     await openApp([command], createCommandIo(io));

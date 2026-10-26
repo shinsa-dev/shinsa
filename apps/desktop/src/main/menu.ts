@@ -7,19 +7,10 @@ interface MenuActions {
   step: (offset: -1 | 1) => void;
   reload: () => void;
   restartEngine: () => void;
-  installCommandLine: () => void;
   update: MenuItemConstructorOptions;
 }
 
-export function applyMenu({
-  show,
-  open,
-  step,
-  reload,
-  restartEngine,
-  installCommandLine,
-  update,
-}: MenuActions) {
+export function applyMenu({ show, open, step, reload, restartEngine, update }: MenuActions) {
   const template: MenuItemConstructorOptions[] = [
     {
       label: APP_NAME,
@@ -35,7 +26,6 @@ export function applyMenu({
             show();
           },
         },
-        { label: 'Install the shinsa Command…', click: installCommandLine },
         { label: 'Restart Engine', click: restartEngine },
         { type: 'separator' },
         { role: 'services' },

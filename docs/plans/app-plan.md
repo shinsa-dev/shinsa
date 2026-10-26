@@ -84,8 +84,9 @@ Shinsa.app/Contents/
 
 ### The command line
 
-- **Shinsa → Install the shinsa Command…** links `Resources/engine/bin/shinsa` into `/usr/local/bin`, asking for
-  your password once, as VS Code does. Agents need nothing: the engine puts its own `bin/` on their `PATH`.
+- **The app puts `shinsa` on your PATH by itself** (built): on every launch it links `~/.local/bin/shinsa` to its own
+  `Resources/engine/bin/shinsa` and adds `~/.local/bin` to any shell (zsh, bash, fish) that lacks it, with no
+  password; `apps/desktop/CLAUDE.md` has the rules. Agents need nothing: the engine puts its own `bin/` on their `PATH`.
 - `shinsa` alone opens the app; `shinsa .` and `shinsa <folder>` open it focused on the project of the repository
   the folder is in (or say Shinsa has not worked there yet); `shinsa open <task>` opens it on a task.
 - Every other command talks to the engine. If it does not answer, the command asks launchd to start it

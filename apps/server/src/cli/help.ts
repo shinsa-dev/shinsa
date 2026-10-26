@@ -22,11 +22,11 @@ const PRIORITY_OPTIONS: CliOption[] = [
   { flag: '--high', text: 'Put it ahead of normal work.' },
 ];
 
-const EVERYDAY_COMMANDS: CliCommand[] = [
+const OPEN_COMMANDS: CliCommand[] = [
   {
     name: '.',
     usage: 'shinsa [folder]',
-    summary: 'Open the app, on the project of a folder: `shinsa .` for this one.',
+    summary: 'Open the app; in a repository, open it on that repository’s project.',
     detail:
       'Alone it opens the app on Home. With a folder it focuses the app on the project of the repository the folder is in, or says that Shinsa has not worked there yet.',
     options: [],
@@ -35,7 +35,7 @@ const EVERYDAY_COMMANDS: CliCommand[] = [
   {
     name: 'open',
     usage: 'shinsa open [task]',
-    summary: 'Open the app on a task: SW-142, its id or its title.',
+    summary: 'Open the app on a task, by its handle (SW-142), id or title.',
     detail: 'Without a task it opens the app on Home; a folder works as it does for `shinsa <folder>`.',
     options: [],
     examples: ['shinsa open SW-142'],
@@ -43,7 +43,7 @@ const EVERYDAY_COMMANDS: CliCommand[] = [
   {
     name: 'do',
     usage: 'shinsa do <request...> [--plan-first] [--urgent | --high]',
-    summary: 'Hand Shinsa a piece of work.',
+    summary: 'Create a task from a request; Shinsa picks the kind of work and runs it.',
     detail:
       'The folder you run it in tells triage where the work is. Shinsa classifies the request, plans it and builds it, and brings it back when it needs a decision.',
     options: [
@@ -55,7 +55,7 @@ const EVERYDAY_COMMANDS: CliCommand[] = [
   {
     name: 'import',
     usage: 'shinsa import <session> [--in <folder>] [--urgent | --high]',
-    summary: 'Turn a Claude Code session into a task.',
+    summary: 'Create a task from a Claude Code session, starting with a plan to approve.',
     detail:
       'Takes a session file (.jsonl) or a session id. The task starts with a plan for you to approve, so nothing builds until you have looked.',
     options: [
@@ -64,22 +64,22 @@ const EVERYDAY_COMMANDS: CliCommand[] = [
     ],
     examples: ['shinsa import 0b9c2f4e-6a8d', 'shinsa import ~/session.jsonl --in ~/Developer/shop'],
   },
+];
+
+const ENGINE_COMMANDS: CliCommand[] = [
   {
     name: 'status',
     usage: 'shinsa status [--json]',
-    summary: 'Whether the engine is running, and what needs you.',
+    summary: 'Show whether the engine runs, what needs you and what agents are doing.',
     detail:
       'Shows the engine’s version and data folder, the Home guide, the decisions waiting for you and what agents are working on. Exits with 1 when the engine is not running, and never starts it.',
     options: [JSON_OPTION],
     examples: ['shinsa status'],
   },
-];
-
-const ENGINE_COMMANDS: CliCommand[] = [
   {
     name: 'start',
     usage: 'shinsa start',
-    summary: 'Start the engine.',
+    summary: 'Start the engine in the background and wait until it answers.',
     detail:
       'Asks launchd to start the engine the Shinsa app set up, and waits until it answers. Any other command that needs the engine starts it the same way.',
     options: [],
@@ -88,7 +88,7 @@ const ENGINE_COMMANDS: CliCommand[] = [
   {
     name: 'stop',
     usage: 'shinsa stop',
-    summary: 'Stop the engine. Agents resume when it starts again.',
+    summary: 'Stop the engine cleanly. Runs resume when it starts again.',
     detail:
       'Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in.',
     options: [],
@@ -98,7 +98,7 @@ const ENGINE_COMMANDS: CliCommand[] = [
   {
     name: 'restart',
     usage: 'shinsa restart [--when-idle]',
-    summary: 'Restart the engine, now or once agents are idle.',
+    summary: 'Restart the engine now, or with --when-idle once no agent is mid-turn.',
     detail:
       'Restarts the engine and waits until the new one answers. Runs it cuts off resume on their own sessions.',
     options: [{ flag: '--when-idle', text: 'Wait until no agent is mid-turn, then restart.' }],
@@ -108,7 +108,7 @@ const ENGINE_COMMANDS: CliCommand[] = [
   {
     name: 'logs',
     usage: 'shinsa logs [--lines <count>] [--json]',
-    summary: 'Show the end of the engine’s log.',
+    summary: 'Print the last lines of the engine’s log, 50 unless --lines says more.',
     detail:
       'Reads `engine.log` in the data folder, one line per entry: the time in UTC, the level, the message and its fields.',
     options: [
@@ -120,14 +120,14 @@ const ENGINE_COMMANDS: CliCommand[] = [
   {
     name: 'version',
     usage: 'shinsa version [--json]',
-    summary: 'Show the version of this command and of the engine.',
+    summary: 'Print the version of this command and of the running engine.',
     detail: 'Also `shinsa --version`. Says when the engine runs another version than the app carries.',
     options: [JSON_OPTION],
     examples: ['shinsa version'],
   },
 ];
 
-export const CLI_COMMANDS = [...EVERYDAY_COMMANDS, ...ENGINE_COMMANDS];
+export const CLI_COMMANDS = [...OPEN_COMMANDS, ...ENGINE_COMMANDS];
 
 const EXAMPLES = [
   'shinsa .',
@@ -158,10 +158,10 @@ function describeTopLevel() {
   return [
     'Shinsa hands coding work to agents and brings back only the decisions.',
     '',
-    'Everyday',
-    ...describeCommandLines(EVERYDAY_COMMANDS),
+    'Open Shinsa and hand it work',
+    ...describeCommandLines(OPEN_COMMANDS),
     '',
-    'Engine (the Shinsa app keeps it running in the background)',
+    'Check and control the background engine',
     ...describeCommandLines(ENGINE_COMMANDS),
   ].join('\n');
 }
@@ -233,11 +233,11 @@ export const REFERENCE_MARKER =
 
 function serializeCliReference() {
   return [
-    '## Everyday commands',
+    '## Open Shinsa and hand it work',
     '',
-    EVERYDAY_COMMANDS.map(serializeCommandReference).join('\n\n'),
+    OPEN_COMMANDS.map(serializeCommandReference).join('\n\n'),
     '',
-    '## The engine',
+    '## Check and control the background engine',
     '',
     ENGINE_COMMANDS.map(serializeCommandReference).join('\n\n'),
     '',

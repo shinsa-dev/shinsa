@@ -13,23 +13,30 @@ import { isSurfaceGroup } from '../../src/cli/surface.ts';
 import { listUncatalogedGroups } from '../../src/surface/index.ts';
 
 describe('shinsa help', () => {
-  test('puts the everyday commands first, then the engine, then every group by section', () => {
+  test('opens with the commands that open Shinsa and hand it work, then the engine, then every group by section', () => {
     const lines = USAGE.split('\n');
     expect(lines.slice(0, 4)).toEqual([
       'Shinsa hands coding work to agents and brings back only the decisions.',
       '',
-      'Everyday',
-      `  ${'shinsa [folder]'.padEnd(28)} Open the app, on the project of a folder: shinsa . for this one.`,
+      'Open Shinsa and hand it work',
+      `  ${'shinsa [folder]'.padEnd(28)} Open the app; in a repository, open it on that repository’s project.`,
     ]);
-    expect(lines).toContain(`  ${'shinsa do <request...>'.padEnd(28)} Hand Shinsa a piece of work.`);
     expect(lines).toContain(
-      `  ${'shinsa restart'.padEnd(28)} Restart the engine, now or once agents are idle.`
+      `  ${'shinsa do <request...>'.padEnd(28)} Create a task from a request; Shinsa picks the kind of work and runs it.`
     );
-    expect(lines).toContain(`  ${'tasks'.padEnd(14)} List, show, create and steer tasks.`);
-    expect(USAGE.indexOf('Everyday')).toBeLessThan(USAGE.indexOf('Engine ('));
-    expect(USAGE.indexOf('Engine (')).toBeLessThan(USAGE.indexOf('\nWork\n'));
+    expect(lines).toContain(
+      `  ${'shinsa restart'.padEnd(28)} Restart the engine now, or with --when-idle once no agent is mid-turn.`
+    );
+    expect(lines).toContain(
+      `  ${'tasks'.padEnd(14)} List, open and create tasks; message, retry, reprioritize, cancel or finish one.`
+    );
+    const engine = USAGE.indexOf('Check and control the background engine');
+    expect(USAGE.indexOf('Open Shinsa and hand it work')).toBeLessThan(engine);
+    expect(USAGE.indexOf('shinsa status')).toBeGreaterThan(engine);
+    expect(engine).toBeLessThan(USAGE.indexOf('\nSteer tasks and answer what agents ask\n'));
     expect(USAGE).not.toMatch(/\bserve\b/);
     expect(USAGE).not.toContain('shinsa engine');
+    expect(USAGE).not.toContain('keeps it running');
   });
 
   test('every group of the surface has a line, and --all lists every command', () => {
@@ -49,7 +56,7 @@ describe('shinsa help', () => {
     expect(selectCliCommand('serve')).toBeNull();
     expect(describeCliUsage(command as NonNullable<typeof command>)).toBe(
       [
-        'Restart the engine, now or once agents are idle.',
+        'Restart the engine now, or with --when-idle once no agent is mid-turn.',
         '',
         'Usage',
         '  shinsa restart [--when-idle]',
@@ -79,6 +86,6 @@ describe('docs/cli.md', () => {
       'Yours alone: an agent’s shell may not run it, since the engine runs the agent.'
     );
     const fresh = replaceReference('# Title\n');
-    expect(fresh.startsWith(`# Title\n\n${REFERENCE_MARKER}\n\n## Everyday commands`)).toBe(true);
+    expect(fresh.startsWith(`# Title\n\n${REFERENCE_MARKER}\n\n## Open Shinsa and hand it work`)).toBe(true);
   });
 });

@@ -15,7 +15,7 @@ import {
 import { describeServer, type ServerHealth } from '../lib/health.ts';
 import { isPermissionAllowed } from '../lib/navigation.ts';
 import { parseNotice } from '../lib/notice.ts';
-import { installCommandLine } from './command-line.ts';
+import { syncCommandLine } from './command-line.ts';
 import { EngineSupervisor } from './engine.ts';
 import { applyMenu } from './menu.ts';
 import { showNotice } from './notifications.ts';
@@ -93,11 +93,11 @@ async function start() {
     step: (offset) => main?.step(offset),
     reload: () => main?.reload(),
     restartEngine: () => void restartEngine(),
-    installCommandLine: () => void installCommandLine(main?.win ?? null),
   };
   updater = new Updater(publishUpdate, () => main?.show());
   refreshMenu();
   updater.start();
+  void syncCommandLine();
   await connect();
   setInterval(() => void watchEngine(), WATCH_MS);
 }

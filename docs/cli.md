@@ -14,7 +14,7 @@ to the daemon. The two set the pattern; Shinsa takes what works from each.
 | The daemon | `tailscaled`, its own binary, run by systemd or the macOS app | `dockerd`, run by the app inside its VM | the app's own engine, the same binary as the command, run by launchd as a login item |
 | Running the daemon by hand | `tailscaled` is not a `tailscale` command | not a `docker` command | not in the help: `shinsa engine` exists only for the launchd job and `bun dev` |
 | Daemon controls | `up`, `down`, `status` (exits 1 when stopped), `version` (with `--daemon`) | `docker desktop start`, `stop`, `restart`, `status`, `logs`, `version`, `update` | `start`, `stop`, `restart` (also `--when-idle`), `status`, `logs`, `version`, at the top level |
-| Everyday work | one flat list of verbs (`ping`, `ssh`, `file`, `serve`) | `docker --help` puts Common Commands first, then Management Commands (`container`, `image`, `system`…) | Everyday first (`.`, `open`, `do`, `import`, `status`), then the groups by section |
+| Day-to-day work | one flat list of verbs (`ping`, `ssh`, `file`, `serve`) | `docker --help` puts Common Commands first, then Management Commands (`container`, `image`, `system`…) | the commands that open Shinsa and hand it work first (`.`, `open`, `do`, `import`), then the engine's, then the groups, each section titled by what its commands do |
 | When the daemon is down | commands fail and say so | commands fail and say so | a command that needs the engine starts it through launchd and carries on; only `status` and `version` report without starting it |
 | Machine output | `--json` on some commands | `--format json` on some commands | `--json` on every command, with errors as JSON too |
 
@@ -44,16 +44,16 @@ What Shinsa takes:
 Every command talks to the engine on the configured host (`SHINSA_HOST` or `hostname` in `config.json`; 127.0.0.1
 when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180). When the Mac
 app runs the engine and it is not answering, a command asks launchd to start it and waits for it; `status` and
-`version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app installs (Shinsa → Install
-the shinsa Command…), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
+`version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app puts on your PATH
+(`~/.local/bin/shinsa`, linked on every launch, in zsh, bash and fish), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
 
 <!-- Everything below is generated from apps/server/src/cli and apps/server/src/surface by `bun run --cwd apps/server docs:cli`, and a test fails when it falls behind. -->
 
-## Everyday commands
+## Open Shinsa and hand it work
 
 ### shinsa [folder]
 
-Open the app, on the project of a folder: `shinsa .` for this one. Alone it opens the app on Home. With a folder it focuses the app on the project of the repository the folder is in, or says that Shinsa has not worked there yet.
+Open the app; in a repository, open it on that repository’s project. Alone it opens the app on Home. With a folder it focuses the app on the project of the repository the folder is in, or says that Shinsa has not worked there yet.
 
 ```
 shinsa [folder]
@@ -64,7 +64,7 @@ $ shinsa ~/Developer/shop
 
 ### shinsa open
 
-Open the app on a task: SW-142, its id or its title. Without a task it opens the app on Home; a folder works as it does for `shinsa <folder>`.
+Open the app on a task, by its handle (SW-142), id or title. Without a task it opens the app on Home; a folder works as it does for `shinsa <folder>`.
 
 ```
 shinsa open [task]
@@ -73,7 +73,7 @@ $ shinsa open SW-142
 
 ### shinsa do
 
-Hand Shinsa a piece of work. The folder you run it in tells triage where the work is. Shinsa classifies the request, plans it and builds it, and brings it back when it needs a decision.
+Create a task from a request; Shinsa picks the kind of work and runs it. The folder you run it in tells triage where the work is. Shinsa classifies the request, plans it and builds it, and brings it back when it needs a decision.
 
 ```
 shinsa do <request...> [--plan-first] [--urgent | --high]
@@ -89,7 +89,7 @@ $ shinsa do "add search to the docs" --plan-first
 
 ### shinsa import
 
-Turn a Claude Code session into a task. Takes a session file (.jsonl) or a session id. The task starts with a plan for you to approve, so nothing builds until you have looked.
+Create a task from a Claude Code session, starting with a plan to approve. Takes a session file (.jsonl) or a session id. The task starts with a plan for you to approve, so nothing builds until you have looked.
 
 ```
 shinsa import <session> [--in <folder>] [--urgent | --high]
@@ -103,9 +103,11 @@ $ shinsa import ~/session.jsonl --in ~/Developer/shop
 | `--urgent` | Put it ahead of everything else. |
 | `--high` | Put it ahead of normal work. |
 
+## Check and control the background engine
+
 ### shinsa status
 
-Whether the engine is running, and what needs you. Shows the engine’s version and data folder, the Home guide, the decisions waiting for you and what agents are working on. Exits with 1 when the engine is not running, and never starts it.
+Show whether the engine runs, what needs you and what agents are doing. Shows the engine’s version and data folder, the Home guide, the decisions waiting for you and what agents are working on. Exits with 1 when the engine is not running, and never starts it.
 
 ```
 shinsa status [--json]
@@ -116,11 +118,9 @@ $ shinsa status
 | --- | --- |
 | `--json` | Print the answer as JSON. |
 
-## The engine
-
 ### shinsa start
 
-Start the engine. Asks launchd to start the engine the Shinsa app set up, and waits until it answers. Any other command that needs the engine starts it the same way.
+Start the engine in the background and wait until it answers. Asks launchd to start the engine the Shinsa app set up, and waits until it answers. Any other command that needs the engine starts it the same way.
 
 ```
 shinsa start
@@ -129,7 +129,7 @@ $ shinsa start
 
 ### shinsa stop
 
-Stop the engine. Agents resume when it starts again. Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in.
+Stop the engine cleanly. Runs resume when it starts again. Waits until it has stopped cleanly. It stays stopped until `shinsa start`, the Shinsa app or a command that needs it starts it again, or until you next log in.
 
 ```
 shinsa stop
@@ -140,7 +140,7 @@ Yours alone: an agent’s shell may not run it, since the engine runs the agent.
 
 ### shinsa restart
 
-Restart the engine, now or once agents are idle. Restarts the engine and waits until the new one answers. Runs it cuts off resume on their own sessions.
+Restart the engine now, or with --when-idle once no agent is mid-turn. Restarts the engine and waits until the new one answers. Runs it cuts off resume on their own sessions.
 
 ```
 shinsa restart [--when-idle]
@@ -156,7 +156,7 @@ Yours alone: an agent’s shell may not run it, since the engine runs the agent.
 
 ### shinsa logs
 
-Show the end of the engine’s log. Reads `engine.log` in the data folder, one line per entry: the time in UTC, the level, the message and its fields.
+Print the last lines of the engine’s log, 50 unless --lines says more. Reads `engine.log` in the data folder, one line per entry: the time in UTC, the level, the message and its fields.
 
 ```
 shinsa logs [--lines <count>] [--json]
@@ -171,7 +171,7 @@ $ shinsa logs --lines 200
 
 ### shinsa version
 
-Show the version of this command and of the engine. Also `shinsa --version`. Says when the engine runs another version than the app carries.
+Print the version of this command and of the running engine. Also `shinsa --version`. Says when the engine runs another version than the app carries.
 
 ```
 shinsa version [--json]

@@ -108,9 +108,11 @@ describe('help and unknown commands', () => {
     expect(await runCli(['do', '--help'], topic.io)).toBe(0);
     expect(await runCli(['stop', '-h'], topic.io)).toBe(0);
     expect(await runCli(['help', 'tasks'], topic.io)).toBe(0);
-    expect(topic.out[0]).toStartWith('Hand Shinsa a piece of work.\n\nUsage\n  shinsa do <request...>');
+    expect(topic.out[0]).toStartWith(
+      'Create a task from a request; Shinsa picks the kind of work and runs it.\n\nUsage\n  shinsa do <request...>'
+    );
     expect(topic.out[1]).toBe(topic.out[0]);
-    expect(topic.out[2]).toStartWith('Stop the engine.');
+    expect(topic.out[2]).toStartWith('Stop the engine cleanly.');
     expect(topic.out[3]).toStartWith('shinsa tasks\n');
     const unknown = createIo('1');
     expect(await runCli(['help', 'launch'], unknown.io)).toBe(1);

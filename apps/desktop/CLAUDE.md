@@ -62,8 +62,15 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
 - **Restarting** the engine is `launchctl kickstart -k` (the status page's Start engine, Shinsa → Restart Engine); the
   engine restarts itself for an update (`POST /api/engine/restart`). `shinsa start`, `stop` and `restart` do the same
   from a terminal, on the same job (`docs/cli.md` → The engine).
-- **The `shinsa` command**: Shinsa → Install the shinsa Command… links `Contents/Resources/engine/bin/shinsa` into
-  `/usr/local/bin` with one administrator prompt, as VS Code does. The job runs that executable as `shinsa engine`
+- **The `shinsa` command** is on your PATH without asking (`main/command-line.ts`, the decisions in
+  `lib/command-line.ts`). On every launch the packaged app links `~/.local/bin/shinsa` to its own
+  `Contents/Resources/engine/bin/shinsa`, the folder Claude Code, pipx and uv use, with no password: it makes the link
+  when there is none, moves it when it points into another `Shinsa.app` (the app moved or a copy made it), and never
+  touches a `shinsa` it did not make (a file, or a link to your checkout). Then it asks each shell you use (zsh, bash
+  when you have a `.bash_profile` or it is your shell, and fish when installed) for the PATH an interactive login sees,
+  and where `~/.local/bin` is missing it adds it once: `conf.d/shinsa.fish` for fish, a marked block at the end of
+  `.zprofile` or `.bash_profile`. A failure leaves things as they were and is tried again at the next launch. The
+  job runs that executable as `shinsa engine`
   (`serializeEngineAgent`, and the checked-in `resources/LaunchAgents` plist a test compares with it).
 - Which server: `SHINSA_URL` (an origin) wins; unpackaged, the Vite dev server on 5181; packaged, `SHINSA_PORT`, then
   `port` in Shinsa's `config.json`, then 5180, always on 127.0.0.1.
