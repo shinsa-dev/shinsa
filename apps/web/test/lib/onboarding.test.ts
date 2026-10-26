@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   describeAccountSource,
+  describeStepHeading,
   describeStepPosition,
   isHighlightKey,
   isImportedNow,
@@ -8,6 +9,7 @@ import {
   listFolderRows,
   listFolderSuggestions,
   listSetupSummary,
+  listStepperItems,
   resolveCheckOutcome,
   resolveFolderOptions,
   resolveNextHighlight,
@@ -43,6 +45,20 @@ describe('the steps', () => {
   it('counts the step you are on, and the last one once setup is done', () => {
     expect(describeStepPosition(createFlow(createStep()))).toBe('Step 3 of 6');
     expect(describeStepPosition(createFlow(null))).toBe('Step 6 of 6');
+  });
+
+  it('names the step you are on for a narrow window, and only the count once setup is done', () => {
+    expect(describeStepHeading(createFlow(createStep()))).toBe('Step 3 of 6: Merging');
+    expect(describeStepHeading(createFlow(null))).toBe('Step 6 of 6');
+  });
+
+  it('checks the answered steps along the top, with the answer as the hint, and holds back the ones not reached', () => {
+    const items = listStepperItems(createFlow(createStep({ id: 'model' })));
+    expect(items.slice(0, 3)).toEqual([
+      { value: 'roots', label: 'Folders', hint: 'Folders answer', checked: true, disabled: false },
+      { value: 'model', label: 'Model', hint: undefined, checked: false, disabled: false },
+      { value: 'merge', label: 'Merging', hint: undefined, checked: false, disabled: true },
+    ]);
   });
 
   it('slides back only when you go to an earlier step', () => {

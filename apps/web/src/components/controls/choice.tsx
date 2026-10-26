@@ -1,10 +1,14 @@
+import { Icon } from '@shinsa/ui/components/icon';
 import { Tabs, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { CHECK_TEXT } from '@/components/status/check-mark.tsx';
 
 interface ChoiceItem<V extends string> {
   value: V;
   label: string;
   hint?: string;
+  checked?: boolean;
+  disabled?: boolean;
 }
 
 export function Choice<V extends string>({
@@ -30,9 +34,11 @@ export function Choice<V extends string>({
             <TabsTrigger
               key={item.value}
               value={item.value}
+              disabled={item.disabled}
               onPointerEnter={onItemIntent && (() => onItemIntent(item.value))}
               onFocus={onItemIntent && (() => onItemIntent(item.value))}
             >
+              {item.checked && <Icon name='IconCheckmark1Small' aria-hidden className={CHECK_TEXT} />}
               {item.label}
             </TabsTrigger>
           );

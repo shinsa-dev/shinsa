@@ -7,7 +7,9 @@ import { ErrorLine } from '@/components/chat/turn-detail.tsx';
 import { type OnboardingAccountActions, OnboardingAccounts } from '@/components/onboarding/accounts.tsx';
 import { OnboardingChecks } from '@/components/onboarding/checks.tsx';
 import { OptionList } from '@/components/onboarding/options.tsx';
-import { OnboardingStepper } from '@/components/onboarding/stepper.tsx';
+import { OnboardingSection } from '@/components/onboarding/section.tsx';
+import { SETTING_ROW } from '@/components/settings/group.tsx';
+import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import {
   listChosenValues,
   REFRESH_KEY,
@@ -18,7 +20,7 @@ import {
   SUBMIT_KEY,
 } from '@/lib/onboarding.ts';
 
-export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col px-6';
+export const ONBOARDING_COLUMN = 'mx-auto flex w-full max-w-xl flex-col gap-6 px-6';
 
 export interface OnboardingStepActions {
   answer: (stepId: OnboardingStepId, values: string[], key?: string) => void;
@@ -27,17 +29,8 @@ export interface OnboardingStepActions {
 }
 
 export interface OnboardingAccountsView {
-  list: AccountSummary[];
+  list: AccountSummary[] | null;
   actions: OnboardingAccountActions;
-}
-
-function StepHeading({ step }: { step: OnboardingStep }) {
-  return (
-    <div className='flex flex-col gap-1.5'>
-      <h1 className='text-balance font-medium text-fg-4 text-lg leading-tight'>{step.title}</h1>
-      <p className='text-pretty text-fg-2 text-sm'>{step.description}</p>
-    </div>
-  );
 }
 
 function AddFolderField({ onAdd }: { onAdd: (path: string) => void }) {
@@ -45,7 +38,7 @@ function AddFolderField({ onAdd }: { onAdd: (path: string) => void }) {
   const trimmed = path.trim();
   return (
     <form
-      className='flex items-center gap-2'
+      className={cn(SETTING_ROW, 'mx-1 mb-1 gap-1.5 px-1.5 first:mt-1')}
       onSubmit={(event) => {
         event.preventDefault();
         if (!trimmed) return;
@@ -54,6 +47,7 @@ function AddFolderField({ onAdd }: { onAdd: (path: string) => void }) {
       }}
     >
       <Input
+        size='sm'
         value={path}
         onChange={(event) => setPath(event.target.value)}
         placeholder='Add a folder by its path, like ~/code'
@@ -61,8 +55,8 @@ function AddFolderField({ onAdd }: { onAdd: (path: string) => void }) {
         spellCheck={false}
         autoComplete='off'
       />
-      <Button type='submit' variant='outline' icon='IconPlusMedium' disabled={!trimmed}>
-        Add
+      <Button type='submit' variant='secondary' size='sm' icon='IconPlusMedium' disabled={!trimmed}>
+        Add folder
       </Button>
     </form>
   );
@@ -86,26 +80,23 @@ function FoldersBody({
   const [typed, setTyped] = React.useState<string[]>([]);
   const options = resolveFolderOptions(step.options, typed, userHome);
   return (
-    <div className='flex flex-col gap-3'>
-      {options.length > 0 && (
-        <OptionList
-          options={options}
-          values={values}
-          multiple
-          label='Folders'
-          busyValue={null}
-          disabled={busy}
-          autoFocus={autoFocus}
-          onPick={(value) => onChange(resolveToggledRoots(values, value))}
-        />
-      )}
+    <OptionList
+      options={options}
+      values={values}
+      multiple
+      label='Folders'
+      busyValue={null}
+      disabled={busy}
+      autoFocus={autoFocus}
+      onPick={(value) => onChange(resolveToggledRoots(values, value))}
+    >
       <AddFolderField
         onAdd={(path) => {
           setTyped([...typed, path]);
           if (!values.includes(path)) onChange([...values, path]);
         }}
       />
-    </div>
+    </OptionList>
   );
 }
 
@@ -151,22 +142,7 @@ function StepBody({
     );
   }
   if (step.id === 'prerequisites') {
-    return (
-      <OnboardingChecks
-        checks={step.checks}
-        footer={
-          <Button
-            variant='outline'
-            size='sm'
-            icon='IconArrowRotateClockwise'
-            loading={pending === REFRESH_KEY}
-            onClick={actions.refresh}
-          >
-            Check again
-          </Button>
-        }
-      />
-    );
+    return <OnboardingChecks checks={step.checks} />;
   }
   return (
     <OptionList
@@ -185,11 +161,43 @@ function StepBody({
   );
 }
 
+function StepAction({
+  step,
+  pending,
+  accounts,
+  actions,
+}: {
+  step: OnboardingStep;
+  pending: string | null;
+  accounts: OnboardingAccountsView;
+  actions: OnboardingStepActions;
+}) {
+  if (step.id === 'accounts') {
+    return (
+      <Button variant='secondary' icon='IconUserAdd' onClick={() => accounts.actions.signIn(null)}>
+        {accounts.list?.length === 0 ? 'Sign in to Claude' : ACCOUNT_LABEL.add}
+      </Button>
+    );
+  }
+  if (step.id !== 'prerequisites') return null;
+  return (
+    <Button
+      variant='secondary'
+      icon='IconArrowRotateClockwise'
+      loading={pending === REFRESH_KEY}
+      onClick={actions.refresh}
+    >
+      Check again
+    </Button>
+  );
+}
+
 function StepFooter({
   flow,
   step,
   values,
   pending,
+  accounts,
   actions,
   onClose,
 }: {
@@ -197,6 +205,7 @@ function StepFooter({
   step: OnboardingStep;
   values: string[];
   pending: string | null;
+  accounts: OnboardingAccountsView;
   actions: OnboardingStepActions;
   onClose?: () => void;
 }) {
@@ -204,7 +213,7 @@ function StepFooter({
   const submitValues = resolveSubmitValues(step, values);
   const choosing = step.options.length > 0 && !step.multiple;
   return (
-    <div className='flex items-center justify-between gap-3 border-border border-t pt-4'>
+    <>
       {previous ? (
         <Button
           variant='secondary'
@@ -217,12 +226,13 @@ function StepFooter({
       ) : (
         <span />
       )}
-      <div className='flex items-center gap-2'>
+      <div className='flex items-center gap-1.5'>
         {onClose && (
           <Button variant='secondary' onClick={onClose}>
             Close setup
           </Button>
         )}
+        <StepAction step={step} pending={pending} accounts={accounts} actions={actions} />
         {(!choosing || values.length > 0) && (
           <Button
             icon={{ name: 'IconArrowRight', position: 'inline-end' }}
@@ -234,7 +244,7 @@ function StepFooter({
           </Button>
         )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -261,32 +271,33 @@ export function OnboardingStepView({
 }) {
   const [values, setValues] = React.useState(() => listChosenValues(step));
   return (
-    <div className='flex flex-col gap-10'>
-      <OnboardingStepper flow={flow} disabled={pending !== null} onOpen={actions.open} />
-      <section
-        className={cn('flex flex-col gap-6', direction === 'back' ? 'onboarding-in-back' : 'onboarding-in')}
-      >
-        <StepHeading step={step} />
-        <StepBody
-          step={step}
-          values={values}
-          pending={pending}
-          userHome={userHome}
-          accounts={accounts}
-          actions={actions}
-          onChange={setValues}
-          autoFocus={autoFocus}
-        />
-        {step.problem && <ErrorLine text={step.problem} />}
+    <OnboardingSection
+      title={step.title}
+      description={step.description}
+      direction={direction}
+      footer={
         <StepFooter
           flow={flow}
           step={step}
           values={values}
           pending={pending}
+          accounts={accounts}
           actions={actions}
           onClose={onClose}
         />
-      </section>
-    </div>
+      }
+    >
+      <StepBody
+        step={step}
+        values={values}
+        pending={pending}
+        userHome={userHome}
+        accounts={accounts}
+        actions={actions}
+        onChange={setValues}
+        autoFocus={autoFocus}
+      />
+      {step.problem && <ErrorLine text={step.problem} />}
+    </OnboardingSection>
   );
 }

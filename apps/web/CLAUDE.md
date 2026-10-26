@@ -56,10 +56,10 @@ src/
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
-│                        onboarding (shell, stepper, the step and its footer, the option list, accounts, checks, finished),
+│                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, accounts, checks, finished),
 │                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar, the
 │                        Terminal button in Desk's top bar), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
-│                        Settings' tabs use, the list row, the logo link home and home-link.tsx (the Home button
+│                        Settings' tabs use, the list row and its LIST_ROW classes, the logo link home and home-link.tsx (the Home button
 │                        that replaces it in the Mac app), page/ column, heading, toolbar, section
 │                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
 │                        status (tiles, glyphs, tones in text, check marks, priority, the health and engine banners, the Update button,

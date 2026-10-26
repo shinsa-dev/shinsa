@@ -82,6 +82,12 @@ export function describeStepPosition(flow: OnboardingFlow) {
   return `Step ${Math.min(flow.index + 1, flow.steps.length)} of ${flow.steps.length}`;
 }
 
+export function describeStepHeading(flow: OnboardingFlow) {
+  const entry = flow.steps[flow.index];
+  const position = describeStepPosition(flow);
+  return entry ? `${position}: ${entry.label}` : position;
+}
+
 export function resolveStepDirection(before: number | null, after: number): StepDirection {
   return before !== null && after < before ? 'back' : 'forward';
 }
@@ -133,6 +139,19 @@ export function resolveStepState(entry: OnboardingStepEntry, index: number, curr
   if (index === current) return 'current';
   if (!entry.reached) return 'upcoming';
   return index < current || entry.summary !== null ? 'done' : 'ahead';
+}
+
+export function listStepperItems(flow: OnboardingFlow) {
+  return flow.steps.map((entry, index) => {
+    const state = resolveStepState(entry, index, flow.index);
+    return {
+      value: entry.id,
+      label: entry.label,
+      hint: entry.summary ?? undefined,
+      checked: state === 'done',
+      disabled: state === 'upcoming',
+    };
+  });
 }
 
 export const SUBMIT_KEY = 'submit';

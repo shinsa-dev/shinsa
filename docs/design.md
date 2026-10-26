@@ -628,7 +628,7 @@ Only these, and they win over anything below:
       project's Colour menu).
     - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
       card surface. A card pads the same on all four sides; the shared `Card` slot carries no
-      padding of its own, so nothing doubles up. Settings groups are `p-1.5` (6px on every side,
+      padding of its own, so nothing doubles up. Settings groups are `p-1.5` (`SettingsCard`, which setup's cards use too; 6px on every side,
       measured), rows inside `pl-2 pr-1.5` (`SETTING_ROW`, a 40px minimum with `py-1` only so a wrapped
       line keeps 4px from the row's edge), so text sits 14px from the left edge and a control 12px
       from the right, and an inner surface (a project's repositories) sits 6px from the card on three sides.
@@ -792,53 +792,67 @@ Only these, and they win over anything below:
     busy submit can't fire twice. It is never `disabled`.
 23. **The kit's icon-only buttons carry their tooltip**, as 13 requires: the dialog and sheet close
     X ("Close").
-24. **Setup is one calm step at a time.** `/onboarding` (`routes/onboarding.tsx`, the pieces in
-    `components/onboarding/`) shows the server's setup steps (`docs/engine.md` → The setup steps) one at a time in
-    one column (`ONBOARDING_COLUMN`: `max-w-xl`, `px-6`, 64px from the top from `md` up), and everything in it
-    starts on the column's left edge: the steps along the top, the title, the body and the footer, with no inset of
-    their own (the old chat's heading sat 12px in from its rows). It is a focus page in its own shell
-    (`OnboardingShell`): a 44px drag bar with the logo in a browser and the traffic lights in the app, the connection
-    status and the Update button, and nothing that leads elsewhere: no Home button or logo link, no rail, no queue,
-    no usage glance, no Focus, and ⌘K is not mounted (the menu is closed on the way in). While `GET /api/onboarding`
-    says setup is not complete, every route but `/onboarding` replaces itself with `/onboarding`
+24. **Setup is one calm step at a time, in the language of Settings.** `/onboarding` (`routes/onboarding.tsx`, the
+    pieces in `components/onboarding/`) shows the server's setup steps (`docs/engine.md` → The setup steps) one at a
+    time in one column (`ONBOARDING_COLUMN`: `max-w-xl`, `px-6`, `PAGE_TOP` and 48px from the top from `md` up, the
+    steps, the step and its footer 24px apart), and everything in it starts on the column's left edge. It is built
+    from the pieces Settings and Home already use, with no style of its own: the steps are the segmented `Choice`
+    (Settings' tabs in a narrow window, the task page's tabs), the heading is `PageHeading`, a list to pick from is a
+    list card (`Card` around a `HighlightList` of `ListRow`-styled rows, `LIST_ROW*` in `layout/list-row.tsx`), and a
+    list of facts is the Settings card (`SettingsCard`, `PathRow`, `SettingRow`, `SETTING_ROW`). It is a focus page in
+    its own shell (`OnboardingShell`): a 44px drag bar with the logo in a browser and the traffic lights in the app,
+    the connection status and the Update button, and nothing that leads elsewhere: no Home button or logo link, no
+    rail, no queue, no usage glance, no Focus, and ⌘K is not mounted (the menu is closed on the way in). While
+    `GET /api/onboarding` says setup is not complete, every route but `/onboarding` replaces itself with `/onboarding`
     (`resolveOnboardingRedirect`, in `root.tsx`), so a link, the address bar, the back button or the app's menu all
     land on setup. A run you started again from Settings (Settings → Setup, ⌘K's Run setup again, `restartOnboarding`)
     is not locked: setup is already complete, and each step's footer has Close setup beside its button, which goes to
     Settings.
-    - **The steps along the top** (`OnboardingStepper`): a numbered 20px dot and the step's label for each step,
-      joined by hairlines. The current step's dot is the accent with a white number and its label `fg-4`
-      (`faux-medium`); a step you answered shows the accent check on `bg-a2` and is a button that opens it, with its
-      answer as the tooltip ("Opus 5.5"); a step you reached but have not answered again (after going back) is a
-      numbered button; the rest are `fg-2`. Below `sm` only the current step keeps its label.
-    - **Each step** is the title (`text-lg` medium `fg-4`, the question itself: "How should pull requests be
-      merged?"), one line of description in `text-sm` `fg-2`, the body, a refused answer's reason as an `ErrorLine`,
-      and the footer behind a hairline: Back (`secondary`, the arrow left) on the left and the primary button on the
-      right, the step's own label ("Continue", "Skip for now", "Finish setup", "Finish anyway") with the arrow at its
-      end. It enters with a 1rem slide and a fade (280ms, the strong ease-out; from the left when you went back),
-      only a fade under reduced motion.
-    - **Options** are one `CARD` list (`OptionList`, a `listbox`): rows of at least 48px on a 14px inset, a radio
-      dot (the accent when chosen) or a `Checkbox` for folders, the label in `text-sm` medium over its meaning in
-      `text-xs` `fg-2`, the recommended one with a quiet "Recommended" badge. Clicking a one-answer option answers it
-      at once and moves on, with a spinner in the row while it saves; nothing starts chosen on a step you have not
-      answered, so there is no Continue until you go back to one you have, where your answer is chosen and Continue
-      keeps it. The list takes focus when the step opens: the arrows, Home and End move a highlight (the hover wash,
-      `aria-activedescendant`) and Enter or Space picks, so setup runs from the keyboard alone; these keys belong to
-      the list, not the page (10).
-    - **Folders** pick several: the found folders with their repository counts, the folders you chose already
-      checked (the one with the most repositories on a first run), and under the list a field to add any other
-      folder by its path, which joins the list checked. Continue is off with nothing checked.
-    - **Accounts** are already imported when the step opens (the server does it, never a question): one `CARD`
-      list of your Claude accounts from the socket, each with its email, where it came from and its plan ("Your
-      Claude Code login · Max plan", "From claude-swap"), "Added" on the ones this setup imported, Sign in again on
-      a signed-out one, and a remove button (`ConfirmDialog` with `describeRemoval`'s words). The card's footer band
-      has Add another account (Sign in to Claude with none), which opens the sign-in dialog. An import that failed
-      is an amber line under the card.
-    - **Tools** are one `CARD` list of checks (`OnboardingChecks`): the `CheckOutcomeIcon`, the tool's name, its
-      version or state at the right in `fg-2`, the fix under it in `fg-3`, and Check again in the footer band. An
-      optional check that fails (codex and its sign-in) is a skipped row, never a fail, and never holds setup back.
-    - **Finished** (`OnboardingFinished`) is the accent check on a 40px tile, "Shinsa is ready", what you set up
-      as a two-column `CARD` list (Folders, Model, Merging, Plans, Accounts) and Go to Home. Opening `/onboarding`
-      once the server's run is finished (setup done and not started again) goes Home instead.
+    - **The steps along the top** (`OnboardingStepper`, items from `listStepperItems`): one 26px segmented `Choice`
+      with each step's label, no numbers and no circles. The step you are on is the selected segment, and the pill
+      slides to the next one as you move (the stepper sits outside the step, so it is not remounted); a step you
+      answered has the accent checkmark before its label (`Choice` items take `checked`) and its answer as the
+      tooltip ("Opus 5.5"); a step you reached but have not answered again (after going back) is a plain segment;
+      both open their step. A step not reached yet is disabled. A click while an answer is saving does nothing.
+      Below `sm` the segments give way to one `PAGE_DESCRIPTION` line in the same 26px slot ("Step 2 of 6: Model",
+      `describeStepHeading`). The finished page keeps the slot empty, so the title never moves: it sits at the same
+      height on every step and on the finished page.
+    - **Each step** (`OnboardingSection`, shared with the finished page) is the `PageHeading` (the question itself as
+      the `text-base` title, "How should pull requests be merged?", its one line of description in `text-xs` `fg-2`
+      under it), 16px to the body, a refused answer's reason as an `ErrorLine`, and 24px to the footer: Back
+      (`secondary`, the arrow left) on the left; on the right Close setup on a run again, the step's own secondary
+      action (Add account, Check again) and the primary button with the step's label ("Continue", "Skip for now",
+      "Finish setup", "Finish anyway") and the arrow at its end, all `default` size, 6px apart, with no hairline above.
+      It enters with a 0.5rem slide and a fade (220ms, the strong ease-out; from the left when you went back), only a
+      fade under reduced motion; nothing leaves, so two steps never overlap.
+    - **Options** are one list card (`OptionList`, a `listbox`): a `Card` with a `HighlightList` inside, rows built
+      like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
+      over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
+      marked with the accent `SelectedMark` at the row's end, as a select or menu marks the current value. The hover
+      and the keyboard highlight are the menus' one surface, which jumps to the row with no transition. Clicking a
+      one-answer option answers it at once and moves on, a spinner in the mark's slot while it saves; nothing starts
+      chosen on a step you have not answered, so there is no Continue until you go back to one you have, where your
+      answer is marked and Continue keeps it. The list takes focus when the step opens: the arrows, Home and End move
+      the highlight (`aria-activedescendant`) and Enter or Space picks, so setup runs from the keyboard alone; these
+      keys belong to the list, not the page (10).
+    - **Folders** pick several: the found folders with their repository counts, each with a `sm` `Checkbox` in the
+      row's icon slot, the folders you chose already checked (the one with the most repositories on a first run), and
+      as the card's last row a `sm` path field with a secondary Add folder (Settings → Repository folders' row), which
+      adds the folder to the list checked. Continue is off with nothing checked.
+    - **Accounts** are already imported when the step opens (the server does it, never a question): one Settings
+      card of your Claude accounts from the socket, each a `PathRow` (the Claude mark, the email, where it came from
+      and its plan in `text-2xs` `fg-2`: "Your Claude Code login · Max plan", "From claude-swap"), "Added" on the ones
+      this setup imported, Sign in again on a signed-out one, and a remove × (`ConfirmDialog` with `describeRemoval`'s
+      words). Until the socket has the accounts the card holds one row with a delayed `LoadingLine`, never "no login
+      found". Add account (Sign in to Claude with none) is in the footer and opens the sign-in dialog. An import that
+      failed is an amber line under the card.
+    - **Tools** are one Settings card of checks (`OnboardingChecks`): `SETTING_ROW`s with the `CheckOutcomeIcon` in
+      the 14px icon slot, the tool's name in `text-xs` `fg-4` with the fix under it in `text-2xs` `fg-3`, and its
+      version or state at the right in `TOKEN_TEXT`. Check again is in the footer. An optional check that fails (codex
+      and its sign-in) is a skipped row, never a fail, and never holds setup back.
+    - **Finished** (`OnboardingFinished`) is "Shinsa is ready" with its line, what you set up as `SettingRow`s in a
+      Settings card (Folders, Model, Merging, Plans, Accounts, the answer at the right in `fg-3`) and Go to Home.
+      Opening `/onboarding` once the server's run is finished (setup done and not started again) goes Home instead.
     Settings → Repository folders lists the chosen folders as `PathRow`s (removable, the `SHINSA_ROOTS` ones marked
     as such), adds one by path and has Find folders (a menu of discovered folders with their repository counts,
     checked when chosen). No folder path is ever written into the code; the ones on screen come from the server.

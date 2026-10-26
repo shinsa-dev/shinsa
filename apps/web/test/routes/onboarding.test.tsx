@@ -123,7 +123,7 @@ describe('the setup page', () => {
   it('opens any step you already answered from the steps at the top', async () => {
     serve(createFlow(createStep()), [() => createFlow(ROOTS)]);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Folders: Folders answer' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Folders' }));
     expect(await screen.findByRole('heading', { name: 'Where do you keep your repositories?' })).toBeTruthy();
     expect(sentReplies()).toEqual([{ type: 'open', stepId: 'roots' }]);
   });
@@ -136,7 +136,7 @@ describe('the setup page', () => {
     const field = screen.getByRole('textbox', { name: 'Folder path' });
     fireEvent.submit(field);
     fireEvent.change(field, { target: { value: ' ~/code ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add folder' }));
     expect(screen.getByRole('option', { name: /~\/code/ }).getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: /Continue/ }));
     await waitFor(() =>
@@ -203,7 +203,7 @@ describe('the setup page', () => {
         accountId: 'work',
       })
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Add another account' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
     await waitFor(() =>
       expect(fake?.requests.some((request) => request.path === '/api/accounts/login')).toBe(true)
     );

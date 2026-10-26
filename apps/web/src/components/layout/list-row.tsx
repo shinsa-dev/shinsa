@@ -2,6 +2,17 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
+export const LIST_ROW =
+  'corner-superellipse/1.125 flex w-full cursor-pointer gap-2 rounded-control text-left outline-none';
+
+export const LIST_ROW_LINES = 'items-start pt-1.5 pb-1';
+
+export const LIST_ROW_LINE = 'h-7 items-center';
+
+export const LIST_ROW_TITLE = 'text-fg-4 text-xs';
+
+export const LIST_ROW_META = 'text-2xs text-fg-2';
+
 export function ListRow({
   leading,
   title,
@@ -31,16 +42,12 @@ export function ListRow({
       aria-current={active || undefined}
       data-active={active}
       data-highlight-item=''
-      className={cn(
-        'corner-superellipse/1.125 flex w-full cursor-pointer gap-2 rounded-control text-left outline-none',
-        meta ? 'items-start pt-1.5 pb-1' : 'h-7 items-center',
-        leading ? 'px-1.5' : 'px-2.5'
-      )}
+      className={cn(LIST_ROW, meta ? LIST_ROW_LINES : LIST_ROW_LINE, leading ? 'px-1.5' : 'px-2.5')}
     >
       {leading}
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
-        <Truncate className='text-fg-4 text-xs'>{title}</Truncate>
-        {meta && <Truncate className='text-2xs text-fg-2'>{meta}</Truncate>}
+        <Truncate className={LIST_ROW_TITLE}>{title}</Truncate>
+        {meta && <Truncate className={LIST_ROW_META}>{meta}</Truncate>}
       </span>
       {trailing && <span className='shrink-0 text-2xs text-fg-2 tabular-nums leading-5'>{trailing}</span>}
     </button>

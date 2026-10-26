@@ -3,6 +3,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { OnboardingFinished } from '@/components/onboarding/finished.tsx';
 import { ONBOARDING_COLUMN, OnboardingStepView } from '@/components/onboarding/step.tsx';
+import { OnboardingStepper } from '@/components/onboarding/stepper.tsx';
 import { createSampleAccounts } from './sample-accounts.ts';
 import { acknowledgeSample } from './samples.ts';
 import { Specimen } from './section.tsx';
@@ -163,10 +164,12 @@ const ACCOUNT_ACTIONS = {
 
 function StepSpecimen({ step, revisit = false }: { step: OnboardingStep; revisit?: boolean }) {
   const [accounts] = React.useState(() => listSampleAccounts());
+  const flow = createSampleFlow(step, revisit);
   return (
     <div className={cn(ONBOARDING_COLUMN, 'mx-0 px-0')}>
+      <OnboardingStepper flow={flow} step={step} onOpen={() => void acknowledgeSample()} />
       <OnboardingStepView
-        flow={createSampleFlow(step, revisit)}
+        flow={flow}
         step={step}
         pending={null}
         direction='forward'

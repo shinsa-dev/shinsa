@@ -1,9 +1,12 @@
+import type { OnboardingStepId } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { cn } from '@shinsa/ui/lib/utils';
+import { PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { OnboardingFinished } from '@/components/onboarding/finished.tsx';
 import { ONBOARDING_COLUMN, OnboardingStepView } from '@/components/onboarding/step.tsx';
+import { OnboardingStepper } from '@/components/onboarding/stepper.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { useOnboardingFlow } from '@/hooks/use-onboarding-flow.ts';
 import { removeAccount, startSignIn, useAccounts } from '@/lib/connection/accounts.ts';
@@ -41,29 +44,35 @@ function OnboardingContent() {
     );
   }
   if (!flow.step) return <OnboardingFinished flow={flow} onHome={() => navigate('/')} />;
+  const openStep = (stepId: OnboardingStepId) => {
+    if (pending === null) void open(stepId);
+  };
   return (
-    <OnboardingStepView
-      key={`${flow.index}:${flow.step.id}`}
-      flow={flow}
-      step={flow.step}
-      pending={pending}
-      direction={direction}
-      userHome={status?.paths.userHome ?? ''}
-      accounts={{ list: accounts?.accounts ?? [], actions: ACCOUNT_ACTIONS }}
-      actions={{
-        answer: (stepId, values, key) => void answer(stepId, values, key),
-        open: (stepId) => void open(stepId),
-        refresh: () => void refresh(),
-      }}
-      onClose={flow.revisit ? () => navigate('/settings') : undefined}
-    />
+    <>
+      <OnboardingStepper flow={flow} step={flow.step} onOpen={openStep} />
+      <OnboardingStepView
+        key={`${flow.index}:${flow.step.id}`}
+        flow={flow}
+        step={flow.step}
+        pending={pending}
+        direction={direction}
+        userHome={status?.paths.userHome ?? ''}
+        accounts={{ list: accounts?.accounts ?? null, actions: ACCOUNT_ACTIONS }}
+        actions={{
+          answer: (stepId, values, key) => void answer(stepId, values, key),
+          open: openStep,
+          refresh: () => void refresh(),
+        }}
+        onClose={flow.revisit ? () => navigate('/settings') : undefined}
+      />
+    </>
   );
 }
 
 export function OnboardingPage() {
   return (
     <PageScroll>
-      <div className={cn(ONBOARDING_COLUMN, 'pt-8 pb-16 md:pt-16')}>
+      <div className={cn(ONBOARDING_COLUMN, PAGE_TOP, 'pb-16 md:pt-12')}>
         <OnboardingContent />
       </div>
     </PageScroll>

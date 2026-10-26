@@ -161,7 +161,7 @@ describe('the /ui gallery', () => {
     fireEvent.click(setup.getByRole('option', { name: /Rebase/ }));
     fireEvent.click(setup.getAllByRole('button', { name: /Back/ })[0] as HTMLElement);
     fireEvent.click(setup.getByRole('button', { name: 'Check again' }));
-    fireEvent.click(setup.getByRole('button', { name: 'Add another account' }));
+    fireEvent.click(setup.getByRole('button', { name: 'Add account' }));
     fireEvent.click(setup.getByRole('button', { name: /Go to Home/ }));
     fireEvent.click(
       findSection('shinsa-chat').getByRole('button', {

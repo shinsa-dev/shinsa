@@ -1,45 +1,32 @@
 import type { OnboardingCheck } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import type * as React from 'react';
-import { CARD } from '@/components/layout/surface/card.ts';
+import { SETTING_ROW, SettingsCard, TOKEN_TEXT } from '@/components/settings/group.tsx';
 import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { resolveCheckOutcome } from '@/lib/onboarding.ts';
 
-export function OnboardingChecks({
-  checks,
-  footer,
-}: {
-  checks: OnboardingCheck[];
-  footer?: React.ReactNode;
-}) {
+export function OnboardingChecks({ checks }: { checks: OnboardingCheck[] }) {
   return (
-    <div className={cn(CARD, 'flex flex-col overflow-hidden')}>
+    <SettingsCard>
       <ul className='flex flex-col'>
         {checks.map((check) => (
-          <li
-            key={check.id}
-            className='flex min-w-0 items-start gap-3 border-border not-first:border-t px-3.5 py-2.5'
-          >
-            <CheckOutcomeIcon outcome={resolveCheckOutcome(check)} className='h-5' />
+          <li key={check.id} className={cn(SETTING_ROW, 'gap-2')}>
+            <CheckOutcomeIcon outcome={resolveCheckOutcome(check)} className='size-3.5' />
             <span className='flex min-w-0 flex-1 flex-col gap-px'>
-              <span className='flex min-w-0 items-baseline gap-3'>
-                <span className='shrink-0 text-fg-4 text-sm'>{check.label}</span>
-                <Truncate className='ms-auto min-w-0 text-end text-fg-2 text-xs'>{check.detail}</Truncate>
-              </span>
+              <span className='text-fg-4 text-xs'>{check.label}</span>
               {check.fix && (
-                <span className='text-fg-3 text-xs'>
+                <span className='text-2xs text-fg-3'>
                   <InlineMarkdown text={check.fix} />
                 </span>
               )}
             </span>
+            <Truncate className={cn(TOKEN_TEXT, 'min-w-0 max-w-1/2 shrink text-end')}>
+              {check.detail}
+            </Truncate>
           </li>
         ))}
       </ul>
-      {footer && (
-        <div className='flex items-center border-border border-t bg-bg-a1 px-3.5 py-2.5'>{footer}</div>
-      )}
-    </div>
+    </SettingsCard>
   );
 }

@@ -33,9 +33,13 @@ export function SettingsGroup({
       <SectionLabel action={action} className='px-1'>
         {title}
       </SectionLabel>
-      <Card className={cn('gap-0 p-1.5', className)}>{children}</Card>
+      <SettingsCard className={className}>{children}</SettingsCard>
     </section>
   );
+}
+
+export function SettingsCard({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <Card className={cn('gap-0 p-1.5', className)}>{children}</Card>;
 }
 
 export function SettingRow({ title, children }: { title: React.ReactNode; children: React.ReactNode }) {
