@@ -1,6 +1,7 @@
 # Shinsa is a Mac app
 
-**Decided 2026-10-25, not built.** On your Mac, Shinsa is one app. There is no server to start, no port to know and
+**Decided 2026-10-25; phases 1 to 3 built 2026-10-26** (Phases, below, says what each one holds and what is left).
+On your Mac, Shinsa is one app. There is no server to start, no port to know and
 no web page to open. The engine still runs as its own process, out of sight, because some work has to go on while
 the app is closed. This plan replaces the parts of `docs/plans/desktop-plan.md` that treat `shinsa serve` as
 something you run, and it is the local half of `docs/plans/remote-plan.md`.
@@ -46,8 +47,9 @@ who starts it (the app, never you), how it is shipped (inside the app) and who m
 ```
 Shinsa.app/Contents/
 ├── MacOS/Shinsa                         Electron, the window
-├── Resources/bin/shinsa                 the engine and the command line, one executable
-├── Resources/app/                       the interface, built from apps/web
+├── Resources/engine/bin/shinsa          the engine, the command line and Eunoe, one executable
+├── Resources/engine/plugin/             the plugin agents load
+├── Resources/engine/web/                the interface, built from apps/web, served by the engine
 └── Library/LaunchAgents/
     └── studio.overclock.shinsa.engine.plist
 ```
@@ -57,9 +59,11 @@ Shinsa.app/Contents/
   command. Bun's SQLite is built in. What the compile has to carry beside it, the Claude Agent SDK's own CLI and
   the plugin agents load (`apps/server/plugin`), goes into `Resources/` and is found relative to the executable.
   Proving this compile is the first step, since everything else depends on it.
-- **The interface ships in the app.** The window loads `Resources/app` from a custom scheme (`shinsa-app://`), not
-  from an HTTP port, so the app's interface and engine are always the same version and no page is served on
-  localhost. The hosted dashboard is the same `apps/web` build, deployed there.
+- **The interface ships in the app**, beside the engine, which serves it on its loopback port as before; the app and
+  the engine are one build, so they are always the same version. Built that way rather than from a custom scheme
+  (`shinsa-app://`): the page's socket, its API calls and Codex's tool server all speak HTTP to the engine already,
+  and a custom scheme would have to proxy every one of them for no change you can see. The hosted dashboard is the
+  same `apps/web` build, deployed there.
 - **The engine is a LaunchAgent the app registers**, with `app.setLoginItemSettings({ type: 'agentService' })`
   (Electron's wrapper for `SMAppService`, macOS 13 and later), pointing at the plist inside the bundle. macOS lists
   it in System Settings → Login Items as Shinsa; moving or deleting the app takes it with it. The plist keeps
@@ -68,9 +72,10 @@ Shinsa.app/Contents/
 
 ### Who talks to the engine
 
-- **Locally, over a Unix socket** in the data directory (`~/.config/shinsa/engine.sock`, mode 600), not a TCP port.
-  Only processes running as you can open it, which covers the app, the command line and agents, and there is no
-  port for a browser or another user to find. The HTTP and WebSocket protocol on it are unchanged.
+- **Locally, on the loopback port** (`127.0.0.1:5180`, `port` in `config.json`), as before, behind the request
+  guard (`docs/engine.md` → Who can change Shinsa: loopback Host only, same-site Origin, JSON bodies), so a website in
+  your browser cannot reach it. A Unix socket (mode 600, no port at all) stays the stricter option; it is left for
+  when the remote tunnel lands, since the tunnel's connector needs the same change.
 - **Remotely, through the tunnel** in `docs/plans/remote-plan.md`. The connector forwards to the same socket and
   the request guard there stays as planned: only signed-in, proxied requests get through.
 - **Webhooks** arrive through the tunnel too, on `/api/hooks/<id>/<token>`, so a webhook schedule needs remote
@@ -78,16 +83,15 @@ Shinsa.app/Contents/
 
 ### The command line
 
-- On first launch the app offers **Install the `shinsa` command**, which links `Resources/bin/shinsa` into
-  `/usr/local/bin` (asking for your password once) or `~/.local/bin` when that is on `PATH`, as VS Code does.
-  Settings → General can install or remove it later.
-- `shinsa .` and `shinsa <path>` open the app (`open -b studio.overclock.shinsa shinsa://project?path=…`) on that
-  project, registering the repository if Shinsa has not worked there yet.
-- Every other command talks to the engine over the socket. If the engine is not running it asks launchd to start
-  it (`launchctl kickstart`), waits for it, then carries on; if the app was never opened it says to open Shinsa
-  once.
-- Removed: `serve`, `service install|uninstall|status|restart|logs` and `open`. Settings → Advanced keeps what
-  `service` was for: whether the engine is running, its version and log, and Restart.
+- **Shinsa → Install the shinsa Command…** links `Resources/engine/bin/shinsa` into `/usr/local/bin`, asking for
+  your password once, as VS Code does. Agents need nothing: the engine puts its own `bin/` on their `PATH`.
+- `shinsa` alone opens the app; `shinsa .` and `shinsa <folder>` open it focused on the project of the repository
+  the folder is in (or say Shinsa has not worked there yet); `shinsa open <task>` opens it on a task.
+- Every other command talks to the engine. If it does not answer, the command asks launchd to start it
+  (`launchctl kickstart`), waits for it, then carries on; otherwise it says to open the Shinsa app.
+- Removed: `service install|uninstall|status|restart|logs`, and `open` in the browser. `serve` stays as the engine's
+  own command, which launchd and `bun dev` run; it is not in the help. The app keeps what `service` was for: the
+  status page shows why the engine is not running and its log, and Shinsa → Restart Engine restarts it.
 
 ### Versions and updates
 
@@ -161,7 +165,8 @@ data directory for it.
 ## Permissions
 
 Running in the background needs no prompt of its own, but three things can stop the engine without a word, so
-onboarding checks each and says how to fix it, and Settings shows the same rows afterwards:
+the app and setup check each and say how to fix it (built: the status page for the login item, `roots_unreadable` at
+setup for a private folder; not yet: the same rows in Settings):
 
 - **Login item.** Registering the LaunchAgent shows macOS's own "Background item added" notice, and you can turn it
   off in System Settings → General → Login Items. The app reads the registration's status (`enabled`,
@@ -192,38 +197,44 @@ and every page shows what it finds in the health banner at the top (`lib/connect
 | A folder it needs is blocked | the engine reports `EPERM` on a chosen folder | Shinsa cannot read ‹folder›; **Open Privacy & Security** |
 | The engine is older than the app, after an update | `version` and `protocol` in `/api/health` | Shinsa ‹version› finishes updating when agents are idle; **Restart now** (Versions and updates, above) |
 
-Each row links to a short guide (`docs/troubleshooting.md`, and the same text on shinsa.dev) with the steps by hand,
-for when the button is not enough. A crash also leaves a line in the task's chat for any run it cut off ("The engine
+Built as the app's status page (`apps/desktop/src/lib/engine.ts`), each state with its fix button and the engine
+log's warnings and errors; the version row is the web's engine banner. Not yet: a short guide per row
+(`docs/troubleshooting.md`, and the same text on shinsa.dev) with the steps by hand, for when the button is not
+enough. A crash also leaves a line in the task's chat for any run it cut off ("The engine
 stopped during this run; it resumed when the engine came back"), as recovery does today. While the app is closed
 nothing can warn you on the Mac; the hosted dashboard shows that your Mac is offline, and the Dock badge shows a
 warning sign the next time the app opens.
 
 ## What goes away
 
-- `shinsa serve` as a command, and the CLI's default of running it.
-- `shinsa service` and `shinsa open`, with their specs in `apps/server/src/surface/` and `docs/cli.md`.
-- The engine's TCP port, `port` in `config.json`, `SHINSA_PORT` and `SHINSA_URL` outside development.
-- The desktop app's "Shinsa is not running" page and its health polling of `127.0.0.1:5180`: the app starts the
-  engine itself and connects over the socket.
+- `shinsa serve` as something you run, and the CLI's default of running it (built: `shinsa` opens the app).
+- `shinsa service`, and `shinsa open` in the browser (built).
+- The desktop app's "Shinsa is not running" page and its Start Shinsa dialog (built: the app starts the engine itself
+  and shows the status page only when it cannot).
+- Later, with the remote tunnel: the TCP port, for the Unix socket.
 - The surface handshake for browser tabs (`hello { surface }`, quiet pages): with no local browser surface, the app
   is the only one that notifies. The hosted dashboard notifies only while the app is not connected.
 - The README's and onboarding's "open http://localhost".
 
 ## Phases
 
-1. **The compiled engine.** `bun build --compile` of `apps/server` with the Agent SDK, the plugin and Eunoe beside
-   it; a release workflow artifact that runs a task end to end on a clean Mac without Bun.
-2. **The bundle and the LaunchAgent.** The engine inside `Shinsa.app`, registered by the app, the Unix socket, the
-   interface from `shinsa-app://`, the engine's rows in the health banner, and the engine following the app after an
-   update (`protocol` in `/api/health`, the restart when agents are idle). Pass: install from the DMG, open, finish
-   onboarding, quit, and a schedule still fires; update, and a run in progress finishes before the engine restarts.
-3. **The command line.** Install the `shinsa` command, `shinsa .`, socket transport, the removals above.
+1. **The compiled engine** (built). `apps/server/scripts/build-engine.ts`: one executable with Eunoe inside, the
+   plugin and the interface beside it, the version, commit, state version and SDK versions baked in. Checked: a
+   question task ran end to end on the compiled engine (triage, a Claude run through the SDK, the hand-over tools).
+2. **The bundle and the job** (built). The engine inside `Shinsa.app`, registered by the app through `SMAppService`
+   with a LaunchAgent where that is refused, the status page instead of the dialog, the engine following the app
+   after an update (`protocol` in `/api/health`, the restart when agents are idle, exit 75 for launchd). Checked on a
+   test copy of the packaged app: it registers and starts the engine in about 4 s, quitting leaves the engine
+   running, `kill -9` brings it back in a second, a restart comes back on its own, a taken port shows its page, and a
+   job macOS lost is registered again. Left for a signed build: an update installed over a running engine.
+3. **The command line** (built). `shinsa`, `shinsa .`, `shinsa open <task>`, waking the engine, Install the shinsa
+   Command…, the removals above.
 4. **Signed releases.** The Developer ID certificate and notarization secrets, after which auto-update installs
    (the updater and the release workflow are already built).
-5. **Remote.** `docs/plans/remote-plan.md`, against the socket, with the hosted dashboard deployed from `apps/web`.
+5. **Remote.** `docs/plans/remote-plan.md`, with the Unix socket, and the hosted dashboard deployed from `apps/web`.
 
-Docs change with each phase, not before it: `docs/spec.md` → Architecture, `docs/engine.md` → The background
-service and Configuration and data, `docs/cli.md`, the desktop and server `CLAUDE.md` files and the README.
+Docs change with each phase, not before it: `docs/spec.md` → Architecture, `docs/engine.md` → The engine in the
+background and Configuration and data, `docs/cli.md`, the desktop and server `CLAUDE.md` files and the README.
 
 ## Open questions
 

@@ -200,7 +200,7 @@ identity).
 
 ## 4. The human surface
 
-Desktop-first and responsive: built for a full window, still right in a ~900px floating window. Web, served by `shinsa serve`, and a Mac app around it (`apps/desktop`) that loads the same page.
+Desktop-first and responsive: built for a full window, still right in a ~900px floating window. On your Mac, Shinsa is the Mac app (`apps/desktop`): it carries the engine, runs it in the background and shows the interface the engine serves; the same interface is the hosted dashboard later (`docs/plans/app-plan.md`).
 
 - **Home.** The briefing (the decision to take now and why, then the next two or three), the
   new-task box, then the queue: what else needs you, what is in progress, what waits on another
@@ -295,10 +295,12 @@ Browser ──WebSocket──► shinsa serve (Bun, on your machine)
                          └─ MCP server for agents (hand-overs, questions, evidence, delegation)
 ```
 
-The Mac app (`apps/desktop`) is a window around `shinsa serve` with the Dock badge, notifications and `shinsa://`
-links; while it is connected it is the one surface that notifies (`docs/plans/desktop-plan.md`, phases 0 to 2).
-Planned, not built: shipping it signed with updates, other providers (Cursor), and dev-server and simulator
-previews per worktree.
+The Mac app (`apps/desktop`) is how you run Shinsa: the engine is compiled into the app and runs as a launchd job the
+app registers, so it keeps working when the window is closed or the app quit, and the app adds the Dock badge,
+notifications, `shinsa://` links, the `shinsa` command and its own updates (`docs/plans/app-plan.md`,
+`docs/engine.md` → The engine in the background). While it is connected it is the one surface that notifies.
+Planned, not built: signing with a Developer ID, the hosted dashboard, other providers (Cursor), and dev-server and
+simulator previews per worktree.
 Remote access (deferred): `docs/plans/remote-plan.md`.
 
 - **Event-sourced core** (from T3 Code): commands are decided purely, events, the effect outbox and

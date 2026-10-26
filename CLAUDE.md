@@ -5,20 +5,22 @@ A control plane for coding agents. Agents do the work end to end; the human only
 ## Project structure
 
 ```
-apps/server/      → @shinsa/server  The local server and the `shinsa` command. `shinsa serve` runs the event log
+apps/server/      → @shinsa/server  The engine and the `shinsa` command. The engine (`shinsa serve`, which the Mac app
+                                    runs in the background from a compiled bundle, scripts/build-engine.ts) runs the event log
                                     (SQLite), effect outbox, agent runs (behind a provider interface: the Claude
                                     Agent SDK and Codex), accounts, the MCP servers, plugins and skills agents load,
                                     schedules and webhooks, git worktrees, GitHub, HTTP +
                                     WebSocket, onboarding and the built web app;
-                                    `shinsa do|import|status|open` and `shinsa <group> <action>` (src/cli, generated
+                                    `shinsa [folder]|open|do|import|status` and `shinsa <group> <action>` (src/cli, generated
                                     from src/surface; docs/cli.md) talk to it over HTTP, so agents can hand work to
                                     and manage Shinsa too; every task agent gets the same surface as tools
                                     (src/agents/manage: tools, client). See apps/server/CLAUDE.md
 apps/server/plugin/                 The Claude Code plugin every agent loads: review, evidence, handover skills
 apps/web/         → @shinsa/web     React 19 + Vite + Tailwind 4, laid out like Buzzkit's app (routes/, components/
                                     <domain>/, hooks/, lib/). Renders server state; owns nothing. See apps/web/CLAUDE.md
-apps/desktop/     → @shinsa/desktop Shinsa for Mac: an Electron window that loads the UI from `shinsa serve` and adds the Dock
-                                    badge, notifications, `shinsa://` links and the menu. See apps/desktop/CLAUDE.md
+apps/desktop/     → @shinsa/desktop Shinsa for Mac, how Shinsa runs: carries the compiled engine, registers it as a launchd
+                                    job, shows its interface, and adds the Dock badge, notifications, `shinsa://` links,
+                                    the menu and its own updates. See apps/desktop/CLAUDE.md
 apps/marketing/   → @shinsa/marketing The one-page site: Astro, static, whose demos are the web app's own components on
                                     sample data, against a stand-in server in the browser. See apps/marketing/CLAUDE.md
 packages/core/    → @shinsa/core    Pure domain, one folder per concern under src/ (domain, agent-models, events,
