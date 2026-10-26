@@ -2,13 +2,28 @@ export const SHELL_PROBE = String.raw`(() => {
   if (window.__shell) return;
   const COMPONENT_TAGS = new Set([0, 1, 11, 14, 15]);
   const PERFORMED_WORK = 1;
-  const perf = { commits: 0, rendered: 0, longTasks: [], step: null, socket: null, lastState: null };
+  const perf = { commits: 0, rendered: 0, longTasks: [], step: null, socket: null, lastState: null, terminals: 0, terminalsWaiting: 0 };
   window.__shell = perf;
 
   const NativeSocket = window.WebSocket;
   window.WebSocket = class extends NativeSocket {
     constructor(...args) {
       super(...args);
+      if (String(args[0]).includes('/ws/terminals/')) {
+        perf.terminals += 1;
+        perf.terminalsWaiting += 1;
+        let waiting = true;
+        const settle = () => {
+          if (!waiting) return;
+          waiting = false;
+          perf.terminalsWaiting -= 1;
+        };
+        this.addEventListener('message', (event) => {
+          if (String(event.data) === '{"type":"live"}') settle();
+        });
+        this.addEventListener('close', settle);
+        return;
+      }
       perf.socket = this;
       this.addEventListener('message', (event) => {
         const text = String(event.data);
@@ -131,6 +146,7 @@ export const SHELL_PROBE = String.raw`(() => {
         if (startedAt !== null && isDone()) {
           const paintedAt = await afterThisFrame();
           removeEventListener(trigger, onTrigger, { capture: true });
+          perf.lastStart = startedAt;
           const tasks = perf.longTasks.slice(longTaskIndex);
           resolve({
             clickToPaint: paintedAt - startedAt,
@@ -154,4 +170,22 @@ export const SHELL_PROBE = String.raw`(() => {
   };
 
   perf.idle = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  perf.settle = (windowMs) =>
+    new Promise((resolve) => {
+      const start = perf.lastStart;
+      let last = performance.now();
+      let settledAt = last - start;
+      let maxGap = 0;
+      const end = last + windowMs;
+      const tick = (time) => {
+        const gap = time - last;
+        maxGap = Math.max(maxGap, gap);
+        if (gap > 34) settledAt = time - start;
+        last = time;
+        if (time < end) requestAnimationFrame(tick);
+        else resolve({ settledAt, maxGap });
+      };
+      requestAnimationFrame(tick);
+    });
 })()`;

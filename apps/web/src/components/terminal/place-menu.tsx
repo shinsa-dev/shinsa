@@ -36,17 +36,19 @@ export function NewTerminalButton({
   ) : (
     <Button variant='secondary' size='icon-sm' icon='IconPlusMedium' aria-label={label} />
   );
-  if (only)
+  if (only) {
+    const button = React.cloneElement(trigger, { onClick: () => onOpen(only) });
+    if (wide) return button;
     return (
       <Hint label={label} detail={only.path}>
-        {React.cloneElement(trigger, { onClick: () => onOpen(only) })}
+        {button}
       </Hint>
     );
+  }
+  const menuTrigger = <DropdownMenuTrigger render={trigger} />;
   return (
     <DropdownMenu>
-      <Hint label={label}>
-        <DropdownMenuTrigger render={trigger} />
-      </Hint>
+      {wide ? menuTrigger : <Hint label={label}>{menuTrigger}</Hint>}
       <DropdownMenuContent align={wide ? 'center' : 'start'} className='min-w-60 max-w-96'>
         {groups.map((group, index) => (
           <React.Fragment key={group.kind}>

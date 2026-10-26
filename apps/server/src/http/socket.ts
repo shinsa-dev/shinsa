@@ -169,10 +169,7 @@ export function createSocketHub(
       sockets.add(socket);
       send(socket, { type: 'state', state: serializeState(engine.state) });
       if (accounts) send(socket, { type: 'accounts', accounts: accounts.snapshot() });
-      if (terminals) {
-        terminals.readAppearance();
-        send(socket, { type: 'terminals', terminals: terminals.snapshot() });
-      }
+      if (terminals) send(socket, { type: 'terminals', terminals: terminals.snapshot() });
       send(socket, { type: 'surfaces', desktop: desktopConnected });
     },
     close(socket: Socket) {

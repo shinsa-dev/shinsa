@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { mkdirSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ServerMessage, TerminalInfo, TerminalsSnapshot } from '@shinsa/core';
+import type {
+  ServerMessage,
+  ServiceDefinition,
+  ServiceSuggestion,
+  TerminalInfo,
+  TerminalsSnapshot,
+} from '@shinsa/core';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
 import { startServer } from '../../src/http/index.ts';
@@ -11,6 +17,7 @@ import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { Terminals } from '../../src/terminals/index.ts';
 import {
   createTerminalSockets,
+  resolveServicePlace,
   resolveTerminalStart,
   type TerminalSocketData,
 } from '../../src/terminals/routes.ts';
@@ -36,16 +43,6 @@ async function start(options: { inspect?: boolean } = {}) {
     home: root,
     version: '1.0.0',
     env: { SHELL: '/bin/sh', PATH: '/usr/bin:/bin', PS1: '$ ', HOME: root },
-    appearance: () => ({
-      source: 'shinsa',
-      fontFamily: null,
-      fontSize: null,
-      cursorStyle: null,
-      cursorBlink: null,
-      optionAsMeta: false,
-      light: null,
-      dark: null,
-    }),
     notifyMs: 1,
   });
   const http = startServer({
@@ -76,7 +73,8 @@ async function start(options: { inspect?: boolean } = {}) {
       headers: { 'content-type': 'application/json', ...(origin ? { origin } : {}) },
       body: JSON.stringify(body),
     });
-  return { base, post, projectId, repoPath, terminals, engine, root };
+  const read = async <T>(path: string) => (await (await fetch(`${base}${path}`)).json()) as T;
+  return { base, post, read, projectId, repoPath, terminals, engine, root };
 }
 
 function openSocket(url: string, origin: string | null) {
@@ -139,6 +137,7 @@ describe('terminals over HTTP and their socket', () => {
     await again.opened;
     await until('a second viewer sees the old output', () => again.state.output.includes('hi-42'));
     again.socket.close();
+    view.socket.send('{"type":"clear"}');
 
     const restarted = (await (
       await post(`/api/terminals/${terminal.id}/restart`, {})
@@ -239,6 +238,138 @@ describe('terminals over HTTP and their socket', () => {
     view.socket.close();
     await until('the socket closes', () => view.state.closed !== null);
     expect(session.viewers).toBe(1);
+  });
+});
+
+describe('services over HTTP', () => {
+  test('says whether a real shell has a program in front of it', async () => {
+    const { base, post, read, projectId, repoPath } = await start();
+    const { terminal } = (await (await post('/api/terminals', { projectId, path: repoPath })).json()) as {
+      terminal: TerminalInfo;
+    };
+    const view = attach(base, terminal.id);
+    await view.opened;
+    view.socket.send(new TextEncoder().encode('echo ready\r'));
+    await until('the shell answers', () => view.state.output.includes('ready'));
+    expect(await read(`/api/terminals/${terminal.id}/foreground`)).toEqual({ program: null });
+    view.socket.send(new TextEncoder().encode('sleep 30\r'));
+    await until(
+      'sleep is in front',
+      async () =>
+        (await read<{ program: string | null }>(`/api/terminals/${terminal.id}/foreground`)).program ===
+        'sleep'
+    );
+    view.socket.send(new TextEncoder().encode('\u0003'));
+    await until(
+      'the shell is idle again',
+      async () =>
+        (await read<{ program: string | null }>(`/api/terminals/${terminal.id}/foreground`)).program === null
+    );
+  });
+
+  test('suggests, adds, starts, stops, restarts, edits and removes a service', async () => {
+    const { post, read, projectId, repoPath, terminals } = await start();
+    mkdirSync(join(repoPath, 'apps/api'), { recursive: true });
+    writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ workspaces: ['apps/*'] }));
+    writeFileSync(join(repoPath, 'apps/api/package.json'), JSON.stringify({ scripts: { dev: 'x' } }));
+    const { suggestions } = await read<{ suggestions: ServiceSuggestion[] }>(
+      `/api/services/suggestions?projectId=${projectId}`
+    );
+    expect(suggestions).toEqual([
+      { name: 'api', cwd: join(repoPath, 'apps/api'), command: 'npm run dev', source: 'package' },
+    ]);
+    const added = await post('/api/services', {
+      projectId,
+      name: ' api ',
+      path: join(repoPath, 'apps/api'),
+      command: 'echo "up-$PORT"; sleep 30',
+      env: { PORT: '4100' },
+    });
+    const { service } = (await added.json()) as { service: ServiceDefinition };
+    expect(service).toMatchObject({ name: 'api', env: { PORT: '4100' } });
+    const left = await read<{ suggestions: ServiceSuggestion[] }>(
+      `/api/services/suggestions?projectId=${projectId}`
+    );
+    expect(left.suggestions).toHaveLength(1);
+
+    const started = (await (await post(`/api/services/${service.id}/start`, {}, null)).json()) as {
+      terminal: TerminalInfo;
+    };
+    expect(started.terminal).toMatchObject({ serviceId: service.id, status: 'running' });
+    await until('it printed', async () =>
+      (await terminals.find(started.terminal.id).serializeScreen()).includes('up-4100')
+    );
+    await post(`/api/services/${service.id}/stop`, {}, null);
+    expect(terminals.find(started.terminal.id).info.status).toBe('stopped');
+    const restarted = (await (await post(`/api/services/${service.id}/restart`, {}, null)).json()) as {
+      terminal: TerminalInfo;
+    };
+    expect(restarted.terminal.status).toBe('running');
+
+    await post(`/api/services/${service.id}/update`, {
+      name: 'broken',
+      path: repoPath,
+      command: 'exit 4',
+      env: {},
+    });
+    await post(`/api/services/${service.id}/restart`, {}, null);
+    await until('it failed', () => terminals.find(started.terminal.id).info.exitCode === 4);
+    await post('/api/services/start-all', { projectId }, null);
+    expect(terminals.find(started.terminal.id).info.status).toBe('running');
+
+    const removed = (await (
+      await post(`/api/services/${service.id}/remove`, {})
+    ).json()) as TerminalsSnapshot;
+    expect(removed).toMatchObject({ services: [], terminals: [] });
+  });
+
+  test('refuses a bad service, a folder outside the project and a change without the page', async () => {
+    const { post, projectId, repoPath, root, terminals } = await start();
+    const service = { projectId, name: 'web', path: repoPath, command: 'bun dev', env: {} };
+    const refusal = async (body: unknown, origin: string | null = ORIGIN) =>
+      ((await (await post('/api/services', body, origin)).json()) as { error: { code: string } }).error.code;
+    expect(await refusal({ ...service, name: '  ' })).toBe('body_invalid');
+    expect(await refusal({ ...service, command: '  ' })).toBe('body_invalid');
+    expect(await refusal({ ...service, path: '/etc' })).toBe('service_place_invalid');
+    expect(await refusal({ ...service, path: join(repoPath, 'gone') })).toBe('terminal_place_missing');
+    expect(await refusal({ ...service, env: [] })).toBe('body_invalid');
+    expect(await refusal({ ...service, env: { 'A-B': 'x' } })).toBe('service_env_invalid');
+    expect(await refusal({ ...service, env: { A: 3 } })).toBe('service_env_invalid');
+    const many = Object.fromEntries(Array.from({ length: 51 }, (_, index) => [`K${index}`, 'v']));
+    expect(await refusal({ ...service, env: many })).toBe('body_invalid');
+    expect(await refusal({ ...service, projectId: 'nope' })).toBe('project_not_found');
+    expect(await refusal(service, null)).toBe('browser_only');
+    const { service: added } = (await (await post('/api/services', service)).json()) as {
+      service: ServiceDefinition;
+    };
+    expect(await refusal({ ...service, name: 'WEB' })).toBe('service_name_taken');
+    rmSync(repoPath, { recursive: true });
+    const moved = (await (await post(`/api/services/${added.id}/start`, {}, null)).json()) as {
+      error: { code: string };
+    };
+    expect(moved.error.code).toBe('terminal_place_missing');
+    const stray = terminals.addService(projectId, { name: 'x', cwd: '/etc', command: 'ls', env: {} });
+    const outside = (await (await post(`/api/services/${stray.id}/start`, {}, null)).json()) as {
+      error: { code: string };
+    };
+    expect(outside.error.code).toBe('service_place_invalid');
+    expect(resolveServicePlace([], root, root)).toBe('folder');
+  });
+});
+
+describe('resolveServicePlace', () => {
+  test('runs in a repository or folder of the project, or a folder inside one, never a worktree', () => {
+    const places = [
+      { path: '/code/web', label: 'web', kind: 'repository', taskId: null },
+      { path: '/notes/', label: 'notes', kind: 'folder', taskId: null },
+      { path: '/wt/a', label: 'A', kind: 'worktree', taskId: 'a' },
+    ] as const;
+    expect(resolveServicePlace([...places], '/code/web/apps/api', '/home')).toBe('repository');
+    expect(resolveServicePlace([...places], '/notes', '/home')).toBe('folder');
+    expect(resolveServicePlace([...places], '/code/website', '/home')).toBeNull();
+    expect(resolveServicePlace([...places], '/wt/a', '/home')).toBeNull();
+    expect(resolveServicePlace([], '/home/x', '/home')).toBe('folder');
+    expect(resolveServicePlace([...places], '/home/x', '/home')).toBeNull();
   });
 });
 

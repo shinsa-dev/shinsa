@@ -6,10 +6,10 @@ import { FocusMenu } from '@/components/focus/menu.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
 import { NavItem } from '@/components/layout/nav-item.tsx';
 import { TaskQueue } from '@/components/queue/queue.tsx';
+import { ServicesMenu } from '@/components/services/menu.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
 import { requestNewTaskOnHome } from '@/lib/command/menu.ts';
-import { resolveTerminalEntry } from '@/lib/terminal/tabs.ts';
 import { navigate, useRoute, useRouteTaskId } from '@/router.ts';
 
 export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onNavigate?: () => void }) {
@@ -49,12 +49,9 @@ export function Rail({ state, onNavigate = () => {} }: { state: ShinsaState; onN
             active={route.name === 'tasks'}
             onClick={() => go('/tasks')}
           />
-          <NavItem
-            label='Terminal'
-            icon='IconConsole'
-            active={route.name === 'terminal'}
-            onClick={() => go(resolveTerminalEntry())}
-          />
+          {route.name !== 'onboarding' && (
+            <ServicesMenu state={state} variant='rail' onNavigate={onNavigate} />
+          )}
           <NavItem
             label='Settings'
             icon='IconSettingsGear1'

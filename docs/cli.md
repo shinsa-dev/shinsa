@@ -1478,6 +1478,67 @@ shinsa setup check [--json]
 
 Every task agent's tool: `setup_check` (reads).
 
+### services
+
+#### shinsa services list
+
+List your services in Shinsa: what each runs, in which project, and whether it is running.
+
+```
+shinsa services list [--project <text>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `--project` | text, optional | Only this project’s services (id, key or name). |
+
+#### shinsa services start
+
+Start a service in its terminal, as Start does in Shinsa.
+
+```
+shinsa services start <service> [--project <text>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+
+#### shinsa services stop
+
+Stop a service: its programs get a hang-up, as closing a terminal does.
+
+```
+shinsa services stop <service> [--project <text>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+
+#### shinsa services restart
+
+Stop a service and start it again.
+
+```
+shinsa services restart <service> [--project <text>] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<service>` | text, required | The service, by its name. |
+| `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+
 ### mcp
 
 #### shinsa mcp list

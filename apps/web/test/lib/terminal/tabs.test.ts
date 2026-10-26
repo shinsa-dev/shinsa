@@ -10,6 +10,7 @@ import {
   rememberTerminalPath,
   resolveActiveTerminal,
   resolveDefaultPlace,
+  resolveNewTerminalPlace,
   resolveTerminalAfterClose,
   resolveTerminalEntry,
   resolveTerminalPath,
@@ -130,10 +131,35 @@ describe('the words', () => {
     expect(describeTerminalTab({ ...ONE, status: 'stopped' })).toStartWith('Ended when the engine restarted');
   });
 
-  it('warns what closing a running terminal stops', () => {
-    expect(describeTerminalClose({ ...ONE, name: 'Server' })).toBe(
-      'The shell in “Server” stops, with anything still running in it, and its scrollback is gone.'
+  it('warns what closing a terminal with a program in front stops', () => {
+    expect(describeTerminalClose({ ...ONE, name: 'Server' }, 'vim')).toBe(
+      'vim is still running in “Server”. Closing the terminal stops it, and its scrollback is gone.'
     );
+  });
+
+  it('says how a service ended, by its name', () => {
+    const service = { ...ONE, name: 'api', serviceId: 'api' };
+    expect(describeTerminalEnd({ ...service, status: 'stopped' })).toBe(
+      'api is stopped. Its last output is above.'
+    );
+    expect(describeTerminalEnd({ ...service, status: 'exited', exitCode: 0 })).toBe('api exited.');
+    expect(describeTerminalEnd({ ...service, status: 'exited', exitCode: 1 })).toBe(
+      'api exited with code 1.'
+    );
+    expect(describeTerminalEnd({ ...service, status: 'exited', exitCode: null })).toBe(
+      'api ended without an exit code.'
+    );
+  });
+
+  it('opens a new tab where the one you are on is, else in the project’s first place', () => {
+    const groups = groupTerminalPlaces(STATE, 'shop');
+    const fallback = resolveDefaultPlace(STATE, 'shop', '/Users/you');
+    const notes = groups.flatMap((group) => group.places).find((place) => place.label === 'notes');
+    expect(resolveNewTerminalPlace({ ...ONE, cwd: notes?.path ?? '' }, groups, fallback)).toEqual(
+      notes ?? null
+    );
+    expect(resolveNewTerminalPlace({ ...ONE, cwd: '/elsewhere' }, groups, fallback)).toEqual(fallback);
+    expect(resolveNewTerminalPlace(null, groups, fallback)).toEqual(fallback);
   });
 
   it('counts the matches of a find', () => {

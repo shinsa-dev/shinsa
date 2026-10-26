@@ -54,12 +54,14 @@ import {
 } from '@/lib/command/registry.ts';
 import { listScheduleSections } from '@/lib/command/schedules.ts';
 import { FALLBACK_PREFIX, scoreCommand } from '@/lib/command/score.ts';
+import { listServiceSections } from '@/lib/command/services.ts';
 import { resolveTaskPage } from '@/lib/command/task.ts';
 import { listVersionSections } from '@/lib/command/versions.ts';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
 import { useConnection } from '@/lib/connection/socket.ts';
+import { useTerminals } from '@/lib/connection/terminals.ts';
 import { useVersions } from '@/lib/connection/versions.ts';
 import { describeNewTask } from '@/lib/new-task.ts';
 import { useLayoutPreference } from '@/lib/preferences/layout.ts';
@@ -408,6 +410,7 @@ export function CommandMenu() {
   const accounts = useAccounts();
   const extensions = useExtensions(open);
   const versions = useVersions(open);
+  const terminals = useTerminals();
   const [query, setQuery] = React.useState('');
   const [stack, setStack] = React.useState<Visit[]>([]);
   const [selected, setSelected] = React.useState('');
@@ -524,6 +527,7 @@ export function CommandMenu() {
     ...listGlobalSections(state, route, theme, layout),
     ...listAccountSections(accounts),
     ...listScheduleSections(state),
+    ...(open ? listServiceSections(state, terminals, Date.now()) : []),
     ...listExtensionSections(extensions.snapshot),
     ...listVersionSections(versions.snapshot, versions.updating),
   ].sort((a, b) => a.rank - b.rank);

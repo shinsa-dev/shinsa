@@ -402,16 +402,17 @@ describe('terminals', () => {
       cwd: '/code/web',
       place: 'repository',
       taskId: null,
+      serviceId: null,
       status: 'running',
       exitCode: null,
       startedAt: 1,
       endedAt: null,
     };
-    const fake = createFakeClient({ '/api/terminals': { terminals: [terminal], appearance: {} } });
+    const fake = createFakeClient({ '/api/terminals': { terminals: [terminal], services: [] } });
     expect((await runSpec(fake, ['terminals', 'list'])).text).toBe(
       `${'Server'.padEnd(24)} ${'running'.padEnd(8)} /code/web`
     );
-    const empty = createFakeClient({ '/api/terminals': { terminals: [], appearance: {} } });
+    const empty = createFakeClient({ '/api/terminals': { terminals: [], services: [] } });
     expect((await runSpec(empty, ['terminals', 'list'])).text).toBe('No terminals.');
   });
 });

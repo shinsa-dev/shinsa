@@ -5,6 +5,7 @@ import { type StepSample, serializeStepTable, summarizeSteps } from './shell-sta
 
 interface Step {
   label: string;
+  open?: { target: string; done: string };
   pushes?: string;
   target?: string;
   key?: { key: string; code: string; keyCode: number; modifiers: number };
@@ -25,6 +26,7 @@ const ATTACH = Bun.env.SHELL_PERF_ATTACH ?? null;
 const OUT = Bun.env.SHELL_PERF_OUT ?? null;
 const HOVER_MS = Number(Bun.env.SHELL_PERF_HOVER_MS ?? 120);
 const META = 4;
+const OPEN_SETTLE_MS = 400;
 
 const HOME = `document.querySelector('header [aria-label="Home"]') || __shell.byPrefix('header button', '^Shinsa') || __shell.byText('nav [data-highlight-item]', 'New task')`;
 const HOME_DONE = `location.pathname === '/' && !!document.querySelector('main textarea')`;
@@ -46,7 +48,22 @@ function listTabSteps() {
   return loop.slice(1).map((to, index) => tabStep(loop[index] ?? 'Overview', to, TAB_READY[to]));
 }
 
-const STEPS: Step[] = [
+const TERMINAL_DONE = `location.pathname === '/terminal' && __shell.terminals > 0 && __shell.terminalsWaiting === 0 && [...document.querySelectorAll('.xterm')].some((terminal) => terminal.offsetParent && terminal.querySelector('.xterm-screen canvas'))`;
+
+const TERMINAL_STEPS: Step[] = [
+  {
+    label: 'Home → Terminal',
+    open: {
+      target: `document.querySelector('header [data-services-trigger]')`,
+      done: `!!document.querySelector('[data-terminal-entry]')`,
+    },
+    target: `document.querySelector('[data-terminal-entry]') || document.querySelector('header button[aria-label="Terminal"]')`,
+    done: TERMINAL_DONE,
+  },
+  { label: 'Terminal → Home', target: HOME, done: HOME_DONE },
+];
+
+const NAVIGATION_STEPS: Step[] = [
   {
     label: 'Home → task',
     pushes: 'State push on a task',
@@ -74,6 +91,8 @@ const STEPS: Step[] = [
     done: `!!document.querySelector('[cmdk-input]')`,
   },
 ];
+
+const STEPS = Bun.env.SHELL_PERF_STEPS === 'terminal' ? TERMINAL_STEPS : NAVIGATION_STEPS;
 
 async function attach(port: string) {
   const target = (await listTargets(port)).find(
@@ -121,7 +140,18 @@ async function click(target: ShellPage, point: { x: number; y: number }) {
   });
 }
 
+async function openFirst(target: ShellPage, open: NonNullable<Step['open']>) {
+  const point = await target.evaluate<{ x: number; y: number } | null>(
+    `__shell.center(${JSON.stringify(open.target)})`
+  );
+  if (!point) return;
+  await click(target, point);
+  await waitFor(target, open.done);
+  await Bun.sleep(OPEN_SETTLE_MS);
+}
+
 async function runStep(target: ShellPage, step: Step): Promise<Measured | null> {
+  if (step.open) await openFirst(target, step.open);
   if (step.target) {
     const point = await target.evaluate<{ x: number; y: number } | null>(
       `__shell.center(${JSON.stringify(step.target)})`
@@ -149,11 +179,15 @@ function openBrowser() {
 const browser = await openBrowser();
 const { page } = browser;
 await page.send('Page.enable');
+if (Bun.env.SHELL_PERF_CPU)
+  await page.send('Emulation.setCPUThrottlingRate', { rate: Number(Bun.env.SHELL_PERF_CPU) });
 await page.send('Page.addScriptToEvaluateOnNewDocument', { source: SHELL_PROBE });
 await page.send('Page.navigate', { url: `${ORIGIN}/` });
 await waitFor(page, `window.__shell && ${HOME_DONE}`);
 await page.evaluate('__shell.idle(1500)');
 
+const SETTLE_MS = Number(Bun.env.SHELL_PERF_SETTLE_MS ?? 0);
+const settles: { label: string; settledAt: number; maxGap: number }[] = [];
 const cold: StepSample[] = [];
 const warm: StepSample[] = [];
 const pushes: StepSample[] = [];
@@ -163,6 +197,11 @@ for (let lap = 0; lap < LAPS; lap += 1) {
     const measured = await runStep(page, step);
     if (measured) (lap === 0 ? cold : warm).push({ label: step.label, ...measured });
     else console.warn(`Skipped ${step.label} on lap ${lap + 1}`);
+    if (measured && SETTLE_MS > 0)
+      settles.push({
+        label: `${step.label}${lap === 0 ? ' (first)' : ''}`,
+        ...(await page.evaluate<{ settledAt: number; maxGap: number }>(`__shell.settle(${SETTLE_MS})`)),
+      });
     if (step.key) await closeMenu(page);
     await page.evaluate('__shell.idle(250)');
     for (let push = 0; measured && step.pushes && push < PUSHES_PER_PAGE; push += 1) {
@@ -184,6 +223,17 @@ console.log(`Revisits (laps 2–${LAPS})\n\n${serializeStepTable(report.warm)}\n
 console.log(
   `State pushes (one task's priority changes; push to paint)\n\n${serializeStepTable(report.pushes)}`
 );
+if (SETTLE_MS > 0) {
+  const labels = [...new Set(settles.map((each) => each.label))];
+  const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+  console.log('\nSettled (click to the last frame longer than 34 ms, and the longest frame)\n');
+  for (const label of labels) {
+    const mine = settles.filter((each) => each.label === label);
+    console.log(
+      `| ${label} | ${median(mine.map((each) => each.settledAt)).toFixed(1)} ms | ${median(mine.map((each) => each.maxGap)).toFixed(1)} ms |`
+    );
+  }
+}
 if (OUT) writeFileSync(OUT, JSON.stringify({ ...report, samples: { cold, warm, pushes } }, null, 2));
 browser.close();
 process.exit(0);

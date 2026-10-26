@@ -12,6 +12,7 @@ import { EXTENSION_SPECS } from './extensions.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
 import { GATE_SPECS } from './gates.ts';
 import { SCHEDULE_SPECS } from './schedules.ts';
+import { SERVICE_SPECS } from './services.ts';
 import { describeTaskLink, type SurfaceSpec } from './spec.ts';
 import { SYSTEM_SPECS } from './system.ts';
 import { TASK_SPECS } from './tasks.ts';
@@ -52,6 +53,7 @@ export const SURFACE: SurfaceSpec[] = [
   ...SCHEDULE_SPECS,
   ...CONFIG_SPECS,
   ...SYSTEM_SPECS,
+  ...SERVICE_SPECS,
   ...EXTENSION_SPECS,
   COMMAND_SPEC,
 ];
@@ -202,6 +204,10 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['skills', 'List the skills agents can load, and turn them on or off.'],
       ['plugins', 'List the Claude Code plugins agents run with, and turn them on or off.'],
     ],
+  },
+  {
+    title: 'Run your projects’ services',
+    groups: [['services', 'List, start, stop or restart a project’s services, such as its dev servers.']],
   },
   {
     title: 'Inspect Shinsa',

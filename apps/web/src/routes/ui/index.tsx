@@ -222,8 +222,8 @@ export function UiPage() {
         </Section>
         <Section
           id='shinsa-terminal'
-          title='Shinsa composites · terminal'
-          description='The Terminal page’s tabs, the place menu, the ended bar and the colours a terminal takes without a Ghostty config, from apps/web/src/components/terminal. The terminal itself needs the engine.'
+          title='Shinsa composites · services and terminal'
+          description='The Services entry in the top bar and the rail, its popover and rows in each state, the Terminal page’s project picker, tabs, place menu and ended bar, and the terminal’s colours, from apps/web/src/components/services and components/terminal. The terminal itself needs the engine.'
           className='flex-col items-start gap-8'
         >
           <TerminalSpecimens />

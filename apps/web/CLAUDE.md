@@ -57,8 +57,11 @@ src/
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
 │                        onboarding (shell, stepper: the steps as a segmented Choice, section: the heading, body and footer every step and the finished page share, the step and its footer, the option list, accounts, checks, finished),
-│                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar, the
-│                        Terminal button in Desk's top bar), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
+│                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar),
+│                        services (menu.tsx: Services beside Home and in the rail, its popover and trigger label;
+│                        service-row.tsx: a service's row, tile and run buttons; service-dialog.tsx: add and edit;
+│                        use-service-actions.tsx: the handlers and their dialogs), focus (menu.tsx: the Focus menu and
+│                        the project trigger and rows the Terminal page's picker shares), layout (cards/ and sidebar/ shells, the nav item both the rail and
 │                        Settings' tabs use, the list row and its LIST_ROW classes, the logo link home and home-link.tsx (the Home button
 │                        that replaces it in the Mac app), page/ column, heading, toolbar, section
 │                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
@@ -75,6 +78,7 @@ src/
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
 │                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys),
+│                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
 │                        (use-transcript-window), the rows in view of a list (use-row-window) and a long list's rows a
@@ -96,7 +100,7 @@ src/
     │                    (the onboarding status, folders, suggestions and the setup steps over HTTP),
     │                    projects.ts (/api/repos/local, adding a repository or a folder to a project),
     │                    terminals.ts (useTerminals over the snapshot the socket holds, /api/terminals changes,
-    │                    openTerminal and openTaskTerminal),
+    │                    openTerminal and openTaskTerminal, the foreground check, every /api/services read and change),
     │                    accounts.ts (useAccounts over the snapshot the socket holds, /api/accounts/* changes,
     │                    the sign-in dialog state), health.ts (/api/health on start and after each reconnect,
     │                    the banner's text and its dismissal), engine.ts (the app against the engine: the engine
@@ -108,7 +112,7 @@ src/
     │                    rows, the root's blocks and their scores, Recent, the New task action), global.ts, gates.ts (the commands of every open gate), task.ts and
     │                    task-actions.ts (a task's page), process.ts (check-ins, the quiet agent, suggested
     │                    tasks, delegations), accounts.ts (Accounts group, Run on account, usage waits),
-    │                    schedules.ts, terminal.ts (the Terminal page's commands), review.ts (the Review tab's Next and Previous place), editor.ts (the Code tab's Editor group: every editing key), extensions.ts (the Integrations group), versions.ts (Update Claude Code and
+    │                    schedules.ts, terminal.ts (the Terminal page's commands), services.ts (the Services group), review.ts (the Review tab's Next and Previous place), editor.ts (the Code tab's Editor group: every editing key), extensions.ts (the Integrations group), versions.ts (Update Claude Code and
     │                    Update Codex), and one file per page that
     │                    registers commands (tasks, home, settings)
     ├── accounts/        account.ts (every account label and toast, plans, Run on account choices, each provider's
@@ -142,12 +146,15 @@ src/
     │                    the task diff, notes, the 14-line fold), diff-theme.ts (`@pierre/diffs` on the `--code-*`
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)
-    ├── terminal/        Terminals (docs/design.md, 37): view.ts (TerminalView: one xterm.js per terminal, kept outside
-    │                    React, its socket and reconnect, WebGL while shown, find; resolveTerminalView), theme.ts (the
-    │                    xterm.js options and theme from Ghostty's appearance over the `--terminal-*` tokens), color.ts
-    │                    (OKLCH and rgb to hex), keys.ts (which keys a focused terminal keeps), replies.ts (the
-    │                    questions the engine answers instead), tabs.ts (the project, tabs, places, order and words),
-    │                    command.ts (a shell block's command for Run in terminal)
+    ├── terminal/        Terminals and services (docs/design.md, 37): view.ts (TerminalView: one xterm.js per terminal,
+    │                    kept outside React, its socket and reconnect, its WebGL renderer kept for the six shown last,
+    │                    fit only when the pane's size changed, find, clear, the font size; resolveTerminalView),
+    │                    theme.ts (the xterm.js options and theme on the `--terminal-*` tokens and `--font-mono`),
+    │                    color.ts (OKLCH and rgb to hex), keys.ts (a Mac terminal's keys, and the page's ⌘T and ⌘W),
+    │                    replies.ts (the questions the engine answers instead), tabs.ts (the project, tabs, places,
+    │                    order and words), services.ts (a service's glyph, state words, the trigger's label, which
+    │                    projects the menu shows, the form and its checks), command.ts (a shell block's command for
+    │                    Run in terminal)
     ├── review/          The Review tab (report.ts: what needs your attention and in what order, the walkthrough's
     │                    sections, the other changed files, the review card's items; keys.ts: J and K; places.ts:
     │                    the paths into Code and into the Review tab), the Code tab's spot targets, the fallback
@@ -171,13 +178,14 @@ src/
     │                    meta tags)
     ├── format/          Counts, times, money, labels, tones, the shared minute and second clocks (clock.ts), a small LRU
     │                    cache (cache.ts), the rows in view of a list (rows.ts)
-    ├── preferences/     localStorage: theme, layout, rail width, recent tasks, section flags, notifications
+    ├── preferences/     localStorage: theme, layout, rail width, recent tasks, section flags, notifications, the
+    │                    terminal's font size
     ├── desktop.ts       The desktop app's bridge (`window.shinsaDesktop`, absent in a browser and Floaty):
     │                    `data-desktop` on <html>, its navigation, the Dock badge, notifications, the page's
     │                    surface and whether it stays quiet (`isPageQuiet`), the app's version and protocol
     │                    (`selectDesktopBuild`) and its own update (`readDesktopUpdate`, `installDesktopUpdate`)
-    ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings, and Terminal, which is
-    │                    never rendered ahead) and the last three task pages, by key, with the URL each was left at
+    ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings and Terminal, each rendered
+    │                    ahead at idle) and the last three task pages, by key, with the URL each was left at
     └── queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
         not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,
@@ -228,12 +236,13 @@ files after it.
   hooks private to them; anything that computes (a label, an order, a section list, a command list) is a `.ts`
   function in `lib/` with a test. A component used by one route still lives in `components/<domain>/` when the
   route file would otherwise grow past a screenful.
-- **⌘K is the only shortcut, but for the Code and Review tabs.** Pages add commands with `useRegisterCommands(sections)` while
+- **⌘K is the only shortcut, but for the Code tab, the Review tab and the Terminal page.** Pages add commands with `useRegisterCommands(sections)` while
   mounted (`docs/design.md`, 14). A command or choice option is disabled only with its reason (`disabled: '…'`, a
   string shown in place of the hint); there is no boolean. While the Code tab is open it binds ⌘P, ⇧⌘F, ⌘F and ⌘G (`hooks/use-code-keys.ts`),
-  and while the Review tab is open J and K (`hooks/use-review-keys.ts`, not while you type), each also a ⌘K command; `bun lint:conventions` rejects a global key listener anywhere else.
+  while the Review tab is open J and K (`hooks/use-review-keys.ts`, not while you type), and while the Terminal page is open ⌘T and ⌘W (`hooks/use-terminal-keys.ts`), each also a ⌘K command or a button; `bun lint:conventions` rejects a global key listener anywhere else.
   A focused terminal keeps its own keys through xterm.js's handler on its element (`lib/terminal/keys.ts`): every
-  Control key goes to the shell, ⌘ keys to Shinsa but ⌘C, ⌘V, ⌘A and ⌘F (`docs/design.md`, 37).
+  Control key goes to the shell, and of the ⌘ keys the line-editing ones (⌘⌫, ⌘←, ⌘→), ⌘C, ⌘V, ⌘A, ⌘F, ⌘L, the font
+  size and scrolling; ⌥ is Meta unless the layout types a character with it; the rest go to Shinsa (`docs/design.md`, 37).
 - **One owner per shared piece.** The visual ones (tones, times, cards, check marks, task actions, dependencies)
   are listed in `docs/design.md`, 15. In code, besides those: gate replies go through `lib/tasks/gates.ts`, what a message does (every composer's
   placeholder and toast for `task.message`, and ⌘K's Message the agent) through `lib/tasks/messages.ts`, HTTP

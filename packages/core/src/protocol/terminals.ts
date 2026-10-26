@@ -2,6 +2,7 @@ import { isTaskSettled } from '../domain/stages.ts';
 import type { Task } from '../domain/types.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listProjectRepos, resolveTaskProject } from '../state/queries.ts';
+import type { ServiceDefinition } from './services.ts';
 
 export type TerminalStatus = 'running' | 'exited' | 'stopped';
 
@@ -22,39 +23,21 @@ export interface TerminalInfo {
   cwd: string;
   place: TerminalPlaceKind;
   taskId: string | null;
+  serviceId: string | null;
   status: TerminalStatus;
   exitCode: number | null;
   startedAt: number;
   endedAt: number | null;
 }
 
-export interface TerminalTheme {
-  foreground: string | null;
-  background: string | null;
-  cursor: string | null;
-  cursorText: string | null;
-  selectionBackground: string | null;
-  selectionForeground: string | null;
-  palette: (string | null)[];
-}
-
-export type TerminalCursorStyle = 'block' | 'bar' | 'underline';
-
-export interface TerminalAppearance {
-  source: 'ghostty' | 'shinsa';
-  fontFamily: string | null;
-  fontSize: number | null;
-  cursorStyle: TerminalCursorStyle | null;
-  cursorBlink: boolean | null;
-  optionAsMeta: boolean;
-  light: TerminalTheme | null;
-  dark: TerminalTheme | null;
-}
-
 export interface TerminalsSnapshot {
   terminals: TerminalInfo[];
-  appearance: TerminalAppearance;
+  services: ServiceDefinition[];
   home: string;
+}
+
+export interface TerminalForeground {
+  program: string | null;
 }
 
 export interface TerminalColors {
@@ -65,7 +48,8 @@ export interface TerminalColors {
 
 export type TerminalClientFrame =
   | { type: 'resize'; cols: number; rows: number }
-  | { type: 'colors'; colors: TerminalColors };
+  | { type: 'colors'; colors: TerminalColors }
+  | { type: 'clear' };
 
 export type TerminalServerFrame = { type: 'reset'; cols: number; rows: number } | { type: 'live' };
 
@@ -76,17 +60,6 @@ export const TERMINAL_LIMITS = {
   rows: 500,
   command: 4000,
 } as const;
-
-export const SHINSA_APPEARANCE: TerminalAppearance = {
-  source: 'shinsa',
-  fontFamily: null,
-  fontSize: null,
-  cursorStyle: null,
-  cursorBlink: null,
-  optionAsMeta: false,
-  light: null,
-  dark: null,
-};
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -156,6 +129,7 @@ export function parseTerminalClientFrame(text: string): TerminalClientFrame | nu
     isDimension(fields.rows, TERMINAL_LIMITS.rows)
   )
     return { type: 'resize', cols: fields.cols, rows: fields.rows };
+  if (fields.type === 'clear') return { type: 'clear' };
   const colors = fields.type === 'colors' ? parseColors(fields.colors) : null;
   return colors ? { type: 'colors', colors } : null;
 }

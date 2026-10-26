@@ -87,6 +87,7 @@ export function createInfo(extra: Partial<TerminalInfo> = {}): TerminalInfo {
     cwd: '/tmp',
     place: 'repository',
     taskId: null,
+    serviceId: null,
     status: 'running',
     exitCode: null,
     startedAt: 1,

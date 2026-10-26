@@ -392,6 +392,33 @@ did after the shared tooltip, against 947 before the kept pages and 796 before t
   `no-cache`, so a relaunch reads the bundle from disk instead of downloading 1.6 MB again. None of it showed above
   the noise of a launch on this machine.
 
+### The Terminal page (2026-10-26)
+
+`SHELL_PERF_STEPS=terminal bun scripts/perf/shell-navigation.ts <origin>` runs only Home → Terminal and back: the
+click on the Terminal button (before) or on Services → Terminal (after, `open` clicks the trigger first and waits
+for its popover), until the terminal in front has its WebGL canvas and every terminal socket the page opened has had
+its screen (`live`; the probe counts `/ws/terminals/` sockets). `SHELL_PERF_SETTLE_MS=600` also records how long
+after the click the last frame over 34 ms ended, and `SHELL_PERF_CPU=4` throttles the CPU four times through CDP, which
+shows what the M-series Mac hides. Two engines on scratch homes with the same project, the terminal in front holding
+6,000 lines of output; "before" is `git archive` of the commit that added terminals, both served built. Median ms,
+8 laps:
+
+| Step | 1× before | 1× after | 4× before | 4× after |
+| --- | --- | --- | --- | --- |
+| Home → Terminal, first visit | 117.3 | 60.4 | 323.2 | 158.2 |
+| Home → Terminal, revisit | 13.4 | 11.3 | 39.4 | 30.6 |
+| Terminal → Home, revisit | 16.7 | 12.4 | 52.7 | 21.1 |
+
+What changed: the page is rendered ahead at idle like the other hub pages (`lib/kept-views.ts`), and rendering it
+creates the view of the terminal it would show, so its socket is open and its screen parsed before you click (the
+first visit then only opens xterm.js into the page and gives it WebGL); a view keeps its WebGL renderer when the page
+or tab is hidden instead of disposing it and building a new context, glyph atlas and shaders on every visit, with the
+six shown last keeping theirs (`WEBGL_LIMIT`); and fitting reads the pane's size and does nothing when it did not
+change, so showing a kept terminal does no layout work. In headless Chromium at full speed both builds are near the
+60 Hz floor on a revisit; the difference is the first visit and the throttled runs, and the WebGL context a hidden
+terminal no longer rebuilds. The first visit is still xterm.js opening into the page (about 60 ms, two long tasks at
+4×): it needs a visible element to measure its font, so it cannot be done hidden.
+
 ### What is left
 
 - **Revealing Review still renders about 620 components** and Code about 650: what is left is the tabs' own effects

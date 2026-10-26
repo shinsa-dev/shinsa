@@ -79,15 +79,16 @@ describe('the hub pages', () => {
     ]);
   });
 
-  it('warms all three once the page is idle', () => {
+  it('warms all four once the page is idle, the terminal page included', () => {
     expect(listHubViews(new Map([['tasks', TASKS]]), true)).toEqual([
       { key: 'home', view: HOME, shownAt: 0 },
       { key: 'tasks', view: TASKS, shownAt: 0 },
       { key: 'settings', view: SETTINGS, shownAt: 0 },
+      { key: 'terminal', view: { route: { name: 'terminal' }, search: '' }, shownAt: 0 },
     ]);
   });
 
-  it('keeps the terminal page once you have been to it, but never opens it ahead', () => {
+  it('keeps the terminal page where you left it', () => {
     const terminal: RouteView = { route: { name: 'terminal' }, search: '?project=SH' };
     expect(isHubRoute(terminal.route)).toBe(true);
     expect(listHubViews(new Map([['terminal', terminal]]), true).map((each) => each.key)).toEqual([

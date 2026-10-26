@@ -1,4 +1,4 @@
-import type { TerminalAppearance, TerminalColors, TerminalTheme } from '@shinsa/core';
+import type { TerminalColors } from '@shinsa/core';
 import type { ITerminalOptions, ITheme } from '@xterm/xterm';
 import { resolveCssColor } from '@/lib/terminal/color.ts';
 
@@ -8,9 +8,7 @@ export type VariableReader = (name: string) => string;
 
 const TERMINAL_SCROLLBACK = 5_000;
 
-const TERMINAL_FONT_SIZE = 13;
-
-const SHINSA_FONT = '"ABC Areal Mono", ui-monospace, "SF Mono", Menlo, monospace';
+const MONO_FALLBACK = '"ABC Areal Mono", ui-monospace, "SF Mono", Menlo, monospace';
 
 const ANSI_NAMES = [
   'black',
@@ -41,7 +39,7 @@ function readToken(read: VariableReader, name: string) {
   return resolveCssColor(read(`--terminal-${name}`));
 }
 
-export function resolveShinsaTheme(read: VariableReader): ITheme {
+export function resolveTerminalTheme(read: VariableReader): ITheme {
   const theme: ITheme = {};
   const set = (key: keyof ITheme, token: string) => {
     const color = readToken(read, token);
@@ -58,56 +56,26 @@ export function resolveShinsaTheme(read: VariableReader): ITheme {
   return theme;
 }
 
-function overlayTheme(base: ITheme, over: TerminalTheme): ITheme {
-  const theme: ITheme = { ...base };
-  const pairs: [keyof ITheme, string | null][] = [
-    ['background', over.background],
-    ['foreground', over.foreground],
-    ['cursor', over.cursor],
-    ['cursorAccent', over.cursorText],
-    ['selectionBackground', over.selectionBackground],
-    ['selectionForeground', over.selectionForeground],
-    ...ANSI_NAMES.map((name, index): [keyof ITheme, string | null] => [name, over.palette[index] ?? null]),
-  ];
-  for (const [key, value] of pairs) if (value) Object.assign(theme, { [key]: value });
-  return theme;
+export function resolveTerminalFont(read: VariableReader) {
+  return read('--font-mono').trim() || MONO_FALLBACK;
 }
 
-export function resolveTerminalTheme(
-  appearance: TerminalAppearance,
-  scheme: ColorScheme,
-  read: VariableReader
-) {
-  const own = appearance[scheme];
-  const base = resolveShinsaTheme(read);
-  return own ? overlayTheme(base, own) : base;
-}
-
-export function resolveTerminalFont(appearance: TerminalAppearance) {
-  const family = appearance.fontFamily?.replace(/["\\]/g, '');
-  return family ? `"${family}", ${SHINSA_FONT}` : SHINSA_FONT;
-}
-
-export function resolveTerminalOptions(
-  appearance: TerminalAppearance,
-  scheme: ColorScheme,
-  read: VariableReader
-): ITerminalOptions {
+export function resolveTerminalOptions(read: VariableReader, fontSize: number): ITerminalOptions {
   return {
     allowProposedApi: true,
     scrollback: TERMINAL_SCROLLBACK,
-    fontFamily: resolveTerminalFont(appearance),
-    fontSize: appearance.fontSize ?? TERMINAL_FONT_SIZE,
-    lineHeight: 1.2,
-    cursorStyle: appearance.cursorStyle ?? 'block',
-    cursorBlink: appearance.cursorBlink ?? false,
+    fontFamily: resolveTerminalFont(read),
+    fontSize,
+    lineHeight: 1.25,
+    cursorStyle: 'block',
+    cursorBlink: false,
     cursorInactiveStyle: 'outline',
-    macOptionIsMeta: appearance.optionAsMeta,
+    macOptionIsMeta: true,
     macOptionClickForcesSelection: true,
     rightClickSelectsWord: true,
     drawBoldTextInBrightColors: false,
     minimumContrastRatio: 1,
-    theme: resolveTerminalTheme(appearance, scheme, read),
+    theme: resolveTerminalTheme(read),
   };
 }
 

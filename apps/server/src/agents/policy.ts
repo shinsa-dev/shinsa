@@ -44,9 +44,9 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
         'Only the human changes a repository’s check commands, works without checks or chooses where agents work. Tell them what you would change and why.',
     },
     {
-      pattern: /\/(?:api|ws)\/terminals(?![\w-])/,
+      pattern: /\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,
       reason:
-        'Only the human types into their terminals. Put the command in a ```sh block in your question to them, and they can run it in a terminal with one press.',
+        'Only the human types into their terminals and runs their services. Put the command in a ```sh block in your question to them, and they can run it in a terminal with one press.',
     },
     {
       pattern: /\bgh\s+pr\s+(merge|create)\b/,

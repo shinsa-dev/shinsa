@@ -76,7 +76,7 @@ export interface ShinsaOptions {
   compaction?: IdleCompactionOptions;
   extensions?: Pick<ExtensionsOptions, 'check' | 'env' | 'fetch'>;
   versions?: VersionsOptions;
-  terminals?: Pick<TerminalsOptions, 'spawn' | 'appearance' | 'env'>;
+  terminals?: Pick<TerminalsOptions, 'spawn' | 'readForeground' | 'env'>;
   byService?: boolean;
   exit?: (code: number) => void;
 }
@@ -159,6 +159,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     readOnly: config.inspect,
     ...options.terminals,
   });
+  terminals.resumeServices(engine.state);
   const inbox = new MessageInbox(engine, classify.message);
   const roots = new Roots(
     config.roots,

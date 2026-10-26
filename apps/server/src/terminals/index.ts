@@ -1,21 +1,25 @@
 import {
   DomainError,
-  SHINSA_APPEARANCE,
+  SERVICE_LIMITS,
+  type ServiceDefinition,
+  type ShinsaState,
   TERMINAL_LIMITS,
-  type TerminalAppearance,
+  type TerminalForeground,
   type TerminalInfo,
   type TerminalPlaceKind,
   type TerminalsSnapshot,
 } from '@shinsa/core';
-import { describeError, log } from '../log/index.ts';
-import { resolveGhosttyAppearance, resolveGhosttyPlaces } from './ghostty.ts';
 import {
+  type ForegroundReader,
+  readForegroundProgram,
   resolveLoginShell,
+  resolveServiceCommand,
   resolveShellCommand,
   resolveTerminalEnv,
   spawnTerminalProcess,
   type TerminalSpawner,
 } from './pty.ts';
+import { resolveServicePlaceIn } from './routes.ts';
 import { TerminalSession, type TerminalViewer } from './session.ts';
 import { TerminalStore } from './store.ts';
 
@@ -28,7 +32,7 @@ export interface TerminalsOptions {
   readOnly?: boolean;
   env?: Env;
   spawn?: TerminalSpawner;
-  appearance?: () => TerminalAppearance;
+  readForeground?: ForegroundReader;
   now?: () => number;
   newId?: () => string;
   notifyMs?: number;
@@ -40,6 +44,13 @@ export interface TerminalStart {
   cwd: string;
   place: TerminalPlaceKind;
   taskId: string | null;
+}
+
+export interface ServiceInput {
+  name: string;
+  cwd: string;
+  command: string;
+  env: Record<string, string>;
 }
 
 type Listener = (snapshot: TerminalsSnapshot) => void;
@@ -60,17 +71,23 @@ export class Terminals {
   readonly #listeners = new Set<Listener>();
   readonly #screenTimers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #now: () => number;
+  readonly #services = new Map<string, ServiceDefinition>();
+  readonly #resumable = new Set<string>();
   #notifyTimer: ReturnType<typeof setTimeout> | null = null;
-  #appearance: TerminalAppearance | null = null;
   #stopped = false;
 
   constructor(options: TerminalsOptions) {
     this.#options = options;
     this.#store = new TerminalStore(options.dataDir);
     this.#now = options.now ?? Date.now;
+    for (const service of this.#store.readServices()) this.#services.set(service.id, service);
     for (const saved of this.#store.readTerminals()) {
-      const info: TerminalInfo =
-        saved.status === 'running' ? { ...saved, status: 'stopped', endedAt: this.#now() } : saved;
+      const known = saved.serviceId === null || this.#services.has(saved.serviceId);
+      const info: TerminalInfo = {
+        ...(saved.status === 'running' ? { ...saved, status: 'stopped', endedAt: this.#now() } : saved),
+        serviceId: known ? saved.serviceId : null,
+      };
+      if (saved.status === 'running' && info.serviceId) this.#resumable.add(info.id);
       this.#sessions.set(info.id, this.#createSession(info, this.#store.readScreen(info.id)));
     }
   }
@@ -104,26 +121,14 @@ export class Terminals {
     return this.#sessions.get(id) ?? null;
   }
 
-  readAppearance() {
-    const read =
-      this.#options.appearance ?? (() => resolveGhosttyAppearance(resolveGhosttyPlaces(this.#env)));
-    try {
-      this.#appearance = read();
-    } catch (error) {
-      log.warn('[Terminals] Could not read the Ghostty config', { error: describeError(error) });
-    }
-    return this.#appearance;
-  }
-
   get #env() {
     return this.#options.env ?? process.env;
   }
 
   snapshot(): TerminalsSnapshot {
-    const appearance = this.#appearance ?? this.readAppearance();
     return {
       terminals: [...this.#sessions.values()].map((session) => session.info),
-      appearance: appearance ?? { ...SHINSA_APPEARANCE },
+      services: [...this.#services.values()],
       home: this.#options.home,
     };
   }
@@ -174,37 +179,47 @@ export class Terminals {
 
   #start(session: TerminalSession) {
     const env = resolveTerminalEnv(this.#env, this.#options.version);
+    const shell = resolveLoginShell(this.#env);
+    const service = session.info.serviceId ? this.#services.get(session.info.serviceId) : undefined;
     session.start({
-      command: resolveShellCommand(resolveLoginShell(this.#env)),
-      env,
+      command: service ? resolveServiceCommand(shell, service.command) : resolveShellCommand(shell),
+      env: service ? { ...env, ...service.env } : env,
       spawn: this.#options.spawn ?? spawnTerminalProcess,
       now: this.#now(),
     });
   }
 
-  create(start: TerminalStart) {
-    this.#assertWritable();
+  #newId() {
+    return this.#options.newId?.() ?? Bun.randomUUIDv7();
+  }
+
+  #open(start: TerminalStart, service: ServiceDefinition | null) {
     if (this.#sessions.size >= TERMINAL_LIMITS.terminals)
       throw new DomainError(
         'terminal_limit',
         `Shinsa keeps ${TERMINAL_LIMITS.terminals} terminals at most. Close one to open another.`
       );
-    const id = this.#options.newId?.() ?? Bun.randomUUIDv7();
     const info: TerminalInfo = {
-      id,
+      id: this.#newId(),
       ...start,
-      name: null,
+      name: service?.name ?? null,
       title: null,
+      serviceId: service?.id ?? null,
       status: 'running',
       exitCode: null,
       startedAt: this.#now(),
       endedAt: null,
     };
     const session = this.#createSession(info, null);
-    this.#sessions.set(id, session);
+    this.#sessions.set(info.id, session);
     this.#start(session);
     this.#changed();
     return session.info;
+  }
+
+  create(start: TerminalStart) {
+    this.#assertWritable();
+    return this.#open(start, null);
   }
 
   rename(id: string, name: string | null) {
@@ -246,16 +261,112 @@ export class Terminals {
     session.type(command);
   }
 
+  async readForeground(id: string): Promise<TerminalForeground> {
+    const session = this.find(id);
+    const { pid } = session;
+    if (pid === null) return { program: null };
+    if (session.info.serviceId) return { program: this.#services.get(session.info.serviceId)?.name ?? null };
+    return { program: await (this.#options.readForeground ?? readForegroundProgram)(pid) };
+  }
+
   close(id: string) {
     this.#assertWritable();
-    const session = this.find(id);
+    this.#closeSession(this.find(id));
+    this.#changed();
+  }
+
+  #closeSession(session: TerminalSession) {
+    const { id } = session.info;
     this.#sessions.delete(id);
     clearTimeout(this.#screenTimers.get(id));
     this.#screenTimers.delete(id);
     session.hangUp();
     session.dispose();
     this.#store.removeScreen(id);
+  }
+
+  findService(id: string) {
+    const service = this.#services.get(id);
+    if (!service) throw new DomainError('service_not_found', 'That service is not there anymore.');
+    return service;
+  }
+
+  #serviceSession(id: string) {
+    return [...this.#sessions.values()].find((session) => session.info.serviceId === id) ?? null;
+  }
+
+  #saveServices() {
+    this.#store.writeServices([...this.#services.values()]);
+  }
+
+  addService(projectId: string, input: ServiceInput) {
+    this.#assertWritable();
+    if (this.#services.size >= SERVICE_LIMITS.services)
+      throw new DomainError(
+        'service_limit',
+        `Shinsa keeps ${SERVICE_LIMITS.services} services at most. Remove one to add another.`
+      );
+    const service: ServiceDefinition = { id: this.#newId(), projectId, ...input };
+    this.#services.set(service.id, service);
+    this.#saveServices();
     this.#changed();
+    return service;
+  }
+
+  updateService(id: string, input: ServiceInput) {
+    this.#assertWritable();
+    const service = { ...this.findService(id), ...input };
+    this.#services.set(id, service);
+    const session = this.#serviceSession(id);
+    if (session) session.info = { ...session.info, name: service.name };
+    this.#saveServices();
+    this.#changed();
+    return service;
+  }
+
+  removeService(id: string) {
+    this.#assertWritable();
+    this.findService(id);
+    const session = this.#serviceSession(id);
+    if (session) this.#closeSession(session);
+    this.#services.delete(id);
+    this.#saveServices();
+    this.#changed();
+  }
+
+  startService(id: string, place: TerminalPlaceKind) {
+    this.#assertWritable();
+    const service = this.findService(id);
+    const session = this.#serviceSession(id);
+    if (!session)
+      return this.#open({ projectId: service.projectId, cwd: service.cwd, place, taskId: null }, service);
+    if (session.running) return session.info;
+    session.info = { ...session.info, cwd: service.cwd, place };
+    this.#start(session);
+    this.#changed();
+    return session.info;
+  }
+
+  async stopService(id: string) {
+    this.#assertWritable();
+    this.findService(id);
+    await this.#serviceSession(id)?.stop();
+    this.#changed();
+  }
+
+  async restartService(id: string, place: TerminalPlaceKind) {
+    await this.stopService(id);
+    return this.startService(id, place);
+  }
+
+  resumeServices(state: ShinsaState) {
+    if (this.#options.readOnly) return;
+    for (const terminalId of this.#resumable) {
+      const service = this.#services.get(this.#sessions.get(terminalId)?.info.serviceId ?? '');
+      const place = service ? resolveServicePlaceIn(state, service, this.home) : null;
+      if (service && place) this.startService(service.id, place);
+    }
+    this.#resumable.clear();
   }
 
   attach(id: string, viewer: TerminalViewer) {
@@ -268,12 +379,21 @@ export class Terminals {
     for (const timer of this.#screenTimers.values()) clearTimeout(timer);
     this.#screenTimers.clear();
     const sessions = [...this.#sessions.values()];
+    const resumable = new Set(
+      sessions
+        .filter((session) => session.running && session.info.serviceId)
+        .map((session) => session.info.id)
+    );
     await Promise.all(sessions.map((session) => session.stop()));
     for (const session of sessions) {
       this.#store.writeScreen(session.info.id, await session.serializeScreen());
       session.dispose();
     }
-    this.#store.writeTerminals(sessions.map((session) => session.info));
+    this.#store.writeTerminals(
+      sessions.map((session) =>
+        resumable.has(session.info.id) ? { ...session.info, status: 'running', endedAt: null } : session.info
+      )
+    );
     this.#listeners.clear();
   }
 }

@@ -38,6 +38,25 @@ export function resolveShellCommand(shell: string) {
   return [shell, '-l'];
 }
 
+export function resolveServiceCommand(shell: string, command: string) {
+  return [shell, '-l', '-c', command];
+}
+
+export type ForegroundReader = (pid: number) => Promise<string | null>;
+
+async function readProcessField(field: string, pid: number) {
+  const child = Bun.spawn(['ps', '-o', `${field}=`, '-p', String(pid)], { stdout: 'pipe', stderr: 'ignore' });
+  const [text] = await Promise.all([new Response(child.stdout).text(), child.exited]);
+  return text.trim();
+}
+
+export async function readForegroundProgram(pid: number) {
+  const group = Number(await readProcessField('tpgid', pid));
+  if (!Number.isInteger(group) || group <= 0 || group === pid) return null;
+  const command = await readProcessField('comm', group);
+  return command.split('/').pop()?.replace(/^-/, '') || 'a program';
+}
+
 export function resolveTerminalEnv(env: Env, version: string): Record<string, string> {
   const next: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {

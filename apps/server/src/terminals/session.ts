@@ -82,6 +82,10 @@ export class TerminalSession {
     return this.#process !== null;
   }
 
+  get pid() {
+    return this.#process?.pid ?? null;
+  }
+
   get viewers() {
     return this.#viewers.size;
   }
@@ -90,6 +94,7 @@ export class TerminalSession {
     if (this.#process) return;
     if (this.info.endedAt !== null) this.#receive(ENCODER.encode('\r\n'));
     this.#lastOutputAt = null;
+    this.#stopping = false;
     this.info = {
       ...this.info,
       status: 'running',
@@ -213,6 +218,10 @@ export class TerminalSession {
     this.#flushBatch();
     this.#mirror.resize(cols, rows);
     this.#process?.resize(cols, rows);
+  }
+
+  clear() {
+    this.#mirror.clear();
   }
 
   replaceColors(colors: TerminalColors) {

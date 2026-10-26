@@ -1,7 +1,10 @@
 import {
   resolveTaskProject,
   resolveTaskTerminalPlace,
+  type ServiceDefinition,
+  type ServiceSuggestion,
   type Task,
+  type TerminalForeground,
   type TerminalInfo,
   type TerminalPlace,
   type TerminalsSnapshot,
@@ -10,7 +13,9 @@ import { useSyncExternalStore } from 'react';
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
 import { connection } from '@/lib/connection/socket.ts';
+import type { ServiceInput } from '@/lib/terminal/services.ts';
 import { resolveTerminalPath } from '@/lib/terminal/tabs.ts';
+import { selectTerminalView } from '@/lib/terminal/view.ts';
 import { navigate } from '@/router.ts';
 
 export function useTerminals() {
@@ -71,4 +76,71 @@ export function closeTerminal(id: string) {
 
 export function reorderTerminals(projectId: string, ids: string[]) {
   return requestWithToast(() => requestTerminals('/api/terminals/order', { projectId, ids }));
+}
+
+export function requestTerminalForeground(id: string) {
+  return requestJson<TerminalForeground>(`/api/terminals/${encodeURIComponent(id)}/foreground`);
+}
+
+export async function requestServiceSuggestions(projectId: string) {
+  const answer = await requestJson<{ suggestions: ServiceSuggestion[] }>(
+    `/api/services/suggestions?projectId=${encodeURIComponent(projectId)}`
+  );
+  return answer.suggestions;
+}
+
+function servicePath(id: string, action: string) {
+  return `/api/services/${encodeURIComponent(id)}/${action}`;
+}
+
+export async function requestServiceAdd(projectId: string, input: ServiceInput) {
+  const { service, ...snapshot } = await requestJson<TerminalsSnapshot & { service: ServiceDefinition }>(
+    '/api/services',
+    { projectId, name: input.name, path: input.cwd, command: input.command, env: input.env }
+  );
+  connection.replaceTerminals(snapshot);
+  return service;
+}
+
+export function requestServiceUpdate(id: string, input: ServiceInput) {
+  return requestTerminals(servicePath(id, 'update'), {
+    name: input.name,
+    path: input.cwd,
+    command: input.command,
+    env: input.env,
+  });
+}
+
+export function removeService(id: string) {
+  return requestWithToast(() => requestTerminals(servicePath(id, 'remove'), {}));
+}
+
+async function requestServiceRun(id: string, action: 'start' | 'restart') {
+  const { terminal, ...snapshot } = await requestJson<TerminalsSnapshot & { terminal: TerminalInfo }>(
+    servicePath(id, action),
+    {}
+  );
+  connection.replaceTerminals(snapshot);
+  return terminal;
+}
+
+export function startService(id: string) {
+  return requestWithToast(() => requestServiceRun(id, 'start'));
+}
+
+export function restartService(id: string) {
+  return requestWithToast(() => requestServiceRun(id, 'restart'));
+}
+
+export function stopService(id: string) {
+  return requestWithToast(() => requestTerminals(servicePath(id, 'stop'), {}));
+}
+
+export function startAllServices(projectId: string) {
+  return requestWithToast(() => requestTerminals('/api/services/start-all', { projectId }));
+}
+
+export function openServiceTerminal(projectKey: string, terminalId: string) {
+  navigate(resolveTerminalPath(projectKey, terminalId));
+  selectTerminalView(terminalId)?.focus();
 }

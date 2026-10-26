@@ -1,11 +1,11 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SHINSA_APPEARANCE, TERMINAL_LIMITS, type TerminalsSnapshot } from '@shinsa/core';
+import { SERVICE_LIMITS, type ShinsaState, TERMINAL_LIMITS, type TerminalsSnapshot } from '@shinsa/core';
 import { log } from '../../src/log/index.ts';
 import { Terminals, type TerminalsOptions } from '../../src/terminals/index.ts';
 import { TYPE_LIMITS } from '../../src/terminals/session.ts';
-import { parseStoredTerminal } from '../../src/terminals/store.ts';
+import { parseStoredService, parseStoredTerminal } from '../../src/terminals/store.ts';
 import { createTempDir, until } from '../helpers/index.ts';
 import { createFakeSpawner, createFakeViewer, createInfo } from './fakes.ts';
 
@@ -21,7 +21,7 @@ function createTerminals(options: Partial<TerminalsOptions> = {}) {
     version: '1.0.0',
     env: { SHELL: '/bin/fish', PATH: '/bin' },
     spawn: fake.spawn,
-    appearance: () => ({ ...SHINSA_APPEARANCE, fontFamily: 'Iosevka' }),
+    readForeground: () => Promise.resolve('vim'),
     now: () => 100,
     newId: () => `term-${++id}`,
     notifyMs: 1,
@@ -41,10 +41,7 @@ describe('Terminals', () => {
       TERM_PROGRAM: 'Shinsa',
       TERM_PROGRAM_VERSION: '1.0.0',
     });
-    expect(terminals.snapshot()).toMatchObject({
-      terminals: [terminal],
-      appearance: { fontFamily: 'Iosevka' },
-    });
+    expect(terminals.snapshot()).toEqual({ terminals: [terminal], services: [], home: '/home/ada' });
   });
 
   it('tells its listeners and saves the list on every change', async () => {
@@ -177,36 +174,152 @@ describe('Terminals', () => {
     expect(() => readOnly.create(START)).toThrow('Terminals are off');
   });
 
-  it('reads the appearance again when asked, and keeps the last one when reading fails', () => {
-    let font = 'Iosevka';
-    const { terminals } = createTerminals({
-      appearance: () => {
-        if (font === 'broken') throw new Error('bad config');
-        return { ...SHINSA_APPEARANCE, fontFamily: font };
-      },
-    });
-    font = 'Menlo';
-    expect(terminals.snapshot().appearance.fontFamily).toBe('Menlo');
-    font = 'broken';
-    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    expect(terminals.readAppearance()?.fontFamily).toBe('Menlo');
-    warn.mockRestore();
+  it('says what runs in a shell in front of it, and nothing for an ended one', async () => {
+    const { terminals, fake } = createTerminals();
+    const terminal = terminals.create(START);
+    expect(await terminals.readForeground(terminal.id)).toEqual({ program: 'vim' });
+    fake.spawned[0]?.exit(0);
+    await until('the shell ends', () => terminals.find(terminal.id).info.status === 'exited');
+    expect(await terminals.readForeground(terminal.id)).toEqual({ program: null });
   });
 
-  it('falls back to Shinsa’s look when the very first read fails, and reads Ghostty’s files by default', () => {
+  it('reads your environment from the engine when it is given none', () => {
+    const { terminals, fake } = createTerminals({ env: undefined });
+    terminals.create(START);
+    expect(fake.spawned[0]?.options.env.PATH).toBe(process.env.PATH ?? '');
+  });
+});
+
+const STATE = {
+  repos: { web: { id: 'web', name: 'web', path: '/code/web', projectId: 'p1' } },
+  projects: { p1: { id: 'p1', name: 'Shop', folders: [] } },
+  tasks: {},
+} as unknown as ShinsaState;
+
+const SERVICE = { name: 'api', cwd: '/code/web/apps/api', command: 'bun run dev', env: { PORT: '4000' } };
+
+describe('Terminals services', () => {
+  it('runs a service’s command in your login shell, with its variables, in a terminal of its own', async () => {
+    const { terminals, fake, dataDir } = createTerminals();
+    const service = terminals.addService('p1', SERVICE);
+    expect(service).toEqual({ id: 'term-1', projectId: 'p1', ...SERVICE });
+    expect(JSON.parse(readFileSync(join(dataDir, 'terminals/services.json'), 'utf8')).services).toEqual([
+      service,
+    ]);
+    const terminal = terminals.startService(service.id, 'repository');
+    expect(terminal).toMatchObject({
+      serviceId: service.id,
+      name: 'api',
+      cwd: SERVICE.cwd,
+      status: 'running',
+    });
+    expect(fake.spawned[0]?.command).toEqual(['/bin/fish', '-l', '-c', 'bun run dev']);
+    expect(fake.spawned[0]?.options.env).toMatchObject({ PORT: '4000', PATH: '/bin' });
+    expect(terminals.startService(service.id, 'repository').id).toBe(terminal.id);
+    expect(fake.spawned).toHaveLength(1);
+    expect(await terminals.readForeground(terminal.id)).toEqual({ program: 'api' });
+    await terminals.stopService(service.id);
+    expect(terminals.find(terminal.id).info.status).toBe('stopped');
+    expect(fake.spawned[0]?.hungUp).toBe(true);
+    terminals.startService(service.id, 'folder');
+    expect(terminals.find(terminal.id).info).toMatchObject({ status: 'running', place: 'folder' });
+    expect(fake.spawned).toHaveLength(2);
+  });
+
+  it('restarts a running service, stopping it first, and starts a stopped one', async () => {
+    const { terminals, fake } = createTerminals();
+    const service = terminals.addService('p1', SERVICE);
+    await terminals.restartService(service.id, 'repository');
+    expect(fake.spawned).toHaveLength(1);
+    const again = await terminals.restartService(service.id, 'repository');
+    expect(fake.spawned).toHaveLength(2);
+    expect(fake.spawned[0]?.hungUp).toBe(true);
+    expect(again.status).toBe('running');
+    fake.spawned[1]?.exit(1);
+    await until('it fails', () => terminals.find(again.id).info.exitCode === 1);
+    expect(terminals.find(again.id).info.status).toBe('exited');
+  });
+
+  it('renames a service’s terminal with it, and removing it closes the terminal', async () => {
+    const { terminals, fake } = createTerminals();
+    const service = terminals.addService('p1', SERVICE);
+    terminals.updateService(service.id, { ...SERVICE, name: 'backend' });
+    const terminal = terminals.startService(service.id, 'repository');
+    expect(terminal.name).toBe('backend');
+    terminals.updateService(service.id, { ...SERVICE, name: 'server', command: 'bun start' });
+    expect(terminals.find(terminal.id).info.name).toBe('server');
+    terminals.removeService(service.id);
+    expect(fake.spawned[0]?.hungUp).toBe(true);
+    expect(terminals.snapshot()).toMatchObject({ services: [], terminals: [] });
+    expect(() => terminals.findService(service.id)).toThrow('That service is not there anymore.');
+    terminals.removeService(terminals.addService('p1', SERVICE).id);
+    await terminals.stopService(terminals.addService('p1', SERVICE).id);
+  });
+
+  it('starts again the services that ran when the engine stopped, where their folder still is', async () => {
+    const { terminals, dataDir } = createTerminals();
+    const kept = terminals.addService('p1', SERVICE);
+    const moved = terminals.addService('p1', { ...SERVICE, name: 'web', cwd: '/elsewhere' });
+    const idle = terminals.addService('p1', { ...SERVICE, name: 'docs' });
+    terminals.startService(kept.id, 'repository');
+    terminals.startService(moved.id, 'repository');
+    terminals.startService(idle.id, 'repository');
+    await terminals.stopService(idle.id);
+    terminals.create(START);
+    await terminals.stop();
+    const again = createTerminals({ dataDir });
+    again.terminals.resumeServices(STATE);
+    expect(again.fake.spawned.map((each) => each.options.cwd)).toEqual([SERVICE.cwd]);
+    expect(again.terminals.snapshot().terminals.map((each) => each.status)).toEqual([
+      'running',
+      'stopped',
+      'stopped',
+      'stopped',
+    ]);
+    again.terminals.resumeServices(STATE);
+    expect(again.fake.spawned).toHaveLength(1);
+    const readOnly = createTerminals({ dataDir, readOnly: true });
+    readOnly.terminals.resumeServices(STATE);
+    expect(readOnly.fake.spawned).toHaveLength(0);
+  });
+
+  it('forgets the service of a saved terminal whose service is gone', () => {
+    const dataDir = createTempDir();
+    mkdirSync(join(dataDir, 'terminals'));
+    writeFileSync(
+      join(dataDir, 'terminals/terminals.json'),
+      JSON.stringify({ terminals: [createInfo({ id: 'orphan', serviceId: 'gone' })] })
+    );
+    writeFileSync(join(dataDir, 'terminals/services.json'), '{');
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
-    const broken = createTerminals({
-      appearance: () => {
-        throw new Error('bad config');
-      },
-    }).terminals;
-    expect(broken.snapshot().appearance).toEqual(SHINSA_APPEARANCE);
+    const { terminals } = createTerminals({ dataDir });
     warn.mockRestore();
-    const home = createTempDir();
-    const real = createTerminals({ appearance: undefined, env: { HOME: home } }).terminals;
-    expect(real.snapshot().appearance.source).toBe('shinsa');
-    const process = createTerminals({ appearance: undefined, env: undefined }).terminals;
-    expect(process.snapshot().appearance.source).toMatch(/shinsa|ghostty/);
+    expect(terminals.snapshot().terminals[0]).toMatchObject({ serviceId: null, status: 'stopped' });
+  });
+
+  it('refuses more services than the limit', () => {
+    const { terminals } = createTerminals();
+    for (let index = 0; index < SERVICE_LIMITS.services; index++) terminals.addService('p1', SERVICE);
+    expect(() => terminals.addService('p1', SERVICE)).toThrow('Remove one to add another.');
+    expect(() => createTerminals({ readOnly: true }).terminals.addService('p1', SERVICE)).toThrow(
+      'Terminals are off'
+    );
+  });
+});
+
+describe('parseStoredService', () => {
+  const service = { id: 's1', projectId: 'p1', ...SERVICE };
+
+  it('keeps only well-formed services', () => {
+    expect(parseStoredService(service)).toEqual(service);
+    expect(parseStoredService({ ...service, extra: true })).toEqual(service);
+    expect(parseStoredService(null)).toBeNull();
+    expect(parseStoredService({ ...service, id: '../x' })).toBeNull();
+    expect(parseStoredService({ ...service, name: '' })).toBeNull();
+    expect(parseStoredService({ ...service, env: { 'A-B': 'x' } })).toBeNull();
+    expect(parseStoredService({ ...service, env: { A: 1 } })).toBeNull();
+    expect(parseStoredService({ ...service, env: [] })).toBeNull();
+    expect(parseStoredService({ ...service, env: null })).toBeNull();
   });
 });
 
@@ -217,6 +330,7 @@ describe('parseStoredTerminal', () => {
     expect(parseStoredTerminal({ ...createInfo(), id: '../x' })).toBeNull();
     expect(parseStoredTerminal({ ...createInfo(), status: 'paused' })).toBeNull();
     expect(parseStoredTerminal({ ...createInfo(), name: 3 })).toBeNull();
+    expect(parseStoredTerminal({ ...createInfo(), serviceId: 3 })).toBeNull();
     expect(parseStoredTerminal({ ...createInfo(), startedAt: '1' })).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
-import { SHINSA_APPEARANCE } from '@shinsa/core';
+import { FitAddon } from '@xterm/addon-fit';
+import { readTerminalFontSize } from '@/lib/preferences/terminal.ts';
 import {
   createWebglRenderer,
   resolveTerminalView,
@@ -8,6 +9,7 @@ import {
   type TerminalSocket,
   TerminalView,
   type TerminalViewOptions,
+  WEBGL_LIMIT,
 } from '@/lib/terminal/view.ts';
 
 interface FakeSocket extends TerminalSocket {
@@ -49,7 +51,16 @@ const views: TerminalView[] = [];
 afterEach(() => {
   for (const view of views.splice(0)) view.dispose();
   syncTerminalViews(new Set());
+  localStorage.clear();
 });
+
+function sizedHost(width = 800, height = 400) {
+  const host = document.createElement('div');
+  Object.defineProperty(host, 'clientWidth', { configurable: true, get: () => width });
+  Object.defineProperty(host, 'clientHeight', { configurable: true, get: () => height });
+  document.body.append(host);
+  return host;
+}
 
 function createView(options: Partial<TerminalViewOptions> = {}) {
   const { sockets, openSocket } = createSockets();
@@ -57,7 +68,6 @@ function createView(options: Partial<TerminalViewOptions> = {}) {
   const links: string[] = [];
   const view = new TerminalView({
     id: 'term-1',
-    appearance: SHINSA_APPEARANCE,
     scheme: 'light',
     mac: true,
     read: () => '',
@@ -66,6 +76,7 @@ function createView(options: Partial<TerminalViewOptions> = {}) {
     loadRenderer: () => null,
     observeSize: () => () => undefined,
     openLink: (url) => links.push(url),
+    nextFrame: (run) => run(),
     ...options,
   });
   views.push(view);
@@ -165,7 +176,7 @@ describe('TerminalView', () => {
     expect(socket().closed).toBe(true);
   });
 
-  it('mounts into a host, moves to another and keeps one renderer while shown', () => {
+  it('mounts into a host, moves to another and keeps its renderer when it is hidden', () => {
     const renderers: string[] = [];
     let observed = 0;
     let stopped = 0;
@@ -193,11 +204,100 @@ describe('TerminalView', () => {
     expect(renderers).toEqual(['webgl']);
     view.unmount();
     view.unmount();
-    expect(renderers).toEqual(['webgl', 'disposed']);
+    expect(renderers).toEqual(['webgl']);
+    expect(view.rendering).toBe(true);
     expect([observed, stopped]).toEqual([3, 3]);
+    view.releaseRenderer();
+    expect(renderers).toEqual(['webgl', 'disposed']);
     view.focus();
     first.remove();
     second.remove();
+  });
+
+  it('releases the renderer of the terminal shown longest ago once more than the limit are shown', () => {
+    const hosts: HTMLElement[] = [];
+    const released: string[] = [];
+    const shown = Array.from({ length: WEBGL_LIMIT + 1 }, (_, index) => {
+      const { openSocket } = createSockets();
+      const view = resolveTerminalView({
+        id: `many-${index}`,
+        scheme: 'light',
+        mac: true,
+        read: () => '',
+        openSocket,
+        observeSize: () => () => undefined,
+        loadRenderer: () => ({ dispose: () => released.push(`many-${index}`) }),
+      });
+      const host = document.createElement('div');
+      document.body.append(host);
+      hosts.push(host);
+      view.mount(host);
+      return view;
+    });
+    expect(released).toEqual(['many-0']);
+    expect(shown[0]?.rendering).toBe(false);
+    shown[1]?.mount(hosts[1] as HTMLElement);
+    shown[0]?.mount(hosts[0] as HTMLElement);
+    expect(released).toEqual(['many-0', 'many-2']);
+    for (const host of hosts) host.remove();
+  });
+
+  it('fits to its host only when the host’s size changed, and again after the screen arrives', async () => {
+    const { view, socket } = createView();
+    const host = sizedHost();
+    const fit = spyOn(FitAddon.prototype, 'fit');
+    view.mount(host);
+    view.fit();
+    expect(fit).toHaveBeenCalledTimes(1);
+    socket().emit('open');
+    socket().emit('message', { data: JSON.stringify({ type: 'reset', cols: 90, rows: 20 }) });
+    socket().emit('message', { data: JSON.stringify({ type: 'live' }) });
+    await write(view, '');
+    expect(fit).toHaveBeenCalledTimes(2);
+    const empty = sizedHost(0, 0);
+    view.mount(empty);
+    expect(fit).toHaveBeenCalledTimes(2);
+    fit.mockRestore();
+    host.remove();
+    empty.remove();
+  });
+
+  it('sends the line-editing keys a Mac terminal has, scrolls, clears and changes the font size', async () => {
+    const { view, socket } = createView();
+    const host = sizedHost();
+    view.mount(host);
+    socket().emit('open');
+    const textarea = view.terminal.textarea as HTMLTextAreaElement;
+    const bytes = () =>
+      socket()
+        .sent.filter((frame) => typeof frame !== 'string')
+        .map((frame) => new TextDecoder().decode(frame as Uint8Array));
+    textarea.dispatchEvent(keydown('Backspace', { metaKey: true }));
+    textarea.dispatchEvent(keydown('ArrowLeft', { altKey: true }));
+    textarea.dispatchEvent(keydown('Enter', { shiftKey: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', shiftKey: true, bubbles: true }));
+    expect(bytes()).toEqual(['\u0015', '\u001bb', '\u001b\r']);
+    const copy = keydown('c', { metaKey: true });
+    textarea.dispatchEvent(copy);
+    expect(copy.defaultPrevented).toBe(true);
+    const top = spyOn(view.terminal, 'scrollToTop');
+    const bottom = spyOn(view.terminal, 'scrollToBottom');
+    const pages = spyOn(view.terminal, 'scrollPages');
+    textarea.dispatchEvent(keydown('Home', { metaKey: true }));
+    textarea.dispatchEvent(keydown('PageDown', { metaKey: true }));
+    textarea.dispatchEvent(keydown('PageUp', { metaKey: true }));
+    textarea.dispatchEvent(keydown('End', { metaKey: true }));
+    expect([top.mock.calls.length, bottom.mock.calls.length, pages.mock.calls]).toEqual([1, 1, [[1], [-1]]]);
+    textarea.dispatchEvent(keydown('=', { metaKey: true }));
+    expect(readTerminalFontSize()).toBe(13);
+    expect(view.terminal.options.fontSize).toBe(13);
+    textarea.dispatchEvent(keydown('l', { metaKey: true }));
+    expect(frames(socket()).at(-1)).toEqual({ type: 'clear' });
+    expect(bytes().at(-1)).toBe('\u000c');
+    await write(view, '\u001b[?1049h');
+    view.clear();
+    expect(bytes().at(-1)).toBe('\u000c');
+    host.remove();
   });
 
   it('keeps Shinsa’s ⌘ keys out of the shell and the shell’s Control keys out of Shinsa', () => {
@@ -254,15 +354,15 @@ describe('TerminalView', () => {
     expect(links).toEqual(['https://example.com']);
   });
 
-  it('follows a new look and colour scheme, and does nothing when neither changed', () => {
+  it('follows the colour scheme, and does nothing when it did not change', () => {
     const { view, socket } = createView();
     socket().emit('open');
     const sent = socket().sent.length;
-    view.updateLook(SHINSA_APPEARANCE, 'light');
+    view.updateScheme('light');
     expect(socket().sent).toHaveLength(sent);
-    view.updateLook({ ...SHINSA_APPEARANCE, fontSize: 16 }, 'dark');
-    expect(view.terminal.options.fontSize).toBe(16);
+    view.updateScheme('dark');
     expect(socket().sent).toHaveLength(sent + 1);
+    expect(view.background).toBeNull();
   });
 });
 
@@ -270,7 +370,6 @@ describe('the views kept across pages', () => {
   it('keeps one view per terminal and drops the ones whose terminal closed', () => {
     const { openSocket } = createSockets();
     const options = {
-      appearance: SHINSA_APPEARANCE,
       scheme: 'light' as const,
       mac: true,
       read: () => '',
@@ -308,7 +407,7 @@ describe('the defaults it runs with in the page', () => {
       run();
       return 0;
     }) as unknown as typeof setTimeout);
-    const view = new TerminalView({ id: 'x', appearance: SHINSA_APPEARANCE, scheme: 'dark', mac: false });
+    const view = new TerminalView({ id: 'x', scheme: 'dark', mac: false });
     views.push(view);
     expect(sockets).toEqual(['ws://localhost/ws/terminals/x']);
     closes[0]?.({ code: 1006 } as unknown as Event);

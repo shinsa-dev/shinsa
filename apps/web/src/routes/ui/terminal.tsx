@@ -1,13 +1,37 @@
-import type { TerminalInfo } from '@shinsa/core';
+import {
+  type Project,
+  resolveServiceView,
+  type ServiceDefinition,
+  type ServiceSuggestion,
+  type ServiceView,
+  type TerminalInfo,
+} from '@shinsa/core';
+import { Button } from '@shinsa/ui/components/button';
+import { DropdownMenu } from '@shinsa/ui/components/dropdown-menu';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
+import { ProjectMenuTrigger } from '@/components/focus/menu.tsx';
+import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
+import { ServiceSuggestions, ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
+import { type ServiceHandlers, ServiceRow } from '@/components/services/service-row.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
 import type { PlaceGroup } from '@/lib/terminal/tabs.ts';
-import { readDocumentVariable, resolveShinsaTheme } from '@/lib/terminal/theme.ts';
+import { readDocumentVariable, resolveTerminalTheme } from '@/lib/terminal/theme.ts';
 import { acknowledgeSample } from './samples.ts';
 import { Specimen } from './section.tsx';
+
+const NOW = 1_800_000_000_000;
+
+const PROJECT: Project = {
+  id: 'shop',
+  name: 'Shop',
+  key: 'SHOP',
+  color: 'green',
+  description: '',
+  folders: [],
+} as unknown as Project;
 
 const BASE: TerminalInfo = {
   id: 'server',
@@ -17,18 +41,59 @@ const BASE: TerminalInfo = {
   cwd: '~/Developer/shop',
   place: 'repository',
   taskId: null,
+  serviceId: null,
   status: 'running',
   exitCode: null,
   startedAt: 0,
   endedAt: null,
 };
 
+function service(name: string, command = 'bun run dev'): ServiceDefinition {
+  return { id: name, projectId: 'shop', name, cwd: `~/Developer/shop/apps/${name}`, command, env: {} };
+}
+
+function serviceTerminal(name: string, extra: Partial<TerminalInfo>): TerminalInfo {
+  return { ...BASE, id: `t-${name}`, name, title: null, serviceId: name, ...extra };
+}
+
+const RUNNING = serviceTerminal('api', { startedAt: NOW - 3_720_000 });
+
+const FAILED = serviceTerminal('worker', { status: 'exited', exitCode: 1, endedAt: NOW - 60_000 });
+
+const VIEWS: ServiceView[] = [
+  resolveServiceView(service('api'), RUNNING, NOW),
+  resolveServiceView(service('web'), serviceTerminal('web', { startedAt: NOW - 1000 }), NOW),
+  resolveServiceView(service('worker', 'bun run worker'), FAILED, NOW),
+  resolveServiceView(
+    service('docs'),
+    serviceTerminal('docs', { status: 'exited', exitCode: 0, endedAt: NOW - 5000 }),
+    NOW
+  ),
+  resolveServiceView(service('storybook', 'bun run storybook'), null, NOW),
+];
+
 const TERMINALS: TerminalInfo[] = [
+  RUNNING,
+  FAILED,
   BASE,
   { ...BASE, id: 'shell', name: null, title: 'fish' },
   { ...BASE, id: 'tests', name: null, title: 'bun test', status: 'exited', exitCode: 1, endedAt: 1 },
   { ...BASE, id: 'old', name: 'Logs', status: 'stopped', endedAt: 1 },
 ];
+
+const SUGGESTIONS: ServiceSuggestion[] = [
+  { name: 'admin', cwd: '~/Developer/shop/apps/admin', command: 'bun run dev', source: 'package' },
+  { name: 'worker', cwd: '~/Developer/shop', command: 'bun apps/api/worker.ts', source: 'procfile' },
+];
+
+const HANDLERS: ServiceHandlers = {
+  start: acknowledgeSample,
+  stop: acknowledgeSample,
+  restart: acknowledgeSample,
+  open: acknowledgeSample,
+  edit: acknowledgeSample,
+  remove: acknowledgeSample,
+};
 
 const GROUPS: PlaceGroup[] = [
   {
@@ -53,15 +118,22 @@ const GROUPS: PlaceGroup[] = [
   },
 ];
 
+const TRIGGERS: { label: string; views: ServiceView[] }[] = [
+  { label: 'none running', views: [] },
+  { label: 'running', views: VIEWS.slice(0, 1) },
+  { label: 'starting', views: VIEWS.slice(1, 2) },
+  { label: 'failed', views: VIEWS.slice(0, 3) },
+];
+
 function Palette() {
-  const theme = resolveShinsaTheme(readDocumentVariable);
+  const theme = resolveTerminalTheme(readDocumentVariable);
   const names = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'] as const;
   return (
     <div
       style={{ background: theme.background, color: theme.foreground }}
       className='flex w-full flex-col gap-1 rounded-lg p-3 font-mono text-xs'
     >
-      <span>The --terminal-* tokens, used where no Ghostty config sets a colour</span>
+      <span>The --terminal-* tokens, in Shinsa’s mono font</span>
       <span className='flex flex-wrap gap-3'>
         {names.map((name) => (
           <span key={name} style={{ color: theme[name] }}>
@@ -76,11 +148,108 @@ function Palette() {
 export function TerminalSpecimens() {
   return (
     <>
-      <Specimen label='TerminalTabs · a named tab, the shell’s title, an exited shell, one the engine restart ended'>
+      <Specimen label='Services in the top bar · nothing running, running, starting, failed, and on the Terminal page'>
+        <div className='flex flex-wrap items-center gap-2'>
+          {TRIGGERS.map((trigger) => (
+            <Button
+              key={trigger.label}
+              variant='secondary'
+              size='sm'
+              icon={{ name: 'IconChevronDownSmall', position: 'inline-end' }}
+              className='pl-1.5 text-fg-3'
+              onClick={acknowledgeSample}
+            >
+              <ServicesTriggerLabel views={trigger.views} active={false} variant='bar' />
+            </Button>
+          ))}
+          <Button
+            variant='secondary'
+            size='sm'
+            icon={{ name: 'IconChevronDownSmall', position: 'inline-end' }}
+            className='pl-1.5 text-fg-4'
+            onClick={acknowledgeSample}
+          >
+            <ServicesTriggerLabel views={VIEWS.slice(0, 1)} active variant='bar' />
+          </Button>
+        </div>
+      </Specimen>
+      <Specimen label='Services in the Shelf rail · and on the Terminal page'>
+        <div className='flex w-60 flex-col gap-px'>
+          <button type='button' data-active={false} className={NAV_ITEM} onClick={acknowledgeSample}>
+            <ServicesTriggerLabel views={VIEWS.slice(0, 3)} active={false} variant='rail' />
+          </button>
+          <button type='button' data-active className={NAV_ITEM} onClick={acknowledgeSample}>
+            <ServicesTriggerLabel views={VIEWS.slice(0, 1)} active variant='rail' />
+          </button>
+        </div>
+      </Specimen>
+      <Specimen label='ServiceRow · running, starting, failed, exited and never started'>
+        <div className='flex w-96 flex-col gap-px rounded-lg border border-border p-1'>
+          {VIEWS.map((view) => (
+            <ServiceRow key={view.service.id} view={view} project={PROJECT} now={NOW} handlers={HANDLERS} />
+          ))}
+        </div>
+      </Specimen>
+      <Specimen label='The Services popover · a project’s services, what Shinsa found in it, and its footer'>
+        <div className='flex w-96 flex-col overflow-hidden rounded-lg border border-border bg-popover'>
+          <ServicesPanel
+            groups={[{ project: PROJECT, views: VIEWS.slice(0, 3) }]}
+            now={NOW}
+            handlers={HANDLERS}
+            footer={
+              <>
+                <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={acknowledgeSample}>
+                  Add a service…
+                </Button>
+                <span className='flex-1' />
+                <Button variant='secondary' size='sm' icon='IconConsole' onClick={acknowledgeSample}>
+                  Terminal
+                </Button>
+              </>
+            }
+          >
+            <ServiceSuggestions
+              suggestions={SUGGESTIONS}
+              root='~/Developer/shop'
+              onAdd={acknowledgeSample}
+              onEdit={acknowledgeSample}
+            />
+          </ServicesPanel>
+        </div>
+      </Specimen>
+      <Specimen label='The Services popover · a project with none yet'>
+        <div className='flex w-96 flex-col overflow-hidden rounded-lg border border-border bg-popover'>
+          <ServicesPanel
+            groups={[{ project: PROJECT, views: [] }]}
+            now={NOW}
+            handlers={HANDLERS}
+            footer={
+              <Button variant='secondary' size='sm' icon='IconPlusMedium' onClick={acknowledgeSample}>
+                Add a service…
+              </Button>
+            }
+          >
+            <ServiceSuggestions
+              suggestions={SUGGESTIONS.slice(0, 1)}
+              root='~/Developer/shop'
+              onAdd={acknowledgeSample}
+              onEdit={acknowledgeSample}
+            />
+          </ServicesPanel>
+        </div>
+      </Specimen>
+      <Specimen label='The Terminal page’s project picker, the Focus menu’s trigger'>
+        <DropdownMenu>
+          <ProjectMenuTrigger color='green' value='Shop' compact />
+        </DropdownMenu>
+      </Specimen>
+      <Specimen label='TerminalTabs · two services, a named tab, the shell’s title, an exited shell, one the engine restart ended'>
         <Toolbar className='w-full gap-1.5 ps-2'>
           <TerminalTabs
             terminals={TERMINALS}
-            activeId='server'
+            services={VIEWS}
+            now={NOW}
+            activeId='t-api'
             renamingId={null}
             onSelect={acknowledgeSample}
             onClose={acknowledgeSample}
@@ -94,7 +263,9 @@ export function TerminalSpecimens() {
       <Specimen label='TerminalTabs · renaming a tab'>
         <Toolbar className='w-full gap-1.5 ps-2'>
           <TerminalTabs
-            terminals={TERMINALS.slice(0, 2)}
+            terminals={TERMINALS.slice(2, 4)}
+            services={[]}
+            now={NOW}
             activeId='server'
             renamingId='server'
             onSelect={acknowledgeSample}
@@ -105,25 +276,23 @@ export function TerminalSpecimens() {
           />
         </Toolbar>
       </Specimen>
-      <Specimen label='EndedBar · the shell exited, and the engine restarted under it'>
+      <Specimen label='EndedBar · a service that failed, a shell that exited, and one the engine restart ended'>
         <div className='flex w-full flex-col'>
-          <EndedBar
-            terminal={TERMINALS[2] ?? BASE}
-            onRestart={acknowledgeSample}
-            onClose={acknowledgeSample}
-          />
-          <EndedBar
-            terminal={TERMINALS[3] ?? BASE}
-            onRestart={acknowledgeSample}
-            onClose={acknowledgeSample}
-          />
+          {[FAILED, TERMINALS[4] ?? BASE, TERMINALS[5] ?? BASE].map((terminal) => (
+            <EndedBar
+              key={terminal.id}
+              terminal={terminal}
+              onRestart={acknowledgeSample}
+              onClose={acknowledgeSample}
+            />
+          ))}
         </div>
       </Specimen>
       <Specimen label='The empty project, with the place menu'>
         <EmptyState
           icon='IconConsole'
           title='No terminals in Shop'
-          description='A terminal runs your own shell in one of the project’s folders, and keeps running when you close Shinsa.'
+          description='A terminal runs your own shell in one of the project’s folders, and keeps running when you close Shinsa. Services you start show here too.'
         >
           <NewTerminalButton
             groups={GROUPS}

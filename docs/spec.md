@@ -216,10 +216,16 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
   agents' transcripts; you can write to the agent).
 - **Terminal.** A real terminal per project, so the few things agents leave to you (your own dev server, an
   interactive sign-in, a command an agent asks you to run) need no other app. Tabs per project, opened in one of the
-  project's repositories, folders or task worktrees, in your login shell with your environment, and looking like your
-  Ghostty (its font and theme) or like Shinsa. The engine runs the shells, so a dev server keeps running when you
-  close the window or quit the app, and a reload shows each terminal as it was. Agents never type into it; an agent
-  that needs you to run a command puts it in its question, and Run in terminal runs it when you press it.
+  project's repositories, folders or task worktrees, in your login shell with your environment, in Shinsa's own
+  colours and mono font, with the keys a Mac terminal has. The engine runs the shells, so a dev server keeps running
+  when you close the window or quit the app, and a reload shows each terminal as it was. Agents never type into it; an
+  agent that needs you to run a command puts it in its question, and Run in terminal runs it when you press it.
+- **Services.** What you usually start in a terminal by hand (a project's `apps/api` and `apps/web` dev servers),
+  started with one press from Services, beside Home, and then only watched: the entry says "2 running" or "1 failed",
+  and its popover lists each service's state, how long it has run, Start, Stop, Restart and its terminal. Shinsa
+  offers the ones it finds (each workspace's `dev` script, a `Procfile`, Docker Compose) and you add, edit or remove
+  any. Each runs in a terminal tab of its own, owned by the engine like every terminal, and starts again by itself
+  when the engine restarts. Also `shinsa services list|start|stop|restart` and ⌘K.
 - **All tasks: the roadmap.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
   that handle several parents), then done and cancelled, collapsed. Priority then age
@@ -782,14 +788,16 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ### A terminal per project (2026-10-26)
 
-- **Ghostty, inside Shinsa.** Each project has terminal tabs (add, close, rename, drag to reorder) on its own page, in
-  Desk's top bar, Shelf's rail and ⌘K; a task opens one in its worktree. The engine owns every shell (Bun's own PTY,
+- **A terminal inside Shinsa.** Each project has terminal tabs (add, close, rename, drag to reorder) on its own page,
+  reached from Services in Desk's top bar and Shelf's rail, and from ⌘K; a task opens one in its worktree. The engine owns every shell (Bun's own PTY,
   so the compiled engine needs nothing native) and keeps a headless copy of each screen, so a terminal survives the
   window and the app, reattaches exactly (the alternate screen of an editor included) and, when the engine itself
   restarts, shows its last output with Start again. The page renders with xterm.js and WebGL: true colour, Unicode 11
-  widths, links, selection, copy and paste, find in the scrollback, 5,000 lines. Your Ghostty config sets the font,
-  cursor and colours; without one the terminal takes Shinsa's own tokens, light and dark (`docs/engine.md` →
-  Terminals, `docs/design.md`, 37).
+  widths, links, selection, copy and paste, find in the scrollback, 5,000 lines. It takes Shinsa's own colour tokens,
+  light and dark, and the Code tab's mono font (`docs/engine.md` → Terminals, `docs/design.md`, 37); reading your
+  Ghostty config was removed on 2026-10-26, so the terminal looks like the rest of Shinsa.
+- **Services and Mac keys (2026-10-26).** Services, closing without a question unless a program runs, ⌘T and ⌘W,
+  and the line-editing keys of Terminal.app and Ghostty (`docs/design.md`, 37).
 - **Why xterm.js and not ghostty-web.** ghostty-web runs Ghostty's own parser in WebAssembly and handles complex
   scripts better, but it is at 0.4, has no WebGL renderer, no search, serialize or headless counterpart, and its
   xterm.js compatibility is partial. xterm.js 6 is what VS Code ships: the WebGL renderer, the add-ons this needs, and

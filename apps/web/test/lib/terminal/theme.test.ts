@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { SHINSA_APPEARANCE, type TerminalTheme } from '@shinsa/core';
 import {
   readDocumentVariable,
   resolveReplyColors,
-  resolveShinsaTheme,
   resolveTerminalFont,
   resolveTerminalOptions,
   resolveTerminalTheme,
@@ -20,19 +18,9 @@ const TOKENS: Record<string, string> = {
 
 const read = (name: string) => TOKENS[name] ?? '';
 
-const GHOSTTY: TerminalTheme = {
-  foreground: '#cdd6f4',
-  background: '#1e1e2e',
-  cursor: null,
-  cursorText: '#1e1e2e',
-  selectionBackground: '#585b70',
-  selectionForeground: '#cdd6f4',
-  palette: ['#45475a', null, '#a6e3a1'],
-};
-
-describe('resolveShinsaTheme', () => {
+describe('resolveTerminalTheme', () => {
   it('reads the --terminal-* tokens and leaves out what is not a colour', () => {
-    expect(resolveShinsaTheme(read)).toEqual({
+    expect(resolveTerminalTheme(read)).toEqual({
       background: '#ffffff',
       foreground: '#000000',
       cursor: '#2f6fec',
@@ -42,50 +30,18 @@ describe('resolveShinsaTheme', () => {
   });
 });
 
-describe('resolveTerminalTheme', () => {
-  it('lays your Ghostty colours over Shinsa’s, for the colour scheme you are in', () => {
-    const appearance = { ...SHINSA_APPEARANCE, source: 'ghostty' as const, dark: GHOSTTY };
-    expect(resolveTerminalTheme(appearance, 'dark', read)).toMatchObject({
-      background: '#1e1e2e',
-      foreground: '#cdd6f4',
-      cursor: '#2f6fec',
-      cursorAccent: '#1e1e2e',
-      selectionForeground: '#cdd6f4',
-      black: '#45475a',
-      red: '#ff0000',
-      green: '#a6e3a1',
-    });
-    expect(resolveTerminalTheme(appearance, 'light', read).background).toBe('#ffffff');
-  });
-});
-
-describe('resolveTerminalFont', () => {
-  it('puts your font first and Shinsa’s mono after it', () => {
-    expect(resolveTerminalFont(SHINSA_APPEARANCE)).toBe(
-      '"ABC Areal Mono", ui-monospace, "SF Mono", Menlo, monospace'
-    );
-    expect(resolveTerminalFont({ ...SHINSA_APPEARANCE, fontFamily: 'Iosevka "Term"' })).toStartWith(
-      '"Iosevka Term", "ABC Areal Mono"'
-    );
-  });
-});
-
 describe('resolveTerminalOptions', () => {
-  it('uses your font size, cursor and option key, or Shinsa’s defaults', () => {
-    expect(resolveTerminalOptions(SHINSA_APPEARANCE, 'light', read)).toMatchObject({
-      fontSize: 13,
+  it('uses Shinsa’s mono font, the size you chose, a block cursor and ⌥ as Meta', () => {
+    expect(resolveTerminalOptions(read, 14)).toMatchObject({
+      fontFamily: '"ABC Areal Mono", ui-monospace, "SF Mono", Menlo, monospace',
+      fontSize: 14,
       cursorStyle: 'block',
       cursorBlink: false,
-      macOptionIsMeta: false,
+      macOptionIsMeta: true,
       scrollback: 5000,
     });
-    expect(
-      resolveTerminalOptions(
-        { ...SHINSA_APPEARANCE, fontSize: 15, cursorStyle: 'bar', cursorBlink: true, optionAsMeta: true },
-        'light',
-        read
-      )
-    ).toMatchObject({ fontSize: 15, cursorStyle: 'bar', cursorBlink: true, macOptionIsMeta: true });
+    const withFont = (name: string) => (name === '--font-mono' ? ' "Mono Test", monospace ' : read(name));
+    expect(resolveTerminalFont(withFont)).toBe('"Mono Test", monospace');
   });
 });
 

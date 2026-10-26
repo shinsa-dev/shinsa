@@ -1,5 +1,8 @@
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 
+export const NAV_ITEM =
+  'corner-superellipse/1.125 flex h-7 w-full cursor-pointer items-center gap-2 rounded-control ps-1.5 pe-2.5 text-left text-fg-3 text-xs outline-none data-[active=true]:text-fg-4 data-hovered:text-fg-4';
+
 export function NavItem({
   label,
   icon,
@@ -20,7 +23,7 @@ export function NavItem({
       data-active={active}
       data-highlight-item=''
       onClick={onClick}
-      className='corner-superellipse/1.125 flex h-7 w-full cursor-pointer items-center gap-2 rounded-control ps-1.5 pe-2.5 text-left text-fg-3 text-xs outline-none data-[active=true]:text-fg-4 data-hovered:text-fg-4'
+      className={NAV_ITEM}
     >
       <span className='grid size-5 shrink-0 place-items-center'>
         <Icon size='md' name={active ? activeIcon : icon} />

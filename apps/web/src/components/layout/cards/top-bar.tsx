@@ -5,9 +5,9 @@ import { FocusMenu } from '@/components/focus/menu.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
 import { CARDS_FRAME } from '@/components/layout/page/column.ts';
 import { QueueMenu } from '@/components/queue/menu.tsx';
+import { ServicesMenu } from '@/components/services/menu.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
-import { TerminalButton } from '@/components/terminal/terminal-link.tsx';
 import { useRoute, useRouteTaskId } from '@/router.ts';
 
 export function CardsTopBar({ state }: { state: ShinsaState }) {
@@ -17,13 +17,13 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
     <header data-window-drag className='shrink-0 select-none desktop:ps-16'>
       <div className={cn(CARDS_FRAME, 'flex h-11 items-center gap-1')}>
         <HomeLink />
+        {route.name !== 'onboarding' && <ServicesMenu state={state} />}
         {route.name === 'task' && <QueueMenu state={state} activeTaskId={activeTaskId} />}
         <ConnectionStatus />
         <span className='flex-1' />
         <UpdateButton />
         {route.name !== 'onboarding' && (
           <>
-            <TerminalButton />
             <UsageMenu state={state} />
             <div className='max-sm:hidden'>
               <FocusMenu state={state} compact />

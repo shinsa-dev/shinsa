@@ -112,6 +112,16 @@ describe('TerminalSession', () => {
     session.dispose();
   });
 
+  it('clears the scrollback it keeps when you clear the terminal, keeping the line you are on', async () => {
+    const { session, process } = createSession();
+    process.emit('old line\r\nprompt $ ');
+    session.clear();
+    const screen = await session.serializeScreen();
+    expect(screen).not.toContain('old line');
+    expect(screen).toContain('prompt $');
+    session.dispose();
+  });
+
   it('answers the terminal’s questions itself, with the page’s colours', async () => {
     const { session, process } = createSession();
     process.emit('\u001b]11;?\u001b\\');

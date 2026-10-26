@@ -6,7 +6,12 @@ import { connection } from '@/lib/connection/socket.ts';
 import { syncTerminalViews } from '@/lib/terminal/view.ts';
 import { TerminalPage } from '@/routes/terminal.tsx';
 import { createShinsaState } from '../support/state.ts';
-import { createTerminal, createTerminalState, createTerminalsSnapshot } from '../support/terminals.ts';
+import {
+  createService,
+  createTerminal,
+  createTerminalState,
+  createTerminalsSnapshot,
+} from '../support/terminals.ts';
 
 class QuietSocket {
   binaryType = 'blob';
@@ -91,17 +96,78 @@ describe('the terminal page', () => {
     await waitFor(() => expect(location.search).toBe('?project=SH&terminal=server'));
   });
 
-  it('asks before closing a running terminal, and closes an ended one at once', async () => {
+  it('asks before closing a terminal with a program in front, and closes an idle or ended one at once', async () => {
     visit('/terminal?project=SH&terminal=server');
-    show(createTerminalsSnapshot([SERVER, ENDED]));
-    answer = createTerminalsSnapshot([SERVER, ENDED]);
+    show(createTerminalsSnapshot([SERVER, SHELL, ENDED]));
+    answer = { ...createTerminalsSnapshot([SERVER, SHELL, ENDED]), program: 'vim' } as typeof answer;
     fireEvent.click(screen.getAllByRole('button', { name: 'Close terminal' })[0] as HTMLElement);
     expect(await screen.findByText('Close this terminal?')).toBeTruthy();
+    expect(screen.getByText(/vim is still running in “Dev server”/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Close terminal' }));
     await waitFor(() => expect(readPosts().map(([url]) => url)).toContain('/api/terminals/server/close'));
-    await waitFor(() => expect(location.search).toBe('?project=SH&terminal=ended'));
+    await waitFor(() => expect(location.search).toBe('?project=SH&terminal=shell'));
+    answer = { ...createTerminalsSnapshot([SERVER, SHELL, ENDED]), program: null } as typeof answer;
     fireEvent.click(screen.getAllByRole('button', { name: 'Close terminal' })[1] as HTMLElement);
+    await waitFor(() => expect(readPosts().map(([url]) => url)).toContain('/api/terminals/shell/close'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close terminal' })[2] as HTMLElement);
     await waitFor(() => expect(readPosts().map(([url]) => url)).toContain('/api/terminals/ended/close'));
+    expect(readPosts().filter(([url]) => url.endsWith('/foreground'))).toHaveLength(2);
+  });
+
+  it('marks a service’s tab, runs it from the toolbar and asks before stopping it to close its tab', async () => {
+    const service = createService({ id: 'api' });
+    const terminal = createTerminal({ id: 'svc', name: 'api', serviceId: 'api', startedAt: 0 });
+    visit('/terminal?project=SH&terminal=svc');
+    show(createTerminalsSnapshot([terminal], [service]));
+    answer = { ...createTerminalsSnapshot([terminal], [service]), terminal };
+    fireEvent.click(screen.getByRole('button', { name: 'Restart api' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop api' }));
+    await waitFor(() =>
+      expect(readPosts().map(([url]) => url)).toEqual(['/api/services/api/restart', '/api/services/api/stop'])
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Close terminal' }));
+    expect(await screen.findByText('Stop api?')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and close' }));
+    await waitFor(() => expect(readPosts().map(([url]) => url)).toContain('/api/terminals/svc/close'));
+  });
+
+  it('starts a stopped service again from the bar under its output', async () => {
+    const service = createService({ id: 'api' });
+    const terminal = createTerminal({
+      id: 'svc',
+      name: 'api',
+      serviceId: 'api',
+      status: 'exited',
+      exitCode: 1,
+    });
+    visit('/terminal?project=SH&terminal=svc');
+    show(createTerminalsSnapshot([terminal], [service]));
+    answer = { ...createTerminalsSnapshot([terminal], [service]), terminal };
+    expect(screen.getByText('api exited with code 1.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Start again' }));
+    await waitFor(() => expect(readPosts()[0]?.[0]).toBe('/api/services/api/start'));
+    fireEvent.click(screen.getByRole('button', { name: 'Start api' }));
+    await waitFor(() => expect(readPosts()[1]?.[0]).toBe('/api/services/api/start'));
+  });
+
+  it('opens a new tab where the one in front is with ⌘T, and closes it with ⌘W', async () => {
+    const platform = navigator.platform;
+    Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'MacIntel' });
+    visit('/terminal?project=SH&terminal=ended');
+    show(createTerminalsSnapshot([ENDED]));
+    answer = { ...createTerminalsSnapshot([ENDED, SERVER]), terminal: SERVER };
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 't', metaKey: true }));
+    await waitFor(() =>
+      expect(readPosts()[0]).toEqual([
+        '/api/terminals',
+        { projectId: 'shop', path: '/Users/you/Developer/web' },
+      ])
+    );
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', metaKey: true }));
+    await waitFor(() =>
+      expect(readPosts().map(([url]) => url)).toContain('/api/terminals/server/foreground')
+    );
+    Object.defineProperty(navigator, 'platform', { configurable: true, get: () => platform });
   });
 
   it('starts an ended shell again from the bar under it', async () => {

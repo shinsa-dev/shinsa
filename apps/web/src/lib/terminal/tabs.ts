@@ -107,10 +107,18 @@ export function resolveDefaultPlace(
   return home ? { path: home, label: 'Home folder', kind: 'folder', taskId: null } : null;
 }
 
+function describeServiceEnd(terminal: TerminalInfo, name: string) {
+  if (terminal.status === 'stopped') return `${name} is stopped. Its last output is above.`;
+  if (terminal.exitCode === 0) return `${name} exited.`;
+  if (terminal.exitCode === null) return `${name} ended without an exit code.`;
+  return `${name} exited with code ${terminal.exitCode}.`;
+}
+
 export function describeTerminalEnd(terminal: TerminalInfo) {
+  if (terminal.status === 'running') return null;
+  if (terminal.serviceId) return describeServiceEnd(terminal, resolveTerminalLabel(terminal));
   if (terminal.status === 'stopped')
     return 'Shinsa’s engine restarted, so this shell ended. Its last output is above.';
-  if (terminal.status !== 'exited') return null;
   if (terminal.exitCode === 0 || terminal.exitCode === null) return 'The shell exited.';
   return `The shell exited with code ${terminal.exitCode}.`;
 }
@@ -132,6 +140,16 @@ export function describeFindResults(results: { index: number; count: number } | 
   return results.index >= 0 ? `${results.index + 1} of ${results.count}` : `${results.count} found`;
 }
 
-export function describeTerminalClose(terminal: TerminalInfo) {
-  return `The shell in “${resolveTerminalLabel(terminal)}” stops, with anything still running in it, and its scrollback is gone.`;
+export function describeTerminalClose(terminal: TerminalInfo, program: string) {
+  return `${program} is still running in “${resolveTerminalLabel(terminal)}”. Closing the terminal stops it, and its scrollback is gone.`;
+}
+
+export function resolveNewTerminalPlace(
+  active: TerminalInfo | null,
+  groups: PlaceGroup[],
+  fallback: TerminalPlace | null
+): TerminalPlace | null {
+  const places = groups.flatMap((group) => group.places);
+  const same = active ? places.find((place) => place.path === active.cwd) : undefined;
+  return same ?? fallback;
 }

@@ -214,10 +214,11 @@ const SHORTCUT_FILES = [
   'apps/web/src/hooks/use-command-key.ts',
   'apps/web/src/hooks/use-code-keys.ts',
   'apps/web/src/hooks/use-review-keys.ts',
+  'apps/web/src/hooks/use-terminal-keys.ts',
 ];
 
 const SHORTCUT_MESSAGE =
-  'A global keyboard shortcut. ⌘K is the only shortcut, the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G and the Review tab J and K while they are open; they live in hooks/use-command-key.ts, hooks/use-code-keys.ts and hooks/use-review-keys.ts, and a terminal keeps its own keys through xterm.js (lib/terminal/keys.ts) (docs/design.md → Where Shinsa differs, 14 and 37)';
+  'A global keyboard shortcut. ⌘K is the only shortcut, the Code tab adds ⌘P, ⇧⌘F, ⌘F and ⌘G, the Review tab J and K and the Terminal page ⌘T and ⌘W while they are open; they live in hooks/use-command-key.ts, hooks/use-code-keys.ts, hooks/use-review-keys.ts and hooks/use-terminal-keys.ts, and a terminal keeps its own keys through xterm.js (lib/terminal/keys.ts) (docs/design.md → Where Shinsa differs, 14, 32, 34 and 37)';
 
 const TIME_CHECK_ROOTS = ['apps/web/src'];
 

@@ -9,10 +9,20 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import { countMatches, describeMatchCount, readFindQuery, updateFindQuery } from '@/lib/code/editor/find.ts';
 import { closeSearchPanel, findNext, findPrevious } from '@/lib/code/editor/setup.ts';
 
-function FindButton({ label, icon, onClick }: { label: string; icon: IconName; onClick: () => void }) {
+function FindButton({
+  label,
+  icon,
+  size = 'icon-xs',
+  onClick,
+}: {
+  label: string;
+  icon: IconName;
+  size?: 'icon-xs' | 'icon-sm';
+  onClick: () => void;
+}) {
   return (
     <Hint label={label}>
-      <Button variant='secondary' size='icon-xs' icon={icon} aria-label={label} onClick={onClick} />
+      <Button variant='secondary' size={size} icon={icon} aria-label={label} onClick={onClick} />
     </Hint>
   );
 }
@@ -113,7 +123,7 @@ export function FindBar({
           {count}
         </span>
         <span className='flex-1' />
-        <FindButton label='Close' icon='IconCrossSmall' onClick={() => close(view)} />
+        <FindButton label='Close' icon='IconCrossSmall' size='icon-sm' onClick={() => close(view)} />
       </div>
       {replacing && <ReplaceRow view={view} />}
     </div>

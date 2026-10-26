@@ -1,4 +1,4 @@
-import { parseTerminalServerFrame, type TerminalAppearance, type TerminalClientFrame } from '@shinsa/core';
+import { parseTerminalServerFrame, type TerminalClientFrame } from '@shinsa/core';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
@@ -6,8 +6,13 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { type IDisposable, Terminal } from '@xterm/xterm';
 import type { SearchOptions } from '@/lib/code/search.ts';
+import {
+  changeTerminalFontSize,
+  readTerminalFontSize,
+  subscribeTerminalFontSize,
+} from '@/lib/preferences/terminal.ts';
 import { createSignal } from '@/lib/signal.ts';
-import { resolveTerminalKey } from '@/lib/terminal/keys.ts';
+import { resolveTerminalKey, type TerminalKey } from '@/lib/terminal/keys.ts';
 import { silenceEngineAnswers } from '@/lib/terminal/replies.ts';
 import {
   type ColorScheme,
@@ -31,7 +36,6 @@ type SizeObserver = (element: HTMLElement, onResize: () => void) => () => void;
 
 export interface TerminalViewOptions {
   id: string;
-  appearance: TerminalAppearance;
   scheme: ColorScheme;
   mac: boolean;
   read?: VariableReader;
@@ -40,6 +44,7 @@ export interface TerminalViewOptions {
   loadRenderer?: TerminalRenderer;
   observeSize?: SizeObserver;
   openLink?: (url: string) => void;
+  nextFrame?: (run: () => void) => void;
 }
 
 export interface FindResults {
@@ -55,7 +60,11 @@ const GONE = 4404;
 
 const RETRY_STEPS_MS = [250, 1000, 2000, 5000];
 
+export const WEBGL_LIMIT = 6;
+
 const ENCODER = new TextEncoder();
+
+const FORM_FEED = '\u000c';
 
 const FIND_DECORATIONS = {
   matchOverviewRuler: '#888888',
@@ -114,13 +123,13 @@ export class TerminalView {
   #findOpen = false;
   #results: FindResults | null = null;
   #scheme: ColorScheme;
-  #appearance: TerminalAppearance;
+  #size: { width: number; height: number } | null = null;
+  readonly #stopFontSize: () => void;
 
   constructor(options: TerminalViewOptions) {
     this.id = options.id;
     this.#options = options;
     this.#scheme = options.scheme;
-    this.#appearance = options.appearance;
     const openLink = options.openLink ?? openInBrowser;
     const activate = (_event: MouseEvent, uri: string) => openLink(uri);
     this.terminal = new Terminal({
@@ -141,6 +150,7 @@ export class TerminalView {
     this.terminal.onData((data) => this.#send(ENCODER.encode(data)));
     this.terminal.onBinary((data) => this.#send(encodeBinary(data)));
     this.terminal.onResize(({ cols, rows }) => this.#sendFrame({ type: 'resize', cols, rows }));
+    this.#stopFontSize = subscribeTerminalFontSize(() => this.#updateFontSize());
     this.#connect();
   }
 
@@ -159,7 +169,19 @@ export class TerminalView {
   }
 
   #resolveOptions() {
-    return resolveTerminalOptions(this.#appearance, this.#scheme, this.#options.read ?? readDocumentVariable);
+    return resolveTerminalOptions(this.#options.read ?? readDocumentVariable, readTerminalFontSize());
+  }
+
+  #updateFontSize() {
+    this.terminal.options.fontSize = readTerminalFontSize();
+    this.#refit();
+  }
+
+  #refit() {
+    (this.#options.nextFrame ?? requestAnimationFrame)(() => {
+      this.#size = null;
+      this.fit();
+    });
   }
 
   #setConnection(connection: TerminalConnection) {
@@ -204,7 +226,11 @@ export class TerminalView {
       this.terminal.reset();
       this.terminal.resize(frame.cols, frame.rows);
     }
-    if (frame?.type === 'live') this.terminal.write('', () => this.fit());
+    if (frame?.type === 'live')
+      this.terminal.write('', () => {
+        this.#size = null;
+        this.fit();
+      });
   }
 
   #send(data: Uint8Array<ArrayBuffer>) {
@@ -220,21 +246,42 @@ export class TerminalView {
   }
 
   #handleKey(event: KeyboardEvent) {
-    const action = resolveTerminalKey(event, this.#options.mac, this.terminal.hasSelection());
-    if (action === 'shell') {
-      event.stopPropagation();
-      return true;
-    }
-    if (event.type !== 'keydown') return false;
-    if (action === 'find') {
+    const key = resolveTerminalKey(event, this.#options.mac, this.terminal.hasSelection());
+    if (key.type === 'shinsa') return false;
+    event.stopPropagation();
+    if (key.type === 'shell') return true;
+    if (key.type === 'copy' || key.type === 'paste') return false;
+    if (event.type === 'keydown') {
       event.preventDefault();
-      this.openFind();
-    }
-    if (action === 'select-all') {
-      event.preventDefault();
-      this.terminal.selectAll();
+      this.#act(key);
     }
     return false;
+  }
+
+  #act(key: TerminalKey) {
+    if (key.type === 'send') this.#send(ENCODER.encode(key.data));
+    if (key.type === 'find') this.openFind();
+    if (key.type === 'select-all') this.terminal.selectAll();
+    if (key.type === 'clear') this.clear();
+    if (key.type === 'font') changeTerminalFontSize(key.change);
+    if (key.type === 'scroll') this.#scroll(key.to);
+  }
+
+  #scroll(to: 'top' | 'bottom' | 'page-up' | 'page-down') {
+    if (to === 'top') this.terminal.scrollToTop();
+    if (to === 'bottom') this.terminal.scrollToBottom();
+    if (to === 'page-up') this.terminal.scrollPages(-1);
+    if (to === 'page-down') this.terminal.scrollPages(1);
+  }
+
+  clear() {
+    this.terminal.clear();
+    this.#sendFrame({ type: 'clear' });
+    if (this.terminal.buffer.active.type === 'normal') this.#send(ENCODER.encode(FORM_FEED));
+  }
+
+  get rendering() {
+    return this.#renderer !== null;
   }
 
   mount(host: HTMLElement) {
@@ -242,6 +289,9 @@ export class TerminalView {
     if (!element) this.terminal.open(host);
     else if (element.parentElement !== host) host.append(element);
     this.#renderer ??= (this.#options.loadRenderer ?? createWebglRenderer)(this.terminal);
+    shown.delete(this.id);
+    shown.set(this.id, this);
+    releaseRenderers();
     this.#stopObserving?.();
     this.#stopObserving = (this.#options.observeSize ?? observeElementSize)(host, () => this.fit());
     this.fit();
@@ -250,12 +300,23 @@ export class TerminalView {
   unmount() {
     this.#stopObserving?.();
     this.#stopObserving = null;
+  }
+
+  releaseRenderer() {
     this.#renderer?.dispose();
     this.#renderer = null;
+    shown.delete(this.id);
   }
 
   fit() {
-    if (this.terminal.element?.isConnected) this.#fit.fit();
+    const element = this.terminal.element;
+    if (!element?.isConnected) return;
+    const parent = element.parentElement;
+    const size = parent ? { width: parent.clientWidth, height: parent.clientHeight } : null;
+    if (!size || size.width === 0 || size.height === 0) return;
+    if (this.#size?.width === size.width && this.#size.height === size.height) return;
+    this.#size = size;
+    this.#fit.fit();
   }
 
   focus() {
@@ -290,33 +351,35 @@ export class TerminalView {
     return this.terminal.options.theme?.background ?? null;
   }
 
-  updateLook(appearance: TerminalAppearance, scheme: ColorScheme) {
-    if (scheme === this.#scheme && JSON.stringify(appearance) === JSON.stringify(this.#appearance)) return;
-    this.#appearance = appearance;
+  updateScheme(scheme: ColorScheme) {
+    if (scheme === this.#scheme) return;
     this.#scheme = scheme;
-    const { theme, fontFamily, fontSize, cursorStyle, cursorBlink, macOptionIsMeta } = this.#resolveOptions();
-    Object.assign(this.terminal.options, {
-      theme,
-      fontFamily,
-      fontSize,
-      cursorStyle,
-      cursorBlink,
-      macOptionIsMeta,
-    });
+    const { theme, fontFamily } = this.#resolveOptions();
+    Object.assign(this.terminal.options, { theme, fontFamily });
     this.#sendColors();
-    this.fit();
     this.#signal.publish();
   }
 
   dispose() {
     this.#disposed = true;
     this.unmount();
+    this.releaseRenderer();
+    this.#stopFontSize();
     this.#socket?.close();
     this.terminal.dispose();
   }
 }
 
 const views = new Map<string, TerminalView>();
+
+const shown = new Map<string, TerminalView>();
+
+function releaseRenderers() {
+  for (const view of shown.values()) {
+    if (shown.size <= WEBGL_LIMIT) return;
+    view.releaseRenderer();
+  }
+}
 
 export function resolveTerminalView(options: TerminalViewOptions) {
   const existing = views.get(options.id);

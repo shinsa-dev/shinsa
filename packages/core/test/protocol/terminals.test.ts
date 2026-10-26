@@ -98,6 +98,10 @@ describe('parseTerminalClientFrame', () => {
     expect(parseTerminalClientFrame('{"type":"colors","colors":null}')).toBeNull();
   });
 
+  it('reads a request to clear the scrollback', () => {
+    expect(parseTerminalClientFrame('{"type":"clear"}')).toEqual({ type: 'clear' });
+  });
+
   it('ignores anything else', () => {
     expect(parseTerminalClientFrame('not json')).toBeNull();
     expect(parseTerminalClientFrame('null')).toBeNull();

@@ -74,6 +74,10 @@ export class TerminalMirror {
     this.#terminal.resize(cols, rows);
   }
 
+  clear() {
+    this.#terminal.write('', () => this.#terminal.clear());
+  }
+
   replaceColors(colors: TerminalColors) {
     this.#colors = colors;
   }

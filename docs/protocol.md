@@ -978,7 +978,7 @@ or `browser` (a tab, Floaty).
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
-| `terminals { terminals }` | On connect and after every change to your terminals: `TerminalsSnapshot` (the terminals in order, the appearance read from Ghostty, your home folder) |
+| `terminals { terminals }` | On connect and after every change to your terminals or services: `TerminalsSnapshot` (the terminals in order, each with the service it runs if any, your services, your home folder) |
 
 Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/protocol/terminals.ts`, `docs/engine.md`
 → Terminals): binary frames carry the shell's output and what you type, text frames carry `reset { cols, rows }` and
@@ -1042,6 +1042,7 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
 | Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/server/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
 | Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/server/src/terminals/`, `apps/web/src/lib/terminal/` |
+| Services, their states and suggestions | `packages/core/src/protocol/services.ts`; `apps/server/src/terminals/` (`detect.ts`, `routes.ts`), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/server/src/store/snapshot.ts`, `apps/server/src/store/event-log.ts` |
 | Event log, receipts, outbox | `apps/server/src/store/event-log.ts`, `apps/server/src/runtime/engine.ts` |

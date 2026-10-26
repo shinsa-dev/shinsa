@@ -10,7 +10,7 @@ export const KEPT_TASK_PAGES = 3;
 
 const HUB_PAGES = ['home', 'tasks', 'settings', 'terminal'] as const;
 
-const WARM_PAGES: ReadonlySet<string> = new Set(['home', 'tasks', 'settings']);
+const WARM_PAGES: ReadonlySet<string> = new Set(HUB_PAGES);
 
 type HubPage = (typeof HUB_PAGES)[number];
 

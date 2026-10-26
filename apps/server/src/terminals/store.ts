@@ -1,11 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { TerminalInfo } from '@shinsa/core';
+import { isServiceEnvKey, SERVICE_LIMITS, type ServiceDefinition, type TerminalInfo } from '@shinsa/core';
 import { writeJsonFile } from '../config/file.ts';
 import { describeError, log } from '../log/index.ts';
 
 interface StoredTerminals {
   terminals: TerminalInfo[];
+}
+
+interface StoredServices {
+  services: ServiceDefinition[];
 }
 
 const ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
@@ -33,6 +37,7 @@ export function parseStoredTerminal(value: unknown): TerminalInfo | null {
     return null;
   if (!(STATUSES.has(fields.status as string) && PLACES.has(fields.place as string))) return null;
   if (!(isTextOrNull(fields.name) && isTextOrNull(fields.title) && isTextOrNull(fields.taskId))) return null;
+  if (!isTextOrNull(fields.serviceId)) return null;
   if (
     !(
       typeof fields.startedAt === 'number' &&
@@ -42,6 +47,40 @@ export function parseStoredTerminal(value: unknown): TerminalInfo | null {
   )
     return null;
   return fields as unknown as TerminalInfo;
+}
+
+function isEnv(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return (
+    entries.length <= SERVICE_LIMITS.envKeys &&
+    entries.every(
+      ([key, each]) => isServiceEnvKey(key) && isText(each) && each.length <= SERVICE_LIMITS.envValue
+    )
+  );
+}
+
+export function parseStoredService(value: unknown): ServiceDefinition | null {
+  if (!value || typeof value !== 'object') return null;
+  const fields = value as Record<string, unknown>;
+  if (!(isText(fields.id) && ID_PATTERN.test(fields.id) && isText(fields.projectId))) return null;
+  if (!(isText(fields.name) && fields.name.length > 0 && isText(fields.cwd) && isText(fields.command)))
+    return null;
+  if (!isEnv(fields.env)) return null;
+  const { id, projectId, name, cwd, command, env } = fields;
+  return { id, projectId, name, cwd, command, env };
+}
+
+function readList<T>(path: string, field: string, parse: (value: unknown) => T | null, what: string): T[] {
+  if (!existsSync(path)) return [];
+  try {
+    const stored = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown> | null;
+    const items = Array.isArray(stored?.[field]) ? (stored[field] as unknown[]) : [];
+    return items.map(parse).filter((item) => item !== null);
+  } catch (error) {
+    log.warn(`[Terminals] Could not read the saved ${what}`, { error: describeError(error) });
+    return [];
+  }
 }
 
 export class TerminalStore {
@@ -59,20 +98,24 @@ export class TerminalStore {
     return join(this.#dir, `${id}.screen`);
   }
 
+  get #services() {
+    return join(this.#dir, 'services.json');
+  }
+
   readTerminals(): TerminalInfo[] {
-    if (!existsSync(this.#index)) return [];
-    try {
-      const stored = JSON.parse(readFileSync(this.#index, 'utf8')) as Partial<StoredTerminals> | null;
-      const terminals = Array.isArray(stored?.terminals) ? stored.terminals : [];
-      return terminals.map(parseStoredTerminal).filter((terminal) => terminal !== null);
-    } catch (error) {
-      log.warn('[Terminals] Could not read the saved terminals', { error: describeError(error) });
-      return [];
-    }
+    return readList(this.#index, 'terminals', parseStoredTerminal, 'terminals');
   }
 
   writeTerminals(terminals: TerminalInfo[]) {
     writeJsonFile(this.#index, { terminals } satisfies StoredTerminals);
+  }
+
+  readServices(): ServiceDefinition[] {
+    return readList(this.#services, 'services', parseStoredService, 'services');
+  }
+
+  writeServices(services: ServiceDefinition[]) {
+    writeJsonFile(this.#services, { services } satisfies StoredServices);
   }
 
   readScreen(id: string) {

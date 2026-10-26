@@ -1,14 +1,16 @@
-import { resolveTerminalLabel, type TerminalInfo } from '@shinsa/core';
+import { resolveTerminalLabel, type ServiceView, type TerminalInfo } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { describeServiceState, SERVICE_GLYPHS } from '@/lib/terminal/services.ts';
 import { describeTerminalTab, moveTerminal } from '@/lib/terminal/tabs.ts';
 
 const TAB =
-  'group/tab corner-superellipse/1.125 relative flex h-6 min-w-0 max-w-56 shrink-0 items-center gap-1.5 rounded-control-sm ps-2 pe-1 text-fg-3 text-xs outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-[active=true]:bg-bg-a2 data-[active=true]:text-fg-4 data-[active=true]:faux-medium data-[dragging=true]:opacity-50';
+  'group/tab corner-superellipse/1.125 relative flex h-7 min-w-0 max-w-56 shrink-0 items-center gap-1.5 rounded-control ps-2 pe-0.75 text-fg-3 text-xs outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-[active=true]:bg-bg-a2 data-[active=true]:text-fg-4 data-[active=true]:faux-medium data-[dragging=true]:opacity-50';
 
 function RenameField({
   terminal,
@@ -41,8 +43,25 @@ function RenameField({
   );
 }
 
+function TabMark({ service, ended }: { service: ServiceView | null; ended: boolean }) {
+  if (!service) return <Icon name='IconConsole' size='sm' />;
+  const glyph = SERVICE_GLYPHS[service.state];
+  return (
+    <Icon
+      name={glyph.icon}
+      size='sm'
+      className={cn(
+        glyph.tone !== 'neutral' && TONE_TEXT[glyph.tone],
+        ended && glyph.tone === 'neutral' && 'text-fg-2'
+      )}
+    />
+  );
+}
+
 function TerminalTab({
   terminal,
+  service,
+  now,
   active,
   dragging,
   onSelect,
@@ -52,6 +71,8 @@ function TerminalTab({
   onDrop,
 }: {
   terminal: TerminalInfo;
+  service: ServiceView | null;
+  now: number;
   active: boolean;
   dragging: boolean;
   onSelect: () => void;
@@ -92,9 +113,16 @@ function TerminalTab({
       }}
       className={TAB}
     >
-      <Hint label={label} detail={describeTerminalTab(terminal)}>
+      <Hint
+        label={label}
+        detail={
+          service
+            ? `${describeServiceState(service, now)} · ${service.service.command}`
+            : describeTerminalTab(terminal)
+        }
+      >
         <span className={cn('flex w-fit min-w-0 items-center gap-1.5', ended && 'text-fg-2')}>
-          <Icon name='IconConsole' size='sm' />
+          <TabMark service={service} ended={ended} />
           <span className='truncate'>{label}</span>
         </span>
       </Hint>
@@ -117,6 +145,8 @@ function TerminalTab({
 
 export function TerminalTabs({
   terminals,
+  services,
+  now,
   activeId,
   renamingId,
   onSelect,
@@ -126,6 +156,8 @@ export function TerminalTabs({
   onReorder,
 }: {
   terminals: TerminalInfo[];
+  services: ServiceView[];
+  now: number;
   activeId: string | null;
   renamingId: string | null;
   onSelect: (terminal: TerminalInfo) => void;
@@ -149,6 +181,8 @@ export function TerminalTabs({
           <TerminalTab
             key={terminal.id}
             terminal={terminal}
+            service={services.find((view) => view.terminal?.id === terminal.id) ?? null}
+            now={now}
             active={terminal.id === activeId}
             dragging={terminal.id === dragged}
             onSelect={() => onSelect(terminal)}

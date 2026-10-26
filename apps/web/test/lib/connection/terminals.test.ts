@@ -3,17 +3,32 @@ import { act, renderHook } from '@testing-library/react';
 import { connection } from '@/lib/connection/socket.ts';
 import {
   closeTerminal,
+  openServiceTerminal,
   openTaskTerminal,
   openTerminal,
+  removeService,
   renameTerminal,
   reorderTerminals,
+  requestServiceAdd,
+  requestServiceSuggestions,
+  requestServiceUpdate,
   requestTerminalCreate,
+  requestTerminalForeground,
+  restartService,
   restartTerminal,
+  startAllServices,
+  startService,
+  stopService,
   useTerminals,
 } from '@/lib/connection/terminals.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createTask } from '../../support/state.ts';
-import { createTerminal, createTerminalState, createTerminalsSnapshot } from '../../support/terminals.ts';
+import {
+  createService,
+  createTerminal,
+  createTerminalState,
+  createTerminalsSnapshot,
+} from '../../support/terminals.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -111,5 +126,56 @@ describe('changing terminals', () => {
     serve({ error: { message: 'That terminal is closed.' } }, 404);
     expect(await closeTerminal('one')).toBe(false);
     expect(toasts.error).toHaveBeenCalledWith('That terminal is closed.');
+  });
+});
+
+describe('services', () => {
+  const API = createService({ id: 'api' });
+  const INPUT = { name: 'api', cwd: API.cwd, command: 'bun run dev', env: { PORT: '4000' } };
+
+  it('reads what runs in front of a shell and what the engine found to suggest', async () => {
+    let fetch = serve({ program: 'vim' });
+    expect(await requestTerminalForeground('one')).toEqual({ program: 'vim' });
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/terminals/one/foreground');
+    const suggestion = { name: 'web', cwd: '/web', command: 'bun run dev', source: 'package' as const };
+    fetch = serve({ suggestions: [suggestion] });
+    expect(await requestServiceSuggestions('shop')).toEqual([suggestion]);
+    expect(fetch.mock.calls[0]?.[0]).toBe('/api/services/suggestions?projectId=shop');
+  });
+
+  it('adds and edits a service with its folder as the path, and keeps the new list', async () => {
+    let fetch = serve({ service: API, ...createTerminalsSnapshot([], [API]) });
+    expect(await requestServiceAdd('shop', INPUT)).toEqual(API);
+    expect(readCall(fetch)).toEqual({
+      url: '/api/services',
+      body: { projectId: 'shop', name: 'api', path: API.cwd, command: 'bun run dev', env: { PORT: '4000' } },
+    });
+    expect(connection.selectTerminals()?.services).toEqual([API]);
+    fetch = serve(createTerminalsSnapshot([], [API]));
+    await requestServiceUpdate('api', INPUT);
+    expect(readCall(fetch).url).toBe('/api/services/api/update');
+  });
+
+  it('starts, restarts, stops, starts all and removes through the engine', async () => {
+    const terminal = createTerminal({ id: 'svc', serviceId: 'api' });
+    let fetch = serve({ terminal, ...createTerminalsSnapshot([terminal], [API]) });
+    expect(await startService('api')).toBe(true);
+    expect(await restartService('api')).toBe(true);
+    expect(connection.selectTerminals()?.terminals).toEqual([terminal]);
+    fetch = serve(createTerminalsSnapshot([terminal], [API]));
+    expect(await stopService('api')).toBe(true);
+    expect(await startAllServices('shop')).toBe(true);
+    expect(await removeService('api')).toBe(true);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      '/api/services/api/stop',
+      '/api/services/start-all',
+      '/api/services/api/remove',
+    ]);
+    expect(readCall(fetch, 1).body).toEqual({ projectId: 'shop' });
+  });
+
+  it('opens a service’s terminal on its tab', () => {
+    openServiceTerminal('SH', 'svc');
+    expect(location.search).toBe('?project=SH&terminal=svc');
   });
 });

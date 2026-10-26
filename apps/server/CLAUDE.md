@@ -51,7 +51,7 @@ src/
 │                        resolve.ts (task, account, repository and project references), client.ts (SurfaceClient,
 │                        the seam the command line and the management tools both run through), one file per group
 │                        (tasks, gates, work, schedules, config: projects and focus, extensions: mcp, skills and
-│                        plugins, system),
+│                        plugins, services, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
 ├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
@@ -220,9 +220,12 @@ src/
 │                        a program's questions), session.ts (TerminalSession: viewers, batching, back-pressure, exit,
 │                        typing a command at the prompt), xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to
 │                        `@xterm/headless` in tsconfig, so the DOM types never reach the engine),
-│                        store.ts (data/terminals/), ghostty.ts (reading Ghostty's config and themes), routes.ts
-│                        (/api/terminals and /ws/terminals/<id>), index.ts (Terminals: the list, create, rename,
-│                        reorder, restart, run, close, stop)
+│                        store.ts (data/terminals/: the terminals, their screens and services.json), detect.ts (the
+│                        services found in a project's folders: workspace dev scripts, a Procfile, Docker Compose),
+│                        routes.ts (/api/terminals, the foreground check, /api/services and /ws/terminals/<id>),
+│                        index.ts (Terminals: the list, create, rename, reorder, restart, run, close, stop, and the
+│                        services: add, update, remove, start, stop, restart, resume after a restart);
+│                        pty.ts also reads the program in front of a shell (readForegroundProgram)
 └── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
                          routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the
                          page's `/ws`; server.ts sends `/ws/terminals/<id>` to terminals/),

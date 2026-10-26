@@ -98,9 +98,13 @@ export async function createGitRepo(
   };
 }
 
-export async function until(describe: string, predicate: () => boolean, timeoutMs = 5_000) {
+export async function until(
+  describe: string,
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 5_000
+) {
   const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
+  while (!(await predicate())) {
     if (Date.now() > deadline) throw new Error(`Timed out waiting for ${describe}.`);
     await Bun.sleep(10);
   }

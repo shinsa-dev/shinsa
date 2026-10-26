@@ -1383,11 +1383,13 @@ running when the window closes or the app quits, and a page that comes back find
   you type and paste and text frames for `resize { cols, rows }` and `colors` (`parseTerminalClientFrame` in core, at
   most 1000 × 500). A page that falls behind (more than 4 MB buffered, or a frame dropped) is sent nothing more until
   it drains below 512 KB, and then the whole screen again, so a flood of output never piles up in the engine. The
-  last page to resize sets the size; the shell gets `SIGWINCH` from the PTY.
+  last page to resize sets the size; the shell gets `SIGWINCH` from the PTY. The page's `clear` frame (⌘L) clears the
+  mirror's scrollback too, keeping the line the cursor is on, so a reload does not bring it back.
 - **The list.** `Terminals` (`index.ts`) keeps the terminals in `data/terminals/terminals.json`, in your order, each
   with its project, folder, the name you gave it, the shell's title (OSC 0/2, 200 characters at most), its status
-  (`running`, `exited` with its code, or `stopped`) and times, and pushes the list to every page as `terminals` on
-  the main socket whenever it changes (coalesced over 50 ms), with the appearance (below) and your home folder. Each
+  (`running`, `exited` with its code, or `stopped`), the service it runs (`serviceId`, below) and times, and pushes
+  the list to every page as `terminals` on the main socket whenever it changes (coalesced over 50 ms), with your
+  services and your home folder. Each
   terminal's screen is saved to `data/terminals/<id>.screen` (its last 1,000 lines, serialized) two seconds after it
   last printed and when Shinsa stops. At most 32 terminals.
 - **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
@@ -1399,8 +1401,14 @@ running when the window closes or the app quits, and a page that comes back find
   project (`listTerminalPlaces` in core: its repositories, its folders and the worktrees of its open tasks), or your
   home folder for a project with none, and only in a folder that exists. With `command`, the command is typed into
   the new shell followed by Return. The rest: `POST /api/terminals/<id>/rename { name }` (60 characters, null for
-  none), `/restart`, `/close`, `POST /api/terminals/order { projectId, ids }`, and `GET /api/terminals` (the list,
-  `shinsa terminals list`). Inspect mode refuses all of it.
+  none), `/restart`, `/close`, `POST /api/terminals/order { projectId, ids }`, `GET /api/terminals` (the list,
+  `shinsa terminals list`) and `GET /api/terminals/<id>/foreground` (below). Inspect mode refuses every change.
+- **What runs in front.** `GET /api/terminals/<id>/foreground` answers `{ program }`: the name of the program in the
+  terminal's foreground process group when it is not the shell itself, else `null` (`readForegroundProgram` in
+  `pty.ts`: `ps -o tpgid=` of the shell gives the group that owns the PTY, the way Terminal.app decides whether to ask,
+  and `ps -o comm=` names it). The page asks it before closing a running shell and closes an idle one at once; a
+  running service always counts as busy and answers its own name. `test/terminals/routes.test.ts` checks it against a
+  real shell running `sleep`.
 - **Your terminals are yours.** No agent tool reaches a terminal; every write route needs a browser's Origin
   (`browser_only` otherwise, so `curl` and the command line cannot type into one); `shinsa terminals` is human-only;
   and `agents/policy.ts` refuses a shell command that names `/api/terminals` or `/ws/terminals`. As everywhere in Who
@@ -1412,14 +1420,54 @@ running when the window closes or the app quits, and a page that comes back find
   150 ms (its prompt; at most 5 s, so a busy program cannot hold it), types the command, and presses Enter 30 ms later
   as a key of its own. A shell such as fish does not run a line whose Enter arrives in the same read as the text, and a
   command written before the shell's first prompt is lost or mangled, so both waits matter.
-- **Appearance follows Ghostty.** `ghostty.ts` reads Ghostty's config the way Ghostty does on a Mac:
-  `$XDG_CONFIG_HOME/ghostty/config` (and `config.ghostty`), then `~/Library/Application Support/com.mitchellh.ghostty/config`
-  (and `config.ghostty`), later files winning, with `config-file` includes (`?` for optional ones) read once each. It
-  takes `font-family` (the first), `font-size`, `cursor-style`, `cursor-style-blink`, `macos-option-as-alt`, `theme`
-  (one theme, or `light:…,dark:…`, looked up in your themes folders and then Ghostty's, `GHOSTTY_RESOURCES_DIR` or
-  the app's) and the colours set over it (`background`, `foreground`, `cursor-color`, `cursor-text`,
-  `selection-*`, `palette = N=#rrggbb`). It is read again whenever a page connects. Without a Ghostty config, or for
-  every colour it leaves unset, the terminal uses Shinsa's `--terminal-*` tokens (`docs/design.md`, 37).
+- **The look is Shinsa's.** The engine sends no appearance: the page draws every terminal in the `--terminal-*` tokens
+  and the Code tab's mono font (`docs/design.md`, 37). Reading Ghostty's config was removed on 2026-10-26.
+
+### Services
+
+A service is a command you keep running for a project, such as `bun run dev` in `apps/api`: started with one press,
+then only watched (`docs/design.md`, 37). It is a terminal under the hood, so everything above holds for it.
+
+- **What one is.** `ServiceDefinition` (core's `protocol/services.ts`): an id, its project, a name (40 characters, one
+  per name in a project), the folder it runs in (one of the project's repositories or folders, or a folder inside one;
+  not a task worktree, which goes away; `resolveServicePlace` in `routes.ts`), the command (4,000 characters) and
+  variables added to your environment (50 at most, names a shell can export). It runs as `<login shell> -l -c
+  <command>` in its own terminal tab (`TerminalInfo.serviceId`), with the terminal's environment and its variables
+  over it, so the shell that started it is the program: it ends when the command ends.
+- **Kept beside the terminals, not in the event log.** The definitions are in `data/terminals/services.json` (mode
+  600: a variable can be a secret). They are not events because nothing `decide` reads depends on them, no agent may
+  change them (an event would need a user command, and every user command has a surface spec that agents' tools are
+  generated from), and they describe this machine: folders and commands that only mean something here, like the MCP
+  servers you add (`extensions.json`) and the terminals themselves. They are written whenever they change and read
+  once at start; a broken file is logged and read as empty.
+- **States.** `resolveServiceState` (core) reads the service's terminal: none or `stopped` is stopped; running is
+  starting for its first 3 s (`SERVICE_LIMITS.startingMs`) and running after; exited with 0 is exited; exited with
+  130 or 143 (an interrupt or a terminate you sent) is stopped; any other code, or none, is failed. `resolveServiceView`
+  adds how long it has been so, `resolveServicesSummary` the counts the header shows.
+- **Start, stop, restart.** `POST /api/services/<id>/start` opens the service's terminal the first time and starts its
+  command again in the same tab after that, below the old output (a start of a running one does nothing). `/stop`
+  hangs it up as closing a terminal window does (`SIGHUP` and the PTY closed, `SIGKILL` 3 s later): the whole
+  process group, so a dev server and the watchers it started end together, and the tab stays with its last screen.
+  `/restart` stops and starts. `POST /api/services/start-all { projectId }` starts every service of a project that is
+  not running. Closing a service's tab stops it and forgets the tab; the service stays.
+- **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
+  engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; plain
+  shells come back as `stopped`, as before. Inspect mode starts nothing.
+- **Found for you.** `GET /api/services/suggestions?projectId=` (`detect.ts`, `listServiceSuggestions`) reads each of
+  the project's repositories and folders: the `dev` script of every workspace the root `package.json` names
+  (`workspaces` as a list or `{ packages }`, and `pnpm-workspace.yaml`; `dir/*` patterns and exact folders, `!`
+  patterns skipped), named after its package without the scope (`@shop/api` is "api"); the root's own `dev` script,
+  "all" when there are workspaces and the package's name otherwise; each `Procfile` line; and `docker compose up` when
+  a Compose file is there. The command uses the package manager the lockfile names (`bun.lock`, `pnpm-lock.yaml`,
+  `yarn.lock`, `package-lock.json`), else `packageManager`, else npm. Two of one name are told apart by their folder.
+  It leaves out what you already added and offers 24 at most. Nothing is added or started until you press it.
+- **Adding and changing.** `POST /api/services { projectId, name, path, command, env }`, `/api/services/<id>/update`
+  (the same fields; a running service keeps its old command until it restarts, and its tab takes the new name) and
+  `/remove` (stops it and closes its tab) need a browser's Origin, like every terminal change: a definition is a
+  command that runs as you. Start, stop and restart do not, so `shinsa services start|stop|restart` work from your own
+  terminal.
+- **Agents.** No tool reaches a service, `shinsa services` is human-only, and `agents/policy.ts` refuses a shell
+  command naming `/api/services` as it does `/api/terminals`.
 
 ## Agents manage Shinsa
 
@@ -1488,6 +1536,8 @@ plainly what protects what.
   - opening a worktree in an editor (`tasks open`);
   - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
     command at all (Terminals, above);
+  - your services: `services list`, `start`, `stop` and `restart`, and adding, changing or removing one, which only
+    the page does (Terminals → Services, above);
   - stopping, restarting or running the engine (`shinsa stop`, `restart`, `engine`: `HUMAN_ONLY_ENGINE_COMMANDS` in
     `cli/engine.ts`, refused in an agent's shell like the rest, since the engine is what runs the agent).
 
@@ -2947,8 +2997,8 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
     │                  task (Where agents work → GitButler, above)
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      Screenshots, logs and files agents attached
-    ├── terminals/     Your terminals (`terminals.json`) and each one's last screen (`<id>.screen`), so a restarted
-    │                  engine shows how each ended (Terminals, above)
+    ├── terminals/     Your terminals (`terminals.json`), each one's last screen (`<id>.screen`), so a restarted
+    │                  engine shows how each ended, and your services (`services.json`, mode 600; Terminals, above)
     ├── usage-limits.json  The last usage reading per account
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
