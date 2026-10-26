@@ -1,14 +1,29 @@
 import { afterEach, describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ModelSource } from '../../src/agents/index.ts';
 import { Transcripts } from '../../src/agents/index.ts';
-import { type CliIo, createProcessIo, runCli, USAGE } from '../../src/cli/index.ts';
+import { NOT_RUNNING } from '../../src/cli/api.ts';
+import {
+  type CliIo,
+  createProcessIo,
+  createWakeEngine,
+  kickEngine,
+  runCli,
+  trimEngineLog,
+  USAGE,
+  writeOutputTo,
+} from '../../src/cli/index.ts';
 import { startServer } from '../../src/http/index.ts';
-import { createServerInstance, ServerRunningError } from '../../src/instance/index.ts';
+import {
+  createServerInstance,
+  resolveBundle,
+  SERVICE_MARKER,
+  ServerRunningError,
+} from '../../src/instance/index.ts';
 import { log } from '../../src/log/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import type { Shinsa } from '../../src/serve.ts';
-import { SERVICE_MARKER, type ServiceControl } from '../../src/service/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import {
   createTempDir,
@@ -53,10 +68,12 @@ function createIo(port: string, overrides: Partial<CliIo> = {}) {
     cwd: '/code/app',
     write: (line = '') => out.push(line),
     writeError: (line) => errors.push(line),
-    openUrl: (url) => {
-      opened.push(url);
+    openApp: (link) => {
+      opened.push(link);
       return Promise.resolve();
     },
+    readRepoRoot: () => Promise.resolve(null),
+    wakeEngine: () => Promise.resolve(false),
     serve: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
     ...overrides,
@@ -78,7 +95,7 @@ describe('help and unknown commands', () => {
 });
 
 describe('shinsa serve', () => {
-  test('is the default command and stops on shutdown', async () => {
+  test('stops on shutdown', async () => {
     let stopped = false;
     let registered: (() => Promise<void>) | null = null;
     const shinsa = {
@@ -93,7 +110,7 @@ describe('shinsa serve', () => {
         registered = stop;
       },
     });
-    expect(await runCli([], io)).toBe(0);
+    expect(await runCli(['serve'], io)).toBe(0);
     await (registered as unknown as () => Promise<void>)();
     expect(stopped).toBe(true);
   });
@@ -165,7 +182,7 @@ describe('shinsa do', () => {
     expect(await runCli(['do', 'x'], io)).toBe(1);
     expect(await runCli(['status'], { ...io, env: { SHINSA_PORT: 'abc' } })).toBe(1);
     expect(errors[0]).toBe('shinsa do: Say what should be done: shinsa do "fix the scroll in tab groups"');
-    expect(errors[1]).toBe('shinsa do: Shinsa is not running on http://127.0.0.1:1. Start it with `shinsa`.');
+    expect(errors[1]).toBe(`shinsa do: ${NOT_RUNNING}`);
     expect(errors[2]).toContain('SHINSA_PORT must be a whole number');
   });
 
@@ -293,16 +310,32 @@ describe('shinsa status and open', () => {
     }
   });
 
-  test('open opens Shinsa or one task in the browser', async () => {
+  test('shinsa alone and open open the app, on Home or on one task', async () => {
     const { io, opened } = createIo('1');
+    expect(await runCli([], io)).toBe(0);
     await runCli(['open'], io);
-    await runCli(['open', 'task/1'], io);
-    expect(opened).toEqual(['http://127.0.0.1:1', 'http://127.0.0.1:1/tasks/task%2F1']);
+    await runCli(['open', 'SW-142'], io);
+    expect(opened).toEqual(['shinsa://home', 'shinsa://home', 'shinsa://task/SW-142']);
+  });
+
+  test('a folder opens the app focused on its project, or says why it cannot', async () => {
+    const { port } = startTestServer();
+    const repoPath = join(createTempDir(), 'shop');
+    const { io, opened, out } = createIo(port, {
+      readRepoRoot: (dir) => Promise.resolve(dir === '/code/app' ? repoPath : null),
+    });
+    expect(await runCli(['.'], io)).toBe(0);
+    expect(await runCli(['open', '/elsewhere'], io)).toBe(0);
+    expect(opened).toEqual(['shinsa://home', 'shinsa://home']);
+    expect(out).toEqual([
+      `Shinsa has not worked in ${repoPath} yet. Ask for something there and it joins your projects.`,
+      '/elsewhere is not in a git repository, so Shinsa opens on Home.',
+    ]);
   });
 });
 
 describe('the process io', () => {
-  test('writes to stdout and stderr and opens URLs with open', async () => {
+  test('writes to stdout and stderr, opens the page in a checkout and finds a repository root', async () => {
     const stdout = spyOn(process.stdout, 'write').mockImplementation(() => true);
     const stderr = spyOn(process.stderr, 'write').mockImplementation(() => true);
     try {
@@ -312,8 +345,14 @@ describe('the process io', () => {
       io.writeError('oops');
       expect(stdout.mock.calls.map((call) => call[0])).toEqual(['\n', 'hello\n']);
       expect(stderr.mock.calls.map((call) => call[0])).toEqual(['oops\n']);
-      await io.openUrl('http://127.0.0.1:5180');
-      await expect(io.openUrl('fail')).rejects.toThrow('open fail failed: cannot open');
+      await io.openApp('shinsa://task/SW-1');
+      expect(await io.wakeEngine()).toBe(false);
+      const repo = createTempDir();
+      Bun.spawnSync(['git', 'init', '-q'], { cwd: repo });
+      expect(await io.readRepoRoot(join(repo, '.'))).toBe(
+        Bun.spawnSync(['git', '-C', repo, 'rev-parse', '--show-toplevel']).stdout.toString().trim()
+      );
+      expect(await io.readRepoRoot(createTempDir())).toBeNull();
       expect(await runCli(['help'])).toBe(0);
     } finally {
       stdout.mockRestore();
@@ -406,41 +445,64 @@ describe('the process io', () => {
   });
 });
 
-describe('the background service from the command line', () => {
-  const service: ServiceControl = {
-    install: () => Promise.reject(new Error('not in this test')),
-    uninstall: () => Promise.reject(new Error('not in this test')),
-    status: () =>
-      Promise.resolve({
-        label: 'studio.overclock.shinsa',
-        plist: '/p.plist',
-        log: '/serve.log',
-        installed: false,
-        loaded: false,
-        state: null,
-        pid: null,
-        lastExitCode: null,
-        server: null,
-      }),
-    restart: () => Promise.reject(new Error('not in this test')),
-    logs: () => ({ path: '/serve.log', lines: [] }),
-  };
-
-  test('works with no server running, as text or JSON', async () => {
-    const { io, out } = createIo('1', { service });
-    expect(await runCli(['service', 'status'], io)).toBe(0);
-    expect(out[0]?.split('\n')[0]).toBe('Service: not installed');
-    expect(await runCli(['service', 'status', '--json'], io)).toBe(0);
-    expect(JSON.parse(out[1] ?? '')).toMatchObject({ loaded: false, server: null });
+describe('waking the engine', () => {
+  test('asks launchd only in the app, and waits until the engine answers', async () => {
+    const { port } = startTestServer();
+    const live = `http://127.0.0.1:${port}`;
+    const kicked = () => Promise.resolve(true);
+    expect(await createWakeEngine(live, { bundled: false, kick: kicked })()).toBe(false);
+    expect(await createWakeEngine(live, { bundled: true, kick: () => Promise.resolve(false) })()).toBe(false);
+    expect(await createWakeEngine(live, { bundled: true, kick: kicked })()).toBe(true);
+    expect(await createWakeEngine('http://127.0.0.1:1', { bundled: true, kick: kicked, waitMs: 300 })()).toBe(
+      false
+    );
+    expect(await kickEngine()).toBe(false);
   });
 
-  test('the command line always has it; without it the command explains who runs it', async () => {
-    expect(createProcessIo().service).toBeDefined();
-    const { io, errors } = createIo('1');
-    expect(await runCli(['service', 'logs'], io)).toBe(1);
-    expect(errors).toEqual([
-      'shinsa service: Only the `shinsa` command line manages the background service, from your own terminal.',
-    ]);
+  test('the engine the app starts writes to its log file and finds the shinsa command on its PATH', async () => {
+    const root = createTempDir();
+    const bundle = resolveBundle(
+      { version: '1.2.3', commit: '', stateVersion: 's', sdkVersion: '0.3.0', sdkClaudeVersion: '2.1.0' },
+      join(root, 'bin', 'shinsa')
+    );
+    const dataDir = join(createTempDir(), 'data');
+    const stdout = process.stdout.write;
+    const stderr = process.stderr.write;
+    const path = process.env.PATH;
+    const restore = overrideEnv({ [SERVICE_MARKER]: '1' });
+    try {
+      const shinsa = await createProcessIo({ isTerminal: () => true, bundle }).serve({
+        [SERVICE_MARKER]: '1',
+        SHINSA_DATA_DIR: dataDir,
+        SHINSA_PORT: '0',
+        SHINSA_INSPECT: '1',
+      });
+      stops.push(shinsa.stop);
+      expect(readFileSync(join(dataDir, 'engine.log'), 'utf8')).toContain('[Serve] Started from a terminal');
+      expect(process.env.PATH?.split(':')[0]).toBe(join(root, 'bin'));
+    } finally {
+      process.stdout.write = stdout;
+      process.stderr.write = stderr;
+      process.env.PATH = path;
+      restore();
+    }
+  });
+});
+
+describe('the engine log', () => {
+  test('writes output to the log file and trims a long one to its last half', () => {
+    const dir = createTempDir();
+    const path = join(dir, 'engine.log');
+    writeFiles(dir, { 'engine.log': 'x'.repeat(100) });
+    trimEngineLog(path, 40);
+    expect(Bun.file(path).size).toBe(20);
+    trimEngineLog(join(dir, 'missing.log'), 40);
+    const stream = { write: (() => true) as NodeJS.WriteStream['write'] } as NodeJS.WriteStream;
+    const close = writeOutputTo(path, [stream]);
+    stream.write('hello\n');
+    stream.write(new TextEncoder().encode('bytes\n'));
+    close();
+    expect(readFileSync(path, 'utf8').endsWith('hello\nbytes\n')).toBe(true);
   });
 });
 
@@ -511,7 +573,7 @@ describe('managing Shinsa from the command line', () => {
     expect(JSON.parse(down.out[0] ?? '')).toEqual({
       error: {
         code: 'command_failed',
-        message: 'Shinsa is not running on http://127.0.0.1:1. Start it with `shinsa`.',
+        message: NOT_RUNNING,
       },
     });
     const invalid = createIo('1');

@@ -1,5 +1,10 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { createServiceRestarter, EngineRestarter, isEngineBusy } from '../../src/instance/index.ts';
+import {
+  createLaunchdRestarter,
+  EngineRestarter,
+  EXIT_RESTART,
+  isEngineBusy,
+} from '../../src/instance/index.ts';
 import { log } from '../../src/log/index.ts';
 import { createRun, createStubEngine } from '../helpers/state.ts';
 
@@ -112,36 +117,35 @@ describe('EngineRestarter', () => {
   });
 });
 
-describe('createServiceRestarter', () => {
-  function createService(server: { pid: number; service: boolean } | null) {
-    let restarts = 0;
-    return {
-      status: () => Promise.resolve({ server } as never),
-      restart: () => {
-        restarts += 1;
-        return Promise.resolve({} as never);
-      },
-      restarts: () => restarts,
-    };
-  }
-
-  test('restarts through launchd only when this process is the background service on macOS', async () => {
+describe('createLaunchdRestarter', () => {
+  test('restarts by stopping cleanly and exiting with the restart code, so launchd starts it again', async () => {
     const stub = createStubEngine();
-    const service = createService({ pid: 7, service: true });
-    const restarter = createServiceRestarter(stub.engine, service, 'darwin', 7);
+    const steps: string[] = [];
+    const restarter = createLaunchdRestarter(stub.engine, {
+      byService: true,
+      stop: () => {
+        steps.push('stop');
+        return Promise.resolve();
+      },
+      exit: (code) => steps.push(`exit ${code}`),
+    });
     await restarter.request('now');
     await Bun.sleep(300);
-    expect(service.restarts()).toBe(1);
-    const elsewhere = createServiceRestarter(stub.engine, createService(null), 'darwin', 7);
-    await expect(elsewhere.request('now')).rejects.toMatchObject({ code: 'restart_unsupported' });
-    const terminal = createServiceRestarter(
-      stub.engine,
-      createService({ pid: 7, service: false }),
-      'darwin',
-      7
-    );
+    expect(steps).toEqual(['stop', `exit ${EXIT_RESTART}`]);
+  });
+
+  test('refuses when launchd did not start the engine, and exits the process by default', async () => {
+    const stub = createStubEngine();
+    const terminal = createLaunchdRestarter(stub.engine, { byService: false, stop: () => Promise.resolve() });
     await expect(terminal.request('now')).rejects.toMatchObject({ code: 'restart_unsupported' });
-    const linux = createServiceRestarter(stub.engine, service, 'linux', 7);
-    await expect(linux.request('now')).rejects.toMatchObject({ code: 'restart_unsupported' });
+    const exit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    try {
+      const service = createLaunchdRestarter(stub.engine, { byService: true, stop: () => Promise.resolve() });
+      await service.request('now');
+      await Bun.sleep(300);
+      expect(exit).toHaveBeenCalledWith(EXIT_RESTART);
+    } finally {
+      exit.mockRestore();
+    }
   });
 });

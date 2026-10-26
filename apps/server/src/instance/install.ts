@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { ENGINE_PROTOCOL } from '@shinsa/core';
 import serverPackage from '../../package.json' with { type: 'json' };
 import { runCommand } from '../shell/index.ts';
+import { BUNDLE, type ShinsaBundle } from './bundle.ts';
 
 export interface ServerInstance {
   version: string;
@@ -51,15 +52,19 @@ export function resolveHealth(
   };
 }
 
-export const INSTALL_PATH = resolve(import.meta.dirname, '../../../..');
+export const INSTALL_PATH = BUNDLE ? BUNDLE.root : resolve(import.meta.dirname, '../../../..');
 
 export const SERVER_ENTRY = resolve(import.meta.dirname, '../main.ts');
 
 const COMMIT_TIMEOUT_MS = 5_000;
 
-export function createServerInstance(commit: string | null = null, now = Date.now()): ServerInstance {
+export function createServerInstance(
+  commit: string | null = null,
+  now = Date.now(),
+  bundle: ShinsaBundle | null = BUNDLE
+): ServerInstance {
   return {
-    version: serverPackage.version,
+    version: bundle?.version ?? serverPackage.version,
     commit,
     installPath: INSTALL_PATH,
     pid: process.pid,
@@ -67,7 +72,11 @@ export function createServerInstance(commit: string | null = null, now = Date.no
   };
 }
 
-export async function resolveServerInstance(installPath = INSTALL_PATH): Promise<ServerInstance> {
+export async function resolveServerInstance(
+  installPath = INSTALL_PATH,
+  bundle: ShinsaBundle | null = BUNDLE
+): Promise<ServerInstance> {
+  if (bundle) return createServerInstance(bundle.commit, Date.now(), bundle);
   const result = await runCommand(['git', 'rev-parse', 'HEAD'], installPath, {
     timeoutMs: COMMIT_TIMEOUT_MS,
   });

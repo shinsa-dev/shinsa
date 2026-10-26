@@ -1,5 +1,4 @@
 import type { UserCommand } from '@shinsa/core';
-import type { ServiceControl } from '../service/index.ts';
 
 export interface CommandReceipt {
   ok: true;
@@ -18,7 +17,6 @@ export interface SurfaceClient {
   post: <T>(path: string, body: unknown) => Promise<T>;
   send: (command: UserCommand) => Promise<CommandReceipt>;
   projects?: SurfaceProjectChanges;
-  service?: ServiceControl;
 }
 
 export function resolveCommandKey(key: string, sent: number) {

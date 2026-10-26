@@ -285,6 +285,25 @@ describe('startShinsa', () => {
     expect(replies[0]).toContain('What is open?');
   });
 
+  test('started by launchd, a restart stops Shinsa and exits with the restart code', async () => {
+    const codes: number[] = [];
+    const shinsa = await startShinsa(createTestConfig(createTempDir()), {
+      models,
+      triage: () => Promise.resolve(null),
+      resolveLogin: () => Promise.resolve(null),
+      byService: true,
+      exit: (code) => codes.push(code),
+    });
+    const response = await fetch(`${shinsa.url}/api/engine/restart`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ when: 'now' }),
+    });
+    expect(await response.json()).toEqual({ restarting: true });
+    await until('the restart to exit', () => codes.length === 1);
+    expect(codes).toEqual([75]);
+  });
+
   test('the default model catalog is used when none is given', async () => {
     const shinsa = await startShinsa(createTestConfig(createTempDir(), { inspect: true }));
     started.push(shinsa);

@@ -126,6 +126,6 @@ export async function listCandidateRepos(roots: string[], origin: string | null)
   return [{ path: root, name: basename(root), touchedAt: Date.now() }, ...local];
 }
 
-export { discoverRoots } from './discover.ts';
+export { createDiscoverer, discoverRoots } from './discover.ts';
 export { type Discoverer, type RootSource, Roots } from './roots.ts';
 export { verifySetup } from './setup.ts';

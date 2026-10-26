@@ -8,8 +8,10 @@ import type { Subprocess } from 'bun';
 import type { EunoeLink, EunoeListener, EunoeMode, EunoeStatus } from '../agents/providers/claude/index.ts';
 import { DIRECT_BASE_URL } from '../agents/providers/claude/route.ts';
 import { writeJsonFile } from '../config/index.ts';
+import { BUNDLE, type ShinsaBundle } from '../instance/bundle.ts';
 import { describeError, log } from '../log/index.ts';
 import { killProcessGroup } from '../shell/index.ts';
+import { EUNOE_COMMAND } from './command.ts';
 import { EunoeRequestWatch } from './requests.ts';
 
 export interface EunoeProxyOptions {
@@ -54,9 +56,11 @@ const BUNDLED_MAIN = '@chroxify/eunoe/src/cli/main.ts';
 
 export function resolveEunoeCommand(
   configured: string | null,
-  resolveModule: (specifier: string) => string = (specifier) => import.meta.resolve(specifier)
+  resolveModule: (specifier: string) => string = (specifier) => import.meta.resolve(specifier),
+  bundle: ShinsaBundle | null = BUNDLE
 ): string[] | null {
   if (configured) return [configured.replace(/^~(?=\/|$)/, homedir())];
+  if (bundle) return [join(bundle.bin, 'shinsa'), EUNOE_COMMAND];
   try {
     return [process.execPath, fileURLToPath(resolveModule(BUNDLED_MAIN))];
   } catch (error) {

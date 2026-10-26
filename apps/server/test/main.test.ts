@@ -2,8 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { USAGE } from '../src/cli/index.ts';
-import { createServerInstance, LOCK_FILE, resolveBootedAt } from '../src/instance/index.ts';
-import { SERVICE_MARKER } from '../src/service/index.ts';
+import { createServerInstance, LOCK_FILE, resolveBootedAt, SERVICE_MARKER } from '../src/instance/index.ts';
 import { createTempDir } from './helpers/index.ts';
 
 const MAIN = join(import.meta.dirname, '../src/main.ts');

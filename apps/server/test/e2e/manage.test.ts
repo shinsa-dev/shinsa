@@ -67,7 +67,9 @@ async function shinsa(...args: string[]) {
     cwd: '/code/app',
     write: (line = '') => out.push(line),
     writeError: (line) => out.push(line),
-    openUrl: () => Promise.resolve(),
+    openApp: () => Promise.resolve(),
+    readRepoRoot: () => Promise.resolve(null),
+    wakeEngine: () => Promise.resolve(false),
     serve: () => Promise.reject(new Error('not in this test')),
     onShutdown: () => undefined,
   };

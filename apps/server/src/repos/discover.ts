@@ -16,7 +16,10 @@ export interface Discovery {
 export interface DiscoveryOptions {
   maxDepth?: number;
   maxDirs?: number;
+  skipPrivate?: boolean;
 }
+
+const PRIVATE_HOME_DIRS = new Set(['Desktop', 'Documents', 'Downloads']);
 
 const MAX_DEPTH = 4;
 
@@ -56,6 +59,13 @@ async function readEntries(path: string): Promise<Dirent[]> {
   }
 }
 
+function listChildren(dir: string, entries: Dirent[], skipPrivate: boolean) {
+  return entries
+    .filter((entry) => entry.isDirectory() && !isSkipped(entry.name))
+    .filter((entry) => !(skipPrivate && PRIVATE_HOME_DIRS.has(entry.name)))
+    .map((entry) => join(dir, entry.name));
+}
+
 function isRepo(entries: Dirent[]) {
   return entries.some((entry) => entry.name === '.git' && (entry.isDirectory() || entry.isFile()));
 }
@@ -82,9 +92,7 @@ export async function discoverRoots(home: string, options: DiscoveryOptions = {}
         continue;
       }
       if (depth === maxDepth) continue;
-      for (const entry of entries) {
-        if (entry.isDirectory() && !isSkipped(entry.name)) next.push(join(dir, entry.name));
-      }
+      next.push(...listChildren(dir, entries, dir === home && Boolean(options.skipPrivate)));
     }
     queue = next;
   }
@@ -96,4 +104,8 @@ export async function discoverRoots(home: string, options: DiscoveryOptions = {}
     }))
     .sort((a, b) => b.repoCount - a.repoCount || a.path.localeCompare(b.path));
   return { candidates, truncated };
+}
+
+export function createDiscoverer(skipPrivate: boolean) {
+  return (home: string) => discoverRoots(home, { skipPrivate });
 }

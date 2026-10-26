@@ -1,6 +1,5 @@
 import { DomainError, type EngineRestartWhen, listLiveRuns, type ShinsaState } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
-import type { ServiceControl } from '../service/index.ts';
 
 interface RestartSource {
   readonly state: ShinsaState;
@@ -69,18 +68,21 @@ export class EngineRestarter {
   }
 }
 
-export function createServiceRestarter(
-  source: RestartSource,
-  service: Pick<ServiceControl, 'status' | 'restart'>,
-  platform: string = process.platform,
-  pid: number = process.pid
-) {
+export const EXIT_RESTART = 75;
+
+export interface LaunchdRestart {
+  byService: boolean;
+  stop: () => Promise<void>;
+  exit?: (code: number) => void;
+}
+
+export function createLaunchdRestarter(source: RestartSource, launchd: LaunchdRestart) {
+  const exit = launchd.exit ?? ((code: number) => process.exit(code));
   return new EngineRestarter(source, {
-    isService: async () => {
-      if (platform !== 'darwin') return false;
-      const status = await service.status();
-      return status.server?.pid === pid && status.server.service;
+    isService: () => Promise.resolve(launchd.byService),
+    restart: async () => {
+      await launchd.stop();
+      exit(EXIT_RESTART);
     },
-    restart: () => service.restart(),
   });
 }

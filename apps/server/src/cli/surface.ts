@@ -1,6 +1,5 @@
 import { DomainError } from '@shinsa/core';
 import { describeError } from '../log/index.ts';
-import type { ServiceControl } from '../service/index.ts';
 import {
   describeGroup,
   describeUsage,
@@ -10,12 +9,12 @@ import {
   type SurfaceSpec,
   selectSpec,
 } from '../surface/index.ts';
-import { createSurfaceClient } from './api.ts';
+import { createSurfaceClient, type EngineWake } from './api.ts';
 
 export interface SurfaceIo {
   base: string;
   write: (line?: string) => void;
-  service?: ServiceControl;
+  wake?: EngineWake;
 }
 
 function isHelp(words: string[]) {
@@ -35,8 +34,7 @@ async function runSpec(spec: SurfaceSpec, args: string[], io: SurfaceIo) {
       return 0;
     }
     const client = {
-      ...createSurfaceClient(io.base, parsed.idempotencyKey ?? `cli:${Bun.randomUUIDv7()}`),
-      service: io.service,
+      ...createSurfaceClient(io.base, parsed.idempotencyKey ?? `cli:${Bun.randomUUIDv7()}`, io.wake),
     };
     const result = await spec.run(client, parsed.values);
     if (json) writeJson(io, result.data);

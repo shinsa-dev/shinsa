@@ -27,18 +27,24 @@ import { Extensions, type ExtensionsOptions } from './extensions/index.ts';
 import { resolveServerUrl, startServer } from './http/index.ts';
 import {
   acquireDataDirLock,
-  createServiceRestarter,
+  BUNDLE,
+  createLaunchdRestarter,
   resolveServerInstance,
   type ServerInstance,
 } from './instance/index.ts';
 import { describeError, log } from './log/index.ts';
 import { type AccountSource, type CommandRunner, type Interpreter, Onboarding } from './onboarding/index.ts';
 import { createProjectChanges } from './projects/routes.ts';
-import { createLoginResolver, type Discoverer, type LoginResolver, Roots } from './repos/index.ts';
+import {
+  createDiscoverer,
+  createLoginResolver,
+  type Discoverer,
+  type LoginResolver,
+  Roots,
+} from './repos/index.ts';
 import { EffectRunner, Engine, MonitorClock, type StateClockOptions } from './runtime/index.ts';
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
-import { createServiceControl } from './service/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
@@ -71,6 +77,8 @@ export interface ShinsaOptions {
   compaction?: IdleCompactionOptions;
   extensions?: Pick<ExtensionsOptions, 'check' | 'env' | 'fetch'>;
   versions?: VersionsOptions;
+  byService?: boolean;
+  exit?: (code: number) => void;
 }
 
 export interface Shinsa {
@@ -85,7 +93,10 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
   const store = new ConfigStore(config.configPath, config.machine);
   prepareDataDir(config);
   const eventLog = new EventLog(config.databasePath);
-  const engine = new Engine(eventLog, { readOnly: config.inspect, stateVersion: resolveStateVersion() });
+  const engine = new Engine(eventLog, {
+    readOnly: config.inspect,
+    stateVersion: BUNDLE?.stateVersion ?? resolveStateVersion(),
+  });
   const transcripts = new Transcripts(config.transcriptsDir);
   const evidence = new EvidenceStore(config.evidenceDir);
   const eunoe = new EunoeProxy({
@@ -142,7 +153,12 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
   });
   const briefings = new Briefings(engine, { ask: quick.write });
   const inbox = new MessageInbox(engine, classify.message);
-  const roots = new Roots(config.roots, store, config.userHome, options.discover);
+  const roots = new Roots(
+    config.roots,
+    store,
+    config.userHome,
+    options.discover ?? createDiscoverer(Boolean(BUNDLE))
+  );
   return {
     config,
     store,
@@ -162,6 +178,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
     classify,
     resolveLogin,
     address,
+    stopShinsa: null as (() => Promise<void>) | null,
     providers,
     eunoe,
     models: options.models ?? providers.resolve(engine.state.settings.defaultProvider),
@@ -207,7 +224,11 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     resolveLogin: services.resolveLogin,
     classify: services.classify,
     workspaces: services.runs.workspaces,
-    restarter: createServiceRestarter(engine, createServiceControl({ env: Bun.env })),
+    restarter: createLaunchdRestarter(engine, {
+      byService: options.byService ?? false,
+      stop: () => services.stopShinsa?.() ?? Promise.resolve(),
+      exit: options.exit,
+    }),
   });
 }
 
@@ -256,6 +277,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
   lock?.update({ port: http.server.port ?? requested.port, url: http.url });
   services.address.url = http.url;
   const { engine, config } = services;
+  services.stopShinsa = () => shinsa.stop();
   const shinsa: Shinsa = {
     url: services.address.url,
     engine,

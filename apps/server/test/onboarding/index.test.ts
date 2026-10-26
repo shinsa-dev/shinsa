@@ -115,4 +115,17 @@ describe('Onboarding', () => {
     const { root, developer } = setup();
     expect(resolveChosenRoots(['~', '~/Developer', developer], root)).toEqual([root, developer]);
   });
+
+  test('resolveChosenRoots says how to give Shinsa access to a folder macOS keeps private', () => {
+    const { root } = setup();
+    const refuse = (code: string) => () => {
+      throw Object.assign(new Error(code), { code });
+    };
+    for (const code of ['EPERM', 'EACCES']) {
+      expect(() => resolveChosenRoots(['~'], root, refuse(code))).toThrow(
+        expect.objectContaining({ code: 'roots_unreadable' })
+      );
+    }
+    expect(() => resolveChosenRoots(['~'], root, refuse('EIO'))).toThrow('EIO');
+  });
 });

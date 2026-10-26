@@ -10,34 +10,40 @@ restarts) is `docs/engine.md`; this file is where things live and the rules for 
 
 ```
 src/
-├── main.ts              The `shinsa` binary: argv → cli/ (the only file outside coverage; test/main.test.ts runs it)
+├── main.ts              The `shinsa` binary from source: argv → cli/ (the only file outside coverage;
+│                        test/main.test.ts runs it). The compiled bundle starts from scripts/engine-main.ts, the same
+│                        plus `shinsa eunoe …`, which runs Eunoe from the one executable
 ├── serve.ts             startShinsa: takes the data directory's lock (not in inspect mode, which is read-only and
 │                        starts nothing), wires the pieces, recovers in-flight work, returns { url, engine, stop }
 ├── cli/                 index.ts routes the commands (`serve` reads the login shell's environment first unless
-│                        started from a terminal, and exits 0 when the service finds the lock held); commands.ts
-│                        do / import / status / open; surface.ts every `shinsa <group> <action>` (help, --json, the
-│                        idempotency key, the service control for `shinsa service`); api.ts the HTTP client and
-│                        the surface client; session.ts reads a Claude Code session for `shinsa import`
+│                        started from a terminal, exits 0 when launchd started it and finds the lock held, and in the
+│                        bundle writes data/engine.log and puts its bin/ on PATH; waking the engine through
+│                        `launchctl kickstart`); commands.ts open (the app, a task, or a folder's project) / do /
+│                        import / status; app.ts the app's bundle id, the engine's label and `shinsa://` links;
+│                        surface.ts every `shinsa <group> <action>` (help, --json, the idempotency key); api.ts the
+│                        HTTP client and the surface client, which wake the engine once when it does not answer;
+│                        session.ts reads a Claude Code session for `shinsa import`
 ├── instance/            Which Shinsa this is and the one-server rule (docs/engine.md → Configuration and data):
 │                        install.ts (version, commit, install path, the server entry, resolveHealth for
 │                        /api/health), lock.ts (data/serve.lock: atomic create, the live-holder check, takeover,
 │                        ServerRunningError naming the holder), inspect.ts (the `inspect_read_only` refusal every
-│                        command gets under SHINSA_INSPECT)
-├── service/             `shinsa service`: the macOS LaunchAgent (launchd.ts: the plist, reading `launchctl print`)
-│                        and ServiceControl (index.ts: install, uninstall, status, restart, logs over `launchctl`;
-│                        SERVICE_MARKER, the `SHINSA_SERVICE=1` the plist sets, and isStartedByService)
+│                        command gets under SHINSA_INSPECT), bundle.ts (BUNDLE: the version, commit, state and SDK
+│                        versions a compiled engine carries, and where its plugin and web folders are; null from
+│                        source), service.ts (SERVICE_MARKER, the `SHINSA_SERVICE=1` the launchd job sets),
+│                        restart.ts (EngineRestarter: stop cleanly and exit 75 for launchd, now or once agents are idle)
 ├── surface/             Everything you can do, as specs both the command line and every task agent's management
 │                        tools are generated from (docs/engine.md → The command surface, docs/cli.md): fields.ts
 │                        (argv, MCP schemas and tool input), spec.ts (defineCommand / defineRead / defineAction),
 │                        resolve.ts (task, account, repository and project references), client.ts (SurfaceClient,
 │                        the seam the command line and the management tools both run through), one file per group
 │                        (tasks, gates, work, schedules, config: projects and focus, extensions: mcp, skills and
-│                        plugins, system, service: the background service, through `SurfaceClient.service`),
+│                        plugins, system),
 │                        index.ts (SURFACE, listAgentSpecs, listUncoveredCommands, help text, the docs/cli.md
 │                        reference)
 ├── config/              paths.ts (where ~/.config/shinsa, config.json and data/ are), file.ts (config.json: read
 │                        leniently, written atomically, ConfigStore), index.ts (ServerConfig from the environment and config.json; every SHINSA_*
-│                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (service/); prepareDataDir)
+│                        variable is read here, except SHINSA_QUICK and SHINSA_SERVICE (instance/service.ts) and the
+│                        SHINSA_BUILD_* a compiled engine carries (instance/bundle.ts); prepareDataDir)
 ├── log/                 One JSON line per entry; describeError and redactSecrets (URL credentials, GitHub and
 │                        Anthropic tokens never reach a log, a failure gate or the event log)
 ├── shell/               runCommand: argv only (never a shell string), its own process group, a timeout that kills

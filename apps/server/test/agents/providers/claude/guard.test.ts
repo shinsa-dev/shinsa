@@ -107,9 +107,6 @@ describe('the command guard', () => {
       'shinsa accounts sign-in-code login-1 abc',
       'shinsa mcp sign-in claude:linear',
       'shinsa tasks open SW-1',
-      'shinsa service install',
-      'shinsa service restart --json',
-      'shinsa service logs --lines 20',
       'shinsa command gate.answer --fields \'{"gateId":"g","decision":"approve"}\'',
     ]) {
       expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
@@ -127,7 +124,7 @@ describe('the command guard', () => {
     expect(resolveCommandVerdict('shinsa merges approve SW-1', 'main')).toMatchObject({
       hookSpecificOutput: {
         permissionDecisionReason:
-          'Only the human runs this command: it decides at a gate, gives a secret, signs in, changes accounts, MCP servers, skills or plugins, opens a task in the browser, manages the background service or sends a raw command. Tell them what you need; it waits for them in Shinsa.',
+          'Only the human runs this command: it decides at a gate, gives a secret, signs in, changes accounts, MCP servers, skills or plugins, opens a task in the browser or sends a raw command. Tell them what you need; it waits for them in Shinsa.',
       },
     });
   });

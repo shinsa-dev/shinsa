@@ -1269,9 +1269,9 @@ fails when the file and the specs differ.
   `config.json`'s `port`. `--help`, `--json` and the refusal shape are `docs/cli.md`. Commands carry an idempotency
   key per invocation (Command receipts, below).
 - **Yours alone** (`humanOnly`): the specs listed in Who can change Shinsa, below.
-- **Without the server**: `shinsa service` reaches `launchctl` through the command line's `SurfaceClient.service`,
-  never the server, so it works while Shinsa is down; a client without it (an agent's) refuses with
-  `service_unavailable` (Configuration and data → The background service).
+- **When the engine is down**: in the Mac app's bundle, a command the engine does not answer asks launchd to start it
+  (`launchctl kickstart`) and waits up to 20 s for it, then tries once more; otherwise it says to open the Shinsa app
+  (`apps/server/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background).
 - **Not here at all**: what only the browser keeps (the layout, the theme, notifications and sounds) and the setup
   chat, which `shinsa folders` and `shinsa settings` cover.
 
@@ -1387,9 +1387,7 @@ plainly what protects what.
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
-  - opening a worktree in an editor (`tasks open`);
-  - running Shinsa in the background (`service install`, `uninstall`, `status`, `restart`, `logs`: Configuration and
-    data → The background service, below).
+  - opening a worktree in an editor (`tasks open`).
 
   They are decisions only you make, need you at the keyboard, or would put a secret through a model. Their surface
   specs are `humanOnly`, so `listAgentSpecs` leaves them out of every agent's tools, the prompt says they wait for you
@@ -2859,7 +2857,7 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
     ├── onboarding.json  The setup chat so far, so a reload or a restart picks it up where it was
     ├── serve.lock     Which server holds this data directory: pid, port, URL, version, commit, install path, start
     │                  and boot time (One server per data directory, below)
-    └── serve.log      The background service's output (The background service, below)
+    └── engine.log     The bundled engine's output under launchd (The engine in the background, below)
 ```
 
 One folder instead of XDG's config and data split on purpose: it is one thing to back up, move or delete, a seeded or
@@ -2933,10 +2931,10 @@ holding it, or the file is not a lock at all. A takeover removes the old file on
 gives up with `server_lock_contended` after three tries, so two servers racing for a stale lock never both win. A
 lock it cannot read (permissions) stops the start instead of being taken over. Inspect mode takes no lock at all.
 
-A server the background service started (the plist sets `SHINSA_SERVICE=1`) that finds a live holder does not fail:
-it logs a warning naming the data directory and the holder's pid, URL and version, and exits 0. launchd's `KeepAlive`
-restarts only a failed exit, so the service stays stopped instead of starting again every 5 s while the other Shinsa
-runs; `shinsa service restart` starts it once that one has stopped. From a terminal the refusal stays an error and
+An engine launchd started (its job sets `SHINSA_SERVICE=1`) that finds a live holder does not fail: it logs a
+warning naming the data directory and the holder's pid, URL and version, and exits 0. launchd's `KeepAlive` restarts
+only a failed exit, so the engine stays stopped instead of starting again every 5 s while the other Shinsa runs; the
+app's Start engine (or Shinsa → Restart Engine) starts it once that one has stopped. From a terminal the refusal stays an error and
 exit code 1. `shinsa serve` removes `SHINSA_SERVICE` from its own environment as it starts, so nothing it runs (an
 agent starting a Shinsa of its own) inherits it.
 
@@ -2963,31 +2961,38 @@ server started from a terminal (stdin or stdout is a TTY, `isStartedFromTerminal
 did: the terminal already has the user's environment. Only the `shinsa serve` command does this; `startShinsa`
 (tests, the soak child) never runs a shell.
 
-### The background service
+### The engine in the background
 
-`shinsa service install|uninstall|status|restart|logs` (`apps/server/src/service/`, specs in `surface/service.ts`)
-runs Shinsa as a macOS LaunchAgent, `studio.overclock.shinsa`, so it lives through closing a window, a crash and a
-reboot. They are yours alone (Who can change Shinsa, above) and work while the server is down: they talk to
-`launchctl`, not to the server.
+The Mac app carries the engine and runs it as a launchd job, `studio.overclock.shinsa.engine`, so it lives through
+closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan.md`; the app's side is
+`apps/desktop/CLAUDE.md`). Nobody installs or starts it by hand.
 
-- **install** writes `~/Library/LaunchAgents/studio.overclock.shinsa.plist` and loads it with `launchctl bootstrap
-  gui/<uid>`. The plist runs the bun on `PATH` (the one the command line runs under when there is none) with this
-  checkout's `apps/server/src/main.ts serve`, from the checkout; it carries every non-empty `SHINSA_*` variable of the
-  shell that installed it, so the service serves the same data directory and port, and `SHINSA_SERVICE=1`, which
-  marks the server as the service's (One server per data directory, above). `RunAtLoad` starts it at login,
-  `KeepAlive` with `SuccessfulExit: false` restarts it after a crash (a clean stop exits 0 and stays stopped),
-  `ThrottleInterval` 5 s, and stdout and stderr go to `data/serve.log`. Installing again boots the loaded job out
-  first and waits (up to 5 s) for launchd to let go. When another Shinsa already holds the data directory, install
-  says so: the service exits 0 on the lock and stays stopped until you stop that one and run `shinsa service
-  restart`.
-- **uninstall** boots the job out and removes the plist.
-- **status**: whether the plist is installed and launchd has the job loaded, its state, pid and last exit code, and
-  the live holder of the data directory's lock (URL, port, pid, version) with whether it is the service's process.
-- **restart**: `launchctl kickstart -k`, after an update for example; refused when the job is not loaded.
-- **logs**: the last lines of `data/serve.log` (`--lines`, 50).
+- **The bundle.** `apps/server/scripts/build-engine.ts` compiles `scripts/engine-main.ts` with `bun build --compile`
+  into one executable, `Shinsa.app/Contents/Resources/engine/bin/shinsa`, the engine and the command line in one;
+  beside it `plugin/` (the plugin agents load) and `web/` (the built interface it serves). The build bakes in the
+  version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
+  `instance/bundle.ts` as `BUNDLE`, null when running from source): a compiled engine cannot read core's sources or
+  the SDK's `package.json`. `shinsa eunoe …` runs Eunoe from the same executable, so the proxy needs no second Bun.
+  Claude Code and Codex stay the user's own installs, found on the login shell's `PATH`.
+- **The job.** `Contents/Library/LaunchAgents/studio.overclock.shinsa.engine.plist` runs `shinsa serve` from the bundle
+  (`BundleProgram`), with `SHINSA_SERVICE=1`, `RunAtLoad`, `KeepAlive` with `SuccessfulExit: false` (a crash or a
+  restart exit brings it back, a clean stop stays stopped), `ThrottleInterval` 5 s and `ProcessType` `Interactive`. The
+  app registers it as a login item (`SMAppService`), so macOS lists it under Login Items as Shinsa; where that is
+  refused it writes the same job, with the program's full path, to `~/Library/LaunchAgents` and loads it with
+  `launchctl bootstrap`.
+- **The log.** A static plist cannot name a log path in the home folder, so a bundled engine started by launchd writes
+  its own stdout and stderr to `data/engine.log`, trimmed to its last half past 8 MB (`writeOutputTo`).
+- **Its PATH.** After reading the login shell, a bundled engine puts its own `bin/` first on `PATH`, so agents find the
+  `shinsa` command.
+- **Restarting.** A restart (`POST /api/engine/restart`, below) stops the engine cleanly and exits with 75
+  (`EX_TEMPFAIL`, `EXIT_RESTART`); launchd starts the bundle's program again, which after an app update is the new
+  version.
+- **Folders macOS keeps private.** The engine is a background process, so it cannot answer macOS's consent prompts
+  well: discovery in the bundle skips `~/Desktop`, `~/Documents` and `~/Downloads` (`createDiscoverer`), and a folder
+  chosen at setup that the engine may not read is refused with `roots_unreadable`, which says to give Shinsa Full Disk
+  Access (`resolveChosenRoots`).
 
-Anywhere but macOS every action but `logs` refuses with `service_unsupported`. Tests never touch launchd: the
-service takes its `launchctl` as a parameter, and `test/helpers/bin/launchctl` stands in for the real one.
+Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies.
 
 ## Onboarding API
 
@@ -3233,10 +3238,9 @@ and the next line is never glued onto it (`readChatEntries`).
 `protocol` is `ENGINE_PROTOCOL` (`packages/core/src/protocol/engine.ts`), raised only when the contract between the
 interface and the engine breaks; `busy` is whether an agent run is mid-turn (`isEngineBusy`: a live run with status
 `running`), and `restart` is `idle` while the engine waits for that to end before restarting. **`POST
-/api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine through launchd (`launchctl kickstart -k`, as
-`shinsa service restart`), at once or once no agent is mid-turn, and answers `{ restarting }` before it goes; it
-refuses with `restart_unsupported` unless this process is the background service on macOS (`EngineRestarter`,
-`apps/server/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
+/api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine: at once or once no agent is mid-turn, it stops cleanly and exits with
+75 for launchd to start it again, and answers `{ restarting }` before it goes; it refuses with `restart_unsupported`
+unless launchd started this process (`createLaunchdRestarter`, `apps/server/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live
@@ -3399,9 +3403,11 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   (`test/helpers/fish/fish`, off the `PATH`, found through the login shell's `PATH` or a `.zshrc` that execs it).
   The fish hand-off was also checked by hand with no terminal and a bare environment (`env -i HOME=$HOME
   SHELL=/bin/zsh PATH=/usr/bin:/bin:/usr/sbin:/sbin`) on a machine whose `.zshrc` runs `exec fish`: the merged `PATH`
-  held the folders only `config.fish` adds. `test/service/` checks the plist and
-  every `launchctl` call against a fake; the real launchd is checked by hand: `shinsa service install` on a scratch
-  `SHINSA_HOME`, `kill -9` the server and see it back within 5 s, then `shinsa service uninstall`.
+  held the folders only `config.fish` adds. The bundled engine and its launchd job are checked by hand on a test
+  copy of the packaged app (another bundle id, its own label and a scratch `SHINSA_HOME`, `apps/desktop/CLAUDE.md` →
+  Testing the packaged app): it registers and starts the engine, quitting the app leaves it running, `kill -9` brings
+  it back within seconds, `POST /api/engine/restart` exits 75 and comes back, and a taken port shows the app's
+  status screen until the port is free.
 - **Real agents.** `bun run --cwd apps/server test:live` runs a change, an Ask task, an investigation and a support
   question through real Claude agents on a throwaway repository (GitHub stays faked). It costs real tokens, so it is not part of `bun test`. The real eunoe is
   checked by hand: `shinsa serve` on a throwaway `SHINSA_HOME` with `SHINSA_EUNOE_PORT` on a spare port, one task, and

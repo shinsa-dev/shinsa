@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { DomainError } from '@shinsa/core';
 
@@ -14,7 +14,28 @@ function isDirectory(path: string) {
   return existsSync(path) && statSync(path).isDirectory();
 }
 
-export function resolveChosenRoots(value: unknown, userHome: string): string[] {
+function isPrivacyRefusal(error: unknown) {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 'EPERM' || code === 'EACCES';
+}
+
+function assertReadable(root: string, entry: string, read: (path: string) => unknown) {
+  try {
+    read(root);
+  } catch (error) {
+    if (!isPrivacyRefusal(error)) throw error;
+    throw new DomainError(
+      'roots_unreadable',
+      `Shinsa cannot read ${entry}. macOS keeps Desktop, Documents and Downloads private: turn on Shinsa in System Settings → Privacy & Security → Full Disk Access, then choose it again.`
+    );
+  }
+}
+
+export function resolveChosenRoots(
+  value: unknown,
+  userHome: string,
+  read: (path: string) => unknown = readdirSync
+): string[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new DomainError('roots_invalid', 'Choose at least one folder that holds your repositories.');
   }
@@ -31,6 +52,7 @@ export function resolveChosenRoots(value: unknown, userHome: string): string[] {
     const root = resolve(path);
     if (!isDirectory(root))
       throw new DomainError('roots_invalid', `${entry} is not a folder on this machine.`);
+    assertReadable(root, entry, read);
     if (!roots.includes(root)) roots.push(root);
   }
   return roots;

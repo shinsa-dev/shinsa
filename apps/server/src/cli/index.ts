@@ -1,19 +1,28 @@
+import { closeSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { join } from 'node:path';
 import { resolveConfig, resolveServerAddress } from '../config/index.ts';
 import { resolveServerUrl } from '../http/index.ts';
-import { describeVersion, ServerRunningError } from '../instance/index.ts';
-import { describeError, log } from '../log/index.ts';
-import { type Shinsa, startShinsa } from '../serve.ts';
 import {
-  createServiceControl,
+  BUNDLE,
+  describeVersion,
   isStartedByService,
   SERVICE_MARKER,
-  type ServiceControl,
-} from '../service/index.ts';
+  ServerRunningError,
+  type ShinsaBundle,
+} from '../instance/index.ts';
+import { describeError, log } from '../log/index.ts';
+import { type Shinsa, startShinsa } from '../serve.ts';
 import { describeFailure, runCommand } from '../shell/index.ts';
-import { applyLoginEnv, createLoginEnvReader, isStartedFromTerminal } from '../shell/login.ts';
+import {
+  applyLoginEnv,
+  createLoginEnvReader,
+  isStartedFromTerminal,
+  mergePathLists,
+} from '../shell/login.ts';
 import { describeSurface } from '../surface/index.ts';
 import { createApiClient } from './api.ts';
-import { type CommandIo, createTask, importSession, openInBrowser, printStatus } from './commands.ts';
+import { APP_BUNDLE_ID, isPathArgument, resolveEngineTarget, resolveLinkPage } from './app.ts';
+import { type CommandIo, createTask, importSession, openApp, printStatus } from './commands.ts';
 import { isSurfaceGroup, runSurface } from './surface.ts';
 
 export interface CliIo {
@@ -21,35 +30,95 @@ export interface CliIo {
   cwd: string;
   write: (line?: string) => void;
   writeError: (line: string) => void;
-  openUrl: (url: string) => Promise<void>;
+  openApp: (link: string) => Promise<void>;
+  readRepoRoot: (dir: string) => Promise<string | null>;
+  wakeEngine: () => Promise<boolean>;
   serve: (env: Record<string, string | undefined>) => Promise<Shinsa>;
   onShutdown: (stop: () => Promise<void>) => void;
   projectsDir?: string;
-  service?: ServiceControl;
 }
 
 export const USAGE = `shinsa: a control plane for coding agents
 
 Usage
-  shinsa                  Start Shinsa (the server and the web app on http://127.0.0.1:5180)
-  shinsa serve            Same as above
+  shinsa [folder]         Open the Shinsa app; with a folder (shinsa .), on the project it belongs to
+  shinsa open [task]      Open the app, or one task in it (SW-142, an id or a title)
   shinsa do <request>     Hand Shinsa a piece of work. Options: --plan-first (approve a plan before building), --urgent, --high
   shinsa import <session> Turn a Claude Code session (.jsonl path or id) into a task. --in <dir> picks the repo
   shinsa status           What needs a decision, and what agents are working on
-  shinsa open [task-id]   Open Shinsa, or one task, in the browser
   shinsa help             This text
 
-Managing Shinsa (the running server; add --help to any for its arguments, --json for JSON)
+The Mac app runs Shinsa's engine in the background; these commands talk to it.
+
+Managing Shinsa (add --help to any for its arguments, --json for JSON)
 ${describeSurface()}
 
 Agents can call these too: \`shinsa do\` from inside any project hands work over to Shinsa.`;
 
+const ENGINE_LOG = 'engine.log';
+
+const ENGINE_LOG_MAX_BYTES = 8 * 1024 * 1024;
+
+const WAKE_WAIT_MS = 20_000;
+
+const WAKE_POLL_MS = 250;
+
 const SHUTDOWN_SIGNALS = ['SIGINT', 'SIGTERM'] as const;
 
-async function openUrl(url: string) {
-  const command = ['open', url];
+async function runOrThrow(command: string[]) {
   const result = await runCommand(command, process.cwd());
   if (!result.ok) throw new Error(describeFailure(command, result));
+  return result.stdout;
+}
+
+function createOpenApp(base: string) {
+  return async (link: string) => {
+    if (BUNDLE) await runOrThrow(['open', '-b', APP_BUNDLE_ID, link]);
+    else await runOrThrow(['open', `${base}${resolveLinkPage(link)}`]);
+  };
+}
+
+async function readRepoRoot(dir: string) {
+  const result = await runCommand(['git', '-C', dir, 'rev-parse', '--show-toplevel'], process.cwd());
+  return result.ok ? result.stdout.trim() || null : null;
+}
+
+async function isAnswering(base: string) {
+  try {
+    const response = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1000) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function kickEngine() {
+  const kicked = await runCommand(
+    ['launchctl', 'kickstart', resolveEngineTarget(process.getuid?.() ?? 0)],
+    process.cwd()
+  );
+  return kicked.ok;
+}
+
+export interface WakeOptions {
+  bundled: boolean;
+  kick: () => Promise<boolean>;
+  waitMs?: number;
+}
+
+export function createWakeEngine(
+  base: string,
+  options: WakeOptions = { bundled: Boolean(BUNDLE) && process.platform === 'darwin', kick: kickEngine }
+) {
+  return async () => {
+    if (!options.bundled || !(await options.kick())) return false;
+    const deadline = Date.now() + (options.waitMs ?? WAKE_WAIT_MS);
+    while (Date.now() < deadline) {
+      if (await isAnswering(base)) return true;
+      await Bun.sleep(WAKE_POLL_MS);
+    }
+    return false;
+  };
 }
 
 function stopOnSignal(stop: () => Promise<void>) {
@@ -67,46 +136,87 @@ function stopOnSignal(stop: () => Promise<void>) {
   }
 }
 
-interface ProcessOptions {
-  isTerminal?: () => boolean;
+export function trimEngineLog(path: string, maxBytes = ENGINE_LOG_MAX_BYTES) {
+  try {
+    if (statSync(path).size <= maxBytes) return;
+    const text = readFileSync(path);
+    writeFileSync(path, text.subarray(text.length - Math.floor(maxBytes / 2)));
+  } catch {
+    return;
+  }
 }
 
-async function serveWithLoginEnv(env: Record<string, string | undefined>, isTerminal: () => boolean) {
+export function writeOutputTo(
+  path: string,
+  streams: NodeJS.WriteStream[] = [process.stdout, process.stderr]
+) {
+  trimEngineLog(path);
+  const fd = openSync(path, 'a');
+  for (const stream of streams) {
+    stream.write = ((chunk: string | Uint8Array) => {
+      writeSync(fd, typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      return true;
+    }) as typeof stream.write;
+  }
+  return () => closeSync(fd);
+}
+
+interface ProcessOptions {
+  isTerminal?: () => boolean;
+  bundle?: ShinsaBundle | null;
+}
+
+async function serveWithLoginEnv(
+  env: Record<string, string | undefined>,
+  isTerminal: () => boolean,
+  bundle: ShinsaBundle | null
+) {
+  const byService = isStartedByService(env);
   delete Bun.env[SERVICE_MARKER];
+  const config = resolveConfig(env, bundle);
+  if (byService && bundle) {
+    mkdirSync(config.dataDir, { recursive: true });
+    writeOutputTo(join(config.dataDir, ENGINE_LOG));
+  }
   if (isTerminal()) {
     log.info('[Serve] Started from a terminal, so the login shell environment is not read');
   } else {
     const added = await applyLoginEnv(Bun.env, createLoginEnvReader(Bun.env));
     log.info('[Serve] Read the login shell environment', { added: added.length });
   }
-  return startShinsa(resolveConfig(env));
+  if (bundle) Bun.env.PATH = mergePathLists(bundle.bin, Bun.env.PATH ?? '');
+  return startShinsa(config, { byService });
+}
+
+function resolveBase(env: Record<string, string | undefined>) {
+  const address = resolveServerAddress(env);
+  return resolveServerUrl(address.hostname, address.port);
 }
 
 export function createProcessIo(options: ProcessOptions = {}): CliIo {
   const isTerminal = options.isTerminal ?? isStartedFromTerminal;
+  const bundle = options.bundle === undefined ? BUNDLE : options.bundle;
+  const base = resolveBase(Bun.env);
   return {
     env: Bun.env,
     cwd: process.cwd(),
     write: (line = '') => process.stdout.write(`${line}\n`),
     writeError: (line) => process.stderr.write(`${line}\n`),
-    openUrl,
-    serve: (env) => serveWithLoginEnv(env, isTerminal),
+    openApp: createOpenApp(base),
+    readRepoRoot,
+    wakeEngine: createWakeEngine(base),
+    serve: (env) => serveWithLoginEnv(env, isTerminal, bundle),
     onShutdown: stopOnSignal,
-    service: createServiceControl({ env: Bun.env }),
   };
-}
-
-function resolveBase(io: CliIo) {
-  const address = resolveServerAddress(io.env);
-  return resolveServerUrl(address.hostname, address.port);
 }
 
 function createCommandIo(io: CliIo): CommandIo {
   return {
-    api: createApiClient(resolveBase(io)),
+    api: createApiClient(resolveBase(io.env), io.wakeEngine),
     cwd: io.cwd,
     write: io.write,
-    openUrl: io.openUrl,
+    openApp: io.openApp,
+    readRepoRoot: io.readRepoRoot,
     projectsDir: io.projectsDir,
   };
 }
@@ -148,14 +258,18 @@ async function routeCommand(command: string, args: string[], io: CliIo) {
       await printStatus(createCommandIo(io));
       return 0;
     case 'open':
-      await openInBrowser(args, createCommandIo(io));
+      await openApp(args, createCommandIo(io));
       return 0;
     default:
+      if (isPathArgument(command)) {
+        await openApp([command], createCommandIo(io));
+        return 0;
+      }
       if (isSurfaceGroup(command)) {
         return runSurface([command, ...args], {
-          base: resolveBase(io),
+          base: resolveBase(io.env),
           write: io.write,
-          service: io.service,
+          wake: io.wakeEngine,
         });
       }
       io.write(USAGE);
@@ -164,7 +278,7 @@ async function routeCommand(command: string, args: string[], io: CliIo) {
 }
 
 export async function runCli(args: string[], io: CliIo = createProcessIo()): Promise<number> {
-  const [command = 'serve', ...rest] = args;
+  const [command = 'open', ...rest] = args;
   try {
     return await routeCommand(command, rest, io);
   } catch (error) {

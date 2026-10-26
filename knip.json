@@ -15,8 +15,12 @@
       "entry": ["src/main/index.ts", "src/preload/index.ts", "test/**/*.test.ts"]
     },
     "apps/server": {
-      "entry": ["test/**/*.test.ts", "test/e2e/soak/child.ts", "test/helpers/mcp/stdio-server.ts"],
-      "ignoreDependencies": ["@chroxify/eunoe"]
+      "entry": [
+        "test/**/*.test.ts",
+        "test/e2e/soak/child.ts",
+        "test/helpers/mcp/stdio-server.ts",
+        "scripts/*.ts"
+      ]
     },
     "apps/marketing": {
       "ignoreDependencies": ["@shinsa/web", "tailwindcss"]

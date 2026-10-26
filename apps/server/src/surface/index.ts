@@ -4,7 +4,6 @@ import { EXTENSION_SPECS } from './extensions.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
 import { GATE_SPECS } from './gates.ts';
 import { SCHEDULE_SPECS } from './schedules.ts';
-import { SERVICE_SPECS } from './service.ts';
 import { describeTaskLink, type SurfaceSpec } from './spec.ts';
 import { SYSTEM_SPECS } from './system.ts';
 import { TASK_SPECS } from './tasks.ts';
@@ -45,7 +44,6 @@ export const SURFACE: SurfaceSpec[] = [
   ...CONFIG_SPECS,
   ...SYSTEM_SPECS,
   ...EXTENSION_SPECS,
-  ...SERVICE_SPECS,
   COMMAND_SPEC,
 ];
 
@@ -167,8 +165,8 @@ export function serializeReference(specs: SurfaceSpec[] = SURFACE) {
     '',
     'Every command talks to the running server on the configured host (`SHINSA_HOST` or `hostname` in `config.json`;',
     '127.0.0.1 when the server listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180).',
-    '`shinsa service` is the exception: it manages the background service with launchd and works while the server is',
-    'down. `--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as',
+    'When the Mac app runs the engine and it is not answering, a command asks launchd to start it and waits for it.',
+    '`--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as',
     '`{ "error": { "code", "message" } }` with exit code 1. A task is named by its handle (SW-142), its id, the start of',
     'its id or its exact title; an account by id or email; a repository by name or id; a project by key, name or id.',
     'Every task agent has each command that is not yours alone as a tool of the same name with `_` for spaces and',

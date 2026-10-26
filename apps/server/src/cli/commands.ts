@@ -1,13 +1,15 @@
 import type { TaskPriority } from '@shinsa/core';
 import type { CommandReceipt } from '../surface/index.ts';
 import type { ApiClient } from './api.ts';
+import { HOME_LINK, isPathArgument, resolvePathArgument, resolveTaskLink } from './app.ts';
 import { describeSession, readSession } from './session.ts';
 
 export interface CommandIo {
   api: ApiClient;
   cwd: string;
   write: (line?: string) => void;
-  openUrl: (url: string) => Promise<void>;
+  openApp: (link: string) => Promise<void>;
+  readRepoRoot: (dir: string) => Promise<string | null>;
   projectsDir?: string;
 }
 
@@ -93,8 +95,26 @@ export async function printStatus(io: CommandIo) {
   for (const entry of summary.working) io.write(`  ${entry.label.padEnd(9)} ${entry.title}`);
 }
 
-export async function openInBrowser(args: string[], io: CommandIo) {
-  const [taskId] = parseArgs(args).positional;
-  const page = taskId ? `${io.api.base}/tasks/${encodeURIComponent(taskId)}` : io.api.base;
-  await io.openUrl(page);
+export async function openApp(args: string[], io: CommandIo) {
+  const [target] = parseArgs(args).positional;
+  if (!target) return io.openApp(HOME_LINK);
+  if (!isPathArgument(target)) return io.openApp(resolveTaskLink(target));
+  await focusFolder(resolvePathArgument(target, io.cwd), io);
+  await io.openApp(HOME_LINK);
+}
+
+async function focusFolder(dir: string, io: CommandIo) {
+  const root = await io.readRepoRoot(dir);
+  if (!root) {
+    io.write(`${dir} is not in a git repository, so Shinsa opens on Home.`);
+    return;
+  }
+  const { repos } = await io.api.readRepos();
+  const repo = repos.find((entry) => entry.path === root);
+  if (!repo) {
+    io.write(`Shinsa has not worked in ${root} yet. Ask for something there and it joins your projects.`);
+    return;
+  }
+  if (!repo.projectId) return;
+  await io.api.sendCommand({ type: 'focus.change', projectId: repo.projectId, until: null });
 }

@@ -1,10 +1,11 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { BUNDLE, resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
 import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
 export { ConfigStore, writeJsonFile } from './file.ts';
-export { type Env, resolveScratchPath, resolveShinsaPaths, resolveUserHome } from './paths.ts';
+export { type Env, resolveScratchPath, resolveShinsaPaths } from './paths.ts';
 
 export interface ServerConfig {
   home: string;
@@ -94,7 +95,7 @@ function resolveDataPaths(dataDir: string, env: Env) {
   };
 }
 
-export function resolveConfig(env: Env): ServerConfig {
+export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): ServerConfig {
   const paths = resolveShinsaPaths(env);
   const read = readMachineConfig(paths.configPath);
   const machine = read.config;
@@ -104,8 +105,12 @@ export function resolveConfig(env: Env): ServerConfig {
     home: paths.home,
     configPath: paths.configPath,
     ...resolveDataPaths(paths.dataDir, env),
-    pluginDir: env.SHINSA_PLUGIN_DIR || resolve(import.meta.dirname, '../../plugin'),
-    webDir: env.SHINSA_WEB_DIR || resolve(import.meta.dirname, '../../../web/dist'),
+    pluginDir:
+      env.SHINSA_PLUGIN_DIR ||
+      (bundle ? resolveBundlePath(bundle, 'plugin') : resolve(import.meta.dirname, '../../plugin')),
+    webDir:
+      env.SHINSA_WEB_DIR ||
+      (bundle ? resolveBundlePath(bundle, 'web') : resolve(import.meta.dirname, '../../../web/dist')),
     port: resolvePortFrom(env, machine),
     hostname,
     allowedHosts: [

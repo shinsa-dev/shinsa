@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { discoverRoots } from '../../src/repos/index.ts';
+import { createDiscoverer, discoverRoots } from '../../src/repos/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 function createRepo(path: string, gitFile = false) {
@@ -48,5 +48,17 @@ describe('discoverRoots', () => {
     const [candidate] = (await discoverRoots(home)).candidates;
     expect(candidate?.repoCount).toBe(10);
     expect(candidate?.repos).toHaveLength(8);
+  });
+
+  test('the app’s engine leaves Desktop, Documents and Downloads alone, which macOS keeps private', async () => {
+    const home = createTempDir();
+    createRepo(join(home, 'Documents', 'Projects', 'notes'));
+    createRepo(join(home, 'Downloads', 'zip'));
+    createRepo(join(home, 'Desktop', 'sketch'));
+    createRepo(join(home, 'Developer', 'shop'));
+    expect((await createDiscoverer(true)(home)).candidates.map((candidate) => candidate.path)).toEqual([
+      join(home, 'Developer'),
+    ]);
+    expect((await createDiscoverer(false)(home)).candidates).toHaveLength(4);
   });
 });

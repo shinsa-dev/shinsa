@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { BUNDLE, type ShinsaBundle } from '../../../instance/bundle.ts';
 import { compareVersions, type LocateDeps, locateProgram, readProgramVersion } from '../versions.ts';
 
 const CLAUDE_EXECUTABLE_ENV = 'CLAUDE_EXECUTABLE';
@@ -20,8 +21,9 @@ function readVersionField(value: unknown) {
   return typeof value === 'string' ? value : '0.0.0';
 }
 
-export function resolveSdkPackage(packagePath = resolveSdkPackagePath()) {
-  const fields = JSON.parse(readFileSync(packagePath, 'utf8')) as {
+export function resolveSdkPackage(packagePath?: string, bundle: ShinsaBundle | null = BUNDLE) {
+  if (bundle && !packagePath) return bundle.sdk;
+  const fields = JSON.parse(readFileSync(packagePath ?? resolveSdkPackagePath(), 'utf8')) as {
     version?: unknown;
     claudeCodeVersion?: unknown;
   };
@@ -31,7 +33,7 @@ export function resolveSdkPackage(packagePath = resolveSdkPackagePath()) {
   };
 }
 
-export function resolveSdkClaudeVersion(packagePath = resolveSdkPackagePath()) {
+export function resolveSdkClaudeVersion(packagePath?: string) {
   return resolveSdkPackage(packagePath).claudeCodeVersion;
 }
 

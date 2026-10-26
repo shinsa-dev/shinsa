@@ -1,0 +1,59 @@
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveStateVersion } from '../src/store/snapshot.ts';
+
+const serverDir = resolve(import.meta.dirname, '..');
+const outDir = resolve(serverDir, 'dist/engine');
+const webDist = resolve(serverDir, '../web/dist');
+const version = Bun.env.SHINSA_VERSION?.replace(/^v/, '') || '0.0.0';
+const target = Bun.env.SHINSA_ENGINE_TARGET || 'bun-darwin-arm64';
+
+function readCommit() {
+  const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: serverDir });
+  const commit = result.stdout.toString().trim();
+  return result.exitCode === 0 && /^[0-9a-f]{40}$/.test(commit) ? commit : '';
+}
+
+async function compile(entry: string, name: string, define: Record<string, string>) {
+  const result = await Bun.build({
+    entrypoints: [entry],
+    compile: { target: target as Bun.Build.CompileTarget, outfile: join(outDir, 'bin', name) },
+    define,
+    minify: false,
+    sourcemap: 'none',
+  });
+  if (!result.success) {
+    throw new Error(`Could not compile ${name}:\n${result.logs.map(String).join('\n')}`);
+  }
+}
+
+if (!existsSync(join(webDist, 'index.html'))) {
+  throw new Error(`Build the web app first (bun run --cwd apps/web build): ${webDist} has no index.html`);
+}
+
+const sdkPackage = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.resolve('@anthropic-ai/claude-agent-sdk'))), 'package.json'),
+    'utf8'
+  )
+) as { version: string; claudeCodeVersion: string };
+
+const stateVersion = resolveStateVersion();
+if (!stateVersion) throw new Error('Could not read the state version from @shinsa/core');
+
+rmSync(outDir, { recursive: true, force: true });
+mkdirSync(join(outDir, 'bin'), { recursive: true });
+
+await compile(join(serverDir, 'scripts/engine-main.ts'), 'shinsa', {
+  'process.env.SHINSA_BUILD_VERSION': JSON.stringify(version),
+  'process.env.SHINSA_BUILD_COMMIT': JSON.stringify(readCommit()),
+  'process.env.SHINSA_BUILD_STATE_VERSION': JSON.stringify(stateVersion),
+  'process.env.SHINSA_BUILD_SDK_VERSION': JSON.stringify(sdkPackage.version),
+  'process.env.SHINSA_BUILD_SDK_CLAUDE_VERSION': JSON.stringify(sdkPackage.claudeCodeVersion),
+});
+
+cpSync(resolve(serverDir, 'plugin'), join(outDir, 'plugin'), { recursive: true });
+cpSync(webDist, join(outDir, 'web'), { recursive: true });
+
+process.stdout.write(`Shinsa ${version} engine in ${outDir}\n`);

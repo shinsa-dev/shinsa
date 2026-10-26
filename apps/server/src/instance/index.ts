@@ -1,3 +1,4 @@
+export { BUNDLE, resolveBundle, resolveBundlePath, type ShinsaBundle } from './bundle.ts';
 export { createReadOnlyError, INSPECT_MESSAGE, INSPECT_READ_ONLY } from './inspect.ts';
 export {
   createServerInstance,
@@ -20,7 +21,9 @@ export {
   selectLockHolder,
 } from './lock.ts';
 export {
-  createServiceRestarter,
+  createLaunchdRestarter,
   EngineRestarter,
+  EXIT_RESTART,
   isEngineBusy,
 } from './restart.ts';
+export { isStartedByService, SERVICE_MARKER } from './service.ts';

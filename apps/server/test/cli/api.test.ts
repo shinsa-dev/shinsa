@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { DomainError } from '@shinsa/core';
-import { createApiClient, createSurfaceClient } from '../../src/cli/api.ts';
+import { createApiClient, createSurfaceClient, NOT_RUNNING } from '../../src/cli/api.ts';
 
 interface Seen {
   method: string;
@@ -101,8 +101,24 @@ describe('the surface client', () => {
       `Shinsa on ${base} answered 502 without JSON.`
     );
     await expect(createSurfaceClient('http://127.0.0.1:1', 'k').read('/api/queue')).rejects.toThrow(
-      'Shinsa is not running on http://127.0.0.1:1. Start it with `shinsa`.'
+      NOT_RUNNING
     );
+  });
+  test('a request the engine does not answer wakes it once, then tries again', async () => {
+    const { base } = serve(() => Response.json({ ok: true }));
+    let wakes = 0;
+    const wakeOnto = (target: string) => {
+      const client = createSurfaceClient(target, 'k', () => {
+        wakes += 1;
+        return Promise.resolve(target === base ? true : wakes > 1);
+      });
+      return client;
+    };
+    await expect(wakeOnto(base).read('/api/health')).resolves.toEqual({ ok: true });
+    await expect(wakeOnto('http://127.0.0.1:1').read('/api/health')).rejects.toThrow(NOT_RUNNING);
+    await expect(wakeOnto('http://127.0.0.1:1').read('/api/health')).rejects.toThrow(NOT_RUNNING);
+    expect(wakes).toBe(2);
+    expect(createApiClient(base, () => Promise.resolve(false)).base).toBe(base);
   });
 });
 
