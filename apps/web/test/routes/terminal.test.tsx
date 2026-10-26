@@ -76,6 +76,7 @@ describe('the terminal page', () => {
     visit('/terminal?project=SH');
     show(createTerminalsSnapshot());
     expect(screen.getByText('No terminals in Shop')).toBeTruthy();
+    expect(screen.queryByRole('tablist')).toBeNull();
     answer = { ...createTerminalsSnapshot([SERVER]), terminal: SERVER };
     fireEvent.click(screen.getByRole('button', { name: 'Open a terminal' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'web' }));

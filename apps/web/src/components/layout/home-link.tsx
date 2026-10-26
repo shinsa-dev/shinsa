@@ -26,7 +26,15 @@ function HomeButton({ onNavigate, className }: { onNavigate?: () => void; classN
   );
 }
 
-export function HomeLink({ onNavigate, className }: { onNavigate?: () => void; className?: string }) {
+export function HomeLink({
+  onNavigate,
+  className,
+  brandClassName,
+}: {
+  onNavigate?: () => void;
+  className?: string;
+  brandClassName?: string;
+}) {
   if (isDesktop()) return <HomeButton onNavigate={onNavigate} className={className} />;
-  return <BrandLink onNavigate={onNavigate} className={className} />;
+  return <BrandLink onNavigate={onNavigate} className={cn(className, brandClassName)} />;
 }

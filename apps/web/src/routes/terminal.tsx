@@ -259,18 +259,20 @@ function ProjectTerminals({
         <span className='shrink-0'>
           <ProjectPicker state={state} project={project} />
         </span>
-        <TerminalTabs
-          terminals={terminals}
-          services={services}
-          now={now}
-          activeId={active?.id ?? null}
-          renamingId={renaming}
-          onSelect={select}
-          onClose={(terminal) => void askToClose(terminal)}
-          onRenameStart={(terminal) => setRenaming(terminal.id)}
-          onRename={rename}
-          onReorder={(ids) => void reorderTerminals(project.id, ids)}
-        />
+        {terminals.length > 0 && (
+          <TerminalTabs
+            terminals={terminals}
+            services={services}
+            now={now}
+            activeId={active?.id ?? null}
+            renamingId={renaming}
+            onSelect={select}
+            onClose={(terminal) => void askToClose(terminal)}
+            onRenameStart={(terminal) => setRenaming(terminal.id)}
+            onRename={rename}
+            onReorder={(ids) => void reorderTerminals(project.id, ids)}
+          />
+        )}
         <NewTerminalButton groups={groups} fallback={fallback} onOpen={open} />
         {activeService && <ActiveServiceButtons view={activeService} />}
         {activeView && (

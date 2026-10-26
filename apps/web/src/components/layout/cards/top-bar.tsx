@@ -16,7 +16,7 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
   return (
     <header data-window-drag className='shrink-0 select-none desktop:ps-16'>
       <div className={cn(CARDS_FRAME, 'flex h-11 items-center gap-1')}>
-        <HomeLink />
+        <HomeLink brandClassName='me-2' />
         {route.name !== 'onboarding' && <ServicesMenu state={state} />}
         {route.name === 'task' && <QueueMenu state={state} activeTaskId={activeTaskId} />}
         <ConnectionStatus />

@@ -1439,7 +1439,7 @@ Only these, and they win over anything below:
       Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
       (`components/layout/home-link.tsx`) renders `HomeButton` there (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
       `IconHomeRoundDoorFilled` in `fg-4` with `aria-current="page"`; the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
-      header and the compact bar alike. The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
+      header and the compact bar alike. In the Cards top bar the wordmark, which has no padding of its own, keeps 8px after it (`brandClassName`, `me-2`), so what it draws sits as far from Services as every other pair in the bar sits apart: about 19px between what one button draws and the next, Home in the app and usage and Focus on the right included. The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
       the page's own history (`MainWindow.step`, which never steps onto the waiting page,
       `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for
       indent and outdent while it has focus, since the page sees the key before the menu does.
