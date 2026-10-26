@@ -37,7 +37,8 @@ export function parseStoredTerminal(value: unknown): TerminalInfo | null {
     return null;
   if (!(STATUSES.has(fields.status as string) && PLACES.has(fields.place as string))) return null;
   if (!(isTextOrNull(fields.name) && isTextOrNull(fields.title) && isTextOrNull(fields.taskId))) return null;
-  if (!isTextOrNull(fields.serviceId)) return null;
+  const serviceId = fields.serviceId ?? null;
+  if (!isTextOrNull(serviceId)) return null;
   if (
     !(
       typeof fields.startedAt === 'number' &&
@@ -46,7 +47,7 @@ export function parseStoredTerminal(value: unknown): TerminalInfo | null {
     )
   )
     return null;
-  return fields as unknown as TerminalInfo;
+  return { ...fields, serviceId } as unknown as TerminalInfo;
 }
 
 function isEnv(value: unknown): value is Record<string, string> {

@@ -333,6 +333,12 @@ describe('parseStoredTerminal', () => {
     expect(parseStoredTerminal({ ...createInfo(), serviceId: 3 })).toBeNull();
     expect(parseStoredTerminal({ ...createInfo(), startedAt: '1' })).toBeNull();
   });
+
+  it('reads a terminal saved before services as a shell of its own', () => {
+    const { serviceId, ...saved } = createInfo();
+    expect(serviceId).toBeNull();
+    expect(parseStoredTerminal(saved)).toEqual(createInfo());
+  });
 });
 
 function hasScreen(dataDir: string, id: string) {
