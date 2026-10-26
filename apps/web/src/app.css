@@ -1,4 +1,5 @@
 @import "@shinsa/ui/styles/globals.css";
+@import "@xterm/xterm/css/xterm.css";
 @import "./desktop.css";
 
 @source "./";
@@ -11,6 +12,35 @@
   --code-comment-todo: var(--orange-text);
   --code-comment-highlight: var(--green-text);
   --code-comment-strike: var(--fg-1);
+  --terminal-background: var(--background);
+  --terminal-foreground: var(--fg-4);
+  --terminal-cursor: var(--primary-4);
+  --terminal-cursor-text: var(--background);
+  --terminal-selection: oklch(0.6 0.215 256 / 0.22);
+  --terminal-ansi-0: var(--fg-4);
+  --terminal-ansi-1: var(--red-text);
+  --terminal-ansi-2: var(--green-text);
+  --terminal-ansi-3: var(--amber-text);
+  --terminal-ansi-4: var(--sky-text);
+  --terminal-ansi-5: var(--purple-text);
+  --terminal-ansi-6: var(--blue-text);
+  --terminal-ansi-7: var(--fg-2);
+  --terminal-ansi-8: var(--fg-2);
+  --terminal-ansi-9: var(--red-4);
+  --terminal-ansi-10: var(--green-text);
+  --terminal-ansi-11: var(--yellow-text);
+  --terminal-ansi-12: var(--primary-4);
+  --terminal-ansi-13: var(--pink-text);
+  --terminal-ansi-14: var(--blue-text);
+  --terminal-ansi-15: var(--fg-1);
+}
+
+.dark {
+  --terminal-selection: oklch(0.62 0.2 256 / 0.34);
+  --terminal-ansi-0: var(--bg-4);
+  --terminal-ansi-7: var(--fg-3);
+  --terminal-ansi-8: var(--fg-1);
+  --terminal-ansi-15: var(--fg-4);
 }
 
 .prose-shinsa {

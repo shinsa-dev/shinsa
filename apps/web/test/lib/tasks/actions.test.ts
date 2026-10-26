@@ -76,15 +76,15 @@ describe('runTaskAction', () => {
     expect(spies.copied).toHaveBeenCalledWith('fix/tabs');
   });
 
-  it('opens the worktree in the editor, a terminal or Finder', () => {
+  it('opens the worktree in the editor or Finder, and a terminal in Shinsa', () => {
     runTaskAction(FULL, 'editor');
     runTaskAction(FULL, 'terminal');
     runTaskAction(FULL, 'finder');
     expect(spies.opened.mock.calls).toEqual([
       ['full', 'editor'],
-      ['full', 'terminal'],
       ['full', 'finder'],
     ]);
+    expect(spies.terminal).toHaveBeenCalledWith(FULL);
   });
 
   it('sends restart, complete and cancel with a toast for each', () => {

@@ -115,6 +115,26 @@ export {
   type ValueChange,
 } from './patch.ts';
 export { serializeRun, serializeState, type WireRun, type WireState } from './runs.ts';
+export {
+  listTerminalPlaces,
+  parseTerminalClientFrame,
+  parseTerminalServerFrame,
+  resolveTaskTerminalPlace,
+  resolveTerminalLabel,
+  SHINSA_APPEARANCE,
+  TERMINAL_LIMITS,
+  type TerminalAppearance,
+  type TerminalClientFrame,
+  type TerminalColors,
+  type TerminalCursorStyle,
+  type TerminalInfo,
+  type TerminalPlace,
+  type TerminalPlaceKind,
+  type TerminalServerFrame,
+  type TerminalStatus,
+  type TerminalsSnapshot,
+  type TerminalTheme,
+} from './terminals.ts';
 export type {
   ProgramId,
   ProgramVersion,

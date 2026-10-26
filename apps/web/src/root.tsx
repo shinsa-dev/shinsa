@@ -32,6 +32,7 @@ import { SettingsPage } from '@/routes/settings.tsx';
 import { TaskPage } from '@/routes/task/index.tsx';
 import { Prefetch } from '@/routes/task/prefetch.tsx';
 import { TasksPage } from '@/routes/tasks.tsx';
+import { TerminalPage } from '@/routes/terminal.tsx';
 
 const UiPage = React.lazy(async () => ({ default: (await import('@/routes/ui/index.tsx')).UiPage }));
 
@@ -54,6 +55,8 @@ const PageView = React.memo(function PageContent({ state, route }: { state: Shin
       return <TaskPage state={state} taskId={route.reference} />;
     case 'settings':
       return <SettingsPage state={state} />;
+    case 'terminal':
+      return <TerminalPage state={state} />;
     case 'onboarding':
       return <OnboardingPage />;
   }

@@ -9,7 +9,7 @@ apps/server/      → @shinsa/server  The engine and the `shinsa` command. The e
                                     runs in the background from a compiled bundle, scripts/build-engine.ts) runs the event log
                                     (SQLite), effect outbox, agent runs (behind a provider interface: the Claude
                                     Agent SDK and Codex), accounts, the MCP servers, plugins and skills agents load,
-                                    schedules and webhooks, git worktrees, GitHub, HTTP +
+                                    schedules and webhooks, git worktrees, GitHub, your terminals (PTYs), HTTP +
                                     WebSocket, onboarding and the built web app;
                                     `shinsa [folder]|open|do|import|status` and `shinsa <group> <action>` (src/cli, generated
                                     from src/surface; docs/cli.md) talk to it over HTTP, so agents can hand work to

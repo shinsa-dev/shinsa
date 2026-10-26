@@ -34,8 +34,8 @@ describe('openWorktree', () => {
 
   it('says it could not open the worktree when the app did not start', async () => {
     serve(() => Response.json({ ok: false }));
-    expect(await openWorktree('t1', 'terminal')).toBe(false);
-    expect(toasts.error).toHaveBeenCalledWith('Couldn’t open the worktree in a terminal');
+    expect(await openWorktree('t1', 'finder')).toBe(false);
+    expect(toasts.error).toHaveBeenCalledWith('Couldn’t open the worktree in Finder');
   });
 
   it('shows Shinsa’s reason when it refuses', async () => {

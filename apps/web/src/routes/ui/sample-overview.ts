@@ -443,6 +443,17 @@ export function createOverviewScene(now: number) {
       choices: ['Keep v1 for one more release', 'Remove it now'],
       recommendation: 'Keep v1 for one more release',
     }),
+    command: createSampleGate(now, {
+      id: 'command-gate',
+      taskId: 'question',
+      type: 'question',
+      title: 'Can you sign in to the staging database?',
+      body: [
+        'The migration check needs a staging session, and signing in opens your browser. Run this, then tell me when it says you are signed in:',
+        '```sh\nfly auth login\nfly proxy 5433:5432 -a shop-staging-db\n```',
+      ].join('\n\n'),
+      runId: 'question-run',
+    }),
     plan: createSampleGate(now, {
       id: 'plan-gate',
       taskId: 'plan',

@@ -7,6 +7,7 @@ export type Route =
   | { name: 'tasks' }
   | { name: 'task'; reference: string }
   | { name: 'settings' }
+  | { name: 'terminal' }
   | { name: 'onboarding' }
   | { name: 'ui' };
 
@@ -32,6 +33,7 @@ export function parseRoute(pathname: string): Route {
   if (reference) return { name: 'task', reference };
   if (pathname === '/tasks') return { name: 'tasks' };
   if (pathname === '/settings') return { name: 'settings' };
+  if (pathname === '/terminal') return { name: 'terminal' };
   if (pathname === '/onboarding') return { name: 'onboarding' };
   if (pathname === '/ui') return { name: 'ui' };
   return { name: 'home' };

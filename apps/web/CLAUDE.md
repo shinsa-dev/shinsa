@@ -23,7 +23,7 @@ src/
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
 ├── routes/              One file per page: home.tsx, tasks.tsx (the roadmap), settings.tsx, onboarding.tsx
-│   │                    (the setup steps)
+│   │                    (the setup steps), terminal.tsx (a project's terminals: tabs, panes, find, the ended bar)
 │   ├── task/            index.tsx (header, tabs, Cards or Sidebar frame, the tabs you opened kept mounted and
 │   │                    the rest rendered ahead at idle; resolves `/tasks/<handle or id>` with
 │   │                    core's selectTaskByReference and replaces it with the canonical URL), overview.tsx,
@@ -56,7 +56,9 @@ src/
 │                        versions.tsx the Agents tab's Versions group;
 │                        plugins.tsx and skills.tsx, whose long lists
 │                        render only the rows in view through virtual-rows.tsx),
-│                        onboarding (shell, stepper, the step and its footer, the option list, accounts, checks, finished), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
+│                        onboarding (shell, stepper, the step and its footer, the option list, accounts, checks, finished),
+│                        terminal (the tab bar, a terminal's pane and its find bar, the place menu, the ended bar, the
+│                        Terminal button in Desk's top bar), focus, layout (cards/ and sidebar/ shells, the nav item both the rail and
 │                        Settings' tabs use, the list row, the logo link home and home-link.tsx (the Home button
 │                        that replaces it in the Mac app), page/ column, heading, toolbar, section
 │                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
@@ -90,9 +92,11 @@ src/
     │                    request whose refusal becomes the server's message), code.ts (the Code tab's reads: refs, paths, tree, blob,
     │                    search and diff, cached by commit in a bounded least-recently-used cache, the last answer shown
     │                    while a newer version loads, never read again for an unrelated task event, and requestFileWrite, the one
-    │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / terminal / Finder), onboarding.ts
+    │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / Finder), onboarding.ts
     │                    (the onboarding status, folders, suggestions and the setup steps over HTTP),
     │                    projects.ts (/api/repos/local, adding a repository or a folder to a project),
+    │                    terminals.ts (useTerminals over the snapshot the socket holds, /api/terminals changes,
+    │                    openTerminal and openTaskTerminal),
     │                    accounts.ts (useAccounts over the snapshot the socket holds, /api/accounts/* changes,
     │                    the sign-in dialog state), health.ts (/api/health on start and after each reconnect,
     │                    the banner's text and its dismissal), engine.ts (the app against the engine: the engine
@@ -104,7 +108,7 @@ src/
     │                    rows, the root's blocks and their scores, Recent, the New task action), global.ts, gates.ts (the commands of every open gate), task.ts and
     │                    task-actions.ts (a task's page), process.ts (check-ins, the quiet agent, suggested
     │                    tasks, delegations), accounts.ts (Accounts group, Run on account, usage waits),
-    │                    schedules.ts, review.ts (the Review tab's Next and Previous place), editor.ts (the Code tab's Editor group: every editing key), extensions.ts (the Integrations group), versions.ts (Update Claude Code and
+    │                    schedules.ts, terminal.ts (the Terminal page's commands), review.ts (the Review tab's Next and Previous place), editor.ts (the Code tab's Editor group: every editing key), extensions.ts (the Integrations group), versions.ts (Update Claude Code and
     │                    Update Codex), and one file per page that
     │                    registers commands (tasks, home, settings)
     ├── accounts/        account.ts (every account label and toast, plans, Run on account choices, each provider's
@@ -138,6 +142,12 @@ src/
     │                    the task diff, notes, the 14-line fold), diff-theme.ts (`@pierre/diffs` on the `--code-*`
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)
+    ├── terminal/        Terminals (docs/design.md, 37): view.ts (TerminalView: one xterm.js per terminal, kept outside
+    │                    React, its socket and reconnect, WebGL while shown, find; resolveTerminalView), theme.ts (the
+    │                    xterm.js options and theme from Ghostty's appearance over the `--terminal-*` tokens), color.ts
+    │                    (OKLCH and rgb to hex), keys.ts (which keys a focused terminal keeps), replies.ts (the
+    │                    questions the engine answers instead), tabs.ts (the project, tabs, places, order and words),
+    │                    command.ts (a shell block's command for Run in terminal)
     ├── review/          The Review tab (report.ts: what needs your attention and in what order, the walkthrough's
     │                    sections, the other changed files, the review card's items; keys.ts: J and K; places.ts:
     │                    the paths into Code and into the Review tab), the Code tab's spot targets, the fallback
@@ -166,8 +176,8 @@ src/
     │                    `data-desktop` on <html>, its navigation, the Dock badge, notifications, the page's
     │                    surface and whether it stays quiet (`isPageQuiet`), the app's version and protocol
     │                    (`selectDesktopBuild`) and its own update (`readDesktopUpdate`, `installDesktopUpdate`)
-    ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings) and the last three
-    │                    task pages, by key, with the URL each was left at
+    ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings, and Terminal, which is
+    │                    never rendered ahead) and the last three task pages, by key, with the URL each was left at
     └── queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
         not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,
@@ -222,6 +232,8 @@ files after it.
   mounted (`docs/design.md`, 14). A command or choice option is disabled only with its reason (`disabled: '…'`, a
   string shown in place of the hint); there is no boolean. While the Code tab is open it binds ⌘P, ⇧⌘F, ⌘F and ⌘G (`hooks/use-code-keys.ts`),
   and while the Review tab is open J and K (`hooks/use-review-keys.ts`, not while you type), each also a ⌘K command; `bun lint:conventions` rejects a global key listener anywhere else.
+  A focused terminal keeps its own keys through xterm.js's handler on its element (`lib/terminal/keys.ts`): every
+  Control key goes to the shell, ⌘ keys to Shinsa but ⌘C, ⌘V, ⌘A and ⌘F (`docs/design.md`, 37).
 - **One owner per shared piece.** The visual ones (tones, times, cards, check marks, task actions, dependencies)
   are listed in `docs/design.md`, 15. In code, besides those: gate replies go through `lib/tasks/gates.ts`, what a message does (every composer's
   placeholder and toast for `task.message`, and ⌘K's Message the agent) through `lib/tasks/messages.ts`, HTTP

@@ -391,3 +391,27 @@ describe('versions', () => {
     expect(fake.posts).toEqual([{ path: '/api/versions/update', body: { program: 'claude' } }]);
   });
 });
+
+describe('terminals', () => {
+  test('lists each terminal by its name or title, whether it runs and its folder', async () => {
+    const terminal = {
+      id: 't1',
+      projectId: 'p1',
+      name: 'Server',
+      title: null,
+      cwd: '/code/web',
+      place: 'repository',
+      taskId: null,
+      status: 'running',
+      exitCode: null,
+      startedAt: 1,
+      endedAt: null,
+    };
+    const fake = createFakeClient({ '/api/terminals': { terminals: [terminal], appearance: {} } });
+    expect((await runSpec(fake, ['terminals', 'list'])).text).toBe(
+      `${'Server'.padEnd(24)} ${'running'.padEnd(8)} /code/web`
+    );
+    const empty = createFakeClient({ '/api/terminals': { terminals: [], appearance: {} } });
+    expect((await runSpec(empty, ['terminals', 'list'])).text).toBe('No terminals.');
+  });
+});

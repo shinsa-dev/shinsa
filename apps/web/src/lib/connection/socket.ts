@@ -6,6 +6,7 @@ import {
   type ServerMessage,
   type StatePatch,
   type Surface,
+  type TerminalsSnapshot,
   type UserCommand,
   type WireState,
 } from '@shinsa/core';
@@ -92,12 +93,14 @@ export class Connection {
   #syncing = false;
   #attempt = 0;
   #accounts: AccountsSnapshot | null = null;
+  #terminals: TerminalsSnapshot | null = null;
   #desktopConnected = false;
   readonly #options: ConnectionOptions;
   readonly #state = createSignal();
   readonly #transcriptSignal = createSignal();
   readonly #accountsSignal = createSignal();
   readonly #surfacesSignal = createSignal();
+  readonly #terminalsSignal = createSignal();
   readonly #pending = new Map<string, Pending>();
   readonly #optimistic = new Map<string, UserCommand>();
   readonly #transcripts = new Map<string, ChatEntry[]>();
@@ -146,6 +149,15 @@ export class Connection {
   selectAccounts = () => this.#accounts;
 
   subscribeSurfaces = (listener: () => void) => this.#surfacesSignal.subscribe(listener);
+
+  subscribeTerminals = (listener: () => void) => this.#terminalsSignal.subscribe(listener);
+
+  selectTerminals = () => this.#terminals;
+
+  replaceTerminals(terminals: TerminalsSnapshot) {
+    this.#terminals = terminals;
+    this.#terminalsSignal.publish();
+  }
 
   isDesktopConnected = () => this.#desktopConnected;
 
@@ -341,6 +353,9 @@ export class Connection {
       case 'surfaces':
         this.#desktopConnected = message.desktop;
         this.#surfacesSignal.publish();
+        return;
+      case 'terminals':
+        this.replaceTerminals(message.terminals);
         return;
     }
   }

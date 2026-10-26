@@ -8,7 +8,9 @@ export interface KeptView<Key extends string = string> {
 
 export const KEPT_TASK_PAGES = 3;
 
-const HUB_PAGES = ['home', 'tasks', 'settings'] as const;
+const HUB_PAGES = ['home', 'tasks', 'settings', 'terminal'] as const;
+
+const WARM_PAGES: ReadonlySet<string> = new Set(['home', 'tasks', 'settings']);
 
 type HubPage = (typeof HUB_PAGES)[number];
 
@@ -23,7 +25,7 @@ export function resolvePageKey(view: RouteView, taskId: string | null) {
 
 export function listHubViews(visited: ReadonlyMap<string, RouteView>, warm: boolean): KeptView[] {
   return HUB_PAGES.flatMap((name) => {
-    const view = visited.get(name) ?? (warm ? { route: { name }, search: '' } : null);
+    const view = visited.get(name) ?? (warm && WARM_PAGES.has(name) ? { route: { name }, search: '' } : null);
     return view ? [{ key: name, view, shownAt: 0 }] : [];
   });
 }

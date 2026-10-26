@@ -233,7 +233,7 @@ export const TOOL_SPECS = {
   ask: {
     name: 'ask',
     description:
-      'Ask the human one question when you are blocked on a decision only they can make. Waits for the answer and returns it. Do not ask for anything you can find out yourself.',
+      'Ask the human one question when you are blocked on a decision only they can make. Waits for the answer and returns it. Do not ask for anything you can find out yourself. When the human has to run a command themselves (an interactive sign-in, a server they run), put the exact command in a ```sh block in `context`: they can run it in a terminal with one press.',
     inputSchema: {
       type: 'object',
       properties: {

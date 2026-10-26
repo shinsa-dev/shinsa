@@ -1,7 +1,15 @@
+import type { ServerWebSocket } from 'bun';
 import type { Transcripts } from '../agents/transcripts/index.ts';
 import { respondSignInPage } from '../extensions/routes.ts';
 import { INSPECT_MESSAGE, INSPECT_READ_ONLY } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
+import {
+  createTerminalRoutes,
+  createTerminalSockets,
+  readTerminalSocketId,
+  type TerminalSocketData,
+  type Terminals,
+} from '../terminals/index.ts';
 import {
   resolveAllowedHosts,
   resolveBodyRefusal,
@@ -17,6 +25,15 @@ const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 export interface HttpContext extends ApiContext {
   transcripts: Transcripts;
+  terminals?: Terminals;
+}
+
+type ServerSocketData = SocketData | TerminalSocketData;
+
+type ServerSocket = ServerWebSocket<ServerSocketData>;
+
+function isTerminalSocket(socket: ServerSocket): socket is ServerWebSocket<TerminalSocketData> {
+  return socket.data.kind === 'terminal';
 }
 
 export function resolveServerUrl(hostname: string, port: number) {
@@ -28,16 +45,56 @@ function respondReadOnly() {
   return respondError(INSPECT_READ_ONLY, INSPECT_MESSAGE, 403);
 }
 
+type Hub = ReturnType<typeof createSocketHub>;
+
+type TerminalSockets = ReturnType<typeof createTerminalSockets>;
+
+export function createSocketHandlers(
+  hub: Pick<Hub, 'open' | 'close' | 'message'>,
+  terminals: TerminalSockets | null
+) {
+  return {
+    open: (socket: ServerSocket) => {
+      if (isTerminalSocket(socket)) terminals?.open(socket);
+      else hub.open(socket as ServerWebSocket<SocketData>);
+    },
+    close: (socket: ServerSocket) => {
+      if (isTerminalSocket(socket)) terminals?.close(socket);
+      else hub.close(socket as ServerWebSocket<SocketData>);
+    },
+    message: (socket: ServerSocket, raw: string | Buffer) => {
+      if (isTerminalSocket(socket)) terminals?.message(socket, raw);
+      else hub.message(socket as ServerWebSocket<SocketData>, raw);
+    },
+    drain: (socket: ServerSocket) => {
+      if (isTerminalSocket(socket)) terminals?.drain(socket);
+    },
+  };
+}
+
 export function startServer(context: HttpContext) {
   const { config } = context;
   const allowedHosts = resolveAllowedHosts(config.allowedHosts);
-  const handleApi = createApiRoutes(context);
+  const { terminals } = context;
+  const handleApi = createApiRoutes(
+    context,
+    terminals ? createTerminalRoutes(context.engine, terminals) : []
+  );
   const hub = createSocketHub(
     context.engine,
     context.transcripts,
     context.accounts,
-    context.classify ?? null
+    context.classify ?? null,
+    terminals
   );
+  const terminalSockets = terminals ? createTerminalSockets(terminals) : null;
+
+  function upgrade(request: Request, bunServer: Bun.Server<ServerSocketData>, data: ServerSocketData) {
+    const upgradeRefusal = resolveUpgradeRefusal(request);
+    if (upgradeRefusal) return respondError('forbidden', upgradeRefusal, 403);
+    if (bunServer.upgrade(request, { data })) return undefined;
+    return new Response('Upgrade failed', { status: 400 });
+  }
 
   async function respondApi(request: Request, url: URL) {
     if (config.inspect && request.method !== 'GET') return respondReadOnly();
@@ -64,7 +121,7 @@ export function startServer(context: HttpContext) {
     return respondSignInPage(extensions, request);
   }
 
-  const server = Bun.serve<SocketData>({
+  const server = Bun.serve<ServerSocketData>({
     port: config.port,
     hostname: config.hostname,
     maxRequestBodySize: MAX_BODY_BYTES,
@@ -74,19 +131,15 @@ export function startServer(context: HttpContext) {
       if (outside) return outside;
       const refusal = resolveRefusal(request, allowedHosts);
       if (refusal) return respondError('forbidden', refusal, 403);
-      if (url.pathname === '/ws') {
-        const upgradeRefusal = resolveUpgradeRefusal(request);
-        if (upgradeRefusal) return respondError('forbidden', upgradeRefusal, 403);
-        if (bunServer.upgrade(request, { data: { transcripts: new Map(), surface: null } })) return undefined;
-        return new Response('Upgrade failed', { status: 400 });
-      }
+      if (url.pathname === '/ws')
+        return upgrade(request, bunServer, { kind: 'hub', transcripts: new Map(), surface: null });
+      const terminalId = terminalSockets ? readTerminalSocketId(url.pathname) : null;
+      if (terminalId) return upgrade(request, bunServer, { kind: 'terminal', terminalId, viewer: null });
       if (url.pathname.startsWith('/api/')) return respondApi(request, url);
       return serveStatic(config.webDir, url.pathname);
     },
     websocket: {
-      open: hub.open,
-      close: hub.close,
-      message: hub.message,
+      ...createSocketHandlers(hub, terminalSockets),
       maxPayloadLength: MAX_BODY_BYTES,
     },
   });

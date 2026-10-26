@@ -294,8 +294,9 @@ function createOnboardingRoutes(onboarding: Onboarding): ApiRoute[] {
   ];
 }
 
-export function createApiRoutes(context: ApiContext) {
+export function createApiRoutes(context: ApiContext, extra: ApiRoute[] = []) {
   const routes: ApiRoute[] = [
+    ...extra,
     ...createTaskRoutes(context),
     ...createServerRoutes(context),
     ...createOnboardingRoutes(context.onboarding),

@@ -468,7 +468,7 @@ describe('the This task section', () => {
     ] as never);
   });
 
-  it('links to the pull request, copies the branch and opens the worktree', () => {
+  it('links to the pull request, copies the branch, opens the worktree and a terminal in it', () => {
     const { state, task } = setup(
       createTask({ id: 't1', branch: 'feat/login', worktreePath: '/tmp/t1', pullRequest: PULL_REQUEST })
     );
@@ -486,9 +486,9 @@ describe('the This task section', () => {
     expect(spies.copied.mock.calls).toEqual([['feat/login']] as never);
     expect(spies.opened.mock.calls).toEqual([
       ['t1', 'editor'],
-      ['t1', 'terminal'],
       ['t1', 'finder'],
     ] as never);
+    expect(spies.terminal).toHaveBeenCalledTimes(1);
   });
 
   it('restarts the step and marks the task done', () => {

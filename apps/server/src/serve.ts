@@ -46,6 +46,7 @@ import { EffectRunner, Engine, MonitorClock, type StateClockOptions } from './ru
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
+import { Terminals, type TerminalsOptions } from './terminals/index.ts';
 import { MessageInbox } from './triage/inbox.ts';
 import { resolveTriage, type TriageResolver } from './triage/index.ts';
 import {
@@ -75,6 +76,7 @@ export interface ShinsaOptions {
   compaction?: IdleCompactionOptions;
   extensions?: Pick<ExtensionsOptions, 'check' | 'env' | 'fetch'>;
   versions?: VersionsOptions;
+  terminals?: Pick<TerminalsOptions, 'spawn' | 'appearance' | 'env'>;
   byService?: boolean;
   exit?: (code: number) => void;
 }
@@ -87,7 +89,7 @@ export interface Shinsa {
 
 type Services = ReturnType<typeof createServices>;
 
-function createServices(config: ServerConfig, options: ShinsaOptions) {
+function createServices(config: ServerConfig, options: ShinsaOptions, instance: ServerInstance) {
   const store = new ConfigStore(config.configPath, config.machine);
   prepareDataDir(config);
   const eventLog = new EventLog(config.databasePath);
@@ -150,6 +152,13 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
     },
   });
   const briefings = new Briefings(engine, { ask: quick.write });
+  const terminals = new Terminals({
+    dataDir: config.dataDir,
+    home: config.userHome,
+    version: instance.version,
+    readOnly: config.inspect,
+    ...options.terminals,
+  });
   const inbox = new MessageInbox(engine, classify.message);
   const roots = new Roots(
     config.roots,
@@ -171,6 +180,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions) {
     versions,
     runs,
     briefings,
+    terminals,
     inbox,
     quick,
     classify,
@@ -199,6 +209,7 @@ function startHttp(services: Services, options: ShinsaOptions, instance: ServerI
     config,
     instance,
     transcripts: services.transcripts,
+    terminals: services.terminals,
     evidence: services.evidence,
     models,
     providers: services.providers,
@@ -264,7 +275,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
   let services: Services;
   let http: ReturnType<typeof startHttp>;
   try {
-    services = createServices(requested, options);
+    services = createServices(requested, options, instance);
     http = startHttp(services, options, instance);
   } catch (error) {
     lock?.release();
@@ -284,6 +295,7 @@ export async function startShinsa(requested: ServerConfig, options: ShinsaOption
       services.schedules.stop();
       services.accounts.stop();
       services.versions.stop();
+      await services.terminals.stop();
       for (const clock of services.clocks) clock.stop();
       await services.effects.stop();
       await services.extensions.stop();

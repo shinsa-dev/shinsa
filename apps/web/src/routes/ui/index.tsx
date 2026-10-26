@@ -24,6 +24,7 @@ import { ReviewSpecimens } from './review.tsx';
 import { Section } from './section.tsx';
 import { SettingsSpecimens } from './settings.tsx';
 import { SURFACE_SECTIONS, SurfaceSpecimens } from './surfaces.tsx';
+import { TerminalSpecimens } from './terminal.tsx';
 import { TOKEN_SECTIONS, TokenSpecimens } from './tokens.tsx';
 
 const SECTIONS = [
@@ -38,6 +39,7 @@ const SECTIONS = [
   { id: 'shinsa-chat', label: 'Chat' },
   { id: 'shinsa-review', label: 'Review' },
   { id: 'shinsa-code', label: 'Code' },
+  { id: 'shinsa-terminal', label: 'Terminal' },
   { id: 'shinsa-settings', label: 'Settings rows' },
 ];
 
@@ -217,6 +219,14 @@ export function UiPage() {
           className='flex-col items-start gap-8'
         >
           <CodeSpecimens />
+        </Section>
+        <Section
+          id='shinsa-terminal'
+          title='Shinsa composites · terminal'
+          description='The Terminal page’s tabs, the place menu, the ended bar and the colours a terminal takes without a Ghostty config, from apps/web/src/components/terminal. The terminal itself needs the engine.'
+          className='flex-col items-start gap-8'
+        >
+          <TerminalSpecimens />
         </Section>
         <Section
           id='shinsa-settings'

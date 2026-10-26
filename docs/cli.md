@@ -1408,6 +1408,18 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<program>` | choice, required | claude or codex. |
 
+### terminals
+
+#### shinsa terminals list
+
+List your terminals in Shinsa: each one’s folder and whether its shell still runs.
+
+```
+shinsa terminals list [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
+
 ### health
 
 #### shinsa health

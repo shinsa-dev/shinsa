@@ -214,6 +214,12 @@ Desktop-first and responsive: built for a full window, still right in a ~900px f
 - **Task page.** Everything about one task, in three tabs: Overview (the decision, the plan,
   progress, evidence, the pull request), Code (the review and every changed file) and Chat (the
   agents' transcripts; you can write to the agent).
+- **Terminal.** A real terminal per project, so the few things agents leave to you (your own dev server, an
+  interactive sign-in, a command an agent asks you to run) need no other app. Tabs per project, opened in one of the
+  project's repositories, folders or task worktrees, in your login shell with your environment, and looking like your
+  Ghostty (its font and theme) or like Shinsa. The engine runs the shells, so a dev server keeps running when you
+  close the window or quit the app, and a reload shows each terminal as it was. Agents never type into it; an agent
+  that needs you to run a command puts it in its question, and Run in terminal runs it when you press it.
 - **All tasks: the roadmap.** Every task in to-do order: ready to merge, changes to review, plan
   to approve, needs your answer, paused, in progress, waiting on another task (drawn as chains
   that handle several parents), then done and cancelled, collapsed. Priority then age
@@ -773,6 +779,24 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   `shinsa settings set delegationLimit` too), changed only by you. The nesting depth stays three. The agents' rules
   no longer mention a running limit, so changing it never invalidates a cached session; a refused delegation says
   the limit and where it is set (`docs/engine.md` → Delegation → Limits).
+
+### A terminal per project (2026-10-26)
+
+- **Ghostty, inside Shinsa.** Each project has terminal tabs (add, close, rename, drag to reorder) on its own page, in
+  Desk's top bar, Shelf's rail and ⌘K; a task opens one in its worktree. The engine owns every shell (Bun's own PTY,
+  so the compiled engine needs nothing native) and keeps a headless copy of each screen, so a terminal survives the
+  window and the app, reattaches exactly (the alternate screen of an editor included) and, when the engine itself
+  restarts, shows its last output with Start again. The page renders with xterm.js and WebGL: true colour, Unicode 11
+  widths, links, selection, copy and paste, find in the scrollback, 5,000 lines. Your Ghostty config sets the font,
+  cursor and colours; without one the terminal takes Shinsa's own tokens, light and dark (`docs/engine.md` →
+  Terminals, `docs/design.md`, 37).
+- **Why xterm.js and not ghostty-web.** ghostty-web runs Ghostty's own parser in WebAssembly and handles complex
+  scripts better, but it is at 0.4, has no WebGL renderer, no search, serialize or headless counterpart, and its
+  xterm.js compatibility is partial. xterm.js 6 is what VS Code ships: the WebGL renderer, the add-ons this needs, and
+  the same parser headless in the engine, so the screen the engine keeps and the one you see agree cell for cell.
+  The renderer sits behind `lib/terminal/view.ts`, so it can be swapped once ghostty-web matures.
+- **Agents point, you press.** The `ask` tool tells agents to put a command for you in a ```` ```sh ```` block; the
+  question card offers Run in terminal on it. No agent tool, command or route lets an agent type into your terminals.
 
 ## 11. Open questions
 

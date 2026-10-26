@@ -15,7 +15,8 @@
     "noEmit": true,
     "types": ["bun"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@xterm/xterm": ["./src/terminals/xterm-types.d.ts"]
     }
   },
   "include": ["src", "test"]

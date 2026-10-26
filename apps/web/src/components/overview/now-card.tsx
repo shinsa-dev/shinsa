@@ -28,10 +28,12 @@ import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
+import { CommandRunnerProvider } from '@/components/text/code-fence.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
+import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import {
   describeFollowUpNote,
@@ -104,11 +106,13 @@ export function QuestionCard({
   task,
   gate,
   onReply = (key, response) => replyToGate(gate, key, response),
+  onRun = (command) => openTaskTerminal(task, command),
 }: {
   state: ShinsaState;
   task: Task;
   gate: Gate;
   onReply?: GateReplier;
+  onRun?: (command: string) => unknown;
 }) {
   const { busy, run } = useBusy<'answer'>();
   const asked = gate.runId ? state.runs[gate.runId] : undefined;
@@ -118,7 +122,11 @@ export function QuestionCard({
       eyebrow={<Eyebrow state={state} task={task} extra={asked ? 'The agent asked' : undefined} />}
       title={gate.title}
     >
-      {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
+      {gate.body && (
+        <CommandRunnerProvider run={onRun}>
+          <Markdown text={gate.body} className='text-fg-3 text-xs' />
+        </CommandRunnerProvider>
+      )}
       <QuestionChoices gate={gate} busy={busy !== null} onPick={answer} />
       <AnswerBox
         label='Your answer'

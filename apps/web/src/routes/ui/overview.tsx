@@ -174,6 +174,17 @@ export function OverviewSpecimens() {
           />
         </Card>
       </Specimen>
+      <Specimen label='QuestionCard · a command the agent asks you to run, with Run in terminal'>
+        <Card>
+          <QuestionCard
+            state={state}
+            task={tasks.question}
+            gate={gates.command}
+            onReply={acknowledgeSample}
+            onRun={acknowledgeSample}
+          />
+        </Card>
+      </Specimen>
       <Specimen label='FindingVerdicts · an escalated review; the primary action follows the verdicts'>
         <Card>
           <EscalatedReview state={state} task={tasks.review} gate={gates.review} />

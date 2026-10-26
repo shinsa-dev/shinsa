@@ -296,7 +296,7 @@ Only these, and they win over anything below:
     `md` (768px) up it sits beside the page; below it, it opens as a sheet. The app has one
     keyboard shortcut: ⌘K (Ctrl K elsewhere) opens the command menu (see 14). Nothing else is
     bound to a key, except the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (32), the Review tab's J and K while it is
-    open (34), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and
+    open (34), a focused terminal's own keys (37), Enter sends in every input, and a setup step's option list takes the arrows, Home, End, Enter and
     Space while it has focus, as any list box does (24). The Mac app's menu adds Go → Back ⌘[, Forward ⌘] and Home
     ⇧⌘H (31); those are the app's, not the page's.
 11. **No focus states.** Nothing marks keyboard focus: no ring, outline, border recolour or wash
@@ -519,7 +519,7 @@ Only these, and they win over anything below:
       (`?status=&q=`), and an active status shows as a removable button beside the search.
     - **Global**, in groups: Tasks (New task, which opens Home with the composer focused, as the rail's and the
       compact bar's New task do, and
-      Jump to a task, a page of every task), Go to (Home, All tasks, Settings), Focus (Switch
+      Jump to a task, a page of every task), Go to (Home, All tasks, Terminal, Settings), Focus (Switch
       focus project; keeping it for 2 hours or until tonight is `searchOnly` and appears only while
       typing), Appearance (Switch layout, Change theme), Accounts (Add a Claude account, Agent usage, which opens
       Settings → Agent usage → Accounts, and Default account once there is an account; 26) and Schedules (Schedules, which opens the section, and each schedule
@@ -1779,7 +1779,7 @@ Only these, and they win over anything below:
 35. **Getting around is instant** (`root.tsx`, `routes/task/index.tsx`, `lib/kept-views.ts`, `hooks/use-idle.ts`;
     measured in `docs/performance.md` → Shell and navigation). A click paints its page in the next frame or two,
     the way a native app switches views:
-    - **Pages you have been to stay mounted.** Home, All tasks and Settings, once visited, and the last three task
+    - **Pages you have been to stay mounted.** Home, All tasks, Settings and Terminal, once visited, and the last three task
       pages you opened stay in the tree inside React's `Activity`, hidden (`display: none`) rather than unmounted,
       so going back shows the same page, its scroll and its open sections, without building it again. A hidden
       page runs no effects (no ⌘K commands, key bindings, transcript subscriptions or reads); they start again
@@ -1825,6 +1825,63 @@ Only these, and they win over anything below:
     - **Not a loading state.** A busy button (22), the live agent's shimmering line (7), "Working out the steps" on
       the progress track and an update's toast report work the server or an agent is doing, not a read, and stay.
 
+37. **A terminal per project** (since 2026-10-26; `routes/terminal.tsx`, `components/terminal/`, `lib/terminal/`,
+    `lib/connection/terminals.ts`, `lib/command/terminal.ts`; how the engine runs it is `docs/engine.md` →
+    Terminals). For what agents leave to you: your own dev server, an interactive sign-in, a command an agent asked
+    you to run. It replaces opening Ghostty for those, so it has to feel like Ghostty.
+    - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page
+      kept mounted once you have been to it but never rendered ahead, since opening it opens sockets (35). Desk has a
+      Terminal icon button in the top bar's trailing group, before the usage menu; Shelf has a Terminal row in the
+      rail under All tasks; ⌘K has Terminal under Go to. All three go back to the terminal you last looked at. A
+      task's `•••` menu and ⌘K's Open a terminal open one in the task's worktree (its repository when it has none),
+      in its project, and go there.
+    - **Shape.** The page fills the space under the top bar edge to edge, with no column: a 36px `Toolbar` with the
+      project (a ghost `SelectField` when there are several, its name otherwise), the tabs, New terminal (`icon-sm`,
+      `IconPlusMedium`) and Find in the scrollback (`IconMagnifyingGlass`), then the terminal on its own background,
+      8px from the top and 12px from the left. A project with no terminal shows the `EmptyState` with Open a
+      terminal (`primary sm`).
+    - **Tabs** (`tab-bar.tsx`). A tab is a 24px row: `IconConsole`, the label (the name you gave it, else the
+      shell's title, else the folder's name; `resolveTerminalLabel` in core), and a close button revealed on hover
+      and always on the active tab. The active tab is `bg-bg-a2`, `fg-4`, `faux-medium`; an ended shell's label is
+      `fg-2`. The tooltip names the folder and how it ended. Double-click renames in place (Enter keeps it, Escape
+      puts the old name back, an empty name goes back to the title); drag a tab onto another to put it there; the
+      middle button closes it. Closing a running shell asks first ("Close this terminal?", `ConfirmDialog`); an
+      ended one closes at once, and the tab to the right is shown next.
+    - **New terminal.** One click opens it in the project's only place; with several, a menu lists Repositories,
+      Folders and Task worktrees (`IconFolderGit`, `IconFolder1`, `IconBranch`), each by name. ⌘K has the same as a
+      page.
+    - **Ended.** A shell that exited, or that a restart of the engine ended, keeps its last screen, and a bar under
+      it says which ("The shell exited with code 1.", "Shinsa’s engine restarted, so this shell ended. Its last output
+      is above.") with Close (`secondary sm`) and Start again (`primary sm`, `IconArrowRotateClockwise`), which starts a
+      new shell below the old output and gives it the keyboard.
+    - **The look follows your terminal.** The font, its size, the cursor's shape and blink, Option as Meta and the
+      colours come from your Ghostty config when you have one (one theme, or a light and a dark one that follow
+      Shinsa's colour scheme), and otherwise from Shinsa: ABC Areal Mono at 13px, a block cursor, and the
+      `--terminal-*` tokens in `app.css` (the page background, `fg-4` text, the accent cursor, a translucent accent
+      selection and an ANSI palette on the `*-text` tokens, light and dark). A Ghostty font comes first and ABC Areal
+      Mono after it. Colours reach xterm.js as hex, converted from the tokens' OKLCH (`lib/terminal/color.ts`), and
+      the theme switches with the page's.
+    - **Rendering.** xterm.js 6 with its WebGL renderer, Unicode 11 widths (CJK and emoji take two cells), clickable
+      links (plain URLs and OSC 8, opened in your browser), 5,000 lines of scrollback, fit to its pane on every
+      resize. One `TerminalView` per terminal (`lib/terminal/view.ts`) lives as long as the terminal, outside React,
+      so switching tabs, pages or projects keeps it; the WebGL renderer is loaded only while it is shown, so a dozen
+      tabs never run out of WebGL contexts. While it reconnects a small `LoadingSpinner` sits in its top-right corner.
+    - **Find** (⌘F while it has focus, or the button): the find bar of the Code tab (`SearchField` with match case,
+      whole word and regular expression, previous, next, the count, close), searching the scrollback; Enter goes to
+      the next match, ⇧Enter the previous, Escape closes it and gives the terminal the keyboard back.
+    - **Keys.** A focused terminal takes every key it would take in Ghostty, Control ones included (Ctrl-K is the
+      shell's), and keeps them from the page. On a Mac it leaves ⌘ keys to Shinsa and the app (⌘K, ⌘,, ⌘R, ⌘[…) but
+      ⌘C copies a selection, ⌘V pastes (bracketed when the program asks), ⌘A selects all and ⌘F finds
+      (`lib/terminal/keys.ts`). Elsewhere it is Ctrl+Shift+C, V, A and F, and Ctrl K goes to the shell, so ⌘K's
+      menu opens from outside the terminal. These are the terminal's own keys while it has focus, through xterm.js's
+      key handler, not a page shortcut (14).
+    - **Run in terminal.** In an agent's question card, a ```` ```sh ```` block (or `bash`, `zsh`, `fish`, `shell`,
+      `console`, where only the `$` lines count) gets a Run in terminal button (`secondary xs`, `IconConsole`) beside
+      its copy button, and nowhere else (`CommandRunnerProvider` in `text/code-fence.tsx`). Pressing it opens a
+      terminal in the task's folder and runs the command; nothing runs without it.
+    - `/ui` shows the tabs in each state, renaming, the ended bars, the empty page with the place menu and the
+      `--terminal-*` colours; the terminal itself needs the engine.
+
 , a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
@@ -1837,7 +1894,8 @@ instead of `CARD`) and `formatAge(…)` or `formatDuration(…)` rendered in JSX
 highlight colour (`transition-colors`, `transition-shadow`, or a bare `transition` or a colour in
 `transition-[…]` on a line with a `hover:` or `active:`; Motion); the `/ui` catalog pages are checked for raw corners
 and those transitions only. Besides that it bans comments (outside `packages/ui`), enforces the verb catalog and rejects a
-global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts` and `hooks/use-code-keys.ts` (32).
+global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-code-keys.ts` and
+`hooks/use-review-keys.ts` (32, 34); a terminal's keys go through xterm.js's own handler on its element (37).
 
 ---
 

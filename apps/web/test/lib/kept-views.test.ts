@@ -86,4 +86,15 @@ describe('the hub pages', () => {
       { key: 'settings', view: SETTINGS, shownAt: 0 },
     ]);
   });
+
+  it('keeps the terminal page once you have been to it, but never opens it ahead', () => {
+    const terminal: RouteView = { route: { name: 'terminal' }, search: '?project=SH' };
+    expect(isHubRoute(terminal.route)).toBe(true);
+    expect(listHubViews(new Map([['terminal', terminal]]), true).map((each) => each.key)).toEqual([
+      'home',
+      'tasks',
+      'settings',
+      'terminal',
+    ]);
+  });
 });

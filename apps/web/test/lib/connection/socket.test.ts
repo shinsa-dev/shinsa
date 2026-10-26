@@ -19,6 +19,7 @@ import {
   useTranscript,
 } from '@/lib/connection/socket.ts';
 import { createShinsaState, createTask } from '../../support/state.ts';
+import { createTerminal, createTerminalsSnapshot } from '../../support/terminals.ts';
 
 class FakeSocket extends EventTarget {
   readyState = 0;
@@ -470,6 +471,21 @@ describe('Connection surfaces', () => {
     latest().receive({ type: 'surfaces', desktop: false });
     expect(subject.isDesktopConnected()).toBe(false);
     expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Connection terminals', () => {
+  it('keeps the terminals the server pushes and tells its listeners', () => {
+    const { subject, latest } = setup();
+    const listener = mock(() => undefined);
+    subject.subscribeTerminals(listener);
+    subject.start();
+    latest().open();
+    expect(subject.selectTerminals()).toBeNull();
+    const terminals = createTerminalsSnapshot([createTerminal({ id: 'one' })]);
+    latest().receive({ type: 'terminals', terminals });
+    expect(subject.selectTerminals()).toEqual(terminals);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 

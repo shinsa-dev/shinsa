@@ -10,6 +10,7 @@ import {
 } from '@/lib/preferences/layout.ts';
 import { THEME_ITEMS, type ThemePreference, writeThemePreference } from '@/lib/preferences/theme.ts';
 import { listProjects } from '@/lib/projects.ts';
+import { resolveTerminalEntry } from '@/lib/terminal/tabs.ts';
 import type { Route } from '@/router.ts';
 
 const FOCUS_ICON = 'IconCircleDotted';
@@ -98,6 +99,15 @@ function listGoCommands(route: Route): Command[] {
       current: route.name === 'tasks',
       keywords: ['list', 'tasks', 'history', 'done', 'search'],
       to: '/tasks',
+    },
+    {
+      kind: 'go',
+      id: 'go.terminal',
+      label: 'Terminal',
+      icon: 'IconConsole',
+      current: route.name === 'terminal',
+      keywords: ['shell', 'console', 'command line', 'dev server'],
+      to: resolveTerminalEntry(),
     },
     {
       kind: 'go',

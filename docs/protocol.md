@@ -978,6 +978,13 @@ or `browser` (a tab, Floaty).
 | `transcript { runId, entries, start }` | On subscribing (the entries from `from`, in pages of 500) and for each new entry; `start` is the position of the first one |
 | `accounts { accounts }` | On connect and after every change to the accounts |
 | `surfaces { desktop }` | On connect, and when whether any desktop surface is connected changes |
+| `terminals { terminals }` | On connect and after every change to your terminals: `TerminalsSnapshot` (the terminals in order, the appearance read from Ghostty, your home folder) |
+
+Each terminal has a socket of its own, `/ws/terminals/<id>` (`packages/core/src/protocol/terminals.ts`, `docs/engine.md`
+→ Terminals): binary frames carry the shell's output and what you type, text frames carry `reset { cols, rows }` and
+`live` (server → page, around the screen sent on attach) and `resize { cols, rows }` and `colors { colors }` (page →
+server, `parseTerminalClientFrame`). A terminal (`TerminalInfo`) is in a project, at a place (`TerminalPlace`:
+`repository`, `folder` or `worktree`, `listTerminalPlaces`), and `running`, `exited` or `stopped`.
 
 `isQuietSurface(surface, desktop)` is true for a page that is not the desktop while one is connected: it plays no
 sound, shows no notification and puts no count in its title or Floaty's tags.
@@ -1034,6 +1041,7 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
 | Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/server/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
+| Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/server/src/terminals/`, `apps/web/src/lib/terminal/` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
 | State snapshots | `apps/server/src/store/snapshot.ts`, `apps/server/src/store/event-log.ts` |
 | Event log, receipts, outbox | `apps/server/src/store/event-log.ts`, `apps/server/src/runtime/engine.ts` |

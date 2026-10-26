@@ -3,6 +3,7 @@ import type { ShinsaState } from '@shinsa/core';
 import { listGlobalSections } from '@/lib/command/global.ts';
 import type { Command, CommandSection } from '@/lib/command/registry.ts';
 import { resolveEndOfDay } from '@/lib/format/time.ts';
+import { rememberTerminalPath } from '@/lib/terminal/tabs.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createProject, createShinsaState, NOW } from '../../support/state.ts';
 
@@ -50,15 +51,18 @@ describe('listGlobalSections', () => {
   });
 
   it('marks the page you are on', () => {
+    rememberTerminalPath('/terminal');
     const sections = listGlobalSections(focused(null), { name: 'settings' }, 'system', 'cards');
     expect(sections[0]?.commands.map((command) => [command.label, command.current])).toEqual([
       ['Home', false],
       ['All tasks', false],
+      ['Terminal', false],
       ['Settings', true],
     ]);
     expect(sections[0]?.commands.map((command) => (command.kind === 'go' ? command.to : null))).toEqual([
       '/',
       '/tasks',
+      '/terminal',
       '/settings',
     ]);
   });

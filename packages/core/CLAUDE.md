@@ -183,7 +183,9 @@ src/
                      the accounts snapshot (accounts.ts), MCP servers, plugins and
                      skills (extensions.ts: the snapshot, scopes, token estimates, what a run loaded, the context
                      optimizer's settings and isUnused), the
-                     onboarding API types (onboarding.ts)
+                     onboarding API types (onboarding.ts), terminals (terminals.ts: TerminalInfo, the appearance read
+                     from Ghostty, listTerminalPlaces and resolveTaskTerminalPlace, resolveTerminalLabel, the
+                     terminal socket's frames and TERMINAL_LIMITS)
 ```
 
 Rounds keep the task's flat fields as the current round's work: a new round archives them into its `Round`

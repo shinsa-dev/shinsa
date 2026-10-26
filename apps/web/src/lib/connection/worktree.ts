@@ -1,12 +1,11 @@
 import { requestWithToast } from '@/lib/connection/commands.ts';
 import { requestJson } from '@/lib/connection/http.ts';
 
-type OpenTarget = 'editor' | 'finder' | 'terminal';
+type OpenTarget = 'editor' | 'finder';
 
 const TARGET_NAME: Record<OpenTarget, string> = {
   editor: 'the editor',
   finder: 'Finder',
-  terminal: 'a terminal',
 };
 
 async function requestOpen(taskId: string, target: OpenTarget, path?: string, line?: number) {

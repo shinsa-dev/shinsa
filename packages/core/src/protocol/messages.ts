@@ -3,6 +3,7 @@ import type { UserCommand } from '../commands/index.ts';
 import type { AccountsSnapshot } from './accounts.ts';
 import type { StatePatch } from './patch.ts';
 import type { WireState } from './runs.ts';
+import type { TerminalsSnapshot } from './terminals.ts';
 
 export const SURFACES = ['desktop', 'browser'] as const;
 
@@ -21,7 +22,8 @@ export type ServerMessage =
   | { type: 'ack'; id: string; error: { code: string; message: string } | null }
   | { type: 'transcript'; runId: string; entries: ChatEntry[]; start: number }
   | { type: 'accounts'; accounts: AccountsSnapshot }
-  | { type: 'surfaces'; desktop: boolean };
+  | { type: 'surfaces'; desktop: boolean }
+  | { type: 'terminals'; terminals: TerminalsSnapshot };
 
 export function isSurface(value: unknown): value is Surface {
   return SURFACES.some((surface) => surface === value);

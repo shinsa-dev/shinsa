@@ -215,8 +215,17 @@ src/
 │                        of task is shaped first (resolveRoundShape); resolveRoundRepository finds the repository a
 │                        task with none needs once its work needs one (the setup check calls it)
 ├── briefing/            The Home guide, debounced, written beside the log through Engine.writeBriefing
+├── terminals/           Your terminals (docs/engine.md → Terminals): pty.ts (your login shell in Bun's PTY, its
+│                        environment, hanging up), mirror.ts (the headless xterm.js copy of the screen, the answers to
+│                        a program's questions), session.ts (TerminalSession: viewers, batching, back-pressure, exit,
+│                        typing a command at the prompt), xterm-types.d.ts (the add-ons' `@xterm/xterm` types mapped to
+│                        `@xterm/headless` in tsconfig, so the DOM types never reach the engine),
+│                        store.ts (data/terminals/), ghostty.ts (reading Ghostty's config and themes), routes.ts
+│                        (/api/terminals and /ws/terminals/<id>), index.ts (Terminals: the list, create, rename,
+│                        reorder, restart, run, close, stop)
 └── http/                server.ts (Bun.serve), guard.ts (Host / Origin / content type), body.ts (JSON bodies),
-                         routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts,
+                         routes.ts, reads.ts (the read endpoints the command line and the agents use), socket.ts (the
+                         page's `/ws`; server.ts sends `/ws/terminals/<id>` to terminals/),
                          static.ts, paths.ts (resolveInside, resolveWritableInside, assertRepoPath), code.ts (the
                          Code tab's routes: refs, paths, tree, blob, raw images, search and diff; a GitButler task's
                          working copy is the files it owns in the ledger, from disk, over its branch), edits.ts (POST
@@ -307,8 +316,9 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   the pull request syncs, the clocks and every running effect, and waits for them and for every running effect
   handler (`Engine.settle`) before it closes
   the log, so no `claude`, check or `gh` outlives the server (`docs/engine.md` → The agent loop → Restart
-  continuation). The eunoe proxy stops after the effects, once no `claude` can still talk to it. Anything new that
-  starts a process or a timer is stopped there too.
+  continuation). The eunoe proxy stops after the effects, once no `claude` can still talk to it. Your terminals' shells
+  are hung up before the clocks stop, and their screens saved. Anything new that starts a process or a timer is
+  stopped there too.
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
   log. An evidence path is absolute or relative to the worktree; evidence URLs must be http or https.

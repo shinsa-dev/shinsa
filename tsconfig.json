@@ -14,7 +14,10 @@
     "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "noEmit": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "paths": {
+      "@xterm/xterm": ["./apps/server/src/terminals/xterm-types.d.ts"]
+    }
   },
   "include": ["scripts/**/*.ts"],
   "exclude": ["node_modules", "apps", "packages"]

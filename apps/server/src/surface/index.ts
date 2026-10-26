@@ -211,6 +211,7 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
       ['usage', 'Show how much of each account’s usage limits is spent, and when it resets.'],
       ['providers', 'List the agent providers, Claude and Codex, and their models.'],
       ['versions', 'Show the installed Claude Code, Codex and Agent SDK, and update them.'],
+      ['terminals', 'List your terminals in Shinsa and whether each shell still runs.'],
       ['health', 'Check that the engine read its event log without damaged entries.'],
       ['command', 'Send any engine command by its type and fields, for scripts.'],
     ],

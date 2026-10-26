@@ -1,6 +1,7 @@
 import { isTaskSettled, type Task, type TaskPriority } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
+import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
@@ -48,8 +49,10 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
     case 'branch':
       if (task.branch) void copyText(task.branch);
       return;
-    case 'editor':
     case 'terminal':
+      void openTaskTerminal(task);
+      return;
+    case 'editor':
     case 'finder':
       void openWorktree(task.id, key);
       return;

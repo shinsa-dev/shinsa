@@ -1351,6 +1351,76 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
   a read's last answer while a newer version of it loads, and reads most of them before they are asked for
   (`docs/design.md`, 36).
 
+## Terminals
+
+Shinsa has a real terminal per project (`apps/server/src/terminals/`, the web's `routes/terminal.tsx`,
+`components/terminal/` and `lib/terminal/`), for what agents leave to you: running your own dev server, signing in
+somewhere interactive, or a command an agent asked you to run. The engine owns every shell, so a terminal keeps
+running when the window closes or the app quits, and a page that comes back finds it as it was.
+
+- **A shell in a pseudo-terminal, in the engine.** `pty.ts` starts your login shell (`$SHELL`, else the account's
+  shell from `os.userInfo()`, else zsh) as `<shell> -l` with `Bun.spawn`'s `terminal` option, Bun's own PTY, so the
+  compiled engine needs no native module (the compiled bundle was run with a PTY before this was built on it). It
+  gets the engine's environment, which `shinsa engine` already filled in from the login shell (Configuration and data
+  → The login shell environment), without what another terminal or the engine set (`TERM_PROGRAM*`,
+  `TERM_SESSION_ID`, `GHOSTTY_*`, `ITERM_*`, `SHINSA_SERVICE`, `COLUMNS`, `LINES`), plus `TERM=xterm-256color`,
+  `COLORTERM=truecolor`, `TERM_PROGRAM=Shinsa`, its version, and `LANG=en_US.UTF-8` when no locale is set, so wide
+  characters measure right. A shell whose rc file hands off to fish (a `.zshrc` that execs it) ends up in fish, as it
+  does in any terminal.
+- **The engine keeps the screen.** Every terminal has a headless xterm.js mirror (`mirror.ts`: `@xterm/headless` with
+  the serialize and Unicode 11 addons, 5,000 lines of scrollback), fed every byte the shell writes. A page that
+  attaches gets the mirror serialized (colours, modes, the alternate screen of `vim` or `htop`, the cursor), plus the
+  bytes it has not parsed yet, then the output as it comes; that is how a reload, a second window or the app opening
+  again shows the terminal exactly as it is. Memory is bounded by the scrollback, not by how long a server has run.
+- **The engine answers the terminal's questions.** A program that asks the terminal something (device attributes,
+  the cursor position, a mode, the background colour: fish asks several before its first prompt) gets its answer
+  from the mirror, once, even with no window open or with two. The page's xterm.js is told to leave those to the
+  engine (`lib/terminal/replies.ts`), and the page sends its colours (`colors`) so a question about the background
+  is answered with the one you see.
+- **One socket per terminal.** `GET /ws/terminals/<id>` upgrades past the same guard as `/ws` (loopback Host, a
+  same-site Origin, required). The server sends text frames for control, `reset { cols, rows }` before the screen and
+  `live` after it, and binary frames for output, batched every 4 ms or 256 KB. The page sends binary frames for what
+  you type and paste and text frames for `resize { cols, rows }` and `colors` (`parseTerminalClientFrame` in core, at
+  most 1000 × 500). A page that falls behind (more than 4 MB buffered, or a frame dropped) is sent nothing more until
+  it drains below 512 KB, and then the whole screen again, so a flood of output never piles up in the engine. The
+  last page to resize sets the size; the shell gets `SIGWINCH` from the PTY.
+- **The list.** `Terminals` (`index.ts`) keeps the terminals in `data/terminals/terminals.json`, in your order, each
+  with its project, folder, the name you gave it, the shell's title (OSC 0/2, 200 characters at most), its status
+  (`running`, `exited` with its code, or `stopped`) and times, and pushes the list to every page as `terminals` on
+  the main socket whenever it changes (coalesced over 50 ms), with the appearance (below) and your home folder. Each
+  terminal's screen is saved to `data/terminals/<id>.screen` (its last 1,000 lines, serialized) two seconds after it
+  last printed and when Shinsa stops. At most 32 terminals.
+- **When the engine stops.** `stop()` hangs up every shell (`SIGHUP` and the PTY closed, as closing a terminal window
+  does, then `SIGKILL` after 3 s), so nothing it started outlives the engine, and saves each screen. A restarted
+  engine cannot have the shell back: a terminal that was running shows as `stopped`, with its last screen and Start
+  again, which starts a new shell in the same folder below the old output. Closing a terminal hangs it up and deletes
+  its screen.
+- **Where it may open.** `POST /api/terminals { projectId, path, command? }` opens one only in a place of the
+  project (`listTerminalPlaces` in core: its repositories, its folders and the worktrees of its open tasks), or your
+  home folder for a project with none, and only in a folder that exists. With `command`, the command is typed into
+  the new shell followed by Return. The rest: `POST /api/terminals/<id>/rename { name }` (60 characters, null for
+  none), `/restart`, `/close`, `POST /api/terminals/order { projectId, ids }`, and `GET /api/terminals` (the list,
+  `shinsa terminals list`). Inspect mode refuses all of it.
+- **Your terminals are yours.** No agent tool reaches a terminal; every write route needs a browser's Origin
+  (`browser_only` otherwise, so `curl` and the command line cannot type into one); `shinsa terminals` is human-only;
+  and `agents/policy.ts` refuses a shell command that names `/api/terminals` or `/ws/terminals`. As everywhere in Who
+  can change Shinsa, this keeps an agent from doing it by accident, not one set on it.
+- **An agent that needs you to run something** asks (`ask`) with the command in a ```` ```sh ```` block in its
+  context, as the tool's description says. The question card shows Run in terminal on that block (and only there),
+  which opens a terminal in the task's worktree, or its repository, and runs it. Nothing runs until you press it.
+  Running types like a person (`TerminalSession.type`): it waits until the shell has printed and then been quiet for
+  150 ms (its prompt; at most 5 s, so a busy program cannot hold it), types the command, and presses Enter 30 ms later
+  as a key of its own. A shell such as fish does not run a line whose Enter arrives in the same read as the text, and a
+  command written before the shell's first prompt is lost or mangled, so both waits matter.
+- **Appearance follows Ghostty.** `ghostty.ts` reads Ghostty's config the way Ghostty does on a Mac:
+  `$XDG_CONFIG_HOME/ghostty/config` (and `config.ghostty`), then `~/Library/Application Support/com.mitchellh.ghostty/config`
+  (and `config.ghostty`), later files winning, with `config-file` includes (`?` for optional ones) read once each. It
+  takes `font-family` (the first), `font-size`, `cursor-style`, `cursor-style-blink`, `macos-option-as-alt`, `theme`
+  (one theme, or `light:…,dark:…`, looked up in your themes folders and then Ghostty's, `GHOSTTY_RESOURCES_DIR` or
+  the app's) and the colours set over it (`background`, `foreground`, `cursor-color`, `cursor-text`,
+  `selection-*`, `palette = N=#rrggbb`). It is read again whenever a page connects. Without a Ghostty config, or for
+  every colour it leaves unset, the terminal uses Shinsa's `--terminal-*` tokens (`docs/design.md`, 37).
+
 ## Agents manage Shinsa
 
 There is no separate conversation with Shinsa. Every task agent can do what you can do in Shinsa, and a task is how
@@ -1416,6 +1486,8 @@ plainly what protects what.
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
   - opening a worktree in an editor (`tasks open`);
+  - your terminals: listing them (`terminals list`), and opening, typing into, renaming or closing one, which has no
+    command at all (Terminals, above);
   - stopping, restarting or running the engine (`shinsa stop`, `restart`, `engine`: `HUMAN_ONLY_ENGINE_COMMANDS` in
     `cli/engine.ts`, refused in an agent's shell like the rest, since the engine is what runs the agent).
 
@@ -2875,6 +2947,8 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
     │                  task (Where agents work → GitButler, above)
     ├── transcripts/   One JSONL chat transcript per run
     ├── evidence/      Screenshots, logs and files agents attached
+    ├── terminals/     Your terminals (`terminals.json`) and each one's last screen (`<id>.screen`), so a restarted
+    │                  engine shows how each ended (Terminals, above)
     ├── usage-limits.json  The last usage reading per account
     ├── provider-usage.json  The last usage reading of each provider with a login of its own (Codex)
     ├── account-marks.json The accounts a usage limit marked spent, until they reset
@@ -3186,8 +3260,9 @@ how the tools are checked again.
 Every page holds one WebSocket on `/ws` (`apps/server/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
-accounts and `surfaces`; then every change of state goes to every socket as a patch, every change of the accounts whole, and a transcript only to the
-sockets following its run. The page's
+accounts, `surfaces` and `terminals` (Terminals, above); then every change of state goes to every socket as a patch, every change of the accounts
+and of the terminals whole, and a transcript only to the sockets following its run. Each terminal has a socket of
+its own on `/ws/terminals/<id>`. The page's
 first message on each socket is `hello` with its surface, `desktop` in the Mac app (it has `window.shinsaDesktop`)
 and `browser` anywhere else, Floaty included. The server keeps each socket's surface and tells every socket, with
 `surfaces { desktop }`, whether at least one desktop surface is connected: on connect, and again only when that

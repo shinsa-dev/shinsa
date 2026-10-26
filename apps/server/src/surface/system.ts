@@ -1,15 +1,17 @@
-import type {
-  AccountPatch,
-  AccountSummary,
-  AccountsSnapshot,
-  AgentProviderInfo,
-  OnBehalfAction,
-  OnboardingStatus,
-  ProgramVersion,
-  QueueSummary,
-  QueueSummaryEntry,
-  UpdateOutcome,
-  VersionsSnapshot,
+import {
+  type AccountPatch,
+  type AccountSummary,
+  type AccountsSnapshot,
+  type AgentProviderInfo,
+  type OnBehalfAction,
+  type OnboardingStatus,
+  type ProgramVersion,
+  type QueueSummary,
+  type QueueSummaryEntry,
+  resolveTerminalLabel,
+  type TerminalsSnapshot,
+  type UpdateOutcome,
+  type VersionsSnapshot,
 } from '@shinsa/core';
 import { describeVersion, type ServerHealth } from '../instance/index.ts';
 import {
@@ -331,6 +333,22 @@ export const SYSTEM_SPECS: SurfaceSpec[] = [
       const data = await client.post<UpdateOutcome>('/api/versions/update', { program: values.program });
       return { data, text: `${data.message}\n${formatVersions(data.versions)}` };
     },
+  }),
+  defineRead<TerminalsSnapshot>({
+    path: ['terminals', 'list'],
+    summary: 'List your terminals in Shinsa: each one’s folder and whether its shell still runs.',
+    humanOnly: true,
+    fields: [],
+    request: () => '/api/terminals',
+    format: ({ terminals }) =>
+      terminals.length === 0
+        ? 'No terminals.'
+        : terminals
+            .map(
+              (terminal) =>
+                `${resolveTerminalLabel(terminal).padEnd(24)} ${terminal.status.padEnd(8)} ${terminal.cwd}`
+            )
+            .join('\n'),
   }),
   defineRead<ServerHealth>({
     path: ['health'],
