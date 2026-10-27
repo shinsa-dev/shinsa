@@ -198,6 +198,7 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
       findRepository: (state, task, local) => resolveRoundRepository(state, task, local, quick.classify),
       resolveLogin,
       roots,
+      services: terminals,
     }),
   };
 }

@@ -57,6 +57,11 @@ export interface EffectRunnerOptions {
   roots?: RootSource;
   watchIntervalMs?: number;
   workspaces?: Workspaces;
+  services?: TaskServices;
+}
+
+export interface TaskServices {
+  closeTaskServices(taskId: string): void;
 }
 
 const WATCH_INTERVAL_MS = 45_000;
@@ -109,6 +114,7 @@ export class EffectRunner {
   readonly #roots: RootSource;
   readonly #watchIntervalMs: number;
   readonly #workspaces: Workspaces;
+  readonly #services: TaskServices | null;
   readonly #evidence: EvidenceStore;
   readonly #ledgers: LedgerStore;
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
@@ -134,6 +140,7 @@ export class EffectRunner {
     this.#resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
+    this.#services = options.services ?? null;
     this.#evidence = new EvidenceStore(config.evidenceDir);
     this.#ledgers = new LedgerStore(config.dataDir);
     this.#workspaces =
@@ -622,6 +629,7 @@ export class EffectRunner {
     const repo = task?.repoId ? this.#engine.state.repos[task.repoId] : undefined;
     if (repo) await this.#removeIsolated(repo, taskId);
     if (!task?.worktreePath || !repo) return;
+    this.#services?.closeTaskServices(taskId);
     try {
       await this.#workspaces.resolve(task).remove(repo, task);
     } catch (error) {
