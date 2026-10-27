@@ -166,7 +166,10 @@ describe('ChatTab', () => {
         name: 'propose_plan',
         args: { goal: 'Ship the form.', phases: [{ title: 'Add fields', detail: 'Two' }] },
       },
-      { name: 'complete_fix', args: { summary: 'Fixed the null check.' } },
+      {
+        name: 'complete_fix',
+        args: { summary: 'Fixed the null check.', walkthrough: { flow: 'Now it checks first.' } },
+      },
       {
         name: 'report_review',
         args: { findings: [{ severity: 'blocking', message: 'Missing test.', file: 'src/a.ts', line: 3 }] },
@@ -196,6 +199,10 @@ describe('ChatTab', () => {
     expect(view.getByText('Proposed the plan')).toBeTruthy();
     expect(view.getByText('Add fields')).toBeTruthy();
     expect(view.getByText('Handed over the fix')).toBeTruthy();
+    expect(view.getByRole('link', { name: 'Read the walkthrough' }).getAttribute('href')).toBe(
+      '/tasks/task-1?tab=review'
+    );
+    expect(view.getAllByRole('link', { name: 'Read the walkthrough' })).toHaveLength(1);
     expect(view.getByText('Reported 1 finding')).toBeTruthy();
     expect(view.getByText('Missing test.')).toBeTruthy();
     expect(view.getByText('Asked you')).toBeTruthy();
@@ -581,7 +588,7 @@ describe('tooltips in the chat', () => {
     const view = renderChat(createShinsaState({ tasks: [task], runs: [finishedRun()] }), task);
     fireEvent.click(view.getByRole('button', { name: /Worked for/ }));
     const triggers = view.container.querySelectorAll('[data-slot="tooltip-trigger"]');
-    expect(triggers.length).toBeGreaterThan(4);
+    expect(triggers.length).toBeGreaterThan(3);
     expect(listStretchedTriggers(view.container)).toEqual([]);
     expect(view.getByRole('button', { name: /^Account switched/ }).hasAttribute('data-chat-line')).toBe(true);
   });

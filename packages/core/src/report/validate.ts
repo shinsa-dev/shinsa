@@ -1,31 +1,74 @@
 import type { ChangeProposalInput, InquiryShape } from '../commands/index.ts';
 import {
+  COMPOSABLE_STEPS,
   type DeliveringStep,
-  PIPELINE_ORDER,
+  EVIDENCE_KINDS,
+  EVIDENCE_STAGES,
+  EVIDENCE_THEMES,
   type PipelineStep,
   PLAN_EVIDENCE_KINDS,
   SHAPE_LIMITS,
 } from '../domain/index.ts';
+import type { EvidenceItemKind } from '../domain/types.ts';
+import { createTesting, isWebUrl, MANUAL_TEST_TARGETS, parseTestFile } from './testing.ts';
 import type {
   Attention,
   CodeSpot,
+  ComparisonPartHandOver,
+  EvidenceHandOver,
+  EvidenceSource,
+  FixHandOver,
+  JudgementAlternative,
   JudgementCall,
+  ManualTestStep,
+  ManualTestTarget,
+  MergeStep,
+  MergeStepKind,
+  MergeStepTiming,
   PhaseHandOver,
   PlanDocument,
   PlanHandOver,
   QuestionHandOver,
+  ReportRisk,
+  ReportTesting,
+  ReportWalkthrough,
+  ReportWalkthroughRevision,
   ReviewFinding,
+  ReviewHandOver,
   SuggestedTask,
   WaitHandOver,
 } from './types.ts';
 
 export const PROTOCOL_LIMITS = {
   phaseSummary: 240,
-  spots: 6,
+  spots: 8,
   why: 180,
+  spotTitle: 80,
+  explain: 400,
   judgementCalls: 5,
+  callTitle: 60,
   call: 120,
   reason: 240,
+  alternatives: 3,
+  alternativeOption: 100,
+  alternativeRejected: 200,
+  walkthroughApproach: 1_200,
+  flow: 2_400,
+  risks: 8,
+  riskTitle: 60,
+  risk: 280,
+  testingAutomated: 4,
+  testingAutomatedItem: 240,
+  testingSteps: 10,
+  testingAction: 240,
+  testingExpect: 240,
+  testingTarget: 400,
+  mergeSteps: 8,
+  mergeStepTitle: 80,
+  mergeStepDetail: 400,
+  mergeStepCommand: 400,
+  disagreements: 8,
+  disagreement: 280,
   goal: 300,
   minPlanPhases: 2,
   planPhases: 8,
@@ -168,12 +211,16 @@ function readSpot(reader: Reader, raw: unknown, path: string): CodeSpot {
   const start = reader.line(record.start, `${path}.start`);
   const end = reader.optionalLine(record.end, `${path}.end`) ?? start;
   reader.range(start, end, path, 'start');
+  const title = reader.optionalText(record.title, `${path}.title`, PROTOCOL_LIMITS.spotTitle);
+  const explain = reader.optionalText(record.explain, `${path}.explain`, PROTOCOL_LIMITS.explain);
   return {
     file: reader.text(record.file, `${path}.file`, PROTOCOL_LIMITS.path),
     start,
     end,
     attention: reader.pick(record.attention, `${path}.attention`, ATTENTION_LEVELS),
     why: reader.text(record.why, `${path}.why`, PROTOCOL_LIMITS.why),
+    ...(title === null ? {} : { title }),
+    ...(explain === null ? {} : { explain }),
   };
 }
 
@@ -183,17 +230,179 @@ function readSpots(reader: Reader, value: unknown, path: string) {
     .map((spot, index) => readSpot(reader, spot, `${path}[${index}]`));
 }
 
+function readAlternatives(reader: Reader, value: unknown, path: string): JudgementAlternative[] {
+  return reader.list(value, path, PROTOCOL_LIMITS.alternatives).map((raw, index) => {
+    const record = reader.record(raw, `${path}[${index}]`);
+    return {
+      option: reader.text(record.option, `${path}[${index}].option`, PROTOCOL_LIMITS.alternativeOption),
+      rejected: reader.text(
+        record.rejected,
+        `${path}[${index}].rejected`,
+        PROTOCOL_LIMITS.alternativeRejected
+      ),
+    };
+  });
+}
+
 function readJudgementCalls(reader: Reader, value: unknown): JudgementCall[] {
   return reader.list(value, 'judgement_calls', PROTOCOL_LIMITS.judgementCalls).map((raw, index) => {
     const path = `judgement_calls[${index}]`;
     const record = reader.record(raw, path);
+    const line = reader.optionalLine(record.line, `${path}.line`);
+    const end = reader.optionalLine(record.end, `${path}.end`);
+    reader.range(line, end, path, 'line');
+    const alternatives = readAlternatives(reader, record.alternatives, `${path}.alternatives`);
     return {
+      title: reader.text(record.title, `${path}.title`, PROTOCOL_LIMITS.callTitle),
       call: reader.text(record.call, `${path}.call`, PROTOCOL_LIMITS.call),
       reason: reader.text(record.reason, `${path}.reason`, PROTOCOL_LIMITS.reason),
       file: reader.optionalText(record.file, `${path}.file`, PROTOCOL_LIMITS.path),
-      line: reader.optionalLine(record.line, `${path}.line`),
+      line,
+      ...(end === null ? {} : { end }),
+      ...(alternatives.length > 0 ? { alternatives } : {}),
     };
   });
+}
+
+function readRisks(reader: Reader, value: unknown): ReportRisk[] {
+  return reader.list(value, 'walkthrough.risks', PROTOCOL_LIMITS.risks).map((raw, index) => {
+    const path = `walkthrough.risks[${index}]`;
+    const record = reader.record(raw, path);
+    const line = reader.optionalLine(record.line, `${path}.line`);
+    const end = reader.optionalLine(record.end, `${path}.end`);
+    reader.range(line, end, path, 'line');
+    return {
+      title: reader.text(record.title, `${path}.title`, PROTOCOL_LIMITS.riskTitle),
+      risk: reader.text(record.risk, `${path}.risk`, PROTOCOL_LIMITS.risk),
+      file: reader.optionalText(record.file, `${path}.file`, PROTOCOL_LIMITS.path),
+      line,
+      end,
+    };
+  });
+}
+
+function readApproach(reader: Reader, value: unknown) {
+  return reader.text(value, 'walkthrough.approach', PROTOCOL_LIMITS.walkthroughApproach);
+}
+
+function readFlow(reader: Reader, value: unknown) {
+  return reader.text(value, 'walkthrough.flow', PROTOCOL_LIMITS.flow);
+}
+
+function readTestTarget(reader: Reader, value: unknown, path: string): ManualTestTarget | null {
+  if (!isGiven(value)) return null;
+  const record = reader.record(value, path);
+  const kind = reader.pick(record.kind, `${path}.kind`, MANUAL_TEST_TARGETS);
+  const text = reader.text(record.value, `${path}.value`, PROTOCOL_LIMITS.testingTarget);
+  if (text && kind === 'url' && !isWebUrl(text)) {
+    reader.errors.push(`${path}.value must be an http or https URL.`);
+  }
+  if (text && kind === 'file' && !parseTestFile(text)) {
+    reader.errors.push(
+      `${path}.value must be a path relative to the repository root, with :line or :start-end when it points at lines.`
+    );
+  }
+  return { kind, value: text };
+}
+
+function readManualSteps(reader: Reader, value: unknown, path: string): ManualTestStep[] {
+  return reader.list(value, path, PROTOCOL_LIMITS.testingSteps).map((raw, index) => {
+    const step = `${path}[${index}]`;
+    const record = reader.record(raw, step);
+    return {
+      action: reader.text(record.action, `${step}.action`, PROTOCOL_LIMITS.testingAction),
+      target: readTestTarget(reader, record.target, `${step}.target`),
+      expect: reader.text(record.expect, `${step}.expect`, PROTOCOL_LIMITS.testingExpect),
+    };
+  });
+}
+
+function readAutomatedTesting(reader: Reader, value: unknown, path: string) {
+  return readTextList(
+    reader,
+    value,
+    path,
+    PROTOCOL_LIMITS.testingAutomated,
+    PROTOCOL_LIMITS.testingAutomatedItem
+  );
+}
+
+function readTesting(reader: Reader, value: unknown): ReportTesting {
+  if (Array.isArray(value)) return createTesting(readAutomatedTesting(reader, value, 'walkthrough.testing'));
+  if (!isGiven(value)) return createTesting();
+  const record = reader.record(value, 'walkthrough.testing');
+  return {
+    automated: readAutomatedTesting(reader, record.automated, 'walkthrough.testing.automated'),
+    manual: readManualSteps(reader, record.manual, 'walkthrough.testing.manual'),
+  };
+}
+
+function readMergeStep(reader: Reader, raw: unknown, path: string): MergeStep {
+  const record = reader.record(raw, path);
+  return {
+    when: reader.pick(record.when, `${path}.when`, MERGE_STEP_TIMINGS),
+    kind: reader.pick(record.kind, `${path}.kind`, MERGE_STEP_KINDS),
+    title: reader.text(record.title, `${path}.title`, PROTOCOL_LIMITS.mergeStepTitle),
+    detail: reader.text(record.detail, `${path}.detail`, PROTOCOL_LIMITS.mergeStepDetail),
+    command: reader.optionalText(record.command, `${path}.command`, PROTOCOL_LIMITS.mergeStepCommand),
+  };
+}
+
+function readMergeSteps(reader: Reader, value: unknown) {
+  const steps = reader
+    .list(value, 'walkthrough.steps', PROTOCOL_LIMITS.mergeSteps)
+    .map((raw, index) => readMergeStep(reader, raw, `walkthrough.steps[${index}]`));
+  steps.forEach((step, index) => {
+    const first = steps.findIndex((other) => other.when === step.when && other.title === step.title);
+    if (first < index) {
+      reader.errors.push(
+        `walkthrough.steps[${index}].title repeats walkthrough.steps[${first}]; give each step its own title.`
+      );
+    }
+  });
+  return steps;
+}
+
+function isGiven(value: unknown) {
+  return value !== undefined && value !== null;
+}
+
+function readWalkthrough(reader: Reader, value: unknown): ReportWalkthrough | null {
+  if (!isGiven(value)) return null;
+  const record = reader.record(value, 'walkthrough');
+  return {
+    approach: readApproach(reader, record.approach),
+    flow: readFlow(reader, record.flow),
+    risks: readRisks(reader, record.risks),
+    testing: readTesting(reader, record.testing),
+    ...resolveGivenSteps(reader, record.steps, false),
+  };
+}
+
+function resolveGivenSteps(reader: Reader, value: unknown, empty: boolean) {
+  if (!isGiven(value)) return {};
+  const steps = readMergeSteps(reader, value);
+  return steps.length > 0 || empty ? { steps } : {};
+}
+
+function readWalkthroughRevision(reader: Reader, value: unknown): ReportWalkthroughRevision | null {
+  if (!isGiven(value)) return null;
+  const errors = reader.errors.length;
+  const record = reader.record(value, 'walkthrough');
+  if (reader.errors.length > errors) return null;
+  const revision: ReportWalkthroughRevision = {
+    ...(isGiven(record.approach) ? { approach: readApproach(reader, record.approach) } : {}),
+    ...(isGiven(record.flow) ? { flow: readFlow(reader, record.flow) } : {}),
+    ...(isGiven(record.risks) ? { risks: readRisks(reader, record.risks) } : {}),
+    ...(isGiven(record.testing) ? { testing: readTesting(reader, record.testing) } : {}),
+    ...resolveGivenSteps(reader, record.steps, true),
+  };
+  if (Object.keys(revision).length === 0) {
+    reader.errors.push(
+      'walkthrough needs at least one of approach, flow, risks, testing or steps. Leave it out when the fix changes none of them.'
+    );
+  }
+  return revision;
 }
 
 function readTextList(reader: Reader, value: unknown, path: string, max: number, itemMax: number) {
@@ -206,12 +415,16 @@ export function validatePhaseHandOver(input: Record<string, unknown>): Validatio
     summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.phaseSummary),
     spots: readSpots(reader, input.spots, 'spots'),
     judgementCalls: readJudgementCalls(reader, input.judgement_calls),
+    walkthrough: readWalkthrough(reader, input.walkthrough),
   });
 }
 
-export function validateFixHandOver(input: Record<string, unknown>): Validation<{ summary: string }> {
+export function validateFixHandOver(input: Record<string, unknown>): Validation<FixHandOver> {
   const reader = new Reader();
-  return reader.result({ summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.phaseSummary) });
+  return reader.result({
+    summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.phaseSummary),
+    walkthrough: readWalkthroughRevision(reader, input.walkthrough),
+  });
 }
 
 function readPlanFiles(reader: Reader, input: unknown) {
@@ -316,9 +529,27 @@ function readPlanParameters(reader: Reader, input: Record<string, unknown>): Par
   };
 }
 
-export function validateReview(
-  input: Record<string, unknown>
-): Validation<{ summary: string | null; findings: ReviewFinding[] }> {
+function readDisagreements(reader: Reader, value: unknown) {
+  const disagreements = reader
+    .list(value, 'disagreements', PROTOCOL_LIMITS.disagreements)
+    .map((raw, index) => {
+      const path = `disagreements[${index}]`;
+      const record = reader.record(raw, path);
+      return {
+        call: reader.count(
+          record.call,
+          `${path}.call`,
+          PROTOCOL_LIMITS.judgementCalls * PROTOCOL_LIMITS.planPhases
+        ),
+        reason: reader.text(record.reason, `${path}.reason`, PROTOCOL_LIMITS.disagreement),
+      };
+    });
+  const calls = disagreements.map((entry) => entry.call);
+  if (new Set(calls).size !== calls.length) reader.errors.push('disagreements names a judgement call twice.');
+  return disagreements;
+}
+
+export function validateReview(input: Record<string, unknown>): Validation<ReviewHandOver> {
   const reader = new Reader();
   const summary = reader.optionalText(input.summary, 'summary', PROTOCOL_LIMITS.reviewSummary);
   const findings = reader.list(input.findings, 'findings', PROTOCOL_LIMITS.findingCount).map((raw, index) => {
@@ -339,7 +570,7 @@ export function validateReview(
       ...(fix === null ? {} : { fix }),
     };
   });
-  return reader.result({ summary, findings });
+  return reader.result({ summary, findings, disagreements: readDisagreements(reader, input.disagreements) });
 }
 
 export function validatePlanHandOver(input: Record<string, unknown>): Validation<PlanHandOver> {
@@ -518,11 +749,11 @@ export function validateDelivery(
 
 type ReshapeHandOver = { reason: string } & ({ shape: InquiryShape } | { steps: PipelineStep[] });
 
-const PIPELINE_STEP_NAMES = PIPELINE_ORDER as readonly [PipelineStep, ...PipelineStep[]];
+const PIPELINE_STEP_NAMES = COMPOSABLE_STEPS as readonly [PipelineStep, ...PipelineStep[]];
 
 function readSteps(reader: Reader, value: unknown) {
   return reader
-    .list(value, 'steps', PIPELINE_ORDER.length, 1)
+    .list(value, 'steps', COMPOSABLE_STEPS.length, 1)
     .map((step, index) => reader.pick(step, `steps[${index}]`, PIPELINE_STEP_NAMES));
 }
 

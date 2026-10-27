@@ -1,4 +1,4 @@
-import type { ChatEvent, ChatTool, ReviewFinding } from '../packages/core/src/index.ts';
+import type { ChatEvent, ChatTool, JudgementCall, ReviewFinding } from '../packages/core/src/index.ts';
 import {
   type CodeSample,
   LIVE_PLAN,
@@ -128,6 +128,22 @@ function serializeFinding(finding: ReviewFinding) {
   };
 }
 
+function serializePhase(phase: SamplePhase | undefined) {
+  return {
+    summary: phase?.summary,
+    spots: phase?.spots,
+    judgement_calls: phase?.judgementCalls,
+    ...(phase?.walkthrough ? { walkthrough: phase.walkthrough } : {}),
+  };
+}
+
+function serializeDisagreements(calls: JudgementCall[], sample: CodeSample) {
+  return listReviewDisagreements(sample).map((entry) => ({
+    call: calls.findIndex((call) => call.call === entry.call) + 1,
+    reason: entry.reason,
+  }));
+}
+
 function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string>) {
   const { review } = sample;
   const title = 'Rename review targets to review spots';
@@ -139,11 +155,7 @@ function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string
   const designLine = resolveLine(review.design.after, '## Review spots');
   const request =
     'The request: Rename review targets to review spots in the web app. Core and the agents already say spot; the web still says target.';
-  const handOverPhase = (index: number) => ({
-    summary: phases[index]?.summary,
-    spots: phases[index]?.spots,
-    judgement_calls: phases[index]?.judgementCalls,
-  });
+  const handOverPhase = (index: number) => serializePhase(phases[index]);
   return {
     0: serializeRun(
       `${SAMPLE_REVIEW}-run-0`,
@@ -309,14 +321,26 @@ function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string
           listMatches(SAMPLE_PATHS.webGuide, review.webGuide.before, 'Review targets'),
           'apps/web'
         ),
+        run(
+          `git show main:${SAMPLE_PATHS.targetsTest} | grep -n describe`,
+          'What the old tests covered',
+          listMatches(SAMPLE_PATHS.targetsTest, review.targetsTest, 'describe(')
+        ),
+        say(
+          'The old tests covered listFindingMarkers, the finding rows and stepping from a decision spot. The new file covers none of them, and the agent decided to drop finding keys from the parser. I disagree with both judgement calls.'
+        ),
         handOver(
           'report_review',
-          { summary: REVIEW_SUMMARY, findings: findings.map(serializeFinding) },
+          {
+            summary: REVIEW_SUMMARY,
+            findings: findings.map(serializeFinding),
+            disagreements: serializeDisagreements(report.judgementCalls, sample),
+          },
           'Review recorded.'
         ),
       ],
       finish(
-        `One blocking finding: [parseSpotKey](shinsa://file/${SAMPLE_PATHS.spotKeys}#L${spotKeyLine}) drops finding and decision keys, so older links to an agent finding open nothing. Four suggestions, none blocking. The rename itself is clean and the [recorded fixture](shinsa://file/${SAMPLE_PATHS.fixture}) still loads all of its spots.`
+        `One blocking finding: [parseSpotKey](shinsa://file/${SAMPLE_PATHS.spotKeys}#L${spotKeyLine}) drops finding and decision keys, so older links to an agent finding open nothing. Four suggestions, none blocking, and I disagree with two judgement calls: the narrow parser and the rewritten tests. The rename itself is clean and the [recorded fixture](shinsa://file/${SAMPLE_PATHS.fixture}) still loads all of its spots.`
       )
     ),
   };

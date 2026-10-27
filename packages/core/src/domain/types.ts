@@ -4,6 +4,8 @@ import type {
   JudgementCall,
   PlanDocument,
   ReportCheck,
+  ReportWalkthrough,
+  ReviewDisagreement,
   ReviewFinding,
   WorkReport,
 } from '../report/types.ts';
@@ -248,6 +250,7 @@ export interface PhaseReport {
   summary: string;
   spots: CodeSpot[];
   judgementCalls: JudgementCall[];
+  walkthrough?: ReportWalkthrough | null;
   at: number;
 }
 
@@ -415,6 +418,7 @@ export interface Task {
   mode?: TaskMode;
   planHistory?: PlanRevision[];
   dismissedFindings?: ReviewFinding[];
+  reviewDisagreements?: ReviewDisagreement[];
   monitor?: Monitor | null;
   treeHash?: string | null;
   fixFingerprints?: FixFingerprint[];

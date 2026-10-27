@@ -45,7 +45,7 @@ const RUN_PURPOSES: readonly unknown[] = [...STAGE_PURPOSE.values()];
 
 const INQUIRY_ROLES: readonly unknown[] = ['reviewer', 'answerer', 'investigator', 'researcher'];
 
-export const LEGACY_EVENT_TYPES = [
+const LEGACY_EVENT_TYPES = [
   'task.answered',
   'task.created',
   'task.staged',
@@ -53,6 +53,17 @@ export const LEGACY_EVENT_TYPES = [
   'worktree.created',
   'run.started',
 ];
+
+const WALKTHROUGH_EVENT_TYPES = ['phase.completed', 'work.submitted', 'walkthrough.revised'];
+
+const TESTING_LOG_VERSION = 3;
+
+export function listLegacyEventTypes(version: number) {
+  return [
+    ...(version < 1 ? LEGACY_EVENT_TYPES : []),
+    ...(version < TESTING_LOG_VERSION ? WALKTHROUGH_EVENT_TYPES : []),
+  ];
+}
 
 function isRecord(value: unknown): value is Payload {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -87,6 +98,16 @@ function resolveRun(run: Payload, stage: string | undefined) {
   return resolveTopLevelRun(run, stage);
 }
 
+function resolveWalkthrough(walkthrough: unknown) {
+  if (!isRecord(walkthrough) || !Array.isArray(walkthrough.testing)) return walkthrough;
+  return { ...walkthrough, testing: { automated: walkthrough.testing, manual: [] } };
+}
+
+function resolveReport(event: Payload) {
+  if (!isRecord(event.report) || !isRecord(event.report.walkthrough)) return event;
+  return { ...event, report: { ...event.report, walkthrough: resolveWalkthrough(event.report.walkthrough) } };
+}
+
 function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
   switch (event.type) {
     case 'task.answered': {
@@ -114,6 +135,11 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       const taskId = typeof event.run.taskId === 'string' ? event.run.taskId : '';
       return { ...event, run: resolveRun(event.run, stages.get(taskId)) };
     }
+    case 'phase.completed':
+    case 'work.submitted':
+      return resolveReport(event);
+    case 'walkthrough.revised':
+      return { ...event, walkthrough: resolveWalkthrough(event.walkthrough) };
     default:
       return event;
   }

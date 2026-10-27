@@ -145,10 +145,17 @@ describe('HandoverCard for the process tools', () => {
     const phase = renderCard(
       call('complete_phase', {
         summary: 'The form validates input.',
-        judgement_calls: [{ call: 'Kept the old reader', reason: 'Other callers still use it.' }],
+        judgement_calls: [
+          {
+            title: 'Keep the old reader',
+            call: 'Kept the old reader',
+            reason: 'Other callers still use it.',
+          },
+        ],
       })
     );
     expect(phase.getByText('Judgement calls')).toBeTruthy();
+    expect(phase.getByText('Keep the old reader')).toBeTruthy();
     expect(phase.getByText('Kept the old reader')).toBeTruthy();
     expect(phase.getByText('Other callers still use it.')).toBeTruthy();
     phase.unmount();

@@ -4,7 +4,12 @@ import { join } from 'node:path';
 import { createState } from '@shinsa/core';
 import { Engine } from '../../src/runtime/engine.ts';
 import { EventLog } from '../../src/store/index.ts';
-import { listLegacyBriefings, listLegacyRewrites, type StoredEventRow } from '../../src/store/legacy.ts';
+import {
+  listLegacyBriefings,
+  listLegacyEventTypes,
+  listLegacyRewrites,
+  type StoredEventRow,
+} from '../../src/store/legacy.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 const TASK = 'task-1';
@@ -179,6 +184,71 @@ describe('rewriting events an older Shinsa wrote', () => {
       { seq: 3, type: 'task.answered', payload: '{"type":"task.delivered"}' },
     ];
     expect(listLegacyRewrites(unreadable)).toEqual([]);
+  });
+});
+
+describe('a walkthrough’s testing as a plain list', () => {
+  const walkthrough = { approach: 'a', flow: 'f', risks: [], testing: ['Resize it.'] };
+  const guide = { automated: ['Resize it.'], manual: [] };
+
+  test('becomes what the tests cover, in phase hand-overs, submitted reports and revisions', () => {
+    expect(
+      rewrite(
+        { type: 'phase.completed', taskId: TASK, report: { index: 0, walkthrough } },
+        { type: 'work.submitted', taskId: TASK, summary: 's', report: { headline: 'h', walkthrough } },
+        { type: 'walkthrough.revised', taskId: TASK, walkthrough: { testing: ['Resize it.'] }, runId: 'r' }
+      ).map((row) => row.event)
+    ).toEqual([
+      {
+        type: 'phase.completed',
+        taskId: TASK,
+        report: { index: 0, walkthrough: { ...walkthrough, testing: guide } },
+      },
+      {
+        type: 'work.submitted',
+        taskId: TASK,
+        summary: 's',
+        report: { headline: 'h', walkthrough: { ...walkthrough, testing: guide } },
+      },
+      { type: 'walkthrough.revised', taskId: TASK, walkthrough: { testing: guide }, runId: 'r' },
+    ]);
+  });
+
+  test('a report without a walkthrough, or one already in the new shape, is left alone', () => {
+    expect(
+      rewrite(
+        { type: 'phase.completed', taskId: TASK, report: { index: 0, walkthrough: null } },
+        { type: 'work.submitted', taskId: TASK, summary: 's', report: null },
+        { type: 'walkthrough.revised', taskId: TASK, walkthrough: { flow: 'f' }, runId: 'r' },
+        {
+          type: 'phase.completed',
+          taskId: TASK,
+          report: { index: 0, walkthrough: { ...walkthrough, testing: guide } },
+        }
+      )
+    ).toEqual([]);
+  });
+
+  test('is read from logs older than the walkthrough guide only', () => {
+    expect(listLegacyEventTypes(0)).toContain('task.answered');
+    expect(listLegacyEventTypes(2)).toEqual(['phase.completed', 'work.submitted', 'walkthrough.revised']);
+    expect(listLegacyEventTypes(3)).toEqual([]);
+  });
+
+  test('is rewritten on boot in a log already in the agent shape', () => {
+    const path = writeLegacyLog([
+      { type: 'phase.completed', taskId: TASK, report: { index: 0, walkthrough } },
+    ]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 2');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.applyLegacyView()).toBe(1);
+    expect(log.readEvents().events[0]).toMatchObject({ report: { walkthrough: { testing: guide } } });
+    expect(log.replaceLegacyEvents()).toBe(1);
+    expect(log.replaceLegacyEvents()).toBe(0);
+    log.close();
+    expect(readStoredLog(path).version).toBe(3);
   });
 });
 

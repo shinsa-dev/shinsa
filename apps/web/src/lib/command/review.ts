@@ -7,7 +7,7 @@ export function listReviewCommands(input: {
   step: (step: ReviewStep) => void;
 }): CommandSection {
   const id = `task.${input.taskId}.review`;
-  const disabled = input.count === 0 ? { disabled: 'Nothing in this review needs your attention' } : {};
+  const disabled = input.count === 0 ? { disabled: 'This review marks no points' } : {};
   return {
     id,
     heading: 'Review',
@@ -16,20 +16,20 @@ export function listReviewCommands(input: {
       {
         kind: 'run',
         id: `${id}.next`,
-        label: 'Next place to check',
+        label: 'Next point',
         icon: 'IconChevronDownMedium',
         trailing: REVIEW_KEY.next,
-        keywords: ['next', 'spot', 'finding', 'attention', 'down'],
+        keywords: ['next', 'point', 'spot', 'finding', 'decision', 'down'],
         ...disabled,
         run: () => input.step(1),
       },
       {
         kind: 'run',
         id: `${id}.previous`,
-        label: 'Previous place to check',
+        label: 'Previous point',
         icon: 'IconChevronTopMedium',
         trailing: REVIEW_KEY.previous,
-        keywords: ['previous', 'spot', 'finding', 'attention', 'up'],
+        keywords: ['previous', 'point', 'spot', 'finding', 'decision', 'up'],
         ...disabled,
         run: () => input.step(-1),
       },

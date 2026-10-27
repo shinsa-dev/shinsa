@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { resolveCurrentRound } from '../../src/index.ts';
+import { type PlanEvidenceKind, resolveCurrentRound } from '../../src/index.ts';
 import {
   REFERENCE_RULES,
   resolveAnswererPrompt,
@@ -15,6 +15,7 @@ import {
   createHarness,
   createTask,
   linkSession,
+  PASSING,
   PLAN,
   proposePlan,
   pullRequest,
@@ -24,12 +25,13 @@ import {
 } from '../harness.ts';
 
 describe('agent prompts', () => {
-  test('teach the reference syntax and link the task itself', () => {
+  test('teach the reference syntax and the run mark, and link the task itself', () => {
     const harness = createHarness();
     const taskId = createTask(harness, { request: 'Ship the API' });
     readyWorktree(harness, taskId);
     const planner = harness.activeRun(taskId).prompt ?? '';
     expect(planner).toContain(REFERENCE_RULES);
+    expect(planner).toContain('```bash run');
     expect(planner).toContain(`(shinsa://task/${taskId})`);
     linkSession(harness, taskId);
     proposePlan(harness, taskId);
@@ -95,6 +97,9 @@ describe('what a prompt says about the work it builds on', () => {
     const { task } = tasks();
     expect(resolvePhaseInstruction(task, null, 0)).toContain('Run whatever lint, type check and tests');
     expect(resolvePhaseInstruction(task, null, 1)).toContain('This is the last phase');
+    expect(resolvePhaseInstruction(task, null, 1)).toContain(
+      '`testing` has two parts. `automated`: one or two lines on what the tests cover'
+    );
     expect(resolvePhaseInstruction(task, null, 0)).toContain('Later phases build on this one');
   });
 
@@ -251,5 +256,50 @@ describe('a later round’s agent', () => {
       'An earlier round of this task has an open pull request, so this round ships through it'
     );
     expect(planner.prompt).not.toContain('- `shape` when the request needs no change at all');
+  });
+});
+
+describe('the reviewer and the guide for testing the change', () => {
+  function reachReviewer(testing: {
+    automated: string[];
+    manual: { action: string; target: null; expect: string }[];
+  }) {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    completePhase(harness, taskId);
+    harness.send({
+      type: 'agent.complete_phase',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Done.',
+      spots: [],
+      judgementCalls: [],
+      walkthrough: { approach: 'Copy it.', flow: 'copy → save', risks: [], testing },
+    });
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    return harness.activeRun(taskId).prompt ?? '';
+  }
+
+  test('is told the guide and to check the human can follow it', () => {
+    const prompt = reachReviewer({
+      automated: ['duplicate.test.ts covers both kinds.'],
+      manual: [{ action: 'Duplicate a paywall.', target: null, expect: 'A copy named “Copy of …”.' }],
+    });
+    expect(prompt).toContain(
+      [
+        'How the agent says to test the change:',
+        'Covered by tests:',
+        '- duplicate.test.ts covers both kinds.',
+        'Try it yourself:',
+        '1. Duplicate a paywall. Expected: A copy named “Copy of …”.',
+      ].join('\n')
+    );
+    expect(prompt).toContain('Check the guide is one the human can follow');
+  });
+
+  test('is told when the agent wrote no guide', () => {
+    expect(reachReviewer({ automated: [], manual: [] })).toContain(
+      'The agent wrote no guide for testing the change.'
+    );
   });
 });

@@ -214,3 +214,43 @@ describe('a task described for an agent', () => {
     );
   });
 });
+
+describe('a task described for an agent, with a guide for testing it', () => {
+  test('lists what the tests cover and the steps to try', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    completePhase(harness, taskId);
+    harness.send({
+      type: 'agent.complete_phase',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Done.',
+      spots: [],
+      judgementCalls: [],
+      walkthrough: {
+        approach: 'Copy it.',
+        flow: 'copy → save',
+        risks: [],
+        testing: {
+          automated: ['duplicate.test.ts covers both kinds.'],
+          manual: [
+            {
+              action: 'Open the paywalls.',
+              target: { kind: 'url', value: 'http://localhost:5173/paywalls' },
+              expect: 'The list loads.',
+            },
+          ],
+        },
+      },
+    });
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      [
+        'How to test the change:',
+        '  Covered by tests:',
+        '  - duplicate.test.ts covers both kinds.',
+        '  Try it yourself:',
+        '  1. Open the paywalls. [url: http://localhost:5173/paywalls] Expected: The list loads.',
+      ].join('\n')
+    );
+  });
+});

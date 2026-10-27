@@ -168,83 +168,101 @@ export function UiPage() {
             <ThemeToggle />
           </header>
 
-        <TokenSpecimens />
-        <InputSpecimens />
-        <OverlaySpecimens />
-        <SurfaceSpecimens />
-        <Section
-          id='shinsa'
-          title='Shinsa composites'
-          description='The app’s own pieces from apps/web/src/components, built on the kit above. Each has one owner; a hand-built copy is a bug.'
-          className='flex-col items-start gap-8'
-        >
-          <CompositeSpecimens />
-        </Section>
-        <Section
-          id='shinsa-setup'
-          title='Shinsa composites · setup'
-          description='Each kind of setup step and the finished page, from apps/web/src/components/onboarding, on sample steps. Every action only shows a toast.'
-          className='flex-col items-start gap-8'
-        >
-          <OnboardingSpecimens />
-        </Section>
-        <Section
-          id='shinsa-accounts'
-          title='Shinsa composites · accounts'
-          description='Usage bars and figures, the usage menu, account status, the percent and sign-in dialogs, and the Run on account choices, from apps/web/src/components/accounts.'
-          className='flex-col items-start gap-8'
-        >
-          <AccountSpecimens />
-        </Section>
-        <Section
-          id='shinsa-overview'
-          title='Shinsa composites · overview cards'
-          description='The now card for each process state, on NowFrame, and the panels under it, from apps/web/src/components/overview. Sample data; every action only shows a toast.'
-          className='flex-col items-start gap-8'
-        >
-          <OverviewSpecimens />
-        </Section>
-        <Section
-          id='shinsa-chat'
-          title='Shinsa composites · chat'
-          description='Delegations, the quiet notice rows and the context meter, from apps/web/src/components/chat.'
-          className='flex-col items-start gap-8'
-        >
-          <ChatSpecimens />
-        </Section>
-        <Section
-          id='shinsa-review'
-          title='Shinsa composites · review'
-          description='The Review tab’s cards, from apps/web/src/components/review: every review comment (an agent finding, a spot, a judgement call, your line comment) is one rich card, and the Code tab shows the same card inline.'
-          className='flex-col items-start gap-8'
-        >
-          <ReviewSpecimens />
-        </Section>
-        <Section
-          id='shinsa-code'
-          title='Shinsa composites · code'
-          description='The Code tab’s editor and Go to file, and the code tokens every highlighter reads, from apps/web/src/components/code. Sample files; nothing is read from a repository.'
-          className='flex-col items-start gap-8'
-        >
-          <CodeSpecimens />
-        </Section>
-        <Section
-          id='shinsa-terminal'
-          title='Shinsa composites · services and terminal'
-          description='The Services entry in the top bar and the rail, its popover and rows in each state, the Terminal page’s project picker, tabs, place menu and ended bar, and the terminal’s colours, from apps/web/src/components/services and components/terminal. The terminal itself needs the engine.'
-          className='flex-col items-start gap-8'
-        >
-          <TerminalSpecimens />
-        </Section>
-        <Section
-          id='shinsa-settings'
-          title='Shinsa composites · settings rows'
-          description='The Models card folded and opened per role, the Accounts card (Claude accounts with their usage, and Codex) in each state, schedule and notification rows, from apps/web/src/components/settings.'
-          className='flex-col items-start gap-8'
-        >
-          <SettingsSpecimens />
-        </Section>
-      </main>
+          <TokenSpecimens />
+          <InputSpecimens />
+          <OverlaySpecimens />
+          <SurfaceSpecimens />
+          <ChecklistSpecimens />
+          <Section
+            id='shinsa'
+            title='Shinsa composites'
+            description='The app’s own pieces from apps/web/src/components, built on the kit above. Each has one owner; a hand-built copy is a bug.'
+            className='flex-col items-start gap-8'
+          >
+            <CompositeSpecimens />
+          </Section>
+          <Section
+            id='shinsa-setup'
+            title='Shinsa composites · setup'
+            description='Each kind of setup step and the finished page, from apps/web/src/components/onboarding, on sample steps. Every action only shows a toast.'
+            className='flex-col items-start gap-8'
+          >
+            <OnboardingSpecimens />
+          </Section>
+          <Section
+            id='shinsa-accounts'
+            title='Shinsa composites · accounts'
+            description='Usage bars and figures, the usage menu, account status, the percent and sign-in dialogs, and the Run on account choices, from apps/web/src/components/accounts.'
+            className='flex-col items-start gap-8'
+          >
+            <AccountSpecimens />
+          </Section>
+          <Section
+            id='shinsa-overview'
+            title='Shinsa composites · overview cards'
+            description='The now card for each process state, on NowFrame, and the panels under it, from apps/web/src/components/overview. Sample data; every action only shows a toast.'
+            className='flex-col items-start gap-8'
+          >
+            <OverviewSpecimens />
+          </Section>
+          <Section
+            id='shinsa-chat'
+            title='Shinsa composites · chat'
+            description='Delegations, the quiet notice rows and the context meter, from apps/web/src/components/chat.'
+            className='flex-col items-start gap-8'
+          >
+            <ChatSpecimens />
+          </Section>
+          <Section
+            id='shinsa-review'
+            title='Shinsa composites · review'
+            description='The Review tab’s cards, from apps/web/src/components/review: every review comment is one rich card in two variants: a spot, a judgement call or your line comment opens on a header bar that folds it, an agent finding opens on its label and title with Fix / Dismiss. The Code tab shows the same card inline.'
+            className='flex-col items-start gap-8'
+          >
+            <ReviewSpecimens />
+          </Section>
+          <Section
+            id='shinsa-evidence'
+            title='Shinsa composites · evidence'
+            description='The Review tab’s Evidence panel, from apps/web/src/components/evidence, on sample files: what the agents attached and the checks Shinsa ran, before the code.'
+            className='flex-col items-start gap-8'
+          >
+            <EvidenceSpecimens />
+          </Section>
+          <Section
+            id='shinsa-code'
+            title='Shinsa composites · code'
+            description='The Code tab’s editor and Go to file, and the code tokens every highlighter reads, from apps/web/src/components/code. Sample files; nothing is read from a repository.'
+            className='flex-col items-start gap-8'
+          >
+            <CodeSpecimens />
+          </Section>
+          <Section
+            id='shinsa-terminal'
+            title='Shinsa composites · services and terminal'
+            description='The Services entry in the top bar and the rail, its popover and rows in each state, the Terminal page’s project picker, tabs, place menu and ended bar, and the terminal’s colours, from apps/web/src/components/services and components/terminal. The terminal itself needs the engine.'
+            className='flex-col items-start gap-8'
+          >
+            <TerminalSpecimens />
+          </Section>
+          <Section
+            id='shinsa-settings'
+            title='Shinsa composites · settings rows'
+            description='The Models card folded and opened per role, the Accounts card (Claude accounts with their usage, and Codex) in each state, schedule and notification rows, from apps/web/src/components/settings.'
+            className='flex-col items-start gap-8'
+          >
+            <SettingsSpecimens />
+          </Section>
+          <Section
+            id='shinsa-errors'
+            title='Shinsa composites · errors'
+            description='What a render error leaves in its place, from apps/web/src/components/errors: the page for a route or the whole app, the inline card for a rail section or a task tab, and the warning button for a top bar menu. Every action only shows a toast.'
+            className='flex-col items-start gap-8'
+          >
+            <ErrorSpecimens />
+          </Section>
+        </main>
+      </CommandRunnerProvider>
     </div>
   );
 }

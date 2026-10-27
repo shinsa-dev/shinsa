@@ -129,7 +129,14 @@ export const SAMPLE_CODE_COMMENTS: LineComment[] = [
 ];
 
 export const SAMPLE_CODE_SPOTS: CodeSpotMark[] = [
-  { key: '0:0', from: 15, to: 24, tone: 'red', selected: true },
+  {
+    key: '0:0',
+    from: 15,
+    to: 24,
+    tone: 'red',
+    label: 'Critical: the spots are read in phase order',
+    selected: true,
+  },
 ];
 
 export const SAMPLE_CODE_PATHS = [

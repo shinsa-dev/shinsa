@@ -38,6 +38,50 @@ For each blocking finding, point to `file:line` and say what breaks and how you 
 
 Earlier review comments, bots and your own instincts are input. Decide for each: valid, stale or a nitpick.
 
+## 6. Check the judgement calls
+
+Your brief numbers the judgement calls the agent made. They are its claims about the change, not its reasoning: read
+the code each is about and decide whether you would have made the same call. Where you would not, say why and what you
+would do instead. A call that breaks the request or a rule is a blocking finding, not only a disagreement.
+
+## 7. Check the steps around the merge
+
+Your brief lists the steps the agent left for the human before and after the merge. Check the list against the code:
+
+- A new environment variable or secret the code reads, a migration file, a deploy, a config or feature flag, a
+  service to restart or a third-party setting the change needs, missing from the list: a blocking finding, naming
+  the step that is missing.
+- A step an agent could have done in the repository (code, tests, docs, `.env.example`, the migration file itself): a
+  finding to do it instead.
+- A step without the command or the place it needs, or one in the wrong order (`pre_merge` for something that needs
+  the merged code): a suggestion.
+- A secret's value written into a step: blocking.
+
+## 8. Check the guide for testing it
+
+Your brief lists how the agent says to test the change: what the tests cover and the steps the human tries by hand.
+Follow the steps you can from the worktree (start the app, open the URL, run the command, read the file).
+
+- A step you cannot follow: a URL, file, command or screen that does not exist or does not lead where it says, or an
+  action too vague to do. A finding, anchored to the line the step is about.
+- A step whose expected result is vague ("it works", "looks right") or does not match what you see. A finding.
+- A user-visible change with no manual steps, or a guide that skips the edge case the change is about: a suggestion.
+- A claim in `automated` the tests do not back (a test file that does not exist or does not check what it says): a
+  blocking finding.
+
+## 9. Check what the tests miss
+
+When the repository measures test coverage, your brief says how many of the changed lines the tests run, and lists
+the files and line ranges (new-file line numbers) that no test runs. Read each of those ranges.
+
+- Important new logic no test runs (a branch that decides something, error handling, a calculation, a migration): a
+  finding anchored to the range, blocking when a bug there would go unnoticed, a suggestion otherwise.
+- Leave trivial lines out: a log line, a type, a re-export, a guard that cannot fire.
+- Coverage counts lines a test ran, not lines a test checked. A covered line with no assertion on its result is still
+  worth a suggestion when it matters.
+
 ## Report
 
-`report_review` with a `summary` (one or two sentences: what you checked and your overall view of the change) and the findings, most severe first, each with a `title` (what is wrong, in a few words), a `message` (what is wrong and why it matters) and a `fix` when you know what to change; an empty list when you found nothing. Nothing about what is fine. Then stop without restating the findings.
+`report_review` with a `summary` (one or two sentences: what you checked and your overall view of the change) and the findings, most severe first, each with a `title` (what is wrong, in a few words), a `message` (what is wrong and why it matters) and a `fix` when you know what to change; an empty list when you found nothing; then `disagreements`, the judgement calls you would have made differently, by number. Nothing about what is fine. Then stop without restating the findings.
+
+In a `message` or a `fix`, a command the human should run themselves (a migration, a sign-in) goes in a ```` ```bash run ```` block, which Shinsa gives a Run in terminal button; code you suggest and example commands go in a plain fence (```` ```ts ````, ```` ```bash ````), which can only be copied.

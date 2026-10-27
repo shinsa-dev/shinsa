@@ -24,6 +24,18 @@
   font-style: normal;
   font-display: swap;
 }
+/* Text diagrams: ABC Areal Mono has no box-drawing glyphs and draws its
+   triangles two cells wide, so lines and arrows come from Menlo (DejaVu Sans
+   Mono shares its metrics), scaled from its 0.602em advance to Areal Mono's
+   0.61em so every column stays one cell. */
+@font-face {
+  font-family: "ABC Areal Mono";
+  src: local("Menlo"), local("Menlo-Regular"), local("DejaVu Sans Mono"), local("DejaVuSansMono");
+  unicode-range: U+2500-257F, U+25A0-25FF;
+  size-adjust: 101.38%;
+  font-weight: 100 900;
+  font-style: normal;
+}
 
 /* ── Light ───────────────────────────────────────────────────────────────── */
 :root {

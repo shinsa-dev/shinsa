@@ -1,11 +1,30 @@
-import type { CodeSpot, DiffFile, ReviewFinding, WorkReport } from '@shinsa/core';
+import {
+  type CodeSpot,
+  type Coverage,
+  type DiffFile,
+  hasTesting,
+  type JudgementAlternative,
+  type JudgementCall,
+  type MergeStep,
+  type MergeStepTiming,
+  type ReportRisk,
+  type ReviewDisagreement,
+  type ReviewFinding,
+  selectMeasuredCoverage,
+  type WorkReport,
+} from '@shinsa/core';
 import { resolveShortPath } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import type { Tone } from '@/lib/format/tone.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
+import { MERGE_STEP_ICON, MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
 import { ATTENTION } from '@/lib/tasks/status.ts';
 
 export type ReviewAuthor = 'review' | 'agent' | 'you';
+
+type ReviewChapterId = 'built' | 'code' | 'calls' | 'careful' | 'review';
+
+export type ReviewProseId = 'approach' | 'flow' | 'testing' | 'pre_merge' | 'post_merge';
 
 export interface ReviewPlace {
   file: string;
@@ -19,133 +38,309 @@ export interface ReviewItem {
   tone: Tone;
   author: ReviewAuthor;
   title: string | null;
+  lead: string | null;
   body: string;
+  why: string | null;
   fix: string | null;
   place: ReviewPlace | null;
   section: string | null;
   finding: number | null;
-  related: ReviewItem[];
+  alternatives: JudgementAlternative[];
+  disagreement: string | null;
 }
 
-export interface ReviewSection {
+interface ReviewProse {
+  key: ReviewProseId;
   title: string;
-  summary: string;
-  spots: ReviewItem[];
+  icon: ReviewProseIcon;
 }
 
-export const REVIEW_AUTHOR: Record<
-  ReviewAuthor,
-  { label: string; icon: 'IconEyeSparkle' | 'IconAgent' | 'IconBubbleText' }
-> = {
-  review: { label: 'Agent review', icon: 'IconEyeSparkle' },
-  agent: { label: 'Agent', icon: 'IconAgent' },
-  you: { label: 'You', icon: 'IconBubbleText' },
+export interface ReviewChapter {
+  id: ReviewChapterId;
+  title: string;
+  prose: ReviewProse[];
+  items: ReviewItem[];
+}
+
+export interface ReviewStop {
+  key: string;
+  chapter: ReviewChapterId;
+  chapterTitle: string;
+  title: string;
+  number: number | null;
+  icon: ReviewProseIcon | null;
+  item: ReviewItem | null;
+}
+
+export interface ReviewMark {
+  key: string;
+  top: number;
+}
+
+const REVIEW_AUTHOR: Record<Exclude<ReviewAuthor, 'agent'>, string> = {
+  review: 'Agent review',
+  you: 'You',
 };
+
+export const REVIEW_AUTHOR_ICON: Record<ReviewAuthor, 'IconEyeSparkle' | 'IconAgent' | 'IconBubbleText'> = {
+  review: 'IconEyeSparkle',
+  agent: 'IconAgent',
+  you: 'IconBubbleText',
+};
+
+export function isFindingItem(item: ReviewItem) {
+  return item.author === 'review';
+}
 
 const FINDING_LABEL: Record<ReviewFinding['severity'], { label: string; tone: Tone }> = {
   blocking: { label: 'Blocking', tone: 'red' },
   suggestion: { label: 'Suggestion', tone: 'amber' },
 };
 
-function resolveFindingPlace(finding: ReviewFinding): ReviewPlace | null {
-  if (!finding.file || finding.line === null) return null;
-  return {
-    file: finding.file,
-    start: finding.line,
-    end: Math.max(finding.end ?? finding.line, finding.line),
-  };
+const CALL_LABEL = { label: 'Judgement call', tone: 'purple' } as const;
+
+const DISPUTED_LABEL = { label: 'Disputed', tone: 'orange' } as const;
+
+const CHAPTER_TITLE: Record<ReviewChapterId, string> = {
+  built: 'How it’s built',
+  code: 'Key code',
+  calls: 'Judgement calls',
+  careful: 'Read carefully',
+  review: 'Agent review',
+};
+
+export const REVIEW_PROSE_TITLE: Record<ReviewProseId, string> = {
+  approach: 'Approach',
+  flow: 'How it works',
+  testing: 'How to test',
+  ...MERGE_STEP_TITLE,
+};
+
+export const REVIEW_PROSE_ICON = {
+  approach: 'IconLightbulbGlow',
+  flow: 'IconLayersThree',
+  testing: 'IconTestTube',
+  ...MERGE_STEP_ICON,
+} as const satisfies Record<ReviewProseId, string>;
+
+type ReviewProseIcon = (typeof REVIEW_PROSE_ICON)[ReviewProseId];
+
+const BLANK: Pick<
+  ReviewItem,
+  'lead' | 'why' | 'fix' | 'section' | 'finding' | 'alternatives' | 'disagreement'
+> = {
+  lead: null,
+  why: null,
+  fix: null,
+  section: null,
+  finding: null,
+  alternatives: [],
+  disagreement: null,
+};
+
+function resolveLinePlace(file: string | null, line: number | null, end?: number | null): ReviewPlace | null {
+  if (!file || line === null) return null;
+  return { file, start: line, end: Math.max(end ?? line, line) };
 }
 
 export function toFindingItem(finding: ReviewFinding, index: number): ReviewItem {
   return {
+    ...BLANK,
     key: `finding:${index}`,
     ...FINDING_LABEL[finding.severity],
     author: 'review',
     title: finding.title ?? null,
     body: finding.message,
     fix: finding.fix ?? null,
-    place: resolveFindingPlace(finding),
-    section: null,
+    place: resolveLinePlace(finding.file, finding.line, finding.end),
     finding: index,
-    related: [],
   };
 }
 
 function toSpotItem(spot: CodeSpot, section: string, key: string): ReviewItem {
   return {
+    ...BLANK,
     key,
     ...ATTENTION[spot.attention],
     author: 'agent',
-    title: null,
-    body: spot.why,
-    fix: null,
+    title: spot.title ?? null,
+    body: spot.explain ?? spot.why,
+    why: spot.explain ? spot.why : null,
     place: { file: spot.file, start: spot.start, end: Math.max(spot.end, spot.start) },
     section,
-    finding: null,
-    related: [],
   };
 }
 
-export function listReviewSections(report: WorkReport): ReviewSection[] {
-  return report.sections.map((section, sectionIndex) => ({
-    title: section.title,
-    summary: section.summary,
-    spots: section.spots.map((spot, spotIndex) =>
-      toSpotItem(spot, section.title, `${sectionIndex}:${spotIndex}`)
-    ),
-  }));
-}
-
-function listJudgementItems(report: WorkReport): ReviewItem[] {
-  return report.judgementCalls.map((call, index) => ({
+function toCallItem(call: JudgementCall, index: number, disagreement: string | null): ReviewItem {
+  return {
+    ...BLANK,
     key: `call:${index}`,
-    label: 'Judgement call',
-    tone: 'purple',
+    ...(disagreement ? DISPUTED_LABEL : CALL_LABEL),
     author: 'agent',
-    title: call.call,
+    title: call.title,
+    lead: call.call,
     body: call.reason,
-    fix: null,
-    place: call.file && call.line !== null ? { file: call.file, start: call.line, end: call.line } : null,
-    section: null,
-    finding: null,
-    related: [],
-  }));
+    place: resolveLinePlace(call.file, call.line, call.end),
+    alternatives: call.alternatives ?? [],
+    disagreement,
+  };
 }
 
-function listSpotsAt(report: WorkReport, attention: CodeSpot['attention']) {
+function toRiskItem(risk: ReportRisk, index: number): ReviewItem {
+  return {
+    ...BLANK,
+    key: `risk:${index}`,
+    label: 'Risk',
+    tone: 'amber',
+    author: 'agent',
+    title: risk.title,
+    body: risk.risk,
+    place: resolveLinePlace(risk.file, risk.line, risk.end),
+  };
+}
+
+function listSpotItems(report: WorkReport) {
   return report.sections.flatMap((section, sectionIndex) =>
-    section.spots.flatMap((spot, spotIndex) =>
-      spot.attention === attention ? [toSpotItem(spot, section.title, `${sectionIndex}:${spotIndex}`)] : []
-    )
+    section.spots.map((spot, spotIndex) => toSpotItem(spot, section.title, `${sectionIndex}:${spotIndex}`))
   );
 }
 
-export function listAttentionItems(
-  report: WorkReport | null,
-  findings: readonly ReviewFinding[]
-): ReviewItem[] {
+function isCareful(item: ReviewItem) {
+  return item.label === ATTENTION.critical.label || item.label === ATTENTION.high.label;
+}
+
+function listCallItems(report: WorkReport, disagreements: readonly ReviewDisagreement[]) {
+  const open = [...disagreements];
+  return report.judgementCalls.map((call, index) => {
+    const at = open.findIndex((entry) => entry.call === call.call);
+    const match = at < 0 ? null : open.splice(at, 1)[0];
+    return toCallItem(call, index, match?.reason ?? null);
+  });
+}
+
+function listFindingItems(findings: readonly ReviewFinding[]) {
   const bySeverity = (severity: ReviewFinding['severity']) =>
     findings.flatMap((finding, index) =>
       finding.severity === severity ? [toFindingItem(finding, index)] : []
     );
-  const blocking = bySeverity('blocking');
-  const suggestions = bySeverity('suggestion');
-  if (!report) return [...blocking, ...suggestions];
-  const findingItems = [...blocking, ...suggestions];
-  const spots = [...listSpotsAt(report, 'critical'), ...listSpotsAt(report, 'high')].filter((spot) => {
-    const owner = findingItems.find((item) => overlaps(item.place, spot.place));
-    owner?.related.push(spot);
-    return !owner;
+  return [...bySeverity('blocking'), ...bySeverity('suggestion')];
+}
+
+function toProse(...keys: ReviewProseId[]): ReviewProse[] {
+  return keys.map((key) => ({ key, title: REVIEW_PROSE_TITLE[key], icon: REVIEW_PROSE_ICON[key] }));
+}
+
+function listBuiltProse(
+  report: WorkReport | null,
+  steps: readonly MergeStep[],
+  coverage: Coverage | null
+): ReviewProseId[] {
+  const walkthrough = report?.walkthrough ?? null;
+  const tested =
+    hasTesting(walkthrough?.testing) ||
+    (report?.checks.length ?? 0) > 0 ||
+    selectMeasuredCoverage(coverage) !== null;
+  const timed = (when: MergeStepTiming) => (steps.some((step) => step.when === when) ? [when] : []);
+  return [
+    ...(walkthrough ? (['approach', 'flow'] as const) : []),
+    ...(tested ? (['testing'] as const) : []),
+    ...timed('pre_merge'),
+    ...timed('post_merge'),
+  ];
+}
+
+function listChapterProse(
+  report: WorkReport | null,
+  steps: readonly MergeStep[],
+  coverage: Coverage | null
+): Record<ReviewChapterId, ReviewProse[]> {
+  return {
+    built: toProse(...listBuiltProse(report, steps, coverage)),
+    code: [],
+    calls: [],
+    careful: [],
+    review: [],
+  };
+}
+
+export function listReviewChapters(
+  report: WorkReport | null,
+  findings: readonly ReviewFinding[],
+  disagreements: readonly ReviewDisagreement[] = [],
+  steps: readonly MergeStep[] = report?.walkthrough?.steps ?? [],
+  coverage: Coverage | null = null
+): ReviewChapter[] {
+  const spots = report ? listSpotItems(report) : [];
+  const prose = listChapterProse(report, steps, coverage);
+  const items: Record<ReviewChapterId, ReviewItem[]> = {
+    built: [],
+    code: spots.filter((item) => !isCareful(item)),
+    calls: report ? listCallItems(report, disagreements) : [],
+    careful: [...spots.filter(isCareful), ...(report?.walkthrough?.risks ?? []).map(toRiskItem)],
+    review: listFindingItems(findings),
+  };
+  return (Object.keys(CHAPTER_TITLE) as ReviewChapterId[]).flatMap((id) =>
+    items[id].length > 0 || prose[id].length > 0
+      ? [{ id, title: CHAPTER_TITLE[id], prose: prose[id], items: items[id] }]
+      : []
+  );
+}
+
+export function listReviewPoints(chapters: readonly ReviewChapter[]) {
+  return chapters.flatMap((chapter) => chapter.items);
+}
+
+function stripInlineMarkdown(text: string) {
+  return text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/`|\*\*/g, '')
+    .trim();
+}
+
+export function resolvePointTitle(item: ReviewItem) {
+  return stripInlineMarkdown(item.title ?? item.body.split(/(?<=[.:])\s/)[0] ?? '');
+}
+
+export function resolveNoteHeading(item: ReviewItem) {
+  if (item.author === 'agent') return { author: null, title: resolvePointTitle(item) };
+  return { author: REVIEW_AUTHOR[item.author], title: null };
+}
+
+export function listReviewStops(chapters: readonly ReviewChapter[]): ReviewStop[] {
+  let number = 0;
+  return chapters.flatMap((chapter) => {
+    const place = { chapter: chapter.id, chapterTitle: chapter.title };
+    return [
+      ...chapter.prose.map((prose) => ({
+        key: prose.key,
+        ...place,
+        title: prose.title,
+        number: null,
+        icon: prose.icon,
+        item: null,
+      })),
+      ...chapter.items.map((item) => {
+        number += 1;
+        return { key: item.key, ...place, title: resolvePointTitle(item), number, icon: null, item };
+      }),
+    ];
   });
-  return [...blocking, ...spots, ...suggestions, ...listJudgementItems(report)];
 }
 
-function overlaps(a: ReviewPlace | null, b: ReviewPlace | null) {
-  if (!a || !b || a.file !== b.file) return false;
-  return a.start <= b.end && b.start <= a.end;
+export function describeStopPosition(stop: ReviewStop, total: number) {
+  return stop.number === null ? null : `${stop.number} of ${total}`;
 }
 
-export function stepReviewItem(items: readonly ReviewItem[], key: string | null, delta: 1 | -1) {
+export function resolveStopInView(marks: readonly ReviewMark[], line: number, bottom: number | null) {
+  const reached = marks.filter((mark) => mark.top <= (bottom ?? line));
+  return reached.at(-1)?.key ?? null;
+}
+
+export function stepReviewItem<T extends { key: string }>(
+  items: readonly T[],
+  key: string | null,
+  delta: 1 | -1
+) {
   if (items.length === 0) return null;
   const index = items.findIndex((item) => item.key === key);
   if (index < 0) return (delta > 0 ? items[0] : items.at(-1)) ?? null;
@@ -156,6 +351,7 @@ function isCovered(path: string, report: WorkReport | null, findings: readonly R
   if (findings.some((finding) => finding.file === path)) return true;
   if (!report) return false;
   if (report.judgementCalls.some((call) => call.file === path)) return true;
+  if (report.walkthrough?.risks.some((risk) => risk.file === path)) return true;
   return report.sections.some((section) => section.spots.some((spot) => spot.file === path));
 }
 
@@ -178,20 +374,32 @@ export function describeAgentReview(findings: readonly ReviewFinding[]) {
   return `Found ${parts.join(' and ')}.`;
 }
 
-export function describeAttentionCount(items: readonly ReviewItem[]) {
-  if (items.length === 0) return 'Nothing stands out. Read the walkthrough below.';
-  return `${formatCount(items.length, 'place needs', 'places need')} your attention, the most critical first.`;
+function countLabel(items: readonly ReviewItem[], ...labels: string[]) {
+  return items.filter((item) => labels.includes(item.label)).length;
+}
+
+export function describePointCount(items: readonly ReviewItem[]) {
+  if (items.length === 0) return 'No point is marked. The changed files are under Everything else.';
+  const calls = countLabel(items, CALL_LABEL.label, DISPUTED_LABEL.label);
+  const detail = [
+    [countLabel(items, 'Blocking'), 'blocking'],
+    [countLabel(items, ATTENTION.critical.label), 'critical'],
+    [calls, calls === 1 ? 'judgement call' : 'judgement calls'],
+    [countLabel(items, DISPUTED_LABEL.label), 'disputed by the agent review'],
+  ].flatMap(([count, label]) => (Number(count) > 0 ? [`${count} ${label}`] : []));
+  const total = formatCount(items.length, 'point', 'points');
+  return detail.length > 0 ? `${total} to read, ${detail.join(', ')}.` : `${total} to read.`;
 }
 
 export function toCommentItem(comment: LineComment): ReviewItem {
   return {
+    ...BLANK,
     key: `comment:${comment.id}`,
     label: describeCommentLines(comment),
     tone: 'blue',
     author: 'you',
     title: null,
     body: comment.text,
-    fix: null,
     place:
       comment.side === 'new'
         ? {
@@ -201,8 +409,6 @@ export function toCommentItem(comment: LineComment): ReviewItem {
           }
         : null,
     section: comment.side === 'new' ? null : comment.path,
-    finding: null,
-    related: [],
   };
 }
 

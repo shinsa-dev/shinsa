@@ -49,7 +49,10 @@ src/
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
 │                        result panels, the Rounds panel and its round headers, progress track), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
-│                        live card, handover, delegation and notice rows, the context meter), review (note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue, home (guide,
+│                        live card, handover, delegation and notice rows, the context meter), review (merge-steps.tsx: the steps around the
+│                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;
+│                        testing.tsx: the Review tab's How to test, what the tests cover and the steps to try with their targets;
+│                        note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and NoteHead with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), evidence (evidence-section.tsx: the Review tab's Evidence panel, its items grouped by kind (comparisons, recordings, screenshots, test and check runs, notes, previews), the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue, home (guide,
 │                        new task, recently finished and recent conversations), roadmap, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx and workspace-select.tsx (where agents work);
@@ -99,7 +102,7 @@ src/
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,
 │                        sound and notification, a menu item's answer (use-menu-answer), review draft, the Code
-│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys),
+│                        tab's saving of the file you edit (use-file-saver), ⌘K key, the Review tab's J and K (use-review-keys), the fading mark on a place you jump to (use-spotlight),
 │                        the Terminal page's ⌘T and ⌘W (use-terminal-keys),
 │                        use-idle (useIdle: true once the browser is idle; useIdleValue: a value that catches up
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
@@ -151,7 +154,8 @@ src/
     ├── code/            The Code tab: location.ts (every view position in the URL: mode, file, line, ref, spot,
     │                    search), tree.ts, file-icons.ts (the icon of a file or folder), prefetch.ts (the Code tab's reads ahead of a
     │                    click: the tab, a hovered row, a file's neighbours and folders, the other refs, the review's snippets,
-    │                    and a hovered changed file's side-by-side pair handed to the session to build at idle), rank.ts (quick open), search.ts, refs.ts (the ref picker), source.ts, notes.ts
+    │                    and a hovered changed file's side-by-side pair handed to the session to build at idle), rank.ts (quick open), search.ts, refs.ts (the ref picker), source.ts, block.ts (a code block's
+    │                    lines, its corner, the command it runs and the text it copies), notes.ts
     │                    (findings, comments and spots on a file), edits.ts (editing in place: whether the open
     │                    file is editable and why not, the FileSaver that saves each pause against the text on
     │                    disk, the line merge with a disk change, what you saved per read),
@@ -162,9 +166,10 @@ src/
     │                    kept), tokens.ts (the tokenizer worker's client and its cache by text), tokenize.worker.ts,
     │                    textmate.ts and shiki-engine.ts (VS Code's grammars line by line in the worker), syntax.ts (the
     │                    tokens as decorations), folding.ts (VS Code's fold gutter and indentation folding),
-    │                    languages, the unified diff with removed lines highlighted in context, note slots, the
+    │                    languages, the unified diff with removed lines highlighted in context, note slots, spot-hints.ts
+    │                    (the spot marks the editor renders a `Hint` into), the
     │                    comment gutter, find.ts: the find bar's panel, its replace row and match count, commands.ts: VS Code's editing keys as CodeMirror commands, one list for the keymap and ⌘K, collapsed.ts: the cursor
-    │                    stepping over folded lines and the sideways scroll the folds and notes follow); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
+    │                    stepping over folded lines and the gutter width the sticky folds and notes sit beside); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
     │                    the task diff, notes, the 14-line fold), diff-theme.ts (`@pierre/diffs` on the `--code-*`
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)
@@ -182,9 +187,13 @@ src/
     │                    shows its problem, the removal words), services-panel.ts (the Services popover's views,
     │                    how they move, which one shows and its height, and ⌘K's request to open it on Add services or Manage), command.ts (a shell block's command for
     │                    Run in terminal)
-    ├── review/          The Review tab (report.ts: what needs your attention and in what order, the walkthrough's
-    │                    sections, the other changed files, the review card's items; keys.ts: J and K; places.ts:
-    │                    the paths into Code and into the Review tab), the Code tab's spot targets, the fallback
+    ├── review/          The Review tab (report.ts: the report read as chapters in reading order (how it's built with
+    │                    how to test and the steps around the merge, key code, judgement calls with the reviewer's
+    │                    disagreements, read carefully with the risks, the agent review), the stops of the index and the one in view, the point count,
+    │                    the other changed files, the review card's items; merge-steps.ts: the steps around the merge, the
+    │                    merge they hold, "Post-merge · 2 steps left", when a step can be ticked; testing.ts: what a step to try points at
+    │                    (a link, a file in Code, a command or plain text); keys.ts: J and K; places.ts:
+    │                    the paths into Code and into the Review tab), the Code tab's spot targets (spots, judgement calls, risks, findings), the fallback
     │                    report, the line-comment draft (sides, ranges, kept in localStorage per gate, and your
     │                    Fix / Dismiss verdicts; serializeComments is what `gate.answer` sends as `comments`),
     │                    finding places

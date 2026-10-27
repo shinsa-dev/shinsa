@@ -16,6 +16,7 @@ import { createChevronMarkers, indentFolding } from './folding.ts';
 import { type SplitPair, SplitView } from './merge.ts';
 import { createEditorExtensions } from './setup.ts';
 import { SlotRegistry } from './slots.ts';
+import { SpotHintRegistry } from './spot-hints.ts';
 import { syntaxTokens } from './syntax.ts';
 import { resolveTextGrammar, type TokenClient, type TokenSet, tokenClient } from './tokens.ts';
 import { setOriginalTokens, unifiedDiff } from './unified.ts';
@@ -78,6 +79,7 @@ export function isSameText(state: EditorState, text: string) {
 
 export class EditorSession {
   readonly registry = new SlotRegistry();
+  readonly spotHints = new SpotHintRegistry();
   readonly findHost = new FindHost();
   readonly editable = new Compartment();
   readonly language = new Compartment();

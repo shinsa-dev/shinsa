@@ -103,13 +103,14 @@ describe('task activity', () => {
         taskId: 'x',
         report: { index: 0, summary: '', spots: [], judgementCalls: [], at },
       },
+      { type: 'walkthrough.revised', taskId: 'x', walkthrough: { flow: 'f' }, runId: 'x' },
       { type: 'gate.answered', gateId: 'x', decision: 'approve', response: null },
       { type: 'run.linked', runId: 'x', sessionId: 's', provider: 'claude' },
     ];
     for (const event of events) {
       applyEvent(state, { ...event, seq: state.seq + 1, at });
     }
-    expect(state).toEqual({ ...createState(), seq: 6 });
+    expect(state).toEqual({ ...createState(), seq: 7 });
   });
 });
 

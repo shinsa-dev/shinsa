@@ -42,7 +42,15 @@ import type {
   WorkspaceMode,
 } from '../domain/index.ts';
 import type { PullRequestWatch, PullRequestWatchChange } from '../domain/pull-requests.ts';
-import type { PlanDocument, ReportCheck, ReviewFinding, WorkReport } from '../report/types.ts';
+import type {
+  PlanDocument,
+  ReportCheck,
+  ReportWalkthroughRevision,
+  ReviewDisagreement,
+  ReviewFinding,
+  WorkReport,
+} from '../report/types.ts';
+import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { ScheduleEventBody } from './schedules.ts';
 
@@ -158,12 +166,15 @@ type EventBody =
   | { type: 'plan.answered'; taskId: string; answers: string }
   | { type: 'phase.updated'; taskId: string; index: number; status: PhaseStatus }
   | { type: 'phase.completed'; taskId: string; report: PhaseReport }
+  | { type: 'walkthrough.revised'; taskId: string; walkthrough: ReportWalkthroughRevision; runId: string }
+  | { type: 'merge_step.ticked'; taskId: string; key: string; title: string; done: boolean }
   | { type: 'work.submitted'; taskId: string; summary: string; report: WorkReport | null }
   | {
       type: 'review.reported';
       taskId: string;
       summary: string | null;
       findings: ReviewFinding[];
+      disagreements?: ReviewDisagreement[];
       runId?: string | null;
     }
   | {

@@ -1,6 +1,12 @@
 import {
+  ATTACHED_EVIDENCE_KINDS,
   ATTENTION_LEVELS,
+  EVIDENCE_STAGES,
+  EVIDENCE_THEMES,
   FINDING_SEVERITIES,
+  MANUAL_TEST_TARGETS,
+  MERGE_STEP_KINDS,
+  MERGE_STEP_TIMINGS,
   PLAN_EVIDENCE_KINDS,
   PROTOCOL_LIMITS,
   type ShinsaToolName,
@@ -38,8 +44,136 @@ const SPOT = {
       'Why the human should read these lines: the risk or the judgement call, not what the code says.',
       L.why
     ),
+    title: limitedText('For a key piece of code: what it is, in a few words.', L.spotTitle),
+    explain: limitedText(
+      'For a key piece of code: how it works, in plain words a reader new to the code follows.',
+      L.explain
+    ),
   },
   required: ['file', 'start', 'end', 'attention', 'why'],
+};
+
+const PLACE = {
+  file: limitedPath('Path relative to the repository root.'),
+  line: { ...LINE, description: 'First line, numbered as in the new file.' },
+  end: { ...LINE, description: 'Last line.' },
+};
+
+const WALKTHROUGH_PARTS = {
+  approach: limitedText(
+    'How the task was achieved: the idea of the change and its structure, in a few short paragraphs.',
+    L.walkthroughApproach
+  ),
+  flow: limitedText(
+    'How it works behind the scenes: the flow of data and control through the new code, step by step. A small text diagram in a code fence helps.',
+    L.flow
+  ),
+  risks: {
+    type: 'array',
+    description: 'Risks and edge cases the reader should know, each with its lines when it has them.',
+    maxItems: L.risks,
+    items: {
+      type: 'object',
+      properties: {
+        title: limitedText('A few words naming the risk.', L.riskTitle),
+        risk: limitedText('The risk or edge case and what happens.', L.risk),
+        ...PLACE,
+      },
+      required: ['title', 'risk'],
+    },
+  },
+  testing: {
+    type: 'object',
+    description:
+      'How to test it, in two parts: what the automated tests cover, and a guide the human follows by hand.',
+    properties: {
+      automated: textList(
+        'One or two lines on what the tests cover: which test files, and what they prove.',
+        L.testingAutomated,
+        L.testingAutomatedItem
+      ),
+      manual: {
+        type: 'array',
+        description:
+          'A guided walkthrough the human follows, in order. Start from where to go: the preview deployment URL, or the command that starts the app and its local URL. Then one concrete step each: what to open, click or type, and what they should see. Add the edge cases worth trying. Link a file in an action as [label](shinsa://file/path#L12-L20). Empty when there is nothing to try by hand.',
+        maxItems: L.testingSteps,
+        items: {
+          type: 'object',
+          properties: {
+            action: limitedText(
+              'What to do, as an instruction: "Open the paywall list", "Click Duplicate on a code paywall".',
+              L.testingAction
+            ),
+            target: {
+              type: 'object',
+              description:
+                'Where the step happens, when it has one place. url: an http or https address (a preview deployment or a local URL). file: a path relative to the repository root, with :line or :start-end for lines. command: the exact shell command. screen: the name of a screen in the app.',
+              properties: {
+                kind: {
+                  type: 'string',
+                  enum: [...MANUAL_TEST_TARGETS],
+                  description: 'What kind of place it is.',
+                },
+                value: limitedText('The URL, path, command or screen name.', L.testingTarget),
+              },
+              required: ['kind', 'value'],
+            },
+            expect: limitedText(
+              'What the human should see when it works, concrete enough to tell pass from fail.',
+              L.testingExpect
+            ),
+          },
+          required: ['action', 'expect'],
+        },
+      },
+    },
+  },
+  steps: {
+    type: 'array',
+    description:
+      'What the human must do around the merge that needs a person or production access, which no agent can do from the worktree: an environment variable or secret to set, a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files) and list only the rest. The merge waits until the human ticks every pre-merge step; a post-merge step opens only once the pull request merged. Leave it out when there is nothing.',
+    maxItems: L.mergeSteps,
+    items: {
+      type: 'object',
+      properties: {
+        when: {
+          type: 'string',
+          enum: [...MERGE_STEP_TIMINGS],
+          description:
+            'pre_merge: done before the merge, because the merged code needs it in place. post_merge: done only once the pull request merged, because it needs the merged code.',
+        },
+        kind: { type: 'string', enum: [...MERGE_STEP_KINDS], description: 'What kind of step it is.' },
+        title: limitedText(
+          'The step as an instruction, naming the thing: "Set STRIPE_WEBHOOK_SECRET in production". Unique in the list.',
+          L.mergeStepTitle
+        ),
+        detail: limitedText(
+          'Where and how: the service or dashboard, the environment, where the value comes from. Never a secret’s value.',
+          L.mergeStepDetail
+        ),
+        command: limitedText(
+          'The exact shell command, when the step is one. The human can run it in a terminal from the task.',
+          L.mergeStepCommand
+        ),
+      },
+      required: ['when', 'kind', 'title', 'detail'],
+    },
+  },
+};
+
+const WALKTHROUGH = {
+  type: 'object',
+  description:
+    'The technical walkthrough of the whole change, the document the human reads at review. Required on the last phase; leave it out before.',
+  properties: WALKTHROUGH_PARTS,
+  required: ['approach', 'flow'],
+};
+
+const WALKTHROUGH_REVISION = {
+  type: 'object',
+  description:
+    'Send only when the fix changes how the change works: the approach, the flow, a risk, how to test it or the steps around the merge. Give only the parts that changed; each replaces that part of the walkthrough whole. Leave it out otherwise.',
+  properties: WALKTHROUGH_PARTS,
 };
 
 export const TOOL_SPECS = {
@@ -160,25 +294,40 @@ export const TOOL_SPECS = {
         spots: {
           type: 'array',
           description:
-            'The line ranges the human must read. Empty only when the phase changed nothing worth reading.',
+            'Every line range the human must read, the key pieces of code explained. Empty only when the phase changed nothing worth reading.',
           maxItems: L.spots,
           items: SPOT,
         },
         judgement_calls: {
           type: 'array',
-          description: 'Judgement calls the human might disagree with. Empty when there are none.',
+          description:
+            'Every judgement call the human might make differently, with the alternatives. Empty when there are none.',
           maxItems: L.judgementCalls,
           items: {
             type: 'object',
             properties: {
+              title: limitedText('A few words naming the decision.', L.callTitle),
               call: limitedText('What you decided.', L.call),
-              reason: limitedText('Why, and the alternative.', L.reason),
-              file: limitedPath('Path relative to the repository root.'),
-              line: LINE,
+              reason: limitedText('Why.', L.reason),
+              ...PLACE,
+              alternatives: {
+                type: 'array',
+                description: 'The options you rejected.',
+                maxItems: L.alternatives,
+                items: {
+                  type: 'object',
+                  properties: {
+                    option: limitedText('The other option.', L.alternativeOption),
+                    rejected: limitedText('Why you did not take it.', L.alternativeRejected),
+                  },
+                  required: ['option', 'rejected'],
+                },
+              },
             },
-            required: ['call', 'reason'],
+            required: ['title', 'call', 'reason'],
           },
         },
+        walkthrough: WALKTHROUGH,
       },
       required: ['summary', 'spots', 'judgement_calls'],
     },
@@ -194,6 +343,7 @@ export const TOOL_SPECS = {
           'What you changed and, for anything you chose not to change, why.',
           L.phaseSummary
         ),
+        walkthrough: WALKTHROUGH_REVISION,
       },
       required: ['summary'],
     },
@@ -226,6 +376,20 @@ export const TOOL_SPECS = {
             required: ['severity', 'message'],
           },
         },
+        disagreements: {
+          type: 'array',
+          description:
+            'The agent’s judgement calls you would have made differently, by their number in your brief. Leave out the ones you agree with.',
+          maxItems: L.disagreements,
+          items: {
+            type: 'object',
+            properties: {
+              call: { ...LINE, description: 'The judgement call’s number in your brief.' },
+              reason: limitedText('Why you disagree, and what you would do instead.', L.disagreement),
+            },
+            required: ['title', 'call', 'reason'],
+          },
+        },
       },
       required: ['findings'],
     },
@@ -233,7 +397,7 @@ export const TOOL_SPECS = {
   ask: {
     name: 'ask',
     description:
-      'Ask the human one question when you are blocked on a decision only they can make. Waits for the answer and returns it. Do not ask for anything you can find out yourself. When the human has to run a command themselves (an interactive sign-in, a server they run), put the exact command in a ```sh block in `context`: they can run it in a terminal with one press.',
+      'Ask the human one question when you are blocked on a decision only they can make. Waits for the answer and returns it. Do not ask for anything you can find out yourself. When the human has to run a command themselves (an interactive sign-in, a server they run), put the exact command in a ```bash run block in `context`: they can run it in a terminal with one press. A plain ```bash block is only for an example.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -300,8 +464,6 @@ export const TOOL_SPECS = {
             required: ['path'],
           },
         },
-        url: { type: 'string', description: 'A URL, for previews.' },
-        text: { type: 'string', description: 'Text evidence, for test output or notes.' },
       },
       required: ['kind', 'title'],
     },

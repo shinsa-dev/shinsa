@@ -22,6 +22,7 @@ function describeFixClosing(next: string) {
   return [
     '',
     'Fix it, re-run the checks yourself, then call `complete_fix` with a one or two sentence summary of what you changed.',
+    'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.',
     `${next} Then stop.`,
   ].join('\n');
 }

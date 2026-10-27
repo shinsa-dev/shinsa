@@ -113,9 +113,46 @@ describe('the shinsa tool server', () => {
     expect(finding.title.maxLength).toBe(PROTOCOL_LIMITS.findingTitle);
     expect(finding.message.maxLength).toBe(PROTOCOL_LIMITS.finding);
     expect(finding.fix.maxLength).toBe(PROTOCOL_LIMITS.findingFix);
+    expect(review.disagreements.maxItems).toBe(PROTOCOL_LIMITS.disagreements);
+    expect(review.disagreements.items.properties.reason.maxLength).toBe(PROTOCOL_LIMITS.disagreement);
+    const phase = TOOL_SPECS.complete_phase.inputSchema.properties;
+    expect(phase.spots.items.properties.explain.maxLength).toBe(PROTOCOL_LIMITS.explain);
+    expect(phase.judgement_calls.items.properties.alternatives.maxItems).toBe(PROTOCOL_LIMITS.alternatives);
+    expect(phase.walkthrough.properties.flow.maxLength).toBe(PROTOCOL_LIMITS.flow);
+    expect(phase.walkthrough.properties.risks.items.properties.risk.maxLength).toBe(PROTOCOL_LIMITS.risk);
+    const risk = phase.walkthrough.properties.risks.items;
+    expect(risk.properties.title.maxLength).toBe(PROTOCOL_LIMITS.riskTitle);
+    expect(risk.properties.title.description).toStartWith('A few words naming the risk.');
+    expect(risk.required).toEqual(['title', 'risk']);
+    const testing = phase.walkthrough.properties.testing.properties;
+    expect(testing.automated.maxItems).toBe(PROTOCOL_LIMITS.testingAutomated);
+    expect(testing.automated.items.maxLength).toBe(PROTOCOL_LIMITS.testingAutomatedItem);
+    expect(testing.manual.maxItems).toBe(PROTOCOL_LIMITS.testingSteps);
+    const manual = testing.manual.items.properties;
+    expect(manual.action.maxLength).toBe(PROTOCOL_LIMITS.testingAction);
+    expect(manual.expect.maxLength).toBe(PROTOCOL_LIMITS.testingExpect);
+    expect(manual.target.properties.kind.enum).toEqual(['url', 'file', 'command', 'screen']);
+    expect(manual.target.properties.value.maxLength).toBe(PROTOCOL_LIMITS.testingTarget);
+    expect(testing.manual.items.required).toEqual(['action', 'expect']);
+    const steps = phase.walkthrough.properties.steps;
+    expect(steps.maxItems).toBe(PROTOCOL_LIMITS.mergeSteps);
+    expect(steps.items.properties.when.enum).toEqual(['pre_merge', 'post_merge']);
+    expect(steps.items.properties.title.maxLength).toBe(PROTOCOL_LIMITS.mergeStepTitle);
+    expect(steps.items.properties.command.maxLength).toBe(PROTOCOL_LIMITS.mergeStepCommand);
+    const fixWalkthrough = TOOL_SPECS.complete_fix.inputSchema.properties.walkthrough;
+    expect(fixWalkthrough.properties).toBe(phase.walkthrough.properties);
+    expect('required' in fixWalkthrough).toBe(false);
+    expect(TOOL_SPECS.complete_fix.inputSchema.required).toEqual(['summary']);
     const call = TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.properties;
     expect(call.file.maxLength).toBe(PROTOCOL_LIMITS.path);
     expect(call.call.maxLength).toBe(PROTOCOL_LIMITS.call);
+    expect(call.title.maxLength).toBe(PROTOCOL_LIMITS.callTitle);
+    expect(call.title.description).toStartWith('A few words naming the decision.');
+    expect(TOOL_SPECS.complete_phase.inputSchema.properties.judgement_calls.items.required).toEqual([
+      'title',
+      'call',
+      'reason',
+    ]);
     expect(TOOL_SPECS.complete_phase.inputSchema.properties.spots.items.properties.file.maxLength).toBe(
       PROTOCOL_LIMITS.path
     );

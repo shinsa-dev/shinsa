@@ -1,6 +1,15 @@
-import type { WorkReport } from '@shinsa/core';
+import type { FindingVerdictKind, WorkReport } from '@shinsa/core';
+import * as React from 'react';
 import { ReviewNote } from '@/components/review/note.tsx';
-import { listAttentionItems, toCommentItem } from '@/lib/review/report.ts';
+import { VerdictChoice } from '@/components/review/verdict-choice.tsx';
+import { createDisclosureId, notPersisted } from '@/lib/preferences/disclosure.ts';
+import {
+  isFindingItem,
+  listReviewChapters,
+  listReviewPoints,
+  type ReviewItem,
+  toCommentItem,
+} from '@/lib/review/report.ts';
 import { SAMPLE_CODE_COMMENTS, SAMPLE_CODE_FINDINGS, SAMPLE_CODE_PATH } from './sample-code.ts';
 import { acknowledgeSample } from './samples.ts';
 import { Specimen } from './section.tsx';
@@ -17,6 +26,8 @@ const REPORT: WorkReport = {
           start: 12,
           end: 18,
           attention: 'high',
+          title: 'The spot key',
+          explain: 'Each spot is keyed by its section and its place in it, so a link names one card.',
           why: 'Keys stay `section:spot`, so links into Code keep working.',
         },
       ],
@@ -25,15 +36,25 @@ const REPORT: WorkReport = {
   checks: [],
   judgementCalls: [
     {
+      title: 'Keep the old spot keys',
       call: 'Kept the old keys',
       reason: 'Links already shared in SW-142 still open the right place.',
       file: SAMPLE_CODE_PATH,
       line: 7,
+      alternatives: [{ option: 'New keys', rejected: 'Every shared link would open nothing.' }],
     },
   ],
 };
 
-const ITEMS = listAttentionItems(REPORT, SAMPLE_CODE_FINDINGS);
+const ITEMS = listReviewPoints(
+  listReviewChapters(REPORT, SAMPLE_CODE_FINDINGS, [
+    { call: 'Kept the old keys', reason: 'A key per finding would make the links clearer.' },
+  ])
+);
+
+const POINTS = ITEMS.filter((item) => !isFindingItem(item));
+
+const FINDINGS = ITEMS.filter(isFindingItem);
 
 function Remove() {
   return (
@@ -47,10 +68,17 @@ function Remove() {
   );
 }
 
+function SampleVerdict({ item }: { item: ReviewItem }) {
+  const [verdict, setVerdict] = React.useState<FindingVerdictKind>(
+    item.label === 'Blocking' ? 'fix' : 'dismiss'
+  );
+  return <VerdictChoice value={verdict} onValueChange={setVerdict} />;
+}
+
 export function ReviewSpecimens() {
   return (
     <>
-      <Specimen label='Needs your attention · ReviewNote: a blocking finding, a spot to read carefully, a suggestion, a judgement call; author, tone, title, markdown and the suggested fix (the snippet shows on a task page)'>
+      <Specimen label='A review point · ReviewNote with its header bar: key code with its explanation and why it matters, a disputed judgement call with its alternative; its title (no author: every point is the agent’s), tone and section in the bar, which folds the card, then the call, markdown and the snippet on a task page'>
         <div className='flex w-full max-w-2xl flex-col gap-2'>
           {POINTS.map((item, index) => (
             <ReviewNote
@@ -62,7 +90,19 @@ export function ReviewSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='Your comment · the same card, with Remove'>
+      <Specimen label='A finding · the same card on NoteHead, no bar: a blocking finding and a suggestion, label and title on the left, Fix / Dismiss on the right, the suggested fix below'>
+        <div className='flex w-full max-w-2xl flex-col gap-2'>
+          {FINDINGS.map((item) => (
+            <ReviewNote
+              key={item.key}
+              persistId={notPersisted('a finding card never folds')}
+              item={item}
+              action={<SampleVerdict item={item} />}
+            />
+          ))}
+        </div>
+      </Specimen>
+      <Specimen label='Your comment · headed You, the one author a review point names, with Remove in its header bar'>
         <div className='flex w-full max-w-2xl flex-col gap-2'>
           {SAMPLE_CODE_COMMENTS.map((comment) => (
             <ReviewNote
@@ -74,7 +114,7 @@ export function ReviewSpecimens() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='Inline in the Code tab · compact: no snippet and no place, the line above is the place'>
+      <Specimen label='Inline in the Code tab · compact: no snippet and no place, the line above is the place; a finding and your comment'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           {FINDINGS.slice(0, 1).map((item) => (
             <ReviewNote

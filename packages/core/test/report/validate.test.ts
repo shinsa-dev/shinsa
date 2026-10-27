@@ -3,6 +3,7 @@ import {
   PROTOCOL_LIMITS,
   type Validation,
   validateDelivery,
+  validateEvidence,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
@@ -41,13 +42,18 @@ describe('validatePhaseHandOver', () => {
       validatePhaseHandOver({
         summary: '  Split the parser.  ',
         spots: [{ ...SPOT, end: undefined }],
-        judgement_calls: [{ call: 'Kept the cache', reason: 'It is hot.', file: '', line: null }],
+        judgement_calls: [
+          { title: ' Keep the cache ', call: 'Kept the cache', reason: 'It is hot.', file: '', line: null },
+        ],
       })
     );
     expect(value).toEqual({
       summary: 'Split the parser.',
       spots: [{ ...SPOT, end: 3 }],
-      judgementCalls: [{ call: 'Kept the cache', reason: 'It is hot.', file: null, line: null }],
+      judgementCalls: [
+        { title: 'Keep the cache', call: 'Kept the cache', reason: 'It is hot.', file: null, line: null },
+      ],
+      walkthrough: null,
     });
   });
 
@@ -56,7 +62,121 @@ describe('validatePhaseHandOver', () => {
       summary: 'Done.',
       spots: [],
       judgementCalls: [],
+      walkthrough: null,
     });
+  });
+
+  test('keeps the explained spots, the alternatives of a call and the walkthrough', () => {
+    const value = readValue(
+      validatePhaseHandOver({
+        summary: 'Done.',
+        spots: [{ ...SPOT, title: ' The cache key ', explain: 'Keys by path and commit.' }],
+        judgement_calls: [
+          {
+            title: 'Cache by commit',
+            call: 'Cache by commit',
+            reason: 'A commit never changes.',
+            file: 'src/a.ts',
+            line: 4,
+            end: 9,
+            alternatives: [{ option: 'Cache by path', rejected: 'A path changes under an agent.' }],
+          },
+        ],
+        walkthrough: {
+          approach: 'Read once, keep it.',
+          flow: 'read → cache → render',
+          risks: [
+            { title: 'Memory growth', risk: 'Memory grows.', file: 'src/a.ts', line: 2 },
+            { title: 'No eviction', risk: 'Nothing evicts.' },
+          ],
+          testing: ['Open the same file twice.'],
+        },
+      })
+    );
+    expect(value).toEqual({
+      summary: 'Done.',
+      spots: [{ ...SPOT, title: 'The cache key', explain: 'Keys by path and commit.' }],
+      judgementCalls: [
+        {
+          title: 'Cache by commit',
+          call: 'Cache by commit',
+          reason: 'A commit never changes.',
+          file: 'src/a.ts',
+          line: 4,
+          end: 9,
+          alternatives: [{ option: 'Cache by path', rejected: 'A path changes under an agent.' }],
+        },
+      ],
+      walkthrough: {
+        approach: 'Read once, keep it.',
+        flow: 'read → cache → render',
+        risks: [
+          { title: 'Memory growth', risk: 'Memory grows.', file: 'src/a.ts', line: 2, end: null },
+          { title: 'No eviction', risk: 'Nothing evicts.', file: null, line: null, end: null },
+        ],
+        testing: { automated: ['Open the same file twice.'], manual: [] },
+      },
+    });
+  });
+
+  test('a judgement call and a risk need a short title', () => {
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          judgement_calls: [{ call: 'Kept the cache', reason: 'It is hot.' }],
+          walkthrough: {
+            approach: 'Read once.',
+            flow: 'read → render',
+            risks: [{ title: 'x'.repeat(PROTOCOL_LIMITS.riskTitle + 1), risk: 'Memory grows.' }],
+          },
+        })
+      )
+    ).toEqual([
+      'judgement_calls[0].title is required.',
+      `walkthrough.risks[0].title is ${PROTOCOL_LIMITS.riskTitle + 1} characters; the limit is ${PROTOCOL_LIMITS.riskTitle}.`,
+    ]);
+  });
+
+  test('names every broken field of the walkthrough and the alternatives', () => {
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          judgement_calls: [
+            {
+              title: 'x'.repeat(PROTOCOL_LIMITS.callTitle + 1),
+              call: 'x',
+              reason: 'y',
+              line: 9,
+              end: 2,
+              alternatives: [{ option: '', rejected: 'z' }],
+            },
+          ],
+          walkthrough: {
+            approach: '',
+            flow: 'x'.repeat(PROTOCOL_LIMITS.flow + 1),
+            risks: [{ risk: 'r', line: 5, end: 1 }],
+            testing: { automated: [''], manual: [{ action: 'Open it.' }] },
+          },
+        })
+      )
+    ).toEqual([
+      'judgement_calls[0].end comes before judgement_calls[0].line.',
+      'judgement_calls[0].alternatives[0].option is required.',
+      `judgement_calls[0].title is ${PROTOCOL_LIMITS.callTitle + 1} characters; the limit is ${PROTOCOL_LIMITS.callTitle}.`,
+      'walkthrough.approach is required.',
+      `walkthrough.flow is ${PROTOCOL_LIMITS.flow + 1} characters; the limit is ${PROTOCOL_LIMITS.flow}.`,
+      'walkthrough.risks[0].end comes before walkthrough.risks[0].line.',
+      'walkthrough.risks[0].title is required.',
+      'walkthrough.testing.automated[0] is required.',
+      'walkthrough.testing.manual[0].expect is required.',
+    ]);
+    expect(errorsOf(validatePhaseHandOver({ summary: 'Done.', walkthrough: 'all of it' }))).toEqual([
+      'walkthrough must be an object.',
+      'walkthrough.approach is required.',
+      'walkthrough.flow is required.',
+    ]);
   });
 
   test('names every field that breaks the protocol', () => {
@@ -100,10 +220,287 @@ describe('validatePhaseHandOver', () => {
   });
 });
 
+describe('the steps around the merge', () => {
+  const WALKTHROUGH = { approach: 'Read once.', flow: 'read → render' };
+
+  const ENV = {
+    when: 'pre_merge' as const,
+    kind: 'env' as const,
+    title: ' Set STRIPE_WEBHOOK_SECRET ',
+    detail: 'In the production environment of the API.',
+  };
+
+  const MIGRATION = {
+    when: 'post_merge' as const,
+    kind: 'migration' as const,
+    title: 'Run the migration',
+    detail: 'Adds the invoices table.',
+    command: 'bun run db:migrate',
+  };
+
+  test('a phase hand-over keeps its steps, with no command as null, and leaves out an empty list', () => {
+    expect(
+      readValue(
+        validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WALKTHROUGH, steps: [ENV, MIGRATION] } })
+      ).walkthrough?.steps
+    ).toEqual([{ ...ENV, title: 'Set STRIPE_WEBHOOK_SECRET', command: null }, { ...MIGRATION }]);
+    expect(
+      readValue(validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WALKTHROUGH, steps: [] } }))
+        .walkthrough
+    ).toEqual({ ...WALKTHROUGH, risks: [], testing: { automated: [], manual: [] } });
+  });
+
+  test('a fix replaces the steps whole, an empty list included, and may send only them', () => {
+    expect(
+      readValue(validateFixHandOver({ summary: 'Fixed.', walkthrough: { steps: [MIGRATION] } })).walkthrough
+    ).toEqual({ steps: [MIGRATION] });
+    expect(
+      readValue(validateFixHandOver({ summary: 'Fixed.', walkthrough: { steps: [] } })).walkthrough
+    ).toEqual({ steps: [] });
+  });
+
+  test('names every broken field of a step, a repeated title and the limits', () => {
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          walkthrough: {
+            ...WALKTHROUGH,
+            steps: [
+              {
+                when: 'later',
+                kind: 'chore',
+                title: '',
+                detail: 'x'.repeat(PROTOCOL_LIMITS.mergeStepDetail + 1),
+              },
+              { ...ENV, command: 'x'.repeat(PROTOCOL_LIMITS.mergeStepCommand + 1) },
+              ENV,
+              { ...ENV, when: 'post_merge' as const },
+            ],
+          },
+        })
+      )
+    ).toEqual([
+      'walkthrough.steps[0].when must be one of pre_merge, post_merge.',
+      'walkthrough.steps[0].kind must be one of env, secret, migration, deploy, config, other.',
+      'walkthrough.steps[0].title is required.',
+      `walkthrough.steps[0].detail is ${PROTOCOL_LIMITS.mergeStepDetail + 1} characters; the limit is ${PROTOCOL_LIMITS.mergeStepDetail}.`,
+      `walkthrough.steps[1].command is ${PROTOCOL_LIMITS.mergeStepCommand + 1} characters; the limit is ${PROTOCOL_LIMITS.mergeStepCommand}.`,
+      'walkthrough.steps[2].title repeats walkthrough.steps[1]; give each step its own title.',
+    ]);
+    expect(
+      errorsOf(
+        validateFixHandOver({
+          summary: 'Fixed.',
+          walkthrough: {
+            steps: Array.from({ length: PROTOCOL_LIMITS.mergeSteps + 1 }, (_, index) => ({
+              ...ENV,
+              title: `Step ${index}`,
+            })),
+          },
+        })
+      )
+    ).toEqual([
+      `walkthrough.steps has ${PROTOCOL_LIMITS.mergeSteps + 1} items; the limit is ${PROTOCOL_LIMITS.mergeSteps}.`,
+    ]);
+  });
+});
+
+describe('how to test the change', () => {
+  const WALKTHROUGH = { approach: 'Read once.', flow: 'read → render' };
+
+  function testingOf(testing: unknown) {
+    return readValue(validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WALKTHROUGH, testing } }))
+      .walkthrough?.testing;
+  }
+
+  test('keeps what the tests cover and the guided steps, each target as given and a missing one as null', () => {
+    expect(
+      testingOf({
+        automated: [' duplicate.test.ts covers both kinds. '],
+        manual: [
+          {
+            action: 'Start the app.',
+            target: { kind: 'command', value: 'bun dev' },
+            expect: 'It prints the local URL.',
+          },
+          {
+            action: 'Open the paywalls.',
+            target: { kind: 'url', value: 'http://localhost:5173/paywalls' },
+            expect: 'The list loads.',
+          },
+          {
+            action: 'Read the copy step.',
+            target: { kind: 'file', value: 'src/paywalls/duplicate.ts:12-20' },
+            expect: 'It copies the code.',
+          },
+          {
+            action: 'Duplicate a paywall.',
+            target: { kind: 'screen', value: 'Paywalls' },
+            expect: 'A copy.',
+          },
+          { action: 'Try an empty name.', expect: 'It is refused.' },
+        ],
+      })
+    ).toEqual({
+      automated: ['duplicate.test.ts covers both kinds.'],
+      manual: [
+        {
+          action: 'Start the app.',
+          target: { kind: 'command', value: 'bun dev' },
+          expect: 'It prints the local URL.',
+        },
+        {
+          action: 'Open the paywalls.',
+          target: { kind: 'url', value: 'http://localhost:5173/paywalls' },
+          expect: 'The list loads.',
+        },
+        {
+          action: 'Read the copy step.',
+          target: { kind: 'file', value: 'src/paywalls/duplicate.ts:12-20' },
+          expect: 'It copies the code.',
+        },
+        { action: 'Duplicate a paywall.', target: { kind: 'screen', value: 'Paywalls' }, expect: 'A copy.' },
+        { action: 'Try an empty name.', target: null, expect: 'It is refused.' },
+      ],
+    });
+  });
+
+  test('reads a plain list as what the tests cover, and no testing as an empty guide', () => {
+    expect(testingOf(['Open the same file twice.'])).toEqual({
+      automated: ['Open the same file twice.'],
+      manual: [],
+    });
+    expect(testingOf(undefined)).toEqual({ automated: [], manual: [] });
+    expect(testingOf({})).toEqual({ automated: [], manual: [] });
+  });
+
+  test('a fix sends the guide in the same shape', () => {
+    expect(
+      readValue(
+        validateFixHandOver({
+          summary: 'Fixed.',
+          walkthrough: { testing: { manual: [{ action: 'Reload.', expect: 'It stays.' }] } },
+        })
+      ).walkthrough
+    ).toEqual({
+      testing: { automated: [], manual: [{ action: 'Reload.', target: null, expect: 'It stays.' }] },
+    });
+  });
+
+  test('names a target that is not a web address or a repository path, and every limit', () => {
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          walkthrough: {
+            ...WALKTHROUGH,
+            testing: {
+              automated: Array.from({ length: PROTOCOL_LIMITS.testingAutomated + 1 }, () => 'Covered.'),
+              manual: [
+                { action: 'Open it.', target: { kind: 'url', value: 'javascript:alert(1)' }, expect: 'x' },
+                { action: 'Read it.', target: { kind: 'file', value: '../secrets.ts' }, expect: 'x' },
+                { action: 'Look.', target: { kind: 'page', value: '' }, expect: 'x' },
+                {
+                  action: 'Look.',
+                  target: 'Settings',
+                  expect: 'x'.repeat(PROTOCOL_LIMITS.testingExpect + 1),
+                },
+              ],
+            },
+          },
+        })
+      )
+    ).toEqual([
+      `walkthrough.testing.automated has ${PROTOCOL_LIMITS.testingAutomated + 1} items; the limit is ${PROTOCOL_LIMITS.testingAutomated}.`,
+      'walkthrough.testing.manual[0].target.value must be an http or https URL.',
+      'walkthrough.testing.manual[1].target.value must be a path relative to the repository root, with :line or :start-end when it points at lines.',
+      'walkthrough.testing.manual[2].target.kind must be one of url, file, command, screen.',
+      'walkthrough.testing.manual[2].target.value is required.',
+      'walkthrough.testing.manual[3].target must be an object.',
+      'walkthrough.testing.manual[3].target.kind must be one of url, file, command, screen.',
+      'walkthrough.testing.manual[3].target.value is required.',
+      `walkthrough.testing.manual[3].expect is ${PROTOCOL_LIMITS.testingExpect + 1} characters; the limit is ${PROTOCOL_LIMITS.testingExpect}.`,
+    ]);
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          walkthrough: {
+            ...WALKTHROUGH,
+            testing: {
+              manual: Array.from({ length: PROTOCOL_LIMITS.testingSteps + 1 }, () => ({
+                action: 'Click.',
+                expect: 'It works.',
+              })),
+            },
+          },
+        })
+      )
+    ).toEqual([
+      `walkthrough.testing.manual has ${PROTOCOL_LIMITS.testingSteps + 1} items; the limit is ${PROTOCOL_LIMITS.testingSteps}.`,
+    ]);
+  });
+});
+
 describe('validateFixHandOver', () => {
   test('needs a summary', () => {
-    expect(readValue(validateFixHandOver({ summary: 'Fixed CI.' }))).toEqual({ summary: 'Fixed CI.' });
+    expect(readValue(validateFixHandOver({ summary: 'Fixed CI.' }))).toEqual({
+      summary: 'Fixed CI.',
+      walkthrough: null,
+    });
     expect(errorsOf(validateFixHandOver({}))).toEqual(['summary is required.']);
+  });
+
+  test('keeps only the parts of the walkthrough the fix sends', () => {
+    expect(
+      readValue(
+        validateFixHandOver({
+          summary: 'Clamped earlier.',
+          walkthrough: {
+            flow: ' clamp → layout ',
+            risks: [{ title: 'Narrow windows', risk: 'Narrow windows.', file: 'a.ts', line: 3 }],
+            testing: [],
+            approach: null,
+          },
+        })
+      ).walkthrough
+    ).toEqual({
+      flow: 'clamp → layout',
+      risks: [{ title: 'Narrow windows', risk: 'Narrow windows.', file: 'a.ts', line: 3, end: null }],
+      testing: { automated: [], manual: [] },
+    });
+    expect(
+      readValue(validateFixHandOver({ summary: 'Fixed.', walkthrough: { approach: 'Measure first.' } }))
+        .walkthrough
+    ).toEqual({ approach: 'Measure first.' });
+  });
+
+  test('refuses an empty walkthrough and names every broken part', () => {
+    expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: {} }))).toEqual([
+      'walkthrough needs at least one of approach, flow, risks, testing or steps. Leave it out when the fix changes none of them.',
+    ]);
+    expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: 'flow' }))).toEqual([
+      'walkthrough must be an object.',
+    ]);
+    expect(
+      errorsOf(
+        validateFixHandOver({
+          summary: 'Fixed.',
+          walkthrough: {
+            approach: '',
+            flow: 'x'.repeat(PROTOCOL_LIMITS.flow + 1),
+            risks: [{ title: 'Edge', risk: 'Edge.', line: 4, end: 2 }],
+            testing: 'Resize it.',
+          },
+        })
+      )
+    ).toEqual([
+      'walkthrough.approach is required.',
+      `walkthrough.flow is ${PROTOCOL_LIMITS.flow + 1} characters; the limit is ${PROTOCOL_LIMITS.flow}.`,
+      'walkthrough.risks[0].end comes before walkthrough.risks[0].line.',
+      'walkthrough.testing must be an object.',
+    ]);
   });
 });
 
@@ -204,11 +601,34 @@ describe('validateReview', () => {
         },
         { severity: 'suggestion', file: null, line: null, end: null, message: 'Rename it.' },
       ],
+      disagreements: [],
     });
   });
 
+  test('keeps the judgement calls the reviewer disagrees with, each once', () => {
+    expect(
+      readValue(validateReview({ findings: [], disagreements: [{ call: 2, reason: ' Too wide. ' }] }))
+    ).toEqual({ summary: null, findings: [], disagreements: [{ call: 2, reason: 'Too wide.' }] });
+    expect(
+      errorsOf(
+        validateReview({
+          findings: [],
+          disagreements: [
+            { call: 0, reason: 'x' },
+            { call: 2, reason: '' },
+            { call: 2, reason: 'y' },
+          ],
+        })
+      )
+    ).toEqual([
+      `disagreements[0].call must be a whole number from 1 to ${PROTOCOL_LIMITS.judgementCalls * PROTOCOL_LIMITS.planPhases}.`,
+      'disagreements[1].reason is required.',
+      'disagreements names a judgement call twice.',
+    ]);
+  });
+
   test('an empty review is fine, a broken finding is not', () => {
-    expect(readValue(validateReview({}))).toEqual({ summary: null, findings: [] });
+    expect(readValue(validateReview({}))).toEqual({ summary: null, findings: [], disagreements: [] });
     expect(
       errorsOf(
         validateReview({

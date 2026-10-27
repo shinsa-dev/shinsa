@@ -1,5 +1,190 @@
-import type { PlanDocument, Repo, ReviewFinding, RunUsage } from '../packages/core/src/index.ts';
+import type {
+  CodeSpot,
+  PlanDocument,
+  Repo,
+  ReviewFinding,
+  RunUsage,
+  WorkReport,
+} from '../packages/core/src/index.ts';
+import { resolveLine } from './seed-code-kit.ts';
 import { MINUTE, NOW, type SeedTask } from './seed-kit.ts';
+
+export const EXPORT_ROWS = `import { clickhouse } from '../clickhouse';
+
+export interface App {
+  id: string;
+  eventCount: number;
+}
+
+export interface Chunk {
+  start: number;
+  end: number;
+}
+
+export async function readRows(app: App, start: number, end: number) {
+  const result = await clickhouse.query({
+    query:
+      'SELECT * FROM paywall_events WHERE app_id = {app:String} ORDER BY id LIMIT {limit:UInt32} OFFSET {offset:UInt32}',
+    query_params: { app: app.id, limit: end - start, offset: start },
+    format: 'JSONEachRow',
+  });
+  return result.json();
+}
+`;
+
+export const EXPORT_CHUNKS_BASE = `import { clickhouse } from '../clickhouse';
+import { type App, type Chunk, readRows } from './rows';
+
+export const CHUNK_ROWS = 50_000;
+
+export function planChunks(rowCount: number): Chunk[] {
+  const chunks: Chunk[] = [];
+  for (let start = 0; start < rowCount; start += CHUNK_ROWS) {
+    chunks.push({ start, end: Math.min(start + CHUNK_ROWS, rowCount) });
+  }
+  return chunks;
+}
+
+export async function writeChunk(app: App, chunk: Chunk) {
+  await clickhouse.insert({
+    table: 'paywall_events_export',
+    values: await readRows(app, chunk.start, chunk.end),
+    format: 'JSONEachRow',
+  });
+}
+`;
+
+export const EXPORT_CHUNKS_NEW = `import { clickhouse } from '../clickhouse';
+import { type App, type Chunk, readRows } from './rows';
+
+export const CHUNK_ROWS = 50_000;
+export const BATCH_ROWS = 5_000;
+const MAX_ATTEMPTS = 3;
+
+export function planChunks(rowCount: number, from = 0): Chunk[] {
+  const chunks: Chunk[] = [];
+  for (let start = from; start < rowCount; start += CHUNK_ROWS) {
+    chunks.push({ start, end: Math.min(start + CHUNK_ROWS, rowCount) });
+  }
+  return chunks;
+}
+
+export async function writeChunkWithRetry(app: App, chunk: Chunk) {
+  let written = chunk.start;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      while (written < chunk.end) {
+        const end = Math.min(written + BATCH_ROWS, chunk.end);
+        await writeBatch(app, written, end);
+        written = end;
+      }
+      return;
+    } catch (error) {
+      if (attempt >= MAX_ATTEMPTS) throw error;
+    }
+  }
+}
+
+async function writeBatch(app: App, start: number, end: number) {
+  await clickhouse.insert({
+    table: 'paywall_events_export',
+    values: await readRows(app, start, end),
+    format: 'JSONEachRow',
+    clickhouse_settings: { insert_deduplication_token: \`\${app.id}:\${start}:\${end}\` },
+  });
+}
+`;
+
+export const EXPORT_RUN_BASE = `import { db } from '../db';
+import { planChunks, writeChunk } from './chunks';
+import type { App } from './rows';
+
+export async function runExport(app: App, exportId: string) {
+  const chunks = planChunks(app.eventCount);
+  for (const chunk of chunks) await writeChunk(app, chunk);
+  await db.export.update({ where: { id: exportId }, data: { status: 'done', finishedAt: new Date() } });
+}
+`;
+
+export const EXPORT_RUN_NEW = `import { db } from '../db';
+import { logger } from '../logger';
+import { planChunks, writeChunkWithRetry } from './chunks';
+import type { App } from './rows';
+
+export async function runExport(app: App, exportId: string) {
+  const row = await db.export.findUniqueOrThrow({ where: { id: exportId } });
+  let offset = row.offset;
+  for (const chunk of planChunks(app.eventCount, offset)) {
+    await writeChunkWithRetry(app, chunk);
+    offset = chunk.end;
+    await db.export.update({ where: { id: exportId }, data: { offset } });
+    logger.info('export.chunk', { appId: app.id, exportId, offset });
+  }
+  await db.export.update({ where: { id: exportId }, data: { status: 'done', finishedAt: new Date() } });
+}
+`;
+
+export const EXPORT_MIGRATION_NEW = `ALTER TABLE exports
+  ADD COLUMN "offset" integer NOT NULL DEFAULT 0;
+`;
+
+export const EXPORT_TEST_NEW = `import { describe, expect, it } from 'bun:test';
+import { planChunks } from './chunks';
+
+describe('planChunks', () => {
+  it('starts from the saved offset', () => {
+    expect(planChunks(120_000, 50_000)).toEqual([
+      { start: 50_000, end: 100_000 },
+      { start: 100_000, end: 120_000 },
+    ]);
+  });
+
+  it('plans nothing once the export is finished', () => {
+    expect(planChunks(120_000, 120_000)).toEqual([]);
+  });
+});
+`;
+
+const EXPORT_PATHS = {
+  run: 'src/export/clickhouse.ts',
+  chunks: 'src/export/chunks.ts',
+  rows: 'src/export/rows.ts',
+  migration: 'migrations/0042_export_offset.sql',
+  test: 'src/export/chunks.test.ts',
+};
+
+export const EXPORT_FILES_BASE: Record<string, string> = {
+  [EXPORT_PATHS.run]: EXPORT_RUN_BASE,
+  [EXPORT_PATHS.chunks]: EXPORT_CHUNKS_BASE,
+  [EXPORT_PATHS.rows]: EXPORT_ROWS,
+};
+
+export const EXPORT_FILES_NEW: Record<string, string> = {
+  [EXPORT_PATHS.run]: EXPORT_RUN_NEW,
+  [EXPORT_PATHS.chunks]: EXPORT_CHUNKS_NEW,
+  [EXPORT_PATHS.migration]: EXPORT_MIGRATION_NEW,
+  [EXPORT_PATHS.test]: EXPORT_TEST_NEW,
+};
+
+interface SpotNote {
+  title: string;
+  why: string;
+  explain: string;
+}
+
+function resolveSpot(
+  file: string,
+  content: string,
+  [from, to]: [string, string],
+  attention: CodeSpot['attention'],
+  note: SpotNote
+): CodeSpot {
+  return { file, start: resolveLine(content, from), end: resolveLine(content, to), attention, ...note };
+}
+
+function resolveRange(content: string, from: string, to: string) {
+  return { line: resolveLine(content, from), end: resolveLine(content, to) };
+}
 
 function createRunUsage(costUsd: number | null, tokens: number): RunUsage {
   return {
@@ -65,6 +250,243 @@ const ESCALATED_FINDINGS: ReviewFinding[] = [
     fix: 'Add `attempt` to the export log line.',
   },
 ];
+
+const EXPORT_CHECKPOINT_CALL = 'Checkpointed the offset once per chunk, not per batch';
+
+const EXPORT_REPORT: WorkReport = {
+  headline:
+    'Export retries resume inside the chunk that failed, and a restart resumes from the last finished chunk.',
+  sections: [
+    {
+      title: 'Find where the export loses its place',
+      summary:
+        'runExport walked every chunk once and kept no state, so one timeout failed the export and a restart began at row 0. It now reads the offset from the export row and writes it back after each chunk.',
+      spots: [
+        resolveSpot(
+          EXPORT_PATHS.run,
+          EXPORT_RUN_NEW,
+          ['let offset = row.offset;', 'data: { offset } });'],
+          'critical',
+          {
+            title: 'Resume from the export row',
+            why: 'This is the only place progress survives a restart. Anything written inside a chunk is lost when the worker dies.',
+            explain:
+              'The loop starts at the `offset` saved on the export row and plans only the chunks after it. After each chunk it moves `offset` to `chunk.end` and writes it back, so a restart picks up at the first unfinished chunk.',
+          }
+        ),
+      ],
+    },
+    {
+      title: 'Retry inside the chunk',
+      summary:
+        'writeChunkWithRetry writes a chunk in 5,000-row batches and retries from the batch that failed, up to three attempts. Each batch carries a deduplication token.',
+      spots: [
+        resolveSpot(
+          EXPORT_PATHS.chunks,
+          EXPORT_CHUNKS_NEW,
+          ['let written = chunk.start;', 'written = end;'],
+          'high',
+          {
+            title: 'Batches resume where the last attempt stopped',
+            why: '`written` is in memory only: a retry resumes at the failed batch, a restart does not.',
+            explain:
+              '`written` tracks the first row not yet stored. Each attempt runs the `while` loop from there, so a timeout on batch 9 retries batch 9, not batches 1 to 8. The outer `for` counts attempts.',
+          }
+        ),
+        resolveSpot(
+          EXPORT_PATHS.chunks,
+          EXPORT_CHUNKS_NEW,
+          ['catch (error)', 'if (attempt >= MAX_ATTEMPTS) throw error;'],
+          'high',
+          {
+            title: 'Give up after three attempts',
+            why: 'Attempts follow each other immediately, with no wait in between.',
+            explain:
+              'Any error from a batch lands here. The third failure is rethrown and fails the export; the first two go straight back into the loop.',
+          }
+        ),
+        resolveSpot(
+          EXPORT_PATHS.chunks,
+          EXPORT_CHUNKS_NEW,
+          ["format: 'JSONEachRow',", 'insert_deduplication_token'],
+          'normal',
+          {
+            title: 'Replayed batches are dropped by ClickHouse',
+            why: 'Only as safe as the deduplication window on the table.',
+            explain:
+              'The token is the app id plus the batch’s row range. When a retry or a restart sends a batch ClickHouse already stored, the insert is accepted and the duplicate rows are discarded.',
+          }
+        ),
+      ],
+    },
+    {
+      title: 'Test the planning',
+      summary: 'Two tests cover planning from a saved offset; the retry loop has no test yet.',
+      spots: [
+        resolveSpot(
+          EXPORT_PATHS.test,
+          EXPORT_TEST_NEW,
+          ["it('starts from the saved offset'", '{ start: 100_000, end: 120_000 },'],
+          'normal',
+          {
+            title: 'Planning from an offset',
+            why: 'Covers the arithmetic, not the retries or the restart.',
+            explain:
+              'An app with 120,000 events and 50,000 already written plans exactly two chunks, the second one short. The other test checks that a finished export plans nothing.',
+          }
+        ),
+      ],
+    },
+  ],
+  checks: [
+    { name: 'bun lint', outcome: 'pass', detail: null },
+    { name: 'bun check-types', outcome: 'pass', detail: null },
+    { name: 'bun test', outcome: 'pass', detail: '2 new' },
+  ],
+  judgementCalls: [
+    {
+      title: 'Checkpoint once per chunk',
+      call: EXPORT_CHECKPOINT_CALL,
+      reason:
+        'A chunk is ten batches. Writing the export row per batch is ten updates per 50,000 rows on a row the dashboard polls for progress; the deduplication tokens cover the batches a restart replays.',
+      file: EXPORT_PATHS.run,
+      ...resolveRange(EXPORT_RUN_NEW, 'offset = chunk.end;', 'data: { offset } });'),
+      alternatives: [
+        {
+          option: 'Write the offset after every 5,000-row batch',
+          rejected:
+            'Ten times the writes to a row that is already read every few seconds while the export runs.',
+        },
+        {
+          option: 'Keep the offset in Redis',
+          rejected:
+            'A second store to keep in step for one integer, when the export row is read at the start anyway.',
+        },
+      ],
+    },
+    {
+      title: 'Deduplicate replayed inserts',
+      call: 'Made replays safe with insert_deduplication_token',
+      reason:
+        'Any retry or restart can resend a batch ClickHouse already stored. A token per batch lets ClickHouse drop the copy without the export having to know what landed.',
+      file: EXPORT_PATHS.chunks,
+      line: resolveLine(EXPORT_CHUNKS_NEW, 'insert_deduplication_token'),
+      end: null,
+      alternatives: [
+        {
+          option: 'Delete the chunk’s rows before writing it again',
+          rejected:
+            'A delete on every retry on a table that is being written to, and the rows briefly vanish from the export.',
+        },
+        {
+          option: 'Switch the table to ReplacingMergeTree',
+          rejected:
+            'Duplicates only collapse on merge, so a read in between still counts them twice, and it changes the table for every reader.',
+        },
+      ],
+    },
+    {
+      title: 'Three attempts per chunk',
+      call: 'Three attempts per chunk, resuming at the failed batch',
+      reason:
+        'Three is what the runbook told support to do by hand. Resuming at `written` means a late timeout costs one batch, not the whole chunk.',
+      file: EXPORT_PATHS.chunks,
+      ...resolveRange(
+        EXPORT_CHUNKS_NEW,
+        'for (let attempt = 1; ; attempt += 1)',
+        'if (attempt >= MAX_ATTEMPTS)'
+      ),
+      alternatives: [
+        {
+          option: 'Retry the whole export from the top',
+          rejected: 'What support did by hand; the largest app took most of a day.',
+        },
+        {
+          option: 'Retry with the official client’s built-in retries',
+          rejected:
+            'The client retries a request, not a batch, so it cannot resume from `written` and does not know about the tokens.',
+        },
+      ],
+    },
+  ],
+  walkthrough: {
+    approach:
+      'A ClickHouse export used to be one pass: plan 50,000-row chunks, insert each one, mark the export done. A timeout anywhere failed the export, and starting again began at row 0.\n\nThe fix works at two levels. Inside a chunk, `writeChunkWithRetry` writes 5,000-row batches and retries from the batch that failed, up to three attempts. Across restarts, `runExport` saves the finished offset on the export row after every chunk and plans only what is left. A new `offset` column holds it.\n\nBecause both levels can resend rows, every batch carries an `insert_deduplication_token`, so a batch ClickHouse already has is dropped instead of doubled.',
+    flow: '1. `runExport` reads the export row and its `offset` (0 for a new export).\n2. `planChunks(app.eventCount, offset)` lists the chunks from there on.\n3. For each chunk, `writeChunkWithRetry` reads and inserts 5,000 rows at a time, tagging each insert with `app:start:end`.\n4. A failed batch throws into the `catch`; the next attempt resumes at `written`. The third failure fails the export.\n5. When a chunk finishes, `runExport` writes `chunk.end` to the export row and logs it.\n6. After the last chunk the row is marked done.\n\n```text\nrunExport\n  │ offset ◀── exports.offset           0 for a new export\n  ▼\nplanChunks(count, offset) ──▶ [chunk, chunk, ...]\n  │\n  ▼ for each chunk\nwriteChunkWithRetry ──▶ batch ──▶ clickhouse.insert(token)\n  │   ▲                   │\n  │   └─ retry, 3 tries ──┘\n  ▼\nexports.offset = chunk.end              a restart resumes here\n```\n\nA restart re-enters at step 1 with the saved offset, so at most one chunk is written again, and the tokens drop the batches that already landed.',
+    risks: [
+      {
+        title: 'Offsets shift during an export',
+        risk: '`readRows` pages with `ORDER BY id` and `OFFSET`. Events written while the export runs shift the offsets, so a resumed export can skip or repeat rows near the edge.',
+        file: EXPORT_PATHS.rows,
+        line: resolveLine(EXPORT_ROWS, 'ORDER BY id LIMIT'),
+        end: null,
+      },
+      {
+        title: 'Old batches can write twice',
+        risk: 'ClickHouse remembers only the most recent deduplication tokens per table. On a busy table, a restart that replays an older batch can write it twice.',
+        file: EXPORT_PATHS.chunks,
+        line: resolveLine(EXPORT_CHUNKS_NEW, 'insert_deduplication_token'),
+        end: null,
+      },
+      {
+        title: 'Late events wait for the next export',
+        risk: '`app.eventCount` is read when the export starts. Events that arrive later are left for the next export.',
+        file: EXPORT_PATHS.run,
+        line: resolveLine(EXPORT_RUN_NEW, 'planChunks(app.eventCount, offset)'),
+        end: null,
+      },
+      {
+        title: 'Permanent errors are retried',
+        risk: 'Every error is retried, including ones that will never pass, such as a revoked password or a schema mismatch. Those take three attempts to surface.',
+        file: EXPORT_PATHS.chunks,
+        ...resolveRange(EXPORT_CHUNKS_NEW, 'catch (error)', 'if (attempt >= MAX_ATTEMPTS)'),
+      },
+    ],
+    testing: {
+      automated: [
+        '`chunks.test.ts` covers planning from a saved offset and an export with nothing left to write.',
+        'The retry loop and the restart have no automated test: the ClickHouse client is not mocked anywhere in this repository yet.',
+      ],
+      manual: [
+        {
+          action: 'Apply the migration to staging so the export row has an `offset` column.',
+          target: { kind: 'file', value: EXPORT_PATHS.migration },
+          expect: '`offset` exists on the export table with a default of 0.',
+        },
+        {
+          action: 'Start an export for a large staging app and follow the worker log.',
+          target: { kind: 'command', value: 'bun run export:worker --app staging-large' },
+          expect: 'One `export.chunk` line per chunk, each with a higher `offset`.',
+        },
+        {
+          action: 'Kill the worker after a few chunks, then start it again.',
+          target: null,
+          expect: 'It resumes at the last logged `offset`, not at row 0.',
+        },
+        {
+          action: 'Compare the saved `offset` with the rows in `paywall_events_export` for that app.',
+          target: null,
+          expect: 'The row count matches the offset, with no chunk written twice.',
+        },
+        {
+          action: 'Set `max_execution_time = 1` on the staging ClickHouse user and start another export.',
+          target: null,
+          expect:
+            'Each chunk gives up after three attempts and the export fails with the timeout in its error.',
+        },
+        {
+          action: 'Read where the offset is saved after each chunk.',
+          target: {
+            kind: 'file',
+            value: `${EXPORT_PATHS.run}:${resolveLine(EXPORT_RUN_NEW, 'let offset = row.offset;')}-${resolveLine(EXPORT_RUN_NEW, 'data: { offset } });')}`,
+          },
+          expect:
+            'The offset moves only after a whole chunk is written, so a restart repeats at most one chunk.',
+        },
+      ],
+    },
+  },
+};
 
 interface SeedRepoPair {
   paywall: Repo;

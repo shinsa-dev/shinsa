@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { isAbsolute, resolve } from 'node:path';
 import {
   type ComparisonHandOver,
@@ -12,8 +13,6 @@ import type { EvidenceStore } from '../store/index.ts';
 
 export const HANDED_OVER =
   'Handed over: the human reads it in the chat as your reply. Stop here and write nothing more: never point at it, repeat or summarise it, and never say your turn is over.';
-
-const EVIDENCE_KINDS = new Set<EvidenceKind>(['screenshot', 'recording', 'test', 'check', 'note', 'preview']);
 
 const COMMIT_TYPES = /^(feat|fix|chore|refactor|docs|perf|test)$/;
 

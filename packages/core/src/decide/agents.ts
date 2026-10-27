@@ -9,6 +9,7 @@ import {
   type Task,
   validatePlanRules,
 } from '../domain/index.ts';
+import { assembleReport } from '../report/assemble.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument } from '../report/types.ts';
 import type { Decider } from './decider.ts';
@@ -88,6 +89,7 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
       summary: command.summary,
       spots: command.spots,
       judgementCalls: command.judgementCalls,
+      ...(command.walkthrough ? { walkthrough: command.walkthrough } : {}),
       at: decider.context.now,
     },
   });
@@ -112,6 +114,14 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
   const { run, task } = findCurrentRun(decider, command.runId, 'complete_fix');
   recordTree(decider, task.id, command.treeHash);
   decider.emit({ type: 'task.noted', taskId: task.id, note: command.summary, runId: run.id });
+  if (command.walkthrough) {
+    decider.emit({
+      type: 'walkthrough.revised',
+      taskId: task.id,
+      walkthrough: command.walkthrough,
+      runId: run.id,
+    });
+  }
   decider.endRun(run, 'completed', command.summary);
   decider.progressed(task.id);
   if (!isPushedFix(task)) {
@@ -122,13 +132,29 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
   requestPush(decider, task.id);
 }
 
+function resolveDisagreements(task: Task, disagreements: { call: number; reason: string }[]) {
+  const calls = assembleReport(task).judgementCalls;
+  return disagreements.map(({ call: number, reason }) => {
+    const call = calls[number - 1];
+    if (!call) {
+      throw new DomainError(
+        'unknown_judgement_call',
+        `disagreements names judgement call ${number}, but the agent made ${calls.length}. Use the numbers from your brief.`
+      );
+    }
+    return { call: call.call, reason };
+  });
+}
+
 export function reportReview(decider: Decider, command: CommandOf<'agent.report_review'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'report_review');
+  const disagreements = resolveDisagreements(task, command.disagreements ?? []);
   decider.emit({
     type: 'review.reported',
     taskId: task.id,
     summary: command.summary,
     findings: command.findings,
+    ...(disagreements.length > 0 ? { disagreements } : {}),
     runId: run.id,
   });
   decider.endRun(run, 'completed', null);
@@ -162,6 +188,10 @@ export function attachEvidence(decider: Decider, command: CommandOf<'agent.attac
       uri: command.uri,
       attachedAt: decider.context.now,
       ...resolveRoundStamp(task),
+      ...(command.detail ? { detail: command.detail } : {}),
+      ...(command.width ? { width: command.width } : {}),
+      ...(command.theme ? { theme: command.theme } : {}),
+      ...(command.stage ? { stage: command.stage } : {}),
     },
   });
 }

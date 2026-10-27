@@ -88,6 +88,7 @@ export interface SeedTask {
   summary?: string;
   reviewSummary?: string;
   findings?: ReviewFinding[];
+  reviewDisagreements?: ReviewDisagreement[];
   runs?: SeedRun[];
   gate?: { type: GateType; title: string; body: string; details?: Partial<Gate> };
   pullRequest?: {

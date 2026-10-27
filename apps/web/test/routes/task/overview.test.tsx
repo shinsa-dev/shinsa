@@ -396,3 +396,54 @@ describe('the rounds of a task on its Overview', () => {
     expect(view.getByRole('heading', { name: 'Rounds' })).toBeTruthy();
   });
 });
+
+describe('the change on the Overview', () => {
+  it('lists each phase without code and points at the review for the rest', () => {
+    const onOpen = mock();
+    const task = createTask({
+      id: 't',
+      stage: 'awaiting_review',
+      report: {
+        headline: 'Retries a failed request.',
+        sections: [
+          {
+            title: 'Retry the request',
+            summary: 'Wraps the call in a loop.',
+            spots: [
+              { file: 'src/retry.ts', start: 2, end: 2, attention: 'critical', why: 'The loop can spin.' },
+            ],
+          },
+        ],
+        checks: [],
+        judgementCalls: [
+          {
+            title: 'Retry three times',
+            call: 'Three tries',
+            reason: 'Matches the rest.',
+            file: null,
+            line: null,
+          },
+        ],
+      },
+    });
+    const state = createShinsaState({ tasks: [task] });
+    pushState(state);
+    const view = render(
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey={task.id}>
+          <OverviewTab state={state} task={task} gate={undefined} onOpen={onOpen} />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+    expect(view.getByText('Wraps the call in a loop.')).toBeTruthy();
+    expect(view.queryByText('The loop can spin.')).toBeNull();
+    expect(view.queryByText('Three tries')).toBeNull();
+    expect(
+      view.getByText(
+        '2 points to read, 1 critical, 1 judgement call. How it works, the code and every judgement call are in the review.'
+      )
+    ).toBeTruthy();
+    fireEvent.click(view.getByRole('button', { name: 'Read the review' }));
+    expect(onOpen).toHaveBeenCalledWith('review');
+  });
+});

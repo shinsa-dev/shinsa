@@ -64,25 +64,125 @@ one-sentence `reason`. Shinsa checks the steps and returns every problem.
 
 ## A phase (`complete_phase`, while you build)
 
-The human reviews the work phase by phase: Shinsa builds the review from every phase you hand over, in plan order.
+The human reviews the work as a technical walkthrough Shinsa builds from every phase you hand over, in plan order.
+You built it and you know why it is the way it is, so you write the explanation; a separate reviewer then checks it
+and says where it disagrees. Mark every point the reader needs: on a large change, forty points is fine.
 
 - **summary**: what this phase changed, one or two sentences. Wrap identifiers in backticks.
-- **spots**: up to 6 exact line ranges in the new file the human must read. `why` says what could go wrong or which
+- **spots**: up to 8 exact line ranges in the new file the human must read. `why` says what could go wrong or which
   judgement call it holds, never what the code does.
   - `critical`: could break something, touches data, money, auth or a public API, or encodes a judgement call.
   - `high`: worth a careful read.
   - `normal`: context for the spots around it.
-  Leave out boilerplate, renames, formatting and mechanical edits; pick the few ranges that matter.
-- **judgement_calls**: up to 5 calls the human might reverse, each a `call` and a `reason` with the alternative you
-  rejected, and the `file` and `line` it is about when there is one.
+  For the key pieces of code, the ones that carry the new logic, add a `title` (what it is, a few words) and an
+  `explain` (how it works, in plain words a reader new to the code follows). Keep each range small: the few lines that
+  carry the idea, not the whole function. Leave out boilerplate, renames, formatting and mechanical edits.
+- **judgement_calls**: up to 5 choices the human might make differently, each a `title` (a few words naming the
+  decision, "Poll instead of webhooks", the heading of its card), a `call`, a `reason`, the
+  `alternatives` you rejected (`option` and why you `rejected` it), and the `file`, `line` and `end` it is about when
+  there is one. The judgement calls matter more than the code: name every one a reader would ask about.
+- **walkthrough**, on the last phase, for the whole change:
+  - `approach`: how the task was achieved, the idea and the structure, in a few short paragraphs.
+  - `flow`: how it works behind the scenes, step by step through the new code.
+  - **Draw it.** Whenever the change has structure or a flow worth drawing (pieces that call each other, the path a
+    request or data takes, states and what moves between them, a tree of files), put a text diagram in `flow` (or in
+    `approach` for the structure), in a fenced code block. Reviewers read the diagram first. Use a tree for structure
+    and boxes and arrows for flow, at most 72 columns wide, aligned for a monospace font, a few words beside each step:
+
+    ```
+    complete_phase { spots }        the Agent's hand-over
+            │
+            ▼
+    assembleReport ──► WorkReport   one report, plan order
+            │
+            ▼
+    Review tab ──► Code tab         a spot opens its lines
+    ```
+
+    Skip it only when the change is one small edit with nothing to draw.
+  - `risks`: the risks and edge cases, each a `title` (a few words naming the risk, "Offsets shift during an
+    export"), the `risk` itself and its `file`, `line` and `end` when it has them.
+  - `testing`: how to test it, in two parts (see below).
+  - `steps`: what the human must do around the merge that needs a person or production access (see below). Leave it
+    out when there is nothing.
+
+### How to test it (`walkthrough.testing`)
+
+Two parts, so the human can tell what is proven from what they should try:
+
+- `automated`: one or two lines on what the tests cover: which test files, and what they prove
+  ("`src/paywalls/duplicate.test.ts` covers both paywall kinds and the empty name").
+- `manual`: a guide the human follows step by step, up to 10 steps. Each step has an `action` (what to do, as an
+  instruction), a `target` when it happens in one place, and `expect` (what they should see when it works, concrete
+  enough to tell pass from fail; "it works" is not a result).
+
+| target `kind` | `value` | The human gets |
+|---|---|---|
+| `url` | An http or https address: the preview deployment, or the local URL | A link that opens in the browser |
+| `file` | A path from the repository root, with `:line` or `:start-end` (`src/a.ts:12-20`) | The file in the Code tab |
+| `command` | The exact shell command (`bun dev`) | Copy and Run in terminal |
+| `screen` | The name of a screen in the app (`Settings → Billing`) | The name, as text |
+
+- Start from where to go: the preview deployment URL, or the command that starts the app and then its local URL.
+- One concrete step each: what to open, click or type. Then the edge cases worth trying (an empty field, a narrow
+  window, a slow network, a second tab).
+- Link a file in an action with the reference syntax, `[duplicate.ts](shinsa://file/src/paywalls/duplicate.ts#L12-L20)`.
+- Leave `manual` empty only when there is nothing a person can try (a refactor the tests prove); say so in `automated`.
+- Cover every piece of new logic with tests. Unless the repository turned it off, Shinsa runs the tests with coverage
+  after the checks and shows the reviewer and the human which of your changed lines no test runs.
+
+```json
+{
+  "automated": ["`src/paywalls/duplicate.test.ts` covers both kinds and the empty name."],
+  "manual": [
+    { "action": "Start the app", "target": { "kind": "command", "value": "bun dev" }, "expect": "It prints http://localhost:5173." },
+    { "action": "Open the paywall list", "target": { "kind": "url", "value": "http://localhost:5173/paywalls" }, "expect": "Code and visual paywalls are listed." },
+    { "action": "Click Duplicate on a code paywall", "expect": "A copy named “Copy of …” opens with the same code." },
+    { "action": "Clear the name and save", "expect": "Save is refused with “Give it a name”." }
+  ]
+}
+```
+
+### Steps around the merge (`walkthrough.steps`)
+
+First do everything you can inside the repository yourself: the code, the tests, the docs, `.env.example`, the
+migration file, the config default. List only what is left for a person with production access, each as a concrete
+step the human can follow without asking you anything:
+
+| Field | Fill it with |
+|---|---|
+| when | `pre_merge` when the merged code needs it in place (a variable it reads, a secret, a setting); `post_merge` when it needs the merged code (running its migration, a deploy, a backfill, turning on its flag) |
+| kind | `env`, `secret`, `migration`, `deploy`, `config` (a setting, a feature flag, a third-party dashboard) or `other` |
+| title | The step as an instruction that names the thing: "Set `STRIPE_WEBHOOK_SECRET` on the API in production" |
+| detail | Where and how: the service, the environment, the dashboard, where a value comes from, what happens without it |
+| command | The exact shell command when the step is one; the human can run it in a terminal from the task |
+
+- Name every variable and secret the change reads that production does not have yet, and where to set it.
+- Never write a secret's value into a step; say where the human finds it.
+- Give the exact command (`bun run db:migrate`, `railway redeploy --service worker`), never "run the migrations".
+- No step for what you can do yourself, and none for things that happen anyway (CI, the merge itself).
+
+Your steps become steps of the task: Shinsa adds Pre-merge and Post-merge to its pipeline from them, so
+never put `pre_merge` or `post_merge` in `reshape_task`. The merge waits until the human ticks every pre-merge
+step; a post-merge step opens only once the pull request merged, and keeps the task open, unticked, until they do it,
+across later rounds too. You can read the
+steps and their ticks in `read_task`; only the human ticks them, and you leave a task with unticked post-merge steps
+open. A fix that sends the list again keeps a tick only on a step it sends unchanged: changing a step's title,
+detail, kind or command asks the human to do it again, so change one only when what they must do changed.
 
 Attach evidence with `attach_evidence` before the last phase (the `evidence` skill). Shinsa commits each phase; never
 commit yourself.
 
 ## A fix (`complete_fix`, while you fix)
 
-One `summary`: what you changed and, for anything you chose not to change, why. Shinsa commits it, then runs the checks
+A `summary`: what you changed and, for anything you chose not to change, why. Shinsa commits it, then runs the checks
 and the agent review again, or pushes it to the pull request.
+
+When the fix changes how the change works (the approach, the flow, a risk, how to test it or the steps around the
+merge), also send `walkthrough` with only the parts that changed. Each part you send replaces that part of the
+walkthrough whole, so send the full new `risks`, `testing` (both `automated` and `manual`) or `steps`, not just the
+new item. A step keeps its tick while its
+timing and title stay the same. Leave `walkthrough` out when the fix changes none of them.
 
 ## Review findings (`report_review`, reviewer)
 
@@ -91,6 +191,10 @@ broken rule or a failing check; everything else is a `suggestion`. Each finding 
 words, at most 80 characters), a `message` (what is wrong and why it matters, at most 280) and, when you know what to
 change, a `fix` (a sentence or a short code block, at most 600). A `summary` of one or two sentences (at most 400) says
 what you checked and your overall view of the change. An empty list means you found nothing wrong.
+
+Your brief numbers the agent's judgement calls. For each one you would have made differently, add a `disagreements`
+entry: its `call` number and a `reason` (why, and what you would do instead, at most 280). The human reads it next
+to the agent's call. Leave out the calls you agree with.
 
 ## Inquiries and operations
 

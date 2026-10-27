@@ -29,6 +29,11 @@ function readLine(args: ChatToolArgs, key: string) {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null;
 }
 
+export function hasHandOverWalkthrough(args: ChatToolArgs) {
+  const walkthrough = args.walkthrough;
+  return Boolean(walkthrough) && typeof walkthrough === 'object' && !Array.isArray(walkthrough);
+}
+
 export function readHandOverSpots(args: ChatToolArgs) {
   return readList(args, 'spots').flatMap((spot) => {
     const file = readString(spot, 'file');

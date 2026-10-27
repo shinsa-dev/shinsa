@@ -15,9 +15,9 @@ import {
 } from '@shinsa/core';
 import { describeError } from '../log/index.ts';
 import {
-  LEGACY_EVENT_TYPES,
   type LegacyBriefingRow,
   listLegacyBriefings,
+  listLegacyEventTypes,
   listLegacyRewrites,
   type ProjectBriefing,
   type StoredEventRow,
@@ -122,7 +122,7 @@ export const SETTLED_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 const SEED_STRIDE = 1000;
 
-const LOG_VERSION = 2;
+const LOG_VERSION = 3;
 
 const BRIEFING_EVENT = 'briefing.written';
 
@@ -335,7 +335,7 @@ export class EventLog {
     const version = this.#selectLogVersion();
     if (version >= LOG_VERSION) return 0;
     return this.#db.transaction(() => {
-      const changed = (version < 1 ? this.#rewriteLegacyRows() : 0) + this.#moveLegacyBriefings();
+      const changed = this.#rewriteLegacyRows(version) + this.#moveLegacyBriefings();
       if (changed > 0) this.#db.run('DELETE FROM snapshots');
       this.#db.run(`PRAGMA user_version = ${LOG_VERSION}`);
       return changed;
@@ -345,7 +345,7 @@ export class EventLog {
   applyLegacyView() {
     const version = this.#selectLogVersion();
     if (version >= LOG_VERSION) return 0;
-    const rewrites = version < 1 ? this.#listLegacyRows() : [];
+    const rewrites = this.#listLegacyRows(version);
     const briefingRows = this.#listLegacyBriefingRows();
     const changed = rewrites.length + briefingRows.length;
     if (changed === 0) return 0;
@@ -356,18 +356,19 @@ export class EventLog {
     return changed;
   }
 
-  #listLegacyRows() {
+  #listLegacyRows(version: number) {
+    const types = listLegacyEventTypes(version);
     const rows = this.#db
       .query<EventRow, string[]>(
-        `SELECT seq, at, type, payload FROM events WHERE type IN (${listPlaceholders(LEGACY_EVENT_TYPES)}) ORDER BY seq`
+        `SELECT seq, at, type, payload FROM events WHERE type IN (${listPlaceholders(types)}) ORDER BY seq`
       )
-      .all(...LEGACY_EVENT_TYPES);
+      .all(...types);
     return listLegacyRewrites(rows);
   }
 
-  #rewriteLegacyRows() {
+  #rewriteLegacyRows(version: number) {
     const update = this.#db.prepare('UPDATE events SET type = ?, payload = ? WHERE seq = ?');
-    const rewrites = this.#listLegacyRows();
+    const rewrites = this.#listLegacyRows(version);
     for (const row of rewrites) update.run(row.type, row.payload, row.seq);
     return rewrites.length;
   }

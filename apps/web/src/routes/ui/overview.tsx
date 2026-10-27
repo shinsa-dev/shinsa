@@ -21,11 +21,13 @@ import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
+import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
+import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import {
-  createVerdictDraft,
   describeEscalationBody,
   describeReviewTitle,
   resolveVerdictAction,
+  resolveVerdictDraft,
 } from '@/lib/overview/verdicts.ts';
 import { createOverviewScene } from './sample-overview.ts';
 import { acknowledgeSample } from './samples.ts';
@@ -36,8 +38,8 @@ function Card({ children }: { children: React.ReactNode }) {
 }
 
 function EscalatedReview({ state, task, gate }: { state: ShinsaState; task: Task; gate: Gate }) {
-  const [verdicts, setVerdicts] = React.useState(() => createVerdictDraft(task.findings));
-  const action = resolveVerdictAction(task.findings, verdicts);
+  const draft = useReviewDraft();
+  const action = resolveVerdictAction(task.findings, resolveVerdictDraft(task.findings, draft.verdicts));
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} />}
@@ -54,11 +56,7 @@ function EscalatedReview({ state, task, gate }: { state: ShinsaState; task: Task
       }
     >
       {gate.escalation && <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>}
-      <FindingVerdicts
-        findings={task.findings}
-        draft={verdicts}
-        onChange={(index, verdict) => setVerdicts((current) => ({ ...current, [index]: verdict }))}
-      />
+      <FindingVerdicts task={task} findings={task.findings} />
     </NowFrame>
   );
 }
@@ -181,7 +179,6 @@ export function OverviewSpecimens() {
             task={tasks.question}
             gate={gates.command}
             onReply={acknowledgeSample}
-            onRun={acknowledgeSample}
           />
         </Card>
       </Specimen>

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { listActiveRuns, listOpenGates } from '../../src/index.ts';
+import { assembleReport } from '../../src/report/index.ts';
 import {
   buildAll,
+  completePhase,
   createHarness,
   createTask,
   failing,
@@ -546,5 +548,195 @@ describe('the plan meets the verification rules', () => {
     complete();
     expect(harness.task(taskId).stage).toBe('checking');
     expect(harness.task(taskId).plan?.body).toContain('## Evidence\nscreenshot, test');
+  });
+});
+
+describe('the reviewer disagrees with a judgement call', () => {
+  function reachReview() {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const walkthrough = {
+      approach: 'Clamp it.',
+      flow: 'a → b',
+      risks: [],
+      testing: { automated: ['Resize it.'], manual: [] },
+    };
+    const calls = [
+      { title: 'Clamp in the layout', call: 'Clamped the width in the tab layout' },
+      { title: 'No new prop', call: 'Kept the tab props as they are' },
+    ];
+    for (const [index, { title, call }] of calls.entries()) {
+      harness.send({
+        type: 'agent.complete_phase',
+        runId: harness.activeRun(taskId).id,
+        summary: `Phase ${index + 1} done.`,
+        spots: [],
+        judgementCalls: [{ title, call, reason: 'Simpler.', file: null, line: null }],
+        walkthrough: index === 1 ? walkthrough : null,
+      });
+    }
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    return { harness, taskId, walkthrough };
+  }
+
+  test('the review keeps each disagreement next to the call it is about', () => {
+    const { harness, taskId, walkthrough } = reachReview();
+    expect(harness.task(taskId).phaseReports.map((report) => report.walkthrough ?? null)).toEqual([
+      null,
+      walkthrough,
+    ]);
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+      disagreements: [{ call: 2, reason: 'A prop is clearer.' }],
+    });
+    expect(harness.task(taskId).reviewDisagreements).toEqual([
+      { call: 'Kept the tab props as they are', reason: 'A prop is clearer.' },
+    ]);
+  });
+
+  test('the reviewer is told each call by its number, title, decision and reason', () => {
+    const { harness, taskId } = reachReview();
+    expect(harness.activeRun(taskId).prompt).toContain(
+      [
+        '1. Clamp in the layout. Clamped the width in the tab layout: Simpler.',
+        '2. No new prop. Kept the tab props as they are: Simpler.',
+      ].join('\n')
+    );
+  });
+
+  test('a judgement call number the brief never gave is refused', () => {
+    const { harness, taskId } = reachReview();
+    expect(() =>
+      harness.send({
+        type: 'agent.report_review',
+        runId: harness.activeRun(taskId).id,
+        summary: null,
+        findings: [],
+        disagreements: [{ call: 3, reason: 'No.' }],
+      })
+    ).toThrow('disagreements names judgement call 3, but the agent made 2.');
+  });
+
+  test('a review without disagreements clears the last one', () => {
+    const { harness, taskId } = reachReview();
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [],
+    });
+    expect(harness.task(taskId).reviewDisagreements).toEqual([]);
+  });
+});
+
+describe('a fix revises the walkthrough', () => {
+  const WALKTHROUGH = {
+    approach: 'Clamp the width.',
+    flow: 'layout → clamp',
+    risks: [{ title: 'Narrow windows', risk: 'Narrow windows.', file: 'a.ts', line: 3, end: 4 }],
+    testing: { automated: ['Resize it.'], manual: [] },
+  };
+
+  function reachFix(walkthroughs: [typeof WALKTHROUGH | null, typeof WALKTHROUGH | null]) {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    for (const [index, walkthrough] of walkthroughs.entries()) {
+      harness.send({
+        type: 'agent.complete_phase',
+        runId: harness.activeRun(taskId).id,
+        summary: `Phase ${index + 1} done.`,
+        spots: [],
+        judgementCalls: [],
+        walkthrough,
+      });
+    }
+    harness.send({ type: 'checks.record', taskId, results: failing() });
+    return { harness, taskId };
+  }
+
+  function walkthroughsOf(harness: ReturnType<typeof createHarness>, taskId: string) {
+    return harness.task(taskId).phaseReports.map((report) => report.walkthrough ?? null);
+  }
+
+  test('replaces only the parts the fix sends, on the phase that has the walkthrough', () => {
+    const { harness, taskId } = reachFix([WALKTHROUGH, null]);
+    const runId = harness.activeRun(taskId).id;
+    const decision = harness.send({
+      type: 'agent.complete_fix',
+      runId,
+      summary: 'Clamped earlier.',
+      walkthrough: { flow: 'clamp → layout', risks: [] },
+    });
+    expect(decision.events.find((event) => event.type === 'walkthrough.revised')).toEqual({
+      type: 'walkthrough.revised',
+      taskId,
+      walkthrough: { flow: 'clamp → layout', risks: [] },
+      runId,
+    });
+    expect(walkthroughsOf(harness, taskId)).toEqual([
+      { ...WALKTHROUGH, flow: 'clamp → layout', risks: [] },
+      null,
+    ]);
+    expect(assembleReport(harness.task(taskId)).walkthrough?.flow).toBe('clamp → layout');
+  });
+
+  test('a fix without one leaves the walkthrough as it was and records nothing for it', () => {
+    const { harness, taskId } = reachFix([null, WALKTHROUGH]);
+    const decision = harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Fixed the types.',
+      walkthrough: null,
+    });
+    expect(decision.events.map((event) => event.type)).not.toContain('walkthrough.revised');
+    expect(walkthroughsOf(harness, taskId)).toEqual([null, WALKTHROUGH]);
+  });
+
+  test('with no walkthrough yet, a revision with the approach and the flow starts one on the last phase', () => {
+    const { harness, taskId } = reachFix([null, null]);
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Rewrote it.',
+      walkthrough: { approach: 'Measure first.', flow: 'measure → clamp' },
+    });
+    expect(walkthroughsOf(harness, taskId)).toEqual([
+      null,
+      {
+        approach: 'Measure first.',
+        flow: 'measure → clamp',
+        risks: [],
+        testing: { automated: [], manual: [] },
+      },
+    ]);
+  });
+
+  test('with no walkthrough yet, a revision missing the approach or the flow changes nothing', () => {
+    const { harness, taskId } = reachFix([null, null]);
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Rewrote it.',
+      walkthrough: { flow: 'measure → clamp', testing: { automated: ['Resize it.'], manual: [] } },
+    });
+    expect(walkthroughsOf(harness, taskId)).toEqual([null, null]);
+  });
+
+  test('a task with no phase reports ignores a revision', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const before = harness.task(taskId);
+    harness.replay({
+      type: 'walkthrough.revised',
+      taskId,
+      walkthrough: { approach: 'A.', flow: 'B.' },
+      runId: 'run-x',
+    });
+    expect(harness.task(taskId)).toBe(before);
   });
 });

@@ -11,6 +11,7 @@ import { selectEditorCommand } from '@/lib/code/editor/commands.ts';
 import { requestLanguage } from '@/lib/code/editor/language.ts';
 import { EditorSession, fromDisk } from '@/lib/code/editor/session.ts';
 import { gotoLine, resolveEditable } from '@/lib/code/editor/setup.ts';
+import type { SpotHintRegistry } from '@/lib/code/editor/spot-hints.ts';
 import { revealLine } from '@/lib/code/editor/unified.ts';
 import { CODE_MARKS, measureCode } from '@/lib/code/marks.ts';
 import type { CodeNote, CodeSpotMark } from '@/lib/code/notes.ts';
@@ -64,10 +65,16 @@ function replaceDoc(view: EditorView, text: string) {
   view.dispatch({ changes, annotations: [fromDisk.of(true), Transaction.addToHistory.of(false)] });
 }
 
-function splitAnnotations(notes: CodeNote[], spots: CodeSpotMark[], keep: number[], split: boolean) {
+function splitAnnotations(
+  notes: CodeNote[],
+  spots: CodeSpotMark[],
+  keep: number[],
+  focus: FocusLines | null,
+  split: boolean
+) {
   const anchors = (side: CommentSide) =>
     notes.filter((note) => note.side === side).map((note) => ({ key: note.key, line: note.line }));
-  const b = { notes: anchors('new'), oldNotes: split ? [] : anchors('old'), spots, keep };
+  const b = { notes: anchors('new'), oldNotes: split ? [] : anchors('old'), spots, keep, focus };
   const a = { ...NO_ANNOTATIONS, notes: anchors('old') };
   return { a, b };
 }
@@ -110,7 +117,7 @@ function useSession(holder: EditorSessionHolder | undefined) {
 }
 
 export default function CodeEditor(props: CodeEditorProps) {
-  const { path, original, split, editable, notes, spots, keep, reveal, handle } = props;
+  const { path, original, split, editable, notes, spots, keep, focus, reveal, handle } = props;
   const diffing = original !== null;
   const docKey = props.docKey ?? `${path}\0${diffing ? 'diff' : 'file'}`;
   const session = useSession(props.session);
@@ -121,7 +128,8 @@ export default function CodeEditor(props: CodeEditorProps) {
   latest.current = props;
   const slots = React.useSyncExternalStore(session.registry.subscribe, session.registry.read);
   const find = React.useSyncExternalStore(session.findHost.subscribe, session.findHost.read);
-  const annotationsKey = JSON.stringify(splitAnnotations(notes, spots, keep, split && diffing));
+  const annotationsKey = JSON.stringify(splitAnnotations(notes, spots, keep, focus, split && diffing));
+  const noteKeys = notes.map((note) => note.key).join('\0');
   const latestAnnotations = React.useRef(annotationsKey);
   latestAnnotations.current = annotationsKey;
 
@@ -220,12 +228,12 @@ export default function CodeEditor(props: CodeEditorProps) {
           />,
           find.panel.dom
         )}
-      {notes.map((note) => {
-        const slot = slots.get(note.key);
-        return slot ? (
-          <React.Fragment key={note.key}>{createPortal(props.renderNote(note), slot)}</React.Fragment>
-        ) : null;
-      })}
+      <SpotHints registry={session.spotHints} />
+      {notes.map((note) => (
+        <React.Fragment key={note.key}>
+          {createPortal(props.renderNote(note), session.registry.upsert(note.key))}
+        </React.Fragment>
+      ))}
     </div>
   );
 }

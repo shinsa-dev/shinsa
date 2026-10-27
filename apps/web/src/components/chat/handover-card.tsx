@@ -7,11 +7,13 @@ import { ToolRow } from '@/components/chat/tool-group.tsx';
 import { CARD, CHAT_INSET, CHIP } from '@/components/layout/surface/card.ts';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
+import { InAppLink } from '@/components/links/link.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import {
+  hasHandOverWalkthrough,
   readHandOverSpots,
   readPlanParameters,
   readProposedChange,
@@ -97,6 +99,7 @@ function SpotList({ task, args }: { task: Task | null; args: ChatToolArgs }) {
       {spots.map((spot) => (
         <ChangeSnippet
           key={`${spot.file}:${spot.start}`}
+          persistId={resolveTaskDisclosureId(task.id, 'handover', 'spot', spot.file, String(spot.start))}
           task={task}
           path={spot.file}
           start={spot.start}
@@ -158,6 +161,14 @@ function SummaryCard({
         </div>
       )}
       <SpotList task={task} args={args} />
+      {task && hasHandOverWalkthrough(args) && (
+        <InAppLink
+          path={resolveReviewPath(task)}
+          className='w-fit font-medium text-primary-text text-xs hover:opacity-80 active:opacity-80'
+        >
+          Read the walkthrough
+        </InAppLink>
+      )}
     </Card>
   );
 }

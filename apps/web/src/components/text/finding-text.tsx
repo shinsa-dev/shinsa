@@ -9,7 +9,15 @@ import { NoteHead } from '@/components/text/note-head.tsx';
 import { hashDisclosurePart, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeFindingPlace, SEVERITY_LABEL } from '@/lib/review/findings.ts';
 
-export function FindingText({ finding, task = null }: { finding: ReviewFinding; task?: Task | null }) {
+export function FindingText({
+  finding,
+  task = null,
+  action = null,
+}: {
+  finding: ReviewFinding;
+  task?: Task | null;
+  action?: React.ReactNode;
+}) {
   const { severity } = finding;
   const where = describeFindingPlace(finding);
   const snippet =
@@ -18,14 +26,19 @@ export function FindingText({ finding, task = null }: { finding: ReviewFinding; 
       : null;
   return (
     <div className='flex min-w-0 flex-1 flex-col gap-px text-xs'>
-      <span className='flex min-w-0 items-center gap-1.5 text-2xs'>
-        <span className={severity === 'blocking' ? 'text-red-text' : 'text-fg-2'}>
-          {SEVERITY_LABEL[severity]}
-        </span>
-        {where && !snippet && <Truncate className={cn(CHIP, 'font-mono')}>{where}</Truncate>}
-      </span>
-      {finding.title && <InlineMarkdown text={finding.title} className='font-medium text-fg-4 leading-5' />}
-      <Markdown text={finding.message} className={finding.title ? 'text-fg-3' : 'text-fg-4'} />
+      <NoteHead
+        label={
+          <>
+            <span className={severity === 'blocking' ? 'text-red-text' : 'text-fg-2'}>
+              {SEVERITY_LABEL[severity]}
+            </span>
+            {where && !snippet && <Truncate className={cn(CHIP, 'font-mono')}>{where}</Truncate>}
+          </>
+        }
+        title={finding.title}
+        body={finding.message}
+        action={action}
+      />
       {snippet && (
         <div className='mt-1.5'>
           <ChangeSnippet
@@ -44,12 +57,8 @@ export function FindingText({ finding, task = null }: { finding: ReviewFinding; 
         </div>
       )}
       {finding.fix && (
-        <div className='corner-superellipse/1.125 mt-1.5 flex flex-col gap-1 rounded-lg bg-bg-a1 px-3 py-2'>
-          <span className='flex items-center gap-1.5 text-2xs text-fg-2'>
-            <Icon size='sm' name='IconBandage' />
-            Suggested fix
-          </span>
-          <Markdown text={finding.fix} className='text-fg-4' />
+        <div className='mt-1.5'>
+          <SuggestedFix text={finding.fix} />
         </div>
       )}
     </div>

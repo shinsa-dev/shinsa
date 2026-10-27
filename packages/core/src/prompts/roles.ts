@@ -4,6 +4,7 @@ import {
   hasStep,
   isComposedByAgent,
   isLaterRound,
+  listEvidenceItems,
   type OperationTiming,
   type Repo,
   resolveCurrentRound,
@@ -13,6 +14,9 @@ import {
   selectShippingTarget,
   type Task,
 } from '../domain/index.ts';
+import { assembleReport } from '../report/assemble.ts';
+import { listMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts';
+import { listTestingLines } from '../report/testing.ts';
 import { PROTOCOL_LIMITS } from '../report/validate.ts';
 import {
   describeApprovedPlan,
@@ -198,14 +202,17 @@ export function resolvePhaseInstruction(task: Task, repo: Repo | null, index: nu
     last
       ? 'This is the last phase: the whole change must work end to end when you finish.'
       : 'Later phases build on this one; leave the code in a working state.',
-    'For user-facing changes, run the app and attach screenshots or a short recording with `attach_evidence`.',
-    'For logic, write the test that fails without your change and passes with it.',
-    'When the phase is done, call `complete_phase`:',
+    describeEvidenceForPhase(task, repo, index, last),
+    'When the phase is done, call `complete_phase`. The human reads it as a technical walkthrough of the change:',
     '- summary: what this phase changed, in one or two sentences.',
-    '- spots: the exact line ranges (new-file line numbers) the human must read, each with why it matters.',
+    '- spots: every line range (new-file line numbers) the human must read, each with why it matters.',
     '  critical = could break something or encodes a judgement call; high = worth a careful read; normal = context.',
+    '  Give the key pieces of code a title and an explain: how that code works, in plain words.',
     '  Leave boilerplate and mechanical edits out.',
-    '- decisions: judgement calls the human might disagree with.',
+    '- judgement_calls: every choice the human might make differently, each with the alternatives you rejected and why.',
+    last
+      ? '- walkthrough: required now, for the whole change: the approach, how it works behind the scenes, the risks and edge cases with their lines, how to test it, and the steps the human must take around the merge.\n  `steps` lists only what needs a person or production access, before or after the merge: an environment variable or secret to set (name it and where; never its value), a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files). Give each step its exact command when it has one. Leave `steps` out when there is nothing.\n  `testing` has two parts. `automated`: one or two lines on what the tests cover, naming the test files. `manual`: the steps the human follows in order, each an `action`, a `target` when it happens in one place (a `url`, a `file` as `path:line`, a `command` or a `screen`) and `expect`, what they should see. Start from where to go (the preview deployment URL, or the command that starts the app and its local URL), then what to click and type, then the edge cases worth trying.\n  Whenever the change has structure or a flow worth drawing (pieces that call each other, a path a request or data takes, states, a tree of files), draw it in `flow` (or `approach`) as a text diagram in a fenced code block: a tree, or boxes and arrows (`a ──► b`), at most 72 columns wide, aligned for a monospace font, with a few words on each step.'
+      : '',
     'Then stop.',
   ]
     .filter(Boolean)
@@ -255,6 +262,62 @@ function describeReviewScope(task: Task, repo: Repo | null, stacked: string | nu
   return `Diff the branch against ${repo?.defaultBranch ?? 'the default branch'} and read every change.`;
 }
 
+function describeJudgementCallsForReview(task: Task) {
+  const calls = assembleReport(task).judgementCalls;
+  if (calls.length === 0) return '';
+  return [
+    '',
+    'The judgement calls the agent made, numbered. They are its claims, not facts; check each against the code:',
+    ...calls.map((call, index) => `${index + 1}. ${call.title}. ${call.call}: ${call.reason}`),
+    'For each one you would have made differently, add it to `disagreements` with its number, why, and what you would do instead. Leave out the ones you agree with.',
+  ].join('\n');
+}
+
+function describeMergeStepsForReview(task: Task) {
+  const steps = listMergeSteps(task);
+  const listed =
+    steps.length === 0
+      ? ['The agent listed no steps for the human around the merge.']
+      : [
+          'The steps the agent listed for the human around the merge:',
+          ...steps.map((step) => `- ${MERGE_STEP_WHEN_WORDS[step.when]}, ${step.kind}: ${step.title}`),
+        ];
+  return [
+    '',
+    ...listed,
+    'Check the list is complete: an environment variable, secret, migration, deploy, config or feature flag the change needs that is missing from it is a blocking finding, and so is a step an agent could have done in the repository (code, tests, docs, `.env.example`, a migration file) or a secret value written into a step.',
+  ].join('\n');
+}
+
+function describeTestingForReview(task: Task) {
+  const lines = listTestingLines(assembleReport(task).walkthrough?.testing);
+  const listed =
+    lines.length === 0
+      ? ['The agent wrote no guide for testing the change.']
+      : ['How the agent says to test the change:', ...lines];
+  return [
+    '',
+    ...listed,
+    'Check the guide is one the human can follow: follow the manual steps you can from the worktree. A step you cannot follow (a URL, file, command or screen that does not exist or does not lead where it says), a step whose expected result is vague, or a user-visible change with no manual steps is a finding.',
+  ].join('\n');
+}
+
+function describeCoverageForReview(task: Task) {
+  const summary = describeCoverage(task.coverage);
+  if (!summary) return '';
+  const gaps = listCoverageGaps(task.coverage);
+  return [
+    '',
+    `Shinsa measured the tests' coverage of the changed lines: ${summary}.`,
+    ...(gaps.length > 0
+      ? ['Changed lines no test runs (new-file line numbers):', ...gaps.map((gap) => `- ${gap}`)]
+      : []),
+    gaps.length > 0
+      ? 'Read those lines. Important new logic that no test runs (a branch that decides something, error handling, a calculation) is a finding: blocking when a bug there would go unnoticed, a suggestion otherwise. Leave out trivial lines.'
+      : '',
+  ].join('\n');
+}
+
 const REVIEW_AGAIN =
   'You reviewed earlier work on this task in this conversation. Judge this review on its own: check that your earlier blocking findings are fixed, read the new commits as closely as the first time, and never pass something because you passed it before.';
 
@@ -302,6 +365,12 @@ export function resolveReviewerPrompt(
     '',
     'What the agent says it did:',
     ...task.phaseReports.map((report) => `- ${report.summary}`),
+    describeJudgementCallsForReview(task),
+    describeMergeStepsForReview(task),
+    describeTestingForReview(task),
+    describeCoverageForReview(task),
+    '',
+    describeEvidenceForReview(evidence),
     '',
     describeReviewScope(task, repo, stacked?.branch ?? null),
     'Shinsa already ran the checks and they pass. Look for what checks miss.',

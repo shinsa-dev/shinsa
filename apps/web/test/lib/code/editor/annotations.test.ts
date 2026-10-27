@@ -11,6 +11,7 @@ import {
   setAnnotations,
 } from '@/lib/code/editor/annotations.ts';
 import { SlotRegistry } from '@/lib/code/editor/slots.ts';
+import { SpotHintRegistry } from '@/lib/code/editor/spot-hints.ts';
 import { createView } from './support.ts';
 
 const DOC = Text.of(['one', 'two', 'three', 'four']);
@@ -29,7 +30,7 @@ function listDecorations(set: ReturnType<typeof buildAnnotations>) {
 }
 
 describe('buildAnnotations', () => {
-  it('washes a spot’s lines in its tone and puts each note under its line, clamped to the file', () => {
+  it('washes the selected spot and the lines a link points at, and puts each note under its line', () => {
     const registry = new SlotRegistry();
     const set = buildAnnotations(
       DOC,
@@ -39,16 +40,79 @@ describe('buildAnnotations', () => {
           { key: 'n1', line: 2 },
           { key: 'n2', line: 99 },
         ],
-        spots: [{ key: 's', from: 0, to: 2, tone: 'red', selected: true }],
+        spots: [
+          { key: 's', from: 0, to: 2, tone: 'red', label: 'Critical', selected: true },
+          { key: 't', from: 3, to: 3, tone: 'amber', label: 'Read carefully', selected: false },
+        ],
+        focus: { from: 3, to: 4, flash: true },
       },
       registry
     );
     expect(listDecorations(set)).toEqual([
-      { from: 0, className: 'cm-spot cm-spot-red cm-spot-selected', key: null },
-      { from: 4, className: 'cm-spot cm-spot-red cm-spot-selected', key: null },
+      { from: 0, className: 'cm-spot-selected', key: null },
+      { from: 4, className: 'cm-spot-selected', key: null },
       { from: 7, className: null, key: 'n1' },
       { from: 18, className: null, key: 'n2' },
     ]);
+    const settled = buildAnnotations(
+      DOC,
+      { ...NO_ANNOTATIONS, focus: { from: 4, to: 4, flash: false } },
+      registry
+    );
+    expect(listDecorations(settled)).toEqual([{ from: 14, className: 'cm-focus-line', key: null }]);
+  });
+});
+
+describe('the spot gutter', () => {
+  it('marks every line of a spot in its tone with what the spot is', () => {
+    const markers = buildSpotMarkers(DOC, [
+      { key: 's', from: 2, to: 9, tone: 'amber', label: 'Read carefully: the order', selected: false },
+      { key: 't', from: 3, to: 3, tone: 'red', label: 'Critical: a finding', selected: false },
+      { key: 'u', from: 4, to: 4, tone: 'neutral', label: 'Context', selected: false },
+      { key: 'v', from: 4, to: 4, tone: 'pink' as 'red', label: 'Context', selected: false },
+      { key: 'w', from: 2, to: 2, tone: 'amber', label: 'Read carefully: the order', selected: false },
+    ]);
+    const found: { from: number; tone: string; label: string }[] = [];
+    markers.between(0, DOC.length, (from, _to, value) => {
+      found.push({ from, tone: (value as SpotMarker).tone, label: (value as SpotMarker).label });
+    });
+    expect(found).toEqual([
+      { from: 4, tone: 'amber', label: 'Read carefully: the order' },
+      { from: 8, tone: 'red', label: 'Read carefully: the order\nCritical: a finding' },
+      { from: 14, tone: 'amber', label: 'Read carefully: the order\nContext' },
+    ]);
+    const marker = new SpotMarker('amber', 'Read carefully: the order');
+    expect(marker.eq(new SpotMarker('amber', 'Read carefully: the order'))).toBe(true);
+    expect(marker.eq(new SpotMarker('red', 'Read carefully: the order'))).toBe(false);
+    const dom = marker.toDOM();
+    expect(dom.className).toBe('cm-spotMark cm-spot-amber');
+    expect(dom.hasAttribute('title')).toBe(false);
+    expect(dom.getAttribute('aria-label')).toBe('Read carefully: the order');
+    marker.destroy(dom);
+  });
+
+  it('hands each drawn mark to the hint registry until it goes', async () => {
+    const hints = new SpotHintRegistry();
+    const marker = new SpotMarker('red', 'Critical', hints);
+    const dom = marker.toDOM();
+    await Promise.resolve();
+    expect(hints.read().map((hint) => [hint.element, hint.label])).toEqual([[dom, 'Critical']]);
+    marker.destroy(dom);
+    await Promise.resolve();
+    expect(hints.read()).toEqual([]);
+  });
+
+  it('draws the marks in the editor, before the line numbers', async () => {
+    const registry = new SlotRegistry();
+    const spots = [{ key: 's', from: 1, to: 1, tone: 'red' as const, label: 'Critical', selected: false }];
+    const hints = new SpotHintRegistry();
+    const view = createView('a\nb', [annotationsField(registry, { ...NO_ANNOTATIONS, spots }, hints)]);
+    const gutters = [...view.dom.querySelectorAll('.cm-gutter')].map((gutter) => gutter.className);
+    expect(gutters[0]).toContain('cm-spotGutter');
+    expect(view.dom.querySelector('.cm-spotMark')?.getAttribute('aria-label')).toBe('Critical');
+    view.dispatch({ effects: setAnnotations.of(NO_ANNOTATIONS) });
+    await Promise.resolve();
+    expect(hints.read()).toEqual([]);
   });
 });
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Run, Task } from '@shinsa/core';
 import {
@@ -79,13 +80,23 @@ describe('assertProtocol', () => {
   });
 });
 
+const FOLDER = { taskId: 'task-1', round: 2 };
+
 describe('storeEvidence', () => {
-  test('a relative path is read from the worktree, not from where Shinsa runs', () => {
+  test('a relative path is read from the worktree into the task and round folder, with its facts', () => {
     const worktree = createTempDir();
     writeFiles(worktree, { 'shots/home.png': 'png' });
     const evidence = new EvidenceStore(createTempDir());
     const stored = storeEvidence(
-      { kind: 'screenshot', title: 'Home', path: 'shots/home.png' },
+      {
+        kind: 'screenshot',
+        title: 'Home page',
+        path: 'shots/home.png',
+        detail: 'The header wraps.',
+        width: 390,
+        theme: 'dark',
+        stage: 'after',
+      },
       worktree,
       evidence,
       FOLDER
@@ -110,7 +121,7 @@ describe('storeEvidence', () => {
     ).toMatchObject({ kind: 'note', title: 'Home', detail: null, width: null });
   });
 
-  test('a URL must be a web address and text is written to a file', () => {
+  test('a URL must be a web address, text is written to a file and a note to a markdown file', () => {
     const evidence = new EvidenceStore(createTempDir());
     expect(
       storeEvidence({ kind: 'preview', title: 'Preview', url: 'https://preview.dev' }, null, evidence, FOLDER)
@@ -129,7 +140,9 @@ describe('storeEvidence', () => {
     ).toMatchObject({ uri: expect.stringMatching(/\/round-2\/ratios-\w+\.md$/) });
   });
 
-  test('an unknown kind or nothing to attach is refused', () => {
+  test('a comparison copies each part, a video as a recording, and names each file by its part', () => {
+    const worktree = createTempDir();
+    writeFiles(worktree, { 'before.png': 'png', 'after.webm': 'webm' });
     const evidence = new EvidenceStore(createTempDir());
     const stored = storeEvidence(
       {

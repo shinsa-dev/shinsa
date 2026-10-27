@@ -9,6 +9,8 @@ import {
   type PullRequestRemark,
   type Repo,
   type Settings,
+  serializeMergeStepsMarkdown,
+  serializeTestingMarkdown,
   type Task,
 } from '@shinsa/core';
 import { assertRefName } from '../git/index.ts';
@@ -354,8 +356,12 @@ export function readStackedPullRequest(repo: Repo, number: number, signal?: Abor
 }
 
 export function serializePullRequestBody(task: Task) {
+  const testing = serializeTestingMarkdown(assembleReport(task).walkthrough?.testing);
+  const steps = serializeMergeStepsMarkdown(listMergeSteps(task));
   return [
     task.summary ?? '',
+    testing ? `\n${testing}` : '',
+    steps ? `\n${steps}` : '',
     task.plan ? `\n<details><summary>Plan</summary>\n\n${task.plan.body}\n</details>` : '',
   ]
     .join('\n')

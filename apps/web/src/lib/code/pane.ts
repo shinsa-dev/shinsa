@@ -61,7 +61,9 @@ export function listKeptLines(
 ) {
   return [
     ...notes.filter((note) => note.side === 'new').map((note) => note.line),
-    ...spots.flatMap((spot) => [spot.from, spot.to]),
+    ...spots.flatMap((spot) =>
+      Array.from({ length: Math.max(spot.to - spot.from, 0) + 1 }, (_, index) => spot.from + index)
+    ),
     ...(line ? [line, end ?? line] : []),
   ];
 }

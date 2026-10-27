@@ -24,14 +24,11 @@ function prefetchTaskCode(state: ShinsaState, taskId: string, search: string) {
   if (!task) return null;
   prefetchEvidence(state, task);
   if (hasReview(task)) {
-    void requestCodeDiffView().then(undefined, skipFailure);
-    if (task.repoId)
-      prefetchSnippets(
-        task,
-        listAttentionItems(task.report, task.findings).flatMap((item) =>
-          item.place ? [item.place.file] : []
-        )
-      );
+    const paths = listReviewPoints(
+      listReviewChapters(task.report, task.findings, task.reviewDisagreements)
+    ).flatMap((item) => (item.place ? [item.place.file] : []));
+    void prepareCodeDiff(paths).then(undefined, skipFailure);
+    if (task.repoId) prefetchSnippets(task, paths);
   }
   if (listTaskTabs(task).includes('code')) void prefetchCode(task, search);
   return task;

@@ -121,7 +121,9 @@ comparison counts as the screenshots (or recordings) a plan asks for.
 
 ## iOS
 
-Build for a simulator with `xcodebuild`, install it with `xcrun simctl install`, launch it, capture with `xcrun simctl io <device> screenshot` and `recordVideo`. Same states as web.
+Build for a simulator with `xcodebuild`, install it with `xcrun simctl install`, launch it, and capture with
+`xcrun simctl io <device> screenshot` and `xcrun simctl io <device> recordVideo`, light and dark
+(`xcrun simctl ui <device> appearance dark`). Use the device's width in points as `width`.
 
 ## Logic
 
@@ -140,4 +142,5 @@ never edit the worktree.
 
 ## When you cannot
 
-If the app cannot run here (missing secrets, services), say so plainly in your summary and attach what you could: a test, a type check, a storybook render. Never claim something works that you did not see work.
+If the app cannot run here (missing secrets, services, a device), say so plainly in your summary and attach what you
+could: a test, a type check, a rendered component. Never claim something works that you did not see work.

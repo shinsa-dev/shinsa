@@ -16,7 +16,7 @@ const TONE_COLOR: Record<(typeof TONES)[number], string> = {
 
 function listSpotTones() {
   return Object.fromEntries(
-    TONES.map((tone) => [`.cm-spot-${tone}`, { boxShadow: `inset 2px 0 0 ${TONE_COLOR[tone]}` }])
+    TONES.map((tone) => [`.cm-spotMark.cm-spot-${tone}`, { backgroundColor: TONE_COLOR[tone] }])
   );
 }
 
@@ -116,10 +116,9 @@ const codeTheme = EditorView.theme({
   '.cm-collapsedLines:before, .cm-collapsedLines:after': { content: 'none', display: 'none' },
   '.cm-collapsedLines:hover': { backgroundColor: 'var(--bg-a2)', color: 'var(--fg-4)' },
   '.cm-mergeSpacer': { backgroundColor: 'var(--bg-a1)' },
-  '.cm-changeGutter': { width: '2px', paddingLeft: '0' },
-  '&.cm-merge-a .cm-changedLineGutter, .cm-deletedLineGutter': { backgroundColor: 'var(--red-4)' },
-  '&.cm-merge-b .cm-changedLineGutter': { backgroundColor: 'var(--green-4)' },
-  '.cm-spot-selected': { backgroundColor: 'var(--primary-a1)' },
+  '.cm-spotGutter': { width: '12px' },
+  '.cm-spotGutter .cm-gutterElement': { display: 'flex', justifyContent: 'flex-end' },
+  '.cm-spotMark': { width: '3px', height: '100%', marginLeft: 'auto', cursor: 'default' },
   ...listSpotTones(),
   '.cm-searchMatch': { backgroundColor: 'var(--amber-a2)', outline: 'none' },
   '.cm-searchMatch-selected': { backgroundColor: 'var(--amber-a4)' },

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { resolveAnsweredReply, resolveSupersededReply, resolveWithdrawnReply } from '@shinsa/core';
 import {
+  hasHandOverWalkthrough,
   readHandOverSpots,
   readPlanParameters,
   readProposedChange,
@@ -130,5 +131,14 @@ describe('readHandOverSpots', () => {
       readHandOverSpots({ spots: [{ start: 1 }, { file: 'a.ts' }, { file: 'a.ts', start: 0 }] })
     ).toEqual([]);
     expect(readHandOverSpots({})).toEqual([]);
+  });
+});
+
+describe('hasHandOverWalkthrough', () => {
+  it('is true only when the hand-over carries a walkthrough', () => {
+    expect(hasHandOverWalkthrough({ walkthrough: { approach: 'A' } })).toBe(true);
+    expect(hasHandOverWalkthrough({ walkthrough: null })).toBe(false);
+    expect(hasHandOverWalkthrough({ walkthrough: ['A'] })).toBe(false);
+    expect(hasHandOverWalkthrough({ summary: 'S' })).toBe(false);
   });
 });

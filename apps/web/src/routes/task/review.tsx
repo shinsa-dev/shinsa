@@ -2,13 +2,12 @@ import type { TaskDiff } from '@shinsa/core';
 import {
   type Gate,
   hasStep,
+  listMergeSteps,
   listOpenGates,
   type ShinsaState,
   type Task,
   type WorkReport,
 } from '@shinsa/core';
-import { Button } from '@shinsa/ui/components/button';
-import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
@@ -16,38 +15,45 @@ import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
-import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { FileLink } from '@/components/links/file.tsx';
-import { Hint } from '@/components/overlays/hint.tsx';
 import { Eyebrow, NowFrame } from '@/components/overview/now-frame.tsx';
 import { ReviewActions } from '@/components/overview/review-actions.tsx';
-import { ReviewNote } from '@/components/review/note.tsx';
-import { CheckOutcomeIcon } from '@/components/status/check-mark.tsx';
+import { MergeStepsPanel } from '@/components/review/merge-steps.tsx';
+import { REVIEW_SELECTED, ReviewNote } from '@/components/review/note.tsx';
+import { PointIndex } from '@/components/review/point-index.tsx';
+import { TestingPanel } from '@/components/review/testing.tsx';
+import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import { LoadingLine } from '@/components/status/loading-line.tsx';
-import { ToneLabel } from '@/components/status/text.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
+import { prepareCodeDiff } from '@/components/text/code-diff.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
-import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
+import { Markdown } from '@/components/text/markdown.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { useReviewKeys } from '@/hooks/use-review-keys.ts';
+import { useSpotlight } from '@/hooks/use-spotlight.ts';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { listReviewCommands } from '@/lib/command/review.ts';
 import { type Loaded, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
-import {
-  describeEscalationBody,
-  resolveVerdict,
-  resolveVerdictDraft,
-  VERDICT_ITEMS,
-} from '@/lib/overview/verdicts.ts';
+import { describeEscalationBody } from '@/lib/overview/verdicts.ts';
+import { createDisclosureId, notPersisted } from '@/lib/preferences/disclosure.ts';
 import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
-import { REVIEW_KEY, type ReviewStep } from '@/lib/review/keys.ts';
+import { resolveReviewItemIdentity } from '@/lib/review/identity.ts';
+import type { ReviewStep } from '@/lib/review/keys.ts';
 import {
   describeAgentReview,
-  describeAttentionCount,
-  listAttentionItems,
+  describeItemPlace,
+  describePointCount,
   listOtherFiles,
-  listReviewSections,
+  listReviewChapters,
+  listReviewPoints,
+  listReviewStops,
+  REVIEW_PROSE_ICON,
+  REVIEW_PROSE_TITLE,
+  type ReviewChapter,
   type ReviewItem,
+  type ReviewProseId,
+  type ReviewStop,
+  resolveStopInView,
   stepReviewItem,
   toCommentItem,
   toFindingItem,
@@ -66,83 +72,313 @@ function selectReviewGate(state: ShinsaState, task: Task): Gate | undefined {
   return listOpenGates(state, task.id).find((gate) => gate.type === 'review' || gate.type === 'merge');
 }
 
-function VerdictChoice({ task, gate, item }: { task: Task; gate: Gate | undefined; item: ReviewItem }) {
-  const draft = useReviewDraft();
-  if (item.finding === null || gate?.type !== 'review') return null;
-  const verdicts = resolveVerdictDraft(task.findings, draft.verdicts);
-  const index = item.finding;
+function skipFailure() {
+  return null;
+}
+
+function prepareReviewSnippets(items: readonly ReviewItem[]) {
+  const paths = items.flatMap((item) => (item.place ? [item.place.file] : []));
+  if (paths.length > 0) void prepareCodeDiff(paths).then(undefined, skipFailure);
+}
+
+const HOLD_MS = 1_200;
+
+const HOLD_STEP_MS = 100;
+
+const IN_VIEW_LINE = 48;
+
+const LETTING_GO = ['wheel', 'touchstart', 'keydown', 'pointerdown'] as const;
+
+function useHoldPointInView(selected: string | null, request: number) {
+  const holding = React.useRef(false);
+  React.useEffect(() => {
+    if (!selected) return;
+    void request;
+    const find = () => document.querySelector(`[data-review-item="${CSS.escape(selected)}"]`);
+    let held = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const letGo = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      holding.current = false;
+    };
+    const hold = () => {
+      find()?.scrollIntoView?.({ block: 'start' });
+      held += HOLD_STEP_MS;
+      timer = setTimeout(held < HOLD_MS ? hold : letGo, HOLD_STEP_MS);
+    };
+    holding.current = true;
+    hold();
+    for (const name of LETTING_GO) window.addEventListener(name, letGo, { once: true, passive: true });
+    return () => {
+      letGo();
+      for (const name of LETTING_GO) window.removeEventListener(name, letGo);
+    };
+  }, [selected, request]);
+  return holding;
+}
+
+function useStopInView(
+  viewport: React.RefObject<HTMLDivElement | null>,
+  stops: readonly ReviewStop[],
+  holding: React.RefObject<boolean>,
+  onChange: (key: string | null) => void
+) {
+  const latest = React.useRef(onChange);
+  latest.current = onChange;
+  React.useEffect(() => {
+    const scroller = viewport.current;
+    if (!scroller) return;
+    const keys = new Set(stops.map((stop) => stop.key));
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      if (holding.current) return;
+      const box = scroller.getBoundingClientRect();
+      const marks = [...scroller.querySelectorAll<HTMLElement>('[data-review-item]')].flatMap((element) => {
+        const key = element.dataset.reviewItem ?? '';
+        return keys.has(key) ? [{ key, top: element.getBoundingClientRect().top - box.top }] : [];
+      });
+      const end = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+      latest.current(resolveStopInView(marks, IN_VIEW_LINE, end ? scroller.clientHeight : null));
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      cancelAnimationFrame(frame);
+    };
+  }, [viewport, stops, holding]);
+}
+
+function resolveReviewDisclosure(task: Task, ...parts: string[]) {
+  return createDisclosureId('task', task.id, 'review', ...parts);
+}
+
+function Chapter({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
   return (
-    <Choice
-      label='Verdict'
-      items={VERDICT_ITEMS}
-      value={resolveVerdict(verdicts, index)}
-      onValueChange={(verdict) => draft.setVerdict(index, verdict)}
+    <section className='flex flex-col gap-1'>
+      <SectionLabel count={count}>{title}</SectionLabel>
+      <div className='flex flex-col gap-2'>{children}</div>
+    </section>
+  );
+}
+
+function Stop({
+  stop,
+  selected,
+  children,
+}: {
+  stop: string;
+  selected: string | null;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      data-review-item={stop}
+      data-selected={stop === selected || undefined}
+      className={cn('corner-superellipse/1.125 scroll-my-6 rounded-xl', REVIEW_SELECTED)}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Prose({ text, className }: { text: string; className?: string }) {
+  return <Markdown text={text} className={cn('text-fg-4 text-xs', className)} />;
+}
+
+function BuiltPart({ task, report, prose }: { task: Task; report: WorkReport; prose: ReviewProseId }) {
+  const walkthrough = report.walkthrough;
+  switch (prose) {
+    case 'approach':
+    case 'flow':
+      return (
+        <Panel
+          persistId={resolveReviewDisclosure(task, 'panel', prose)}
+          title={REVIEW_PROSE_TITLE[prose]}
+          icon={REVIEW_PROSE_ICON[prose]}
+        >
+          <Prose text={walkthrough?.[prose] ?? ''} />
+        </Panel>
+      );
+    case 'testing':
+      return (
+        <TestingPanel
+          persistId={resolveReviewDisclosure(task, 'panel', prose)}
+          task={task}
+          testing={walkthrough?.testing ?? null}
+          checks={task.checkResults ?? report.checks}
+          coverage={task.coverage}
+        />
+      );
+    case 'pre_merge':
+    case 'post_merge':
+      return (
+        <MergeStepsPanel persistId={resolveReviewDisclosure(task, 'panel', prose)} task={task} when={prose} />
+      );
+  }
+}
+
+function HowItIsBuilt({
+  task,
+  report,
+  chapter,
+  selected,
+}: {
+  task: Task;
+  report: WorkReport;
+  chapter: ReviewChapter;
+  selected: string | null;
+}) {
+  return (
+    <Chapter title={chapter.title}>
+      {chapter.prose.map((prose) => (
+        <Stop key={prose.key} stop={prose.key} selected={selected}>
+          <BuiltPart task={task} report={report} prose={prose.key} />
+        </Stop>
+      ))}
+    </Chapter>
+  );
+}
+
+function PointCard({ task, item, selected }: { task: Task; item: ReviewItem; selected: string | null }) {
+  return (
+    <ReviewNote
+      persistId={resolveReviewDisclosure(task, 'card', resolveReviewItemIdentity(item))}
+      task={task}
+      item={item}
+      selected={item.key === selected}
+      action={<FindingVerdictChoice task={task} finding={item.finding} />}
     />
   );
 }
 
-function StepButtons({ disabled, onStep }: { disabled: boolean; onStep: (step: ReviewStep) => void }) {
+function RiskRow({ task, item, selected }: { task: Task; item: ReviewItem; selected: string | null }) {
+  const place = item.place;
   return (
-    <>
-      <Hint label='Previous place' shortcut={REVIEW_KEY.previous}>
-        <Button
-          variant='secondary'
-          size='icon-xs'
-          icon='IconChevronTopMedium'
-          aria-label='Previous place'
-          disabled={disabled}
-          onClick={() => onStep(-1)}
+    <li
+      data-review-item={item.key}
+      data-selected={item.key === selected || undefined}
+      className='corner-superellipse/1.125 flex scroll-my-6 flex-col gap-2 rounded-lg p-1.5 transition-[background-color] duration-500 data-selected:bg-primary-a1'
+    >
+      {item.title && <span className='font-medium text-fg-4 text-xs leading-5'>{item.title}</span>}
+      <Prose text={item.body} />
+      {place && task.repoId && (
+        <ChangeSnippet
+          persistId={resolveReviewDisclosure(task, 'risk', resolveReviewItemIdentity(item), 'snippet')}
+          task={task}
+          path={place.file}
+          start={place.start}
+          end={place.end}
+          spot={item.key}
+          startsOpen
         />
-      </Hint>
-      <Hint label='Next place' shortcut={REVIEW_KEY.next}>
-        <Button
-          variant='secondary'
-          size='icon-xs'
-          icon='IconChevronDownMedium'
-          aria-label='Next place'
-          disabled={disabled}
-          onClick={() => onStep(1)}
-        />
-      </Hint>
-    </>
+      )}
+      {place && !task.repoId && (
+        <span className='text-2xs'>
+          <FileLink task={task} path={place.file} label={describeItemPlace(place)} />
+        </span>
+      )}
+    </li>
   );
 }
 
-function Attention({
+function ReadCarefully({
   task,
-  gate,
-  items,
+  chapter,
   selected,
-  onStep,
 }: {
   task: Task;
-  gate: Gate | undefined;
-  items: ReviewItem[];
+  chapter: ReviewChapter;
   selected: string | null;
-  onStep: (step: ReviewStep) => void;
+}) {
+  const spots = chapter.items.filter((item) => !item.key.startsWith('risk:'));
+  const risks = chapter.items.filter((item) => item.key.startsWith('risk:'));
+  return (
+    <Chapter title={chapter.title} count={chapter.items.length}>
+      {spots.map((item) => (
+        <PointCard key={item.key} task={task} item={item} selected={selected} />
+      ))}
+      {risks.length > 0 && (
+        <Panel
+          persistId={resolveReviewDisclosure(task, 'panel', 'risks')}
+          title='Risks and edge cases'
+          icon='IconExclamationTriangle'
+          count={risks.length}
+        >
+          <ul className='-m-1.5 flex flex-col gap-1'>
+            {risks.map((item) => (
+              <RiskRow key={item.key} task={task} item={item} selected={selected} />
+            ))}
+          </ul>
+        </Panel>
+      )}
+    </Chapter>
+  );
+}
+
+function PointCards({
+  task,
+  chapter,
+  selected,
+}: {
+  task: Task;
+  chapter: ReviewChapter;
+  selected: string | null;
 }) {
   return (
-    <section className='flex flex-col gap-2'>
-      <SectionLabel
-        count={items.length}
-        action={<StepButtons disabled={items.length === 0} onStep={onStep} />}
-      >
-        Needs your attention
-      </SectionLabel>
-      {items.length === 0 ? (
-        <p className='text-fg-2 text-xs'>{describeAttentionCount(items)}</p>
+    <Chapter title={chapter.title} count={chapter.items.length}>
+      {chapter.items.map((item) => (
+        <PointCard key={item.key} task={task} item={item} selected={selected} />
+      ))}
+    </Chapter>
+  );
+}
+
+function AgentReview({
+  task,
+  chapter,
+  selected,
+}: {
+  task: Task;
+  chapter: ReviewChapter | undefined;
+  selected: string | null;
+}) {
+  const reviewed = task.reviewSummary !== null;
+  if (!chapter && !reviewed && !hasStep(task, 'agent_review')) return null;
+  const items = chapter?.items ?? [];
+  return (
+    <Panel
+      persistId={resolveReviewDisclosure(task, 'panel', 'agent-review')}
+      title='Agent review'
+      icon='IconEyeSparkle'
+      count={items.length > 0 ? items.length : undefined}
+    >
+      {reviewed || chapter ? (
+        <div className='flex flex-col gap-1'>
+          {task.reviewSummary && <Prose text={task.reviewSummary} />}
+          <p className='text-fg-3 text-xs'>
+            {describeAgentReview(task.findings)} A signal for you, never the approval.
+          </p>
+        </div>
       ) : (
-        items.map((item) => (
-          <ReviewNote
-            key={item.key}
-            task={task}
-            item={item}
-            selected={item.key === selected}
-            action={<VerdictChoice task={task} gate={gate} item={item} />}
-          />
-        ))
+        <p className='text-fg-2 text-xs'>The agent review has not run yet.</p>
       )}
-    </section>
+      {items.map((item) => (
+        <ReviewNote
+          key={item.key}
+          persistId={resolveReviewDisclosure(task, 'card', resolveReviewItemIdentity(item))}
+          task={task}
+          item={item}
+          selected={item.key === selected}
+          className='rounded-lg'
+          action={<FindingVerdictChoice task={task} finding={item.finding} />}
+        />
+      ))}
+    </Panel>
   );
 }
 
@@ -150,8 +386,7 @@ function Comments({ task, selected }: { task: Task; selected: string | null }) {
   const draft = useReviewDraft();
   if (draft.comments.length === 0) return null;
   return (
-    <section className='flex flex-col gap-2'>
-      <SectionLabel count={draft.comments.length}>Your comments</SectionLabel>
+    <Chapter title='Your comments' count={draft.comments.length}>
       {draft.comments.map((comment) => {
         const item = toCommentItem(comment);
         return (
@@ -173,78 +408,7 @@ function Comments({ task, selected }: { task: Task; selected: string | null }) {
           />
         );
       })}
-    </section>
-  );
-}
-
-function Walkthrough({ task, report }: { task: Task; report: WorkReport }) {
-  const sections = listReviewSections(report);
-  if (sections.length === 0) return null;
-  return (
-    <Panel title='Walkthrough' icon='IconCodeLines'>
-      <ol className='flex flex-col gap-4'>
-        {sections.map((section, index) => (
-          <li key={section.title} className='flex gap-2.5'>
-            <StepNumber index={index} />
-            <div className='flex min-w-0 flex-1 flex-col gap-2'>
-              <div className='flex flex-col gap-px'>
-                <InlineMarkdown text={section.title} className='font-medium text-fg-4 text-xs leading-5' />
-                <Markdown text={section.summary} className='text-fg-3 text-xs' />
-              </div>
-              {section.spots.map((spot) =>
-                spot.place ? (
-                  <ChangeSnippet
-                    key={spot.key}
-                    task={task}
-                    path={spot.place.file}
-                    start={spot.place.start}
-                    end={spot.place.end}
-                    why={spot.body}
-                    spot={spot.key}
-                    label={spot.tone === 'neutral' ? null : <ToneLabel label={spot.label} tone={spot.tone} />}
-                  />
-                ) : null
-              )}
-            </div>
-          </li>
-        ))}
-      </ol>
-    </Panel>
-  );
-}
-
-function AgentReview({ task }: { task: Task }) {
-  const reviewed = task.findings.length > 0 || task.reviewSummary !== null;
-  if (!reviewed && !hasStep(task, 'agent_review')) return null;
-  return (
-    <Panel title='Agent review' icon='IconEyeSparkle'>
-      {reviewed ? (
-        <div className='flex flex-col gap-1'>
-          {task.reviewSummary && <Markdown text={task.reviewSummary} className='text-fg-4 text-xs' />}
-          <p className='text-fg-3 text-xs'>{describeAgentReview(task.findings)}</p>
-          <p className='text-2xs text-fg-2'>A signal for you, never the approval.</p>
-        </div>
-      ) : (
-        <p className='text-fg-2 text-xs'>The agent review has not run yet.</p>
-      )}
-    </Panel>
-  );
-}
-
-function Checks({ report }: { report: WorkReport }) {
-  if (report.checks.length === 0) return null;
-  return (
-    <Panel title='Checks' icon='IconCheckCircle2'>
-      <ul className='flex flex-col gap-1.5'>
-        {report.checks.map((check) => (
-          <li key={check.name} className='flex min-w-0 items-center gap-2 text-xs'>
-            <CheckOutcomeIcon outcome={check.outcome} />
-            <code className='shrink-0 font-mono text-2xs text-fg-4'>{check.name}</code>
-            {check.detail && <Truncate className='text-2xs text-fg-2'>{check.detail}</Truncate>}
-          </li>
-        ))}
-      </ul>
-    </Panel>
+    </Chapter>
   );
 }
 
@@ -283,6 +447,7 @@ function EverythingElse({ task, report, diff }: { task: Task; report: WorkReport
           {dismissed.map((finding, index) => (
             <ReviewNote
               key={`${finding.file}:${finding.line}:${finding.message}`}
+              persistId={notPersisted('a finding card never folds')}
               item={{ ...toFindingItem(finding, index), key: `dismissed:${index}`, finding: null }}
               compact
             />
@@ -298,14 +463,14 @@ function ReviewSummary({
   task,
   gate,
   report,
-  items,
+  points,
   diff,
 }: {
   state: ShinsaState;
   task: Task;
   gate: Gate | undefined;
   report: WorkReport;
-  items: ReviewItem[];
+  points: ReviewItem[];
   diff: TaskDiff | null;
 }) {
   const added = diff?.files.reduce((total, file) => total + file.additions, 0) ?? 0;
@@ -319,14 +484,43 @@ function ReviewSummary({
       action={gate && <ReviewActions task={task} gate={gate} />}
     >
       {gate?.escalation && <p className='text-fg-3 text-xs'>{describeEscalationBody(gate.escalation)}</p>}
-      <p className='text-fg-3 text-xs'>{describeAttentionCount(items)}</p>
+      <p className='text-fg-3 text-xs'>{describePointCount(points)}</p>
       {!task.report && (
         <p className='text-2xs text-fg-2'>
-          The agent handed over no report, so Shinsa picked these places from the riskiest changes.
+          The agent handed over no report, so Shinsa marked the riskiest changes.
+        </p>
+      )}
+      {task.report && !report.walkthrough && (
+        <p className='text-2xs text-fg-2'>
+          The agent wrote no walkthrough, so the review is its marked points.
         </p>
       )}
     </NowFrame>
   );
+}
+
+function ReviewChapters({
+  task,
+  report,
+  chapters,
+  selected,
+}: {
+  task: Task;
+  report: WorkReport;
+  chapters: ReviewChapter[];
+  selected: string | null;
+}) {
+  return chapters.map((chapter) => {
+    if (chapter.id === 'built') {
+      return (
+        <HowItIsBuilt key={chapter.id} task={task} report={report} chapter={chapter} selected={selected} />
+      );
+    }
+    if (chapter.id === 'careful')
+      return <ReadCarefully key={chapter.id} task={task} chapter={chapter} selected={selected} />;
+    if (chapter.id === 'review') return null;
+    return <PointCards key={chapter.id} task={task} chapter={chapter} selected={selected} />;
+  });
 }
 
 export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
@@ -336,39 +530,86 @@ export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
     () => task.report ?? (diffValue ? resolveFallbackReport(diffValue, task.summary ?? task.title) : null),
     [task.report, task.summary, task.title, diffValue]
   );
-  const items = React.useMemo(() => listAttentionItems(report, task.findings), [report, task.findings]);
+  const chapters = React.useMemo(
+    () =>
+      listReviewChapters(
+        report,
+        task.findings,
+        task.reviewDisagreements,
+        listMergeSteps(task),
+        task.coverage ?? null
+      ),
+    [report, task]
+  );
+  const points = React.useMemo(() => listReviewPoints(chapters), [chapters]);
+  const stops = React.useMemo(() => listReviewStops(chapters), [chapters]);
   const selected = useSearchParam('spot');
+  const [request, setRequest] = React.useState(0);
+  const [current, setCurrent] = React.useState(selected);
+  const viewport = React.useRef<HTMLDivElement>(null);
   const gate = selectReviewGate(state, task);
+  React.useEffect(() => {
+    prepareReviewSnippets(points);
+  }, [points]);
+  React.useEffect(() => {
+    if (selected) setCurrent(selected);
+  }, [selected]);
+  const select = (key: string) => {
+    setCurrent(key);
+    setRequest((count) => count + 1);
+    updateSearchParams({ spot: key }, { replace: true });
+  };
   const step = (delta: ReviewStep) => {
-    const next = stepReviewItem(items, selected, delta);
-    if (next) updateSearchParams({ spot: next.key }, { replace: true });
+    const next = stepReviewItem(stops, current, delta);
+    if (next) select(next.key);
   };
   useReviewKeys(step);
-  useRegisterCommands([listReviewCommands({ taskId: task.id, count: items.length, step })]);
+  const holding = useHoldPointInView(report ? selected : null, request);
+  const lit = useSpotlight(selected, request);
+  useStopInView(viewport, stops, holding, setCurrent);
+  useRegisterCommands([listReviewCommands({ taskId: task.id, count: stops.length, step })]);
+  if (!report && diff.status === 'error') {
+    return (
+      <PageScroll>
+        <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
+          <p className='text-fg-2 text-xs'>{diff.message}</p>
+          <EvidenceSection state={state} task={task} showEmpty />
+        </div>
+      </PageScroll>
+    );
+  }
   if (!report) {
     return (
       <div className={cn(PAGE_COLUMN, 'flex items-center gap-2 py-5 text-fg-2 text-xs')}>
-        {diff.status === 'error' ? diff.message : <LoadingLine label='Reading the changes' />}
+        <LoadingLine label='Reading the changes' />
       </div>
     );
   }
   return (
     <div className='flex min-h-0 flex-1 flex-col'>
-      <PageScroll>
-        <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
+      {stops.length > 0 && (
+        <div className={cn(PAGE_COLUMN, 'shrink-0 pt-5 pb-1')}>
+          <PointIndex chapters={chapters} stops={stops} current={current} onSelect={select} />
+        </div>
+      )}
+      <PageScroll viewportRef={viewport}>
+        <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 pt-4 pb-5', stops.length === 0 && 'pt-5')}>
           <ReviewSummary
             state={state}
             task={task}
             gate={gate}
             report={report}
-            items={items}
+            points={points}
             diff={diffValue}
           />
-          <Attention task={task} gate={gate} items={items} selected={selected} onStep={step} />
-          <Comments task={task} selected={selected} />
-          <Walkthrough task={task} report={report} />
-          <AgentReview task={task} />
-          <Checks report={report} />
+          <EvidenceSection state={state} task={task} showEmpty />
+          <ReviewChapters task={task} report={report} chapters={chapters} selected={lit} />
+          <AgentReview
+            task={task}
+            chapter={chapters.find((chapter) => chapter.id === 'review')}
+            selected={lit}
+          />
+          <Comments task={task} selected={lit} />
           <EverythingElse task={task} report={report} diff={diffValue} />
         </div>
       </PageScroll>

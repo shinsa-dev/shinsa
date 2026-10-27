@@ -3,6 +3,7 @@ import {
   type CommandOf,
   isDelegatedRun,
   isTaskSettled,
+  resolveCurrentRound,
   type ShinsaCommand,
   type ShinsaEvent,
   selectStackTarget,
@@ -178,18 +179,18 @@ export class ToolCalls {
         break;
       }
       case 'complete_fix': {
-        const { summary } = assertProtocol(validateFixHandOver(input));
+        const handOver = assertProtocol(validateFixHandOver(input));
         await this.#commitThenDispatch(
           call,
-          { type: 'agent.complete_fix', runId, attemptId, summary },
+          { type: 'agent.complete_fix', runId, attemptId, ...handOver },
           dispatch
         );
         break;
       }
       case 'report_review': {
-        const { summary, findings } = assertProtocol(validateReview(input));
+        const review = assertProtocol(validateReview(input));
         this.#findCurrent(runId, attemptId);
-        await dispatch({ type: 'agent.report_review', runId, attemptId, summary, findings });
+        await dispatch({ type: 'agent.report_review', runId, attemptId, ...review });
         break;
       }
     }

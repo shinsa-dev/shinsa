@@ -32,6 +32,8 @@ import type {
   JudgementCall,
   PlanDocument,
   ReportCheck,
+  ReportWalkthrough,
+  ReportWalkthroughRevision,
   ReviewFinding,
   SuggestedTask,
 } from '../report/types.ts';
@@ -121,10 +123,23 @@ type AgentCommand =
       summary: string;
       spots: CodeSpot[];
       judgementCalls: JudgementCall[];
+      walkthrough?: ReportWalkthrough | null;
       treeHash?: string | null;
     }
-  | { type: 'agent.complete_fix'; runId: string; summary: string; treeHash?: string | null }
-  | { type: 'agent.report_review'; runId: string; summary: string | null; findings: ReviewFinding[] }
+  | {
+      type: 'agent.complete_fix';
+      runId: string;
+      summary: string;
+      walkthrough?: ReportWalkthroughRevision | null;
+      treeHash?: string | null;
+    }
+  | {
+      type: 'agent.report_review';
+      runId: string;
+      summary: string | null;
+      findings: ReviewFinding[];
+      disagreements?: { call: number; reason: string }[];
+    }
   | {
       type: 'agent.ask';
       runId: string;

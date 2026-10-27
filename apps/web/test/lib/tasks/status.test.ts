@@ -50,6 +50,66 @@ describe('gate glyphs and statuses', () => {
   });
 });
 
+describe('a merged task with steps left', () => {
+  it('says how many steps after the merge are left, in amber, until each is ticked', () => {
+    const step = {
+      when: 'post_merge' as const,
+      kind: 'migration' as const,
+      title: 'Migrate',
+      detail: 'd',
+      command: null,
+    };
+    const walkthrough = {
+      approach: 'a',
+      flow: 'f',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      steps: [step, { ...step, title: 'Deploy' }],
+    };
+    const phaseReports = [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }];
+    const pullRequest = createPullRequest({ number: 42, state: 'merged' });
+    const task = createTask({ id: 't', stage: 'merged', phaseReports, pullRequest });
+    const open = createShinsaState({ tasks: [task], gates: [gate({ type: 'post_merge' })] });
+    expect(resolveTaskStatus(open, task)).toEqual({ label: 'Post-merge · 2 steps left', tone: 'amber' });
+    expect(resolveTaskStatusIcon(open, task)).toBe('IconChecklist');
+    expect(resolveGateStatus(gate({ type: 'post_merge' }))).toEqual({
+      label: 'Post-merge',
+      tone: 'amber',
+    });
+    expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
+      label: 'Merged',
+      tone: 'neutral',
+    });
+  });
+});
+
+describe('a merge gate with steps before it', () => {
+  it('says how many steps before the merge are left, in amber, then that it is ready', () => {
+    const step = {
+      when: 'pre_merge' as const,
+      kind: 'env' as const,
+      title: 'Set A',
+      detail: 'd',
+      command: null,
+    };
+    const walkthrough = {
+      approach: 'a',
+      flow: 'f',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      steps: [step],
+    };
+    const phaseReports = [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }];
+    const { state, task } = withGate({ type: 'merge' }, { stage: 'awaiting_merge', phaseReports });
+    expect(resolveTaskStatus(state, task)).toEqual({
+      label: 'Pre-merge · 1 step left',
+      tone: 'amber',
+    });
+    const ticked = { ...task, mergeStepsDone: listMergeSteps(task).map((candidate) => candidate.key) };
+    expect(resolveTaskStatus(state, ticked)).toEqual({ label: 'Ready to merge', tone: 'green' });
+  });
+});
+
 describe('a proposed change', () => {
   it('is a purple decision to approve, like a plan', () => {
     expect(resolveGateGlyph(gate({ type: 'proposal' }))).toEqual({ icon: 'IconFileEdit', tone: 'purple' });

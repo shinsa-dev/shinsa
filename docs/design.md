@@ -14,7 +14,9 @@ Only these, and they win over anything below:
 
 1. **Font.** ABC Areal (variable) for everything, ABC Areal Mono for code. Read every mention of
    Manrope as ABC Areal and of Roboto Mono as ABC Areal Mono. The files are in
-   `packages/ui/src/styles/fonts` (Dinamo licence).
+   `packages/ui/src/styles/fonts` (Dinamo licence). ABC Areal Mono has no box-drawing glyphs and draws its
+   triangles two cells wide, so the family takes those two blocks (U+2500–257F, U+25A0–25FF) from Menlo, or DejaVu
+   Sans Mono, scaled to its 0.61em cell (`size-adjust` in `globals.css`): a text diagram keeps every column.
 2. **Accent.** One blue, `--primary-4` (`oklch(0.6 0.215 256)` light, `oklch(0.62 0.2 256)` dark), with
    a white label. Read every mention of teal as this blue. The chart's first series is the accent.
 3. **The primary button keeps a highlight.** `Button` `primary` (the default variant) and
@@ -103,7 +105,7 @@ Only these, and they win over anything below:
      glyph (`gap-1.25`) in `text-xs` medium `fg-4`, the meta in `text-xs` `fg-2` at the right. The Overview's
      `Panel` header (`CARD_HEADER`) is the same band, slot and 8px. A delegation's spawn card and the live card's
      row use the same band and slot. Inside a card, an icon that leads a row sits in the same 20px slot on the
-     same 12px inset (judgement calls, a delegation's question, the live feed), and a 20px tile (`StatusTile`
+     same 12px inset (an alternative in a review card, a delegation's question, the live feed), and a 20px tile (`StatusTile`
      `md`, `StepNumber`) is that slot: so the header's icon and every row icon under it share one centre.
    - **The role header** introduces a run as a chat line: the role's icon and its name in plain words as the
      label (from `RUN_ROLE` in `lib/chat/run-role.ts`: Agent `IconAgent`, Reviewer `IconShieldCheck`, Answerer
@@ -779,8 +781,7 @@ Only these, and they win over anything below:
       task rows, review findings, message links. A title next to its description on one line
       (⌘K rows, a section label and its count, "Waits on ‹task›") is 6px (`gap-1.5`).
     - **Numbered steps** are `StepNumber` (`components/layout/surface/step-number.tsx`): a 20px `bg-bg-a2` tile,
-      `rounded-control-sm`, in the plan, What changed, the chat's plan card and the review
-      walkthrough.
+      `rounded-control-sm`, in the plan, What changed and the chat's plan card.
     - **Task actions** have one source, `lib/tasks/actions.ts` (`TASK_ACTION`: label and
       icon). The task page's `•••` menu, the All tasks context menu (`TaskActionItems` in
       `components/task/action-items.tsx`) and ⌘K's
@@ -1023,11 +1024,12 @@ Only these, and they win over anything below:
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
       same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes
       "Or write your own answer."
-    - **Review verdicts** (`finding-verdicts.tsx`): each finding is a row (severity in
-      `red-text` or `fg-2`, the file as a mono chip, the message) with a Fix / Dismiss `Choice`
-      at the right; blocking findings start on Fix. The primary action follows the verdicts:
-      "Fix 2 findings" while any is kept (it also sends your drafted line comments, and its tooltip
-      says so), Approve changes when all are dismissed. The activity lists the comments a decision
+    - **Review verdicts** (`finding-verdicts.tsx`): each finding opens on `NoteHead` (34, The review card): a
+      full-width row with the severity in `red-text` or `fg-2` (the file as a mono chip when there is no snippet) over
+      the title on the left and the Fix / Dismiss `Choice` on the right, then the message, the file row and the
+      suggested fix full width below; blocking findings start on Fix. The primary action follows the verdicts:
+      "Fix 2 findings" while any is kept (it also sends your drafted line comments, and its tooltip says so, 13),
+      Approve changes when all are dismissed. The activity lists the comments a decision
       sent under it, each with its place (`activity-row.tsx`). An escalated
       review titles the card "The agents could not settle the review", or "The fix changed nothing and
       the same findings came back" when a round left the code as it was, and says why
@@ -1071,7 +1073,7 @@ Only these, and they win over anything below:
       operation, so the task is answering, researching, investigating or operating), the next hand-over replaces the
       result, so it shows nowhere on the Overview until then; the chat still has it, right above the follow-up. Only
       the round carrying on to its next step (the diagnosis while the fix builds) keeps it as a `ResultPanel`. A kind of task without a build step (answer, investigation,
-      research, operation) has no Summary, What changed or Judgement calls panels, and its Code tab is Files alone (the
+      research, operation) has no Summary or What changed panel, and its Code tab is Files alone (the
       repository at its default branch, 32); find and fix gets Review and Changes once it builds. A finished answer, investigation or report keeps the composer, for a follow-up the
       same agent answers.
     - **No strip until the steps are settled.** While triage has not chosen the kind of task, or the agent of a
@@ -1089,7 +1091,7 @@ Only these, and they win over anything below:
       and a 1280px one; each folded step keeps its label in its tooltip.
     - **A proposed change** (`ChangeCard` in `now-card.tsx`, on `NowFrame`): the eyebrow names who proposes it ("The
       investigation proposes a fix", "The answer proposes a change", "The report proposes a change"), the title is
-      the gate's question, then the why and, on the inner `bg-bg-a1` block, "What it would change" with the request.
+      the gate's question, then the why and, on an inset note, "What it would change" with the request.
       Make it a change (primary) at the top right, and the footer's quiet "Keep it as an investigation" (an answer,
       a report). Both are gate replies in `lib/tasks/gates.ts` (`makeChange`, `keepAsIs`), and ⌘K offers the same two.
       Your OK in composed steps is the same card (`describeChangeGate`): the eyebrow says the result is in ("The
@@ -1549,7 +1551,7 @@ Only these, and they win over anything below:
       already say them. `?tab=chat&run=` scrolls straight to the run, whatever round it is in, since nothing is
       folded away.
     - **The Overview shows the current round**: every card is the current round's, and a Rounds `Panel` sits under
-      the current round's content (after What changed and Judgement calls, before Activity), never above the answer.
+      the current round's content (after What changed, before Activity), never above the answer.
       It lists the earlier rounds and the rounds waiting to start, each a `RoundHeader` row: the round icon as a
       20px `StatusTile` in the round's tone, "Round 3" (medium `fg-4`), its title (`fg-3`, `Truncate`), its status
       in its tone (`text-2xs`), the chevron, then at the right its pull request (a `PrLink`-style tile and `#N`, its
@@ -1656,7 +1658,12 @@ Only these, and they win over anything below:
       → Code tab). A tree row acts on the mouse press, not the release (a file opens, a folder opens or closes;
       touch and the keyboard still act on the click), and nothing in the Code tab animates: hover and selected
       backgrounds, the indent guides, the chevrons and the kit's buttons inside it change in the frame they are asked
-      to (`INSTANT` on the workbench turns every transition off). A file is read before you click it: hovering a row
+      to (`INSTANT` on the workbench turns every transition off). The one exception is a tab indicator: the kit
+      marks every `Tabs` indicator `data-motion="move"` and `INSTANT` skips it, so the explorer's Changes / Files and
+      a finding's Fix / Dismiss (`FindingVerdictChoice`) slide with the kit's movement duration, exactly as the task
+      tabs' does, while their colours stay instant. `INSTANT` names the transitions of `::before` and `::after` with
+      `[&_*::before]`, never the `before:` variant, which also gives every element an empty `content` box: in a flex
+      row that box is an item, and it pushed the explorer's header apart (2026-10-26). A file is read before you click it: hovering a row
       for 40 ms (`useHoverIntent`) or focusing it reads it (both sides of a changed file) and tokenizes it in the
       worker, in side by side builds the file's pair of editor states when the browser is next idle
       (`EditorSession.prefetchPair`), so a first side-by-side view costs what a revisit does, and opening a file reads the two files after it and the one before when the browser is next idle
@@ -1686,9 +1693,21 @@ Only these, and they win over anything below:
       exists; its hint says whether there are uncommitted edits), Base, and every earlier commit by its subject, each
       with its short id as the hint. The ref is the "after" side of everything: the trees, the files, the search and
       the diffs (base against it).
-    - **Spots and findings in the code.** A spot's lines carry a 2px bar in its attention tone, and the `spot` in the
-      URL (a link from the Review tab) washes that spot `primary-a1` and scrolls to it. There is no walkthrough here
-      and no Previous spot / Next spot: stepping through what needs you is the Review tab's (34).
+    - **Spots and findings in the code.** A spot's lines carry a 3px mark in its attention tone (Critical red, Read
+      carefully amber, Context `fg-2`) in a gutter of their own left of the line numbers (`cm-spotGutter`,
+      `lib/code/editor/annotations.ts`); hovering it names the attention and why ("Read carefully: …") in the app's
+      `Hint` tooltip, beside the mark and following the pointer down it (never the browser's `title`: each drawn
+      mark is handed to `SpotHintRegistry`, `lib/code/editor/spot-hints.ts`, and the editor renders a `Hint` into
+      it), and a line two spots share takes the stronger tone and both reasons, one to a line. The code itself carries only the diff's own marks (below),
+      so a coloured bar on a line of code always means added (green) or removed (red). The `spot` in the URL (a link
+      from the Review tab) washes that spot `primary-a1` and scrolls to it. There is no walkthrough here and no
+      Previous spot / Next spot: stepping through what needs you is the Review tab's (34).
+    - **A link to a file and line opens it there** (`FileLink`, the review's snippets, the chat's file references,
+      the Overview's finding cards: all `resolveCodePath`). The Code tab opens on that file, whatever file it had open
+      and whether or not it was opened before (a kept tab never puts back the file it last showed over the one the
+      address names, `hasFileInAddress`), scrolls the line to the centre, opening any fold over it (in side by side
+      both sides' folds, `revealSplitLines`), and washes the line or range `primary-a3` for 2 s
+      (`FOCUS_FLASH_MS`), then leaves it `primary-a1` while the file stays open.
     - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
       each file with a red risk dot with its reason, your comment count, the diff counts (or Binary), its status
       letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
@@ -1783,10 +1802,14 @@ Only these, and they win over anything below:
       cursor, so the arrow keys step over a fold (`lib/code/editor/collapsed.ts`, a transaction filter that moves a
       cursor landing in a folded block widget past it in the direction it was going; a selection or an edit is left
       alone). Each side scrolls sideways on its own: its line numbers stay pinned at its left on the page background
-      and the code slides under them, while the fold labels and the notes under lines follow the scroll
-      (`--scroll-left`), so they stay in view. A file added or deleted whole has one side only, so side by side shows
+      and the code slides under them, while the fold labels and the notes under lines stay beside the gutter. They
+      are block widgets in the editor's content, `position: sticky` at the gutter's width (`--cm-gutter-width`,
+      measured when the editor's geometry changes, never on scroll; `pinBlocksToGutter`) and as wide as the visible
+      side, so they move with the text in the same frame, vertically and sideways, and never widen what the side
+      scrolls over: a side scrolls as far as its code and no further. A file added or deleted whole has one side only, so side by side shows
       that side at the full width (the unified view, no empty half) and the layout toggle is hidden for it
-      (`hasOneSide`). A binary file shows nothing as text, and an image before and after on a checkerboard; a file
+      (`hasOneSide`). Below `md` (a phone or a narrow window) every diff is unified and the toggle is hidden, since two
+      columns of code do not fit. A binary file shows nothing as text, and an image before and after on a checkerboard; a file
       over 2 MB says its size and that it is too large to show as text. A file over 1 MB, or with a line over 10,000
       characters (a minified bundle), stops before the editor with "Opening this file may slow the page", the reason
       ("‹path› has a line of 900,000 characters, too long to show as text.") and Open anyway (`resolveTextGuard`).
@@ -1810,13 +1833,18 @@ Only these, and they win over anything below:
       into the round's next commit, and the agent hears which files you edited (`docs/engine.md` → Your edits).
     - **Inline.** Findings sit under their last line as the review card (`ReviewNote`, 34) in its compact form: the
       author (Agent review), the tone (Blocking red, Suggestion amber), the title, the message as markdown and the
-      suggested fix, with no snippet or place (the line above is the place). Each spot's lines carry a 2px bar in its
-      attention tone and the selected one the `primary-a1` wash. At a review or
+      suggested fix, with no snippet or place (the line above is the place); at a review gate the row of its label and
+      title carries the same Fix / Dismiss `Choice` on its right as the Review tab and the Overview (`NoteHead`,
+      `components/review/verdict-choice.tsx`, on the
+      one review draft, so a verdict set anywhere shows everywhere). Each spot's lines carry their mark in the spot
+      gutter (above) and the selected one the `primary-a1` wash. Every note is rendered by React into an element
+      the session keeps per note (`SlotRegistry`), and the editor's block widget only moves that element in and out,
+      so a note scrolled back into view is already drawn at its height and nothing trails the scroll. At a review or
       merge gate a click on a line number opens a comment box under it (on the selected lines when the click is in a
       selection); a removed line's number does the same for the removed line, and its comment sits under the removed
       block. A comment is kept per gate in localStorage, anchored to the commit it was
-      made at, and goes with Request changes. Saved, it is the same compact card, authored You, its lines as the
-      label, with Remove at the right. A comment is words only; to change the code, edit it (above). The comment
+      made at, and goes with Request changes. Saved, it is the compact review card with its header bar (34),
+      authored You, its lines as the tag, with Remove at the right of the bar, and folds from the bar. A comment is words only; to change the code, edit it (above). The comment
       box and every note under a line are at most 36rem wide and never wider than the side they sit in less its
       gutter (`100cqw - 6rem`, each editor being its own inline-size container), so a box for a long selection wraps
       inside the visible pane instead of running off it.
@@ -1875,8 +1903,7 @@ Only these, and they win over anything below:
     stays CodeMirror 6, its merge view included: it edits, finds, goes to a line, folds and
     holds a 10k-line file, which a diff renderer does not. Every small diff anywhere else goes through one wrapper,
     `CodeDiff` (`components/text/code-diff.tsx`), on `@pierre/diffs` (diffs.com): the chat's Edit and Write rows
-    (a write is a new file, every line added), the spots in a phase hand-over card and on the Overview's What
-    changed, and a review finding's code (in the chat's review card and the fix gate's findings). Never hand-build `+`/`−` rows or a second diff renderer.
+    (a write is a new file, every line added), the spots in a phase hand-over card, the Review tab's points (34) and a review finding's code (in the chat's review card and the fix gate's findings). Never hand-build `+`/`−` rows or a second diff renderer.
     - **Lazy.** `CodeDiff` itself is a few lines in the entry bundle; the library loads with
       `components/text/code-diff-view.tsx` the first time a diff is shown (its own chunk, about 81 KB gzipped, and
       the Shiki grammars it shares with the code fences), and the language's grammar is loaded before the first
@@ -1898,7 +1925,7 @@ Only these, and they win over anything below:
       you open it. Its header (28px) is the file's icon, path and lines, and a click anywhere on it but the place folds
       it, the chevron box 3px from the top, bottom and end; on a task with a repository that place is a link that
       opens the Code tab at those lines (with the spot, so the Code tab washes it; "Open in Code" on hover), and it can
-      lead with a label (the attention of a walkthrough spot). Open, open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
+      lead with a label (a spot's attention). Open, open, it shows the task's diff (base against head) narrowed to the hunks around those lines with
       two lines of context (`narrowHunks`), the lines themselves washed `primary-a1`; when the change does not reach
       them, the file at the head around them as unchanged lines (`createContextHunk`). A finding's place is its
       header, so a finding with a snippet drops its place chip. A blocking finding's snippet starts open
@@ -1918,43 +1945,189 @@ Only these, and they win over anything below:
     know, every important point marked; forty or fifty points on a large change is normal. It reads top to bottom as a
     document in the same centred column, never a split with a file list:
     - **What the change does.** A `NowFrame`: the status and the diff counts as the eyebrow, the report's headline as
-      the title, and how many places need you ("3 places need your attention, the most critical first."). The
-      decision sits at its top right exactly as on the Overview's now card (`ReviewActions`,
-      `components/overview/review-actions.tsx`, shared by both): Approve changes, or Fix N findings once you keep any,
-      or Merge #N at the merge gate; Request changes stays ⌘K's. The Fix / Dismiss verdicts and your line comments
-      live in the review draft (`ReviewDraftProvider`), so the Overview, the Review tab and ⌘K always agree. Without
-      a report the places come from the riskiest changes and a quiet line says so.
-    - **Needs your attention**, most critical first (`listAttentionItems`): blocking findings, critical spots, spots to
-      read carefully, suggestions, then judgement calls. Each is one review card (`ReviewNote`), with Previous place /
-      Next place (`icon-xs`) at the heading's right. A spot on the same lines as a finding folds into that finding's
-      card ("The agent marked these lines") instead of showing the same code twice. Your saved line comments follow
-      under "Your comments", each with Remove.
-    - **The review card** is how every review comment looks, anywhere: a `CARD` whose 36px header band carries the
-      author's icon and name (Agent review `IconEyeSparkle`, Agent `IconAgent`, You `IconBubbleText`), the tone as a dot
-      and label (Blocking and Critical red, Suggestion and Read carefully amber, Judgement call purple, your comment
-      blue with its lines), the section it belongs to in `fg-2`, and at the right the action (Fix / Dismiss at a
-      review gate, Remove for a comment). Under it: the title (`text-xs` medium `fg-4`), the message as markdown
-      (inline code, smart links to tasks, pull requests, files and branches through the shared reference
-      components), the change snippet of its exact lines open (the header a link into Code at those lines), and the
-      suggested fix on a `bg-a1` block headed "Suggested fix" (`IconBandage`). The selected card has a 2px
-      `primary-a3` outline 2px outside it and scrolls into view. In the Code tab the same card is compact: no snippet
-      and no place (32).
-      The chat's review card and the Overview's finding verdicts (`FindingText`) show the same parts in their
-      smaller row: severity, title, message, snippet and suggested fix.
-    - **Walkthrough**: a panel with the report's sections numbered, each title and summary over its spots as change
-      snippets, folded, the critical and read-carefully ones labelled with their tone.
-    - **Agent review**: the reviewer's summary in its own words, what it found ("Found 1 blocking finding and 2
-      suggestions.") and "A signal for you, never the approval."; "The agent review has not run yet." before it ran.
-    - **Checks**: each check the agent ran with its outcome mark and detail.
-    - **Everything else**, collapsed: the changed files nothing above points at, each a file link with its counts,
-      and the findings you dismissed in earlier rounds, compact.
-    - **Stepping.** The place you are on is `?spot=` in the URL (the same keys the Code tab uses: `0:1` a spot,
-      `finding:0` a finding, `call:0` a judgement call, `comment:<id>` your comment), so a link opens the Review tab on
-      that card. J and K step to the next and previous place while the Review tab is open and you are not typing
-      (`hooks/use-review-keys.ts`, `lib/review/keys.ts`), each also a ⌘K command (Next place to check, Previous place
-      to check) with its key; this and the Code tab's keys are the only exceptions to ⌘K being the one shortcut.
-    - **Links in.** The Overview's Review and What changed's link, ⌘K's Review the changes, a task link's action and
-      the queue's Review changes open `?tab=review`.
+      the title, and how many points it marks and which matter most ("40 points to read, 1 blocking, 4 critical, 10
+      judgement calls, 2 disputed by the agent review."). The decision sits at its top right exactly as on the Overview's now
+      card (`ReviewActions`, `components/overview/review-actions.tsx`, shared by both): Approve changes, or Fix N
+      findings once you keep any, or Merge #N at the merge gate; Request changes stays ⌘K's. The Fix / Dismiss verdicts
+      and your line comments live in the review draft (`ReviewDraftProvider`), so the Overview, the Review tab, the Code
+      tab's inline cards and ⌘K always agree. Without a report the points come from the riskiest changes, and without a
+      walkthrough the review is the marked points; a quiet line says which.
+    - **Evidence, before the code** (`components/evidence/`, `lib/evidence/`, since 2026-10-26). Right under it, an
+      **Evidence** `Panel` (`IconImages1`, the count of items after the title) shows what the agents attached this round
+      (`docs/engine.md` → Evidence) as items grouped by kind, each group under a `SectionLabel` naming its kind
+      (Comparison, Recording, Screenshot, Test run, Check run, Note, Preview; plural with the count beside it when the
+      group has more than one), in that order (`resolveEvidenceLayout`, from core's `listEvidenceItems`). A comparison
+      is one item: its title and facts ("1280px · Dark"), what to look at, then its parts side by side (three across
+      from `sm` when it has more than two), each labelled Before, After or its state. One view shot in light and in dark
+      is one comparison too, its parts labelled Light and Dark and its facts the width alone ("1280px"), since its parts
+      differ in theme. Recordings and screenshots sit in
+      a two-column grid (one below `sm`), each with its title, facts and what to look at; a lone screenshot shows no
+      stage, since it has no before. A test or check run reads as its result: a bordered list of each command it ran
+      (`lib/evidence/runs.ts`: a `$ ` line starts a command, else the first line is the command), each with the check
+      glyph (`CheckOutcomeIcon`) and its counts ("2 pass, 0 fail") or, without counts, Passed or Failed; the raw output
+      stays behind Show the output (`secondary` `xs`, chevron) in the caption's trailing slot. The checks Shinsa ran
+      itself are a Check run titled "Checks run by Shinsa: …" (`docs/engine.md` → Evidence). A note is markdown
+      (`IconNote1` in its caption): the shared `Markdown` renderer, `text-xs` in an `INSET` (`px-3.5 py-2.5`), so its
+      tables, lists, code and smart links (a file, a task or a pull request in the reference syntax, 8) read as they
+      do everywhere else. A run whose text names no command is a code block (`CodeFence`, monospace, copy on hover, at
+      most 320px tall and scrolling inside); a preview is a link row. Last, a line with where the files are on disk ("Stored in ~/…/evidence/<task>/round-1",
+      `IconFolder1`, a copy button), from the data folder `/api/health` reports. Every thumbnail is a 16:10 frame
+      (`object-contain`, `bg-bg-2`, a 1px border so a dark shot keeps its edge on a dark card); a click opens the
+      image viewer on it, whose arrows step item by item ("1 of 4") and whose bar switches Before and After inside a
+      comparison. A recording's frame shows its first frame (muted, metadata preloaded) under a round play glyph, and
+      plays only in the viewer, with its controls (the server answers byte ranges so it seeks). An item the reviewer
+      attached carries a purple "From the agent review" badge: evidence from outside the author. With nothing
+      attached, the panel says so ("No screenshots, recordings or test runs were attached this round. Request changes
+      to ask the agent for them."), so a missing proof is visible, not silent. 20px between groups, 4px from a group's
+      label to its items. When the task has no work report and its changes cannot be read (a merged branch that was
+      cleaned up), the tab says so in one quiet line and still shows this panel under it, since the Overview points
+      here with one line that counts the items by kind ("1 comparison, 1 recording and 2 test runs in the review",
+      `describeEvidenceSummary`).
+    - **Reading order, by context.** The chapters follow how you come to understand a change: **How it's built**
+      (Approach, How it works, How to test, then **Pre-merge steps** and **Post-merge steps** when the agent left
+      steps for you), **Key code** (the spots marked Context), **Judgement calls**, **Read carefully** (the Critical
+      and Read carefully spots, then the risks), then the **Agent review**. Each
+      chapter with more than one block opens with a `SectionLabel` (its count beside it) 4px over its cards, 8px between
+      cards, 20px between chapters, as on the Overview (`listReviewChapters` in `lib/review/report.ts`).
+    - **Every point, pinned.** One compact line stays fixed above the scrolling column
+      (`components/review/point-index.tsx`): a card whose only content is a `Panel` header band (36px, `IconListBullets`,
+      "Every point" and the count right after it, the box chevron at the right). While you read it says where you are:
+      "12 of 40 · Judgement calls · the point's title", or the chapter and section name on a part of the walkthrough
+      (How it's built · Approach). The point in view is the last one whose top passed a line 48px under the top of the
+      scroller, or the last in view once the page is scrolled to its end (`resolveStopInView`); a jump holds its point
+      in place for a moment and the line takes over again once you scroll. The line has one edge, the card's border, and
+      the popover one edge, its ring, as every popup (Shape & depth). A click opens the whole index as a popover the
+      width of the line, over the content so nothing moves: grouped by chapter, each chapter labelled, one 28px row each
+      (its number, its tag as a dot and label, its title or first sentence, its place `path:lines` from `md`), the walkthrough
+      parts as unnumbered rows that carry their panel's icon (`REVIEW_PROSE_ICON`: Approach `IconLightbulbGlow`, How it
+      works `IconLayersThree`, How to test `IconTestTube`, Pre-merge `IconChecklist`, Post-merge
+      `IconMerged`, 14px) in the number's 20px slot, right-aligned like the numbers, the point you are on carrying the shared highlight (`HoverHighlight`, which rests on it
+      and slides to the row you point at) and scrolled into view. A row jumps there and
+      closes the list. There is no sidebar and no Previous / Next button: J and K and ⌘K step.
+    - **Section cards everywhere.** Approach, How it works, How to test, Pre-merge steps, Post-merge steps, the risks
+      and the agent review are each a `Panel`
+      (the Overview's: `CARD_HEADER` band, icon slot, title, count right after the title, `DisclosureHeader` with the box
+      chevron), never loose text under a heading.
+      - **Approach** and **How it works**: the agent's walkthrough as prose, the idea and structure of the change, then
+        the flow of data and control through the new code, with a text diagram in a code fence (a tree, or boxes and
+        arrows) whenever the change has structure or a flow worth drawing; every seeded review has one. A fence drawn
+        with box-drawing lines (`isTextDiagram` in `lib/code/highlight.ts`) is set on a 14px line (`leading-3.5`) so
+        its vertical lines join; like every fence it never wraps and scrolls sideways inside the block. Every code
+        block (`CodeFence`: markdown fences in the chat, the Review tab and review cards, diagrams, evidence text, the
+        How to test commands and the steps around the merge; and the chat's tool-call blocks) is one `CodeBlock`
+        (`components/text/code-block.tsx`): `bg-bg-2` with the hairline `border-border` every card has, so it keeps its
+        edge on a card in both themes. `CodeBlock` owns **one corner** for everything a block offers, as Buzzkit's
+        code block does: Copy, and **Run in terminal** after it, both `secondary icon-xs` buttons side by side on one
+        surface of its own (the block's `bg-bg-2`, a hairline `border-border`, `rounded-control`). Run in terminal
+        (`IconConsole`) is there only on a command meant to be run: a fence marked `run` after its language
+        (```` ```bash run ````, or `sh`, `zsh`, `fish`, `shell`, `console`; in `console` only the `$` lines count),
+        How to test's commands and the steps around the merge, in agent prose, notes, the chat and the Overview alike.
+        The mark is read from the fence's info string (`isRunnableFence` in `lib/code/block.ts`, the `meta` the
+        markdown keeps beside the language), never shown and never changes the highlighting. A plain
+        ```` ```bash ```` fence, or a block that only opens on a `$ ` prompt, is an example and has Copy alone; the
+        house rules and the `handover` and `review` skills teach agents the mark. The
+        task page provides the runner (`TaskCommandRunner`, `components/task/command-runner.tsx`) only when the task
+        has a folder to open a terminal in (`selectTaskTerminal`, the check `openTaskTerminal` makes), so a block
+        with nowhere to run has Copy alone; the chat's tool-call blocks are a record of what the agent ran and keep
+        Copy alone too. Its delayed tooltip is "Run in terminal" over the folder it runs in; pressing it opens a
+        terminal in the task's folder and runs the command, and nothing runs without it. Copy and Run both drop a
+        leading `$ ` prompt (`resolveBlockCopy`, `resolveBlockCommand` in `lib/code/block.ts`), on an example as on a
+        runnable block. **Where the corner
+        sits** follows the block's logical lines (`resolveCodeCorner`; a block never wraps, it scrolls, so its lines
+        are its text's): beside a single line it is centred at the right edge, in the block's own row, so the line
+        ends before it and never runs under it, even scrolled; on several lines it stays in the top-right corner, 6px
+        from the top and end, with a 12px fade from the code into its surface on its left, so code scrolling under
+        it never shows through behind the buttons. Either way the corner appears on hover, when a button has
+        keyboard focus (`has-[:focus-visible]`, a reveal, not a focus mark) and always on touch
+        (`pointer-coarse:`). Copy waits `TOOLTIP_DELAY` like every tooltip and flips to Copied, through
+        `useCopyText`. `/ui` shows the two side by side: runnable blocks (one line, several lines, and one where
+        nothing can run it) and examples (a plain ```` ```bash ```` fence, a `$ `-prompted block and code).
+      - **Key code**: the Context spots of every phase in plan order, each a review card: its title in the header,
+        how the code works in plain words (`explain`), "Why it matters" in the spot's tone (the risk), and the change snippet of its exact
+        lines, open. The phase it belongs to is the card's section. A spot without an explanation shows its why as the body.
+      - **Judgement calls**, more important than the code: each call a card (Judgement call, purple) headed by its
+        title (a few words naming the decision), then the call itself and the reason,
+        "Also considered" listing each alternative and why it was rejected, and the snippet of its lines. When the agent
+        review would have decided otherwise the card is Disputed (orange) and carries "The agent review disagrees" with
+        its reason on an orange inset note (`orange-a2` on the inset's hairline), so you read both sides in one place.
+      - **Read carefully**: the Critical and Read carefully spots as review cards, then the **Risks and edge cases**
+        panel: each risk the agent named as a row with its title, the risk and its snippet, the row you are on washed `primary-a1`.
+      - **How to test** (`components/review/testing.tsx`, `TestingPanel`): two parts, each under a quiet `text-2xs`
+        label, and never a checklist. **Covered by tests**: the agent's one or two lines on what the tests cover, as
+        plain text, then one line on the checks ("All 4 checks passed. The Overview lists each check."); the checks
+        themselves are the Overview's. Under them, when the checks measured it, the changed-line coverage in one
+        `fg-2` line ("85% of changed lines are covered (36 of 42) · 2 files have uncovered lines.", or "All 42 changed
+        lines are covered.") and a quiet `text-2xs` toggle, Show 3 files, that opens the files: each a `FileLink`, "10
+        of 14 lines" and, when some are missed, "Not covered:" with each range a `FileLink` into Code at those lines
+        (`lib/coverage.ts`). Nothing at all when coverage is off, could not be measured or no changed line runs as
+        code. **Try it yourself**: the steps to try in order, each a `StepNumber` with the
+        action (Markdown, so its smart links work), its target, and "You should see" over what you should see. A target
+        renders by its kind (`resolveTestTarget`, `lib/review/testing.ts`): a web address (`http` or `https`) is a link
+        that opens in the browser, with `IconGlobe`; a file is a `FileLink` into the Code tab at its lines (`path`,
+        `path:12-20` or a `shinsa://file/` reference); a command is a shell `CodeFence` with Copy and Run in terminal
+        in its corner, as every command in a task has; a screen, and an address or file that cannot be read, is
+        plain text with its icon. The panel shows when the walkthrough has either part, there are checks or coverage was measured. It sits in
+        How it's built, after How it works.
+      - **Pre-merge steps** and **Post-merge steps**: the steps around the merge as checklists (Steps around the
+        merge, 12), each panel's count beside its title; you
+        tick them here as on the Overview.
+      - **Agent review**: one panel with the reviewer's summary in its own words, what it found and "A signal for you,
+        never the approval.", then each finding's card (`rounded-lg`, nested) with Fix / Dismiss at a review gate, the
+        shared `FindingVerdictChoice` (`components/review/verdict-choice.tsx`) the Overview's finding verdicts and the
+        Code tab's inline cards use too; "The agent review has not run yet." before it ran. Its `VerdictChoice` is the
+        same control on a value and `onValueChange`, without the draft or the connection, which `/ui` shows.
+    - **Snippets are the marked lines.** A snippet shows the lines a point marks and two rows around them, not the whole
+      hunk: a long removal before replaced lines shows only as many removed lines as the point marks new ones, plus two
+      (`narrowHunks` in `lib/code/diff-view.ts`); a pure removal shows whole.
+    - **Your comments**, each with Remove; then **Everything else**, collapsed: the changed files nothing above points
+      at, each a file link with its counts, and the findings you dismissed in earlier rounds, compact.
+    - **Every point once.** A point appears in one chapter only; there is no separate attention list, no phase
+      walkthrough (What changed is the Overview's) and no checks list.
+    - **The review card** is how every point and every review comment looks, anywhere: a `CARD`
+      (`components/review/note.tsx`, `ReviewNote`) in one of two variants, picked by what it is (`isFindingItem` in
+      `lib/review/report.ts`: a finding is the one the agent review wrote).
+      - **A point or a comment** (key code, a judgement call, a Read carefully spot, your comment) opens on a header
+        bar: the 36px `bg-bg-a1` band (`DisclosureHeader`, `strip='band'`, box chevron at the right, as a `Panel`)
+        with the author's icon in its icon slot (Agent `IconAgent`, You `IconBubbleText`; `REVIEW_AUTHOR_ICON`), then
+        what the card is (`text-xs` medium `fg-4`, `resolveNoteHeading`): on the agent's points (key code, a judgement
+        call, a Read carefully spot, a risk) their short title, never an "Agent" label, since every point is the
+        agent's; an author's name only where it tells two authors apart, "You" on your comment (and "Agent review" on
+        a finding's label line). Then the tag as a dot and label, the section it belongs to (`text-2xs`
+        `fg-2`, truncated), and the action at the right before the chevron (Remove for a comment). The whole bar folds
+        the card to the bar alone ("Collapse judgement call"); a click on the action does not. Every card starts
+        open and remembers a fold (`task:<id>:review:card:<point>`, 40), and a card you jump to (J and K, the
+        index, `?spot=`) opens again. Under the bar, 12px in: a judgement
+        call's call (`text-xs` medium `fg-4`), then the body as markdown (`fg-3` under the call, `fg-4` without).
+      - **A finding** (Blocking, Suggestion, a dismissed one in Everything else) has no bar. It opens on the head every
+        finding has (`NoteHead`, `components/text/note-head.tsx`, the Overview's too): one full-width row,
+        `justify-between`, with the label line (`text-2xs`: Agent review in `fg-2`, the tag as a dot and label) and
+        the title (`text-xs` medium `fg-4`) stacked on the left and Fix / Dismiss on the right at a review gate,
+        aligned to the row's top, then the body full width. It does not fold, so the verdict is always in view.
+      Both then show, full width: Why it matters, Also considered, the disagreement, the change snippet of its exact
+      lines open (the header a link into Code at those lines, with the point's key), and the suggested fix on an inset
+      note headed "Suggested fix" (`IconBandage`); the body's markdown has inline code and smart links to tasks, pull
+      requests, files and branches through the shared reference components. The card you jump to has a 2px
+      `primary-a3` outline 2px outside it and scrolls into view; on the Review tab the outline (and a risk row's
+      `primary-a1` wash) holds 1.5s and fades over 500ms (`useSpotlight`, `hooks/use-spotlight.ts`, the hold the chat's
+      jumped-to run uses), while `?spot=` keeps the place. In the Code tab the same card is compact: no snippet and no
+      place (32). The chat's review card and the Overview's finding verdicts (`FindingText`) show a finding's parts on
+      the same `NoteHead`, with the severity as the label line. There is one finding layout with Fix / Dismiss, never a
+      variant with the toggle in a header band; /ui shows both variants (Review: a point, a finding, your comment, and
+      both inline in the Code tab).
+    - **Instant.** Nothing on the tab waits on a read it could have made earlier: the snippets are slices of the task's
+      diff the tab already holds, and prefetching a task (on hover and at idle, 36) loads the diff view and the
+      grammars of every point's language (`prepareCodeDiff`), so switching to Review paints every snippet in the first
+      frame.
+    - **Stepping.** The point you are on is `?spot=` in the URL (the keys the Code tab uses: `0:1` a spot, `call:0` a
+      judgement call, `risk:0` a risk, `finding:0` a finding, `comment:<id>` your comment; `approach`, `flow` and
+      `testing`, `pre_merge` and `post_merge` the walkthrough's parts), so a link opens the Review tab on that card, and a snippet's link opens the Code
+      tab on the same key, marked there like a spot (`listReviewTargets` marks judgement calls and risks with lines too).
+      J and K step to the next and previous stop in reading order, from the one in view, walkthrough parts included,
+      while the Review tab is open and you are not typing (`hooks/use-review-keys.ts`, `lib/review/keys.ts`), each also a ⌘K command (Next point, Previous
+      point) with its key; this and the Code tab's keys are the only exceptions to ⌘K being the one shortcut.
+    - **Links in.** The Overview's Review button and What changed's Read the review, ⌘K's Review the changes, a task
+      link's action and the queue's Review changes open `?tab=review`, and a chat hand-over (a phase or a fix) that
+      carries a walkthrough ends with one line, Read the walkthrough, linking there.
 
 35. **Getting around is instant** (`root.tsx`, `routes/task/index.tsx`, `lib/kept-views.ts`, `hooks/use-idle.ts`;
     measured in `docs/performance.md` → Shell and navigation). A click paints its page in the next frame or two,

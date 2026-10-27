@@ -2,6 +2,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ReviewNote } from '@/components/review/note.tsx';
+import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
 import { notPersisted, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
@@ -89,7 +90,17 @@ export function CodeNoteView({
   onSave: (text: string) => void;
   onCancel: () => void;
 }) {
-  if (note.kind === 'finding') return <ReviewNote item={note.item} compact className={NOTE_WIDTH} />;
+  if (note.kind === 'finding') {
+    return (
+      <ReviewNote
+        persistId={notPersisted('a finding card never folds')}
+        item={note.item}
+        compact
+        className={NOTE_WIDTH}
+        action={task && <FindingVerdictChoice task={task} finding={note.item.finding} />}
+      />
+    );
+  }
   if (note.kind === 'comment') {
     return (
       <CommentNote comment={note.comment} onRemove={onRemove ? () => onRemove(note.comment.id) : null} />

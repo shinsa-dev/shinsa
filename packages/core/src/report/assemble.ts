@@ -1,4 +1,5 @@
 import type { Task } from '../domain/types.ts';
+import { resolveLatestWalkthrough } from './merge-steps.ts';
 import type { WorkReport } from './types.ts';
 
 export function assembleReport(task: Task): WorkReport {
@@ -13,5 +14,6 @@ export function assembleReport(task: Task): WorkReport {
     })),
     checks: task.checkResults ?? [],
     judgementCalls: reports.flatMap((report) => report.judgementCalls),
+    walkthrough: resolveLatestWalkthrough(reports),
   };
 }

@@ -23,6 +23,8 @@ import {
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
+import { createTesting } from '../report/testing.ts';
+import type { ReportWalkthroughRevision } from '../report/types.ts';
 import { applyAccountBound } from './accounts.ts';
 import {
   describeChecks,
@@ -321,6 +323,67 @@ function applyPhaseCompleted(state: ShinsaState, event: EventOf<'phase.completed
   });
 }
 
+function selectLatestReport(reports: PhaseReport[]) {
+  return reports.reduce<PhaseReport | null>(
+    (latest, report) => (latest === null || report.index > latest.index ? report : latest),
+    null
+  );
+}
+
+function resolveRevisedReport(
+  reports: PhaseReport[],
+  revision: ReportWalkthroughRevision
+): PhaseReport | null {
+  const described = selectLatestReport(reports.filter((report) => report.walkthrough));
+  if (described?.walkthrough) {
+    return { ...described, walkthrough: { ...described.walkthrough, ...revision } };
+  }
+  const latest = selectLatestReport(reports);
+  if (!latest || revision.approach === undefined || revision.flow === undefined) return null;
+  return {
+    ...latest,
+    walkthrough: {
+      approach: revision.approach,
+      flow: revision.flow,
+      risks: revision.risks ?? [],
+      testing: revision.testing ?? createTesting(),
+      ...(revision.steps ? { steps: revision.steps } : {}),
+    },
+  };
+}
+
+function applyWalkthroughRevised(state: ShinsaState, event: EventOf<'walkthrough.revised'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const revised = resolveRevisedReport(task.phaseReports, event.walkthrough);
+  if (!revised) return;
+  const phaseReports = task.phaseReports.map((report) => (report.index === revised.index ? revised : report));
+  updateTask(state, event.taskId, event.at, { phaseReports });
+}
+
+function applyMergeStepTicked(state: ShinsaState, event: EventOf<'merge_step.ticked'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  const carried = task.carriedMergeSteps ?? [];
+  if (carried.some((step) => resolveMergeStepKey(step) === event.key)) {
+    updateTask(state, event.taskId, event.at, {
+      carriedMergeSteps: carried.map((step) =>
+        resolveMergeStepKey(step) === event.key ? { ...step, done: event.done } : step
+      ),
+    });
+  } else {
+    const others = (task.mergeStepsDone ?? []).filter((key) => key !== event.key);
+    updateTask(state, event.taskId, event.at, {
+      mergeStepsDone: event.done ? [...others, event.key] : others,
+    });
+  }
+  record(state, event.taskId, event.at, {
+    actor: 'you',
+    kind: 'decision',
+    text: event.done ? `Ticked the step “${event.title}”` : `Unticked the step “${event.title}”`,
+  });
+}
+
 function listFixFingerprints(task: Task | undefined, event: EventOf<'fix.started'>) {
   if (event.round === 0) return [];
   return [
@@ -434,7 +497,11 @@ function applyWorkSubmitted(state: ShinsaState, event: EventOf<'work.submitted'>
 }
 
 function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported'>) {
-  updateTask(state, event.taskId, event.at, { reviewSummary: event.summary, findings: event.findings });
+  updateTask(state, event.taskId, event.at, {
+    reviewSummary: event.summary,
+    findings: event.findings,
+    reviewDisagreements: event.disagreements ?? [],
+  });
   record(state, event.taskId, event.at, {
     actor: 'agent',
     kind: 'review',
@@ -606,6 +673,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'phase.completed':
       applyPhaseCompleted(state, event);
+      break;
+    case 'walkthrough.revised':
+      applyWalkthroughRevised(state, event);
+      break;
+    case 'merge_step.ticked':
+      applyMergeStepTicked(state, event);
       break;
     case 'work.submitted':
       applyWorkSubmitted(state, event);

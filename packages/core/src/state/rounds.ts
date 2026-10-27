@@ -146,6 +146,7 @@ function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: nu
     report: null,
     reviewSummary: null,
     findings: [],
+    reviewDisagreements: [],
     fixRounds: 0,
     fixFor: null,
     fixSignature: null,

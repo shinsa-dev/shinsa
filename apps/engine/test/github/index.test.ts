@@ -255,6 +255,30 @@ describe('serializePullRequest', () => {
     expect(serializePullRequestBody(createTask({ plan: { body: 'The plan' } as Task['plan'] }))).toContain(
       '<details><summary>Plan</summary>\n\nThe plan\n</details>'
     );
+    const step = {
+      when: 'pre_merge' as const,
+      kind: 'env' as const,
+      title: 'Set A',
+      detail: 'In production.',
+      command: null,
+    };
+    const walkthrough = {
+      approach: 'a',
+      flow: 'f',
+      risks: [],
+      testing: { automated: ['a.test.ts covers it.'], manual: [] },
+      steps: [step],
+    };
+    expect(
+      serializePullRequestBody(
+        createTask({
+          summary: 'Did it.',
+          phaseReports: [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }],
+        })
+      )
+    ).toBe(
+      'Did it.\n\n### How to test\n**Covered by tests**\n- a.test.ts covers it.\n\n### Pre-merge steps\n- [ ] **Set A**: In production.'
+    );
   });
 });
 

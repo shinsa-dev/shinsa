@@ -41,6 +41,18 @@ describe('fix prompts', () => {
     );
   });
 
+  test('every fix prompt says when to send the parts of the walkthrough that changed', () => {
+    for (const prompt of [
+      resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]),
+      resolveReviewFixPrompt([finding]),
+      resolvePullRequestFixPrompt(pullRequest({ number: 42 })),
+    ]) {
+      expect(prompt).toContain(
+        'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.'
+      );
+    }
+  });
+
   test('a pull request fix says Shinsa pushes it, not that the checks and review run again', () => {
     const prompt = resolvePullRequestFixPrompt(pullRequest({ checks: 'failing' }));
     expect(prompt).toContain('Afterwards Shinsa pushes your fix to the pull request.');

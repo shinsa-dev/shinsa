@@ -173,3 +173,12 @@ describe('useTokens', () => {
     await waitFor(() => expect(result.current?.[0]?.[0]?.content).toBe('fn'));
   });
 });
+
+describe('isTextDiagram', () => {
+  it('reads a block drawn with box-drawing lines as a diagram, and code or arrows alone as not', () => {
+    expect(isTextDiagram('a ──▶ b\n  │\n  ▼\n  c')).toBe(true);
+    expect(isTextDiagram('├─ src\n└─ test')).toBe(true);
+    expect(isTextDiagram('const a = b => c;')).toBe(false);
+    expect(isTextDiagram('a → b → c')).toBe(false);
+  });
+});

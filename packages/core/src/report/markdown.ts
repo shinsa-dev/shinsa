@@ -1,4 +1,16 @@
-import type { Attention, PlanDocument, ReportCheck, WorkReport } from './types.ts';
+import { parseTestFile, serializeTestFile } from './testing.ts';
+import type {
+  Attention,
+  ManualTestStep,
+  ManualTestTarget,
+  ManualTestTargetKind,
+  MergeStep,
+  MergeStepTiming,
+  PlanDocument,
+  ReportCheck,
+  ReportTesting,
+  WorkReport,
+} from './types.ts';
 
 const CHECK_MARK: Record<ReportCheck['outcome'], string> = { pass: '✓', fail: '✗', skipped: '–' };
 
@@ -46,9 +58,74 @@ export function serializePlanMarkdown(plan: PlanDocument) {
     .join('\n\n');
 }
 
+const MERGE_STEP_HEADING: Record<MergeStepTiming, string> = {
+  pre_merge: '### Pre-merge steps',
+  post_merge: '### Post-merge steps',
+};
+
+function describeMergeStep(step: MergeStep) {
+  const line = `- [ ] **${step.title}**: ${step.detail}`;
+  if (!step.command) return line;
+  return [line, '  ```sh', ...step.command.split('\n').map((text) => `  ${text}`), '  ```'].join('\n');
+}
+
+export function serializeMergeStepsMarkdown(steps: readonly MergeStep[]) {
+  return (['pre_merge', 'post_merge'] as const)
+    .map((when) =>
+      describeSection(
+        MERGE_STEP_HEADING[when],
+        steps
+          .filter((step) => step.when === when)
+          .map(describeMergeStep)
+          .join('\n')
+      )
+    )
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+const STEP_INDENT = '   ';
+
+const TEST_TARGET_MARKDOWN: Record<ManualTestTargetKind, (value: string) => string> = {
+  url: (value) => `<${value}>`,
+  file: (value) => {
+    const file = parseTestFile(value);
+    return `\`${file ? serializeTestFile(file) : value}\``;
+  },
+  command: (value) => `\`${value}\``,
+  screen: (value) => `*${value}*`,
+};
+
+function describeTestTarget(target: ManualTestTarget) {
+  if (target.kind === 'command' && /[\n`]/.test(target.value)) {
+    return [
+      '',
+      `${STEP_INDENT}\`\`\`sh`,
+      ...target.value.split('\n').map((text) => `${STEP_INDENT}${text}`),
+      `${STEP_INDENT}\`\`\``,
+    ].join('\n');
+  }
+  return ` ${TEST_TARGET_MARKDOWN[target.kind](target.value)}`;
+}
+
+function describeManualStep(step: ManualTestStep, index: number) {
+  const action = step.target ? `${step.action.replace(/[.:]$/, '')}:` : step.action;
+  const target = step.target ? describeTestTarget(step.target) : '';
+  return `${index + 1}. ${action}${target}\n${STEP_INDENT}Expected: ${step.expect}`;
+}
+
+export function serializeTestingMarkdown(testing: ReportTesting | null | undefined) {
+  const parts = [
+    describeSection('**Covered by tests**', bulletList(testing?.automated ?? [])),
+    describeSection('**Try it yourself**', (testing?.manual ?? []).map(describeManualStep).join('\n')),
+  ].filter(Boolean);
+  return describeSection('### How to test', parts.join('\n\n'));
+}
+
 export function serializeReportMarkdown(report: WorkReport) {
   return [
     report.headline,
+    describeSection('### How it works', report.walkthrough?.approach ?? ''),
     describeSection(
       '### What changed',
       bulletList(report.sections.map((section) => `**${section.title}**: ${section.summary}`))
@@ -59,8 +136,10 @@ export function serializeReportMarkdown(report: WorkReport) {
     ),
     describeSection(
       '### Judgement calls',
-      bulletList(report.judgementCalls.map((call) => `**${call.call}** ${call.reason}`))
+      bulletList(report.judgementCalls.map((call) => `**${call.title}**: ${call.call}. ${call.reason}`))
     ),
+    serializeTestingMarkdown(report.walkthrough?.testing),
+    serializeMergeStepsMarkdown(report.walkthrough?.steps ?? []),
   ]
     .filter(Boolean)
     .join('\n\n');

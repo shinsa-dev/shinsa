@@ -47,7 +47,7 @@ import {
 } from '@/lib/overview/now.ts';
 import { describePlanEyebrow } from '@/lib/overview/plan-version.ts';
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
-import { describeEscalationBody, describeReviewTitle, resolveVerdictDraft } from '@/lib/overview/verdicts.ts';
+import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { describeSpent } from '@/lib/tasks/cost.ts';
 import {
@@ -106,7 +106,6 @@ export function QuestionCard({
   task,
   gate,
   onReply = (key, response) => replyToGate(gate, key, response),
-  onRun = (command) => openTaskTerminal(task, command),
 }: {
   state: ShinsaState;
   task: Task;
@@ -275,10 +274,8 @@ function ReviewCard({
   gate: Gate;
   onOpen: (target: NowTarget) => void;
 }) {
-  const draft = useReviewDraft();
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
-  const verdicts = resolveVerdictDraft(findings, draft.verdicts);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -298,9 +295,8 @@ function ReviewCard({
           ? describeEscalationBody(gate.escalation)
           : describeReviewFacts(task, merge, describeSpent(state, task))}
       </p>
-      {findings.length > 0 && (
-        <FindingVerdicts task={task} findings={findings} draft={verdicts} onChange={draft.setVerdict} />
-      )}
+      {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
+      {merge && <MergeStepsBlock task={task} when='pre_merge' />}
     </NowFrame>
   );
 }

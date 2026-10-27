@@ -1,10 +1,7 @@
 import * as React from 'react';
+import { SPOTLIGHT_FADE_MS, SPOTLIGHT_HOLD_MS } from '@/hooks/use-spotlight.ts';
 
 const NEAR_BOTTOM = 80;
-
-const FOCUS_HOLD_MS = 1500;
-
-const FOCUS_FADE_MS = 600;
 
 function revealRun(runId: string) {
   const delegation = document.querySelector<HTMLElement>(`[data-delegation="${CSS.escape(runId)}"]`);
@@ -59,13 +56,16 @@ export function useStickToBottom(focusRunId: string | null) {
   React.useEffect(() => {
     if (!focusRunId) return;
     pinned.current = false;
-    focus.current = { runId: focusRunId, until: Date.now() + FOCUS_HOLD_MS };
+    focus.current = { runId: focusRunId, until: Date.now() + SPOTLIGHT_HOLD_MS };
     let clear: ReturnType<typeof setTimeout> | undefined;
     let target: HTMLElement | null = null;
     const frame = requestAnimationFrame(() => {
       target = revealRun(focusRunId);
       target?.setAttribute('data-focused', '');
-      clear = setTimeout(() => target?.removeAttribute('data-focused'), FOCUS_HOLD_MS + FOCUS_FADE_MS);
+      clear = setTimeout(
+        () => target?.removeAttribute('data-focused'),
+        SPOTLIGHT_HOLD_MS + SPOTLIGHT_FADE_MS
+      );
     });
     return () => {
       cancelAnimationFrame(frame);

@@ -60,6 +60,28 @@ describe('resolveTaskNow', () => {
     expect(nowFor({}, { type: 'merge' })).toBe('Clean and ready to merge');
   });
 
+  it('counts the steps before the merge, and names the merged pull request after it', () => {
+    const step = {
+      when: 'pre_merge' as const,
+      kind: 'env' as const,
+      title: 'Set A',
+      detail: 'd',
+      command: null,
+    };
+    const walkthrough = {
+      approach: 'a',
+      flow: 'f',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      steps: [step],
+    };
+    const phaseReports = [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }];
+    expect(nowFor({ phaseReports }, { type: 'merge' })).toBe('1 step to do before the merge');
+    const merged = { ...PULL_REQUEST, state: 'merged' as const };
+    expect(nowFor({ pullRequest: merged }, { type: 'post_merge' })).toBe('PR #42 merged');
+    expect(nowFor({}, { type: 'post_merge' })).toBe('Merged');
+  });
+
   it('shows the gate title for a question, a secret request and a failure', () => {
     expect(nowFor({}, { type: 'question', title: 'Which retry scope?' })).toBe('Which retry scope?');
     expect(nowFor({}, { type: 'secret', title: 'The test needs a Stripe key.' })).toBe(

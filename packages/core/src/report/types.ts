@@ -8,6 +8,8 @@ export interface CodeSpot {
   end: number;
   attention: Attention;
   why: string;
+  title?: string;
+  explain?: string;
 }
 
 export interface ReportSection {
@@ -22,11 +24,77 @@ export interface ReportCheck {
   detail: string | null;
 }
 
+export interface JudgementAlternative {
+  option: string;
+  rejected: string;
+}
+
 export interface JudgementCall {
+  title: string;
   call: string;
   reason: string;
   file: string | null;
   line: number | null;
+  end?: number | null;
+  alternatives?: JudgementAlternative[];
+}
+
+export interface ReportRisk {
+  title: string;
+  risk: string;
+  file: string | null;
+  line: number | null;
+  end: number | null;
+}
+
+export type MergeStepTiming = 'pre_merge' | 'post_merge';
+
+export type MergeStepKind = 'env' | 'secret' | 'migration' | 'deploy' | 'config' | 'other';
+
+export interface MergeStep {
+  when: MergeStepTiming;
+  kind: MergeStepKind;
+  title: string;
+  detail: string;
+  command: string | null;
+}
+
+export interface CarriedMergeStep extends MergeStep {
+  round: number;
+  done: boolean;
+}
+
+export type ManualTestTargetKind = 'url' | 'file' | 'command' | 'screen';
+
+export interface ManualTestTarget {
+  kind: ManualTestTargetKind;
+  value: string;
+}
+
+export interface ManualTestStep {
+  action: string;
+  target: ManualTestTarget | null;
+  expect: string;
+}
+
+export interface ReportTesting {
+  automated: string[];
+  manual: ManualTestStep[];
+}
+
+export interface ReportWalkthrough {
+  approach: string;
+  flow: string;
+  risks: ReportRisk[];
+  testing: ReportTesting;
+  steps?: MergeStep[];
+}
+
+export type ReportWalkthroughRevision = Partial<ReportWalkthrough>;
+
+export interface FixHandOver {
+  summary: string;
+  walkthrough: ReportWalkthroughRevision | null;
 }
 
 export interface WorkReport {
@@ -34,6 +102,7 @@ export interface WorkReport {
   sections: ReportSection[];
   checks: ReportCheck[];
   judgementCalls: JudgementCall[];
+  walkthrough?: ReportWalkthrough | null;
 }
 
 export interface PlanFile {
@@ -80,10 +149,22 @@ export interface ReviewFinding {
   verdictNote?: string | null;
 }
 
+export interface ReviewDisagreement {
+  call: string;
+  reason: string;
+}
+
+export interface ReviewHandOver {
+  summary: string | null;
+  findings: ReviewFinding[];
+  disagreements: { call: number; reason: string }[];
+}
+
 export interface PhaseHandOver {
   summary: string;
   spots: CodeSpot[];
   judgementCalls: JudgementCall[];
+  walkthrough: ReportWalkthrough | null;
 }
 
 export interface PlanHandOver {

@@ -1,6 +1,9 @@
 import { type Activity, type Gate, resolveCurrentRound, type Task } from '../domain/index.ts';
 import { resolveRequest } from '../prompts/context.ts';
 import { listWaitsOn } from '../queue/rank.ts';
+import { assembleReport } from '../report/assemble.ts';
+import { listMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts';
+import { listTestingLines } from '../report/testing.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { STAGE_WORDS, serializeReference } from './references.ts';
@@ -58,6 +61,29 @@ function describeGate(gate: Gate) {
   return `- ${gate.title} (gate ${gate.id}, ${gate.type}): ${cut(gate.body, BODY_LIMIT)}${choices}`;
 }
 
+function describeMergeSteps(task: Task) {
+  const steps = listMergeSteps(task);
+  if (steps.length === 0) return [];
+  return [
+    'Steps for the human around the merge (only the human ticks them):',
+    ...steps.map((step, index) => {
+      const command = step.command ? `: \`${step.command}\`` : '';
+      return `  ${index + 1}. [${step.done ? 'x' : ' '}] ${MERGE_STEP_WHEN_WORDS[step.when]}, ${step.kind}: ${step.title}${command}`;
+    }),
+  ];
+}
+
+function describeTesting(task: Task) {
+  const lines = listTestingLines(assembleReport(task).walkthrough?.testing);
+  if (lines.length === 0) return [];
+  return ['How to test the change:', ...lines.map((line) => `  ${line}`)];
+}
+
+function describeTestCoverage(task: Task) {
+  const summary = describeCoverage(task.coverage);
+  return summary ? [`Changed-line coverage: ${summary}.`] : [];
+}
+
 function describeRequest(task: Task) {
   const round = resolveCurrentRound(task).number;
   const label = round > 1 ? `Request (round ${round})` : 'Request';
@@ -84,6 +110,9 @@ export function serializeTaskDetail(state: ShinsaState, taskId: string) {
     ...describePlan(task),
     ...(task.summary ? [`Summary: ${task.summary}`] : []),
     ...(task.result ? [`Result (${task.result.step}): ${cut(task.result.body, REQUEST_LIMIT)}`] : []),
+    ...describeTesting(task),
+    ...describeTestCoverage(task),
+    ...describeMergeSteps(task),
     ...(waits.length > 0 ? [`Waits on: ${waits.map(describeLink).join(', ')}`] : []),
     ...(gates.length > 0 ? ['Open decisions:', ...gates.map(describeGate)] : ['No open decisions.']),
     'Recent activity:',

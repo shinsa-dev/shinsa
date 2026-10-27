@@ -42,8 +42,9 @@ function EvidencePlace({
 }
 
 function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget) => void }) {
-  const sections = task.report?.sections ?? [];
-  if (sections.length === 0) return null;
+  const report = task.report;
+  if (!report || report.sections.length === 0) return null;
+  const points = listReviewPoints(listReviewChapters(report, task.findings, task.reviewDisagreements));
   return (
     <Panel
       persistId={resolveOverviewPanelId(task, 'changes')}
@@ -55,29 +56,20 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
         </Button>
       }
     >
-      <ol className='flex flex-col gap-4'>
-        {sections.map((section, index) => (
+      <ol className='flex flex-col gap-3'>
+        {report.sections.map((section, index) => (
           <li key={section.title} className='flex gap-2.5'>
             <StepNumber index={index} />
-            <div className='flex min-w-0 flex-1 flex-col gap-2'>
-              <div className='flex flex-col gap-px'>
-                <InlineMarkdown text={section.title} className='font-medium text-fg-4 text-xs leading-5' />
-                <Markdown text={section.summary} className='text-fg-3 text-xs' />
-              </div>
-              {section.spots.slice(0, SPOTS_SHOWN).map((spot) => (
-                <ChangeSnippet
-                  key={`${spot.file}:${spot.start}`}
-                  task={task}
-                  path={spot.file}
-                  start={spot.start}
-                  end={spot.end}
-                  why={spot.why}
-                />
-              ))}
+            <div className='flex min-w-0 flex-1 flex-col gap-px'>
+              <InlineMarkdown text={section.title} className='font-medium text-fg-4 text-xs leading-5' />
+              <Markdown text={section.summary} className='text-fg-3 text-xs' />
             </div>
           </li>
         ))}
       </ol>
+      <p className='text-2xs text-fg-2'>
+        {describePointCount(points)} How it works, the code and every judgement call are in the review.
+      </p>
     </Panel>
   );
 }
@@ -168,7 +160,6 @@ export function OverviewTab({
           )}
           <EvidencePlace state={state} task={task} onOpen={onOpen} />
           {code && <ChangesPanel task={task} onOpen={onOpen} />}
-          {code && <JudgementCallsPanel task={task} />}
           <RoundsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
           <ActivityPanel state={state} task={task} onOpenRun={(runId) => onOpen('agent', runId)} />
         </div>

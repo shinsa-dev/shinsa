@@ -665,6 +665,768 @@ function pushPlanProposal(task: SeedTask, progress: SeedProgress, push: Push, cl
   progress.proposed = true;
 }
 
+function assertArgs(command: CommandDefinition, args: string[]) {
+  const required = (command.args ?? []).filter((arg) => arg.required);
+  if (args.length < required.length) {
+    throw new UsageError(\`\${command.name} needs <\${required[args.length]?.name}>.\`);
+  }
+}
+
+export function parseLegacyInput(command: CommandDefinition, argv: string[]) {
+  const parsed = parseFlags(argv, {
+    boolean: Object.keys(command.flags).filter((name) => command.flags[name]?.kind === 'boolean'),
+  });
+  push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
+  progress.built += 1;
+}
+
+function resolveRunPhase(progress: SeedProgress, run: SeedRun) {
+  if (run.purpose !== 'build') return {};
+  const last = (progress.plan?.phases.length ?? 1) - 1;
+  return { phaseIndex: Math.min(progress.built, last) };
+}
+
+function pushFixStart(task: SeedTask, index: number, progress: SeedProgress, push: Push, clock: SeedClock) {
+  const run = task.runs?.[index];
+  if (run?.purpose !== 'fix') return;
+  progress.fixes += 1;
+  if (index - 1 === task.revision?.afterRun) return;
+  push(clock.step(0.1), {
+    type: 'fix.started',
+    taskId: task.id,
+    round: progress.fixes,
+    reason: run.fix ?? 'checks',
+  });
+}
+
+const HELP_NEW = `import type { CommandDefinition } from './registry';
+
+export function renderHelp(command: CommandDefinition) {
+  const args = (command.args ?? []).map((arg) => (arg.required ? \`<\${arg.name}>\` : \`[\${arg.name}]\`));
+  const lines = [\`Usage: superwall \${[command.name, ...args, '[flags]'].join(' ')}\`, '', command.summary];
+  const flags = Object.entries(command.flags);
+  if (flags.length > 0) {
+    lines.push('', 'Flags:');
+    const width = Math.max(...flags.map(([name]) => name.length));
+    for (const [name, spec] of flags) {
+      const alias = spec.alias ? \`-\${spec.alias}, \` : '    ';
+      const fallback = spec.default === undefined ? '' : \` (default: \${spec.default})\`;
+      lines.push(\`  \${alias}--\${name.padEnd(width)}  \${spec.help}\${fallback}\`);
+    }
+  }
+  return lines.join('\\n');
+}
+
+export function renderCommandList(commands: readonly CommandDefinition[]) {
+  const visible = commands.filter((command) => !command.hidden);
+  const width = Math.max(...visible.map((command) => command.name.length));
+  return visible.map((command) => \`  \${command.name.padEnd(width)}  \${command.summary}\`).join('\\n');
+}
+`;
+
+const CLI_INDEX_NEW = `import { COMMANDS } from './commands';
+import { renderCommandList, renderHelp } from './help';
+import { parseInput, parseLegacyInput, UsageError } from './registry';
+
+const BY_NAME = new Map(COMMANDS.map((command) => [command.name, command]));
+
+export async function main(argv: string[], env = process.env) {
+  const [name = 'help', ...rest] = argv;
+  if (name === 'help' || name === '--help') return printHelp(rest[0]);
+  const command = BY_NAME.get(name);
+  if (!command) return fail(\`Unknown command: \${name}\`, renderCommandList(COMMANDS));
+  if (rest.includes('--help')) return console.log(renderHelp(command));
+  try {
+    const legacy = env.SUPERWALL_LEGACY_FLAGS === '1';
+    await command.run(legacy ? parseLegacyInput(command, rest) : parseInput(command, rest));
+  } catch (error) {
+    if (!(error instanceof UsageError)) throw error;
+    fail(error.message, renderHelp(command));
+  }
+}
+
+function printHelp(name: string | undefined) {
+  const command = name ? BY_NAME.get(name) : undefined;
+  if (command) return console.log(renderHelp(command));
+  console.log(\`Usage: superwall <command> [flags]\\n\\n\${renderCommandList(COMMANDS)}\`);
+}
+
+function fail(message: string, help: string): never {
+  console.error(\`\${message}\\n\\n\${help}\`);
+  process.exit(2);
+}
+`;
+
+const DEPLOY_NEW = `import { runDeploy } from '../../actions/deploy';
+import { defineCommand, flag } from '../registry';
+
+export default defineCommand({
+  name: 'deploy',
+  summary: 'Build, publish and promote in one step',
+  args: [{ name: 'environment', help: 'staging or production', required: true }],
+  flags: {
+    app: flag.string('The app to deploy; defaults to the linked one'),
+    message: flag.string('A note shown in the dashboard history', { alias: 'm' }),
+    wait: flag.number('Seconds to wait for the rollout before returning', { default: 120 }),
+  },
+  run: ({ args, flags }) => runDeploy({ environment: args[0] ?? 'staging', ...flags }),
+});
+`;
+
+const LOGIN_NEW = `import { runLogin } from '../../actions/login';
+import { defineCommand, flag } from '../registry';
+import { readStdin } from '../stdin';
+
+export default defineCommand({
+  name: 'login',
+  summary: 'Sign in with a browser or an API token',
+  agents: false,
+  flags: {
+    token: flag.string('An API token; pass - to read it from stdin'),
+  },
+  run: async ({ flags }) => {
+    const token = flags.token === '-' ? await readStdin() : flags.token;
+    await runLogin({ token });
+  },
+});
+`;
+
+const LOGS_NEW = `import { runLogs } from '../../actions/logs';
+import { defineCommand, flag } from '../registry';
+
+export default defineCommand({
+  name: 'logs',
+  summary: 'Stream the paywall event logs of the app',
+  flags: {
+    app: flag.string('The app to read; defaults to the linked one'),
+    since: flag.string('How far back to start, such as 10m or 2h', { default: '10m' }),
+    limit: flag.number('The most events to print', { default: 200 }),
+    follow: flag.boolean('Keep streaming new events', { alias: 'f' }),
+  },
+  run: ({ flags }) => runLogs(flags),
+});
+`;
+
+const CODEMOD_NEW = `import { readFileSync, writeFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { Glob } from 'bun';
+import FLAG_HELP from './flag-help.json';
+
+interface LegacyOptions {
+  boolean?: string[];
+  string?: string[];
+  default?: Record<string, unknown>;
+}
+
+const PARSE_CALL = /parseFlags\\(argv, (\\{.*\\})\\);/;
+const DESCRIPTION = /export const description = '([^']*)';/;
+const ACTION_CALL = /await (run\\w+)\\(flags\\);/;
+
+for (const path of new Glob('src/cli/commands/*.ts').scanSync()) {
+  const source = readFileSync(path, 'utf8');
+  const parse = PARSE_CALL.exec(source);
+  const action = ACTION_CALL.exec(source)?.[1];
+  if (!parse?.[1] || !action || source.includes('flags._')) {
+    console.warn(\`Skipped \${path}: port it by hand.\`);
+    continue;
+  }
+  const options = Function(\`return (\${parse[1]})\`)() as LegacyOptions;
+  const name = basename(path, '.ts');
+  writeFileSync(path, renderCommand(name, DESCRIPTION.exec(source)?.[1] ?? '', options, action));
+}
+
+function renderCommand(name: string, summary: string, options: LegacyOptions, action: string) {
+  const flags = [
+    ...(options.string ?? []).map((flag) => renderFlag(name, flag, 'string', options.default?.[flag])),
+    ...(options.boolean ?? []).map((flag) => renderFlag(name, flag, 'boolean', options.default?.[flag])),
+  ];
+  return [
+    \`import { \${action} } from '../../actions/\${name}';\`,
+    "import { defineCommand, flag } from '../registry';",
+    '',
+    'export default defineCommand({',
+    \`  name: '\${name}',\`,
+    \`  summary: '\${summary}',\`,
+    \`  flags: {\${flags.length > 0 ? \`\\n\${flags.join('\\n')}\\n  \` : ''}},\`,
+    \`  run: ({ flags }) => \${action}(flags),\`,
+    '});',
+    '',
+  ].join('\\n');
+}
+
+function renderFlag(command: string, name: string, kind: string, fallback: unknown) {
+  const help = (FLAG_HELP as Record<string, string>)[\`\${command}.\${name}\`] ?? '';
+  const options = fallback === undefined ? '' : \`, { default: \${JSON.stringify(fallback)} }\`;
+  return \`    \${name}: flag.\${kind}('\${help}'\${options}),\`;
+}
+`;
+
+const DOCS_SCRIPT_NEW = `import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { COMMANDS } from '../src/cli/commands';
+import { renderHelp } from '../src/cli/help';
+
+const OUT = 'docs/cli';
+
+const visible = COMMANDS.filter((command) => !command.hidden);
+mkdirSync(OUT, { recursive: true });
+for (const command of visible) {
+  const page = [\`# superwall \${command.name}\`, '', command.summary, '', '\`\`\`text', renderHelp(command), '\`\`\`', ''];
+  writeFileSync(join(OUT, \`\${command.name}.mdx\`), page.join('\\n'));
+}
+const index = visible.map((command) => \`- [\${command.name}](./\${command.name}): \${command.summary}\`);
+writeFileSync(join(OUT, 'index.mdx'), \`# Commands\\n\\n\${index.join('\\n')}\\n\`);
+`;
+
+const MCP_COMMANDS_NEW = `import { COMMANDS } from '../cli/commands';
+import type { CommandDefinition } from '../cli/registry';
+
+export function listCommandTools() {
+  return COMMANDS.filter((command) => !command.hidden && command.agents !== false).map((command) => ({
+    name: \`superwall.\${command.name}\`,
+    description: command.summary,
+    inputSchema: resolveInputSchema(command),
+  }));
+}
+
+function resolveInputSchema(command: CommandDefinition) {
+  const properties: Record<string, { type: string; description: string }> = {};
+  for (const [name, spec] of Object.entries(command.flags)) {
+    properties[name] = { type: spec.kind, description: spec.help };
+  }
+  const args = command.args ?? [];
+  if (args.length > 0) {
+    properties.args = { type: 'array', description: args.map((arg) => \`\${arg.name}: \${arg.help}\`).join('; ') };
+  }
+  return { type: 'object', properties, required: args.some((arg) => arg.required) ? ['args'] : [] };
+}
+`;
+
+const HELP_TEST_NEW = `import { describe, expect, it } from 'bun:test';
+import { COMMANDS } from './commands';
+import { renderHelp } from './help';
+import { parseInput } from './registry';
+
+describe('command help', () => {
+  for (const command of COMMANDS) {
+    it(\`matches the snapshot for \${command.name}\`, () => {
+      expect(renderHelp(command)).toMatchSnapshot();
+    });
+  }
+
+  it('gives every flag a help text', () => {
+    const missing = COMMANDS.flatMap((command) =>
+      Object.entries(command.flags)
+        .filter(([, spec]) => spec.help === '')
+        .map(([name]) => \`\${command.name} --\${name}\`)
+    );
+    expect(missing).toEqual([]);
+  });
+});
+
+describe('parseInput', () => {
+  const push = COMMANDS.find((command) => command.name === 'push');
+
+  it('suggests the closest flag', () => {
+    expect(() => push && parseInput(push, ['--apps', 'demo'])).toThrow('Did you mean --app?');
+  });
+
+  it('asks for a missing argument', () => {
+    const deploy = COMMANDS.find((command) => command.name === 'deploy');
+    expect(() => deploy && parseInput(deploy, [])).toThrow('deploy needs <environment>.');
+  });
+});
+`;
+
+const TAB_GROUP_TEST_NEW = `import { describe, expect, it, mock } from 'bun:test';
+import { render } from '@testing-library/react';
+import { TabGroup } from './tab-group';
+
+const TABS = Array.from({ length: 40 }, (_, index) => ({ id: \`tab-\${index}\`, label: \`Tab \${index}\` }));
+
+describe('TabGroup', () => {
+  it('scrolls the active tab to the centre', () => {
+    const scrollIntoView = mock();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const view = render(<TabGroup tabs={TABS} active='tab-0' onSelect={() => {}} />);
+    view.rerender(<TabGroup tabs={TABS} active='tab-31' onSelect={() => {}} />);
+    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  });
+
+  it('keeps every tab at its natural width', () => {
+    const view = render(<TabGroup tabs={TABS} active='tab-0' onSelect={() => {}} />);
+    expect(view.getAllByRole('button').every((tab) => tab.classList.contains('shrink-0'))).toBe(true);
+  });
+});
+`;
+
+const DEFAULTS_TEST_NEW = `import { describe, expect, it } from 'bun:test';
+import { resolveDefaultModel } from './defaults';
+
+const RESETS_AT = Date.UTC(2026, 9, 26, 18);
+
+describe('resolveDefaultModel', () => {
+  it('keeps the preferred model below 85%', () => {
+    expect(resolveDefaultModel('claude', { used: 84, limit: 100, resetsAt: RESETS_AT })).toBe('claude-opus-5-5');
+  });
+
+  it('falls back at 85% of the window', () => {
+    expect(resolveDefaultModel('claude', { used: 85, limit: 100, resetsAt: RESETS_AT })).toBe('claude-sonnet-5-5');
+    expect(resolveDefaultModel('codex', { used: 85, limit: 100, resetsAt: RESETS_AT })).toBe('gpt-6-mini');
+  });
+
+  it('keeps the preferred model without usage data', () => {
+    expect(resolveDefaultModel('claude', null)).toBe('claude-opus-5-5');
+  });
+});
+`;
+
+interface CliFlag {
+  name: string;
+  kind: 'string' | 'boolean';
+  help: string;
+  fallback?: boolean;
+}
+
+interface CliCommand {
+  name: string;
+  summary: string;
+  flags: CliFlag[];
+}
+
+const APP_FLAG: CliFlag = { name: 'app', kind: 'string', help: 'The app to use; defaults to the linked one' };
+
+const JSON_FLAG: CliFlag = { name: 'json', kind: 'boolean', help: 'Print the result as JSON' };
+
+function createListCommand(name: string, noun: string): CliCommand {
+  return { name, summary: `List the ${noun} of the app`, flags: [APP_FLAG, JSON_FLAG] };
+}
+
+const CLI_COMMANDS: CliCommand[] = [
+  {
+    name: 'push',
+    summary: 'Upload the local paywalls to the dashboard',
+    flags: [
+      APP_FLAG,
+      JSON_FLAG,
+      {
+        name: 'cache',
+        kind: 'boolean',
+        help: 'Reuse assets that did not change since the last push',
+        fallback: true,
+      },
+    ],
+  },
+  {
+    name: 'pull',
+    summary: 'Download the dashboard paywalls into this folder',
+    flags: [APP_FLAG, { name: 'force', kind: 'boolean', help: 'Overwrite local changes' }],
+  },
+  { name: 'logout', summary: 'Sign out and forget the stored token', flags: [] },
+  { name: 'whoami', summary: 'Show the signed-in account', flags: [JSON_FLAG] },
+  {
+    name: 'init',
+    summary: 'Create a superwall.config.ts in this folder',
+    flags: [{ name: 'template', kind: 'string', help: 'The template to start from' }],
+  },
+  {
+    name: 'dev',
+    summary: 'Serve the paywalls locally with live reload',
+    flags: [{ name: 'port', kind: 'string', help: 'The port to serve on' }],
+  },
+  {
+    name: 'build',
+    summary: 'Bundle the paywalls for publishing',
+    flags: [{ name: 'out', kind: 'string', help: 'Where to write the bundle' }],
+  },
+  {
+    name: 'preview',
+    summary: 'Open a paywall in the device preview',
+    flags: [{ name: 'device', kind: 'string', help: 'The device to preview on' }],
+  },
+  { name: 'publish', summary: 'Publish a built bundle to the dashboard', flags: [APP_FLAG, JSON_FLAG] },
+  {
+    name: 'promote',
+    summary: 'Promote a published version to production',
+    flags: [APP_FLAG, { name: 'version', kind: 'string', help: 'The version to promote' }],
+  },
+  {
+    name: 'rollback',
+    summary: 'Roll production back to the previous version',
+    flags: [APP_FLAG, { name: 'yes', kind: 'boolean', help: 'Skip the confirmation' }],
+  },
+  { name: 'status', summary: 'Show the deploy status of the app', flags: [APP_FLAG, JSON_FLAG] },
+  { name: 'open', summary: 'Open the app in the dashboard', flags: [APP_FLAG] },
+  { name: 'link', summary: 'Link this folder to a dashboard app', flags: [APP_FLAG] },
+  { name: 'unlink', summary: 'Forget the dashboard app linked to this folder', flags: [] },
+  createListCommand('env-list', 'environment variables'),
+  {
+    name: 'env-set',
+    summary: 'Set an environment variable',
+    flags: [
+      APP_FLAG,
+      { name: 'name', kind: 'string', help: 'The variable to set' },
+      { name: 'value', kind: 'string', help: 'The value to store' },
+    ],
+  },
+  {
+    name: 'env-unset',
+    summary: 'Remove an environment variable',
+    flags: [APP_FLAG, { name: 'name', kind: 'string', help: 'The variable to remove' }],
+  },
+  createListCommand('products', 'products'),
+  createListCommand('entitlements', 'entitlements'),
+  createListCommand('campaigns', 'campaigns'),
+  createListCommand('placements', 'placements'),
+  createListCommand('paywalls', 'paywalls'),
+  { name: 'templates', summary: 'List the paywall templates you can start from', flags: [JSON_FLAG] },
+  {
+    name: 'doctor',
+    summary: 'Check the local setup for common problems',
+    flags: [{ name: 'fix', kind: 'boolean', help: 'Fix what can be fixed automatically' }],
+  },
+  {
+    name: 'upgrade',
+    summary: 'Upgrade the CLI to the latest version',
+    flags: [{ name: 'channel', kind: 'string', help: 'The release channel to follow' }],
+  },
+  {
+    name: 'completion',
+    summary: 'Print the shell completion script',
+    flags: [{ name: 'shell', kind: 'string', help: 'The shell to print it for' }],
+  },
+  {
+    name: 'migrate',
+    summary: 'Move a dashboard paywall into this folder as code',
+    flags: [{ name: 'id', kind: 'string', help: 'The paywall to move' }],
+  },
+];
+
+const HAND_PORTED = ['deploy', 'login', 'logs'];
+
+function resolveCamelName(name: string) {
+  return name.replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase());
+}
+
+function resolveActionName(name: string) {
+  const camel = resolveCamelName(name);
+  return `run${camel.charAt(0).toUpperCase()}${camel.slice(1)}`;
+}
+
+function listFlagNames(command: CliCommand, kind: CliFlag['kind']) {
+  return command.flags.filter((flag) => flag.kind === kind).map((flag) => `'${flag.name}'`);
+}
+
+function serializeLegacyCommand(command: CliCommand) {
+  const booleans = listFlagNames(command, 'boolean');
+  const strings = listFlagNames(command, 'string');
+  const defaults = command.flags.flatMap((flag) =>
+    flag.fallback === undefined ? [] : [`${flag.name}: ${flag.fallback}`]
+  );
+  const options = [
+    booleans.length > 0 ? `boolean: [${booleans.join(', ')}]` : null,
+    strings.length > 0 ? `string: [${strings.join(', ')}]` : null,
+    defaults.length > 0 ? `default: { ${defaults.join(', ')} }` : null,
+  ].filter((option) => option !== null);
+  const action = resolveActionName(command.name);
+  return [
+    `import { ${action} } from '../../actions/${command.name}';`,
+    "import { parseFlags } from '../parse-flags';",
+    '',
+    `export const description = '${command.summary}';`,
+    '',
+    'export async function run(argv: string[]) {',
+    `  const flags = parseFlags(argv, ${options.length > 0 ? `{ ${options.join(', ')} }` : '{}'});`,
+    `  await ${action}(flags);`,
+    '}',
+    '',
+  ].join('\n');
+}
+
+function serializeCommandFlag(flag: CliFlag) {
+  const options = flag.fallback === undefined ? '' : `, { default: ${flag.fallback} }`;
+  return `    ${flag.name}: flag.${flag.kind}('${flag.help}'${options}),`;
+}
+
+function serializeCommand(command: CliCommand) {
+  const ordered = [
+    ...command.flags.filter((flag) => flag.kind === 'string'),
+    ...command.flags.filter((flag) => flag.kind === 'boolean'),
+  ];
+  const flags = ordered.length > 0 ? `\n${ordered.map(serializeCommandFlag).join('\n')}\n  ` : '';
+  const action = resolveActionName(command.name);
+  return [
+    `import { ${action} } from '../../actions/${command.name}';`,
+    "import { defineCommand, flag } from '../registry';",
+    '',
+    'export default defineCommand({',
+    `  name: '${command.name}',`,
+    `  summary: '${command.summary}',`,
+    `  flags: {${flags}},`,
+    `  run: ({ flags }) => ${action}(flags),`,
+    '});',
+    '',
+  ].join('\n');
+}
+
+function listCliNames() {
+  return [...CLI_COMMANDS.map((command) => command.name), ...HAND_PORTED].sort();
+}
+
+function serializeLegacyIndex() {
+  return `${listCliNames()
+    .map((name) => `export * as ${resolveCamelName(name)} from './${name}';`)
+    .join('\n')}\n`;
+}
+
+function serializeCommandIndex() {
+  const names = listCliNames();
+  return [
+    ...names.map((name) => `import ${resolveCamelName(name)} from './${name}';`),
+    "import type { CommandDefinition } from '../registry';",
+    '',
+    'export const COMMANDS: readonly CommandDefinition[] = [',
+    ...names.map((name) => `  ${resolveCamelName(name)},`),
+    '];',
+    '',
+  ].join('\n');
+}
+
+function serializeFlagHelp() {
+  const entries = CLI_COMMANDS.flatMap((command) =>
+    command.flags.map((flag) => [`${command.name}.${flag.name}`, flag.help] as const)
+  );
+  return `${JSON.stringify(Object.fromEntries(entries), null, 2)}\n`;
+}
+
+const CLI_PATHS = {
+  registry: 'src/cli/registry.ts',
+  suggest: 'src/cli/suggest.ts',
+  help: 'src/cli/help.ts',
+  index: 'src/cli/index.ts',
+  commands: 'src/cli/commands/index.ts',
+  push: 'src/cli/commands/push.ts',
+  deploy: 'src/cli/commands/deploy.ts',
+  codemod: 'scripts/codemods/define-command.ts',
+  docs: 'scripts/generate-command-docs.ts',
+  mcp: 'src/mcp/commands.ts',
+  test: 'src/cli/help.test.ts',
+};
+
+function listCliFiles(serialize: (command: CliCommand) => string) {
+  return Object.fromEntries(
+    CLI_COMMANDS.map((command) => [`src/cli/commands/${command.name}.ts`, serialize(command)])
+  );
+}
+
+function listCliBaseFiles(): Files {
+  return {
+    ...listCliFiles(serializeLegacyCommand),
+    'src/cli/commands/deploy.ts': DEPLOY_BASE,
+    'src/cli/commands/login.ts': LOGIN_BASE,
+    'src/cli/commands/logs.ts': LOGS_BASE,
+    'src/cli/commands/index.ts': serializeLegacyIndex(),
+    'src/cli/parse-flags.ts': PARSE_FLAGS_BASE,
+    [CLI_PATHS.index]: CLI_INDEX_BASE,
+  };
+}
+
+function listCliNewFiles(): Files {
+  return {
+    ...listCliFiles(serializeCommand),
+    [CLI_PATHS.deploy]: DEPLOY_NEW,
+    'src/cli/commands/login.ts': LOGIN_NEW,
+    'src/cli/commands/logs.ts': LOGS_NEW,
+    [CLI_PATHS.commands]: COMMAND_INDEX_NEW,
+    [CLI_PATHS.registry]: REGISTRY_NEW,
+    [CLI_PATHS.suggest]: SUGGEST_NEW,
+    [CLI_PATHS.help]: HELP_NEW,
+    [CLI_PATHS.index]: CLI_INDEX_NEW,
+    [CLI_PATHS.codemod]: CODEMOD_NEW,
+    'scripts/codemods/flag-help.json': serializeFlagHelp(),
+    [CLI_PATHS.docs]: DOCS_SCRIPT_NEW,
+    [CLI_PATHS.mcp]: MCP_COMMANDS_NEW,
+    [CLI_PATHS.test]: HELP_TEST_NEW,
+  };
+}
+
+const PUSH_NEW = serializeCommand(CLI_COMMANDS[0] as CliCommand);
+
+const COMMAND_INDEX_NEW = serializeCommandIndex();
+
+function resolveSeedPipeline(task: SeedTask): readonly PipelineStep[] | null {
+  if (task.composed) return task.composed.pipeline;
+  return task.shape ? SHAPE_PIPELINES[task.shape] : null;
+}
+
+type Timeline = TimedSeedEvent[];
+
+const SMALL_PLAN = [
+  { title: 'Find the cause', detail: 'Reproduce it and trace where it goes wrong.' },
+  { title: 'Make the change', detail: 'Fix it in the narrowest place that covers every caller.' },
+  { title: 'Verify it', detail: 'Run the checks and confirm the behaviour by hand.' },
+];
+
+const LARGE_PLAN = [
+  { title: 'Read the current code', detail: 'Map what exists and where the change has to land.' },
+  { title: 'Build the core change', detail: 'The new behaviour, behind the existing interfaces.' },
+  { title: 'Wire it into the app', detail: 'Connect the screens and commands that use it.' },
+  { title: 'Test and capture evidence', detail: 'Tests for the logic, recordings for anything visible.' },
+];
+
+const LIVE_STAGES = new Set<TaskStage>([
+  'planning',
+  'building',
+  'reviewing',
+  'fixing',
+  'investigating',
+  'researching',
+  'operating',
+]);
+
+const SEED_CHECKS = [
+  { name: 'bun run lint', outcome: 'pass' as const, detail: null },
+  { name: 'bun run check-types', outcome: 'pass' as const, detail: null },
+  { name: 'bun test', outcome: 'pass' as const, detail: null },
+];
+
+const BUILT_STAGES = new Set<TaskStage>([
+  'checking',
+  'awaiting_review',
+  'shipping',
+  'awaiting_merge',
+  'merged',
+  'awaiting_operation',
+]);
+
+function resolveSeedPlan(task: SeedTask): PlanDocument {
+  if (task.plan) return task.plan;
+  return {
+    goal: task.request,
+    phases: task.size === 'large' ? LARGE_PLAN : SMALL_PLAN,
+    behaviour: [],
+    approach: 'Planned by the agent.',
+    files: [],
+    outOfScope: [],
+    verification: ['The tests that cover the change pass, and the change behaves as asked when run by hand.'],
+    questions: [],
+  };
+}
+
+function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
+  push(clock.at, {
+    type: 'task.created',
+    taskId: task.id,
+    request: task.request,
+    repoId: task.repo.id,
+    priority: task.priority ?? 'normal',
+    planFirst: task.planFirst ?? false,
+    origin: null,
+    ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
+    auto: task.auto ?? CHOSEN_BY_YOU,
+  });
+  push(clock.step(0.2), {
+    type: 'task.triaged',
+    taskId: task.id,
+    title: task.title,
+    repoId: task.repo.id,
+    size: task.size,
+    branch: task.branch,
+    ...(task.shape ? { pipeline: [...SHAPE_PIPELINES[task.shape]] } : {}),
+    decisions: task.decisions ?? NO_TRIAGE_DECISIONS,
+  });
+  if (task.composed) {
+    push(clock.step(0.1), {
+      type: 'task.reshaped',
+      taskId: task.id,
+      pipeline: task.composed.pipeline,
+      by: 'agent',
+      reason: task.composed.why,
+    });
+  }
+  if (task.waitsOn) {
+    push(clock.step(0.05), {
+      type: 'task.waits_on_changed',
+      taskId: task.id,
+      waitsOn: task.waitsOn,
+      by: 'you',
+    });
+  }
+  if (task.worktreePath) {
+    push(clock.step(0.1), {
+      type: 'worktree.created',
+      taskId: task.id,
+      path: task.worktreePath,
+      branch: task.branch,
+      workspace: 'worktrees',
+    });
+  }
+}
+
+function resolveRunModel(task: SeedTask, role: RunRole) {
+  if (task.provider === 'codex') return 'gpt-6-astra';
+  return role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
+}
+
+function pushTaskRevision(task: SeedTask, push: Push, clock: SeedClock) {
+  if (!task.revision) return;
+  const gateId = `${task.id}-review-1`;
+  push(clock.step(0.5), {
+    type: 'gate.opened',
+    gate: {
+      id: gateId,
+      taskId: task.id,
+      type: 'review',
+      status: 'open',
+      title: `Review “${task.title}”`,
+      body: 'Built, checked and reviewed by the agents.',
+      runId: null,
+      openedAt: clock.at,
+      answeredAt: null,
+      decision: null,
+      response: null,
+    },
+  });
+  push(clock.step(20), {
+    type: 'gate.answered',
+    gateId,
+    decision: 'revise',
+    response: task.revision.response,
+  });
+  push(clock.step(0.1), { type: 'fix.started', taskId: task.id, round: 1, reason: 'you' });
+}
+
+interface SeedProgress {
+  plan: PlanDocument | null;
+  finished: number;
+  proposed: boolean;
+  built: number;
+  fixes: number;
+  agentRuns: number;
+}
+
+function resolveProposedPlan(task: SeedTask) {
+  const planning = task.stage === 'triage' || task.stage === 'waiting_on_tasks' || task.stage === 'planning';
+  const inquiring = ['answering', 'researching', 'investigating', 'awaiting_proposal'].includes(task.stage);
+  if (planning || inquiring) return null;
+  const pipeline = resolveSeedPipeline(task);
+  if (pipeline && !pipeline.includes('plan')) return null;
+  return resolveSeedPlan(task);
+}
+
+function resolveFinishedPhases(task: SeedTask, plan: PlanDocument) {
+  if (BUILT_STAGES.has(task.stage)) return plan.phases.length;
+  if (task.stage === 'building') return Math.floor(plan.phases.length / 2);
+  return 0;
+}
+
+function pushPlanProposal(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
+  if (!progress.plan || progress.proposed) return;
+  const { plan } = progress;
+  push(clock.step(0.2), { type: 'plan.proposed', taskId: task.id, body: plan.goal, document: plan });
+  progress.proposed = true;
+}
+
 function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
   const index = progress.built;
   const phase = progress.plan?.phases[index];
@@ -676,6 +1438,8 @@ function pushPhaseDone(task: SeedTask, progress: SeedProgress, push: Push, clock
       summary: task.report?.sections[index]?.summary ?? phase?.detail ?? 'Done.',
       spots: task.report?.sections[index]?.spots ?? [],
       judgementCalls: index === 0 ? (task.report?.judgementCalls ?? []) : [],
+      walkthrough:
+        index === (progress.plan?.phases.length ?? 1) - 1 ? (task.report?.walkthrough ?? null) : null,
       at: 0,
     },
   });
@@ -817,6 +1581,7 @@ function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
       taskId: task.id,
       summary: task.reviewSummary ?? null,
       findings: task.findings,
+      ...(task.reviewDisagreements ? { disagreements: task.reviewDisagreements } : {}),
     });
   }
   pushTaskPullRequest(task, push, clock);
@@ -931,6 +1696,14 @@ function seedFiles(task: SeedTask) {
   return SEED_FILES[task.repo.id] ?? { read: 'src/index.ts', edit: 'src/index.ts', test: 'bun test' };
 }
 
+function listSeedDisagreements(task: SeedTask) {
+  const calls = task.report?.judgementCalls ?? [];
+  return (task.reviewDisagreements ?? []).map((entry) => ({
+    call: calls.findIndex((call) => call.call === entry.call) + 1,
+    reason: entry.reason,
+  }));
+}
+
 function resolveHandover({ task, role, purpose }: SeedRunTimes): ChatTool {
   const body = task.summary ?? task.title;
   if (purpose === 'plan') {
@@ -940,7 +1713,11 @@ function resolveHandover({ task, role, purpose }: SeedRunTimes): ChatTool {
   if (purpose === 'operate') return { kind: 'shinsa', name: 'report_outcome', args: { outcome: body } };
   if (role === 'reviewer') {
     const summary = task.reviewSummary ? { summary: task.reviewSummary } : {};
-    return { kind: 'shinsa', name: 'report_review', args: { ...summary, findings: task.findings ?? [] } };
+    return {
+      kind: 'shinsa',
+      name: 'report_review',
+      args: { ...summary, findings: task.findings ?? [], disagreements: listSeedDisagreements(task) },
+    };
   }
   return (
     resolveShapeHandover(role, body) ?? { kind: 'shinsa', name: 'complete_fix', args: { summary: body } }
@@ -1456,6 +2233,19 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
                 'high',
                 'Each streamed part becomes its own message. Long replies will arrive as many rows unless the server sends one text part.'
               ),
+              spot(chatFile, EMBEDDED_CHAT_NEW, 'async reset()', 'await this.session.close();', 'normal', {
+                title: 'Reset closes the connection',
+                why: 'reset() changed from sync to async. Two call sites in the editor await it now.',
+                explain:
+                  'Clearing the history alone would leave an open MCP connection per reset. `close()` shuts the SDK client and drops it, so the next `send` connects again with a fresh session.',
+              }),
+            ],
+          },
+          {
+            title: 'Render tool results inline',
+            summary:
+              'The session splits the tool response into text and tool_result parts; the chat turns tool results into rows with role tool.',
+            spots: [
               spot(
                 chatFile,
                 EMBEDDED_CHAT_NEW,
@@ -1501,6 +2291,97 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
             line: 15,
           },
         ],
+        walkthrough: {
+          approach:
+            'The old chat posted the whole history to `/chat` and waited for one reply. This change puts an `McpSession` between the chat and the paywall server: it owns the official SDK `Client`, connects on the first message, and turns one `chat.complete` tool call into a list of parts.\n\n`EmbeddedChat` keeps its shape. `send()` still takes text and reports messages through `onMessage`; it now walks the parts and records text and tool results as separate rows. Only the constructor option changed, from `endpoint` to `serverUrl`, and `reset()` became async because it closes the connection.\n\n`transport.ts` is deleted: the chat was its only caller.',
+          flow: '1. The editor calls `send(text)`. The user message goes into `history` first.\n2. `ensureConnected` returns at once when a client exists. Otherwise it counts an attempt and connects over streamable HTTP with `x-paywall-id` on every request. After three failures in a row it throws “The MCP server is unreachable.”\n3. `complete` calls the `chat.complete` tool with the history and the paywall id.\n4. The response’s `content` items become parts: `tool_result` items as tool parts, the rest as text.\n5. `send` records each part through `record`, which appends it to `history` and hands it to `onMessage`.\n6. `reset()` clears the history and closes the client.\n\n```text\neditor\n  │ send(text)\n  ▼\nEmbeddedChat ──────────────── history.push(user message)\n  │\n  ▼\nMcpSession.ensureConnected ── first call: Client.connect,\n  │                            streamable HTTP, x-paywall-id\n  ▼\nMcpSession.complete ──callTool(chat.complete)──▶ MCP server\n  │                                                  │\n  │ ◀──────────── content[]: text, tool_result ──────┘\n  ▼\nparts ──▶ record() ──▶ history + onMessage ──▶ transcript rows\n```\n\nThe history sent to the server includes the tool rows, so the model sees what its tools returned on the next turn.',
+          risks: [
+            {
+              title: 'Orphaned user turn on a failed connect',
+              risk: 'The user message is pushed before connecting. If the connect fails or the signal aborts, the history keeps a user turn with no reply and the next send carries it along.',
+              file: chatFile,
+              ...rangeOf(
+                EMBEDDED_CHAT_NEW,
+                'this.history.push(message);',
+                'await this.session.ensureConnected'
+              ),
+            },
+            {
+              title: 'Replies arrive whole',
+              risk: 'Nothing streams yet: `callTool` resolves with the whole response before the first part is yielded, so a long reply still shows nothing until it is complete.',
+              file: sessionFile,
+              ...rangeOf(
+                MCP_SESSION_NEW,
+                'const response = await this.client.callTool(',
+                '{ signal: options.signal }'
+              ),
+            },
+            {
+              title: 'Paywall id read on every request',
+              risk: 'The paywall server has to read `x-paywall-id` on every request. If it only checks it on initialize, tool calls run against no paywall.',
+              file: sessionFile,
+              ...rangeOf(
+                MCP_SESSION_NEW,
+                "requestInit: { headers: { 'x-paywall-id'",
+                "requestInit: { headers: { 'x-paywall-id'"
+              ),
+            },
+          ],
+          testing: {
+            automated: [
+              '`mcp-session.test.ts` runs the session against a fake MCP server: three refused connects then the unreachable error, `x-paywall-id` on every request, and tool results arriving as their own parts.',
+            ],
+            manual: [
+              {
+                action: 'Start the editor and the local MCP server from the worktree.',
+                target: { kind: 'command', value: 'PAYWALL_MCP_URL=http://localhost:7410/mcp bun dev' },
+                expect: 'The editor serves on port 5173 and the chat panel opens without a connection error.',
+              },
+              {
+                action: 'Open a paywall and ask the chat to change the headline to “Spring sale”.',
+                target: { kind: 'url', value: 'http://localhost:5173/paywalls/spring-sale' },
+                expect:
+                  'A tool row with `paywall.update` appears under the reply and the preview shows the new headline.',
+              },
+              {
+                action: 'Stop the MCP server mid-conversation and send another message.',
+                target: null,
+                expect: 'After three failed tries the chat shows the unreachable error instead of a spinner.',
+              },
+              {
+                action: 'Reset the chat while a reply is still streaming, then send a new message.',
+                target: null,
+                expect: 'The next conversation starts empty, with no half reply from the old one.',
+              },
+              {
+                action: 'Check that the paywall id rides on every request, not only on initialize.',
+                target: {
+                  kind: 'file',
+                  value: `${sessionFile}:${lineOf(MCP_SESSION_NEW, "requestInit: { headers: { 'x-paywall-id'")}`,
+                },
+                expect: 'The header is set on the transport, so every tool call carries `x-paywall-id`.',
+              },
+            ],
+          },
+          steps: [
+            {
+              when: 'pre_merge',
+              kind: 'env',
+              title: 'Set `PAYWALL_MCP_URL` for the editor in production',
+              detail:
+                'The editor builds `serverUrl` from it and has no default. Use the MCP v2 endpoint, `https://mcp.superwall.com/v2`; staging already has it. `.env.example` names it.',
+              command: 'vercel env add PAYWALL_MCP_URL production',
+            },
+            {
+              when: 'post_merge',
+              kind: 'config',
+              title: 'Turn on `embedded-chat-mcp-v2` for 10% of workspaces',
+              detail:
+                'In LaunchDarkly, production. Raise it to everyone once the chat’s error rate holds for a day.',
+              command: null,
+            },
+          ],
+        },
       },
       reviewSummary:
         'I read the new MCP session, the rewired chat and the three new tests, and ran a chat against a server that drops after connecting. The streaming and tool rows work; the reconnect limit does not hold, so a flaky server keeps the chat retrying forever.',
@@ -1542,15 +2423,15 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         {
           role: 'reviewer',
           minutes: 4,
-          summary: 'One blocking finding on the reconnect limit, two suggestions.',
+          summary: 'One blocking finding on the reconnect limit, three suggestions.',
           reply:
-            'One blocking finding: the reconnect counter in [mcp-session.ts](shinsa://file/src/chat/mcp-session.ts#L26) resets after every successful connect, so a flaky server gets three new tries every time. Two suggestions, on dropped connections and on reset().\n\n[Let the embedded chat call paywall tools](shinsa://task/task-chat-tools) waits on this change, and #4531 from "Refuse to duplicate code-first paywalls" touches the same editor, so merging that first keeps the conflicts small. The work is on [feat/embedded-chat-mcp](shinsa://branch/feat/embedded-chat-mcp) in [paywall-next](shinsa://repo/paywall-next).',
+            'One blocking finding: the reconnect counter in [mcp-session.ts](shinsa://file/src/chat/mcp-session.ts#L26) resets after every successful connect, so a flaky server gets three new tries every time, and I disagree with the reconnect limit decision for the same reason. Three suggestions, on dropped connections, unlabelled tool failures and reset().\n\n[Let the embedded chat call paywall tools](shinsa://task/task-chat-tools) waits on this change, and #4531 from "Refuse to duplicate code-first paywalls" touches the same editor, so merging that first keeps the conflicts small. The work is on [feat/embedded-chat-mcp](shinsa://branch/feat/embedded-chat-mcp) in [paywall-next](shinsa://repo/paywall-next).',
         },
       ],
       gate: {
         type: 'review',
         title: 'Review the embedded chat on MCP v2',
-        body: 'Built, checked and reviewed by an agent. One blocking finding and two suggestions left for you to judge.',
+        body: 'Built, checked and reviewed by an agent. One blocking finding and three suggestions left for you to judge.',
       },
     },
     {
@@ -1740,7 +2621,155 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           { name: 'bun test', outcome: 'pass', detail: '2 new' },
           { name: 'CI', outcome: 'pass', detail: 'All 9 checks green' },
         ],
-        judgementCalls: [],
+        judgementCalls: [
+          {
+            title: 'Guard the server, not the button',
+            call: 'Guarded duplicatePaywall instead of hiding the button',
+            reason:
+              'The dashboard, the public API and the template job all call it. One guard in the function covers every caller.',
+            file: duplicateFile,
+            ...rangeOf(DUPLICATE_NEW, "if (source.kind === 'code_first')", 'throw new PaywallError'),
+            alternatives: [
+              {
+                option: 'Hide the Duplicate button for code-first paywalls',
+                rejected:
+                  'The API route stays open, and the next client with a duplicate action repeats the bug.',
+              },
+              {
+                option: 'Check the kind in each route handler',
+                rejected: 'Three callers would each need the same check, and a fourth would forget it.',
+              },
+            ],
+          },
+          {
+            title: 'A dedicated error code',
+            call: 'Added a code_first_duplicate error code',
+            reason:
+              'The dashboard shows PaywallError messages as they are. `forbidden` would tell the user they lack access, which is not why it failed.',
+            file: errorsFile,
+            ...rangeOf(ERRORS_NEW, 'export type PaywallErrorCode', 'export type PaywallErrorCode'),
+            alternatives: [
+              {
+                option: 'Reuse forbidden',
+                rejected: 'Reads as a permissions problem, and support would chase the wrong cause.',
+              },
+              {
+                option: 'Throw a plain Error',
+                rejected: 'Becomes a 500 and an alert for a request that is simply not allowed.',
+              },
+            ],
+          },
+          {
+            title: 'Check the kind after the read',
+            call: 'Checked the kind after the read instead of filtering in the query',
+            reason:
+              'Filtering in `where` would turn a code-first paywall into not found, which hides the reason.',
+            file: duplicateFile,
+            ...rangeOf(
+              DUPLICATE_NEW,
+              'const source = await db.paywall.findUniqueOrThrow',
+              "if (source.kind === 'code_first')"
+            ),
+            alternatives: [
+              {
+                option: "Add `kind: { not: 'code_first' }` to the query",
+                rejected:
+                  'One query instead of a check, but the user would see “not found” for a paywall they are looking at.',
+              },
+            ],
+          },
+        ],
+        walkthrough: {
+          approach:
+            'Code-first paywalls live in a repository; the dashboard only mirrors them. Duplicating one created a dashboard copy that no repository owns, which then drifted from the code.\n\nThe fix is one guard where every duplicate starts: `duplicatePaywall` reads the source, and a code-first source throws a `PaywallError` with a new `code_first_duplicate` code and a message that says where to duplicate it instead.',
+          flow: "1. The dashboard or the API calls `duplicatePaywall(paywallId, ownerId)`.\n2. The source paywall is read; a missing one still throws not found.\n3. A `code_first` source throws `PaywallError('code_first_duplicate')`.\n4. The API maps the code to 409 and returns the message; the dashboard shows it in a toast.\n5. A visual paywall is copied as before.\n\n```text\nDuplicate button ─┐\nPOST /duplicate ──┼──▶ duplicatePaywall(paywallId, ownerId)\ntemplate job ─────┘          │\n                             ▼\n                       read the source ── missing ──▶ not found\n                             │\n                             ▼\n                       code_first? ── yes ──▶ PaywallError (409)\n                             │ no                  │\n                             ▼                     ▼\n                  db.paywall.create(copy)    toast in the dashboard\n```",
+          risks: [
+            {
+              title: 'Existing copies stay as they are',
+              risk: 'Copies made from code-first paywalls before this change still exist and behave like visual paywalls nobody maintains. They are not touched here.',
+              file: null,
+              line: null,
+              end: null,
+            },
+            {
+              title: 'Old dashboards show a generic error',
+              risk: 'Older dashboard builds switch on the error code and have no case for `code_first_duplicate`, so they show the generic “Something went wrong” until they update.',
+              file: errorsFile,
+              ...rangeOf(ERRORS_NEW, 'export type PaywallErrorCode', 'export type PaywallErrorCode'),
+            },
+          ],
+          testing: {
+            automated: [
+              '`duplicate.test.ts` covers both kinds: a visual paywall is copied, a code-first one is refused with the repository message.',
+            ],
+            manual: [
+              {
+                action: 'Run the duplicate tests on the branch.',
+                target: { kind: 'command', value: 'bun test src/paywalls/duplicate.test.ts' },
+                expect: 'Both cases pass: the visual copy and the refused code-first paywall.',
+              },
+              {
+                action: 'Start the dashboard and open the paywall list.',
+                target: { kind: 'url', value: 'http://localhost:5173/paywalls' },
+                expect: 'The list loads with both visual and code-first paywalls.',
+              },
+              {
+                action: 'Open a code-first paywall and press Duplicate.',
+                target: null,
+                expect:
+                  'A toast says code-first paywalls are duplicated from their repository, and no copy appears in the list.',
+              },
+              {
+                action: 'Duplicate a visual paywall the same way.',
+                target: null,
+                expect: 'A copy named “… (copy)” appears at the top of the list, as before.',
+              },
+              {
+                action: 'Call the API directly for a code-first paywall.',
+                target: {
+                  kind: 'command',
+                  value: 'curl -i -X POST http://localhost:8787/paywalls/pw_code_first/duplicate',
+                },
+                expect: 'A 409 with `code_first_duplicate` and the same message as the toast.',
+              },
+              {
+                action: 'Read the guard where every duplicate starts.',
+                target: {
+                  kind: 'file',
+                  value: `${duplicateFile}:${lineOf(DUPLICATE_NEW, "if (source.kind === 'code_first')")}-${lineOf(DUPLICATE_NEW, "throw new PaywallError('code_first_duplicate'")}`,
+                },
+                expect: 'The check runs before the copy is written, so the template job is covered too.',
+              },
+            ],
+          },
+          steps: [
+            {
+              when: 'pre_merge',
+              kind: 'env',
+              title: 'Set `CODE_FIRST_DOCS_URL` on the API in production',
+              detail:
+                'The refusal message links to it. Use `https://docs.superwall.com/paywalls/code-first#duplicate`; without it the message links to the docs home.',
+              command:
+                'railway variables --service api --environment production --set CODE_FIRST_DOCS_URL=https://docs.superwall.com/paywalls/code-first#duplicate',
+            },
+            {
+              when: 'pre_merge',
+              kind: 'config',
+              title: 'Add `code_first_duplicate` to the API error alerts allowlist',
+              detail:
+                'In Sentry, project `api`: a 409 with this code is expected, so it should not page anyone.',
+              command: null,
+            },
+            {
+              when: 'post_merge',
+              kind: 'deploy',
+              title: 'Release the dashboard',
+              detail:
+                'Older dashboard builds show “Something went wrong” for the new code until they update; this release shows the message.',
+              command: 'bun run --cwd apps/dashboard release',
+            },
+          ],
+        },
       },
       runs: [
         { role: 'agent', purpose: 'build', minutes: 9, summary: 'Added the guard and tests.' },
@@ -1795,6 +2824,302 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           'The docs page for each command is generated from its definition.',
         ],
         approach:
+          'Introduce defineCommand({ name, args, flags, run }) and migrate all 31 commands in this task. A codemod handles the commands with plain flags; the ones that read positional arguments or stdin are done by hand. The old flag parser stays behind an opt-in variable until the next release.',
+        files: [
+          { path: 'src/cli/registry.ts', change: 'New defineCommand, flag builders and the parser.' },
+          { path: 'src/cli/commands/*.ts', change: 'Migrated to defineCommand.' },
+          { path: 'src/cli/help.ts', change: 'New: help rendered from a definition.' },
+          { path: 'scripts/generate-command-docs.ts', change: 'New: one docs page per command.' },
+          { path: 'src/mcp/commands.ts', change: 'New: commands listed as MCP tools.' },
+        ],
+        outOfScope: ['Changing any command’s behaviour.'],
+        verification: ['Snapshot of every command’s help output before and after.'],
+        questions: [],
+      },
+      report: {
+        headline:
+          'All 31 framework commands now declare their arguments, flags and help in one defineCommand call, and the CLI help, the docs pages and the MCP tool list are generated from it.',
+        sections: [
+          {
+            title: 'Define the command schema',
+            summary:
+              'registry.ts adds defineCommand, small flag builders and parseInput, which rejects unknown flags and suggests the closest one.',
+            spots: [
+              spot(
+                CLI_PATHS.registry,
+                REGISTRY_NEW,
+                'export const flag = {',
+                "number: createFlag('number'),",
+                'normal',
+                {
+                  title: 'Flag builders',
+                  why: 'Every command’s flags go through these three builders; the kind decides how parseInput reads the value.',
+                  explain:
+                    '`flag.string`, `flag.boolean` and `flag.number` return a `FlagSpec` with its kind, help text and optional `alias` and `default`. The generic keeps the default typed, so `flag.number(..., { default: 120 })` will not accept a string.',
+                }
+              ),
+              spot(
+                CLI_PATHS.registry,
+                REGISTRY_NEW,
+                'export function defineCommand',
+                'return definition as unknown as CommandDefinition;',
+                'high',
+                {
+                  title: 'One command, typed inside, plain outside',
+                  why: 'The cast drops the per-command flag types once the definition leaves the file.',
+                  explain:
+                    'Inside a command file `run` sees `flags.wait` as `number | undefined`. The return value is widened to the plain `CommandDefinition` so 31 differently typed commands fit in one `COMMANDS` array.',
+                }
+              ),
+              spot(
+                CLI_PATHS.registry,
+                REGISTRY_NEW,
+                "const [raw = '', inline] = token",
+                'if (!spec) throw new UsageError',
+                'critical',
+                {
+                  title: 'Split a flag from its value',
+                  why: '`split` with a limit drops everything after the second `=`, so values containing `=` are cut.',
+                  explain:
+                    'A token like `--app=demo` is split into the flag name and an inline value. The name goes through the alias lookup, and a name the command does not declare is a `UsageError` instead of being passed through, which is what the old parser did.',
+                }
+              ),
+              spot(
+                CLI_PATHS.registry,
+                REGISTRY_NEW,
+                "if (spec.kind === 'boolean') {",
+                "flags[name] = spec.kind === 'number'",
+                'critical',
+                {
+                  title: 'Read the value by kind',
+                  why: 'There is no branch for `--no-<flag>`, which the old parser supported.',
+                  explain:
+                    'Booleans take no value: `--json` is true and `--json=false` is false. Strings and numbers take the inline value or the next token, and a missing one is a usage error naming the flag.',
+                }
+              ),
+              spot(
+                CLI_PATHS.suggest,
+                SUGGEST_NEW,
+                'for (const name of names)',
+                'if (distance <= MAX_DISTANCE',
+                'normal',
+                {
+                  title: 'Suggest the closest flag',
+                  why: 'Two edits is tight: `--no-cache` against `cache` is three, so it gets no suggestion.',
+                  explain:
+                    '`suggestName` counts edits between the typed name and every declared flag and keeps the closest one within two edits. `--apps` suggests `--app`; `--frobnicate` suggests nothing.',
+                }
+              ),
+            ],
+          },
+          {
+            title: 'Port the existing commands',
+            summary:
+              'A codemod moved the 28 commands with plain flags onto defineCommand; deploy, login and logs were ported by hand.',
+            spots: [
+              spot(CLI_PATHS.commands, COMMAND_INDEX_NEW, 'export const COMMANDS', '  campaigns,', 'normal', {
+                title: 'Every command in one list',
+                why: 'A command that is not imported here does not exist: no help, no docs page, no tool.',
+                explain:
+                  '`COMMANDS` is a plain array of the 31 default exports, sorted by name. The CLI, the docs script and the MCP server all read this list, so they cannot disagree about what exists.',
+              }),
+              spot(
+                CLI_PATHS.push,
+                PUSH_NEW,
+                'cache: flag.boolean(',
+                'run: ({ flags }) => runPush(flags),',
+                'critical',
+                {
+                  title: 'Defaults carried over from the old parser',
+                  why: '`cache` defaults to true and the only way to turn it off was `--no-cache`, which the new parser rejects.',
+                  explain:
+                    'The codemod read the old `parseFlags` options and wrote one builder call per flag, keeping `default: { cache: true }` as `{ default: true }`. `run` receives the parsed flags as they are.',
+                }
+              ),
+              spot(
+                CLI_PATHS.deploy,
+                DEPLOY_NEW,
+                "args: [{ name: 'environment'",
+                'run: ({ args, flags }) => runDeploy',
+                'high',
+                {
+                  title: 'Positional arguments are declared too',
+                  why: 'The `staging` fallback can never apply now that the argument is required, so it only hides a mistake.',
+                  explain:
+                    '`deploy` takes the environment as an argument. Declaring it makes the help show `<environment>` and lets `parseInput` fail early with “deploy needs <environment>.” instead of the action throwing later.',
+                }
+              ),
+              spot(
+                CLI_PATHS.codemod,
+                CODEMOD_NEW,
+                'if (!parse?.[1] || !action',
+                'const options = Function(',
+                'high',
+                {
+                  title: 'Port only what the codemod understands',
+                  why: '`Function` evaluates the options object from the source. Safe here because it runs once on our own files, never on input.',
+                  explain:
+                    'A command is rewritten only when it has one `parseFlags(argv, {...})` call, passes `flags` straight to its action and never reads positional `flags._`. Anything else is skipped with a warning and was ported by hand.',
+                }
+              ),
+            ],
+          },
+          {
+            title: 'Generate docs and help',
+            summary:
+              'help.ts renders usage and flags from a definition; the docs script writes one page per visible command; the CLI prints help before parsing.',
+            spots: [
+              spot(
+                CLI_PATHS.help,
+                HELP_NEW,
+                'for (const [name, spec] of flags)',
+                'lines.push(`  ',
+                'normal',
+                {
+                  title: 'Help from the definition',
+                  why: 'Help is aligned by padding names, so a very long flag name widens every line.',
+                  explain:
+                    'Each flag becomes one line: the short alias if any, the name padded to the longest one, the help text and the default. Commands without flags print usage and the summary only.',
+                }
+              ),
+              spot(
+                CLI_PATHS.docs,
+                DOCS_SCRIPT_NEW,
+                'for (const command of visible)',
+                'writeFileSync(join(OUT, `',
+                'normal',
+                {
+                  title: 'One docs page per command',
+                  why: 'Pages are only written, never removed.',
+                  explain:
+                    'The page is the command name, its summary and the same help text the CLI prints, in a code block. The script runs in the docs build, so the pages cannot drift from the CLI.',
+                }
+              ),
+              spot(
+                CLI_PATHS.index,
+                CLI_INDEX_NEW,
+                "if (name === 'help'",
+                "if (rest.includes('--help'))",
+                'normal',
+                {
+                  title: 'Help before parsing',
+                  why: '`--help` anywhere in the arguments wins, even as the value of a string flag.',
+                  explain:
+                    '`superwall help deploy` and `superwall deploy --help` print the same text. Help is checked before `parseInput`, so asking for help never fails on a missing argument.',
+                }
+              ),
+            ],
+          },
+          {
+            title: 'Expose the commands to agents',
+            summary:
+              'The MCP server lists every visible command as a tool, with an input schema built from its flags.',
+            spots: [
+              spot(
+                CLI_PATHS.mcp,
+                MCP_COMMANDS_NEW,
+                'return COMMANDS.filter',
+                'inputSchema: resolveInputSchema(command),',
+                'high',
+                {
+                  title: 'Commands become tools',
+                  why: 'Every visible command, including deploy and rollback, is offered to agents unless it sets `agents: false`.',
+                  explain:
+                    'Each command becomes a tool named `superwall.<command>` with its summary as the description. `hidden` commands and those marked `agents: false` (login, for its token) are left out.',
+                }
+              ),
+              spot(
+                CLI_PATHS.mcp,
+                MCP_COMMANDS_NEW,
+                'if (args.length > 0) {',
+                "return { type: 'object', properties",
+                'normal',
+                {
+                  title: 'Arguments as one array',
+                  why: 'The array has no `items`, which strict JSON schema validators reject.',
+                  explain:
+                    'Flags map one to one onto properties, using the flag kind as the JSON type. Positional arguments become one `args` array described by their names, required when any argument is.',
+                }
+              ),
+            ],
+          },
+          {
+            title: 'Verify every command',
+            summary:
+              'A snapshot of every command’s help, a check that no flag lacks help text, and two parser tests.',
+            spots: [
+              spot(
+                CLI_PATHS.test,
+                HELP_TEST_NEW,
+                'for (const command of COMMANDS)',
+                'toMatchSnapshot',
+                'normal',
+                {
+                  title: 'A snapshot per command',
+                  why: 'Snapshots show the help changed, not that the parsing behaves as before.',
+                  explain:
+                    'One test per command renders its help and compares it with the stored snapshot, so any change to a flag, default or summary shows up in review as a snapshot diff.',
+                }
+              ),
+              spot(
+                CLI_PATHS.test,
+                HELP_TEST_NEW,
+                "it('gives every flag a help text'",
+                'expect(missing).toEqual([]);',
+                'normal',
+                {
+                  title: 'No flag without help',
+                  why: 'The codemod writes an empty string when `flag-help.json` has no entry; this test is what catches it.',
+                  explain:
+                    'Collects every `command --flag` pair whose help is empty and expects none. The failure message lists them, which is how the four missing texts were found during the port.',
+                }
+              ),
+            ],
+          },
+        ],
+        checks: [
+          { name: 'bun lint', outcome: 'pass', detail: null },
+          { name: 'bun check-types', outcome: 'pass', detail: null },
+          { name: 'bun test', outcome: 'pass', detail: '214 tests, 34 new' },
+        ],
+        judgementCalls: [
+          {
+            title: 'A static command list',
+            call: 'A static list of commands instead of scanning the folder',
+            reason:
+              'The CLI ships as one bundle, so a folder scan at runtime finds nothing. An import per command is 31 lines and makes the list explicit.',
+            file: CLI_PATHS.commands,
+            ...rangeOf(COMMAND_INDEX_NEW, 'export const COMMANDS', 'export const COMMANDS'),
+            alternatives: [
+              {
+                option: 'Glob src/cli/commands at startup',
+                rejected:
+                  'The bundled CLI has no commands folder, and reading files on every start slows `superwall --help`.',
+              },
+              {
+                option: 'Register from each command file as a side effect',
+                rejected:
+                  'Order would depend on import order, and a file nobody imports would silently drop its command.',
+              },
+            ],
+          },
+          {
+            title: 'Port the existing commands',
+            detail: 'Move every command onto the schema without changing behaviour.',
+          },
+          {
+            title: 'Generate docs and help',
+            detail: 'The CLI help and the docs page read the same definition.',
+          },
+          { title: 'Expose it to agents', detail: 'The MCP server lists commands from the schema.' },
+          { title: 'Verify every command', detail: 'Snapshot the help output and run each command once.' },
+        ],
+        behaviour: [
+          '`superwall help <command>` prints generated help.',
+          'Unknown flags fail with the closest suggestion.',
+          'The docs page for each command is generated from its definition.',
+        ],
+        approach:
           'Introduce defineCommand({ name, args, run }) and migrate the 31 commands in four batches. A codemod handles the 24 commands with plain flags; the rest are done by hand.',
         files: [
           { path: 'src/cli/registry.ts', change: 'New defineCommand and the registry.' },
@@ -1814,7 +3139,126 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
             recommendation: 'Keep it',
           },
         ],
+        walkthrough: {
+          approach:
+            'Before this change each command parsed its own `argv` with `parseFlags`, which accepted any flag, and the help and the docs were written by hand. Now each command file exports one `defineCommand({ name, summary, args, flags, run })`, and everything else reads that definition.\n\n`registry.ts` holds the types, the flag builders and `parseInput`. `commands/index.ts` lists all 31 commands. The CLI entry, `help.ts`, the docs script and the MCP server read that list.\n\nThe port ran in two passes: a codemod rewrote the 28 commands that pass their flags straight to an action, and deploy, login and logs were ported by hand. Behaviour stayed the same except where the old parser was lax: unknown flags now fail with a suggestion.',
+          flow: '1. `main(argv)` takes the command name. `help`, `--help` and unknown names print help without parsing.\n2. The command is looked up in `BY_NAME`, built once from `COMMANDS`.\n3. `parseInput` fills defaults, then walks the tokens: plain tokens are arguments, `--name` and `--name=value` are flags, aliases resolve through `alias`.\n4. An undeclared flag throws a `UsageError` with the closest declared name, if one is within two edits.\n5. Required arguments are checked, then `run({ args, flags })` is called.\n6. A `UsageError` prints the message and the command’s help and exits with 2; any other error propagates as before.\n\n```text\ncommands/*.ts ── defineCommand ──▶ COMMANDS\n                                      │\n        ┌─────────────────────────────┼─────────────────────┐\n        ▼                             ▼                     ▼\ncli/index.ts                help.ts, docs script     mcp/commands.ts\nparseInput ──▶ run          --help, cli/*.mdx        superwall.<name>\n```\n\nWith `SUPERWALL_LEGACY_FLAGS=1`, step 3 uses the old `parseFlags` instead and steps 4 and 5 are skipped.',
+          risks: [
+            {
+              title: 'Short flags do not combine',
+              risk: 'Short flags cannot be combined: `-fv` is looked up as one flag named `fv` and fails. Only `logs -f` and `deploy -m` have short forms today.',
+              file: CLI_PATHS.registry,
+              ...rangeOf(REGISTRY_NEW, "const [raw = '', inline] = token", 'const name = resolveFlagName'),
+            },
+            {
+              title: 'Bad numbers become NaN',
+              risk: 'Number flags are read with `Number()`, so `--wait soon` becomes `NaN` instead of a usage error.',
+              file: CLI_PATHS.registry,
+              ...rangeOf(
+                REGISTRY_NEW,
+                'const value = inline ?? argv[++index];',
+                "flags[name] = spec.kind === 'number'"
+              ),
+            },
+            {
+              title: 'Stale pages for removed commands',
+              risk: 'The docs script only writes pages. A renamed or removed command leaves its old page in `docs/cli` until someone deletes it.',
+              file: CLI_PATHS.docs,
+              ...rangeOf(DOCS_SCRIPT_NEW, 'mkdirSync(OUT', 'for (const command of visible)'),
+            },
+            {
+              title: 'Agents can deploy unconfirmed',
+              risk: '`deploy`, `promote` and `rollback` are offered to agents as tools with no confirmation of their own; only the MCP client’s approval stands between an agent and production.',
+              file: CLI_PATHS.mcp,
+              ...rangeOf(MCP_COMMANDS_NEW, 'return COMMANDS.filter', 'name: `superwall.'),
+            },
+            {
+              title: 'Legacy mode hides the new errors',
+              risk: 'With `SUPERWALL_LEGACY_FLAGS=1` unknown flags are accepted silently again, so a script that sets it never sees the new errors.',
+              file: CLI_PATHS.index,
+              ...rangeOf(
+                CLI_INDEX_NEW,
+                'const legacy = env.SUPERWALL_LEGACY_FLAGS',
+                'await command.run(legacy'
+              ),
+            },
+          ],
+          testing: {
+            automated: [
+              '`help.test.ts` snapshots the help of all 31 commands and fails when any flag has no help text.',
+              'Two parser tests: an unknown flag suggests the closest one, and `deploy` without an environment asks for it.',
+            ],
+            manual: [
+              {
+                action: 'Run a command with a misspelled flag from the worktree.',
+                target: { kind: 'command', value: 'bun src/cli/index.ts push --apps demo' },
+                expect: 'The CLI stops with “Did you mean --app?” instead of pushing.',
+              },
+              {
+                action: 'Run deploy without an environment.',
+                target: { kind: 'command', value: 'bun src/cli/index.ts deploy' },
+                expect: 'It asks for `<environment>` and exits without building anything.',
+              },
+              {
+                action: 'Print the help for every command.',
+                target: { kind: 'command', value: 'bun src/cli/index.ts --help' },
+                expect: 'All 31 commands are listed, each with a one-line summary and no empty flag help.',
+              },
+              {
+                action: 'Generate the command docs and compare them with the hand-written pages.',
+                target: {
+                  kind: 'command',
+                  value: 'bun scripts/generate-command-docs.ts && git diff --stat docs/cli',
+                },
+                expect: 'Only wording differences, and every command and flag still has a page entry.',
+              },
+              {
+                action: 'Read how the MCP server builds its tool list from the registry.',
+                target: { kind: 'file', value: CLI_PATHS.mcp },
+                expect: '`login` is left out, and `deploy` gets an `args` property from its definition.',
+              },
+            ],
+          },
+        },
       },
+      reviewSummary:
+        'I read the registry, the parser, the codemod and a sample of the ported commands, ran every command’s help, and tried the flags used in the docs. The structure is sound; the parser drops two things the old one handled, negated flags and values containing =.',
+      reviewDisagreements: [
+        {
+          call: EXIT_CODE_CALL,
+          reason:
+            'The plan kept behaviour changes out of scope, and the CI examples in the docs check for exit code 1. Changing it is reasonable but belongs in its own task with a release note.',
+        },
+      ],
+      findings: [
+        {
+          severity: 'blocking',
+          file: CLI_PATHS.registry,
+          ...rangeOf(REGISTRY_NEW, "if (spec.kind === 'boolean') {", "flags[name] = inline !== 'false';"),
+          title: 'Negated flags no longer work',
+          message:
+            'The old parser read `--no-cache` as `cache: false`. parseInput has no `no-` branch, so `superwall push --no-cache`, which the deploy guide uses, fails as an unknown flag, with no suggestion.',
+          fix: "Accept the negated form of boolean flags before the lookup:\n\n```ts\nconst negated = raw.startsWith('no-') && command.flags[raw.slice(3)]?.kind === 'boolean';\nif (negated) {\n  flags[raw.slice(3)] = false;\n  continue;\n}\n```",
+        },
+        {
+          severity: 'blocking',
+          file: CLI_PATHS.registry,
+          ...rangeOf(REGISTRY_NEW, "const [raw = '', inline] = token", "const [raw = '', inline] = token"),
+          title: 'Values containing = are cut',
+          message:
+            "`split('=', 2)` drops everything after the second `=`, so `env-set --value=c2VjcmV0==` stores `c2VjcmV0`. Base64 values end in `=`, so this corrupts real secrets without an error.",
+          fix: "Split on the first `=` only:\n\n```ts\nconst body = token.replace(/^--?/, '');\nconst at = body.indexOf('=');\nconst raw = at < 0 ? body : body.slice(0, at);\nconst inline = at < 0 ? undefined : body.slice(at + 1);\n```",
+        },
+        {
+          severity: 'suggestion',
+          file: CLI_PATHS.mcp,
+          ...rangeOf(MCP_COMMANDS_NEW, 'properties.args = {', 'properties.args = {'),
+          title: 'The args schema has no items',
+          message:
+            '`args` is declared as an array without `items`. Strict MCP clients validate every tool schema and drop the whole list over one invalid entry.',
+          fix: "Declare the item type: `{ type: 'array', items: { type: 'string' }, description }`.",
+        },
+      ],
       runs: [
         {
           role: 'agent',
@@ -1858,8 +3302,27 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
             ],
           },
           {
-            title: 'Keep the active tab visible',
-            summary: 'Selecting a tab scrolls it to the centre.',
+            title: 'Scroll the row',
+            summary:
+              'The row scrolls horizontally with the scrollbar hidden, and selecting a tab scrolls it to the centre.',
+            spots: [
+              spot(tabsFile, TAB_GROUP_NEW, '<div ref={listRef}', '{tabs.map((tab) => (', 'normal', {
+                title: 'The row scrolls, the page does not',
+                why: 'Hidden scrollbar: there is no visual hint more tabs exist off-screen.',
+                explain:
+                  '`overflow-x-auto` makes the row scroll, `overscroll-x-contain` stops a trackpad swipe at the end from going back in history, and `[scrollbar-width:none]` hides the bar.',
+              }),
+              spot(tabsFile, TAB_GROUP_NEW, 'React.useEffect', '}, [active]);', 'high', {
+                title: 'Scroll the active tab into view',
+                why: 'Smooth scrolling runs on first render too, so the row animates on page load.',
+                explain:
+                  'Whenever `active` changes, the effect finds the selected button by `data-active` and calls `scrollIntoView` with `inline: center`. `block: nearest` keeps the page from scrolling vertically to reach the row.',
+              }),
+            ],
+          },
+          {
+            title: 'Test it',
+            summary: 'Two component tests with 40 tabs.',
             spots: [
               spot(
                 'src/ui/tab-group.tsx',
@@ -1872,8 +3335,124 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
             ],
           },
         ],
-        checks: [{ name: 'bun lint', outcome: 'pass', detail: null }],
-        judgementCalls: [],
+        checks: [
+          { name: 'bun lint', outcome: 'pass', detail: null },
+          { name: 'bun test', outcome: 'pass', detail: '2 new' },
+        ],
+        judgementCalls: [
+          {
+            title: 'Centre the active tab',
+            call: 'Centred the active tab instead of scrolling it just into view',
+            reason:
+              'Centring shows the tabs on both sides of the selection, so you can see there is more in either direction.',
+            file: tabsFile,
+            ...rangeOf(TAB_GROUP_NEW, 'selected?.scrollIntoView', 'selected?.scrollIntoView'),
+            alternatives: [
+              {
+                option: "inline: 'nearest'",
+                rejected:
+                  'The tab lands flush with the edge, so the next one is always hidden and the row looks like it ends there.',
+              },
+            ],
+          },
+          {
+            title: 'Hide the scrollbar',
+            call: 'Hid the scrollbar',
+            reason:
+              'The tab row is 32px tall. A horizontal scrollbar either covers the labels or adds a strip under the row, depending on the system setting.',
+            file: tabsFile,
+            ...rangeOf(TAB_GROUP_NEW, '<div ref={listRef}', '<div ref={listRef}'),
+            alternatives: [
+              {
+                option: 'Keep the native scrollbar',
+                rejected:
+                  'Overlaps the labels on macOS with scrollbars always shown, and looks different on every system.',
+              },
+              {
+                option: 'Fade the edges with a mask',
+                rejected:
+                  'Needs the scroll position in state to drop the fade at either end; worth its own change.',
+              },
+            ],
+          },
+          {
+            title: 'Scroll from an effect',
+            call: 'Scrolled from an effect on active, not in the click handler',
+            reason:
+              'Tabs are also selected by keyboard shortcuts and from links, which never pass through `onClick`.',
+            file: tabsFile,
+            ...rangeOf(TAB_GROUP_NEW, 'React.useEffect', '}, [active]);'),
+            alternatives: [
+              {
+                option: 'Call scrollIntoView in onClick',
+                rejected: 'Misses every selection that does not come from a click.',
+              },
+            ],
+          },
+        ],
+        walkthrough: {
+          approach:
+            'Two small changes in `TabGroup`. The row becomes a horizontal scroll container and the tabs stop shrinking, so a crowded group scrolls instead of squeezing its labels. Then an effect keeps the selected tab visible by scrolling it to the centre whenever the selection changes.\n\nNo state is added: the selected tab is found in the DOM through the `data-active` attribute the buttons already had.',
+          flow: "1. The row renders with `overflow-x-auto`, and each tab keeps its width with `shrink-0`.\n2. With more tabs than fit, the row scrolls under a trackpad swipe or Shift with the wheel.\n3. When `active` changes, from a click, a shortcut or a link, the effect runs.\n4. It looks up `[data-active=\"true\"]` inside the row and scrolls it to the centre.\n\n```text\nclick, shortcut or link\n  │ onSelect(id)\n  ▼\nparent sets active ──▶ TabGroup renders the row\n  │                    overflow-x-auto, every tab shrink-0\n  ▼\nuseEffect([active])\n  │\n  ▼\nlistRef.current.querySelector('[data-active=\"true\"]')\n  │\n  ▼\nscrollIntoView({ block: 'nearest', inline: 'center' })\n```",
+          risks: [
+            {
+              title: 'Hidden tabs give no hint',
+              risk: 'Without a scrollbar or a fade, nothing shows that more tabs exist off-screen.',
+              file: tabsFile,
+              ...rangeOf(TAB_GROUP_NEW, '<div ref={listRef}', '<div ref={listRef}'),
+            },
+            {
+              title: 'Vertical wheels need Shift',
+              risk: 'A mouse with only a vertical wheel cannot scroll the row unless Shift is held.',
+              file: tabsFile,
+              ...rangeOf(TAB_GROUP_NEW, '<div ref={listRef}', '<div ref={listRef}'),
+            },
+            {
+              title: 'The page can scroll too',
+              risk: '`scrollIntoView` also scrolls scrollable ancestors. `block: nearest` keeps that to a minimum, but a page scrolled away from the row can still move.',
+              file: tabsFile,
+              ...rangeOf(TAB_GROUP_NEW, 'selected?.scrollIntoView', 'selected?.scrollIntoView'),
+            },
+          ],
+          testing: {
+            automated: [
+              '`tab-group.test.tsx` checks that selecting a tab scrolls it to the centre and that no tab can shrink.',
+            ],
+            manual: [
+              {
+                action: 'Open the preview deployment of this branch on a paywall with many tabs.',
+                target: {
+                  kind: 'url',
+                  value: 'https://paywall-editor-git-fix-tab-group-scroll.vercel.app/paywalls/spring-sale',
+                },
+                expect: 'The tab row runs past the edge and scrolls sideways instead of squeezing the tabs.',
+              },
+              {
+                action: 'Open a group with 40 tabs and select the last one.',
+                target: null,
+                expect: 'The row scrolls the selected tab to the middle and every tab keeps its full width.',
+              },
+              {
+                action: 'Scroll the row with a vertical mouse wheel, then again with Shift held.',
+                target: null,
+                expect: 'Only the Shift scroll moves the row; this is the known limit in the risks.',
+              },
+              {
+                action: 'Reload the page while a late tab is selected and watch the row.',
+                target: null,
+                expect: 'The row starts at the selected tab without sliding into place on load.',
+              },
+              {
+                action: 'Read the scroll call to see why the page around the row can move.',
+                target: {
+                  kind: 'file',
+                  value: `${tabsFile}:${lineOf(TAB_GROUP_NEW, 'selected?.scrollIntoView')}`,
+                },
+                expect: '`block: nearest` keeps the page still unless the row is already off screen.',
+              },
+            ],
+          },
+        },
       },
       reviewSummary:
         'I read the scroll change and opened a group with 40 tabs. The row scrolls and keeps the active tab in view; the only issue is the animation on first render.',
@@ -2004,6 +3583,18 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
         headline: 'New chats default to a cheaper model once 85% of the usage window is spent.',
         sections: [
           {
+            title: 'Read the usage window',
+            summary: 'A UsageWindow type carries how much is used, the limit and when it resets.',
+            spots: [
+              spot(usageFile, USAGE_NEW, 'export interface UsageWindow', 'resetsAt: number;', 'normal', {
+                title: 'The usage window',
+                why: 'Claude reports tokens and Codex reports requests; the ratio only holds when `used` and `limit` come from the same report.',
+                explain:
+                  'The shape both providers’ usage reports are mapped into. `resetsAt` is a timestamp in milliseconds; nothing in this change reads it yet.',
+              }),
+            ],
+          },
+          {
             title: 'Choose the model from usage',
             summary: 'resolveDefaultModel takes the usage window and falls back above 85%.',
             spots: [
@@ -2013,7 +3604,55 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
                 'export function resolveDefaultModel',
                 'return resolveFallbackModel(provider);',
                 'high',
-                'A missing usage window keeps the preferred model, so accounts without usage data never fall back.'
+                {
+                  title: 'Fall back past the threshold',
+                  why: 'A missing usage window keeps the preferred model, so accounts without usage data never fall back.',
+                  explain:
+                    'The preferred model stays unless there is a window and its used share has reached `FALLBACK_THRESHOLD`. The comparison is a ratio, so it works for any unit as long as both sides share it.',
+                }
+              ),
+              spot(
+                defaultsFile,
+                DEFAULTS_NEW,
+                'function resolveFallbackModel',
+                "return 'gpt-6-mini';",
+                'normal',
+                {
+                  title: 'One cheaper model per provider',
+                  why: 'A new provider makes this switch fail to type-check until it gets a fallback, which is intended.',
+                  explain:
+                    'Each provider has one fallback: Sonnet for Claude and the mini model for Codex. The switch is exhaustive over `Provider`.',
+                }
+              ),
+            ],
+          },
+          {
+            title: 'Test the threshold',
+            summary: 'Three tests around 85% and the missing window.',
+            spots: [
+              spot(
+                defaultsTestFile,
+                DEFAULTS_TEST_NEW,
+                "it('falls back at 85% of the window'",
+                "toBe('gpt-6-mini');",
+                'normal',
+                {
+                  title: 'The boundary itself',
+                  why: 'Exactly 85% falls back; the comparison is `<`, so the threshold is inclusive.',
+                  explain: 'Checks both providers at exactly 85 of 100, where the fallback starts.',
+                }
+              ),
+              spot(
+                defaultsTestFile,
+                DEFAULTS_TEST_NEW,
+                "it('keeps the preferred model without usage data'",
+                "expect(resolveDefaultModel('claude', null))",
+                'normal',
+                {
+                  title: 'No usage data',
+                  why: 'Covers `null`, not a window with a limit of 0.',
+                  explain: 'An account whose provider reports no usage keeps the preferred model.',
+                }
               ),
             ],
           },
@@ -2027,6 +3666,75 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
             line: 4,
           },
         ],
+        walkthrough: {
+          approach:
+            'Kanna picks a default model when a chat starts. `resolveDefaultModel` now also takes the provider’s current usage window: below 85% it returns the preferred model as before, at 85% or more it returns that provider’s cheaper model.\n\nThe usage window is a small new type in `usage.ts`, filled by the provider adapters. The model choice stays in `defaults.ts` as two switches, one for the preferred model and one for the fallback.',
+          flow: '1. Starting a chat calls `resolveDefaultModel(provider, usage)` with the latest window, or `null` when the provider reports none.\n2. With no window, the preferred model is returned.\n3. Otherwise `used / limit` is compared with `FALLBACK_THRESHOLD` (0.85).\n4. Below it, the preferred model; at or above it, `resolveFallbackModel`.\n5. A running chat keeps its model; only the next new chat sees the change.\n\n```text\nnew chat ──▶ resolveDefaultModel(provider, usage)\n             │\n             ├─ no usage window ─────▶ the preferred model\n             │\n             ├─ used / limit < 0.85 ─▶ the preferred model\n             │\n             └─ used / limit ≥ 0.85 ─▶ resolveFallbackModel\n                                       sonnet for Claude, mini for Codex\n\nrunning chat ──▶ keeps its model; only the next new chat changes\n```',
+          risks: [
+            {
+              title: 'A zero limit divides by zero',
+              risk: 'A window with a limit of 0 divides by zero: `0 / 0` is `NaN`, which fails the `<` check, so the fallback is picked for an account with no limit at all.',
+              file: defaultsFile,
+              ...rangeOf(
+                DEFAULTS_NEW,
+                'if (!usage || usage.used / usage.limit',
+                'if (!usage || usage.used / usage.limit'
+              ),
+            },
+            {
+              title: 'Imminent resets are ignored',
+              risk: 'The choice ignores `resetsAt`: a window at 90% that resets in two minutes still starts the chat on the cheaper model.',
+              file: usageFile,
+              ...rangeOf(USAGE_NEW, 'resetsAt: number;', 'resetsAt: number;'),
+            },
+            {
+              title: 'No usage, no fallback',
+              risk: 'Accounts whose provider reports no usage never fall back, however close they are to the limit.',
+              file: defaultsFile,
+              ...rangeOf(
+                DEFAULTS_NEW,
+                'if (!usage || usage.used / usage.limit',
+                'if (!usage || usage.used / usage.limit'
+              ),
+            },
+          ],
+          testing: {
+            automated: [
+              '`defaults.test.ts` covers 84% (preferred), exactly 85% for both providers (fallback) and no usage data (preferred).',
+            ],
+            manual: [
+              {
+                action:
+                  'Start Kanna from the worktree with a Claude account whose usage window is above 85%.',
+                target: { kind: 'command', value: 'bun run dev' },
+                expect: 'The client serves on port 5174 and the usage meter shows the window above 85%.',
+              },
+              {
+                action: 'Start a new chat.',
+                target: { kind: 'url', value: 'http://localhost:5174/' },
+                expect: 'The model picker shows Sonnet instead of Opus.',
+              },
+              {
+                action: 'Go back to a chat that was already open before the window passed 85%.',
+                target: null,
+                expect: 'It keeps Opus; only new chats change.',
+              },
+              {
+                action: 'Switch to an account whose provider reports no usage and start a chat.',
+                target: null,
+                expect: 'The preferred model, however much of the window is used.',
+              },
+              {
+                action: 'Read the threshold check, including what a limit of 0 does.',
+                target: {
+                  kind: 'file',
+                  value: `${defaultsFile}:${lineOf(DEFAULTS_NEW, 'if (!usage || usage.used / usage.limit')}`,
+                },
+                expect: 'A limit of 0 gives `NaN` and falls back, the first risk above.',
+              },
+            ],
+          },
+        },
       },
       provider: 'codex',
       runs: [{ role: 'agent', purpose: 'build', minutes: 11, summary: 'Added the fallback.' }],
@@ -2044,6 +3752,71 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       ageHours: 96,
       pullRequest: { number: 212, checks: 'passing' },
       merged: true,
+      ticked: ['Update the dark mode screenshots in the help center'],
+      report: {
+        headline: 'Hint text, borders and disabled labels read clearly in dark settings.',
+        sections: [
+          {
+            title: 'Raise the muted tokens in dark mode',
+            summary:
+              'The dark theme’s muted text and border tokens move up so hint text passes 4.5:1 on the panel. Light mode keeps its values.',
+            spots: [],
+          },
+          {
+            title: 'Raise the disabled labels',
+            summary: 'Disabled rows use a lighter grey in dark mode: dimmer than the rest, but readable.',
+            spots: [],
+          },
+        ],
+        checks: [],
+        judgementCalls: [],
+        walkthrough: {
+          approach:
+            'Only the dark theme’s tokens change, so every screen that reads them improves at once and light mode is untouched.',
+          flow: 'The settings page reads `--muted`, `--border` and `--disabled` from the theme; nothing else changes.',
+          risks: [],
+          testing: {
+            automated: ['No new tests: the change is three colour tokens in the dark theme.'],
+            manual: [
+              {
+                action: 'Open Appearance in dark mode.',
+                target: { kind: 'screen', value: 'Settings → Appearance' },
+                expect:
+                  'The hint under each setting reads at a glance, and disabled rows are dimmer but readable.',
+              },
+              {
+                action: 'Switch to light mode on the same screen.',
+                target: null,
+                expect: 'Nothing moves or changes colour.',
+              },
+              {
+                action: 'Read the dark theme block to see which tokens moved.',
+                target: { kind: 'file', value: 'src/client/theme.css' },
+                expect: 'Only `--muted`, `--border` and `--disabled` change, and only under the dark theme.',
+              },
+            ],
+          },
+          steps: [
+            {
+              when: 'post_merge',
+              kind: 'deploy',
+              title: 'Purge the CDN cache for the settings stylesheet',
+              detail:
+                'Cloudflare keeps `settings.css` for a day, so dark mode shows the old contrast until it is purged. The token is in 1Password under Cloudflare.',
+              command:
+                'curl -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" -H "Authorization: Bearer $CF_API_TOKEN" --data \'{"files":["https://app.superwall.com/assets/settings.css"]}\'',
+            },
+            {
+              when: 'post_merge',
+              kind: 'other',
+              title: 'Update the dark mode screenshots in the help center',
+              detail:
+                'The Appearance article shows the old greys. Take them in Settings → Appearance at 1280 wide.',
+              command: null,
+            },
+          ],
+        },
+      },
       runs: [
         {
           role: 'agent',
@@ -2082,6 +3855,177 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       reason: 'cancelled',
       branch: 'feat/old-editor-banner',
       ageHours: 120,
+    },
+  ];
+}
+
+function listMergeStepTasks({ paywall, kanna }: Pick<SeedRepos, 'paywall' | 'kanna'>): SeedTask[] {
+  return [
+    {
+      id: 'task-key-rotation',
+      request: 'let customers rotate their API key without downtime',
+      title: 'Rotate API keys without downtime',
+      repo: paywall,
+      size: 'large',
+      stage: 'awaiting_merge',
+      reason: 'ready to merge',
+      branch: 'feat/api-key-rotation',
+      ageHours: 7,
+      summary: 'A rotated API key keeps working for 24 hours next to the new one.',
+      report: {
+        headline:
+          'Rotating an API key keeps the old one working for 24 hours, so customers swap it without downtime.',
+        sections: [
+          {
+            title: 'Accept the previous key for a day',
+            summary:
+              'The key check accepts the current key or, until it expires, the previous one, hashed with the same pepper.',
+            spots: [],
+          },
+          {
+            title: 'Rotate from the dashboard',
+            summary:
+              'Settings → API keys has Rotate, which shows the new key once and when the old one stops working.',
+            spots: [],
+          },
+        ],
+        checks: [
+          { name: 'Unit tests', outcome: 'pass', detail: '214 passed' },
+          { name: 'CI', outcome: 'pass', detail: 'All 9 checks green' },
+        ],
+        judgementCalls: [],
+        walkthrough: {
+          approach:
+            'The previous key is kept as a hash with an expiry next to the current one, so the one key check covers every route.',
+          flow: '1. Rotate stores the current hash as the previous one with a 24 hour expiry.\n2. A request’s key is checked against the current hash, then the previous one while it lasts.\n3. After the expiry the previous hash is cleared on the next check.',
+          risks: [],
+          testing: {
+            automated: [
+              '`api-keys/rotate.test.ts` covers both keys working after a rotation and the old one failing after 24 hours.',
+            ],
+            manual: [
+              {
+                action: 'Rotate the key from the dashboard.',
+                target: { kind: 'url', value: 'http://localhost:5173/settings/api-keys' },
+                expect: 'The new key shows once, with “The old key works until …” under it.',
+              },
+              {
+                action: 'Call the API with the old key.',
+                target: {
+                  kind: 'command',
+                  value: 'curl -H "Authorization: Bearer $OLD_KEY" http://localhost:8787/v1/paywalls',
+                },
+                expect: 'It returns 200; with a made-up key it returns 401.',
+              },
+            ],
+          },
+          steps: [
+            {
+              when: 'pre_merge',
+              kind: 'secret',
+              title: 'Create `API_KEY_PEPPER` in production',
+              detail:
+                'Both hashes use it. Generate 32 random bytes and add it to the API service in Railway; never reuse staging’s.',
+              command:
+                'railway variables --service api --environment production --set API_KEY_PEPPER=$(openssl rand -hex 32)',
+            },
+            {
+              when: 'pre_merge',
+              kind: 'migration',
+              title: 'Run the `api_keys_previous` migration',
+              detail:
+                'It adds the previous hash and its expiry. It is additive, so it is safe before the code ships.',
+              command: 'bun run --cwd apps/api db:migrate',
+            },
+            {
+              when: 'post_merge',
+              kind: 'other',
+              title: 'Announce key rotation in the changelog',
+              detail: 'Link the API keys guide so customers know the old key keeps working for a day.',
+              command: null,
+            },
+          ],
+        },
+      },
+      runs: [
+        {
+          role: 'agent',
+          purpose: 'build',
+          minutes: 12,
+          summary: 'Kept the previous key for a day.',
+        },
+        { role: 'reviewer', minutes: 3, summary: 'No findings.' },
+      ],
+      pullRequest: { number: 4548, checks: 'passing' },
+      ticked: ['Create `API_KEY_PEPPER` in production', 'Run the `api_keys_previous` migration'],
+      gate: {
+        type: 'merge',
+        title: 'Merge #4548',
+        body: 'Checks are green and both pre-merge steps are ticked.',
+      },
+    },
+    {
+      id: 'task-session-timeout',
+      request: 'log people out after 12 hours idle',
+      title: 'Log out after 12 idle hours',
+      repo: kanna,
+      size: 'small',
+      stage: 'merged',
+      reason: 'merged',
+      branch: 'feat/idle-timeout',
+      ageHours: 30,
+      pullRequest: { number: 219, checks: 'passing', mergeCommit: '4be1a07' },
+      merged: true,
+      summary: 'Sessions end after 12 hours without activity.',
+      report: {
+        headline: 'Sessions end after 12 hours without activity, configurable per workspace.',
+        sections: [
+          {
+            title: 'Expire idle sessions',
+            summary:
+              'The session store records the last request and refuses a session idle for longer than the limit.',
+            spots: [],
+          },
+        ],
+        checks: [{ name: 'Unit tests', outcome: 'pass', detail: '88 passed' }],
+        judgementCalls: [],
+        walkthrough: {
+          approach: 'The limit lives in the session store, so every route is covered by one check.',
+          flow: 'Each request touches the session; a session idle past `SESSION_IDLE_HOURS` is refused and the user signs in again.',
+          risks: [],
+          testing: {
+            automated: ['`session-store.test.ts` covers the idle limit and the default of 12 hours.'],
+            manual: [
+              {
+                action: 'Start the app with a one-minute limit and wait a minute.',
+                target: { kind: 'command', value: 'SESSION_IDLE_HOURS=0.0167 bun run dev' },
+                expect: 'The next click lands on the sign-in page.',
+              },
+            ],
+          },
+          steps: [
+            {
+              when: 'post_merge',
+              kind: 'env',
+              title: 'Set `SESSION_IDLE_HOURS=12` in production',
+              detail: 'The default is 12 already; setting it makes the value visible to on-call.',
+              command: 'fly secrets set SESSION_IDLE_HOURS=12 --app kanna',
+            },
+            {
+              when: 'post_merge',
+              kind: 'deploy',
+              title: 'Restart the web workers',
+              detail: 'Workers read the variable on start.',
+              command: 'fly apps restart kanna',
+            },
+          ],
+        },
+      },
+      runs: [
+        { role: 'agent', purpose: 'build', minutes: 5, summary: 'Added the idle limit.' },
+        { role: 'reviewer', minutes: 2, summary: 'No findings.' },
+      ],
+      ticked: ['Set `SESSION_IDLE_HOURS=12` in production', 'Restart the web workers'],
     },
   ];
 }

@@ -1,7 +1,7 @@
 # Shinsa: spec
 
 > 審査, *shinsa*: examination, judging.
-> **A control plane for coding agents. The agents do the work; you make the calls.**
+> **A control plane for coding agents. Hand over the work; keep the decisions.**
 
 ## 1. The problem
 
@@ -140,7 +140,7 @@ answered, when. Gates survive restarts. The decisions, as you see them (the sche
 | Gate | What you see | Your answers |
 | --- | --- | --- |
 | Plan | The proposed plan as a document, its version and what changed since the last one | Approve this version · Comment (agent revises) · Reject |
-| Review | The change running, evidence, diff ranked by risk, checks, each agent finding | Approve · Request changes · Fix or dismiss each finding |
+| Review | The change running, evidence, diff ranked by risk, checks, how many of the changed lines the tests run, each agent finding | Approve · Request changes · Fix or dismiss each finding |
 | Merge | Final diff summary, CI, bot verdicts, what changed since review | Merge (or write in the chat to send it back) |
 | Question | One question, the context it needs, choices to pick in one click | Answer |
 | Your OK | What an answer, investigation or report proposes to change, and why | Make it a change · Keep it as it is |
@@ -755,7 +755,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   one-line reason. A file that changed on disk under you keeps your unsaved edit when it touched other lines, and
   otherwise shows the disk version with a notice (`docs/engine.md` → Your edits).
 - **Side by side first.** A diff opens side by side with its new side editable; unified is the toggle and is
-  remembered. Each side scrolls sideways under its own pinned line numbers, folded "N unchanged lines" are no place
+  remembered, and on a phone or a window below `md` every diff is unified. Each side scrolls sideways under its own pinned line numbers, folded "N unchanged lines" are no place
   for the cursor, and a comment box for a long selection fits the visible pane. Open in editor left the toolbar:
   Shinsa is the editor (the task's ⌘K and menu still open the checkout elsewhere).
 - **GitButler stacks, decided.** Shinsa stacks a task only onto a branch it created. Cancelling a task another is
@@ -787,6 +787,35 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   `shinsa settings set delegationLimit` too), changed only by you. The nesting depth stays three. The agents' rules
   no longer mention a running limit, so changing it never invalidates a cached session; a refused delegation says
   the limit and where it is set (`docs/engine.md` → Delegation → Limits).
+
+### Review is the technical read (2026-10-26)
+
+- **Overview decides, Review explains.** The Overview stays the quick decision layer: findings with Fix / Dismiss,
+  suggestions, the checks, What changed as each phase's title and summary, and one line pointing at the review.
+  Review became the in-depth technical read, ordered by context: what the change does, then how it is built (the
+  approach, how it works behind the scenes, how to test it and the steps around the merge), the key code explained
+  simply, the judgement calls with the alternatives and why, what to read carefully (the critical spots and the
+  risks), then the agent review, each a section
+  card like the Overview's. The index of every point is one line pinned above the column that says where you are and
+  opens the whole grouped list in place. Every point appears once; the attention list, the phase walkthrough and the
+  checks list left Review (`docs/design.md` 34).
+- **The agent that built it writes the walkthrough; the reviewer checks it.** The reasons live in the builder's head,
+  so `complete_phase` carries them: spots gain a `title` and an `explain` for the key code, judgement calls gain
+  a short `title` and `alternatives`, and the last phase hands over a `walkthrough` (approach, flow, risks with a
+  title and lines, and how to test it: what the tests
+  cover, then a guide you follow by hand, each step with where to go and what you should see). The
+  reviewer keeps its own session and never sees the builder's reasoning, only its numbered calls, and says where it
+  would have decided otherwise (`report_review`'s `disagreements`); the reader sees both on the judgement call's card
+  (`docs/engine.md` → The review report, `docs/protocol.md` → Hand-overs).
+- **Steps around the merge are yours, as a checklist.** What a change needs that no agent can do from the worktree (a
+  variable or secret to set, a migration or deploy to run, a flag to flip) comes back as concrete steps in the
+  walkthrough (`steps`: before or after the merge, with the exact command), after the agent did everything it can in
+  the repository. They are steps of the task, Pre-merge and Post-merge: the merge waits until you tick
+  each step before it, and a merged task waits at Post-merge ("Post-merge · 2 steps left", in Needs you)
+  until you tick the ones after it, across later rounds too; a step's command opens in a terminal only when you ask. The reviewer checks the
+  list is complete (`docs/engine.md` → Steps around the merge).
+- **Instant.** Prefetching a task loads the diff view and the grammars of every point's language, so the snippets
+  paint with the tab instead of a second later.
 
 ### A terminal per project (2026-10-26)
 

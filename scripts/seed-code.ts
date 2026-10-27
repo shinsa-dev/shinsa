@@ -10,6 +10,8 @@ import type {
   Project,
   Repo,
   ReportCheck,
+  ReportWalkthrough,
+  ReviewDisagreement,
   ReviewFinding,
   RunPurpose,
   RunRole,
@@ -799,7 +801,7 @@ function pushPhase(
   taskId: string,
   index: number,
   [from, to]: readonly [number, number],
-  phase: { summary: string; spots: CodeSpot[]; judgementCalls: JudgementCall[]; tree: string }
+  phase: SamplePhase & { tree: string }
 ) {
   const report: PhaseReport = {
     index,
@@ -807,6 +809,7 @@ function pushPhase(
     summary: phase.summary,
     spots: phase.spots,
     judgementCalls: phase.judgementCalls,
+    walkthrough: phase.walkthrough ?? null,
     at: to - 0.3 * MINUTE,
   };
   push(from + 0.1 * MINUTE, { type: 'phase.updated', taskId, index, status: 'active' });
@@ -826,16 +829,61 @@ function openGate(
   });
 }
 
+export interface SamplePhase {
+  summary: string;
+  spots: CodeSpot[];
+  judgementCalls: JudgementCall[];
+  walkthrough?: ReportWalkthrough | null;
+}
+
+interface SpotDetail {
+  title: string;
+  explain: string;
+}
+
 function spotIn(
   file: string,
   content: string,
   from: string,
   to: string,
   attention: CodeSpot['attention'],
-  why: string
-) {
+  why: string,
+  detail?: SpotDetail
+): CodeSpot {
   const start = resolveLine(content, from);
-  return { file, start, end: resolveLine(content, to, start - 1), attention, why };
+  return { file, start, end: resolveLine(content, to, start - 1), attention, why, ...detail };
+}
+
+function placeIn(file: string, content: string, from: string, to = from) {
+  const line = resolveLine(content, from);
+  return { file, line, end: resolveLine(content, to, line - 1) };
+}
+
+function riskIn(title: string, risk: string, file: string, content: string, from: string, to = from) {
+  return { title, risk, ...placeIn(file, content, from, to) };
+}
+
+function withWalkthrough(phases: SamplePhase[], walkthrough: ReportWalkthrough): SamplePhase[] {
+  return phases.map((phase, index) => (index === phases.length - 1 ? { ...phase, walkthrough } : phase));
+}
+
+function assembleReport(
+  plan: PlanDocument,
+  phases: SamplePhase[],
+  checks: ReportCheck[],
+  walkthrough: ReportWalkthrough
+): WorkReport {
+  return {
+    headline: plan.goal,
+    sections: phases.map((phase, index) => ({
+      title: plan.phases[index]?.title ?? `Phase ${index + 1}`,
+      summary: phase.summary,
+      spots: phase.spots,
+    })),
+    checks,
+    judgementCalls: phases.flatMap((phase) => phase.judgementCalls),
+    walkthrough,
+  };
 }
 
 export const REVIEW_PLAN: PlanDocument = {
@@ -875,30 +923,114 @@ export const REVIEW_PLAN: PlanDocument = {
   questions: [],
 };
 
-export function resolveReviewReport(sample: CodeSample, checks: ReportCheck[]) {
-  const { review } = sample;
-  const lockLine = review.lock.line;
-  const phases: { summary: string; spots: CodeSpot[]; judgementCalls: JudgementCall[] }[] = [
-    {
-      summary:
-        'targets.ts is now spots.ts with ReviewSpot and the matching function names. Spot keys live in spot-keys.ts. The old tests are replaced by smaller ones against the recorded fixture.',
-      spots: [
-        spotIn(
-          SAMPLE_PATHS.spotKeys,
-          review.spotKeys.after,
-          'export function parseSpotKey',
-          'return { section',
-          'critical',
-          'Only section and spot keys parse. A finding or judgement call key from an older link comes back as null.'
-        ),
-        spotIn(
-          SAMPLE_PATHS.spots,
-          review.spots.after,
-          'export function listReviewSpots',
-          'section.spots.map',
-          'high',
-          'The by-attention order still comes from listRankedSpots in core; only the names and the key format changed.'
-        ),
+const PARSE_CALL = 'parseSpotKey reads section and spot keys only';
+const TESTS_CALL = 'Rewrote the tests instead of renaming them';
+
+function countTests(content: string) {
+  return content.split('\n').filter((line) => /^\s+it\(/.test(line)).length;
+}
+
+function describeReviewFlow(review: ReviewNotes) {
+  const handBuilt = resolveLine(review.review.after, 'const target = toReviewSpot(spot, section.title');
+  return [
+    'A spot starts in the agent’s hand-over and ends as a focused range in the Code tab:',
+    '',
+    '```text',
+    'complete_phase { spots }            the agent’s hand-over',
+    '        │',
+    '        ▼',
+    'WorkReport.sections[s].spots[i]     core keeps the agent’s order',
+    '        │',
+    '        ├─ walkthrough ────▶ review.tsx builds s:i by hand',
+    '        ├─ by attention ───▶ listRankedSpots ─▶ formatSpotKey(s, i)',
+    '        ├─ + findings ─────▶ listFindingSpots ─▶ finding:n',
+    '        ▼',
+    'ReviewPane   one list, stepSpot     selectedKey picks the row',
+    '        │',
+    '        ▼',
+    'CodePane ──▶ CodeView focus { start, end } + listFindingMarkers',
+    '',
+    'a link with a key ──▶ parseSpotKey ──▶ { section, spot } or null',
+    '```',
+    '',
+    '1. `complete_phase` carries each spot as a file, a line range and an attention. Core stores the spots per section in the report, in the order the agent wrote them.',
+    `2. In walkthrough order the review renders each section itself and keys a row \`s:i\` with a template literal (review.tsx line ${handBuilt}). By attention, \`listReviewSpots\` sorts through core’s \`listRankedSpots\` and keys with \`formatSpotKey\`. Both give the same string, so the selection survives switching.`,
+    '3. `ReviewPane` appends the finding rows from `listFindingSpots`, keyed `finding:n`, and `stepSpot` wraps around the joined list. A judgement call opens `createDecisionSpot`, keyed `decision:file:line`, which sits outside that list.',
+    '4. `CodePane` finds the spot’s file in the diff and hands `CodeView` the range to focus. Finding markers land on the last line each finding points at.',
+    '5. A link carrying a key goes through `parseSpotKey`, which accepts `s:i` and nothing else.',
+  ].join('\n');
+}
+
+function describeReviewWalkthrough(review: ReviewNotes): ReportWalkthrough {
+  const lock = review.lock;
+  return {
+    approach: [
+      'The web was the last layer that said target for what core and the agents call a spot, so this is a rename with one structural change.',
+      '',
+      '`lib/review/targets.ts` moves to `spots.ts` with `git mv`, so its history follows, and seven exported names change (`ReviewTarget` to `ReviewSpot`, `listReviewTargets` to `listReviewSpots` and so on). The three callers and the recorded fixture follow in phase 2 and the design doc in phase 3, one commit each, so every commit reads on its own.',
+      '',
+      `The structural change: the \`section:spot\` key was a template literal in two places. It now comes from \`formatSpotKey\` in a new \`spot-keys.ts\`, beside \`parseSpotKey\`, which reads a key back from a link. The ${countLines(review.targetsTest)}-line test file is replaced by ${countLines(review.spotsTest.after)} lines against the public functions and the recorded fixture.`,
+    ].join('\n'),
+    flow: describeReviewFlow(review),
+    risks: [
+      riskIn(
+        'No caller for parseSpotKey yet',
+        'Nothing in the app calls `parseSpotKey` yet; only the test does. Whatever reads review links next inherits the null for finding and decision keys.',
+        SAMPLE_PATHS.spotKeys,
+        review.spotKeys.after,
+        'export function parseSpotKey',
+        'return { section'
+      ),
+      riskIn(
+        'Walkthrough keys built by hand',
+        'The walkthrough still builds its keys by hand. If `formatSpotKey` ever changes, the selection is lost each time you switch between walkthrough and by attention.',
+        SAMPLE_PATHS.review,
+        review.review.after,
+        'const target = toReviewSpot(spot, section.title'
+      ),
+      riskIn(
+        'Finding keys can shift',
+        'Finding keys are an index into `task.findings`. After a second agent review the same key can open a different finding.',
+        SAMPLE_PATHS.spots,
+        review.spots.after,
+        'key: `finding:'
+      ),
+      riskIn(
+        'Colons in decision keys',
+        'Decision keys hold a file path, and a path can contain a colon. A parser that splits on the first colon would read the wrong line.',
+        SAMPLE_PATHS.spots,
+        review.spots.after,
+        'key: `decision:'
+      ),
+      riskIn(
+        'Finding rows lost their tests',
+        '`listFindingMarkers`, `listFindingSpots` and `createDecisionSpot` lost their direct tests with targets.test.ts. A mistake in the finding rows would not fail a test.',
+        SAMPLE_PATHS.spots,
+        review.spots.after,
+        'export function listFindingMarkers',
+        'finding.file === file'
+      ),
+      {
+        title: 'Lockfile bump inside a rename',
+        risk: `bun.lock moves ${lock.name} from ${lock.from} to ${lock.to}. Small, but it ships inside a rename and changes what a fresh install builds.`,
+        file: SAMPLE_PATHS.lockfile,
+        line: lock.line,
+        end: lock.line,
+      },
+      {
+        title: 'Binary screenshot change',
+        risk: 'docs/images/review.png is a binary change. The diff cannot show it, so open it beside the old one.',
+        file: SAMPLE_PATHS.screenshot,
+        line: null,
+        end: null,
+      },
+    ],
+    testing: {
+      automated: [
+        '`bun test apps/web/test/lib/review`: six tests against the recorded fixture, covering both orders, critical first, wrap-around stepping and the key round trip.',
+        '`bunx knip` passes now that `SpotKey` is no longer exported; it failed on the first run of the checks.',
+      ],
+      manual: [
         {
           file: SAMPLE_PATHS.lockfile,
           start: lockLine,
@@ -906,108 +1038,486 @@ export function resolveReviewReport(sample: CodeSample, checks: ReportCheck[]) {
           attention: 'normal',
           why: `bun install re-resolved ${review.lock.name} from ${review.lock.from} to ${review.lock.to}. No dependency was added.`,
         },
-        spotIn(
-          SAMPLE_PATHS.ranking,
-          review.ranking,
-          'export function listRankedSpots',
-          'a.spotIndex - b.spotIndex',
-          'normal',
-          'Not changed: core already calls these spots. This is the name the web now matches.'
-        ),
-      ],
-      judgementCalls: [
         {
-          call: 'Rewrote the tests instead of renaming them',
-          reason:
-            'The old tests asserted each renamed function line by line. The new ones cover the same behaviour through the public functions and the recorded fixture.',
-          file: SAMPLE_PATHS.spotsTest,
-          line: 1,
+          action: 'Open this task’s Code tab and the Review beside it.',
+          target: { kind: 'url', value: 'http://localhost:5181/tasks/SMP-2?tab=code' },
+          expect: 'The Review lists the spots in walkthrough order, the first one selected.',
         },
         {
-          call: 'Kept the bun.lock change',
-          reason: `bun install moved ${review.lock.name} by one patch release. Reverting it by hand would fail the frozen-lockfile install in CI.`,
-          file: SAMPLE_PATHS.lockfile,
-          line: lockLine,
+          action: 'Step with next until you pass the last finding, then step back with previous.',
+          target: null,
+          expect:
+            'After the last finding it wraps back to the first spot, and previous walks the same path backwards.',
+        },
+        {
+          action: 'Pick a spot, switch to By attention and back.',
+          target: null,
+          expect: 'The same spot stays selected, because both lists key it as section:spot.',
+        },
+        {
+          action: 'Click a judgement call’s place, then press next.',
+          target: null,
+          expect: 'The code pane opens that line, and next goes back to the first spot.',
+        },
+        {
+          action: 'Open a link with a finding key such as `finding:0`, then read how keys are parsed.',
+          target: {
+            kind: 'file',
+            value: `${SAMPLE_PATHS.spotKeys}:${resolveLine(review.spotKeys.after, 'export function parseSpotKey')}-${resolveLine(review.spotKeys.after, 'return { section')}`,
+          },
+          expect:
+            'The link opens nothing: `parseSpotKey` accepts only `s:i` keys and returns null for the rest.',
         },
       ],
     },
-    {
-      summary:
-        'The review, the changes list and the code view import from spots.ts. The recorded fixture exports LARGE_REVIEW_SPOT_COUNT.',
-      spots: [
-        spotIn(
+  };
+}
+
+function listRenamePhase(review: ReviewNotes): SamplePhase {
+  const lock = review.lock;
+  return {
+    summary:
+      'targets.ts is now spots.ts with ReviewSpot and the matching function names. Spot keys live in spot-keys.ts. The old tests are replaced by smaller ones against the recorded fixture.',
+    spots: [
+      spotIn(
+        SAMPLE_PATHS.spotKeys,
+        review.spotKeys.after,
+        'export function parseSpotKey',
+        'return { section',
+        'critical',
+        'Only section and spot keys parse. A finding or judgement call key from an older link comes back as null.',
+        {
+          title: 'parseSpotKey reads a key back from a link',
+          explain:
+            'The regex accepts two runs of digits around one colon and returns them as numbers. Anything else, an empty value included, is `null`, so a caller treats no key and a key it does not know the same way. `finding:2` and `decision:path:line` both land in that null.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.spotKeys,
+        review.spotKeys.after,
+        'export function formatSpotKey',
+        'return `',
+        'high',
+        'Every list keyed by section and spot has to build its key here, or the selection breaks when the order switches.',
+        {
+          title: 'One function builds a spot key',
+          explain:
+            '`formatSpotKey(section, spot)` returns `section:spot`, the same string the template literal in targets.ts produced, so nothing keyed before the rename changes. It sits beside `parseSpotKey` so the writer and the reader of the format change together.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.spots,
+        review.spots.after,
+        'export interface ReviewSpot',
+        'section: string',
+        'normal',
+        'Only the name changed. Anything still typed as ReviewTarget fails to compile, so no caller can be missed.',
+        {
+          title: 'ReviewSpot, the row the review steps through',
+          explain:
+            'A `CodeSpot` from core plus the two fields the web adds: `key`, which identifies the row for selection, and `section`, the phase title the by-attention list shows. `toReviewSpot` spreads the core spot in, so a new field on `CodeSpot` reaches the web without a change here.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.spots,
+        review.spots.after,
+        "if (order === 'attention')",
+        'formatSpotKey(sectionIndex',
+        'high',
+        'The by-attention order still comes from listRankedSpots in core; only the names and the key format changed.',
+        {
+          title: 'By attention borrows core’s ranking',
+          explain:
+            '`listRankedSpots` returns each spot with the indexes it had in the report. The key is built from those indexes, not from the sorted position, so a spot keeps one key in both orders and the selection survives switching.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.spots,
+        review.spots.after,
+        'export function listFindingSpots',
+        'key: `finding:',
+        'high',
+        'Finding keys are positional. A second review that reorders its findings makes an old finding link open another finding.',
+        {
+          title: 'Findings join the list with a key of their own',
+          explain:
+            'Located findings become rows too, critical when blocking and high otherwise, keyed `finding:` plus their index in `task.findings`. That is the key `parseSpotKey` now rejects.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.spots,
+        review.spots.after,
+        'export function createDecisionSpot',
+        'key: `decision:',
+        'high',
+        'The key embeds a file path, so any parser that splits it on a colon has to take the last part as the line.',
+        {
+          title: 'A judgement call opens a one-line spot',
+          explain:
+            '`createDecisionSpot` makes a spot on the single line a judgement call names. It never joins the stepping list: `ReviewPane` holds it apart and drops it on the next selection.',
+        }
+      ),
+      {
+        file: SAMPLE_PATHS.lockfile,
+        start: lock.line,
+        end: lock.line,
+        attention: 'normal',
+        why: `bun install re-resolved ${lock.name} from ${lock.from} to ${lock.to}. No dependency was added.`,
+      },
+      spotIn(
+        SAMPLE_PATHS.ranking,
+        review.ranking,
+        '.sort(',
+        'a.spotIndex - b.spotIndex',
+        'normal',
+        'Not changed: core already calls these spots. This is the name the web now matches.',
+        {
+          title: 'The ranking the web reuses',
+          explain:
+            'Attention rank first, then the section, then the place in the section. Nothing looks at the file or the line, so two critical spots in one phase keep the order the agent wrote them in.',
+        }
+      ),
+    ],
+    judgementCalls: [
+      {
+        title: 'Rewrite the spot tests',
+        call: TESTS_CALL,
+        reason:
+          'The old tests asserted each renamed function line by line. The new ones cover the same behaviour through the public functions and the recorded fixture.',
+        ...placeIn(
+          SAMPLE_PATHS.spotsTest,
+          review.spotsTest.after,
+          'import { formatSpotKey',
+          'LARGE_REVIEW_REPORT,'
+        ),
+        alternatives: [
+          {
+            option: `Rename the ${countLines(review.targetsTest)}-line targets.test.ts in place`,
+            rejected:
+              'Every assertion named a function being renamed, so the diff would have been the whole file with no behaviour to read.',
+          },
+          {
+            option: 'Keep both files until the callers moved',
+            rejected:
+              'targets.test.ts imports a module that no longer exists after phase 1, so it could not run.',
+          },
+        ],
+      },
+      {
+        title: 'Keep the lockfile bump',
+        call: 'Kept the bun.lock change',
+        reason: `bun install moved ${lock.name} by one patch release. Reverting it by hand would fail the frozen-lockfile install in CI.`,
+        file: SAMPLE_PATHS.lockfile,
+        line: lock.line,
+        alternatives: [
+          {
+            option: `Pin ${lock.name} at ${lock.from}`,
+            rejected:
+              'It is a transitive dependency. Pinning it would add a direct dependency to undo a patch release.',
+          },
+          {
+            option: 'Split it into a commit of its own',
+            rejected:
+              'bun install wrote it during the move, and a commit with only bun.lock in it says less than this line.',
+          },
+        ],
+      },
+      {
+        title: 'A module for spot keys',
+        call: 'Gave spot keys a module of their own',
+        reason:
+          'The key was a template literal in targets.ts and in review.tsx. One module with both the writer and the reader keeps the format in one place for links.',
+        ...placeIn(SAMPLE_PATHS.spotKeys, review.spotKeys.after, 'export function formatSpotKey', 'return `'),
+        alternatives: [
+          {
+            option: 'Keep formatSpotKey inside spots.ts',
+            rejected: 'parseSpotKey would then pull the whole review module into anything that reads a link.',
+          },
+          {
+            option: 'Move the key format into core',
+            rejected: 'Core never sees these keys. They only exist to select rows in the web.',
+          },
+        ],
+      },
+      {
+        title: 'Parse only section and spot keys',
+        call: PARSE_CALL,
+        reason:
+          'Spot links only ever carried a section and a spot. Finding and decision keys select rows inside the page, and a decision key holds a file path, so there was no format to commit to.',
+        ...placeIn(SAMPLE_PATHS.spotKeys, review.spotKeys.after, 'const match =', 'if (!match) return null'),
+        alternatives: [
+          {
+            option: 'Parse finding:N and decision:file:line too',
+            rejected:
+              'A decision key holds a path that can contain a colon, so it needs an escaping rule a rename should not invent.',
+          },
+          {
+            option: 'Return the raw string for any other key',
+            rejected:
+              'Every caller would have to tell a spot key from anything else again, which is what the parser is for.',
+          },
+        ],
+      },
+      {
+        title: 'Leave CodeMarker where it is',
+        call: 'Left CodeMarker in spots.ts',
+        reason:
+          'The code view and the changes list draw markers that listFindingMarkers builds in this module. Moving the type alone would split it from the only function that makes it.',
+        ...placeIn(SAMPLE_PATHS.spots, review.spots.after, 'export interface CodeMarker', 'text: string'),
+        alternatives: [
+          {
+            option: 'Move CodeMarker next to the code view',
+            rejected:
+              'The type would sit away from listFindingMarkers, its only producer, and the move is not part of a rename.',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function listCallersPhase(review: ReviewNotes): SamplePhase {
+  return {
+    summary:
+      'The review, the changes list and the code view import from spots.ts. The recorded fixture exports LARGE_REVIEW_SPOT_COUNT.',
+    spots: [
+      spotIn(
+        SAMPLE_PATHS.review,
+        review.review.after,
+        'createDecisionSpot,',
+        'listReviewSpots,',
+        'high',
+        'Every renamed function comes in through this one import; the component bodies only changed names.',
+        {
+          title: 'The review takes every renamed name from one import',
+          explain:
+            'The component bodies changed only where they call these names. Locals such as `target`, `targets` and `decisionTarget` kept theirs, so every changed line in review.tsx is a name and nothing else.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.review,
+        review.review.after,
+        '{section.spots.map((spot, spotIndex) => {',
+        'const target = toReviewSpot(spot, section.title',
+        'high',
+        'The walkthrough still builds its key by hand. It matches formatSpotKey today; if the format changes, selection breaks in this order only.',
+        {
+          title: 'The walkthrough keys its rows by hand',
+          explain:
+            'In walkthrough order the review renders each section itself instead of calling `listReviewSpots`, so it calls `toReviewSpot` with a template literal. The string equals `formatSpotKey(sectionIndex, spotIndex)`, which is why switching orders keeps the selection.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.review,
+        review.review.after,
+        'const targets = React.useMemo(',
+        '[report, order, findings]',
+        'high',
+        'Next and previous step through this list: report spots in the chosen order, then findings. Decision spots are never in it.',
+        {
+          title: 'One list for stepping',
+          explain:
+            '`ReviewPane` joins `listReviewSpots(report, order)` and the finding rows, and `stepSpot` wraps around the result. The selection is looked up by key in this list, so a key that is not in it falls back to the first spot.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.review,
+        review.review.after,
+        '<JudgementCalls',
+        'createDecisionSpot(file, line)',
+        'normal',
+        'A judgement call’s place opens a decision spot that stays outside the stepping list until the next selection.'
+      ),
+      spotIn(
+        SAMPLE_PATHS.codeView,
+        review.codeView.after,
+        '.filter((marker) => marker.line === anchor)',
+        '<MarkerNote key=',
+        'normal',
+        'Unchanged, but it is where a finding shows: under the line the finding ends on, which listFindingMarkers sets.',
+        {
+          title: 'Where a finding marker lands',
+          explain:
+            'The code view only knows the `CodeMarker` type from the review module. It draws a note under the row whose anchor equals `marker.line`, and `listFindingMarkers` sets that to the finding’s last line.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.changes,
+        review.changes.after,
+        'markers={listFindingMarkers(task, selected.path)}',
+        'markers={listFindingMarkers(task, selected.path)}',
+        'normal',
+        'The changes list only reads finding markers, through the same function as the review, so both views mark the same lines.'
+      ),
+      spotIn(
+        SAMPLE_PATHS.fixture,
+        review.fixture.after,
+        'export const LARGE_REVIEW_SPOT_COUNT',
+        'export const LARGE_REVIEW_REPORT',
+        'normal',
+        `The fixture keeps its ${FIXTURE_SPOT_TOTAL} spots; only the export name and two why texts changed in ${countLines(review.fixture.after).toLocaleString('en-GB')} lines.`,
+        {
+          title: 'The recorded fixture',
+          explain: `A recorded ${FIXTURE_SECTIONS}-section review kept as test data, so the review tests run against every attention and range the agents produce instead of a hand-made three-spot report.`,
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.spotsTest,
+        review.spotsTest.after,
+        "it('ignores any other key'",
+        'toBeNull()',
+        'critical',
+        'This test pins the null for finding:2, so the regression the agent review found reads as intended behaviour.',
+        {
+          title: 'The test that pins the null',
+          explain:
+            'Written in phase 1 to show `parseSpotKey` rejects anything that is not a spot key. It makes old finding links failing look deliberate; however the blocking finding is settled, this test changes with it.',
+        }
+      ),
+    ],
+    judgementCalls: [
+      {
+        title: 'Rename callers only',
+        call: 'Changed only names in the callers',
+        reason:
+          'The walkthrough in review.tsx still builds its key with a template literal. It gives the same string as formatSpotKey, and changing it is not a rename, so I listed it as a risk instead.',
+        ...placeIn(
           SAMPLE_PATHS.review,
           review.review.after,
-          'createDecisionSpot,',
-          "from '@/lib/review/spots.ts'",
-          'high',
-          'Every renamed function comes in through this one import; the component bodies only changed names.'
+          'const target = toReviewSpot(spot, section.title'
         ),
-        spotIn(
-          SAMPLE_PATHS.codeView,
-          review.codeView.after,
-          "from '@/lib/review/spots.ts'",
-          "from '@/lib/review/spots.ts'",
-          'high',
-          'The code view only needs the CodeMarker type, which moved with the module.'
+        alternatives: [
+          {
+            option: 'Call formatSpotKey in review.tsx too',
+            rejected:
+              'Correct, but it puts a behaviour change into a commit the reviewer reads as names only.',
+          },
+        ],
+      },
+      {
+        title: 'Keep local names in review.tsx',
+        call: 'Kept the local target names in review.tsx',
+        reason:
+          'Locals such as targets, decisionTarget and setDecisionTarget are not exported. Renaming them would triple the diff and hide the import changes that matter.',
+        ...placeIn(
+          SAMPLE_PATHS.review,
+          review.review.after,
+          'const [decisionTarget',
+          'const index = selected'
         ),
-        spotIn(
-          SAMPLE_PATHS.changes,
-          review.changes.after,
-          "from '@/lib/review/spots.ts'",
-          "from '@/lib/review/spots.ts'",
-          'normal',
-          'The changes list reads finding markers only.'
-        ),
-        spotIn(
-          SAMPLE_PATHS.fixture,
-          review.fixture.after,
-          'The first review spot in this file.',
-          'The first review spot in this file.',
-          'normal',
-          `The fixture keeps its ${FIXTURE_SPOT_TOTAL} spots; only the export name and two why texts changed in ${countLines(review.fixture.after).toLocaleString('en-GB')} lines.`
-        ),
-      ],
-      judgementCalls: [],
-    },
-    {
-      summary: 'The design doc has a short section on review spots and a new screenshot of the walkthrough.',
-      spots: [
-        spotIn(
+        alternatives: [
+          {
+            option: 'Rename every local as well',
+            rejected: 'Dozens more changed lines in one component, none of which a caller can see.',
+          },
+        ],
+      },
+      {
+        title: 'Rename the fixture without an alias',
+        call: 'Renamed the fixture export without an alias',
+        reason: 'Only spots.test.ts imports LARGE_REVIEW_SPOT_COUNT, and it moved in the same phase.',
+        ...placeIn(SAMPLE_PATHS.fixture, review.fixture.after, 'export const LARGE_REVIEW_SPOT_COUNT'),
+        alternatives: [
+          {
+            option: 'Export both names for a while',
+            rejected: 'knip fails on the unused old name, and nothing outside the test reads it.',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function listDocsPhase(review: ReviewNotes): SamplePhase {
+  return {
+    summary: 'The design doc has a short section on review spots and a new screenshot of the walkthrough.',
+    spots: [
+      spotIn(
+        SAMPLE_PATHS.design,
+        review.design.after,
+        'A spot is a line range a review points at',
+        'a spot; schedules and MCP servers keep',
+        'high',
+        'Says where target still means something: schedules and MCP servers. The next rename pass reads this first.',
+        {
+          title: 'Where target still belongs',
+          explain:
+            'A schedule target is what a schedule runs against, and an MCP server target is where a tool call goes. Neither is a place in a review, so the section names both to keep the word from being renamed there.',
+        }
+      ),
+      spotIn(
+        SAMPLE_PATHS.design,
+        review.design.after,
+        '![The review walkthrough',
+        '![The review walkthrough',
+        'normal',
+        'The screenshot is captured again from this branch. The PNG diff cannot show what moved, so check it by eye.'
+      ),
+    ],
+    judgementCalls: [
+      {
+        title: 'Leave target in settings',
+        call: 'Left target in settings and schedules',
+        reason:
+          'Schedule targets and MCP server targets name what a schedule or a server acts on, not a place in a review.',
+        ...placeIn(
           SAMPLE_PATHS.design,
           review.design.after,
-          '## Review spots',
-          '![The review walkthrough',
-          'normal',
-          'Says why schedules and MCP servers keep the word target.'
+          'A spot is a line range a review points at',
+          'a spot; schedules and MCP servers keep'
         ),
-      ],
-      judgementCalls: [
-        {
-          call: 'Left target in settings and schedules',
-          reason:
-            'Schedule targets and MCP server targets name what a schedule or a server acts on, not a place in a review.',
-          file: null,
-          line: null,
-        },
-      ],
+        alternatives: [
+          {
+            option: 'Rename every target in the web app',
+            rejected:
+              'Schedule and MCP targets name what a schedule or a server acts on; calling them spots would be wrong.',
+          },
+        ],
+      },
+      {
+        title: 'Capture a new screenshot',
+        call: 'Captured a new screenshot instead of keeping the old one',
+        reason:
+          'The old image showed the walkthrough before the rename. A fresh capture of this task shows the current labels with the first spot spotlit.',
+        file: SAMPLE_PATHS.screenshot,
+        line: null,
+        alternatives: [
+          {
+            option: 'Keep the old screenshot',
+            rejected: 'It would show the wording the new section says is gone.',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function resolveReviewReport(sample: CodeSample, checks: ReportCheck[]) {
+  const { review } = sample;
+  const walkthrough = describeReviewWalkthrough(review);
+  const phases = withWalkthrough(
+    [listRenamePhase(review), listCallersPhase(review), listDocsPhase(review)],
+    walkthrough
+  );
+  return { phases, report: assembleReport(REVIEW_PLAN, phases, checks, walkthrough) };
+}
+
+export function listReviewDisagreements(sample: CodeSample): ReviewDisagreement[] {
+  return [
+    {
+      call: PARSE_CALL,
+      reason:
+        'Links to agent findings worked before this change and now open nothing. finding:N is already the key the page builds, so parse it and leave only decision keys out.',
+    },
+    {
+      call: TESTS_CALL,
+      reason: `The old file had ${countTests(sample.review.targetsTest)} tests, including listFindingMarkers, listFindingTargets and stepping from a decision spot. The new one covers none of those, so the rewrite lost behaviour, not just names.`,
     },
   ];
-  const report: WorkReport = {
-    headline: REVIEW_PLAN.goal,
-    sections: phases.map((phase, index) => ({
-      title: REVIEW_PLAN.phases[index]?.title ?? `Phase ${index + 1}`,
-      summary: phase.summary,
-      spots: phase.spots,
-    })),
-    checks,
-    judgementCalls: phases.flatMap((phase) => phase.judgementCalls),
-  };
-  return { phases, report };
 }
 
 export const REVIEW_SUMMARY =
-  'I read the rename across lib/review, the code view and the tests, and opened old spot links against the new parser. The rename is clean, but links to agent findings and judgement calls stop working.';
+  'I read the rename across lib/review, the code view and the tests, and opened old spot links against the new parser. The rename is clean, but links to agent findings and judgement calls stop working, and I disagree with two of the judgement calls: the narrow parser and the rewritten tests, which dropped the finding and decision coverage.';
 
 export const MERGED_REVIEW_SUMMARY =
   'I read the new queue order and its two tests. Urgent work sits on top inside each gate and the input is left untouched; nothing to report.';
@@ -1156,13 +1666,14 @@ function scriptReview(sample: CodeSample, push: Push) {
     role: 'reviewer',
     from: at(REVIEW_MARKS.reviewer[0]),
     to: at(REVIEW_MARKS.reviewer[1]),
-    summary: 'One blocking finding on old spot links, four suggestions.',
+    summary: 'One blocking finding on old spot links, four suggestions and two disputed judgement calls.',
   });
   push(at(REVIEW_MARKS.reviewer[1] - 0.2), {
     type: 'review.reported',
     taskId: task,
     summary: REVIEW_SUMMARY,
     findings: listReviewFindings(sample),
+    disagreements: listReviewDisagreements(sample),
     runId: reviewer,
   });
   push(at(REVIEW_MARKS.reviewer[1] + 0.2), {
@@ -1206,15 +1717,58 @@ export const MERGED_PLAN: PlanDocument = {
   questions: [],
 };
 
-function scriptMerged(sample: CodeSample, push: Push) {
-  const task = SAMPLE_MERGED;
-  const at = (minutes: number) => NOW - MERGED_AGE_HOURS * HOUR + minutes * MINUTE;
-  const { merged } = sample;
-  const stackLine = resolveLine(QUEUE_STACK, 'export function stackByPriority');
-  const phases = [
-    {
-      summary: 'stackByPriority sorts by priority, then by age, and never mutates its input.',
-      spots: [
+const MERGED_CHECKS: ReportCheck[] = [
+  { name: 'bun lint', outcome: 'pass', detail: null },
+  { name: 'bun check-types', outcome: 'pass', detail: null },
+  { name: 'bun run test', outcome: 'pass', detail: '2 new tests' },
+  { name: 'bunx knip', outcome: 'pass', detail: null },
+];
+
+function describeMergedWalkthrough(merged: MergedNotes): ReportWalkthrough {
+  return {
+    approach:
+      'A pure helper beside the queue instead of a change to how gates are ranked. `stackByPriority` takes any entry that carries a task, sorts a copy by priority and then by age, and is exported from the queue barrel so the web can adopt it one list at a time.',
+    flow: [
+      '```text',
+      'stackByPriority(entries)',
+      '        │',
+      '        ▼',
+      '[...entries]                  a copy, the caller’s array stays put',
+      '        │',
+      '        ▼',
+      'PRIORITY_RANK                 urgent 0, high 1, normal 2, low 3',
+      '        │ equal rank',
+      '        ▼',
+      'task.createdAt                oldest first',
+      '        │',
+      '        ▼',
+      'new array ──▶ queue barrel ──▶ the web adopts it, one list at a time',
+      '```',
+      '',
+      'The caller’s array is copied first, so state that holds it never changes under it. `PRIORITY_RANK` puts urgent at 0 and low at 3; equal ranks fall through to the creation time, oldest first.',
+    ].join('\n'),
+    risks: [
+      riskIn(
+        'A new priority needs a rank',
+        'A priority missing from `PRIORITY_RANK` would compare as NaN and leave the order to the engine. The type rules it out today; a new priority has to be added to the table.',
+        SAMPLE_PATHS.queueStack,
+        merged.stack,
+        'PRIORITY_RANK[a.task.priority]'
+      ),
+      riskIn(
+        'Nothing uses the helper yet',
+        'Nothing calls `stackByPriority` yet, so the queue on screen does not change until the web adopts it.',
+        SAMPLE_PATHS.queueIndex,
+        merged.index.after,
+        'export { stackByPriority }'
+      ),
+    ],
+    testing: {
+      automated: [
+        '`bun test packages/core/test/queue`: the order across urgent, high and low with a tie on high, and that the input array is left untouched.',
+        'Nothing to try on screen yet: no screen uses the helper.',
+      ],
+      manual: [
         {
           file: SAMPLE_PATHS.queueStack,
           start: stackLine,
@@ -1223,39 +1777,132 @@ function scriptMerged(sample: CodeSample, push: Push) {
           why: 'Ties keep the oldest task first, so two urgent reviews never swap places on a refresh.',
         },
       ],
-      judgementCalls: [],
     },
-    {
-      summary: 'Two tests: the order across priorities and that the input array is left alone.',
-      spots: [
-        spotIn(
-          SAMPLE_PATHS.queueTest,
-          QUEUE_TEST,
-          "test('puts urgent work",
-          "toEqual(['urgent'",
-          'normal',
-          'The order the queue shows.'
-        ),
-      ],
-      judgementCalls: [],
-    },
-  ];
-  const checks: ReportCheck[] = [
-    { name: 'bun lint', outcome: 'pass', detail: null },
-    { name: 'bun check-types', outcome: 'pass', detail: null },
-    { name: 'bun run test', outcome: 'pass', detail: '2 new tests' },
-    { name: 'bunx knip', outcome: 'pass', detail: null },
-  ];
-  const report: WorkReport = {
-    headline: MERGED_PLAN.goal,
-    sections: phases.map((phase, index) => ({
-      title: MERGED_PLAN.phases[index]?.title ?? '',
-      summary: phase.summary,
-      spots: phase.spots,
-    })),
-    checks,
-    judgementCalls: [],
   };
+}
+
+export function resolveMergedReport(sample: CodeSample) {
+  const { merged } = sample;
+  const walkthrough = describeMergedWalkthrough(merged);
+  const phases = withWalkthrough(
+    [
+      {
+        summary: 'stackByPriority sorts by priority, then by age, and never mutates its input.',
+        spots: [
+          spotIn(
+            SAMPLE_PATHS.queueStack,
+            merged.stack,
+            'return [...entries].sort(',
+            'PRIORITY_RANK[a.task.priority]',
+            'high',
+            'Ties keep the oldest task first, so two urgent reviews never swap places on a refresh.',
+            {
+              title: 'Priority first, age second',
+              explain:
+                '`PRIORITY_RANK` maps urgent to 0 and low to 3, so subtracting ranks puts urgent first. Equal ranks subtract to 0 and `||` falls through to `createdAt`, oldest first. The spread copies the array, so `sort` never touches the caller’s list.',
+            }
+          ),
+          spotIn(
+            SAMPLE_PATHS.queueIndex,
+            merged.index.after,
+            'export { stackByPriority }',
+            'export { stackByPriority }',
+            'normal',
+            'Exported from the queue barrel so the web can stack its lists next without reaching into the file.'
+          ),
+        ],
+        judgementCalls: [
+          {
+            title: 'Break ties by creation time',
+            call: 'Broke ties by creation time',
+            reason:
+              'Without a second key two urgent tasks could trade places whenever the list is rebuilt. createdAt never changes, so the order holds across refreshes.',
+            ...placeIn(SAMPLE_PATHS.queueStack, merged.stack, 'PRIORITY_RANK[a.task.priority]'),
+            alternatives: [
+              {
+                option: 'Break ties by task id',
+                rejected: 'Ids are random, so the order would be stable but mean nothing to the reader.',
+              },
+              {
+                option: 'Rely on a stable sort and the input order',
+                rejected:
+                  'The input order is whatever the caller happened to build, so it would differ between views.',
+              },
+            ],
+          },
+          {
+            title: 'A helper beside resolveQueue',
+            call: 'Added a helper instead of changing resolveQueue',
+            reason:
+              'resolveQueue decides which gate a task waits at. Keeping the order separate lets the web adopt it one list at a time.',
+            ...placeIn(SAMPLE_PATHS.queueIndex, merged.index.after, 'export { stackByPriority }'),
+            alternatives: [
+              {
+                option: 'Sort inside resolveQueue',
+                rejected:
+                  'Every caller would get the new order in the same change, which the plan kept for later.',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        summary: 'Two tests: the order across priorities and that the input array is left alone.',
+        spots: [
+          spotIn(
+            SAMPLE_PATHS.queueTest,
+            merged.test,
+            "test('puts urgent work",
+            "toEqual(['urgent'",
+            'normal',
+            'The order the queue shows.',
+            {
+              title: 'Both keys in one test',
+              explain:
+                'Two high tasks of different ages sit between an urgent and a low one. The expected order only holds if priority wins first and age breaks the tie.',
+            }
+          ),
+          spotIn(
+            SAMPLE_PATHS.queueTest,
+            merged.test,
+            "test('leaves the input alone'",
+            "toEqual(['b', 'a'])",
+            'normal',
+            'Guards the copy: sorting in place would reorder the caller’s array behind its back.'
+          ),
+        ],
+        judgementCalls: [
+          {
+            title: 'Cast the test tasks',
+            call: 'Built test tasks with a cast',
+            reason:
+              'The order reads three fields. A complete Task needs every field the domain has, which would bury what each test checks.',
+            ...placeIn(
+              SAMPLE_PATHS.queueTest,
+              merged.test,
+              'return { task: { id, priority, createdAt } as Task }'
+            ),
+            alternatives: [
+              {
+                option: 'Build complete tasks with a factory',
+                rejected: 'More setup than assertion, and none of the extra fields affect the order.',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    walkthrough
+  );
+  return { phases, report: assembleReport(MERGED_PLAN, phases, MERGED_CHECKS, walkthrough) };
+}
+
+function scriptMerged(sample: CodeSample, push: Push) {
+  const task = SAMPLE_MERGED;
+  const at = (minutes: number) => NOW - MERGED_AGE_HOURS * HOUR + minutes * MINUTE;
+  const { merged } = sample;
+  const { phases, report } = resolveMergedReport(sample);
+  const checks = MERGED_CHECKS;
   stage(push, task, at(0.5), 'planning', 'planning the phases');
   pushRun(push, {
     taskId: task,
@@ -1398,6 +2045,54 @@ export const LIVE_PLAN: PlanDocument = {
   evidence: ['screenshot'],
 };
 
+export function resolveLivePhase(sample: CodeSample): SamplePhase {
+  const tokens = sample.live.tokens.after;
+  const light = resolveLine(tokens, '--code-keyword');
+  const dark = resolveLine(tokens, '.dark {', light);
+  return {
+    summary: 'Six code colour tokens for light and dark, at the end of the kit’s globals.',
+    spots: [
+      {
+        file: SAMPLE_PATHS.tokens,
+        start: light - 1,
+        end: resolveLine(tokens, '--code-type', light - 1),
+        attention: 'normal',
+        why: 'Light values stay dark enough to read on the page surface, one hue per kind of token.',
+        title: 'The light palette',
+        explain:
+          'Six variables, one per kind of token the highlighter tells apart. They use `oklch` like the rest of the kit, so lightness is the same number across hues and the six read as one weight.',
+      },
+      {
+        file: SAMPLE_PATHS.tokens,
+        start: dark,
+        end: resolveLine(tokens, '--code-type', dark - 1),
+        attention: 'normal',
+        why: 'Dark values are lighter and less saturated so they hold contrast on the dark surface.',
+        title: 'Dark overrides',
+        explain:
+          'The `.dark` block redefines the same six variables, so anything that reads `var(--code-keyword)` switches with the theme and needs no reload.',
+      },
+    ],
+    judgementCalls: [
+      {
+        title: 'Code colours in the kit globals',
+        call: 'Put the code colours in the kit’s globals',
+        reason:
+          'The chat’s code fences will need the same colours later, and the kit is what both the code view and the chat read.',
+        file: SAMPLE_PATHS.tokens,
+        line: light,
+        alternatives: [
+          {
+            option: 'Use a Shiki theme for each mode',
+            rejected:
+              'Its colours come from GitHub, which is what the request asked to replace, and switching themes would mean highlighting again.',
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function scriptLive(sample: CodeSample, push: Push) {
   const task = SAMPLE_LIVE;
   const at = (minutes: number) => NOW - LIVE_AGE_HOURS * HOUR + minutes * MINUTE;
@@ -1434,17 +2129,7 @@ function scriptLive(sample: CodeSample, push: Push) {
     resolveLine(sample.live.tokens.after, '--code-keyword') - 4
   );
   pushPhase(push, task, 0, [at(LIVE_MARKS.builder[0]), at(LIVE_MARKS.builder[1])], {
-    summary: 'Six code colour tokens for light and dark, at the end of the kit’s globals.',
-    spots: [
-      {
-        file: SAMPLE_PATHS.tokens,
-        start,
-        end: start + 18,
-        attention: 'normal',
-        why: 'Dark values are lighter and less saturated so they hold contrast on the dark surface.',
-      },
-    ],
-    judgementCalls: [],
+    ...resolveLivePhase(sample),
     tree: sample.live.trees[0] ?? '',
   });
   push(at(LIVE_MARKS.working), { type: 'phase.updated', taskId: task, index: 1, status: 'active' });

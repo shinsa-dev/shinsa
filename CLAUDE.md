@@ -67,7 +67,9 @@ web ──WebSocket──► shinsa engine
   inquiry results have fixed fields with hard length limits. The tools publish the limits in their schemas;
   `validate*` rejects a hand-over that breaks one and tells the agent what to fix. Shinsa assembles the work report
   you review from the phase hand-overs, in plan order, each pointing at line ranges ranked `critical` / `high` /
-  `normal` (`docs/protocol.md` → Hand-overs).
+  `normal`, with the decisions and their alternatives and, on the last phase, the Agent's walkthrough of the whole
+  change; the reviewer, on its own session, adds findings and the decisions it disagrees with (`docs/protocol.md` →
+  Hand-overs, `docs/engine.md` → The review report).
 - **Projects, not setup.** A task belongs to a project (repositories and folders, a key, a description; the focus
   project by default). Triage finds the repository within it, or in the folders chosen at onboarding, and Shinsa
   registers it the first time it works there. Agents are told the project. A task's handle (`SW-142`) is for people

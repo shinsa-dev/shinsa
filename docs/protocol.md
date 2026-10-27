@@ -50,8 +50,12 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | review | Reading a change: the agent review (the reviewer, on its own session, soft gate) or your review (hard gate) | steps `agent_review`, `your_review` | Agent review, Review |
 | finding | One problem the reviewer reports, blocking or a suggestion, at a file and line | `ReviewFinding` | finding |
 | diagnosis | What an investigation hands over: what it found and why | `report_diagnosis`, `TaskResult` step `investigate` | Diagnosis |
-| judgement call | A choice the agent made in a phase, with its reason | `JudgementCall` | Judgement calls |
-| spot | A line range the work report points you at, ranked critical, high or normal | `CodeSpot` | spot |
+| judgement call | A choice the agent made in a phase, with its reason and the alternatives it rejected | `JudgementCall` | Judgement call, "Judgement calls" |
+| disagreement | A judgement call the reviewer would have made differently, with why | `ReviewDisagreement`, `report_review`'s `disagreements`, `Task.reviewDisagreements` | Disputed, "The agent review disagrees" |
+| spot | A line range the work report points you at, ranked critical, high or normal; a key piece of code also has a title and an explanation | `CodeSpot` | spot, "Key code" |
+| walkthrough | The Agent's technical account of the whole change on its last phase: approach, flow, risks, testing (what the tests cover and a guide to try it by hand) and the steps around the merge; a fix revises the parts it changes | `ReportWalkthrough`, `complete_phase`'s `walkthrough`; `ReportWalkthroughRevision`, `complete_fix`'s | Approach, How it works, Risks and edge cases, How to test, Pre-merge, Post-merge |
+| merge step | Something you must do around the merge that needs a person or production access (a variable or secret to set, a migration or deploy to run, a config or flag to change), before it or after it; you tick each one, and the merge waits for every one before it | `MergeStep` (`when`, `kind`, `title`, `detail`, `command`), `walkthrough.steps`, `MergeStepView` (a `ChecklistItem` with `round` and `due`), `Task.mergeStepsDone`, `Task.carriedMergeSteps`, `merge_step.tick`, the steps `pre_merge` and `post_merge`, the gate `post_merge` | Pre-merge, Post-merge, "Post-merge · 2 steps left" |
+| point | Anything the Review tab marks for you to read: a spot, a judgement call, a risk or a finding | `ReviewItem` (web, `lib/review/report.ts`) | point, "Every point" |
 | ref | The commit the Code tab reads at: the head of the branch, the base, a commit between them, or the working copy (`working`) while the worktree exists | `TaskRefs`, `WORKING_REF` | "Head of the branch", "Working copy", "Base" |
 | line comment | A comment you leave on a line or range of the new or the removed side, sent with Request changes | `ReviewComment` (`gate.answer`'s `comments`), `LineComment` in the web's draft (`lib/review/draft.ts`, adds its id and commit) | Your comments |
 | your edits | A file you change in the Code tab: saved to the task's working copy as you type, committed with the round's next commit, and named to the agent's next turn | `FileWrite`, `Task.editedPaths`, `Task.untoldEdits`, `task.record_edit`, `task.edited` | "Edited ‹path›", "Saving…" |
@@ -94,7 +98,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | Name | Meanings |
 | --- | --- |
 | round | a task's round (`Round`); a fix round (`fixRounds`, "Fix round 2"); a review round (`MAX_REVIEW_ROUNDS`) |
-| step | a pipeline step (`PipelineStep`); an operation's numbered steps (`PlanDocument.operation`) |
+| step | a pipeline step (`PipelineStep`); an operation's numbered steps (`PlanDocument.operation`); a step around the merge (`MergeStep`, `walkthrough.steps`), which you do, not an agent |
 | check | a repository check (`checks` step, `ReportCheck`); CI on the pull request as stored (`PullRequest.checks`, `checkRuns`); the evidence kind `check` |
 | wait | a monitor (`wait_for`); a usage wait; a run waiting on its delegations (`RunStatus 'waiting'`, `RunWait`); a task waiting on other tasks (`waiting_on_tasks`); a round waiting to start (`RoundStatus 'waiting'`) |
 | queued | the status of a run created but not yet dispatched; GitHub's merge queue; a round waiting to start, in the event `round.queued` |
@@ -135,8 +139,8 @@ command, stored shape and route uses the current one. Old shapes already in the 
 12. **One role list**: `RunRole` has no `triage` and no `shipper`; `RUN_AGENT_ROLE` is the one table. A round has one
     agent (`agent`, "Agent"), whose runs differ by `purpose`; there is no `fixer` or `operator` role, and `planner`
     and `builder` name delegated agents only (`docs/engine.md` → Agents).
-13. **Judgement calls**: `JudgementCall { call, reason, file, line }`, `judgementCalls`, `complete_phase`
-    `judgement_calls`.
+13. **Judgement calls**: `JudgementCall { title, call, reason, file, line, end?, alternatives? }`, `judgementCalls`,
+    `complete_phase` `judgement_calls`; a decision is only your answer at a gate.
 14. **Reply**: `GateDecision` is `approve | revise | reject | reply | waive`; the command stays `gate.answer`.
 15. **One result field**: `Task.answer`, `agent.answer` and `validateAnswer` are gone; the `answer` tool sends
     `agent.deliver` with step `answer` into `Task.result`.
@@ -203,7 +207,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `planHistory?` | `PlanRevision[]` (last 10) | earlier versions |
 | `planAnswers` | string \| null | your words when you approved the plan, for the agent as it builds |
 | `phases` | `PhaseProgress[]` | per plan phase: `pending`, `active`, `done`, `skipped` |
-| `phaseReports` | `PhaseReport[]` | per finished phase: summary, code spots, judgement calls (`judgementCalls`) |
+| `phaseReports` | `PhaseReport[]` | per finished phase: summary, code spots, judgement calls (`judgementCalls`), and the last phase's `walkthrough?` |
 | `summary` | string \| null | the work's summary |
 | `report` | `WorkReport` \| null | the review walkthrough built from every phase: headline, sections, checks, judgement calls |
 | `worktreePath` | string \| null | the task's worktree; for a GitButler or main-checkout task, the repository itself |
@@ -224,6 +228,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `checkResults` | `ReportCheck[]` \| null | the last round of checks |
 | `reviewSummary` | string \| null | the last agent review's summary: what the reviewer checked and its view of the change |
 | `findings` | `ReviewFinding[]` | the last agent review's findings, each with an optional `title` and `fix` |
+| `reviewDisagreements?` | `ReviewDisagreement[]` | the judgement calls the last agent review would have made differently: the call's text and why |
 | `dismissedFindings?` | `ReviewFinding[]` (last 30) | findings you dismissed, never reported again |
 | `fixRounds` | number | automatic fix rounds used |
 | `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| null | what the current fix is for (`conflict`: commits GitButler left conflicted on the task's branch) |
@@ -721,8 +726,8 @@ role without the tool (`hasTool`).
 | --- | --- | --- |
 | `agent.propose_plan` | `propose_plan` | hands over a plan (checked by `validatePlanRules`) |
 | `agent.complete_phase` | `complete_phase` | hands over a phase with its judgement calls; Shinsa commits it (the last one needs the evidence) |
-| `agent.complete_fix` | `complete_fix` | hands over a fix; Shinsa commits and pushes when shipping |
-| `agent.report_review` | `report_review` | hands over the review: `summary` (or null) and the findings |
+| `agent.complete_fix` | `complete_fix` | hands over a fix (`summary`, and `walkthrough` when it changes how the change works); Shinsa commits and pushes when shipping |
+| `agent.report_review` | `report_review` | hands over the review: `summary` (or null), the findings and the `disagreements` with the Agent's judgement calls |
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
@@ -830,11 +835,13 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.edits_approved` | `gate`: the review or merge you approved with uncommitted edits (`approvedEdits`), or null once the checks or CI it waited for passed |
 | `task.conflict_held` | `branch`: a conflict kept for the Agent's next build, fix or operation turn or the task's next review or merge gate, or null once an Agent at work or a new turn of it was told |
 | `plan.proposed`, `plan.answered`, `plan.approved` | a plan version was proposed; you answered it; approved |
-| `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`) |
+| `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`, and the last phase's `walkthrough`) |
+| `walkthrough.revised` | a fix changed how the change works (`walkthrough`: only the parts that changed, `runId`); merged into the latest phase report's walkthrough (`docs/engine.md` → The review report) |
+| `merge_step.ticked` | you ticked or unticked a step around the merge (`key`, `title`, `done`); adds or removes its key in `mergeStepsDone`, or marks the carried step, and records it in the activity |
 | `work.submitted` | the work report was assembled (`sections`, `judgementCalls`) |
 | `work.committed` | Shinsa committed (the tree hash) |
-| `checks.recorded` | a round of checks finished |
-| `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`); the review escalated to you |
+| `checks.recorded` | a round of checks finished (`results`, and `coverage?` when it was measured; sets `checkResults` and `coverage`) |
+| `review.reported`, `review.escalated` | a reviewer reported (`summary`, `findings`, `disagreements?`); the review escalated to you |
 | `fix.started` | a fix round started (reason, signature, tree) |
 | `evidence.attached` | evidence was attached |
 | `gate.opened`, `gate.answered`, `gate.withdrawn`, `gate.superseded` | a gate opened (`type`), was answered, withdrawn, or replaced by your message |
@@ -946,17 +953,22 @@ The fields each hand-over tool takes, checked by `validate*` in `packages/core/s
 | Tool | Fields (required in bold) | Limits |
 | --- | --- | --- |
 | `propose_plan` | **`goal`**, **`phases`** (**`title`**, **`detail`**), **`behaviour`**, **`approach`**, **`files`** (**`path`**, **`change`**), **`out_of_scope`**, **`verification`**, **`questions`** (**`question`**, **`options`**, `recommendation`); `impact`, `evidence`, `checks`, `approval`, `operation`, `change_summary` | goal 300; 2 to 8 phases (title 60, detail 160); behaviour 8 × 200; approach 700; files 20 (change 140); out of scope and verification 6 × 200; questions 4 (question 200, 2 to 4 options of 100); impact 1,000; checks 6 × 200; operation 8 × 200; change summary 240 |
-| `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**), **`judgement_calls`** (**`call`**, **`reason`**, `file`, `line`) | summary 240; 6 spots (why 180); 5 judgement calls (call 120, reason 240) |
-| `complete_fix` | **`summary`** | 240 |
-| `report_review` | **`findings`** (**`severity`**: blocking or suggestion, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary` | summary 400; 12 findings (title 80, message 280, fix 600) |
+| `complete_phase` | **`summary`**, **`spots`** (**`file`**, **`start`**, **`end`**, **`attention`**: critical, high or normal, **`why`**, `title`, `explain`), **`judgement_calls`** (**`title`**: a few words naming the decision, **`call`**, **`reason`**, `file`, `line`, `end`, `alternatives` (**`option`**, **`rejected`**)); `walkthrough` (**`approach`**, **`flow`**, `risks` (**`title`**: a few words naming the risk, **`risk`**, `file`, `line`, `end`), `testing` (`automated`, `manual` (**`action`**, `target` (**`kind`**: url, file, command or screen, **`value`**), **`expect`**)), `steps` (**`when`**: pre_merge or post_merge, **`kind`**: env, secret, migration, deploy, config or other, **`title`**, **`detail`**, `command`)), asked for on the last phase | summary 240; 8 spots (why 180, title 80, explain 400); 5 judgement calls (title 60, call 120, reason 240; 3 alternatives, option 100, rejected 200); walkthrough approach 1,200, flow 2,400, 8 risks (title 60, risk 280), testing automated 4 × 240 and 10 manual steps (action 240, target 400, expect 240), 8 steps (title 80, unique per `when`; detail 400; command 400) |
+| `complete_fix` | **`summary`**; `walkthrough` (`approach`, `flow`, `risks` (**`title`**, **`risk`**, `file`, `line`, `end`), `testing`, `steps`), only when the fix changes how the change works, with only the parts that changed and at least one; `testing` and `steps` replace the part whole, an empty one included | summary 240; walkthrough as in `complete_phase` |
+| `report_review` | **`findings`** (**`severity`**: blocking or suggestion, **`message`**: what is wrong and why it matters, `title`, `fix`, `file`, `line`, `end`); `summary`; `disagreements` (**`call`**: the judgement call's number in the brief, **`reason`**) | summary 400; 12 findings (title 80, message 280, fix 600); 8 disagreements (reason 280), each call once |
 | `answer` | **`answer`**; `propose_change` (**`request`**, **`why`**) | answer 8,000; request 2,000, why 240 |
 | `report_diagnosis` | **`diagnosis`**; `propose_change` | 12,000 |
 | `submit_report` | **`report`**; `propose_change` | 40,000 |
 | `report_outcome` | **`outcome`** | 8,000 |
 | `reshape_task` | **`reason`**; `shape` (answer, investigate, research) or `steps` (`PIPELINE_ORDER` names) | reason 240 |
+| `attach_evidence` | **`kind`** (comparison, screenshot, recording, test, check, note, preview), **`title`**: what it shows, the same for a before shot and its after shot; `detail`: what to look at; `width` (CSS pixels), `theme` (light, dark), `stage` (before, after); exactly one of `path`, `url` (http or https) or `text`, or for a comparison **`parts`** (each **`path`**, `stage`, `label`) | title 80; detail 280; width 1 to 7,680; text 40,000; url 2,000; path 300; 2 to 6 parts, label 40 |
 
-Shinsa assembles the work report you review (`WorkReport`: headline, sections, checks, judgement calls) from the plan's
-goal, every `complete_phase` and the checks it ran (`assembleReport`); no agent hands over a whole report. The other
+Shinsa assembles the work report you review (`WorkReport`: headline, sections, checks, judgement calls and the
+walkthrough) from the plan's goal, every `complete_phase` (the latest walkthrough wins, as revised by a fix's
+`walkthrough`: `ReportWalkthroughRevision`, merged part by part) and the checks it ran (`assembleReport`); no agent hands over a whole report. `decide` turns each disagreement's number into the call's text
+(`ReviewDisagreement { call, reason }`, kept on the task as `reviewDisagreements`, cleared by the next review and by a
+new round) and refuses a number the brief never gave (`unknown_judgement_call`). Why the builder writes it and the reviewer
+checks it: `docs/engine.md` → The review report. The other
 tools' limits are `PROTOCOL_LIMITS` (`ask`, `wait_for`, `suggest_tasks`), `DELEGATION_LIMITS` and `SCHEDULE_LIMITS`.
 
 ## The socket

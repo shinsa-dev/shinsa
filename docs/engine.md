@@ -175,9 +175,10 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    output. Every fix prompt says what follows the fix: the task's checks and agent review where it
    has them, then your review; for a pull request fix, the push.
 5. **Agent review.** A fresh reviewer reads the diff. It hands over one `report_review`: a summary of what it checked
-   and its view of the change, and each finding anchored to lines with a title, what is wrong and why it matters,
-   and a suggested fix when it has one (`resolveReviewerPrompt`). The task keeps them as `reviewSummary` and
-   `findings` until the next review or round. Blocking findings go back to the Agent, and then
+   and its view of the change, each finding anchored to lines with a title, what is wrong and why it matters,
+   and a suggested fix when it has one, and the Agent's judgement calls it would have made differently
+   (`disagreements`, by their number in its brief; `resolveReviewerPrompt`). The task keeps them as `reviewSummary`,
+   `findings` and `reviewDisagreements` until the next review or round (The review report, below). Blocking findings go back to the Agent, and then
    the checks and a new reviewer run again. Suggestions alone do not block.
 6. **Your review.** The review gate shows one report built from every phase. Approve it, or write
    in the chat: a message while the gate is open withdraws it and goes to the Agent. Approving with edits you made in
@@ -1801,8 +1802,11 @@ truth, and a snapshot only saves replaying it.
   briefing) have their `briefing.written` rows moved: the newest per project goes to the `briefings` table with its
   row's time, every such row and the receipts of `briefing.write` are deleted, and the log position they reached is
   kept in `seq_floor`, so the next event never takes a position an earlier event had (server ids such as `boot:<seq>`
-  name it). A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 2) marks
-  the log so each pass runs once: a log at 1 only has its briefings moved. A role it does not know stays as written:
+  name it). Logs from before the walkthrough's guide for testing (log version 3) have a `testing` list of strings in
+  `phase.completed`, `work.submitted` and `walkthrough.revised`; it becomes `{ automated: <the list>, manual: [] }`.
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 3) marks the log so
+  each pass runs once: a log at 1 or 2 only has its briefings moved and its testing lists rewritten
+  (`listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
   `run_purpose_unknown`, `run_purpose_unexpected`), so it shows in `/api/health` problems instead of reaching a page.
   Inspect mode writes nothing: it runs the same rules in memory on its read-only view instead
@@ -1924,7 +1928,7 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
 From T3 Code (harness plan WS4 names the sources). The evaluation is pure
 (`evaluatePullRequestWatch`, `packages/core/src/decide/watch.ts`); its
 state lives on the task (`task.pullRequestWatch`, changed only by `pull_request.watched`); the
-server reads GitHub (`apps/server/src/github`) and reports with `pull_request.record`, which now
+server reads GitHub (`apps/engine/src/github`) and reports with `pull_request.record`, which now
 carries the comments it read (`remarks`) and who is reading (`viewer`).
 
 - **What a read holds.** `gh pr view` for the pull request, then one GraphQL read for each check
@@ -3067,8 +3071,9 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   with `git fast-import`), and files it under a Sample project (`scripts/seed-code.ts`, helpers in `seed-code-kit.ts`, transcripts in
   `seed-code-transcripts.ts`). Four tasks use it: SMP-2 at your review, on a branch with three phase commits, a fix
   commit and one uncommitted edit, twelve changed files (a rename with edits, a deletion, two additions, a PNG,
-  `bun.lock` and a 5,000-line fixture), a report with nine spots (one in a file outside the diff), findings of both
-  severities, judgement calls, one Agent chat (planning, three phases and a fix on one session) and a reviewer chat
+  `bun.lock` and a 5,000-line fixture), a report of 40 points (18 spots, the key ones explained, one in a file outside the diff; 10 judgement calls with
+  their alternatives, two disputed by the reviewer; 7 risks) with the Agent's walkthrough, findings of both
+  severities, one Agent chat (planning, three phases and a fix on one session) and a reviewer chat
   whose tool calls carry the real lines;
   SMP-1 merged through a `--no-ff` merge commit with its worktree gone and its branch kept, so its code is read from
   commits alone; SMP-4 with its Agent still building phase 2 over uncommitted edits; and SMP-3, an answer with no code. The
@@ -3250,7 +3255,7 @@ limit).
 
 ### The setup steps
 
-The web's setup is a short run of steps the server keeps (`apps/server/src/onboarding/flow.ts`), over a fixed,
+The web's setup is a short run of steps the server keeps (`apps/engine/src/onboarding/flow.ts`), over a fixed,
 ordered list defined in code (`steps.ts`): `roots` (the repository folders, "Where do you keep your repositories?";
 discovered folders with their repository counts, several at once, and any other folder by its path), `model` (the
 default model, from the provider's catalog, or each role's own), `merge` (the merge method), `plans` (plan approval
@@ -3398,9 +3403,9 @@ says hello counts as no desktop.
 ## Health
 
 `GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
-(`resolveHealth`, `apps/server/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
-which Shinsa answered: `version` is the server package's version, `commit` the checkout's `HEAD` (null outside a git
-checkout), `installPath` the folder holding `apps/server`, and `startedAt` and `uptimeMs` count from when the server
+(`resolveHealth`, `apps/engine/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
+which Shinsa answered: `version` is the engine package's version, `commit` the checkout's `HEAD` (null outside a git
+checkout), `installPath` the folder holding `apps/engine`, and `startedAt` and `uptimeMs` count from when the server
 started. `problems` lists every event row the engine skipped at boot:
 `{ seq, type, kind: 'unreadable' | 'unappliable', error }` (a payload that is not JSON or does not match its type,
 or an event `applyEvent` threw on). Replay never stops at a damaged row: every later event is still applied, the
@@ -3422,7 +3427,7 @@ unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/
 
 `packages/core/src` has one folder per domain, each with an `index.ts` barrel; the package's `index.ts` re-exports
 them, and other packages import only `@shinsa/core`. The folder table and the invariants `decide` keeps are in
-`packages/core/CLAUDE.md`; the server's layout is in `apps/server/CLAUDE.md`.
+`packages/core/CLAUDE.md`; the server's layout is in `apps/engine/CLAUDE.md`.
 
 ## Testing
 
@@ -3476,7 +3481,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   without the bundled package, another eunoe on the port, adopting an orphan, stopping mid-start, and folds reaching
   the session that watches them. `packages/core/test/chat/`
   covers references and `markFinalReplies`.
-- **The whole server.** `apps/server/test/e2e/` runs the engine, outbox, effects, run supervisor, real checks and real
+- **The whole server.** `apps/engine/test/e2e/` runs the engine, outbox, effects, run supervisor, real checks and real
   git with a bare `origin` against scripted agents (`FakeAgents`) and the fake `gh`. `World` (`e2e/harness.ts`)
   restarts it two ways: `restartGracefully()` as a shutdown does, and `restart()` as a crash, which stops the old
   daemon's agent sessions before the new one boots. The files:

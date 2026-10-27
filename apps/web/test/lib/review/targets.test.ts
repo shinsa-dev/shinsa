@@ -30,6 +30,46 @@ describe('listReviewTargets', () => {
     ]);
   });
 
+  it('marks judgement calls and risks with lines, under the keys the Review tab links with', () => {
+    const report: WorkReport = {
+      ...REPORT,
+      sections: [],
+      judgementCalls: [
+        { title: 'Keep the API', call: 'Kept the API', reason: 'Small.', file: 'e.ts', line: 3, end: 5 },
+        { title: 'Retry three times', call: 'Three tries', reason: 'Enough.', file: null, line: null },
+      ],
+      walkthrough: {
+        approach: 'A',
+        flow: 'B',
+        risks: [
+          { title: 'Retries a bad request', risk: 'A 400 retries too.', file: 'f.ts', line: 7, end: null },
+          { title: 'Uncapped wait', risk: 'Nothing caps it.', file: 'g.ts', line: null, end: null },
+        ],
+        testing: { automated: [], manual: [] },
+      },
+    };
+    expect(listReviewTargets(report)).toEqual([
+      {
+        key: 'call:0',
+        file: 'e.ts',
+        start: 3,
+        end: 5,
+        attention: 'normal',
+        why: 'Kept the API',
+        section: 'Judgement calls',
+      },
+      {
+        key: 'risk:0',
+        file: 'f.ts',
+        start: 7,
+        end: 7,
+        attention: 'high',
+        why: 'A 400 retries too.',
+        section: 'Risks and edge cases',
+      },
+    ]);
+  });
+
   it('has nothing to step through in an empty report', () => {
     const empty = { ...REPORT, sections: [] };
     expect(listReviewTargets(empty)).toEqual([]);
