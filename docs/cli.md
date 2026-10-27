@@ -529,6 +529,37 @@ Every task agent's tool: `rounds_ship`. Sends `round.ship`.
 | `<round>` | integer, required | The round number, from `shinsa tasks show`. |
 | `<how>` | choice, required | onto_pull_request or stacked. |
 
+#### shinsa rounds update
+
+Change what a queued round asks for, before it starts.
+
+```
+shinsa rounds update <task> <round> <text...> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `round.update`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
+| `<text>` | text, required | What the round asks for instead. |
+
+#### shinsa rounds remove
+
+Remove a queued round before it starts. The rounds after it move up.
+
+```
+shinsa rounds remove <task> <round> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `round.remove`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
+
 ### gates
 
 #### shinsa gates answer

@@ -126,6 +126,8 @@ type EventBody =
       onto: number | null;
     }
   | { type: 'round.pull_request_merged'; taskId: string; pullRequest: number; branch: string }
+  | { type: 'round.updated'; taskId: string; number: number; request: string; title: string }
+  | { type: 'round.removed'; taskId: string; number: number }
   | {
       type: 'round.shipping_changed';
       taskId: string;

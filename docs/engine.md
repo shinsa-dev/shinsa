@@ -612,10 +612,25 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
     while the run waits to start are held and steered in once its session exists.
   - **After the agent is idle**, a message starts the next turn at once: a follow-up on a resting task, a fix, a
     revised plan or a new round, as What a message does (below) says.
-  - **Every message ends in a state you can see** (`docs/design.md`, 9): "Sending" until the server accepts it,
-    "Queued" while it waits in the inbox, then delivered (no line), noted as needing no reply (`acknowledge`, the
-    activity entry's `noted`), or not delivered with the reason (the drop's activity entry keeps the text and the
-    reason as `undelivered`).
+  - **What waits and what does not.** Only new work waits: a message routed as `new_round` while a round is in
+    flight becomes a round with status `waiting` (`round.queued`) and starts only when the current round rests or
+    reaches the merge gate (below). Everything else is delivered when it is routed: it steers the running turn,
+    starts a fix, revises the plan, wakes a step waiting for its delegations, answers or supersedes a gate, or
+    follows up a resting task. A message at an open gate is never held for the gate: the gate's own reply starts
+    the next step at once. The only waits after routing that the log does not record are the provider's: a steer
+    the session cannot take any more (closing, or the stop window) goes as the next turn after `run.end`, seconds
+    later, and a message sent while the run waits to start is steered in once its session exists.
+  - **Every message ends in a state you can see** (`docs/design.md`, 9): delivering (no line, a light around the
+    bubble) from the moment it is sent while it is in the outbox and the task's `inbox`, and for a round that
+    started from the queue until the round's first run starts; queued, above the composer, while its round
+    waits; then delivered (no line), noted as needing no reply (`acknowledge`, the activity entry's `noted`), or
+    not delivered with the reason (the drop's activity entry keeps the text and the reason as `undelivered`).
+  - **A queued round can change before it starts.** `round.update` replaces a waiting round's request (its title
+    becomes the request's first line; its kind of work and how it ships stay) and `round.remove` takes it out of
+    the queue, the waiting rounds after it moving up one number (`round.updated`, `round.removed`, activity
+    "Changed queued round 3: …" and "Removed queued round 3: …"). A round that started is refused
+    (`round_started`: send a message instead), as is a closed task. Both are on the surface (`shinsa rounds update`,
+    `rounds remove`, an agent's `rounds_update` and `rounds_remove`) and done on your behalf like `round.ship`.
 - **One active round, and when the next one starts.** A new round waits (`round.queued`, round status `waiting`, at
   most five waiting) and
   starts by itself once the current round rests (`startQueuedRounds`, after every command, like `releaseWaiting`):

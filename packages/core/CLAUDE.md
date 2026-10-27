@@ -67,7 +67,8 @@ src/
 │                    inbox.ts (messages accepted and not yet routed), overlaps.ts (task.overlapped, task.overlaps_told),
 │                    rounds.ts (round 1 on task.created, archiving a round and starting the next, a round's branch
 │                    and pull request, where a merged pull request marks every round still shipped on it merged,
-│                    rounds when a task rests, closes or reopens for a follow-up)
+│                    rounds when a task rests, closes or reopens for a follow-up, a waiting round changed or
+│                    removed with the later ones renumbered)
 ├── decide/          decide() (index.ts): one exhaustive switch over the command, then releaseWaiting,
 │   │                startQueuedRounds, enforceLiveness and dispatchRuns, over a Decider (decider.ts) that works on a draft and emits
 │   │                events and effects (taskSession: the one session every run of a task resumes, whatever its
@@ -127,7 +128,8 @@ src/
 │   ├── suggestions.ts  Tasks an agent suggests, accepting and dismissing them, split-offs and keeping one
 │   │                as the next round
 │   ├── rounds.ts    A new round waiting, starting the next one when the current one rests (startQueuedRounds, after
-│   │                every command), its branch and pull request, switching how a round ships
+│   │                every command), its branch and pull request, switching how a round ships, changing or
+│   │                removing a round that waits (updateRound, removeRound)
 │   ├── config.ts    Setup verification and its configuration gate
 │   ├── monitors.ts  wait_for: arming, waking and checking a monitor
 │   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits

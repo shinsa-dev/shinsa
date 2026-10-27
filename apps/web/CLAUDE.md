@@ -50,7 +50,8 @@ src/
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
 │                        result panels, the Rounds panel and its round headers, progress track), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
-│                        live card, handover, delegation and notice rows, the context meter), review (merge-steps.tsx: the steps around the
+│                        live card, handover, delegation and notice rows, the context meter, message-queue.tsx:
+│                        the queued messages docked above the composer), review (merge-steps.tsx: the steps around the
 │                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;
 │                        testing.tsx: the Review tab's How to test, what the tests cover and the steps to try with their targets;
 │                        note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and NoteHead with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), evidence (evidence-section.tsx: the Review tab's Evidence panel, its items grouped by kind (comparisons, recordings, screenshots, test and check runs, notes, previews), the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue, home (guide,
@@ -110,7 +111,8 @@ src/
 │                        at idle, what hidden pages and tabs render with), the chat's rendered window
 │                        (use-transcript-window), the rows in view of a list (use-row-window) and a long list's rows a
 │                        batch at a time (use-progressive-count), use-delayed (useDelayed: true once a wait has
-│                        lasted LOADING_DELAY_MS, 300ms)…)
+│                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
+│                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
     │                    patches applied once per frame, acks, transcripts from the position held (every followed
@@ -211,6 +213,7 @@ src/
     │                    roadmap groups and chains, next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
+    │                    queued messages and whether a started round is still delivering (message-queue.ts), the
     │                    messages on their way to the server (outbox.ts, read with hooks/use-outbox.ts), process
     │                    actions (process.ts), suggested tasks, cost, pull request facts, branch and request text,
     │                    kinds of task (shapes.ts: labels, composed steps, the result panel per step, your OK's
@@ -259,12 +262,14 @@ files after it.
 
 - **The server is the source of truth.** Components read `ShinsaState` from `useConnection()` and act through
   `sendCommand` / `sendCommandWithToast`; there are no optimistic writes, and acting never navigates
-  (`docs/design.md`, Where Shinsa differs, 9). The one exception is a chat message you send: it shows as sending
+  (`docs/design.md`, Where Shinsa differs, 9). The one exception is a chat message you send: it shows as delivering
   from the moment you press send (`lib/tasks/outbox.ts`, `useOutbox`) until the state has it in the task's `inbox`,
   and leaves the outbox when the server answers either way; each sent message is matched to one message that
-  landed, so a repeated message stays sending until it lands too. In the inbox it shows as queued, then as
+  landed, so a repeated message stays delivering until it lands too. In the inbox it is still delivering, then
   delivered, noted (needs no reply) or not delivered with the reason (`listHumanMessages` in `lib/chat/timeline.ts`,
-  `describeMessageStatus` in `lib/tasks/messages.ts`; `docs/engine.md` → Rounds).
+  `describeMessageStatus` in `lib/tasks/messages.ts`), or, when it asked for new work while a round runs, queued
+  above the composer as a waiting round you can edit or remove (`lib/tasks/message-queue.ts`,
+  `components/chat/message-queue.tsx`; `docs/engine.md` → Rounds).
 - **Setup is the server's steps.** The steps, their order, what each answer saves, going back and the accounts it
   imports all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders
   `GET /api/onboarding/flow` and sends what you pick, a folder path you add, Back or a step you open

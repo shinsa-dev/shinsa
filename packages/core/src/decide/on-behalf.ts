@@ -48,6 +48,10 @@ const DESCRIPTIONS: Descriptions = {
     command.shipping === 'stacked'
       ? `Set round ${command.number} of ${quoteTask(state, command.taskId)} to ship as its own stacked pull request`
       : `Set round ${command.number} of ${quoteTask(state, command.taskId)} to ship onto the open pull request`,
+  'round.update': (state, command) =>
+    `Changed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
+  'round.remove': (state, command) =>
+    `Removed queued round ${command.number} of ${quoteTask(state, command.taskId)}`,
   'suggestion.keep': (state, command) =>
     `Kept a split-off of ${quoteTask(state, command.taskId)} as its next round`,
   'monitor.check_in_now': (state, command) =>

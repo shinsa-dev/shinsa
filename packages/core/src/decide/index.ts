@@ -38,7 +38,7 @@ import { recordOnBehalfAction } from './on-behalf.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
 import { recordPullRequest, recordPullRequestReadFailure, recordPush } from './pull-requests.ts';
-import { changeRoundShipping, startQueuedRounds } from './rounds.ts';
+import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
   attemptRun,
@@ -136,6 +136,10 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return dropMessage(decider, command);
     case 'round.ship':
       return changeRoundShipping(decider, command);
+    case 'round.update':
+      return updateRound(decider, command);
+    case 'round.remove':
+      return removeRound(decider, command);
     case 'gate.answer':
       assertHumanDecides(decider);
       return answerGate(decider, command.gateId, command.decision, command.response, {

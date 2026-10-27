@@ -254,6 +254,69 @@
   animation: chat-swap-out 240ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
+@keyframes message-delivery-orbit {
+  from {
+    transform: translate(-50%, -50%) rotate(0turn);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(1turn);
+  }
+}
+
+.message-delivery {
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  overflow: hidden;
+  container-type: size;
+  pointer-events: none;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  opacity: 1;
+  transition: opacity 400ms cubic-bezier(0.23, 1, 0.32, 1);
+
+  @starting-style {
+    opacity: 0;
+  }
+
+  &[data-phase="settling"] {
+    opacity: 0;
+  }
+}
+
+.message-delivery-light {
+  --delivery-light: var(--fg-2);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(100cqw + 100cqh);
+  aspect-ratio: 1;
+  background: conic-gradient(
+    transparent 0turn 0.55turn,
+    color-mix(in oklab, var(--delivery-light) 35%, transparent) 0.8turn,
+    var(--delivery-light) 0.96turn,
+    transparent 1turn
+  );
+  transform: translate(-50%, -50%);
+  animation: message-delivery-orbit 2.4s linear infinite;
+  will-change: transform;
+}
+
+.dark .message-delivery-light {
+  --delivery-light: var(--fg-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-delivery {
+    background: var(--fg-2);
+  }
+
+  .message-delivery-light {
+    display: none;
+  }
+}
+
 @keyframes onboarding-in {
   from {
     opacity: 0;

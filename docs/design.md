@@ -227,7 +227,7 @@ Only these, and they win over anything below:
    and leaves out the tasks the guide above already names (hidden when none are left).
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
    the greeting, the guide and the composer, then Also needs you, In progress, Recently finished
-   (merged or done in the last week, five at most), Recent conversations (the latest agent message
+   (merged or done in the last 24 hours, five at most), Recent conversations (the latest agent message
    of five tasks, opening their chat) and Waiting on another task. Recently
    finished is closure news, so it follows the work still moving; Recent conversations is how you
    jump back into a chat, a step after the news; Waiting, the section that starts collapsed in the
@@ -316,14 +316,33 @@ Only these, and they win over anything below:
 9. **Acting never moves you.** There is no previous/next stepper on the task page; the queue
    button and ⌘K are how you move between tasks. Approving,
    merging, answering, replying or cancelling stays on the task and confirms with a toast. A chat message you
-   send shows as your bubble at once, and a `text-2xs` line under it says where it is until the agent has it
-   (`UserMessage`'s `status`, worded by `describeMessageStatus` in `lib/tasks/messages.ts`): "Sending" until the
-   server has accepted it, then "Queued" while it waits its turn in the task's inbox, both shimmering, the same
-   `ShimmeringText` and `SHIMMER_LINE` as the live card's "Starting"; the line goes when it is delivered. Every
-   message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for one
-   the classifier read as needing nothing (no agent runs for it), or "Not delivered. ‹reason›" in `text-red-text`
-   for one the task could no longer take, which stays in the chat. Several messages sent while one is read reach
-   the agent together, as one message (`docs/engine.md` → Rounds, Queued messages).
+   send shows as your bubble at once. **Delivering and queued are two states, each tied to the engine.**
+   - **Delivering** (`UserMessage`'s `status` `delivering`, `isDelivering` in `lib/tasks/messages.ts`): from the
+     moment you press send (the outbox) through the server's acceptance and the classifier's pass over the task's
+     `inbox`, until it is routed into the task (steered into the running turn, a fix, a follow-up, a revised plan),
+     and for a round that started from the queue until the round's first run starts (`isRoundDelivering` in
+     `lib/tasks/message-queue.ts`). No text: a light travels around the bubble's border (`DeliveryEdge`, the
+     `message-delivery` classes in `app.css`): a 1px ring masked over the border, a conic gradient of `fg-2`
+     (`fg-3` in dark) with a soft tail, turning once every 2.4s on `transform` alone, linear like a spinner since it
+     loops. It fades in, and fades out over 400ms (`useSettling`, `SETTLE_MS`) on the strong ease-out once the
+     message is delivered; under reduced motion it is a still `fg-2` ring. "Sending" is in an `sr-only` span.
+   - **Queued** (`MessageQueue`, `components/chat/message-queue.tsx`, over `listQueuedMessages`): a message the
+     classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
+     `waiting`) until the current round rests or reaches the merge gate (`docs/engine.md` → Rounds). It is not a
+     bubble in the chat: the queue docks above the composer on the Chat and Overview tabs (`Composer`'s `dock`), a
+     `CARD` `mb-1.5` with a 32px `text-2xs` header (an hourglass, "Queued" in `fg-3`, then "· Sends once round 2 is
+     finished." or "· Sends once round 2 is finished, one round at a time." in `fg-2`, `describeQueue`) over one
+     row per waiting round: its text `text-xs fg-3`, three lines at most, then Edit message (`IconPencil`) and Remove
+     from the queue (`IconCrossSmall`), `secondary` `icon-xs` buttons 1px apart. The list scrolls past 176px
+     (`ScrollArea`). Edit turns the row into the kit's `Textarea` with Cancel and Save (Enter saves, Escape cancels,
+     `round.update`); Remove sends `round.remove` and dims the row while it goes. Both are optimistic. When the round
+     starts, its message joins the chat under its round's divider as your bubble, delivering, then settles. Several
+     messages routed together are one round, so one row, delivered together.
+   Every message ends in a state you can see: delivered (no line), "Noted. It needs no reply." in `text-fg-2` for
+   one the classifier read as needing nothing (no agent runs for it), or "Not delivered. ‹reason›" in
+   `text-red-text` for one the task could no longer take, which stays in the chat (`describeMessageStatus`).
+   Several messages sent while one is read reach the agent together, as one message (`docs/engine.md` → Rounds,
+   Queued messages).
 10. **Two layouts, picked in Settings → Appearance.** On screen they carry names of their own, kept in one
     constant, `LAYOUT_NAMES` (`lib/preferences/layout.ts`: label, a one-line hint and the icon, read by Settings
     → Appearance, where each layout's choice shows its hint as a tooltip, and by ⌘K's Switch layout): **Desk** for

@@ -192,6 +192,14 @@ describe('parseUserCommand', () => {
         { type: 'round.ship', taskId: 't1', number: 2, shipping: 'stacked' },
       ],
       [
+        { type: 'round.update', taskId: 't1', number: 2, request: 'Add search' },
+        { type: 'round.update', taskId: 't1', number: 2, request: 'Add search' },
+      ],
+      [
+        { type: 'round.remove', taskId: 't1', number: 2 },
+        { type: 'round.remove', taskId: 't1', number: 2 },
+      ],
+      [
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
       ],

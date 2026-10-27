@@ -457,6 +457,15 @@ function readRoundShip(fields: Fields): UserCommand {
   };
 }
 
+function readRoundUpdate(fields: Fields): UserCommand {
+  return {
+    type: 'round.update',
+    taskId: readId(fields, 'taskId'),
+    number: readCount(fields, 'number'),
+    request: readText(fields, 'request'),
+  };
+}
+
 function readSnooze(fields: Fields): UserCommand {
   return {
     type: 'run.snooze_silence',
@@ -587,6 +596,12 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.retry': readRetry,
   'task.message': readTaskMessage,
   'round.ship': readRoundShip,
+  'round.update': readRoundUpdate,
+  'round.remove': (fields) => ({
+    type: 'round.remove',
+    taskId: readId(fields, 'taskId'),
+    number: readCount(fields, 'number'),
+  }),
   'gate.answer': readGateAnswer,
   'merge_step.tick': readMergeStepTick,
   'suggestion.accept': readSuggestionAccept,

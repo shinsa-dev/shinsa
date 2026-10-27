@@ -330,9 +330,57 @@ export function recordRoundBranch(state: ShinsaState, taskId: string, branch: st
   );
 }
 
+function applyRoundUpdated(state: ShinsaState, event: EventOf<'round.updated'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
+  writeRounds(
+    state,
+    task,
+    event.at,
+    resolveTaskRounds(task).map((round) =>
+      round.number === event.number ? { ...round, request: event.request, title: event.title } : round
+    )
+  );
+  record(state, task.id, event.at, {
+    actor: 'you',
+    kind: 'round',
+    text: `Changed queued round ${event.number}: ${event.title}`,
+    detail: event.request,
+  });
+}
+
+function applyRoundRemoved(state: ShinsaState, event: EventOf<'round.removed'>) {
+  const task = state.tasks[event.taskId];
+  const removed = task && resolveTaskRounds(task).find((round) => round.number === event.number);
+  if (!task || !removed) return;
+  writeRounds(
+    state,
+    task,
+    event.at,
+    resolveTaskRounds(task).flatMap((round) => {
+      if (round.number === event.number) return [];
+      return round.number > event.number ? [{ ...round, number: round.number - 1 }] : [round];
+    })
+  );
+  record(state, task.id, event.at, {
+    actor: 'you',
+    kind: 'round',
+    text: `Removed queued round ${event.number}: ${removed.title}`,
+    detail: removed.request,
+  });
+}
+
 type RoundEvent = Extract<
   ShinsaEvent,
-  { type: 'round.queued' | 'round.started' | 'round.shipping_changed' | 'round.pull_request_merged' }
+  {
+    type:
+      | 'round.queued'
+      | 'round.started'
+      | 'round.shipping_changed'
+      | 'round.pull_request_merged'
+      | 'round.updated'
+      | 'round.removed';
+  }
 >;
 
 export function applyRoundEvent(state: ShinsaState, event: RoundEvent) {
@@ -348,6 +396,12 @@ export function applyRoundEvent(state: ShinsaState, event: RoundEvent) {
       return;
     case 'round.pull_request_merged':
       applyRoundPullRequestMerged(state, event);
+      return;
+    case 'round.updated':
+      applyRoundUpdated(state, event);
+      return;
+    case 'round.removed':
+      applyRoundRemoved(state, event);
       return;
   }
 }

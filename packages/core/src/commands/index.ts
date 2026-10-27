@@ -95,6 +95,8 @@ export type UserCommand =
   | { type: 'task.retry'; taskId: string; account?: RunAccount }
   | ({ type: 'task.message'; taskId: string; text: string } & MessageRoute)
   | { type: 'round.ship'; taskId: string; number: number; shipping: RoundShipping }
+  | { type: 'round.update'; taskId: string; number: number; request: string }
+  | { type: 'round.remove'; taskId: string; number: number }
   | {
       type: 'gate.answer';
       gateId: string;

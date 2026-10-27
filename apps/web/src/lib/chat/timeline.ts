@@ -18,7 +18,7 @@ import {
 } from '@shinsa/core';
 import { describeTool, isHandover, type ToolDescription } from '@/lib/chat/tool-describe.ts';
 
-export type MessageStatus = 'sending' | 'queued' | 'noted' | 'undelivered';
+type MessageStatus = 'delivering' | 'noted' | 'undelivered';
 
 export interface HumanMessage {
   at: number;
@@ -112,18 +112,18 @@ function listUnsent(sending: HumanMessage[], landed: HumanMessage[]) {
 }
 
 export function listHumanMessages(task: Task, sending: HumanMessage[] = []): HumanMessage[] {
-  const queued = (task.inbox ?? []).map(({ at, text }) => ({ at, text, status: 'queued' as const }));
-  const landed = [...listMessagesOf(task, ['asked', 'message']), ...listUndelivered(task), ...queued];
+  const routing = (task.inbox ?? []).map(({ at, text }) => ({ at, text, status: 'delivering' as const }));
+  const landed = [...listMessagesOf(task, ['asked', 'message']), ...listUndelivered(task), ...routing];
   const unsent = listUnsent(sending, landed).map(({ at, text }) => ({
     at,
     text,
-    status: 'sending' as const,
+    status: 'delivering' as const,
   }));
   return [...landed, ...unsent].sort((left, right) => left.at - right.at);
 }
 
 function isWaiting(message: HumanMessage) {
-  return message.status === 'sending' || message.status === 'queued';
+  return message.status === 'delivering';
 }
 
 export function listFollowUpMessages(task: Task, sending: HumanMessage[] = []): HumanMessage[] {

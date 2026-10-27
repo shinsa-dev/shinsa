@@ -360,6 +360,25 @@ function scriptRounds(push: Push, clock: SeedClock, worktree: string) {
       pipeline: PIPELINE,
     },
   });
+  push(clock.step(0.4), {
+    type: 'task.messaged',
+    taskId: TASK,
+    text: 'And a legend under the header that says what each latency colour means.',
+    kind: 'new_round',
+    round: 7,
+  });
+  push(clock.step(0.1), {
+    type: 'round.queued',
+    taskId: TASK,
+    round: {
+      number: 7,
+      title: 'Explain the latency colours',
+      request: 'And a legend under the header that says what each latency colour means.',
+      why: null,
+      shipping: 'onto_pull_request',
+      pipeline: PIPELINE,
+    },
+  });
   push(clock.step(0.5), {
     type: 'task.messaged',
     taskId: TASK,
