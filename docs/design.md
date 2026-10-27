@@ -1309,6 +1309,12 @@ Only these, and they win over anything below:
       (No limit, the default, or 2, 4, 8 or 16 at once, a stored number not in the list added in order, and
       Custom…, which opens a dialog for any whole number of 1 or more; `delegationLimit`, `docs/engine.md` →
       Delegation) and Merge with. ⌘K's Change a setting has the same rows, without Custom….
+    - **Settings → Agents → Memory** (`components/settings/memory.tsx`, `lib/memory.ts`; `docs/engine.md` → Memory)
+      sits between Engine and Versions: the rules agents proposed first (each with its project and why, Keep, Edit and
+      Dismiss), then Every project, then a block per project that has rules, each headed by its count of 20 ("3 of
+      20"), each rule with Edit and Remove. New rule opens an inline row (the rule and its scope, Add rule); editing a
+      proposal ends in Keep, which keeps it with your words. Errors stay in the row ("Keep it to 240 characters. It
+      has 251."). A `remember` call in the chat is a card with the rule, the agent's why and "In Settings → Memory".
     - **The sign-in dialog** (`sign-in-dialog.tsx`, one `Dialog` mounted by `Root`, opened by
       `startSignIn`): Starting sign-in… with a spinner; "Sign in to Claude" with the browser note,
       the sign-in page as a link and a code field, Submit code the form's primary button; Finishing

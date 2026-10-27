@@ -857,6 +857,21 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   and step through the section; a missing proof says so. The Overview keeps one line pointing there
   (`docs/design.md` 34). The seed carries real screenshots, a recording and test runs on six review tasks.
 
+### Memory, and less guidance (2026-10-27)
+
+- **Why.** Research on context files and skills (ETH Zurich's "Evaluating AGENTS.md", SkillsBench, both February
+  2026) found that context an agent can find itself, or writes for itself, makes it no better and costs every turn,
+  while short rules written by people help. Shinsa had the opposite: long house rules repeating its tools, and no place
+  for what you teach agents at a gate, so the next task forgot it.
+- **Memory.** Rules you keep for every later agent, for every project or one: at most 240 characters each, 20 per
+  scope. Agents propose with `remember` when you correct them; only you keep, edit or remove one, in Settings → Agents
+  → Memory or with `shinsa memory`. A fresh session (the task's agent or the reviewer) hears every rule in its brief,
+  a resumed one only the new ones; never the system prompt, so the prompt cache holds (`docs/engine.md` → Memory).
+- **Less guidance.** The house rules lost what a tool's own description already says (a third shorter, about 5,700
+  characters per role), the writing rules are one block (`WRITING_RULES`), and the `handover` skill keeps only what the
+  schemas cannot say (13.7k to 3.9k characters). No skill editor and no style setting: your skills come from
+  `~/.claude/skills` and each repository, and taste is a memory rule.
+
 ## 11. Open questions
 
 1. **Plan gate threshold.** Today: `shinsa do --plan-first` and `shinsa import` always stop at the plan gate, and
