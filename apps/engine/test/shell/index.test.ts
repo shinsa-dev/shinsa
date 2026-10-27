@@ -95,6 +95,28 @@ describe('runCommand', () => {
     expect(result.timedOut).toBe(false);
   });
 
+  test('a process the group stop misses while it is being forked is stopped once the command ends', async () => {
+    const dir = createTempDir();
+    const controller = new AbortController();
+    const kill = spyOn(process, 'kill');
+    let missed = false;
+    kill.mockImplementation((pid: number, signal?: string | number) => {
+      kill.mockRestore();
+      const target = !missed && pid < 0 ? -pid : pid;
+      missed = true;
+      return process.kill(target, signal);
+    });
+    const started = Date.now();
+    const running = runCommand(['sh', '-c', 'touch started; sleep 30 & wait'], dir, {
+      signal: controller.signal,
+    });
+    await until('the command to start', () => existsSync(join(dir, 'started')));
+    controller.abort();
+    expect(await running).toMatchObject({ ok: false, timedOut: false });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(missed).toBe(true);
+  });
+
   test('a group that already ended when the timeout fires is not reported as a failed stop', async () => {
     const warn = spyOn(log, 'warn');
     try {

@@ -92,21 +92,29 @@ export async function runCommand(
   const child = spawn(command, cwd, options);
   if (typeof child === 'string') return { ok: false, code: 127, stdout: '', stderr: child, timedOut: false };
   let timedOut = false;
+  let stopped = false;
+  const stop = () => {
+    stopped = true;
+    killProcessGroup(child.pid);
+  };
   const timeoutMs = options.timeoutMs === undefined ? COMMAND_TIMEOUT_MS : options.timeoutMs;
   const timer =
     timeoutMs === null
       ? undefined
       : setTimeout(() => {
           timedOut = true;
-          killProcessGroup(child.pid);
+          stop();
         }, timeoutMs);
-  const stop = () => killProcessGroup(child.pid);
   options.signal?.addEventListener('abort', stop, { once: true });
+  const exited = child.exited.then((code) => {
+    if (stopped) killProcessGroup(child.pid);
+    return code;
+  });
   try {
     const [stdout, stderr, code] = await Promise.all([
       readOutput(child.stdout, options.onLine),
       readOutput(child.stderr, options.onLine),
-      child.exited,
+      exited,
     ]);
     return { ok: code === 0 && !timedOut, code, stdout: stdout.trim(), stderr: stderr.trim(), timedOut };
   } finally {
