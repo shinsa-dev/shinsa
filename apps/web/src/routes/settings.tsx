@@ -68,8 +68,8 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <AttentionSettings settings={state.settings} />
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
-          <SetupSettings />
           <UpdateSettings />
+          <SetupSettings />
         </>
       );
     case 'agents':

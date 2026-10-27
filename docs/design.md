@@ -372,7 +372,8 @@ Only these, and they win over anything below:
     The scale applies wherever the icon draws (the rail's rows, the Overview tab's house), never per call site;
     each shows its filled icon in `fg-4` with `aria-current="page"` on its own page (19), and Home has no buttons of
     its own for them. The queue button sits after Services, because that corner is navigation and nothing on the right (Focus) moves when it comes and
-    goes; it shows on every task page at every width, and it is the only place Cards lists the
+    goes; it shows on every page but Home, All tasks and setup (`isQueueButtonShown`), at every width: a task, Settings,
+    the Terminal page, /ui. It is the only place Cards lists the
     queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
     the queue; it never hides. Its nav names the same places as Desk's bar, in the same words: New task (Home), Tasks,
     Services and Settings, each filled on its own page. From
@@ -753,7 +754,7 @@ Only these, and they win over anything below:
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Setup, Updates), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
+      Attention, Notifications, Context, Updates, Setup), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
       folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
       tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
       floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
