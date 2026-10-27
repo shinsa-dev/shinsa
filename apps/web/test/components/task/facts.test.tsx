@@ -15,7 +15,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createRepo, createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const DECIDED: TriageDecisions = {
   shape: { value: 'answer', why: 'It asks how something works.' },
@@ -54,24 +54,39 @@ function renderFacts(task: Task = createTask({ id: 't', handle: 'SW-7' }), other
   );
 }
 
-describe('a task with no repository', () => {
-  it('shows no repository fact, where a task with one names it', () => {
+describe('the project fact', () => {
+  it('shows the project as its dot and name, never the repository’s folder, and nothing for a task with neither', () => {
     const question = createTask({ id: 'hey', handle: 'T-1', stage: 'answering', pipeline: ['answer'] });
     const state = createShinsaState({
-      tasks: [question, { ...question, id: 'bound', repoId: 'kanna' }],
-      repos: [createRepo({ id: 'kanna' })],
+      tasks: [
+        question,
+        { ...question, id: 'bound', repoId: 'kanna' },
+        { ...question, id: 'scoped', projectId: 'p' },
+        { ...question, id: 'loose', repoId: 'scratch' },
+      ],
+      projects: [createProject({ id: 'p', name: 'Personal', color: 'green' })],
+      repos: [
+        createRepo({ id: 'kanna', name: 'kanna', projectId: 'p' }),
+        createRepo({ id: 'scratch', name: 'scratch' }),
+      ],
     });
     pushState(state);
     const view = render(
       <TooltipProvider>
-        <TaskFacts state={state} task={question} />
-        <hr />
-        <TaskFacts state={state} task={state.tasks.bound as Task} />
+        {['hey', 'bound', 'scoped', 'loose'].map((id) => (
+          <TaskFacts key={id} state={state} task={state.tasks[id] as Task} />
+        ))}
       </TooltipProvider>
     );
-    const [unbound, bound] = view.container.querySelectorAll('div.flex-wrap');
-    expect(unbound?.textContent).not.toMatch(/kanna|repositor/i);
-    expect(bound?.textContent).toContain('kanna');
+    const [unbound, bound, scoped, loose] = view.container.querySelectorAll('div.flex-wrap');
+    expect(unbound?.textContent).not.toMatch(/kanna|personal|repositor/i);
+    expect(unbound?.querySelector('[data-project-dot]')).toBeNull();
+    expect(bound?.textContent).toContain('Personal');
+    expect(bound?.textContent).not.toContain('kanna');
+    expect(bound?.querySelector('[data-project-dot]')?.getAttribute('data-project-dot')).toBe('green');
+    expect(scoped?.textContent).toContain('Personal');
+    expect(loose?.textContent).toContain('scratch');
+    expect(loose?.querySelector('[data-project-dot]')?.getAttribute('data-project-dot')).toBe('gray');
   });
 });
 

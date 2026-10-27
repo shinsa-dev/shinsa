@@ -11,7 +11,7 @@ import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
-import { ProjectDot } from '@/components/status/project-dot.tsx';
+import { ProjectLabel } from '@/components/status/project-dot.tsx';
 import { StatusText } from '@/components/status/text.tsx';
 import { PriorityChoices, TaskActionItems } from '@/components/task/action-items.tsx';
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
@@ -19,7 +19,7 @@ import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { selectTaskProject } from '@/lib/projects.ts';
+import { resolveTaskProjectLabel } from '@/lib/projects.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
 import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
@@ -88,8 +88,7 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
   group: RoadmapGroupKey;
   depth: number;
 }) {
-  const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  const project = selectTaskProject(state, task);
+  const project = resolveTaskProjectLabel(state, task);
   const level = Math.min(depth, 3);
   return (
     <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
@@ -122,9 +121,8 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
           <TaskHandle task={task} />
           <Truncate className='text-fg-4'>{task.title}</Truncate>
         </span>
-        <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
-          {project && <ProjectDot color={project.color} label={project.name} className='size-1.5' />}
-          <Truncate>{repo?.name ?? 'No repository'}</Truncate>
+        <span className='flex min-w-0 items-center text-fg-2 max-md:hidden'>
+          {project ? <ProjectLabel label={project} /> : <Truncate>No project</Truncate>}
         </span>
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
           <KindMark state={state} task={task} />

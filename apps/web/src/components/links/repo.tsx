@@ -1,5 +1,5 @@
 import type { Repo, ShinsaState } from '@shinsa/core';
-import { GlyphLabel, InAppLink, InlineMark, SMART_LINK } from '@/components/links/link.tsx';
+import { GlyphLabel, InAppLink, SMART_LINK } from '@/components/links/link.tsx';
 import {
   InfoAction,
   InfoHeader,
@@ -36,6 +36,7 @@ export function RepoDetails({ state, repo }: { state: ShinsaState; repo: Repo })
 }
 
 export function RepoChip({ state, repo }: { state: ShinsaState; repo: Repo }) {
+  const color = selectProject(state, repo.projectId)?.color ?? 'gray';
   const path = `/tasks?q=${encodeURIComponent(repo.name)}`;
   return (
     <InfoPopover
@@ -43,7 +44,11 @@ export function RepoChip({ state, repo }: { state: ShinsaState; repo: Repo }) {
       render={<InAppLink path={path} className={SMART_LINK} />}
       trigger={
         <GlyphLabel
-          glyph={<InlineMark icon={repo.remote ? 'IconGithub' : 'IconFolder1'} />}
+          glyph={
+            <span className='relative -top-px me-1 inline-grid size-3.5 place-items-center align-middle'>
+              <ProjectDot color={color} />
+            </span>
+          }
           text={repo.name}
         />
       }

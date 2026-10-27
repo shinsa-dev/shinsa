@@ -59,7 +59,7 @@ export function TasksPage({ state }: { state: ShinsaState }) {
           )}
         >
           <span>Task</span>
-          <span className='max-md:hidden'>Repository</span>
+          <span className='max-md:hidden'>Project</span>
           <span className='max-md:hidden'>Status</span>
           <span className='max-md:hidden'>Pull request</span>
           <span className='text-right'>Updated</span>

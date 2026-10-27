@@ -55,7 +55,7 @@ export function ProjectOption({ color, name }: { color: string; name: string }) 
 export function ProjectLabel({ label, className }: { label: ProjectLabelView; className?: string }) {
   return (
     <span className={cn('flex min-w-0 items-center gap-1.5', className)}>
-      <ProjectDot color={label.color} />
+      <ProjectDotIcon color={label.color} />
       <Truncate>
         {label.name}
         {label.repo && <span className='text-fg-2'> · {label.repo}</span>}

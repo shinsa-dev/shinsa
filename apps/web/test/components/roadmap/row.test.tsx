@@ -6,7 +6,7 @@ import { RoadmapRow } from '@/components/roadmap/row.tsx';
 import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { listSentCommands, pushState, startFakeServer, stopFakeServer } from '../../support/server.ts';
-import { createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 
 const STATE = createShinsaState({
   tasks: [
@@ -191,13 +191,30 @@ describe('the chain arrow', () => {
   });
 });
 
-describe('the repository column', () => {
-  it('says No repository for a task that works without one', () => {
+describe('the project column', () => {
+  it('says No project for a task that works without one', () => {
     renderRow(
       createTask({ id: 'research', title: 'Compare the search engines', stage: 'researching' }),
       'working'
     );
-    expect(screen.getByText('No repository')).toBeTruthy();
+    expect(screen.getByText('No project')).toBeTruthy();
+  });
+
+  it('shows the project’s dot and name, and the repository after it when the project has several', () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'web', title: 'Fix the paywall', repoId: 'web' })],
+      projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
+      repos: [
+        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p' }),
+        createRepo({ id: 'api', name: 'superwall-api', projectId: 'p' }),
+      ],
+    });
+    const view = renderRow(state.tasks.web as Task, 'working', 0, state);
+    expect(view.container.querySelector('[data-project-dot]')?.getAttribute('data-project-dot')).toBe(
+      'purple'
+    );
+    expect(screen.getByText('Superwall')).toBeTruthy();
+    expect(screen.getByText('· paywall-next', { exact: false })).toBeTruthy();
   });
 });
 

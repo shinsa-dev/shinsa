@@ -28,6 +28,7 @@ import {
   InfoSection,
 } from '@/components/overlays/info-popover.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
+import { ProjectLabel } from '@/components/status/project-dot.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
@@ -39,6 +40,7 @@ import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeChecksPassed, hasFailingCheck, isAgentWorking } from '@/lib/overview/now.ts';
+import { resolveTaskProjectLabel } from '@/lib/projects.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import { describePullRequestFact, describeStarted } from '@/lib/tasks/facts.ts';
 import { type Check, listTaskChecks, resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
@@ -173,18 +175,13 @@ function StatusFact({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
+function ProjectFact({ state, task }: { state: ShinsaState; task: Task }) {
+  const label = resolveTaskProjectLabel(state, task);
+  if (!label) return null;
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  if (!repo) return null;
+  if (!repo) return <ProjectLabel label={label} className={FACT} />;
   return (
-    <FactPopover
-      trigger={
-        <>
-          <Icon size='sm' name='IconFolder1' />
-          <span className='truncate'>{repo.name}</span>
-        </>
-      }
-    >
+    <FactPopover trigger={<ProjectLabel label={label} />}>
       <RepoDetails state={state} repo={repo} />
     </FactPopover>
   );
@@ -430,7 +427,7 @@ export function TaskFacts({
       <HandleFact task={task} />
       <RoundFact task={task} />
       <StatusFact state={state} task={task} />
-      <RepoFact state={state} task={task} />
+      <ProjectFact state={state} task={task} />
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} checks={checks} />
       {!task.pullRequest && checks.length > 0 && <ChecksFact checks={checks} />}
