@@ -2,6 +2,7 @@ import { type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { CARDS_FRAME, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { TaskHeader } from '@/components/task/header.tsx';
@@ -76,14 +77,20 @@ function TaskTabs({
     .filter((tab) => warm || visited.current.has(tab))
     .map((tab) => {
       const content = (
-        <TaskTabContent
-          tab={tab}
-          state={tab === view.tab ? state : settled}
-          task={task}
-          lead={view.lead}
-          codeModes={view.codeModes}
-          chatRunId={view.chatRunId}
-        />
+        <ErrorBoundary
+          size='inline'
+          resetKey={tab === view.tab ? task.id : 'hidden'}
+          className={cn(PAGE_COLUMN, 'py-5')}
+        >
+          <TaskTabContent
+            tab={tab}
+            state={tab === view.tab ? state : settled}
+            task={task}
+            lead={view.lead}
+            codeModes={view.codeModes}
+            chatRunId={view.chatRunId}
+          />
+        </ErrorBoundary>
       );
       return (
         <React.Activity key={tab} mode={tab === view.tab ? 'visible' : 'hidden'}>

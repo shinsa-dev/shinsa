@@ -5,17 +5,18 @@ import { useSelectAllScope } from '@shinsa/ui/hooks/use-select-all-scope';
 import * as React from 'react';
 import { SignInDialog } from '@/components/accounts/sign-in-dialog.tsx';
 import { CommandMenu } from '@/components/command/menu.tsx';
-import { CardsShell } from '@/components/layout/cards/shell.tsx';
-import { SidebarShell } from '@/components/layout/sidebar/shell.tsx';
+import { ErrorBoundary } from '@/components/errors/boundary.tsx';
+import { AppFrame } from '@/components/layout/frame.tsx';
 import { OnboardingShell } from '@/components/onboarding/shell.tsx';
 import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { HealthBanner } from '@/components/status/health-banner.tsx';
 import { LoadingSpinner } from '@/components/status/loading-line.tsx';
 import { useAttention } from '@/hooks/use-attention.ts';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
-import { writeCommandMenuOpen } from '@/lib/command/registry.ts';
+import { useCommandMenuOpen, writeCommandMenuOpen } from '@/lib/command/registry.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { connection, useConnection } from '@/lib/connection/socket.ts';
+import { ERROR_COPY, recordCommandMenuError, resolveResetKey } from '@/lib/errors.ts';
 import {
   isHubRoute,
   KEPT_TASK_PAGES,
@@ -71,6 +72,8 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
   const key = resolvePageKey(view, resolveRouteTaskId(state, route));
   const hubs = React.useRef(new Map<string, typeof view>());
   const tasks = React.useRef<readonly KeptView[]>([]);
+  const visit = React.useRef({ key, count: 0 });
+  if (visit.current.key !== key) visit.current = { key, count: visit.current.count + 1 };
   if (isHubRoute(route)) hubs.current.set(route.name, view);
   if (route.name === 'task') tasks.current = updateKeptViews(tasks.current, key, view, KEPT_TASK_PAGES);
   const pages = [...listHubViews(hubs.current, warm), ...tasks.current];
@@ -80,11 +83,20 @@ function Pages({ state, route }: { state: ShinsaState; route: PageRoute }) {
         const shown = page.key === key;
         return (
           <React.Activity key={page.key} mode={shown ? 'visible' : 'hidden'}>
-            <PageView state={shown ? state : settled} route={page.view.route as PageRoute} />
+            <ErrorBoundary
+              size='page'
+              resetKey={shown ? resolveResetKey(page.view, visit.current.count) : 'hidden'}
+            >
+              <PageView state={shown ? state : settled} route={page.view.route as PageRoute} />
+            </ErrorBoundary>
           </React.Activity>
         );
       })}
-      {route.name === 'onboarding' && <OnboardingPage />}
+      {route.name === 'onboarding' && (
+        <ErrorBoundary size='page' resetKey={resolveResetKey(view, visit.current.count)}>
+          <OnboardingPage />
+        </ErrorBoundary>
+      )}
     </>
   );
 }
@@ -102,25 +114,44 @@ function Loading() {
   );
 }
 
-function resolveShell(route: PageRoute, layout: ReturnType<typeof useLayoutPreference>) {
-  if (route.name === 'onboarding') return OnboardingShell;
-  return layout === 'cards' ? CardsShell : SidebarShell;
-}
-
 function Workspace({ route }: { route: PageRoute }) {
   const { state } = useConnection();
   const layout = useLayoutPreference();
+  const search = useSearchString();
   React.useEffect(() => connection.start(), []);
   if (!state) return <Loading />;
-  const Shell = resolveShell(route, layout);
-  return (
-    <Shell state={state}>
-      <HealthBanner />
-      <EngineBanner />
-      <AttentionSignals state={state} route={route} />
-      <Prefetch state={state} />
+  const viewKey = resolveResetKey({ route, search });
+  const content = (
+    <>
+      <ErrorBoundary size='silent' resetKey={viewKey}>
+        <HealthBanner />
+        <EngineBanner />
+      </ErrorBoundary>
+      <ErrorBoundary size='silent' resetKey={viewKey}>
+        <AttentionSignals state={state} route={route} />
+        <Prefetch state={state} />
+      </ErrorBoundary>
       <Pages state={state} route={route} />
-    </Shell>
+    </>
+  );
+  if (route.name === 'onboarding') return <OnboardingShell>{content}</OnboardingShell>;
+  return (
+    <AppFrame layout={layout} state={state}>
+      {content}
+    </AppFrame>
+  );
+}
+
+function GuardedCommandMenu({ route }: { route: PageRoute }) {
+  const open = useCommandMenuOpen();
+  return (
+    <ErrorBoundary
+      size='silent'
+      resetKey={`${open} ${resolveResetKey({ route, search: '' })}`}
+      onError={recordCommandMenuError}
+    >
+      <CommandMenu />
+    </ErrorBoundary>
   );
 }
 
@@ -136,8 +167,10 @@ function App({ route }: { route: PageRoute }) {
   return (
     <>
       <Workspace route={route} />
-      {route.name !== 'onboarding' && redirect === null && <CommandMenu />}
-      <SignInDialog />
+      {route.name !== 'onboarding' && redirect === null && <GuardedCommandMenu route={route} />}
+      <ErrorBoundary size='silent'>
+        <SignInDialog />
+      </ErrorBoundary>
     </>
   );
 }
@@ -148,13 +181,21 @@ export function Root() {
   useSelectAllScope();
   return (
     <TooltipProvider>
-      {route.name === 'ui' ? (
-        <React.Suspense fallback={<Loading />}>
-          <UiPage />
-        </React.Suspense>
-      ) : (
-        <App route={route} />
-      )}
+      <ErrorBoundary
+        size='page'
+        resetKey={resolveResetKey({ route, search })}
+        title={ERROR_COPY.app}
+        description={ERROR_COPY.appHint}
+        className='flex h-dvh flex-col bg-background'
+      >
+        {route.name === 'ui' ? (
+          <React.Suspense fallback={<Loading />}>
+            <UiPage />
+          </React.Suspense>
+        ) : (
+          <App route={route} />
+        )}
+      </ErrorBoundary>
       <Toaster />
     </TooltipProvider>
   );

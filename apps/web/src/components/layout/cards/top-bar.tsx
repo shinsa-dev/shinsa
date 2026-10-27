@@ -1,6 +1,7 @@
 import type { ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
+import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { FocusMenu } from '@/components/focus/menu.tsx';
 import { HomeLink } from '@/components/layout/home-link.tsx';
 import { NavButton } from '@/components/layout/nav-button.tsx';
@@ -9,11 +10,13 @@ import { QueueMenu } from '@/components/queue/menu.tsx';
 import { ServicesMenu } from '@/components/services/menu.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
+import { resolveResetKey } from '@/lib/errors.ts';
 import { useRoute, useRouteTaskId } from '@/router.ts';
 
 export function CardsTopBar({ state }: { state: ShinsaState }) {
   const route = useRoute();
   const activeTaskId = useRouteTaskId(state);
+  const resetKey = resolveResetKey({ route, search: '' });
   return (
     <header data-window-drag className='shrink-0 select-none desktop:ps-16'>
       <div className={cn(CARDS_FRAME, 'flex h-11 items-center gap-1')}>
@@ -21,13 +24,23 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
         {route.name !== 'onboarding' && (
           <>
             <NavButton page='tasks' label='Tasks' icon='IconListBullets' activeIcon='IconListBulletsFilled' />
-            <ServicesMenu state={state} />
+            <ErrorBoundary size='icon' resetKey={resetKey}>
+              <ServicesMenu state={state} />
+            </ErrorBoundary>
           </>
         )}
-        {route.name === 'task' && <QueueMenu state={state} activeTaskId={activeTaskId} />}
-        <ConnectionStatus />
+        {route.name === 'task' && (
+          <ErrorBoundary size='icon' resetKey={resetKey}>
+            <QueueMenu state={state} activeTaskId={activeTaskId} />
+          </ErrorBoundary>
+        )}
+        <ErrorBoundary size='icon' resetKey={resetKey}>
+          <ConnectionStatus />
+        </ErrorBoundary>
         <span className='flex-1' />
-        <UpdateButton />
+        <ErrorBoundary size='icon' resetKey={resetKey}>
+          <UpdateButton />
+        </ErrorBoundary>
         {route.name !== 'onboarding' && (
           <>
             <NavButton
@@ -38,9 +51,13 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
               iconOnly
               className='me-0.5'
             />
-            <UsageMenu state={state} />
+            <ErrorBoundary size='icon' resetKey={resetKey}>
+              <UsageMenu state={state} />
+            </ErrorBoundary>
             <div className='max-sm:hidden'>
-              <FocusMenu state={state} compact />
+              <ErrorBoundary size='icon' resetKey={resetKey}>
+                <FocusMenu state={state} compact />
+              </ErrorBoundary>
             </div>
           </>
         )}

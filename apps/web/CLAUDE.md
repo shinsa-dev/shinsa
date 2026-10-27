@@ -69,7 +69,9 @@ src/
 │                        fields with Environment under Advanced and when a field shows its problem; service-row.tsx: a
 │                        service's row, tile and run buttons (Restart and Stop 1px apart, as on the Terminal page),
 │                        and Manage's row, which a press ticks (an outline Checkbox), with its bare edit button;
-│                        use-service-actions.ts: the row handlers and the panel's server calls), focus (menu.tsx: the Focus menu and
+│                        use-service-actions.ts: the row handlers and the panel's server calls), errors (boundary.tsx: ErrorBoundary, which catches a
+│                        render error, logs it and resets on its resetKey; fallback.tsx: ErrorFallback, the page, inline
+│                        and icon looks with Try again, Reload and Copy details), focus (menu.tsx: the Focus menu and
 │                        the project trigger and rows the Terminal page's picker shares), layout (cards/ and sidebar/ shells, the nav item both the rail and
 │                        Settings' tabs use, the list row and its LIST_ROW classes, compact-section.tsx (the compact queue's section and
 │                        popover classes, which the Services popover's list shares; the fold chevron right after a

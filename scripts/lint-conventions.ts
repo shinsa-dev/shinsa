@@ -36,6 +36,11 @@ const ROOTS = [
 const SKIPPED_SEGMENTS = new Set(['node_modules', 'dist']);
 
 const BANNED_VERB_PATTERN = /^(get|fetch|load|set|delete|destroy)[A-Z]/;
+const REACT_LIFECYCLE_NAMES = new Set([
+  'getDerivedStateFromError',
+  'getDerivedStateFromProps',
+  'getSnapshotBeforeUpdate',
+]);
 
 const VERB_CATALOG =
   'find*, select*, list*, count*, resolve*, create*, update*, upsert*, write*, replace*, remove*, assert*, serialize*, parse*, validate*, describe*, request*, sync*, apply*, record*, is*, has*, needs*';
@@ -358,6 +363,7 @@ function collectVerbViolations(file: string, program: BabelNode, violations: Vio
   walk(program, (node) => {
     const declaration = declaredFunctionName(node);
     if (!declaration || !BANNED_VERB_PATTERN.test(declaration.name)) return;
+    if (node.type === 'ClassMethod' && REACT_LIFECYCLE_NAMES.has(declaration.name)) return;
     violations.push({
       file,
       line: declaration.line,
