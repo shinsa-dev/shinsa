@@ -256,7 +256,7 @@ describe('the Review tab', () => {
     expect(screen.queryByText('bun lint')).toBeNull();
     expect(screen.queryByText('Changed files the review does not point at')).toBeNull();
     fireEvent.click(await screen.findByText('Everything else'));
-    expect(screen.getByText('Changed files the review does not point at')).toBeDefined();
+    expect(await screen.findByText('Changed files the review does not point at')).toBeDefined();
     expect(screen.getByText('Binary')).toBeDefined();
   });
 

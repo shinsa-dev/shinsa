@@ -161,7 +161,7 @@ export class Connection {
 
   isDesktopConnected = () => this.#desktopConnected;
 
-  replaceAccounts(accounts: AccountsSnapshot) {
+  replaceAccounts(accounts: AccountsSnapshot | null) {
     this.#accounts = accounts;
     this.#accountsSignal.publish();
   }

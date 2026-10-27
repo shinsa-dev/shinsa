@@ -6,7 +6,7 @@ import { SettingsPage } from '@/routes/settings.tsx';
 import { createAccount, createSnapshot } from '../support/accounts.ts';
 import { findTooltipText } from '../support/hover.ts';
 import { createOnboardingStatus } from '../support/onboarding.ts';
-import { pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
+import { clearAccounts, pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
 import { createShinsaState } from '../support/state.ts';
 
 let requests: Mock<(input: RequestInfo | URL) => Promise<Response>>;
@@ -17,6 +17,7 @@ beforeEach(() => {
   resetOnboardingStatus();
   requests = spyOn(globalThis, 'fetch').mockResolvedValue(new Response('offline', { status: 503 }));
   startFakeServer();
+  clearAccounts();
 });
 
 afterEach(async () => {

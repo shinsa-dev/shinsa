@@ -115,6 +115,10 @@ export function pushState(state: ShinsaState) {
   });
 }
 
+export function clearAccounts() {
+  act(() => connection.replaceAccounts(null));
+}
+
 export function pushAccounts(accounts: AccountsSnapshot) {
   act(() => {
     push({ type: 'accounts', accounts });
