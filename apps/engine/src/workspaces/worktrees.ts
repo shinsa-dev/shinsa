@@ -4,6 +4,7 @@ import {
   commitWorktree,
   createWorktree,
   discardEdits,
+  listChangedFiles,
   pushBranch,
   refreshWorktree,
   removeWorktree,
@@ -25,6 +26,7 @@ export async function commitCheckout(path: string, message: string): Promise<Wor
   const committed = await commitWorktree(path, message);
   return {
     treeHash: await resolveTree(path),
+    files: await listChangedFiles(path, before, 'HEAD'),
     undo: async () => {
       if (!committed) return;
       await runGitOrThrow(['reset', '--soft', before], path);

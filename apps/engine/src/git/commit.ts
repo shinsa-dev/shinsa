@@ -56,6 +56,14 @@ export async function commitWorktree(path: string, message: string) {
   return { merge };
 }
 
+export async function listChangedFiles(path: string, from: string, to: string) {
+  const names = await runCommandOrThrow(
+    ['git', '-c', 'core.quotePath=false', 'diff', '--name-only', '--no-renames', from, to],
+    path
+  );
+  return names.split('\n').filter((name) => name.length > 0);
+}
+
 export async function stashEdits(path: string, message: string) {
   const status = await runCommand(['git', 'status', '--porcelain'], path);
   if (!status.ok || status.stdout.length === 0) return false;

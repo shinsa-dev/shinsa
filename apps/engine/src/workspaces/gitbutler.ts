@@ -146,13 +146,14 @@ export class GitButlerStrategy implements WorkspaceStrategy {
       const paths = listOwnedPaths(claimed.ledger, task.id, dirty);
       if (paths.length === 0) {
         this.#ledgers.write(repo.id, claimed.ledger);
-        return { treeHash: await resolveBranchTree(repo, branch), undo: () => Promise.resolve() };
+        return { treeHash: await resolveBranchTree(repo, branch), files: [], undo: () => Promise.resolve() };
       }
       const { commitId, stackedOn } = await this.#commitOrStack(repo, branch, message, paths, canStackOn);
       const after = await readDirtyState(repo.path);
       this.#ledgers.write(repo.id, recordCommitted(claimed.ledger, task.id, paths, after));
       return {
         treeHash: await resolveBranchTree(repo, branch),
+        files: paths,
         undo: () => this.#uncommit(repo, task, commitId, paths, dirty),
         ...(stackedOn ? { stackedOn } : {}),
       };

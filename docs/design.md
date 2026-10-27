@@ -46,8 +46,11 @@ Only these, and they win over anything below:
    rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
    chat fence beside the editor, a diff side by side with its new side editable, the same diff unified with a spot,
    a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
+   Checks list in each state (`routes/ui/checks.tsx`, on `routes/ui/sample-checks.ts`: running, all passed,
+   failing, passed when re-run alone, already failing on main, an agent's check, the repository's baseline, CI after the
+   pull request, a linked test, the plan's Checks, check activity and Always run before review), the
    Review tab's Evidence panel (`routes/ui/evidence.tsx`: `EvidencePanel` with a before and after pair, a recording,
-   test output, Shinsa's own check run and a markdown note with a table, on sample files in `apps/web/public/samples/evidence` that
+   a test the agent linked (read as its check), a check Shinsa ran and a markdown note with a table, on sample files in `apps/web/public/samples/evidence` that
    `scripts/seed-media/generate.ts` renders, 34), and the error fallbacks in their three sizes (`routes/ui/errors.tsx`,
    38). A piece that reads live state has a
    presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
@@ -493,8 +496,8 @@ Only these, and they win over anything below:
     - **Task facts.** What a details panel would hold is one quiet wrapped row under the heading on
       every tab (`components/task/facts.tsx`, rendered by `TaskHeader`): state, repository, branch, pull request,
       priority, started (added, for a task that has not started), and, when they apply, what it
-      waits on and what it unblocks (or the checks,
-      when there is no pull request yet), and the coverage of the change once the checks measured it
+      waits on and what it unblocks (or the checks, when there is no pull request yet: the Checks list's summary
+      with its glyph, "All 4 checks passed", "Running 2 checks", and the list in its popover), and the coverage of the change once the checks measured it
       (`IconShieldCheck`, "86% of changed lines covered" or "All changed lines covered", a link to Review → How to
       test whose delayed tooltip is the full summary; nothing when coverage is off or could not be measured). Waits on reads "Waits on ‹A›, ‹B›" and is a click menu,
       not a popover (`WaitsOnItems`): the tasks it waits on (each opens, with its status), then
@@ -503,12 +506,30 @@ Only these, and they win over anything below:
       waiting (clears them all). Each item is an `h-6`
       chip, a 14px icon 6px from `text-xs` `fg-3`, `px-1.5` and pulled out by the same amount so
       the first icon sits on the column edge. Items with more to say open an `InfoPopover` on
-      hover (see 15), never a tooltip: the pull request shows CI, unresolved comments, mergeable, each
-      check with its state and a link to GitHub; the branch its full name and base; the
+      hover (see 15), never a tooltip: the pull request shows unresolved comments, mergeable, the Checks list in
+      both stages (Building, then CI) and a link to GitHub; the branch its full name and base; the
       repository its path, project and default branch; several related tasks list as links. A task with no
       repository (a greeting, a general question) has no repository fact at all, and no branch; nothing in the web
       assumes `task.repoId` is set (the roadmap row's hint reads "No repository").
       Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/status/priority-icon.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
+    - **The Checks list** (`components/checks/checks-list.tsx`, built by `resolveChecksView` in
+      `lib/tasks/checks.ts`, since 2026-10-27) is one list in two stages, a bonus that shows what was checked and never
+      a wall. **Building** (before the pull request) holds the task's checks: the plan's ("From the plan · phases 1 to
+      3"), the ones the agent added ("Added by the agent · phase 3") and the repository's Always run before review
+      commands ("Repository · before review"), each with its label (`text-xs fg-4`), who added it beside it
+      (`text-2xs fg-2`), its command (mono `text-2xs fg-3`, selectable) and its latest result: Passed (the accent
+      `IconCheckCircle2Filled`), Failed (red, with what failed under the command in `red-text`), Not run yet
+      (`IconCircleDotted`), Running (the kit's `Spinner` in the accent, while the stage is `checking` and the check is
+      in the current run, as core records it in `Task.runningChecks`), Passed with "Passed when re-run alone"
+      under it, or "Already failing on main, so it does not block" (a grey `IconCircleXFilled`, "Not blocking").
+      **CI** (after the pull request) holds the pull request's checks, each named and linked to its run, "Required"
+      or "Optional" beside it. Each stage's header is its title and summary ("All 4 passed", "1 of 4 failed", "Running
+      2 checks", "2 passed, 2 not run yet", in the accent, red or blue); the rows sit in one `INSET` with hairlines
+      between them, the state's word at the end, and Show the output (`OutputToggle`) when Shinsa kept the check's
+      output: the latest piece Shinsa attached for it, read in a capped code block. It shows on the Overview's review
+      card and, while the checks run, on the now card (whose title is then the stage reason, "Running the checks for
+      phase 1 of 3", never the next phase), in Review → How to test, and, compact (`ChecksSections`: an
+      `InfoSection` per stage, no output), in the checks fact's and the pull request's popovers.
     - **Who worked on this.** Once an agent has run, the facts row ends with `IconAgents` and "3 agents"; its
       `InfoPopover` is a small tree headed "Who worked on this" (`listTaskAgents` in `lib/chat/agents.ts`): each
       role once, in the order it first worked, with its `RoleMark` icon, its name and "2 runs" ("· working now" with
@@ -784,7 +805,11 @@ Only these, and they win over anything below:
       project are named SW-1, SW-2…"), then a secondary `xs` Add and the `•••` (Rename…, Change key…, Edit or Add
       description…, Colour, Remove project). The shelf is one list of what the project holds: each repository
       (GitHub or local icon) and each folder (`IconFolders`, the folder's name), all as `PathRow`s (a 14px icon 8px
-      from the name, the path after it in `text-2xs fg-2`, a ghost `sm` select of its test coverage (Auto coverage,
+      from the name, the path after it in `text-2xs fg-2`, a ghost `sm` select of what always runs before review
+      (Nothing before review, the default: only the checks the agent chose run; or "2 commands before review", which
+      opens the Always run before review dialog, one command per line, with a pencil button beside the select to edit
+      them again; `components/settings/baseline-select.tsx`, `lib/baseline.ts`; the commands join every task's
+      Building checks as the repository's baseline, 12), a ghost `sm` select of its test coverage (Auto coverage,
       Custom coverage, Coverage off, `components/settings/coverage-select.tsx`: Auto's hint says what the server
       found, "Measures with Vitest." or "Found no coverage tool here, so nothing is measured.", from GET
       /api/repos/coverage; choosing Custom opens the Custom test coverage dialog with the command, the report's path
@@ -792,7 +817,7 @@ Only these, and they win over anything below:
       beside the select edits it again; `lib/coverage.ts`), a ghost `sm` select of where agents work (Worktrees,
       GitButler, Main checkout, each with its one-line hint; GitButler is disabled with the reason until `but` is
       installed and the repository is a GitButler workspace, `components/settings/workspace-select.tsx`), a remove ×;
-      repositories without a project have the two selects alone), and "No repositories or folders yet." when
+      repositories without a project have the three selects alone), and "No repositories or folders yet." when
       empty. Add is a menu of the repositories found on disk ("In your folders", "In other projects") and Folder
       by its path…, which puts a path field with Add folder and Cancel (Escape) at the end of the shelf. The
       description lives only in its dialog.
@@ -1092,8 +1117,8 @@ Only these, and they win over anything below:
       for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too.
     - **Setup incomplete** (`setup-card.tsx`): status orange in the Paused group with the
       `IconToolbox` tile; the card renders the gate's body (each problem and its fix) as markdown, with Verify
-      again (primary, `approve`) and Start without checks (outline, `waive`, only when checks are all that is
-      missing) at the top right, and Cancel task as the footer's quiet link.
+      again (primary, `approve`) at the top right, and Cancel task as the footer's quiet link. A repository without
+      check commands is not a problem: nothing extra runs.
     - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
       plan an inset (`bg-bg-a1` on `INSET`) shows "You asked" with your words, then "What changed"
       with the agent's summary and the computed changes as a quiet `·` list. Approve plan sends
@@ -1199,15 +1224,28 @@ Only these, and they win over anything below:
     - **The plan's parameters** sit under its phases and operation, in the plan card and in the chat's plan card
       (`PlanParameterList` in `plan-parameters.tsx`, `resolvePlanParameters` in `lib/overview/plan-parameters.ts`),
       each only when the plan sets it: **Impact** (markdown), **Evidence** (the kinds the agent must attach, as a
-      `·` list: Screenshot, Recording, Test output, Note, Preview link), **Extra checks** (each command a mono chip)
+      `·` list: Screenshot, Recording, Linked test, Note, Preview link), **Checks** (the plan's `verification`: each
+      label in `fg-3`, its phases beside it in `text-2xs fg-2`, "Phases 1 to 3", and its command a mono chip)
       and, when the agent asked for your approval, the quiet line "The agent asked for your approval."
-    - **Cost** is a task fact (`IconCoins`, the icon orange past a limit, the total beside it) whose `InfoPopover`
-      breaks it down by step and by phase; its header reads "$1.75 · 12% of the weekly limit" once a step was
-      measured against an account's weekly window, or against a limit "12% of the weekly limit, 10% allowed" (the
-      usage limit) or "$1.75 of $5.00" (the cost limit). The review card's facts line ends with "$3.56 so far".
-      Unknown prices read "Unknown" or "$0.30 + unknown", never $0.
+    - **Cost** is a task fact in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
+      on a subscription shows its share of the weekly window (`IconGauge`, "1.8% of weekly limit"), and a task on an
+      API key, or on a provider with no weekly window, its dollars (`IconCoins`, "$1.75"). The two are never shown
+      side by side as rival totals: the popover's header is the primary one ("1.8% of the weekly limit", or
+      "$1.75"), the line under it carries the other ("$4.31 and 8.2M tokens, as estimated by the agent provider.")
+      and, for a share, what it was learned from ("The share is learned from 12 tasks on this account."), and its rows
+      by step and by phase use the task's unit. While the account's rate is still being learned the task shows
+      dollars, and the line ends "The share of the weekly limit shows once a few more tasks have run on this
+      account."; nothing else marks a share as an estimate. A share follows the account's current rate, so it can
+      move a little as the rate improves. Shares show a tenth below 10% ("0.4%", "<0.1%") and
+      whole percentages above. The icon turns orange past a limit; against a limit the header reads "12% of the
+      weekly limit, 10% allowed" (the usage limit) or "$1.75 of $5.00" (the cost limit): a limit already passed
+      always shows, otherwise only the limit in the task's unit (a learning task that passed its usage limit on an
+      early estimate shows that header over its dollars; the gate says it is an estimate). The review card's facts line ends with "1.8% of the
+      weekly limit so far" or "$3.56 so far". Unknown prices read "Unknown" or "$0.30 + unknown", never $0. Tasks
+      from before weekly readings were kept (`docs/engine.md` → Cost) get their share from their cost once the
+      account's rate is learned.
     - ⌘K adds, on the task: Answer "‹choice›" per choice (Recommended as its hint), Verify the
-      setup again / Start without checks, Check in now, Snooze / Dismiss the quiet-agent warning,
+      setup again, Check in now, Snooze / Dismiss the quiet-agent warning,
       Add the suggested task “‹title›” (a page with the same two starts, the agent's pick first with
       Suggested as its hint) / Dismiss the suggested task “‹title›”; at the bottom while typing, "Ask: ‹text›" next to
       Create task. Settings → Limits has Usage limit per task (and Cost limit per task where it applies, 26);
@@ -1304,8 +1342,13 @@ Only these, and they win over anything below:
       only for a program that is installed and not set by an override; Update Claude Code is there before the
       versions are read.
     - **Settings → Limits** is titles-only rows: Usage limit per task (No limit, the default, or 5, 10, 20, 30 or
-      50% of the weekly limit; `docs/engine.md` → Cost; Codex's weekly limit counts too), Cost limit per task (only
-      while one is set or when no account reports a weekly window: API keys), Switch accounts at (Other…
+      50% of the weekly limit, counted against the task's share of it; `docs/engine.md` → Cost; Codex's weekly limit
+      counts too), Cost limit per task (only
+      while one is set, when no account reports a weekly window (API keys), or while an account that reports one is
+      still learning its rate, when it is the limit that holds), with only the usage limit set while an account is
+      learning, a muted `SettingsEmpty` row under it ("While Shinsa learns an account's rate, the usage limit counts
+      an early estimate, and nothing before the first measured step. A cost limit holds from the start."), Switch
+      accounts at (Other…
       opens the same percentage dialog as an account's), After a usage limit (Resume automatically /
       Wait for me) and, only while that is Wait for me, Ask me what to do (When the limit resets / Right
       away: the task waits as "Paused until the usage limit resets" and its failure gate opens at the
@@ -1502,15 +1545,25 @@ Only these, and they win over anything below:
     - **Settings → General → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
       `apps/desktop`'s, `docs/release.md` → Channels and updates) is the last group of General. In the app: a
       secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
-      dialog), then two 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`) and, once the updater has
-      something to say, its status ("Checking for updates…", "Up to date", "Downloading 1.3.1…", the failure in orange,
-      or "1.3.1 is ready" in blue with a secondary `sm` Restart to update, `IconArrowRotateClockwise`; a beta on
-      Stable that is newer than the latest stable reads "Go back to 1.2.0 (stable)?" in blue with two secondary `sm`
-      buttons, Stay on this beta, then Download and install with `IconArrowDown`), over "Beta
-      channel · Updates install when you quit Shinsa". Update channel: a select of Stable (`IconShieldCheck`) and Beta
-      (`IconTestTube`) over what the chosen one gets: "Releases only. Coming from a beta, you can go back to the
-      latest stable." or "New versions first, as pre-releases, and every stable release once it
-      is newer than yours." Switching checks again at once. ⌘K's Change a setting has Update channel in the app only.
+      dialog), then 40px rows of two lines each. Shinsa (Shinsa Canary in that app): the app's version (`TOKEN_TEXT`)
+      and, once the updater has something to say, its status ("Checking for updates…", "Up to date", "Downloading
+      1.3.1…", the failure in orange, or "1.3.1 is ready" in blue with a secondary `sm` Restart to update,
+      `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
+      (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: in Shinsa a select
+      of Stable (`IconShieldCheck`) and Beta (`IconTestTube`) over what the chosen one gets: "Releases only. Coming
+      from a beta, you can go back to the latest stable." or "New versions first, as pre-releases, and every stable
+      release once it is newer than yours." Switching checks again at once. Under it a third row, Shinsa Canary: "A
+      separate app beside Shinsa with every change merged into main, and its own data and engine." and a secondary
+      `sm` Download Shinsa Canary (`IconArrowUpRight` at the end), a link to `https://shinsa.dev/download/canary` that
+      opens in the browser. Shinsa Canary is its own app (its own bundle id, data, engine and port), so its bridge
+      always reports `channel: 'canary'` and the web reads that as a fixed channel (`isChannelFixed`): the row shows
+      Canary (`IconFeather`) as text, no select, over "Shinsa Canary is built from every change merged into main and
+      updates only to the next canary.", the version row reads "Canary channel · Updates install when you quit Shinsa
+      Canary", and there is no download row. ⌘K's Change a setting has Update channel (Stable and Beta) in Shinsa
+      only, and Setup has Download Shinsa Canary there too; Shinsa Canary has neither. `/ui` → Settings shows Stable
+      up to date, Beta with an update ready, a beta switched to Stable offered the latest stable, and Shinsa Canary
+      downloading the next canary.
       In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
       are in its own Settings."
 
@@ -1666,10 +1719,12 @@ Only these, and they win over anything below:
     - **On `/ui`** (chat specimens): the round dividers of a four-round task in every state and its Rounds panel.
 
 31. **The desktop app is the same page in a Mac window** (`apps/desktop`, its `CLAUDE.md`; `lib/desktop.ts` on the
-    web side). It loads the UI from the server (the CLI's port, `http://127.0.0.1:5180` by default), so the app, a
+    web side). It loads the UI from the server (the CLI's port, `http://127.0.0.1:7446` by default), so the app, a
     browser tab and Floaty always show one version; Floaty stays the floating window and the app is the full one.
     The page learns it runs in the app only from the preload bridge `window.shinsaDesktop`; a browser and Floaty
-    have none and nothing below applies there.
+    have none and nothing below applies there. Shinsa Canary is the same app under its own name, icon (the mark on a
+    canary-yellow squircle, `icon-canary.*`) and engine on `http://127.0.0.1:7447`; its page differs only in Settings →
+    Updates (above).
     - **The title bar is the top bar.** The traffic lights sit inset over the 44px top bar, centred on it.
       `applyDesktop` (called from `main.tsx`) sets `data-desktop` on `<html>` (`window`, or `fullscreen` when the
       lights are gone), and the `desktop:` variant (`app.css`) holds the room they take: the Cards top bar
@@ -1707,7 +1762,7 @@ Only these, and they win over anything below:
     - **The engine's status page**: the app starts its own engine, so there is no dialog and nothing to run. While the
       engine starts the window shows one quiet page with a small spinner ("Starting Shinsa"); when it cannot run, the
       same page says why and offers the fix, the first button `primary`: Allow Shinsa to run in the background (Open
-      Login Items, Try again), Port 5180 is taken, The engine keeps stopping (Start engine, Copy details, with the
+      Login Items, Try again), Port 7446 is taken, The engine keeps stopping (Start engine, Copy details, with the
       engine log's warnings and errors under it), or The engine is not running (Start engine, Open Privacy & Security,
       Copy details). The page opens Shinsa by itself as soon as the engine answers, and the window switches to it if
       the engine stops answering for 15 s while you work (`apps/desktop/src/lib/engine.ts`,
@@ -2050,18 +2105,21 @@ Only these, and they win over anything below:
     - **Evidence, before the code** (`components/evidence/`, `lib/evidence/`, since 2026-10-26). Right under it, an
       **Evidence** `Panel` (`IconImages1`, the count of items after the title) shows what the agents attached this round
       (`docs/engine.md` → Evidence) as items grouped by kind, each group under a `SectionLabel` naming its kind
-      (Comparison, Recording, Screenshot, Test run, Check run, Note, Preview; plural with the count beside it when the
+      (Comparison, Recording, Screenshot, Test, Check, Note, Preview; plural with the count beside it when the
       group has more than one), in that order (`resolveEvidenceLayout`, from core's `listEvidenceItems`). A comparison
       is one item: its title and facts ("1280px · Dark"), what to look at, then its parts side by side (three across
       from `sm` when it has more than two), each labelled Before, After or its state. One view shot in light and in dark
       is one comparison too, its parts labelled Light and Dark and its facts the width alone ("1280px"), since its parts
       differ in theme. Recordings and screenshots sit in
       a two-column grid (one below `sm`), each with its title, facts and what to look at; a lone screenshot shows no
-      stage, since it has no before. A test or check run reads as its result: a bordered list of each command it ran
-      (`lib/evidence/runs.ts`: a `$ ` line starts a command, else the first line is the command), each with the check
-      glyph (`CheckOutcomeIcon`) and its counts ("2 pass, 0 fail") or, without counts, Passed or Failed; the raw output
-      stays behind Show the output (`secondary` `xs`, chevron) in the caption's trailing slot. The checks Shinsa ran
-      itself are a Check run titled "Checks run by Shinsa: …" (`docs/engine.md` → Evidence). A note is markdown
+      stage, since it has no before. A test or a check is a reference to one of the task's checks, never a text of its
+      own: every piece with a `checkId` (the agent's link, `shinsa://check/<id>`, and the output Shinsa kept each time it
+      ran the check) folds into one item per check (`resolveEvidenceLayout`), a Test when the agent linked it as one,
+      else a Check. It renders as the check's row from the Checks list (`CheckRowItem`, 12): its label, who added it, its
+      command and outcome, the agent's note on what it proves under it (with the review mark when the reviewer linked
+      it), and Show the output on the latest output Shinsa kept this round; a check the task no longer has reads "No
+      longer one of the task’s checks". A test or check piece without a `checkId` still reads as its result: a
+      bordered list of each command it ran (`lib/evidence/runs.ts`), each with `CheckOutcomeIcon` and its counts. A note is markdown
       (`IconNote1` in its caption): the shared `Markdown` renderer, `text-xs` in an `INSET` (`px-3.5 py-2.5`), so its
       tables, lists, code and smart links (a file, a task or a pull request in the reference syntax, 8) read as they
       do everywhere else. A run whose text names no command is a code block (`CodeFence`, monospace, copy on hover, at
@@ -2076,7 +2134,7 @@ Only these, and they win over anything below:
       to ask the agent for them."), so a missing proof is visible, not silent. 20px between groups, 4px from a group's
       label to its items. When the task has no work report and its changes cannot be read (a merged branch that was
       cleaned up), the tab says so in one quiet line and still shows this panel under it, since the Overview points
-      here with one line that counts the items by kind ("1 comparison, 1 recording and 2 test runs in the review",
+      here with one line that counts the items by kind ("1 comparison, 1 recording and 2 tests in the review",
       `describeEvidenceSummary`).
     - **Reading order, by context.** The chapters follow how you come to understand a change: **How it's built**
       (Approach, How it works, How to test, then **Pre-merge steps** and **Post-merge steps** when the agent left
@@ -2149,8 +2207,7 @@ Only these, and they win over anything below:
         panel: each risk the agent named as a row with its title, the risk and its snippet, the row you are on washed `primary-a1`.
       - **How to test** (`components/review/testing.tsx`, `TestingPanel`): two parts, each under a quiet `text-2xs`
         label, and never a checklist. **Covered by tests**: the agent's one or two lines on what the tests cover, as
-        plain text, then one line on the checks ("All 4 checks passed. The Overview lists each check."); the checks
-        themselves are the Overview's. Under them, when the checks measured it, the changed-line coverage in one
+        plain text, then the Checks list in both stages (12, The Checks list). Under them, when the checks measured it, the changed-line coverage in one
         `fg-2` line ("85% of changed lines are covered (36 of 42) · 2 files have uncovered lines.", or "All 42 changed
         lines are covered.") and a quiet `text-2xs` toggle, Show 3 files, that opens the files: each a `FileLink`, "10
         of 14 lines" and, when some are missed, "Not covered:" with each range a `FileLink` into Code at those lines
@@ -2177,7 +2234,7 @@ Only these, and they win over anything below:
     - **Your comments**, each with Remove; then **Everything else**, collapsed: the changed files nothing above points
       at, each a file link with its counts, and the findings you dismissed in earlier rounds, compact.
     - **Every point once.** A point appears in one chapter only; there is no separate attention list, no phase
-      walkthrough (What changed is the Overview's) and no checks list.
+      walkthrough (What changed is the Overview's) and no second checks list: the Checks list is How to test's.
     - **The review card** is how every point and every review comment looks, anywhere: a `CARD`
       (`components/review/note.tsx`, `ReviewNote`) in one of two variants, picked by what it is (`isFindingItem` in
       `lib/review/report.ts`: a finding is the one the agent review wrote).

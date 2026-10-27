@@ -88,6 +88,7 @@ describe('GitButler workspaces', () => {
     const task = await startTask(strategy, repo, 'task-1', 'fix/scroll');
     const commit = await editAndCommit(strategy, repo, task, { 'a.txt': 'a, fixed\n' });
     expect(commit.treeHash).toBe(await git(path, 'rev-parse', 'fix/scroll^{tree}'));
+    expect(commit.files).toEqual(['a.txt']);
     expect(await git(path, 'show', '--name-only', '--format=', 'fix/scroll')).toBe('a.txt');
     expect(await listUncommitted(path)).toBe('M b.txt\n?? notes.txt');
   });
@@ -117,6 +118,7 @@ describe('GitButler workspaces', () => {
     const release = await strategy.claim(repo, task);
     const empty = await strategy.commit(repo, task, 'feat: nothing');
     expect(empty.treeHash).toBe(await git(path, 'rev-parse', 'main^{tree}'));
+    expect(empty.files).toEqual([]);
     await empty.undo();
     writeFiles(path, { 'a.txt': 'a, fixed\n' });
     const commit = await strategy.commit(repo, task, 'feat: a');

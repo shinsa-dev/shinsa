@@ -52,7 +52,7 @@ web ──WebSocket──► shinsa engine
   planning is its round zero, then it builds every phase, takes every fix and runs the operation, and every later round
   and kind of work (an answer, an investigation, research) resumes the same session (`Decider.taskSession`); an Agent's
   runs differ only by `purpose`. A fresh session only when the old one cannot go on (context full, lost, image error,
-  provider changed); a changed model resumes the session on the new model. The reviewer keeps a session of its own per task, checks stay commands, and delegation is
+  provider changed); a changed model resumes the session on the new model. The reviewer keeps a session of its own per task, checks stay commands (the Agent chooses scoped ones in its plan and keeps them current, Shinsa runs them, `docs/engine.md` → Checks), and delegation is
   only for work whose context must stay apart or that runs truly in parallel. Never add a role per step or per problem
   type.
 - **Cache first: an agent session's prefix never changes** (`docs/engine.md` → Caching). The system prompt and the
@@ -62,7 +62,7 @@ web ──WebSocket──► shinsa engine
   call; read-only steps use hooks, never `disallowedTools`; the extension set is decided once per session. Quick calls
   keep a fixed system prompt and put the call's data in the user prompt. A change that breaks this fails
   `providers/claude/session.test.ts` and `test/e2e/prompt-cache.test.ts`.
-- **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → setup verification → planning → building → checking → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets ("kind of task" on screen, shape in code) and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
+- **The task lifecycle** lives in `packages/core/src/decide/`, one file per area (`lifecycle`, `fixes`, `pull-requests`, `dependencies`, `gates`, `runs`…; the table is `packages/core/CLAUDE.md`): triage → waiting on other tasks → setup verification → planning → building and checking, phase by phase (each phase's checks, the agent's choice) → review gate → shipping → merge gate → merged, for a change. Each task follows its own pipeline of fixed building-block steps (answer, research, investigate, your OK, plan, operate, build, checks, agent review, your review, pull request, merge) under guards in core, so a question, an investigation, research or an operation never opens a pull request, and turning one into a change goes through your OK. Every step and gate is an instance of a typed schema in core (`domain/steps.ts`), and a rule set over it (`domain/verification.ts`) makes verification strict for any work that changes code or runs an operation and never applies to a pure inquiry. Six kinds are presets ("kind of task" on screen, shape in code) and the kind is never yours to change; the planner may compose other steps and set plan parameters, which core's rules checker (`validateComposition`, `validatePlanRules`) accepts or hands back. The path, the shapes, each gate and what opens it are `docs/engine.md` → A task's path, Task shapes, Gates; the schema and the rules are `docs/protocol.md` → Steps and gates, Verification.
 - **The hand-over protocol** (`packages/core/src/report/`): plans, phase hand-overs, fixes, review findings and
   inquiry results have fixed fields with hard length limits. The tools publish the limits in their schemas;
   `validate*` rejects a hand-over that breaks one and tells the agent what to fix. Shinsa assembles the work report
@@ -82,7 +82,7 @@ web ──WebSocket──► shinsa engine
 - **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge` Shinsa
   takes; GitHub branch protection is what stops a shell from taking another (`docs/engine.md` → Who can change Shinsa).
 - **Some decisions are human-only**: closing any gate, the settings in `HUMAN_ONLY_SETTINGS` and a repository's
-  checks (`HUMAN_ONLY_REPO_FIELDS`). Their surface specs are `humanOnly`, so no agent has a tool or a shell command for
+  own check commands, workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`); a task's own checks are its agent's. Their surface specs are `humanOnly`, so no agent has a tool or a shell command for
   them, and core refuses them on your behalf: nothing sent for you closes a gate, and a message an agent sends to a
   task at a gate is kept for its next agent (`docs/engine.md` → Who can change Shinsa has the list and the HTTP guard).
 - **No backwards compatibility in code.** Shinsa has never shipped: a rename or a removal is done everywhere at once,
@@ -96,7 +96,7 @@ web ──WebSocket──► shinsa engine
 
 | Command | Description |
 |---|---|
-| `bun dev` | `shinsa engine` on :5180 and the web app on :5181 (proxies `/api` and `/ws`) |
+| `bun dev` | `shinsa engine` on :5180 and the web app on :5181 (proxies `/api` and `/ws`); the engine's `dev` and `start` scripts pass `SHINSA_PORT=5180` (an exported `SHINSA_PORT` wins), so a checkout never takes the Mac app's port |
 | `bun run build` then `bun start` | Production: `shinsa engine` serves `apps/web/dist` on :5180 |
 | `bun lint` | Biome (with the Grit plugins), `bun lint:conventions` (`scripts/lint-conventions.ts`, its rule tables and messages in `scripts/lint-rules.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
 | `bun format` | Biome's formatter only (`bun format:fix` writes) |
@@ -105,11 +105,11 @@ web ──WebSocket──► shinsa engine
 | `bunx knip` / `bun deps` | Dead code / workspace dependency drift |
 | `bun run --cwd apps/marketing dev` | The site on :5182 (`build`, `preview` likewise; Astro runs under Bun) |
 | `bun run seed` | Seeded state to look at: writes `~/.shinsa-seed` (`SHINSA_SEED_DIR` overrides it) and prints the command that serves it under `SHINSA_INSPECT`; `SHINSA_SEED_SESSION` (a Claude session `.jsonl`) replaces one task's synthetic transcript; `bun scripts/seed-media/generate.ts [origin]` renders its screenshots and recording again (Chromium and ffmpeg) |
-| `gh workflow run release.yml -f channel=beta -f bump=minor` | A release of the Mac app (Actions → Release): channel `stable` or `beta`, bump `patch`, `minor` or `major` of the last stable version; the version scheme, the update channels and the signing secrets are `docs/release.md` |
+| `gh workflow run release.yml -f channel=beta -f bump=minor` | A release of the Mac app (Actions → Release): channel `stable` or `beta`, bump `patch`, `minor` or `major` of the last stable version; every merge to `main` that passes the Test workflow also publishes a Shinsa Canary build (`X.Y.Z-canary.N`, a separate app beside Shinsa, `shinsa.dev/download/canary`); the version scheme, the update channels and the signing secrets are `docs/release.md` |
 | `bun scripts/screenshots/readme.ts` | The README's two screenshots, `.github/assets/shinsa-light.png` and `shinsa-dark.png`, taken again from the real Mac app: seeds `/tmp/shinsa-shots` (`SHINSA_SHOTS_DIR`), serves it in inspect mode on a free port with the web app built there, opens the dev app (`apps/desktop`, `scripts/dev.ts`) on it at 1000 × 700, switches its `nativeTheme` through the main process's inspector (so the page, the traffic lights and the window edge follow, and the system's appearance stays), and captures the window of the process it started with its shadow (`screencapture -l`, the window id from `windows.swift`), shrunk by `pngquant` when installed. It focuses the window for a moment, restores the dev app's `prefs.json` and stops everything it started |
 
 Everything Shinsa keeps lives in `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa`): `config.json`, the Claude accounts
-and `data/`. `docs/engine.md` → Configuration and data has the layout, the overrides (`SHINSA_HOME`,
+and `data/`; the Mac app's engine runs on 7446 (`APP_FLAVORS`, `port` in `config.json` changes it); Shinsa Canary keeps its own in `~/.config/shinsa-canary` and runs on 7447. `docs/engine.md` → Configuration and data has the layout, the overrides (`SHINSA_HOME`,
 `SHINSA_DATA_DIR`, `SHINSA_INSPECT` for looking at seeded state) and the split between `config.json` and the event
 log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cwd apps/engine start`.
 

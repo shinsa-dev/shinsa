@@ -62,8 +62,8 @@ interface ToolCall {
 type CallDispatch = (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
 
 type CommitHandOver =
-  | Omit<CommandOf<'agent.complete_phase'>, 'treeHash'>
-  | Omit<CommandOf<'agent.complete_fix'>, 'treeHash'>;
+  | Omit<CommandOf<'agent.complete_phase'>, 'treeHash' | 'files'>
+  | Omit<CommandOf<'agent.complete_fix'>, 'treeHash' | 'files'>;
 
 type HandOverTool = 'propose_plan' | 'complete_phase' | 'complete_fix' | 'report_review';
 
@@ -148,7 +148,7 @@ export class ToolCalls {
     try {
       if (commit.stackedOn) await dispatch({ type: 'task.stack', taskId: task.id, branch: commit.stackedOn });
       await this.#work.recordOverlaps(task.id, [], call.signal);
-      return await dispatch({ ...command, treeHash: commit.treeHash });
+      return await dispatch({ ...command, treeHash: commit.treeHash, files: commit.files });
     } catch (error) {
       await commit.undo();
       throw error;

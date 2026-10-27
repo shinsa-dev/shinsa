@@ -85,8 +85,10 @@ draft ─► plan ──[GATE: approve plan]──► build ─► self-check �
   (`shinsa do --plan-first`, or a session brought in with `shinsa import`) always stops there, and so does a task
   that runs an operation or a plan that asks for your approval, whatever the setting says (`docs/engine.md` → A
   task's path).
-- **Self-check** is everything an agent can verify alone: types, lint, tests, the repo's rules,
-  a review pass against the rules skills, and for UI work the evidence capture (§5).
+- **Self-check** is everything that can be verified before you look: the checks the agent chose for the
+  task, which Shinsa runs after each phase (a test file or folder, one package's type check, the linter on
+  the changed paths; never the whole suite, which CI runs on the pull request), a review pass against the
+  rules skills, and for UI work the evidence capture (§5).
 - **After review**, the PR loop is automated: review-bot comments and CI failures go back to
   the round's agent, in the session that planned and built the work, and Shinsa pushes each fix until the PR is
   clean. You are not asked again
@@ -102,7 +104,7 @@ operate, build, checks, agent review, your review, pull request, merge) under gu
 change: anything that changes code goes through your review before a pull request, and merges
 only after one; an operation's plan always waits for you; an answer, research or investigation
 goes on to a change or an operation only with your OK, which you can refuse; every change runs
-Shinsa's checks and an independent agent review. Everything else is the agent's to compose while it plans: a
+the checks its agent chose and an independent agent review. Everything else is the agent's to compose while it plans: a
 task can run an operation before its change or after its merge (ship a column, then backfill
 it). The six shapes below are presets:
 
@@ -120,8 +122,8 @@ or composes the task's own steps from the building blocks, before it plans: inve
 OK, then an operation; research, your OK, then a change; a change, then an operation once it
 merged; or something smaller when the request needs no change at all. Every step and gate is
 an instance of one typed schema, and a rule set over it applies David's workflow to any work that
-changes code or runs an operation: a verification plan up front, the evidence the plan asks for,
-Shinsa's checks, an independent agent review, your review, the pull request, CI and your merge;
+changes code or runs an operation: a verification plan up front (the checks that prove the change),
+the evidence the plan asks for, those checks run by Shinsa, an independent agent review, your review, the pull request, CI and your merge;
 an operation needs a plan you approved and states its impact, and one that runs after a merge
 asks you again on the merged commit before it runs. A question, research or an investigation
 gets none of it. Core checks every composition and every plan against the schema and the rules
@@ -147,7 +149,7 @@ answered, when. Gates survive restarts. The decisions, as you see them (the sche
 | Operation | After a merge: the merged commit, the operation's steps and its impact, and the notes for the agent in a box you can edit | Run the operation with the notes in the box (a message in the chat replaces them and runs nothing) · Finish without it |
 
 A paused task (out of recovery, an agent's wait that ran out of time or check-ins, its usage or cost limit reached), an
-incomplete setup (missing repository, default branch or checks, found before any agent starts) and a provider that
+incomplete setup (a missing repository or default branch, found before any agent starts) and a provider that
 needs signing in again (a Claude account, or Codex's own login) are gates too: Retry, Verify again or Sign in, and
 Cancel. Every gate is yours: an agent can never close one, and a message it sends for you waits for the task's next
 agent.
@@ -486,8 +488,14 @@ Ported from Paperclip's execution semantics (`docs/engine.md` → Process and st
   run ends and the same session checks in again later; a task waiting on other tasks names the one
   holding the chain up.
 - **Cost is counted** per run, task, step and phase, and so is the share of the account's weekly
-  usage window each step used. Two optional per-task limits pause the task: a share of the weekly
-  window (for subscriptions) and a dollar amount (for API keys and Codex). Both are off by default.
+  usage window each step used: its cost at a rate Shinsa learns per account from how far the window moved while
+  runs worked, the way tokens become dollars at the model's prices. Each run is charged its own cost, so runs in
+  parallel never count the same usage twice. Every run is charged at the account's current rate, so a task's share
+  can move a little as the rate improves. A task shows its share of the weekly window on a subscription whose rate
+  is learned (from 5 tasks and 10 points of movement), with how many tasks it was learned from, and dollars until
+  then and on an API key. Two optional per-task limits pause the task: a share of the weekly window (for
+  subscriptions; an early estimate while the account is learning) and a dollar amount (for API keys and Codex, and
+  the limit that always holds while an account is learning). Both are off by default.
   Unknown prices stay unknown.
 - **Quiet agents are flagged**, informationally, after 5 and 15 minutes without output.
 - **Recovery budgets follow durable state** (failing checks, finding files, the tree), so prose
@@ -563,7 +571,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 - **Some decisions are only yours.** The decisions at your gates (`docs/engine.md` → Who can
   change Shinsa) happen there, by you: agents have no tool and no command for them, core refuses one sent on
   your behalf, and an agent asked in chat to merge points you to the gate. The settings that spend money, merge or
-  decide for you, and a repository's checks, are yours too. An agent's shell
+  decide for you, and a repository's own check commands, are yours too. An agent's shell
   can still do whatever your account can (`gh pr merge`, `git push`), so turn on GitHub branch
   protection for the default branch; it is what really guards a merge. Shinsa itself answers only
   on this machine and refuses requests from other websites.
@@ -856,6 +864,41 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   shots and recordings in a grid, test output as code, links, and where it is stored; images open in the image viewer
   and step through the section; a missing proof says so. The Overview keeps one line pointing there
   (`docs/design.md` 34). The seed carries real screenshots, a recording and test runs on six review tasks.
+
+### Checks the agent chooses (2026-10-27)
+
+- **Why.** Shinsa ran the repository's whole check suite (its configured commands, else every `lint`,
+  `check-types`, `typecheck` and `test` script it found) after the last phase and after every fix of every task.
+  With several tasks at once on a loaded machine, a whole suite is slow, can time out in tests the change never
+  touched, and sends the agent into fix rounds for failures that are not its own. A repository with no commands got
+  a setup gate that could only be waived.
+- **The agent chooses, Shinsa runs.** The plan's verification is now a list of checks, each a label, a scoped
+  command and the phases it covers (`bun test apps/engine/test/agents/transcripts`,
+  `bun run --cwd apps/web check-types`, `bunx biome check <changed paths>`). A command that runs the whole suite is
+  refused at the plan: CI runs that on the pull request. While it builds and fixes, the agent adds, changes and
+  removes checks with a reason each (a new file in a later phase gets its own check), and the task's activity says
+  so. The repository's own commands stay as an optional baseline that runs once before review, and only you change
+  them. Checks are like evidence: chosen for the task, a bonus, not a burden.
+- **When they run.** After each phase, that phase's checks and the ones just added or changed; before review also
+  the repository's commands; after any fix (failed checks, the agent review's findings, the changes you asked for),
+  the checks that failed, the ones the fix names and the checks of every phase whose files the fix changed, never
+  the whole set; after you approve with your edits, all of them. In parallel, at low priority, headless, with no
+  limit across tasks.
+- **Only the change's failures block.** A failing test file runs again alone once, and a check that then passes is
+  marked "passed when re-run alone". One that still fails runs on the base commit (cached per commit and command),
+  and Shinsa compares the failures themselves, not just the exit code: each failing test by its file and name, each
+  type or lint error by its file, code and message, never its line number, so errors that only moved still match.
+  When every failure is already on the base, the check is marked "already failing on the base branch" and does not
+  block. New ones on top block, named first: "2 new type errors, 14 already on the base branch". Output Shinsa
+  cannot read into failures always blocks. Changed-line coverage comes only from the tests among the task's checks,
+  once before review.
+- **Two stages, one list.** Before the pull request, the task's checks; after it, CI's check runs from the pull
+  request, in the same Checks list. The pull request's fix loop is unchanged.
+- **Evidence links a check.** An agent proving its change with a test links the check by its id instead of pasting
+  its output, and Shinsa keeps the output of each check run beside its result (`docs/engine.md` → Checks,
+  Evidence).
+- **Setup asks less.** "No checks to run" and Start without checks are gone: a repository with no commands of its
+  own runs only its tasks' checks, so nothing is missing.
 
 ## 11. Open questions
 

@@ -8,6 +8,7 @@ interface WorkspaceCheckout {
 
 export interface WorkspaceCommit {
   treeHash: string | null;
+  files: string[];
   undo: () => Promise<void>;
   stackedOn?: string;
 }
