@@ -54,6 +54,22 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
   with room for its shadow, and the Shinsa mark from `packages/ui/src/components/logo.tsx` in near-black at 488px,
   centred. Change `scripts/icon.ts`, never the outputs, and run `bun run icon` (needs `rsvg-convert` from Homebrew's
   librsvg, and `iconutil`). The unpackaged app sets `resources/icon.png` as its Dock icon.
+- **The disk image** opens on a 660×400 window (`dmg` in `electron-builder.yml`): Shinsa.app on the left, the
+  Applications link on the right, 112pt icons, on a light background in the site's look (the dot grid, circuit traces
+  with the blue signal running from the app to Applications, the mark and "Shinsa" in Areal, and a "Drag Shinsa into
+  Applications to install" line). Finder never themes a disk image's background and draws the labels dark in light and
+  dark mode alike, so it stays light. The backgrounds are `resources/dmg/background-stable.png` and
+  `background-beta.png`, each with an `@2x` (electron-builder joins the pair into a Retina TIFF); the beta one adds a
+  Beta pill. `electron-builder.yml` names the stable one; a beta release swaps in the beta one with
+  `-c.dmg.background=dmg/background-beta.png` (`release.yml`). They are 660×432: Finder's window is the image's size,
+  title bar included, so its bottom 32px never show. Change `scripts/dmg-background.ts`,
+  never the outputs, and run `bun run dmg-background` (needs `rsvg-convert` from Homebrew's librsvg; the text is set in
+  Areal from `apps/marketing/src/assets/fonts`, and the script holds the words' measured widths, so remeasure if you
+  change them). The icon positions in the script and in `electron-builder.yml` must agree. The volume is named
+  `Shinsa <version>`: Finder caches a disk image's background and layout by volume name, so a new name per version
+  keeps an old one from showing. To try a change, build a disk image from the packaged app with a version you have not
+  opened yet: `bunx electron-builder --mac dmg --arm64 --publish never --prepackaged release/mac-arm64/Shinsa.app
+  -c.mac.identity=null -c.extraMetadata.version=0.0.1-test.1 -c.directories.output=/tmp/shinsa-dmg`.
 - **Logic in `lib/`, Electron in `main/`.** Anything that decides goes in `lib/` with a test; `main/` wires it.
 - **The engine is the app's to run.** Packaged, the app removes the old `shinsa service` LaunchAgent once
   (`studio.overclock.shinsa`, so two engines never share a data folder), then registers the bundle's job with
@@ -96,6 +112,7 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
 | `bun run dev` | Bundles `src/main` and `src/preload` to `dist/` and opens the app, as `.electron/Shinsa.app`, on the Vite dev server (start `bun dev` first); `SHINSA_URL=http://127.0.0.1:5180 bun run dev` for the built server |
 | `bun run package` | Builds the web app and the engine (`SHINSA_VERSION` sets its version), then `release/mac-arm64/Shinsa.app` with the engine and its job inside, signed ad hoc so it runs on this Mac (electron-builder, `electron-builder.yml`) |
 | `bun run icon` | Writes `resources/icon.svg`, `icon.png` and `icon.icns` from the logo (`scripts/icon.ts`) |
+| `bun run dmg-background` | Writes the disk image backgrounds, `resources/dmg/background-stable.png`, `background-beta.png` and their `@2x` (`scripts/dmg-background.ts`) |
 | `bun test` | The `lib/` tests, 100% line and function coverage |
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
 

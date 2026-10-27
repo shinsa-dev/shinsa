@@ -28,6 +28,19 @@ mac:
   hardenedRuntime: true
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
+dmg:
+  title: ${productName} ${version}
+  background: dmg/background-stable.png
+  iconSize: 112
+  iconTextSize: 13
+  contents:
+    - x: 180
+      y: 196
+      type: file
+    - x: 480
+      y: 196
+      type: link
+      path: /Applications
 publish:
   provider: github
   owner: shinsa-dev

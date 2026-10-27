@@ -88,9 +88,11 @@ jobs:
         run: |
           signing=(-c.mac.identity=- -c.mac.notarize=false)
           if [ "$MODE" = signed ]; then signing=(-c.mac.notarize=true); fi
+          dmg=()
+          case "$VERSION" in *-*) dmg=(-c.dmg.background=dmg/background-beta.png) ;; esac
           bunx electron-builder --mac dmg zip --arm64 --publish never \
             -c.extraMetadata.version="$VERSION" \
-            "${signing[@]}"
+            "${signing[@]}" "${dmg[@]}"
       - name: Check the versions and the signature
         working-directory: apps/desktop/release
         env:

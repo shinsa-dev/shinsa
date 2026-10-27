@@ -29,7 +29,9 @@ The workflow, on `macos-15`:
    five secrets set) or **not signed** (none set). Some but not all set fails the run, naming the missing ones.
 3. Builds the web app, the engine with `SHINSA_VERSION=<version>` (`apps/engine/scripts/build-engine.ts`) and the app
    with `extraMetadata.version=<version>`, then `electron-builder --mac dmg zip --arm64`, signing and notarizing when
-   the secrets are there.
+   the secrets are there. The disk image's volume is `Shinsa <version>` and opens on Shinsa's install window, the app
+   beside an Applications link on the site's background; a beta passes `-c.dmg.background=dmg/background-beta.png`
+   for the one with the Beta pill (`apps/desktop/CLAUDE.md` → The disk image).
 4. Checks that the app (`CFBundleShortVersionString`) and the engine inside it (`shinsa version --json`) both say the
    release's version, prerelease suffix included, and verifies the signature (`codesign --verify --deep --strict`;
    `spctl` and `stapler validate` too when signed).
