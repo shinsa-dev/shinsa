@@ -1,46 +1,81 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  compareVersions,
+  type ByteRange,
+  type DownloadBucket,
   type DownloadCache,
+  type DownloadPointer,
   type DownloadWorld,
-  NO_STABLE_PAGE,
-  parseVersion,
-  RELEASES_API,
-  RELEASES_CACHE_KEY,
-  resolveCachedReleases,
+  FEED_CACHE_KEY,
+  LATEST_STABLE_URL,
+  listFeedVersions,
+  parseDownloadPointer,
+  parseRange,
+  RELEASES_FEED,
+  RELEASES_PAGE,
   resolveChannel,
-  resolveReleases,
+  resolveChannelKey,
+  resolvePointerCacheKey,
+  resolveReleaseKey,
   respond,
-  UNAVAILABLE_PAGE,
-  type Version,
 } from '../../src/worker/download.ts';
 
 const DMG_BYTES = new Uint8Array([0x6b, 0x6f, 0x6c, 0x79, 0x00, 0x01, 0x02, 0x03]);
 
-function asset(tag: string, name = 'Shinsa-mac-arm64.dmg') {
+const SHA = 'a'.repeat(64);
+
+const PUBLISHED_AT = '2026-10-27T12:11:13Z';
+
+const LAST_MODIFIED = 'Tue, 27 Oct 2026 12:11:13 GMT';
+
+const EARLIER = 'Mon, 26 Oct 2026 12:00:00 GMT';
+
+type StoredChannel = 'stable' | 'beta';
+
+function pointerOf(version: string, overrides: Partial<DownloadPointer> = {}): DownloadPointer {
   return {
-    name,
+    version,
+    key: resolveReleaseKey(version),
     size: DMG_BYTES.length,
-    browser_download_url: `https://github.com/shinsa-dev/shinsa/releases/download/${tag}/${name}`,
+    sha256: SHA,
+    publishedAt: PUBLISHED_AT,
+    ...overrides,
   };
 }
 
-function dmgOf(tag: string) {
-  return asset(tag).browser_download_url;
+interface BucketCall {
+  method: 'get' | 'head';
+  key: string;
+  range?: ByteRange;
 }
 
-function release(tag: string, overrides: Record<string, unknown> = {}) {
-  return { tag_name: tag, draft: false, prerelease: tag.includes('-'), assets: [asset(tag)], ...overrides };
+function createBucket(objects: Record<string, string | Uint8Array>, failure?: Error) {
+  const calls: BucketCall[] = [];
+  const bucket: DownloadBucket = {
+    head: async (key) => {
+      calls.push({ method: 'head', key });
+      return key in objects ? {} : null;
+    },
+    get: async (key, options) => {
+      calls.push({ method: 'get', key, ...(options?.range ? { range: options.range } : {}) });
+      if (failure) throw failure;
+      const stored = objects[key];
+      if (stored === undefined) return null;
+      const bytes = typeof stored === 'string' ? new TextEncoder().encode(stored) : stored;
+      const range = options?.range ?? { offset: 0, length: bytes.length };
+      const slice = bytes.slice(range.offset, range.offset + range.length);
+      return { body: new Response(slice).body, text: async () => new TextDecoder().decode(slice) };
+    },
+  };
+  return { bucket, calls };
 }
 
-function picked(tag: string) {
-  return { version: tag.replace(/^v/, ''), url: dmgOf(tag), size: DMG_BYTES.length };
-}
-
-function version(tag: string): Version {
-  const parsed = parseVersion(tag);
-  if (!parsed) throw new Error(`Not a version: ${tag}`);
-  return parsed;
+function storeChannels(channels: [StoredChannel, DownloadPointer | string][]) {
+  const objects: Record<string, string | Uint8Array> = {};
+  for (const [channel, pointer] of channels) {
+    objects[resolveChannelKey(channel)] = typeof pointer === 'string' ? pointer : JSON.stringify(pointer);
+    if (typeof pointer !== 'string') objects[pointer.key] = DMG_BYTES;
+  }
+  return objects;
 }
 
 function createCache() {
@@ -54,69 +89,62 @@ function createCache() {
   return { cache, entries };
 }
 
-type Answer = (url: string, init: RequestInit) => Promise<Response>;
+type Answer = (url: string) => Promise<Response>;
 
-function createWorld(answer: Answer, cache: DownloadCache | null = null) {
-  const calls: { url: string; init: RequestInit }[] = [];
-  const pages: { url: string; method: string }[] = [];
+type Conditions = Record<string, string>[];
+
+function feedOf(tags: string[]) {
+  const entries = tags.map(
+    (tag) =>
+      `<entry><id>tag:github.com,2008:Repository/1/${tag}</id><link rel="alternate" type="text/html" href="https://github.com/shinsa-dev/shinsa/releases/tag/${tag}"/></entry>`
+  );
+  return `<?xml version="1.0" encoding="UTF-8"?><feed><link type="text/html" rel="alternate" href="https://github.com/shinsa-dev/shinsa/releases"/>${entries.join('')}</feed>`;
+}
+
+function answerFeed(tags: string[]): Answer {
+  return () =>
+    Promise.resolve(new Response(feedOf(tags), { headers: { 'Content-Type': 'application/atom+xml' } }));
+}
+
+const unreachable: Answer = () => Promise.reject(new Error('network down'));
+
+function createWorld({
+  bucket = null,
+  answer = unreachable,
+  cache = null,
+}: {
+  bucket?: DownloadBucket | null;
+  answer?: Answer;
+  cache?: DownloadCache | null;
+}) {
+  const fetched: { url: string; init: RequestInit }[] = [];
+  const pages: string[] = [];
   const world: DownloadWorld = {
+    bucket,
     fetch: (url, init) => {
-      calls.push({ url, init });
-      return answer(url, init);
+      fetched.push({ url, init });
+      return answer(url);
     },
     cache,
     assets: async (request) => {
-      pages.push({ url: request.url, method: request.method });
-      const body = request.method === 'HEAD' ? null : `page ${new URL(request.url).pathname}`;
-      return new Response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+      pages.push(new URL(request.url).pathname);
+      return new Response(`page ${new URL(request.url).pathname}`);
     },
   };
-  return { world, calls, pages };
-}
-
-function answerWith(body: unknown, status = 200) {
-  return () => Promise.resolve(Response.json(body, { status }));
-}
-
-const DMG_HEADERS = { ETag: '"dmg"', 'Last-Modified': 'Tue, 27 Oct 2026 12:00:00 GMT' };
-
-function serveDmg(_url: string, init: RequestInit) {
-  const range = new Headers(init.headers).get('range');
-  if (!range) {
-    return Promise.resolve(
-      new Response(DMG_BYTES, { headers: { ...DMG_HEADERS, 'Content-Length': String(DMG_BYTES.length) } })
-    );
-  }
-  const start = Number(/^bytes=(\d+)-$/.exec(range)?.[1]);
-  if (start >= DMG_BYTES.length) {
-    return Promise.resolve(
-      new Response('out of range', {
-        status: 416,
-        headers: { 'Content-Range': `bytes */${DMG_BYTES.length}` },
-      })
-    );
-  }
-  const slice = DMG_BYTES.slice(start);
-  return Promise.resolve(
-    new Response(slice, {
-      status: 206,
-      headers: {
-        ...DMG_HEADERS,
-        'Content-Length': String(slice.length),
-        'Content-Range': `bytes ${start}-${DMG_BYTES.length - 1}/${DMG_BYTES.length}`,
-      },
-    })
-  );
-}
-
-function createGitHub(releases: unknown, assetAnswer: Answer = serveDmg) {
-  return createWorld((url, init) =>
-    url === RELEASES_API ? Promise.resolve(Response.json(releases)) : assetAnswer(url, init)
-  );
+  return { world, fetched, pages };
 }
 
 function createRequest(path: string, headers: Record<string, string> = {}, method = 'GET') {
   return new Request(`https://shinsa.dev${path}`, { method, headers });
+}
+
+const RELEASED = storeChannels([
+  ['stable', pointerOf('1.2.9')],
+  ['beta', pointerOf('1.3.0-beta.2')],
+]);
+
+function dmgUrl(tag: string) {
+  return `https://github.com/shinsa-dev/shinsa/releases/download/${tag}/Shinsa-mac-arm64.dmg`;
 }
 
 describe('resolveChannel', () => {
@@ -134,122 +162,77 @@ describe('resolveChannel', () => {
   });
 });
 
-describe('parseVersion', () => {
-  it('reads a release tag and a pre-release tag', () => {
-    expect(parseVersion('v1.3.0')).toEqual({ core: [1, 3, 0], prerelease: [] });
-    expect(parseVersion('1.3.0-beta.2')).toEqual({ core: [1, 3, 0], prerelease: ['beta', 2] });
-    expect(parseVersion('v2.0.0-rc.1+build.5')).toEqual({ core: [2, 0, 0], prerelease: ['rc', 1] });
-  });
-
-  it('refuses a tag that is not a version', () => {
-    expect(parseVersion('latest')).toBeNull();
-    expect(parseVersion('v1.3')).toBeNull();
+describe('the bucket layout', () => {
+  it('keeps one disk image per version and one pointer per channel', () => {
+    expect(resolveReleaseKey('1.0.0-beta.1')).toBe('releases/1.0.0-beta.1/Shinsa-mac-arm64.dmg');
+    expect(resolveChannelKey('stable')).toBe('channels/stable.json');
+    expect(resolvePointerCacheKey('beta')).toBe('https://shinsa.dev/cache/download/channels/beta.json');
   });
 });
 
-describe('compareVersions', () => {
-  it('orders by semver, a pre-release before its release', () => {
-    const ordered = [
-      '1.2.9',
-      '1.3.0-alpha',
-      '1.3.0-alpha.1',
-      '1.3.0-alpha.beta',
-      '1.3.0-beta',
-      '1.3.0-beta.2',
-      '1.3.0-beta.11',
-      '1.3.0-rc.1',
-      '1.3.0',
-      '1.10.0',
-      '2.0.0',
-    ];
-    for (const [index, tag] of ordered.entries()) {
-      for (const [other, next] of ordered.entries()) {
-        expect(Math.sign(compareVersions(version(tag), version(next)))).toBe(Math.sign(index - other));
-      }
-    }
-  });
-});
-
-describe('resolveReleases', () => {
-  it('takes the newest release by version, not by list order, for each channel', () => {
-    const releases = [
-      release('v1.2.9'),
-      release('v1.3.0-beta.2'),
-      release('v1.3.0-beta.11'),
-      release('v1.2.0'),
-    ];
-    expect(resolveReleases(releases)).toEqual({ stable: picked('v1.2.9'), beta: picked('v1.3.0-beta.11') });
+describe('parseDownloadPointer', () => {
+  it('reads a pointer the release workflow wrote', () => {
+    expect(parseDownloadPointer(pointerOf('1.0.0-beta.1'))).toEqual(pointerOf('1.0.0-beta.1'));
   });
 
-  it('gives beta a stable release over its own betas', () => {
-    expect(resolveReleases([release('v1.3.0-beta.2'), release('v1.3.0')])?.beta).toEqual(picked('v1.3.0'));
-  });
-
-  it('keeps a release GitHub marks as a pre-release, or does not mark at all, out of stable', () => {
-    const releases = [release('v1.4.0', { prerelease: true }), release('v1.5.0', { prerelease: undefined })];
-    expect(resolveReleases(releases)).toEqual({ stable: null, beta: picked('v1.5.0') });
-  });
-
-  it('skips drafts, tags that are not versions and releases without the disk image', () => {
-    const releases = [
-      release('v1.4.0', { draft: true }),
-      release('nightly'),
-      release('v1.3.1', { assets: [asset('v1.3.1', 'Shinsa-mac-arm64.zip')] }),
-      release('v1.3.2', { assets: [{ name: 'Shinsa-mac-arm64.dmg', size: 8 }] }),
-      release('v1.3.5', { assets: [{ ...asset('v1.3.5'), size: '8' }] }),
-      release('v1.3.3', { assets: null }),
+  it('refuses anything else', () => {
+    for (const value of [
       null,
-      'v1.9.0',
-      { ...release('v1.3.4'), tag_name: 7 },
-      release('v1.3.0-beta.2', { assets: [7, asset('v1.3.0-beta.2')] }),
-    ];
-    expect(resolveReleases(releases)).toEqual({ stable: null, beta: picked('v1.3.0-beta.2') });
-  });
-
-  it('is null when the answer is not a list', () => {
-    expect(resolveReleases({ message: 'API rate limit exceeded' })).toBeNull();
-  });
-});
-
-describe('resolveCachedReleases', () => {
-  it('asks GitHub for the releases as an identified client and keeps the answer five minutes', async () => {
-    const { cache, entries } = createCache();
-    const { world, calls } = createWorld(answerWith([release('v1.0.0-beta.1')]), cache);
-    const expected = { stable: null, beta: picked('v1.0.0-beta.1') };
-    expect(await resolveCachedReleases(world)).toEqual(expected);
-    expect(calls.map((call) => call.url)).toEqual([RELEASES_API]);
-    expect(calls[0]?.init.headers).toMatchObject({
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'shinsa.dev',
-    });
-    expect(entries.get(RELEASES_CACHE_KEY)?.headers.get('Cache-Control')).toBe('max-age=300');
-    expect(await resolveCachedReleases(world)).toEqual(expected);
-    expect(calls).toHaveLength(1);
-  });
-
-  it('works without a cache', async () => {
-    const { world } = createWorld(answerWith([release('v1.3.0')]));
-    expect(await resolveCachedReleases(world)).toEqual({ stable: picked('v1.3.0'), beta: picked('v1.3.0') });
-  });
-
-  it('is null on a rate limit, a network error or an answer that is not a list, and keeps nothing', async () => {
-    const { cache, entries } = createCache();
-    const limited = createWorld(answerWith({ message: 'API rate limit exceeded' }, 403), cache).world;
-    const offline = createWorld(() => Promise.reject(new Error('network down')), cache).world;
-    const garbled = createWorld(() => Promise.resolve(new Response('not json')), cache).world;
-    const listless = createWorld(answerWith({ message: 'Not Found' }), cache).world;
-    for (const world of [limited, offline, garbled, listless]) {
-      expect(await resolveCachedReleases(world)).toBeNull();
+      'pointer',
+      pointerOf('latest'),
+      { ...pointerOf('1.0.0'), version: 7 },
+      pointerOf('1.0.0', { key: '' }),
+      { ...pointerOf('1.0.0'), key: 7 },
+      { ...pointerOf('1.0.0'), size: '8' },
+      pointerOf('1.0.0', { size: -1 }),
+      pointerOf('1.0.0', { size: 1.5 }),
+      pointerOf('1.0.0', { sha256: 'ABC' }),
+      { ...pointerOf('1.0.0'), sha256: null },
+      pointerOf('1.0.0', { publishedAt: 'yesterday' }),
+      { ...pointerOf('1.0.0'), publishedAt: 0 },
+    ]) {
+      expect(parseDownloadPointer(value)).toBeNull();
     }
-    expect(entries.size).toBe(0);
   });
 });
 
-describe('respond', () => {
-  const releases = [release('v1.3.0-beta.2'), release('v1.2.9')];
+describe('parseRange', () => {
+  it('reads a single byte range against the file size', () => {
+    expect(parseRange('bytes=4-', 8)).toEqual({ offset: 4, length: 4 });
+    expect(parseRange('bytes=2-5', 8)).toEqual({ offset: 2, length: 4 });
+    expect(parseRange('bytes=2-100', 8)).toEqual({ offset: 2, length: 6 });
+    expect(parseRange('bytes=-3', 8)).toEqual({ offset: 5, length: 3 });
+    expect(parseRange('bytes=-100', 8)).toEqual({ offset: 0, length: 8 });
+  });
 
+  it('cannot satisfy a range past the end, an empty suffix or any range of an empty file', () => {
+    expect(parseRange('bytes=8-', 8)).toBe('unsatisfiable');
+    expect(parseRange('bytes=-0', 8)).toBe('unsatisfiable');
+    expect(parseRange('bytes=-4', 0)).toBe('unsatisfiable');
+  });
+
+  it('ignores a range it does not take, so the whole file is sent', () => {
+    expect(parseRange('bytes=0-1,4-5', 8)).toBeNull();
+    expect(parseRange('items=0-1', 8)).toBeNull();
+    expect(parseRange('bytes=-', 8)).toBeNull();
+    expect(parseRange('bytes=5-2', 8)).toBeNull();
+  });
+});
+
+describe('listFeedVersions', () => {
+  it('lists the release tags of the feed that are versions, in the feed order', () => {
+    expect(listFeedVersions(feedOf(['v1.3.0-beta.2', 'nightly', 'v1.2.9']))).toEqual([
+      'v1.3.0-beta.2',
+      'v1.2.9',
+    ]);
+    expect(listFeedVersions('not a feed')).toEqual([]);
+  });
+});
+
+describe('respond from the bucket', () => {
   it('streams the stable disk image from shinsa.dev, named for its version, without a redirect', async () => {
-    const { world, calls } = createGitHub(releases);
+    const { bucket, calls } = createBucket(RELEASED);
+    const { world, fetched } = createWorld({ bucket });
     const response = await respond(createRequest('/download'), world);
     expect(response.status).toBe(200);
     expect(Object.fromEntries(response.headers)).toEqual({
@@ -258,122 +241,251 @@ describe('respond', () => {
       'content-disposition': 'attachment; filename="Shinsa-1.2.9.dmg"',
       'content-length': String(DMG_BYTES.length),
       'content-type': 'application/x-apple-diskimage',
-      etag: '"dmg"',
-      'last-modified': 'Tue, 27 Oct 2026 12:00:00 GMT',
+      etag: `"${SHA}"`,
+      'last-modified': LAST_MODIFIED,
       'x-content-type-options': 'nosniff',
     });
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(DMG_BYTES);
-    expect(calls.map((call) => call.url)).toEqual([RELEASES_API, dmgOf('v1.2.9')]);
-    expect(calls[1]?.init.redirect).toBe('follow');
-    expect(new Headers(calls[1]?.init.headers).get('User-Agent')).toBe('shinsa.dev');
+    expect(calls).toEqual([
+      { method: 'get', key: 'channels/stable.json' },
+      { method: 'get', key: 'releases/1.2.9/Shinsa-mac-arm64.dmg' },
+    ]);
+    expect(fetched).toEqual([]);
   });
 
-  it('streams the newest release, pre-releases included, for beta', async () => {
-    const { world, calls } = createGitHub(releases);
-    const response = await respond(createRequest('/download/beta/'), world);
+  it('streams the beta pointer for beta', async () => {
+    const { bucket } = createBucket(RELEASED);
+    const response = await respond(createRequest('/download/beta/'), createWorld({ bucket }).world);
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Disposition')).toBe(
       'attachment; filename="Shinsa-1.3.0-beta.2.dmg"'
     );
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(DMG_BYTES);
-    expect(calls[1]?.url).toBe(dmgOf('v1.3.0-beta.2'));
   });
 
-  it('answers HEAD from the release list without fetching the disk image', async () => {
-    const { world, calls } = createGitHub(releases);
-    const response = await respond(createRequest('/download/beta', {}, 'HEAD'), world);
+  it('serves the beta at /download while there is no stable release', async () => {
+    const { bucket, calls } = createBucket(storeChannels([['beta', pointerOf('1.0.0-beta.1')]]));
+    const response = await respond(createRequest('/download'), createWorld({ bucket }).world);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Disposition')).toBe(
+      'attachment; filename="Shinsa-1.0.0-beta.1.dmg"'
+    );
+    expect(calls.map((call) => call.key)).toEqual([
+      'channels/stable.json',
+      'channels/beta.json',
+      'releases/1.0.0-beta.1/Shinsa-mac-arm64.dmg',
+    ]);
+  });
+
+  it('answers HEAD from the pointer and a check that the file is there, reading no bytes', async () => {
+    const { bucket, calls } = createBucket(RELEASED);
+    const response = await respond(
+      createRequest('/download/beta', { Range: 'bytes=100-' }, 'HEAD'),
+      createWorld({ bucket }).world
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Length')).toBe(String(DMG_BYTES.length));
     expect(response.headers.get('Content-Type')).toBe('application/x-apple-diskimage');
     expect(response.headers.get('Accept-Ranges')).toBe('bytes');
     expect(response.body).toBeNull();
-    expect(calls.map((call) => call.url)).toEqual([RELEASES_API]);
+    expect(calls.at(-1)).toEqual({ method: 'head', key: 'releases/1.3.0-beta.2/Shinsa-mac-arm64.dmg' });
   });
 
-  it('passes a range through so a download can resume', async () => {
-    const { world, calls } = createGitHub(releases);
+  it('reads only the requested range, so a download can resume', async () => {
+    const { bucket, calls } = createBucket(RELEASED);
     const response = await respond(
-      createRequest('/download', { Range: 'bytes=4-', 'If-Range': '"dmg"' }),
-      world
+      createRequest('/download', { Range: 'bytes=4-' }),
+      createWorld({ bucket }).world
     );
     expect(response.status).toBe(206);
     expect(response.headers.get('Content-Range')).toBe(`bytes 4-7/${DMG_BYTES.length}`);
     expect(response.headers.get('Content-Length')).toBe('4');
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(DMG_BYTES.slice(4));
-    const forwarded = new Headers(calls[1]?.init.headers);
-    expect(forwarded.get('Range')).toBe('bytes=4-');
-    expect(forwarded.get('If-Range')).toBe('"dmg"');
+    expect(calls.at(-1)?.range).toEqual({ offset: 4, length: 4 });
   });
 
-  it('passes an unsatisfiable range through without a body', async () => {
-    const { world } = createGitHub(releases);
-    const response = await respond(createRequest('/download', { Range: 'bytes=100-' }), world);
+  it('honours If-Range: the range when the file is unchanged, the whole file when it is not', async () => {
+    const { bucket } = createBucket(RELEASED);
+    const { world } = createWorld({ bucket });
+    const byTag = await respond(
+      createRequest('/download', { Range: 'bytes=-2', 'If-Range': `"${SHA}"` }),
+      world
+    );
+    expect(byTag.status).toBe(206);
+    expect(byTag.headers.get('Content-Range')).toBe('bytes 6-7/8');
+    const byDate = await respond(
+      createRequest('/download', { Range: 'bytes=0-0', 'If-Range': LAST_MODIFIED }),
+      world
+    );
+    expect(byDate.status).toBe(206);
+    for (const ifRange of ['"other"', `W/"${SHA}"`, EARLIER]) {
+      const changed = await respond(
+        createRequest('/download', { Range: 'bytes=4-', 'If-Range': ifRange }),
+        world
+      );
+      expect(changed.status).toBe(200);
+      expect(new Uint8Array(await changed.arrayBuffer())).toEqual(DMG_BYTES);
+    }
+  });
+
+  it('answers an unsatisfiable range with 416 and the size, without reading the file', async () => {
+    const { bucket, calls } = createBucket(RELEASED);
+    const response = await respond(
+      createRequest('/download', { Range: 'bytes=100-' }),
+      createWorld({ bucket }).world
+    );
     expect(response.status).toBe(416);
     expect(response.headers.get('Content-Range')).toBe(`bytes */${DMG_BYTES.length}`);
     expect(await response.text()).toBe('');
+    expect(calls).toHaveLength(1);
   });
 
-  it('shows the no stable release page, with the beta on offer, when only betas exist', async () => {
-    const { world, pages } = createGitHub([release('v1.0.0-beta.1')]);
-    const response = await respond(createRequest('/download'), world);
-    expect(response.status).toBe(404);
-    expect(await response.text()).toBe(`page ${NO_STABLE_PAGE}`);
-    expect(response.headers.get('Content-Type')).toBe('text/html; charset=utf-8');
-    expect(response.headers.get('Cache-Control')).toBe('no-store');
-    expect(response.headers.get('Retry-After')).toBeNull();
-    expect(pages).toEqual([{ url: `https://shinsa.dev${NO_STABLE_PAGE}`, method: 'GET' }]);
+  it('answers a conditional request for the file it already has with 304', async () => {
+    const { bucket, calls } = createBucket(RELEASED);
+    const { world } = createWorld({ bucket });
+    for (const headers of [
+      { 'If-None-Match': `W/"${SHA}"` },
+      { 'If-None-Match': `"other", "${SHA}"` },
+      { 'If-None-Match': '*' },
+      { 'If-Modified-Since': LAST_MODIFIED },
+      { 'If-Match': `"${SHA}"`, 'If-None-Match': `"${SHA}"` },
+    ] as Conditions) {
+      const response = await respond(createRequest('/download', headers), world);
+      expect(response.status).toBe(304);
+      expect(response.headers.get('ETag')).toBe(`"${SHA}"`);
+      expect(response.body).toBeNull();
+    }
+    expect(calls.every((call) => call.key === 'channels/stable.json')).toBe(true);
   });
 
-  it('shows the unavailable page as a 404 when no release has the disk image', async () => {
-    const { world } = createGitHub([release('v1.3.0', { assets: [] })]);
-    for (const path of ['/download', '/download/beta']) {
-      const response = await respond(createRequest(path), world);
-      expect(response.status).toBe(404);
-      expect(await response.text()).toBe(`page ${UNAVAILABLE_PAGE}`);
+  it('sends the file when the condition does not hold', async () => {
+    const { bucket } = createBucket(RELEASED);
+    const { world } = createWorld({ bucket });
+    for (const headers of [
+      { 'If-None-Match': '"other"' },
+      { 'If-Modified-Since': EARLIER },
+      { 'If-Modified-Since': 'not a date' },
+      { 'If-Match': '*' },
+      { 'If-Unmodified-Since': LAST_MODIFIED },
+      { 'If-Match': `"${SHA}"`, 'If-Unmodified-Since': EARLIER },
+    ] as Conditions) {
+      expect((await respond(createRequest('/download', headers), world)).status).toBe(200);
     }
   });
 
-  it('shows the unavailable page as a 503 to retry when GitHub does not answer', async () => {
-    const { world } = createWorld(answerWith({ message: 'API rate limit exceeded' }, 403));
-    const response = await respond(createRequest('/download/beta'), world);
-    expect(response.status).toBe(503);
-    expect(response.headers.get('Retry-After')).toBe('300');
-    expect(response.headers.get('Cache-Control')).toBe('no-store');
-    expect(await response.text()).toBe(`page ${UNAVAILABLE_PAGE}`);
-  });
-
-  it('shows the unavailable page when the disk image is missing upstream or its fetch fails', async () => {
-    const cancelled: number[] = [];
-    const missingBody = new ReadableStream({
-      cancel: () => {
-        cancelled.push(404);
-      },
-    });
-    const missing = createGitHub(releases, () =>
-      Promise.resolve(new Response(missingBody, { status: 404 }))
-    ).world;
-    const offline = createGitHub(releases, () => Promise.reject(new Error('connection reset'))).world;
-    for (const world of [missing, offline]) {
-      const response = await respond(createRequest('/download'), world);
-      expect(response.status).toBe(503);
-      expect(await response.text()).toBe(`page ${UNAVAILABLE_PAGE}`);
+  it('refuses a request whose precondition fails with 412', async () => {
+    const { bucket } = createBucket(RELEASED);
+    const { world } = createWorld({ bucket });
+    for (const headers of [
+      { 'If-Match': '"other"' },
+      { 'If-Match': `W/"${SHA}"` },
+      { 'If-Unmodified-Since': EARLIER },
+    ] as Conditions) {
+      const response = await respond(createRequest('/download', headers), world);
+      expect(response.status).toBe(412);
+      expect(response.body).toBeNull();
     }
-    expect(cancelled).toEqual([404]);
   });
 
-  it('answers HEAD for a fallback page without a body', async () => {
-    const { world, pages } = createGitHub([]);
-    const response = await respond(createRequest('/download', {}, 'HEAD'), world);
-    expect(response.status).toBe(404);
-    expect(response.body).toBeNull();
-    expect(pages[0]?.method).toBe('HEAD');
+  it('keeps the pointer a minute at the edge, so a download reads only the file', async () => {
+    const { cache, entries } = createCache();
+    const { bucket, calls } = createBucket(RELEASED);
+    const { world } = createWorld({ bucket, cache });
+    await respond(createRequest('/download'), world);
+    await respond(createRequest('/download'), world);
+    expect(calls.filter((call) => call.key === 'channels/stable.json')).toHaveLength(1);
+    expect(entries.get(resolvePointerCacheKey('stable'))?.headers.get('Cache-Control')).toBe('max-age=60');
+  });
+});
+
+describe('respond when the bucket cannot serve', () => {
+  const betaOnly = answerFeed(['v1.0.0-beta.2', 'v1.0.0-beta.11', 'v1.0.0-beta.3']);
+
+  const pointerWithoutFile = { [resolveChannelKey('beta')]: JSON.stringify(pointerOf('1.0.0-beta.4')) };
+
+  async function expectRedirect(response: Response, location: string) {
+    expect(response.status).toBe(302);
+    expect(response.headers.get('Location')).toBe(location);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(await response.text()).toBe('');
+  }
+
+  it('redirects to the newest release on GitHub when the bucket has no pointer for the channel', async () => {
+    const { bucket } = createBucket({});
+    const { world, fetched } = createWorld({ bucket, answer: betaOnly });
+    await expectRedirect(await respond(createRequest('/download/beta'), world), dmgUrl('v1.0.0-beta.11'));
+    expect(fetched[0]?.url).toBe(RELEASES_FEED);
+    expect(new Headers(fetched[0]?.init.headers).get('User-Agent')).toBe('shinsa.dev');
   });
 
+  it('redirects when the worker has no bucket, as before the binding exists', async () => {
+    const { world } = createWorld({ answer: betaOnly });
+    await expectRedirect(await respond(createRequest('/download/beta'), world), dmgUrl('v1.0.0-beta.11'));
+  });
+
+  it('redirects when the bucket fails, a pointer is unreadable or its file is missing', async () => {
+    const buckets = [
+      createBucket(RELEASED, new Error('R2 is down')).bucket,
+      createBucket(storeChannels([['beta', 'not json']])).bucket,
+      createBucket(storeChannels([['beta', '{"version":"1.0.0"}']])).bucket,
+      createBucket(pointerWithoutFile).bucket,
+    ];
+    for (const bucket of buckets) {
+      const { world } = createWorld({ bucket, answer: betaOnly });
+      await expectRedirect(await respond(createRequest('/download/beta'), world), dmgUrl('v1.0.0-beta.11'));
+    }
+    const { world } = createWorld({ bucket: createBucket(pointerWithoutFile).bucket, answer: betaOnly });
+    await expectRedirect(
+      await respond(createRequest('/download/beta', {}, 'HEAD'), world),
+      dmgUrl('v1.0.0-beta.11')
+    );
+  });
+
+  it('sends /download to GitHub’s latest release once the feed shows a stable one', async () => {
+    const { world } = createWorld({ answer: answerFeed(['v1.1.0-beta.1', 'v1.0.0']) });
+    await expectRedirect(await respond(createRequest('/download'), world), LATEST_STABLE_URL);
+  });
+
+  it('sends /download to the newest beta while the feed shows no stable release', async () => {
+    const { world } = createWorld({ answer: betaOnly });
+    await expectRedirect(await respond(createRequest('/download'), world), dmgUrl('v1.0.0-beta.11'));
+  });
+
+  it('falls back to the latest release and the releases page when the feed fails too', async () => {
+    const answers: Answer[] = [
+      unreachable,
+      () => Promise.resolve(new Response('rate limited', { status: 429 })),
+      answerFeed(['nightly']),
+    ];
+    for (const answer of answers) {
+      const { world } = createWorld({ answer });
+      await expectRedirect(await respond(createRequest('/download'), world), LATEST_STABLE_URL);
+      await expectRedirect(await respond(createRequest('/download/beta'), world), RELEASES_PAGE);
+    }
+  });
+
+  it('keeps the feed a minute at the edge and nothing when it fails', async () => {
+    const { cache, entries } = createCache();
+    const { world, fetched } = createWorld({ answer: betaOnly, cache });
+    await respond(createRequest('/download/beta'), world);
+    await respond(createRequest('/download/beta'), world);
+    expect(fetched).toHaveLength(1);
+    expect(entries.get(FEED_CACHE_KEY)?.headers.get('Cache-Control')).toBe('max-age=60');
+    const failing = createCache();
+    await respond(createRequest('/download/beta'), createWorld({ cache: failing.cache }).world);
+    expect(failing.entries.size).toBe(0);
+  });
+});
+
+describe('respond to other paths', () => {
   it('serves every other path from the static assets', async () => {
-    const { world, calls } = createGitHub(releases);
+    const { bucket, calls } = createBucket(RELEASED);
+    const { world, fetched, pages } = createWorld({ bucket });
     expect(await (await respond(createRequest('/download/other'), world)).text()).toBe(
       'page /download/other'
     );
+    expect(pages).toEqual(['/download/other']);
     expect(calls).toEqual([]);
+    expect(fetched).toEqual([]);
   });
 });

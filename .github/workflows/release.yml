@@ -25,6 +25,8 @@ jobs:
   mac:
     runs-on: macos-15
     timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -154,3 +156,21 @@ jobs:
             Shinsa-mac-arm64.zip Shinsa-mac-arm64.zip.blockmap \
             "${updates[@]}"
           printf '**Published** [%s](%s/%s/releases/tag/%s).\n' "$title" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  downloads:
+    needs: mac
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - name: Serve the disk image from shinsa.dev
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+          RELEASE_TAG: ${{ needs.mac.outputs.tag }}
+        run: bun scripts/release-upload.ts

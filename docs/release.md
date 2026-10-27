@@ -35,6 +35,10 @@ The workflow, on `macos-15`:
    `spctl` and `stapler validate` too when signed).
 5. Writes the update files for both channels (below) and publishes the release with GitHub's generated notes under a
    one-line channel note: `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s and the update files.
+6. In a second job (`downloads`, on Ubuntu, after the release is published), copies the release's disk image to the
+   site's R2 bucket and points the download channels at it (`scripts/release-upload.ts`, below). It is its own job
+   so that a failure there (a token without R2 access, an R2 outage) leaves the published release alone, and
+   Re-run failed jobs retries only the copy.
 
 ## Versions
 
@@ -98,11 +102,27 @@ The app updates itself with electron-updater from the releases of `shinsa-dev/sh
 - A new install starts on Beta when its version is a beta and on Stable otherwise; the choice is the app's own
   (Settings → General → Updates, ⌘K's Update channel) and switching checks again at once.
 
-Downloads: `https://shinsa.dev/download` is the DMG of the newest stable release, and
-`https://shinsa.dev/download/beta` the DMG of the newest release, pre-releases included. The files stay on GitHub
-Releases (`Shinsa-mac-arm64.dmg` on each tag); the site's Worker finds the release and streams the file through, so the
-download comes from shinsa.dev as `Shinsa-<version>.dmg`, with no redirect to GitHub, and GitHub still counts it.
-Until the first stable release, `/download` shows a page offering the beta (`apps/marketing/CLAUDE.md` → Deploy).
+## Downloads
+
+`https://shinsa.dev/download` is the DMG of the newest stable release, and `https://shinsa.dev/download/beta` the DMG
+of the newest release, pre-releases included; until the first stable release, `/download` serves the beta. Both come
+from Cloudflare R2, not from GitHub, so heavy traffic never meets GitHub's rate limits; the download is named
+`Shinsa-<version>.dmg` and never leaves shinsa.dev. GitHub's download count no longer includes them.
+
+`bun scripts/release-upload.ts <tag>` (the workflow passes `RELEASE_TAG`) does the copy: it reads the release with
+`gh release view`, downloads its `Shinsa-mac-arm64.dmg` and checks the size and SHA-256 against GitHub's digest,
+uploads it to `shinsa-releases/releases/<version>/Shinsa-mac-arm64.dmg`, then writes the channel pointers
+`channels/stable.json` (a stable release) and `channels/beta.json` (every release), each only when the release is not
+older by semver than what it points at, so a stable release moves Beta too once it is newer and a stable hotfix below
+a running beta leaves Beta alone. The rules are `scripts/release-downloads.ts`, tested at 100%; the layout and how the
+site serves it are `apps/marketing/CLAUDE.md` → Deploy. It runs `wrangler r2 object put` from `apps/marketing`
+(whose `wrangler.jsonc` names the account) with the `CLOUDFLARE_API_TOKEN` secret, which needs **Workers R2 Storage:
+Edit** on the Overclock Studio account. Wrangler uploads at most 300 MiB in one object; the script stops with a
+clear error beyond that (the DMG is about 170 MB). Running it again for the same tag is safe, and running it by hand
+with a signed-in `wrangler` (`wrangler login`) backfills a release.
+
+If R2 cannot serve (no pointer yet, an error), the site redirects to the file on GitHub instead of showing a page, so
+a download always works.
 
 Apple Silicon only. A universal or an extra x64 build would need an x64 engine (`SHINSA_ENGINE_TARGET=bun-darwin-x64`)
 per architecture in `extraResources`, roughly doubles the build and the download, and needs the updater files to name

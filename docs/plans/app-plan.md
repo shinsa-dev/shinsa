@@ -171,8 +171,8 @@ data directory for it.
   and `APPLE_TEAM_ID` as secrets and drops `mac.identity=-`.
 - **Releases live in this repository.** `shinsa-dev/shinsa` goes public, under MIT, when Shinsa launches; until
   then its release files cannot be downloaded without signing in, which is fine while nothing is published.
-  `shinsa.dev/download` serves the newest stable `Shinsa-mac-arm64.dmg` through the site's Worker, GitHub counts
-  every download, and electron-updater reads the same releases.
+  `shinsa.dev/download` serves the newest stable `Shinsa-mac-arm64.dmg` through the site's Worker, from a copy in
+  Cloudflare R2 the release workflow makes (`docs/release.md` → Downloads), and electron-updater reads the releases.
 - **Artifacts**: `Shinsa-mac-arm64.dmg` for the download, and the `zip` and `latest-mac.yml` electron-updater
   needs, on every release.
 

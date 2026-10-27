@@ -80,12 +80,12 @@ src/
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   lib/design.ts             `/design.md`, the whole design system in one file (below)
-  pages/                    index, 404, og.png, llms.txt, design.md, and download/ (the two pages the Worker shows
-                            when there is no file to serve); public/ holds the
+  pages/                    index, 404, og.png, llms.txt and design.md; public/ holds the
                             PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
-  worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals into download.ts,
-                            which answers the download paths (tested in test/worker/ at 100%, `bun run test`)
+  worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals and the R2 bucket
+                            into download.ts, which answers the download paths (tested in test/worker/ at 100%,
+                            `bun run test`)
 ```
 
 ## The design system file
@@ -130,52 +130,57 @@ charset; `bunx wrangler dev` serves `dist` as production does.
 
 ## Deploy
 
-Cloudflare Workers Builds deploys the site from the Git repository; there is no workflow and no API token in the
-repository. The `shinsa-marketing` Worker (`wrangler.jsonc`) serves `dist` as static assets on `shinsa.dev` and
-`www.shinsa.dev`. Its build settings, set in the Cloudflare dashboard: root directory `apps/marketing`, build command
+Cloudflare Workers Builds deploys the site from the Git repository; no workflow deploys it (the repository's
+`CLOUDFLARE_API_TOKEN` is used only by the Release workflow, to fill the download bucket below). The
+`shinsa-marketing` Worker (`wrangler.jsonc`) serves `dist` as static assets on `shinsa.dev` and `www.shinsa.dev`. Its build settings, set in the Cloudflare dashboard: root directory `apps/marketing`, build command
 `bun install --frozen-lockfile && bun run build` (the install runs at the workspace root, since the site builds the
 web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `main`, and preview command
 `bun run deploy:preview` (`wrangler preview`) on every other branch. A preview is its own copy of the Worker on
-workers.dev with a URL per branch and per deployment (`"previews": {}` turns it on; the site has no bindings, so the
-block is empty). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There is no server and no analytics.
-The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download` and `/download/*`
-(`assets.run_worker_first`); every other request is a plain static asset hit. Every release, stable or beta, carries
-`Shinsa-mac-arm64.dmg`, and GitHub Releases stays the only storage, so the site never changes for a release. The
-Worker serves the file itself: the browser never leaves shinsa.dev, sees no redirect and no github.com address.
+workers.dev with a URL per branch and per deployment (`previews` turns it on, and repeats the R2 binding, since a
+preview inherits no binding). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There
+is no server and no analytics. The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download` and
+`/download/*` (`assets.run_worker_first`); every other request is a plain static asset hit.
 
-- **Which release.** One unauthenticated read of `api.github.com/repos/shinsa-dev/shinsa/releases?per_page=30`
-  answers both channels (`resolveReleases`): it skips drafts, tags that are not versions and releases without the disk
-  image, and picks the highest version by semver order rather than the list's order (1.3.0-beta.2 < 1.3.0-beta.11 <
-  1.3.0). `/download` takes the newest release GitHub does not mark as a pre-release, as GitHub's `latest` would;
-  `/download/beta` the newest of all, pre-releases included. The two picks (version, the asset's
-  `browser_download_url` and its size) are kept 5 minutes in the edge cache (`caches.default`, under a made-up URL),
-  so GitHub's limit of 60 requests an hour per address, shared with everything else on Cloudflare's egress, is never
-  reached; a new release reaches the site within those 5 minutes. The cache works on the custom domains, not on a
-  workers.dev preview, which asks GitHub every time.
-- **The file.** A GET fetches the asset's `browser_download_url` server-side, follows GitHub's redirect to its signed
-  storage URL inside the Worker, and streams the body straight through, never buffered: `Content-Type:
-  application/x-apple-diskimage`, `Content-Disposition: attachment; filename="Shinsa-<version>.dmg"`
-  (`Shinsa-1.0.0-beta.1.dmg`), `Accept-Ranges: bytes`, `Cache-Control: public, max-age=300`,
-  `X-Content-Type-Options: nosniff`, and upstream's `Content-Length`, `ETag` and `Last-Modified`. `Range` and
-  `If-Range` go upstream as they came, so a resumed download gets upstream's 206 and `Content-Range` (or its 416).
-  A HEAD answers from the release list alone, with the asset's size as `Content-Length`, and fetches nothing.
-  Because the Worker fetches the asset, GitHub still counts every download (a resumed one may count again).
-- **When there is nothing to serve**, the answer is a page of the site at the same address, never a redirect, with
-  `Cache-Control: no-store`: `/download` with only betas released shows `pages/download/no-stable-release.astro`
-  (404, offering the beta); no release with the disk image shows `pages/download/unavailable.astro` (404); and when
-  GitHub does not answer (the rate limit, the network, an answer that is not a list) or the asset fetch fails or is
-  missing, the same unavailable page as a 503 with `Retry-After: 300`. Nothing is cached on a failure. Both pages
-  are noindex and left out of the sitemap.
-- **What is not cached.** The disk image itself is not kept at the edge: GitHub's redirect points at a signed URL that
-  changes on every request and expires within the hour, so a `cf` cache on the fetch never hits (and caching the
-  redirect would serve dead links); a custom `cacheKey` per tag is Enterprise only; and teeing the stream into the
-  Cache API would hold the difference in memory behind a slow client and cannot store a 206. Storing the files in R2
-  would be the way to serve them from Cloudflare's cache.
-- **Workers limits that apply.** A streamed response has no size limit (the 512 MB cache limit only matters for
-  cached objects). Passing `upstream.body` through costs no CPU time per byte, and an HTTP request has no wall-clock
-  limit while the client stays connected. A download is at most 3 subrequests (the release list on a cache miss, the
-  asset and its one redirect, each hop counting) plus a cache read and write, far below the 50 of the Free plan.
-  Memory (128 MB) is never at risk, since nothing is buffered.
+The downloads are served from Cloudflare R2, so they never wait on GitHub and have no request limit and no egress fee.
+The bucket is `shinsa-releases` on the Overclock Studio account (`account_id` in `wrangler.jsonc`), bound as
+`DOWNLOADS`. The Release workflow fills it (`docs/release.md`), so the site never changes for a release:
 
-The Worker needs no secret, no binding but `ASSETS` and nothing in the dashboard: Workers Builds deploys it with the
-assets from the same `wrangler deploy`.
+```
+releases/<version>/Shinsa-mac-arm64.dmg   every release's disk image, never overwritten
+channels/stable.json                      what /download serves
+channels/beta.json                        what /download/beta serves
+```
+
+A channel file is a pointer, `{version, key, size, sha256, publishedAt}` (`parseDownloadPointer`), written after the
+GitHub release is published and only when its version is not older than the one there by semver (so a stable release
+moves both pointers, and a stable hotfix below a running beta moves only `stable.json`).
+
+- **Serving.** The Worker reads the channel's pointer (kept 60 seconds in the edge cache, `caches.default` under a
+  made-up URL; the cache works on the custom domains, not on a workers.dev preview) and streams the object from the
+  binding, never buffered and never through a redirect: `Content-Type: application/x-apple-diskimage`,
+  `Content-Disposition: attachment; filename="Shinsa-<version>.dmg"` (`Shinsa-1.0.0-beta.1.dmg`),
+  `Accept-Ranges: bytes`, `Cache-Control: public, max-age=300`, `X-Content-Type-Options: nosniff`, `Content-Length`,
+  an `ETag` that is the file's SHA-256 and a `Last-Modified` that is the release's publish time. A single `Range`
+  (`bytes=a-b`, `a-`, `-n`) reads only those bytes from R2 and answers 206 with `Content-Range`; a range past the end
+  answers 416 with `Content-Range: bytes */<size>`, a multi-range or malformed one gets the whole file, and `If-Range`
+  sends the whole file when the validator does not match. `If-None-Match` and `If-Modified-Since` answer 304,
+  `If-Match` and `If-Unmodified-Since` 412, all from the pointer without touching the file. A HEAD answers from the
+  pointer and a `head` of the object, reading no bytes. With no stable release yet (`stable.json` missing),
+  `/download` serves the beta pointer directly rather than redirecting to `/download/beta`.
+- **When R2 cannot serve**: no binding (a Worker deployed before it), no pointer, an unreadable pointer, the object
+  missing, or any R2 error. The answer is then always a `302` to GitHub with `Cache-Control: no-store`, never a page.
+  The Worker reads the public Atom feed `github.com/shinsa-dev/shinsa/releases.atom` (not the REST API and its 60
+  requests an hour; kept 60 seconds in the edge cache, nothing kept on a failure). `/download/beta` goes to the
+  newest version in it, by semver, as `releases/download/<tag>/Shinsa-mac-arm64.dmg`, or to the releases page when
+  the feed fails. `/download` goes to `releases/latest/download/Shinsa-mac-arm64.dmg` (GitHub's own redirect, no API),
+  except that a feed listing only betas sends it to the newest beta, since GitHub's `latest` has nothing before the
+  first stable release. The feed lists the last 10 releases, so ten betas after a stable release would send a
+  fallback `/download` to a beta: a working file, in a case that needs R2 down too.
+- **Workers limits that apply.** A streamed response has no size limit, an R2 body costs no CPU time per byte, and an
+  HTTP request has no wall-clock limit while the client stays connected. A download is two R2 operations (the pointer,
+  on a cache miss, and the object), both Class B reads, of which ten million a month are free. Memory (128 MB) is never
+  at risk, since nothing is buffered. The disk image itself is not kept in the edge cache: R2 serves it directly, and
+  teeing a 170 MB stream into the Cache API would hold it in memory behind a slow client and cannot store a 206.
+
+The Worker needs no secret: Workers Builds deploys it, with the assets and the binding, from the same `wrangler
+deploy`. The binding names a bucket that must exist, or the deploy fails.

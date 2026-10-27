@@ -117,8 +117,8 @@ The page shows and switches it through the bridge (`channel`, `applyUpdateChanne
 and switching checks again at once. The About panel and the manual check's answer name the channel. Releasing is
 Actions → Release (`.github/workflows/release.yml`, `docs/release.md`): channel stable or beta, bump patch, minor or
 major; it builds `Shinsa-mac-arm64.dmg` and `.zip` with that version in the app and its engine, signs and notarizes
-when the `CSC_LINK` and Apple secrets are set, and publishes the release, which `shinsa.dev/download` (stable) and
-`shinsa.dev/download/beta` serve. The version lives in the tag, never in `package.json`. The plan for the engine
+when the `CSC_LINK` and Apple secrets are set, publishes the release, and copies the DMG to the site's R2 bucket,
+from which `shinsa.dev/download` (stable) and `shinsa.dev/download/beta` serve it. The version lives in the tag, never in `package.json`. The plan for the engine
 following the app is `docs/plans/app-plan.md` → Versions and updates.
 
 The root `bun dev` skips this package (`--filter=!@shinsa/desktop`), so it never opens a window by itself.
