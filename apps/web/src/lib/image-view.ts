@@ -64,11 +64,144 @@ export function zoomAround(view: View, scale: number, point: Point): View {
   return { scale, x: point.x - (point.x - view.x) * ratio, y: point.y - (point.y - view.y) * ratio };
 }
 
-export function resolveOriginTransform(rect: DOMRect, fitted: Size, viewport: Size) {
-  const dx = rect.left + rect.width / 2 - viewport.width / 2;
-  const dy = rect.top + rect.height / 2 - viewport.height / 2;
-  const ratio = Math.min(rect.width / fitted.width, rect.height / fitted.height);
-  return `translate(${dx}px, ${dy}px) scale(${ratio})`;
+export interface Box {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+export type Corners = [number, number, number, number];
+
+export interface Landing {
+  view: View;
+  clip: Insets;
+  corners: Corners;
+}
+
+export interface Clip {
+  box: Box;
+  radius: number;
+}
+
+export interface Thumbnail {
+  box: Box;
+  objectFit: string;
+  radius: number;
+  clips: Clip[];
+}
+
+const SNAP = 0.5;
+
+function centreBox(box: Box, size: Size): Box {
+  return {
+    left: box.left + (box.width - size.width) / 2,
+    top: box.top + (box.height - size.height) / 2,
+    width: size.width,
+    height: size.height,
+  };
+}
+
+function scaleSize(size: Size, ratio: number): Size {
+  return { width: size.width * ratio, height: size.height * ratio };
+}
+
+export function resolveObjectBox(box: Box, natural: Size, objectFit: string): Box {
+  const contain = Math.min(box.width / natural.width, box.height / natural.height);
+  const cover = Math.max(box.width / natural.width, box.height / natural.height);
+  if (objectFit === 'fill') return box;
+  if (objectFit === 'cover') return centreBox(box, scaleSize(natural, cover));
+  if (objectFit === 'none') return centreBox(box, natural);
+  if (objectFit === 'scale-down') return centreBox(box, scaleSize(natural, Math.min(1, contain)));
+  return centreBox(box, scaleSize(natural, contain));
+}
+
+export function intersectBoxes(first: Box, second: Box): Box | null {
+  const left = Math.max(first.left, second.left);
+  const top = Math.max(first.top, second.top);
+  const right = Math.min(first.left + first.width, second.left + second.width);
+  const bottom = Math.min(first.top + first.height, second.top + second.height);
+  if (right <= left || bottom <= top) return null;
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function isSamePoint(first: Point, second: Point) {
+  return Math.abs(first.x - second.x) < SNAP && Math.abs(first.y - second.y) < SNAP;
+}
+
+function listCorners(box: Box): [Point, Point, Point, Point] {
+  const right = box.left + box.width;
+  const bottom = box.top + box.height;
+  return [
+    { x: box.left, y: box.top },
+    { x: right, y: box.top },
+    { x: right, y: bottom },
+    { x: box.left, y: bottom },
+  ];
+}
+
+export function resolveCorners(visible: Box, clips: Clip[]): Corners {
+  const corners = listCorners(visible);
+  const radius = (at: 0 | 1 | 2 | 3) =>
+    Math.max(
+      0,
+      ...clips
+        .filter((clip) => isSamePoint(listCorners(clip.box)[at], corners[at]))
+        .map((clip) => clip.radius)
+    );
+  return [radius(0), radius(1), radius(2), radius(3)];
+}
+
+export function resolveViewLanding(view: View, radius: number): Landing {
+  return { view, clip: { top: 0, right: 0, bottom: 0, left: 0 }, corners: [radius, radius, radius, radius] };
+}
+
+export function resolveLanding(
+  thumbnail: Thumbnail,
+  natural: Size,
+  fitted: Size,
+  viewport: Size
+): Landing | null {
+  if (thumbnail.box.width <= 0 || thumbnail.box.height <= 0) return null;
+  const drawn = resolveObjectBox(thumbnail.box, natural, thumbnail.objectFit);
+  const clips = [
+    { box: thumbnail.box, radius: thumbnail.radius },
+    ...thumbnail.clips,
+    { box: { left: 0, top: 0, ...viewport }, radius: 0 },
+  ];
+  let visible: Box | null = drawn;
+  for (const clip of clips) visible = visible && intersectBoxes(visible, clip.box);
+  if (!visible) return null;
+  const scale = drawn.width / fitted.width;
+  return {
+    view: {
+      scale,
+      x: drawn.left + drawn.width / 2 - viewport.width / 2,
+      y: drawn.top + drawn.height / 2 - viewport.height / 2,
+    },
+    clip: {
+      top: (visible.top - drawn.top) / scale,
+      right: (drawn.left + drawn.width - visible.left - visible.width) / scale,
+      bottom: (drawn.top + drawn.height - visible.top - visible.height) / scale,
+      left: (visible.left - drawn.left) / scale,
+    },
+    corners: resolveCorners(visible, clips).map((radius) => radius / scale) as Corners,
+  };
+}
+
+export function serializeLanding({ view, clip, corners }: Landing) {
+  const round = corners.map((radius) => `${radius}px`).join(' ');
+  return {
+    transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+    clipPath: `inset(${clip.top}px ${clip.right}px ${clip.bottom}px ${clip.left}px round ${round})`,
+  };
 }
 
 const TAP_SLOP = 4;
@@ -144,6 +277,66 @@ export function resolveStepIndex(index: number, offset: number, count: number) {
   return (index + offset + count) % count;
 }
 
+export interface ViewerSwap {
+  kind: 'part' | 'step';
+  direction: 1 | -1;
+}
+
+export function resolveSwap(
+  images: readonly { item?: string }[],
+  from: number,
+  to: number,
+  offset: number
+): ViewerSwap {
+  const item = images[from]?.item;
+  return {
+    kind: item && images[to]?.item === item ? 'part' : 'step',
+    direction: offset < 0 ? -1 : 1,
+  };
+}
+
+const SWAP_SLIDE = 10;
+
+export function resolveSwapMotion(swap: ViewerSwap, reduced: boolean) {
+  const slides = swap.kind === 'step' && !reduced;
+  const slide = slides ? SWAP_SLIDE * swap.direction : 0;
+  return { duration: slides ? 200 : 150, enter: slide, leave: 0 - slide };
+}
+
+export function isLeavingHeld(swap: ViewerSwap, leaving: Size | null, entering: Size | null) {
+  if (swap.kind !== 'part' || !leaving || !entering) return false;
+  return Math.abs(leaving.width - entering.width) < SNAP && Math.abs(leaving.height - entering.height) < SNAP;
+}
+
 export function describeZoom(scale: number, actual: number) {
   return `${Math.round((scale / actual) * 100)}%`;
+}
+
+interface ViewerPart {
+  index: number;
+  name: string;
+}
+
+export interface ViewerItem {
+  position: number;
+  count: number;
+  parts: ViewerPart[];
+}
+
+export function resolveViewerItem(
+  images: readonly { item?: string; part?: string }[],
+  index: number
+): ViewerItem {
+  const starts: number[] = [];
+  images.forEach((image, at) => {
+    if (at === 0 || !image.item || images[at - 1]?.item !== image.item) starts.push(at);
+  });
+  const position = starts.filter((at) => at <= index).length - 1;
+  const start = starts[position] ?? 0;
+  const end = starts[position + 1] ?? images.length;
+  const parts = images
+    .slice(start, end)
+    .map((image, offset) => ({ index: start + offset, name: image.part ?? '' }))
+    .filter((part) => part.name !== '');
+  return { position: position + 1, count: starts.length, parts: parts.length > 1 ? parts : [] };
 }

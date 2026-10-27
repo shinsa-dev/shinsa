@@ -3,6 +3,9 @@ import * as React from 'react';
 export interface ViewerImage {
   src: string;
   caption?: string | null;
+  media?: 'image' | 'video';
+  item?: string;
+  part?: string;
 }
 
 export function useImageViewer() {

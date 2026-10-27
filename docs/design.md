@@ -3102,7 +3102,7 @@ the glyphs inside it.
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
 | `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, toasts, ⌘K's search glyph, the logo |
-| `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, the image viewer's controls, the icon specimens on `/ui`                              |
+| `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
   box) at the text's x-height-plus, so it reads as a word in the line; 16 is the
@@ -3325,6 +3325,10 @@ Toggle (see Toggle) and `Input`'s own text inset (see Open issues).
 
 ## Layout
 
+- **No sidebars: navigation inside a page is a horizontal tab bar.** Shinsa's UI is compact and every page
+  is one centred column, so a page with parts (Settings, the task page) switches them with a tab bar under
+  its heading, at every width, never with a rail or a list of links at the side. The Sidebar layout's task
+  rail (Where Shinsa differs, 10) is app chrome you choose, not a page's own navigation.
 - **App chrome owns layout.** A sidebar and a top bar define the box; both sit
   on the canvas and are split from content by the border alone. Page content
   uses `PageContainer`, or `ListPageShell` for list surfaces, with a named
@@ -5178,7 +5182,7 @@ Rules:
   palette enters like every dialog, and list popups open instantly.
 - **Hover is colour, not motion.** No hover scale or translate. The only press
   shapes are the fixed `inset` deflate and the scale of the link button, a
-  ghost tab, a checkbox and the image viewer's round buttons, and they land at
+  ghost tab and a checkbox, and they land at
   once, never eased.
 - **Tooltips:** open after `TOOLTIP_DELAY` (600ms) and fade in over 150ms, and
   instant (`data-instant`, no transition) on a trigger reached within

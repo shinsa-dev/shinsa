@@ -1,38 +1,112 @@
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
-import { Icon } from '@shinsa/ui/components/icon';
+import { Button } from '@shinsa/ui/components/button';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { Choice } from '@/components/controls/choice.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import type { useImageViewer, ViewerImage } from '@/hooks/use-image-viewer.ts';
 import {
+  type Box,
+  type Clip,
   clampView,
   describeZoom,
   FIT,
+  isLeavingHeld,
   isPastTapSlop,
+  type Landing,
   type Point,
   resolveFit,
   resolveImageName,
   resolveKeyView,
-  resolveOriginTransform,
+  resolveLanding,
   resolvePanView,
   resolvePinch,
   resolvePinchView,
   resolveStagePoint,
   resolveStepIndex,
+  resolveSwap,
+  resolveSwapMotion,
   resolveTapView,
+  resolveViewerItem,
+  resolveViewLanding,
   resolveWheelView,
   resolveZoomRange,
   type Size,
+  serializeLanding,
   type View,
+  type ViewerSwap,
 } from '@/lib/image-view.ts';
 
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
-const MORPH_MS = 320;
+const MOTION = { duration: 240, easing: EASE } as const;
+const FADE_IN = [{ opacity: 0 }, { opacity: 1 }];
+const FADE_OUT = [{ opacity: 1 }, { opacity: 0 }];
+const SWAP_EASE = 'cubic-bezier(0.23, 1, 0.32, 1)';
+const SHRUNK = 0.96;
 const DOUBLE_TAP_MS = 300;
 
 function prefersReducedMotion() {
   return matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function resolveRadius(element: Element) {
+  return Number.parseFloat(getComputedStyle(element).borderTopLeftRadius) || 0;
+}
+
+function resolveBox(element: Element): Box {
+  const { left, top, width, height } = element.getBoundingClientRect();
+  return { left, top, width, height };
+}
+
+function resolveThumbnail(origin: HTMLElement) {
+  const clips: Clip[] = [];
+  for (let parent = origin.parentElement; parent; parent = parent.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(parent);
+    if (overflowX !== 'visible' || overflowY !== 'visible') {
+      clips.push({ box: resolveBox(parent), radius: resolveRadius(parent) });
+    }
+  }
+  return {
+    box: resolveBox(origin),
+    objectFit: getComputedStyle(origin).objectFit,
+    radius: resolveRadius(origin),
+    clips,
+  };
+}
+
+function resolveShrunk(view: View): View {
+  return { ...view, scale: view.scale * SHRUNK };
+}
+
+function resolveOriginSize(origin: HTMLElement | null, src: string | undefined): Size | null {
+  if (!src || origin?.getAttribute('src') !== src) return null;
+  if (origin instanceof HTMLVideoElement && origin.videoWidth > 0) {
+    return { width: origin.videoWidth, height: origin.videoHeight };
+  }
+  if (origin instanceof HTMLImageElement && origin.naturalWidth > 0) {
+    return { width: origin.naturalWidth, height: origin.naturalHeight };
+  }
+  return null;
+}
+
+function settleAnimations(element: HTMLElement) {
+  for (const animation of element.getAnimations()) {
+    animation.commitStyles();
+    animation.cancel();
+  }
+}
+
+function clearMotionStyles(element: HTMLElement) {
+  for (const property of ['opacity', 'translate', 'transform', 'clip-path']) {
+    element.style.removeProperty(property);
+  }
+}
+
+interface Layer {
+  image: ViewerImage;
+  view: View;
 }
 
 function useViewport() {
@@ -48,30 +122,126 @@ function useViewport() {
 function ChromeButton({
   label,
   shortcut,
+  icon,
   onClick,
   className,
-  children,
 }: {
   label: string;
   shortcut: string;
+  icon: IconName;
   onClick: () => void;
   className?: string;
-  children: React.ReactNode;
 }) {
   return (
     <Hint label={label} shortcut={shortcut}>
-      <button
-        type='button'
+      <Button
+        variant='outline'
+        size='icon'
         aria-label={label}
         onClick={onClick}
-        className={cn(
-          'pointer-events-auto grid size-9 cursor-pointer place-items-center rounded-full bg-white/10 text-white outline-none backdrop-blur-md hover:bg-white/20 active:scale-95 active:bg-white/20',
-          className
-        )}
+        className={cn('pointer-events-auto', className)}
       >
-        {children}
-      </button>
+        <Icon name={icon} />
+      </Button>
     </Hint>
+  );
+}
+
+function LayerVideo({
+  src,
+  name,
+  size,
+  live,
+  onMeasure,
+}: {
+  src: string;
+  name: string;
+  size: Size | null;
+  live: boolean;
+  onMeasure: (element: HTMLVideoElement) => void;
+}) {
+  if (!size) {
+    if (!live) return null;
+    return (
+      <video
+        key={`measure-${src}`}
+        src={src}
+        muted
+        preload='metadata'
+        aria-hidden
+        onLoadedMetadata={(event) => onMeasure(event.currentTarget)}
+        className='invisible absolute'
+      />
+    );
+  }
+  return (
+    // biome-ignore lint/a11y/useMediaCaption: agent recordings have no captions
+    <video
+      src={src}
+      aria-label={name}
+      aria-hidden={!live}
+      controls
+      autoPlay
+      playsInline
+      width={size.width}
+      height={size.height}
+      style={{ width: size.width, height: size.height }}
+      className={cn(
+        'corner-superellipse/1.125 block max-w-none rounded-lg bg-black object-contain',
+        live && 'pointer-events-auto'
+      )}
+    />
+  );
+}
+
+function LayerPicture({
+  src,
+  name,
+  size,
+  view,
+  transition,
+  landing,
+  gestures,
+  onMeasure,
+}: {
+  src: string;
+  name: string;
+  size: Size | null;
+  view: View;
+  transition: string | undefined;
+  landing: boolean;
+  gestures: React.HTMLAttributes<HTMLDivElement> | null;
+  onMeasure: (element: HTMLImageElement) => void;
+}) {
+  return (
+    <div
+      {...gestures}
+      style={{
+        transform: landing ? undefined : `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,
+        transition,
+      }}
+      className={cn(
+        gestures && 'pointer-events-auto touch-none',
+        gestures && (view.scale > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in')
+      )}
+    >
+      <img
+        src={src}
+        alt={gestures ? name : ''}
+        aria-hidden={!gestures}
+        draggable={false}
+        ref={(element) => {
+          if (element?.complete && element.naturalWidth > 0) onMeasure(element);
+        }}
+        onLoad={(event) => onMeasure(event.currentTarget)}
+        style={size ? { width: size.width, height: size.height } : undefined}
+        className={cn(
+          'corner-superellipse/1.125 block max-w-none rounded-lg object-contain',
+          landing && 'rounded-none',
+          !size && 'invisible'
+        )}
+      />
+    </div>
   );
 }
 
@@ -90,15 +260,27 @@ function ImageViewerDialog({
 }) {
   const image = images[index];
   const many = images.length > 1;
+  const video = image?.media === 'video';
   const viewport = useViewport();
-  const [measured, setMeasured] = React.useState<{ src: string; size: Size } | null>(null);
+  const [sizes, setSizes] = React.useState<Record<string, Size>>(() => {
+    const size = resolveOriginSize(resolveOrigin(index), image?.src);
+    return image && size ? { [image.src]: size } : {};
+  });
+  const [layers, setLayers] = React.useState<Layer[]>(() => (image ? [{ image, view: FIT }] : []));
   const [view, setView] = React.useState<View>(FIT);
   const [smooth, setSmooth] = React.useState(false);
   const [closing, setClosing] = React.useState(false);
-  const stage = React.useRef<HTMLDivElement>(null);
-  const frame = React.useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = React.useState(false);
+  const stage = React.useRef<HTMLDivElement | null>(null);
+  const frame = React.useRef<HTMLDivElement | null>(null);
   const backdrop = React.useRef<HTMLDivElement>(null);
+  const chrome = React.useRef<HTMLDivElement>(null);
   const shown = React.useRef<string | null>(null);
+  const swap = React.useRef<ViewerSwap | null>(null);
+  const elements = React.useRef(new Map<string, HTMLDivElement>());
+  const leaving = React.useRef(new WeakSet<HTMLElement>());
+  const liveSrc = React.useRef(image?.src);
+  liveSrc.current = image?.src;
   const pointers = React.useRef(new Map<number, Point>());
   const gesture = React.useRef<{
     start: Point;
@@ -108,8 +290,9 @@ function ImageViewerDialog({
   } | null>(null);
   const lastTap = React.useRef(0);
 
-  const natural = image && measured?.src === image.src ? measured.size : null;
-  const fit = resolveFit(natural, viewport, many ? 72 : 24);
+  const gutter = many ? 72 : 24;
+  const natural = image ? (sizes[image.src] ?? null) : null;
+  const fit = resolveFit(natural, viewport, gutter);
   const fitted = fit ? { width: fit.width, height: fit.height } : null;
   const { target, max: maxScale } = resolveZoomRange(fit);
   const toStage = (clientX: number, clientY: number) =>
@@ -124,88 +307,185 @@ function ImageViewerDialog({
     [fitted, viewport]
   );
 
-  React.useEffect(() => {
-    setView(FIT);
-  }, [index]);
+  const mountStage = React.useCallback((element: HTMLDivElement | null) => {
+    stage.current = element;
+    setMounted(element !== null);
+  }, []);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const origin = resolveOrigin(index);
-    if (!origin) return;
+    if (!mounted || !origin) return;
     origin.style.visibility = 'hidden';
     return () => {
       origin.style.visibility = '';
     };
-  }, [index, resolveOrigin]);
+  }, [mounted, index, resolveOrigin]);
+
+  React.useLayoutEffect(() => {
+    if (!mounted) return;
+    for (const element of [backdrop.current, chrome.current]) element?.animate(FADE_IN, MOTION);
+  }, [mounted]);
+
+  function resolveFlight(): Landing | null {
+    const origin = resolveOrigin(index);
+    if (!origin || !natural || !fitted || video || prefersReducedMotion()) return null;
+    return resolveLanding(resolveThumbnail(origin), natural, fitted, viewport);
+  }
+
+  function resolveRest(at: View) {
+    const media = frame.current?.querySelector('img');
+    return resolveViewLanding(at, media ? resolveRadius(media) : 0);
+  }
 
   React.useLayoutEffect(() => {
     const element = frame.current;
-    if (!fit || !element || !image || shown.current === image.src) return;
+    if (!mounted || !fit || !element || !image || shown.current === image.src) return;
     const first = shown.current === null;
     shown.current = image.src;
-    const reduce = prefersReducedMotion();
     if (!first) {
-      if (!reduce) element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+      swapIn(element);
       return;
     }
-    backdrop.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: reduce ? 0 : 220,
-      easing: 'ease-out',
-    });
-    if (reduce) return;
-    const rect = resolveOrigin(index)?.getBoundingClientRect();
-    if (!rect || rect.width === 0) {
+    const flight = resolveFlight();
+    const rest = serializeLanding(resolveRest(FIT));
+    if (flight) element.animate([serializeLanding(flight), rest], MOTION);
+    else if (video || prefersReducedMotion()) element.animate(FADE_IN, MOTION);
+    else {
+      const shrunk = serializeLanding(resolveRest(resolveShrunk(FIT)));
       element.animate(
         [
-          { opacity: 0, transform: 'scale(0.96)' },
-          { opacity: 1, transform: 'none' },
+          { ...shrunk, opacity: 0 },
+          { ...rest, opacity: 1 },
         ],
-        { duration: 220, easing: EASE }
+        MOTION
       );
-      return;
     }
-    element.animate([{ transform: resolveOriginTransform(rect, fit, viewport) }, { transform: 'none' }], {
-      duration: MORPH_MS,
-      easing: EASE,
-    });
   });
 
-  function measure(element: HTMLImageElement) {
+  function resolveLayerFit(src: string) {
+    const fitAt = resolveFit(sizes[src] ?? null, viewport, gutter);
+    return fitAt ? { width: fitAt.width, height: fitAt.height } : null;
+  }
+
+  function removeLayer(src: string) {
+    elements.current.delete(src);
+    setLayers((list) =>
+      list.filter((layer) => layer.image.src !== src || layer.image.src === liveSrc.current)
+    );
+  }
+
+  function swapIn(element: HTMLDivElement) {
+    const motion = swap.current;
+    if (!motion) return;
+    const { duration, enter, leave } = resolveSwapMotion(motion, prefersReducedMotion());
+    const timing = { duration, easing: SWAP_EASE, fill: 'forwards' } as const;
+    const returning = element.getAnimations().length > 0;
+    settleAnimations(element);
+    leaving.current.delete(element);
+    const entering = returning
+      ? element.animate({ opacity: 1, translate: '0px 0px' }, timing)
+      : element.animate(
+          [
+            { opacity: 0, translate: `${enter}px 0px` },
+            { opacity: 1, translate: '0px 0px' },
+          ],
+          timing
+        );
+    entering.onfinish = () => {
+      clearMotionStyles(element);
+      entering.cancel();
+    };
+    for (const [src, other] of elements.current) {
+      if (src === image?.src || leaving.current.has(other)) continue;
+      leaving.current.add(other);
+      settleAnimations(other);
+      const held = isLeavingHeld(motion, resolveLayerFit(src), fitted);
+      const exit = other.animate({ opacity: held ? 1 : 0, translate: `${leave}px 0px` }, timing);
+      exit.onfinish = () => removeLayer(src);
+    }
+  }
+
+  function record(element: HTMLElement, size: Size) {
     const src = element.getAttribute('src') ?? '';
-    if (measured?.src === src) return;
-    setMeasured({ src, size: { width: element.naturalWidth, height: element.naturalHeight } });
+    if (sizes[src]) return;
+    setSizes((known) => ({ ...known, [src]: size }));
+  }
+
+  function measure(element: HTMLImageElement) {
+    record(element, { width: element.naturalWidth, height: element.naturalHeight });
+  }
+
+  function measureVideo(element: HTMLVideoElement) {
+    record(element, { width: element.videoWidth, height: element.videoHeight });
   }
 
   function requestClose() {
     if (closing) return;
     setClosing(true);
-    const element = frame.current;
-    if (prefersReducedMotion() || !element || !fit) {
+    const origin = resolveOrigin(index);
+    const reveal = () => {
+      if (origin) origin.style.visibility = '';
+    };
+    const finish = () => {
+      reveal();
       onClose();
+    };
+    const fade = { ...MOTION, fill: 'forwards' } as const;
+    for (const element of [backdrop.current, chrome.current]) element?.animate(FADE_OUT, fade);
+    const element = frame.current;
+    if (!element) {
+      finish();
       return;
     }
-    const rect = resolveOrigin(index)?.getBoundingClientRect();
-    const visible =
-      rect && rect.width > 0 && rect.bottom > 0 && rect.top < viewport.height && view.scale <= 1;
-    backdrop.current?.animate([{ opacity: 1 }, { opacity: 0 }], {
-      duration: 200,
-      easing: 'ease-in',
-      fill: 'forwards',
+    const running = element.getAnimations();
+    const style = getComputedStyle(element);
+    const rest = serializeLanding(resolveRest(view));
+    const live = (value: string, fallback: string) =>
+      running.length > 0 && value !== 'none' ? value : fallback;
+    const from = {
+      transform: live(style.transform, rest.transform),
+      clipPath: live(style.clipPath, rest.clipPath),
+      opacity: running.length > 0 ? Number(style.opacity) : 1,
+      translate: style.translate === 'none' ? '0px 0px' : style.translate,
+    };
+    for (const [src, other] of elements.current) {
+      if (src !== image?.src) other.animate({ opacity: 0 }, fade);
+    }
+    for (const animation of running) animation.cancel();
+    const flight = resolveFlight();
+    if (!flight) reveal();
+    const to = {
+      translate: '0px 0px',
+      ...(flight
+        ? { ...serializeLanding(flight), opacity: 1 }
+        : video || prefersReducedMotion()
+          ? { ...rest, opacity: 0 }
+          : { ...serializeLanding(resolveRest(resolveShrunk(view))), opacity: 0 }),
+    };
+    element.animate([from, to], fade).finished.then(finish, finish);
+  }
+
+  function show(next: number, offset: number) {
+    const to = images[next];
+    if (closing || !image || !to || next === index) return;
+    const size = resolveOriginSize(resolveOrigin(next), to.src);
+    if (size && !sizes[to.src]) setSizes((known) => ({ ...known, [to.src]: size }));
+    const ready = fitted !== null && shown.current === image.src;
+    swap.current = resolveSwap(images, index, next, offset);
+    setLayers((list) => {
+      const kept = list
+        .filter((layer) => layer.image.src !== image.src || ready)
+        .map((layer) => (layer.image.src === image.src ? { image: layer.image, view } : layer));
+      return kept.some((layer) => layer.image.src === to.src) ? kept : [...kept, { image: to, view: FIT }];
     });
-    const keyframes =
-      visible && rect
-        ? [{ transform: 'none' }, { transform: resolveOriginTransform(rect, fit, viewport) }]
-        : [
-            { opacity: 1, transform: 'none' },
-            { opacity: 0, transform: 'scale(0.96)' },
-          ];
-    element
-      .animate(keyframes, { duration: visible ? 260 : 180, easing: EASE, fill: 'forwards' })
-      .finished.then(onClose, onClose);
+    setSmooth(false);
+    setView(FIT);
+    onIndexChange(next);
   }
 
   function step(offset: number) {
     if (!many) return;
-    onIndexChange(resolveStepIndex(index, offset, images.length));
+    show(resolveStepIndex(index, offset, images.length), offset);
   }
 
   React.useEffect(() => {
@@ -213,7 +493,7 @@ function ImageViewerDialog({
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      if (!fitted) return;
+      if (!fitted || video) return;
       applyView(resolveWheelView(view, event, toStage(event.clientX, event.clientY), maxScale), false);
     };
     element.addEventListener('wheel', onWheel, { passive: false });
@@ -221,7 +501,8 @@ function ImageViewerDialog({
   });
 
   function onKeyDown(event: React.KeyboardEvent) {
-    const next = resolveKeyView(event.key, view, maxScale);
+    if (event.defaultPrevented) return;
+    const next = video ? null : resolveKeyView(event.key, view, maxScale);
     if (event.key === 'ArrowRight') step(1);
     else if (event.key === 'ArrowLeft') step(-1);
     else if (next) applyView(next, true);
@@ -278,9 +559,46 @@ function ImageViewerDialog({
     applyView(resolveTapView(view, target, toStage(event.clientX, event.clientY)), true);
   }
 
+  function renderLayer(layer: Layer) {
+    const { src } = layer.image;
+    const live = src === image?.src;
+    const size = live ? fitted : resolveLayerFit(src);
+    const name = layer.image.caption || resolveImageName(src);
+    const isVideo = layer.image.media === 'video';
+    return (
+      <div
+        key={src}
+        ref={(element) => {
+          if (element) elements.current.set(src, element);
+          if (live) frame.current = element;
+        }}
+        style={{ zIndex: live ? 1 : 0 }}
+        className={cn('col-start-1 row-start-1', live && !isVideo && 'will-change-transform')}
+      >
+        {isVideo ? (
+          <LayerVideo src={src} name={name} size={size} live={live} onMeasure={measureVideo} />
+        ) : (
+          <LayerPicture
+            src={src}
+            name={name}
+            size={size}
+            view={live ? view : layer.view}
+            transition={live && smooth && !closing ? `transform 260ms ${EASE}` : undefined}
+            landing={live && closing}
+            gestures={
+              live ? { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp } : null
+            }
+            onMeasure={measure}
+          />
+        )}
+      </div>
+    );
+  }
+
   if (!image) return null;
   const caption = image.caption || resolveImageName(image.src);
   const zoomed = view.scale > 1;
+  const item = resolveViewerItem(images, index);
 
   return (
     <DialogPrimitive.Root
@@ -295,7 +613,7 @@ function ImageViewerDialog({
           className='fixed inset-0 z-50 bg-black/85 backdrop-blur-sm'
         />
         <DialogPrimitive.Popup
-          ref={stage}
+          ref={mountStage}
           aria-label={caption}
           onKeyDown={onKeyDown}
           className='dark fixed inset-0 z-50 select-none overflow-hidden text-foreground outline-none'
@@ -308,79 +626,64 @@ function ImageViewerDialog({
             className='absolute inset-0 cursor-default outline-none'
           />
           <div className='pointer-events-none absolute inset-0 grid place-items-center'>
-            <div ref={frame} className='will-change-transform'>
+            {(layers.some((layer) => layer.image.src === image.src)
+              ? layers
+              : [...layers, { image, view: FIT }]
+            ).map((layer) => renderLayer(layer))}
+          </div>
+          <div ref={chrome} className='pointer-events-none absolute inset-0'>
+            <div className='pointer-events-none absolute inset-x-0 top-0 flex justify-end p-3'>
+              <ChromeButton label='Close' shortcut='Esc' icon='IconCrossMedium' onClick={requestClose} />
+            </div>
+            {many && (
+              <>
+                <ChromeButton
+                  label='Previous'
+                  shortcut='←'
+                  icon='IconChevronLeftMedium'
+                  onClick={() => step(-1)}
+                  className='absolute top-1/2 left-3 -translate-y-1/2'
+                />
+                <ChromeButton
+                  label='Next'
+                  shortcut='→'
+                  icon='IconChevronRightMedium'
+                  onClick={() => step(1)}
+                  className='absolute top-1/2 right-3 -translate-y-1/2'
+                />
+              </>
+            )}
+            <div className='pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4'>
               <div
-                onPointerDown={onPointerDown}
-                onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onPointerCancel={onPointerUp}
-                style={{
-                  transform: `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.scale})`,
-                  transition: smooth ? `transform 260ms ${EASE}` : undefined,
-                }}
                 className={cn(
-                  'pointer-events-auto touch-none',
-                  zoomed ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'
+                  'corner-superellipse/1.125 pointer-events-auto flex h-8 min-w-0 max-w-full items-center gap-2 rounded-popup bg-popover ps-3 text-popover-foreground text-xs shadow-3 sm:max-w-xl',
+                  many && 'w-xl',
+                  item.parts.length > 0 ? 'pe-0.75' : 'pe-3'
                 )}
               >
-                <img
-                  key={image.src}
-                  src={image.src}
-                  alt={caption}
-                  draggable={false}
-                  ref={(element) => {
-                    if (element?.complete && element.naturalWidth > 0) measure(element);
-                  }}
-                  onLoad={(event) => measure(event.currentTarget)}
-                  style={fitted ? { width: fitted.width, height: fitted.height } : undefined}
-                  className={cn(
-                    'corner-superellipse/1.125 block max-w-none rounded-lg object-contain',
-                    !fitted && 'invisible'
-                  )}
-                />
+                <DialogPrimitive.Title className={cn('min-w-0 font-medium', many && 'flex-1')}>
+                  <Truncate>{caption}</Truncate>
+                </DialogPrimitive.Title>
+                {item.count > 1 && (
+                  <span className='shrink-0 text-fg-2 tabular-nums'>
+                    {item.position} of {item.count}
+                  </span>
+                )}
+                {zoomed && fit && (
+                  <span className='shrink-0 text-fg-2 tabular-nums'>
+                    {describeZoom(view.scale, fit.actual)}
+                  </span>
+                )}
+                {item.parts.length > 0 && (
+                  <Choice
+                    label='Which state'
+                    value={String(index)}
+                    onValueChange={(value) => show(Number(value), Number(value) - index)}
+                    items={item.parts.map((part) => ({ value: String(part.index), label: part.name }))}
+                    className='shrink-0'
+                  />
+                )}
               </div>
-            </div>
-          </div>
-          <div className='pointer-events-none absolute inset-x-0 top-0 flex justify-end p-3'>
-            <ChromeButton label='Close' shortcut='Esc' onClick={requestClose}>
-              <Icon size='lg' name='IconCrossMedium' />
-            </ChromeButton>
-          </div>
-          {many && (
-            <>
-              <ChromeButton
-                label='Previous image'
-                shortcut='←'
-                onClick={() => step(-1)}
-                className='absolute top-1/2 left-3 -translate-y-1/2'
-              >
-                <Icon size='lg' name='IconChevronLeftMedium' />
-              </ChromeButton>
-              <ChromeButton
-                label='Next image'
-                shortcut='→'
-                onClick={() => step(1)}
-                className='absolute top-1/2 right-3 -translate-y-1/2'
-              >
-                <Icon size='lg' name='IconChevronRightMedium' />
-              </ChromeButton>
-            </>
-          )}
-          <div className='pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4'>
-            <div className='pointer-events-auto flex h-8 min-w-0 max-w-full items-center gap-2 rounded-full bg-white/10 px-3.5 text-white text-xs backdrop-blur-md sm:max-w-xl'>
-              <DialogPrimitive.Title className='min-w-0 font-medium'>
-                <Truncate>{caption}</Truncate>
-              </DialogPrimitive.Title>
-              {many && (
-                <span className='shrink-0 text-white/60 tabular-nums'>
-                  {index + 1} of {images.length}
-                </span>
-              )}
-              {zoomed && fit && (
-                <span className='shrink-0 text-white/60 tabular-nums'>
-                  {describeZoom(view.scale, fit.actual)}
-                </span>
-              )}
             </div>
           </div>
         </DialogPrimitive.Popup>
