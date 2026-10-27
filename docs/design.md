@@ -19,6 +19,8 @@ Only these, and they win over anything below:
    `packages/ui/src/styles/fonts` (Dinamo licence). ABC Areal Mono has no box-drawing glyphs and draws its
    triangles two cells wide, so the family takes those two blocks (U+2500–257F, U+25A0–25FF) from Menlo, or DejaVu
    Sans Mono, scaled to its 0.61em cell (`size-adjust` in `globals.css`): a text diagram keeps every column.
+   Until the files load, "ABC Areal Fallback" and "ABC Areal Mono Fallback" (Arial and Menlo with Areal's
+   width and vertical metrics) hold the lines where Areal will set them, so nothing moves when it swaps in.
 2. **Accent.** One blue, `--primary-4` (`oklch(0.6 0.215 256)` light, `oklch(0.62 0.2 256)` dark), with
    a white label. Read every mention of teal as this blue. The chart's first series is the accent.
 3. **The primary button keeps a highlight.** `Button` `primary` (the default variant) and

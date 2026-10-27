@@ -463,9 +463,11 @@ export function cn(...inputs: ClassValue[]) {
 
 ### 0.4 Fonts
 
-The typeface is ABC Areal (variable, weights 100 to 900) for everything and ABC Areal Mono (variable) for code, both
-from Dinamo. They are licensed and do not ship with this file. Without them the stacks fall back to
-`ui-sans-serif, system-ui, sans-serif` and `ui-monospace, "SF Mono", Menlo, monospace`; the layout holds, but the
+The typeface is ABC Areal (variable, weights 400 to 700) for everything and ABC Areal Mono (variable) for code, both
+from Dinamo. They are licensed and do not ship with this file. Until they load, and without them, text is set in
+"ABC Areal Fallback" (Arial) and "ABC Areal Mono Fallback" (Menlo), system fonts scaled and given Areal's vertical
+metrics so lines break and stand where Areal's will; past those the stacks fall back to
+`ui-sans-serif, system-ui, sans-serif` and `ui-monospace, "SF Mono", Menlo, monospace`. The layout holds, but the
 result is not pixel-identical. Areal's weights are tuned: medium sits at 450, semibold at 550, bold at 600 (see
 Typography). Box-drawing characters and geometric shapes (U+2500 to U+257F, U+25A0 to U+25FF) come from Menlo at a
 `size-adjust` of 101.38%, so text diagrams keep one cell per column.
@@ -503,10 +505,12 @@ Shinsa is a dense, native-feeling app. Almost all text is 13px or 12px; the larg
 
 | Role | Family stack (`--font-sans` / `--font-mono`) | Utility |
 | --- | --- | --- |
-| Everything: headings, body, labels, buttons, data, ids, numbers, dates | `"ABC Areal", ui-sans-serif, system-ui, sans-serif` | default (`font-sans`) |
-| Code only: code blocks, inline code, commands, paths shown as code, terminal, editor, diffs | `"ABC Areal Mono", ui-monospace, "SF Mono", Menlo, monospace` | `font-mono` |
+| Everything: headings, body, labels, buttons, data, ids, numbers, dates | `"ABC Areal", "ABC Areal Fallback", ui-sans-serif, system-ui, sans-serif` | default (`font-sans`) |
+| Code only: code blocks, inline code, commands, paths shown as code, terminal, editor, diffs | `"ABC Areal Mono", "ABC Areal Mono Fallback", ui-monospace, "SF Mono", Menlo, monospace` | `font-mono` |
 
-Both are variable fonts (weight axis 100 to 900, licensed from Dinamo). ABC Areal Mono has no box-drawing glyphs and draws its triangles two cells wide, so the mono family takes the box-drawing (U+2500 to 257F) and geometric-shape (U+25A0 to 25FF) blocks from Menlo (or DejaVu Sans Mono, which shares its metrics), scaled from Menlo's 0.602em advance to Areal Mono's 0.61em cell. A text diagram therefore keeps every column one cell wide.
+Both are variable fonts with a weight axis from 400 to 700, licensed from Dinamo. The `@font-face` rules declare `100 900`, so a weight outside the axis is clamped to 400 or 700 rather than faked. ABC Areal Mono has no box-drawing glyphs and draws its triangles two cells wide, so the mono family takes the box-drawing (U+2500 to 257F) and geometric-shape (U+25A0 to 25FF) blocks from Menlo (or DejaVu Sans Mono, which shares its metrics), scaled from Menlo's 0.602em advance to Areal Mono's 0.61em cell. A text diagram therefore keeps every column one cell wide.
+
+Each family's second entry is a metric-matched fallback: a local system font (Arial, or Liberation Sans and Arimo, which share its widths; Menlo, DejaVu Sans Mono or Courier New) with `size-adjust` set so its average advance equals Areal's (Capsize's English letter weighting) and `ascent-override`, `descent-override` and `line-gap-override` set to Areal's own 878, 210 and 0 per 1000 (hhea and OS/2 agree, and the fonts set USE_TYPO_METRICS). Text drawn in it before Areal arrives breaks into the same lines at the same heights, so nothing moves when Areal swaps in. Its `unicode-range` lists only characters Areal has, so once Areal loads the fallback draws nothing, and a character Areal lacks still falls through to the rest of the stack. The marketing site preloads `ABCArealVariable.woff2`; the mono file is not used above the fold there.
 
 ```css
 @font-face {
@@ -531,6 +535,28 @@ Both are variable fonts (weight axis 100 to 900, licensed from Dinamo). ABC Area
   size-adjust: 101.38%;
   font-weight: 100 900;
   font-style: normal;
+}
+/* Metric-matched fallbacks: a system font scaled to Areal's average advance, with Areal's vertical metrics. */
+@font-face {
+  font-family: "ABC Areal Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("LiberationSans-Regular"), local("Arimo");
+  unicode-range: U+20-7E, U+A0-AB, U+AE-B4, U+B6-137, U+139-148, U+14A-17E, U+2013-2014, U+2018-201A, U+201C-201E,
+    U+2020-2022, U+2026, U+2030, U+2039-203A, U+20AC, U+2122, U+2190-2193, U+2212;
+  size-adjust: 100.49%;
+  ascent-override: 87.37%;
+  descent-override: 20.9%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "ABC Areal Mono Fallback";
+  src: local("Menlo"), local("Menlo-Regular"), local("DejaVu Sans Mono"), local("DejaVuSansMono"),
+    local("Courier New"), local("CourierNewPSMT");
+  unicode-range: U+20-7E, U+A0-AB, U+AE-B4, U+B6-137, U+139-148, U+14A-17E, U+2013-2014, U+2018-201A, U+201C-201E,
+    U+2020-2022, U+2026, U+2030, U+2039-203A, U+20AC, U+2122, U+2190-2193, U+2212;
+  size-adjust: 101.32%;
+  ascent-override: 86.66%;
+  descent-override: 20.73%;
+  line-gap-override: 0%;
 }
 ```
 

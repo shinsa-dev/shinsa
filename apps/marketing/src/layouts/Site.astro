@@ -1,5 +1,4 @@
 ---
-import arealMono from '@shinsa/ui/styles/fonts/ABCArealMonoVariable.woff2?url';
 import areal from '@shinsa/ui/styles/fonts/ABCArealVariable.woff2?url';
 import '../styles/global.css';
 import Backdrop from '../components/layout/Backdrop.astro';
@@ -38,7 +37,6 @@ const structuredData = {
     <meta name='color-scheme' content='light dark' />
     <title>{title}</title>
     <link rel='preload' href={areal} as='font' type='font/woff2' crossorigin />
-    <link rel='preload' href={arealMono} as='font' type='font/woff2' crossorigin />
     <meta name='description' content={description} />
     <link rel='canonical' href={canonical} />
     <meta name='robots' content={noindex ? 'noindex' : 'index, follow, max-image-preview:large'} />

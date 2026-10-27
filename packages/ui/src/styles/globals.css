@@ -36,6 +36,32 @@
   font-weight: 100 900;
   font-style: normal;
 }
+/* Until Areal loads, text is set in a system font scaled to Areal's average
+   advance (Capsize's weighting) and given its vertical metrics (878 / 210 / 0
+   per 1000, hhea and OS/2 alike), so lines break and stand where Areal's will
+   and nothing moves when it swaps in. Each range is a part of Areal's own
+   character set: a character Areal lacks still falls through to the stack. */
+@font-face {
+  font-family: "ABC Areal Fallback";
+  src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("LiberationSans-Regular"), local("Arimo");
+  unicode-range: U+20-7E, U+A0-AB, U+AE-B4, U+B6-137, U+139-148, U+14A-17E, U+2013-2014, U+2018-201A, U+201C-201E,
+    U+2020-2022, U+2026, U+2030, U+2039-203A, U+20AC, U+2122, U+2190-2193, U+2212;
+  size-adjust: 100.49%;
+  ascent-override: 87.37%;
+  descent-override: 20.9%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: "ABC Areal Mono Fallback";
+  src: local("Menlo"), local("Menlo-Regular"), local("DejaVu Sans Mono"), local("DejaVuSansMono"),
+    local("Courier New"), local("CourierNewPSMT");
+  unicode-range: U+20-7E, U+A0-AB, U+AE-B4, U+B6-137, U+139-148, U+14A-17E, U+2013-2014, U+2018-201A, U+201C-201E,
+    U+2020-2022, U+2026, U+2030, U+2039-203A, U+20AC, U+2122, U+2190-2193, U+2212;
+  size-adjust: 101.32%;
+  ascent-override: 86.66%;
+  descent-override: 20.73%;
+  line-gap-override: 0%;
+}
 
 /* ── Light ───────────────────────────────────────────────────────────────── */
 :root {
@@ -453,8 +479,8 @@
 
 /* ── Theme mapping ───────────────────────────────────────────────────────── */
 @theme inline {
-  --font-sans: "ABC Areal", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "ABC Areal Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "ABC Areal", "ABC Areal Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "ABC Areal Mono", "ABC Areal Mono Fallback", ui-monospace, "SF Mono", Menlo, monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
