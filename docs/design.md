@@ -321,14 +321,13 @@ Only these, and they win over anything below:
      moment you press send (the outbox) through the server's acceptance and the classifier's pass over the task's
      `inbox`, until it is routed into the task (steered into the running turn, a fix, a follow-up, a revised plan),
      and for a round that started from the queue until the round's first run starts (`isRoundDelivering` in
-     `lib/tasks/message-queue.ts`). No text: the bubble, border included, is at 50% opacity, and a blue light
+     `lib/tasks/message-queue.ts`). No text: the bubble stays at full opacity, and a blue light
      travels around its border (`DeliveryEdge`, the `message-delivery` classes in `app.css`): a 1px ring masked over
-     the border, outside the dimmed bubble so it keeps its strength, a conic gradient of the accent (`primary-4`, in
+     the border, a conic gradient of the accent (`primary-4`, in
      both themes) with a soft tail, turning once every 2.4s on `transform` alone, linear like a spinner since it
-     loops. It fades in. Once the message is delivered the light fades out and the bubble eases to full opacity,
-     both over 400ms (`useSettling`, `SETTLE_MS`; the bubble's `transition-opacity duration-400`) on the strong
-     ease-out, so only opacity and transform ever animate. Under reduced motion the bubble is still at 50% and the
-     ring is a still `primary-4` border, and the bubble turns opaque at once. "Sending" is in an `sr-only` span.
+     loops. It fades in. Once the message is delivered the light fades out over 400ms (`useSettling`, `SETTLE_MS`) on the strong
+     ease-out, so only opacity and transform ever animate. Under reduced motion the ring is a still `primary-4`
+     border. "Sending" is in an `sr-only` span.
      The queue docked above the composer keeps its own look.
    - **Queued** (`MessageQueue`, `components/chat/message-queue.tsx`, over `listQueuedMessages`): a message the
      classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
