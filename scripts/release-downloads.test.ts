@@ -6,11 +6,12 @@ import {
   type DownloadRelease,
   describeDownloadUpload,
   listPointerUploads,
-  MAX_UPLOAD_BYTES,
   parseDownloadRelease,
   parseStoredPointer,
+  parseTokenId,
+  R2_ACCOUNT_ID,
   resolveChannelUpdates,
-  resolveObjectPath,
+  resolveR2Credentials,
 } from './release-downloads.ts';
 
 const SHA = 'b'.repeat(64);
@@ -79,7 +80,7 @@ describe('assertDownloadFile', () => {
     expect(() => assertDownloadFile(releaseOf('v1.0.0'), { size: 178563557, sha256: SHA })).not.toThrow();
   });
 
-  it('refuses a file of another size or digest, or one too large to upload', () => {
+  it('refuses a file of another size or digest', () => {
     const release = releaseOf('v1.0.0');
     for (const file of [
       { size: 1, sha256: SHA },
@@ -87,30 +88,42 @@ describe('assertDownloadFile', () => {
     ]) {
       expect(() => assertDownloadFile(release, file)).toThrow('is not the file GitHub describes');
     }
-    const huge = { ...release, pointer: { ...release.pointer, size: MAX_UPLOAD_BYTES + 1 } };
-    expect(() => assertDownloadFile(huge, { size: MAX_UPLOAD_BYTES + 1, sha256: SHA })).toThrow(
-      'wrangler uploads at most'
-    );
   });
 });
 
 describe('parseStoredPointer', () => {
-  it('reads the pointer wrangler printed', () => {
-    const stdout = JSON.stringify(pointerOf('1.0.0'));
-    expect(parseStoredPointer({ exitCode: 0, stdout, stderr: '' })).toEqual(pointerOf('1.0.0'));
+  it('reads the pointer stored in the bucket', () => {
+    expect(parseStoredPointer(JSON.stringify(pointerOf('1.0.0')))).toEqual(pointerOf('1.0.0'));
   });
 
   it('is null for a missing or unreadable pointer, so the release writes a new one', () => {
-    const missing = { exitCode: 1, stdout: '', stderr: '✘ [ERROR] The specified key does not exist.' };
-    expect(parseStoredPointer(missing)).toBeNull();
-    expect(parseStoredPointer({ exitCode: 0, stdout: 'not json', stderr: '' })).toBeNull();
-    expect(parseStoredPointer({ exitCode: 0, stdout: '{}', stderr: '' })).toBeNull();
+    expect(parseStoredPointer(null)).toBeNull();
+    expect(parseStoredPointer('not json')).toBeNull();
+    expect(parseStoredPointer('{}')).toBeNull();
+  });
+});
+
+describe('the bucket credentials', () => {
+  it('takes the token id from the account token check', () => {
+    expect(parseTokenId({ success: true, result: { id: 'abc', status: 'active' } })).toBe('abc');
   });
 
-  it('throws on any other failure, so a token without R2 access stops the upload', () => {
-    expect(() =>
-      parseStoredPointer({ exitCode: 1, stdout: '', stderr: ' Authentication error [code: 10000]\n' })
-    ).toThrow('Reading a channel pointer failed: Authentication error [code: 10000]');
+  it('refuses a token the account does not know, naming the account', () => {
+    for (const answer of [
+      null,
+      { success: false, errors: [] },
+      { success: true, result: {} },
+      { success: true },
+    ]) {
+      expect(() => parseTokenId(answer)).toThrow(`not an active token of the account ${R2_ACCOUNT_ID}`);
+    }
+  });
+
+  it('uses the token id as the access key and the SHA-256 of the token as the secret, as R2 does', () => {
+    expect(resolveR2Credentials('secret', 'abc')).toEqual({
+      accessKeyId: 'abc',
+      secretAccessKey: '2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b',
+    });
   });
 });
 
@@ -139,12 +152,9 @@ describe('listPointerUploads', () => {
   it('writes the release pointer to each channel it updates', () => {
     const release = releaseOf('v1.0.0');
     expect(listPointerUploads(release, ['stable', 'beta'])).toEqual([
-      { path: 'shinsa-releases/channels/stable.json', body: `${JSON.stringify(pointerOf('1.0.0'))}\n` },
-      { path: 'shinsa-releases/channels/beta.json', body: `${JSON.stringify(pointerOf('1.0.0'))}\n` },
+      { key: 'channels/stable.json', body: `${JSON.stringify(pointerOf('1.0.0'))}\n` },
+      { key: 'channels/beta.json', body: `${JSON.stringify(pointerOf('1.0.0'))}\n` },
     ]);
-    expect(resolveObjectPath(release.pointer.key)).toBe(
-      'shinsa-releases/releases/1.0.0/Shinsa-mac-arm64.dmg'
-    );
   });
 });
 

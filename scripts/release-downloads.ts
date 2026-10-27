@@ -14,21 +14,17 @@ export interface DownloadRelease {
   pointer: DownloadPointer;
 }
 
-export interface CommandResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}
-
 export type ChannelPointers = Record<Channel, DownloadPointer | null>;
 
 export const DOWNLOADS_BUCKET = 'shinsa-releases';
 
 export const RELEASE_VIEW_FIELDS = 'tagName,isDraft,isPrerelease,publishedAt,assets';
 
-export const MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
+export const R2_ACCOUNT_ID = 'e8563b02f2bf2b6a136f2781445a486f';
 
-const MISSING_KEY = 'The specified key does not exist';
+export const R2_ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+
+export const TOKEN_VERIFY_URL = `https://api.cloudflare.com/client/v4/accounts/${R2_ACCOUNT_ID}/tokens/verify`;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -63,20 +59,29 @@ export function assertDownloadFile(release: DownloadRelease, file: { size: numbe
   const { pointer, tag } = release;
   if (file.size !== pointer.size || file.sha256 !== pointer.sha256)
     throw new Error(`The downloaded ${DMG_NAME} of ${tag} is not the file GitHub describes.`);
-  if (file.size > MAX_UPLOAD_BYTES)
-    throw new Error(`${DMG_NAME} is ${file.size} bytes; wrangler uploads at most ${MAX_UPLOAD_BYTES}.`);
 }
 
-export function parseStoredPointer(result: CommandResult) {
-  if (result.exitCode === 0) {
-    try {
-      return parseDownloadPointer(JSON.parse(result.stdout));
-    } catch {
-      return null;
-    }
+export function parseStoredPointer(text: string | null) {
+  if (text === null) return null;
+  try {
+    return parseDownloadPointer(JSON.parse(text));
+  } catch {
+    return null;
   }
-  if (result.stderr.includes(MISSING_KEY)) return null;
-  throw new Error(`Reading a channel pointer failed: ${result.stderr.trim()}`);
+}
+
+export function parseTokenId(answer: unknown) {
+  const id = isRecord(answer) && isRecord(answer.result) ? answer.result.id : null;
+  if (!isRecord(answer) || answer.success !== true || typeof id !== 'string')
+    throw new Error(`CLOUDFLARE_API_TOKEN is not an active token of the account ${R2_ACCOUNT_ID}.`);
+  return id;
+}
+
+export function resolveR2Credentials(token: string, tokenId: string) {
+  return {
+    accessKeyId: tokenId,
+    secretAccessKey: new Bun.CryptoHasher('sha256').update(token).digest('hex'),
+  };
 }
 
 export function resolveChannelUpdates(release: DownloadRelease, current: ChannelPointers): Channel[] {
@@ -87,13 +92,9 @@ export function resolveChannelUpdates(release: DownloadRelease, current: Channel
   });
 }
 
-export function resolveObjectPath(key: string) {
-  return `${DOWNLOADS_BUCKET}/${key}`;
-}
-
 export function listPointerUploads(release: DownloadRelease, channels: Channel[]) {
   return channels.map((channel) => ({
-    path: resolveObjectPath(resolveChannelKey(channel)),
+    key: resolveChannelKey(channel),
     body: `${JSON.stringify(release.pointer)}\n`,
   }));
 }

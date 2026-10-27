@@ -117,11 +117,13 @@ uploads it to `shinsa-releases/releases/<version>/Shinsa-mac-arm64.dmg`, then wr
 `channels/stable.json` (a stable release) and `channels/beta.json` (every release), each only when the release is not
 older by semver than what it points at, so a stable release moves Beta too once it is newer and a stable hotfix below
 a running beta leaves Beta alone. The rules are `scripts/release-downloads.ts`, tested at 100%; the layout and how the
-site serves it are `apps/marketing/CLAUDE.md` → Deploy. It runs `wrangler r2 object put` from `apps/marketing`
-(whose `wrangler.jsonc` names the account) with the `CLOUDFLARE_API_TOKEN` secret, which needs **Workers R2 Storage:
-Edit** on the Overclock Studio account. Wrangler uploads at most 300 MiB in one object; the script stops with a
-clear error beyond that (the DMG is about 170 MB). Running it again for the same tag is safe, and running it by hand
-with a signed-in `wrangler` (`wrangler login`) backfills a release.
+site serves it are `apps/marketing/CLAUDE.md` → Deploy. It talks to R2's S3 API with the `CLOUDFLARE_API_TOKEN` secret, the
+**Shinsa CI** account token of Overclock Studio, which needs only **Workers R2 Storage Bucket Item Read** and **Write**
+on `shinsa-releases`. The script asks Cloudflare for the token's id (`/accounts/<id>/tokens/verify`) and signs in with
+the id as the access key and the token's SHA-256 as the secret, as R2 defines them; a bucket-scoped token works there
+and not on Cloudflare's REST object API, which `wrangler r2 object` uses. Large files go up in parts, so there is no
+size limit to watch. Running it again for the same tag is safe, and
+`CLOUDFLARE_API_TOKEN=… bun scripts/release-upload.ts v1.2.0` backfills a release by hand.
 
 If R2 cannot serve (no pointer yet, an error), the site redirects to the file on GitHub instead of showing a page, so
 a download always works.

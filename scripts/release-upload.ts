@@ -1,35 +1,40 @@
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { $ } from 'bun';
+import { $, S3Client } from 'bun';
 import { DMG_NAME, resolveChannelKey } from '../apps/marketing/src/worker/download.ts';
 import {
   assertDownloadFile,
+  DOWNLOADS_BUCKET,
   describeDownloadUpload,
   listPointerUploads,
   parseDownloadRelease,
   parseStoredPointer,
+  parseTokenId,
+  R2_ENDPOINT,
   RELEASE_VIEW_FIELDS,
   resolveChannelUpdates,
-  resolveObjectPath,
+  resolveR2Credentials,
+  TOKEN_VERIFY_URL,
 } from './release-downloads.ts';
 
 const tag = Bun.argv[2] ?? Bun.env.RELEASE_TAG;
 if (!tag) throw new Error('Name the release: bun scripts/release-upload.ts v1.2.0');
 const repository = Bun.env.GITHUB_REPOSITORY ?? 'shinsa-dev/shinsa';
-const marketing = new URL('../apps/marketing/', import.meta.url).pathname;
+const token = Bun.env.CLOUDFLARE_API_TOKEN;
+if (!token) throw new Error('Set CLOUDFLARE_API_TOKEN: a token with R2 access to the bucket.');
 const directory = mkdtempSync(join(tmpdir(), 'shinsa-release-'));
 
-async function requestPointer(key: string) {
-  const result = await $`bun x wrangler r2 object get ${resolveObjectPath(key)} --remote --pipe`
-    .cwd(marketing)
-    .quiet()
-    .nothrow();
-  return parseStoredPointer({
-    exitCode: result.exitCode,
-    stdout: result.stdout.toString(),
-    stderr: result.stderr.toString(),
-  });
+async function requestBucket() {
+  const answer = await fetch(TOKEN_VERIFY_URL, { headers: { Authorization: `Bearer ${token}` } });
+  const credentials = resolveR2Credentials(token as string, parseTokenId(await answer.json()));
+  return new S3Client({ ...credentials, bucket: DOWNLOADS_BUCKET, endpoint: R2_ENDPOINT });
+}
+
+async function requestPointer(bucket: S3Client, key: string) {
+  const file = bucket.file(key);
+  if (!(await file.exists())) return null;
+  return parseStoredPointer(await file.text());
 }
 
 async function requestSha256(path: string) {
@@ -45,20 +50,15 @@ try {
   await $`gh release download ${tag} --repo ${repository} --pattern ${DMG_NAME} --dir ${directory}`;
   const dmg = join(directory, DMG_NAME);
   assertDownloadFile(release, { size: Bun.file(dmg).size, sha256: await requestSha256(dmg) });
+  const bucket = await requestBucket();
   const current = {
-    stable: await requestPointer(resolveChannelKey('stable')),
-    beta: await requestPointer(resolveChannelKey('beta')),
+    stable: await requestPointer(bucket, resolveChannelKey('stable')),
+    beta: await requestPointer(bucket, resolveChannelKey('beta')),
   };
-  await $`bun x wrangler r2 object put ${resolveObjectPath(release.pointer.key)} --file ${dmg} --content-type application/x-apple-diskimage --remote`.cwd(
-    marketing
-  );
+  await bucket.write(release.pointer.key, Bun.file(dmg), { type: 'application/x-apple-diskimage' });
   const channels = resolveChannelUpdates(release, current);
   for (const upload of listPointerUploads(release, channels)) {
-    const file = join(directory, 'pointer.json');
-    writeFileSync(file, upload.body);
-    await $`bun x wrangler r2 object put ${upload.path} --file ${file} --content-type application/json --remote`.cwd(
-      marketing
-    );
+    await bucket.write(upload.key, upload.body, { type: 'application/json' });
   }
   const summary = describeDownloadUpload(release, channels, current);
   if (Bun.env.GITHUB_STEP_SUMMARY)
