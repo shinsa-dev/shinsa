@@ -5,6 +5,7 @@ import {
   createSettings,
   type FastModeAvailability,
   type Settings,
+  type UsageRate,
 } from '@shinsa/core';
 import {
   AGENT_GROUPS,
@@ -14,6 +15,7 @@ import {
   describeFollowedRole,
   describeGroupSelects,
   describeRoleSelects,
+  describeUsageLimitNote,
   FAST_MODE_ITEMS,
   FAST_MODE_UNAVAILABLE,
   FIX_ROUND_ITEMS,
@@ -248,25 +250,44 @@ describe('the usage limit', () => {
     expect(parseUsageLimit('20')).toBe(20);
   });
 
-  it('shows the cost limit only while it is on, or when no account reports a weekly limit', () => {
-    const weekly = createAccount({
-      id: 'weekly',
-      usage: {
-        status: 'ok',
-        windows: [
-          { id: 'seven_day', kind: 'weekly', label: 'Weekly', model: null, usedPercent: 10, resetsAt: null },
-        ],
-        detail: null,
-        checkedAt: 1,
-        source: 'read',
-      },
-    });
-    const keyed: AccountSummary = createAccount({ id: 'api' });
-    expect(needsCostLimit(settings(), [weekly, keyed])).toBe(false);
-    expect(needsCostLimit(settings({ taskBudgetUsd: 5 }), [weekly])).toBe(true);
-    expect(needsCostLimit(settings(), [keyed])).toBe(true);
-    expect(needsCostLimit(settings(), [])).toBe(true);
-    expect(needsCostLimit(settings(), null)).toBe(false);
+  const weekly = createAccount({
+    id: 'weekly',
+    usage: {
+      status: 'ok',
+      windows: [
+        { id: 'seven_day', kind: 'weekly', label: 'Weekly', model: null, usedPercent: 10, resetsAt: null },
+      ],
+      detail: null,
+      checkedAt: 1,
+      source: 'read',
+    },
+  });
+  const keyed: AccountSummary = createAccount({ id: 'api' });
+  const rate = (trusted: boolean): UsageRate => ({ percentPerUsd: 0.2, tasks: 5, trusted });
+  const learned = new Map([['account:weekly', rate(true)]]);
+
+  it('shows the cost limit while it is on, when no account reports a weekly limit, or while one is learning', () => {
+    expect(needsCostLimit(settings(), [weekly, keyed], learned)).toBe(false);
+    expect(needsCostLimit(settings({ taskBudgetUsd: 5 }), [weekly], learned)).toBe(true);
+    expect(needsCostLimit(settings(), [keyed], learned)).toBe(true);
+    expect(needsCostLimit(settings(), [], null)).toBe(true);
+    expect(needsCostLimit(settings(), null, learned)).toBe(false);
+    expect(needsCostLimit(settings(), [weekly], new Map([['account:weekly', rate(false)]]))).toBe(true);
+    expect(needsCostLimit(settings(), [weekly], new Map())).toBe(true);
+    expect(needsCostLimit(settings(), [weekly], null)).toBe(false);
+  });
+
+  it('says the usage limit is an estimate on a learning account, only while no cost limit holds instead', () => {
+    const usageOnly = settings({ taskUsageLimit: 10 });
+    expect(describeUsageLimitNote(usageOnly, [weekly], new Map())).toBe(
+      'While Shinsa learns an account’s rate, the usage limit counts an early estimate, and nothing before the first measured step. A cost limit holds from the start.'
+    );
+    expect(describeUsageLimitNote(usageOnly, [weekly], learned)).toBeNull();
+    expect(
+      describeUsageLimitNote(settings({ taskUsageLimit: 10, taskBudgetUsd: 5 }), [weekly], null)
+    ).toBeNull();
+    expect(describeUsageLimitNote(settings(), [weekly], new Map())).toBeNull();
+    expect(describeUsageLimitNote(usageOnly, null, new Map())).toBeNull();
   });
 });
 

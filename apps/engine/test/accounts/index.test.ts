@@ -705,14 +705,34 @@ describe('choosing the account for an attempt', () => {
     });
   });
 
-  test('a run starts from the cached weekly reading and ends on a fresh one, so a short run is still charged', async () => {
+  test('a run starts from the cached weekly reading and ends on a fresh one, each with its time and reset', async () => {
     const world = createWorld({ registry: true });
     const account = await addAccount(world, 'weekly@example.com', 20);
     await world.accounts.refresh();
     world.usage.set('token-weekly@example.com', windows(30, 24));
-    expect(await world.accounts.readWeeklyPercent(account.id, false)).toBe(20);
-    expect(await world.accounts.readWeeklyPercent(account.id, true)).toBe(24);
-    expect(await world.accounts.readWeeklyPercent('gone', true)).toBeNull();
+    const resetsAt = Date.parse('2030-01-01T00:00:00Z');
+    expect(await world.accounts.readWeeklyReading(account.id, false)).toMatchObject({
+      percent: 20,
+      resetsAt,
+    });
+    const fresh = await world.accounts.readWeeklyReading(account.id, true);
+    expect(fresh).toEqual({ percent: 24, at: expect.any(Number), resetsAt });
+    expect(await world.accounts.readWeeklyReading('gone', true)).toBeNull();
+  });
+
+  test('a weekly value a session pushed is read again, since its time is not known', async () => {
+    const world = createWorld({ registry: true });
+    const account = await addAccount(world, 'pushed@example.com', 20);
+    await world.accounts.refresh();
+    world.accounts.limits.recordPush(account.id, {
+      kind: 'rate_limit',
+      status: 'allowed_warning',
+      limit: 'seven_day',
+      utilization: 0.31,
+      resetsAt: null,
+    });
+    world.usage.set('token-pushed@example.com', windows(30, 26));
+    expect(await world.accounts.readWeeklyReading(account.id, false)).toMatchObject({ percent: 26 });
   });
 
   test('a model window counts only for runs on that model', async () => {
@@ -1317,10 +1337,10 @@ describe('a provider with a sign-in of its own (Codex)', () => {
   test('a run on it starts from the cached weekly reading and ends on a fresh one; an unknown provider reads nothing', async () => {
     const codex = createCodexSource([codexReading(40), codexReading(45)]);
     const world = createWorld({ registry: true, providerUsage: [codex.source] });
-    expect(await world.accounts.readProviderWeeklyPercent('codex', false)).toBe(40);
-    expect(await world.accounts.readProviderWeeklyPercent('codex', false)).toBe(40);
-    expect(await world.accounts.readProviderWeeklyPercent('codex', true)).toBe(45);
-    expect(await world.accounts.readProviderWeeklyPercent('gemini', true)).toBeNull();
+    expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
+    expect(await world.accounts.readProviderWeeklyReading('codex', false)).toMatchObject({ percent: 40 });
+    expect(await world.accounts.readProviderWeeklyReading('codex', true)).toMatchObject({ percent: 45 });
+    expect(await world.accounts.readProviderWeeklyReading('gemini', true)).toBeNull();
   });
 
   test('fast mode is read from the provider, or from the Claude account a run leases', async () => {

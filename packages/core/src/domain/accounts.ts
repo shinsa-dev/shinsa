@@ -5,6 +5,12 @@ export interface RunAccount {
   email: string | null;
 }
 
+export interface WeeklyReading {
+  percent: number;
+  at: number;
+  resetsAt: number | null;
+}
+
 export type AccountSwitchReason = 'usage_limit' | 'signed_out' | 'headroom' | 'bound';
 
 export type UsageWaitStatus = 'armed' | 'resumed';

@@ -231,8 +231,14 @@ describe('a walkthrough’s testing as a plain list', () => {
 
   test('is read from logs older than the walkthrough guide only', () => {
     expect(listLegacyEventTypes(0)).toContain('task.answered');
-    expect(listLegacyEventTypes(2)).toEqual(['phase.completed', 'work.submitted', 'walkthrough.revised']);
-    expect(listLegacyEventTypes(3)).toEqual([]);
+    expect(listLegacyEventTypes(2)).toEqual([
+      'phase.completed',
+      'work.submitted',
+      'walkthrough.revised',
+      'run.metered',
+    ]);
+    expect(listLegacyEventTypes(3)).toEqual(['run.metered']);
+    expect(listLegacyEventTypes(4)).toEqual([]);
   });
 
   test('is rewritten on boot in a log already in the agent shape', () => {
@@ -248,7 +254,35 @@ describe('a walkthrough’s testing as a plain list', () => {
     expect(log.replaceLegacyEvents()).toBe(1);
     expect(log.replaceLegacyEvents()).toBe(0);
     log.close();
-    expect(readStoredLog(path).version).toBe(3);
+    expect(readStoredLog(path).version).toBe(4);
+  });
+});
+
+describe('the weekly usage a metered run recorded as one number', () => {
+  const usage = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.5 };
+
+  test('is dropped, since it was the account’s movement and not the run’s share', () => {
+    expect(
+      rewrite(
+        { type: 'run.metered', runId: 'r', usage, weeklyPercent: 77 },
+        { type: 'run.metered', runId: 'r', usage }
+      )
+    ).toEqual([{ seq: 1, type: 'run.metered', event: { type: 'run.metered', runId: 'r', usage } }]);
+  });
+
+  test('is rewritten on boot in a log of the walkthrough guide’s version', () => {
+    const path = writeLegacyLog([{ type: 'run.metered', runId: 'r', usage, weeklyPercent: 3 }]);
+    const db = new Database(path);
+    db.run('PRAGMA user_version = 3');
+    db.close();
+    const log = new EventLog(path);
+    expect(log.replaceLegacyEvents()).toBe(1);
+    log.close();
+    const stored = readStoredLog(path);
+    expect(stored.version).toBe(4);
+    expect(stored.rows).toEqual([
+      { seq: 1, type: 'run.metered', payload: JSON.stringify({ type: 'run.metered', runId: 'r', usage }) },
+    ]);
   });
 });
 

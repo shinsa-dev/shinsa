@@ -16,10 +16,12 @@ import {
   resolveDelegationLimit,
   resolveFastModeAvailability,
   resolveIdleCompaction,
+  resolveMeterWindow,
   resolveModelLabel,
   resolveProviderLabel,
   resolveWeeklyPercent,
   type Settings,
+  type UsageRate,
 } from '@shinsa/core';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { resolveProviderIcon } from '@/lib/accounts/account.ts';
@@ -215,9 +217,44 @@ export const USAGE_LIMIT_TITLE = 'Usage limit per task';
 
 export const COST_LIMIT_TITLE = 'Cost limit per task';
 
-export function needsCostLimit(settings: Settings, accounts: AccountSummary[] | null) {
+type UsageRates = Map<string, UsageRate | null>;
+
+function isLearningRate(account: AccountSummary, rates: UsageRates) {
+  const window = resolveMeterWindow({
+    account: { id: account.id, email: account.email },
+    provider: 'claude',
+  });
+  return rates.get(window)?.trusted !== true;
+}
+
+function listWeeklyAccounts(accounts: AccountSummary[]) {
+  return accounts.filter((account) => resolveWeeklyPercent(account.usage) !== null);
+}
+
+function hasLearningAccount(accounts: AccountSummary[], rates: UsageRates | null) {
+  return rates !== null && listWeeklyAccounts(accounts).some((account) => isLearningRate(account, rates));
+}
+
+export function needsCostLimit(
+  settings: Settings,
+  accounts: AccountSummary[] | null,
+  rates: UsageRates | null
+) {
   if (settings.taskBudgetUsd != null) return true;
-  return accounts !== null && !accounts.some((account) => resolveWeeklyPercent(account.usage) !== null);
+  if (accounts === null) return false;
+  return listWeeklyAccounts(accounts).length === 0 || hasLearningAccount(accounts, rates);
+}
+
+const USAGE_LIMIT_LEARNING =
+  'While Shinsa learns an account’s rate, the usage limit counts an early estimate, and nothing before the first measured step. A cost limit holds from the start.';
+
+export function describeUsageLimitNote(
+  settings: Settings,
+  accounts: AccountSummary[] | null,
+  rates: UsageRates | null
+) {
+  if (settings.taskUsageLimit == null || settings.taskBudgetUsd != null || accounts === null) return null;
+  return hasLearningAccount(accounts, rates) ? USAGE_LIMIT_LEARNING : null;
 }
 
 const USAGE_LIMITS = [5, 10, 20, 30, 50];

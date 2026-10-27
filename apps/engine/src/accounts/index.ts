@@ -13,7 +13,7 @@ import {
   resolveAgentModel,
   resolveCandidateSpentUntil,
   resolveSpentUntil,
-  resolveWeeklyPercent,
+  resolveWeeklyReading,
 } from '@shinsa/core';
 import type { AccountLease, AccountLeaseRequest, RejectionVerdict, RunRejection } from '../agents/index.ts';
 import { resolveClaudeExecutable } from '../agents/providers/claude/executable.ts';
@@ -407,15 +407,17 @@ export class Accounts {
     return Promise.resolve(this.#rotation.lease(request));
   }
 
-  async readWeeklyPercent(accountId: string, force: boolean) {
-    await this.limits.refresh([accountId], force);
-    return resolveWeeklyPercent(this.limits.snapshot(accountId));
+  async readWeeklyReading(accountId: string, force: boolean) {
+    const pushed = this.limits.snapshot(accountId).source === 'push';
+    await this.limits.refresh([accountId], force || pushed);
+    return resolveWeeklyReading(this.limits.snapshot(accountId));
   }
 
-  async readProviderWeeklyPercent(provider: string, force: boolean) {
+  async readProviderWeeklyReading(provider: string, force: boolean) {
     if (!this.#providerUsage.has(provider)) return null;
-    await this.providerLimits.refresh([provider], force);
-    return resolveWeeklyPercent(this.providerLimits.snapshot(provider));
+    const pushed = this.providerLimits.snapshot(provider).source === 'push';
+    await this.providerLimits.refresh([provider], force || pushed);
+    return resolveWeeklyReading(this.providerLimits.snapshot(provider));
   }
 
   async readFastMode(provider: string, accountId: string | null): Promise<FastModeAvailability> {

@@ -19,9 +19,9 @@ import {
   resolveAgentProvider,
   resolveContinuePrompt,
   resolveTaskProject,
-  resolveWeeklyUsed,
   type ShinsaCommand,
   type Task,
+  type WeeklyReading,
 } from '@shinsa/core';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
 import { isSameExtensionSet, type SessionExtensionSource } from '../extensions/index.ts';
@@ -546,7 +546,7 @@ export class RunSupervisor {
   async #attempt(turn: Turn, plan: TurnPlan) {
     const { run, active, provider } = turn;
     const { attemptId, account } = await this.#recordAttempt(turn, plan);
-    const weeklyBefore = this.#leasing.readWeeklyPercent(run.id, active.lease, provider.id, false);
+    const weeklyBefore = this.#leasing.readWeeklyReading(run.id, active.lease, provider.id, false);
     const pin = plan.resume ? this.#extensionSets.select(plan.resume) : null;
     const extensions = await this.#resolveExtensions(run, pin);
     const loader = extensions ? (this.#extensions?.createLoader?.(extensions) ?? null) : null;
@@ -605,14 +605,13 @@ export class RunSupervisor {
     attemptId: string,
     sessionId: string | null,
     result: AgentSessionResult,
-    weeklyBefore: Promise<number | null>
+    weeklyBefore: Promise<WeeklyReading | null>
   ) {
     if (result.usage) {
-      const weekly = resolveWeeklyUsed(
-        await weeklyBefore,
-        await this.#leasing.readWeeklyPercent(run.id, active.lease, provider.id, true)
-      );
-      await this.#meter(run.id, sessionId, result.usage, `run.meter:${attemptId}`, weekly);
+      const before = await weeklyBefore;
+      const after = await this.#leasing.readWeeklyReading(run.id, active.lease, provider.id, true);
+      const readings = [before, after].filter((reading) => reading !== null);
+      await this.#meter(run.id, sessionId, result.usage, `run.meter:${attemptId}`, readings);
     }
     for (const subagent of result.subagentUsage ?? []) {
       const id = `run.meter:${attemptId}:${subagent.sessionId}`;
@@ -650,11 +649,11 @@ export class RunSupervisor {
     sessionId: string | null,
     usage: RunUsage,
     id: string,
-    weekly: number | null = null
+    readings: WeeklyReading[] = []
   ) {
     try {
       await this.#engine.dispatch(
-        { type: 'run.meter', runId, sessionId, usage, ...(weekly ? { weeklyPercent: weekly } : {}) },
+        { type: 'run.meter', runId, sessionId, usage, ...(readings.length > 0 ? { readings } : {}) },
         { id }
       );
     } catch (error) {

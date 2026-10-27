@@ -1,4 +1,4 @@
-import type { AccountUsage, Settings } from '@shinsa/core';
+import type { AccountUsage, Settings, UsageRate } from '@shinsa/core';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { PercentDialog } from '@/components/accounts/percent-dialog.tsx';
@@ -21,6 +21,7 @@ import { describeUsageDetail, listUsageRows, type UsageRow } from '@/lib/account
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import {
   COST_LIMIT_TITLE,
+  describeUsageLimitNote,
   listBudgetItems,
   listUsageLimitItems,
   needsCostLimit,
@@ -31,7 +32,7 @@ import {
   USAGE_LIMIT_TITLE,
   updateSettings,
 } from '@/lib/settings.ts';
-import { SETTING_ROW, SettingRow, SettingsGroup } from './group.tsx';
+import { SETTING_ROW, SettingRow, SettingsEmpty, SettingsGroup } from './group.tsx';
 
 function WindowRow({ row }: { row: UsageRow }) {
   return (
@@ -87,8 +88,15 @@ function SwitchAtField({ settings }: { settings: Settings }) {
   );
 }
 
-export function LimitSettings({ settings }: { settings: Settings }) {
-  const accounts = useAccounts();
+export function LimitSettings({
+  settings,
+  rates,
+}: {
+  settings: Settings;
+  rates: Map<string, UsageRate | null> | null;
+}) {
+  const accounts = useAccounts()?.accounts ?? null;
+  const note = describeUsageLimitNote(settings, accounts, rates);
   return (
     <SettingsGroup title='Limits'>
       <SettingRow title={USAGE_LIMIT_TITLE}>
@@ -99,7 +107,8 @@ export function LimitSettings({ settings }: { settings: Settings }) {
           onValueChange={(value) => void updateSettings({ taskUsageLimit: parseUsageLimit(value) })}
         />
       </SettingRow>
-      {needsCostLimit(settings, accounts?.accounts ?? null) && (
+      {note && <SettingsEmpty>{note}</SettingsEmpty>}
+      {needsCostLimit(settings, accounts, rates) && (
         <SettingRow title={COST_LIMIT_TITLE}>
           <SelectField
             label={COST_LIMIT_TITLE}
