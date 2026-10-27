@@ -168,6 +168,62 @@ describe('the /ui gallery', () => {
         name: 'Stop “Review the session cleanup” and what it delegated',
       })
     );
+    const review = findSection('shinsa-review');
+    const verdicts = review.getAllByRole('tablist', { name: 'Verdict' });
+    expect(verdicts).toHaveLength(3);
+    fireEvent.click(review.getByRole('button', { name: 'Collapse disputed' }));
+    expect(review.queryByText('Kept the old keys')).toBeNull();
+    const [blocking] = verdicts;
+    if (!blocking) throw new Error('No verdict.');
+    expect(within(blocking).getByRole('tab', { name: 'Fix' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(blocking).getByRole('tab', { name: 'Dismiss' }));
+    expect(within(blocking).getByRole('tab', { name: 'Dismiss' }).getAttribute('aria-selected')).toBe('true');
+    await expectNothingSent();
+  });
+
+  it('offers Run in terminal only on the code blocks marked run, and Copy on every example', async () => {
+    await renderGallery();
+    const shinsa = findSection('shinsa');
+    const specimen = (label: RegExp) => within(shinsa.getByText(label).parentElement as HTMLElement);
+    const runnable = specimen(/^CodeBlock · its corner/);
+    expect(runnable.getAllByRole('button', { name: 'Run in terminal' })).toHaveLength(2);
+    expect(runnable.getAllByRole('button', { name: 'Copy' })).toHaveLength(3);
+    const examples = specimen(/^CodeBlock · an example/);
+    expect(examples.queryByRole('button', { name: 'Run in terminal' })).toBeNull();
+    expect(examples.getAllByRole('button', { name: 'Copy' })).toHaveLength(3);
+    await expectNothingSent();
+  });
+
+  it('shows How to test with what the tests cover and a step to try for each kind of target, running nothing', async () => {
+    await renderGallery();
+    const overview = findSection('shinsa-overview');
+    const panel = overview.getByText('Try it yourself').closest('section') as HTMLElement;
+    expect(within(panel).getByText('Covered by tests')).toBeTruthy();
+    expect(within(panel).getAllByText('You should see')).toHaveLength(4);
+    expect(
+      within(panel)
+        .getByRole('link', { name: 'http://localhost:5173/billing/invoices' })
+        .getAttribute('target')
+    ).toBe('_blank');
+    expect(within(panel).getByText('Billing → Invoices → the newest invoice')).toBeTruthy();
+    expect(within(panel).getByText('apps/api/src/webhooks/stripe.ts')).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Run in terminal' }));
+    await expectNothingSent();
+  });
+
+  it('ticks the checklist samples in place and draws a Markdown task list as read-only rows', async () => {
+    await renderGallery();
+    const checklist = findSection('checklist');
+    expect(checklist.getAllByText('1 of 3 done').length).toBeGreaterThan(0);
+    fireEvent.click(checklist.getByRole('checkbox', { name: 'Publish the release notes' }));
+    await waitFor(() => expect(checklist.getByText('2 of 3 done')).toBeTruthy());
+    const flag = () => checklist.getByRole('checkbox', { name: 'Turn on the invoices flag' });
+    expect(flag().hasAttribute('data-disabled')).toBe(true);
+    fireEvent.click(checklist.getByRole('checkbox', { name: 'Run the migration' }));
+    await waitFor(() => expect(flag().hasAttribute('data-disabled')).toBe(false));
+    fireEvent.click(checklist.getAllByRole('button', { name: 'Run in terminal' })[0] as HTMLElement);
+    expect(checklist.getAllByText('Check the upgrade notes')).toHaveLength(2);
+    expect(checklist.getAllByRole('img', { name: 'Done' }).length).toBeGreaterThan(4);
     await expectNothingSent();
   });
 

@@ -46,7 +46,7 @@ function isAtMergeGate(state: ShinsaState, task: Task) {
   return (
     task.stage === 'awaiting_merge' &&
     listOpenGates(state, task.id).some((gate) => gate.type === 'merge') &&
-    resolveOperationTiming(resolveTaskPipeline(task)) !== 'after_merge'
+    resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge'
   );
 }
 

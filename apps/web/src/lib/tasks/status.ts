@@ -11,6 +11,7 @@ import {
 import type { IconName } from '@shinsa/ui/components/icon';
 import { STAGE_ICON, STAGE_LABEL, STAGE_TONE } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
+import { describePostMergeStatus, describePreMergeStatus } from '@/lib/review/merge-steps.ts';
 import { ROADMAP_GROUP, resolveRoadmapGroup } from '@/lib/tasks/roadmap.ts';
 
 export interface Status {
@@ -38,6 +39,7 @@ const GATE_GLYPH: Record<GateType, Glyph> = {
   failure: { icon: 'IconPause', tone: 'orange' },
   configuration: { icon: 'IconToolbox', tone: 'orange' },
   sign_in: { icon: 'IconUserKey', tone: 'orange' },
+  post_merge: { icon: 'IconChecklist', tone: 'amber' },
 };
 
 const GATE_STATUS: Record<GateType, Status> = {
@@ -51,6 +53,7 @@ const GATE_STATUS: Record<GateType, Status> = {
   failure: { label: 'Paused', tone: 'orange' },
   configuration: { label: 'Setup incomplete', tone: 'orange' },
   sign_in: { label: 'Sign in needed', tone: 'orange' },
+  post_merge: { label: 'Post-merge', tone: 'amber' },
 };
 
 const WAITING_TO_CHECK_IN: Status = { label: 'Waiting to check in again', tone: 'blue' };
@@ -85,6 +88,9 @@ function isWaitingForDelegations(state: ShinsaState, task: Task) {
 
 export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   const gate = selectLeadGate(state, task);
+  if (gate?.type === 'post_merge') return { label: describePostMergeStatus(task), tone: 'amber' };
+  const before = gate?.type === 'merge' ? describePreMergeStatus(task) : null;
+  if (before) return { label: before, tone: 'amber' };
   if (gate) return resolveGateStatus(gate);
   if (task.monitor?.status === 'armed') return WAITING_TO_CHECK_IN;
   if (task.usageWait?.status === 'armed') return WAITING_FOR_USAGE;

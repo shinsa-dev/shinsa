@@ -81,7 +81,7 @@ describe('task shapes', () => {
     expect(validatePipeline(after)).toEqual([]);
     expect(validatePipeline(['investigate', 'your_ok', ...after])).toEqual([]);
     expect(resolveOperationTiming(before)).toBe('before_build');
-    expect(resolveOperationTiming(after)).toBe('after_merge');
+    expect(resolveOperationTiming(after)).toBe('post_merge');
     expect(resolveOperationTiming(SHAPE_PIPELINES.operation)).toBe('alone');
     expect(resolveOperationTiming(CHANGE)).toBeNull();
     expect(resolveWorkStep(before)).toBe('operate');
@@ -90,7 +90,7 @@ describe('task shapes', () => {
   });
 
   test('an operation never runs in the middle of a change', () => {
-    const placed = 'An operation runs right after the plan, or last, after the merge.';
+    const placed = 'An operation runs right after the plan, or after the merge, before your steps after it.';
     expect(validatePipeline(['plan', 'build', 'operate', ...REVIEW_TAIL])).toContain(placed);
     expect(
       validatePipeline([
@@ -278,5 +278,12 @@ describe('whether a task’s steps are settled', () => {
     expect(resolveShapeState({ stage: 'building', auto: AUTO, pipeline: [...CHANGE], plan: null })).toBe(
       'settled'
     );
+  });
+
+  test('the agent never composes your steps around the merge; Shinsa adds them from the work report', () => {
+    expect(validateComposition(FRESH, [...CHANGE.slice(0, -1), 'pre_merge', 'merge', 'post_merge'])).toEqual([
+      'Shinsa adds `pre_merge` and `post_merge` from the steps around the merge in your work report; leave them out.',
+    ]);
+    expect(resolvePresetOf([...CHANGE, 'post_merge'])).toBe('change');
   });
 });

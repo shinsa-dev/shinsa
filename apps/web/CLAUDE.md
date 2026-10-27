@@ -38,7 +38,8 @@ src/
 │                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once), code.tsx (the editor, its diffs and Go to
 │                        file) and settings.tsx (the feature pieces in
 │                        each state), samples.ts, sample-accounts.ts, sample-delegations.ts, sample-extensions.ts,
-│                        sample-versions.ts, sample-code.ts and sample-overview.ts (their sample data; samples.ts also has the toast every action
+│                        sample-versions.ts, sample-code.ts, sample-evidence.ts, sample-overview.ts and sample-merge-steps.ts (their sample data; merge-steps.tsx,
+│                        the steps around the merge on the merge gate, a merged task and the Review tab, ticking in place; samples.ts also has the toast every action
 │                        shows; /ui never connects or sends anything)
 ├── components/<domain>/ Pieces a route composes, one folder per domain, files named for what they are:
 │                        task (header, facts with why each was chosen, menus, composer, review draft, the
@@ -97,7 +98,8 @@ src/
 │                        and title left, the action right), code-diff.tsx: CodeDiff, the one wrapper for every diff outside the Code
 │                        tab, with code-diff-view.tsx, the lazily loaded `@pierre/diffs` view; change-snippet.tsx: a
 │                        file's lines as a folded diff for spots and findings), controls (choice, choice buttons, select field, options trigger, copy
-│                        button), accounts (sign-in and percent dialogs, usage menu, bar and percent, refresh button, account
+│                        button, checklist.tsx: ItemChecklist and ChecklistBlock, every list of things to do on the
+│                        kit's Checklist), accounts (sign-in and percent dialogs, usage menu, bar and percent, refresh button, account
 │                        status, the account named with its provider, Run on account items)
 ├── hooks/               use-*.ts: client hooks shared by components (task view, busy action, the minute clock and
 │                        use-now, a per-second clock on one shared timer, attention: the tab title, Floaty tags,

@@ -60,8 +60,9 @@ export function describeFollowUpNote(step: DeliveringStep, role: Run['role'] | n
 }
 
 export function resolveNowKind(state: ShinsaState, task: Task, gate: Gate | undefined): NowKind {
-  if (gate) return 'gate';
-  if (listActiveRuns(state, task.id).length > 0) return 'work';
+  const working = listActiveRuns(state, task.id).length > 0;
+  if (gate && !(gate.type === 'post_merge' && working)) return 'gate';
+  if (working) return 'work';
   if (isUsageWaitArmed(task)) return 'usage_wait';
   if (task.monitor?.status === 'armed') return 'wait';
   return task.stage === 'done' && task.result ? 'result' : 'work';

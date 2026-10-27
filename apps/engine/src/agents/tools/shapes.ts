@@ -1,7 +1,7 @@
 import {
   type ChangeProposalInput,
+  COMPOSABLE_STEPS,
   type DeliveringStep,
-  PIPELINE_ORDER,
   SHAPE_LIMITS,
   type ShinsaEvent,
   STEP_SCHEMA,
@@ -14,7 +14,7 @@ import { limitedText, type ToolSpec } from './schema.ts';
 
 const L = SHAPE_LIMITS;
 
-const STEP_CATALOG = PIPELINE_ORDER.map(
+const STEP_CATALOG = COMPOSABLE_STEPS.map(
   (step) => `- \`${step}\` (${STEP_SCHEMA[step].title}): ${STEP_SCHEMA[step].exit}`
 ).join('\n');
 
@@ -105,8 +105,8 @@ export const SHAPE_TOOL_SPECS = {
         steps: {
           type: 'array',
           minItems: 1,
-          maxItems: PIPELINE_ORDER.length,
-          items: { type: 'string', enum: [...PIPELINE_ORDER] },
+          maxItems: COMPOSABLE_STEPS.length,
+          items: { type: 'string', enum: [...COMPOSABLE_STEPS] },
           description: `The steps in order, from these building blocks, each with what ends it:\n${STEP_CATALOG}\nYou cannot add steps or gates: you compose these, and set the plan's parameters in \`propose_plan\`. Shinsa checks the steps against its rules and returns every problem.`,
         },
         reason: limitedText('Why the task takes these steps, in one sentence.', L.reason),

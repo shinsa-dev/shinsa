@@ -146,3 +146,33 @@ describe('FileLink', () => {
     expect(view.queryByRole('link')).toBeNull();
   });
 });
+
+describe('Markdown task lists', () => {
+  it('draws a task list as read-only checklist rows, nested content kept', () => {
+    const text =
+      '- [x] Update the changelog\n- [ ] Check the notes\n  - read the migration\n\n1. one\n2. two';
+    const view = renderMarkdown(createWorld(), text);
+    expect(view.queryByRole('checkbox')).toBeNull();
+    const rows = view.container.querySelectorAll('[data-slot=checklist-item]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent?.trim()).toBe('Update the changelog');
+    expect(rows[0]?.querySelector('[data-slot=checklist-mark]')?.getAttribute('aria-label')).toBe('Done');
+    expect(rows[1]?.querySelector('[data-slot=checklist-mark]')?.getAttribute('aria-label')).toBe('Not done');
+    expect(rows[1]?.querySelector('ul li')?.textContent).toBe('read the migration');
+    expect(view.container.querySelectorAll('ol li')).toHaveLength(2);
+  });
+
+  it('reads a loose task list and a numbered one the same way', () => {
+    const view = renderMarkdown(createWorld(), '3. [x] First\n\n4. [ ] Second\n\n   More about it.');
+    const rows = view.container.querySelectorAll('[data-slot=checklist-item]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelector('[data-slot=checklist-mark]')?.getAttribute('aria-label')).toBe('Done');
+    expect(rows[1]?.textContent).toContain('More about it.');
+    expect(view.container.querySelector('input')).toBeNull();
+  });
+
+  it('keeps a numbered list starting where it says', () => {
+    const view = renderMarkdown(createWorld(), '3. three\n4. four');
+    expect(view.container.querySelector('ol')?.getAttribute('start')).toBe('3');
+  });
+});

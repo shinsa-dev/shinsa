@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { listWaitsOn, resolveFocusProject, resolveQueue } from '../../src/index.ts';
+import { type Gate, listWaitsOn, resolveFocusProject, resolveQueue, type Task } from '../../src/index.ts';
+import { resolveGateWords } from '../../src/queue/reasons.ts';
 import {
   approve,
   createHarness,
@@ -139,5 +140,12 @@ describe('what is working and what is waiting', () => {
     harness.send({ type: 'focus.change', projectId: side, until: 5_000 });
     expect(resolveFocusProject(harness.state, 4_999)).toBe(side);
     expect(resolveFocusProject(harness.state, 5_000)).toBeNull();
+  });
+
+  test('a gate after the merge says what is left', () => {
+    const gate = { type: 'post_merge', title: '2 post-merge steps left' } as Gate;
+    expect(resolveGateWords(gate).why(gate, {} as Task)).toBe(
+      'Merged, and the task is done once you do the steps it left for you: 2 post-merge steps left'
+    );
   });
 });

@@ -12,7 +12,7 @@ import {
 } from '../../src/index.ts';
 import { IMPACT, PLAN } from '../harness.ts';
 
-const AFTER_MERGE: PipelineStep[] = [...SHAPE_PIPELINES.change, 'operate'];
+const POST_MERGE: PipelineStep[] = [...SHAPE_PIPELINES.change, 'operate'];
 
 const UNVERIFIED_PLAN: PlanDocument = { ...PLAN, verification: [] };
 
@@ -31,16 +31,16 @@ describe('the verification rules', () => {
       ...new Set(listVerificationRules(steps).map((rule) => rule.applies)),
     ];
     expect(classes(SHAPE_PIPELINES.fix)).toEqual(['code']);
-    expect(classes(AFTER_MERGE)).toEqual(['code', 'operation']);
+    expect(classes(POST_MERGE)).toEqual(['code', 'operation']);
   });
 
   test('every rule names its class, scope and check, and the scoped ones apply only in their scope', () => {
     expect(new Set(VERIFICATION_RULES.map((rule) => rule.id)).size).toBe(VERIFICATION_RULES.length);
     const ids = (steps: readonly PipelineStep[]) => listVerificationRules(steps).map((rule) => rule.id);
     expect(ids(SHAPE_PIPELINES.operation)).not.toContain('operation.steps');
-    expect(ids(SHAPE_PIPELINES.operation)).not.toContain('operation.confirm_after_merge');
+    expect(ids(SHAPE_PIPELINES.operation)).not.toContain('operation.confirm_post_merge');
     expect(ids(['plan', 'operate', ...SHAPE_PIPELINES.change.slice(1)])).toContain('operation.steps');
-    expect(ids(AFTER_MERGE)).toContain('operation.confirm_after_merge');
+    expect(ids(POST_MERGE)).toContain('operation.confirm_post_merge');
   });
 
   test('a code change needs its checks and an independent agent review, each named on its own', () => {
@@ -65,7 +65,7 @@ describe('the verification rules', () => {
       'This task runs an operation, so the plan needs `impact`: what the operation changes and how much, the result of a dry run (or why none is possible) and how to undo it.',
     ]);
     expect(validatePlanRules(SHAPE_PIPELINES.operation, { ...UNVERIFIED_PLAN, impact: IMPACT })).toEqual([]);
-    expect(validatePlanRules(AFTER_MERGE, { ...PLAN, impact: IMPACT })).toEqual([
+    expect(validatePlanRules(POST_MERGE, { ...PLAN, impact: IMPACT })).toEqual([
       'This task also runs an operation: list its steps in `operation`, in order, each with how to check it worked. The `phases` are the code change only.',
     ]);
   });

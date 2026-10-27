@@ -142,13 +142,18 @@ export {
   TASK_PRIORITIES,
 } from './stages.ts';
 export {
+  COMPOSABLE_STEPS,
   describePlanGateRule,
   GATE_SCHEMA,
   type GateChoice,
   type GateDefinition,
   type GateStrength,
+  type HandOverStep,
+  type HandOverTimings,
   type HardGateDefinition,
+  isComposableStep,
   isWorktreeStep,
+  listComposedSteps,
   needsWorktree,
   PIPELINE_ORDER,
   type PipelineStep,
@@ -156,6 +161,7 @@ export {
   type PlanGateReason,
   type PlanGateRule,
   resolveGateDefinition,
+  resolveHandOverPipeline,
   type SoftGateDefinition,
   type SoftGateOutcome,
   type SoftGateType,
@@ -185,6 +191,9 @@ export {
 } from './tools.ts';
 export type * from './types.ts';
 export {
+  EVIDENCE_KINDS,
+  EVIDENCE_STAGES,
+  EVIDENCE_THEMES,
   listMissingEvidence,
   listVerificationRules,
   PLAN_EVIDENCE_KINDS,

@@ -1,6 +1,6 @@
 import {
+  COMPOSABLE_STEPS,
   listVerificationRules,
-  PIPELINE_ORDER,
   PLAN_EVIDENCE_KINDS,
   resolveTaskPipeline,
   STEP_SCHEMA,
@@ -15,14 +15,14 @@ function describeActor(actor: StepActor) {
 }
 
 export function describeStepCatalog() {
-  return PIPELINE_ORDER.map((step) => {
+  return COMPOSABLE_STEPS.map((step) => {
     const definition = STEP_SCHEMA[step];
     return `- \`${step}\` (${describeActor(definition.actor)}): ${definition.exit}`;
   }).join('\n');
 }
 
 export function describeStepRules() {
-  const needs = PIPELINE_ORDER.flatMap((step) => STEP_SCHEMA[step].needs.map((need) => need.rule));
+  const needs = COMPOSABLE_STEPS.flatMap((step) => STEP_SCHEMA[step].needs.map((need) => need.rule));
   const verification = VERIFICATION_RULES.filter((rule) => rule.check.kind === 'step').map(
     (rule) => rule.message
   );

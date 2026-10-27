@@ -1,5 +1,5 @@
 import { DomainError } from './errors.ts';
-import { type PipelineStep, validatePipeline } from './steps.ts';
+import { isComposableStep, listComposedSteps, type PipelineStep, validatePipeline } from './steps.ts';
 import type { Task } from './types.ts';
 import { validateVerification } from './verification.ts';
 
@@ -78,7 +78,7 @@ const CHANGE_TAIL: readonly PipelineStep[] = [
   'merge',
 ];
 
-export type OperationTiming = 'alone' | 'before_build' | 'after_merge';
+export type OperationTiming = 'alone' | 'before_build' | 'post_merge';
 
 export const SHAPE_PIPELINES: Record<TaskShape, readonly PipelineStep[]> = {
   answer: ['answer'],
@@ -103,7 +103,7 @@ export function resolveOperationTiming(steps: readonly PipelineStep[]): Operatio
   const index = steps.indexOf('operate');
   if (index === -1) return null;
   if (!steps.includes('build')) return 'alone';
-  return steps.indexOf('build') > index ? 'before_build' : 'after_merge';
+  return steps.indexOf('build') > index ? 'before_build' : 'post_merge';
 }
 
 const INQUIRY_NOUN: Record<InquiryStep, string> = {
@@ -125,6 +125,12 @@ export function validateComposition(
   steps: readonly PipelineStep[]
 ): string[] {
   const errors = [...validatePipeline(steps), ...validateVerification(steps)];
+  const handOver = steps.filter((step) => !isComposableStep(step));
+  if (handOver.length > 0) {
+    errors.push(
+      `Shinsa adds ${handOver.map((step) => `\`${step}\``).join(' and ')} from the steps around the merge in your work report; leave them out.`
+    );
+  }
   const ran = resolveInquiryStep(resolveTaskPipeline(task));
   if (ran && isInquiryDone(task, ran) && !steps.includes(ran)) {
     errors.push(`${INQUIRY_NOUN[ran]} already ran, so \`${ran}\` stays in the steps.`);
@@ -164,7 +170,8 @@ export function isSamePipeline(a: readonly PipelineStep[], b: readonly PipelineS
 }
 
 export function resolvePresetOf(steps: readonly PipelineStep[]): TaskShape | null {
-  return TASK_SHAPES.find((shape) => isSamePipeline(SHAPE_PIPELINES[shape], steps)) ?? null;
+  const composed = listComposedSteps(steps);
+  return TASK_SHAPES.find((shape) => isSamePipeline(SHAPE_PIPELINES[shape], composed)) ?? null;
 }
 
 export function resolveWorkStep(steps: readonly PipelineStep[]): WorkStep | null {

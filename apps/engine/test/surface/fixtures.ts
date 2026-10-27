@@ -73,6 +73,7 @@ export function createTaskDetail(overrides: Record<string, unknown> = {}) {
       ...((overrides.task as object | undefined) ?? {}),
     },
     gates: [],
+    mergeSteps: [],
     text: 'Fix the tab scroll\nBuilding.',
     suggestions: [],
     ...overrides,

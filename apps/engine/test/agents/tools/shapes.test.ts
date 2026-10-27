@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  PIPELINE_ORDER,
+  COMPOSABLE_STEPS,
   SHAPE_LIMITS,
   type ShinsaCommand,
   type ShinsaEvent,
@@ -141,8 +141,9 @@ describe('the shape tools', () => {
 
   test('reshape_task offers exactly the building blocks, each with its title and what ends it, and no others', () => {
     const steps = SHAPE_TOOL_SPECS.reshape_task.inputSchema.properties.steps;
-    expect(steps.items.enum).toEqual([...PIPELINE_ORDER]);
-    for (const step of PIPELINE_ORDER) {
+    expect(steps.items.enum).toEqual([...COMPOSABLE_STEPS]);
+    expect(steps.items.enum).not.toContain('post_merge');
+    for (const step of COMPOSABLE_STEPS) {
       expect(steps.description).toContain(
         `- \`${step}\` (${STEP_SCHEMA[step].title}): ${STEP_SCHEMA[step].exit}`
       );

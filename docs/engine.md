@@ -198,6 +198,9 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
    takes it out without merging reopens the merge gate with GitHub's reason (Merge queues, below).
    Merging settles the task, removes the worktree and starts the tasks waiting on it; a task that runs an operation
    after the merge resumes the Agent to run it instead and settles when the operation is done (Task shapes, below).
+   Approving waits for the steps around the merge you must do yourself (Steps around the merge, below): while one
+   before the merge is unticked, core refuses the approval (`merge_steps_open`) and the web holds the Merge button,
+   and once it merged, post-merge steps keep the task open behind the Post-merge gate until each is ticked.
 
 That path is one **round**. A task is the conversation, and it can run any number of rounds (Rounds, below): the
 merge ends the round, not the task.
@@ -619,22 +622,25 @@ folds in `state/shapes.ts`).
 
 - **Steps are building blocks, never free-form.** A task's `pipeline` is an ordered subset of fixed steps: `answer`,
   `research`, `investigate`, `your_ok`, `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`,
-  `merge`, in that order, and `operate`, which goes right after `plan` (an operation on its own, or before a code
-  change) or last, after `merge` (an operation on the merged code: a backfill, a migration, a cleanup). The liveness
-  rule, the gates and the invariants all key on these steps, so no agent can invent one; any valid composition of them
-  is a kind of task.
+  `pre_merge`, `merge`, `post_merge`, in that order, and `operate`, which goes right after `plan` (an operation on
+  its own, or before a code change) or after `merge` (an operation on the merged code: a backfill, a migration, a
+  cleanup), before only `post_merge`. `pre_merge` and `post_merge` are your steps around the merge: Shinsa adds
+  them when the work report lists steps for you before or after the merge, and no agent composes them (Steps around
+  the merge, below). The liveness rule, the gates and the invariants all key on these steps, so no agent can invent
+  one; any valid composition of them is a kind of task.
 - **Guards** (`validatePipeline`, generated from each step's `needs` in the step schema, Steps and gates below; checked
   on every shape change, which throws `pipeline_invalid` otherwise). Core keeps the safety rules: code goes through your
   review before a pull request (`build` needs `your_review`, `pull_request` and `merge` after it, in that order), a merge
   needs a pull request, and an inquiry turns into work only with your OK (the rules checker, below). The rest keeps a
   composition meaningful: at most one of answer, research and investigate; `build` and `operate` need `plan` before
   them, and `plan` needs one of them; checks, reviews, pull requests and merges need `build`; an operation never sits
-  inside a change ("An operation runs right after the plan, or last, after the merge."); `your_ok` sits after an
+  inside a change ("An operation runs right after the plan, or after the merge, before your steps after it.");
+  `pre_merge` needs the pull request before it and the merge after it, and `post_merge` the merge before it; `your_ok` sits after an
   answer, research or an investigation and before a plan. On top of the guards, the verification rules (Steps and gates)
   make `checks` and `agent_review` part of every code change: a composition without them is refused. A task may both
   build and operate.
 - **A change and an operation together.** `resolveOperationTiming` says where the operation runs: `alone`,
-  `before_build` or `after_merge`. The plan gate always opens when a task operates, so you approve the operation with
+  `before_build` or `post_merge`. The plan gate always opens when a task operates, so you approve the operation with
   the plan, and the plan states the operation's `impact` (what it changes and how much, its dry run or why there is
   none, how to undo it). With both, the plan's phases are the code change only and the operation is the plan's
   `operation` list (steps in order, each with how to check it worked; `propose_plan` is refused with `plan_invalid`
@@ -712,7 +718,8 @@ folds in `state/shapes.ts`).
   task has a repository or its steps need one), each step,
   the plan's phases, and Your OK to change (Your OK to run before an operation) for a `your_ok` step or while the proposal
   gate is open; the step is done once the proposal is accepted. The steps follow the pipeline's order, so an operation after
-  the merge is the last step; Checks and agent review is named for what the task keeps (Checks, Agent review), and a fix
+  the merge comes after Merge; Pre-merge and Post-merge show how many of their steps are done and wait on
+  you while one is open (Pre-merge while the merge gate is open, Post-merge once the round rests); Checks and agent review is named for what the task keeps (Checks, Agent review), and a fix
   in a change without either shows Build as current.
   Until the steps are settled nothing draws them: `resolveShapeState` (`domain/shapes.ts`) is `triage` while an Auto
   task has no pipeline yet, `agent` while the Agent of a task Shinsa shaped can still reshape it (planning or
@@ -941,6 +948,166 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 - Approving records `plan.approved` (`approvedAt`), and your words with it `plan.answered` (`planAnswers`). The
   first phase's instruction says the plan was approved and carries your words; the round brief a fresh session gets
   names the approved version and says to follow it exactly.
+
+### The review report
+
+The review you read is a technical walkthrough of the change, and the question is who writes it. The agent that
+built the change is the only one that knows why it is the way it is: which options it weighed, what it rejected and
+where it is unsure. The reviewer must not see that reasoning, or it would judge the work from inside the head that
+wrote it (Agents, above). So the work is split:
+
+- **The Agent writes the walkthrough**, in its hand-overs, as part of building (`complete_phase`, `docs/protocol.md`
+  → Hand-overs): every spot it marks, with a `title` and a plain-words `explain` for the key pieces of code; every
+  judgement call with a short `title` naming the decision, its `alternatives` and why each was rejected; and on the last phase a `walkthrough` for the
+  whole change: the approach, how it works behind the scenes (a text diagram in a code fence whenever the change has
+  structure or a flow worth drawing), the risks, each with a short `title` and its lines, and how to test it. `resolvePhaseInstruction` asks for it, and for the walkthrough only on the last phase.
+  How to test it has two parts: what the automated tests cover, and a guide you follow by hand, step by step, each
+  step an action, where it happens (a URL, a file, a command or a screen) and what you should see. The guide starts
+  from where to go (the preview deployment, or the command that starts the app and its local URL) and ends with the
+  edge cases worth trying. The review gate's body and the pull request's description write both parts
+  (`serializeTestingMarkdown`: "Covered by tests", then numbered "Try it yourself" steps with "Expected:"), and
+  `read_task` lists them (`listTestingLines`). A plain list of strings, the older form, is read as what the tests
+  cover; logs written before the guide are rewritten once on start (`store/legacy.ts`, log version 3).
+  `assembleReport` keeps the latest phase's walkthrough, so a later phase may restate the whole.
+- **The reviewer checks it from outside.** Its own session sees the request, the plan, the phase summaries and the
+  Agent's judgement calls as numbered claims, each its title, the call and its reason (`describeJudgementCallsForReview`), never the Agent's conversation. Besides
+  its findings it names each call it would have made differently, with why and what it would do instead; `decide`
+  resolves each number to the call's text (`unknown_judgement_call` for a number the brief never gave) and the task keeps
+  them as `reviewDisagreements`. A call that breaks the request or a rule is a blocking finding instead. It also sees
+  the guide for testing the change (`describeTestingForReview`) and follows the steps it can from the worktree: a step
+  it cannot follow, or one whose expected result is vague, is a finding, and so is a claim about the tests that the
+  tests do not back.
+- **You read both side by side**: the Review tab puts the reviewer's disagreement on the call's own card and its
+  findings after the walkthrough (`docs/design.md` 34). Nothing of this is in a system prompt or a tool list beyond
+  the static schemas: the instruction, the numbered calls and the earlier phases all go in the user turn, so both
+  sessions keep their cached prefix (Caching, below).
+
+A fix that changes how the change works revises the walkthrough: `complete_fix` takes an optional `walkthrough` with
+only the parts that changed (approach, flow, risks, testing), each replacing that part whole, and every fix prompt
+asks for it only when the fix changes one of them (`describeFixClosing`). `decide` records it as `walkthrough.revised`,
+and the fold merges it into the walkthrough of the latest phase report that has one; when none has one yet, a revision
+with both the approach and the flow starts one on the latest phase report (risks and testing empty: `createTesting`), and anything else
+is ignored. `assembleReport` reads the result as before, and a new round starts without phase reports, so a revision
+never reaches an earlier round's report. The `walkthrough` schema is static like every tool's (Caching, below).
+
+### Steps around the merge
+
+The two kinds have standard names, like a pre-commit and a post-commit hook. A **pre-merge step** is done before the
+merge, because the merged code needs it in place; Merge waits until each is ticked. A **post-merge step** needs the
+merged code, so it only exists for you once the pull request has actually merged: before that it cannot be ticked,
+no gate asks for it and no status counts it.
+
+Some of a change cannot be done from the worktree: an environment variable or a secret production needs, a migration
+or a deploy to run, a config or feature flag to flip, a service to restart, a backfill, a third-party setting. No agent
+has production access, and none should, so the Agent hands these over as steps for you, in the walkthrough's `steps`
+(`MergeStep`: `when` `pre_merge` or `post_merge`, `kind` env, secret, migration, deploy, config or other, a `title` that
+names the thing, a `detail` with where and how, and the exact `command` when the step is one; `docs/protocol.md` →
+Hand-overs). The last phase's instruction (`resolvePhaseInstruction`) and the handover skill ask for them: everything
+the Agent can do inside the repository it does itself (code, tests, docs, `.env.example`, the migration file); a step
+names its variable and where to set it, never a secret's value. A fix that changes them sends the whole new list in its
+`walkthrough` revision. The reviewer's brief lists them (`describeMergeStepsForReview`) and asks it to check the list
+is complete: a variable the code reads that no step names, or a step an agent could have done, is a finding.
+
+You tick a step once you did it (`merge_step.tick`, human-only: core refuses it on your behalf, and its spec,
+`shinsa merges tick`, is `humanOnly`); `merge_step.ticked` keeps the step's key in `Task.mergeStepsDone`. A step's key
+is its timing and a hash of everything it says, its kind, title, detail and command (`resolveMergeStepKey`), so a fix
+that changes any of them asks you again, and one that sends the step unchanged keeps the tick. `listMergeSteps` reads
+the steps from the latest walkthrough with their ticks, plus the ones carried over from earlier rounds; each says its
+round and whether it can be ticked now (`due`).
+
+**They are steps of the pipeline.** `pre_merge` ("Pre-merge") and `post_merge` ("Post-merge") are two
+steps of the schema like every other, of class `handover`, done by you and guarded by their `needs` (Task shapes):
+`pre_merge` sits after `pull_request` and before `merge`, and `post_merge` is the last step, after `merge` and
+after an operation that follows the merge. No agent composes them (`composable: false`: `reshape_task` does not offer
+them and `validateComposition` refuses them); Shinsa adds them. After every command, `syncMergeSteps`
+(`decide/merge-steps.ts`, run after the command and again after a queued round starts) looks at each task the command
+changed: it gives the pipeline `pre_merge` exactly while the work report (or an earlier round still shipping onto
+the same pull request) lists a pre-merge step, and `post_merge` exactly while this round's report lists a
+post-merge step (`resolveHandOverPipeline`), through `task.reshaped` (`by: shinsa`, "Added the step Pre-merge"), the
+same shape change every other step goes through, checked by `validatePipeline`. A fix revision that clears a timing's
+steps takes its step out again.
+
+- **Pre-merge** is a gate on the merge gate (its gate type is `merge`). Approving the merge gate waits until
+  every pre-merge step is ticked (`assertMergeStepsDone`, `merge_steps_open`); revising or rejecting it does
+  not. While one is open the merge gate's Needs you line says so ("1 pre-merge step for you") and the progress
+  shows Pre-merge as the step waiting on you, with how many are done; once each is ticked Merge is.
+- **Post-merge** is a gate of its own, `post_merge` ("Post-merge"), and it opens only after the merge happened. A
+  post-merge step ticks only once its pull request merged (`merge_step_early`; a pre-merge step no longer changes once
+  it has). When the round rests (it merged, or the operation after the merge finished) with a post-merge step
+  unticked, the gate opens:
+  it shows in Needs you below the decision gates, the task's status reads "Post-merge · 2 steps left", the
+  progress shows Post-merge as current and its Overview opens on the steps. The gate takes no decision: ticking
+  the last step withdraws it, and unticking one opens it again. The round rests as merged meanwhile, so a new round can
+  start, but the task is not done until each is ticked: neither you nor an agent marks it done (`task_open`).
+  An operation after the merge runs before these steps: they are what is left for you once Shinsa's work on the round
+  is over, and something the operation needs first belongs before the merge or in the operation gate's notes.
+- **Carry-over.** A new round archives the walkthrough, so the open steps of the round that ends move to
+  `Task.carriedMergeSteps` with their round: every open post-merge step, and every open pre-merge step of a
+  round that shipped onto the pull request the next round ships on too (it still blocks that merge). The post-merge
+  gate stays open across rounds until the last carried step is ticked, and the Overview shows them under Post-merge
+  steps while the later round works. Steps ticked before a round starts are dropped.
+- **Visible to agents.** `read_task` (`serializeTaskDetail`) numbers the steps with their ticks, the review gate's body
+  and the pull request's description list them as task lists (`serializeMergeStepsMarkdown`), and the activity
+  records each tick. Nothing runs a step for you: a step's command opens in a terminal only when you ask (Run in
+  terminal).
+
+### Evidence
+
+The review opens with proof, not the diff: screenshots before and after, a recording of an interaction, test output
+(`docs/spec.md` 6). Shinsa does not run a browser of its own; the agents capture evidence with the tools they have
+and hand it over with `attach_evidence` (since 2026-10-26).
+
+- **Who captures it.** The Agent proves its own work. Every phase instruction (`resolvePhaseInstruction`,
+  `describeEvidenceForPhase`) names the kinds the plan's `evidence` asks for; on the first phase of a plan that asks for
+  a `screenshot` or a `recording` it says to capture the screens as they are, `stage: "before"`, before editing
+  anything a user sees; every phase asks for after shots at the same title, width and theme, a recording for an
+  interaction and the run output of the test that fails without the change; the last phase says Shinsa refuses it
+  until each planned kind is attached (`code.evidence`, `evidence_missing`). The reviewer is given the list of what
+  the Agent attached this round (`describeEvidenceForReview`: kind, title, stage, width, theme) or told there is none,
+  checks it against the diff, and may attach its own; its pieces show as from the agent review, independent of the
+  author. How to capture (start the app per the repository, Playwright's command line or a script in a scratch folder,
+  1280px and 390px, light and dark, `git worktree add --detach` of the base for a before shot taken late, the
+  simulator for iOS) is the `evidence` skill (`apps/engine/plugin/skills/evidence/SKILL.md`), which the skill index
+  in the system prompt points to for a change a user sees and for a review of one.
+- **What it carries.** `attach_evidence` takes `kind`, a `title` (80) that a before and its after share, an optional
+  `detail` (280, what to look at), `width` (CSS pixels), `theme` (`light`, `dark`), `stage` (`before`, `after`) and
+  exactly one of `path`, `url` or `text` (40,000). A note's text is markdown (a table for measurements, `shinsa://`
+  references for files and tasks), and the Review tab renders it so; test and check output stays plain text. Core's `validateEvidence` checks it and the server refuses with every
+  reason (`Shinsa did not attach it. Fix these…`). `evidence.attached` keeps the optional fields only when set.
+- **Items, not files** (since 2026-10-26). One call is one item of one kind: a **comparison** (one view in two to six
+  states: before and after, or empty, loading and full), a **recording**, a **screenshot**, a **test** or **check**
+  run, a **note** or a **preview**. A comparison is `kind: "comparison"` with `parts` (2 to 6,
+  `PROTOCOL_LIMITS.evidenceParts`, each a `path` with a `stage` or a `label` of 40); the server stores each part and dispatches `agent.attach_comparison`, which
+  `decide` folds into one `evidence.attached` per part sharing a fresh `itemId` (each part a `screenshot` or
+  `recording` by its file, carrying its `stage` and `label`), so the event stays the one it was and a planned
+  `screenshot` is met by a comparison of screenshots. Core's `listEvidenceItems` turns a round's pieces back into
+  items (`EvidenceItem`: `id`, `kind`, `title`, `parts`): the pieces of one `itemId` are one comparison; a `before`
+  and an `after` screenshot or recording attached by separate calls with the same title, width and theme pair into
+  one too (the latest of each stage, so a retaken after replaces the earlier one), which is how a before shot taken
+  early meets its after; every other piece is an item of its own kind. The Review tab and the Overview count these
+  items, never files.
+- **Where it is kept.** The server copies a file, or writes the text (a note as `.md`, other text as `.txt`), into
+  `<data>/evidence/<task id>/round-<n>/<slug of the title>-<id>.<ext>` (`EvidenceStore`, 200 MB a file), so the
+  agent's own temporary files can go; a URL is kept as given. `/api/evidence/<task id>/round-<n>/<name>` serves it
+  (and the chat's tool images, still one level up), only names of that shape resolve, with
+  `Cache-Control: private, max-age=31536000, immutable` and byte ranges (206, 416), so a recording seeks.
+- **Cache-stable.** The schema and the skill index are static; the kinds the plan asks for and what was attached reach
+  the agents only in the user turn (Caching, below).
+- **Shinsa's own checks are evidence too** (since 2026-10-26). After every checks run (`checks.run`), the server
+  writes each command with Passed or Failed and the tail of its output (`tailOutput`, the whole piece at most 40,000
+  characters) as one text file in the round's folder, titled "Checks run by Shinsa: all 3 passed" or "1 of 3 failed"
+  (`serializeCheckEvidence`, `apps/engine/src/checks/evidence.ts`), and `checks.record` carries it as `evidence`;
+  `decide` attaches it as `evidence.attached`, kind `check`, of no run (`runId: null`), while the task is checking.
+  The changed-line coverage measured after passing checks travels on the same `checks.record` as `coverage`
+  (Test coverage of the change).
+  So a change always shows the output of its checks, even when no agent attached any, and a later round of checks
+  after a fix adds its own piece. A command whose output an agent already attached this round (a `test`, `check` or
+  `note` piece whose lines, timings aside, hold every line of it) is left out and the detail names it; when every
+  command is, nothing is attached. The reviewer's list of attached evidence leaves Shinsa's pieces out, since its
+  prompt already says the checks pass.
+- **Where you see it.** The Review tab's Evidence section (`docs/design.md` 34), also when the task has no work report
+  and its changes cannot be read (a merged branch that was cleaned up); the Overview keeps one line pointing there,
+  or shows the section itself for a task with no review (an operation).
 
 ### Review rounds escalate to you
 
@@ -1285,7 +1452,7 @@ line and every task agent's management tools are generated from it, so neither c
   tasks, recent activity and the same text `read_task` gives an agent. `/api/tasks/<task>/chat` pages the transcripts of the
   task's runs: the last `limit` entries (50), or the ones after the `after` index, filtered by `kinds` (`user`,
   `agent` and `error` unless you ask for `tool_call`, `tool_result`, `status` or `notice`) and `run`.
-- **The command line** (`apps/server/src/cli/surface.ts`): `shinsa <group> <action> [arguments]` against the server
+- **The command line** (`apps/engine/src/cli/surface.ts`): `shinsa <group> <action> [arguments]` against the server
   at `SHINSA_HOST` or `config.json`'s `hostname` (loopback when it listens on every address) and `SHINSA_PORT` or
   `config.json`'s `port`. `--help`, `--json` and the refusal shape are `docs/cli.md`. Commands carry an idempotency
   key per invocation (Command receipts, below).

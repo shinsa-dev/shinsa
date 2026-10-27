@@ -44,6 +44,10 @@ export function sealDraft(state: ShinsaState): StateChanges {
   return changes;
 }
 
+export function listChangedIds(state: ShinsaState, key: StateRecordKey): string[] {
+  return [...(DRAFTS.get(state)?.changed.get(key) ?? [])];
+}
+
 function ownRecord(state: ShinsaState, key: StateRecordKey, id: string): Record<string, unknown> {
   const draft = DRAFTS.get(state);
   if (!draft) return state[key];

@@ -347,4 +347,45 @@ describe('resolveLabelFold', () => {
       null,
     ]);
   });
+
+  it('counts the steps around the merge as long labels, and shows how many are done as the count', () => {
+    const step = {
+      when: 'pre_merge' as const,
+      kind: 'env' as const,
+      title: 'Set A',
+      detail: 'd',
+      command: null,
+    };
+    const walkthrough = {
+      approach: 'a',
+      flow: 'f',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      steps: [step, { ...step, when: 'post_merge' as const, title: 'Deploy' }],
+    };
+    const steps = resolveSteps(
+      resolveTaskProgress(
+        createTask({
+          id: 't',
+          stage: 'awaiting_merge',
+          pipeline: [
+            'plan',
+            'build',
+            'checks',
+            'agent_review',
+            'your_review',
+            'pull_request',
+            'pre_merge',
+            'merge',
+            'post_merge',
+          ],
+          phaseReports: [{ index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 }],
+        })
+      )
+    );
+    const before = steps.find((candidate) => candidate.key === 'pre-merge');
+    expect(before).toMatchObject({ label: 'Pre-merge', count: '0/1', status: 'waiting', detail: [] });
+    expect(steps.find((candidate) => candidate.key === 'post-merge')?.label).toBe('Post-merge');
+    expect(steps.map((candidate) => resolveLabelFold(candidate, steps))[0]).toBe('always');
+  });
 });

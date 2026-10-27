@@ -13,8 +13,8 @@ import { NowCard } from '@/components/overview/now-card.tsx';
 import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
+import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
 import { Composer } from '@/components/task/composer.tsx';
-import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
@@ -74,25 +74,20 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
   );
 }
 
-function JudgementCallsPanel({ task }: { task: Task }) {
-  const calls = task.report?.judgementCalls ?? [];
-  if (calls.length === 0) return null;
+function PostMergePanel({ state, task, gate }: { state: ShinsaState; task: Task; gate: Gate | undefined }) {
+  const open = listOpenGates(state, task.id).some((candidate) => candidate.type === 'post_merge');
+  const shown = gate?.type === 'post_merge' && resolveNowKind(state, task, gate) === 'gate';
+  if (!open || shown) return null;
   return (
-    <Panel title='Judgement calls' icon='IconSplit'>
-      <ul className='flex flex-col divide-y divide-border'>
-        {calls.map((call) => (
-          <li key={call.call} className='flex gap-2.5 py-2 first:pt-0 last:pb-0'>
-            <Icon size='sm' name='IconSplit' className='mt-0.5' />
-            <div className='flex min-w-0 flex-1 flex-col gap-px'>
-              <InlineMarkdown text={call.call} className='font-medium text-fg-4 text-xs leading-5' />
-              <Markdown text={call.reason} className='text-fg-3 text-xs' />
-              {call.file && (
-                <code className={cn(CHIP, 'mt-0.5 font-mono text-2xs')}>{describeFindingPlace(call)}</code>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+    <Panel
+      persistId={resolveOverviewPanelId(task, 'post-merge')}
+      title={MERGE_STEP_TITLE.post_merge}
+      icon='IconChecklist'
+    >
+      <p className='text-fg-3 text-xs'>
+        An earlier round merged and left these steps for you. The task is done once each is ticked.
+      </p>
+      <MergeStepsBlock task={task} when='post_merge' />
     </Panel>
   );
 }
@@ -144,6 +139,7 @@ export function OverviewTab({
       <PageScroll>
         <div className={cn(PAGE_COLUMN, 'flex flex-col gap-5 py-5')}>
           <NowCard key={gate?.id ?? 'now'} state={state} task={task} gate={gate} onOpen={onOpen} />
+          <PostMergePanel state={state} task={task} gate={gate} />
           {resolveResultPlace(state, task, gate) === 'panel' && <ResultPanel task={task} />}
           <DelegationsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
           <SuggestionsPanel task={task} />

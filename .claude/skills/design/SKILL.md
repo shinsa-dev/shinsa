@@ -12,7 +12,7 @@ Before writing UI:
 
 1. Is there already a component? Primitives in `@shinsa/ui/components/*` (Button, Badge, Card,
    Dialog, Sheet, DropdownMenu, Select, Command, Tabs, Tooltip, Truncate,
-   ScrollArea, EmptyState, Field…; docs/design.md → Where Shinsa differs, 18). Shinsa
+   ScrollArea, EmptyState, Field, Checklist…; docs/design.md → Where Shinsa differs, 18). Shinsa
    composites in `apps/web/src/components/<domain>` (layout/page: PageHeading, Toolbar, SectionLabel;
    layout: ListRow; layout/surface: CARD, Panel, StepNumber; controls: Choice, ChoiceButtons, SelectField,
    CopyButton, OptionsTrigger (every `•••`), ChecklistBlock and ItemChecklist (every list of things to do, merge

@@ -1,16 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  COMPOSABLE_STEPS,
   describePlanGateRule,
   GATE_SCHEMA,
   type Gate,
   type GateType,
   isAgentQuestion,
+  isComposableStep,
   isDecisionGate,
   isPausingGate,
   needsWorktree,
   PIPELINE_ORDER,
   PLAN_GATE_RULE,
   resolveGateDefinition,
+  resolveHandOverPipeline,
   SHAPE_PIPELINES,
   STEP_SCHEMA,
   TASK_SHAPES,
@@ -59,7 +62,7 @@ describe('the step schema', () => {
     for (const definition of Object.values(GATE_SCHEMA)) {
       if (definition.strength === 'hard') {
         expect(definition.decidedBy).toBe('you');
-        expect(definition.decisions.length).toBeGreaterThan(0);
+        expect(definition.decisions.length > 0).toBe(definition.type !== 'post_merge');
       } else {
         expect(definition.outcomes.map((outcome) => outcome.decision)).toEqual(['pass', 'fail', 'escalate']);
       }
@@ -134,5 +137,51 @@ describe('the step schema', () => {
     expect(isPausingGate(gate({ type: 'configuration' }))).toBe(true);
     expect(isPausingGate(gate({ type: 'operation' }))).toBe(false);
     expect(isPausingGate(gate({ type: 'review' }))).toBe(false);
+  });
+
+  test('your steps before and after the merge are steps no agent composes, guarded like the rest', () => {
+    expect(COMPOSABLE_STEPS).not.toContain('pre_merge');
+    expect(COMPOSABLE_STEPS).not.toContain('post_merge');
+    expect(isComposableStep('merge')).toBe(true);
+    expect(isComposableStep('pre_merge')).toBe(false);
+    expect(STEP_SCHEMA.pre_merge.gate.types).toEqual(['merge']);
+    expect(STEP_SCHEMA.post_merge.gate.types).toEqual(['post_merge']);
+    expect(GATE_SCHEMA.post_merge.decisions).toEqual([]);
+    const change = SHAPE_PIPELINES.change;
+    const both = resolveHandOverPipeline(change, { before: true, after: true });
+    expect(both.slice(-4)).toEqual(['pull_request', 'pre_merge', 'merge', 'post_merge']);
+    expect(validatePipeline(both)).toEqual([]);
+    expect(validatePipeline([...change, 'operate', 'post_merge'])).toEqual([]);
+    expect(validatePipeline([...change, 'post_merge', 'operate'])).toContain(
+      'An operation runs right after the plan, or after the merge, before your steps after it.'
+    );
+    expect(
+      validatePipeline([
+        'plan',
+        'build',
+        'checks',
+        'agent_review',
+        'your_review',
+        'pre_merge',
+        'pull_request',
+        'merge',
+      ])
+    ).toContain('Your pre-merge steps come after the pull request.');
+    expect(validatePipeline(['plan', 'operate', 'pre_merge'])).toEqual(
+      expect.arrayContaining([
+        'Your pre-merge steps come after the pull request.',
+        'Your pre-merge steps need a merge after them.',
+      ])
+    );
+    expect(validatePipeline(['plan', 'operate', 'post_merge'])).toContain(
+      'Your post-merge steps come after the merge.'
+    );
+    expect(resolveHandOverPipeline(both, { before: false, after: false })).toEqual([...change]);
+    expect(resolveHandOverPipeline(SHAPE_PIPELINES.operation, { before: true, after: true })).toEqual([
+      ...SHAPE_PIPELINES.operation,
+    ]);
+    expect(resolveHandOverPipeline([...change, 'operate'], { before: false, after: true }).slice(-2)).toEqual(
+      ['operate', 'post_merge']
+    );
   });
 });

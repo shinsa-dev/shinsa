@@ -22,7 +22,8 @@ src/
 │                    validateComposition (the rules checker for the steps the agent composes while it plans), the shape
 │                    of a task, resolveShapeState (whether triage or the agent may still change the steps),
 │                    findInquiryStep, findWorkStep, resolveProposalUpgrade, SHAPE_LIMITS), the step and gate schema
-│                    (steps.ts: PipelineStep, STEP_SCHEMA, GATE_SCHEMA with the hard GateType and the SoftGateType
+│                    (steps.ts: PipelineStep, STEP_SCHEMA, COMPOSABLE_STEPS and resolveHandOverPipeline (the steps around the
+│                    merge no agent composes), GATE_SCHEMA with the hard GateType and the SoftGateType
 │                    that escalatesTo one, resolveGateDefinition, PLAN_GATE_RULE and describePlanGateRule,
 │                    validatePipeline read from each step's needs), the verification rules
 │                    (verification.ts: VERIFICATION_RULES, validateVerification, validatePlanRules,
@@ -51,7 +52,7 @@ src/
 │                    (ordering)
 ├── state/           project.ts (createState, applyEvent, replayEventLog: replay that skips and reports an event it
 │                    cannot apply, from an empty state or a snapshot), draft.ts (createDraft and sealDraft: the
-│                    copy-on-write state decide works on, and the ids it wrote; writeEntry and removeEntry, the only
+│                    copy-on-write state decide works on, and the ids it wrote (listChangedIds); writeEntry and removeEntry, the only
 │                    way a fold writes a record; STATE_RECORDS and STATE_FIELDS name every part of the state),
 │                    write.ts (the shared writes the folds use; applyOnBehalf: an event sent on your
 │                    behalf marks the activity it records), activity.ts (the wording of a task's activity),
@@ -82,6 +83,10 @@ src/
 │   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks, stacking a GitButler
 │   │                     task on another's branch (stackTask), the lock on that dependency (assertStackKept) and
 │   │                     unstacking the tasks above one that settles without a merge (unstackTasksOn)
+│   ├── merge-steps.ts  The steps around the merge you tick (merge_step.tick, human-only), the merge gate's wait for
+│   │                the ones before it (assertMergeStepsDone), no done while one after it is open
+│   │                (assertNoMergeStepsLeft), and syncMergeSteps (after every command, for the tasks it changed:
+│   │                the pre_merge and post_merge steps of the pipeline, and the Post-merge gate)
 │   ├── edits.ts     Your edits from the Code tab: recording one (task.record_edit, steering a working agent
 │   │                with a note of Shinsa's), committing them (task.commit_edits), and approving the review or the
 │   │                merge with them (task.edits_approved: the checks run again before the push, or CI before the
@@ -156,8 +161,12 @@ src/
 │                    plain text
 ├── report/          The hand-over protocol: types, PROTOCOL_LIMITS (with minPlanPhases and findingCount), the enum
 │                    lists the tool schemas read (ATTENTION_LEVELS, FINDING_SEVERITIES, DELEGATION_MODES,
-│                    DELEGATION_ISOLATIONS) and validate*, the delegation and courier requests (orchestration.ts),
-│                    plan changes between versions, Markdown, assembleReport
+│                    DELEGATION_ISOLATIONS, MERGE_STEP_TIMINGS, MERGE_STEP_KINDS) and validate*, the delegation and courier
+│                    requests (orchestration.ts), plan changes between versions, Markdown, assembleReport, the steps
+│                    around the merge with their ticks (merge-steps.ts: listMergeSteps, resolveMergeStepKey), how to
+│                    test the change (testing.ts: MANUAL_TEST_TARGETS, parseTestFile, listTestingLines), the
+│                    checklist shape every list you tick shares (checklist.ts: ChecklistItem, Checklist,
+│                    resolveChecklistProgress, listOpenChecklistItems)
 ├── chat/            The chat protocol (ChatEntry), shinsa:// references, inline code marking, a task as text for
 │                    an agent (task-detail.ts: serializeTaskDetail, what `read_task` and `tasks_show` read), the
 │                    other open work in a task's repository (repository-work.ts: listRepositoryWork,
@@ -208,7 +217,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
   input. Never store a shared constant into state by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
 - **No old logs.** Shinsa has never shipped, so there is nothing to replay but logs the current code wrote: rename or
   remove an event or a field outright, with no reader for the old shape and no default that only an old log needs.
-  The server rewrites old shapes in the user's log once on start (`apps/server/src/store/legacy.ts`), so core
+  The server rewrites old shapes in the user's log once on start (`apps/engine/src/store/legacy.ts`), so core
   never sees them.
 - **Nothing runs on import.** `package.json` says `"sideEffects": false`, so a bundler keeps only what a caller
   imports: the desktop app's main bundle, which needs only `ENGINE_PROTOCOL`, holds that one module instead of the
@@ -226,8 +235,13 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
   - at most one active run per task, and none still `queued` once `decide` returns;
   - every open task is live (`isTaskLive`): a gate, an active run, an armed wait, or a stage Shinsa runs itself
     (triage, waiting on other tasks, checks, the pull request);
-  - settled tasks have no runs and no gates;
+  - settled tasks have no runs and no gates but a Post-merge gate;
+  - merge steps (`merge-step-invariants.ts`): a task's pipeline has `pre_merge` and `post_merge` exactly as its
+    steps around the merge say (`resolveHandOverPipeline`), at most one Post-merge gate, open exactly while the
+    task is not closed and a due step after the merge is open (carried over, or of a round that rests), and no task
+    marked done with one open;
   - an agent's question is open only while the run that asked it is active, and a superseded question is withdrawn;
+    while an agent runs, the only other open gate a task may have is a Post-merge gate;
   - no failure gate while an agent runs (starting a step withdraws it), and at most one failure gate per task;
   - a task waiting for a usage limit to reset has no run, no failure or Sign in gate and is not settled; at most one
     Sign in gate per task, and it names its provider, and its account for Claude (none for a provider's own login);
@@ -264,7 +278,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     per task;
   - rounds (`round-invariants.ts`): rounds are numbered one by one, at most one is active and an open task works on
     exactly one, a round waiting to start comes after every started one and a closed task has none waiting; every
-    live run (delegated runs included) and every open gate belongs to the current round; the task works on its active round's branch and through its
+    live run (delegated runs included) and every open gate but a Post-merge gate belongs to the current round; the task works on its active round's branch and through its
     round's pull request; a shipped round's pull request is open and a merged round's merged; a stacked round stacks on
     an earlier round's branch; a pull request open across rounds stays on one branch, and the stack never repeats the
     task's own pull request;

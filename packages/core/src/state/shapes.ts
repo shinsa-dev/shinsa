@@ -1,6 +1,9 @@
+import { describeList } from '../chat/text.ts';
 import {
   type DeliveringStep,
   type InquiryStep,
+  isSamePipeline,
+  listComposedSteps,
   needsWorktree,
   type PipelineStep,
   resolveInquiryStep,
@@ -9,6 +12,7 @@ import {
   resolveTaskPipeline,
   resolveWorkStep,
   type ShapeActor,
+  STEP_SCHEMA,
   type TaskShape,
   type WorkStep,
 } from '../domain/index.ts';
@@ -61,6 +65,20 @@ function describePipeline(steps: readonly PipelineStep[]) {
   );
 }
 
+function describeSteps(verb: string, steps: readonly PipelineStep[]) {
+  const titles = steps.map((step) => STEP_SCHEMA[step].title);
+  return `${verb} ${titles.length === 1 ? 'the step' : 'the steps'} ${describeList(titles)}`;
+}
+
+function describeHandOverChange(from: readonly PipelineStep[], to: readonly PipelineStep[]) {
+  const added = to.filter((step) => !from.includes(step));
+  const removed = from.filter((step) => !to.includes(step));
+  return [
+    ...(added.length > 0 ? [describeSteps('Added', added)] : []),
+    ...(removed.length > 0 ? [describeSteps(added.length > 0 ? 'removed' : 'Removed', removed)] : []),
+  ].join(' and ');
+}
+
 function describeReshape(steps: readonly PipelineStep[], by: ShapeActor) {
   if (by === 'you') return `Made it ${describePipeline(steps)}`;
   return `Turned into ${describePipeline(steps)}`;
@@ -81,7 +99,9 @@ function applyReshaped(state: ShinsaState, event: EventOf<'task.reshaped'>) {
   record(state, task.id, event.at, {
     actor: event.by,
     kind: 'shape',
-    text: describeReshape(event.pipeline, event.by),
+    text: isSamePipeline(listComposedSteps(from), listComposedSteps(event.pipeline))
+      ? describeHandOverChange(from, event.pipeline)
+      : describeReshape(event.pipeline, event.by),
     detail: event.reason || null,
   });
 }

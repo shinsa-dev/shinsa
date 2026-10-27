@@ -10,6 +10,7 @@ import { ACCOUNT_LABEL } from '@/lib/accounts/account.ts';
 import { describeSignInCheck, resolveSignInProvider } from '@/lib/accounts/sign-in.ts';
 import { type Command, type MenuPage, RANK } from '@/lib/command/registry.ts';
 import { refreshUsage, startSignIn } from '@/lib/connection/accounts.ts';
+import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { OPERATION_SKIP } from '@/lib/overview/operation.ts';
 import { canSkipChecks } from '@/lib/overview/setup.ts';
 import {
@@ -21,6 +22,7 @@ import {
   type VerdictAction,
 } from '@/lib/overview/verdicts.ts';
 import { type LineComment, serializeComments } from '@/lib/review/draft.ts';
+import { describeMergeBlock, listTimedSteps, MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
 import { declineSecret, resolveSecretLabel } from '@/lib/secrets.ts';
 import {
   type AnswerExtras,
@@ -308,6 +310,11 @@ function listReviewCommands(task: Task, gate: Gate, context: GateContext): Comma
   return commands;
 }
 
+function resolveMergeBlock(task: Task) {
+  const blocked = describeMergeBlock(task);
+  return blocked ? { disabled: blocked } : {};
+}
+
 function listMergeCommands(task: Task, gate: Gate, context: GateContext): Command[] {
   return [
     {
@@ -317,9 +324,25 @@ function listMergeCommands(task: Task, gate: Gate, context: GateContext): Comman
       icon: 'IconMerged',
       keywords: ['merge', 'ship', 'land', 'approve', 'pull request'],
       run: () => void replyToGate(gate, resolveApprovalReply(task, gate, 'merge')),
+      ...resolveMergeBlock(task),
     },
     createReviseCommand(gate, context),
   ];
+}
+
+function listPostMergeCommands(task: Task, gate: Gate): Command[] {
+  return listTimedSteps(task, 'post_merge')
+    .filter((step) => step.due && !step.done)
+    .map((step) => ({
+      kind: 'run',
+      id: `${resolveGateId(gate)}.tick.${step.key}`,
+      label: `Tick “${step.title}”`,
+      hint: MERGE_STEP_TITLE.post_merge,
+      icon: 'IconChecklist',
+      keywords: ['done', 'step', 'after', 'merge', 'check'],
+      run: () =>
+        void sendCommandWithToast({ type: 'merge_step.tick', taskId: task.id, key: step.key, done: true }),
+    }));
 }
 
 function listChangeCommands(task: Task, gate: Gate): Command[] {
@@ -420,6 +443,8 @@ function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: G
       return listReviewCommands(task, gate, context);
     case 'merge':
       return listMergeCommands(task, gate, context);
+    case 'post_merge':
+      return listPostMergeCommands(task, gate);
   }
 }
 

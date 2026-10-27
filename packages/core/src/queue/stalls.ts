@@ -14,7 +14,8 @@ export interface WaitLeaf {
 
 export function selectLeadGate(state: ShinsaState, task: Task) {
   const gates = listOpenGates(state, task.id);
-  return gates.find((gate) => !isDecisionGate(gate)) ?? gates[0] ?? null;
+  const current = gates.filter((gate) => gate.type !== 'post_merge');
+  return current.find((gate) => !isDecisionGate(gate)) ?? current[0] ?? gates[0] ?? null;
 }
 
 function resolveStall(state: ShinsaState, task: Task): Omit<WaitLeaf, 'path' | 'task'> | null {

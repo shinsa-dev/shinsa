@@ -39,19 +39,19 @@ export function NowFrame({
 export function Eyebrow({ state, task, extra }: { state: ShinsaState; task: Task; extra?: React.ReactNode }) {
   const round = resolveRoundCount(task);
   return (
-    <span className='flex items-center gap-1.5'>
-      <StatusText state={state} task={task} className='text-2xs' />
+    <span className='flex flex-wrap items-center gap-x-1.5'>
+      <StatusText state={state} task={task} className='whitespace-nowrap text-2xs' />
       {round && (
-        <>
+        <span className='flex items-center gap-1.5 whitespace-nowrap'>
           <span>·</span>
           <span className='tabular-nums'>{round}</span>
-        </>
+        </span>
       )}
       {extra && (
-        <>
+        <span className='flex items-center gap-1.5 whitespace-nowrap'>
           <span>·</span>
           {extra}
-        </>
+        </span>
       )}
     </span>
   );

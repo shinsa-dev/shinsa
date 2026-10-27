@@ -245,3 +245,57 @@ describe('secrets', () => {
     expect(fake.sent).toEqual([]);
   });
 });
+
+describe('ticking a step around the merge', () => {
+  const STEPS = [
+    {
+      key: 'pre_merge:Set A',
+      when: 'pre_merge',
+      kind: 'env',
+      title: 'Set A',
+      detail: 'd',
+      command: null,
+      done: false,
+    },
+    {
+      key: 'post_merge:Migrate',
+      when: 'post_merge',
+      kind: 'migration',
+      title: 'Migrate',
+      detail: 'd',
+      command: 'm',
+      done: false,
+    },
+  ];
+
+  function stepsClient(steps: unknown[] = STEPS) {
+    return createFakeClient({ '/api/tasks/fix': createTaskDetail({ mergeSteps: steps }) });
+  }
+
+  test('ticks a step by its number or its title, and unticks it with --undo', async () => {
+    const fake = stepsClient();
+    expect((await runSpec(fake, ['merges', 'tick', 'fix', '2'])).text).toBe('Ticked the step.');
+    expect((await runSpec(fake, ['merges', 'tick', 'fix', 'set', 'a', '--undo'])).text).toBe(
+      'Unticked the step.'
+    );
+    await runSpec(fake, ['merges', 'tick', 'fix', 'pre_merge:Set A']);
+    expect(fake.sent).toEqual([
+      { type: 'merge_step.tick', taskId: 'task-123', key: 'post_merge:Migrate', done: true },
+      { type: 'merge_step.tick', taskId: 'task-123', key: 'pre_merge:Set A', done: false },
+      { type: 'merge_step.tick', taskId: 'task-123', key: 'pre_merge:Set A', done: true },
+    ]);
+  });
+
+  test('names a step it cannot find, or a task with none', async () => {
+    await expect(runSpec(stepsClient(), ['merges', 'tick', 'fix', 'Deploy'])).rejects.toThrow(
+      '“Fix the tab scroll” has no step Deploy. `shinsa tasks show` lists its steps, numbered from 1.'
+    );
+    await expect(runSpec(stepsClient([]), ['merges', 'tick', 'fix', '1'])).rejects.toThrow(
+      '“Fix the tab scroll” has no steps around the merge.'
+    );
+  });
+
+  test('is the human’s alone', () => {
+    expect(listAgentSpecs().some((spec) => spec.path.join(' ') === 'merges tick')).toBe(false);
+  });
+});

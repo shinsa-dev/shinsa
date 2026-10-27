@@ -8,6 +8,7 @@ import {
   NO_PROJECT_KEY,
   needsWorktree,
   type OnBehalfAction,
+  type PhaseReport,
   type Project,
   parseTaskHandle,
   type Repo,
@@ -22,6 +23,7 @@ import {
   type TaskShape,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
+import { resolveMergeStepKey } from '../report/merge-steps.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
 import { createTesting } from '../report/testing.ts';
 import type { ReportWalkthroughRevision } from '../report/types.ts';

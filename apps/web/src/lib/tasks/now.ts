@@ -6,7 +6,8 @@ import {
   selectLeadGate,
   type Task,
 } from '@shinsa/core';
-import { formatCount } from '@/lib/format/count.ts';
+import { formatCount, formatSteps } from '@/lib/format/count.ts';
+import { countOpenSteps } from '@/lib/review/merge-steps.ts';
 import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
 
 export function resolveGateNow(task: Task, gate: Gate) {
@@ -17,8 +18,13 @@ export function resolveGateNow(task: Task, gate: Gate) {
     }
     case 'review':
       return task.report?.headline ?? 'Checks passed, agent review clean';
-    case 'merge':
+    case 'merge': {
+      const open = countOpenSteps(task, 'pre_merge');
+      if (open > 0) return `${formatSteps(open)} to do before the merge`;
       return task.pullRequest ? `PR #${task.pullRequest.number} is clean` : 'Clean and ready to merge';
+    }
+    case 'post_merge':
+      return task.pullRequest ? `PR #${task.pullRequest.number} merged` : 'Merged';
     default:
       return gate.title;
   }

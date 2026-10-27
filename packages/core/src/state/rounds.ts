@@ -15,6 +15,7 @@ import {
   toRoundPullRequest,
 } from '../domain/index.ts';
 import type { EventOf, ShinsaEvent } from '../events/index.ts';
+import { listCarriedMergeSteps } from '../report/merge-steps.ts';
 import type { ShinsaState } from './project.ts';
 import { record, updateTask } from './write.ts';
 
@@ -160,6 +161,8 @@ function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: nu
     configProblems: [],
     approvedEdits: null,
     heldConflict: null,
+    mergeStepsDone: [],
+    carriedMergeSteps: listCarriedMergeSteps(task),
     ...resolveBranchPatch(task, choice, needsWorktree(next.pipeline), at),
   };
 }

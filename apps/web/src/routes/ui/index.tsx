@@ -15,6 +15,7 @@ import { CommandRunnerProvider } from '@/components/text/code-block.tsx';
 import { readThemePreference, type ThemePreference, writeThemePreference } from '@/lib/preferences/theme.ts';
 import { AccountSpecimens } from './accounts.tsx';
 import { ChatSpecimens } from './chat.tsx';
+import { CHECKLIST_SECTIONS, ChecklistSpecimens } from './checklist.tsx';
 import { CodeSpecimens } from './code.tsx';
 import { CompositeSpecimens } from './composites.tsx';
 import { ErrorSpecimens } from './errors.tsx';

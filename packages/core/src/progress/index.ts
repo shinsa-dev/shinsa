@@ -3,11 +3,15 @@ import {
   type PipelineStep,
   type Round,
   type RoundStatus,
+  resolveCurrentRound,
   resolveTaskPipeline,
   resolveWorkStep,
   type Task,
   type TaskStage,
 } from '../domain/index.ts';
+import { resolveChecklistProgress } from '../report/checklist.ts';
+import { listMergeSteps, listOpenMergeSteps } from '../report/merge-steps.ts';
+import type { MergeStepTiming } from '../report/types.ts';
 
 export type DisplayPhaseStatus = 'done' | 'active' | 'waiting' | 'pending' | 'skipped';
 
@@ -17,6 +21,7 @@ export interface DisplayPhase {
   detail: string | null;
   status: DisplayPhaseStatus;
   planned: boolean;
+  count?: { done: number; total: number };
 }
 
 export interface TaskProgress {
@@ -39,7 +44,9 @@ type DisplayKey =
   | 'check'
   | 'review'
   | 'pull-request'
-  | 'merge';
+  | 'pre-merge'
+  | 'merge'
+  | 'post-merge';
 
 const STEP_DISPLAY: Record<PipelineStep, DisplayKey> = {
   answer: 'answer',
@@ -53,7 +60,9 @@ const STEP_DISPLAY: Record<PipelineStep, DisplayKey> = {
   agent_review: 'check',
   your_review: 'review',
   pull_request: 'pull-request',
+  pre_merge: 'pre-merge',
   merge: 'merge',
+  post_merge: 'post-merge',
 };
 
 const DISPLAY_TITLE: Record<DisplayKey, string> = {
@@ -68,7 +77,9 @@ const DISPLAY_TITLE: Record<DisplayKey, string> = {
   check: 'Checks and agent review',
   review: 'Your review',
   'pull-request': 'Pull request',
+  'pre-merge': 'Pre-merge',
   merge: 'Merge',
+  'post-merge': 'Post-merge',
 };
 
 const STAGE_DISPLAY: Partial<Record<TaskStage, DisplayKey>> = {
@@ -96,6 +107,8 @@ const WAITING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
   'awaiting_proposal',
   'awaiting_operation',
 ]);
+
+const HAND_OVER_KEYS: ReadonlySet<DisplayKey> = new Set<DisplayKey>(['pre-merge', 'post-merge']);
 
 const FINISHED_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>(['merged', 'done']);
 
@@ -125,16 +138,31 @@ function isKeyDone(task: Task, key: DisplayKey) {
   return task.result?.step === key;
 }
 
+function hasOpenSteps(task: Task, keys: DisplayKey[], when: MergeStepTiming, round: number) {
+  const key = when === 'pre_merge' ? 'pre-merge' : 'post-merge';
+  if (!keys.includes(key)) return false;
+  return listOpenMergeSteps(task, when).some((step) => step.round === round);
+}
+
+function resolveStepsKey(task: Task, keys: DisplayKey[]): DisplayKey | null {
+  const round = resolveCurrentRound(task).number;
+  if (task.stage === 'awaiting_merge' && hasOpenSteps(task, keys, 'pre_merge', round)) return 'pre-merge';
+  if (FINISHED_STAGES.has(task.stage) && hasOpenSteps(task, keys, 'post_merge', round)) return 'post-merge';
+  return null;
+}
+
 function resolveStageKey(task: Task, keys: DisplayKey[]) {
   if (task.stage === 'fixing' && task.fixFor === 'pull_request') return 'pull-request';
+  const steps = resolveStepsKey(task, keys);
+  if (steps) return steps;
   const key = STAGE_DISPLAY[task.stage];
   return key === 'check' && !keys.includes(key) ? 'build' : key;
 }
 
 function resolveCurrentIndex(task: Task, keys: DisplayKey[]) {
   if (task.stage === 'cancelled') return -1;
-  if (FINISHED_STAGES.has(task.stage)) return keys.length;
   const key = resolveStageKey(task, keys);
+  if (FINISHED_STAGES.has(task.stage) && key !== 'post-merge') return keys.length;
   if (key) return keys.indexOf(key);
   const first = keys.findIndex((candidate) => !isKeyDone(task, candidate));
   return first === -1 ? keys.length : first;
@@ -150,12 +178,40 @@ function resolveStatus(
   if (current === -1 || index > current) return 'pending';
   if (index < current) return 'done';
   if (resolveStageKey(task, keys) !== key) return key === 'setup' ? 'active' : 'pending';
-  return WAITING_STAGES.has(task.stage) ? 'waiting' : 'active';
+  return WAITING_STAGES.has(task.stage) || HAND_OVER_KEYS.has(key) ? 'waiting' : 'active';
 }
 
 function describeQueuedDetail(task: Task) {
   if (task.waitsOn.length > 1) return 'Starts when the tasks it waits on finish';
   return 'Starts when the task it waits on finishes';
+}
+
+const HAND_OVER_TIMING: Partial<Record<DisplayKey, MergeStepTiming>> = {
+  'pre-merge': 'pre_merge',
+  'post-merge': 'post_merge',
+};
+
+function resolveStepCount(task: Task, when: MergeStepTiming) {
+  const round = resolveCurrentRound(task).number;
+  const steps = listMergeSteps(task).filter((step) => step.when === when && step.round === round);
+  const { done, total } = resolveChecklistProgress(steps);
+  return { done, total };
+}
+
+function resolveDisplayPhase(
+  task: Task,
+  key: DisplayKey,
+  status: DisplayPhaseStatus,
+  current: boolean
+): DisplayPhase {
+  const title = resolveTitle(task, key);
+  const timing = HAND_OVER_TIMING[key];
+  if (timing) {
+    const count = resolveStepCount(task, timing);
+    return { key, title, detail: `${count.done} of ${count.total} done`, status, planned: false, count };
+  }
+  const detail = task.stage === 'waiting_on_tasks' && current ? describeQueuedDetail(task) : null;
+  return { key, title, detail, status, planned: false };
 }
 
 function resolveCheckTitle(pipeline: readonly PipelineStep[]) {
@@ -201,8 +257,7 @@ export function resolveTaskProgress(task: Task): TaskProgress {
   const phases = keys.flatMap((key, index): DisplayPhase[] => {
     const status = resolveStatus(task, keys, index, current, key);
     if (key === 'build') return resolvePlanPhases(task, status);
-    const detail = task.stage === 'waiting_on_tasks' && index === current ? describeQueuedDetail(task) : null;
-    return [{ key, title: resolveTitle(task, key), detail, status, planned: false }];
+    return [resolveDisplayPhase(task, key, status, index === current)];
   });
   return summarizeProgress(phases);
 }
@@ -210,7 +265,10 @@ export function resolveTaskProgress(task: Task): TaskProgress {
 const ROUND_STEP_STATUS: Record<RoundStatus, (key: DisplayKey) => DisplayPhaseStatus> = {
   waiting: () => 'pending',
   active: () => 'pending',
-  shipped: (key) => (key === 'merge' ? 'waiting' : 'done'),
+  shipped: (key) => {
+    if (key === 'post-merge') return 'pending';
+    return key === 'merge' || key === 'pre-merge' ? 'waiting' : 'done';
+  },
   merged: () => 'done',
   finished: () => 'done',
   cancelled: () => 'skipped',

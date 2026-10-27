@@ -103,6 +103,7 @@ export type UserCommand =
       verdicts?: FindingVerdict[];
       comments?: ReviewComment[];
     }
+  | { type: 'merge_step.tick'; taskId: string; key: string; done: boolean }
   | { type: 'suggestion.accept'; taskId: string; suggestionId: string; waitsOnThis: boolean }
   | { type: 'suggestion.dismiss'; taskId: string; suggestionId: string }
   | { type: 'suggestion.keep'; taskId: string; suggestionId: string; shape?: TaskShape }

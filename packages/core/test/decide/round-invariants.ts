@@ -233,7 +233,7 @@ function assertStepsBelong(state: ShinsaState, task: Task, context: string) {
   for (const run of listLiveRuns(state, task.id)) {
     expect(run.round ?? 1, `${context}: run ${run.id} of another round`).toBe(current);
   }
-  for (const gate of listOpenGates(state, task.id)) {
+  for (const gate of listOpenGates(state, task.id).filter((open) => open.type !== 'post_merge')) {
     expect(gate.round ?? 1, `${context}: gate ${gate.id} of another round`).toBe(current);
   }
 }

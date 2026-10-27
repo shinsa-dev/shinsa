@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { Gate, Task } from '@shinsa/core';
+import { type Gate, resolveMergeStepKey, type Task } from '@shinsa/core';
 import { listOpenGateCommands } from '@/lib/command/gates.ts';
 import type { Command } from '@/lib/command/registry.ts';
 import * as accounts from '@/lib/connection/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createShinsaState, createTask } from '../../support/state.ts';
 
 let spies: ReturnType<typeof spyOnCommands>;
@@ -28,6 +29,63 @@ function run(command: Command | undefined) {
 }
 
 describe('gate commands', () => {
+  it('holds the merge command while a step before the merge is open, saying why', () => {
+    const step = {
+      when: 'pre_merge' as const,
+      kind: 'env' as const,
+      title: 'Set A',
+      detail: 'd',
+      command: null,
+    };
+    const walkthrough = {
+      approach: 'a',
+      flow: 'f',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      steps: [step],
+    };
+    const report = { index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 };
+    const gate = createGate({ id: 'g', taskId: 't', type: 'merge' });
+    const open = commandsFor(createTask({ id: 't', phaseReports: [report] }), gate);
+    expect(open[0]?.disabled).toBe('Tick the pre-merge step first');
+    const ticked = commandsFor(
+      createTask({ id: 't', phaseReports: [report], mergeStepsDone: [resolveMergeStepKey(step)] }),
+      gate
+    );
+    expect(ticked[0]?.disabled).toBeUndefined();
+    run(ticked[0]);
+    expect(spies.sent).toHaveBeenCalled();
+  });
+
+  it('ticks each open step after the merge from the gate after it', () => {
+    const step = {
+      when: 'post_merge' as const,
+      kind: 'deploy' as const,
+      title: 'Restart',
+      detail: 'd',
+      command: null,
+    };
+    const walkthrough = {
+      approach: 'a',
+      flow: 'f',
+      risks: [],
+      testing: { automated: [], manual: [] },
+      steps: [step],
+    };
+    const report = { index: 0, summary: 's', spots: [], judgementCalls: [], walkthrough, at: 0 };
+    const pullRequest = createPullRequest({ number: 42, state: 'merged' });
+    const task = createTask({ id: 't', stage: 'merged', phaseReports: [report], pullRequest });
+    const commands = commandsFor(task, createGate({ id: 'g', taskId: 't', type: 'post_merge' }));
+    expect(commands.map((command) => command.label)).toEqual(['Tick “Restart”']);
+    run(commands[0]);
+    expect(spies.sent).toHaveBeenCalledWith({
+      type: 'merge_step.tick',
+      taskId: 't',
+      key: resolveMergeStepKey(step),
+      done: true,
+    });
+  });
+
   it('keeps the commands of two open questions on one task apart, each answering its own gate', () => {
     const task = createTask({ id: 't' });
     const gates = ['g1', 'g2'].map((id) =>

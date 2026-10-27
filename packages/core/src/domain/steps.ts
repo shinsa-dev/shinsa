@@ -13,7 +13,9 @@ export type PipelineStep =
   | 'agent_review'
   | 'your_review'
   | 'pull_request'
-  | 'merge';
+  | 'pre_merge'
+  | 'merge'
+  | 'post_merge';
 
 export const PIPELINE_ORDER: readonly PipelineStep[] = [
   'answer',
@@ -27,7 +29,9 @@ export const PIPELINE_ORDER: readonly PipelineStep[] = [
   'agent_review',
   'your_review',
   'pull_request',
+  'pre_merge',
   'merge',
+  'post_merge',
 ];
 
 export type StepClass =
@@ -38,7 +42,8 @@ export type StepClass =
   | 'operation'
   | 'verification'
   | 'review'
-  | 'shipping';
+  | 'shipping'
+  | 'handover';
 
 export type GateStrength = 'hard' | 'soft' | 'none';
 
@@ -111,6 +116,7 @@ export interface StepDefinition {
   needs: readonly StepNeed[];
   worktree: boolean;
   stages: readonly TaskStage[];
+  composable: boolean;
 }
 
 const NEEDS_PLAN: StepNeed = {
@@ -145,6 +151,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     needs: [],
     worktree: false,
     stages: ['answering'],
+    composable: true,
   },
   research: {
     step: 'research',
@@ -159,6 +166,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     needs: [],
     worktree: false,
     stages: ['researching'],
+    composable: true,
   },
   investigate: {
     step: 'investigate',
@@ -176,6 +184,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     needs: [],
     worktree: true,
     stages: ['investigating'],
+    composable: true,
   },
   your_ok: {
     step: 'your_ok',
@@ -207,6 +216,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     ],
     worktree: false,
     stages: ['awaiting_proposal'],
+    composable: true,
   },
   plan: {
     step: 'plan',
@@ -238,6 +248,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     ],
     worktree: true,
     stages: ['planning', 'awaiting_plan'],
+    composable: true,
   },
   operate: {
     step: 'operate',
@@ -259,6 +270,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     needs: [NEEDS_PLAN],
     worktree: true,
     stages: ['operating', 'awaiting_operation'],
+    composable: true,
   },
   build: {
     step: 'build',
@@ -284,6 +296,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     ],
     worktree: true,
     stages: ['building', 'fixing'],
+    composable: true,
   },
   checks: {
     step: 'checks',
@@ -298,6 +311,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     needs: [NEEDS_BUILD],
     worktree: false,
     stages: ['checking'],
+    composable: true,
   },
   agent_review: {
     step: 'agent_review',
@@ -312,6 +326,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     needs: [NEEDS_BUILD],
     worktree: false,
     stages: ['reviewing'],
+    composable: true,
   },
   your_review: {
     step: 'your_review',
@@ -326,6 +341,7 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     needs: [NEEDS_BUILD],
     worktree: false,
     stages: ['awaiting_review'],
+    composable: true,
   },
   pull_request: {
     step: 'pull_request',
@@ -348,6 +364,39 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     ],
     worktree: false,
     stages: ['shipping'],
+    composable: true,
+  },
+  pre_merge: {
+    step: 'pre_merge',
+    title: 'Pre-merge',
+    class: 'handover',
+    actor: { by: 'you' },
+    inputs: ['the pre-merge steps in the work report: a variable, a secret, a setting production needs'],
+    outputs: [{ name: 'each step ticked once you did it', tool: null, evidence: false }],
+    exit: 'You ticked every pre-merge step; until then the merge gate does not merge.',
+    gate: {
+      strength: 'hard',
+      types: ['merge'],
+      when: 'Ticked on the merge gate: Merge waits until every step is ticked.',
+    },
+    placement: 'canonical',
+    needs: [
+      {
+        steps: ['pull_request'],
+        match: 'all',
+        where: 'before',
+        rule: 'Your pre-merge steps come after the pull request.',
+      },
+      {
+        steps: ['merge'],
+        match: 'all',
+        where: 'anywhere',
+        rule: 'Your pre-merge steps need a merge after them.',
+      },
+    ],
+    worktree: false,
+    stages: [],
+    composable: false,
   },
   merge: {
     step: 'merge',
@@ -370,6 +419,33 @@ export const STEP_SCHEMA: Record<PipelineStep, StepDefinition> = {
     ],
     worktree: false,
     stages: ['awaiting_merge', 'merged'],
+    composable: true,
+  },
+  post_merge: {
+    step: 'post_merge',
+    title: 'Post-merge',
+    class: 'handover',
+    actor: { by: 'you' },
+    inputs: ['the post-merge steps in the work report: a deploy, a migration, a variable, a flag'],
+    outputs: [{ name: 'each step ticked once you did it', tool: null, evidence: false }],
+    exit: 'You ticked every post-merge step. They open only once the pull request merged, and until each is ticked the task stays open, across later rounds too.',
+    gate: {
+      strength: 'hard',
+      types: ['post_merge'],
+      when: 'The round rests after its merge (and after an operation that follows it) with a step still unticked.',
+    },
+    placement: 'canonical',
+    needs: [
+      {
+        steps: ['merge'],
+        match: 'all',
+        where: 'before',
+        rule: 'Your post-merge steps come after the merge.',
+      },
+    ],
+    worktree: false,
+    stages: [],
+    composable: false,
   },
 };
 
@@ -560,6 +636,16 @@ const HARD_GATES = {
     refusal: 'Verify the setup again, start without checks, or cancel the task.',
     pauses: true,
   },
+  post_merge: {
+    type: 'post_merge',
+    strength: 'hard',
+    decidedBy: 'you',
+    title: 'Post-merge',
+    shows: ['each post-merge step the agent left for you', 'which are ticked'],
+    decisions: [],
+    refusal: 'Tick each post-merge step once you did it; the gate closes with the last one.',
+    pauses: false,
+  },
   sign_in: {
     type: 'sign_in',
     strength: 'hard',
@@ -648,7 +734,8 @@ function isPlaced(steps: readonly PipelineStep[], step: PipelineStep) {
   const index = steps.indexOf(step);
   const before = steps.slice(0, index);
   if (before.at(-1) === 'plan') return true;
-  return index === steps.length - 1 && before.at(-1) === 'merge';
+  const after = steps.slice(index + 1).filter((later) => later !== 'post_merge');
+  return after.length === 0 && before.at(-1) === 'merge';
 }
 
 function isNeedMet(steps: readonly PipelineStep[], step: PipelineStep, need: StepNeed) {
@@ -668,7 +755,7 @@ function listOrderErrors(steps: readonly PipelineStep[]) {
   }
   const placed = steps.filter((step) => STEP_SCHEMA[step].placement === 'after_plan_or_last');
   if (placed.some((step) => steps.includes('plan') && !isPlaced(steps, step))) {
-    errors.push('An operation runs right after the plan, or last, after the merge.');
+    errors.push('An operation runs right after the plan, or after the merge, before your steps after it.');
   }
   if (listStepsOfClass(steps, 'inquiry').length > 1) {
     errors.push('A task answers, researches or investigates, not more than one of them.');
@@ -689,4 +776,35 @@ export function validatePipeline(steps: readonly PipelineStep[]): string[] {
     errors.add('A task needs a step that does the work.');
   }
   return [...errors];
+}
+
+export type HandOverStep = Extract<PipelineStep, 'pre_merge' | 'post_merge'>;
+
+export const COMPOSABLE_STEPS: readonly PipelineStep[] = PIPELINE_ORDER.filter(
+  (step) => STEP_SCHEMA[step].composable
+);
+
+export function isComposableStep(step: PipelineStep) {
+  return STEP_SCHEMA[step].composable;
+}
+
+export function listComposedSteps(steps: readonly PipelineStep[]) {
+  return steps.filter(isComposableStep);
+}
+
+export interface HandOverTimings {
+  before: boolean;
+  after: boolean;
+}
+
+export function resolveHandOverPipeline(
+  steps: readonly PipelineStep[],
+  listed: HandOverTimings
+): PipelineStep[] {
+  const composed = listComposedSteps(steps);
+  if (!composed.includes('merge')) return composed;
+  const pipeline = composed.flatMap((step): PipelineStep[] =>
+    step === 'merge' && listed.before ? ['pre_merge', 'merge'] : [step]
+  );
+  return listed.after ? [...pipeline, 'post_merge'] : pipeline;
 }

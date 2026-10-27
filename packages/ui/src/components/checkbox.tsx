@@ -19,6 +19,7 @@ const SIZE_CLASS: Record<CheckboxSize, string> = {
 // a dense row stays easy to hit. The check is centred over the whole box, border
 // included: at 14px the box's inside is 12px, and a 14px glyph placed there
 // would sit 1px right and low.
+// Indeterminate (some of a group ticked) fills the same way with a dash.
 // `outline` has no fill at rest, only its edge, for a list of boxes inside a
 // popover, where a filled box on every row reads heavier than the rows
 // themselves; ticked it fills like `filled`.
@@ -26,10 +27,12 @@ const VARIANT_CLASS: Record<CheckboxVariant, string> = {
   filled: [
     'bg-background text-primary-foreground',
     'data-checked:border-primary-4 data-checked:bg-primary-4',
+    'data-indeterminate:border-primary-4 data-indeterminate:bg-primary-4',
   ].join(' '),
   outline: [
     'bg-transparent text-primary-foreground',
     'data-checked:border-primary-4 data-checked:bg-primary-4',
+    'data-indeterminate:border-primary-4 data-indeterminate:bg-primary-4',
   ].join(' '),
 };
 
@@ -37,12 +40,14 @@ function Checkbox({
   size = 'md',
   variant = 'filled',
   className,
+  indeterminate = false,
   ...props
 }: CheckboxPrimitive.Root.Props & { size?: CheckboxSize; variant?: CheckboxVariant }) {
   return (
     <CheckboxPrimitive.Root
       data-slot='checkbox'
       data-variant={variant}
+      indeterminate={indeterminate}
       className={cn(
         'peer relative inline-grid shrink-0 place-items-center rounded-checkbox border border-icon-1 outline-none',
         'not-data-disabled:cursor-pointer after:absolute after:-inset-1.5',
@@ -59,7 +64,7 @@ function Checkbox({
         data-slot='checkbox-indicator'
         className='absolute -inset-px grid place-items-center'
       >
-        <Icon name='IconCheckmark1Small' size='sm' />
+        <Icon name={indeterminate ? 'IconMinusSmall' : 'IconCheckmark1Small'} size='sm' />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

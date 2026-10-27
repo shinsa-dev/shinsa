@@ -3,7 +3,7 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 
-type OnBehalfCommand = Exclude<UserCommand, { type: 'gate.answer' }>;
+type OnBehalfCommand = Exclude<UserCommand, { type: 'gate.answer' | 'merge_step.tick' }>;
 
 type Describe<T extends OnBehalfCommand['type']> = (state: ShinsaState, command: CommandOf<T>) => string;
 
@@ -83,7 +83,7 @@ function selectCreatedTask(decider: Decider) {
 }
 
 function isOnBehalfCommand(command: ShinsaCommand): command is OnBehalfCommand {
-  return isUserCommand(command) && command.type !== 'gate.answer';
+  return isUserCommand(command) && command.type !== 'gate.answer' && command.type !== 'merge_step.tick';
 }
 
 function selectActionTask(decider: Decider, command: OnBehalfCommand) {

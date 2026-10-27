@@ -13,6 +13,7 @@ import {
   isLaterRound,
   isSamePipeline,
   isWorktreeStep,
+  listComposedSteps,
   type PipelineStep,
   type Run,
   resolveInquiryStep,
@@ -167,7 +168,7 @@ export function startAfterPlan(decider: Decider, taskId: string) {
 
 export function finishMerge(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
-  if (resolveOperationTiming(resolveTaskPipeline(task)) !== 'after_merge') {
+  if (resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge') {
     settleTask(decider, taskId, 'merged', 'pull request merged');
     return;
   }
@@ -177,7 +178,7 @@ export function finishMerge(decider: Decider, taskId: string) {
     ['pull_request.open', 'pull_request.push', 'pull_request.watch', 'pull_request.merge', 'checks.run'],
     'The pull request merged.'
   );
-  decider.withdrawGates(taskId, () => true);
+  decider.withdrawGates(taskId, (gate) => gate.type !== 'post_merge');
   decider.clearWaits(taskId);
   openOperationGate(decider, decider.task(taskId));
 }
@@ -389,7 +390,7 @@ export function recordReshape(decider: Decider, command: CommandOf<'agent.reshap
   const errors = validateComposition(task, pipeline);
   if (errors.length > 0) throw new DomainError('pipeline_invalid', errors.join(' '));
   const before = resolveTaskPipeline(task);
-  if (isSamePipeline(before, pipeline)) return;
+  if (isSamePipeline(listComposedSteps(before), pipeline)) return;
   decider.endRun(run, 'completed', command.reason);
   reshapeTask(decider, task.id, pipeline, 'agent', command.reason);
   const work = resolveWorkStep(pipeline);
@@ -471,7 +472,7 @@ export function restartAnswer(decider: Decider, task: Task, text: string | null)
 
 function resolveRestingStage(task: Task) {
   const merged = task.pullRequest?.state === 'merged';
-  return merged && resolveOperationTiming(resolveTaskPipeline(task)) !== 'after_merge' ? 'merged' : 'done';
+  return merged && resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge' ? 'merged' : 'done';
 }
 
 function finishFollowUp(decider: Decider, task: Task, run: Run, proposal: ChangeProposalInput | null) {

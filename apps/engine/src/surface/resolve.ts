@@ -3,6 +3,7 @@ import {
   DomainError,
   type Focus,
   type Gate,
+  type MergeStepView,
   type Project,
   type Repo,
   type RunAccount,
@@ -25,6 +26,7 @@ export interface ProjectsRead {
 export interface TaskDetail {
   task: TaskView;
   gates: Gate[];
+  mergeSteps: MergeStepView[];
   text: string;
   suggestions: { id: string; title: string; why: string; status: string; waitsOnThis: boolean }[];
 }
@@ -53,6 +55,22 @@ export async function findOpenGate(
     throw new DomainError('gate_not_found', `“${detail.task.title}” has no ${describe} waiting.`);
   }
   return gate;
+}
+
+export async function findMergeStep(client: SurfaceClient, ref: string, step: string) {
+  const detail = await readTask(client, ref);
+  const steps = detail.mergeSteps;
+  const wanted = step.trim().toLowerCase();
+  const found =
+    steps[Number(wanted) - 1] ??
+    steps.find((candidate) => candidate.key === step || candidate.title.toLowerCase() === wanted);
+  if (found) return { taskId: detail.task.id, step: found };
+  throw new DomainError(
+    'merge_step_not_found',
+    steps.length === 0
+      ? `“${detail.task.title}” has no steps around the merge.`
+      : `“${detail.task.title}” has no step ${step}. \`shinsa tasks show\` lists its steps, numbered from 1.`
+  );
 }
 
 export async function findAccount(client: SurfaceClient, ref: string): Promise<RunAccount> {

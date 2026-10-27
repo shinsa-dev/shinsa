@@ -48,7 +48,7 @@ const OPERATION_NOTE = [
 const COMBINED_NOTE: Record<Exclude<OperationTiming, 'alone'>, string> = {
   before_build:
     "This task runs an operation first and then changes the code: you run the operation once the human approves the plan, then build the phases, and the change goes through the human's review, a pull request and the merge.",
-  after_merge:
+  post_merge:
     "This task changes the code and then runs an operation: you build the phases, the change goes through the human's review, a pull request and the merge, and then you run the operation on the merged code (a backfill, a migration, a cleanup).",
 };
 
@@ -58,7 +58,7 @@ const ROUND_JOB: Record<OperationTiming | 'build', string> = {
   build: `each phase in turn, ${FIXING}.`,
   alone: 'the operation in the plan, step by step.',
   before_build: `the operation in the plan first, then each phase in turn, ${FIXING}.`,
-  after_merge: `each phase in turn, ${FIXING}, and after the merge the operation in the plan.`,
+  post_merge: `each phase in turn, ${FIXING}, and after the merge the operation in the plan.`,
 };
 
 function describeRoundJob(task: Task) {
@@ -144,7 +144,7 @@ export function resolvePlanningPrompt(task: Task, repo: Repo | null, bases: Task
 }
 
 function describeOperationForBuilder(task: Task) {
-  if (resolveOperationTiming(resolveTaskPipeline(task)) !== 'after_merge') return '';
+  if (resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge') return '';
   return "Do not run the plan's operation yet: you run it after the pull request merges and the human confirms it.";
 }
 
@@ -442,7 +442,7 @@ export function resolveInvestigatorPrompt(task: Task, repo: Repo | null, followU
 
 const OPERATION_MOMENT: Record<Exclude<OperationTiming, 'alone'>, string> = {
   before_build: 'You build the code change in the plan after it, from the state the operation leaves.',
-  after_merge:
+  post_merge:
     'The code change in the plan has merged into the default branch, and your worktree has it. The human read the merged commit and confirmed the operation. Run it against that code.',
 };
 
@@ -466,7 +466,7 @@ function describeOperation(task: Task) {
 }
 
 function describeOperationOpening(task: Task) {
-  if (resolveOperationTiming(resolveTaskPipeline(task)) === 'after_merge') return '';
+  if (resolveOperationTiming(resolveTaskPipeline(task)) === 'post_merge') return '';
   return task.plan?.approvedAt ? 'The human approved the plan.' : '';
 }
 

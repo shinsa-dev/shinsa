@@ -715,6 +715,22 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | --- | --- | --- |
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 
+#### shinsa merges tick
+
+Tick a pre-merge or post-merge step you did (a variable set, a migration run). The merge waits for every pre-merge step; a post-merge step ticks only once the pull request merged.
+
+```
+shinsa merges tick <task> <step...> [--undo] [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `merge_step.tick`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<step>` | text, required | The step: its number in `shinsa tasks show`, from 1, or its title. |
+| `--undo` | boolean, optional | Untick it instead. |
+
 ### operations
 
 #### shinsa operations run

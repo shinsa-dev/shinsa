@@ -54,6 +54,11 @@ const GATE_WORDS: Record<GateType, GateWords> = {
     why: describePaused,
   },
   sign_in: { label: 'Paused', reason: 'An agent needs you to sign in again', why: describePaused },
+  post_merge: {
+    label: 'Post-merge',
+    reason: 'Merged, with steps left for you to do',
+    why: (gate) => `Merged, and the task is done once you do the steps it left for you: ${gate.title}`,
+  },
 };
 
 export function resolveGateWords(gate: Gate) {

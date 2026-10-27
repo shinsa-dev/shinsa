@@ -209,7 +209,9 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `phases` | `PhaseProgress[]` | per plan phase: `pending`, `active`, `done`, `skipped` |
 | `phaseReports` | `PhaseReport[]` | per finished phase: summary, code spots, judgement calls (`judgementCalls`), and the last phase's `walkthrough?` |
 | `summary` | string \| null | the work's summary |
-| `report` | `WorkReport` \| null | the review walkthrough built from every phase: headline, sections, checks, judgement calls |
+| `report` | `WorkReport` \| null | the review built from every phase: headline, sections, checks, judgement calls, `walkthrough?` |
+| `mergeStepsDone?` | string[] | the steps around the merge you ticked, by key (`resolveMergeStepKey`: `when:` and a hash of the step's kind, title, detail and command, so any change to a step clears its tick); the steps themselves are the latest walkthrough's `steps` (`listMergeSteps`); a new round starts it empty |
+| `carriedMergeSteps?` | `CarriedMergeStep[]` (`MergeStep` with `round`, `done`) | the open steps a new round carried over from the round before it: every step after the merge, and the steps before the merge of a round still shipping onto the next one's pull request; ticks of a carried step land here; done ones are dropped at the next round |
 | `worktreePath` | string \| null | the task's worktree; for a GitButler or main-checkout task, the repository itself |
 | `workspace?` | `WorkspaceMode` | where the task works, taken from its repository when it set up (`worktree.requested`) and kept |
 | `returnBranch?` | string | main checkout: the branch the checkout was on when the task took it, where it goes back when the task settles |
@@ -475,9 +477,11 @@ never runs. A delegated run takes `planner`, `builder` or `reviewer` (`DelegateR
 | `needs` | `{ steps, match: any \| all, where: before \| anywhere, rule }`; `validatePipeline` reports `rule` word for word |
 | `worktree` | whether it works in the task's worktree, so setup verification and `worktree.create` run first |
 | `stages` | the task stages that belong to it; the invariants check a task's stage belongs to a step it has |
+| `composable` | whether the Agent may put it in a composition (`COMPOSABLE_STEPS`, the `reshape_task` enum); false only for `pre_merge` and `post_merge`, which Shinsa adds from the work report (`resolveHandOverPipeline`) |
 
 `PIPELINE_ORDER`: answer, research, investigate, your_ok, plan, operate, build, checks, agent_review, your_review,
-pull_request, merge. `operate` is placed right after `plan` or last, after `merge`.
+pull_request, pre_merge, merge, post_merge. `operate` is placed right after `plan` or after `merge`, before only
+`post_merge`.
 
 | Step | Class | Actor | Outputs (tool) | Gate | Needs | Worktree | Stages |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -492,7 +496,9 @@ pull_request, merge. `operate` is placed right after `plan` or last, after `merg
 | `agent_review` | verification | reviewer | findings (`report_review`, evidence) | soft: `agent_review` | build | no | reviewing |
 | `your_review` | review | you | your decision | hard: `review` | build | no | awaiting_review |
 | `pull_request` | shipping | Shinsa | pull request, CI, bot verdicts (evidence) | soft: `ci` | build; your review before it | no | shipping |
+| `pre_merge` | handover | you | each step ticked | hard: `merge` (Merge waits until each is ticked) | pull request before it; a merge | no | |
 | `merge` | shipping | you | the merged commit (evidence) | hard: `merge` | build; pull request before it | no | awaiting_merge, merged |
+| `post_merge` | handover | you | each step ticked | hard: `post_merge`, once the round rests with a step unticked | merge before it | no | |
 
 An inquiry has no gate of its own: a proposal goes to `your_ok`. An inquiry that proposes a change on a task without
 `your_ok` is reshaped by the agent to `[inquiry, your_ok, plan, build, checks, agent_review, your_review,
@@ -505,7 +511,7 @@ the plan step's `when` from it and `needsPlanApproval` (`decide/lifecycle.ts`) e
 check cannot drift.
 
 `validatePipeline` refuses: no steps; a step twice; steps out of order; an operation not right after the plan or
-last; more than one inquiry; any unmet need (its `rule` word for word); no step that does the work (an inquiry, a
+after the merge (before only `post_merge`); more than one inquiry; any unmet need (its `rule` word for word); no step that does the work (an inquiry, a
 build or an operation).
 
 ### `GATE_SCHEMA` (`domain/steps.ts`)
@@ -518,7 +524,9 @@ from its definition. A soft gate (`SoftGateDefinition`) declares who decides it,
 (`pass`, `fail`, `escalate`) and the hard gate it escalates to (`escalatesTo`).
 
 Hard gates, decided by you; the stored `Gate.type` is the key. The plan, your OK, review and merge gates open as
-`STEP_SCHEMA` says; the operation gate opens when a task that operates after the merge merges; the others as
+`STEP_SCHEMA` says; the operation gate opens when a task that operates after the merge merges; the post-merge gate
+opens when a round rests with a step after the merge unticked, stays open across later rounds and is the only gate a
+merged or done task keeps (`syncMergeSteps`, `docs/engine.md` → Steps around the merge); the others as
 `docs/engine.md` → Gates says. `isDecisionGate` is true for plan, review and merge; `isAgentQuestion` for question and
 secret.
 
@@ -534,6 +542,7 @@ secret.
 | `failure` | Paused | what stopped, why, what Retry does | approve (retry) · reply (retry with guidance) · reject (cancel) | "Retry or cancel the task." | yes |
 | `configuration` | Setup incomplete | each setup problem and its fix | approve (verifies the setup again) · waive (starts without checks, only when checks are all that is missing) · reject | "Verify the setup again, start without checks, or cancel the task." | yes |
 | `sign_in` | Sign in | the provider and the account | approve (retry) · reply (retry with guidance) · reject (cancel) | "Sign in, retry or cancel the task." | yes |
+| `post_merge` | Post-merge | each step left for you after the merge, which are ticked | none: ticking the last step withdraws it (`merge_step.tick`), unticking one opens it again | "Tick each step under Post-merge once you did it; the gate closes with the last one." | no |
 
 `reply` needs words, except at the operation gate, where empty words clear the notes.
 
@@ -568,7 +577,7 @@ Soft gates, decided by Shinsa or the reviewer:
 ## Verification
 
 `VERIFICATION_RULES` (`domain/verification.ts`) apply exactly when a composition contains work of their class and
-the rule's scope holds (`always`; `alone`: no `build`; `with_code`: with `build`; `after_merge`).
+the rule's scope holds (`always`; `alone`: no `build`; `with_code`: with `build`; `post_merge`).
 
 | Rule | Class | Scope | Checked by | Requirement |
 | --- | --- | --- | --- | --- |
@@ -582,7 +591,7 @@ the rule's scope holds (`always`; `alone`: no `build`; `with_code`: with `build`
 | `operation.plan_approved` | operation | `always` | the plan gate | an operation runs only from a plan you approved |
 | `operation.impact` | operation | `always` | `propose_plan` | `impact`: what changes and how much, a dry run or why none, how to undo |
 | `operation.steps` | operation | `with_code` | `propose_plan` | the operation's steps in `operation`, apart from the phases |
-| `operation.confirm_after_merge` | operation | `after_merge` | the operation gate | you confirm again on the merged commit |
+| `operation.confirm_post_merge` | operation | `post_merge` | the operation gate | you confirm again on the merged commit |
 
 `validateComposition` = `validatePipeline` + the `step` rules + two rules about the task as it stands (an inquiry that
 ran stays; an inquiry that leads to a plan needs `your_ok` unless it already ran). `validatePlanRules` = the `plan`
@@ -668,7 +677,8 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `task.cancel` | cancels it | `tasks cancel` | agent |
 | `task.complete` | marks it done without merging | `tasks done` | agent |
 | `task.bind_account` | binds it to an account, or any | `tasks bind` | agent |
-| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below) | `gates answer`, `plans *`, `reviews *`, `merges *`, `operations *`, `questions answer`, `command` | **human** |
+| `gate.answer` | decides a gate, any gate; at a review or merge gate, Request changes (`revise`) may carry `comments` (Line comments, below); approving a merge gate needs every step before the merge ticked (`merge_steps_open`) | `gates answer`, `plans *`, `reviews *`, `merges approve`, `merges reject`, `operations *`, `questions answer`, `command` | **human** |
+| `merge_step.tick` | ticks or unticks a step around the merge (`key`, `done`); a step that is not due is refused (`merge_step_early`: one after the merge before its pull request merged, one before the merge once it merged), a step the task does not have is refused (`merge_step_not_found`), and a closed task's not at all (`task_settled`); ticking the last open step after the merge withdraws the Post-merge gate | `merges tick [--undo]` | **human** |
 | `suggestion.accept` | adds a suggested task, optionally waiting on this one | `suggestions accept` | agent |
 | `suggestion.dismiss` | dismisses one | `suggestions dismiss` | agent |
 | `suggestion.keep` | keeps a split-off in this task as its next round (`shape` optional; the server asks the classifier when it is left out) | `suggestions keep` | agent |
@@ -691,8 +701,9 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 Core refuses a command sent on your behalf with `human_only`, recording nothing, when it is a `gate.answer`
 (`assertHumanDecides`), when a gate that was open before it is no longer open after it (`assertGatesStayOpen` in
 `decide/gates.ts`, run at the end of `decide`, so retry, complete, cancel, wait-on, keeping a split-off and the rest
-cannot step past an open gate), or when a `settings.change` or `repo.update` touches a human-only field. A
-`task.complete` on your behalf also needs no waiting round and no open pull request (`task_open`).
+cannot step past an open gate), when it is a `merge_step.tick`, or when a `settings.change` or `repo.update` touches
+a human-only field. A `task.complete` on your behalf also needs no waiting round, no open pull request and no unticked
+step after the merge (`task_open`).
 
 Not commands, human-only all the same: `gates secret` and `gates decline-secret` (`/api/secrets`), `schedules
 webhook-secret`, `accounts sign-in`, `sign-in-code`, `import` and `remove`, `mcp check|add|remove|on|off|sign-in|sign-out`,
@@ -970,6 +981,21 @@ walkthrough) from the plan's goal, every `complete_phase` (the latest walkthroug
 new round) and refuses a number the brief never gave (`unknown_judgement_call`). Why the builder writes it and the reviewer
 checks it: `docs/engine.md` → The review report. The other
 tools' limits are `PROTOCOL_LIMITS` (`ask`, `wait_for`, `suggest_tasks`), `DELEGATION_LIMITS` and `SCHEDULE_LIMITS`.
+
+How to test the change (`ReportTesting`, `report/testing.ts`) has two parts: `automated`, a line or two on what the
+tests cover, and `manual`, the steps the human follows in order (`ManualTestStep { action, target, expect }`). A
+target is where the step happens: a `url` (http or https only), a `file` (a repository path with `:line` or
+`:start-end`, or a `shinsa://file/` reference; `parseTestFile`), a `command` or a `screen` by name; a step without one
+stores `null`. A plain list of strings, the older form, is still accepted and read as `automated`.
+
+### Checklists
+
+A list of things to do that you tick is one shape (`packages/core/src/report/checklist.ts`): a `ChecklistItem`
+`{ key, title, detail, command, done }` (`key` names it for a tick, `detail` and `command` are null when there is none)
+and a `Checklist<Item> { title, items }`. `resolveChecklistProgress(items)` gives `{ done, total, complete }` (an empty
+list is complete) and `listOpenChecklistItems(items)` the items left, in order. The steps around the merge are
+checklist items (`MergeStepView`); the web draws every checklist, and every GFM task list in Markdown, with one
+component (`docs/design.md` → Checklists).
 
 ## The socket
 

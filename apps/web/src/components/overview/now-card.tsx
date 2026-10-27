@@ -15,6 +15,7 @@ import { TaskLink } from '@/components/links/task.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
 import { FindingVerdicts } from '@/components/overview/finding-verdicts.tsx';
 import { LiveFeed } from '@/components/overview/live-feed.tsx';
+import { PostMergeCard } from '@/components/overview/merge-steps-card.tsx';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { OperationCard } from '@/components/overview/operation-card.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
@@ -28,12 +29,11 @@ import { SignInCard } from '@/components/overview/sign-in-card.tsx';
 import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
-import { CommandRunnerProvider } from '@/components/text/code-fence.tsx';
+import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
+import { InsetNote } from '@/components/text/inset-note.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
-import { useReviewDraft } from '@/hooks/use-review-draft.ts';
-import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import {
   describeFollowUpNote,
@@ -385,6 +385,8 @@ function GateCard({
     case 'review':
     case 'merge':
       return <ReviewCard state={state} task={task} gate={gate} onOpen={onOpen} />;
+    case 'post_merge':
+      return <PostMergeCard state={state} task={task} />;
   }
 }
 

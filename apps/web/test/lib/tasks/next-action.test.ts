@@ -30,6 +30,10 @@ describe('resolveTaskAction', () => {
   it('opens the task for a plan or a merge', () => {
     expect(actionFor({ type: 'plan' })).toEqual({ label: 'Review plan', path: '/tasks/t' });
     expect(actionFor({ type: 'merge' })).toEqual({ label: 'Review and merge', path: '/tasks/t' });
+    expect(actionFor({ type: 'post_merge' })).toEqual({
+      label: 'Do the post-merge steps',
+      path: '/tasks/t',
+    });
   });
 
   it('opens the task to decide on a proposed change, where the proposal is', () => {

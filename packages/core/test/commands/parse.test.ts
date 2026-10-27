@@ -192,6 +192,10 @@ describe('parseUserCommand', () => {
         { type: 'round.ship', taskId: 't1', number: 2, shipping: 'stacked' },
       ],
       [
+        { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
+        { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
+      ],
+      [
         { type: 'suggestion.keep', taskId: 't1', suggestionId: 's1' },
         { type: 'suggestion.keep', taskId: 't1', suggestionId: 's1' },
       ],
@@ -213,6 +217,11 @@ describe('parseUserCommand', () => {
       [[], 'A command must be an object.'],
       [{ type: 'run.end' }, 'Unknown command.'],
       [{ type: 'task.create', request: 4 }, 'request must be text.'],
+      [{ type: 'merge_step.tick', taskId: 't1', key: 'x', done: 'yes' }, 'done must be true or false.'],
+      [
+        { type: 'merge_step.tick', taskId: 't1', key: 'x'.repeat(121), done: true },
+        'key is longer than 120 characters.',
+      ],
       [{ type: 'task.create', request: 'x'.repeat(200_001) }, 'request is longer than 200000 characters.'],
       [
         { type: 'task.create', request: 'x', priority: 'now' },

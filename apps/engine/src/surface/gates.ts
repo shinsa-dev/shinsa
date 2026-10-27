@@ -1,7 +1,7 @@
 import type { FindingVerdict, GateDecision, GateType, UserCommand } from '@shinsa/core';
 import type { SurfaceClient } from './client.ts';
 import type { FieldSpec, Values } from './fields.ts';
-import { findOpenGate } from './resolve.ts';
+import { findMergeStep, findOpenGate } from './resolve.ts';
 import { defineAction, defineCommand, encode, readValue, type SurfaceSpec } from './spec.ts';
 import { TASK_FIELD } from './tasks.ts';
 
@@ -193,6 +193,34 @@ export const GATE_SPECS: SurfaceSpec[] = [
   }),
   defineGateShortcut(['merges', 'approve'], 'Merge the pull request of a task.', MERGE, 'approve'),
   defineGateShortcut(['merges', 'reject'], 'Do not merge; cancel the task.', MERGE, 'reject'),
+  defineCommand({
+    path: ['merges', 'tick'],
+    summary:
+      'Tick a pre-merge or post-merge step you did (a variable set, a migration run). The merge waits for every pre-merge step; a post-merge step ticks only once the pull request merged.',
+    command: 'merge_step.tick',
+    humanOnly: true,
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'step',
+        kind: 'text',
+        positional: 'rest',
+        required: true,
+        description: 'The step: its number in `shinsa tasks show`, from 1, or its title.',
+      },
+      { name: 'undo', kind: 'boolean', description: 'Untick it instead.' },
+    ],
+    build: async (values, client) => {
+      const found = await findMergeStep(client, readValue(values, 'task'), readValue(values, 'step'));
+      return {
+        type: 'merge_step.tick',
+        taskId: found.taskId,
+        key: found.step.key,
+        done: values.undo !== true,
+      };
+    },
+    done: (values) => (values.undo === true ? 'Unticked the step.' : 'Ticked the step.'),
+  }),
   defineCommand({
     path: ['operations', 'run'],
     summary: 'Run the operation of a change that merged. Notes replace the ones saved on the operation.',

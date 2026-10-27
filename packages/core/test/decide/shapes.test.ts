@@ -837,7 +837,7 @@ describe('the agent composes the steps', () => {
       'A code change goes through your review, a pull request and the merge. A pull request opens only after your review.'
     );
     expect(refuse(['plan', 'build', 'operate', ...REVIEW_TAIL])).toThrow(
-      'An operation runs right after the plan, or last, after the merge.'
+      'An operation runs right after the plan, or after the merge, before your steps after it.'
     );
     expect(refuse(['plan', 'build', 'checks', 'agent_review', 'your_review', 'merge'])).toThrow(
       'A merge needs a pull request first.'

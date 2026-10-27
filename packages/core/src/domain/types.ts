@@ -1,5 +1,6 @@
 import type { PlanChange } from '../report/plan-changes.ts';
 import type {
+  CarriedMergeStep,
   CodeSpot,
   JudgementCall,
   PlanDocument,
@@ -132,7 +133,8 @@ export type GateType =
   | 'operation'
   | 'failure'
   | 'configuration'
-  | 'sign_in';
+  | 'sign_in'
+  | 'post_merge';
 
 export type GateCause = 'budget' | 'monitor' | 'workspace_update';
 
@@ -448,6 +450,8 @@ export interface Task {
   overlaps?: TaskOverlap[];
   approvedEdits?: EditsApproval | null;
   heldConflict?: string | null;
+  mergeStepsDone?: string[];
+  carriedMergeSteps?: CarriedMergeStep[];
 }
 
 export interface InboxMessage {

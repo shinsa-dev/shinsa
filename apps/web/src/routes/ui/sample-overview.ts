@@ -32,7 +32,7 @@ function createUsageWaitTask(now: number, id: string, autoResume: boolean) {
   };
 }
 
-const AFTER_MERGE: Task['pipeline'] = [
+const POST_MERGE: Task['pipeline'] = [
   'plan',
   'build',
   'checks',
@@ -347,7 +347,7 @@ export function createOverviewScene(now: number) {
       id: 'planned',
       title: 'Backfill missing product currencies',
       stage: 'awaiting_plan',
-      pipeline: AFTER_MERGE,
+      pipeline: POST_MERGE,
       plan: {
         version: 1,
         body: '',
@@ -360,7 +360,7 @@ export function createOverviewScene(now: number) {
       title: 'Backfill missing product currencies',
       stage: 'awaiting_operation',
       stageReason: 'waiting for your OK to run the operation',
-      pipeline: AFTER_MERGE,
+      pipeline: POST_MERGE,
       plan: {
         version: 1,
         body: '',
@@ -450,7 +450,9 @@ export function createOverviewScene(now: number) {
       title: 'Can you sign in to the staging database?',
       body: [
         'The migration check needs a staging session, and signing in opens your browser. Run this, then tell me when it says you are signed in:',
-        '```sh\nfly auth login\nfly proxy 5433:5432 -a shop-staging-db\n```',
+        '```sh run\nfly auth login\nfly proxy 5433:5432 -a shop-staging-db\n```',
+        'The check then connects the way it does in CI:',
+        '```bash\nDATABASE_URL=postgres://localhost:5433/shop bun run db:check\n```',
       ].join('\n\n'),
       runId: 'question-run',
     }),

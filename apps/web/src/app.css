@@ -119,12 +119,6 @@
   list-style: none;
 }
 
-.prose-shinsa :where(input[type="checkbox"]) {
-  margin: 0 0.375rem 0 0;
-  vertical-align: -0.125em;
-  accent-color: var(--primary);
-}
-
 .prose-shinsa :where(li)::marker {
   color: var(--fg-2);
 }

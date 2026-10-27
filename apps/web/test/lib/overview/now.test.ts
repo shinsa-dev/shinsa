@@ -223,6 +223,9 @@ describe('what the now card shows', () => {
     expect(resolveNowKind(state, usage, undefined)).toBe('usage_wait');
     const monitor = createTask({ id: 't', stage: 'building', monitor: { status: 'armed' } as never });
     expect(resolveNowKind(state, monitor, undefined)).toBe('wait');
+    const postMerge = createGate({ id: 'a', taskId: 't', type: 'post_merge' });
+    expect(resolveNowKind(state, done, postMerge)).toBe('gate');
+    expect(resolveNowKind(running, done, postMerge)).toBe('work');
     expect(resolveNowKind(state, createTask({ id: 't', stage: 'done' }), undefined)).toBe('work');
   });
 

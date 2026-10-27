@@ -67,6 +67,8 @@ const GATE_FACTS: Record<GateType, (gate: Gate) => string> = {
   failure: (gate) => `paused after a failure, needs a decision: ${gate.title}`,
   configuration: (gate) => `the setup needs fixing before any work starts: ${gate.title}`,
   sign_in: (gate) => `paused until the developer signs in again: ${gate.title}`,
+  post_merge: (gate) =>
+    `after the merge: merged, and the task is done once the developer does the steps it left them: ${gate.title}`,
 };
 
 function describeGate(gate: Gate) {

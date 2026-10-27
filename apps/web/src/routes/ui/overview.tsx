@@ -29,6 +29,7 @@ import {
   resolveVerdictAction,
   resolveVerdictDraft,
 } from '@/lib/overview/verdicts.ts';
+import { MergeStepSpecimens } from './merge-steps.tsx';
 import { createOverviewScene } from './sample-overview.ts';
 import { acknowledgeSample } from './samples.ts';
 import { Specimen } from './section.tsx';
@@ -184,7 +185,9 @@ export function OverviewSpecimens() {
       </Specimen>
       <Specimen label='FindingVerdicts · an escalated review; the primary action follows the verdicts'>
         <Card>
-          <EscalatedReview state={state} task={tasks.review} gate={gates.review} />
+          <ReviewDraftProvider enabled draftKey='ui-escalated-review'>
+            <EscalatedReview state={state} task={tasks.review} gate={gates.review} />
+          </ReviewDraftProvider>
         </Card>
       </Specimen>
       <Specimen label='PlanCard · a revised plan: what you asked, what changed, the plan'>
@@ -255,6 +258,7 @@ export function OverviewSpecimens() {
           />
         </Card>
       </Specimen>
+      <MergeStepSpecimens state={state} />
       <Specimen label='DelegationsPanel · delegations, nested under the task that started them'>
         <Card>
           <DelegationsPanel

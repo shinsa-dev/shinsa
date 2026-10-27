@@ -27,6 +27,7 @@ import {
 import { type Decider, quoteTitles } from './decider.ts';
 import { assertStackKept, changeDependencies, resolveDependencies } from './dependencies.ts';
 import { settleTask, startWork } from './lifecycle.ts';
+import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { retryTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
 
@@ -191,6 +192,7 @@ export function completeTask(decider: Decider, command: CommandOf<'task.complete
   const task = decider.task(command.taskId);
   if (decider.context.onBehalf) assertNothingOpen(task);
   assertNoShippedRoundOpen(task);
+  assertNoMergeStepsLeft(task);
   if (isTaskResting(task)) {
     decider.stage(task.id, 'done', 'marked done by you', 'you');
     decider.requestBriefing(task.id);

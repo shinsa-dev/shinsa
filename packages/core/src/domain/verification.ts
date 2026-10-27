@@ -13,7 +13,7 @@ export type VerificationCheck =
   | { kind: 'evidence' }
   | { kind: 'gate'; gate: GateType };
 
-export type VerificationScope = 'always' | 'alone' | 'with_code' | 'after_merge';
+export type VerificationScope = 'always' | 'alone' | 'with_code' | 'post_merge';
 
 export interface VerificationRule {
   id: string;
@@ -136,16 +136,16 @@ export const VERIFICATION_RULES: readonly VerificationRule[] = [
       'This task also runs an operation: list its steps in `operation`, in order, each with how to check it worked. The `phases` are the code change only.',
   },
   {
-    id: 'operation.confirm_after_merge',
+    id: 'operation.confirm_post_merge',
     applies: 'operation',
-    scope: 'after_merge',
+    scope: 'post_merge',
     check: { kind: 'gate', gate: 'operation' },
     requirement: 'After the merge you confirm again, with the merged commit in front of you, before it runs.',
     message: 'An operation after the merge waits for your OK on the merged code.',
   },
 ];
 
-function isAfterMerge(steps: readonly PipelineStep[]) {
+function isPostMerge(steps: readonly PipelineStep[]) {
   const build = steps.indexOf('build');
   return build !== -1 && steps.indexOf('operate') > build;
 }
@@ -158,7 +158,7 @@ function listVerifiedClasses(steps: readonly PipelineStep[]): VerifiedClass[] {
 function isInScope(steps: readonly PipelineStep[], scope: VerificationScope) {
   if (scope === 'alone') return !steps.includes('build');
   if (scope === 'with_code') return steps.includes('build');
-  if (scope === 'after_merge') return isAfterMerge(steps);
+  if (scope === 'post_merge') return isPostMerge(steps);
   return true;
 }
 

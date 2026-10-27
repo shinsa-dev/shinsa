@@ -50,6 +50,13 @@ import {
   listDelegationCommands,
   listDelegationMarks,
 } from './delegation-invariants.ts';
+import {
+  assertMergeStepInvariants,
+  listMergeStepCommands,
+  listMergeStepMarks,
+  resolveFixWalkthrough,
+  resolvePhaseWalkthrough,
+} from './merge-step-invariants.ts';
 import { assertHandleInvariants, listProjectMarks, selectProjectCommand } from './project-invariants.ts';
 import {
   assertRoundInvariants,
@@ -193,6 +200,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           summary: 'Done.',
           spots: [],
           judgementCalls: [],
+          ...resolvePhaseWalkthrough(runId),
         });
         if (needsEvidence(state, run.taskId) && chance(random, 0.5)) {
           commands.push({
@@ -216,7 +224,12 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
         commands.push({ type: 'agent.deliver', runId, step: 'operate', body: 'Ran it.' });
         break;
       default:
-        commands.push({ type: 'agent.complete_fix', runId, summary: 'Fixed.' });
+        commands.push({
+          type: 'agent.complete_fix',
+          runId,
+          summary: 'Fixed.',
+          ...resolveFixWalkthrough(runId),
+        });
     }
     if (chance(random, 0.3)) {
       commands.push({
@@ -451,6 +464,7 @@ function listUserCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
     if (chance(random, 0.08)) commands.push({ type: 'task.cancel', taskId });
     if (chance(random, 0.04)) commands.push({ type: 'task.complete', taskId });
   }
+  commands.push(...listMergeStepCommands(state));
   if (chance(random, 0.05)) {
     commands.push({
       type: 'settings.change',
@@ -755,7 +769,9 @@ function assertInvariants(state: ShinsaState, now: number) {
     if (previous && previous !== where) throw new Error(`${taskId} is both ${previous} and ${where}`);
     seen.set(taskId, where);
   };
-  for (const entry of queue.ready) place(entry.task.id, 'deciding');
+  for (const entry of queue.ready) {
+    if (entry.gate.type !== 'post_merge') place(entry.task.id, 'deciding');
+  }
   for (const task of queue.working) place(task.id, 'working');
   for (const task of queue.waiting) place(task.id, 'waiting');
 
@@ -782,17 +798,23 @@ function assertInvariants(state: ShinsaState, now: number) {
     ).toBe(false);
 
     assertShapeInvariants(task, gates, state, context);
+    assertMergeStepInvariants(task, gates, context);
     assertRoundInvariants(state, task, context);
     assertAgentInvariants(state, task, context);
     if (isTaskSettled(task)) {
       expect(runs, context).toHaveLength(0);
-      expect(gates, context).toHaveLength(0);
+      expect(
+        gates.filter((gate) => gate.type !== 'post_merge'),
+        context
+      ).toHaveLength(0);
       continue;
     }
     if (runs.length > 0) {
       expect(RUN_STAGES.has(task.stage), context).toBe(true);
       expect(
-        gates.every((gate) => isAgentQuestion(gate) && gate.runId === runs[0]?.id),
+        gates.every(
+          (gate) => gate.type === 'post_merge' || (isAgentQuestion(gate) && gate.runId === runs[0]?.id)
+        ),
         context
       ).toBe(true);
     }
@@ -1071,6 +1093,7 @@ describe('decide under random command sequences', () => {
         settled += Object.values(state.tasks).filter((task) => task.stage === 'merged').length;
         for (const mark of listReachedStates(state)) reached.add(mark);
         for (const mark of [
+          ...listMergeStepMarks(state),
           ...listDelegationMarks(state),
           ...listCreatedTaskMarks(state),
           ...listScheduleMarks(state),
@@ -1089,6 +1112,7 @@ describe('decide under random command sequences', () => {
         'courier task',
         'delivered result',
         'escalated review',
+        'gate after the merge',
         'historical question',
         'later delivery generation',
         'monitor',
@@ -1099,6 +1123,7 @@ describe('decide under random command sequences', () => {
         'sign-in gate',
         'skipped run',
         'split plan',
+        'ticked merge step',
         'usage wait',
         'waiting parent',
       ]);
@@ -1252,11 +1277,14 @@ describe('decide under random command sequences', () => {
     () => {
       const reached = new Set<string>();
       const collect = (state: ShinsaState) => {
-        for (const mark of listRoundMarks(state)) if (mark) reached.add(mark);
+        for (const mark of [...listRoundMarks(state), ...listMergeStepMarks(state)])
+          if (mark) reached.add(mark);
       };
       for (let seed = 1; seed <= RARE_SEEDS; seed += 1) simulate(seed, STEPS, 'rounds', collect);
       expect([...reached].sort()).toEqual([
+        'carried merge step',
         'closed task',
+        'gate after the merge',
         'kept split-off',
         'merged later round',
         'round from the default branch',
@@ -1264,6 +1292,7 @@ describe('decide under random command sequences', () => {
         'shipped round',
         'stacked round',
         'three rounds',
+        'ticked merge step',
         'waiting round',
       ]);
     },

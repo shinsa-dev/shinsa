@@ -39,12 +39,23 @@ export function StatusLetter({ status, muted = false }: { status: DiffFile['stat
   );
 }
 
-function ViewedBox({ viewed, onToggle }: { viewed: boolean; onToggle: () => void }) {
+function ViewedBox({
+  viewed,
+  label = 'Viewed',
+  indeterminate = false,
+  onToggle,
+}: {
+  viewed: boolean;
+  label?: string;
+  indeterminate?: boolean;
+  onToggle: () => void;
+}) {
   return (
     <Checkbox
       size='sm'
       aria-label='Viewed'
       checked={viewed}
+      indeterminate={indeterminate}
       onCheckedChange={onToggle}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}

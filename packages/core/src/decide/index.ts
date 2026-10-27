@@ -31,6 +31,7 @@ import { commitEdits, recordEdit } from './edits.ts';
 import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
+import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
 import { dropMessage, messageTask, receiveMessage, redeliverMessage, routeMessage } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
@@ -142,6 +143,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
         ...(command.verdicts === undefined ? {} : { verdicts: command.verdicts }),
         ...(command.comments === undefined ? {} : { comments: command.comments }),
       });
+    case 'merge_step.tick':
+      return tickMergeStep(decider, command);
     case 'suggestion.accept':
       return acceptSuggestion(decider, command);
     case 'suggestion.dismiss':
@@ -283,7 +286,9 @@ export function decide(state: ShinsaState, command: ShinsaCommand, context: Deci
   }
   apply(decider, command);
   releaseWaiting(decider);
+  syncMergeSteps(decider);
   startQueuedRounds(decider);
+  syncMergeSteps(decider);
   enforceLiveness(decider);
   dispatchRuns(decider);
   assertGatesStayOpen(decider, state);

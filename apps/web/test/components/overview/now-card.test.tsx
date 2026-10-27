@@ -106,7 +106,7 @@ describe('NowCard on the Overview', () => {
     });
     const run = createRun({ id: 'r', taskId: 'task-1', role: 'agent', startedAt: Date.now() });
     const { view } = renderOverview(createShinsaState({ tasks: [task], runs: [run] }), task, undefined);
-    const eyebrow = view.getByText('Round 2 of 2').parentElement as HTMLElement;
+    const eyebrow = view.getByText('Round 2 of 2').parentElement?.parentElement as HTMLElement;
     expect(eyebrow.textContent).toMatch(/·Round 2 of 2·.*Agent.*·Started just now$/);
     expect(eyebrow.textContent).not.toMatch(/round 2|started/);
   });

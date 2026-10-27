@@ -178,7 +178,7 @@ export function settleTask(
     stage === 'merged' ? SETTLED_EFFECTS : [...SETTLED_EFFECTS, 'pull_request.merge'],
     'The task is finished.'
   );
-  decider.withdrawGates(taskId, () => true);
+  decider.withdrawGates(taskId, (gate) => stage === 'cancelled' || gate.type !== 'post_merge');
   decider.clearWaits(taskId);
   decider.stage(taskId, stage, reason, by);
   if (task.worktreePath) decider.run({ kind: 'worktree.remove', taskId });

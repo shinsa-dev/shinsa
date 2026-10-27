@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { DiffFile, ShinsaState, Task, TaskDiff, TaskRefs, WorkReport } from '@shinsa/core';
+import {
+  type DiffFile,
+  type MergeStep,
+  resolveMergeStepKey,
+  type ShinsaState,
+  type Task,
+  type TaskDiff,
+  type TaskRefs,
+  type WorkReport,
+} from '@shinsa/core';
 import { Toaster, toast } from '@shinsa/ui/components/sonner';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';

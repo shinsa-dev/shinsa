@@ -10,13 +10,15 @@ import {
   resolveVerdictAnswer,
   resolveVerdictDraft,
 } from '@/lib/overview/verdicts.ts';
+import { describeMergeBlock } from '@/lib/review/merge-steps.ts';
 import { replyToGate, resolveApprovalReply } from '@/lib/tasks/gates.ts';
 
 export function ReviewActions({ task, gate }: { task: Task; gate: Gate }) {
   const { busy, run } = useBusy<'merge' | 'decide'>();
   const draft = useReviewDraft();
   if (gate.type === 'merge') {
-    return (
+    const blocked = describeMergeBlock(task);
+    const button = (
       <Button
         size='sm'
         icon='IconMerged'

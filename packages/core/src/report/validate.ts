@@ -113,6 +113,25 @@ export const PROTOCOL_LIMITS = {
   evidenceLabel: 40,
 } as const;
 
+export const ATTACHED_EVIDENCE_KINDS: readonly [EvidenceItemKind, ...EvidenceItemKind[]] = [
+  ...EVIDENCE_KINDS,
+  'comparison',
+];
+
+export const MERGE_STEP_TIMINGS: readonly [MergeStepTiming, ...MergeStepTiming[]] = [
+  'pre_merge',
+  'post_merge',
+];
+
+export const MERGE_STEP_KINDS: readonly [MergeStepKind, ...MergeStepKind[]] = [
+  'env',
+  'secret',
+  'migration',
+  'deploy',
+  'config',
+  'other',
+];
+
 export const ATTENTION_LEVELS: readonly [Attention, ...Attention[]] = ['critical', 'high', 'normal'];
 
 export const FINDING_SEVERITIES: readonly [ReviewFinding['severity'], ...ReviewFinding['severity'][]] = [

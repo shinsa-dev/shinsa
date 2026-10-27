@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Gate, Task } from '@shinsa/core';
+import { type Gate, listMergeSteps, type Task } from '@shinsa/core';
 import {
   ATTENTION,
   resolveGateGlyph,
@@ -10,6 +10,7 @@ import {
   resolveTaskStatusIcon,
   resolveWorkingGlyph,
 } from '@/lib/tasks/status.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function gate(overrides: Partial<Gate> = {}) {

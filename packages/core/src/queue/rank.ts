@@ -1,5 +1,5 @@
 import { describeUnblocks } from '../briefing/text.ts';
-import { capitalise } from '../chat/text.ts';
+import { capitalise, describeCount } from '../chat/text.ts';
 import {
   compareTasks,
   type GateType,
@@ -11,6 +11,7 @@ import {
   type Task,
   type TaskStage,
 } from '../domain/index.ts';
+import { listOpenMergeSteps } from '../report/merge-steps.ts';
 import type { ShinsaState } from '../state/project.ts';
 import {
   listOpenBlockers,
@@ -34,6 +35,7 @@ const GATE_RANK: Record<GateType, number> = {
   failure: 4,
   configuration: 4,
   sign_in: 4,
+  post_merge: 3,
 };
 
 const WORKING_STAGES: ReadonlySet<TaskStage> = new Set<TaskStage>([
@@ -70,8 +72,16 @@ export function listWaitsOn(state: ShinsaState, task: Task): Task[] {
   return [];
 }
 
+function describePreMerge(task: Task) {
+  const open = listOpenMergeSteps(task, 'pre_merge').length;
+  return `${capitalise(describeCount(open, 'pre-merge step'))} for you`;
+}
+
 function describeReason(entry: Omit<QueuedGate, 'reason'>) {
   const { reason } = resolveGateWords(entry.gate);
+  if (entry.gate.type === 'merge' && listOpenMergeSteps(entry.task, 'pre_merge').length > 0) {
+    return describePreMerge(entry.task);
+  }
   if (!isDecisionGate(entry.gate)) return reason;
   if (entry.unblocks > 0) return capitalise(describeUnblocks(entry.unblocks));
   if (entry.task.priority === 'urgent' || entry.task.priority === 'high') return 'Marked high priority';
@@ -114,7 +124,9 @@ function listQueuedGates(state: ShinsaState): QueuedGate[] {
 
 export function resolveQueue(state: ShinsaState, now: number): Queue {
   const entries = listQueuedGates(state);
-  const tasksWithGates = new Set(entries.map((entry) => entry.task.id));
+  const tasksWithGates = new Set(
+    entries.filter((entry) => entry.gate.type !== 'post_merge').map((entry) => entry.task.id)
+  );
 
   const running = resolveActiveRunTasks(state);
   const working: Task[] = [];

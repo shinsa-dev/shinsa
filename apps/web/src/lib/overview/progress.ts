@@ -22,7 +22,9 @@ const STEP_LABEL: Record<string, string> = {
   check: 'Checks',
   review: 'Your review',
   'pull-request': 'Pull request',
+  'pre-merge': 'Pre-merge',
   merge: 'Merge',
+  'post-merge': 'Post-merge',
 };
 
 export const STEP_STATUS_LABEL: Record<StepStatus, string> = {
@@ -76,9 +78,9 @@ export function resolveSteps(progress: TaskProgress): Step[] {
     steps.push({
       key: phase.key,
       label: STEP_LABEL[phase.key] ?? phase.title,
-      count: null,
+      count: phase.count ? `${phase.count.done}/${phase.count.total}` : null,
       status: toStepStatus(phase.status),
-      detail: phase.detail ? [{ text: phase.detail, done: false }] : [],
+      detail: phase.detail && !phase.count ? [{ text: phase.detail, done: false }] : [],
     });
   }
   return steps;
@@ -94,9 +96,16 @@ const LONGEST_FULL_STRIP = 8;
 
 export type LabelFold = 'narrow' | 'always' | null;
 
+const LONG_LABELS: ReadonlySet<string> = new Set(['pre-merge', 'post-merge']);
+
+function resolveStripLength(steps: Step[]) {
+  return steps.length + steps.filter((step) => LONG_LABELS.has(step.key)).length;
+}
+
 export function resolveLabelFold(step: Step, steps: Step[]): LabelFold {
-  if (steps.length <= LONG_STRIP || !isStepReached(step)) return null;
-  return steps.length > LONGEST_FULL_STRIP ? 'always' : 'narrow';
+  const length = resolveStripLength(steps);
+  if (length <= LONG_STRIP || !isStepReached(step)) return null;
+  return length > LONGEST_FULL_STRIP ? 'always' : 'narrow';
 }
 
 export const SHAPING_LABEL = 'Working out the steps';

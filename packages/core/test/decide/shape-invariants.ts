@@ -269,7 +269,7 @@ function assertOperationInvariants(
   context: string
 ) {
   const timing = resolveOperationTiming(pipeline);
-  if (task.stage === 'operating' && timing === 'after_merge') {
+  if (task.stage === 'operating' && timing === 'post_merge') {
     expect(task.pullRequest?.state, `${context}: operating after the merge before it merged`).toBe('merged');
     expect(isConfirmed(history), `${context}: operating after the merge without your OK`).toBe(true);
   }
@@ -278,13 +278,13 @@ function assertOperationInvariants(
     task.stage === 'awaiting_operation' ? 1 : 0
   );
   if (task.stage === 'awaiting_operation') {
-    expect(timing, context).toBe('after_merge');
+    expect(timing, context).toBe('post_merge');
     expect(task.pullRequest?.state, `${context}: confirming an operation before the merge`).toBe('merged');
   }
   if (task.stage === 'operating' && timing === 'before_build') {
     expect(task.phaseReports, `${context}: operating after building started`).toHaveLength(0);
   }
-  if (timing === 'after_merge')
+  if (timing === 'post_merge')
     expect(task.stage, `${context}: merged before its operation`).not.toBe('merged');
   if (task.pullRequest?.state === 'merged' && !isTaskSettled(task) && !isFollowUpOnWork(task)) {
     expect(
@@ -380,7 +380,7 @@ function listCompositionMarks(task: Task) {
   return [
     operated && task.pullRequest?.state === 'merged' ? 'operation after merge' : null,
     operated && built && timing === 'before_build' ? 'operation before build' : null,
-    timing === 'after_merge' && task.stageReason === 'merged without running the operation'
+    timing === 'post_merge' && task.stageReason === 'merged without running the operation'
       ? 'operation skipped after merge'
       : null,
   ];

@@ -385,8 +385,52 @@ Only these, and they win over anything below:
       "First, the operation" or "After the merge, the operation"); an operation after the merge has **Run the
       operation**; a paused task has Retry; a question has its answer
       box. Status labels say what waits on you the same way: Plan to approve, **Changes to
-      review** (never the bare "Ready for review"), Ready to merge.
-    - **Panels keep their action when collapsed.** An Overview panel's header action ("Open the
+      review** (never the bare "Ready for review"), Ready to merge, and a merged task with post-merge steps left
+      **Post-merge · 2 steps left** in amber (`IconChecklist`) until each is ticked: that is its open Post-merge
+      gate, so Home, the rail and the roadmap read it like any other gate.
+    - **Steps around the merge** (`components/review/merge-steps.tsx`, `lib/review/merge-steps.ts`; `docs/engine.md` →
+      Steps around the merge, since 2026-10-26). What the agent left for you that needs a person or production access
+      (a variable or secret to set, a migration or deploy to run, a flag to flip) is a checklist, never prose: each
+      step a row with a small checkbox on its title line, the title (`text-xs` medium, `fg-3` once ticked), its kind
+      beside it in `text-2xs fg-2` with its icon (Environment variable `IconKey1`, Secret `IconLock`, Migration
+      `IconDatabase`, Deploy `IconRocket`, Config `IconSettingsSliderHor`, Step `IconChecklist`), the detail as
+      markdown in `fg-3`, and its command as a shell code block with **Run in terminal** in its corner beside Copy,
+      which opens a terminal in the task's folder (the repository once merged) and runs the command, as any fence marked
+      `run` in a task does; nothing runs on its own. A list opens with its title (Pre-merge steps, Post-merge steps) and how far it is ("1 of 2 done",
+      "All done") at the right. A tick is `merge_step.tick`; the box waits for the server and a refusal is a toast. A
+      post-merge step cannot be ticked before the pull request merged: its box is disabled and its tooltip
+      says so. The merge gate's now card lists Pre-merge steps; a merged task with steps left opens on its Post-merge
+      gate, a now card titled "Merged. 2 steps left to do." that lists Post-merge steps
+      (`components/overview/merge-steps-card.tsx`, the gate's card in `now-card.tsx`); while a later round works, the
+      steps an earlier round left show in a Post-merge steps panel under the now card (`routes/task/overview.tsx`).
+      ⌘K's Merge #N is disabled with the same reason, and the Post-merge gate offers **Tick “…”** for each open
+      step. **They are steps of the progress track** too: Pre-merge sits between Pull request and Merge and
+      Post-merge last, each with its count ("Post-merge 1/2") and "1 of 2 done" under it, waiting on you (amber) while one is open and done once
+      each is ticked. In Needs you the merge gate says "2 pre-merge steps for you" while one is open, and the
+      Post-merge gate ("Merged, with steps left for you to do") sorts below the decision gates.
+      Both lists render through the checklist (**Checklists**, below): the steps are `ChecklistItem`s, their kind is
+      the row's `meta`, and their command the checklist's shell code block, Run in terminal in its corner.
+    - **Checklists** (kit `@shinsa/ui/components/checklist`, app `components/controls/checklist.tsx`, since
+      2026-10-26). Anything that is a list of things to do, ticked or only shown, is one checklist look, never a
+      hand-built list of checkboxes. The kit draws it: `Checklist` (the `ul`, rows `gap-3`), `ChecklistHeader`
+      (`title` `text-xs` medium `fg-4` left, `progress` `text-2xs fg-2` tabular right), `ChecklistItem` (`done`,
+      `check`: the check in a 20px column so it sits on the title's first line, the content in a `gap-1` column),
+      `ChecklistTitle` (`text-xs` medium `fg-4`, `fg-3` once done, with `meta` beside it in `text-2xs fg-2`, wrapping
+      under it when narrow), `ChecklistDetail` (`text-xs fg-3`), `ChecklistActions` (what the row offers under it,
+      `gap-1.5`) and `ChecklistMark` (a read-only check: the compact checkbox's box without a control, the accent
+      with a white check once done, named "Done" or "Not done"). The app draws data: `ItemChecklist` and
+      `ChecklistBlock` (the same with its header, nothing when empty) take `items` (`ChecklistItem` from
+      `@shinsa/core`: `key`, `title`, `detail`, `command`, `done`) and render the title as inline markdown, the
+      detail as markdown and the command as a shell `CodeFence` (copy on hover); `onTick(item, done)` makes each
+      check a 14px `Checkbox` that waits for the promise, without it the rows are `ChecklistMark`s;
+      `describeBlock(item)` disables a box with the reason as its tooltip; `meta(item)` and `actions(item)` fill the
+      row's kind and any buttons under it (a command's Run in terminal is the code block's own, in its corner). The progress is `describeChecklistProgress` ("1 of 2 done",
+      "All done"; `lib/format/checklist.ts`, on core's `resolveChecklistProgress`). A GFM task list in any
+      `Markdown` (agent prose, notes, the plan, report text) renders as the same rows, read-only: each `- [ ]` /
+      `- [x]` item a `ChecklistItem` with a `ChecklistMark` lined up with its first line (`1lh`, so it fits
+      `prose-shinsa` and `prose-chat`), its text and nested lists kept, rows `gap-1`. Nothing in markdown ticks.
+      `/ui` → Checklist shows it ticking, with commands and a disabled row, read-only, the kit parts and a task list.
+    - **Panels keep their action when collapsed.** An Overview panel's header action ("Read the
       review" on What changed, which opens the Review tab) stays in the header whether the panel is open or closed
       (`components/layout/surface/panel.tsx`); a panel can start collapsed (`defaultOpen`), as the Review tab's
       Everything else does, and remembers what you leave it at (`persistId`, 40). A passive figure beside the title (the Delegations count) is the panel's `meta`, not
@@ -851,7 +895,7 @@ Only these, and they win over anything below:
 18. **The kit (`packages/ui`).** Imported as `@shinsa/ui/components/<name>`, `@shinsa/ui/lib/<name>`,
     `@shinsa/ui/hooks/<name>` and `@shinsa/ui/styles/globals.css`:
     - `src/components/` holds every primitive the app renders, one flat file each (`button.tsx`,
-      `dialog.tsx`, …); the icon set is the one folder, `components/icon/`. A primitive nothing but `/ui`
+      `dialog.tsx`, `checklist.tsx`, …); the icon set is the one folder, `components/icon/`. A primitive nothing but `/ui`
       renders is deleted, with its tests, its `/ui` entry and any dependency only it used.
     - `src/lib/` is the logic the components share, pure and unit-tested: `cn` (with the theme's
       corner, shadow and leading tokens taught to tailwind-merge, so `cn('rounded-control',

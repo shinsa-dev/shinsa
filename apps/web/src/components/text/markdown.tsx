@@ -1,12 +1,14 @@
 import { markInlineCode } from '@shinsa/core';
+import { Checklist, ChecklistItem, ChecklistMark } from '@shinsa/ui/components/checklist';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import renderMarkdown, { type Components } from 'react-markdown';
+import renderMarkdown, { type Components, type ExtraProps } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ReferenceAnchor, ReferenceLabel, useReferenceMarkdown } from '@/components/links/reference.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
 import { isRunnableFence } from '@/lib/code/block.ts';
 import { createCache } from '@/lib/format/cache.ts';
+import { isTaskItemDone, isTaskList, isTaskListItem } from '@/lib/format/checklist.ts';
 import { isReferenceHref, transformUrl } from '@/lib/tasks/references.ts';
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -15,7 +17,12 @@ const PARSED_LIMIT = 400;
 
 const INLINE_ELEMENTS = ['code', 'strong', 'em', 'a', 'del'];
 
-function readFence(children: React.ReactNode) {
+function readFenceMeta(node: ExtraProps['node']) {
+  const code = node?.children[0];
+  return code?.type === 'element' ? code.data?.meta : null;
+}
+
+function readFence(node: ExtraProps['node'], children: React.ReactNode) {
   const element = React.Children.toArray(children)[0];
   if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(element)) return null;
   const language = element.props.className?.match(/language-([\w+#.-]+)/)?.[1] ?? null;
@@ -34,16 +41,52 @@ function ExternalLink({ href, children }: { href?: string; children?: React.Reac
   );
 }
 
+function TaskList({ className, children }: { className?: string; children?: React.ReactNode }) {
+  return <Checklist className={cn(className, 'gap-1')}>{children}</Checklist>;
+}
+
 const BLOCK_COMPONENTS: Components = {
+  ul: ({ className, children }) =>
+    isTaskList(className) ? (
+      <TaskList className={className}>{children}</TaskList>
+    ) : (
+      <ul className={className}>{children}</ul>
+    ),
+  ol: ({ className, children, start }) =>
+    isTaskList(className) ? (
+      <TaskList className={className}>{children}</TaskList>
+    ) : (
+      <ol className={className} start={start}>
+        {children}
+      </ol>
+    ),
+  li: ({ node, className, children }) => {
+    if (!isTaskListItem(className)) return <li className={className}>{children}</li>;
+    const done = isTaskItemDone(node);
+    return (
+      <ChecklistItem
+        done={done}
+        check={<ChecklistMark done={done} />}
+        className={cn(className, '[&>[data-slot=checklist-check]]:h-[1lh]')}
+      >
+        <div>{children}</div>
+      </ChecklistItem>
+    );
+  },
+  input: () => null,
   a: ({ href, children }) =>
     isReferenceHref(href) ? (
       <ReferenceAnchor href={href}>{children}</ReferenceAnchor>
     ) : (
       <ExternalLink href={href}>{children}</ExternalLink>
     ),
-  pre: ({ children }) => {
-    const fence = readFence(children);
-    return fence ? <CodeFence code={fence.code} language={fence.language} /> : <pre>{children}</pre>;
+  pre: ({ node, children }) => {
+    const fence = readFence(node, children);
+    return fence ? (
+      <CodeFence code={fence.code} language={fence.language} runnable={fence.runnable} />
+    ) : (
+      <pre>{children}</pre>
+    );
   },
 };
 

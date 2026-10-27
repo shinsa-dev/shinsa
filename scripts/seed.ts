@@ -24,6 +24,8 @@ import {
   isReadOnlyRun,
   NO_PROJECT_KEY,
   RUN_AGENT_ROLE,
+  resolveHandOverPipeline,
+  resolveMergeStepKey,
   SHAPE_PIPELINES,
   serializePlanMarkdown,
 } from '../packages/core/src/index.ts';
@@ -1585,6 +1587,54 @@ function pushTaskResults(task: SeedTask, push: Push, clock: SeedClock) {
     });
   }
   pushTaskPullRequest(task, push, clock);
+}
+
+function listSeedMergeSteps(task: SeedTask) {
+  return task.report?.walkthrough?.steps ?? [];
+}
+
+function pushHandOverSteps(task: SeedTask, push: Push, clock: SeedClock) {
+  const steps = listSeedMergeSteps(task);
+  if (steps.length === 0) return;
+  const pipeline = [...(resolveSeedPipeline(task) ?? SHAPE_PIPELINES.change)];
+  const next = resolveHandOverPipeline(pipeline, {
+    before: steps.some((step) => step.when === 'pre_merge'),
+    after: steps.some((step) => step.when === 'post_merge'),
+  });
+  if (!isSamePipeline(next, pipeline)) {
+    push(clock.step(0.05), {
+      type: 'task.reshaped',
+      taskId: task.id,
+      pipeline: next,
+      by: 'shinsa',
+      reason: 'The work report lists steps for you around the merge.',
+    });
+  }
+  for (const step of steps.filter((candidate) => task.ticked?.includes(candidate.title))) {
+    push(clock.step(0.4), {
+      type: 'merge_step.ticked',
+      taskId: task.id,
+      key: resolveMergeStepKey(step),
+      title: step.title,
+      done: true,
+    });
+  }
+}
+
+function resolvePostMergeGate(task: SeedTask): SeedTask['gate'] {
+  const open = listSeedMergeSteps(task).filter(
+    (step) => step.when === 'post_merge' && !task.ticked?.includes(step.title)
+  );
+  if (!task.merged || open.length === 0) return undefined;
+  return {
+    type: 'post_merge',
+    title: `${open.length} ${open.length === 1 ? 'post-merge step' : 'post-merge steps'} left`,
+    body: [
+      `Pull request #${task.pullRequest?.number} merged. These steps are yours; tick each once you did it. The task is done once every step is ticked.`,
+      '',
+      ...open.map((step) => `- [ ] **${step.title}**: ${step.detail}`),
+    ].join('\n'),
+  };
 }
 
 function resolveSeedGateRun(task: SeedTask) {

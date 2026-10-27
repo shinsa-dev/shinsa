@@ -348,6 +348,15 @@ function readTaskPrioritize(fields: Fields): UserCommand {
   };
 }
 
+function readMergeStepTick(fields: Fields): UserCommand {
+  return {
+    type: 'merge_step.tick',
+    taskId: readId(fields, 'taskId'),
+    key: readId(fields, 'key', MAX_STEP_KEY),
+    done: readBoolean(fields, 'done'),
+  };
+}
+
 function readSuggestionAccept(fields: Fields): UserCommand {
   return {
     type: 'suggestion.accept',
@@ -526,6 +535,7 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'task.message': readTaskMessage,
   'round.ship': readRoundShip,
   'gate.answer': readGateAnswer,
+  'merge_step.tick': readMergeStepTick,
   'suggestion.accept': readSuggestionAccept,
   'suggestion.dismiss': readSuggestionDismiss,
   'suggestion.keep': readSuggestionKeep,

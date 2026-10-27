@@ -51,7 +51,9 @@ const STEP_LABEL: Record<PipelineStep, string> = {
   agent_review: 'agent review',
   your_review: 'your review',
   pull_request: 'pull request',
+  pre_merge: 'pre-merge',
   merge: 'merge',
+  post_merge: 'post-merge',
 };
 
 export const RESULT_PANEL: Record<DeliveringStep, { title: string; icon: IconName }> = {
@@ -186,7 +188,7 @@ export function describeChangeGate(task: Task, gate: Gate) {
 
 const OPERATION_HEADING = {
   before_build: 'First, the operation',
-  after_merge: 'After the merge, the operation',
+  post_merge: 'After the merge, the operation',
 } as const;
 
 export function resolvePlannedOperation(task: Task) {

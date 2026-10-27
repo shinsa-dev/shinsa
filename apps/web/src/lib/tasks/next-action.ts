@@ -34,6 +34,8 @@ function resolveGateAction(gate: Gate, task: Task): TaskAction {
       return { label: 'Review changes', path: resolveTaskPath(task, { tab: 'review' }) };
     case 'merge':
       return { label: 'Review and merge', path };
+    case 'post_merge':
+      return { label: 'Do the post-merge steps', path };
   }
 }
 
