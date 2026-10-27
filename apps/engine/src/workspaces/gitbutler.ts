@@ -4,11 +4,13 @@ import { resolveFreeBranch } from '../git/worktree.ts';
 import { describeError, log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 import {
-  isGitButlerWorkspace,
+  BUT_MISSING,
+  isGitButlerReady,
   isStackedWithOthers,
   listAppliedBranches,
   listConflictedBranches,
   readButStatus,
+  readButVersion,
   runBut,
 } from './but.ts';
 import {
@@ -39,8 +41,8 @@ function describeConflicts(paths: string[]) {
   return `These files had uncommitted changes that are not this task’s, so Shinsa will not commit them to its branch: ${paths.join(', ')}. Undo your edits to them, or ask the human what to do.`;
 }
 
-export function describeNotWorkspace(repo: Repo) {
-  return `${repo.path} is not a GitButler workspace. Run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`;
+export function describeNotWorkspace(repo: Repo, version: string) {
+  return `${repo.path} is not a GitButler workspace, which \`but\` ${version} needs. Update \`but\` (0.23 and newer work in any repository) or run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`;
 }
 
 async function hasLocalBranch(repo: Repo, branch: string) {
@@ -82,8 +84,10 @@ export class GitButlerStrategy implements WorkspaceStrategy {
     this.#lease = lease;
   }
 
-  prepare(repo: Repo, task: Task, signal?: AbortSignal) {
-    if (!isGitButlerWorkspace(repo.path)) throw new Error(describeNotWorkspace(repo));
+  async prepare(repo: Repo, task: Task, signal?: AbortSignal) {
+    const version = await readButVersion(signal);
+    if (version === null) throw new Error(BUT_MISSING);
+    if (!isGitButlerReady(repo.path, version)) throw new Error(describeNotWorkspace(repo, version));
     if (!task.branch) throw new Error('The task has no branch yet.');
     const requested = assertRefName(task.branch);
     return this.#serially(repo, async () => {

@@ -10,14 +10,21 @@ import { ConflictedBranchError } from '../../src/workspaces/index.ts';
 import { WorkspaceLock } from '../../src/workspaces/lock.ts';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import {
+  createGitRepo,
+  createTempDir,
+  git,
+  overrideEnv,
+  startGitButler,
+  writeFiles,
+} from '../helpers/index.ts';
 import { createRound, createTask } from '../helpers/state.ts';
 
 setDefaultTimeout(30_000);
 
 async function createWorkspace(files: Record<string, string> = {}) {
   const made = await createGitRepo({ files: { 'a.txt': 'a\n', 'b.txt': 'b\n', ...files } });
-  await runCommandOrThrow(['but', 'setup', '--json'], made.path);
+  await startGitButler(made.path);
   const strategy = new GitButlerStrategy(createTempDir());
   return { ...made, strategy };
 }
@@ -320,16 +327,24 @@ describe('GitButler workspaces', () => {
     await strategy.remove(repo, { ...merged, branch: null });
   });
 
-  test('a repository that is not a GitButler workspace is refused before anything changes', async () => {
+  test('a repository `but` cannot work in is refused before anything changes', async () => {
     const { repo, path } = await createGitRepo();
     const strategy = new GitButlerStrategy(createTempDir());
-    expect(() => strategy.prepare(repo, createTask({ worktreePath: null }))).toThrow(
-      `${path} is not a GitButler workspace. Run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`
+    const restore = overrideEnv({ FAKE_BUT_VERSION: '0.22.3' });
+    await expect(strategy.prepare(repo, createTask({ worktreePath: null }))).rejects.toThrow(
+      `${path} is not a GitButler workspace, which \`but\` 0.22.3 needs. Update \`but\` (0.23 and newer work in any repository) or run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`
     );
+    restore();
+    const hidden = overrideEnv({ FAKE_BUT_MISSING: '1' });
+    await expect(strategy.prepare(repo, createTask({ worktreePath: null }))).rejects.toThrow(
+      'GitButler’s command line (`but`) is not installed or not on the PATH.'
+    );
+    hidden();
+    expect(await git(path, 'branch', '--show-current')).toBe('main');
     const workspace = await createWorkspace();
-    expect(() =>
+    await expect(
       workspace.strategy.prepare(workspace.repo, createTask({ branch: null, worktreePath: null }))
-    ).toThrow('The task has no branch yet.');
+    ).rejects.toThrow('The task has no branch yet.');
   });
 
   test('a ledger write that fails gives the claim back', async () => {

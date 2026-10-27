@@ -22,8 +22,10 @@ jobs:
       - name: Install GitButler's but
         run: |
           dpkg -s libdbus-1-3 >/dev/null 2>&1 || sudo apt-get install -y libdbus-1-3
-          curl -fsSL https://gitbutler.com/install.sh | sh
+          curl -fsSL https://gitbutler.com/install.sh | sh -s -- "$BUT_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        env:
+          BUT_VERSION: 0.23.0
       - run: but --version
       - run: bun run test
 

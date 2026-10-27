@@ -3,9 +3,18 @@ import type { ShinsaState, Task } from '@shinsa/core';
 import type { RunSupervisor } from '../../src/agents/index.ts';
 import type { Briefings } from '../../src/briefing/index.ts';
 import { EffectRunner } from '../../src/runtime/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
+import { listAppliedBranches, readButStatus } from '../../src/workspaces/but.ts';
 import { Workspaces } from '../../src/workspaces/index.ts';
-import { createGitRepo, createTempDir, createTestConfig, git, until, writeFiles } from '../helpers/index.ts';
+import {
+  createGitRepo,
+  createTempDir,
+  createTestConfig,
+  git,
+  overrideEnv,
+  startGitButler,
+  until,
+  writeFiles,
+} from '../helpers/index.ts';
 import { createRepo, createStubEngine, createTask } from '../helpers/state.ts';
 
 const RUNS = { quiesce: () => Promise.resolve() } as unknown as RunSupervisor;
@@ -46,7 +55,7 @@ const CHANGE: Task['pipeline'] = [
 describe('effects where agents work', () => {
   test('a GitButler task gets its branch in the checkout, and the checkout is where it works', async () => {
     const { repo, path } = await createGitRepo();
-    await runCommandOrThrow(['but', 'setup', '--json'], path);
+    await startGitButler(path);
     const { runner, dispatched } = setup(
       { stage: 'triage', worktreePath: null, workspace: 'gitbutler' },
       { ...repo, workspace: 'gitbutler' }
@@ -58,7 +67,7 @@ describe('effects where agents work', () => {
       path,
       branch: 'fix/tab-scroll',
     });
-    expect(await git(path, 'branch', '--show-current')).toBe('gitbutler/workspace');
+    expect(listAppliedBranches(await readButStatus(path))).toEqual(['fix/tab-scroll']);
   });
 
   test('the setup check stops a task whose repository cannot hold agents the way you chose', async () => {
@@ -69,7 +78,9 @@ describe('effects where agents work', () => {
       { stage: 'triage', pipeline: CHANGE, worktreePath: null },
       { ...repo, workspace: 'gitbutler' }
     );
+    const restore = overrideEnv({ FAKE_BUT_VERSION: '0.22.3' });
     await gitbutler.runner.apply({ kind: 'config.verify', taskId: 'task-1' }, createContext());
+    restore();
     expect(gitbutler.dispatched[0]).toMatchObject({
       type: 'config.record',
       problems: [{ kind: 'workspace', detail: expect.stringContaining('is not a GitButler workspace') }],
@@ -94,7 +105,7 @@ describe('effects where agents work', () => {
 
   test('a GitButler task’s checks wait for another task’s agent to stop changing files', async () => {
     const { repo, path } = await createGitRepo();
-    await runCommandOrThrow(['but', 'setup', '--json'], path);
+    await startGitButler(path);
     const workspaces = new Workspaces({ dataDir: createTempDir(), worktreesDir: createTempDir() });
     const butler = { ...repo, workspace: 'gitbutler' as const, checkCommands: ['true'] };
     const other = createTask({ id: 'task-2', worktreePath: path, workspace: 'gitbutler' });
@@ -196,7 +207,7 @@ describe('effects where agents work', () => {
 
   test('updating a GitButler workspace runs `but pull`, then hands the task back to its agent', async () => {
     const { repo, path } = await createGitRepo();
-    await runCommandOrThrow(['but', 'setup', '--json'], path);
+    await startGitButler(path);
     const butler = { ...repo, workspace: 'gitbutler' as const };
     const shipping = setup(
       { stage: 'shipping', worktreePath: path, workspace: 'gitbutler', branch: 'fix/tab-scroll' },

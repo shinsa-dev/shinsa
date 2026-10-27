@@ -292,7 +292,9 @@ describe('Settings → Projects', () => {
     const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
     const gitbutler = within(list).getByRole('option', { name: /^GitButler/ });
     expect(gitbutler.getAttribute('aria-disabled')).toBe('true');
-    expect(gitbutler.textContent).toContain('Run `but setup` in this repository to use it.');
+    expect(gitbutler.textContent).toContain(
+      'Run `but setup` in this repository, or update `but` to 0.23 or newer, to use it.'
+    );
   });
 
   it('sets each repository’s test coverage: Auto says what it found, Custom asks for the command and report', async () => {

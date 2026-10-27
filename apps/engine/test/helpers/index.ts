@@ -18,6 +18,7 @@ import {
   type Progress,
   type Terminal,
 } from '../../src/terminal/index.ts';
+import { needsButSetup, readButVersion } from '../../src/workspaces/but.ts';
 import { createConfigAt } from './config.ts';
 
 const created: string[] = [];
@@ -63,6 +64,17 @@ export interface TestRepo {
   path: string;
   origin: string;
   repo: Repo;
+}
+
+export async function startGitButler(path: string) {
+  const version = await readButVersion();
+  if (version !== null && needsButSetup(version)) await runCommandOrThrow(['but', 'setup', '--json'], path);
+}
+
+export async function startParallelBranches(path: string) {
+  await startGitButler(path);
+  for (const branch of ['side/one', 'side/two'])
+    await runCommandOrThrow(['but', 'branch', 'new', branch, '--json'], path);
 }
 
 export async function createGitRepo(
