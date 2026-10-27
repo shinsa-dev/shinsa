@@ -40,8 +40,10 @@ src/
 │                        shows; /ui never connects or sends anything)
 ├── components/<domain>/ Pieces a route composes, one folder per domain, files named for what they are:
 │                        task (header, facts with why each was chosen, menus, composer, review draft, the
-│                        handle), overview (now card and its
-│                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, the plan's
+│                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
+│                        page while it has a folder), overview (now card and its
+│                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
+│                        steps left after the merge), the plan's
 │                        parameters, the quiet-agent note,
 │                        question choices, finding verdicts, plan revision, suggested tasks, delegations and
 │                        result panels, the Rounds panel and its round headers, progress track), chat (the chat line every one-line row is, round dividers, run sections, the role mark,
@@ -82,8 +84,12 @@ src/
 │                        status (tiles, glyphs, tones in text, check marks, priority, the health and engine banners, the Update button,
 │                        loading-line.tsx: LoadingLine and LoadingSpinner, the waits that show only after 300ms), links (TaskLink, PrLink,
 │                        RepoChip, BranchChip, FileLink, references), overlays (hint, info popover, image
-│                        viewer, confirm dialog), text (time ago, markdown, code fence, file path, diff stats,
-│                        finding text, code-diff.tsx: CodeDiff, the one wrapper for every diff outside the Code
+│                        viewer, confirm dialog), text (time ago, markdown, code fence, code-block.tsx: CodeBlock, the frame and the one corner every code block shares
+│                        (fences and the chat's tool-call blocks): Copy, and Run in terminal on a shell fence marked run where
+│                        CommandRunnerProvider has a runner, centred beside one line or top-right on several), inset-note.tsx (InsetNote and
+│                        SuggestedFix: a labelled note on the inset), file path, diff stats,
+│                        finding text, note-head.tsx: NoteHead, the head every finding and review card opens on (label
+│                        and title left, the action right), code-diff.tsx: CodeDiff, the one wrapper for every diff outside the Code
 │                        tab, with code-diff-view.tsx, the lazily loaded `@pierre/diffs` view; change-snippet.tsx: a
 │                        file's lines as a folded diff for spots and findings), controls (choice, choice buttons, select field, options trigger, copy
 │                        button), accounts (sign-in and percent dialogs, usage menu, bar and percent, refresh button, account

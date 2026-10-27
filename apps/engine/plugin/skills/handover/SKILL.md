@@ -10,6 +10,27 @@ limits, published in its schema; Shinsa rejects a hand-over that breaks one and 
 call the tool again. The human sees a hand-over in the chat as soon as you make it, so stop after it: never
 announce, repeat or summarise it, and never say your turn is over. This page is how to fill the fields well.
 
+## Commands in your text
+
+A field that takes Markdown can hold a fenced block. Mark a command the human should run themselves with `run`
+after its language, and Shinsa gives the block a Run in terminal button; anything else is an example and can only be
+copied. The structured commands (a `command` target in `testing`, a step's `command`) are always runnable, so never
+fence them.
+
+````md
+Start the preview and open it in Safari:
+
+```bash run
+bun run --cwd apps/dashboard dev
+```
+
+A retry resumes from the saved offset, for example:
+
+```bash
+bun run export --app app_9f2c --from-offset 150000
+```
+````
+
 ## The plan (`propose_plan`, while you plan)
 
 | Field | Fill it with |

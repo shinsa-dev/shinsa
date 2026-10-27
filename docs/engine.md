@@ -1413,9 +1413,10 @@ running when the window closes or the app quits, and a page that comes back find
   (`browser_only` otherwise, so `curl` and the command line cannot type into one); `shinsa terminals` is human-only;
   and `agents/policy.ts` refuses a shell command that names `/api/terminals` or `/ws/terminals`. As everywhere in Who
   can change Shinsa, this keeps an agent from doing it by accident, not one set on it.
-- **An agent that needs you to run something** asks (`ask`) with the command in a ```` ```sh ```` block in its
-  context, as the tool's description says. The question card shows Run in terminal on that block (and only there),
-  which opens a terminal in the task's worktree, or its repository, and runs it. Nothing runs until you press it.
+- **An agent that needs you to run something** asks (`ask`) with the command in a ```` ```bash run ```` block in
+  its context, as the tool's description says; the house rules (`prompts/rules.ts`) and the `handover` and `review`
+  skills teach every role the `run` mark, and a plain ```` ```bash ```` block is an example with Copy alone. The
+  question card shows Run in terminal in that block's corner (as every block marked `run` on a task's pages does), which opens a terminal in the task's worktree, or its repository, and runs it. Nothing runs until you press it.
   Running types like a person (`TerminalSession.type`): it waits until the shell has printed and then been quiet for
   150 ms (its prompt; at most 5 s, so a busy program cannot hold it), types the command, and presses Enter 30 ms later
   as a key of its own. A shell such as fish does not run a line whose Enter arrives in the same read as the text, and a

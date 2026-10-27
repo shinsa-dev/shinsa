@@ -2073,12 +2073,15 @@ Only these, and they win over anything below:
       the chevron, a radio list of every project with its dot, which closes on the one you pick (the Focus menu's
       stays open for how long to keep it). A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
-    - **Tabs** (`tab-bar.tsx`). A tab is a 24px row, the height of the project picker beside it: its mark, the label (the name you gave it, else the shell's
-      title, else the folder's name; a service's tab is its name; `resolveTerminalLabel` in core), and a close button
-      (`icon-2xs`, 18px) inset 3px from the tab's top, bottom and end, revealed on hover and always on the active tab.
-      A shell's mark is `IconConsole`, `IconConsoleFilled` on the tab in front (19, the filled rule); a service's is
-      its state's glyph in its tone, filled on the tab in front too (`IconPlayFilled`…), so a service tab reads apart
-      from a shell and shows whether it runs. The active tab is `bg-bg-a2`, `fg-4`, `faux-medium`; an ended shell's label
+    - **Tabs** (`tab-bar.tsx`). A tab is the kit's segmented tab, 22px inside the 26px list: its mark, the label (the
+      name you gave it, else the shell's title, else the folder's name; a service's tab is its name;
+      `resolveTerminalLabel` in core), and a close button (`icon-2xs`, 18px) revealed on hover and always on the
+      active tab. The button sits in an even 2px inset: 2px from the tab's top and bottom, and the tab's end padding
+      is 2px too (`pe-0.5` over the kit's `px-2`; measured), so the × is centred in its corner. A shell's mark is
+      `IconConsole`, `IconConsoleFilled` on the tab in front (19, the filled rule); a service's is its state's glyph
+      in its tone, filled on the tab in front too (`IconPlayFilled`…), so a service tab reads apart from a shell and
+      shows whether it runs. They are the kit's `Tabs` (each tab a `TabsTrigger` rendered as a `div`, since it holds its close
+      button), so the selected pill slides between terminals like every other tab bar; an ended shell's label
       is `fg-2`. The tooltip names the folder and how it ended, or a service's state and command. Double-click
       renames in place (Enter keeps it, Escape puts the old name back, an empty name goes back to the title); drag a
       tab onto another to put it there; the middle button closes it.
@@ -2141,10 +2144,12 @@ Only these, and they win over anything below:
       front with the rule above (`hooks/use-terminal-keys.ts`, the one page-level listener besides 14's, 32's and
       34's). The Mac app's menu has no Close Window item, so ⌘W reaches the page there; a browser keeps both for its
       own tabs.
-    - **Run in terminal.** In an agent's question card, a ```` ```sh ```` block (or `bash`, `zsh`, `fish`, `shell`,
-      `console`, where only the `$` lines count) gets a Run in terminal button (`secondary xs`, `IconConsole`) beside
-      its copy button, and nowhere else (`CommandRunnerProvider` in `text/code-fence.tsx`). Pressing it opens a
-      terminal in the task's folder and runs the command; nothing runs without it.
+    - **Run in terminal.** Every shell fence marked `run` (```` ```bash run ````) in a task's prose, notes, chat and
+      Overview, How to test's commands and the steps around the merge has Run in terminal in its code block's corner
+      beside Copy; a plain ```` ```bash ```` fence is an example with Copy alone (`CodeBlock`, How
+      it's built above; the runner is `CommandRunnerProvider` in `text/code-block.tsx`, which the task page fills
+      while the task has a folder). Its tooltip names the folder it runs in. Pressing it opens a terminal in the
+      task's folder and runs the command; nothing runs without it.
     - **⌘K.** Services (Start all services, Add services…, Manage services…, and Start, Restart or Stop each service of the project
       in focus), and on
       the Terminal page New terminal, Find in the scrollback, Clear the scrollback (⌘L), Start the shell again, Rename,

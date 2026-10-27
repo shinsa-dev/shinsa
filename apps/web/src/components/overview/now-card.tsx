@@ -112,7 +112,6 @@ export function QuestionCard({
   task: Task;
   gate: Gate;
   onReply?: GateReplier;
-  onRun?: (command: string) => unknown;
 }) {
   const { busy, run } = useBusy<'answer'>();
   const asked = gate.runId ? state.runs[gate.runId] : undefined;
@@ -122,11 +121,7 @@ export function QuestionCard({
       eyebrow={<Eyebrow state={state} task={task} extra={asked ? 'The agent asked' : undefined} />}
       title={gate.title}
     >
-      {gate.body && (
-        <CommandRunnerProvider run={onRun}>
-          <Markdown text={gate.body} className='text-fg-3 text-xs' />
-        </CommandRunnerProvider>
-      )}
+      {gate.body && <Markdown text={gate.body} className='text-fg-3 text-xs' />}
       <QuestionChoices gate={gate} busy={busy !== null} onPick={answer} />
       <AnswerBox
         label='Your answer'
@@ -264,12 +259,7 @@ export function ChangeCard({
     >
       {task.result && <Markdown text={task.result.body} className='text-fg-4 text-xs' />}
       {change.why && <Markdown text={change.why} className='text-fg-3 text-xs' />}
-      {change.request && (
-        <div className='corner-superellipse/1.125 flex flex-col gap-px rounded-lg bg-bg-a1 px-3 py-2.5'>
-          <span className='text-2xs text-fg-2'>{change.requestLabel}</span>
-          <Markdown text={change.request} className='text-fg-4 text-xs' />
-        </div>
-      )}
+      {change.request && <InsetNote label={change.requestLabel} text={change.request} />}
     </NowFrame>
   );
 }

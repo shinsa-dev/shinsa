@@ -19,6 +19,7 @@ import {
   splitArguments,
   splitLines,
 } from '@/lib/chat/tool-output.ts';
+import { resolveCodeCorner } from '@/lib/code/block.ts';
 import { resolveLanguage } from '@/lib/code/highlight.ts';
 import { countLineChanges } from '@/lib/code/line-changes.ts';
 
@@ -39,7 +40,7 @@ function StructuredOutput({
 }) {
   const lines = React.useMemo(() => splitLines(structured).map((line) => ({ text: line })), [structured]);
   return (
-    <DetailBlock label={label} copy={text}>
+    <DetailBlock label={label} copy={text} corner={resolveCodeCorner(structured)}>
       <CodeLines lines={lines} language='json' wrap />
     </DetailBlock>
   );
@@ -49,7 +50,7 @@ function OutputText({ text, failed, label }: { text: string; failed: boolean; la
   const structured = React.useMemo(() => formatStructured(text), [text]);
   if (structured) return <StructuredOutput text={text} structured={structured} label={label} />;
   return (
-    <DetailBlock label={label} copy={text}>
+    <DetailBlock label={label} copy={text} corner={resolveCodeCorner(text)}>
       <CodeLines
         lines={splitLines(text).map((line) => ({ text: line }))}
         wrap
@@ -101,7 +102,7 @@ function ReadDetail({ call, path, running }: { call: ToolCall; path: string; run
   const plain = call.failed || call.result === null || call.images.length > 0;
   if (plain) return <ToolResult call={call} running={running} />;
   return (
-    <DetailBlock copy={parsed.code}>
+    <DetailBlock copy={parsed.code} corner={resolveCodeCorner(parsed.code)}>
       <CodeLines
         lines={parsed.lines}
         language={resolveLanguage(path)}

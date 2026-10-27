@@ -77,6 +77,7 @@ export function resolveHouseRules(role: RunRole) {
     'Every hand-over goes through a Shinsa tool with fixed fields and hard length limits. Shinsa rejects one that breaks a limit and tells you which; fix it and call the tool again.',
     'Write for a reader with ten seconds per item: plain sentences, no filler, no restating the request.',
     'Wrap code identifiers, file paths and commands in backticks, for example `reset()` or `src/chat/session.ts`. No headings or lists inside short fields.',
+    'Mark a command the human should run themselves in a fenced block whose language is followed by `run`, as ```bash run (sh, zsh, fish, shell and console work too): Shinsa gives that block a Run in terminal button. Use a plain ```bash block for an example, an illustration or a command you ran; it can only be copied.',
     REFERENCE_RULES,
     resolveOrchestrationRules(tools),
     MANAGE_RULES,

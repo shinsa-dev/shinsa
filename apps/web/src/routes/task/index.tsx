@@ -5,6 +5,7 @@ import * as React from 'react';
 import { ErrorBoundary } from '@/components/errors/boundary.tsx';
 import { CARDS_FRAME, PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { TaskCommandRunner } from '@/components/task/command-runner.tsx';
 import { TaskHeader } from '@/components/task/header.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
@@ -163,7 +164,9 @@ export function TaskPage({ state, taskId }: { state: ShinsaState; taskId: string
   const Frame = layout === 'cards' ? CardsTaskPage : SidebarTaskPage;
   return (
     <ReviewDraftProvider enabled={view.reviewing} draftKey={view.draftKey}>
-      <Frame state={state} task={task} view={view} />
+      <TaskCommandRunner state={state} task={task}>
+        <Frame state={state} task={task} view={view} />
+      </TaskCommandRunner>
     </ReviewDraftProvider>
   );
 }

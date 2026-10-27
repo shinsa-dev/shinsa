@@ -3,6 +3,7 @@ import {
   resolveTaskTerminalPlace,
   type ServiceDefinition,
   type ServiceSuggestion,
+  type ShinsaState,
   type Task,
   type TerminalForeground,
   type TerminalInfo,
@@ -50,15 +51,20 @@ export function openTerminal(projectKey: string, projectId: string, place: Termi
   });
 }
 
+export function selectTaskTerminal(state: ShinsaState | null, task: Task) {
+  const projectId = state ? resolveTaskProject(state, task) : null;
+  const project = projectId ? state?.projects[projectId] : undefined;
+  const place = state ? resolveTaskTerminalPlace(state, task) : null;
+  return project && place ? { project, place } : null;
+}
+
 export function openTaskTerminal(task: Task, command?: string) {
   return requestWithToast(async () => {
-    const state = connection.snapshot().state;
-    const projectId = state ? resolveTaskProject(state, task) : null;
-    const project = projectId ? state?.projects[projectId] : undefined;
-    const place = state ? resolveTaskTerminalPlace(state, task) : null;
-    if (!(project && place)) throw new Error('This task has no project folder to open a terminal in.');
-    const terminal = await requestTerminalCreate(project.id, place, command);
-    navigate(resolveTerminalPath(project.key, terminal.id));
+    const terminal = selectTaskTerminal(connection.snapshot().state, task);
+    if (!terminal) throw new Error('This task has no project folder to open a terminal in.');
+    const { project, place } = terminal;
+    const created = await requestTerminalCreate(project.id, place, command);
+    navigate(resolveTerminalPath(project.key, created.id));
   });
 }
 

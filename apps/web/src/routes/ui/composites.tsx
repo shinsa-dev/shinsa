@@ -28,10 +28,12 @@ import { ProjectDot } from '@/components/status/project-dot.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { UpdateButtonView } from '@/components/status/update-button.tsx';
+import { CommandRunnerProvider } from '@/components/text/code-block.tsx';
 import { CodeDiff } from '@/components/text/code-diff.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
+import { InsetNote, SuggestedFix } from '@/components/text/inset-note.tsx';
 import { Duration, TimeAgo } from '@/components/text/time-ago.tsx';
 import type { DiffSource } from '@/lib/code/diff-view.ts';
 import { resolveEngineView } from '@/lib/connection/engine.ts';
@@ -305,6 +307,36 @@ export function CompositeSpecimens() {
               </div>
             </div>
           </Panel>
+        </div>
+      </Specimen>
+      <Specimen label='CodeBlock · its corner: Copy, and Run in terminal on a shell block marked run (```bash run) where a task can run it (the folder in its tooltip); one line centred at the right edge, several lines at the top right; Copy alone where nothing can run it; hover, focus or touch shows it'>
+        <div className='w-full max-w-xl'>
+          <CodeFence code='SESSION_IDLE_HOURS=0.0167 bun run dev' language='sh' runnable />
+          <CodeFence code={'$ bun install\n$ bun run db:migrate\n$ bun run dev'} language='bash' runnable />
+          <CommandRunnerProvider runner={null}>
+            <CodeFence code='gh auth login' language='sh' runnable />
+          </CommandRunnerProvider>
+        </div>
+      </Specimen>
+      <Specimen label='CodeBlock · an example: a plain ```bash block, one that only opens on a $ prompt, or code, is copy-only; highlighted the same, copied without its prompts'>
+        <div className='w-full max-w-xl'>
+          <CodeFence code='bun test --watch apps/web/test/lib/code' language='bash' />
+          <CodeFence code={'$ bun install\n$ bun run db:migrate\n$ bun run dev'} language={null} />
+          <CodeFence code={SAMPLE_CODE} language='ts' />
+        </div>
+      </Specimen>
+      <Specimen label='InsetNote · each tone on its own edge: a toned fill takes its tone’s border, never the grey hairline · SuggestedFix'>
+        <div className='grid w-full max-w-xl gap-2'>
+          {(Object.keys(TONE_EDGE) as Tone[]).map((tone) => (
+            <InsetNote
+              key={tone}
+              tone={tone}
+              icon='IconEyeSparkle'
+              label={tone === 'neutral' ? 'A note' : `A ${tone} note`}
+              text='The agent review disagrees: the retry should back off, not loop.'
+            />
+          ))}
+          <SuggestedFix text='Wait 2 seconds before the next attempt and give up after five.' />
         </div>
       </Specimen>
       <Specimen label='CodeDiff · an edit, a new file, a renamed file and a binary file, each in the card it sits in'>

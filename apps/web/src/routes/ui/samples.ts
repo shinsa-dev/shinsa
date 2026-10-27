@@ -21,6 +21,11 @@ export function acknowledgeSample() {
   return Promise.resolve(true);
 }
 
+export const SAMPLE_RUNNER = {
+  run: acknowledgeSample,
+  folder: '/Users/ada/Developer/shop/.worktrees/sw-142',
+};
+
 export function createSampleTask(
   now: number,
   overrides: Partial<Task> & { id: string; title: string }

@@ -17,6 +17,7 @@ import {
   requestTerminalForeground,
   restartService,
   restartTerminal,
+  selectTaskTerminal,
   startAllServices,
   startService,
   stopService,
@@ -93,6 +94,16 @@ describe('opening a terminal', () => {
     expect(readCall(fetch).body).toMatchObject({ projectId: 'shop', command: 'gh auth login' });
     expect(location.search).toBe('?project=SH&terminal=one');
     snapshot.mockRestore();
+  });
+
+  it('finds where a task’s commands run: its worktree in its project, or nowhere', () => {
+    const state = createTerminalState();
+    expect(selectTaskTerminal(state, state.tasks.fix as never)).toMatchObject({
+      project: { id: 'shop' },
+      place: { path: '/Users/you/.config/shinsa/data/worktrees/fix', kind: 'worktree' },
+    });
+    expect(selectTaskTerminal(state, createTask({ id: 'loose' }))).toBeNull();
+    expect(selectTaskTerminal(null, state.tasks.fix as never)).toBeNull();
   });
 
   it('says so for a task with nowhere to open one, or before Shinsa has its state', async () => {

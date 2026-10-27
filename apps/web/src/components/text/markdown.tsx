@@ -5,6 +5,7 @@ import renderMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ReferenceAnchor, ReferenceLabel, useReferenceMarkdown } from '@/components/links/reference.tsx';
 import { CodeFence } from '@/components/text/code-fence.tsx';
+import { isRunnableFence } from '@/lib/code/block.ts';
 import { createCache } from '@/lib/format/cache.ts';
 import { isReferenceHref, transformUrl } from '@/lib/tasks/references.ts';
 
@@ -18,7 +19,11 @@ function readFence(children: React.ReactNode) {
   const element = React.Children.toArray(children)[0];
   if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(element)) return null;
   const language = element.props.className?.match(/language-([\w+#.-]+)/)?.[1] ?? null;
-  return { language, code: String(element.props.children ?? '').replace(/\n$/, '') };
+  return {
+    language,
+    runnable: isRunnableFence(readFenceMeta(node)),
+    code: String(element.props.children ?? '').replace(/\n$/, ''),
+  };
 }
 
 function ExternalLink({ href, children }: { href?: string; children?: React.ReactNode }) {

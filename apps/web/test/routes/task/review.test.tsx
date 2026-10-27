@@ -141,7 +141,9 @@ function renderReview(state: ShinsaState, task: Task, query = '') {
   return render(
     <TooltipProvider>
       <ReviewDraftProvider enabled draftKey={`gate-${task.id}`}>
-        <ReviewTab state={state} task={task} />
+        <TaskCommandRunner state={state} task={task}>
+          <ReviewTab state={state} task={task} />
+        </TaskCommandRunner>
       </ReviewDraftProvider>
       <Toaster />
     </TooltipProvider>

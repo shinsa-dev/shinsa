@@ -1,9 +1,10 @@
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { CopyButton } from '@/components/controls/copy-button.tsx';
+import { CodeBlock } from '@/components/text/code-block.tsx';
 import { TokenText } from '@/components/text/code-fence.tsx';
 import { splitLines } from '@/lib/chat/tool-output.ts';
+import { type CodeCorner, resolveCodeCorner } from '@/lib/code/block.ts';
 import { type Token, useLanguageTokens } from '@/lib/code/highlight.ts';
 import { formatCount } from '@/lib/format/count.ts';
 
@@ -90,24 +91,20 @@ export function CodeLines({
 export function DetailBlock({
   label,
   copy,
+  corner,
   children,
 }: {
   label?: React.ReactNode;
   copy?: string | null;
+  corner?: CodeCorner;
   children: React.ReactNode;
 }) {
   return (
     <div className='flex min-w-0 flex-col gap-1.5'>
       {label && <span className='flex min-w-0 items-center gap-2 text-2xs text-fg-2'>{label}</span>}
-      <div className='group/block corner-superellipse/1.125 relative min-w-0 overflow-hidden rounded-lg border border-border bg-bg-a1'>
+      <CodeBlock copy={copy || null} corner={corner}>
         {children}
-        {copy && (
-          <CopyButton
-            text={copy}
-            className='absolute top-1 right-1 bg-card opacity-0 group-hover/block:opacity-100'
-          />
-        )}
-      </div>
+      </CodeBlock>
     </div>
   );
 }
@@ -127,7 +124,7 @@ export function HighlightedBlock({
 }) {
   const lines = React.useMemo(() => splitLines(code).map((text) => ({ text })), [code]);
   return (
-    <DetailBlock label={label} copy={code}>
+    <DetailBlock label={label} copy={code} corner={resolveCodeCorner(code)}>
       <CodeLines lines={lines} language={language} wrap={wrap} tone={tone} />
     </DetailBlock>
   );
