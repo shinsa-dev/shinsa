@@ -21,7 +21,7 @@ The first releases use `bump=major`: betas `1.0.0-beta.N`, then `1.0.0` (The fir
 | `channel` | `stable`: a normal GitHub release, marked latest. `beta`: a GitHub pre-release of the next version | `beta` |
 | `bump` | `patch`, `minor` or `major`: which part of the **last stable** version goes up | `patch` |
 
-The workflow, on `macos-15`:
+The workflow, on a Blacksmith macOS 15 runner (`blacksmith-6vcpu-macos-15`):
 
 1. Works out the version (`scripts/release.ts`, the rules below; `scripts/release-version.ts` holds them, tested at
    100%) and writes it to the run's summary.
