@@ -112,9 +112,10 @@ export async function launchChrome(width: number, height: number) {
       '--no-first-run',
       '--disable-background-timer-throttling',
       '--disable-renderer-backgrounding',
+      ...(Bun.env.CI ? ['--no-sandbox'] : []),
       'about:blank',
     ],
-    { stdout: 'ignore', stderr: 'ignore' }
+    { stdout: 'ignore', stderr: 'pipe' }
   );
   for (let attempt = 0; attempt < 100; attempt += 1) {
     await Bun.sleep(100);
@@ -133,5 +134,6 @@ export async function launchChrome(width: number, height: number) {
     };
   }
   chrome.kill();
-  throw new Error('Chromium did not open a page.');
+  const output = (await new Response(chrome.stderr).text()).trim().slice(-2000);
+  throw new Error(output ? `Chromium did not open a page:\n${output}` : 'Chromium did not open a page.');
 }
