@@ -12,6 +12,7 @@ import { AttentionSettings } from '@/components/settings/attention.tsx';
 import { ContextSettings } from '@/components/settings/context.tsx';
 import { FolderSettings, SetupSettings } from '@/components/settings/folders.tsx';
 import { IntegrationSettings } from '@/components/settings/integrations.tsx';
+import { MemorySettings } from '@/components/settings/memory.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
@@ -76,6 +77,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
       return (
         <>
           <AgentSettings settings={state.settings} />
+          <MemorySettings state={state} />
           <VersionSettings />
         </>
       );

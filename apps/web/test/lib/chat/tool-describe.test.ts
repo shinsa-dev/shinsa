@@ -39,6 +39,12 @@ describe('isHandover', () => {
     }
   });
 
+  it('shows suggested tasks and a proposed rule as cards of their own', () => {
+    for (const name of ['suggest_tasks', 'remember'] as const) {
+      expect(isHandover({ kind: 'shinsa', name, args: {} })).toBe(true);
+    }
+  });
+
   it('keeps evidence, task lookups, notes and other tools in the work', () => {
     for (const name of ['attach_evidence', 'find_tasks', 'note'] as const) {
       expect(isHandover({ kind: 'shinsa', name, args: {} })).toBe(false);

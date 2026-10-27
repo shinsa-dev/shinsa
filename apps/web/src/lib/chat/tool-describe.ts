@@ -27,6 +27,7 @@ const HANDOVER_TOOLS = new Set<ShinsaToolName>([
   'report_review',
   'ask',
   'suggest_tasks',
+  'remember',
   'answer',
   'report_diagnosis',
   'submit_report',

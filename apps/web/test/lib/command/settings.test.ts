@@ -57,6 +57,7 @@ describe('Jump to', () => {
       ['Setup', 'General'],
       ['Models', 'Agents'],
       ['Engine', 'Agents'],
+      ['Memory', 'Agents'],
       ['Versions', 'Agents'],
       ['Accounts', 'Agent usage'],
       ['Limits', 'Agent usage'],
