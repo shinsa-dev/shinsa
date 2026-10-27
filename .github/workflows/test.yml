@@ -25,7 +25,7 @@ jobs:
           curl -fsSL https://gitbutler.com/install.sh | sh -s -- "$BUT_VERSION"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
         env:
-          BUT_VERSION: 0.23.0
+          BUT_VERSION: 0.22.3
       - run: but --version
       - run: bun run test
 
