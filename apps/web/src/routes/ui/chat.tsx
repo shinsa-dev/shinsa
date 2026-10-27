@@ -344,7 +344,7 @@ function ChatSpecimenList() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='UserMessage · delivered, delivering (one line, several lines, then delivered on a loop), noted with no reply, not delivered'>
+      <Specimen label='UserMessage · delivered, delivering at half opacity with the blue light going round (one line, several lines, then delivered on a loop), noted with no reply, not delivered'>
         <SampleMessages />
       </Specimen>
       <QueueSpecimens now={now} />

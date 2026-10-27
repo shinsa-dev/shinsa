@@ -286,7 +286,7 @@
 }
 
 .message-delivery-light {
-  --delivery-light: var(--fg-2);
+  --delivery-light: var(--primary-4);
   position: absolute;
   top: 50%;
   left: 50%;
@@ -303,13 +303,9 @@
   will-change: transform;
 }
 
-.dark .message-delivery-light {
-  --delivery-light: var(--fg-3);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .message-delivery {
-    background: var(--fg-2);
+    background: var(--primary-4);
   }
 
   .message-delivery-light {

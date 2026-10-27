@@ -321,11 +321,15 @@ Only these, and they win over anything below:
      moment you press send (the outbox) through the server's acceptance and the classifier's pass over the task's
      `inbox`, until it is routed into the task (steered into the running turn, a fix, a follow-up, a revised plan),
      and for a round that started from the queue until the round's first run starts (`isRoundDelivering` in
-     `lib/tasks/message-queue.ts`). No text: a light travels around the bubble's border (`DeliveryEdge`, the
-     `message-delivery` classes in `app.css`): a 1px ring masked over the border, a conic gradient of `fg-2`
-     (`fg-3` in dark) with a soft tail, turning once every 2.4s on `transform` alone, linear like a spinner since it
-     loops. It fades in, and fades out over 400ms (`useSettling`, `SETTLE_MS`) on the strong ease-out once the
-     message is delivered; under reduced motion it is a still `fg-2` ring. "Sending" is in an `sr-only` span.
+     `lib/tasks/message-queue.ts`). No text: the bubble, border included, is at 50% opacity, and a blue light
+     travels around its border (`DeliveryEdge`, the `message-delivery` classes in `app.css`): a 1px ring masked over
+     the border, outside the dimmed bubble so it keeps its strength, a conic gradient of the accent (`primary-4`, in
+     both themes) with a soft tail, turning once every 2.4s on `transform` alone, linear like a spinner since it
+     loops. It fades in. Once the message is delivered the light fades out and the bubble eases to full opacity,
+     both over 400ms (`useSettling`, `SETTLE_MS`; the bubble's `transition-opacity duration-400`) on the strong
+     ease-out, so only opacity and transform ever animate. Under reduced motion the bubble is still at 50% and the
+     ring is a still `primary-4` border, and the bubble turns opaque at once. "Sending" is in an `sr-only` span.
+     The queue docked above the composer keeps its own look.
    - **Queued** (`MessageQueue`, `components/chat/message-queue.tsx`, over `listQueuedMessages`): a message the
      classifier read as new work while a round is in flight is the next round, which waits (`round.queued`, status
      `waiting`) until the current round rests or reaches the merge gate (`docs/engine.md` → Rounds). It is not a
@@ -947,7 +951,10 @@ Only these, and they win over anything below:
     marks, the search toggles, the Python, Go, Docker and database marks) are drawn into `components/icon/custom.ts`;
     `TONED_ICON_SOURCES` there names the file and folder marks the Code tab draws in a pastel file tint (32). Chevrons draw square-cornered and all at one size: `Icon` always
     draws a chevron in a 14px box, and the generator scales `IconChevron…Small` 1.4× and `…Medium` 0.9333× so every
-    chevron is 6.5px long, dividing the stroke by the scale so the weight matches (Iconography → Icon sizes). `Icon`,
+    chevron is 6.5px long, dividing the stroke by the scale so the weight matches. Crosses are the same kind of
+    glyph and draw at the same size: `Icon` draws `IconCrossSmall` and `IconCrossMedium` in the same 14px box, scaled
+    1.4× and 1.0182× so the X is 6.5px on both axes, its ink box (7.7px) as wide and tall as a chevron's long side
+    (Iconography → Icon sizes). `Icon`,
     `Spinner` and `Logo` are the only things that draw an svg. `Logo` draws in its text's colour, not the icon ink: the brand mark beside "Shinsa" is as strong as the word.
     **An icon draws in a solid icon ink, one step quieter than its text, and never at an opacity.**
     You read the text; the icon is taken in passively. Each grey text step has its ink in
@@ -1647,7 +1654,9 @@ Only these, and they win over anything below:
       opened round is indented to its title: a short summary in `fg-3` (`resolveRoundSummary`: what it was about,
       what it did or found, and how it ended, or for a waiting round why it is new and when it starts), then the
       quiet "Open in chat ›". A waiting round keeps its shipping select.
-    - **A message can be new work.** The composer's hint still says what feedback does; Shinsa's classifier decides
+    - **A message can be new work.** The composer's hint still says what feedback does. At a gate that takes words
+      (the plan, the review, a question, your OK, the operation, a failure, Sign in or setup gate) that is all it
+      does: a message there is never queued as a round. Elsewhere Shinsa's classifier decides
       whether a message is feedback, the next round or another task's work, so the chat shows a new round's divider
       (Waiting to start) and its request as soon as one is queued. A merged task keeps its composer: "Ask for the next piece of work. It
       starts as a new round of this task." A closed task (marked done, cancelled) has none.
@@ -3431,6 +3440,17 @@ the glyphs inside it.
   about the box's centre, dividing the stroke by the same factor, so every
   chevron is 6.5px long at the same weight: the size of the Overview cards'
   fold chevrons.
+- **Crosses are drawn at the chevrons' size.** An X (close, remove, dismiss,
+  clear) is the same kind of glyph and often sits beside one, or beside the
+  pen in the queue, but Central draws `IconCrossSmall` 8 × 8 units and
+  `IconCrossMedium` 11 × 11, so a 14px Small cross read clearly smaller. `Icon`
+  draws any cross in the `sm` 14px box too, and the generator (`CROSS_SCALE`)
+  scales `Small` 1.4× and `Medium` 1.0182× about the centre, the stroke divided
+  by the same factor (1.4286 / 1.9643), so every cross is 11.2 units (6.5px) on
+  both axes. Measured in the browser at 14px, round caps included: a chevron's
+  ink is 7.7 × 4.45px, a cross's 7.7 × 7.7px (it was 5.85px for `Small` and
+  7.6px for `Medium`), both starting 3.15px from the box's edge, so the X's ink
+  box covers the chevron's long side exactly.
 - A tile is not an icon: `StatusTile` is an 18px (`sm`) or 20px (`md`) tinted
   square around an `sm` glyph, so the glyph's drawn part matches the 14px icons
   in its row.
