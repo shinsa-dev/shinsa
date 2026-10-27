@@ -209,11 +209,14 @@ export function listShippingItems(task: Task, round: Round): ShippingItem[] | nu
   ];
 }
 
+const SHIPPING_TOASTS: Record<RoundShipping, string> = {
+  stacked: 'ships as its own stacked pull request',
+  onto_pull_request: 'ships onto the open pull request',
+};
+
 export function changeRoundShipping(task: Task, round: Round, shipping: RoundShipping) {
   return sendCommandWithToast(
     { type: 'round.ship', taskId: task.id, number: round.number, shipping },
-    shipping === 'stacked'
-      ? `Round ${round.number} ships as its own stacked pull request.`
-      : `Round ${round.number} ships onto the open pull request.`
+    `Round ${round.number} ${SHIPPING_TOASTS[shipping]}.`
   );
 }
