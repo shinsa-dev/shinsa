@@ -102,6 +102,16 @@ describe('request size', () => {
     expect(response.status).toBe(413);
     expect(Object.keys(engine.state.tasks)).toEqual([]);
   });
+
+  test('an attachment upload may be larger, up to its own limit', async () => {
+    const { post } = await start();
+    const data = Buffer.alloc(9_000_000).toString('base64');
+    const uploaded = await post('/api/attachments', { name: 'big.bin', data });
+    expect(uploaded.status).toBe(200);
+    expect(await uploaded.json()).toMatchObject({ name: 'big.bin', size: 9_000_000 });
+    const over = await post('/api/attachments', { name: 'huge.bin', data: 'A'.repeat(40_000_000) });
+    expect(over.status).toBe(413);
+  });
 });
 
 describe('the health endpoint', () => {
@@ -333,6 +343,23 @@ describe('read endpoints', () => {
     expect(
       (await call('/api/models', { method: 'POST', headers: { 'content-type': 'application/json' } })).status
     ).toBe(404);
+  });
+
+  test('an uploaded attachment is served back by its id and file name only', async () => {
+    const { call, post } = await start();
+    const response = await post('/api/attachments', {
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      data: Buffer.from('hello').toString('base64'),
+    });
+    const attachment = (await response.json()) as { url: string; path: string; kind: string };
+    expect(attachment.kind).toBe('file');
+    const served = await call(attachment.url);
+    expect(await served.text()).toBe('hello');
+    expect(served.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    expect((await call(attachment.url, { headers: { range: 'bytes=1-2' } })).status).toBe(206);
+    expect((await call('/api/attachments/..%2Fshinsa.sqlite')).status).toBe(404);
+    expect((await post('/api/attachments', { name: 'a.txt', data: '' })).status).toBe(400);
   });
 
   test('evidence is served by its task, round and name only, cached and in ranges', async () => {

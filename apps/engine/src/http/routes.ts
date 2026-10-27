@@ -30,7 +30,7 @@ import { createLoginResolver, type LoginResolver, type RootSource } from '../rep
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
-import type { EvidenceStore } from '../store/index.ts';
+import { AttachmentStore, type EvidenceStore, readAttachmentUpload } from '../store/index.ts';
 import { type Classifier, routeUserCommand } from '../triage/message.ts';
 import type { Versions } from '../versions/index.ts';
 import { createVersionRoutes } from '../versions/routes.ts';
@@ -181,11 +181,22 @@ function readRestartWhen(body: JsonObject): EngineRestartWhen {
 function createServerRoutes(context: ApiContext): ApiRoute[] {
   const { engine, config, evidence, models, providers, classify, restarter } = context;
   const instance = context.instance ?? createServerInstance();
+  const attachments = new AttachmentStore(config.attachmentsDir);
   async function respondCommand(request: Request) {
     const key = readIdempotencyKey(request);
     const taskId = await dispatchUserCommand(engine, await readJson(request), key, classify ?? null);
     const handle = taskId ? (engine.state.tasks[taskId]?.handle ?? null) : null;
     return respondJson({ ok: true, taskId, handle });
+  }
+
+  async function respondAttachmentUpload(request: Request) {
+    return respondJson(attachments.write(readAttachmentUpload(await readJsonObject(request))));
+  }
+
+  function respondAttachment(name: string, request: Request) {
+    const path = attachments.selectFile(name);
+    if (!path) return Promise.resolve(new Response('Not found', { status: 404 }));
+    return Promise.resolve(respondEvidenceFile(Bun.file(path), request.headers.get('range')));
   }
 
   function respondEvidence(name: string, request: Request) {
@@ -246,6 +257,16 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
       method: 'GET',
       pattern: /^\/api\/evidence\/(.+)$/,
       respond: ([, name = ''], request) => respondEvidence(name, request),
+    },
+    {
+      method: 'POST',
+      pattern: /^\/api\/attachments$/,
+      respond: (_match, request) => respondAttachmentUpload(request),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/attachments\/(.+)$/,
+      respond: ([, name = ''], request) => respondAttachment(name, request),
     },
   ];
 }

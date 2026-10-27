@@ -14,6 +14,7 @@ export function createConfigAt(root: string, overrides: Partial<ServerConfig> = 
     databasePath: join(dataDir, 'shinsa.sqlite'),
     worktreesDir: join(dataDir, 'worktrees'),
     evidenceDir: join(dataDir, 'evidence'),
+    attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
     pluginDir: resolve(import.meta.dirname, '../../plugin'),
     webDir: join(root, 'web'),

@@ -14,6 +14,7 @@ export interface ServerConfig {
   databasePath: string;
   worktreesDir: string;
   evidenceDir: string;
+  attachmentsDir: string;
   transcriptsDir: string;
   pluginDir: string;
   webDir: string;
@@ -91,6 +92,7 @@ function resolveDataPaths(dataDir: string, env: Env) {
     databasePath: join(dataDir, DATABASE_FILE),
     worktreesDir: env.SHINSA_WORKTREES_DIR || join(dataDir, 'worktrees'),
     evidenceDir: join(dataDir, 'evidence'),
+    attachmentsDir: join(dataDir, 'attachments'),
     transcriptsDir: join(dataDir, 'transcripts'),
   };
 }
