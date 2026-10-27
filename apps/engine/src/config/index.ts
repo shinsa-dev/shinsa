@@ -1,6 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { FlavorIdentity } from '@shinsa/core';
 import { BUNDLE, resolveBundlePath, type ShinsaBundle } from '../instance/bundle.ts';
+import { FLAVOR } from '../instance/flavor.ts';
 import { type MachineConfig, type MachineConfigRead, readMachineConfig } from './file.ts';
 import { type Env, resolveShinsaPaths, resolveUserHome } from './paths.ts';
 
@@ -35,8 +37,6 @@ interface EunoeConfig {
   port: number | null;
 }
 
-export const DEFAULT_PORT = 5180;
-
 const DATABASE_FILE = 'shinsa.sqlite';
 
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
@@ -66,8 +66,8 @@ function resolveEunoe(env: Env): EunoeConfig {
   return { command: env.SHINSA_EUNOE || null, port };
 }
 
-function resolvePortFrom(env: Env, machine: MachineConfig) {
-  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? DEFAULT_PORT);
+function resolvePortFrom(env: Env, machine: MachineConfig, flavor: FlavorIdentity) {
+  const port = readNumber(env, 'SHINSA_PORT', machine.port ?? flavor.port);
   if (port > 65_535) throw new Error(`SHINSA_PORT must be a port number, not "${port}".`);
   return port;
 }
@@ -76,12 +76,12 @@ function resolveHostname(env: Env, machine: MachineConfig) {
   return env.SHINSA_HOST || machine.hostname || '127.0.0.1';
 }
 
-export function resolveServerAddress(env: Env) {
-  const machine = readMachineConfig(resolveShinsaPaths(env).configPath).config;
+export function resolveServerAddress(env: Env, flavor: FlavorIdentity = FLAVOR) {
+  const machine = readMachineConfig(resolveShinsaPaths(env, flavor).configPath).config;
   const hostname = resolveHostname(env, machine);
   return {
     hostname: WILDCARD_HOSTS.has(hostname) ? '127.0.0.1' : hostname,
-    port: resolvePortFrom(env, machine),
+    port: resolvePortFrom(env, machine, flavor),
   };
 }
 
@@ -95,8 +95,12 @@ function resolveDataPaths(dataDir: string, env: Env) {
   };
 }
 
-export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): ServerConfig {
-  const paths = resolveShinsaPaths(env);
+export function resolveConfig(
+  env: Env,
+  bundle: ShinsaBundle | null = BUNDLE,
+  flavor: FlavorIdentity = FLAVOR
+): ServerConfig {
+  const paths = resolveShinsaPaths(env, flavor);
   const read = readMachineConfig(paths.configPath);
   const machine = read.config;
   const hostname = resolveHostname(env, machine);
@@ -111,7 +115,7 @@ export function resolveConfig(env: Env, bundle: ShinsaBundle | null = BUNDLE): S
     webDir:
       env.SHINSA_WEB_DIR ||
       (bundle ? resolveBundlePath(bundle, 'web') : resolve(import.meta.dirname, '../../../web/dist')),
-    port: resolvePortFrom(env, machine),
+    port: resolvePortFrom(env, machine, flavor),
     hostname,
     allowedHosts: [
       ...new Set([...LOOPBACK_HOSTS, ...configured, ...readList(env.SHINSA_ALLOWED_HOSTS, ',')]),
