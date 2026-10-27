@@ -3,7 +3,6 @@
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@shinsa/ui/components/tooltip';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 
@@ -82,30 +81,19 @@ function DialogContent({
   );
 }
 
-/** The corner X of a dialog or sheet: an icon button named "Close" in its label and its tooltip. */
+/** The corner X of a dialog or sheet: an icon button named "Close". An X in the corner says it, so no tooltip. */
 function DialogCloseButton({ className, ...props }: DialogPrimitive.Close.Props) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <DialogPrimitive.Close
-            data-slot='dialog-close'
-            aria-label='Close'
-            render={
-              <Button
-                variant='secondary'
-                size='icon-sm'
-                className={cn('absolute top-3 right-3', className)}
-              />
-            }
-            {...props}
-          />
-        }
-      >
-        <Icon name='IconCrossMedium' />
-      </TooltipTrigger>
-      <TooltipContent>Close</TooltipContent>
-    </Tooltip>
+    <DialogPrimitive.Close
+      data-slot='dialog-close'
+      aria-label='Close'
+      render={
+        <Button variant='secondary' size='icon-sm' className={cn('absolute top-3 right-3', className)} />
+      }
+      {...props}
+    >
+      <Icon name='IconCrossMedium' />
+    </DialogPrimitive.Close>
   );
 }
 

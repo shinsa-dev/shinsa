@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from 'bun:test';
+import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { EngineBanner } from '@/components/status/engine-banner.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
 import { refreshHealth, type ServerHealth } from '@/lib/connection/health.ts';
 import { installDesktop } from '../../support/desktop.ts';
+import { findTooltipText } from '../../support/hover.ts';
 import { startFakeOnboarding } from '../../support/onboarding.ts';
 
 let desktop: ReturnType<typeof installDesktop> | null = null;
@@ -85,11 +87,20 @@ describe('the engine banner', () => {
 });
 
 describe('the update button', () => {
-  it('appears once an update is downloaded, and installs it', () => {
+  it('appears once an update is downloaded, says agents keep working, and installs it', async () => {
     desktop = installDesktop();
-    const view = render(<UpdateButton />);
-    expect(view.container.textContent).toBe('');
+    const view = render(
+      <TooltipProvider>
+        <UpdateButton />
+      </TooltipProvider>
+    );
+    expect(screen.queryByRole('button', { name: 'Update' })).toBeNull();
     act(() => desktop?.changeUpdate({ status: 'ready', version: '0.6.0' }));
+    expect(await findTooltipText(screen.getByRole('button', { name: 'Update' }))).toBe(
+      'Shinsa 0.6.0 is ready. The app restarts for a moment and agents keep working.'
+    );
+    view.unmount();
+    render(<UpdateButton />);
     fireEvent.click(screen.getByRole('button', { name: 'Update' }));
     expect(desktop.updateCalls).toEqual(['install']);
   });

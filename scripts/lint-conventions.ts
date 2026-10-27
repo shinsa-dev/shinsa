@@ -255,6 +255,14 @@ const FITTED_WIDTH =
 const STRETCHED_TRIGGER_MESSAGE =
   'A tooltip trigger that can stretch past its text. The element a Hint or TooltipTrigger wraps is inline or w-fit, so the empty rest of a row never opens the tooltip (docs/design.md → Where Shinsa differs, 13)';
 
+const TOOLTIP_PARTS = new Set(['Hint', 'Tooltip', 'TooltipProvider', 'TooltipTrigger', 'TooltipContent']);
+
+const TOOLTIP_DELAY_MESSAGE =
+  'A tooltip with a delay of its own. Every tooltip waits TOOLTIP_DELAY and moves on within TOOLTIP_SKIP_DELAY (@shinsa/ui/components/tooltip); drop the delay (docs/design.md → Where Shinsa differs, 13)';
+
+const ECHO_TOOLTIP_MESSAGE =
+  'A tooltip that repeats the text it sits on adds nothing. Make it say what the screen does not (where the control leads, what it covers) or drop it, keeping an aria-label only on an icon-only button (docs/design.md → Where Shinsa differs, 13)';
+
 const SHORTCUT_FILES = [
   'apps/web/src/hooks/use-command-key.ts',
   'apps/web/src/hooks/use-code-keys.ts',
@@ -507,6 +515,74 @@ function isStretchedTrigger(node: BabelNode) {
   return !FITTED_WIDTH.test(classes);
 }
 
+function isTooltipDelay(node: BabelNode) {
+  if (node.type === 'JSXOpeningElement') {
+    const name = (node.name as BabelNode & { name?: string }).name ?? '';
+    return TOOLTIP_PARTS.has(name) && readProps(node).has('delay');
+  }
+  if (node.type !== 'CallExpression') return false;
+  if ((node.callee as BabelNode & { name?: string }).name !== 'useTooltipTrigger') return false;
+  const options = (node.arguments as BabelNode[])[1];
+  return options?.type === 'ObjectExpression' && readProps(options).has('delay');
+}
+
+function readReference(node: BabelNode | null | undefined): string | null {
+  if (!node) return null;
+  if (node.type === 'JSXExpressionContainer') return readReference(node.expression as BabelNode);
+  if (node.type === 'StringLiteral') return `"${String(node.value).replace(/\s+/g, ' ').trim()}"`;
+  if (node.type === 'Identifier') return String(node.name);
+  if (node.type !== 'MemberExpression' || node.computed) return null;
+  const object = readReference(node.object as BabelNode);
+  const property = (node.property as BabelNode & { name?: string }).name;
+  return object && property ? `${object}.${property}` : null;
+}
+
+function readShownText(children: BabelNode[]): string | null {
+  const parts: (string | null)[] = [];
+  const collect = (nodes: BabelNode[]) => {
+    for (const node of nodes) {
+      if (node.type === 'JSXText') {
+        const text = String(node.value).replace(/\s+/g, ' ').trim();
+        if (text) parts.push(`"${text}"`);
+      } else if (node.type === 'JSXExpressionContainer') {
+        if (node.expression && (node.expression as BabelNode).type !== 'JSXEmptyExpression')
+          parts.push(readReference(node));
+      } else if (node.type === 'JSXElement' || node.type === 'JSXFragment') {
+        collect(node.children as BabelNode[]);
+      }
+    }
+  };
+  collect(children);
+  return parts.length === 1 ? (parts[0] ?? null) : null;
+}
+
+function listElementChildren(node: BabelNode) {
+  return (node.children as BabelNode[]).filter((child) => child.type === 'JSXElement');
+}
+
+function readTooltipPair(node: BabelNode): [string | null, BabelNode | undefined] {
+  const wrapper = readElementName(node);
+  if (wrapper === 'Hint') {
+    const attributes = (node.openingElement as BabelNode).attributes as BabelNode[];
+    const extra = attributes.some((attribute) => ['shortcut', 'detail'].includes(readKey(attribute) ?? ''));
+    if (extra) return [null, undefined];
+    const label = attributes.find((attribute) => readKey(attribute) === 'label');
+    return [readReference(label?.value as BabelNode | undefined), listElementChildren(node)[0]];
+  }
+  if (wrapper !== 'Tooltip') return [null, undefined];
+  const parts = listElementChildren(node);
+  const content = parts.find((part) => readElementName(part) === 'TooltipContent');
+  const trigger = parts.find((part) => readElementName(part) === 'TooltipTrigger');
+  return [content ? readShownText(content.children as BabelNode[]) : null, trigger];
+}
+
+function isEchoTooltip(node: BabelNode) {
+  if (node.type !== 'JSXElement') return false;
+  const [tooltip, trigger] = readTooltipPair(node);
+  if (!tooltip || !trigger) return false;
+  return readShownText(trigger.children as BabelNode[])?.toLowerCase() === tooltip.toLowerCase();
+}
+
 function isGlobalKeyListener(node: BabelNode) {
   if (node.type !== 'CallExpression') return false;
   const callee = node.callee as BabelNode & { name?: string; property?: BabelNode & { name?: string } };
@@ -547,6 +623,7 @@ function collectSyntaxViolations(file: string, program: BabelNode, violations: V
   const tipped = isUnder(file, APP_AND_KIT);
   walk(program, (node, ancestors) => {
     const line = node.loc?.start.line ?? 0;
+    if (tipped) for (const message of listTooltipMessages(node)) violations.push({ file, line, message });
     if (keyed && isGlobalKeyListener(node)) violations.push({ file, line, message: SHORTCUT_MESSAGE });
     if (app && isHandRolledTabBar(node)) violations.push({ file, line, message: TAB_BAR_MESSAGE });
     if (app && isLoneOption(node, ancestors)) violations.push({ file, line, message: LONE_OPTION_MESSAGE });
@@ -556,6 +633,26 @@ function collectSyntaxViolations(file: string, program: BabelNode, violations: V
     if (!styled) return;
     for (const message of listStyleMessages(file, node, ancestors)) violations.push({ file, line, message });
   });
+}
+
+function listTooltipMessages(node: BabelNode) {
+  const checks: [boolean, string][] = [
+    [isTooltipDelay(node), TOOLTIP_DELAY_MESSAGE],
+    [isEchoTooltip(node), ECHO_TOOLTIP_MESSAGE],
+  ];
+  return checks.filter(([broken]) => broken).map(([, message]) => message);
+}
+
+function listStyleMessages(file: string, node: BabelNode, ancestors: BabelNode[]) {
+  const checks: [boolean, string][] = [
+    [isSelfHighlightedRow(node), OWN_HIGHLIGHT_MESSAGE],
+    [isFadedIcon(node), ICON_FADE_MESSAGE],
+    [isClassSizedIcon(node), ICON_SIZE_MESSAGE],
+    [isBrighterIcon(node, ancestors), ICON_BRIGHTER_MESSAGE],
+    [isRawSvg(file, node), RAW_SVG_MESSAGE],
+    [isGreenCheckmark(node, ancestors), GREEN_MESSAGE],
+  ];
+  return checks.filter(([broken]) => broken).map(([, message]) => message);
 }
 
 function isRuleBroken(rule: ClassRule, file: string, line: string) {

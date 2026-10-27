@@ -5,7 +5,6 @@ import {
   formatBytes,
   formatCount,
   formatLineRange,
-  formatLines,
   formatSteps,
 } from '@/lib/format/count.ts';
 
@@ -16,11 +15,9 @@ describe('formatCount', () => {
     expect(formatCount(2, 'task', 'tasks')).toBe('2 tasks');
   });
 
-  it('counts steps and lines the same way', () => {
+  it('counts steps the same way', () => {
     expect(formatSteps(1)).toBe('1 step');
     expect(formatSteps(3)).toBe('3 steps');
-    expect(formatLines(1)).toBe('1 line');
-    expect(formatLines(12)).toBe('12 lines');
   });
 });
 

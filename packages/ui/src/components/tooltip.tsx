@@ -11,7 +11,18 @@ import * as React from 'react';
  * marked `data-tooltip-trigger`: no root, state or listener of its own, so a
  * page full of hints costs nothing until one opens. What a tooltip shows is
  * read when it opens, so content that is costly to build is built only then.
+ *
+ * Every tooltip waits the same `TOOLTIP_DELAY` under a resting pointer; there
+ * is no per-trigger delay. Once one has shown, the next trigger the pointer
+ * reaches within `TOOLTIP_SKIP_DELAY` opens at once and without its entrance,
+ * so running along a row of hints reads as one tooltip moving.
  */
+
+/** How long the pointer rests on a trigger before its tooltip opens, in milliseconds. */
+const TOOLTIP_DELAY = 600;
+
+/** How long after a tooltip closes the next one still opens at once, in milliseconds. */
+const TOOLTIP_SKIP_DELAY = 400;
 
 type TooltipSide = 'top' | 'bottom' | 'left' | 'right' | 'inline-start' | 'inline-end';
 
@@ -24,8 +35,6 @@ interface TooltipOptions {
   align?: TooltipAlign;
   sideOffset?: number;
   alignOffset?: number;
-  /** Milliseconds the pointer rests on the trigger before it opens; the provider's when unset. */
-  delay?: number;
   /** Follow the pointer down the trigger instead of centring on it. */
   trackCursorAxis?: 'y';
 }
@@ -34,7 +43,6 @@ type TooltipSource = TooltipOptions | (() => TooltipOptions | null) | null;
 
 interface TooltipRecord {
   source: TooltipSource;
-  providerDelay: number;
 }
 
 interface TooltipVirtualAnchor {
@@ -46,6 +54,8 @@ interface TooltipView {
   open: boolean;
   options: TooltipOptions | null;
   anchor: Element | TooltipVirtualAnchor | null;
+  /** Opened straight after another one, so it skips its entrance. */
+  instant: boolean;
 }
 
 type OpenedBy = 'pointer' | 'focus' | 'tap';
@@ -54,7 +64,7 @@ type TriggerElement = React.ReactElement<Record<string, unknown>>;
 
 const TRIGGER_ATTRIBUTE = 'data-tooltip-trigger';
 
-const CLOSED: TooltipView = { open: false, options: null, anchor: null };
+const CLOSED: TooltipView = { open: false, options: null, anchor: null, instant: false };
 
 function readOptions(record: TooltipRecord) {
   return typeof record.source === 'function' ? record.source() : record.source;
@@ -83,6 +93,8 @@ class TooltipStore {
   #view: TooltipView = CLOSED;
   #current: { element: Element; record: TooltipRecord; marks: string[] } | null = null;
   #timer: ReturnType<typeof setTimeout> | undefined;
+  #cooling: ReturnType<typeof setTimeout> | undefined;
+  #warm = false;
   #frame = 0;
   #pointerModality = false;
   #openedBy: OpenedBy = 'pointer';
@@ -109,8 +121,18 @@ class TooltipStore {
     if (!current) return;
     this.#current = null;
     for (const name of current.marks) current.element.removeAttribute(name);
-    if (this.#view.open) this.#show({ ...this.#view, open: false });
+    if (!this.#view.open) return;
+    this.#warmUp();
+    this.#show({ ...this.#view, open: false });
   };
+
+  #warmUp() {
+    clearTimeout(this.#cooling);
+    this.#warm = true;
+    this.#cooling = setTimeout(() => {
+      this.#warm = false;
+    }, TOOLTIP_SKIP_DELAY);
+  }
 
   connect(render: (view: TooltipView) => void, popupId: string) {
     this.#render = render;
@@ -131,6 +153,7 @@ class TooltipStore {
       for (const [type, listener] of listeners)
         document.removeEventListener(type, listener as EventListener, true);
       this.hide();
+      clearTimeout(this.#cooling);
       cancelAnimationFrame(this.#frame);
       this.#render = () => undefined;
     };
@@ -141,7 +164,7 @@ class TooltipStore {
     this.#render(view);
   }
 
-  #open(element: Element, record: TooltipRecord, by: OpenedBy, y?: number) {
+  #open(element: Element, record: TooltipRecord, by: OpenedBy, y?: number, instant = false) {
     clearTimeout(this.#timer);
     const options = readOptions(record);
     if (!options || !element.isConnected) return;
@@ -157,7 +180,7 @@ class TooltipStore {
     this.#current = { element, record, marks };
     this.#openedBy = by;
     const anchor = options.trackCursorAxis === 'y' && y !== undefined ? followCursor(element, y) : element;
-    this.#show({ open: true, options, anchor });
+    this.#show({ open: true, options, anchor, instant });
   }
 
   #select(target: EventTarget | null) {
@@ -174,6 +197,8 @@ class TooltipStore {
   #dismiss() {
     this.#dismissed = this.#current?.element ?? null;
     this.hide();
+    clearTimeout(this.#cooling);
+    this.#warm = false;
   }
 
   #onPointerOver = (event: PointerEvent) => {
@@ -187,14 +212,12 @@ class TooltipStore {
     }
     this.hide();
     const { element, record } = trigger;
-    const delay = readOptions(record)?.delay ?? record.providerDelay;
-    const open = () => this.#open(element, record, 'pointer', event.clientY);
-    if (delay <= 0) {
-      open();
+    if (this.#warm) {
+      this.#open(element, record, 'pointer', event.clientY, true);
       return;
     }
     this.#current = { element, record, marks: [] };
-    this.#timer = setTimeout(open, delay);
+    this.#timer = setTimeout(() => this.#open(element, record, 'pointer', event.clientY), TOOLTIP_DELAY);
   };
 
   #onPointerOut = (event: PointerEvent) => {
@@ -258,14 +281,11 @@ class TooltipStore {
 }
 
 interface TooltipGroup {
-  options: Omit<TooltipOptions, 'delay' | 'trackCursorAxis'> | null;
-  delay?: number;
+  options: Omit<TooltipOptions, 'trackCursorAxis'> | null;
   trackCursorAxis?: 'y';
 }
 
 const TooltipStoreContext = React.createContext<TooltipStore | null>(null);
-
-const TooltipDelayContext = React.createContext(0);
 
 const TooltipGroupContext = React.createContext<TooltipGroup | null>(null);
 
@@ -299,6 +319,8 @@ function TooltipPopup({ store }: { store: TooltipStore }) {
               }}
               id={id}
               data-slot='tooltip-content'
+              data-instant={view.instant ? '' : undefined}
+              style={view.instant ? { animation: 'none' } : undefined}
               className={cn(
                 'corner-superellipse/1.125 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:fade-in-0 data-open:zoom-in-95 data-closed:fade-out-0 data-closed:zoom-out-95 z-50 inline-flex min-h-6 w-fit max-w-72 origin-(--transform-origin) items-center gap-1 rounded-control border border-border bg-popover px-2 py-1 text-2xs text-fg-4 leading-[1.35] has-data-[slot=kbd]:py-0.5 has-data-[slot=kbd]:pr-0.5 data-[state=delayed-open]:animate-in data-closed:animate-out data-open:animate-in **:data-[slot=kbd]:relative **:data-[slot=kbd]:isolate **:data-[slot=kbd]:z-50 **:data-[slot=kbd]:h-4 **:data-[slot=kbd]:rounded-sm **:data-[slot=kbd]:bg-bg-a2 **:data-[slot=kbd]:text-fg-3',
                 options.className
@@ -313,18 +335,14 @@ function TooltipPopup({ store }: { store: TooltipStore }) {
   );
 }
 
-/**
- * The outermost provider mounts the page's one tooltip; a nested one only sets
- * how long the pointer rests on the triggers inside it before one opens.
- */
-function TooltipProvider({ delay, children }: { delay?: number; children?: React.ReactNode }) {
+/** Mounts the page's one tooltip; a provider inside another adds nothing. */
+function TooltipProvider({ children }: { children?: React.ReactNode }) {
   const parent = React.useContext(TooltipStoreContext);
   const [store] = React.useState(() => parent ?? new TooltipStore());
-  const content = <TooltipDelayContext.Provider value={delay ?? 0}>{children}</TooltipDelayContext.Provider>;
-  if (parent) return delay === undefined ? children : content;
+  if (parent) return children;
   return (
     <TooltipStoreContext.Provider value={store}>
-      {content}
+      {children}
       <TooltipPopup store={store} />
     </TooltipStoreContext.Provider>
   );
@@ -343,10 +361,8 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
  */
 function useTooltipTrigger(element: TriggerElement, tooltip: TooltipSource) {
   const store = React.useContext(TooltipStoreContext);
-  const providerDelay = React.useContext(TooltipDelayContext);
-  const [record] = React.useState<TooltipRecord>(() => ({ source: null, providerDelay: 0 }));
+  const [record] = React.useState<TooltipRecord>(() => ({ source: null }));
   record.source = tooltip;
-  record.providerDelay = providerDelay;
 
   React.useEffect(() => store?.refresh(record));
 
@@ -372,17 +388,8 @@ function useTooltipTrigger(element: TriggerElement, tooltip: TooltipSource) {
 }
 
 /** Pairs a `TooltipTrigger` with the `TooltipContent` it opens. */
-function Tooltip({
-  delay,
-  trackCursorAxis,
-  children,
-}: {
-  delay?: number;
-  trackCursorAxis?: 'y';
-  children?: React.ReactNode;
-}) {
+function Tooltip({ trackCursorAxis, children }: { trackCursorAxis?: 'y'; children?: React.ReactNode }) {
   const [group] = React.useState<TooltipGroup>(() => ({ options: null }));
-  group.delay = delay;
   group.trackCursorAxis = trackCursorAxis;
   return <TooltipGroupContext.Provider value={group}>{children}</TooltipGroupContext.Provider>;
 }
@@ -410,7 +417,7 @@ function TooltipTrigger({ render, ...props }: React.ComponentProps<'button'> & {
   const element = render ?? <button type='button' />;
   const read = React.useCallback(() => {
     if (!group?.options) return null;
-    return { delay: group.delay, trackCursorAxis: group.trackCursorAxis, ...group.options };
+    return { trackCursorAxis: group.trackCursorAxis, ...group.options };
   }, [group]);
   return useTooltipTrigger(
     React.cloneElement(element, mergeTriggerProps(element.props, props)),
@@ -422,7 +429,7 @@ function TooltipTrigger({ render, ...props }: React.ComponentProps<'button'> & {
 function TooltipContent({
   children,
   ...options
-}: Omit<TooltipOptions, 'content' | 'delay' | 'trackCursorAxis'> & { children?: React.ReactNode }) {
+}: Omit<TooltipOptions, 'content' | 'trackCursorAxis'> & { children?: React.ReactNode }) {
   const group = React.useContext(TooltipGroupContext);
   if (group) group.options = { ...options, content: children };
   return null;
@@ -432,4 +439,13 @@ function TooltipLabel({ className, ...props }: React.ComponentProps<'span'>) {
   return <span data-slot='tooltip-label' className={cn('text-fg-2', className)} {...props} />;
 }
 
-export { Tooltip, TooltipContent, TooltipLabel, TooltipProvider, TooltipTrigger, useTooltipTrigger };
+export {
+  TOOLTIP_DELAY,
+  TOOLTIP_SKIP_DELAY,
+  Tooltip,
+  TooltipContent,
+  TooltipLabel,
+  TooltipProvider,
+  TooltipTrigger,
+  useTooltipTrigger,
+};

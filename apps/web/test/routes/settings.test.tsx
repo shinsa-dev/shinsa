@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { resetOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { SettingsPage } from '@/routes/settings.tsx';
 import { createAccount, createSnapshot } from '../support/accounts.ts';
+import { findTooltipText } from '../support/hover.ts';
 import { createOnboardingStatus } from '../support/onboarding.ts';
 import { pushAccounts, startFakeServer, stopFakeServer } from '../support/server.ts';
 import { createShinsaState } from '../support/state.ts';
@@ -71,6 +72,14 @@ describe('Settings tabs', () => {
     await settle();
     expect(location.search).toBe('');
     expect(screen.getByText('Appearance')).toBeTruthy();
+  });
+
+  it('explains each layout on its option in Appearance', async () => {
+    await renderSettings();
+    const layouts = screen.getByRole('tablist', { name: 'Layout' });
+    expect(await findTooltipText(within(layouts).getByRole('tab', { name: 'Desk' }))).toBe(
+      'Pages sit centred with nothing at the sides, and a button at the top opens what needs you.'
+    );
   });
 
   it('opens the tab of a linked section and scrolls to it once the accounts are in', async () => {

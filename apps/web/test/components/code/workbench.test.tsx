@@ -207,6 +207,26 @@ describe('notes in the code', () => {
     expect(screen.getByText('Suggested fix')).toBeDefined();
   });
 
+  it('names a spot in the app’s tooltip when its gutter mark is hovered', async () => {
+    renderCode(nextTask(), '&mode=changes&file=docs%2Falpha.txt&diff=1');
+    await findLine('two');
+    const mark = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>('.cm-spotMark [data-tooltip-trigger]');
+      if (!found) throw new Error('No spot mark');
+      return found;
+    });
+    expect(mark.parentElement?.hasAttribute('title')).toBe(false);
+    expect(await findTooltipText(mark)).toBe('Context: Adds the second line.');
+  });
+
+  it('opens the file a link names at its line and washes the line, strongly at first', async () => {
+    renderCode(nextTask(), '&mode=changes&file=docs%2Falpha.txt&diff=1&line=2');
+    const line = await findLine('two');
+    expect(params().get('file')).toBe('docs/alpha.txt');
+    await waitFor(() => expect(line.className).toContain('cm-focus-flash'));
+    expect(line.className).toContain('cm-focus-line');
+  });
+
   it('comments on a line, keeps the comment through a reload and removes it', async () => {
     const task = nextTask();
     const first = renderCode(task);

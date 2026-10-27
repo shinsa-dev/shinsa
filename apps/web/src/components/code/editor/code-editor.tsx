@@ -81,6 +81,20 @@ function revealIn(view: EditorView, line: number) {
   });
 }
 
+function SpotHints({ registry }: { registry: SpotHintRegistry }) {
+  const hints = React.useSyncExternalStore(registry.subscribe, registry.read);
+  return hints.map((hint) => (
+    <React.Fragment key={hint.id}>
+      {createPortal(
+        <Hint side='right' followCursor label={<span className='whitespace-pre-line'>{hint.label}</span>}>
+          <span className='block size-full' />
+        </Hint>,
+        hint.element
+      )}
+    </React.Fragment>
+  ));
+}
+
 function useSession(holder: EditorSessionHolder | undefined) {
   const own = React.useRef<EditorSession | null>(null);
   const target = (holder ?? own) as { current: EditorSession | null };

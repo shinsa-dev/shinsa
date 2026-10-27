@@ -65,6 +65,24 @@ describe('the way home', () => {
     expect(bar.textContent).not.toContain('Shinsa');
   });
 
+  it('takes the Mac app look and the route from its scope, as the site’s demos render it', () => {
+    act(() => navigate('/'));
+    render(
+      <TooltipProvider>
+        <DesktopChrome value>
+          <RouteScope value={parseRoute('/tasks')}>
+            <CardsTopBar state={STATE} />
+          </RouteScope>
+        </DesktopChrome>
+      </TooltipProvider>
+    );
+    const bar = screen.getByRole('banner');
+    expect(bar.querySelector('button')?.textContent).toBe('Home');
+    expect(bar.textContent).not.toContain('Shinsa');
+    expect(screen.getByRole('button', { name: 'Home' }).getAttribute('aria-current')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Tasks' }).getAttribute('aria-current')).toBe('page');
+  });
+
   it('goes to Tasks and Settings from the Cards top bar, each marked while you are there', async () => {
     act(() => navigate('/'));
     render(

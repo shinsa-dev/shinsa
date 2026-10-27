@@ -289,7 +289,8 @@ Only these, and they win over anything below:
     Cards ("Pages sit centred with nothing at the sides, and a button at the top opens what needs you.") and
     **Shelf** for Sidebar ("A rail at the side lists every task and stays open, so each one is a click away.").
     Desk is the default. Renaming them is that one constant; the code, the `?layout=` param and this file keep
-    `cards` and `sidebar`.
+    `cards` and `sidebar`. Both are one frame, `AppFrame` (`components/layout/frame.tsx`), around one `main`:
+    switching adds or drops the top bar and the rail and never remounts the pages inside.
     Cards (the default) has no rail: a top
     bar with the navigation on the left (the Shinsa logo, the Home button in the Mac app, 31; Tasks; Services, 37;
     and a "3 need you" button that opens the compact queue) and Update, Settings, Agent usage and Focus on the right,
@@ -338,9 +339,11 @@ Only these, and they win over anything below:
     - **The decision card.** The Overview opens with the task's now card
       (`components/overview/now-card.tsx`), and a gate's actions sit at its top right, each named
       for what it decides: a review gate has Review (outline, opens the Review tab, 34) then **Approve
-      changes** (primary; its tooltip says it opens the pull request, and it is disabled while
-      line comments are drafted; **Fix N findings** in its place sends the drafted comments with the
-      findings you kept and clears them); a merge gate has Review then **Merge #N**; a plan gate has
+      changes** (primary; its tooltip says it opens the pull request, and it is disabled while line comments are
+      drafted, with why in its tooltip, 13; **Fix N findings** in its place sends the drafted comments with the
+      findings you kept and clears them); a merge gate has Review then **Merge #N**, and under its facts the
+      pre-merge steps as a checklist (**Pre-merge steps**, below), with Merge #N disabled and its
+      tooltip saying why ("Tick the 2 pre-merge steps first") until each is ticked; a plan gate has
       **Approve plan** over the plan itself (a change with an operation lists it under its phases, headed
       "First, the operation" or "After the merge, the operation"); an operation after the merge has **Run the
       operation**; a paused task has Retry; a question has its answer
@@ -432,45 +435,75 @@ Only these, and they win over anything below:
       Started time's tooltip once it runs. Each fact's menu is the override: the priority menu and the Waits on menu.
       No "Auto" label is shown.
 
-13. **Anything you hover that has more to tell has a tooltip**, as in Buzzkit. Four kinds:
-    - **Every time** goes through `components/text/time-ago.tsx`: `TimeAgo` ("2h ago", or `compact`
-      for the bare "2h" a row ends with, or `text`, a function of now for a phrase around the age such
-      as "Started 2h ago", so it ticks with the minute) and `Duration`
-      ("Worked for 3m", the live card's running clock). Each renders a `<time>` whose tooltip
-      opens after 150ms with the exact moment: the date bright and the clock muted
-      ("Wed, Oct 22, 2026 2:14 PM"); a duration shows "2:14 PM to 2:17 PM" ("Since 2:14 PM" while
-      it runs) with the day muted. `detail` adds a muted second line naming what the time is
-      when the row doesn't say it ("Waiting on you", "Step started", "Finished", "Last message").
-      Toasts are the only times without one. A bare `formatAge(…)` or `formatDuration(…)` in JSX
-      is a bug, and the lint below rejects it.
-    - **Icon-only buttons** name their action in a tooltip through `Hint`
-      (`components/overlays/hint.tsx`): copy ("Copy", then "Copied"), the task and project `•••` menus
-      ("Task actions", "Project options"), collapse and expand ("Collapse summary"), previous and
-      next spot, the image viewer's close, previous and next (with their key, `Esc`, `←`, `→`),
-      send, comment on a line, the compact bar's queue and new-task buttons, the sidebar's resize
-      handle (following the pointer down the edge). The tooltip repeats the `aria-label`. A `Hint` with a `detail`
-      stacks a muted second line under its label, as a time's tooltip does (a task's round, 12).
-    - **Every copy says "Copied" in a toast.** Copying anything (the task's handle, a commit, a branch name, a
-      command, a code block, a webhook URL) goes through one helper, `copyText` in `lib/connection/commands.ts`:
-      it writes the clipboard, toasts "Copied", or "Couldn’t copy to the clipboard" when the browser refuses, and
-      reports which. `useCopyText` (`components/controls/copy-button.tsx`) wraps it for a trigger that also swaps
-      to its "Copied" state; never call `navigator.clipboard` anywhere else. This replaces the "No success toast"
-      of Components → Copy below.
-    - **Text from data that can be cut off** is `Truncate` (`@shinsa/ui/components/truncate`):
-      task titles in every row, previews, repository names and paths, branch and file paths,
-      check names and details, tool targets, run headlines, attachment names, the image
-      caption. Its tooltip, with the full text, appears only when the text really is clipped.
-      Text that is already a popover or menu trigger (the Focus menu, the repository and branch
-      facts) keeps a plain `truncate`, so two overlays never stack.
-    - **Small marks that carry meaning without a label** get a short tooltip: queue tiles
-      (`GateGlyph`, `WorkingGlyph`: "Changes to review", "Building · Agent working"), the
-      finished tiles on Home ("Merged", "Done"), project dots ("Superwall project"), check and to-do
-      icons ("Passed", "Failed", "In progress"), the progress track's steps (step, count and
-      state, then the plan's phases), the diff counts ("12 lines added · 3 lines removed"), a
-      changed file's status letter ("Modified") and risk dot ("High risk" and the reason), its
-      comment count, a pull request badge in the pull request's tone ("Pull request #4531 · Checks passing"), a
-      repository's GitHub or folder icon. The command menu's search button reads "Search and actions" with
-      its `⌘K` key.
+13. **A tooltip must add information the screen doesn't show, and every tooltip is delayed.** Whether something
+    you hover gets one depends only on that: a tooltip that says something new stays, one that repeats what is
+    already visible goes. Everything you can hover falls under one of these:
+    - **No tooltip** when it would only repeat the screen. A control whose tooltip would restate its own label
+      ("Copy" on a button reading Copy, "Review" on Review, a labelled menu item, a `Choice` option or tab whose
+      name says it all) has none. Self-evident numbers have none: the diff counts ("+12 −3"), counts in a row whose
+      label sits beside them. A generic menu trigger (the `•••` of a task, a project, an account, a schedule:
+      `OptionsTrigger`) has none, since its menu is one click away and names every action. The corner X of a
+      dialog or sheet says close by itself. Each keeps its `aria-label` when it has no visible text.
+    - **A labelled control keeps a tooltip that says what its label can't**: what pressing it leads to or
+      covers. Approve changes ("Opens the pull request"), Fix N findings ("Sends the findings you kept and your
+      line comments to the agent"), Update ("Shinsa 0.7.0 is ready. The app restarts for a moment and agents keep
+      working."), Settings → Notifications' Test ("Play the sound", or "Play the sound and show a test
+      notification" once notifications are allowed), Desk and Shelf in Settings → Appearance (each layout's hint line, a `Choice`
+      item's `hint`) and a **disabled** control whose reason is not on screen (Approve changes while line comments
+      are drafted: "Send your line comments to the agent or remove them first").
+    - **A delayed tooltip** wherever else hovering has more to tell:
+      - **Icon-only buttons** whose meaning isn't plain from the glyph, through `Hint`
+        (`components/overlays/hint.tsx`): copy ("Copy", then "Copied"), Run in terminal (the folder it runs in as
+        its detail, `~` for your home folder), collapse and expand ("Collapse summary"),
+        previous and next spot, send, comment on a line, remove ("Remove folder"), dismiss, stop a delegated task,
+        the compact bar's queue and new-task buttons, the sidebar's resize handle (following the pointer down the
+        edge), the error button. The tooltip repeats the `aria-label`. A `Hint` with a `detail` stacks a muted
+        second line under its label, as a time's tooltip does (a task's round, 12).
+      - **Keyboard-shortcut hints**: a `Hint` with a `shortcut` ("Home ⇧⌘H", "Search and actions ⌘K", "Search in
+        files ⇧⌘F", the image viewer's close, previous and next with `Esc`, `←`, `→`), even on a labelled button,
+        since the key is not on screen.
+      - **Copy feedback**: a copy trigger names what it copies ("Copy the task’s handle", "Copy the full commit"
+        with the sha as its detail) and flips to "Copied" in place while it is open. **Every copy says "Copied"
+        in a toast** too. Copying anything (the task's handle, a commit, a branch name, a command, a code block, a
+        webhook URL) goes through one helper, `copyText` in `lib/connection/commands.ts`: it writes the clipboard,
+        toasts "Copied", or "Couldn’t copy to the clipboard" when the browser refuses, and reports which.
+        `useCopyText` (`components/controls/copy-button.tsx`) wraps it for a trigger that also swaps to its
+        "Copied" state; never call `navigator.clipboard` anywhere else. This replaces the "No success toast" of
+        Components → Copy below.
+      - **Small marks that carry meaning without a label**: queue tiles (`GateGlyph`, `WorkingGlyph`: "Changes to
+        review", "Building · Agent working"), the finished tiles on Home ("Merged", "Done"), project dots
+        ("Superwall project"), check and to-do icons ("Passed", "Failed", "In progress"), the progress track's
+        steps (step, count and state, then the plan's phases), a changed file's risk dot ("High risk" and the
+        reason), a changed file's status letter ("Added") and comment count ("2 comments from you"), a pull request badge in the pull request's tone ("Pull request #4531 · Checks passing"), the
+        context meter, a repository's GitHub or folder icon, a project's key badge, the reconnecting pulse.
+      - **Text that hides more than it shows**: a fact Shinsa chose for you ("Shinsa chose this: …", 12), the round
+        fact and divider, the Waits on list, a smart link's target ("Open in Code ‹path› · lines 4–9"), a
+        setting's or MCP's one-line explanation, a plugin's or skill's origin.
+      - **Every time** goes through `components/text/time-ago.tsx`: `TimeAgo` ("2h ago", or `compact` for the bare
+        "2h" a row ends with, or `text`, a function of now for a phrase around the age such as "Started 2h ago",
+        so it ticks with the minute) and `Duration` ("Worked for 3m", the live card's running clock). Each
+        renders a `<time>` whose tooltip shows the exact moment: the date bright and the clock muted ("Wed, Oct
+        22, 2026 2:14 PM"); a duration shows "2:14 PM to 2:17 PM" ("Since 2:14 PM" while it runs) with the day
+        muted. `detail` adds a muted second line naming what the time is when the row doesn't say it ("Waiting
+        on you", "Step started", "Finished", "Last message"). Toasts are the only times without one. A bare
+        `formatAge(…)` or `formatDuration(…)` in JSX is a bug, and the lint below rejects it.
+      - **Text from data that can be cut off** is `Truncate` (`@shinsa/ui/components/truncate`): task titles in
+        every row, previews, repository names and paths, branch and file paths, check names and details, tool
+        targets, run headlines, attachment names, the image caption. Its tooltip, with the full text, appears
+        only when the text really is clipped. Text that is already a popover or menu trigger (the Focus menu, the
+        repository and branch facts) keeps a plain `truncate`, so two overlays never stack.
+    - **Instant: nothing.** No tooltip opens the moment the pointer arrives. Keyboard focus is not hover: a
+      tooltip opens on a keyboard focus at once, and on a tap where there is no hover.
+
+    **One delay, in the kit.** `TOOLTIP_DELAY` (600ms) is how long the pointer rests on a trigger before its
+    tooltip opens; `TOOLTIP_SKIP_DELAY` (400ms) is how long after one closes the next still opens at once, with no
+    entrance (`data-instant`), so running along a row of hints reads as one tooltip moving. Both are constants in
+    `@shinsa/ui/components/tooltip`, and nothing else sets a delay: `Tooltip`, `TooltipProvider`, `Hint` and
+    `useTooltipTrigger` take none. A press or Escape cools the group, so the next tooltip waits again. `bun
+    lint:conventions` rejects a `delay` on any tooltip part and a tooltip that repeats the text of the control
+    it sits on (a `Hint` whose `label` is the trigger's one text or value, or a `TooltipContent` equal to its
+    `TooltipTrigger`'s text; a `Hint` with a `shortcut` or a `detail` adds something and passes).
+
     - **A tooltip opens over its text, never over the row it sits in.** The element a `Hint` or
       `TooltipTrigger` wraps is the text and its icon only: inline, or `w-fit` (`max-w-full` so it still
       truncates), never a block that stretches across a full-width row. Hovering the empty right of a round
@@ -482,13 +515,13 @@ Only these, and they win over anything below:
     - **One tooltip serves the page.** The `TooltipProvider` in `root.tsx` mounts the only Base UI tooltip; a
       `Hint`, a time, a clipped `Truncate` or a `TooltipTrigger` is just its own element, registered by a ref and
       marked `data-tooltip-trigger` (`useTooltipTrigger` in `@shinsa/ui/components/tooltip`). The provider opens
-      the tooltip on hover after the trigger's delay (150ms for times and clipped text, at once for the rest), on
+      the tooltip on hover after `TOOLTIP_DELAY` (at once within `TOOLTIP_SKIP_DELAY` of the last one), on
       keyboard focus, and on a tap where there is no hover; it closes it when the pointer leaves, on a press of the
       trigger, on Escape and when focus leaves. A tooltip closed by a press or Escape stays closed until the pointer
       leaves its trigger. What it shows is built when it opens, so a time's exact moment is formatted only then.
       While it is open the trigger carries `aria-describedby` (the tooltip) and `data-popup-open`. A trigger costs
       no component, state or listener of its own, so a page full of hints stays cheap to keep and to show again
-      (35).
+      (35). Tests open one with `findTooltipText` (`test/support/hover.ts`), which lets the delay pass at once.
     Content follows Buzzkit's scanning rules: the value first in `fg-4`, the qualifier muted in
     `TooltipLabel`, states in their status colour (`*-text`), lists one item per line in the
     foreground, mixed bright and muted text inside one `whitespace-nowrap` span. Never a sentence
@@ -521,7 +554,7 @@ Only these, and they win over anything below:
       Merge the pull request, Answer the question, Retry / Retry with guidance, or Allow another $N for a cost
       limit; Sign in / Retry anyway for a Sign in gate; Give the ‹label› / Don’t give the secret for a secret;
       Resume now and the auto-resume toggle for a usage wait), then View (Overview, Review, Code, Chat), then Review while the
-      Review tab is open (Next place to check and Previous place to check, J and K; 34), then Code while the Code tab is open (Changes, Files, Go to file…,
+      Review tab is open (Next point and Previous point, J and K; 34), then Code while the Code tab is open (Changes, Files, Go to file…,
       Search in files, Hide viewed files or Show viewed files while the task has changes, Find in this file, Go to
       line and the diff layout, each with its key; 32), then
       This task (Wait for another task…, a choice that ticks every task it waits on and toggles
@@ -589,8 +622,8 @@ Only these, and they win over anything below:
       "Waiting on you" stay.
     - **Checkmarks are the accent**, everywhere: check and to-do glyphs, the current value in a
       menu, a select or ⌘K, copy confirmations, done tiles, settled tasks in ⌘K, the "decision"
-      activity, toasts, popovers, tooltips, and GFM task-list checkboxes in agent markdown
-      (`accent-color`). They come from `components/status/check-mark.tsx` (`CheckMark`, `SelectedMark`, `CHECK_TEXT`,
+      activity, toasts, popovers, tooltips, and GFM task lists in agent markdown (drawn as checklist rows,
+      `ChecklistMark`, below). They come from `components/status/check-mark.tsx` (`CheckMark`, `SelectedMark`, `CHECK_TEXT`,
       `CheckOutcomeIcon` for pass / fail / skipped). The one exception
       is the progress track: its done steps (a 15px check on `green` at 29%) and the line
       between them are green, so done reads apart from the blue pulse of the current step.
@@ -841,8 +874,8 @@ Only these, and they win over anything below:
 22. **Busy buttons stay themselves.** `Button loading` keeps its colours and width, swaps its icon
     (or, without one, adds a leading spinner), sets `aria-busy` and ignores presses and keys, so a
     busy submit can't fire twice. It is never `disabled`.
-23. **The kit's icon-only buttons carry their tooltip**, as 13 requires: the dialog and sheet close
-    X ("Close").
+23. **The kit's dialog and sheet close X has no tooltip** (13): the corner X says it, and its `aria-label` is
+    "Close".
 24. **Setup is one calm step at a time, in the language of Settings.** `/onboarding` (`routes/onboarding.tsx`, the
     pieces in `components/onboarding/`) shows the server's setup steps (`docs/engine.md` → The setup steps) one at a
     time in one column (`ONBOARDING_COLUMN`: `max-w-xl`, `px-6`, `PAGE_TOP` and 48px from the top from `md` up, the
@@ -880,7 +913,7 @@ Only these, and they win over anything below:
       like Home's `ListRow` (28px for a label alone, label over its meaning `gap-px` when it has one, `text-xs` `fg-4`
       over `text-2xs` `fg-2`), the recommended one with a quiet `sm` "Recommended" badge after its label, your answer
       marked with the accent `SelectedMark` at the row's end, as a select or menu marks the current value. The hover
-      and the keyboard highlight are the menus' one surface, which jumps to the row with no transition. Clicking a
+      and the keyboard highlight are the menus' one surface, which slides to the row on the movement clock. Clicking a
       one-answer option answers it at once and moves on, a spinner in the mark's slot while it saves; nothing starts
       chosen on a step you have not answered, so there is no Continue until you go back to one you have, where your
       answer is marked and Continue keeps it. The list takes focus when the step opens: the arrows, Home and End move
@@ -1598,12 +1631,19 @@ Only these, and they win over anything below:
       letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
       kit's `Checkbox` at `sm` (14px, a quiet `icon-1` edge that turns `fg-1` on hover, `rounded-checkbox`; ticked,
       filled `primary-4` with a white check centred over the whole box, border included, so it sits true at 14px as
-      at 16px), with no tooltip: the box says what it does. A viewed row reads as done, greyed to the disabled step: its name, status letter, counts, comment
+      at 16px), with no tooltip: the box says what it does. The diff counts have no tooltip either; the letter's says
+      its name ("Added") and your comment count's what it counts ("2 comments from you"), since neither is on screen
+      (13). A folder has a viewed box too: ticking it marks every file under it, at
+      any depth, viewed (`writeViewedFiles`), unticking clears them, and it reads ticked when all of them are viewed
+      and indeterminate (the kit's `Checkbox` with `indeterminate`, a dash) when some are; a fully viewed folder greys
+      like a viewed file. A viewed row reads as done, greyed to the disabled step: its name, status letter, counts, comment
       count and risk dot all `fg-1`, its icon in `icon-1` even when the language mark is coloured
       (`file-icons-muted`); the open file keeps its selected look whether viewed or not. "2 files · 1 viewed"
       heads the tree beside the total counts and the Hide viewed files toggle (`icon-xs`, an eye; remembered in
       `shinsa.code-hide-viewed`; ⌘K has the same toggle), which drops viewed files from the tree but the open one and then reads "2 files ·
-      1 viewed hidden" ("Every file is viewed." when nothing is left). Viewed files are kept per task and commit.
+      1 viewed hidden". When every file is viewed the tree shows only the calm line "Every file is viewed." in its
+      place, with no button (the header's toggle shows them again), even for the open file, which stays open in the editor (`listShownChanges`). Viewed files
+      are kept per task and commit.
       **Files** is the repository as a lazy tree, a folder read when you open it (`/tree`), the open file's folders
       opened for you; changed files carry their status letter at the right. **Search** (the button or ⇧⌘F) is a
       field with the three search toggles inside it, a Files to include pattern, a one-line summary ("12 results in
@@ -1672,7 +1712,10 @@ Only these, and they win over anything below:
       toolbar's end, hidden below `md`, showing the layout it switches to: `IconLayoutTopBottom` "Show unified",
       `IconLayoutColumn` "Show side by side"; ⌘K has it too), remembered in `shinsa.code-unified`. Unified puts
       removed lines above where they were, highlighted from a parse of the whole old file (so a removed line inside a
-      block comment reads as a comment), numbered in red in the gutter. Changed words are washed, and unchanged
+      block comment reads as a comment), numbered in red in the gutter. A changed line has exactly two layers: the
+      line's wash (`--code-added` or `--code-removed`, the whole width) with a 2px bar at the code's left edge in
+      `green-4` or `red-4`, and the strong wash on the words that changed; nothing boxes the line's text. The bar is
+      on the code, not in the gutter, so it slides with the code when it scrolls sideways. Unchanged
       stretches of four lines or more fold into "N unchanged lines": a click opens them, and they are no place for the
       cursor, so the arrow keys step over a fold (`lib/code/editor/collapsed.ts`, a transaction filter that moves a
       cursor landing in a folded block widget past it in the direction it was going; a selection or an edit is left
@@ -3744,8 +3787,8 @@ as the part's own border over its own fill, or reproduce the fill under it
 
 **Truncate.** One line by default, or up to two with `lines={2}` for gallery
 names and paywall results. It ends in an ellipsis and, only when it's actually
-clipped, shows the full text in a tooltip after 150ms
-(`components/ui/truncate.tsx`, ported from buzzkit). Use it instead of a bare
+clipped, shows the full text in a tooltip after the one tooltip delay
+(Where Shinsa differs, 13; `components/ui/truncate.tsx`, ported from buzzkit). Use it instead of a bare
 `truncate` span wherever text comes from data or a label can meet a narrow
 container; `middle` cuts in the centre for ids (plain-string children only).
 One-line text renders `display:block`; two-line text uses a line clamp and
@@ -4864,7 +4907,8 @@ is `ps-3 pe-1.5 py-1.5`; a tooltip ending in keys is 4px at the end.
 **Todo stepper.** A row can carry a `status` (a non-interactive badge inside
 the trigger, 6px before the chevron); `action` sits outside the trigger.
 
-**Copy.** One interaction everywhere: `CopyButton` (a ghost icon button), or
+**Copy.** One interaction everywhere: `CopyButton` (a ghost icon button whose
+delayed tooltip says "Copy", then "Copied"; Where Shinsa differs, 13), or
 `CopyIcon` + `useCopy` for a custom trigger (`components/ui/copy-button.tsx`)
 — the trigger carries `group/copy` for hover-revealed copies. **The copy
 glyph takes the trigger's own ink** (`currentColor`): a ghost button's
@@ -5002,8 +5046,9 @@ Rules:
   shapes are the fixed `inset` deflate and the scale of the link button, a
   ghost tab, a checkbox and the image viewer's round buttons, and they land at
   once, never eased.
-- **Tooltips:** 150ms in, and instant (`data-instant`, no transition) when
-  moving between adjacent triggers.
+- **Tooltips:** open after `TOOLTIP_DELAY` (600ms) and fade in over 150ms, and
+  instant (`data-instant`, no transition) on a trigger reached within
+  `TOOLTIP_SKIP_DELAY` (400ms) of the last one (Where Shinsa differs, 13).
 - **Dialogs enter visibly** (since 2026-10-26; `DIALOG_MOTION` in the kit's
   `dialog.tsx`, shared by `alert-dialog.tsx`): a fade with a scale from
   0.96 over 150ms `ease-out`, out in 100ms, the scrim fading with it. A dialog

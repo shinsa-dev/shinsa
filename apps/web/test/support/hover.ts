@@ -1,11 +1,29 @@
+import { TOOLTIP_DELAY } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, waitFor } from '@testing-library/react';
+
+function skipTooltipDelay(run: () => void) {
+  const real = globalThis.setTimeout;
+  const instant = (handler: () => void, ms?: number) => {
+    if (ms !== TOOLTIP_DELAY) return real(handler, ms);
+    handler();
+    return real(() => undefined, 0);
+  };
+  globalThis.setTimeout = instant as typeof setTimeout;
+  try {
+    run();
+  } finally {
+    globalThis.setTimeout = real;
+  }
+}
 
 async function hover(element: HTMLElement) {
   await act(async () => {
-    fireEvent.pointerEnter(element);
-    fireEvent.mouseEnter(element);
-    fireEvent.pointerMove(element);
-    fireEvent.mouseMove(element);
+    skipTooltipDelay(() => {
+      fireEvent.pointerEnter(element);
+      fireEvent.mouseEnter(element);
+      fireEvent.pointerMove(element);
+      fireEvent.mouseMove(element);
+    });
   });
 }
 

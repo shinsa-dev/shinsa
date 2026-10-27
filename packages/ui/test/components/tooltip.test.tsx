@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as React from 'react';
 import {
+  TOOLTIP_DELAY,
+  TOOLTIP_SKIP_DELAY,
   Tooltip,
   TooltipContent,
   TooltipLabel,
@@ -20,10 +22,10 @@ beforeEach(() => {
 
 afterEach(() => media.restore());
 
-function Hint(props: { onClick?: () => void; delay?: number }) {
+function Hint(props: { onClick?: () => void }) {
   return (
     <TooltipProvider>
-      <Tooltip delay={props.delay}>
+      <Tooltip>
         <TooltipTrigger onClick={props.onClick}>Info</TooltipTrigger>
         <TooltipContent>
           Merged <TooltipLabel>2h ago</TooltipLabel>
@@ -45,11 +47,40 @@ async function settle() {
   });
 }
 
+/** Runs `run` with the tooltip's open delay already elapsed, so a hover opens as the pointer arrives. */
+function skippingDelay(run: () => void) {
+  const real = globalThis.setTimeout;
+  const instant = (handler: () => void, ms?: number) => {
+    if (ms !== TOOLTIP_DELAY) return real(handler, ms);
+    handler();
+    return real(() => undefined, 0);
+  };
+  globalThis.setTimeout = instant as typeof setTimeout;
+  try {
+    run();
+  } finally {
+    globalThis.setTimeout = real;
+  }
+}
+
+/** The pointer arrives and rests until the tooltip's delay has passed. */
 async function hover(element: Element, init: PointerEventInit = {}) {
   await act(async () => {
-    fireEvent.pointerOver(element, { pointerType: 'mouse', ...init });
+    skippingDelay(() => fireEvent.pointerOver(element, { pointerType: 'mouse', ...init }));
     await flush();
   });
+}
+
+/** The pointer arrives, and the test keeps the real clock. */
+async function arrive(element: Element) {
+  await act(async () => {
+    fireEvent.pointerOver(element, { pointerType: 'mouse' });
+    await flush();
+  });
+}
+
+async function wait(ms: number) {
+  await act(() => Bun.sleep(ms));
 }
 
 async function tap(element: Element) {
@@ -176,41 +207,74 @@ describe('Tooltip on a device with hover', () => {
     expect(tooltip()?.hasAttribute('data-open')).toBe(true);
   });
 
+  it('waits one delay for every tooltip: 600ms in, 400ms to move on to the next at once', () => {
+    expect(TOOLTIP_DELAY).toBe(600);
+    expect(TOOLTIP_SKIP_DELAY).toBe(400);
+  });
+
   it('waits the delay before it opens, and a move away before then opens nothing', async () => {
     render(
       <>
-        <Hint delay={30} />
+        <Hint />
         <p>Elsewhere</p>
       </>
     );
     const trigger = screen.getByRole('button', { name: 'Info' });
-    await hover(trigger);
+    await arrive(trigger);
+    await wait(TOOLTIP_DELAY / 2);
     expect(tooltip()).toBeNull();
-    await hover(screen.getByText('Elsewhere'));
-    await settle();
-    await act(() => Bun.sleep(40));
+    await arrive(screen.getByText('Elsewhere'));
+    await wait(TOOLTIP_DELAY);
     expect(tooltip()).toBeNull();
 
-    await hover(trigger);
-    await waitFor(() => expect(tooltip()?.textContent).toBe('Merged 2h ago'));
+    await arrive(trigger);
+    await waitFor(() => expect(tooltip()?.textContent).toBe('Merged 2h ago'), { timeout: TOOLTIP_DELAY * 2 });
+    expect(tooltip()?.hasAttribute('data-instant')).toBe(false);
   });
 
-  it('takes the delay of the nearest provider', async () => {
+  it('opens the next trigger at once while one shows or just closed, and waits again once it cools', async () => {
     render(
       <TooltipProvider>
-        <TooltipProvider delay={30}>
-          <Labelled label='Slow' tip='Slow tip' />
-        </TooltipProvider>
         <TooltipProvider>
-          <Labelled label='Quick' tip='Quick tip' />
+          <Labelled label='One' tip='First' />
+          <Labelled label='Two' tip='Second' />
         </TooltipProvider>
+        <p>Elsewhere</p>
       </TooltipProvider>
     );
-    await hover(screen.getByRole('button', { name: 'Slow' }));
-    expect(tooltip()).toBeNull();
-    await waitFor(() => expect(tooltip()?.textContent).toBe('Slow tip'));
-    await hover(screen.getByRole('button', { name: 'Quick' }));
-    expect(tooltip()?.textContent).toBe('Quick tip');
+    const one = screen.getByRole('button', { name: 'One' });
+    const two = screen.getByRole('button', { name: 'Two' });
+    await hover(one);
+    await arrive(two);
+    expect(tooltip()?.textContent).toBe('Second');
+    expect(tooltip()?.hasAttribute('data-instant')).toBe(true);
+
+    await arrive(screen.getByText('Elsewhere'));
+    await waitClosed();
+    await arrive(one);
+    expect(tooltip()?.textContent).toBe('First');
+
+    await arrive(screen.getByText('Elsewhere'));
+    await wait(TOOLTIP_SKIP_DELAY + 50);
+    await arrive(two);
+    expect(tooltip()?.hasAttribute('data-open') ?? false).toBe(false);
+  });
+
+  it('waits the delay again after a press or Escape closes a tooltip', async () => {
+    render(
+      <TooltipProvider>
+        <Labelled label='One' tip='First' />
+        <Labelled label='Two' tip='Second' />
+      </TooltipProvider>
+    );
+    await hover(screen.getByRole('button', { name: 'One' }));
+    await act(async () => {
+      fireEvent.keyDown(document.body, { key: 'Escape' });
+      await flush();
+    });
+    await waitClosed();
+    await arrive(screen.getByRole('button', { name: 'Two' }));
+    expect(tooltip()?.hasAttribute('data-open') ?? false).toBe(false);
   });
 
   it('moves straight to the next trigger and opens the innermost of nested ones', async () => {

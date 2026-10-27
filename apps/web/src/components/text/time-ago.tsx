@@ -3,8 +3,6 @@ import type * as React from 'react';
 import { useMinute } from '@/hooks/use-minute.ts';
 import { formatAge, formatClock, formatDay, formatDuration, formatTimeAgo } from '@/lib/format/time.ts';
 
-const TIME_TOOLTIP_DELAY = 150;
-
 function DayAndClock({ at }: { at: number }) {
   return (
     <span className='whitespace-nowrap'>
@@ -36,7 +34,6 @@ function useTimeTrigger(at: number, content: React.ReactNode, text: string, deta
       {text}
     </time>,
     {
-      delay: TIME_TOOLTIP_DELAY,
       className: detail ? 'flex-col items-start gap-px' : undefined,
       content: (
         <>

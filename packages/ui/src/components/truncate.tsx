@@ -5,8 +5,6 @@ import { isClipped, resolveMiddleTruncation } from '@shinsa/ui/lib/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
-const TRUNCATE_TOOLTIP_DELAY = 150;
-
 const useMeasureEffect = typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect;
 
 const LINE_CLAMP = { 2: 'line-clamp-2 whitespace-normal', 3: 'line-clamp-3 whitespace-normal' };
@@ -128,7 +126,6 @@ function Truncate({
     text,
     clipped
       ? {
-          delay: TRUNCATE_TOOLTIP_DELAY,
           className: 'max-w-72 whitespace-normal text-pretty [overflow-wrap:anywhere]',
           content: <span>{full ?? children}</span>,
         }

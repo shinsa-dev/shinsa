@@ -21,10 +21,17 @@ export function ReviewActions({ task, gate }: { task: Task; gate: Gate }) {
         size='sm'
         icon='IconMerged'
         loading={busy === 'merge'}
+        disabled={blocked !== null}
         onClick={() => void run('merge', () => replyToGate(gate, resolveApprovalReply(task, gate, 'merge')))}
       >
         {task.pullRequest ? `Merge #${task.pullRequest.number}` : 'Merge'}
       </Button>
+    );
+    if (!blocked) return button;
+    return (
+      <Hint label={blocked}>
+        <span className='flex w-fit'>{button}</span>
+      </Hint>
     );
   }
   const commented = draft.comments.length > 0;

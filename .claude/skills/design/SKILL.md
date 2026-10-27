@@ -15,7 +15,8 @@ Before writing UI:
    ScrollArea, EmptyState, Field…; docs/design.md → Where Shinsa differs, 18). Shinsa
    composites in `apps/web/src/components/<domain>` (layout/page: PageHeading, Toolbar, SectionLabel;
    layout: ListRow; layout/surface: CARD, Panel, StepNumber; controls: Choice, ChoiceButtons, SelectField,
-   CopyButton, OptionsTrigger (every `•••`); overlays: InfoPopover, Hint, ConfirmDialog; text: TimeAgo, Markdown;
+   CopyButton, OptionsTrigger (every `•••`), ChecklistBlock and ItemChecklist (every list of things to do, merge
+   steps included; a Markdown task list draws the same rows read-only); overlays: InfoPopover, Hint, ConfirmDialog; text: TimeAgo, Markdown;
    status: StatusTile, CheckMark, CheckOutcomeIcon; links:
    TaskLink, PrLink, RepoChip, BranchChip, FileLink). Use them.
 2. Every text gets a type role (docs/design.md → Sizing → Type roles). Size, weight and colour come
@@ -52,7 +53,11 @@ Checklist:
       outline otherwise (`NavItem`'s and `NavButton`'s `activeIcon`, Home, Tasks, Settings, Services, the terminal tab
       in front, a service's tab included, whose state glyph fills in its tone; docs/design.md → Where Shinsa differs,
       19). A state glyph anywhere but the tab in front (a row's tile, a status tile) keeps its outline.
-- [ ] Icon-only buttons name their action in an `aria-label` and the same tooltip.
+- [ ] Icon-only buttons name their action in an `aria-label`, and the same tooltip when the glyph doesn't say it.
+- [ ] A tooltip adds information the screen doesn't show, or it goes: none that repeats a control's label, on
+      `+N −N`, on a self-evident count or on a `•••` menu trigger; a labelled control keeps one that says what its
+      label can't (Approve changes: "Opens the pull request"). Never a `delay`: every tooltip waits `TOOLTIP_DELAY`
+      (lint fails on a delay and on a tooltip equal to its trigger's text; docs/design.md → Where Shinsa differs, 13).
 - [ ] No keyboard shortcut but ⌘K, and the Code tab's ⌘P, ⇧⌘F, ⌘F and ⌘G while it is open (lint fails on a global
       key listener anywhere else; docs/design.md → Where Shinsa differs, 32).
 - [ ] A tooltip opens over its text and icon only: what a `Hint` or `TooltipTrigger` wraps is inline or

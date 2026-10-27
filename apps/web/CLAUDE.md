@@ -219,7 +219,7 @@ holds the shared helpers: `state.ts` builds `ShinsaState` fixtures, `pull-reques
 `chat.ts` transcript entries and tool calls, `accounts.ts`, `schedules.ts`, `onboarding.ts`, `extensions.ts`,
 `versions.ts` and `notifications.ts` their fixtures, `rounds.ts` rounds (`createRound`), `server.ts` a fake WebSocket server that drives the real `connection` (push state and transcripts,
 hold or fail acks, read the commands sent; stop it in `afterEach`), `commands.ts` spies on `sendCommandWithToast`
-and toasts, `hover.ts` hovers an element and waits for its tooltip's text, `wait.ts` waits for an element to
+and toasts, `hover.ts` hovers an element, lets `TOOLTIP_DELAY` pass at once and waits for its tooltip's text, `wait.ts` waits for an element to
 leave (`waitForGone`: a failing `expect(element).toBeNull()` prints the whole element on every retry, which took
 seconds per closing dialog and timed tests out under load). Prefer these to `mock.module`: Bun runs every test file in one process, so a module mock leaks into the
 files after it.

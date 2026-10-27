@@ -6,10 +6,6 @@ export function formatSteps(count: number) {
   return formatCount(count, 'step', 'steps');
 }
 
-export function formatLines(count: number) {
-  return formatCount(count, 'line', 'lines');
-}
-
 export function formatLineRange(start: number, end: number) {
   return start === end ? `line ${start}` : `lines ${start}–${end}`;
 }
