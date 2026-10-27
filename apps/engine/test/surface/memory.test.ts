@@ -36,6 +36,20 @@ describe('shinsa memory', () => {
     ]);
   });
 
+  test('changing a rule without --project keeps it where it is', async () => {
+    const fake = createFakeClient({
+      '/api/memory': {
+        memory: [{ id: 'm2', status: 'kept', projectId: 'project-1', project: 'Work', text: 'Use bun.' }],
+      },
+    });
+    await runSpec(fake, ['memory', 'write', '--id', 'm2', 'Use', 'bun', 'everywhere.']);
+    await runSpec(fake, ['memory', 'write', '--id', 'gone', 'Use', 'bun.']);
+    expect(fake.sent).toEqual([
+      { type: 'memory.write', memoryId: 'm2', projectId: 'project-1', text: 'Use bun everywhere.' },
+      { type: 'memory.write', memoryId: 'gone', projectId: null, text: 'Use bun.' },
+    ]);
+  });
+
   test('keeps or removes a rule by its id, and only the human may', async () => {
     const fake = createFakeClient();
     await runSpec(fake, ['memory', 'keep', 'm1']);

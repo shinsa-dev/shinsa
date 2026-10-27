@@ -20,9 +20,11 @@ function describeMemory(entry: MemoryView) {
   return `${entry.id}  (${status}, ${scope}) ${entry.text}`;
 }
 
-async function resolveProjectId(client: SurfaceClient, project: string) {
-  if (!project) return null;
-  return await findProjectId(client, project);
+async function resolveScope(client: SurfaceClient, memoryId: string | null, project: string) {
+  if (project) return await findProjectId(client, project);
+  if (!memoryId) return null;
+  const { memory } = await client.read<{ memory: MemoryView[] }>('/api/memory');
+  return memory.find((entry) => entry.id === memoryId)?.projectId ?? null;
 }
 
 export const MEMORY_SPECS: SurfaceSpec[] = [
@@ -44,16 +46,20 @@ export const MEMORY_SPECS: SurfaceSpec[] = [
       {
         name: 'project',
         kind: 'text',
-        description: 'Only for this project (key, name or id). Leave out for every project.',
+        description:
+          'Only for this project (key, name or id). Leave out for every project, or with --id to keep the rule where it is.',
       },
       { name: 'text', kind: 'text', positional: 'rest', required: true, description: 'The rule.' },
     ],
-    build: async (values, client) => ({
-      type: 'memory.write',
-      memoryId: readValue(values, 'id') || null,
-      projectId: await resolveProjectId(client, readValue(values, 'project')),
-      text: readValue(values, 'text'),
-    }),
+    build: async (values, client) => {
+      const memoryId = readValue(values, 'id') || null;
+      return {
+        type: 'memory.write',
+        memoryId,
+        projectId: await resolveScope(client, memoryId, readValue(values, 'project')),
+        text: readValue(values, 'text'),
+      };
+    },
     done: () => 'Agents remember it.',
   }),
   defineCommand({

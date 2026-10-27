@@ -1342,14 +1342,15 @@ itself do not).
   chat; it changes nothing until you keep it.
 - **Only you keep, write or remove** (`memory.write`, `memory.accept`, `memory.remove`; Who can change Shinsa, below):
   Settings → Agents → Memory, or `shinsa memory`. Writing over a proposal keeps it with your words and scope;
-  removing a proposal dismisses it.
+  removing a proposal dismisses it. `shinsa memory write --id` without `--project` keeps the rule in its scope.
 - **What agents are told** (`resolveMemoryTold`, from `Decider.startRun`, in the user turn beside the project context,
   never in the system prompt or a tool; Caching, below). A fresh session of the task's agent or of the reviewer gets
   every kept rule for its project plus every global one, under one heading. A resumed session gets only the rules
   kept or edited since its last turn started (`updatedAt` at or after the latest start of a run on that session),
   under "kept new rules since your last turn"; nothing when there are none. A removal is not retold: a session that
-  heard a rule keeps it until its next fresh session. A resume that falls back to a full brief (`resolveRunBrief`)
-  carries every rule again. Proposals are never told, and delegated agents and the quick calls get no memory.
+  heard a rule keeps it until its next fresh session. A resumed turn that must be briefed again (its session was
+  compacted, handed off or never had these house rules; `resolveRunBrief`) carries every rule again, for any briefed
+  role: the agent's round brief, a planning turn, the reviewer and the inquiry roles. Proposals are never told, and delegated agents and the quick calls get no memory.
 
 ### Setup verification
 

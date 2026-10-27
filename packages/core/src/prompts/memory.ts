@@ -30,9 +30,14 @@ export function resolveMemoryContext(state: ShinsaState, task: Task) {
   return describeRules(MEMORY_HEADING, listKeptMemory(state, resolveTaskProject(state, task)));
 }
 
-export function resolveMemoryTold(state: ShinsaState, task: Task, role: RunRole, resumeFrom: Run | null) {
+export function resolveBriefedMemory(state: ShinsaState, task: Task, role: RunRole) {
   if (!isBriefedRole(role)) return '';
-  if (!resumeFrom?.sessionId) return resolveMemoryContext(state, task);
+  return resolveMemoryContext(state, task);
+}
+
+export function resolveMemoryTold(state: ShinsaState, task: Task, role: RunRole, resumeFrom: Run | null) {
+  if (!resumeFrom?.sessionId) return resolveBriefedMemory(state, task, role);
+  if (!isBriefedRole(role)) return '';
   const since = resolveLastTurnStart(state, resumeFrom);
   const fresh = listKeptMemory(state, resolveTaskProject(state, task)).filter(
     (entry) => entry.updatedAt >= since

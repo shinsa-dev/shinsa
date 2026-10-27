@@ -1,6 +1,6 @@
 import { isTaskComplete, type Run, type RunPurpose, type Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
-import { resolveMemoryContext } from './memory.ts';
+import { resolveBriefedMemory, resolveMemoryContext } from './memory.ts';
 import { resolveProjectContext } from './project.ts';
 import { describeRound, resolveAgentPrompt } from './roles.ts';
 import { splitHouseRules } from './rules.ts';
@@ -35,6 +35,7 @@ export function resolveRoundBrief(
 export function resolveRunBrief(state: ShinsaState, run: Run) {
   const prompt = run.prompt ?? '';
   const task = state.tasks[run.taskId];
-  if (!task || run.resume !== true || !needsRoundBrief(run)) return prompt;
+  if (!task || run.resume !== true) return prompt;
+  if (!needsRoundBrief(run)) return `${prompt}${resolveBriefedMemory(state, task, run.role)}`;
   return `${resolveRoundBrief(state, task, run, prompt)}${resolveProjectContext(state, task)}${resolveMemoryContext(state, task)}`;
 }

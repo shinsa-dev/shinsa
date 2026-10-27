@@ -317,4 +317,27 @@ describe('what agents are told', () => {
     expect(build.prompt).not.toContain('Never use em dashes.');
     expect(resolveRunBrief(harness.state, build)).toContain(`${HEADING} from earlier work.`);
   });
+
+  test('a resumed reviewer that must be briefed again gets every rule', () => {
+    const harness = createHarness();
+    write(harness, 'Never use em dashes.');
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    linkSession(harness, taskId, 'review-session');
+    harness.send({
+      type: 'agent.report_review',
+      runId: harness.activeRun(taskId).id,
+      summary: null,
+      findings: [{ severity: 'blocking', file: null, line: null, message: 'Handle the empty list.' }],
+    });
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Handled it.' });
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    const reviewer = harness.activeRun(taskId);
+    expect(reviewer).toMatchObject({ role: 'reviewer', resume: true });
+    expect(reviewer.prompt).not.toContain('Never use em dashes.');
+    expect(resolveRunBrief(harness.state, reviewer)).toContain(`${HEADING} from earlier work.`);
+    const delegated = { ...reviewer, role: 'planner' as const };
+    expect(resolveRunBrief(harness.state, delegated)).toBe(reviewer.prompt ?? '');
+  });
 });

@@ -1075,7 +1075,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `--id` | text, optional | The rule to change. Leave out to write a new one. |
-| `--project` | text, optional | Only for this project (key, name or id). Leave out for every project. |
+| `--project` | text, optional | Only for this project (key, name or id). Leave out for every project, or with --id to keep the rule where it is. |
 | `<text>` | text, required | The rule. |
 
 #### shinsa memory keep
