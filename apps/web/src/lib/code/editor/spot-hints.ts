@@ -5,11 +5,19 @@ export interface SpotHint {
 }
 
 export class SpotHintRegistry {
-  readonly #hints = new Map<HTMLElement, SpotHint>();
-  readonly #listeners = new Set<() => void>();
-  #snapshot: readonly SpotHint[] = [];
-  #next = 0;
-  #queued = false;
+  readonly #hints: Map<HTMLElement, SpotHint>;
+  readonly #listeners: Set<() => void>;
+  #snapshot: readonly SpotHint[];
+  #next: number;
+  #queued: boolean;
+
+  constructor() {
+    this.#hints = new Map();
+    this.#listeners = new Set();
+    this.#snapshot = [];
+    this.#next = 0;
+    this.#queued = false;
+  }
 
   add(element: HTMLElement, label: string) {
     this.#next += 1;

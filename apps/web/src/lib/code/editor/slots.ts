@@ -1,6 +1,11 @@
 export class SlotRegistry {
-  readonly #slots = new Map<string, HTMLElement>();
-  readonly #heights = new Map<string, number>();
+  readonly #slots: Map<string, HTMLElement>;
+  readonly #heights: Map<string, number>;
+
+  constructor() {
+    this.#slots = new Map();
+    this.#heights = new Map();
+  }
 
   select(key: string) {
     return this.#slots.get(key) ?? null;

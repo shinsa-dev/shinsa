@@ -17,8 +17,13 @@ export interface FindSnapshot {
 }
 
 export class FindHost {
-  readonly #listeners = new Set<() => void>();
-  #snapshot: FindSnapshot = { panel: null, replace: false, version: 0 };
+  readonly #listeners: Set<() => void>;
+  #snapshot: FindSnapshot;
+
+  constructor() {
+    this.#listeners = new Set();
+    this.#snapshot = { panel: null, replace: false, version: 0 };
+  }
 
   createPanel = (view: EditorView): Panel => {
     const dom = document.createElement('div');
