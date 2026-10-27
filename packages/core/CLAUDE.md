@@ -102,9 +102,11 @@ src/
 │   ├── messages.ts  A message from you: resolveMessageEffect says what it does where the task is (steer, retry,
 │   │                verify the setup, revise, fix, replace the operation's notes, a follow-up on a resting task…; the
 │   │                web's composer hint reads it), then it is delivered, only recorded (acknowledge), queued as a new
-│   │                round or suggested as a separate task by its kind; superseding an open question; a message sent
-│   │                for you to a task at a gate is only
-│   │                recorded, for its next agent; needsMessageKind (the server classifies such a message first);
+│   │                round or suggested as a separate task by its kind (at a gate that takes words, always delivered:
+│   │                FEEDBACK_ONLY_EFFECTS); the same text twice within a window is taken once (isRepeatedMessage);
+│   │                superseding an open question; a message sent for you to a task at a gate is only recorded, for
+│   │                its next agent; needsMessageKind (the server classifies such a message first, never at those
+│   │                gates);
 │   │                the inbox: receiveMessage, routeMessage (delivers with the classifier's kind), dropMessage
 │   ├── retry.ts     Retry: restart the current step with a fresh fix budget
 │   ├── runs.ts      Agent run ends, recovery by failure class (one nudge, a fresh session, or a gate at once),

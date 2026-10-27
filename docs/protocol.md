@@ -645,7 +645,11 @@ records it (`task.messaged`) and nothing else, and the next agent's brief carrie
 an agent on the human’s behalf: …", or "Sent by a schedule: …").
 
 `task.message` carries an optional `kind` (`MessageKind`), with the classifier's `title`, `why` and `shape` for new
-work. Without one it is `feedback`, except a schedule's message to a resting task, which is `new_round`. `feedback` is
+work. Without one it is `feedback`, except a schedule's message to a resting task, which is `new_round`. Where the
+effect is `retry`, `verify_setup`, `supersede_question`, `revise_plan`, `request_changes`, `decline_proposal` or
+`operation_notes` it is `feedback` whatever `kind` it carries, and the server asks no classifier (`needsMessageKind`).
+A `task.message` or `message.receive` whose text matches a message still in the task's inbox, or the request of a
+round still waiting, from the last 10 minutes emits nothing. `feedback` is
 delivered by the effect: on a resting task a follow-up in the same round (an answerer resuming the round's last session
 when the round was not an inquiry, which rests again as it was; `answer` with a proposal is refused there with
 `follow_up_proposal`). `acknowledge` is only recorded (`task.messaged` with `kind: 'acknowledge'`, "Sent a message"),

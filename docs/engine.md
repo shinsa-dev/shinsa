@@ -549,8 +549,8 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
 
 - **Round 1 is the task's request.** `task.created` folds into round 1, so every task has one. The task's own fields (plan, phases, report, checks,
   findings, fix budget, result, proposal, pull request) are the current round's.
-- **How a new round is decided.** The classifier decides, not the agent, for every message, the task resting or not:
-  one quick call on the classifier model reads your message against the task's rounds (each with its kind of work, its
+- **How a new round is decided.** The classifier decides, not the agent, for every message, the task resting or not,
+  except where you decide (below): one quick call on the classifier model reads your message against the task's rounds (each with its kind of work, its
   status and what it did: the result, the report's headline or the plan's goal) and whether a round is in progress, and
   answers `acknowledge`, `feedback`, `new_round` or `separate_task`. Most messages are no new work: thanks, "ok" or
   small talk is `acknowledge`, and a question about what a round did is `feedback`; only a message that asks for
@@ -561,9 +561,18 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   shape question (`resolveRoundShape` in `triage/message.ts`, the task's rounds as context) before it dispatches, and
   the answer travels on the command like a classified message's, so replay never asks again. Only when the model is
   off or gives no usable answer does the round fall back to `change`.
+- **Where you decide, a message is always the gate's reply.** At a plan gate, a review gate, an agent's question, your
+  OK, an operation gate, a failure, Sign in or setup gate, and while planning with no agent running, the composer's
+  words say what sending does (What a message does, below), and that is what it does: the classifier is not asked
+  (`needsMessageKind` is false, so neither `MessageInbox` nor an agent's `tasks_message` calls it), and core reads the
+  message as `feedback` whatever kind it carries (`FEEDBACK_ONLY_EFFECTS` in `decide/messages.ts`: a kind classified
+  earlier, `--as` or `as`). So a message at the plan gate, "I agree, and then group the projects too", revises the
+  plan with all of it, the new scope included; it never queues a round, is never only noted and never becomes a
+  split-off, and it never approves the plan, which stays the gate's own approve. The merge gate is not one of them: a
+  round queued there starts at once (One active round, below), so the classifier still tells a change before the
+  merge from the next piece of work, and "thanks" from either.
 - **A message that needs no new work stays in its round.** `acknowledge` is recorded in the chat (`task.messaged`,
-  "Sent a message") and nothing else happens: no run, no round, wherever the task is, except that it answers an agent's
-  open question. A pure acknowledgement starts no agent on purpose: a reply would resume a session that has gone cold
+  "Sent a message") and nothing else happens: no run, no round, wherever the task is but where you decide (above). A pure acknowledgement starts no agent on purpose: a reply would resume a session that has gone cold
   since the round ended, at the cost of reading its whole context again, to say "you're welcome"; the next agent of
   the round reads it among your messages anyway. `feedback` to a resting task is a follow-up in the same round
   (`follow_up`): a finished answer, investigation or report goes to the same agent as before; any other finished round
@@ -583,8 +592,8 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   (`routeUserCommand` on the socket and `POST /api/commands`): it becomes `message.receive`, which core checks and keeps
   in the task's `inbox`, and the acknowledgement and the state push carry it straight away. `MessageInbox`
   (`triage/inbox.ts`) then routes each task's inbox, one task at a time and in the order sent: it takes everything
-  waiting in the inbox, asks the classifier once about all of it (the texts joined by a blank line), read against the
-  task as it is at that moment, and routes it as one (`message.route` with `messageIds`, command id
+  waiting in the inbox, asks the classifier once about all of it (the texts joined by a blank line; not at all where
+  you decide, above), read against the task as it is at that moment, and routes it as one (`message.route` with `messageIds`, command id
   `message.route:<ids>`). Messages that arrive while the classifier reads wait for the next pass, which reads the task
   as the first pass left it: a message sent while the follow-up it started is running steers that agent rather than
   being read as a message to a resting task. The classifier's answer is a typed decision (`choice` of `acknowledge`,
@@ -601,6 +610,12 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
   `tasks_message` without `as` is classified before it is dispatched, since the agent waits for the result. The
   receipt is taken over the command as you sent it, so the same command id resent after a reconnect is answered from
   its receipt and never accepted twice.
+- **The same message twice is taken once.** A message whose text (trimmed) matches one still waiting in the task's
+  inbox, or the request of a round still waiting to start, and that arrived within 10 minutes of it
+  (`MESSAGE_REPEAT_WINDOW_MS`), changes nothing (`isRepeatedMessage`, in both `message.receive` and `task.message`):
+  sending again because the first showed no sign of going makes no second round and no second revision. The window
+  is counted from when the first was received or queued; after it, or once the first has been delivered, the same
+  text is a new message.
 - **Queued messages.** Several messages in a row reach the task in order, never lost and never stuck:
   - **Routed together, delivered as one.** Messages routed in one pass are one delivery: one steer, one follow-up, one
     fix or one new round whose request is their texts in order, so a burst of short messages is one turn of the agent,
@@ -993,9 +1008,10 @@ sending does:
 | a resting task (a finished answer, investigation or report; a merged change; an operation that ran) | `follow_up` | a finished inquiry's agent answers it; any other round's last session is resumed by an answerer, in the same round (Rounds, above) |
 | a closed task (marked done, cancelled) | `closed` | refused: "This task is finished." |
 
-That is what feedback does. A message the classifier reads as needing nothing (`acknowledge`) is only recorded,
-wherever the task is, unless it answers an agent's open question. A message the classifier reads as new work queues
-the next round wherever the task is,
+That is what feedback does, and at a failure, Sign in, setup, question, plan, review, your OK or operation gate, and
+while planning with no agent running, it is all a message does, whatever the classifier would read it as (Rounds →
+Where you decide, above). Elsewhere, a message the classifier reads as needing nothing (`acknowledge`) is only
+recorded, and a message it reads as new work queues the next round,
 and one it reads as work for another task becomes a split-off suggested task (Rounds, above). A message an agent sends
 on your behalf, or a schedule sends, to a task with any open gate is not delivered into the gate: core records it
 (`task.messaged`) and nothing else, the next agent's brief carries it (`resolveLaterMessages`: "Sent by an agent on

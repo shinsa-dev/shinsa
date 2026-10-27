@@ -217,7 +217,8 @@ src/
 │                        message is accepted into the task's inbox at once (message.receive) and inbox.ts
 │                        (MessageInbox) classifies and routes it after, one task at a time and in order:
 │                        everything waiting in a task's inbox is classified together against the task as it is
-│                        then and routed as one (message.route with messageIds), a classifier that does not
+│                        then and routed as one (message.route with messageIds; not classified at a gate that
+│                        takes words, needsMessageKind), a classifier that does not
 │                        answer within 30 s routes it unclassified, and a route that breaks is dropped with a
 │                        reason, so no message waits for ever; the receipt is taken over the
 │                        command as sent; createCommandRouter, the same route for an agent's management commands,
