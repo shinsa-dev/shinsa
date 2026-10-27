@@ -6,7 +6,9 @@ specification follows below, unchanged; where it names its own files (`component
 `styles.css`), Shinsa's are `packages/ui/src/components/*.tsx` and
 `packages/ui/src/styles/globals.css` (18 below has the layout). `/ui` renders every token and kit
 component in both themes, and Shinsa's shared building blocks and feature pieces (5); when this file
-and the code disagree, fix one of them in the same change.
+and the code disagree, fix one of them in the same change. `docs/design-system.md` restates this system as one
+self-contained file for agents outside the repo (published as `shinsa.dev/design.md`, its token, icon and lint tables
+generated from the source); a change here changes it too.
 
 ## Where Shinsa differs
 

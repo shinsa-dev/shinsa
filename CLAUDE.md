@@ -1,6 +1,6 @@
 # Shinsa
 
-A control plane for coding agents. Agents do the work end to end; the human only appears at gates: reviewing a change, approving a merge, answering a question (and approving a plan, when switched on). Everything between gates is Shinsa's job. The product spec and its status are `docs/spec.md`; the agent engine (roles, lifecycle, outbox, recovery, accounts, delegation, schedules) is `docs/engine.md`; every object, its schema and its name (the glossary, commands, events, effects, the naming decisions) is `docs/protocol.md`; the design system is `docs/design.md` and the `design` skill; where each harness feature comes from (T3 Code, Kanna, Paperclip) and how far it is built is `docs/harness-plan.md`.
+A control plane for coding agents. Agents do the work end to end; the human only appears at gates: reviewing a change, approving a merge, answering a question (and approving a plan, when switched on). Everything between gates is Shinsa's job. The product spec and its status are `docs/spec.md`; the agent engine (roles, lifecycle, outbox, recovery, accounts, delegation, schedules) is `docs/engine.md`; every object, its schema and its name (the glossary, commands, events, effects, the naming decisions) is `docs/protocol.md`; the design system is `docs/design.md` and the `design` skill, and `docs/design-system.md` is the same system as one self-contained file for agents outside the repo (served as `shinsa.dev/design.md`, its token, icon and lint tables generated at build; `apps/marketing/CLAUDE.md`); where each harness feature comes from (T3 Code, Kanna, Paperclip) and how far it is built is `docs/harness-plan.md`.
 
 ## Project structure
 
@@ -28,7 +28,7 @@ packages/core/    → @shinsa/core    Pure domain, one folder per concern under 
                                     report, chat, prompts, progress, protocol); tests under test/ at 100% coverage.
                                     No I/O. See packages/core/CLAUDE.md
 packages/ui/      → @shinsa/ui      The design system: Buzzkit's kit (tokens, components, icons), docs/design.md
-docs/                               spec.md, engine.md, protocol.md, design.md, cli.md, harness-plan.md
+docs/                               spec.md, engine.md, protocol.md, design.md, design-system.md, cli.md, harness-plan.md
 ```
 
 ## How it works
@@ -98,7 +98,7 @@ web ──WebSocket──► shinsa engine
 |---|---|
 | `bun dev` | `shinsa engine` on :5180 and the web app on :5181 (proxies `/api` and `/ws`) |
 | `bun run build` then `bun start` | Production: `shinsa engine` serves `apps/web/dist` on :5180 |
-| `bun lint` | Biome (with the Grit plugins), `bun lint:conventions` (`scripts/lint-conventions.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
+| `bun lint` | Biome (with the Grit plugins), `bun lint:conventions` (`scripts/lint-conventions.ts`, its rule tables and messages in `scripts/lint-rules.ts`: comments outside `packages/ui`, the verb catalog, the class checks in `apps/web/src` and, for icon fades, green checkmarks, corners and focus states, `packages/ui/src` too) and `bun lint:spelling` (cspell; add a real word to `cspell.json`) |
 | `bun format` | Biome's formatter only (`bun format:fix` writes) |
 | `bun check-types` | TypeScript in every workspace and `scripts/` |
 | `bun run test` | Unit tests (Bun) in every workspace plus `scripts/*.test.ts` (`bun run test:scripts`, the root `bunfig.toml`); each workspace and `scripts/` fails below 100% line and function coverage |

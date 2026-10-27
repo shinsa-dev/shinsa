@@ -24,7 +24,7 @@
     },
     "apps/marketing": {
       "entry": ["test/**/*.test.ts"],
-      "ignoreDependencies": ["@shinsa/web", "tailwindcss"]
+      "ignoreDependencies": ["@shinsa/web"]
     }
   }
 }

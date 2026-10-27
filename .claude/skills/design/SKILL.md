@@ -6,7 +6,9 @@ description: Shinsa's design system (paywall-next's Application register on Buzz
 # Shinsa design
 
 The rules live in `docs/design.md` (paywall-next's DESIGN.md plus "Where Shinsa differs", which wins);
-the live reference is `/ui`. This skill is the checklist.
+the live reference is `/ui`. `docs/design-system.md` is the same system as one self-contained file for agents
+outside the repo (`shinsa.dev/design.md`): a change to a rule, a component or a pattern updates it too. This skill is
+the checklist.
 
 Before writing UI:
 

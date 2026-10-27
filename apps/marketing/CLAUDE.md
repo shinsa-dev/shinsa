@@ -79,12 +79,45 @@ src/
                             `src/assets/fonts/` (static Regular and Medium cut from the kit's variable font, since Satori
                             reads neither WOFF2 nor variable fonts), with the kit's own logo and icons
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
-  pages/                    index, 404, og.png, llms.txt; public/ holds the
-                            PNG icons, site.webmanifest and robots.txt; @astrojs/sitemap writes the sitemap
+  lib/design.ts             `/design.md`, the whole design system in one file (below)
+  pages/                    index, 404, og.png, llms.txt, design.md; public/ holds the
+                            PNG icons, site.webmanifest, robots.txt and _headers; @astrojs/sitemap writes the sitemap
   lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
   worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals into download.ts,
                             which answers the download paths (tested in test/worker/ at 100%, `bun run test`)
 ```
+
+## The design system file
+
+`/design.md` is Shinsa's whole design system as one Markdown file, for an agent that has nothing else: an agent given
+only it should build UI that matches Shinsa to the pixel and follows every rule. `pages/design.md.ts` writes it at
+build time (`dist/design.md`) with `serializeDesign` (`lib/design.ts`). The prose is `docs/design-system.md`, written
+by hand; every `<!-- design:NAME -->` line in it is replaced by a part generated from the source, so the parts that
+can drift never do:
+
+| Marker | Generated from |
+| --- | --- |
+| `toc` | the file's own `##` headings |
+| `tokens` | every custom property in `:root`, `.dark, :root` and `.dark` of the kit's `globals.css`, light and dark, grouped, with the stylesheet's own comments; and any block that redefines tokens inside a region |
+| `theme` | the kit's `@theme inline` block: the colour utilities and every other theme variable |
+| `scales` | the effective type, weight, tracking, leading, corner, spacing, breakpoint, container and easing scales: the kit's theme over `tailwindcss/theme.css`, with px worked out |
+| `utilities` | every `@custom-variant`, `@utility`, `@property` and `@keyframes` in `globals.css`, verbatim |
+| `icons` | `ICON_NAMES` (`@shinsa/ui/components/icon`), the filled twins and the marks drawn in `custom.ts` |
+| `lint` | `CLASS_RULES`, every `*_MESSAGE`, `BANNED_VERB_PATTERN` and `VERB_CATALOG` from `scripts/lint-rules.ts` (the data half of `scripts/lint-conventions.ts`) |
+| `kit-stylesheet`, `web-stylesheet` | `globals.css`, and the web's `app.css` and `desktop.css`, verbatim |
+
+`serializeDesign` throws on an unknown marker or a missing one. `test/lib/design.test.ts` builds the real file and
+fails when a token in `globals.css`, an export of a `packages/ui` component, an icon or a lint rule is missing from it,
+or when a section is missing from the contents. It also holds a few key phrases from each of the `design`, `copy`,
+`conventions` and `review` skills and the engine plugin's `evidence`, `handover` and `review` skills (`SKILL_RULES`),
+and fails when one leaves either the skill or the file. A change to the design system updates `docs/design-system.md`
+in the same change as `docs/design.md` and the skills; the test catches a new token, component or icon, or a dropped
+key skill phrase, not a changed rule.
+
+It is served as `text/markdown; charset=utf-8`: Wrangler already types `.md` that way, and `public/_headers` says so
+for `/design.md` in case that ever changes (a static endpoint's own headers are not kept in a static build, and the
+Worker runs only for the download paths). `bun run preview` (Astro's static server) sends `text/markdown` without the
+charset; `bunx wrangler dev` serves `dist` as production does.
 
 ## Rules
 
