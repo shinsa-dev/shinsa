@@ -1,4 +1,4 @@
-import type { DesktopBridge, DesktopNotice, DesktopUpdate } from '@/lib/desktop.ts';
+import type { DesktopBridge, DesktopNotice, DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 
 type WindowState = DesktopBridge['windowState'];
 
@@ -9,15 +9,19 @@ export function installDesktop(windowState: WindowState = 'window') {
   const stateListeners = new Set<(state: WindowState) => void>();
   const updateListeners = new Set<(update: DesktopUpdate) => void>();
   const updateCalls: string[] = [];
+  const channels: UpdateChannel[] = [];
   const bridge: DesktopBridge = {
     version: '0.0.0',
     protocol: 1,
     update: { status: 'none' },
+    channel: 'stable',
     windowState,
     updateBadge: (count) => badges.push(count),
     notify: (notice) => notices.push(notice),
     installUpdate: () => updateCalls.push('install'),
     checkForUpdates: () => updateCalls.push('check'),
+    applyUpdateChannel: (channel) => channels.push(channel),
+    answerDowngrade: (accept) => updateCalls.push(accept ? 'downgrade' : 'keep beta'),
     onUpdate: (listener) => {
       updateListeners.add(listener);
       return () => updateListeners.delete(listener);
@@ -37,6 +41,7 @@ export function installDesktop(windowState: WindowState = 'window') {
     badges,
     notices,
     updateCalls,
+    channels,
     changeUpdate: (update: DesktopUpdate) => {
       for (const listener of updateListeners) listener(update);
     },

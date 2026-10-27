@@ -7,6 +7,7 @@ import * as onboarding from '@/lib/connection/onboarding.ts';
 import { DEFAULT_PREFERENCES, readNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnCommands } from '../../support/commands.ts';
+import { installDesktop } from '../../support/desktop.ts';
 import { installNotifications } from '../../support/notifications.ts';
 import { createRepo } from '../../support/state.ts';
 
@@ -120,6 +121,30 @@ describe('Change a setting', () => {
       ['After a usage limit', 'Resume automatically'],
       ['File list', 'Left'],
     ]);
+  });
+
+  it('switches the app’s update channel, and only in the app', () => {
+    expect(() =>
+      find(listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES), 'settings.update-channel')
+    ).toThrow();
+    const fake = installDesktop();
+    const sections = listSettingsSections(
+      createSettings(),
+      MODELS,
+      DEFAULT_PREFERENCES,
+      null,
+      undefined,
+      'left',
+      'stable'
+    );
+    expect(find(sections, 'settings.update-channel')).toMatchObject({
+      label: 'Update channel',
+      hint: 'Stable',
+    });
+    pick(sections, 'settings.update-channel', 'beta');
+    pick(sections, 'settings.update-channel', 'stable');
+    expect(fake.channels).toEqual(['beta', 'stable']);
+    fake.restore();
   });
 
   it('moves the Code tab’s file list to either side', () => {

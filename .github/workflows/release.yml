@@ -3,8 +3,13 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: Stable is a normal release marked latest; beta is a pre-release of the next version
+        type: choice
+        options: [beta, stable]
+        default: beta
       bump:
-        description: Which part of the version goes up
+        description: Which part of the last stable version goes up (docs/release.md)
         type: choice
         options: [patch, minor, major]
         default: patch
@@ -19,43 +24,60 @@ permissions:
 jobs:
   mac:
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Next version
-        id: version
-        env:
-          BUMP: ${{ inputs.bump }}
-        run: |
-          last=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
-          last=${last#v}
-          IFS=. read -r major minor patch <<< "${last:-0.0.0}"
-          case "$BUMP" in
-            major) major=$((major + 1)); minor=0; patch=0 ;;
-            minor) minor=$((minor + 1)); patch=0 ;;
-            patch) patch=$((patch + 1)) ;;
-          esac
-          echo "version=$major.$minor.$patch" >> "$GITHUB_OUTPUT"
-          echo "Releasing $major.$minor.$patch (after ${last:-nothing})" >> "$GITHUB_STEP_SUMMARY"
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      - name: Next version
+        id: version
+        env:
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_BUMP: ${{ inputs.bump }}
+        run: bun scripts/release.ts
+      - name: Signing preflight
+        id: signing
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          missing=()
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then missing+=("$name"); fi
+          done
+          if [ ${#missing[@]} -eq 0 ]; then
+            mode=signed
+            line="Signed with the Developer ID Application certificate and notarized by Apple: it opens without a Gatekeeper prompt and updates itself."
+          elif [ ${#missing[@]} -eq 5 ]; then
+            mode=unsigned
+            line="Not signed (ad hoc) and not notarized: no signing secrets are set. It installs, macOS asks before the first launch, and it never updates itself, since Squirrel.Mac installs only signed updates (docs/release.md)."
+          else
+            echo "::error title=Signing::Some signing secrets are set and some are missing (${missing[*]}). Set all five or none (docs/release.md)."
+            exit 1
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Signing::$line"
+          printf '**Signing:** %s\n\n' "$line" >> "$GITHUB_STEP_SUMMARY"
       - run: bun run build
         working-directory: apps/web
       - name: Build the engine
         env:
           SHINSA_VERSION: ${{ steps.version.outputs.version }}
-        run: bun apps/server/scripts/build-engine.ts
-      - run: apps/server/dist/engine/bin/shinsa help
+        run: bun apps/engine/scripts/build-engine.ts
       - run: bun run build
         working-directory: apps/desktop
       - name: Build, sign and notarize
         working-directory: apps/desktop
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          MODE: ${{ steps.signing.outputs.mode }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -63,18 +85,72 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           signing=(-c.mac.identity=- -c.mac.notarize=false)
-          if [ -n "$CSC_LINK" ]; then signing=(-c.mac.notarize=true); fi
+          if [ "$MODE" = signed ]; then signing=(-c.mac.notarize=true); fi
           bunx electron-builder --mac dmg zip --arm64 --publish never \
-            '-c.mac.artifactName=Shinsa-mac-${arch}.${ext}' \
             -c.extraMetadata.version="$VERSION" \
             "${signing[@]}"
+      - name: Check the versions and the signature
+        working-directory: apps/desktop/release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          app=mac-arm64/Shinsa.app
+          bundled=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
+          engine=$("$app/Contents/Resources/engine/bin/shinsa" version --json | jq -r .command.version)
+          echo "Release $VERSION, app $bundled, engine $engine"
+          if [ "$bundled" != "$VERSION" ] || [ "$engine" != "$VERSION" ]; then
+            echo "::error title=Versions::The app ($bundled) and its engine ($engine) must both be $VERSION."
+            exit 1
+          fi
+          codesign --verify --deep --strict "$app"
+          if [ "$MODE" = signed ]; then
+            spctl --assess --type execute --verbose=2 "$app"
+            xcrun stapler validate "$app"
+          fi
+      - name: Update files for both channels
+        working-directory: apps/desktop/release
+        env:
+          CHANNEL: ${{ steps.version.outputs.channel }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$CHANNEL" = stable ]; then
+            cp latest-mac.yml beta-mac.yml
+            files=(latest-mac.yml beta-mac.yml)
+          else
+            mv latest-mac.yml beta-mac.yml
+            files=(beta-mac.yml)
+          fi
+          for file in "${files[@]}"; do
+            if ! grep -qx "version: $VERSION" "$file"; then
+              echo "::error title=Update files::$file does not name $VERSION."
+              exit 1
+            fi
+          done
+          printf '%s\n' "${files[@]}" > update-files.txt
       - name: Publish the release
         working-directory: apps/desktop/release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
-        run: >-
-          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "Shinsa $VERSION" --generate-notes
-          Shinsa-mac-arm64.dmg Shinsa-mac-arm64.dmg.blockmap
-          Shinsa-mac-arm64.zip Shinsa-mac-arm64.zip.blockmap
-          latest-mac.yml
+          CHANNEL: ${{ steps.version.outputs.channel }}
+          NOTES: ${{ steps.version.outputs.notes }}
+          NOTES_START_TAG: ${{ steps.version.outputs.notes_start_tag }}
+        run: |
+          updates=()
+          while IFS= read -r file; do updates+=("$file"); done < update-files.txt
+          if [ "$CHANNEL" = beta ]; then
+            kind=(--prerelease --latest=false)
+            title="Shinsa $VERSION (beta)"
+          else
+            kind=(--latest)
+            title="Shinsa $VERSION"
+          fi
+          if [ -n "$NOTES_START_TAG" ]; then kind+=(--notes-start-tag "$NOTES_START_TAG"); fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$title" \
+            --generate-notes --notes "$NOTES" "${kind[@]}" \
+            Shinsa-mac-arm64.dmg Shinsa-mac-arm64.dmg.blockmap \
+            Shinsa-mac-arm64.zip Shinsa-mac-arm64.zip.blockmap \
+            "${updates[@]}"
+          printf '**Published** [%s](%s/%s/releases/tag/%s).\n' "$title" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$TAG" >> "$GITHUB_STEP_SUMMARY"

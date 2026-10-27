@@ -19,17 +19,17 @@ describe('settings tabs', () => {
       'Integrations',
       'Automations',
     ]);
-    expect(listSettingsTabs().map((tab) => tab.activeIcon)).toEqual([
-      'IconSettingsGear1Filled',
-      'IconAgentsFilled',
-      'IconGaugeFilled',
-      'IconFolder1Filled',
-      'IconIntegrationsFilled',
-      'IconCalendarClockFilled',
-    ]);
   });
 
   it('finds a tab by id', () => {
+    expect(findSettingsTab('general').sections).toEqual([
+      'Appearance',
+      'Attention',
+      'Notifications',
+      'Context',
+      'Setup',
+      'Updates',
+    ]);
     expect(findSettingsTab('accounts').sections).toEqual(['Accounts', 'Limits']);
     expect(findSettingsTab('agents').sections).toEqual(['Models', 'Engine', 'Versions']);
     expect(findSettingsTab('projects').sections).toEqual(['Repository folders', 'Projects']);

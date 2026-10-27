@@ -56,7 +56,7 @@ describe('Settings tabs', () => {
         .map((tab) => tab.textContent)
     ).toEqual(['General', 'Agents', 'Agent usage', 'Projects', 'Integrations', 'Automations']);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('General');
-    for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup'])
+    for (const section of ['Appearance', 'Attention', 'Notifications', 'Context', 'Setup', 'Updates'])
       expect(screen.getByText(section)).toBeTruthy();
     expect(screen.queryByText('Engine')).toBeNull();
     fireEvent.click(within(tabs).getByRole('tab', { name: 'Agents' }));
@@ -66,9 +66,9 @@ describe('Settings tabs', () => {
     expect(screen.getByText('Engine')).toBeTruthy();
     expect(screen.getByText('Versions')).toBeTruthy();
     expect(screen.queryByText('Appearance')).toBeNull();
-    const nav = screen.getByRole('navigation', { name: 'Settings sections' });
-    expect(within(nav).getByRole('button', { name: 'Agents' }).getAttribute('aria-current')).toBe('page');
-    fireEvent.click(within(nav).getByRole('button', { name: 'General' }));
+    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).toBeNull();
+    expect(within(tabs).getByRole('tab', { name: 'Agents' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(within(tabs).getByRole('tab', { name: 'General' }));
     await settle();
     expect(location.search).toBe('');
     expect(screen.getByText('Appearance')).toBeTruthy();

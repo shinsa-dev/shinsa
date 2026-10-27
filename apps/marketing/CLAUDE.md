@@ -90,5 +90,21 @@ web app's components), deploy command `bun run deploy` (`wrangler deploy`) on `m
 `bun run deploy:preview` (`wrangler preview`) on every other branch. A preview is its own copy of the Worker on
 workers.dev with a URL per branch and per deployment (`"previews": {}` turns it on; the site has no bindings, so the
 block is empty). Wrangler comes from this package's `devDependencies`, as Workers Builds requires. There is no server and no analytics.
-`/download` is a redirect in `public/_redirects` to the latest GitHub release's `Shinsa-mac-arm64.dmg`, so the site
-never changes for a release and GitHub counts the downloads.
+The Worker (`main` in `wrangler.jsonc`, `src/worker/`) runs only for `/download` and `/download/*`
+(`assets.run_worker_first`); every other request is a plain static asset hit. Every release, stable or beta, carries
+`Shinsa-mac-arm64.dmg`, so the site never changes for a release and GitHub counts the downloads:
+
+- `/download` redirects (302) to `releases/latest/download/Shinsa-mac-arm64.dmg`, the newest stable release, since
+  GitHub's `latest` never names a pre-release. It needs no lookup; it lives in the Worker rather than in a
+  `_redirects` file so both channels and their fallback are in one tested module.
+- `/download/beta` redirects to the disk image of the newest release, pre-releases (`v1.3.0-beta.2`) included. The
+  Worker reads `api.github.com/repos/shinsa-dev/shinsa/releases?per_page=10` unauthenticated, skips drafts and
+  releases without the disk image, and picks the highest version by semver order rather than the list's order
+  (1.3.0-beta.2 < 1.3.0-beta.11 < 1.3.0). The answer is kept 5 minutes in the edge cache (`caches.default`, under a
+  made-up URL), so GitHub's limit of 60 requests an hour per address is never reached; the cache works on the custom
+  domains, not on a workers.dev preview, which asks GitHub every time. On any failure (the rate limit, the network,
+  an answer that is not a list, no release with the disk image) it redirects to the releases page instead and keeps
+  nothing.
+
+The Worker needs no secret, no binding but `ASSETS` and nothing in the dashboard: Workers Builds deploys it with the
+assets from the same `wrangler deploy`.

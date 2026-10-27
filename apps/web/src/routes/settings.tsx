@@ -1,9 +1,7 @@
 import type { ShinsaState } from '@shinsa/core';
-import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
-import { NavItem } from '@/components/layout/nav-item.tsx';
 import { PAGE_COLUMN, PAGE_TOP } from '@/components/layout/page/column.ts';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
@@ -17,6 +15,7 @@ import { IntegrationSettings } from '@/components/settings/integrations.tsx';
 import { NotificationSettings } from '@/components/settings/notifications.tsx';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
 import { ScheduleSettings } from '@/components/settings/schedules.tsx';
+import { UpdateSettings } from '@/components/settings/updates.tsx';
 import { LimitSettings } from '@/components/settings/usage.tsx';
 import { VersionSettings } from '@/components/settings/versions.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
@@ -26,6 +25,7 @@ import { useExtensions } from '@/lib/connection/extensions.ts';
 import { useAgentProviders } from '@/lib/connection/models.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
 import { useWorkspaceSupport } from '@/lib/connection/workspaces.ts';
+import { readDesktopChannel, subscribeDesktopUpdate } from '@/lib/desktop.ts';
 import { useExplorerSide } from '@/lib/preferences/code.ts';
 import { useNotificationPreferences } from '@/lib/preferences/notifications.ts';
 import { resolveHashSectionId } from '@/lib/settings.ts';
@@ -69,6 +69,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
           <NotificationSettings />
           <ContextSettings settings={state.settings} />
           <SetupSettings />
+          <UpdateSettings />
         </>
       );
     case 'agents':
@@ -110,8 +111,17 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const repos = Object.values(state.repos);
   const support = useWorkspaceSupport(resolveRepoKey(repos));
   const explorerSide = useExplorerSide();
+  const updateChannel = React.useSyncExternalStore(subscribeDesktopUpdate, readDesktopChannel);
   useRegisterCommands(
-    listSettingsSections(state.settings, providers, notifications, accounts, { repos, support }, explorerSide)
+    listSettingsSections(
+      state.settings,
+      providers,
+      notifications,
+      accounts,
+      { repos, support },
+      explorerSide,
+      updateChannel
+    )
   );
   const extensions = useExtensions();
   const extensionsRead = extensions.snapshot !== null || extensions.failure !== null;
@@ -120,44 +130,19 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const openTab = (next: SettingsTabId) => updateSearchParams({ tab: resolveSettingsTabParam(next) });
 
   return (
-    <div className='@container/settings flex min-h-0 flex-1 flex-col'>
-      <PageScroll viewportRef={scroller}>
-        <div className='grid @min-[74rem]/settings:grid-cols-[1fr_minmax(0,48rem)_1fr]'>
-          <nav
-            aria-label='Settings sections'
-            className={cn(
-              'sticky top-0 @min-[74rem]/settings:block hidden w-52 self-start justify-self-end pe-6',
-              PAGE_TOP
-            )}
-          >
-            <HoverHighlight className='flex flex-col gap-px'>
-              {tabs.map((entry) => (
-                <NavItem
-                  key={entry.id}
-                  label={entry.label}
-                  icon={entry.icon}
-                  activeIcon={entry.activeIcon}
-                  active={entry.id === tab}
-                  onClick={() => openTab(entry.id)}
-                />
-              ))}
-            </HoverHighlight>
-          </nav>
-          <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-12')}>
-            <div className='flex flex-col gap-3'>
-              <PageHeading title={current.label} />
-              <Choice<SettingsTabId>
-                label='Settings sections'
-                items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
-                value={tab}
-                onValueChange={openTab}
-                className='@min-[74rem]/settings:hidden'
-              />
-            </div>
-            <TabSections state={state} tab={tab} />
-          </div>
+    <PageScroll viewportRef={scroller}>
+      <div className={cn(PAGE_COLUMN, PAGE_TOP, 'flex flex-col gap-6 pb-12')}>
+        <div className='flex flex-col gap-3'>
+          <PageHeading title={current.label} />
+          <Choice<SettingsTabId>
+            label='Settings sections'
+            items={tabs.map((entry) => ({ value: entry.id, label: entry.label }))}
+            value={tab}
+            onValueChange={openTab}
+          />
         </div>
-      </PageScroll>
-    </div>
+        <TabSections state={state} tab={tab} />
+      </div>
+    </PageScroll>
   );
 }

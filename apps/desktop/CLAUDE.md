@@ -17,16 +17,20 @@ src/
 │                   health.ts (GET /api/health, with or without `version`), bounds.ts (window place on connected
 │                   displays), service.ts (starting the service), bridge.ts (the bridge's types and IPC channels),
 │                   dev-bundle.ts (the app's name, and the renamed Electron.app `bun run dev` runs), update.ts
-│                   (the updater's states, its menu item, notice and answers)
+│                   (the updater's states, its menu item, notice and answers, the go-back dialog, which download
+│                   a switch to Stable discards, where macOS stages one), update-channel.ts (Stable or Beta, the
+│                   updater options each sets, when a beta on Stable is offered the latest stable)
 ├── main/           The Electron glue, kept thin and outside coverage: index.ts (single instance, deep links,
 │                   connecting to the server, its first health check sent before the app is ready, IPC, the
 │                   session's permissions), window.ts (MainWindow: hide on close, navigation, Back and Forward,
 │                   the waiting page; V8's code cache without the heat check), menu.ts (the app menu, with Go:
 │                   Back ⌘[, Forward ⌘], Home ⇧⌘H), notifications.ts, server.ts (health, starting
-│                   the service in the login shell), prefs.ts (window bounds in userData/prefs.json),
+│                   the service in the login shell), prefs.ts (window bounds, the update channel and the beta you
+│                   chose to stay on in userData/prefs.json),
 │                   updater.ts (Updater: electron-updater, checked at start and every four hours)
-└── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, windowState, updateBadge,
-                    notify, installUpdate, checkForUpdates, onNavigate, onWindowState, onUpdate) to the server's page
+└── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
+                    updateBadge, notify, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
+                    onWindowState, onUpdate) to the server's page
                     only; `protocol` is core's ENGINE_PROTOCOL, and the page compares both with the engine's
 static/waiting.html The "Shinsa is not running" page
 resources/          The app icon: icon.svg (the source), icon.png (1024px), icon.icns (electron-builder's `mac.icon`),
@@ -95,15 +99,27 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
 | `bun test` | The `lib/` tests, 100% line and function coverage |
 | `bun run check-types` | `tsc` over `src`, `test` and `scripts` |
 
-**Updates.** The packaged app updates itself (`main/updater.ts`): electron-updater reads `latest-mac.yml` from the
-GitHub releases of `shinsa-dev/shinsa` (`publish` in `electron-builder.yml`), downloads a new version in the
-background and installs it when you quit, or at once from Shinsa → Restart to Update. Quitting never stops the server,
-so an update never interrupts an agent. Squirrel.Mac installs only an update signed by the same Developer ID, so ad
-hoc builds download but do not install. Releasing is Actions → Release (`.github/workflows/release.yml`, patch,
-minor or major): it raises the latest `v*` tag, builds `Shinsa-mac-arm64.dmg` and `.zip` with that version, signs and
-notarizes when the `CSC_LINK` and Apple secrets are set, and publishes the release, where `shinsa.dev/download`
-points. The version lives in the tag, never in `package.json`. The plan for the engine following the app is
-`docs/plans/app-plan.md` → Versions and updates.
+**Updates.** The packaged app updates itself (`main/updater.ts`): electron-updater reads the GitHub releases of
+`shinsa-dev/shinsa` (`publish` in `electron-builder.yml`), downloads a new version in the background and installs it
+when you quit, or at once from Shinsa → Restart to Update. Quitting never stops the server, so an update never
+interrupts an agent. Squirrel.Mac installs only an update signed by the same Developer ID, so ad hoc builds download
+but do not install. There are two channels (`lib/update-channel.ts`): Stable reads `latest-mac.yml` from the release
+marked latest, Beta reads `beta-mac.yml` from the newest release, pre-releases included (`allowPrerelease`), and
+`allowDowngrade` stays false (electron-updater turns it on when `channel` is set) except for one accepted go-back: on
+Stable, a beta newer than the latest stable is offered that stable ("Go back to 1.2.0 (stable)?", update status
+`downgrade`, `answerDowngrade` over the bridge, a dialog once after the switch), and accepting downloads it with
+`allowDowngrade` on for that check only. Switching to Stable discards a beta that is downloading or staged (the
+download is cancelled; Squirrel.Mac's ShipIt job and folder are removed). `test/lib/update-feed.test.ts` runs
+electron-updater's GitHub provider over fake feeds to pin what each channel offers. The channel is the app's, not the
+engine's: it lives in `userData/prefs.json` (`updateChannel`), since the updater runs before any page loads and while
+the engine is down, and a browser tab has no updater; a new install starts on Beta when its own version is a beta.
+The page shows and switches it through the bridge (`channel`, `applyUpdateChannel`; Settings → General → Updates),
+and switching checks again at once. The About panel and the manual check's answer name the channel. Releasing is
+Actions → Release (`.github/workflows/release.yml`, `docs/release.md`): channel stable or beta, bump patch, minor or
+major; it builds `Shinsa-mac-arm64.dmg` and `.zip` with that version in the app and its engine, signs and notarizes
+when the `CSC_LINK` and Apple secrets are set, and publishes the release, where `shinsa.dev/download` (stable) and
+`shinsa.dev/download/beta` point. The version lives in the tag, never in `package.json`. The plan for the engine
+following the app is `docs/plans/app-plan.md` → Versions and updates.
 
 The root `bun dev` skips this package (`--filter=!@shinsa/desktop`), so it never opens a window by itself.
 

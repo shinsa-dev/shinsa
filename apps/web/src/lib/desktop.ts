@@ -12,20 +12,29 @@ export interface DesktopNotice {
   path: string | null;
 }
 
+export type UpdateChannel = 'stable' | 'beta';
+
 export type DesktopUpdate =
   | { status: 'none' }
+  | { status: 'checking' }
+  | { status: 'current' }
+  | { status: 'failed'; message: string }
   | { status: 'downloading'; version: string }
-  | { status: 'ready'; version: string };
+  | { status: 'ready'; version: string }
+  | { status: 'downgrade'; version: string };
 
 export interface DesktopBridge {
   version: string;
   protocol: number;
   update: DesktopUpdate;
+  channel: UpdateChannel;
   windowState: DesktopWindowState;
   updateBadge: (count: number) => void;
   notify: (notice: DesktopNotice) => void;
   installUpdate: () => void;
   checkForUpdates: () => void;
+  applyUpdateChannel: (channel: UpdateChannel) => void;
+  answerDowngrade: (accept: boolean) => void;
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
@@ -85,12 +94,15 @@ const updateSignal = createSignal();
 
 let desktopUpdate: DesktopUpdate = NO_UPDATE;
 
+let desktopChannel: UpdateChannel = 'stable';
+
 let watchedDesktop: DesktopBridge | null = null;
 
 function watchDesktopUpdate(desktop: DesktopBridge) {
   if (watchedDesktop === desktop) return;
   watchedDesktop = desktop;
   desktopUpdate = desktop.update;
+  desktopChannel = desktop.channel;
   desktop.onUpdate((update) => {
     desktopUpdate = update;
     updateSignal.publish();
@@ -121,4 +133,25 @@ export function installDesktopUpdate() {
 
 export function checkDesktopUpdates() {
   selectDesktop()?.checkForUpdates();
+}
+
+export function answerDesktopDowngrade(accept: boolean) {
+  selectDesktop()?.answerDowngrade(accept);
+}
+
+export function readDesktopChannel(): UpdateChannel | null {
+  const desktop = selectDesktop();
+  if (!desktop) return null;
+  watchDesktopUpdate(desktop);
+  return desktopChannel;
+}
+
+export function applyDesktopChannel(channel: UpdateChannel) {
+  const desktop = selectDesktop();
+  if (!desktop) return;
+  watchDesktopUpdate(desktop);
+  if (channel === desktopChannel) return;
+  desktopChannel = channel;
+  desktop.applyUpdateChannel(channel);
+  updateSignal.publish();
 }

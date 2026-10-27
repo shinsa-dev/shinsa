@@ -1,4 +1,6 @@
-import type { DesktopUpdate } from './bridge.ts';
+import { isPrereleaseVersion, resolveVersionOrder } from '@shinsa/core';
+import type { DesktopUpdate, UpdateChannel } from './bridge.ts';
+import { describeUpdateChannel } from './update-channel.ts';
 
 export const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000;
 
@@ -7,7 +9,8 @@ export type UpdateState =
   | { status: 'checking'; manual: boolean }
   | { status: 'downloading'; version: string; percent: number }
   | { status: 'ready'; version: string }
-  | { status: 'current' }
+  | { status: 'current'; latest: string | null }
+  | { status: 'downgrade'; version: string }
   | { status: 'failed'; message: string };
 
 export interface UpdateMenuItem {
@@ -44,15 +47,44 @@ export function describeReadyNotice(version: string) {
   };
 }
 
-export function describeManualResult(state: UpdateState, current: string) {
+function describeCurrent(current: string, latest: string | null, channel: UpdateChannel) {
+  const label = describeUpdateChannel(channel);
+  if (latest && resolveVersionOrder(latest, current) === -1)
+    return `You have Shinsa ${current}, newer than ${latest}, the latest on the ${label} channel. It stays on ${current} until the ${label} channel passes it.`;
+  return `You have Shinsa ${current}, the latest version on the ${label} channel.`;
+}
+
+export function describeManualResult(state: UpdateState, current: string, channel: UpdateChannel) {
   switch (state.status) {
     case 'current':
-      return { message: 'Shinsa is up to date', detail: `You have Shinsa ${current}, the latest version.` };
+      return { message: 'Shinsa is up to date', detail: describeCurrent(current, state.latest, channel) };
     case 'failed':
       return { message: 'Shinsa could not check for updates', detail: state.message };
     default:
       return null;
   }
+}
+
+export const DOWNGRADE_ACCEPT = 0;
+
+export function describeDowngradeDialog(version: string, current: string) {
+  return {
+    message: `Go back to ${version} (stable)?`,
+    detail: `You have the beta ${current}, newer than ${version}, the latest stable release. Shinsa can download ${version} and install it when you quit, like any update. Or stay on this beta until a stable release passes it.`,
+    buttons: ['Download and install', 'Stay on this beta'],
+    defaultId: DOWNGRADE_ACCEPT,
+    cancelId: 1,
+  };
+}
+
+export function needsDiscard(state: UpdateState, channel: UpdateChannel) {
+  if (channel !== 'stable' || (state.status !== 'downloading' && state.status !== 'ready')) return false;
+  return isPrereleaseVersion(state.version);
+}
+
+export function resolveStagedUpdate(home: string, appId: string) {
+  const label = `${appId}.ShipIt`;
+  return { label, directory: `${home}/Library/Caches/${label}` };
 }
 
 export function describeUpdateFailure(error: unknown) {
@@ -62,7 +94,20 @@ export function describeUpdateFailure(error: unknown) {
 }
 
 export function resolveDesktopUpdate(state: UpdateState): DesktopUpdate {
-  if (state.status === 'downloading') return { status: 'downloading', version: state.version };
-  if (state.status === 'ready') return { status: 'ready', version: state.version };
-  return { status: 'none' };
+  switch (state.status) {
+    case 'checking':
+      return { status: 'checking' };
+    case 'current':
+      return { status: 'current' };
+    case 'failed':
+      return { status: 'failed', message: state.message };
+    case 'downloading':
+      return { status: 'downloading', version: state.version };
+    case 'ready':
+      return { status: 'ready', version: state.version };
+    case 'downgrade':
+      return { status: 'downgrade', version: state.version };
+    default:
+      return { status: 'none' };
+  }
 }

@@ -136,11 +136,21 @@ Shinsa.app/Contents/
 - **Why not update the engine separately:** two version numbers means a compatibility matrix to keep and to explain,
   and every bug report starts with "which engine?". With one bundle the app is the thing you install and update, and
   updating the engine is a restart.
-- **Releasing** (built: `.github/workflows/release.yml`). Actions → Release → Run workflow, choosing patch, minor or
-  major (or `gh workflow run release.yml -f bump=minor`). It takes the latest `v*` tag, raises it, builds the DMG
-  and the zip with that version, signs and notarizes when the Apple secrets are set, and publishes the GitHub
-  release with `latest-mac.yml`, the file the updater reads, and notes from the merged pull requests. Nothing to bump
-  by hand: the version lives in the tag, not in `package.json`.
+- **Releasing** (built: `.github/workflows/release.yml`, the whole procedure in `docs/release.md`). Actions →
+  Release → Run workflow, choosing the channel (stable or beta) and patch, minor or major (or
+  `gh workflow run release.yml -f channel=beta -f bump=minor`). Stable raises the last stable tag; a beta is
+  `<that raised version>-beta.N`, a GitHub pre-release, so it always sorts between the stable before it and the stable
+  it leads to. It builds the DMG and the zip with that version in the app and the engine alike, signs and notarizes
+  when the Apple secrets are set, and publishes the release with the update files of both channels (`latest-mac.yml`
+  and `beta-mac.yml` for a stable release, `beta-mac.yml` for a beta) and notes from the merged pull requests.
+  Nothing to bump by hand: the version lives in the tag, not in `package.json`.
+- **Two update channels** (built: `apps/desktop/src/lib/update-channel.ts`). Stable follows the release marked
+  latest; Beta follows the newest release, pre-releases included, so it gets every stable release once it is newer.
+  Leaving Beta on a beta newer than the latest stable offers to go back to that stable (Settings → General →
+  Updates, and a dialog after the switch); otherwise, and if you stay, the beta stays until a stable release passes
+  it, and downgrades are off in every other case (`docs/release.md` → Channels and updates). The channel
+  is the app's own setting (Settings → General → Updates), kept in its `prefs.json`, and a new install starts on the
+  channel of the version it is.
 - **Installing an update needs a signed app.** macOS's updater (Squirrel.Mac) installs a new version only when it is
   signed by the same Developer ID as the running one. Ad hoc builds download updates but cannot install them, so
   auto-update works from the first release signed with the secrets in Distribution, below. The feed is the releases

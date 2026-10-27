@@ -49,6 +49,7 @@ export {
   ENGINE_PROTOCOL,
   type EngineFit,
   type EngineRestartWhen,
+  isPrereleaseVersion,
   resolveEngineFit,
   resolveVersionOrder,
   type ShinsaBuild,

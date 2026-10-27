@@ -4,6 +4,8 @@ import { app } from 'electron';
 
 interface Prefs {
   windowBounds?: unknown;
+  updateChannel?: unknown;
+  keptBeta?: unknown;
 }
 
 let cached: Prefs | null = null;

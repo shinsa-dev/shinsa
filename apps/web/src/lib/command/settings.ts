@@ -24,6 +24,7 @@ import {
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
 import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
+import { applyDesktopChannel, type UpdateChannel } from '@/lib/desktop.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
 import { updateNotifications } from '@/lib/notifications/settings.ts';
 import {
@@ -93,6 +94,7 @@ import {
   resolveSettingsPath,
   resolveSettingsTab,
 } from '@/lib/settings-tabs.ts';
+import { UPDATE_CHANNEL_ITEMS, UPDATES_LABEL } from '@/lib/updates.ts';
 import { VERSIONS_SECTION } from '@/lib/versions.ts';
 import { changeWorkspace, listWorkspaceItems, WORKSPACE_TITLE } from '@/lib/workspaces.ts';
 import { navigate } from '@/router.ts';
@@ -464,7 +466,8 @@ export function listSettingsSections(
   notifications: NotificationPreferences,
   snapshot: AccountsSnapshot | null = null,
   workspaces: WorkspaceChoices = { repos: [], support: null },
-  explorerSide: ExplorerSide = 'left'
+  explorerSide: ExplorerSide = 'left',
+  updateChannel: UpdateChannel | null = null
 ): CommandSection[] {
   return [
     { id: 'settings.sections', heading: 'Jump to', rank: RANK.context, commands: listJumpCommands() },
@@ -482,6 +485,17 @@ export function listSettingsSections(
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),
+        ...(updateChannel
+          ? [
+              settingChoice(
+                'update-channel',
+                UPDATES_LABEL.channel,
+                UPDATE_CHANNEL_ITEMS,
+                updateChannel,
+                (value) => applyDesktopChannel(value === 'beta' ? 'beta' : 'stable')
+              ),
+            ]
+          : []),
       ],
     },
     {

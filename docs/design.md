@@ -730,7 +730,7 @@ Only these, and they win over anything below:
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Setup), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
+      Attention, Notifications, Context, Setup, Updates), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
       folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
       tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
       floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
@@ -738,12 +738,10 @@ Only these, and they win over anything below:
       the bare `/settings`), and a link to a section (`/settings#limits`, the old `#agent-usage`, `#usage`, `#codex`
       and `#agents` too) opens its tab and scrolls to it. A card never repeats its page's name: the Agents tab's
       model card is Models and Agent usage's account card is Accounts; Projects keeps its Projects card, the
-      list of projects themselves. Where the page is wide enough for a rail beside the centred column (a container
-      query, 74rem, so 1280 in Cards), the tabs are a left rail in the left gutter, the sidebar's `NavItem`s
-      (`components/layout/nav-item.tsx`) under one `HoverHighlight`, sticky, with the column still on Home's axis,
-      the active tab's icon the filled variant of its outline icon (`activeIcon`, `IconSettingsGear1Filled`…, as
-      the sidebar rail does); narrower, they are the segmented `Choice` under the heading, the task page's tab
-      control. The page heading is the open tab's name ("General", "Agents"), never "Settings".
+      list of projects themselves. The tabs are the segmented `Choice` under the heading, the task page's tab
+      control, at every width: there is no rail of tabs beside the column, however wide the window (Layout, No
+      sidebars). The column stays on Home's axis (`PAGE_COLUMN`) and the bar scrolls with the page; switching tabs
+      keeps the heading and the bar where they are and swaps only the pane under them. The page heading is the open tab's name ("General", "Agents"), never "Settings".
     - **Settings is titles only**: the group label and each row's title with its control (a 40px
       row). There are no section or row descriptions (`SettingsGroup` and `SettingRow` take none), so a
       title and its options must say what a setting does on their own ("Setup steps" with Run setup again).
@@ -1437,7 +1435,7 @@ Only these, and they win over anything below:
       background, Always; the default is in the background), Sound (Chime, Ping or Pop, with a secondary `sm`
       Test button, `IconPlay`, that plays it and, while notifications are on or the browser already allows them,
       also shows a "Test notification" ("Shinsa shows a decision that needs you like this."; its tooltip says
-      which: "Play the sound" or "Play the sound and show a test notification"; a blocked browser gets the same
+      which: "Play the sound" or "Play the sound and show a test notification", 13; a blocked browser gets the same
       toast as below) and Show a notification (Never by default; choosing another asks the browser first and stays off
       with a toast when it is blocked). Sounds are Web Audio oscillators, never an `<audio>` element, so they never
       take the media keys.
@@ -1469,8 +1467,23 @@ Only these, and they win over anything below:
       the versions match. `/ui` shows `EngineCard` in its three states.
     - **The Update button** (`components/status/update-button.tsx`): once the desktop app has downloaded an update, a
       `primary` `sm` "Update" in the header's trailing group, before the usage menu, in both layouts; it fades and
-      scales in (`fade-in-0 zoom-in-95`, 200 ms), its hint names the version and says agents keep working, and a
-      click installs and relaunches the app. Nothing shows in a browser or while the update downloads.
+      scales in (`fade-in-0 zoom-in-95`, 200 ms), its tooltip names the version and says the app restarts for a
+      moment and agents keep working (13), and a click installs and relaunches the app. Nothing shows in a browser or
+      while the update downloads.
+    - **Settings → General → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
+      `apps/desktop`'s, `docs/release.md` → Channels and updates) is the last group of General. In the app: a
+      secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
+      dialog), then two 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`) and, once the updater has
+      something to say, its status ("Checking for updates…", "Up to date", "Downloading 1.3.1…", the failure in orange,
+      or "1.3.1 is ready" in blue with a secondary `sm` Restart to update, `IconArrowRotateClockwise`; a beta on
+      Stable that is newer than the latest stable reads "Go back to 1.2.0 (stable)?" in blue with two secondary `sm`
+      buttons, Stay on this beta, then Download and install with `IconArrowDown`), over "Beta
+      channel · Updates install when you quit Shinsa". Update channel: a select of Stable (`IconShieldCheck`) and Beta
+      (`IconTestTube`) over what the chosen one gets: "Releases only. Coming from a beta, you can go back to the
+      latest stable." or "New versions first, as pre-releases, and every stable release once it
+      is newer than yours." Switching checks again at once. ⌘K's Change a setting has Update channel in the app only.
+      In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
+      are in its own Settings."
 
 28. **The task chat is the one place to talk.** An Answer task is how you just talk (`docs/engine.md` → Agents
     manage Shinsa); nothing in the top bar, the rail or ⌘K opens a conversation of its own.

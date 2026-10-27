@@ -7,15 +7,22 @@ export interface DesktopNotice {
   path: string | null;
 }
 
+export type UpdateChannel = 'stable' | 'beta';
+
 export type DesktopUpdate =
   | { status: 'none' }
+  | { status: 'checking' }
+  | { status: 'current' }
+  | { status: 'failed'; message: string }
   | { status: 'downloading'; version: string }
-  | { status: 'ready'; version: string };
+  | { status: 'ready'; version: string }
+  | { status: 'downgrade'; version: string };
 
 export interface DesktopStart {
   version: string;
   protocol: number;
   update: DesktopUpdate;
+  channel: UpdateChannel;
   windowState: DesktopWindowState;
 }
 
@@ -24,6 +31,8 @@ export interface DesktopBridge extends DesktopStart {
   notify: (notice: DesktopNotice) => void;
   installUpdate: () => void;
   checkForUpdates: () => void;
+  applyUpdateChannel: (channel: UpdateChannel) => void;
+  answerDowngrade: (accept: boolean) => void;
   onNavigate: (listener: (path: string) => void) => () => void;
   onWindowState: (listener: (state: DesktopWindowState) => void) => () => void;
   onUpdate: (listener: (update: DesktopUpdate) => void) => () => void;
@@ -38,4 +47,6 @@ export const CHANNELS = {
   update: 'shinsa:update',
   installUpdate: 'shinsa:install-update',
   checkForUpdates: 'shinsa:check-for-updates',
+  updateChannel: 'shinsa:update-channel',
+  downgrade: 'shinsa:downgrade',
 } as const;

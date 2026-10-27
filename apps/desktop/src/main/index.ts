@@ -15,6 +15,7 @@ import {
 import { describeServer, type ServerHealth } from '../lib/health.ts';
 import { isPermissionAllowed } from '../lib/navigation.ts';
 import { parseNotice } from '../lib/notice.ts';
+import { describeAppVersion, parseUpdateChannel } from '../lib/update-channel.ts';
 import { syncCommandLine } from './command-line.ts';
 import { EngineSupervisor } from './engine.ts';
 import { applyMenu } from './menu.ts';
@@ -38,6 +39,7 @@ let shownScreen = '';
 let menuActions: Omit<Parameters<typeof applyMenu>[0], 'update'> | null = null;
 let updater: Updater | null = null;
 let firstHealth: Promise<ServerHealth | null> | null = null;
+let aboutCredits: string | undefined;
 
 app.setName(APP_NAME);
 if (!app.isPackaged) app.setPath('userData', join(app.getPath('appData'), `${APP_NAME} Dev`));
@@ -108,6 +110,7 @@ function refreshMenu() {
 
 function publishUpdate() {
   refreshMenu();
+  applyAboutPanel();
   if (updater) main?.win.webContents.send(CHANNELS.update, updater.pageState);
 }
 
@@ -129,6 +132,7 @@ function watchPage() {
             version: app.getVersion(),
             protocol: ENGINE_PROTOCOL,
             update: updater?.pageState ?? { status: 'none' },
+            channel: updater?.channel ?? 'stable',
             windowState: main.windowState,
           }
         : null;
@@ -139,6 +143,13 @@ function watchPage() {
   });
   ipcMain.on(CHANNELS.checkForUpdates, (event) => {
     if (main?.isAppSender(event)) void updater?.check(true);
+  });
+  ipcMain.on(CHANNELS.updateChannel, (event, value: unknown) => {
+    const channel = main?.isAppSender(event) ? parseUpdateChannel(value) : null;
+    if (channel) void updater?.applyChannel(channel);
+  });
+  ipcMain.on(CHANNELS.downgrade, (event, accept: unknown) => {
+    if (main?.isAppSender(event)) void updater?.answerDowngrade(accept === true);
   });
   ipcMain.on(CHANNELS.badge, (event, count: unknown) => {
     if (main?.isAppSender(event)) app.dock?.setBadge(resolveBadgeText(count));
@@ -153,8 +164,10 @@ function watchPage() {
   });
 }
 
-function applyAboutPanel(credits?: string) {
-  app.setAboutPanelOptions({ applicationName: APP_NAME, applicationVersion: app.getVersion(), credits });
+function applyAboutPanel(credits = aboutCredits) {
+  aboutCredits = credits;
+  const version = updater ? describeAppVersion(app.getVersion(), updater.channel) : app.getVersion();
+  app.setAboutPanelOptions({ applicationName: APP_NAME, applicationVersion: version, credits });
 }
 
 function showApp(current: MainWindow, health: ServerHealth) {

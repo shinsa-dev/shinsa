@@ -58,6 +58,12 @@ Shinsa (審査) means examination, judging. Agents do the work end to end; the j
 Shinsa is a Mac app for Apple Silicon: [shinsa.dev/download](https://shinsa.dev/download) always fetches the latest
 release. It needs git, the GitHub CLI signed in (`gh auth login`) and Claude Code signed in; Codex is optional.
 
+To get new versions first, take the beta: [shinsa.dev/download/beta](https://shinsa.dev/download/beta) fetches the
+newest release, betas included. Betas update to newer betas and to each stable release once it is newer; switch between Stable
+and Beta in Settings → General → Updates, where a beta switched to Stable can go back to the latest stable release. All releases are on the
+[releases page](https://github.com/shinsa-dev/shinsa/releases), and how they are made is
+[`docs/release.md`](docs/release.md).
+
 Open it and it sets up its engine in the background: agents and schedules keep running when the window is closed or
 the app is quit, and the app updates itself. It also puts `shinsa` on your terminal's PATH, in zsh, bash and fish:
 `shinsa .` opens Shinsa on the project you are in, and `shinsa do "…"` hands it work.

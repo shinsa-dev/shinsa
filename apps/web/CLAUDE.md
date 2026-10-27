@@ -227,10 +227,12 @@ src/
     ├── desktop.ts       The desktop app's bridge (`window.shinsaDesktop`, absent in a browser and Floaty):
     │                    `data-desktop` on <html>, its navigation, the Dock badge, notifications, the page's
     │                    surface and whether it stays quiet (`isPageQuiet`), the app's version and protocol
-    │                    (`selectDesktopBuild`) and its own update (`readDesktopUpdate`, `installDesktopUpdate`)
+    │                    (`selectDesktopBuild`) and its own update (`readDesktopUpdate`, `installDesktopUpdate`,
+    │                    `answerDesktopDowngrade` for going back from a beta to the latest stable);
+    │                    `DesktopChrome` gives a subtree the app's look without the bridge (the site's demos)
     ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings and Terminal, each rendered
     │                    ahead at idle) and the last three task pages, by key, with the URL each was left at
-    └── queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
+    └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
         not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,
         useWorkspaceSupport over GET /api/repos/workspaces), coverage.ts (a repository's test coverage setting, Auto / Custom /

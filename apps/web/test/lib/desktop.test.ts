@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
+  answerDesktopDowngrade,
   applyDesktop,
+  applyDesktopChannel,
   checkDesktopUpdates,
   installDesktopUpdate,
   isDesktop,
   isPageQuiet,
   notifyDesktop,
+  readDesktopChannel,
   readDesktopUpdate,
   resolveSurface,
   selectDesktopBuild,
@@ -87,6 +90,9 @@ describe('the app’s own update', () => {
     })();
     installDesktopUpdate();
     checkDesktopUpdates();
+    answerDesktopDowngrade(true);
+    applyDesktopChannel('beta');
+    expect(readDesktopChannel()).toBeNull();
     expect(heard).toBe(0);
   });
 
@@ -105,6 +111,24 @@ describe('the app’s own update', () => {
     stop();
     installDesktopUpdate();
     checkDesktopUpdates();
-    expect(fake.updateCalls).toEqual(['install', 'check']);
+    answerDesktopDowngrade(true);
+    answerDesktopDowngrade(false);
+    expect(fake.updateCalls).toEqual(['install', 'check', 'downgrade', 'keep beta']);
+  });
+
+  it('reads the app’s update channel and asks the app to switch it, once per change', () => {
+    fake = installDesktop();
+    fake.bridge.channel = 'beta';
+    expect(readDesktopChannel()).toBe('beta');
+    let heard = 0;
+    const stop = subscribeDesktopUpdate(() => {
+      heard += 1;
+    });
+    applyDesktopChannel('beta');
+    applyDesktopChannel('stable');
+    expect(readDesktopChannel()).toBe('stable');
+    expect(fake.channels).toEqual(['stable']);
+    expect(heard).toBe(1);
+    stop();
   });
 });
