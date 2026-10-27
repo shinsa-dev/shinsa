@@ -9,6 +9,7 @@ import type {
   PipelineStep,
   PlanDocument,
   Repo,
+  ReviewDisagreement,
   ReviewFinding,
   RunPurpose,
   RunRole,
@@ -103,6 +104,7 @@ export interface SeedTask {
   auto?: TaskAuto;
   decisions?: TriageDecisions;
   composed?: { pipeline: PipelineStep[]; why: string };
+  ticked?: string[];
   extra?: ShinsaEventInput[];
   timed?: TimedSeedEvent[];
   provider?: 'codex';

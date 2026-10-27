@@ -3,18 +3,22 @@ import {
   type CodeSample,
   LIVE_PLAN,
   listGrepMatches,
+  listReviewDisagreements,
   listReviewFindings,
   MERGED_PLAN,
   MERGED_REVIEW_SUMMARY,
   PULL_REQUEST_NUMBER,
   REVIEW_PLAN,
   REVIEW_SUMMARY,
+  resolveLivePhase,
+  resolveMergedReport,
   resolveReviewReport,
   SAMPLE_ANSWER,
   SAMPLE_LIVE,
   SAMPLE_MERGED,
   SAMPLE_PATHS,
   SAMPLE_REVIEW,
+  type SamplePhase,
 } from './seed-code.ts';
 import { listEditHunks, resolveLine, serializeNumberedLines } from './seed-code-kit.ts';
 import {
@@ -147,7 +151,7 @@ function serializeDisagreements(calls: JudgementCall[], sample: CodeSample) {
 function listReviewRuns(sample: CodeSample, openings: ReadonlyMap<string, string>) {
   const { review } = sample;
   const title = 'Rename review targets to review spots';
-  const { phases } = resolveReviewReport(sample, []);
+  const { phases, report } = resolveReviewReport(sample, []);
   const findings = listReviewFindings(sample);
   const lock = review.lock;
   const spotKeyLine = resolveLine(review.spotKeys.after, 'const match =');
@@ -350,6 +354,7 @@ function listMergedRuns(sample: CodeSample, openings: ReadonlyMap<string, string
   const title = 'Stack the queue by priority';
   const request = 'The request: Stack the queue by priority: urgent work should sit on top inside each gate.';
   const { index } = sample.merged;
+  const { phases } = resolveMergedReport(sample);
   return {
     0: serializeRun(
       `${SAMPLE_MERGED}-run-0`,
@@ -372,11 +377,7 @@ function listMergedRuns(sample: CodeSample, openings: ReadonlyMap<string, string
         write(SAMPLE_PATHS.queueStack, sample.merged.stack),
         edit(SAMPLE_PATHS.queueIndex, index.before, index.after),
         run('bun check-types', 'Type-check every workspace', ' Tasks:    5 successful, 5 total'),
-        handOver(
-          'complete_phase',
-          { summary: 'stackByPriority sorts by priority, then by age.' },
-          'Phase 1 committed.'
-        ),
+        handOver('complete_phase', serializePhase(phases[0]), 'Phase 1 committed.'),
       ],
       finish('Added stackByPriority to the queue.')
     ),
@@ -390,11 +391,7 @@ function listMergedRuns(sample: CodeSample, openings: ReadonlyMap<string, string
           'Run the new tests',
           ' 2 pass\n 0 fail\n 2 expect() calls'
         ),
-        handOver(
-          'complete_phase',
-          { summary: 'Two tests for the order and the untouched input.' },
-          'Phase 2 committed.'
-        ),
+        handOver('complete_phase', serializePhase(phases[1]), 'Phase 2 committed.'),
       ],
       finish('Covered the order with two tests.')
     ),
@@ -429,11 +426,7 @@ function listLiveRuns(sample: CodeSample, openings: ReadonlyMap<string, string>)
       [resolveOpening(openings, `${SAMPLE_LIVE}-run-1`)],
       [
         edit(SAMPLE_PATHS.tokens, live.tokens.before, live.tokens.after),
-        handOver(
-          'complete_phase',
-          { summary: 'Six code colour tokens for light and dark.' },
-          'Phase 1 committed.'
-        ),
+        handOver('complete_phase', serializePhase(resolveLivePhase(sample)), 'Phase 1 committed.'),
       ],
       finish(`Added the tokens from line ${tokensLine - 2} of the kit’s globals.`)
     ),
@@ -484,7 +477,13 @@ function listAnswerRuns(sample: CodeSample) {
         handOver(
           'answer',
           {
-            answer: 'Critical first, then high, then normal; inside a rank, the order the agents wrote them.',
+            answer: [
+              'Critical first, then high, then normal; inside a rank, the order the agents wrote them.',
+              'To see it, start the app and open any review with Sort by attention:',
+              '```bash run\nbun dev\n```',
+              'Its tests pin the order:',
+              '```bash\nbun test apps/web/test/lib/review\n```',
+            ].join('\n\n'),
           },
           'Answer delivered.'
         ),

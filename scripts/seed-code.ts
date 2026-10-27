@@ -5,6 +5,7 @@ import type {
   CodeSpot,
   Gate,
   JudgementCall,
+  MeasuredCoverage,
   PhaseReport,
   PlanDocument,
   Project,
@@ -413,7 +414,7 @@ const HISTORY: { message: string; areas: string[] }[] = [
   { message: 'chore: set up the monorepo', areas: [] },
   { message: 'feat(ui): design tokens and the component kit', areas: ['packages/ui'] },
   { message: 'feat(core): events, commands and the decider', areas: ['packages/core'] },
-  { message: 'feat(server): event log, effect runner and agent runs', areas: ['apps/server'] },
+  { message: 'feat(server): event log, effect runner and agent runs', areas: ['apps/engine'] },
   { message: 'feat(web): task pages, the review and the chat', areas: ['apps/web'] },
   { message: 'docs: spec, engine, protocol and design', areas: ['docs', 'scripts'] },
 ];
@@ -718,6 +719,7 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
   });
   return {
     worktree,
+    coverage,
     ...renamed,
     ...callers,
     spotKeys,
@@ -1091,11 +1093,9 @@ function describeReviewWalkthrough(review: ReviewNotes): ReportWalkthrough {
       ],
       manual: [
         {
-          file: SAMPLE_PATHS.lockfile,
-          start: lockLine,
-          end: lockLine,
-          attention: 'normal',
-          why: `bun install re-resolved ${review.lock.name} from ${review.lock.from} to ${review.lock.to}. No dependency was added.`,
+          action: 'Start Shinsa from the worktree.',
+          target: { kind: 'command', value: 'bun dev' },
+          expect: 'The engine runs on port 5180 and the web app on port 5181.',
         },
         {
           action: 'Open this task’s Code tab and the Review beside it.',
@@ -2198,11 +2198,6 @@ function scriptLive(sample: CodeSample, push: Push) {
     summary: 'Add the code tokens: done.',
     phaseIndex: 0,
   });
-  const start = resolveLine(
-    sample.live.tokens.after,
-    '@layer base {',
-    resolveLine(sample.live.tokens.after, '--code-keyword') - 4
-  );
   pushPhase(push, task, 0, [at(LIVE_MARKS.builder[0]), at(LIVE_MARKS.builder[1])], {
     ...resolveLivePhase(sample),
     tree: sample.live.trees[0] ?? '',

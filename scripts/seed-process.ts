@@ -226,17 +226,17 @@ const RATE_LIMIT_REVISED: PlanDocument = {
 const ESCALATED_FINDINGS: ReviewFinding[] = [
   {
     severity: 'blocking',
-    file: 'src/export/clickhouse.ts',
-    line: 42,
-    end: 48,
+    file: EXPORT_PATHS.chunks,
+    ...resolveRange(EXPORT_CHUNKS_NEW, 'let written = chunk.start;', 'written = end;'),
     title: 'The retry offset lives only in memory',
-    message: 'The retry keeps the offset in memory; a restart mid-export starts the chunk from zero again.',
-    fix: 'Read the offset from the export row before each retry and write it back after every chunk, in the same transaction as the chunk itself.',
+    message:
+      '`written` is never stored, and the export row only moves after a whole chunk. A restart mid-chunk starts that chunk from its first row again and relies on deduplication tokens that may have expired.',
+    fix: 'Write the batch offset to the export row after every batch and start `written` from it, so a restart resumes at the last batch ClickHouse acknowledged.',
   },
   {
     severity: 'blocking',
-    file: 'src/export/chunks.ts',
-    line: 18,
+    file: EXPORT_PATHS.chunks,
+    ...resolveRange(EXPORT_CHUNKS_NEW, 'catch (error)', 'if (attempt >= MAX_ATTEMPTS)'),
     title: 'Retries have no backoff',
     message: 'Three retries with no backoff hammer ClickHouse when it is already slow.',
     fix: 'Wait between attempts, doubling each time:\n\n```ts\nawait sleep(500 * 2 ** attempt);\n```',
@@ -493,7 +493,7 @@ interface SeedRepoPair {
   kanna: Repo;
 }
 
-function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
+function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: string): SeedTask[] {
   return [
     {
       id: 'task-rate-limit',
@@ -543,10 +543,19 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair): SeedTask[] {
       reason: 'the agents could not settle the review',
       branch: 'fix/export-retry-restart',
       ageHours: 4,
+      worktreePath: exportBackoffPath,
       summary: 'Retries now resume from the last written chunk.',
+      report: EXPORT_REPORT,
       reviewSummary:
         'I checked the fix round against the same two findings. The offset still lives in memory and the retries still have no backoff, so a restart or a slow ClickHouse breaks the export.',
       findings: ESCALATED_FINDINGS,
+      reviewDisagreements: [
+        {
+          call: EXPORT_CHECKPOINT_CALL,
+          reason:
+            'Checkpointing per chunk is what lets a restart replay up to 45,000 rows, and the deduplication window is too short to rely on for a busy table. Per batch costs one small update per 5,000 rows.',
+        },
+      ],
       runs: [
         { role: 'agent', purpose: 'build', minutes: 9, summary: 'Persisted the chunk offset.' },
         { role: 'reviewer', minutes: 3, summary: 'Two blocking findings.' },
@@ -843,6 +852,6 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
   ];
 }
 
-export function listProcessTasks(repos: SeedRepoPair): SeedTask[] {
-  return [...listLimitTasks(repos), ...listWaitTasks(repos), ...listBudgetTasks(repos)];
+export function listProcessTasks(repos: SeedRepoPair, exportBackoffPath: string): SeedTask[] {
+  return [...listLimitTasks(repos, exportBackoffPath), ...listWaitTasks(repos), ...listBudgetTasks(repos)];
 }

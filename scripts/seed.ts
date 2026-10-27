@@ -22,6 +22,7 @@ import {
   formatTaskHandle,
   isDecisionGate,
   isReadOnlyRun,
+  isSamePipeline,
   NO_PROJECT_KEY,
   RUN_AGENT_ROLE,
   resolveHandOverPipeline,
@@ -53,7 +54,7 @@ import {
   type TimedSeedEvent,
   writeTranscript,
 } from './seed-kit.ts';
-import { listProcessTasks } from './seed-process.ts';
+import { EXPORT_FILES_BASE, EXPORT_FILES_NEW, listProcessTasks } from './seed-process.ts';
 import { resolveRunOpening, stampRunPrompts } from './seed-prompts.ts';
 import { listRoundTasks } from './seed-rounds.ts';
 import { listShapeTasks, resolveShapeHandover } from './seed-shapes.ts';
@@ -63,7 +64,6 @@ const ROOT = Bun.env.SHINSA_SEED_DIR ?? join(homedir(), '.shinsa-seed');
 const DATA = join(ROOT, 'data');
 const REPOS = join(ROOT, 'repos');
 const WORKTREES = join(DATA, 'worktrees');
-const DEFAULTS_TEST_EVIDENCE = 'seed-usage-defaults-test.txt';
 
 type Files = Record<string, string>;
 
@@ -117,15 +117,25 @@ function lineOf(content: string, needle: string) {
   return index + 1;
 }
 
+interface SpotNote {
+  title: string;
+  why: string;
+  explain: string;
+}
+
 function spot(
   file: string,
   content: string,
   from: string,
   to: string,
   attention: CodeSpot['attention'],
-  why: string
+  note: SpotNote
 ): CodeSpot {
-  return { file, start: lineOf(content, from), end: lineOf(content, to), attention, why };
+  return { file, start: lineOf(content, from), end: lineOf(content, to), attention, ...note };
+}
+
+function rangeOf(content: string, from: string, to: string) {
+  return { line: lineOf(content, from), end: lineOf(content, to) };
 }
 
 const EMBEDDED_CHAT_BASE = `import { createTransport, type Transport } from './transport';
@@ -288,6 +298,48 @@ export class McpSession {
 }
 `;
 
+const MCP_SESSION_TEST_NEW = `import { describe, expect, it } from 'bun:test';
+import { startFakeMcpServer } from '../test/fake-mcp-server';
+import { McpSession } from './mcp-session';
+
+describe('McpSession', () => {
+  it('gives up after three failed connects', async () => {
+    const server = await startFakeMcpServer({ refuse: true });
+    const session = new McpSession(server.url, { paywallId: 'pw_1' });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(session.ensureConnected()).rejects.toThrow();
+    }
+    await expect(session.ensureConnected()).rejects.toThrow('The MCP server is unreachable.');
+    await server.stop();
+  });
+
+  it('sends the paywall id on every request', async () => {
+    const server = await startFakeMcpServer();
+    const session = new McpSession(server.url, { paywallId: 'pw_1' });
+    await session.ensureConnected();
+    await Array.fromAsync(session.complete([], {}));
+    expect(server.requests.every((request) => request.headers['x-paywall-id'] === 'pw_1')).toBe(true);
+    await session.close();
+    await server.stop();
+  });
+
+  it('yields tool results as their own parts', async () => {
+    const server = await startFakeMcpServer({
+      content: [
+        { type: 'text', text: 'Updating the headline.' },
+        { type: 'tool_result', name: 'paywall.update', text: 'Saved.' },
+      ],
+    });
+    const session = new McpSession(server.url, { paywallId: 'pw_1' });
+    await session.ensureConnected();
+    const parts = await Array.fromAsync(session.complete([], {}));
+    expect(parts.map((part) => part.kind)).toEqual(['text', 'tool_result']);
+    await session.close();
+    await server.stop();
+  });
+});
+`;
+
 const TRANSPORT_BASE = `export interface Transport {
   post(path: string, body: unknown): Promise<{ text: string }>;
 }
@@ -441,6 +493,25 @@ interface TabGroupProps {
 }
 `;
 
+const KANNA_THEME = `:root {
+  --background: #ffffff;
+  --panel: #f6f6f7;
+  --text: #18191b;
+  --muted: #5d6068;
+  --border: #e2e3e6;
+  --disabled: #9a9ca3;
+}
+
+.dark {
+  --background: #111113;
+  --panel: #18191b;
+  --text: #ededef;
+  --muted: #a1a4ab;
+  --border: #3a3c42;
+  --disabled: #6f727a;
+}
+`;
+
 const DEFAULTS_BASE = `import type { ModelId, Provider } from './models';
 
 export function resolveDefaultModel(provider: Provider): ModelId {
@@ -494,177 +565,188 @@ export function isExhausted(window: UsageWindow, now: number) {
 }
 `;
 
-function resolveSeedPipeline(task: SeedTask): readonly PipelineStep[] | null {
-  if (task.composed) return task.composed.pipeline;
-  return task.shape ? SHAPE_PIPELINES[task.shape] : null;
+const PARSE_FLAGS_BASE = `export interface ParseOptions {
+  boolean?: string[];
+  string?: string[];
+  alias?: Record<string, string>;
+  default?: Record<string, unknown>;
 }
 
-type Timeline = TimedSeedEvent[];
+export type ParsedFlags = Record<string, unknown> & { _: string[] };
 
-const SMALL_PLAN = [
-  { title: 'Find the cause', detail: 'Reproduce it and trace where it goes wrong.' },
-  { title: 'Make the change', detail: 'Fix it in the narrowest place that covers every caller.' },
-  { title: 'Verify it', detail: 'Run the checks and confirm the behaviour by hand.' },
-];
-
-const LARGE_PLAN = [
-  { title: 'Read the current code', detail: 'Map what exists and where the change has to land.' },
-  { title: 'Build the core change', detail: 'The new behaviour, behind the existing interfaces.' },
-  { title: 'Wire it into the app', detail: 'Connect the screens and commands that use it.' },
-  { title: 'Test and capture evidence', detail: 'Tests for the logic, recordings for anything visible.' },
-];
-
-const LIVE_STAGES = new Set<TaskStage>([
-  'planning',
-  'building',
-  'reviewing',
-  'fixing',
-  'investigating',
-  'researching',
-  'operating',
-]);
-
-const SEED_CHECKS = [
-  { name: 'bun run lint', outcome: 'pass' as const, detail: null },
-  { name: 'bun run check-types', outcome: 'pass' as const, detail: null },
-  { name: 'bun test', outcome: 'pass' as const, detail: null },
-];
-
-const BUILT_STAGES = new Set<TaskStage>([
-  'checking',
-  'awaiting_review',
-  'shipping',
-  'awaiting_merge',
-  'merged',
-  'awaiting_operation',
-]);
-
-function resolveSeedPlan(task: SeedTask): PlanDocument {
-  if (task.plan) return task.plan;
-  return {
-    goal: task.request,
-    phases: task.size === 'large' ? LARGE_PLAN : SMALL_PLAN,
-    behaviour: [],
-    approach: 'Planned by the agent.',
-    files: [],
-    outOfScope: [],
-    verification: ['The tests that cover the change pass, and the change behaves as asked when run by hand.'],
-    questions: [],
-  };
-}
-
-function pushTaskStart(task: SeedTask, push: Push, clock: SeedClock) {
-  push(clock.at, {
-    type: 'task.created',
-    taskId: task.id,
-    request: task.request,
-    repoId: task.repo.id,
-    priority: task.priority ?? 'normal',
-    planFirst: task.planFirst ?? false,
-    origin: null,
-    ...(task.shape && !task.auto?.shape ? { shape: task.shape } : {}),
-    auto: task.auto ?? CHOSEN_BY_YOU,
-  });
-  push(clock.step(0.2), {
-    type: 'task.triaged',
-    taskId: task.id,
-    title: task.title,
-    repoId: task.repo.id,
-    size: task.size,
-    branch: task.branch,
-    ...(task.shape ? { pipeline: [...SHAPE_PIPELINES[task.shape]] } : {}),
-    decisions: task.decisions ?? NO_TRIAGE_DECISIONS,
-  });
-  if (task.composed) {
-    push(clock.step(0.1), {
-      type: 'task.reshaped',
-      taskId: task.id,
-      pipeline: task.composed.pipeline,
-      by: 'agent',
-      reason: task.composed.why,
-    });
+export function parseFlags(argv: string[], options: ParseOptions = {}): ParsedFlags {
+  const flags: ParsedFlags = { ...options.default, _: [] };
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index] ?? '';
+    if (!token.startsWith('-')) {
+      flags._.push(token);
+      continue;
+    }
+    const body = token.replace(/^--?/, '');
+    if (body.startsWith('no-')) {
+      flags[body.slice(3)] = false;
+      continue;
+    }
+    const [raw = '', ...rest] = body.split('=');
+    const name = options.alias?.[raw] ?? raw;
+    if (options.boolean?.includes(name)) {
+      flags[name] = true;
+      continue;
+    }
+    flags[name] = rest.length > 0 ? rest.join('=') : argv[++index];
   }
-  if (task.waitsOn) {
-    push(clock.step(0.05), {
-      type: 'task.waits_on_changed',
-      taskId: task.id,
-      waitsOn: task.waitsOn,
-      by: 'you',
-    });
+  return flags;
+}
+`;
+
+const CLI_INDEX_BASE = `import * as commands from './commands';
+
+const USAGE = 'Usage: superwall <command> [flags]';
+
+export async function main(argv: string[]) {
+  const [name = 'help', ...rest] = argv;
+  const command = commands[toExportName(name) as keyof typeof commands];
+  if (!command) {
+    console.error(\`Unknown command: \${name}\\n\\n\${USAGE}\`);
+    process.exit(1);
   }
-  if (task.worktreePath) {
-    push(clock.step(0.1), {
-      type: 'worktree.created',
-      taskId: task.id,
-      path: task.worktreePath,
-      branch: task.branch,
-      workspace: 'worktrees',
-    });
+  await command.run(rest);
+}
+
+function toExportName(name: string) {
+  return name.replace(/-(\\w)/g, (_, letter: string) => letter.toUpperCase());
+}
+`;
+
+const DEPLOY_BASE = `import { runDeploy } from '../../actions/deploy';
+import { parseFlags } from '../parse-flags';
+
+export const description = 'Build, publish and promote in one step';
+
+export async function run(argv: string[]) {
+  const flags = parseFlags(argv, { string: ['app', 'message', 'wait'], alias: { m: 'message' } });
+  const [environment] = flags._;
+  if (!environment) throw new Error('deploy needs an environment: staging or production');
+  await runDeploy({ environment, app: flags.app, message: flags.message, wait: Number(flags.wait ?? 120) });
+}
+`;
+
+const LOGIN_BASE = `import { runLogin } from '../../actions/login';
+import { parseFlags } from '../parse-flags';
+import { readStdin } from '../stdin';
+
+export const description = 'Sign in with a browser or an API token';
+
+export async function run(argv: string[]) {
+  const flags = parseFlags(argv, { string: ['token'] });
+  const token = flags.token === '-' ? await readStdin() : (flags.token as string | undefined);
+  await runLogin({ token });
+}
+`;
+
+const LOGS_BASE = `import { runLogs } from '../../actions/logs';
+import { parseFlags } from '../parse-flags';
+
+export const description = 'Stream the paywall event logs of the app';
+
+export async function run(argv: string[]) {
+  const flags = parseFlags(argv, {
+    boolean: ['follow'],
+    string: ['app', 'since', 'limit'],
+    alias: { f: 'follow' },
+    default: { since: '10m', limit: '200' },
+  });
+  await runLogs({ ...flags, limit: Number(flags.limit) });
+}
+`;
+
+const REGISTRY_NEW = `import { parseFlags } from './parse-flags';
+import { suggestName } from './suggest';
+
+export type FlagKind = 'string' | 'boolean' | 'number';
+
+type FlagValue<K extends FlagKind> = K extends 'boolean' ? boolean : K extends 'number' ? number : string;
+
+export interface FlagSpec<K extends FlagKind = FlagKind> {
+  kind: K;
+  help: string;
+  alias?: string;
+  default?: FlagValue<K>;
+}
+
+export interface ArgSpec {
+  name: string;
+  help: string;
+  required: boolean;
+}
+
+type FlagValues<F extends Record<string, FlagSpec>> = { [K in keyof F]: FlagValue<F[K]['kind']> | undefined };
+
+export interface CommandDefinition<F extends Record<string, FlagSpec> = Record<string, FlagSpec>> {
+  name: string;
+  summary: string;
+  args?: ArgSpec[];
+  flags: F;
+  hidden?: boolean;
+  agents?: boolean;
+  run: (input: { args: string[]; flags: FlagValues<F> }) => Promise<void>;
+}
+
+export class UsageError extends Error {}
+
+function createFlag<K extends FlagKind>(kind: K) {
+  return (help: string, options: Omit<FlagSpec<K>, 'kind' | 'help'> = {}): FlagSpec<K> => ({
+    kind,
+    help,
+    ...options,
+  });
+}
+
+export const flag = {
+  string: createFlag('string'),
+  boolean: createFlag('boolean'),
+  number: createFlag('number'),
+};
+
+export function defineCommand<F extends Record<string, FlagSpec>>(definition: CommandDefinition<F>) {
+  return definition as unknown as CommandDefinition;
+}
+
+export function parseInput(command: CommandDefinition, argv: string[]) {
+  const flags: Record<string, unknown> = {};
+  const args: string[] = [];
+  for (const [name, spec] of Object.entries(command.flags)) flags[name] = spec.default;
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index] ?? '';
+    if (!token.startsWith('-') || token === '-') {
+      args.push(token);
+      continue;
+    }
+    const [raw = '', inline] = token.replace(/^--?/, '').split('=', 2);
+    const name = resolveFlagName(command, raw);
+    const spec = command.flags[name];
+    if (!spec) throw new UsageError(describeUnknownFlag(command, raw));
+    if (spec.kind === 'boolean') {
+      flags[name] = inline !== 'false';
+      continue;
+    }
+    const value = inline ?? argv[++index];
+    if (value === undefined) throw new UsageError(\`--\${name} needs a value.\`);
+    flags[name] = spec.kind === 'number' ? Number(value) : value;
   }
+  assertArgs(command, args);
+  return { args, flags };
 }
 
-function resolveRunModel(task: SeedTask, role: RunRole) {
-  if (task.provider === 'codex') return 'gpt-6-astra';
-  return role === 'reviewer' ? 'claude-sonnet-5-5' : 'claude-opus-5-5';
+function resolveFlagName(command: CommandDefinition, raw: string) {
+  const aliased = Object.entries(command.flags).find(([, spec]) => spec.alias === raw);
+  return aliased?.[0] ?? raw;
 }
 
-function pushTaskRevision(task: SeedTask, push: Push, clock: SeedClock) {
-  if (!task.revision) return;
-  const gateId = `${task.id}-review-1`;
-  push(clock.step(0.5), {
-    type: 'gate.opened',
-    gate: {
-      id: gateId,
-      taskId: task.id,
-      type: 'review',
-      status: 'open',
-      title: `Review “${task.title}”`,
-      body: 'Built, checked and reviewed by the agents.',
-      runId: null,
-      openedAt: clock.at,
-      answeredAt: null,
-      decision: null,
-      response: null,
-    },
-  });
-  push(clock.step(20), {
-    type: 'gate.answered',
-    gateId,
-    decision: 'revise',
-    response: task.revision.response,
-  });
-  push(clock.step(0.1), { type: 'fix.started', taskId: task.id, round: 1, reason: 'you' });
-}
-
-interface SeedProgress {
-  plan: PlanDocument | null;
-  finished: number;
-  proposed: boolean;
-  built: number;
-  fixes: number;
-  agentRuns: number;
-}
-
-function resolveProposedPlan(task: SeedTask) {
-  const planning = task.stage === 'triage' || task.stage === 'waiting_on_tasks' || task.stage === 'planning';
-  const inquiring = ['answering', 'researching', 'investigating', 'awaiting_proposal'].includes(task.stage);
-  if (planning || inquiring) return null;
-  const pipeline = resolveSeedPipeline(task);
-  if (pipeline && !pipeline.includes('plan')) return null;
-  return resolveSeedPlan(task);
-}
-
-function resolveFinishedPhases(task: SeedTask, plan: PlanDocument) {
-  if (BUILT_STAGES.has(task.stage)) return plan.phases.length;
-  if (task.stage === 'building') return Math.floor(plan.phases.length / 2);
-  return 0;
-}
-
-function pushPlanProposal(task: SeedTask, progress: SeedProgress, push: Push, clock: SeedClock) {
-  if (!progress.plan || progress.proposed) return;
-  const { plan } = progress;
-  push(clock.step(0.2), { type: 'plan.proposed', taskId: task.id, body: plan.goal, document: plan });
-  progress.proposed = true;
+function describeUnknownFlag(command: CommandDefinition, raw: string) {
+  const suggestion = suggestName(raw, Object.keys(command.flags));
+  const hint = suggestion ? \` Did you mean --\${suggestion}?\` : '';
+  return \`Unknown flag --\${raw} for \${command.name}.\${hint}\`;
 }
 
 function assertArgs(command: CommandDefinition, args: string[]) {
@@ -678,28 +760,35 @@ export function parseLegacyInput(command: CommandDefinition, argv: string[]) {
   const parsed = parseFlags(argv, {
     boolean: Object.keys(command.flags).filter((name) => command.flags[name]?.kind === 'boolean'),
   });
-  push(clock.step(0), { type: 'phase.updated', taskId: task.id, index, status: 'done' });
-  progress.built += 1;
+  return { args: parsed._, flags: parsed };
+}
+`;
+
+const SUGGEST_NEW = `const MAX_DISTANCE = 2;
+
+export function suggestName(input: string, names: string[]) {
+  let best: { name: string; distance: number } | null = null;
+  for (const name of names) {
+    const distance = countEdits(input, name);
+    if (distance <= MAX_DISTANCE && (!best || distance < best.distance)) best = { name, distance };
+  }
+  return best?.name ?? null;
 }
 
-function resolveRunPhase(progress: SeedProgress, run: SeedRun) {
-  if (run.purpose !== 'build') return {};
-  const last = (progress.plan?.phases.length ?? 1) - 1;
-  return { phaseIndex: Math.min(progress.built, last) };
+function countEdits(a: string, b: string) {
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0] ?? 0;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const current = row[j] ?? 0;
+      row[j] = Math.min(current + 1, (row[j - 1] ?? 0) + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = current;
+    }
+  }
+  return row[b.length] ?? 0;
 }
-
-function pushFixStart(task: SeedTask, index: number, progress: SeedProgress, push: Push, clock: SeedClock) {
-  const run = task.runs?.[index];
-  if (run?.purpose !== 'fix') return;
-  progress.fixes += 1;
-  if (index - 1 === task.revision?.afterRun) return;
-  push(clock.step(0.1), {
-    type: 'fix.started',
-    taskId: task.id,
-    round: progress.fixes,
-    reason: run.fix ?? 'checks',
-  });
-}
+`;
 
 const HELP_NEW = `import type { CommandDefinition } from './registry';
 
@@ -1644,20 +1733,21 @@ function resolveSeedGateRun(task: SeedTask) {
 }
 
 function pushTaskGate(task: SeedTask, push: Push, clock: SeedClock) {
-  if (!task.gate) return;
+  const seeded = task.gate ?? resolvePostMergeGate(task);
+  if (!seeded) return;
   const gate: Gate = {
     id: `${task.id}-gate`,
     taskId: task.id,
-    type: task.gate.type,
+    type: seeded.type,
     status: 'open',
-    title: task.gate.title,
-    body: task.gate.body,
+    title: seeded.title,
+    body: seeded.body,
     runId: resolveSeedGateRun(task),
     openedAt: clock.at,
     answeredAt: null,
     decision: null,
     response: null,
-    ...task.gate.details,
+    ...seeded.details,
   };
   push(clock.at, { type: 'gate.opened', gate });
 }
@@ -1671,6 +1761,7 @@ function pushTask(task: SeedTask, push: Push) {
   }
   pushTaskRuns(task, push, clock);
   pushTaskResults(task, push, clock);
+  pushHandOverSteps(task, push, clock);
   if (task.note) push(clock.step(0.1), { type: 'task.noted', taskId: task.id, note: task.note });
   for (const event of task.extra ?? []) push(clock.step(0.1), event);
   for (const { at, event } of task.timed ?? []) push(at, event);
@@ -1687,6 +1778,10 @@ function buildEvents(tasks: SeedTask[], projects: Project[], repos: Repo[]) {
 
   push(start, { type: 'settings.changed', settings: { ...createSettings(), taskUsageLimit: 10 } });
   for (const task of tasks) pushTask(task, push);
+  const runEnds = new Map(
+    timeline.flatMap(({ at, event }) => (event.type === 'run.ended' ? [[event.runId, at] as const] : []))
+  );
+  for (const { at, event } of listSeedEvidenceEvents(runEnds)) push(at, event);
   return stampTaskHandles(
     timeline.sort((a, b) => a.at - b.at),
     projects,
@@ -2061,11 +2156,14 @@ function createRepos(): SeedRepos {
     'src/paywalls/duplicate.ts': DUPLICATE_BASE,
     'src/paywalls/errors.ts': ERRORS_BASE,
     'src/ui/tab-group.tsx': TAB_GROUP_BASE,
+    ...EXPORT_FILES_BASE,
+    ...listCliBaseFiles(),
     'package.json': '{ "name": "paywall-next", "private": true }\n',
   };
   const paywallPath = createRepo('superwall/paywall-next', paywallBase);
   const kannaPath = createRepo('kanna', {
     'src/shared/defaults.ts': DEFAULTS_BASE,
+    'src/client/theme.css': KANNA_THEME,
     'package.json': '{ "name": "kanna-code" }\n',
   });
   const docsPath = createRepo('superwall/docs', {
@@ -2143,6 +2241,8 @@ interface SeedWorktrees {
   tabs: string;
   rounds: string;
   defaults: string;
+  exportBackoff: string;
+  registry: string;
 }
 
 function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
@@ -2151,6 +2251,7 @@ function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
   const chatPath = createWorktree(paywallPath, 'task-embedded-chat', 'feat/embedded-chat-mcp', 'main', {
     'src/chat/embedded-chat.ts': EMBEDDED_CHAT_NEW,
     'src/chat/mcp-session.ts': MCP_SESSION_NEW,
+    'src/chat/mcp-session.test.ts': MCP_SESSION_TEST_NEW,
   });
   rmSync(join(chatPath, 'src/chat/transport.ts'));
   commitWorktree(chatPath, 'feat(chat): run the embedded chat on MCP v2');
@@ -2162,7 +2263,25 @@ function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
   commitWorktree(duplicatePath, 'fix(paywalls): refuse to duplicate code-first paywalls');
   const tabsPath = createWorktree(paywallPath, 'task-tab-scroll', 'fix/tab-group-scroll', 'main', {
     'src/ui/tab-group.tsx': TAB_GROUP_NEW,
+    'src/ui/tab-group.test.tsx': TAB_GROUP_TEST_NEW,
   });
+  commitWorktree(tabsPath, 'fix(ui): scroll tab groups horizontally');
+  const exportBackoffPath = createWorktree(
+    paywallPath,
+    'task-export-backoff',
+    'fix/export-retry-restart',
+    'main',
+    EXPORT_FILES_NEW
+  );
+  commitWorktree(exportBackoffPath, 'fix(export): resume retries inside the chunk and after a restart');
+  const registryPath = createWorktree(
+    paywallPath,
+    'task-command-registry',
+    'refactor/command-registry',
+    'main',
+    listCliNewFiles()
+  );
+  commitWorktree(registryPath, 'refactor(cli): declare every command with defineCommand');
   git(['branch', 'feat/mcp-v2-agent-4', 'main'], paywallPath);
   const roundsPath = createWorktree(
     paywallPath,
@@ -2176,20 +2295,27 @@ function createWorktrees({ paywall, kanna }: SeedRepos): SeedWorktrees {
   const defaultsPath = createWorktree(kannaPath, 'task-usage-defaults', 'feat/usage-aware-defaults', 'main', {
     'src/shared/defaults.ts': DEFAULTS_NEW,
     'src/shared/usage.ts': USAGE_NEW,
+    'src/shared/defaults.test.ts': DEFAULTS_TEST_NEW,
   });
+  commitWorktree(defaultsPath, 'feat(models): fall back to a cheaper model near the usage limit');
   return {
     chat: chatPath,
     duplicate: duplicatePath,
     tabs: tabsPath,
     rounds: roundsPath,
     defaults: defaultsPath,
+    exportBackoff: exportBackoffPath,
+    registry: registryPath,
   };
 }
+
+const RECONNECT_CALL = 'Reconnect limit of 3';
 
 function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
   const chatPath = worktrees.chat;
   const chatFile = 'src/chat/embedded-chat.ts';
   const sessionFile = 'src/chat/mcp-session.ts';
+  const testFile = 'src/chat/mcp-session.test.ts';
   return [
     {
       id: 'task-embedded-chat',
@@ -2250,15 +2376,26 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
           {
             title: 'Open an MCP session per chat',
             summary:
-              'A new McpSession owns the SDK client, connects lazily and gives up after three failed attempts.',
+              'A new McpSession owns the SDK client, connects on the first message and gives up after three failed attempts.',
             spots: [
+              spot(sessionFile, MCP_SESSION_NEW, 'if (this.client) return;', 'this.attempts += 1;', 'high', {
+                title: 'Connect on first use, at most three times',
+                why: 'A connected session returns at once, so a client whose transport has closed is never replaced.',
+                explain:
+                  '`ensureConnected` is called before every send. A live `client` returns straight away. Otherwise it checks the attempt counter against `RECONNECT_LIMIT` and counts this attempt before connecting, so a failed connect still uses one up.',
+              }),
               spot(
                 sessionFile,
                 MCP_SESSION_NEW,
-                'async ensureConnected',
+                'const client = new Client({',
                 'this.attempts = 0;',
                 'critical',
-                'The reconnect counter only resets on success. A server that drops after connecting gets three new tries each time, not three in total.'
+                {
+                  title: 'A good connect resets the counter',
+                  why: 'The reconnect counter only resets on success. A server that drops after connecting gets three new tries each time, not three in total.',
+                  explain:
+                    'The SDK `Client` is built per attempt and only stored once `connect` resolves. Setting `attempts` back to 0 here makes the limit count failures in a row rather than failures over the life of the chat.',
+                }
               ),
               spot(
                 sessionFile,
@@ -2266,14 +2403,19 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
                 'const transport = new StreamableHTTPClientTransport',
                 "requestInit: { headers: { 'x-paywall-id'",
                 'high',
-                'The paywall id travels as a header; the MCP server must accept it on every request, not just initialize.'
+                {
+                  title: 'The paywall travels as a header',
+                  why: 'The paywall id travels as a header; the MCP server must accept it on every request, not just initialize.',
+                  explain:
+                    '`requestInit` is applied to every HTTP request the streamable transport makes, so the server sees `x-paywall-id` on the initialize call and on each tool call. The same `signal` aborts the connect when the editor closes the chat.',
+                }
               ),
             ],
           },
           {
-            title: 'Stream the reply into the chat',
+            title: 'Route messages through the session',
             summary:
-              'send() iterates the completion stream and records text and tool results as separate messages.',
+              'send() connects if needed and walks the parts of one chat.complete call, recording each as its own message. reset() now closes the session.',
             spots: [
               spot(
                 chatFile,
@@ -2281,7 +2423,12 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
                 'const stream = this.session.complete',
                 "this.record({ id: part.id, role: 'assistant'",
                 'high',
-                'Each streamed part becomes its own message. Long replies will arrive as many rows unless the server sends one text part.'
+                {
+                  title: 'Every part becomes a row',
+                  why: 'Each streamed part becomes its own message. Long replies will arrive as many rows unless the server sends one text part.',
+                  explain:
+                    '`send` iterates the generator with `for await`. Tool results go through `describeTool`, text parts become assistant messages, and both pass through `record`, which appends to `history` and calls `onMessage` so the editor renders them in order.',
+                }
               ),
               spot(chatFile, EMBEDDED_CHAT_NEW, 'async reset()', 'await this.session.close();', 'normal', {
                 title: 'Reset closes the connection',
@@ -2297,26 +2444,42 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
               'The session splits the tool response into text and tool_result parts; the chat turns tool results into rows with role tool.',
             spots: [
               spot(
-                chatFile,
-                EMBEDDED_CHAT_NEW,
-                'private describeTool',
-                'toolName: result.name,',
-                'normal',
-                'Failed tools are shown to the user with the raw error text.'
+                sessionFile,
+                MCP_SESSION_NEW,
+                'for (const item of response.content',
+                "yield { kind: 'text', id: crypto.randomUUID()",
+                'high',
+                {
+                  title: 'Split the response into parts',
+                  why: '`isError` is always false here, so a failed tool is never labelled as failed.',
+                  explain:
+                    '`chat.complete` returns one `content` array. Items of type `tool_result` become tool parts with their name and text; everything else is treated as text and gets a fresh id so the editor can key the rows.',
+                }
               ),
+              spot(chatFile, EMBEDDED_CHAT_NEW, 'private describeTool', 'toolName: result.name,', 'normal', {
+                title: 'Tool rows carry the tool name',
+                why: 'Failed tools are shown to the user with the raw error text.',
+                explain:
+                  'A tool result becomes a message with role `tool` and the tool’s name, which the transcript uses for the row label. A failed result is prefixed with the tool name and “failed:”.',
+              }),
             ],
           },
           {
-            title: 'Close the session on reset',
-            summary: 'reset() is now async and closes the MCP connection; callers were updated.',
+            title: 'Test the session',
+            summary: 'Three new tests run the session against a fake MCP server.',
             spots: [
               spot(
-                chatFile,
-                EMBEDDED_CHAT_NEW,
-                'async reset()',
-                'await this.session.close();',
-                'normal',
-                'reset() changed from sync to async. Two call sites in the editor await it now.'
+                testFile,
+                MCP_SESSION_TEST_NEW,
+                "it('gives up after three failed connects'",
+                "rejects.toThrow('The MCP server is unreachable.')",
+                'high',
+                {
+                  title: 'Three refused connects, then the error',
+                  why: 'Only refused connects are tested. A server that accepts and then drops, the case that matters, is not.',
+                  explain:
+                    'The fake server refuses every connect. Three calls fail with the transport error and the fourth fails with the unreachable message without touching the network, which is what the user sees in the chat.',
+                }
               ),
             ],
           },
@@ -2328,17 +2491,75 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         ],
         judgementCalls: [
           {
+            title: 'Keep the EmbeddedChat API',
             call: 'Kept the public EmbeddedChat API',
             reason: 'Only the constructor option was renamed, so the editor change stays small.',
             file: chatFile,
-            line: 10,
+            ...rangeOf(EMBEDDED_CHAT_NEW, 'export interface EmbeddedChatOptions', 'signal?: AbortSignal;'),
+            alternatives: [
+              {
+                option: 'Hand the McpSession to the editor',
+                rejected:
+                  'Every editor screen that embeds the chat would learn about MCP, connects and tool parts.',
+              },
+              {
+                option: 'Add an EmbeddedChatV2 next to the old class',
+                rejected:
+                  'Two chats to keep in step until the old endpoint is switched off, and nothing else uses the old one.',
+              },
+            ],
           },
           {
-            call: 'Reconnect limit of 3',
+            title: 'Reconnect at most three times',
+            call: RECONNECT_CALL,
             reason:
               'Matches the editor’s other network retries; past that the user sees an error instead of a spinner.',
             file: sessionFile,
-            line: 15,
+            ...rangeOf(MCP_SESSION_NEW, 'const RECONNECT_LIMIT = 3;', 'const RECONNECT_LIMIT = 3;'),
+            alternatives: [
+              {
+                option: 'Exponential backoff up to a 30 second deadline',
+                rejected: 'The user watches a spinner for half a minute before learning the server is down.',
+              },
+              {
+                option: 'Keep retrying in the background',
+                rejected:
+                  'The chat looks alive while every message fails, and nothing tells the user to reload.',
+              },
+            ],
+          },
+          {
+            title: 'chat.complete as an MCP tool',
+            call: 'Called chat.complete as an MCP tool instead of using sampling',
+            reason:
+              'The paywall server owns the model and the paywall tools, so the chat asks it through one tool call. Sampling would run the model on our side.',
+            file: sessionFile,
+            ...rangeOf(
+              MCP_SESSION_NEW,
+              'const response = await this.client.callTool(',
+              '{ signal: options.signal }'
+            ),
+            alternatives: [
+              {
+                option: 'MCP sampling with sampling/createMessage',
+                rejected:
+                  'Sampling is the server asking the client for a completion; here the server has the model and the tools.',
+              },
+            ],
+          },
+          {
+            title: 'Keep complete() a generator',
+            call: 'Kept complete() a generator although the reply arrives whole',
+            reason:
+              'The server sends the whole response today. When it starts sending progress notifications, only McpSession changes and send() stays as it is.',
+            file: sessionFile,
+            ...rangeOf(MCP_SESSION_NEW, 'async *complete(', 'async *complete('),
+            alternatives: [
+              {
+                option: 'Return an array of parts',
+                rejected: 'Simpler now, but send() would change again once the server streams.',
+              },
+            ],
           },
         ],
         walkthrough: {
@@ -2434,7 +2655,14 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
         },
       },
       reviewSummary:
-        'I read the new MCP session, the rewired chat and the three new tests, and ran a chat against a server that drops after connecting. The streaming and tool rows work; the reconnect limit does not hold, so a flaky server keeps the chat retrying forever.',
+        'I read the new MCP session, the rewired chat and the three new tests, and ran a chat against a server that drops after connecting. The tool rows work; the reconnect limit does not hold, so a flaky server keeps the chat retrying forever, and failed tools are never labelled.',
+      reviewDisagreements: [
+        {
+          call: RECONNECT_CALL,
+          reason:
+            'Three is a fine number, but it is not enforced: the counter resets after every good connect, so a server that accepts and then drops is retried forever. Count per session, and test a server that drops, not only one that refuses.',
+        },
+      ],
       findings: [
         {
           severity: 'blocking',
@@ -2455,6 +2683,16 @@ function listEmbeddedChatTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees)
           message:
             'this.client stays set after the transport closes, so ensureConnected returns early and the next complete() call fails on a dead client instead of reconnecting.',
           fix: 'Clear the client when the connection closes:\n\n```ts\nclient.onclose = () => {\n  this.client = null;\n};\n```',
+        },
+        {
+          severity: 'suggestion',
+          file: sessionFile,
+          line: lineOf(MCP_SESSION_NEW, "if (item.type === 'tool_result')"),
+          end: lineOf(MCP_SESSION_NEW, 'isError: false'),
+          title: 'Failed tools are never labelled',
+          message:
+            'complete() sets `isError: false` on every tool result, so describeTool never takes its failed branch and a failed paywall.update reads like a success. The plan promises failures are labelled.',
+          fix: 'Pass the flag through from the response item:\n\n```ts\nisError: item.isError === true,\n```\n\nand add `isError?: boolean` to the item type.',
         },
         {
           severity: 'suggestion',
@@ -2620,9 +2858,16 @@ function listBacklogTasks({ paywall, docs }: SeedRepos): SeedTask[] {
   ];
 }
 
+const EXIT_CODE_CALL = 'Usage errors exit with code 2';
+
 function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
   const duplicatePath = worktrees.duplicate;
   const tabsPath = worktrees.tabs;
+  const duplicateFile = 'src/paywalls/duplicate.ts';
+  const duplicateTestFile = 'src/paywalls/duplicate.test.ts';
+  const errorsFile = 'src/paywalls/errors.ts';
+  const tabsFile = 'src/ui/tab-group.tsx';
+  const tabsTestFile = 'src/ui/tab-group.test.tsx';
   return [
     {
       id: 'task-duplicate',
@@ -2639,16 +2884,41 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         headline: 'Duplicating a code-first paywall now fails with a clear error.',
         sections: [
           {
-            title: 'Guard the duplicate path',
-            summary: 'duplicatePaywall throws a typed error for code-first paywalls.',
+            title: 'Find the duplicate path',
+            summary:
+              'The dashboard button and the public API both call duplicatePaywall, which copied any paywall, code-first ones included.',
+            spots: [],
+          },
+          {
+            title: 'Refuse code-first paywalls',
+            summary:
+              'duplicatePaywall throws a typed error for code-first paywalls, with its own error code.',
             spots: [
               spot(
-                'src/paywalls/duplicate.ts',
+                duplicateFile,
                 DUPLICATE_NEW,
-                "if (source.kind === 'code_first')",
+                'const source = await db.paywall.findUniqueOrThrow',
                 'throw new PaywallError',
                 'high',
-                'The API maps PaywallError codes to 409; the dashboard shows the message as is.'
+                {
+                  title: 'Refuse after reading the source',
+                  why: 'The API maps PaywallError codes to 409; the dashboard shows the message as is.',
+                  explain:
+                    'The source paywall is read as before; when its `kind` is `code_first` the function throws before anything is written. Visual paywalls take the old path unchanged.',
+                }
+              ),
+              spot(
+                errorsFile,
+                ERRORS_NEW,
+                'export type PaywallErrorCode',
+                'export class PaywallError',
+                'normal',
+                {
+                  title: 'A code for this refusal',
+                  why: 'Clients that switch on the code need a case for the new value, or they fall into their default.',
+                  explain:
+                    '`code_first_duplicate` joins the union, so the API layer maps it like the other codes and the dashboard can show the message instead of a generic failure.',
+                }
               ),
             ],
           },
@@ -2657,12 +2927,30 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
             summary: 'One test per paywall kind.',
             spots: [
               spot(
-                'src/paywalls/duplicate.test.ts',
+                duplicateTestFile,
                 DUPLICATE_TEST_NEW,
                 "it('refuses a code-first paywall'",
                 'rejects.toThrow',
                 'normal',
-                'Fails on main, passes on this branch.'
+                {
+                  title: 'The refusal',
+                  why: 'Fails on main, passes on this branch.',
+                  explain:
+                    'Seeds a code-first paywall and expects the duplicate to reject with the repository message, so a regression shows up as a test failure rather than a copied paywall.',
+                }
+              ),
+              spot(
+                duplicateTestFile,
+                DUPLICATE_TEST_NEW,
+                "it('copies a visual paywall'",
+                'expect(copy.name)',
+                'normal',
+                {
+                  title: 'Visual paywalls still copy',
+                  why: 'Only the name is checked, not the copied content.',
+                  explain:
+                    'The happy path stays covered: a visual paywall is copied for a new owner and gets the “(copy)” suffix.',
+                }
               ),
             ],
           },
@@ -2833,6 +3121,7 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         },
       ],
       pullRequest: { number: 4531, checks: 'passing' },
+      ticked: ['Set `CODE_FIRST_DOCS_URL` on the API in production'],
       gate: {
         type: 'merge',
         title: 'Merge #4531',
@@ -2846,10 +3135,11 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
       repo: paywall,
       size: 'large',
       planFirst: true,
-      stage: 'awaiting_plan',
-      reason: 'needs the plan approved before work starts',
+      stage: 'awaiting_review',
+      reason: 'built, checked and ready for review',
       branch: 'refactor/command-registry',
       ageHours: 5,
+      worktreePath: worktrees.registry,
       plan: {
         goal: 'Every framework command declares its arguments and help text in one place, so the CLI, the docs and the agents read the same definition.',
         phases: [
@@ -3154,39 +3444,75 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
             ],
           },
           {
-            title: 'Port the existing commands',
-            detail: 'Move every command onto the schema without changing behaviour.',
+            title: 'Own flag builders, no zod',
+            call: 'Wrote small flag builders instead of using zod',
+            reason:
+              'The schema needs help text, aliases and positional arguments as much as types. Three builders cover that in 15 lines and keep the CLI start fast.',
+            file: CLI_PATHS.registry,
+            ...rangeOf(REGISTRY_NEW, 'export const flag = {', "number: createFlag('number'),"),
+            alternatives: [
+              {
+                option: 'zod schemas with describe() for help',
+                rejected:
+                  'Aliases and positional arguments would sit outside the schema anyway, and it adds a dependency to every CLI start.',
+              },
+              {
+                option: 'commander or yargs',
+                rejected:
+                  'They own parsing, dispatch and help, so the docs and the MCP list would have to read their internals.',
+              },
+            ],
           },
           {
-            title: 'Generate docs and help',
-            detail: 'The CLI help and the docs page read the same definition.',
-          },
-          { title: 'Expose it to agents', detail: 'The MCP server lists commands from the schema.' },
-          { title: 'Verify every command', detail: 'Snapshot the help output and run each command once.' },
-        ],
-        behaviour: [
-          '`superwall help <command>` prints generated help.',
-          'Unknown flags fail with the closest suggestion.',
-          'The docs page for each command is generated from its definition.',
-        ],
-        approach:
-          'Introduce defineCommand({ name, args, run }) and migrate the 31 commands in four batches. A codemod handles the 24 commands with plain flags; the rest are done by hand.',
-        files: [
-          { path: 'src/cli/registry.ts', change: 'New defineCommand and the registry.' },
-          { path: 'src/cli/commands/*.ts', change: 'Migrated to defineCommand.' },
-        ],
-        outOfScope: ['Changing any command’s behaviour.'],
-        verification: ['Snapshot of every command’s help output before and after.'],
-        questions: [
-          {
-            question: 'Migrate all 31 commands in this task, or only the registry plus 3 examples?',
-            options: ['All 31 commands', 'Registry and 3 examples'],
-            recommendation: 'Registry and 3 examples',
+            title: 'Codemod most commands',
+            call: 'Codemod for 28 commands, 3 ported by hand',
+            reason:
+              'Most commands pass their flags straight to an action, which a regex can read reliably. deploy, login and logs do more and needed a person.',
+            file: CLI_PATHS.codemod,
+            ...rangeOf(CODEMOD_NEW, 'if (!parse?.[1] || !action', 'console.warn(`Skipped'),
+            alternatives: [
+              {
+                option: 'Port all 31 by hand',
+                rejected: 'A day of identical edits, with typos the snapshots would only partly catch.',
+              },
+              {
+                option: 'Codemod everything with a TypeScript AST',
+                rejected: 'More code than the three commands it would save, and it would run once.',
+              },
+            ],
           },
           {
-            question: 'Keep the old flag parser as a fallback during the migration?',
-            options: ['Keep it', 'Remove it'],
-            recommendation: 'Keep it',
+            title: 'Keep the old parser behind a flag',
+            call: 'Kept the old parser behind SUPERWALL_LEGACY_FLAGS=1',
+            reason:
+              'You asked to keep it during the migration. Opting in with a variable keeps one parser in charge by default.',
+            file: CLI_PATHS.index,
+            ...rangeOf(
+              CLI_INDEX_NEW,
+              'const legacy = env.SUPERWALL_LEGACY_FLAGS',
+              'await command.run(legacy'
+            ),
+            alternatives: [
+              {
+                option: 'Retry with the old parser when the new one throws',
+                rejected: 'Typos would be accepted again, and the same command line could mean two things.',
+              },
+            ],
+          },
+          {
+            title: 'Exit code 2 for usage errors',
+            call: EXIT_CODE_CALL,
+            reason:
+              'Scripts can then tell a typo from a failed deploy. 2 is what most CLIs use for usage errors.',
+            file: CLI_PATHS.index,
+            ...rangeOf(CLI_INDEX_NEW, 'function fail(message: string', 'process.exit(2);'),
+            alternatives: [
+              {
+                option: 'Keep exit code 1 for everything',
+                rejected:
+                  'A CI step cannot tell “wrong flag” from “the deploy failed” without parsing stderr.',
+              },
+            ],
           },
         ],
         walkthrough: {
@@ -3314,13 +3640,24 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
           role: 'agent',
           purpose: 'plan',
           minutes: 8,
-          summary: 'Proposed the registry plan with two open questions.',
+          summary: 'Proposed the registry plan; you chose to port all 31 commands.',
+        },
+        {
+          role: 'agent',
+          purpose: 'build',
+          minutes: 58,
+          summary: 'Built the registry and ported all 31 commands.',
+        },
+        {
+          role: 'reviewer',
+          minutes: 6,
+          summary: 'Two blocking findings in the flag parser, one suggestion.',
         },
       ],
       gate: {
-        type: 'plan',
-        title: 'Approve the command registry plan',
-        body: 'Two questions need your answer before building.',
+        type: 'review',
+        title: 'Review the command registry rewrite',
+        body: 'Built, checked and reviewed by an agent. Two blocking findings and one suggestion left for you to judge.',
       },
     },
     {
@@ -3338,16 +3675,22 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
         headline: 'Tab groups scroll sideways and keep the active tab in view.',
         sections: [
           {
-            title: 'Make the list scrollable',
-            summary: 'The row scrolls horizontally with the scrollbar hidden; tabs no longer shrink.',
+            title: 'Find why the tabs overflow',
+            summary:
+              'The row was a plain flex container, so extra tabs shrank until their labels clipped, then overflowed the panel.',
             spots: [
               spot(
-                'src/ui/tab-group.tsx',
+                tabsFile,
                 TAB_GROUP_NEW,
-                '<div ref={listRef}',
+                'data-active={tab.id === active}',
                 "className='shrink-0'",
                 'normal',
-                'Hidden scrollbar: there is no visual hint more tabs exist off-screen.'
+                {
+                  title: 'Tabs keep their width',
+                  why: 'Without `shrink-0` the flex row squeezes every tab before it ever scrolls.',
+                  explain:
+                    'Flex items shrink by default. `shrink-0` keeps each tab at its label’s width, so a crowded group overflows the row instead of clipping the labels.',
+                }
               ),
             ],
           },
@@ -3375,12 +3718,29 @@ function listReviewTasks({ paywall }: SeedRepos, worktrees: SeedWorktrees): Seed
             summary: 'Two component tests with 40 tabs.',
             spots: [
               spot(
-                'src/ui/tab-group.tsx',
-                TAB_GROUP_NEW,
-                'React.useEffect',
-                '}, [active]);',
-                'high',
-                'Smooth scrolling runs on first render too, so the row animates on page load.'
+                tabsTestFile,
+                TAB_GROUP_TEST_NEW,
+                "it('scrolls the active tab to the centre'",
+                'expect(scrollIntoView).toHaveBeenLastCalledWith',
+                'normal',
+                {
+                  title: 'Selecting a tab scrolls it',
+                  why: 'jsdom has no layout, so the test checks the call, not where the row ends up.',
+                  explain:
+                    'Replaces `scrollIntoView` with a mock, renders 40 tabs, selects tab 31 and checks the last call asked for the centre.',
+                }
+              ),
+              spot(
+                tabsTestFile,
+                TAB_GROUP_TEST_NEW,
+                "it('keeps every tab at its natural width'",
+                "tab.classList.contains('shrink-0')",
+                'normal',
+                {
+                  title: 'No tab can shrink',
+                  why: 'A class check: it fails if the class is removed, not if another class overrides it.',
+                  explain: 'Renders 40 tabs and checks that every button keeps `shrink-0`.',
+                }
               ),
             ],
           },
@@ -3546,7 +3906,7 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       gate: {
         type: 'question',
         title: 'Retry the whole export or only the failed chunk?',
-        body: 'Exports run in 50k-row chunks. Retrying only the failed chunk is faster but needs the chunk offset persisted. Retrying the whole export is simpler and takes up to 4 minutes for the largest app.',
+        body: 'Exports run in 50k-row chunks. Retrying only the failed chunk is faster but needs the chunk offset persisted. Retrying the whole export is simpler and takes up to 4 minutes for the largest app.\n\nWith the offset kept, a retry picks up where the export stopped, for example:\n\n```bash\nbun run export --app app_9f2c --from-offset 150000\n```\n\nTo watch the timeout on the largest app yourself before you choose, run:\n\n```bash run\nbun run export --app app_9f2c --dry-run\n```',
       },
     },
     {
@@ -3616,6 +3976,9 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
 
 function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
   const defaultsPath = worktrees.defaults;
+  const defaultsFile = 'src/shared/defaults.ts';
+  const defaultsTestFile = 'src/shared/defaults.test.ts';
+  const usageFile = 'src/shared/usage.ts';
   return [
     {
       id: 'task-usage-defaults',
@@ -3649,7 +4012,7 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
             summary: 'resolveDefaultModel takes the usage window and falls back above 85%.',
             spots: [
               spot(
-                'src/shared/defaults.ts',
+                defaultsFile,
                 DEFAULTS_NEW,
                 'export function resolveDefaultModel',
                 'return resolveFallbackModel(provider);',
@@ -3707,13 +4070,58 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
             ],
           },
         ],
-        checks: [{ name: 'bun test', outcome: 'pass', detail: null }],
+        checks: [{ name: 'bun test', outcome: 'pass', detail: '3 new' }],
         judgementCalls: [
           {
+            title: 'Fall back at 85%',
             call: 'Threshold at 85%',
             reason: 'Leaves room to finish a long turn on the preferred model.',
-            file: 'src/shared/defaults.ts',
-            line: 4,
+            file: defaultsFile,
+            ...rangeOf(DEFAULTS_NEW, 'const FALLBACK_THRESHOLD', 'const FALLBACK_THRESHOLD'),
+            alternatives: [
+              {
+                option: '95%',
+                rejected:
+                  'A long agent turn started at 94% can use the rest of the window and stop halfway through an edit.',
+              },
+              {
+                option: 'A setting for the threshold',
+                rejected:
+                  'One more setting for a number few people would change; it can become one if someone asks.',
+              },
+            ],
+          },
+          {
+            title: 'Only new chats switch model',
+            call: 'Only new chats change model',
+            reason:
+              'Switching a running chat mid-conversation drops the provider’s prompt cache and changes its behaviour halfway through a task.',
+            file: defaultsFile,
+            ...rangeOf(
+              DEFAULTS_NEW,
+              'export function resolveDefaultModel',
+              'const preferred = resolvePreferredModel'
+            ),
+            alternatives: [
+              {
+                option: 'Switch running chats too',
+                rejected:
+                  'Saves more of the window, but the next turn reruns the whole context uncached on a model that did not start the work.',
+              },
+            ],
+          },
+          {
+            title: 'A fixed fallback per provider',
+            call: 'A fixed fallback per provider in code',
+            reason: 'Each provider has exactly one cheaper model that handles agent work well enough.',
+            file: defaultsFile,
+            ...rangeOf(DEFAULTS_NEW, 'function resolveFallbackModel', "return 'gpt-6-mini';"),
+            alternatives: [
+              {
+                option: 'Let you pick the fallback in settings',
+                rejected: 'A picker for a list of one per provider; worth it once there is a real choice.',
+              },
+            ],
           },
         ],
         walkthrough: {
@@ -4089,11 +4497,12 @@ function listTasks(repos: SeedRepos, worktrees: SeedWorktrees): SeedTask[] {
     ...listActiveTasks(repos),
     ...listPersonalTasks(repos, worktrees),
     ...listBasketTasks({ basketServer, basketSdk }),
-    ...listProcessTasks({ paywall, kanna }),
+    ...listProcessTasks({ paywall, kanna }, worktrees.exportBackoff),
     ...listShapeTasks({ paywall, kanna }),
     ...listDelegationTasks({ paywall }),
     ...listTriggerTasks({ paywall, kanna }),
     ...listRoundTasks({ paywall }, worktrees.rounds),
+    ...listMergeStepTasks({ paywall, kanna }),
   ];
 }
 
@@ -4122,7 +4531,10 @@ function seed() {
       },
       next: [
         { taskId: 'task-duplicate', why: 'Pull request #4531 is clean and ready to merge' },
-        { taskId: 'task-command-registry', why: 'The plan needs your approval before building starts' },
+        {
+          taskId: 'task-command-registry',
+          why: 'The rewrite is built, and the agent review found two blocking problems in the flag parser',
+        },
       ],
       running: 'Agents are working on the remaining tasks.',
       note: null,
