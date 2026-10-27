@@ -1,6 +1,8 @@
 import { rmSync } from 'node:fs';
 import {
+  type Coverage,
   evaluatePullRequestWatch,
+  isOfCurrentRound,
   isSamePullRequest,
   isSamePullRequestWatch,
   isTaskSettled,
@@ -440,13 +442,27 @@ export class EffectRunner {
     if (task.approvedEdits === 'review') await this.#commitEdits(task, repo, context);
     const planChecks = task.plan?.document?.checks ?? [];
     const release = await this.#workspaces.resolve(task).claim(repo, task, context.signal);
-    let results: Awaited<ReturnType<typeof runChecks>>;
+    let runs: CheckRun[];
+    let coverage: Coverage | null = null;
     try {
-      results = await runChecks(repo, task.worktreePath, planChecks, context.signal);
+      runs = await runChecks(repo, task.worktreePath, planChecks, context.signal);
+      if (runs.every((run) => run.check.outcome !== 'fail')) {
+        coverage = await measureTaskCoverage({
+          repo,
+          task,
+          ledgers: this.#ledgers,
+          baseBranch: resolvePullRequestBase(this.#engine.state, task),
+          signal: context.signal,
+        });
+      }
     } finally {
       await release();
     }
     if (context.signal.aborted) return;
+    if (coverage?.status === 'unavailable') {
+      log.warn('[Coverage] Could not measure the changed lines', { taskId, reason: coverage.reason });
+    }
+    const evidence = this.#storeCheckEvidence(task, runs);
     await this.#engine.dispatch(
       {
         type: 'checks.record',

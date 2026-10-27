@@ -17,7 +17,12 @@ import type {
   RunRole,
   WorkReport,
 } from '../packages/core/src/index.ts';
-import { serializeReportMarkdown } from '../packages/core/src/index.ts';
+import {
+  type CoverageFile,
+  parseChangedLines,
+  resolveCoverageRanges,
+  serializeReportMarkdown,
+} from '../packages/core/src/index.ts';
 import {
   bumpLockfileEntry,
   countLines,
@@ -467,6 +472,47 @@ function commitHistory(path: string, files: { path: string; mode: string }[]) {
   git(['reset', '-q'], path);
 }
 
+const SAMPLE_COVERAGE_COMMAND = 'bun test --coverage --coverage-reporter=lcov';
+
+const COVERED_SOURCE = /\.tsx?$/;
+
+const TEST_PATH = /(^|\/)test\/|\.test\.tsx?$/;
+
+function measureSampleFile(cwd: string, path: string, lines: number[], missed: number): CoverageFile {
+  const text = readText(cwd, path).split('\n');
+  const executable = lines.filter((line) => (text[line - 1] ?? '').trim().length > 1);
+  const runs = resolveCoverageRanges(executable).sort((x, y) => y[1] - y[0] - (x[1] - x[0]));
+  const uncovered = runs
+    .flatMap(([start, end]) => Array.from({ length: end - start + 1 }, (_, offset) => start + offset))
+    .slice(0, missed);
+  return {
+    path,
+    covered: executable.length - uncovered.length,
+    executable: executable.length,
+    uncovered: resolveCoverageRanges(uncovered),
+  };
+}
+
+function measureSampleCoverage(
+  cwd: string,
+  range: string[],
+  missed: Record<string, number>
+): MeasuredCoverage {
+  const changed = parseChangedLines(git(['diff', '-U0', '--no-color', '--find-renames', ...range], cwd));
+  const sources = [...changed].filter(([path]) => COVERED_SOURCE.test(path) && !TEST_PATH.test(path));
+  const files = sources
+    .map(([path, lines]) => measureSampleFile(cwd, path, lines, missed[path] ?? 0))
+    .filter((file) => file.executable > 0)
+    .sort((a, b) => b.executable - b.covered - (a.executable - a.covered) || a.path.localeCompare(b.path));
+  return {
+    status: 'measured',
+    command: SAMPLE_COVERAGE_COMMAND,
+    covered: files.reduce((sum, file) => sum + file.covered, 0),
+    executable: files.reduce((sum, file) => sum + file.executable, 0),
+    files,
+  };
+}
+
 export interface FileChange {
   before: string;
   after: string;
@@ -480,6 +526,7 @@ export interface MergedNotes {
   head: string;
   mergeCommit: string;
   trees: string[];
+  coverage: MeasuredCoverage;
 }
 
 function createMergedTask(repo: string, worktrees: string): MergedNotes {
@@ -524,6 +571,7 @@ function createMergedTask(repo: string, worktrees: string): MergedNotes {
     head: second.sha,
     mergeCommit: git(['rev-parse', 'HEAD'], repo),
     trees: [first.tree, second.tree],
+    coverage: measureSampleCoverage(repo, [main, second.sha], {}),
   };
 }
 
@@ -545,6 +593,7 @@ export interface ReviewNotes {
   importers: string;
   diffStat: string;
   trees: string[];
+  coverage: MeasuredCoverage;
 }
 
 function renameModule(worktree: string) {
@@ -663,6 +712,10 @@ function createReviewTask(repo: string, worktrees: string): ReviewNotes {
     ),
   };
   writeText(worktree, SAMPLE_PATHS.webGuide, webGuide.after);
+  const coverage = measureSampleCoverage(worktree, ['main'], {
+    [SAMPLE_PATHS.review]: 4,
+    [SAMPLE_PATHS.spots]: 3,
+  });
   return {
     worktree,
     ...renamed,
@@ -744,6 +797,12 @@ export function createCodeSample(repos: string, worktrees: string): CodeSample {
       remote: REMOTE,
       projectId: PROJECT_ID,
       checkCommands: ['bun lint', 'bun check-types', 'bun run test', 'bunx knip'],
+      coverage: {
+        mode: 'custom',
+        command: SAMPLE_COVERAGE_COMMAND,
+        report: 'coverage/lcov.info',
+        format: null,
+      },
     },
     merged,
     review,
@@ -1657,7 +1716,12 @@ function scriptReview(sample: CodeSample, push: Push) {
     treeHash: sample.review.trees[3] ?? '',
   });
   stage(push, task, at(REVIEW_MARKS.fix[1] + 0.2), 'checking', 'running the checks');
-  push(at(REVIEW_MARKS.passedChecks), { type: 'checks.recorded', taskId: task, results: PASSED_CHECKS });
+  push(at(REVIEW_MARKS.passedChecks), {
+    type: 'checks.recorded',
+    taskId: task,
+    results: PASSED_CHECKS,
+    coverage: sample.review.coverage,
+  });
   stage(push, task, at(REVIEW_MARKS.passedChecks + 0.2), 'reviewing', 'agent review');
   const reviewer = runId(task, 5);
   pushRun(push, {
@@ -1770,11 +1834,17 @@ function describeMergedWalkthrough(merged: MergedNotes): ReportWalkthrough {
       ],
       manual: [
         {
-          file: SAMPLE_PATHS.queueStack,
-          start: stackLine,
-          end: stackLine + 5,
-          attention: 'high' as const,
-          why: 'Ties keep the oldest task first, so two urgent reviews never swap places on a refresh.',
+          action: 'Run the queue tests with coverage.',
+          target: { kind: 'command', value: 'cd packages/core && bun test test/queue' },
+          expect: 'The stack tests pass and the queue folder stays at 100% line and function coverage.',
+        },
+        {
+          action: 'Read the comparison to check the tie-break.',
+          target: {
+            kind: 'file',
+            value: `${SAMPLE_PATHS.queueStack}:${resolveLine(merged.stack, 'PRIORITY_RANK[a.task.priority]')}`,
+          },
+          expect: 'Equal priorities fall through to `createdAt`, oldest first, on a copy of the input.',
         },
       ],
     },
@@ -1936,7 +2006,12 @@ function scriptMerged(sample: CodeSample, push: Push) {
     pushPhase(push, task, index, [at(marks[0]), at(marks[1])], { ...phase, tree: merged.trees[index] ?? '' });
   }
   stage(push, task, at(22.2), 'checking', 'running the checks');
-  push(at(MERGED_MARKS.checks), { type: 'checks.recorded', taskId: task, results: checks });
+  push(at(MERGED_MARKS.checks), {
+    type: 'checks.recorded',
+    taskId: task,
+    results: checks,
+    coverage: merged.coverage,
+  });
   stage(push, task, at(MERGED_MARKS.checks + 0.2), 'reviewing', 'agent review');
   pushRun(push, {
     taskId: task,

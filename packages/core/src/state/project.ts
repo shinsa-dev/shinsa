@@ -513,7 +513,10 @@ function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported
 }
 
 function applyChecksRecorded(state: ShinsaState, event: EventOf<'checks.recorded'>) {
-  updateTask(state, event.taskId, event.at, { checkResults: event.results });
+  updateTask(state, event.taskId, event.at, {
+    checkResults: event.results,
+    coverage: event.coverage ? structuredClone(event.coverage) : null,
+  });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'review',
@@ -559,6 +562,7 @@ function applyWorkspaceEvent(state: ShinsaState, event: WorkspaceEvent) {
       writeEntry(state, 'repos', event.repo.id, {
         ...event.repo,
         checkCommands: [...event.repo.checkCommands],
+        ...(event.repo.coverage ? { coverage: { ...event.repo.coverage } } : {}),
       });
       return;
     case 'repo.removed':

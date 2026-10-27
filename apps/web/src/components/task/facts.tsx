@@ -34,6 +34,7 @@ import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { describeRunsOn } from '@/lib/accounts/account.ts';
 import { describeAgentCount, listTaskAgents } from '@/lib/chat/agents.ts';
+import { describeCoverageFact, describeCoverageSummary } from '@/lib/coverage.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -128,31 +129,34 @@ function AgentsFact({ state, task }: { state: ShinsaState; task: Task }) {
       }
     >
       <InfoHeader title='Who worked on this' description='Each agent role, and the agents it delegated to.' />
-      <ul aria-label='Who worked on this' className='flex flex-col border-border border-t p-1'>
-        {agents.map((agent) => (
-          <li key={agent.key}>
-            <button
-              type='button'
-              onClick={() => navigate(resolveTaskPath(task, { tab: 'chat', run: agent.runId }))}
-              className={cn(
-                'corner-superellipse/1.125 flex h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-item pe-2 text-start text-xs hover:bg-bg-a2 active:bg-bg-a2',
-                AGENT_INDENT[agent.depth] ?? AGENT_INDENT.at(-1)
-              )}
-            >
-              {agent.depth > 0 && (
-                <Icon size='sm' name='IconArrowCornerDownRight' aria-hidden className='text-fg-2' />
-              )}
-              <Icon size='sm' name={agent.icon} className='text-fg-3' />
-              <span className='shrink-0 font-medium text-fg-4'>{agent.name}</span>
-              {agent.label && <Truncate className='min-w-0 text-fg-3'>{agent.label}</Truncate>}
-              <span className='ms-auto flex shrink-0 items-center gap-1.5 ps-3 text-2xs text-fg-2'>
-                {agent.live && <Pulse tone='blue' />}
-                {agent.detail}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <HoverHighlight className='border-border border-t p-1' indicatorClassName='rounded-item'>
+        <ul aria-label='Who worked on this' className='flex flex-col'>
+          {agents.map((agent) => (
+            <li key={agent.key}>
+              <button
+                type='button'
+                data-highlight-item=''
+                onClick={() => navigate(resolveTaskPath(task, { tab: 'chat', run: agent.runId }))}
+                className={cn(
+                  'corner-superellipse/1.125 flex h-7 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-item pe-2 text-start text-xs',
+                  AGENT_INDENT[agent.depth] ?? AGENT_INDENT.at(-1)
+                )}
+              >
+                {agent.depth > 0 && (
+                  <Icon size='sm' name='IconArrowCornerDownRight' aria-hidden className='text-fg-2' />
+                )}
+                <Icon size='sm' name={agent.icon} className='text-fg-3' />
+                <span className='shrink-0 font-medium text-fg-4'>{agent.name}</span>
+                {agent.label && <Truncate className='min-w-0 text-fg-3'>{agent.label}</Truncate>}
+                <span className='ms-auto flex shrink-0 items-center gap-1.5 ps-3 text-2xs text-fg-2'>
+                  {agent.live && <Pulse tone='blue' />}
+                  {agent.detail}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </HoverHighlight>
     </FactPopover>
   );
 }
@@ -242,6 +246,22 @@ function ChecksFact({ checks }: { checks: Check[] }) {
     >
       <CheckList checks={checks} />
     </FactPopover>
+  );
+}
+
+function CoverageFact({ task }: { task: Task }) {
+  const fact = describeCoverageFact(task.coverage);
+  if (!fact) return null;
+  return (
+    <Hint label={`${describeCoverageSummary(task.coverage)}. How to test in Review lists the files.`}>
+      <InAppLink
+        path={resolveTaskPath(task, { tab: 'review', spot: 'testing' })}
+        className={cn(FACT, FACT_INTERACTIVE, 'no-underline')}
+      >
+        <Icon size='sm' name='IconShieldCheck' />
+        <span className='tabular-nums'>{fact}</span>
+      </InAppLink>
+    </Hint>
   );
 }
 
@@ -414,6 +434,7 @@ export function TaskFacts({
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} checks={checks} />
       {!task.pullRequest && checks.length > 0 && <ChecksFact checks={checks} />}
+      <CoverageFact task={task} />
       <PriorityFact state={state} task={task} />
       <StartedFact state={state} task={task} />
       <CostFact state={state} task={task} />

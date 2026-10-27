@@ -164,6 +164,8 @@ describe('the command guard', () => {
       'shinsa repos update app --checks=lint',
       'shinsa repos update app --workspace gitbutler',
       'shinsa repos update app --workspace=main_checkout',
+      'shinsa repos update app --coverage off',
+      'shinsa repos update app --coverage-command="make cover"',
     ]) {
       expect({ command, denied: denied(command) }).toEqual({ command, denied: true });
     }
@@ -186,7 +188,7 @@ describe('the command guard', () => {
     expect(resolveCommandVerdict('shinsa repos update app --waive-checks', 'main')).toMatchObject({
       hookSpecificOutput: {
         permissionDecisionReason:
-          'Only the human changes a repository’s check commands, works without checks or chooses where agents work. Tell them what you would change and why.',
+          'Only the human changes a repository’s check commands, works without checks, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
       },
     });
   });

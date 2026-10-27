@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { serializeTaskDetail } from '../../src/index.ts';
 import {
   approve,
+  buildAll,
   completePhase,
   createHarness,
   createTask,
   type Harness,
+  PASSING,
   proposePlan,
   pullRequest,
   reachReviewGate,
@@ -55,6 +57,21 @@ describe('a task described for an agent', () => {
         (entry) => `- ${new Date(entry.at).toISOString()} the human: ${entry.text}`
       ),
     ]);
+  });
+
+  test('names the changed-line coverage once it is measured', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({
+      type: 'checks.record',
+      taskId,
+      results: PASSING,
+      coverage: { status: 'measured', command: 'go test', covered: 1, executable: 2, files: [] },
+    });
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      'Changed-line coverage: 50% of changed lines are covered (1 of 2).'
+    );
   });
 
   test('lists the plan with each phase, and says once it is approved', () => {

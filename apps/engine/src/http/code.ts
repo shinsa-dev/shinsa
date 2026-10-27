@@ -141,12 +141,7 @@ export function createCodeRoutes(
   }
 
   function listOwnedPaths(found: CodeTask) {
-    const owners = ledgers.read(found.task.repoId ?? '').owners;
-    return new Set(
-      Object.entries(owners)
-        .filter(([, owner]) => owner.taskId === found.task.id)
-        .map(([path]) => path)
-    );
+    return ledgers.listOwned(found.task.repoId ?? '', found.task.id);
   }
 
   async function resolveRefs(found: CodeTask, signal: AbortSignal): Promise<TaskRefs> {

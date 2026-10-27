@@ -468,7 +468,9 @@ Only these, and they win over anything below:
       every tab (`components/task/facts.tsx`, rendered by `TaskHeader`): state, repository, branch, pull request,
       priority, started (added, for a task that has not started), and, when they apply, what it
       waits on and what it unblocks (or the checks,
-      when there is no pull request yet). Waits on reads "Waits on ‹A›, ‹B›" and is a click menu,
+      when there is no pull request yet), and the coverage of the change once the checks measured it
+      (`IconShieldCheck`, "86% of changed lines covered" or "All changed lines covered", a link to Review → How to
+      test whose delayed tooltip is the full summary; nothing when coverage is off or could not be measured). Waits on reads "Waits on ‹A›, ‹B›" and is a click menu,
       not a popover (`WaitsOnItems`): the tasks it waits on (each opens, with its status), then
       Wait for another task (a submenu of open tasks with a checkmark on each it waits on; the
       ones it waits on sort first, a click ticks or unticks one and the menu stays open) and Stop
@@ -749,7 +751,7 @@ Only these, and they win over anything below:
       "Task agents" or "Researcher" cannot say on its own which work it covers (26).
       A row may still show data under or beside its name (an account's reset time, a schedule's summary, a
       path); the two layout names keep their hint lines as tooltips on Desk and Shelf (`Choice` items take a
-      `hint`). Model selects show
+      `hint`, 13; ⌘K's Switch layout shows the same line). Model selects show
       the display name ("Opus 5.5") from the first paint (`KNOWN_AGENT_MODELS`, refined by the live
       catalog), never the raw alias.
       Section → section is 24px (`gap-6`) on every page.
@@ -758,10 +760,15 @@ Only these, and they win over anything below:
       project are named SW-1, SW-2…"), then a secondary `xs` Add and the `•••` (Rename…, Change key…, Edit or Add
       description…, Colour, Remove project). The shelf is one list of what the project holds: each repository
       (GitHub or local icon) and each folder (`IconFolders`, the folder's name), all as `PathRow`s (a 14px icon 8px
-      from the name, the path after it in `text-2xs fg-2`, a ghost `sm` select of where agents work (Worktrees,
+      from the name, the path after it in `text-2xs fg-2`, a ghost `sm` select of its test coverage (Auto coverage,
+      Custom coverage, Coverage off, `components/settings/coverage-select.tsx`: Auto's hint says what the server
+      found, "Measures with Vitest." or "Found no coverage tool here, so nothing is measured.", from GET
+      /api/repos/coverage; choosing Custom opens the Custom test coverage dialog with the command, the report's path
+      inside the repository and its format, Infer from the path until the path says nothing, and a pencil button
+      beside the select edits it again; `lib/coverage.ts`), a ghost `sm` select of where agents work (Worktrees,
       GitButler, Main checkout, each with its one-line hint; GitButler is disabled with the reason until `but` is
       installed and the repository is a GitButler workspace, `components/settings/workspace-select.tsx`), a remove ×;
-      repositories without a project have the select alone), and "No repositories or folders yet." when
+      repositories without a project have the two selects alone), and "No repositories or folders yet." when
       empty. Add is a menu of the repositories found on disk ("In your folders", "In other projects") and Folder
       by its path…, which puts a path field with Add folder and Cancel (Escape) at the end of the shelf. The
       description lives only in its dialog.

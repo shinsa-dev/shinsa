@@ -1190,10 +1190,10 @@ Every task agent's tool: `repos_list` (reads).
 
 #### shinsa repos update
 
-Change a repository's name, default branch, project, check commands or where agents work.
+Change a repository's name, default branch, project, check commands, where agents work or how test coverage is measured.
 
 ```
-shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--waive-checks] [--workspace <worktrees|gitbutler|main_checkout>] [--json]
+shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--waive-checks] [--workspace <worktrees|gitbutler|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
 ```
 
 Every task agent's tool: `repos_update`. Sends `repo.update`.
@@ -1207,6 +1207,10 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--checks` | list, optional | The check commands, in order. Repeat the option for each. Only the human changes them. |
 | `--waive-checks` | boolean, optional | Work without checks. Only the human changes it. |
 | `--workspace` | choice, optional | Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it. |
+| `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines after the checks: auto (a coverage command it detects), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
+| `--coverage-command` | text, optional | With --coverage custom: the command that runs the tests with coverage. |
+| `--coverage-report` | text, optional | With --coverage custom: the report it writes, relative to the repository. |
+| `--coverage-format` | choice, optional | With --coverage custom: the report format, when its name does not tell (lcov, cobertura or go). |
 
 #### shinsa repos remove
 

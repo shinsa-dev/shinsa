@@ -18,6 +18,8 @@ import { assembleReport } from '../report/assemble.ts';
 import { listMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts';
 import { listTestingLines } from '../report/testing.ts';
 import { PROTOCOL_LIMITS } from '../report/validate.ts';
+import { describeCoverage, listCoverageGaps } from '../test-coverage/describe.ts';
+import { resolveRepoCoverage } from '../test-coverage/setting.ts';
 import {
   describeApprovedPlan,
   describeBases,

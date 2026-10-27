@@ -166,6 +166,15 @@ export class LedgerStore {
     return { owners: parsed.owners ?? {}, baselines: parsed.baselines ?? {} };
   }
 
+  listOwned(repoId: string, taskId: string): ReadonlySet<string> {
+    const owners = this.read(repoId).owners;
+    return new Set(
+      Object.entries(owners)
+        .filter(([, owner]) => owner.taskId === taskId)
+        .map(([path]) => path)
+    );
+  }
+
   write(repoId: string, ledger: WorkspaceLedger) {
     mkdirSync(this.#dir, { recursive: true });
     const file = this.#resolveFile(repoId);

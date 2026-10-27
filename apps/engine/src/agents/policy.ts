@@ -39,9 +39,10 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
         'Only the human changes this setting: plan approval, the merge method, budgets and usage limits, resuming, account switching, fast mode and delegations at once. Tell them what you would change and why.',
     },
     {
-      pattern: /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|waive-checks|workspace)(?![\w-])/,
+      pattern:
+        /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|waive-checks|workspace|coverage(?:-command|-report|-format)?)(?![\w-])/,
       reason:
-        'Only the human changes a repository’s check commands, works without checks or chooses where agents work. Tell them what you would change and why.',
+        'Only the human changes a repository’s check commands, works without checks, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
     },
     {
       pattern: /\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,

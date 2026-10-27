@@ -233,7 +233,9 @@ src/
     └── queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
         checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
         not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,
-        useWorkspaceSupport over GET /api/repos/workspaces), settings.ts, settings-tabs.ts, schedules.ts, secrets.ts,
+        useWorkspaceSupport over GET /api/repos/workspaces), coverage.ts (a repository's test coverage setting, Auto / Custom /
+        Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
+        Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, secrets.ts,
         onboarding.ts, image-view.ts (fit, zoom, pan and pinch), keys.ts, signal.ts, new-task.ts (the composer's project, start and priority),
         extensions.ts (MCP servers, plugins and skills: labels, status groups, places, skill groups, token text,
         search, what agents have not used lately and the optimizer's rows, the visible range of a long list, the

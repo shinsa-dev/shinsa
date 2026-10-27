@@ -106,7 +106,69 @@ serves the default provider's list, the one setup's Model step offers.
 
 **Checks are not an agent.** Shinsa runs the repository's check commands itself (`apps/engine/src/checks`:
 the configured commands, otherwise `lint`, `check-types`, `typecheck` and `test` from
-`package.json`), so a green build is a fact, never an agent's claim.
+`package.json`), so a green build is a fact, never an agent's claim. When they pass, Shinsa also measures how much of
+the change the tests run (Test coverage of the change, below), the same way: a number Shinsa read from a report, never
+an agent's claim.
+
+### Test coverage of the change
+
+After a checks run in which no check failed, the server runs the repository's tests with coverage in the task's
+checkout and works out **changed-line coverage**: of the lines the task's diff adds or modifies, the ones the report
+marks executable, and of those the ones a test ran (`apps/engine/src/test-coverage/`, the pure parts in
+`packages/core/src/test-coverage/`).
+
+- **The setting** is per repository (`Repo.coverage`, `CoverageSetting`), a human-only repository field
+  (`HUMAN_ONLY_REPO_FIELDS`) like the checks: whether coverage is measured, and by what command, decides what the
+  reviewer and you are told about the tests, so no agent changes it. Settings → Projects shows it on each repository's
+  row; `shinsa repos update --coverage auto|custom|off` (with `--coverage-command`, `--coverage-report` and
+  `--coverage-format` for custom) changes it. Three modes (`COVERAGE_MODES`):
+  - **Auto**, the default: detect a coverage command from the repository's files, or measure nothing;
+  - **Custom**: your command and the report it writes (a path inside the repository), with the format when the
+    report's name does not tell it (`resolveCoverageFormat`: `.info`/`lcov*` is lcov, `.xml` Cobertura, `.out` and
+    `.coverprofile` a Go profile);
+  - **Off**: nothing runs, and the agent's phase instruction does not mention coverage.
+- **Detection** (`resolveCoveragePlan`) reads only files, and detects nothing rather than guess. The first that applies:
+
+  | What it finds | Command (in the lockfile's runner: `bunx`, `pnpm exec`, `yarn`, else `npx`) | Report |
+  |---|---|---|
+  | a `test` script that is `c8 …` or `nyc …` with no shell operators | the script with `--reporter=lcov --report-dir=<dir>` added | lcov |
+  | a `test` script that is `bun test …` with no shell operators | `bun test --coverage --coverage-reporter=lcov --coverage-dir=<dir> …` | lcov |
+  | `vitest` and `@vitest/coverage-v8` or `-istanbul` in the dependencies | `vitest run --coverage --coverage.reporter=lcov --coverage.reportsDirectory=<dir>` | lcov |
+  | `jest` in the dependencies | `jest --coverage --coverageReporters=lcov --coverageDirectory=<dir>` | lcov |
+  | `pytest-cov` in `pyproject.toml`, `setup.cfg`, `setup.py`, `Pipfile`, `tox.ini` or a `requirements*.txt` | `pytest --cov=. --cov-report=xml:<dir>/coverage.xml` (through `uv run`, `poetry run` or `pipenv run` when their lockfile is there, else `python3 -m pytest`) | Cobertura |
+  | a `go.mod` | `go test ./... -coverprofile=<dir>/cover.out` | Go profile |
+
+  `<dir>` is a fresh temporary folder Shinsa removes afterwards, so a stale report is never read; a custom report is
+  deleted before its command runs. `GET /api/repos/coverage` says what Auto would run in each repository, for
+  Settings.
+- **The run** shares the checks' environment, timeout (15 minutes) and cancellation, while the task still holds its
+  workspace. A command that exits non-zero but leaves a report still counts (a coverage floor fails the run, not the
+  report); one that times out, leaves no report or a report with no files, or any error while reading it or the diff,
+  gives `{ status: 'unavailable', reason }`, which is logged and shown nowhere. Checks that fail measure nothing: a fix
+  comes first.
+- **In a GitButler workspace** one checkout holds every applied branch, so the report covers other tasks' code too,
+  and only the task's own lines count, read the way the Code tab assembles its working copy (What the Code tab reads
+  in GitButler, below): the lines its branch changes since the base (`git diff -U0 <base> <branch>`), moved to where
+  they sit in the checkout through the diff from the branch to the working directory (`mapChangedLines`: a line
+  another change rewrote drops out, one below an insertion moves down), plus the uncommitted lines (against the
+  workspace commit, `HEAD`) of the files the ledger says the task owns (`LedgerStore.listOwned`, the Code tab's
+  `owned` paths). Another task's commits, its owned files and paths nobody owns are never counted.
+- **The computation** is pure: the report parsers take text (`parseLcov`: `SF`/`DA` records; `parseCobertura`: each
+  class's `filename` joined to each `<source>`, line hits; `parseGoProfile`: `file:start.col,end.col statements
+  count` blocks, every line in a block with statements), `parseChangedLines` reads `git diff -U0 <base>` of the
+  checkout (untracked files included, through a scratch index) into new-file line numbers, and `measureCoverage`
+  intersects them. Report paths become repository-relative by stripping the checkout's path or its real path, then the
+  Go module path from `go.mod`; a path still unmatched matches the shortest report path that ends with it. A changed
+  line the report does not list is not executable. The base is the one the Code tab diffs against
+  (`resolveTaskRefs`), so the whole task's change is measured, every round.
+- **Where it goes.** `checks.record` carries it as `coverage`, `checks.recorded` folds it onto `Task.coverage` (cleared
+  by checks without it and by a new round, like `checkResults`). The web shows a measured result with an executable
+  line under the checks in Review → How to test, with the files and their missed ranges linking into Code, and as a
+  fact on the Overview's checks; `read_task` names the summary (`describeCoverage`). The reviewer's brief has the
+  summary and up to 20 files with their missed ranges (`listCoverageGaps`), and the review skill tells it to flag
+  important new logic no test runs; the Agent's phase instruction and the handover skill tell it to cover new logic
+  with tests and that Shinsa measures it, unless the repository turned coverage off. All of it is in the user turn,
+  never a system prompt (Caching).
 
 ### Who is who
 
@@ -1712,8 +1774,9 @@ plainly what protects what.
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
-    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's checks (`HUMAN_ONLY_REPO_FIELDS`:
-    `checkCommands`, `checksWaived`); agents keep the rest (models, providers, fix rounds, attention, compaction);
+    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's checks, workspace and coverage
+    (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `checksWaived`, `workspace`, `coverage`); agents keep the rest (models,
+    providers, fix rounds, attention, compaction);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);

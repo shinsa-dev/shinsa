@@ -184,7 +184,15 @@ src/
 ├── github/              `gh` for pull requests: read (the view with the merge commit, then one GraphQL read for
 │                        checks, comments, threads, the reader and the merge queue), create, retarget, merge
 ├── checks/              The repository's check commands, then the plan's own `checks`, each run the same way
-│                        (`sh -c` in the worktree, one timeout, the result named by its command; a repeat runs once)
+│                        (`sh -c` in the worktree, one timeout, the result named by its command; a repeat runs once);
+│                        evidence.ts writes their output as Shinsa's own `check` evidence, leaving out output an agent
+│                        already attached (docs/engine.md → Evidence)
+├── test-coverage/       Changed-line coverage after passing checks: detect.ts (resolveCoveragePlan: the command Auto
+│                        detects from the repository's files, writing into a temporary folder), index.ts
+│                        (measureTaskCoverage: run it like a check, read the report, diff against the task's base (in a
+│                        GitButler workspace only the task's branch and the files the ledger says it owns), and
+│                        core's measureCoverage; listCoverageDetections for GET /api/repos/coverage)
+│                        (docs/engine.md → Test coverage of the change)
 ├── repos/               Finds repositories in the chosen folders, registers one on first use in its project, or
 │                        names a new project after its GitHub owner (index.ts); discover.ts (scans the home folder for the folders that hold repositories),
 │                        roots.ts (chosen folders, SHINSA_ROOTS, or discovery until onboarding is done), setup.ts

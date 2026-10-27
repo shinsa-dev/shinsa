@@ -155,6 +155,7 @@ function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: nu
     fixFingerprints: [],
     recoveries: 0,
     checkResults: null,
+    coverage: null,
     result: null,
     proposal: null,
     shapeChanges: [],

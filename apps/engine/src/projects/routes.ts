@@ -4,6 +4,7 @@ import { readJsonObject } from '../http/body.ts';
 import type { ApiRoute } from '../http/routes.ts';
 import { type LoginResolver, listLocalRepos, type RootSource, upsertRepo } from '../repos/index.ts';
 import type { DispatchOptions, Engine } from '../runtime/engine.ts';
+import { listCoverageDetections } from '../test-coverage/index.ts';
 import { listWorkspaceSupport } from '../workspaces/index.ts';
 import { resolveProjectFolder } from './folders.ts';
 
@@ -101,6 +102,14 @@ export function createProjectRoutes(context: ProjectRoutesContext): ApiRoute[] {
       pattern: /^\/api\/repos\/workspaces$/,
       respond: async () =>
         Response.json({ support: await listWorkspaceSupport(Object.values(engine.state.repos)) }),
+    },
+    {
+      method: 'GET',
+      pattern: /^\/api\/repos\/coverage$/,
+      respond: () =>
+        Promise.resolve(
+          Response.json({ detected: listCoverageDetections(Object.values(engine.state.repos)) })
+        ),
     },
     {
       method: 'POST',

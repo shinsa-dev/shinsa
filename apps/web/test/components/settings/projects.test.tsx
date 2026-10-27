@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
-import type { Project, ProjectInput, Repo, ShinsaState } from '@shinsa/core';
+import type { CoverageSetting, Project, ProjectInput, Repo, ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ProjectSettings } from '@/components/settings/projects.tsx';
+import { type CoverageDetectionMap, resetCoverageDetection } from '@/lib/connection/coverage.ts';
 import { resetWorkspaceSupport, type WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import type { ProjectActions } from '@/lib/projects.ts';
 import { findTooltipText } from '../../support/hover.ts';
@@ -30,17 +31,24 @@ function createActions(overrides: Partial<ProjectActions> = {}) {
     addFolder: mock(async (_project: Project, _path: string): Promise<string | null> => null),
     removeFolder: mock(async () => true),
     changeWorkspace: mock(async (_repo: Repo, _mode: string) => true),
+    changeCoverage: mock(async (_repo: Repo, _setting: CoverageSetting) => true),
   };
   return Object.assign(actions, overrides) as typeof actions;
 }
 
 let support: WorkspaceSupportMap = {};
 
+let detected: CoverageDetectionMap = {};
+
 beforeEach(() => {
   resetWorkspaceSupport();
+  resetCoverageDetection();
   support = {};
-  spyOn(globalThis, 'fetch').mockImplementation((async () =>
-    Response.json({ support })) as unknown as typeof fetch);
+  detected = {};
+  spyOn(globalThis, 'fetch').mockImplementation((async (url: string) =>
+    String(url).endsWith('/coverage')
+      ? Response.json({ detected })
+      : Response.json({ support })) as unknown as typeof fetch);
 });
 
 afterEach(() => {
@@ -285,5 +293,87 @@ describe('Settings → Projects', () => {
     const gitbutler = within(list).getByRole('option', { name: /^GitButler/ });
     expect(gitbutler.getAttribute('aria-disabled')).toBe('true');
     expect(gitbutler.textContent).toContain('Run `but setup` in this repository to use it.');
+  });
+
+  it('sets each repository’s test coverage: Auto says what it found, Custom asks for the command and report', async () => {
+    detected = { web: { tool: 'Vitest', command: 'npx vitest run --coverage' } };
+    const actions = renderProjects(superwallState());
+    await settle();
+    const web = screen.getByRole('combobox', { name: 'Test coverage in web' });
+    expect(web.textContent).toContain('Auto coverage');
+    fireEvent.click(web);
+    await settle();
+    let list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(list).getByRole('option', { name: /^Auto coverage/ }).textContent).toContain(
+      'Measures with Vitest.'
+    );
+    const off = within(list).getByRole('option', { name: /^Coverage off/ });
+    fireEvent.pointerDown(off, { pointerType: 'mouse' });
+    fireEvent.click(off);
+    await settle();
+    expect(actions.changeCoverage.mock.calls[0]?.[1]).toEqual({ mode: 'off' });
+    fireEvent.click(screen.getByRole('combobox', { name: 'Test coverage in notes' }));
+    await settle();
+    list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(list).getByRole('option', { name: /^Auto coverage/ }).textContent).toContain(
+      'Found no coverage tool here'
+    );
+    const custom = within(list).getByRole('option', { name: /^Custom coverage/ });
+    fireEvent.pointerDown(custom, { pointerType: 'mouse' });
+    fireEvent.click(custom);
+    await settle();
+    expect(screen.getByText('Custom test coverage')).toBeDefined();
+    const command = screen.getByLabelText('Command');
+    fireEvent.submit(command.closest('form') as HTMLFormElement);
+    await settle();
+    expect(screen.getByText('Give the command that writes the report.')).toBeDefined();
+    fireEvent.change(command, { target: { value: 'make cover' } });
+    fireEvent.change(screen.getByLabelText('Report'), { target: { value: 'out/report.txt' } });
+    fireEvent.submit(command.closest('form') as HTMLFormElement);
+    await settle();
+    expect(screen.getByText('Shinsa cannot tell the format from the path. Choose one.')).toBeDefined();
+    fireEvent.change(screen.getByLabelText('Report'), { target: { value: 'out/cover.out' } });
+    expect(screen.queryByText('Shinsa cannot tell the format from the path. Choose one.')).toBeNull();
+    fireEvent.submit(command.closest('form') as HTMLFormElement);
+    await settle();
+    expect(actions.changeCoverage.mock.calls[1]?.[1]).toEqual({
+      mode: 'custom',
+      command: 'make cover',
+      report: 'out/cover.out',
+      format: null,
+    });
+    await waitForGone(() => screen.queryByText('Custom test coverage'));
+  });
+
+  it('edits a custom coverage command, and keeps the dialog open when saving fails', async () => {
+    const actions = createActions({ changeCoverage: mock(async () => false) });
+    renderProjects(
+      createShinsaState({
+        repos: [
+          createRepo({
+            id: 'web',
+            coverage: { mode: 'custom', command: 'make cover', report: 'cover.xml', format: null },
+          }),
+        ],
+      }),
+      actions
+    );
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit the coverage command for web' }));
+    await settle();
+    const command = screen.getByLabelText('Command') as HTMLInputElement;
+    expect(command.value).toBe('make cover');
+    fireEvent.click(screen.getByRole('combobox', { name: 'Format' }));
+    await settle();
+    const list = screen.getAllByRole('listbox').at(-1) as HTMLElement;
+    expect(within(list).getByRole('option', { name: 'Infer from the path: Cobertura XML' })).toBeDefined();
+    const lcov = within(list).getByRole('option', { name: 'LCOV' });
+    fireEvent.pointerDown(lcov, { pointerType: 'mouse' });
+    fireEvent.click(lcov);
+    await settle();
+    fireEvent.submit(command.closest('form') as HTMLFormElement);
+    await settle();
+    expect(actions.changeCoverage.mock.calls[0]?.[1]).toMatchObject({ format: 'lcov' });
+    expect(screen.getByText('Custom test coverage')).toBeDefined();
   });
 });

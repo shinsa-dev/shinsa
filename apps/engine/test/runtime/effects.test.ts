@@ -779,6 +779,50 @@ describe('checks', () => {
     });
   });
 
+  test('after passing checks the changed lines are measured and recorded with them; failing checks skip it', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const report = "mkdir -p coverage && printf 'SF:a.txt\\nDA:1,0\\nend_of_record\\n' > coverage/lcov.info";
+    const coverage = { mode: 'custom', command: report, report: 'coverage/lcov.info', format: null } as const;
+    const passing = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['true'], coverage })
+    );
+    await passing.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    expect(passing.dispatched[0]).toMatchObject({
+      type: 'checks.record',
+      coverage: {
+        status: 'measured',
+        covered: 0,
+        executable: 1,
+        files: [{ path: 'a.txt', covered: 0, executable: 1, uncovered: [[1, 1]] }],
+      },
+    });
+    const failing = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['false'], coverage })
+    );
+    await failing.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    expect(failing.dispatched[0]).not.toHaveProperty('coverage');
+  });
+
+  test('coverage that cannot be measured is recorded as unavailable and logged, and the checks go on', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const coverage = { mode: 'custom', command: 'true', report: 'coverage/lcov.info', format: null } as const;
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['true'], coverage })
+    );
+    const warn = spyOn(log, 'warn');
+    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    expect(warn).toHaveBeenCalledWith('[Coverage] Could not measure the changed lines', {
+      taskId: 'task-1',
+      reason: expect.stringContaining('wrote no report'),
+    });
+    warn.mockRestore();
+    expect(dispatched[0]).toMatchObject({
+      type: 'checks.record',
+      results: [{ outcome: 'pass' }],
+      coverage: { status: 'unavailable', command: 'true' },
+    });
+  });
+
   test('cancelled checks stop the running command, skip the rest and record nothing', async () => {
     const { repo, worktree } = await createShippingRepo();
     const { runner, dispatched } = setup(

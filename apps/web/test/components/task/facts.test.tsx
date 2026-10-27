@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TaskFacts } from '@/components/task/facts.tsx';
 import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
+import { createPartialCoverage } from '../../support/coverage.ts';
 import { findTooltipText } from '../../support/hover.ts';
 import { createRound } from '../../support/rounds.ts';
 import {
@@ -235,5 +236,27 @@ describe('the round and the agents in the facts row', () => {
     expect(list.textContent).toBe('Answerer2 runs · working now');
     fireEvent.click(screen.getByRole('button', { name: /Answerer/ }));
     expect(window.location.pathname + window.location.search).toBe('/tasks/SW-7?tab=chat&run=b');
+  });
+});
+
+describe('the coverage fact', () => {
+  it('says how much of the change the tests run and links to How to test in Review', async () => {
+    renderFacts(createTask({ id: 't', handle: 'SW-7', coverage: createPartialCoverage() }));
+    const fact = screen.getByText('85% of changed lines covered').closest('a') as HTMLAnchorElement;
+    expect(fact.getAttribute('href')).toBe('/tasks/SW-7?tab=review&spot=testing');
+    expect(await findTooltipText(fact)).toBe(
+      '85% of changed lines are covered (36 of 42) · 2 files have uncovered lines. How to test in Review lists the files.'
+    );
+  });
+
+  it('shows nothing when coverage was not measured', () => {
+    renderFacts(
+      createTask({
+        id: 't',
+        handle: 'SW-7',
+        coverage: { status: 'unavailable', command: 'bun test', reason: 'No report.' },
+      })
+    );
+    expect(screen.queryByText(/changed lines/)).toBeNull();
   });
 });

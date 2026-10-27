@@ -228,6 +228,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `checkResults` | `ReportCheck[]` \| null | the last round of checks |
+| `coverage?` | `Coverage` \| null | the tests' coverage of the task's changed lines, measured after the last passing checks (`checks.recorded`); cleared by checks without it and by a new round |
 | `reviewSummary` | string \| null | the last agent review's summary: what the reviewer checked and its view of the change |
 | `findings` | `ReviewFinding[]` | the last agent review's findings, each with an optional `title` and `fix` |
 | `reviewDisagreements?` | `ReviewDisagreement[]` | the judgement calls the last agent review would have made differently: the call's text and why |
@@ -404,6 +405,14 @@ the merge gate, so an open pull request is never left without one.
 | `checkCommands` | string[] | configured checks; empty means read from `package.json`; only you change it |
 | `checksWaived?` | boolean | "Start without checks"; only you change it |
 | `workspace?` | `WorkspaceMode` | where agents work: `worktrees` (the default), `gitbutler` or `main_checkout`; only you change it (`docs/engine.md` → Where agents work) |
+| `coverage?` | `CoverageSetting` | how test coverage is measured after the checks: `{ mode: 'auto' }` (the default, absent), `{ mode: 'off' }` or `{ mode: 'custom', command, report, format }` (`report` a path inside the repository, `format` `lcov` \| `cobertura` \| `go` or null to read it from the report's name, `resolveCoverageFormat`); only you change it (`docs/engine.md` → Test coverage of the change) |
+
+`Coverage` (`packages/core/src/test-coverage/types.ts`) is either `{ status: 'measured', command, covered, executable,
+files }`, where `files` lists each changed file with executable changed lines (`path`, `covered`, `executable`,
+`uncovered`: the missed lines merged into `[start, end]` new-file ranges), most missed first, at most 100 files of 40
+ranges each (`COVERAGE_LIMITS`; the totals count every file), or `{ status: 'unavailable', command, reason }` when the
+command failed to leave a readable report. The web and the agents show only a measured result with at least one
+executable changed line (`selectMeasuredCoverage`).
 
 - **Handle**: `<key>-<n>`; `T-<n>` for a task with no project (`NO_PROJECT_KEY`). Counters per key live in the log
   (`state.taskNumbers`); a key change starts the new key's counter and never reuses a handle. Parsed by
@@ -467,7 +476,7 @@ never runs. A delegated run takes `planner`, `builder` or `reviewer` (`DelegateR
 | `StepDefinition` field | Meaning |
 | --- | --- |
 | `step`, `title` | the name and its title on screen |
-| `class` | `inquiry`, `consent`, `planning`, `code`, `operation`, `verification`, `review` or `shipping`; the verification rules key on it |
+| `class` | `inquiry`, `consent`, `planning`, `code`, `operation`, `verification`, `review`, `shipping` or `handover` (your steps around the merge); the verification rules key on it |
 | `actor` | `{ by: 'agent', role }`, `{ by: 'shinsa' }` or `{ by: 'you' }` |
 | `inputs` | what it reads (the request, the inquiry's result, the approved plan, the diff, the merged code) |
 | `outputs` | what it hands over: `{ name, tool, evidence }`, `tool` null when Shinsa records it |
@@ -693,7 +702,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `schedule.remove` | deletes one | `schedules delete` | agent |
 | `project.write` | creates or changes a project | `projects write` | agent |
 | `project.remove` | removes one | `projects remove` | agent |
-| `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `checksWaived`, `workspace` (`HUMAN_ONLY_REPO_FIELDS`) |
+| `repo.update` | changes a repository's fields | `repos update` | agent; **human** for `checkCommands`, `checksWaived`, `workspace`, `coverage` (`HUMAN_ONLY_REPO_FIELDS`) |
 | `repo.remove` | forgets a repository | `repos remove` | agent |
 | `focus.change` | sets or clears the focus | `focus set`, `focus clear` | agent |
 | `settings.change` | changes settings (`SETTINGS_KEYS`) | `settings set` | agent; **human** for `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`, `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit` (`HUMAN_ONLY_SETTINGS`) |
@@ -777,7 +786,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `task.record_edit` | the file route after a save from the Code tab (`http/edits.ts`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
 | `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
-| `checks.record` | `checks.run` effect | records a round of checks |
+| `checks.record` | `checks.run` effect | records a round of checks, with `evidence` (title, detail, uri) for the output the server stored, attached as Shinsa's own `check` evidence, and `coverage?` (`Coverage`) when the checks passed and the repository measures coverage |
 | `pull_request.record` | open, merge and watch effects | records a pull request read |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
@@ -1063,7 +1072,8 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | Task, Run, Gate, Repo, Project, Evidence, stages, roles | `packages/core/src/domain/types.ts` |
 | Which settings a run role uses | `packages/core/src/agent-models/index.ts` (`RUN_AGENT_ROLE`) |
 | Rounds, shipping, resting and closed | `packages/core/src/domain/rounds.ts`, `state/rounds.ts`, `decide/rounds.ts` |
-| The message classifier and routing | `apps/server/src/triage/message.ts` |
+| Test coverage of the change: the setting, the report and diff parsers, the measurement, the summary | `packages/core/src/test-coverage/`; detection and the run in `apps/engine/src/test-coverage/` |
+| The message classifier and routing | `apps/engine/src/triage/message.ts` |
 | Human-only decisions | `packages/core/src/decide/gates.ts` (`assertHumanDecides`, `assertGatesStayOpen`), `domain/settings.ts` (`HUMAN_ONLY_SETTINGS`, `HUMAN_ONLY_REPO_FIELDS`), `decide/settings.ts` |
 | Gate predicates | `packages/core/src/domain/gates.ts` (`isPausingGate`, `isDecisionGate`, `isAgentQuestion`) |
 | Steps, gates, `validatePipeline`, `PLAN_GATE_RULE` | `packages/core/src/domain/steps.ts`; `needsPlanApproval` in `decide/lifecycle.ts` |

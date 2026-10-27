@@ -10,6 +10,7 @@ import type {
   ReviewFinding,
   WorkReport,
 } from '../report/types.ts';
+import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
 import type { RunAccount, UsageWait } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch } from './pull-requests.ts';
@@ -206,6 +207,7 @@ export interface Repo {
   checkCommands: string[];
   checksWaived?: boolean;
   workspace?: WorkspaceMode;
+  coverage?: CoverageSetting;
 }
 
 export interface Project {
@@ -407,6 +409,7 @@ export interface Task {
   recoveries: number;
   phaseReports: PhaseReport[];
   checkResults: ReportCheck[] | null;
+  coverage?: Coverage | null;
   pullRequest: PullRequest | null;
   pullRequestWatch?: PullRequestWatch | null;
   pullRequestReadFailures?: number;

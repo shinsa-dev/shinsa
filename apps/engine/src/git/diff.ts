@@ -64,12 +64,7 @@ export function resolveCommitDiff(
   return readDiff({ cwd: repoPath, range: [base, head], signal }, paths);
 }
 
-export async function resolveWorkingDiff(
-  worktree: string,
-  base: string,
-  paths: readonly string[] | null = null,
-  signal?: AbortSignal
-): Promise<DiffFile[]> {
+async function withScratchIndex<T>(worktree: string, read: (env: Record<string, string>) => Promise<T>) {
   const index = await runCommandOrThrow(
     ['git', 'rev-parse', '--path-format=absolute', '--git-path', 'index'],
     worktree
@@ -83,8 +78,32 @@ export async function resolveWorkingDiff(
       utimesSync(env.GIT_INDEX_FILE, atime, mtime);
     }
     await runCommandOrThrow(['git', 'add', '-A', '--intent-to-add'], worktree, { env });
-    return await readDiff({ cwd: worktree, range: [base], env, signal }, paths);
+    return await read(env);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+export function resolveWorkingDiff(
+  worktree: string,
+  base: string,
+  paths: readonly string[] | null = null,
+  signal?: AbortSignal
+): Promise<DiffFile[]> {
+  return withScratchIndex(worktree, (env) => readDiff({ cwd: worktree, range: [base], env, signal }, paths));
+}
+
+export function readChangedLinesPatch(
+  worktree: string,
+  base: string,
+  signal?: AbortSignal,
+  paths: readonly string[] = []
+) {
+  return withScratchIndex(worktree, (env) =>
+    readDiffText({ cwd: worktree, range: [base], env, signal }, ['-U0'], paths)
+  );
+}
+
+export function readCommitLinesPatch(repoPath: string, base: string, head: string, signal?: AbortSignal) {
+  return readDiffText({ cwd: repoPath, range: [base, head], signal }, ['-U0'], []);
 }

@@ -37,6 +37,7 @@ import type {
   ReviewFinding,
   SuggestedTask,
 } from '../report/types.ts';
+import type { Coverage } from '../test-coverage/types.ts';
 import type {
   DelegationAgentCommand,
   DelegationSystemCommand,

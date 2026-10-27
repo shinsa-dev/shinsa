@@ -28,6 +28,15 @@ import type {
   TaskPriority,
 } from '../domain/types.ts';
 import { WORKSPACE_MODES, type WorkspaceMode } from '../domain/workspaces.ts';
+import { resolveCoverageFormat } from '../test-coverage/setting.ts';
+import {
+  COVERAGE_FORMATS,
+  COVERAGE_LIMITS,
+  COVERAGE_MODES,
+  type CoverageFormat,
+  type CoverageMode,
+  type CoverageSetting,
+} from '../test-coverage/types.ts';
 import type { ProjectInput, UserCommand } from './index.ts';
 
 type Fields = Record<string, unknown>;
@@ -58,6 +67,10 @@ const SHIPPINGS: ReadonlySet<RoundShipping> = new Set(ROUND_SHIPPINGS);
 
 const WORKSPACES: ReadonlySet<WorkspaceMode> = new Set(WORKSPACE_MODES);
 
+const COVERAGE_MODE_SET: ReadonlySet<CoverageMode> = new Set(COVERAGE_MODES);
+
+const COVERAGE_FORMAT_SET: ReadonlySet<CoverageFormat> = new Set(COVERAGE_FORMATS);
+
 const MAX_VERDICTS = 50;
 
 const SIDES = new Set<CommentSide>(['old', 'new']);
@@ -67,6 +80,8 @@ const MAX_COMMENTS = 100;
 const MAX_PATH = 1_024;
 
 const MAX_NOTE = 2_000;
+
+const MAX_STEP_KEY = 120;
 
 function refuse(message: string): never {
   throw new DomainError('command_invalid', message);
@@ -217,6 +232,42 @@ function readKnownKeys(fields: Fields, allowed: readonly string[], name: string)
   }
 }
 
+function readReportPath(fields: Fields) {
+  const report = readId(fields, 'report', COVERAGE_LIMITS.report).trim();
+  const segments = report.replace(/\\/g, '/').split('/');
+  if (
+    !report ||
+    report.startsWith('/') ||
+    /^[A-Za-z]:/.test(report) ||
+    segments.includes('..') ||
+    report.includes('\0')
+  ) {
+    refuse('report must be a path inside the repository, such as coverage/lcov.info.');
+  }
+  return report;
+}
+
+function readCoverage(value: unknown): CoverageSetting {
+  const fields = readObject(value, 'coverage');
+  const mode = readChoice(fields, 'mode', COVERAGE_MODE_SET);
+  if (mode !== 'custom') {
+    readKnownKeys(fields, ['mode'], 'Coverage set to auto or off');
+    return { mode };
+  }
+  readKnownKeys(fields, ['mode', 'command', 'report', 'format'], 'Custom coverage');
+  const command = readId(fields, 'command', COVERAGE_LIMITS.command).trim();
+  if (!command) refuse('command must not be empty.');
+  const report = readReportPath(fields);
+  const format =
+    fields.format === null || fields.format === undefined
+      ? null
+      : readChoice(fields, 'format', COVERAGE_FORMAT_SET);
+  if (!(format ?? resolveCoverageFormat(report))) {
+    refuse(`Shinsa cannot tell the format of ${report} from its name. Give format: lcov, cobertura or go.`);
+  }
+  return { mode, command, report, format };
+}
+
 const REPO_PATCH_KEYS = [
   'name',
   'defaultBranch',
@@ -225,6 +276,7 @@ const REPO_PATCH_KEYS = [
   'checkCommands',
   'checksWaived',
   'workspace',
+  'coverage',
 ] as const;
 
 function readRepoPatch(value: unknown): RepoPatch {
@@ -238,6 +290,7 @@ function readRepoPatch(value: unknown): RepoPatch {
   if ('checkCommands' in fields) patch.checkCommands = readList(fields, 'checkCommands', readText);
   if ('checksWaived' in fields) patch.checksWaived = readBoolean(fields, 'checksWaived');
   if ('workspace' in fields) patch.workspace = readChoice(fields, 'workspace', WORKSPACES);
+  if ('coverage' in fields) patch.coverage = readCoverage(fields.coverage);
   return patch;
 }
 

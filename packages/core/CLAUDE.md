@@ -152,6 +152,13 @@ src/
 │                    usage credits fast mode needs)
 ├── costs/           A run's usage delta per session, the cost rollup per task, role and phase, the usage and
 │                    cost limits (listTaskBudgets)
+├── test-coverage/   Changed-line coverage, pure: the per-repository setting (setting.ts: resolveRepoCoverage,
+│                    resolveCoverageFormat), the lcov, Cobertura and Go profile parsers taking text (reports.ts),
+│                    unified diff to new-file line numbers and those lines moved through a later diff (diff.ts:
+│                    parseChangedLines, mapChangedLines), report paths made
+│                    repository-relative, the intersection and the ranges (measure.ts: measureCoverage), the summary and
+│                    the reviewer's gaps (describe.ts: describeCoverage, listCoverageGaps). Not `coverage/`: that name is
+│                    gitignored
 ├── schedules/       Schedule times (time.ts: next run, DST-safe daily, time zones), describing a schedule
 │                    (describe.ts), validating set_schedule and request_secret (validate.ts)
 ├── queue/           Needs you (rank.ts), the one table of gate words (reasons.ts), stepping through decisions

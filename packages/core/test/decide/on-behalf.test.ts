@@ -237,6 +237,7 @@ describe('acting for the human', () => {
       checkCommands: ['bun test'],
       checksWaived: true,
       workspace: 'main_checkout',
+      coverage: { mode: 'off' },
     };
     const refused: ShinsaCommand[] = [
       ...HUMAN_ONLY_SETTINGS.map(

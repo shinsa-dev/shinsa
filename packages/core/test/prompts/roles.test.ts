@@ -103,6 +103,73 @@ describe('what a prompt says about the work it builds on', () => {
     expect(resolvePhaseInstruction(task, null, 0)).toContain('Later phases build on this one');
   });
 
+  test('a plan that asks for screenshots gets before shots first and everything before the last phase', () => {
+    const { task } = tasks();
+    const plan = task.plan;
+    const document = plan?.document;
+    if (!plan || !document) throw new Error('The sample task has a plan.');
+    const withEvidence = (evidence: PlanEvidenceKind[]) => ({
+      ...task,
+      plan: { ...plan, document: { ...document, evidence } },
+    });
+    const visual = withEvidence(['screenshot', 'test']);
+    const first = resolvePhaseInstruction(visual, null, 0);
+    expect(first).toContain('The plan asks for `screenshot`, `test` as evidence.');
+    expect(first).toContain('`stage: "before"`');
+    expect(first).not.toContain('Attach all of it before you call `complete_phase`');
+    expect(resolvePhaseInstruction(visual, null, 1)).toContain(
+      'Attach all of it before you call `complete_phase`'
+    );
+    expect(resolvePhaseInstruction(visual, null, 1)).not.toContain('`stage: "before"`:');
+    const logic = withEvidence(['test']);
+    expect(resolvePhaseInstruction(logic, null, 0)).not.toContain('`stage: "before"`:');
+    expect(resolvePhaseInstruction(task, null, 0)).not.toContain('The plan asks for');
+  });
+
+  test('the agent is told Shinsa measures changed-line coverage, unless the repository turned it off', () => {
+    const { task } = tasks();
+    const said =
+      'Cover every piece of new logic with tests. After the checks, Shinsa measures how many of your changed lines the tests run';
+    expect(resolvePhaseInstruction(task, null, 0)).toContain(said);
+    const repo = {
+      id: 'r1',
+      name: 'app',
+      path: '/code/app',
+      defaultBranch: 'main',
+      remote: null,
+      projectId: null,
+      checkCommands: [],
+    };
+    expect(resolvePhaseInstruction(task, { ...repo, coverage: { mode: 'auto' } }, 0)).toContain(said);
+    expect(resolvePhaseInstruction(task, { ...repo, coverage: { mode: 'off' } }, 0)).not.toContain(said);
+  });
+
+  test('the reviewer is told the coverage, and to read the missed lines only when there are some', () => {
+    const { task } = tasks();
+    const covered = resolveReviewerPrompt(
+      {
+        ...task,
+        coverage: {
+          status: 'measured',
+          command: 'bun test --coverage',
+          covered: 5,
+          executable: 5,
+          files: [{ path: 'src/a.ts', covered: 5, executable: 5, uncovered: [] }],
+        },
+      },
+      null,
+      []
+    );
+    expect(covered).toContain(
+      "Shinsa measured the tests' coverage of the changed lines: All 5 changed lines are covered."
+    );
+    expect(covered).not.toContain('Changed lines no test runs');
+    expect(covered).not.toContain('Read those lines.');
+    expect(resolveReviewerPrompt({ ...task, coverage: null }, null, [])).not.toContain(
+      'coverage of the changed lines'
+    );
+  });
+
   test('a phase without a plan asks for the whole change', () => {
     const { task } = tasks();
     expect(resolvePhaseInstruction({ ...task, plan: null }, null, 0)).toContain(

@@ -2,6 +2,7 @@ import type { ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { useCoverageDetection } from '@/lib/connection/coverage.ts';
 import { useWorkspaceSupport } from '@/lib/connection/workspaces.ts';
 import { listLooseRepos, listProjects, PROJECT_ACTIONS, type ProjectActions } from '@/lib/projects.ts';
 import { resolveRepoKey } from '@/lib/workspaces.ts';
@@ -38,7 +39,9 @@ export function ProjectSettings({
 }) {
   const projects = listProjects(state);
   const loose = listLooseRepos(state);
-  const support = useWorkspaceSupport(resolveRepoKey(Object.values(state.repos)));
+  const repoKey = resolveRepoKey(Object.values(state.repos));
+  const support = useWorkspaceSupport(repoKey);
+  const detected = useCoverageDetection(repoKey);
   return (
     <SettingsGroup
       title='Projects'
@@ -49,7 +52,14 @@ export function ProjectSettings({
         <SettingsEmpty>Create a project for the repositories you work on together.</SettingsEmpty>
       )}
       {projects.map((project) => (
-        <ProjectBlock key={project.id} state={state} project={project} actions={actions} support={support} />
+        <ProjectBlock
+          key={project.id}
+          state={state}
+          project={project}
+          actions={actions}
+          support={support}
+          detected={detected}
+        />
       ))}
       {loose.length > 0 && (
         <SettingsBlock
@@ -61,7 +71,7 @@ export function ProjectSettings({
           }
         >
           {loose.map((repo) => (
-            <LooseRepoRow key={repo.id} repo={repo} actions={actions} support={support} />
+            <LooseRepoRow key={repo.id} repo={repo} actions={actions} support={support} detected={detected} />
           ))}
         </SettingsBlock>
       )}

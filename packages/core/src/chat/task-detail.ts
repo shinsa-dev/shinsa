@@ -6,6 +6,7 @@ import { listMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts'
 import { listTestingLines } from '../report/testing.ts';
 import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
+import { describeCoverage } from '../test-coverage/describe.ts';
 import { STAGE_WORDS, serializeReference } from './references.ts';
 
 const REQUEST_LIMIT = 1_500;

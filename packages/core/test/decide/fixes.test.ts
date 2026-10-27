@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { listActiveRuns } from '../../src/index.ts';
+import { type Coverage, listActiveRuns } from '../../src/index.ts';
 import {
   buildAll,
   completePhase,
@@ -13,6 +13,50 @@ import {
   reachReviewGate,
   readInstruction,
 } from '../harness.ts';
+
+const COVERAGE = {
+  status: 'measured',
+  command: 'bun test --coverage',
+  covered: 3,
+  executable: 4,
+  files: [{ path: 'src/a.ts', covered: 3, executable: 4, uncovered: [[7, 7]] }],
+} as const;
+
+describe('coverage of the changed lines', () => {
+  test('is recorded with the checks, and read by the reviewer', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({
+      type: 'checks.record',
+      taskId,
+      results: PASSING,
+      coverage: structuredClone(COVERAGE) as unknown as Coverage,
+    });
+    expect(harness.task(taskId).coverage).toEqual(COVERAGE as unknown as Coverage);
+    const reviewer = harness.activeRun(taskId).prompt ?? '';
+    expect(reviewer).toContain(
+      "Shinsa measured the tests' coverage of the changed lines: 75% of changed lines are covered (3 of 4)."
+    );
+    expect(reviewer).toContain('- src/a.ts: 3 of 4 changed lines covered; not covered: 7');
+  });
+
+  test('checks without it clear what an earlier run measured', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({
+      type: 'checks.record',
+      taskId,
+      results: failing(),
+      coverage: COVERAGE as unknown as Coverage,
+    });
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Typed it.' });
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    expect(harness.task(taskId).coverage).toBeNull();
+    expect(harness.activeRun(taskId).prompt).not.toContain('coverage of the changed lines');
+  });
+});
 
 describe('checks and agent review', () => {
   test('passing checks start an independent reviewer', () => {

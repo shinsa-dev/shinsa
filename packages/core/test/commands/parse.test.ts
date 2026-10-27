@@ -242,6 +242,49 @@ describe('parseUserCommand', () => {
         'A repository update cannot change path.',
       ],
       [{ type: 'repo.update', repoId: 'r1', patch: { checkCommands: [1] } }, 'checkCommands must be text.'],
+      [{ type: 'repo.update', repoId: 'r1', patch: { coverage: 'off' } }, 'coverage must be an object.'],
+      [
+        { type: 'repo.update', repoId: 'r1', patch: { coverage: { mode: 'sometimes' } } },
+        'mode must be one of auto, custom, off.',
+      ],
+      [
+        { type: 'repo.update', repoId: 'r1', patch: { coverage: { mode: 'off', command: 'x' } } },
+        'Coverage set to auto or off cannot change command.',
+      ],
+      [
+        {
+          type: 'repo.update',
+          repoId: 'r1',
+          patch: { coverage: { mode: 'custom', command: ' ', report: 'a.info' } },
+        },
+        'command must not be empty.',
+      ],
+      ...['/abs/lcov.info', 'C:/lcov.info', '../lcov.info', 'a/../../lcov.info', ' ', 'a\0.info'].map(
+        (report): [unknown, string] => [
+          {
+            type: 'repo.update',
+            repoId: 'r1',
+            patch: { coverage: { mode: 'custom', command: 'x', report } },
+          },
+          'report must be a path inside the repository, such as coverage/lcov.info.',
+        ]
+      ),
+      [
+        {
+          type: 'repo.update',
+          repoId: 'r1',
+          patch: { coverage: { mode: 'custom', command: 'x', report: 'cov/data', format: null } },
+        },
+        'Shinsa cannot tell the format of cov/data from its name. Give format: lcov, cobertura or go.',
+      ],
+      [
+        {
+          type: 'repo.update',
+          repoId: 'r1',
+          patch: { coverage: { mode: 'custom', command: 'x', report: 'a.info', format: 'json', extra: 1 } },
+        },
+        'Custom coverage cannot change extra.',
+      ],
       [{ type: 'repo.register', repo: {}, projectName: null }, 'Unknown command.'],
       [{ type: 'area.write', area: { name: 'Acme', color: 'blue' } }, 'Unknown command.'],
       [{ type: 'project.write', project: { name: 'Acme', color: 3 } }, 'color must be text.'],
@@ -363,6 +406,29 @@ describe('parseUserCommand for the process commands', () => {
       repoId: 'r',
       patch: { checksWaived: true },
     });
+    expect(
+      parseUserCommand({
+        type: 'repo.update',
+        repoId: 'r',
+        patch: {
+          coverage: { mode: 'custom', command: ' make cover ', report: 'out/cover.data', format: 'go' },
+        },
+      })
+    ).toEqual({
+      type: 'repo.update',
+      repoId: 'r',
+      patch: { coverage: { mode: 'custom', command: 'make cover', report: 'out/cover.data', format: 'go' } },
+    });
+    expect(
+      parseUserCommand({
+        type: 'repo.update',
+        repoId: 'r',
+        patch: { coverage: { mode: 'custom', command: 'npm run cover', report: 'coverage/lcov.info' } },
+      })
+    ).toMatchObject({ patch: { coverage: { format: null } } });
+    expect(
+      parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { coverage: { mode: 'auto' } } })
+    ).toEqual({ type: 'repo.update', repoId: 'r', patch: { coverage: { mode: 'auto' } } });
     expect(
       parseUserCommand({ type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } })
     ).toEqual({ type: 'settings.change', patch: { agentModels: { answerer: 'sonnet' } } });

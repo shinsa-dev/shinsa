@@ -1,6 +1,10 @@
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import {
+  COVERAGE_FORMATS,
+  COVERAGE_MODES,
+  type CoverageFormat,
+  type CoverageSetting,
   DomainError,
   HOUR_MS,
   HUMAN_ONLY_SETTINGS,
@@ -80,9 +84,23 @@ function assertSettingKey(key: string) {
   }
 }
 
+function buildCoverage(values: Values): CoverageSetting | null {
+  const mode = readValue(values, 'coverage');
+  if (!mode) return null;
+  if (mode !== 'custom') return { mode: mode as 'auto' | 'off' };
+  const format = readValue(values, 'coverageFormat');
+  return {
+    mode,
+    command: readValue(values, 'coverageCommand'),
+    report: readValue(values, 'coverageReport'),
+    format: format ? (format as CoverageFormat) : null,
+  };
+}
+
 async function buildRepoPatch(client: SurfaceClient, values: Values): Promise<RepoPatch> {
   const project = readValue(values, 'project');
   const projectId = await resolveOptionalProjectId(client, project === 'none' ? '' : project);
+  const coverage = buildCoverage(values);
   return {
     ...(values.name ? { name: readValue(values, 'name') } : {}),
     ...(values.defaultBranch ? { defaultBranch: readValue(values, 'defaultBranch') } : {}),
@@ -90,6 +108,7 @@ async function buildRepoPatch(client: SurfaceClient, values: Values): Promise<Re
     ...(values.checks === undefined ? {} : { checkCommands: values.checks as string[] }),
     ...(typeof values.waiveChecks === 'boolean' ? { checksWaived: values.waiveChecks } : {}),
     ...(values.workspace ? { workspace: readValue(values, 'workspace') as WorkspaceMode } : {}),
+    ...(coverage ? { coverage } : {}),
   };
 }
 
@@ -340,7 +359,8 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
   }),
   defineCommand({
     path: ['repos', 'update'],
-    summary: "Change a repository's name, default branch, project, check commands or where agents work.",
+    summary:
+      "Change a repository's name, default branch, project, check commands, where agents work or how test coverage is measured.",
     command: 'repo.update',
     fields: [
       REPO_FIELD,
@@ -363,6 +383,30 @@ export const CONFIG_SPECS: SurfaceSpec[] = [
         choices: WORKSPACE_MODES,
         description:
           'Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it.',
+      },
+      {
+        name: 'coverage',
+        kind: 'choice',
+        choices: COVERAGE_MODES,
+        description:
+          'How Shinsa measures test coverage of the changed lines after the checks: auto (a coverage command it detects), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it.',
+      },
+      {
+        name: 'coverageCommand',
+        kind: 'text',
+        description: 'With --coverage custom: the command that runs the tests with coverage.',
+      },
+      {
+        name: 'coverageReport',
+        kind: 'text',
+        description: 'With --coverage custom: the report it writes, relative to the repository.',
+      },
+      {
+        name: 'coverageFormat',
+        kind: 'choice',
+        choices: COVERAGE_FORMATS,
+        description:
+          'With --coverage custom: the report format, when its name does not tell (lcov, cobertura or go).',
       },
     ],
     build: async (values, client) => ({

@@ -186,7 +186,7 @@ type EventBody =
       stalled?: number;
       treeHash?: string | null;
     }
-  | { type: 'checks.recorded'; taskId: string; results: ReportCheck[] }
+  | { type: 'checks.recorded'; taskId: string; results: ReportCheck[]; coverage?: Coverage }
   | { type: 'gate.opened'; gate: Gate }
   | {
       type: 'gate.answered';

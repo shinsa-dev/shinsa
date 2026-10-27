@@ -150,4 +150,27 @@ describe('a project’s repositories and folders', () => {
       support: { [repoId]: { butInstalled: true, gitButlerWorkspace: false } },
     });
   });
+
+  test('every registered repository says which coverage command Auto would run, or none', async () => {
+    const { home, engine, call, projectId } = await setup();
+    const app = await createGitRepo({
+      root: home,
+      name: 'app',
+      remote: false,
+      files: { 'go.mod': 'module example.com/app\n' },
+    });
+    const web = await createGitRepo({ root: home, name: 'web', remote: false });
+    await call('POST', `/api/projects/${projectId}/repos`, { path: app.path });
+    await call('POST', `/api/projects/${projectId}/repos`, { path: web.path });
+    const ids = Object.fromEntries(Object.values(engine.state.repos).map((repo) => [repo.name, repo.id]));
+    expect(await call('GET', '/api/repos/coverage')).toEqual({
+      detected: {
+        [ids.app ?? '']: {
+          tool: 'go test',
+          command: "go test ./... -coverprofile='<report folder>/cover.out'",
+        },
+        [ids.web ?? '']: null,
+      },
+    });
+  });
 });

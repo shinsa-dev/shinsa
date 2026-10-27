@@ -18,6 +18,7 @@ import {
   toCommentItem,
   toFindingItem,
 } from '@/lib/review/report.ts';
+import { createPartialCoverage } from '../../support/coverage.ts';
 
 function createSpot(file: string, attention: CodeSpot['attention'], start = 1, end = start): CodeSpot {
   return { file, start, end, attention, why: `Why ${file}` };

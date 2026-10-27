@@ -313,11 +313,37 @@ describe('repositories', () => {
           '--waive-checks',
           '--workspace',
           'gitbutler',
+          '--coverage',
+          'off',
         ])
       ).text
     ).toBe('Saved the repository.');
     await runSpec(fake, ['repos', 'update', 'repo-1', '--project', 'none', '--no-waive-checks']);
     await runSpec(fake, ['repos', 'update', 'app']);
+    await runSpec(fake, [
+      'repos',
+      'update',
+      'app',
+      '--coverage',
+      'custom',
+      '--coverage-command',
+      'make cover',
+      '--coverage-report',
+      'out/cover.data',
+      '--coverage-format',
+      'go',
+    ]);
+    await runSpec(fake, [
+      'repos',
+      'update',
+      'app',
+      '--coverage',
+      'custom',
+      '--coverage-command',
+      'npm run cover',
+      '--coverage-report',
+      'coverage/lcov.info',
+    ]);
     expect(fake.sent).toEqual([
       {
         type: 'repo.update',
@@ -329,6 +355,7 @@ describe('repositories', () => {
           checkCommands: ['bun test', 'bun lint'],
           checksWaived: true,
           workspace: 'gitbutler',
+          coverage: { mode: 'off' },
         },
       },
       {
@@ -337,6 +364,20 @@ describe('repositories', () => {
         patch: { projectId: null, checksWaived: false },
       },
       { type: 'repo.update', repoId: 'repo-1', patch: {} },
+      {
+        type: 'repo.update',
+        repoId: 'repo-1',
+        patch: {
+          coverage: { mode: 'custom', command: 'make cover', report: 'out/cover.data', format: 'go' },
+        },
+      },
+      {
+        type: 'repo.update',
+        repoId: 'repo-1',
+        patch: {
+          coverage: { mode: 'custom', command: 'npm run cover', report: 'coverage/lcov.info', format: null },
+        },
+      },
     ]);
   });
 
