@@ -259,8 +259,11 @@ holds the shared helpers: `state.ts` builds `ShinsaState` fixtures, `pull-reques
 hold or fail acks, read the commands sent; stop it in `afterEach`), `commands.ts` spies on `sendCommandWithToast`
 and toasts, `hover.ts` hovers an element, lets `TOOLTIP_DELAY` pass at once and waits for its tooltip's text, `wait.ts` waits for an element to
 leave (`waitForGone`: a failing `expect(element).toBeNull()` prints the whole element on every retry, which took
-seconds per closing dialog and timed tests out under load). Prefer these to `mock.module`: Bun runs every test file in one process, so a module mock leaks into the
-files after it.
+seconds per closing dialog and timed tests out under load), `teardown.ts` undoes what a helper set up after each test
+(`addTeardown`, run by `test/setup.ts`; the editor tests' `createView` destroys its view there). Prefer these to
+`mock.module`: Bun runs every test file in one process, and in no fixed order, so a module mock, a cache, a dialog left
+open or a node left in `document.body` leaks into the files after it; a module's own `afterEach` registers only in the
+first file that imports it, so a shared helper never registers one.
 
 ## Rules
 

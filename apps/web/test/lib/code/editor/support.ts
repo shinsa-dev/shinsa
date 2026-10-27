@@ -1,14 +1,8 @@
-import { afterEach } from 'bun:test';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { FindHost } from '@/lib/code/editor/find.ts';
 import { createEditorExtensions } from '@/lib/code/editor/setup.ts';
-
-const views: EditorView[] = [];
-
-afterEach(() => {
-  for (const view of views.splice(0)) view.destroy();
-});
+import { addTeardown } from '../../../support/teardown.ts';
 
 export function createView(
   doc: string,
@@ -33,6 +27,9 @@ export function createView(
     }),
     parent,
   });
-  views.push(view);
+  addTeardown(() => {
+    view.destroy();
+    parent.remove();
+  });
   return view;
 }
