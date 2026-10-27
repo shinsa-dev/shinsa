@@ -62,6 +62,11 @@ function listToolRules(tools: readonly ShinsaToolName[]) {
     'To see the other open tasks in this repository, their branches, the files they changed and whether an agent works on them now, call `list_repository_work`.',
     'When you notice work worth doing that is outside this task, propose it with `suggest_tasks` instead of doing it. The human decides whether it joins the roadmap.',
     'When the human asks in this chat for something that does not belong in this task, suggest it with `suggest_tasks`, with `split_off` set on it; the human makes it a task of its own or keeps it here as the next round.',
+    ...(tools.includes('remember')
+      ? [
+          'When the human corrects how you work (in a plan, a review, a comment or the chat) and the correction would hold for later tasks too, propose it with `remember` as one short rule. The human decides whether agents keep it. Never propose what the code or the repository’s own files already say.',
+        ]
+      : []),
   ];
 }
 

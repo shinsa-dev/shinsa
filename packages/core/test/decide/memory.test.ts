@@ -1,6 +1,22 @@
 import { describe, expect, test } from 'bun:test';
-import { listKeptMemory, listMemory, MEMORY_LIMITS, resolveTaskProject } from '../../src/index.ts';
-import { buildAll, createHarness, createTask, type Harness, registerRepo } from '../harness.ts';
+import {
+  listKeptMemory,
+  listMemory,
+  MEMORY_LIMITS,
+  resolveRunBrief,
+  resolveTaskProject,
+} from '../../src/index.ts';
+import {
+  buildAll,
+  completePhase,
+  createHarness,
+  createTask,
+  type Harness,
+  linkSession,
+  PASSING,
+  proposePlan,
+  registerRepo,
+} from '../harness.ts';
 
 function remember(harness: Harness, taskId: string, scope: 'global' | 'project', text: string) {
   return harness.send({
@@ -223,5 +239,82 @@ describe('only the human decides what agents remember', () => {
     expect(() => harness.send({ type: 'memory.accept', memoryId }, { onBehalf: true })).toThrow(refusal);
     expect(() => harness.send({ type: 'memory.remove', memoryId }, { onBehalf: true })).toThrow(refusal);
     expect(entries(harness)).toMatchObject([{ status: 'proposed' }]);
+  });
+});
+
+describe('what agents are told', () => {
+  const HEADING = 'The human asked agents to remember these rules';
+  const NEW_HEADING = 'The human kept new rules for agents since your last turn';
+
+  test('a fresh session hears every rule for its project and every global rule, and no other project’s', () => {
+    const harness = createHarness();
+    harness.send({ type: 'project.write', project: { name: 'Other', color: 'blue', folders: [] } });
+    const other = Object.keys(harness.state.projects)[0] ?? '';
+    write(harness, 'Never use em dashes.');
+    write(harness, 'Only for the other project.', other);
+    const taskId = createTask(harness);
+    const prompt = harness.activeRun(taskId).prompt ?? '';
+    expect(prompt).toContain(
+      `${HEADING} from earlier work. Follow them unless this task asks otherwise:\n- Never use em dashes.`
+    );
+    expect(prompt).not.toContain('Only for the other project.');
+  });
+
+  test('a proposal is never told, and without rules there is no heading', () => {
+    const harness = createHarness();
+    const first = createTask(harness);
+    remember(harness, first, 'global', 'Keep plans short.');
+    const second = createTask(harness, { request: 'Add the export' });
+    expect(harness.activeRun(second).prompt).not.toContain(HEADING);
+  });
+
+  test('a resumed session hears only the rules kept since its last turn', () => {
+    const harness = createHarness();
+    write(harness, 'Never use em dashes.');
+    const taskId = createTask(harness);
+    linkSession(harness, taskId);
+    write(harness, 'Keep plans short.');
+    proposePlan(harness, taskId);
+    const build = harness.activeRun(taskId);
+    expect(build.resume).toBe(true);
+    expect(build.prompt).toContain(
+      `${NEW_HEADING}. Follow them from now on unless this task asks otherwise:\n- Keep plans short.`
+    );
+    expect(build.prompt).not.toContain('Never use em dashes.');
+    completePhase(harness, taskId);
+    expect(harness.activeRun(taskId).prompt).not.toContain(NEW_HEADING);
+  });
+
+  test('a rule you edit is told again to a resumed session', () => {
+    const harness = createHarness();
+    write(harness, 'Never use em dashes.');
+    const [rule] = entries(harness);
+    const taskId = createTask(harness);
+    linkSession(harness, taskId);
+    write(harness, 'Never use em dashes or en dashes.', null, rule?.id ?? null);
+    proposePlan(harness, taskId);
+    expect(harness.activeRun(taskId).prompt).toContain('- Never use em dashes or en dashes.');
+  });
+
+  test('the reviewer hears the rules in its own fresh session', () => {
+    const harness = createHarness();
+    write(harness, 'Never use em dashes.');
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    const reviewer = harness.activeRun(taskId);
+    expect(reviewer.role).toBe('reviewer');
+    expect(reviewer.prompt).toContain(`${HEADING} from earlier work.`);
+  });
+
+  test('a session that comes back fresh after a lost resume is briefed with every rule', () => {
+    const harness = createHarness();
+    write(harness, 'Never use em dashes.');
+    const taskId = createTask(harness);
+    linkSession(harness, taskId);
+    proposePlan(harness, taskId);
+    const build = harness.activeRun(taskId);
+    expect(build.prompt).not.toContain('Never use em dashes.');
+    expect(resolveRunBrief(harness.state, build)).toContain(`${HEADING} from earlier work.`);
   });
 });

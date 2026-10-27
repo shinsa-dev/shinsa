@@ -113,6 +113,15 @@ describe('the role and fix prompts', () => {
   });
 });
 
+describe('remembering a rule', () => {
+  test('every working role is told to propose a correction that would hold for later tasks, the reviewer never', () => {
+    for (const role of ['agent', 'answerer', 'investigator', 'researcher'] as const) {
+      expect(resolveHouseRules(role)).toContain('propose it with `remember` as one short rule');
+    }
+    expect(resolveHouseRules('reviewer')).not.toContain('`remember`');
+  });
+});
+
 describe('splitting the house rules off a brief', () => {
   test('every role brief starts with its house rules, which split off from the instruction', () => {
     const { task, repo } = context();
