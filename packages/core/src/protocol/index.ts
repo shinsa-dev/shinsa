@@ -120,9 +120,12 @@ export {
   isServiceActive,
   isServiceEnvKey,
   listProjectServices,
+  listServiceTaskRuns,
+  listTaskServices,
   resolveServiceState,
   resolveServicesSummary,
   resolveServiceView,
+  resolveTaskServiceCwd,
   SERVICE_LIMITS,
   type ServiceDefinition,
   type ServiceSource,
@@ -131,6 +134,8 @@ export {
   type ServicesSummary,
   type ServiceView,
   selectService,
+  selectServiceTerminal,
+  type TaskServiceView,
 } from './services.ts';
 export {
   listTerminalPlaces,
