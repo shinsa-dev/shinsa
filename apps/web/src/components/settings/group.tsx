@@ -2,17 +2,21 @@ import { Card } from '@shinsa/ui/components/card';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import * as React from 'react';
+import type * as React from 'react';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { resolveSectionId } from '@/lib/settings.ts';
 
-export const SETTING_ROW = 'flex min-h-10 items-center gap-4 py-1 pr-1.5 pl-2';
+export const ROW_INSET =
+  'pr-[calc(--spacing(1.5)-var(--shelf-edge,0px))] pl-[calc(--spacing(2)-var(--shelf-edge,0px))]';
 
-export const SETTINGS_SHELF = 'flex flex-col divide-y divide-border rounded-item bg-bg-a1';
+export const SETTING_ROW = `flex min-h-10 items-center gap-4 py-1 ${ROW_INSET}`;
+
+export const SETTINGS_SHELF = `${INSET} flex flex-col divide-y divide-border bg-bg-a1 [--shelf-edge:1px]`;
 
 export const TOKEN_TEXT = 'shrink-0 text-2xs text-fg-2 tabular-nums';
 

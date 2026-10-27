@@ -5,6 +5,7 @@ import * as React from 'react';
 import type { EditorHandle } from '@/components/code/editor/code-editor.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
 import { QuickOpenDialog } from '@/components/code/quick-open.tsx';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { CodeFence } from '@/components/text/code-fence.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
 import { type CodeNote, listFileNotes } from '@/lib/code/notes.ts';
@@ -118,12 +119,7 @@ function renderNote(note: CodeNote) {
 
 function EditorFrame({ className, children }: { className: string; children: React.ReactNode }) {
   return (
-    <div
-      className={cn(
-        'corner-superellipse/1.125 flex w-full min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-background',
-        className
-      )}
-    >
+    <div className={cn(INSET, 'flex w-full min-w-0 flex-col overflow-hidden bg-background', className)}>
       <React.Suspense fallback={null}>{children}</React.Suspense>
     </div>
   );
@@ -142,6 +138,7 @@ function DiffEditor({ split }: { split: boolean }) {
         notes={split ? [] : NOTES}
         spots={SAMPLE_CODE_SPOTS}
         keep={listKeptLines(NOTES, SAMPLE_CODE_SPOTS, null, null)}
+        focus={null}
         reveal={null}
         onComment={null}
         onEdit={ignore}
@@ -166,6 +163,7 @@ function FileEditor({ path, content }: { path: string; content: string }) {
         notes={[]}
         spots={[]}
         keep={[]}
+        focus={null}
         reveal={null}
         onComment={null}
         onEdit={ignore}

@@ -4,7 +4,7 @@ import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
-import { CHIP, COMPOSER_FIELD } from '@/components/layout/surface/card.ts';
+import { CHIP, COMPOSER_FIELD, INSET } from '@/components/layout/surface/card.ts';
 import { PrLink } from '@/components/links/pull-request.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -143,10 +143,7 @@ export function OperationCard({
         rows={2}
         aria-label='Notes for the agent'
         placeholder='Notes for the agent, such as what to watch or skip.'
-        className={cn(
-          COMPOSER_FIELD,
-          'corner-superellipse/1.125 max-h-48 min-h-14 rounded-lg border border-border bg-bg-a1 pb-2.5'
-        )}
+        className={cn(COMPOSER_FIELD, INSET, 'max-h-48 min-h-14 bg-bg-a1 pb-2.5')}
       />
     </NowFrame>
   );

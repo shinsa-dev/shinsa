@@ -33,7 +33,7 @@ interface HostProps {
 
 function ProblemRow({ problem }: { problem: string }) {
   return (
-    <div className='flex min-h-8 items-start gap-1.5 py-1.5 pr-1.5 pl-2 text-2xs text-fg-3'>
+    <div className={cn(ROW_INSET, 'flex min-h-8 items-start gap-1.5 py-1.5 text-2xs text-fg-3')}>
       <Icon size='sm' name='IconExclamationTriangle' className='mt-px text-orange-text' />
       <span className='min-w-0'>{problem}</span>
     </div>

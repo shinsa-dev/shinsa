@@ -227,6 +227,21 @@ const CLASS_RULES: ClassRule[] = [
     roots: APP,
   },
   {
+    pattern: /(?:^|[\s'"`])rounded-lg border border-border\b/,
+    message:
+      'A hand-built inset box. Use INSET from components/layout/surface/card.ts, the one edge of everything nested in a card or the chat column (docs/design.md → Where Shinsa differs, 15)',
+    roots: APP,
+  },
+  {
+    pattern: INSET_FILL,
+    unless: /(?:^|[\s'"`])(?:border|size-[\w.]+|opacity-0)(?=[\s'"`]|$)/,
+    message:
+      "A nested box with a fill and no edge. Everything nested in a card or the chat column has the card's hairline: put INSET from components/layout/surface/card.ts under the fill (docs/design.md → Where Shinsa differs, 15)",
+    roots: APP,
+  },
+  { ...TONE_EDGE_RULE, roots: APP_AND_KIT, inCatalog: true },
+  { ...SELECTION_CLASS_RULE, roots: APP_AND_KIT, inCatalog: true },
+  {
     pattern: /(?:^|[\s:'"`])(?:[a-z]+:)*rounded(?:-[trblse]{1,2})?-\[(?!inherit\])/,
     message:
       'Raw corner. Corners come from the radius tokens, and a nested corner is concentric: inner = outer − padding. Use rounded-control / -control-sm / -popup / -item / -segment (globals.css → Corners), or add a derived token there',

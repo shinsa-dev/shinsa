@@ -696,13 +696,16 @@ Only these, and they win over anything below:
     - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
       card surface. A card pads the same on all four sides; the shared `Card` slot carries no
       padding of its own, so nothing doubles up. Settings groups are `p-1.5` (`SettingsCard`, which setup's cards use too; 6px on every side,
-      measured), rows inside `pl-2 pr-1.5` (`SETTING_ROW`, a 40px minimum with `py-1` only so a wrapped
+      measured), rows inside `pl-2 pr-1.5` (`SETTING_ROW`'s `ROW_INSET`, a 40px minimum with `py-1` only so a wrapped
       line keeps 4px from the row's edge), so text sits 14px from the left edge and a control 12px
       from the right, and an inner surface (a project's repositories) sits 6px from the card on three sides.
       Settings has one grouped pattern, the projects card's (`SettingsBlock` and `SETTINGS_SHELF` in
       `components/settings/group.tsx`): a 32px header row with no fill, then the rows that
-      belong to it on one `rounded-item` `bg-bg-a1` shelf with hairlines between them, blocks 6px apart (`gap-1.5`)
-      and no hairline between blocks. Projects, accounts and the agent groups' per-role rows use it. A control on the shelf
+      belong to it on one shelf, an inset (`INSET`, `bg-bg-a1`) with hairlines between the rows, blocks 6px apart
+      (`gap-1.5`) and no hairline between blocks. The shelf's 1px edge sits 6px from the card on three sides, like any inner
+      surface, and its rows give that pixel back (`--shelf-edge`, which `ROW_INSET` subtracts), so a row's text
+      still sits 14px from the card and 8px inside the edge, in line with the header's, and its control 12px from
+      the card's right, measured. Projects, accounts and the agent groups' per-role rows use it. A control on the shelf
       has no fill at rest, since the shelf is already the second surface: never a fill on a fill. A button there is the
       kit's `secondary` (its ghost; `CopyButton` is always one), a select `ghost`; the one exception is an MCP's
       Connect, primary `xs`, the one thing to act on. `CARD_HEADER` is the one card header strip (36px, `bg-bg-a1`, `ps-3 pe-3`, the end padding taken over by the 7px trailing inset when it folds, a 14px icon in a
@@ -716,7 +719,23 @@ Only these, and they win over anything below:
       on all four sides, measured: the row keeps 2px less under its text because a line already carries about
       3px below its baseline. Anything nested in a card
       or in the chat column (answer box, code fences, code snippets, tool blocks, images,
-      message links) is `rounded-lg`.
+      message links, a suggested fix, a disagreement, a plan revision, a request, a sign-in fix, the quiet-agent note,
+      evidence, inline notes, an error's details) is an **inset**: `INSET` (`components/layout/surface/card.ts`:
+      `rounded-lg` and the card's own hairline, `border border-border`) with its fill on top, so every nested box has
+      the same edge in both themes and none is a fill alone. The fill says what it holds: `bg-bg-a1` for a note
+      (`InsetNote` in `components/text/inset-note.tsx`: a `text-2xs` label, with an icon or without, over the text; its
+      `tone` prop takes any status tone; `SuggestedFix` is the one suggested fix), `bg-bg-2` for code and
+      images, `bg-card` for a message link, and Settings' shelf of rows (`SETTINGS_SHELF`) is one too. Not an inset,
+      and so no edge: rows in a list, highlights and hover washes, controls (fields, segmented controls, buttons) and
+      tiles (a `StepNumber`, an avatar). **A toned box takes its tone's edge.** A box filled in a tone (the
+      review's orange "The agent review disagrees", a checked choice card, any warning, error, info or success
+      note) is edged in the same hue at its `-a3` step, never the grey hairline: `TONE_INSET[tone]`
+      (`card.ts`) is the inset's shape on `TONE_EDGE` and `TONE_WASH` (`lib/format/tone.ts`), the tone's `-a2` fill
+      on its `-a3` border (`primary-a1` on `primary-a3` for the kit's checked choice card), the same tokens in both
+      themes; neutral stays `bg-bg-a1` on `border-border`. A tile or badge in a tone (`TONE_SURFACE`) has no border, so
+      it has no edge to tint. `bun lint:conventions` rejects a `rounded-lg` box with a fill and no `border`, a
+      hand-built `rounded-lg border border-border`, and a tone fill on a line that draws the grey edge (`INSET`,
+      `border`, `border-border`, `border-bg-N`) with no toned border (`scripts/lint-tone-edge.ts`, tested).
     - **Composers**: the task composer, Home's new-task box and the question's answer box share
       `COMPOSER_FIELD` (text 12px in, 10px from the top) and `COMPOSER_FOOTER` (6px around a
       28px `sm` control, no divider).
@@ -962,7 +981,7 @@ Only these, and they win over anything below:
       again (primary, `approve`) and Start without checks (outline, `waive`, only when checks are all that is
       missing) at the top right, and Cancel task as the footer's quiet link.
     - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
-      plan a `bg-bg-a1` `rounded-lg` block shows "You asked" with your words, then "What changed"
+      plan an inset (`bg-bg-a1` on `INSET`) shows "You asked" with your words, then "What changed"
       with the agent's summary and the computed changes as a quiet `·` list. Approve plan sends
       the version on screen.
     - **Questions with choices** (`question-choices.tsx`): `outline` `sm` buttons in a wrapping

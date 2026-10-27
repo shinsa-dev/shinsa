@@ -1,6 +1,8 @@
 import type { Gate, ProviderLogin, ShinsaState, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { cn } from '@shinsa/ui/lib/utils';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
@@ -17,7 +19,7 @@ function ProviderFix({ login }: { login: ProviderLogin }) {
   const view = describeProviderLogin(login);
   if (!view.fix) return null;
   return (
-    <div className='corner-superellipse/1.125 flex items-center gap-1.5 rounded-lg bg-bg-a1 py-1 pr-1 pl-2'>
+    <div className={cn(INSET, 'flex items-center gap-1.5 bg-bg-a1 py-1 pr-1 pl-2')}>
       <span className='min-w-0 flex-1 text-fg-3 text-xs'>
         <InlineMarkdown text={view.fix} />
       </span>

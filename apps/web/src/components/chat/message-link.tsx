@@ -2,6 +2,7 @@ import type { Run } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { resolveLastAgentText } from '@/lib/chat/timeline.ts';
@@ -26,7 +27,8 @@ export function MessageLink({
       type='button'
       onClick={() => onOpen(run.id)}
       className={cn(
-        'corner-superellipse/1.125 group flex w-full min-w-0 cursor-pointer flex-col gap-px rounded-lg border border-border bg-card px-3 py-2.5 text-left hover:bg-bg-a1 active:bg-bg-a1',
+        INSET,
+        'group flex w-full min-w-0 cursor-pointer flex-col gap-px bg-card px-3 py-2.5 text-left hover:bg-bg-a1 active:bg-bg-a1',
         className
       )}
     >

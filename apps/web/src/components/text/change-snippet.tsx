@@ -3,6 +3,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { DisclosureAction, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -104,7 +105,7 @@ export function ChangeSnippet({
   const disclosure = useDisclosure(persistId, startsOpen);
   const lines = React.useMemo(() => ({ start, end }), [start, end]);
   return (
-    <figure className='corner-superellipse/1.125 flex min-w-0 flex-col overflow-hidden rounded-lg border border-border'>
+    <figure className={cn(INSET, 'flex min-w-0 flex-col overflow-hidden')}>
       <DisclosureHeader
         as='figcaption'
         disclosure={disclosure}

@@ -1,6 +1,7 @@
 import { type Run, resolveSilenceLevel, type ShinsaState } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { QuietLink } from '@/components/overview/now-frame.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
@@ -26,7 +27,7 @@ export function SilenceNote({
   const level = resolveSilenceLevel(state, run, now);
   if (since === null || !describeSilence(level, since, now)) return null;
   return (
-    <div className='corner-superellipse/1.125 flex items-center gap-2 rounded-lg bg-bg-a1 px-3 py-2 text-2xs text-fg-2'>
+    <div className={cn(INSET, 'flex items-center gap-2 bg-bg-a1 px-3 py-2 text-2xs text-fg-2')}>
       <span
         className={cn('flex items-center gap-2', level === 'critical' ? 'text-orange-text' : 'text-fg-3')}
       >

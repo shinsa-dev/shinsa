@@ -197,6 +197,39 @@
      Components reference primary-* only, so the accent is set in this block:
      the primary button, links, selection, checked controls and checkmarks. */
   --primary-4: oklch(0.6 0.215 256);
+
+  /* File icons: the Code tab's language and folder marks (icon/custom.ts,
+     TONED_ICON_SOURCES) draw in one of these. Softer than the tone ramps, so
+     a tree of fifty files reads as gentle colour, not a row of warning
+     lights, yet each language stays its own hue at a glance. Light holds
+     them mid-light and mid-chroma; .dark lifts them and drains a little
+     chroma. A row that mutes its marks (`file-icons-muted`) draws them in
+     its icon ink instead. */
+  --file-red: oklch(0.64 0.13 20);
+  --file-coral: oklch(0.66 0.13 36);
+  --file-orange: oklch(0.68 0.13 54);
+  --file-amber: oklch(0.7 0.13 66);
+  --file-gold: oklch(0.72 0.135 80);
+  --file-yellow: oklch(0.77 0.14 104);
+  --file-green: oklch(0.67 0.12 150);
+  --file-teal: oklch(0.67 0.1 178);
+  --file-cyan: oklch(0.68 0.1 208);
+  --file-azure: oklch(0.67 0.11 234);
+  --file-blue: oklch(0.63 0.13 260);
+  --file-indigo: oklch(0.62 0.12 282);
+  --file-purple: oklch(0.64 0.13 306);
+  --file-pink: oklch(0.67 0.12 348);
+  --file-slate: oklch(0.6 0.035 255);
+}
+
+/* ── Aliases ───────────────────────────────────────────────────────────── */
+/* Every token defined by another token sits here, on both the root and any
+   .dark region: a custom property resolves where it is declared, so an alias
+   declared on :root alone keeps light values inside a .dark region (the image
+   viewer, a dark preview on a light page). Declared on .dark too, it reads
+   that region's tokens. .dark below still overrides what differs in dark. */
+.dark,
+:root {
   --primary-text: var(--primary-4);
   --primary-1: color-mix(in oklch, var(--primary-4) 10%, var(--background));
   --primary-2: color-mix(in oklch, var(--primary-4) 40%, var(--background));
@@ -222,29 +255,6 @@
   --code-added-strong: var(--green-a2);
   --code-removed: var(--red-a1);
   --code-removed-strong: var(--red-a2);
-
-  /* File icons: the Code tab's language and folder marks (icon/custom.ts,
-     TONED_ICON_SOURCES) draw in one of these. Softer than the tone ramps, so
-     a tree of fifty files reads as gentle colour, not a row of warning
-     lights, yet each language stays its own hue at a glance. Light holds
-     them mid-light and mid-chroma; .dark lifts them and drains a little
-     chroma. A row that mutes its marks (`file-icons-muted`) draws them in
-     its icon ink instead. */
-  --file-red: oklch(0.64 0.13 20);
-  --file-coral: oklch(0.66 0.13 36);
-  --file-orange: oklch(0.68 0.13 54);
-  --file-amber: oklch(0.7 0.13 66);
-  --file-gold: oklch(0.72 0.135 80);
-  --file-yellow: oklch(0.77 0.14 104);
-  --file-green: oklch(0.67 0.12 150);
-  --file-teal: oklch(0.67 0.1 178);
-  --file-cyan: oklch(0.68 0.1 208);
-  --file-azure: oklch(0.67 0.11 234);
-  --file-blue: oklch(0.63 0.13 260);
-  --file-indigo: oklch(0.62 0.12 282);
-  --file-purple: oklch(0.64 0.13 306);
-  --file-pink: oklch(0.67 0.12 348);
-  --file-slate: oklch(0.6 0.035 255);
 
   /* Semantic (shadcn) mapping */
   --foreground: var(--fg-4);

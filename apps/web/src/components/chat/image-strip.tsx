@@ -1,5 +1,6 @@
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import { useImageViewer, type ViewerImage } from '@/hooks/use-image-viewer.ts';
@@ -30,7 +31,10 @@ function ImageThumb({
         type='button'
         onClick={onOpen}
         aria-label={label}
-        className='corner-superellipse/1.125 max-w-full cursor-zoom-in overflow-hidden rounded-lg border border-border bg-bg-a1 hover:border-fg-a1 active:border-fg-a1'
+        className={cn(
+          INSET,
+          'max-w-full cursor-zoom-in overflow-hidden bg-bg-a1 hover:border-fg-a1 active:border-fg-a1'
+        )}
       >
         <img
           ref={originRef}

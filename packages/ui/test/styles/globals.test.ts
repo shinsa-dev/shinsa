@@ -31,6 +31,22 @@ describe('globals.css', () => {
     });
   }
 
+  it('declares every alias on a .dark region too, so a dark region inside a light page reads its own tokens', () => {
+    const aliases = readBlock('.dark,\n:root');
+    for (const alias of [
+      'foreground',
+      'card-foreground',
+      'popover-foreground',
+      'muted-foreground',
+      'primary-a1',
+      'code-keyword',
+    ]) {
+      expect(aliases).toContain(`--${alias}: `);
+      expect(readBlock(':root')).not.toContain(`--${alias}: `);
+    }
+    expect(css.indexOf('.dark,\n:root {')).toBeLessThan(css.indexOf('\n.dark {'));
+  });
+
   it('pairs every grey text step with its icon ink and draws icons in it', () => {
     for (const step of [1, 2, 3, 4]) expect(css).toContain(`--icon-ink-fg-${step}: var(--icon-${step});`);
     expect(css).toContain('--icon-color: --value(--icon-ink-*, --color-*);');
@@ -77,7 +93,7 @@ describe('globals.css', () => {
 
   it('fills a field a step above a dark popover, which already sits on the field’s own step', () => {
     expect(readBlock('.dark')).toContain('--popover: var(--bg-2);');
-    expect(readBlock(':root')).toContain('--input: var(--bg-2);');
+    expect(readBlock('.dark,\n:root')).toContain('--input: var(--bg-2);');
     expect(readBlock('.dark [data-slot="popover-content"]')).toContain('--input: var(--bg-3);');
     expect(readBlock('.dark [data-slot="popover-content"]')).toContain('--input-hover: var(--bg-4);');
   });

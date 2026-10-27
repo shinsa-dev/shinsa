@@ -15,7 +15,7 @@ import { ListRow } from '@/components/layout/list-row.tsx';
 import { PageHeading } from '@/components/layout/page/heading.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
-import { CARD, COMPOSER_FOOTER } from '@/components/layout/surface/card.ts';
+import { CARD, COMPOSER_FOOTER, INSET } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
@@ -37,7 +37,7 @@ import type { DiffSource } from '@/lib/code/diff-view.ts';
 import { resolveEngineView } from '@/lib/connection/engine.ts';
 import { resolveHealthBanner } from '@/lib/connection/health.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
-import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
+import { TONE_EDGE, TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { AUTO_CHOICES, type NewTaskChoices } from '@/lib/new-task.ts';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { MERGE_ITEMS } from '@/lib/settings.ts';
@@ -310,7 +310,7 @@ export function CompositeSpecimens() {
       <Specimen label='CodeDiff · an edit, a new file, a renamed file and a binary file, each in the card it sits in'>
         <div className='grid w-full max-w-xl gap-2'>
           {DIFF_SAMPLES.map((source) => (
-            <div key={source.path} className='overflow-hidden rounded-lg border border-border bg-bg-a1'>
+            <div key={source.path} className={cn(INSET, 'overflow-hidden bg-bg-a1')}>
               <CodeDiff source={source} numbered={source.kind === 'patch'} />
             </div>
           ))}

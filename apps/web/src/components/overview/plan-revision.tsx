@@ -1,4 +1,6 @@
 import type { Task } from '@shinsa/core';
+import { cn } from '@shinsa/ui/lib/utils';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { resolvePlanVersion } from '@/lib/overview/plan-version.ts';
 
@@ -6,7 +8,7 @@ export function PlanRevision({ task }: { task: Task }) {
   const version = resolvePlanVersion(task);
   if (!version) return null;
   return (
-    <div className='corner-superellipse/1.125 flex flex-col gap-2 rounded-lg bg-bg-a1 px-3 py-2.5 text-xs'>
+    <div className={cn(INSET, 'flex flex-col gap-2 bg-bg-a1 px-3 py-2.5 text-xs')}>
       {version.feedback && (
         <div className='flex flex-col gap-px'>
           <span className='text-2xs text-fg-2'>You asked</span>
