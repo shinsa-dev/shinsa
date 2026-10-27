@@ -4,6 +4,7 @@ import * as React from 'react';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import type { ViewerImage } from '@/hooks/use-image-viewer.ts';
+import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 
 export const ROW_INDENT = 'ps-6.25';
 
@@ -138,23 +139,19 @@ export function FoldLine({
 }
 
 export function ExpandRow({
+  persistId,
   children,
   images = [],
   ...parts
 }: LineParts & {
+  persistId: DisclosurePersistId;
   children: React.ReactNode;
   images?: (string | ViewerImage)[];
 }) {
-  const [open, setOpen] = React.useState(false);
+  const { open, toggle } = useDisclosure(persistId, false);
   return (
     <div className='flex min-w-0 flex-col'>
-      <button
-        type='button'
-        data-chat-line
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-        className={LINE_BUTTON}
-      >
+      <button type='button' data-chat-line aria-expanded={open} onClick={toggle} className={LINE_BUTTON}>
         <LineBody {...parts} />
         <RowChevron open={open} className={open ? undefined : 'opacity-0 group-hover/row:opacity-100'} />
       </button>

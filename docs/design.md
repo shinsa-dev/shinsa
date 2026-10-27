@@ -204,8 +204,8 @@ Only these, and they win over anything below:
    redraws the whole page from the next state push. Nothing on Home or in the queue button's list shows
    work from other projects, and ⌘K's decisions across tasks follow the focus too; only Jump to a task, a
    search of every task, reaches past it. **Every Home section folds** from its `SectionLabel` header (a chevron, `aria-expanded`), is
-   open until you fold it, the long tail included, and Home remembers each choice in `localStorage`
-   (`shinsa.home-open.<section>`, `useStoredToggle`), apart from the compact queue's, where Waiting
+   open until you fold it, the long tail included, and Home remembers each choice like every collapsible
+   (`home:section:<section>`, `resolveHomeSectionId`, 40), apart from the compact queue's, where Waiting
    still starts folded: folding Also needs you on Home never hides a decision in the queue button's
    list. The sections stack in `WideSections` (`components/queue/queue.tsx`) with one `gap-6` between
    them, and the visible gap is the same open or folded: a folded section is just its header, whose
@@ -260,7 +260,7 @@ Only these, and they win over anything below:
    one vertical axis. Open and closed sections are shared by both through `localStorage`, and a
    section can always be collapsed, the one holding the task on screen included. Until you have
    toggled a section yourself it opens when it holds the task on screen; after that your choice
-   wins everywhere (`useStoredToggle` with `resolveSectionDefault` from `lib/queue.ts`). A section is
+   wins everywhere (`queue:section:<section>`, `resolveSectionId` with `resolveSectionDefault` from `lib/queue.ts`, 40). A section is
    `CompactSection` (`components/layout/compact-section.tsx`), the one the Services popover draws its projects with
    (37), and the queue popover is `COMPACT_POPOVER` (320px, as tall as its content up to the room under the button,
    then it scrolls) with its list inset 6px more at the top (`COMPACT_POPOVER_INSET`), so the first header's icon
@@ -352,8 +352,9 @@ Only these, and they win over anything below:
     - **Panels keep their action when collapsed.** An Overview panel's header action ("Open the
       review" on What changed, which opens the Review tab) stays in the header whether the panel is open or closed
       (`components/layout/surface/panel.tsx`); a panel can start collapsed (`defaultOpen`), as the Review tab's
-      Everything else does. A passive figure beside the title (the Delegations count) is the panel's `meta`, not
-      its action, so a click on it folds the panel like the rest of the header.
+      Everything else does, and remembers what you leave it at (`persistId`, 40). A passive figure beside the title (the Delegations count) is the panel's `meta`, not
+      its action, so a click on it folds the panel like the rest of the header; a plain count is its `count`, in `fg-2`
+      right after the title (the Review tab's risks and agent review), never pushed to the middle of the band.
     - **The whole header is the trigger** (`DisclosureHeader`, `components/layout/surface/disclosure-header.tsx`,
       since 2026-10-25). Every collapsible header folds from a click anywhere on it: Overview and Review panels,
       change snippets, the live card's row, a delegation's spawn card, a round's row, Home's sections, the compact
@@ -364,15 +365,21 @@ Only these, and they win over anything below:
       trigger, a `<button>` with `aria-expanded` and "Expand ‹label›" / "Collapse ‹label›"; no button is ever
       nested in another. **A trailing chevron's end inset equals its vertical inset**, so it wraps the header's
       corner evenly: end padding = (header height − chevron box) ÷ 2. The header names its height (`strip`: `line`
-      24, `strip` 28, `block` 32, `band` 36) and the chevron its box (`chevron`: `box`, the 22px `icon-xs`
-      button look with its hover wash, on card bands and snippets; `glyph`, the bare 14px chevron, on section and
-      group headers), and `resolveDisclosureStrip` (`components/layout/surface/disclosure.ts`) writes both as CSS
+      24, `strip` 28, `block` 32, `band` 36) and the chevron its box (`chevron`: `box`, the kit's own `Button`,
+      `secondary` `icon-xs` (22px), on card bands and snippets; `glyph`, the bare 14px chevron, on section and
+      group headers). The box is a real kit `Button` so it looks and presses like every other one: its wash shows
+      only while the pointer is on the chevron itself (hovering the rest of the header leaves it bare), pressing it
+      deflates its fill by the kit's press inset, and its colours change in the frame, with no transition. In a
+      header that is one `<button>` it renders as an `aria-hidden` `<span>` out of the tab order
+      (`nativeButton={false}`), so no button is nested; in a header with its own controls it is the `<button>`
+      that takes the keyboard. `resolveDisclosureStrip` (`components/layout/surface/disclosure.ts`) writes both as CSS
       variables and derives the end padding and the chevron box from them: band 7px, snippet 3px, block 9px,
       line 5px. The chevron is always last, after the header's controls (a delegation's Stop comes before it).
       Home's section labels and a round's row keep the chevron right after the label and have no trailing inset.
       `disclosure-header.test.tsx` fails when a header is built by hand (`aria-expanded` outside the primitive
       and the listed row disclosures: chat lines, tree items, Show more, the request under a title, Per role, an
-      MCP's details row) or when a header ends in a chevron without a strip.
+      MCP's details row), when a header ends in a chevron without a strip, or when a box chevron is not the kit
+      `Button` (or takes a header-wide hover, press or colour transition).
     - **Activity reads newest first.** The Overview's Activity panel lists the newest entry at the top and older
       ones below it (`listActivityNewestFirst`; entries of the same moment keep the log's order, reversed). Every
       place that lists a task's activity uses it.

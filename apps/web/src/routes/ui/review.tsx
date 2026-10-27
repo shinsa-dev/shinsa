@@ -52,22 +52,47 @@ export function ReviewSpecimens() {
     <>
       <Specimen label='Needs your attention · ReviewNote: a blocking finding, a spot to read carefully, a suggestion, a judgement call; author, tone, title, markdown and the suggested fix (the snippet shows on a task page)'>
         <div className='flex w-full max-w-2xl flex-col gap-2'>
-          {ITEMS.map((item, index) => (
-            <ReviewNote key={item.key} item={item} selected={index === 0} />
+          {POINTS.map((item, index) => (
+            <ReviewNote
+              key={item.key}
+              persistId={createDisclosureId('ui', 'review', 'point', item.key)}
+              item={item}
+              selected={index === 0}
+            />
           ))}
         </div>
       </Specimen>
       <Specimen label='Your comment · the same card, with Remove'>
         <div className='flex w-full max-w-2xl flex-col gap-2'>
           {SAMPLE_CODE_COMMENTS.map((comment) => (
-            <ReviewNote key={comment.id} item={toCommentItem(comment)} action={<Remove />} />
+            <ReviewNote
+              key={comment.id}
+              persistId={createDisclosureId('ui', 'review', 'comment', comment.id)}
+              item={toCommentItem(comment)}
+              action={<Remove />}
+            />
           ))}
         </div>
       </Specimen>
       <Specimen label='Inline in the Code tab · compact: no snippet and no place, the line above is the place'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
-          {ITEMS.slice(0, 1).map((item) => (
-            <ReviewNote key={item.key} item={item} compact />
+          {FINDINGS.slice(0, 1).map((item) => (
+            <ReviewNote
+              key={item.key}
+              persistId={notPersisted('a finding card never folds')}
+              item={item}
+              compact
+              action={<SampleVerdict item={item} />}
+            />
+          ))}
+          {SAMPLE_CODE_COMMENTS.slice(0, 1).map((comment) => (
+            <ReviewNote
+              key={comment.id}
+              persistId={createDisclosureId('ui', 'review', 'inline-comment', comment.id)}
+              item={toCommentItem(comment)}
+              compact
+              action={<Remove />}
+            />
           ))}
         </div>
       </Specimen>

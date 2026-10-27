@@ -7,6 +7,7 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import type { WorkItem } from '@/lib/chat/timeline.ts';
 import { formatBrief } from '@/lib/chat/turns.ts';
+import { useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
 export function ErrorLine({ text }: { text: string }) {
   return (
@@ -28,17 +29,22 @@ export function AgentText({ text }: { text: string }) {
 }
 
 function DetailItem({ item, live }: { item: WorkItem; live: boolean }) {
+  const persistId = useDisclosureScope('item', item.key);
   switch (item.kind) {
     case 'instructions':
       return (
-        <ExpandRow icon='IconFileText' label={item.first ? 'Brief from Shinsa' : 'Message from Shinsa'}>
+        <ExpandRow
+          persistId={persistId}
+          icon='IconFileText'
+          label={item.first ? 'Brief from Shinsa' : 'Message from Shinsa'}
+        >
           <Markdown text={formatBrief(item.text)} className='prose-chat' />
         </ExpandRow>
       );
     case 'agent':
       return <Markdown text={item.text} className='prose-chat' />;
     case 'tools':
-      return <ToolGroup calls={item.calls} live={live} />;
+      return <ToolGroup persistId={persistId} calls={item.calls} live={live} />;
   }
 }
 

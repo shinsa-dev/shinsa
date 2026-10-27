@@ -1,6 +1,7 @@
 import { ExpandRow } from '@/components/chat/chat-line.tsx';
 import { type NoticeGroup, resolveNoticeLine } from '@/lib/chat/notices.ts';
 import type { QuietNoticeKind, TimelineItemOf } from '@/lib/chat/timeline.ts';
+import { useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
 function NoticeGroups({ groups }: { groups: NoticeGroup[] }) {
   return (
@@ -25,8 +26,9 @@ function NoticeGroups({ groups }: { groups: NoticeGroup[] }) {
 
 export function NoticeLine({ item }: { item: TimelineItemOf<QuietNoticeKind> }) {
   const { icon, label, meta, detail, groups } = resolveNoticeLine(item);
+  const persistId = useDisclosureScope('notice', item.key);
   return (
-    <ExpandRow icon={icon} label={label} meta={meta}>
+    <ExpandRow persistId={persistId} icon={icon} label={label} meta={meta}>
       <p className='text-fg-3 text-xs'>{detail}</p>
       {groups && <NoticeGroups groups={groups} />}
     </ExpandRow>

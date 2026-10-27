@@ -7,6 +7,7 @@ import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
+import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { resolveSectionId } from '@/lib/settings.ts';
 
 export const SETTING_ROW = 'flex min-h-10 items-center gap-4 py-1 pr-1.5 pl-2';
@@ -99,6 +100,7 @@ export function SettingsBlock({ header, children }: { header: React.ReactNode; c
 }
 
 export function FoldingBlock({
+  persistId,
   title,
   detail,
   status,
@@ -106,6 +108,7 @@ export function FoldingBlock({
   forcedOpen = false,
   children,
 }: {
+  persistId: DisclosurePersistId;
   title: string;
   detail: string;
   status?: { icon: IconName; tone: Tone };
@@ -113,17 +116,12 @@ export function FoldingBlock({
   forcedOpen?: boolean;
   children: React.ReactNode;
 }) {
-  const [expanded, setExpanded] = React.useState(startsOpen);
-  const open = expanded || forcedOpen;
+  const disclosure = useDisclosure(persistId, startsOpen);
+  const open = disclosure.open || forcedOpen;
+  const shown = forcedOpen ? { ...disclosure, open } : disclosure;
   return (
     <div className='flex flex-col'>
-      <DisclosureHeader
-        open={open}
-        onToggle={() => setExpanded((value) => !value)}
-        strip='block'
-        chevron='glyph'
-        className='gap-1.5 pl-2 text-xs'
-      >
+      <DisclosureHeader disclosure={shown} strip='block' chevron='glyph' className='gap-1.5 pl-2 text-xs'>
         {status && (
           <Icon size='sm' name={status.icon} className={cn('-translate-y-px', TONE_TEXT[status.tone])} />
         )}

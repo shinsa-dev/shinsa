@@ -39,6 +39,7 @@ import { resolveHealthBanner } from '@/lib/connection/health.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT, type Tone } from '@/lib/format/tone.ts';
 import { AUTO_CHOICES, type NewTaskChoices } from '@/lib/new-task.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { MERGE_ITEMS } from '@/lib/settings.ts';
 import { ROADMAP_GROUPS } from '@/lib/tasks/roadmap.ts';
 import { acknowledgeSample, createSampleState, createSampleTask, HOUR } from './samples.ts';
@@ -257,19 +258,21 @@ export function CompositeSpecimens() {
       </Specimen>
       <Specimen label='ListRow in a card · Toolbar' className='items-start'>
         <div className={cn(CARD, 'w-80 p-1')}>
-          <ListRow
-            leading={<StatusTile icon='IconEyeOpen' tone='amber' label='Changes to review' />}
-            title='Run the embedded chat on MCP v2'
-            meta='Changes to review · The embedded chat now runs on MCP v2'
-            trailing={<TimeAgo at={now - 26 * HOUR} compact />}
-            onClick={() => undefined}
-          />
-          <ListRow
-            leading={<StatusTile icon='IconHammer' tone='blue' label='Building' />}
-            title='Stream MCP tool results'
-            meta='Building · Make the change'
-            onClick={() => undefined}
-          />
+          <HoverHighlight className='flex flex-col gap-px'>
+            <ListRow
+              leading={<StatusTile icon='IconEyeOpen' tone='amber' label='Changes to review' />}
+              title='Run the embedded chat on MCP v2'
+              meta='Changes to review · The embedded chat now runs on MCP v2'
+              trailing={<TimeAgo at={now - 26 * HOUR} compact />}
+              onClick={() => undefined}
+            />
+            <ListRow
+              leading={<StatusTile icon='IconHammer' tone='blue' label='Building' />}
+              title='Stream MCP tool results'
+              meta='Building · Make the change'
+              onClick={() => undefined}
+            />
+          </HoverHighlight>
         </div>
         <div className={cn(CARD, 'w-80 overflow-hidden')}>
           <Toolbar>
@@ -285,6 +288,7 @@ export function CompositeSpecimens() {
       <Specimen label='Panel · StepNumber · CodeFence'>
         <div className='w-full max-w-xl'>
           <Panel
+            persistId={createDisclosureId('ui', 'composites', 'panel')}
             title='What changed'
             icon='IconCodeLines'
             action={

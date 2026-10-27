@@ -3,6 +3,7 @@ import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
+import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 
 export const COMPACT_POPOVER =
   'max-h-(--available-height) w-80 gap-0 p-0 [--glyph-ring:var(--color-popover)]';
@@ -19,8 +20,8 @@ export function CompactSections({ className, children }: { className?: string; c
 }
 
 export function CompactSection({
-  open,
-  onToggle,
+  persistId,
+  defaultOpen = true,
   label,
   leading,
   title,
@@ -28,8 +29,8 @@ export function CompactSection({
   action,
   children,
 }: {
-  open: boolean;
-  onToggle: () => void;
+  persistId: DisclosurePersistId;
+  defaultOpen?: boolean;
   label?: string;
   leading: React.ReactNode;
   title: string;
@@ -37,11 +38,11 @@ export function CompactSection({
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const disclosure = useDisclosure(persistId, defaultOpen);
   return (
     <section className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'>
       <DisclosureHeader
-        open={open}
-        onToggle={onToggle}
+        disclosure={disclosure}
         label={label}
         action={action}
         className={cn(HEADER, 'h-6 pe-1')}
@@ -53,7 +54,7 @@ export function CompactSection({
           <DisclosureChevron className={REVEAL} />
         </span>
       </DisclosureHeader>
-      {open && <div className='flex flex-col pt-0.5'>{children}</div>}
+      {disclosure.open && <div className='flex flex-col pt-0.5'>{children}</div>}
     </section>
   );
 }

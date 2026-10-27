@@ -18,7 +18,7 @@ import { ScrollFade } from '@shinsa/ui/components/scroll-fade';
 import { Separator } from '@shinsa/ui/components/separator';
 import { SizeAnimator } from '@shinsa/ui/components/size-animator';
 import { Spinner } from '@shinsa/ui/components/spinner';
-import { useState } from 'react';
+import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { Section, Specimen } from './section.tsx';
 
 export const SURFACE_SECTIONS = [
@@ -41,7 +41,10 @@ const FADE_ROWS = Array.from({ length: 16 }, (_, i) => ({
 }));
 
 export function SurfaceSpecimens() {
-  const [expanded, setExpanded] = useState(false);
+  const { open: expanded, toggle } = useDisclosure(
+    createDisclosureId('ui', 'surfaces', 'size-animator'),
+    false
+  );
 
   return (
     <>
@@ -229,7 +232,7 @@ export function SurfaceSpecimens() {
         description='Transitions height changes instead of snapping. Use around popup content that grows or filters.'
         className='flex-col items-start'
       >
-        <Button variant='outline' onClick={() => setExpanded((v) => !v)}>
+        <Button variant='outline' onClick={toggle}>
           {expanded ? 'Collapse' : 'Expand'}
         </Button>
         <SizeAnimator className='w-72 rounded-xl bg-bg-2'>

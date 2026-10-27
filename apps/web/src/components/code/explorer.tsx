@@ -14,6 +14,7 @@ import { Hint } from '@/components/overlays/hint.tsx';
 import type { CodeFileRef, CodeLocation, CodeMode } from '@/lib/code/location.ts';
 import { listRefChoices } from '@/lib/code/refs.ts';
 import type { CodeSearch, Loaded } from '@/lib/connection/code.ts';
+import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { CODE_MODE, type ExplorerMode } from '@/lib/tasks/tabs.ts';
 
 export interface ExplorerProps {
@@ -78,6 +79,7 @@ function ExplorerBody(props: ExplorerProps) {
   if (diff.status !== 'ready') return null;
   return (
     <ChangesTree
+      persistId={resolveTaskDisclosureId(props.task.id, 'code', 'changes')}
       diff={diff.value}
       activePath={location.active?.kind === 'diff' ? activePath : null}
       commentCounts={props.commentCounts}

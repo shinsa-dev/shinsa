@@ -13,6 +13,7 @@ import { ROADMAP_COLUMNS } from '@/components/roadmap/row.tsx';
 import { useRegisterCommands } from '@/lib/command/registry.ts';
 import { applySearch, listTaskListSections } from '@/lib/command/tasks.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeRoadmapCounts, listRoadmapSections, selectRoadmapGroup } from '@/lib/tasks/roadmap.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
@@ -78,6 +79,12 @@ export function TasksPage({ state }: { state: ShinsaState }) {
             sections.map(({ group, entries }) => (
               <RoadmapSection
                 key={`${group.key}-${status?.key ?? 'all'}`}
+                persistId={createDisclosureId(
+                  'roadmap',
+                  'group',
+                  group.key,
+                  ...(status ? ['status', status.key] : [])
+                )}
                 group={group}
                 entries={entries}
                 state={state}

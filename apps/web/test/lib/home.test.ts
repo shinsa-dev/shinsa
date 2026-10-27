@@ -6,7 +6,7 @@ import {
   listRecentConversations,
   listRecentlyFinished,
   resolveGreeting,
-  resolveHomeSectionFlag,
+  resolveHomeSectionId,
   resolveHomeSections,
   resolvePreview,
   resolveRunningVerb,
@@ -118,10 +118,10 @@ describe('Home within the focus project', () => {
   });
 });
 
-describe('resolveHomeSectionFlag', () => {
+describe('resolveHomeSectionId', () => {
   it('keeps Home sections apart from the compact queue', () => {
-    expect(resolveHomeSectionFlag('needs')).toBe('shinsa.home-open.needs');
-    expect(resolveHomeSectionFlag('finished')).toBe('shinsa.home-open.finished');
+    expect(String(resolveHomeSectionId('needs'))).toBe('home:section:needs');
+    expect(String(resolveHomeSectionId('finished'))).toBe('home:section:finished');
   });
 });
 

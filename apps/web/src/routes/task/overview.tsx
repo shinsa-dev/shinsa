@@ -55,11 +55,12 @@ function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget
   if (sections.length === 0) return null;
   return (
     <Panel
+      persistId={resolveOverviewPanelId(task, 'changes')}
       title='What changed'
       icon='IconCodeLines'
       action={
         <Button variant='link' size='sm' onClick={() => onOpen('review')}>
-          Open the review
+          Read the review
         </Button>
       }
     >
@@ -125,7 +126,7 @@ function ActivityPanel({
   const entries = listActivityNewestFirst(task);
   const shown = useProgressiveCount(entries.length, FIRST_ACTIVITY);
   return (
-    <Panel title='Activity' icon='IconClock'>
+    <Panel persistId={resolveOverviewPanelId(task, 'activity')} title='Activity' icon='IconClock'>
       <ol className='flex flex-col'>
         {entries.slice(0, shown).map((entry, index) => (
           <ActivityRow
@@ -164,7 +165,7 @@ export function OverviewTab({
           <DelegationsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />
           <SuggestionsPanel task={task} />
           {code && (
-            <Panel title='Summary' icon='IconNote1'>
+            <Panel persistId={resolveOverviewPanelId(task, 'summary')} title='Summary' icon='IconNote1'>
               {summary ? (
                 <Markdown text={summary} className='text-fg-4' />
               ) : (

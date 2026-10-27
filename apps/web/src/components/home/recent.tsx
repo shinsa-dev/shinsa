@@ -7,7 +7,7 @@ import { StatusTile } from '@/components/status/tile.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { resolveHomeSectionFlag, resolvePreview } from '@/lib/home.ts';
+import { resolveHomeSectionId, resolvePreview } from '@/lib/home.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 export function RecentlyFinished({ state, finished }: { state: ShinsaState; finished: Task[] }) {
@@ -16,7 +16,7 @@ export function RecentlyFinished({ state, finished }: { state: ShinsaState; fini
       title='Recently finished'
       count={finished.length}
       empty='Nothing finished this week.'
-      flag={resolveHomeSectionFlag('finished')}
+      persistId={resolveHomeSectionId('finished')}
     >
       {finished.map((task) => (
         <ListRow
@@ -43,7 +43,7 @@ export function RecentConversations({ conversations }: { conversations: { task: 
       title='Recent conversations'
       count={conversations.length}
       empty='No agent has written yet.'
-      flag={resolveHomeSectionFlag('conversations')}
+      persistId={resolveHomeSectionId('conversations')}
     >
       {conversations.map(({ task, entry }) => (
         <ListRow

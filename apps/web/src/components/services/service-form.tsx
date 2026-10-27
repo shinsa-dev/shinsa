@@ -4,6 +4,7 @@ import { Textarea } from '@shinsa/ui/components/textarea';
 import * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
+import { createDisclosureId, type Disclosure, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   resolveShownErrors,
   SERVICE_FIELDS,
@@ -78,20 +79,11 @@ function DraftField({
   );
 }
 
-function AdvancedFields({
-  open,
-  onToggle,
-  children,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
+function AdvancedFields({ disclosure, children }: { disclosure: Disclosure; children: React.ReactNode }) {
   return (
     <div className='flex flex-col gap-2'>
       <DisclosureHeader
-        open={open}
-        onToggle={onToggle}
+        disclosure={disclosure}
         label='Advanced'
         strip='line'
         chevron='glyph'
@@ -99,7 +91,7 @@ function AdvancedFields({
       >
         Advanced
       </DisclosureHeader>
-      {open && children}
+      {disclosure.open && children}
     </div>
   );
 }
@@ -119,7 +111,8 @@ export function ServiceFields({
   onChange: (field: ServiceField, value: string) => void;
   onLeave: (field: ServiceField) => void;
 }) {
-  const [advanced, setAdvanced] = React.useState(draft.env.trim() !== '');
+  const advanced = useDisclosure(createDisclosureId('services', 'form', 'advanced'), draft.env.trim() !== '');
+  const forced = Boolean(errors.env) && !advanced.open;
   const field = (name: ServiceField, focus: boolean) => (
     <DraftField
       key={name}
@@ -135,7 +128,7 @@ export function ServiceFields({
   return (
     <FieldGroup>
       {MAIN_FIELDS.map((name, index) => field(name, autoFocus && index === 0))}
-      <AdvancedFields open={advanced || Boolean(errors.env)} onToggle={() => setAdvanced(!advanced)}>
+      <AdvancedFields disclosure={forced ? { ...advanced, open: true } : advanced}>
         {field('env', false)}
       </AdvancedFields>
     </FieldGroup>

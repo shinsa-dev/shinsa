@@ -18,6 +18,7 @@ import { type HumanMessage, type RunTurn, resolveTimeline, resolveTurns } from '
 import { resolveClosing } from '@/lib/chat/turns.ts';
 import { useTranscript } from '@/lib/connection/socket.ts';
 import { formatSteps } from '@/lib/format/count.ts';
+import { useDisclosure, useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
 export const ROW = 'py-2 mb-1';
 
@@ -46,12 +47,15 @@ function RunEvidenceScope({ runId, children }: { runId: string; children: React.
 }
 
 function WorkedRow({ run, turn }: { run: Run; turn: RunTurn }) {
-  const [open, setOpen] = React.useState(false);
+  const { open, toggle } = useDisclosure(
+    useDisclosureScope('run', run.id, 'turn', turn.key, 'worked'),
+    false
+  );
   return (
     <div className='flex min-w-0 flex-col'>
       <FoldLine
         open={open}
-        onToggle={() => setOpen(!open)}
+        onToggle={toggle}
         label={
           <span className='tabular-nums'>
             Worked for <Duration from={turn.startedAt} to={turn.endedAt} />
@@ -81,11 +85,13 @@ function TurnView({
   waiting: boolean;
   lead?: boolean;
 }) {
+  const humanId = useDisclosureScope('run', run.id, 'turn', turn.key, 'message');
   return (
     <>
       {lead && turn.human && (
         <div className={ROW}>
           <UserMessage
+            persistId={humanId}
             text={turn.human.text}
             attachments={turn.human.attachments}
             status={turn.human.status}
@@ -209,6 +215,7 @@ export const RunSection = React.memo(function RunSectionView({
   const headline = React.useMemo(() => resolveRunHeadline(run, task, entries), [run, task, entries]);
   const closing = resolveClosing(run, turns);
   const opening = turns[0]?.human ?? null;
+  const openingId = useDisclosureScope('run', run.id, 'opening', 'message');
   return (
     <RunEvidenceScope runId={run.id}>
       <section
@@ -224,6 +231,7 @@ export const RunSection = React.memo(function RunSectionView({
         {opening && (
           <div className={ROW}>
             <UserMessage
+              persistId={openingId}
               text={opening.text}
               attachments={opening.attachments}
               status={opening.status}

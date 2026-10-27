@@ -157,6 +157,7 @@ function Comments({ task, selected }: { task: Task; selected: string | null }) {
         return (
           <ReviewNote
             key={item.key}
+            persistId={resolveReviewDisclosure(task, 'card', resolveReviewItemIdentity(item))}
             task={task}
             item={item}
             selected={item.key === selected}
@@ -252,7 +253,12 @@ function EverythingElse({ task, report, diff }: { task: Task; report: WorkReport
   const dismissed = task.dismissedFindings ?? [];
   if (files.length === 0 && dismissed.length === 0) return null;
   return (
-    <Panel title='Everything else' icon='IconFiles' defaultOpen={false}>
+    <Panel
+      persistId={resolveReviewDisclosure(task, 'panel', 'everything-else')}
+      title='Everything else'
+      icon='IconFiles'
+      defaultOpen={false}
+    >
       {files.length > 0 && (
         <div className='flex flex-col gap-1.5'>
           <span className='text-2xs text-fg-2'>Changed files the review does not point at</span>

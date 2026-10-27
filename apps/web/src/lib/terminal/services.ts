@@ -18,6 +18,7 @@ import {
 import type { IconName } from '@shinsa/ui/components/icon';
 import { formatDuration } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { listProjects } from '@/lib/projects.ts';
 
 export const SERVICE_GLYPHS: Record<ServiceState, { icon: IconName; activeIcon: IconName; tone: Tone }> = {
@@ -72,8 +73,8 @@ export function describeServiceGroup(views: ServiceView[]): { label: string; ton
   return parts;
 }
 
-export function resolveServiceGroupFlag(projectId: string) {
-  return `shinsa.services-open.${projectId}`;
+export function resolveServiceGroupId(projectId: string) {
+  return createDisclosureId('services', 'project', projectId);
 }
 
 export function listStoppedServices(views: ServiceView[]) {

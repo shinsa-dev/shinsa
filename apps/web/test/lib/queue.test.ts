@@ -5,7 +5,7 @@ import {
   listQueueSections,
   type QueueSection,
   resolveSectionDefault,
-  resolveSectionFlag,
+  resolveSectionId,
 } from '@/lib/queue.ts';
 import {
   createGate,
@@ -113,8 +113,8 @@ describe('listQueueSections', () => {
 
 describe('section open state', () => {
   it('stores each section under its own key', () => {
-    expect(resolveSectionFlag(sectionOf('needs'))).toBe('shinsa.queue-open.needs');
-    expect(resolveSectionFlag(sectionOf('waiting'))).toBe('shinsa.queue-open.waiting');
+    expect(String(resolveSectionId(sectionOf('needs')))).toBe('queue:section:needs');
+    expect(String(resolveSectionId(sectionOf('waiting')))).toBe('queue:section:waiting');
   });
 
   it('opens fixed sections, and collapsed ones only when they hold the task on screen', () => {

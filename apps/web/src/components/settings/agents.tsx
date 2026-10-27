@@ -1,10 +1,11 @@
 import type { AccountsSnapshot, AgentProviderInfo, Settings } from '@shinsa/core';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
-import * as React from 'react';
+import type * as React from 'react';
 import { SelectField } from '@/components/controls/select-field.tsx';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useAgentProviders } from '@/lib/connection/models.ts';
+import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   AGENT_GROUPS,
   type AgentGroup,
@@ -168,7 +169,10 @@ function AgentGroupBlock({ context, group }: { context: ModelsContext; group: Ag
     group.roles.map(({ role }) => role)
   );
   const speed = resolveGroupSpeed(settings, group, availability);
-  const [open, setOpen] = React.useState(model === MIXED_VALUE || speed === MIXED_VALUE);
+  const roles = useDisclosure(
+    createDisclosureId('settings', 'agents', 'group', group.id, 'roles'),
+    model === MIXED_VALUE || speed === MIXED_VALUE
+  );
   const apply = (patch: Partial<Settings> | null) => {
     if (patch) update(patch);
   };
@@ -178,7 +182,7 @@ function AgentGroupBlock({ context, group }: { context: ModelsContext; group: Ag
         title={
           <>
             <span className='truncate'>{group.title}</span>
-            <RolesToggle open={open} onToggle={() => setOpen((current) => !current)} />
+            <RolesToggle open={roles.open} onToggle={roles.toggle} />
           </>
         }
         description={group.description}
@@ -193,7 +197,7 @@ function AgentGroupBlock({ context, group }: { context: ModelsContext; group: Ag
           onSpeed={(next) => apply(resolveGroupSpeedPatch(settings, group, next))}
         />
       </DescribedRow>
-      {open && (
+      {roles.open && (
         <div className={SETTINGS_SHELF}>
           {group.roles.map((entry) => (
             <RoleRow key={entry.role} context={context} entry={entry} />

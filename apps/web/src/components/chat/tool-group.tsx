@@ -11,6 +11,7 @@ import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { resolveGroupKey, resolveGroupPhrase, resolveRunningLabel } from '@/lib/chat/tool-describe.ts';
 import { resolveEditStats } from '@/lib/chat/tool-output.ts';
 import { selectLatestCall } from '@/lib/chat/turns.ts';
+import { type DisclosurePersistId, useDisclosure, useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
 const COLLAPSE_AFTER = 5;
 
@@ -39,8 +40,10 @@ export function ToolRow({ call, live }: { call: ToolCall; live: boolean }) {
   const images = useCallImages(call);
   const stats = React.useMemo(() => resolveEditStats(call.tool), [call.tool]);
   const broken = call.failed && call.recovery === null;
+  const persistId = useDisclosureScope('tool', call.key);
   return (
     <ExpandRow
+      persistId={persistId}
       icon={broken ? 'IconExclamationCircle' : call.description.icon}
       iconClassName={broken ? 'text-red-text' : undefined}
       label={
@@ -59,8 +62,16 @@ export function ToolRow({ call, live }: { call: ToolCall; live: boolean }) {
   );
 }
 
-export function ToolGroup({ calls, live }: { calls: ToolCall[]; live: boolean }) {
-  const [open, setOpen] = React.useState(false);
+export function ToolGroup({
+  persistId,
+  calls,
+  live,
+}: {
+  persistId: DisclosurePersistId;
+  calls: ToolCall[];
+  live: boolean;
+}) {
+  const { open, toggle, replaceOpen } = useDisclosure(persistId, false);
   const [single] = calls;
   if (calls.length === 1 && single) return <ToolRow call={single} live={live} />;
   const failures = calls.filter((call) => call.failed && call.recovery === null).length;
@@ -71,7 +82,7 @@ export function ToolGroup({ calls, live }: { calls: ToolCall[]; live: boolean })
     <div className='flex min-w-0 flex-col'>
       <FoldLine
         open={open}
-        onToggle={() => setOpen(!open)}
+        onToggle={toggle}
         label={running ? <ShimmeringText text={label} className={SHIMMER_LINE} /> : label}
         meta={failures > 0 && <span className='text-red-text'>{failures} failed</span>}
       />
@@ -89,7 +100,7 @@ export function ToolGroup({ calls, live }: { calls: ToolCall[]; live: boolean })
             <ToolRow key={call.key} call={call} live={live} />
           ))}
           {calls.length > COLLAPSE_AFTER && (
-            <FoldLine open onToggle={() => setOpen(false)} label='Collapse' />
+            <FoldLine open onToggle={() => replaceOpen(false)} label='Collapse' />
           )}
         </div>
       )}

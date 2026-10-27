@@ -7,6 +7,7 @@ import { GlyphLabel, INLINE_TILE, SMART_LINK } from '@/components/links/link.tsx
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import type { Disclosure } from '@/lib/preferences/disclosure.ts';
 import {
   changeRoundShipping,
   describeRoundStatus,
@@ -72,22 +73,19 @@ function RoundShippingSelect({
 export function RoundHeader({
   task,
   round,
-  open,
-  onToggle,
+  disclosure,
   onShippingChange,
 }: {
   task: Task;
   round: Round;
-  open: boolean;
-  onToggle: () => void;
+  disclosure: Disclosure;
   onShippingChange?: ShippingChanger;
 }) {
   const status = describeRoundStatus(round);
   const pullRequest = selectRoundPullRequest(task, round);
   return (
     <DisclosureHeader
-      open={open}
-      onToggle={onToggle}
+      disclosure={disclosure}
       label={`round ${round.number}`}
       action={
         <>

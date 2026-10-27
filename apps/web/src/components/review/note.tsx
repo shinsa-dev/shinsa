@@ -4,6 +4,7 @@ import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { FileLink } from '@/components/links/file.tsx';
 import { ToneLabel } from '@/components/status/text.tsx';
@@ -41,12 +42,23 @@ function RelatedNote({ item }: { item: ReviewItem }) {
   );
 }
 
-function NotePlace({ task, item, compact }: { task: Task | null; item: ReviewItem; compact: boolean }) {
+function NotePlace({
+  persistId,
+  task,
+  item,
+  compact,
+}: {
+  persistId: DisclosurePersistId;
+  task: Task | null;
+  item: ReviewItem;
+  compact: boolean;
+}) {
   const place = item.place;
   if (!place || compact) return null;
   if (task?.repoId) {
     return (
       <ChangeSnippet
+        persistId={extendDisclosureId(persistId, 'snippet')}
         task={task}
         path={place.file}
         start={place.start}
@@ -71,6 +83,7 @@ export function ReviewNote({
   action = null,
   className,
 }: {
+  persistId: DisclosurePersistId;
   item: ReviewItem;
   task?: Task | null;
   selected?: boolean;

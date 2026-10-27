@@ -1,6 +1,7 @@
 import type { Gate, Queue, QueuedGate, ShinsaState, Task } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
 import type { Tone } from '@/lib/format/tone.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { orderChains, ROADMAP_GROUP } from '@/lib/tasks/roadmap.ts';
 
 export type QueueItem =
@@ -85,8 +86,8 @@ export function listQueueSections(
   ];
 }
 
-export function resolveSectionFlag(section: QueueSection) {
-  return `shinsa.queue-open.${section.key}`;
+export function resolveSectionId(section: QueueSection) {
+  return createDisclosureId('queue', 'section', section.key);
 }
 
 export function resolveSectionDefault(section: QueueSection, activeTaskId: string | null) {

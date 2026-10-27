@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import type { Round, Task } from '@shinsa/core';
+import { buttonVariants } from '@shinsa/ui/components/button';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render } from '@testing-library/react';
-import * as React from 'react';
+import type * as React from 'react';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { resolveDisclosureStrip } from '@/components/layout/surface/disclosure.ts';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
@@ -11,6 +13,7 @@ import { Panel } from '@/components/layout/surface/panel.tsx';
 import { RoundHeader } from '@/components/overview/round-header.tsx';
 import { FoldingBlock } from '@/components/settings/group.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
+import { createDisclosureId, readDisclosure, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { createRound } from '../../../support/rounds.ts';
 import { createTask } from '../../../support/state.ts';
 
@@ -68,12 +71,24 @@ function assertOneTrigger(view: ReturnType<typeof render>) {
   expect(view.container.querySelector('button button, button a, a button')).toBeNull();
 }
 
+function assertKitChevron(view: ReturnType<typeof render>) {
+  const chevron = view.container.querySelector('[data-disclosure-chevron]') as HTMLElement;
+  expect(chevron.dataset.slot).toBe('button');
+  const classes = chevron.className.split(' ');
+  for (const token of buttonVariants({ variant: 'secondary', size: 'icon-xs' }).split(' ')) {
+    if (!token.startsWith('size-')) expect(classes).toContain(token);
+  }
+  expect(chevron.className).not.toContain('group-hover/disclosure');
+  expect(chevron.className).not.toContain('group-active/disclosure');
+  expect(chevron.className).not.toMatch(/transition-(colors|all)/);
+  return chevron;
+}
+
 function Toggled({ action, interactive }: { action?: React.ReactNode; interactive?: boolean }) {
-  const [open, setOpen] = React.useState(false);
+  const disclosure = useDisclosure(createDisclosureId('ui', 'details'), false);
   return (
     <DisclosureHeader
-      open={open}
-      onToggle={() => setOpen(!open)}
+      disclosure={disclosure}
       label='details'
       strip='band'
       chevron='box'
@@ -117,6 +132,13 @@ describe('a disclosure header', () => {
     assertOneTrigger(view);
     expect(header(view).tagName).toBe('BUTTON');
     expect(header(view).getAttribute('aria-label')).toBe('Expand details');
+    const chevron = assertKitChevron(view);
+    expect(chevron.tagName).toBe('SPAN');
+    expect(chevron.getAttribute('aria-hidden')).toBe('true');
+    expect(chevron.tabIndex).toBe(-1);
+    fireEvent.click(chevron);
+    expect(expanded(view)).toBe('true');
+    fireEvent.click(chevron);
     fireEvent.click(view.getByText('Details'));
     expect(expanded(view)).toBe('true');
     expect(header(view).getAttribute('aria-label')).toBe('Collapse details');
@@ -144,6 +166,8 @@ describe('a disclosure header', () => {
     expect(acted).toEqual(['action']);
     expect(expanded(view)).toBe('true');
     const chevron = view.getByRole('button', { name: 'Collapse details' });
+    expect(assertKitChevron(view)).toBe(chevron);
+    expect(chevron.tagName).toBe('BUTTON');
     fireEvent.click(chevron);
     expect(chevron.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(header(view));
@@ -156,6 +180,7 @@ describe('the headers that fold', () => {
     const acted: string[] = [];
     const view = render(
       <Panel
+        persistId={createDisclosureId('ui', 'panel', 'changes')}
         title='What changed'
         icon='IconCodeLines'
         action={
@@ -177,9 +202,30 @@ describe('the headers that fold', () => {
     expect(view.getByText('Body')).toBeTruthy();
   });
 
+  it('keep a panel folded when it mounts again', () => {
+    const summary = createDisclosureId('task', 't', 'overview', 'panel', 'summary');
+    const panel = () => (
+      <Panel persistId={summary} title='Summary' icon='IconNote1'>
+        <p>Body</p>
+      </Panel>
+    );
+    const first = render(panel());
+    fireEvent.click(first.getByText('Summary'));
+    first.unmount();
+    const again = render(panel());
+    expect(again.queryByText('Body')).toBeNull();
+    expect(expanded(again)).toBe('false');
+    expect(again.getByRole('button', { name: 'Expand summary' })).toBeTruthy();
+  });
+
   it('show a panel’s passive meta inside the trigger', () => {
     const view = render(
-      <Panel title='Delegations' icon='IconAgents' meta='2 running'>
+      <Panel
+        persistId={createDisclosureId('ui', 'panel', 'delegations')}
+        title='Delegations'
+        icon='IconAgents'
+        meta='2 running'
+      >
         <p>Body</p>
       </Panel>
     );
@@ -192,7 +238,13 @@ describe('the headers that fold', () => {
     for (const repoId of [null, 'r-1']) {
       const view = render(
         <TooltipProvider>
-          <ChangeSnippet task={createTask({ id: 'snippet', repoId })} path='src/a.ts' start={3} end={4} />
+          <ChangeSnippet
+            persistId={createDisclosureId('ui', 'snippet', String(repoId))}
+            task={createTask({ id: 'snippet', repoId })}
+            path='src/a.ts'
+            start={3}
+            end={4}
+          />
         </TooltipProvider>
       );
       assertOneTrigger(view);
@@ -211,7 +263,11 @@ describe('the headers that fold', () => {
 
   it('fold a settings block and a section from anywhere on their header', () => {
     const view = render(
-      <FoldingBlock title='Skills' detail='3 of 12 on'>
+      <FoldingBlock
+        persistId={createDisclosureId('settings', 'skills', 'group', 'all')}
+        title='Skills'
+        detail='3 of 12 on'
+      >
         <p>Rows</p>
       </FoldingBlock>
     );
@@ -220,20 +276,26 @@ describe('the headers that fold', () => {
     fireEvent.click(view.getByText('3 of 12 on'));
     expect(view.getByText('Rows')).toBeTruthy();
     view.unmount();
-    let open = true;
-    const section = render(
-      <SectionLabel open={open} onToggle={() => (open = !open)} count={2}>
-        Waiting
-      </SectionLabel>
-    );
+    const waiting = createDisclosureId('home', 'section', 'waiting');
+    function Waiting() {
+      return (
+        <SectionLabel disclosure={useDisclosure(waiting, true)} count={2}>
+          Waiting
+        </SectionLabel>
+      );
+    }
+    const section = render(<Waiting />);
     assertOneTrigger(section);
     expect(section.container.querySelector('h2 > button')).toBeTruthy();
     fireEvent.click(header(section));
-    expect(open).toBe(false);
+    expect(readDisclosure(waiting)).toBe(false);
   });
 
   it('fold a round from its row, its shipping choice and pull request acting on their own', () => {
-    const toggled: boolean[] = [];
+    const id = createDisclosureId('task', 't', 'overview', 'round', '2');
+    function Header({ shown, folded }: { shown: Task; folded: Round }) {
+      return <RoundHeader task={shown} round={folded} disclosure={useDisclosure(id, false)} />;
+    }
     const round = createRound({
       number: 2,
       status: 'waiting',
@@ -256,15 +318,15 @@ describe('the headers that fold', () => {
     });
     const view = render(
       <TooltipProvider>
-        <RoundHeader task={task} round={round} open={false} onToggle={() => toggled.push(true)} />
+        <Header shown={task} folded={round} />
       </TooltipProvider>
     );
     assertOneTrigger(view);
     fireEvent.click(view.getByText('Round 2 work'));
-    expect(toggled).toHaveLength(1);
+    expect(readDisclosure(id)).toBe(true);
     fireEvent.click(view.getByRole('combobox', { name: 'How round 2 ships' }));
-    expect(toggled).toHaveLength(1);
-    fireEvent.click(view.getByRole('button', { name: 'Expand round 2' }));
-    expect(toggled).toHaveLength(2);
+    expect(readDisclosure(id)).toBe(true);
+    fireEvent.click(view.getByRole('button', { name: 'Collapse round 2' }));
+    expect(readDisclosure(id)).toBe(false);
   });
 });

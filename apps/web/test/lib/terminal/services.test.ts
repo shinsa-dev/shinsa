@@ -25,7 +25,7 @@ import {
   parseServiceEnv,
   resolveActiveService,
   resolveServiceForm,
-  resolveServiceGroupFlag,
+  resolveServiceGroupId,
   resolveServicesAddTarget,
   resolveServicesProjects,
   resolveShownErrors,
@@ -118,7 +118,7 @@ describe('a project’s services in the menu', () => {
   });
 
   it('keeps each project’s fold apart', () => {
-    expect(resolveServiceGroupFlag('shop')).toBe('shinsa.services-open.shop');
+    expect(String(resolveServiceGroupId('shop'))).toBe('services:project:shop');
   });
 
   it('says what a service is when there are none, naming the project in view', () => {

@@ -30,7 +30,6 @@ import { ProjectDot } from '@/components/status/project-dot.tsx';
 import { useNow } from '@/hooks/use-now.ts';
 import { useTerminals } from '@/lib/connection/terminals.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { useStoredToggle } from '@/lib/preferences/stored-flag.ts';
 import { resolveSettingsPath } from '@/lib/settings-tabs.ts';
 import {
   canStartAll,
@@ -41,7 +40,7 @@ import {
   describeServicesTrigger,
   describeStartAll,
   listServiceGroups,
-  resolveServiceGroupFlag,
+  resolveServiceGroupId,
   resolveServicesAddTarget,
   resolveServicesProjects,
   SERVICES_ACTIVE_ICON,
@@ -84,11 +83,9 @@ function ServiceGroupSection({
   handlers: ServiceHandlers;
   manage: ManageControl | null;
 }) {
-  const [open, toggle] = useStoredToggle(resolveServiceGroupFlag(group.project.id), true);
   return (
     <CompactSection
-      open={open}
-      onToggle={toggle}
+      persistId={resolveServiceGroupId(group.project.id)}
       label={group.project.name}
       leading={<ProjectDot color={group.project.color} />}
       title={group.project.name}

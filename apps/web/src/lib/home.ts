@@ -11,6 +11,7 @@ import {
   type Task,
   type TaskStage,
 } from '@shinsa/core';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import type { QueueSection } from '@/lib/queue.ts';
 import { resolveCatalog, selectPullRequestTask } from '@/lib/tasks/references.ts';
 
@@ -62,8 +63,8 @@ export function listRecentlyFinished(state: ShinsaState, now: number, shown: Rea
     .slice(0, RECENT_LIMIT);
 }
 
-export function resolveHomeSectionFlag(key: QueueSection['key'] | 'finished' | 'conversations') {
-  return `shinsa.home-open.${key}`;
+export function resolveHomeSectionId(key: QueueSection['key'] | 'finished' | 'conversations') {
+  return createDisclosureId('home', 'section', key);
 }
 
 function listNamedTaskIds(state: ShinsaState, text: string) {

@@ -1,11 +1,11 @@
 import type { Task } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
-import * as React from 'react';
 import { PAGE_DESCRIPTION, PageHeading } from '@/components/layout/page/heading.tsx';
+import { resolveTaskDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { describeRequest } from '@/lib/tasks/request.ts';
 
 export function TaskHeading({ task, className }: { task: Task; className?: string }) {
-  const [open, setOpen] = React.useState(false);
+  const { open, toggle } = useDisclosure(resolveTaskDisclosureId(task.id, 'request'), false);
   const request = describeRequest(task);
   const description = cn(PAGE_DESCRIPTION, 'text-left', !open && 'line-clamp-2');
   return (
@@ -18,7 +18,7 @@ export function TaskHeading({ task, className }: { task: Task; className?: strin
           <button
             type='button'
             aria-expanded={open}
-            onClick={() => setOpen(!open)}
+            onClick={toggle}
             className={cn(
               description,
               'cursor-pointer whitespace-pre-line outline-none hover:text-fg-3 active:text-fg-3'

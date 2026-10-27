@@ -3,12 +3,12 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import * as React from 'react';
 import { SHIMMER_LINE } from '@/components/chat/chat-line.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
 import { describeAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
+import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { describeMessageStatus } from '@/lib/tasks/messages.ts';
 
 const CLAMP_LINES = 12;
@@ -76,15 +76,17 @@ function MessageStatus(message: Pick<HumanMessage, 'status' | 'reason'>) {
 }
 
 export function UserMessage({
+  persistId,
   text,
   attachments = [],
   status,
   reason,
 }: {
+  persistId: DisclosurePersistId;
   text: string;
   attachments?: ChatAttachment[];
 } & Pick<HumanMessage, 'status' | 'reason'>) {
-  const [expanded, setExpanded] = React.useState(false);
+  const { open: expanded, toggle } = useDisclosure(persistId, false);
   const body = text.trim();
   if (!body && attachments.length === 0) return null;
   const long = body.split('\n').length > CLAMP_LINES || body.length > CLAMP_CHARACTERS;

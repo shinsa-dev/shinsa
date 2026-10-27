@@ -5,6 +5,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
+import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import { acceptSuggestion, dismissSuggestion, keepSuggestion } from '@/lib/tasks/process.ts';
 import {
   listOpenSuggestions,
@@ -95,7 +96,11 @@ export function SuggestionsPanel({
   const open = listOpenSuggestions(task);
   if (open.length === 0) return null;
   return (
-    <Panel title='Suggested tasks' icon='IconLightbulbGlow'>
+    <Panel
+      persistId={resolveOverviewPanelId(task, 'suggestions')}
+      title='Suggested tasks'
+      icon='IconLightbulbGlow'
+    >
       <ul className='flex flex-col divide-y divide-border'>
         {open.map((suggestion) => (
           <SuggestionRow

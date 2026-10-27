@@ -16,6 +16,7 @@ import {
   type SkillGroup,
   SWITCH_LABEL,
 } from '@/lib/extensions.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { FoldingBlock, SETTING_ROW, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
 import { VirtualRows } from './virtual-rows.tsx';
 
@@ -67,7 +68,12 @@ function SkillGroupBlock({
   searching: boolean;
 }) {
   return (
-    <FoldingBlock title={group.title} detail={describeGroupCount(group)} forcedOpen={searching}>
+    <FoldingBlock
+      persistId={createDisclosureId('settings', 'skills', 'group', group.id)}
+      title={group.title}
+      detail={describeGroupCount(group)}
+      forcedOpen={searching}
+    >
       <VirtualRows items={group.skills} rowHeight={SKILL_ROW_HEIGHT} keyOf={(skill) => skill.id}>
         {(skill, index) => (
           <SkillRow

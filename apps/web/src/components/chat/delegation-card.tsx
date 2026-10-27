@@ -26,6 +26,7 @@ import {
 import type { TimelineItemOf } from '@/lib/chat/timeline.ts';
 import { useConnection } from '@/lib/connection/socket.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { useDisclosure, useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 import { stopDelegation } from '@/lib/tasks/process.ts';
 
 export const OpenDelegations = React.createContext<ReadonlySet<string>>(new Set());
@@ -111,10 +112,11 @@ export function DelegationSpawnCard({
   onStop: DelegationStopper;
 }) {
   const opened = React.useContext(OpenDelegations).has(view.run.id);
-  const [open, setOpen] = React.useState(opened);
+  const disclosure = useDisclosure(useDisclosureScope('delegation', view.run.id), opened);
+  const { replaceOpen } = disclosure;
   React.useEffect(() => {
-    if (opened) setOpen(true);
-  }, [opened]);
+    if (opened) replaceOpen(true);
+  }, [opened, replaceOpen]);
   return (
     <div
       data-message
@@ -122,8 +124,7 @@ export function DelegationSpawnCard({
       className={cn(CARD, 'flex min-w-0 scroll-mt-4 flex-col overflow-hidden', SELECTED_WASH)}
     >
       <DisclosureHeader
-        open={open}
-        onToggle={() => setOpen(!open)}
+        disclosure={disclosure}
         label='delegation'
         strip='band'
         chevron='box'
@@ -138,17 +139,20 @@ export function DelegationSpawnCard({
       {view.question && (
         <DelegationQuestion question={view.question} className='border-border border-t px-3 py-2' />
       )}
-      {open && <div className={cn('border-border border-t py-1', CHAT_NESTED)}>{conversation(view)}</div>}
+      {disclosure.open && (
+        <div className={cn('border-border border-t py-1', CHAT_NESTED)}>{conversation(view)}</div>
+      )}
     </div>
   );
 }
 
 export function DelegationReportRow({ view }: { view: DelegationView }) {
   const parts = { icon: <DelegationMark view={view} />, label: `${describeReportVerb(view)}: ${view.title}` };
+  const persistId = useDisclosureScope('delegation', view.run.id, 'report');
   return (
     <div data-message className={cn('flex min-w-0 flex-col', CHAT_INSET)}>
       {view.result ? (
-        <ExpandRow {...parts}>
+        <ExpandRow persistId={persistId} {...parts}>
           <Markdown text={view.result} className='prose-chat' />
         </ExpandRow>
       ) : (

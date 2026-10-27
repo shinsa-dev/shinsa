@@ -1,3 +1,4 @@
+import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -7,6 +8,7 @@ import {
   resolveDisclosureStrip,
   TRAILING_BOX,
 } from '@/components/layout/surface/disclosure.ts';
+import type { Disclosure } from '@/lib/preferences/disclosure.ts';
 
 type HeaderTag = 'div' | 'h2' | 'h3' | 'figcaption';
 
@@ -18,29 +20,61 @@ interface DisclosureTrigger {
 
 const TriggerContext = React.createContext<DisclosureTrigger | null>(null);
 
-const CHEVRON_BOX =
-  'corner-superellipse/1.125 grid shrink-0 place-items-center rounded-control-sm outline-none';
-
-const CHEVRON_WASH = {
-  box: 'text-fg-2 group-hover/disclosure:bg-bg-a2/70 group-hover/disclosure:text-fg-4 group-active/disclosure:bg-bg-a2/70 group-active/disclosure:text-fg-4',
-  glyph: 'group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4',
-};
+const GLYPH_CHEVRON =
+  'corner-superellipse/1.125 grid size-3.5 shrink-0 place-items-center rounded-control-sm outline-none group-hover/disclosure:text-fg-4 group-active/disclosure:text-fg-4';
 
 function describeToggle(open: boolean, label: string) {
   return `${open ? 'Collapse' : 'Expand'} ${label}`;
 }
 
-export function DisclosureChevron({ kind = 'glyph', className }: { kind?: ChevronKind; className?: string }) {
-  const trigger = React.useContext(TriggerContext);
-  const open = trigger?.open ?? false;
-  const glyph = (
+function ChevronGlyph({ open }: { open: boolean }) {
+  return (
     <Icon
-      size='sm'
       name='IconChevronDownSmall'
       className={cn('transition-[rotate] duration-150', !open && '-rotate-90')}
     />
   );
-  const classes = cn(CHEVRON_BOX, kind === 'box' ? TRAILING_BOX : 'size-3.5', CHEVRON_WASH[kind], className);
+}
+
+function BoxChevron({ trigger, className }: { trigger: DisclosureTrigger | null; className?: string }) {
+  const open = trigger?.open ?? false;
+  const classes = cn(TRAILING_BOX, className);
+  if (!trigger?.separate) {
+    return (
+      <Button
+        variant='secondary'
+        size='icon-xs'
+        nativeButton={false}
+        render={<span />}
+        tabIndex={-1}
+        aria-hidden
+        data-disclosure-chevron
+        className={classes}
+      >
+        <ChevronGlyph open={open} />
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant='secondary'
+      size='icon-xs'
+      data-disclosure-chevron
+      aria-expanded={open}
+      aria-label={trigger.label ? describeToggle(open, trigger.label) : undefined}
+      className={classes}
+    >
+      <ChevronGlyph open={open} />
+    </Button>
+  );
+}
+
+export function DisclosureChevron({ kind = 'glyph', className }: { kind?: ChevronKind; className?: string }) {
+  const trigger = React.useContext(TriggerContext);
+  if (kind === 'box') return <BoxChevron trigger={trigger} className={className} />;
+  const open = trigger?.open ?? false;
+  const glyph = <ChevronGlyph open={open} />;
+  const classes = cn(GLYPH_CHEVRON, className);
   if (!trigger?.separate) {
     return (
       <span data-disclosure-chevron aria-hidden className={classes}>
@@ -77,8 +111,7 @@ export function DisclosureAction({ children, className }: { children: React.Reac
 
 export function DisclosureHeader({
   as: Tag = 'div',
-  open,
-  onToggle,
+  disclosure,
   label,
   strip,
   chevron,
@@ -89,8 +122,7 @@ export function DisclosureHeader({
   children,
 }: {
   as?: HeaderTag;
-  open: boolean;
-  onToggle: () => void;
+  disclosure: Disclosure;
   label?: string;
   strip?: DisclosureStrip;
   chevron?: ChevronKind;
@@ -100,6 +132,7 @@ export function DisclosureHeader({
   className?: string;
   children: React.ReactNode;
 }) {
+  const { open, toggle: onToggle } = disclosure;
   const separate = interactive || Boolean(action);
   const trigger = React.useMemo(() => ({ open, label, separate }), [open, label, separate]);
   const header = cn(

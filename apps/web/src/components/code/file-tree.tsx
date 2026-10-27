@@ -20,6 +20,7 @@ import {
   resolveActiveGuide,
 } from '@/lib/code/tree.ts';
 import { requestRepoTree, useRepoTrees } from '@/lib/connection/code.ts';
+import { resolveTaskDisclosureId, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
 
 const FOLDER_PREFETCH_LIMIT = 64;
 
@@ -44,8 +45,11 @@ export function FileTree({
   onPrefetch: (path: string) => void;
   onPrefetchFolder: (dir: string) => void;
 }) {
-  const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(
-    () => new Set(listAncestors(activePath ?? ''))
+  const [stored, markOpen] = useDisclosureSet(resolveTaskDisclosureId(task.id, 'code', 'files'), true);
+  const [revealed, replaceRevealed] = React.useState<string | null>(null);
+  const expanded = React.useMemo<ReadonlySet<string>>(
+    () => (revealed === activePath ? stored : new Set([...stored, ...listAncestors(activePath ?? '')])),
+    [stored, revealed, activePath]
   );
   const changed = React.useMemo(() => new Map(changes.map((file) => [file.path, file])), [changes]);
   React.useEffect(() => {

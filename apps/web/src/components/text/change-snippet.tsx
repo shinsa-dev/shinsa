@@ -13,6 +13,7 @@ import { type DiffLines, resolveSpotSource } from '@/lib/code/diff-view.ts';
 import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import { useFileContent, useFileDiff, useTaskDiff, useTaskRefs } from '@/lib/connection/code.ts';
 import { formatLineRange } from '@/lib/format/count.ts';
+import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { resolveCodePath } from '@/lib/review/places.ts';
 
 const NOTE = 'px-2 py-1.5 text-2xs text-fg-2';
@@ -80,6 +81,7 @@ function SnippetPlace({
 }
 
 export function ChangeSnippet({
+  persistId,
   task,
   path,
   start,
@@ -89,6 +91,7 @@ export function ChangeSnippet({
   label = null,
   spot = null,
 }: {
+  persistId: DisclosurePersistId;
   task: Task;
   path: string;
   start: number;
@@ -98,14 +101,13 @@ export function ChangeSnippet({
   label?: React.ReactNode;
   spot?: string | null;
 }) {
-  const [open, setOpen] = React.useState(startsOpen);
+  const disclosure = useDisclosure(persistId, startsOpen);
   const lines = React.useMemo(() => ({ start, end }), [start, end]);
   return (
     <figure className='corner-superellipse/1.125 flex min-w-0 flex-col overflow-hidden rounded-lg border border-border'>
       <DisclosureHeader
         as='figcaption'
-        open={open}
-        onToggle={() => setOpen(!open)}
+        disclosure={disclosure}
         label='code'
         strip='strip'
         chevron='box'
@@ -115,7 +117,7 @@ export function ChangeSnippet({
         {label}
         <SnippetPlace task={task} path={path} start={start} end={end} spot={spot} />
       </DisclosureHeader>
-      {open && (
+      {disclosure.open && (
         <div className='border-border border-t'>
           <SnippetBody task={task} path={path} lines={lines} />
         </div>

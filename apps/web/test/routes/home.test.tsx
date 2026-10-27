@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { Activity, ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { createDisclosureId, readDisclosure } from '@/lib/preferences/disclosure.ts';
 import { HomePage } from '@/routes/home.tsx';
 import { startFakeServer, stopFakeServer } from '../support/server.ts';
 import { createGate, createProject, createRepo, createShinsaState, createTask } from '../support/state.ts';
@@ -120,8 +121,8 @@ describe('HomePage', () => {
     act(() => fireEvent.click(header(/^Recent conversations/)));
     expect(screen.queryByRole('button', { name: /Rename the settings page/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Wrote the export/ })).toBeNull();
-    expect(localStorage.getItem('shinsa.home-open.finished')).toBe('false');
-    expect(localStorage.getItem('shinsa.home-open.conversations')).toBe('false');
+    expect(readDisclosure(createDisclosureId('home', 'section', 'finished'))).toBe(false);
+    expect(readDisclosure(createDisclosureId('home', 'section', 'conversations'))).toBe(false);
     view.unmount();
     renderHome();
     expect(headers()).toEqual([

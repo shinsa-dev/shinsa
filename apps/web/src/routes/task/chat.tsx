@@ -31,6 +31,11 @@ import {
   resolveChatRunId,
   type TranscriptBlock,
 } from '@/lib/chat/window.ts';
+import {
+  DisclosureScope,
+  resolveTaskDisclosureId,
+  useDisclosureScope,
+} from '@/lib/preferences/disclosure.ts';
 import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { hasRounds } from '@/lib/tasks/rounds.ts';
 
@@ -58,11 +63,13 @@ function TranscriptBlockView({
   waiting: boolean;
   rerunId: string | null;
 }) {
+  const messageId = useDisclosureScope('block', block.key, 'message');
   switch (block.kind) {
     case 'message':
       return (
         <div className={ROW}>
           <UserMessage
+            persistId={messageId}
             text={block.message.text}
             status={block.message.status}
             reason={block.message.reason}
@@ -74,7 +81,7 @@ function TranscriptBlockView({
         <>
           <RoundDivider round={block.round} first={block.first} />
           <div className={ROW}>
-            <UserMessage text={block.round.request} />
+            <UserMessage persistId={messageId} text={block.round.request} />
           </div>
         </>
       );
@@ -154,17 +161,19 @@ export function ChatTab({
         >
           <TaskEvidence.Provider value={evidence}>
             <OpenDelegations.Provider value={opened}>
-              <div ref={content} className={cn(PAGE_COLUMN, CHAT_COLUMN, 'flex flex-col pt-2 pb-6')}>
-                <Transcript
-                  key={task.id}
-                  state={state}
-                  task={task}
-                  runs={runs}
-                  focusRunId={focusRunId}
-                  scroller={scroller}
-                  content={content}
-                />
-              </div>
+              <DisclosureScope value={resolveTaskDisclosureId(task.id, 'chat')}>
+                <div ref={content} className={cn(PAGE_COLUMN, CHAT_COLUMN, 'flex flex-col pt-2 pb-6')}>
+                  <Transcript
+                    key={task.id}
+                    state={state}
+                    task={task}
+                    runs={runs}
+                    focusRunId={focusRunId}
+                    scroller={scroller}
+                    content={content}
+                  />
+                </div>
+              </DisclosureScope>
             </OpenDelegations.Provider>
           </TaskEvidence.Provider>
         </ScrollArea>

@@ -1,6 +1,9 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from '@babel/parser';
+import { listDisclosureViolations } from './lint-disclosure.ts';
+import { RAW_SELECTION_MESSAGE, RAW_SELECTION_PATTERN, SELECTION_CLASS_RULE } from './lint-selection.ts';
+import { TONE_EDGE_RULE } from './lint-tone-edge.ts';
 
 type Violation = { file: string; line: number; message: string };
 
@@ -714,6 +717,9 @@ function checkFile(file: string, violations: Violation[]): void {
   collectRawSelection(file, source, violations);
   collectClassViolations(file, source, violations);
   collectSyntaxViolations(file, parsed.program, violations);
+  if (file.endsWith('.tsx') && isUnder(file, APP)) {
+    for (const violation of listDisclosureViolations(source)) violations.push({ file, ...violation });
+  }
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
 }
 

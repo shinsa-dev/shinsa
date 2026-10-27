@@ -16,6 +16,7 @@ import { describeParkedRun } from '@/lib/chat/delegations.ts';
 import type { RunTurn } from '@/lib/chat/timeline.ts';
 import { resolveLiveStep, selectLatestAgentText } from '@/lib/chat/turns.ts';
 import { flattenWhitespace, formatSteps } from '@/lib/format/count.ts';
+import { useDisclosure, useDisclosureScope } from '@/lib/preferences/disclosure.ts';
 
 const SWAP_MS = 240;
 
@@ -60,7 +61,7 @@ function SwapText({ id, text }: { id: string; text: string }) {
 }
 
 export function LiveCard({ run, turn, waiting }: { run: Run; turn: RunTurn; waiting: boolean }) {
-  const [open, setOpen] = React.useState(false);
+  const disclosure = useDisclosure(useDisclosureScope('run', run.id, 'turn', turn.key, 'live'), false);
   const now = useNow();
   const latest = selectLatestAgentText(turn);
   const parked = describeParkedRun(run);
@@ -74,13 +75,7 @@ export function LiveCard({ run, turn, waiting }: { run: Run; turn: RunTurn; wait
           <SwapText id={latest.key} text={latest.text} />
         </div>
       )}
-      <DisclosureHeader
-        open={open}
-        onToggle={() => setOpen(!open)}
-        strip='band'
-        chevron='box'
-        className='gap-1.25 ps-3 text-2xs'
-      >
+      <DisclosureHeader disclosure={disclosure} strip='band' chevron='box' className='gap-1.25 ps-3 text-2xs'>
         <IconSlot>
           <Pulse tone={tone} />
         </IconSlot>
@@ -92,7 +87,7 @@ export function LiveCard({ run, turn, waiting }: { run: Run; turn: RunTurn; wait
           {turn.steps > 0 && ` · ${formatSteps(turn.steps)}`}
         </span>
       </DisclosureHeader>
-      {open && (
+      {disclosure.open && (
         <div className='border-border border-t p-3'>
           <TurnDetail items={turn.work.filter((item) => item !== latest)} run={run} />
         </div>

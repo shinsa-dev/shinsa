@@ -18,6 +18,7 @@ import {
   splitMatchText,
 } from '@/lib/code/search.ts';
 import { type CodeSearch, useRepoSearch } from '@/lib/connection/code.ts';
+import { notPersisted, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
 
 const SEARCH_DELAY_MS = 250;
 

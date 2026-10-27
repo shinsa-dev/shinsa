@@ -11,6 +11,7 @@ import {
 import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { type DelegationView, describeDelegations, listRoundDelegationTree } from '@/lib/chat/delegations.ts';
+import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
 import { stopDelegation } from '@/lib/tasks/process.ts';
 
 const DEPTH_INDENT = ['', '', 'ps-6.25'];
@@ -69,6 +70,7 @@ export function DelegationsPanel({
   const summary = describeDelegations(tree.map((entry) => entry.view));
   return (
     <Panel
+      persistId={resolveOverviewPanelId(task, 'delegations')}
       title='Delegations'
       icon='IconAgents'
       meta={summary && <span className='font-normal text-2xs text-fg-2 tabular-nums'>{summary}</span>}

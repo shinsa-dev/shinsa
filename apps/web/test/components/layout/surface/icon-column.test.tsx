@@ -15,6 +15,7 @@ import {
 import { resolveDisclosureStrip } from '@/components/layout/surface/disclosure.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { createRun } from '../../../support/state.ts';
 
 function spacing(classes: string, pattern: RegExp) {
@@ -64,7 +65,7 @@ describe('one icon column per card', () => {
 
   it('gives the Overview’s panels the same header', () => {
     const view = render(
-      <Panel title='Activity' icon='IconClock'>
+      <Panel persistId={createDisclosureId('ui', 'panel', 'activity')} title='Activity' icon='IconClock'>
         <p>Row</p>
       </Panel>
     );

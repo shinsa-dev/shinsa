@@ -6,6 +6,11 @@ import { RoundHeader } from '@/components/overview/round-header.tsx';
 import { InlineMarkdown } from '@/components/text/markdown.tsx';
 import { listTaskRuns } from '@/lib/chat/runs.ts';
 import {
+  resolveOverviewPanelId,
+  resolveTaskDisclosureId,
+  useDisclosure,
+} from '@/lib/preferences/disclosure.ts';
+import {
   listEarlierRounds,
   listWaitingRounds,
   ROUND_ICON,
@@ -54,17 +59,19 @@ function RoundRow({
   onOpen: (runId: string) => void;
   onShippingChange?: ShippingChanger;
 }) {
-  const [open, setOpen] = React.useState(false);
+  const disclosure = useDisclosure(
+    resolveTaskDisclosureId(task.id, 'overview', 'round', String(round.number)),
+    false
+  );
   return (
     <li className='flex flex-col py-2 first:pt-0 last:pb-0'>
       <RoundHeader
         task={task}
         round={round}
-        open={open}
-        onToggle={() => setOpen(!open)}
+        disclosure={disclosure}
         {...(onShippingChange ? { onShippingChange } : {})}
       />
-      {open && <RoundDetail round={round} run={run} onOpen={onOpen} />}
+      {disclosure.open && <RoundDetail round={round} run={run} onOpen={onOpen} />}
     </li>
   );
 }
@@ -95,7 +102,7 @@ export function RoundsPanel({
     />
   );
   return (
-    <Panel title='Rounds' icon={ROUND_ICON}>
+    <Panel persistId={resolveOverviewPanelId(task, 'rounds')} title='Rounds' icon={ROUND_ICON}>
       <div className='flex flex-col divide-y divide-border'>
         {earlier.length > 0 && (
           <ul

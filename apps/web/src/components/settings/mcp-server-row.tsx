@@ -3,7 +3,6 @@ import { Button } from '@shinsa/ui/components/button';
 import { Switch } from '@shinsa/ui/components/switch';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
-import * as React from 'react';
 import { SectionChevron } from '@/components/layout/page/section-label.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
@@ -23,6 +22,7 @@ import {
   SWITCH_LABEL,
 } from '@/lib/extensions.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
+import { createDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { SETTING_ROW, TOKEN_TEXT } from './group.tsx';
 import { ServerMenu } from './mcp-server-menu.tsx';
 
@@ -98,8 +98,7 @@ export function McpServerRow({
   ...props
 }: RowProps & { actions: ExtensionActions; onOpen: (target: ServerDialogTarget) => void }) {
   const { server, snapshot, places } = props;
-  const [open, setOpen] = React.useState(false);
-  const toggle = () => setOpen((value) => !value);
+  const { open, toggle } = useDisclosure(createDisclosureId('settings', 'mcp', 'server', server.id), false);
   return (
     <div className='flex flex-col'>
       <div className={cn(SETTING_ROW, 'gap-1.5')}>

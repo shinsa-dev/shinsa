@@ -4,6 +4,7 @@ import * as React from 'react';
 import { ReviewNote } from '@/components/review/note.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
 import { isSubmitKey } from '@/lib/keys.ts';
+import { notPersisted, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeCommentLines, type LineComment } from '@/lib/review/draft.ts';
 import { toCommentItem } from '@/lib/review/report.ts';
 
@@ -14,6 +15,11 @@ const NOTE = `flex ${NOTE_WIDTH} flex-col gap-1.5 rounded-lg px-3 py-2 font-sans
 function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: (() => void) | null }) {
   return (
     <ReviewNote
+      persistId={
+        task
+          ? resolveTaskDisclosureId(task.id, 'code', 'comment', comment.id)
+          : notPersisted('a comment shown without its task')
+      }
       item={toCommentItem(comment)}
       compact
       className={NOTE_WIDTH}

@@ -13,14 +13,14 @@ import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { resolveHomeSectionFlag } from '@/lib/home.ts';
-import { useStoredToggle } from '@/lib/preferences/stored-flag.ts';
+import { resolveHomeSectionId } from '@/lib/home.ts';
+import { type DisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import {
   listQueueSections,
   type QueueItem,
   type QueueSection,
   resolveSectionDefault,
-  resolveSectionFlag,
+  resolveSectionId,
 } from '@/lib/queue.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
@@ -43,22 +43,22 @@ export function WideSection({
   title,
   count,
   empty,
-  flag,
+  persistId,
   children,
 }: {
   title: string;
   count: number;
   empty: string | null;
-  flag: string;
+  persistId: DisclosureId;
   children: React.ReactNode;
 }) {
-  const [open, toggle] = useStoredToggle(flag, true);
+  const disclosure = useDisclosure(persistId, true);
   return (
-    <section className={cn('flex flex-col gap-1', open && 'pb-1')}>
-      <SectionLabel count={count} open={open} onToggle={toggle} className='px-1'>
+    <section className={cn('flex flex-col gap-1', disclosure.open && 'pb-1')}>
+      <SectionLabel count={count} disclosure={disclosure} className='px-1'>
         {title}
       </SectionLabel>
-      {open && (
+      {disclosure.open && (
         <div className={cn(CARD, 'p-1 [--glyph-ring:var(--color-card)]')}>
           {count === 0 ? (
             <p className='p-2.5 text-2xs text-fg-2'>{empty}</p>
@@ -84,15 +84,11 @@ function QueueCompactSection({
   activeTaskId: string | null;
   children: React.ReactNode;
 }) {
-  const [open, onToggle] = useStoredToggle(
-    resolveSectionFlag(section),
-    resolveSectionDefault(section, activeTaskId)
-  );
   const count = section.items.length;
   return (
     <CompactSection
-      open={open}
-      onToggle={onToggle}
+      persistId={resolveSectionId(section)}
+      defaultOpen={resolveSectionDefault(section, activeTaskId)}
       leading={
         <Icon
           size='sm'
@@ -155,7 +151,7 @@ function QueueSectionView({
       title={section.title}
       count={section.items.length}
       empty={section.empty}
-      flag={resolveHomeSectionFlag(section.key)}
+      persistId={resolveHomeSectionId(section.key)}
     >
       {rows}
     </WideSection>

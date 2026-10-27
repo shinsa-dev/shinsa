@@ -16,6 +16,12 @@ import { Markdown } from '@/components/text/markdown.tsx';
 import { resolveContextMeter } from '@/lib/chat/context.ts';
 import { type DelegationView, selectDelegation } from '@/lib/chat/delegations.ts';
 import type { QuietNoticeKind, TimelineItemOf } from '@/lib/chat/timeline.ts';
+import {
+  createDisclosureId,
+  DisclosureScope,
+  useDisclosure,
+  useDisclosureScope,
+} from '@/lib/preferences/disclosure.ts';
 import { createSampleChatCalls } from './sample-chat.ts';
 import { createSampleDelegations } from './sample-delegations.ts';
 import { acknowledgeSample, createSampleRoundsTask, createSampleRun, createSampleState } from './samples.ts';
@@ -156,7 +162,11 @@ function IconColumnSpecimen({ view }: { view: DelegationView | undefined }) {
             onStop={acknowledgeSample}
           />
         )}
-        <Panel title='Activity' icon='IconClock'>
+        <Panel
+          persistId={createDisclosureId('ui', 'chat', 'panel', 'activity')}
+          title='Activity'
+          icon='IconClock'
+        >
           <div className='flex items-center gap-3 text-fg-3 text-xs'>
             <StatusTile icon='IconBubbleText' tone='blue' />
             Answered the question
@@ -182,7 +192,9 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
       outcome: 'completed',
     })
   );
-  const [open, setOpen] = React.useState(true);
+  const { open, toggle } = useDisclosure(createDisclosureId('ui', 'chat', 'lines', 'worked'), true);
+  const briefId = useDisclosureScope('lines', 'brief');
+  const groupId = useDisclosureScope('lines', 'group');
   const loaded = notices.find((item) => item.kind === 'extensions');
   return (
     <>
@@ -191,14 +203,14 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
           <ChatLine icon='IconAgent' label='Agent' meta='Planned 4 phases · christo@example.com' />
           {loaded && <NoticeLine item={loaded} />}
           <div className='flex min-w-0 flex-col'>
-            <FoldLine open={open} onToggle={() => setOpen(!open)} label='Worked for 58s' meta='8 steps' />
+            <FoldLine open={open} onToggle={toggle} label='Worked for 58s' meta='8 steps' />
             {open && (
               <DetailRail className='pb-0'>
                 <div className='flex min-w-0 flex-col gap-4'>
-                  <ExpandRow icon='IconFileText' label='Brief from Shinsa'>
+                  <ExpandRow persistId={briefId} icon='IconFileText' label='Brief from Shinsa'>
                     <Markdown text='List the projects Shinsa knows.' className='prose-chat' />
                   </ExpandRow>
-                  <ToolGroup calls={calls.work} live={false} />
+                  <ToolGroup persistId={groupId} calls={calls.work} live={false} />
                   <ToolRow call={calls.retried} live={false} />
                 </div>
               </DetailRail>
@@ -218,6 +230,36 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
 }
 
 export function ChatSpecimens() {
+  return (
+    <DisclosureScope value={createDisclosureId('ui', 'chat')}>
+      <ChatSpecimenList />
+    </DisclosureScope>
+  );
+}
+
+function SampleMessages() {
+  const sample = (name: string) => createDisclosureId('ui', 'chat', 'message', name);
+  return (
+    <div className='flex w-full max-w-xl flex-col gap-2'>
+      <UserMessage persistId={sample('delivered')} text='Use the cheaper plan.' />
+      <UserMessage
+        persistId={sample('sending')}
+        text='Also add search to the settings page.'
+        status='sending'
+      />
+      <UserMessage persistId={sample('queued')} text='And dark mode.' status='queued' />
+      <UserMessage persistId={sample('noted')} text='Thanks!' status='noted' />
+      <UserMessage
+        persistId={sample('undelivered')}
+        text='One more thing.'
+        status='undelivered'
+        reason='This task is finished. Start a new one.'
+      />
+    </div>
+  );
+}
+
+function ChatSpecimenList() {
   const [now] = React.useState(Date.now);
   const [views] = React.useState(() => createDelegationViews(now));
   const [notices] = React.useState(() => createNoticeItems(now));
@@ -247,17 +289,7 @@ export function ChatSpecimens() {
         </div>
       </Specimen>
       <Specimen label='UserMessage · delivered, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
-        <div className='flex w-full max-w-xl flex-col gap-2'>
-          <UserMessage text='Use the cheaper plan.' />
-          <UserMessage text='Also add search to the settings page.' status='sending' />
-          <UserMessage text='And dark mode.' status='queued' />
-          <UserMessage text='Thanks!' status='noted' />
-          <UserMessage
-            text='One more thing.'
-            status='undelivered'
-            reason='This task is finished. Start a new one.'
-          />
-        </div>
+        <SampleMessages />
       </Specimen>
       <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (open a row for why)'>
         <div className='flex w-full max-w-xl flex-col gap-2'>

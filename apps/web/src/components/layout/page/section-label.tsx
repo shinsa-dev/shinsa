@@ -2,6 +2,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
 import { DisclosureChevron, DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
+import type { Disclosure } from '@/lib/preferences/disclosure.ts';
 
 const SECTION_LABEL = 'flex shrink-0 items-center gap-1.5 font-medium text-2xs text-fg-2 leading-4';
 
@@ -21,15 +22,13 @@ export function SectionLabel({
   children,
   count,
   action,
-  open = true,
-  onToggle,
+  disclosure,
   className,
 }: {
   children: React.ReactNode;
   count?: number;
   action?: React.ReactNode;
-  open?: boolean;
-  onToggle?: () => void;
+  disclosure?: Disclosure;
   className?: string;
 }) {
   const label = (
@@ -38,12 +37,11 @@ export function SectionLabel({
       {count !== undefined && <span className='font-normal text-fg-2 tabular-nums'>{count}</span>}
     </>
   );
-  if (onToggle) {
+  if (disclosure) {
     return (
       <DisclosureHeader
         as='h2'
-        open={open}
-        onToggle={onToggle}
+        disclosure={disclosure}
         action={action && <span className={ACTIONS}>{action}</span>}
         className={cn(SECTION_LABEL, 'h-6 gap-1.5 hover:text-fg-4 active:text-fg-4', className)}
       >

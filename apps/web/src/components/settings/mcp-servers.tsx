@@ -2,6 +2,7 @@ import type { ExtensionsSnapshot, McpServerSummary } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { RefreshButton } from '@/components/accounts/refresh-button.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
@@ -16,7 +17,8 @@ import {
   resolveCurrentServer,
   type ServerDialogTarget,
 } from '@/lib/extensions.ts';
-import { FoldingBlock, SettingsEmpty, SettingsGroup } from './group.tsx';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
+import { FoldingBlock, ROW_INSET, SettingsEmpty, SettingsGroup } from './group.tsx';
 import { McpServerRow } from './mcp-server-row.tsx';
 import { ServerDialog } from './server-dialog.tsx';
 
@@ -125,6 +127,7 @@ export function McpServersGroup({
       {listServerStatusGroups(servers, snapshot.plugins).map((group) => (
         <FoldingBlock
           key={group.key}
+          persistId={createDisclosureId('settings', 'mcp', 'group', group.key)}
           title={group.title}
           detail={String(group.servers.length)}
           status={group}

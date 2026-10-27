@@ -1,10 +1,12 @@
 import type { ReviewFinding, Task } from '@shinsa/core';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
+import type * as React from 'react';
 import { CHIP } from '@/components/layout/surface/card.ts';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
-import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
+import { SuggestedFix } from '@/components/text/inset-note.tsx';
+import { NoteHead } from '@/components/text/note-head.tsx';
+import { hashDisclosurePart, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeFindingPlace, SEVERITY_LABEL } from '@/lib/review/findings.ts';
 
 export function FindingText({ finding, task = null }: { finding: ReviewFinding; task?: Task | null }) {
@@ -27,6 +29,12 @@ export function FindingText({ finding, task = null }: { finding: ReviewFinding; 
       {snippet && (
         <div className='mt-1.5'>
           <ChangeSnippet
+            persistId={resolveTaskDisclosureId(
+              snippet.task.id,
+              'finding',
+              hashDisclosurePart([snippet.path, snippet.line, finding.message].join('\n')),
+              'snippet'
+            )}
             task={snippet.task}
             path={snippet.path}
             start={snippet.line}

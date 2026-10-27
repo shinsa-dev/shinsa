@@ -3,6 +3,7 @@ import type { ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { TaskQueue } from '@/components/queue/queue.tsx';
+import { createDisclosureId, readDisclosure, writeDisclosure } from '@/lib/preferences/disclosure.ts';
 import { createGate, createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
 
 const FULL = createShinsaState({
@@ -96,15 +97,15 @@ describe('compact queue', () => {
     renderQueue();
     act(() => fireEvent.click(header(/^Waiting on another task/)));
     expect(isOpen(/^Waiting on another task/)).toBe(true);
-    expect(localStorage.getItem('shinsa.queue-open.waiting')).toBe('true');
+    expect(readDisclosure(createDisclosureId('queue', 'section', 'waiting'))).toBe(true);
     act(() => fireEvent.click(header(/^Needs you/)));
     expect(isOpen(/^Needs you/)).toBe(false);
     expect(screen.queryByRole('button', { name: /Review the login fix/ })).toBeNull();
-    expect(localStorage.getItem('shinsa.queue-open.needs')).toBe('false');
+    expect(readDisclosure(createDisclosureId('queue', 'section', 'needs'))).toBe(false);
   });
 
   it('keeps a closed choice over the open default for the task on screen', () => {
-    localStorage.setItem('shinsa.queue-open.waiting', 'false');
+    writeDisclosure(createDisclosureId('queue', 'section', 'waiting'), false);
     renderQueue({ activeTaskId: 'later' });
     expect(isOpen(/^Waiting on another task/)).toBe(false);
   });
@@ -117,7 +118,7 @@ describe('compact queue', () => {
   });
 
   it('lists waiting tasks in chain order rather than by priority', () => {
-    localStorage.setItem('shinsa.queue-open.waiting', 'true');
+    writeDisclosure(createDisclosureId('queue', 'section', 'waiting'), true);
     renderQueue({
       state: createShinsaState({
         tasks: [
@@ -160,7 +161,7 @@ describe('wide queue', () => {
   });
 
   it('keeps its open sections apart from the compact queue', () => {
-    localStorage.setItem('shinsa.queue-open.working', 'false');
+    writeDisclosure(createDisclosureId('queue', 'section', 'working'), false);
     const view = renderQueue({ variant: 'wide' });
     expect(isOpen(/^In progress/)).toBe(true);
     act(() => fireEvent.click(header(/^Needs you/)));

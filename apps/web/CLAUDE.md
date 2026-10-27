@@ -78,7 +78,7 @@ src/
 │                        header's counts, its action at the end), the logo link home and home-link.tsx (the Home button
 │                        that replaces it in the Mac app), nav-button.tsx (NavButton: the Cards top bar's Home, Tasks and
 │                        icon-only Settings, filled on their own page), page/ column, heading, toolbar, section
-│                        label, the page scroller with its edge fade, surface/ card and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
+│                        label, the page scroller with its edge fade, surface/ card, inset (INSET: the edge of every box nested in a card; TONE_INSET: a toned box on its tone’s edge) and chip classes, the icon slot, panel, disclosure-header.tsx (DisclosureHeader: every collapsible header, the whole header the trigger) with disclosure.ts (its heights and trailing inset), step number),
 │                        status (tiles, glyphs, tones in text, check marks, priority, the health and engine banners, the Update button,
 │                        loading-line.tsx: LoadingLine and LoadingSpinner, the waits that show only after 300ms), links (TaskLink, PrLink,
 │                        RepoChip, BranchChip, FileLink, references), overlays (hint, info popover, image
@@ -196,9 +196,11 @@ src/
     │                    browser.ts, settings.ts (the Notifications rows), page.ts (the tab title and Floaty's
     │                    meta tags)
     ├── format/          Counts, times, money, labels, tones, the shared minute and second clocks (clock.ts), a small LRU
-    │                    cache (cache.ts), the rows in view of a list (rows.ts)
-    ├── preferences/     localStorage: theme, layout, rail width, recent tasks, section flags, notifications, the
-    │                    terminal's font size
+    │                    cache (cache.ts), the rows in view of a list (rows.ts), a checklist's progress and a Markdown
+    │                    task list's items (checklist.ts)
+    ├── preferences/     localStorage: theme, layout, rail width, recent tasks, flags, notifications, the
+    │                    terminal's font size, disclosure.ts (every collapsible's open state: useDisclosure,
+    │                    createDisclosureId, DisclosureScope; docs/design.md 40)
     ├── desktop.ts       The desktop app's bridge (`window.shinsaDesktop`, absent in a browser and Floaty):
     │                    `data-desktop` on <html>, its navigation, the Dock badge, notifications, the page's
     │                    surface and whether it stays quiet (`isPageQuiet`), the app's version and protocol
@@ -274,6 +276,17 @@ files after it.
   (`isPageQuiet`): `useAttention` plays no sound and shows no notification, but keeps the count and status in the
   title and Floaty's tags, which Floaty reads; Settings → Notifications says the app handles them. Anything new that
   alerts goes through that check (`docs/design.md`, 31).
+- **A render error stays in its region** (`docs/design.md`, 38). The app root, every routed page (keyed by its
+  route, so going there again recovers), every task tab's content and every shell widget that reads live state (the
+  top bar's menus and status, the rail's sections) sit in an `ErrorBoundary` (`components/errors/boundary.tsx`)
+  of the right size: `page` for a route, `inline` for a region, `icon` for a trigger in a bar, `silent` for what
+  renders nothing of its own. A new top-level region, or a new widget in the shell that reads live state, gets one.
+- **Every collapsible remembers whether it is open** (`docs/design.md`, 40). Its state is `useDisclosure(persistId,
+  defaultOpen)` from `lib/preferences/disclosure.ts`, never `useState`; a collapsible primitive (`Panel`,
+  `ReviewNote`, `ExpandRow`, …) takes a required `persistId` built with `createDisclosureId` from what it shows
+  (`task:<taskId>:overview:panel:<panel>`), never an index, and `DisclosureHeader` takes the hook's `disclosure`. A
+  fold that should be forgotten passes `notPersisted('why')`. `bun lint:conventions` rejects the rest
+  (`scripts/lint-disclosure.ts`); `test/setup.ts` resets the store between tests.
 - **No comments** (lint-enforced). Names, small modules and `docs/` explain.
 - `@shinsa/ui` resolves through its package `exports`; there is no path alias to its sources.
 

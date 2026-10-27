@@ -22,7 +22,9 @@ import {
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
+import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
+import { resolveReviewPath } from '@/lib/review/places.ts';
 import { describeSteps } from '@/lib/tasks/shapes.ts';
 
 function Card({

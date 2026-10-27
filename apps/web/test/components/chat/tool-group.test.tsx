@@ -4,6 +4,7 @@ import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render } from '@testing-library/react';
 import { ToolGroup } from '@/components/chat/tool-group.tsx';
 import { resolveTimeline, type ToolCall } from '@/lib/chat/timeline.ts';
+import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { createEntry } from '../../support/server.ts';
 
 function runCommands(count: number, { failed = [] as number[], open = [] as number[] } = {}) {
@@ -42,10 +43,12 @@ function runCommands(count: number, { failed = [] as number[], open = [] as numb
 function renderGroup(calls: ToolCall[], live = false) {
   return render(
     <TooltipProvider>
-      <ToolGroup calls={calls} live={live} />
+      <ToolGroup persistId={GROUP} calls={calls} live={live} />
     </TooltipProvider>
   );
 }
+
+const GROUP = createDisclosureId('task', 't1', 'chat', 'item', 'tools');
 
 describe('ToolGroup', () => {
   it('shows a single call as its own row', () => {
@@ -79,7 +82,7 @@ describe('ToolGroup', () => {
     expect(view.getAllByRole('button')).toHaveLength(2);
     view.rerender(
       <TooltipProvider>
-        <ToolGroup calls={runCommands(3)} live />
+        <ToolGroup persistId={GROUP} calls={runCommands(3)} live />
       </TooltipProvider>
     );
     const [group, latest] = view.getAllByRole('button');

@@ -22,6 +22,7 @@ import {
 } from '@/lib/code/tree.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { useHideViewed } from '@/lib/preferences/code.ts';
+import { type DisclosureId, useDisclosureSet } from '@/lib/preferences/disclosure.ts';
 
 export function StatusLetter({ status, muted = false }: { status: DiffFile['status']; muted?: boolean }) {
   return (
@@ -187,6 +188,7 @@ export function ChangesTree({
   onOpen,
   onPrefetch,
 }: {
+  persistId: DisclosureId;
   diff: TaskDiff;
   activePath: string | null;
   commentCounts: ReadonlyMap<string, number>;
@@ -195,7 +197,7 @@ export function ChangesTree({
   onOpen: (path: string) => void;
   onPrefetch: (path: string) => void;
 }) {
-  const [collapsed, setCollapsed] = React.useState<ReadonlySet<string>>(new Set());
+  const [collapsed, markCollapsed] = useDisclosureSet(persistId, false);
   const [hideViewed, toggleHideViewed] = useHideViewed();
   const shown = React.useMemo(
     () => listShownChanges(diff.files, viewed, hideViewed, activePath),
