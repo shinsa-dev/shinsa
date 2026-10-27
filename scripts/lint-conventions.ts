@@ -298,6 +298,12 @@ function listSourceFiles(root: string): string[] {
   return files;
 }
 
+function listStyleSheets(root: string): string[] {
+  return readdirSync(root, { recursive: true })
+    .map((entry) => join(root, String(entry)))
+    .filter((path) => path.endsWith('.css'));
+}
+
 function isUnder(file: string, roots: readonly string[]) {
   return roots.some((root) => file.startsWith(root));
 }
@@ -661,6 +667,14 @@ function isRuleBroken(rule: ClassRule, file: string, line: string) {
   return rule.pattern.test(line) && !rule.unless?.test(line);
 }
 
+function collectRawSelection(file: string, source: string, violations: Violation[]): void {
+  if (!isUnder(file, APP)) return;
+  source.split('\n').forEach((line, index) => {
+    if (RAW_SELECTION_PATTERN.test(line))
+      violations.push({ file, line: index + 1, message: RAW_SELECTION_MESSAGE });
+  });
+}
+
 function collectClassViolations(file: string, source: string, violations: Violation[]): void {
   if (!file.endsWith('.tsx')) return;
   source.split('\n').forEach((line, index) => {
@@ -691,6 +705,7 @@ function checkFile(file: string, violations: Violation[]): void {
   if (!isUnder(file, COMMENT_CHECK_EXCLUDED_ROOTS)) {
     collectCommentViolations(file, parsed.comments ?? [], violations);
   }
+  collectRawSelection(file, source, violations);
   collectClassViolations(file, source, violations);
   collectSyntaxViolations(file, parsed.program, violations);
   if (isUnder(file, VERB_CHECK_ROOTS)) collectVerbViolations(file, parsed.program, violations);
@@ -701,6 +716,8 @@ function run(): void {
   for (const root of ROOTS.filter((candidate) => existsSync(candidate))) {
     for (const file of listSourceFiles(root)) checkFile(file, violations);
   }
+  for (const sheet of APP.flatMap((root) => listStyleSheets(root)))
+    collectRawSelection(sheet, readFileSync(sheet, 'utf8'), violations);
   if (violations.length === 0) return;
   for (const violation of violations) {
     process.stderr.write(

@@ -1517,13 +1517,15 @@ Only these, and they win over anything below:
       lights are gone), and the `desktop:` variant (`app.css`) holds the room they take: the Cards top bar
       `desktop:ps-16`, the Sidebar rail's header and compact bar `desktop:ps-20`. A bar marked `data-window-drag`
       drags the window; its buttons, links, inputs and the reconnecting dot stay clickable, and toasts, dialogs,
-      menus and tooltips never drag. The bars are chrome: `select-none`, so a drag across them never selects text,
-      while content (the chat, the overview, code) stays selectable.
+      menus and tooltips never drag. The bars are chrome, so a drag across them never selects text, while content
+      (the chat, the overview, code) stays selectable (39).
     - **Home, not the wordmark.** A Mac app's toolbar carries its controls, not its name (the menu bar and the
       Dock already say Shinsa), so in the app the Shinsa wordmark is a Home button: `HomeLink`
       (`components/layout/home-link.tsx`) renders a `NavButton` there, as Tasks and Settings are (secondary `sm`, `IconHomeRoundDoor` and the word Home; on Home itself
       `IconHomeRoundDoorFilled` in `fg-4` with `aria-current="page"`; the tooltip "Home ⇧⌘H") and `BrandLink` in a browser and Floaty, in the Cards top bar, the rail's
-      header and the compact bar alike. In the Cards top bar the wordmark, which has no padding of its own, keeps 8px after it (`brandClassName`, `me-2`), so what it draws sits as far from Tasks as every other pair in the bar sits apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
+      header and the compact bar alike. The site's demos (`apps/marketing`, which never have the bridge) ask for the
+      app's look with the `DesktopChrome` context (`lib/desktop.ts`) and render the bar at the demo's page with
+      `RouteScope` (`router.ts`); nothing else reads either. In the Cards top bar the wordmark, which has no padding of its own, keeps 8px after it (`brandClassName`, `me-2`), so what it draws sits as far from Tasks as every other pair in the bar sits apart: 19px between what one button draws and the next, Home in the app, Tasks, Services and the queue on the left and Settings, usage and Focus on the right included; the icon-only Settings keeps 2px more after it (`me-0.5`), since a square icon button pads its glyph less than a labelled button does (measured from the pixels at 1440 and 900, light and dark, in the browser and the app: every gap 19px, the browser's Services to the queue 18px). The Go menu has the matching keys: Back ⌘[ and Forward ⌘] step through
       the page's own history (`MainWindow.step`, which never steps onto the waiting page,
       `resolveHistoryStep`), and Home ⇧⌘H opens `/`, as in Finder and Safari. The code editor keeps ⌘[ and ⌘] for
       indent and outdent while it has focus, since the page sees the key before the menu does.
@@ -2125,7 +2127,107 @@ Only these, and they win over anything below:
       popover with three projects, with a project's none and with no project, Manage with two ticked and asking before it removes them, Add services with the project picker, the custom form and a service's form, the project picker, the tabs with services, renaming, the ended bars,
       the empty page with the place menu and the `--terminal-*` colours; the terminal itself needs the engine.
 
-, a
+38. **A render error stays where it happened** (since 2026-10-26; `components/errors/boundary.tsx`,
+    `components/errors/fallback.tsx`, `lib/errors.ts`). React unmounts everything above a component that throws while
+    rendering, up to the nearest error boundary, so without one a single broken widget blanks the whole window. Every
+    region that reads live state sits in an `ErrorBoundary`, in layers, so a failure takes down only its own region:
+    - **The app root** (`Root`): the last resort, a full page ("Shinsa hit an error.", reload to start again).
+    - **Each routed page** (`Pages` in `root.tsx`, inside the page's `Activity`): the page fallback ("This page hit
+      an error." and "The rest of Shinsa keeps working…") in place of the page, under a shell that keeps working (the
+      top bar or rail, ⌘K). It starts over each time you come back to the page, or when its route or search changes.
+    - **Each task tab's content** (`TaskTabs`): the inline card in the page column, under the header and tabs.
+    - **Shell widgets that read live state**: in the top bar the Services menu, the queue button, the connection
+      status, the Update button, the usage menu and the Focus menu get the icon fallback; in the rail its top-row
+      widgets get the icon fallback, and the Services entry, the Focus menu and the queue the inline card. The
+      banners, the attention signals and the prefetch are `silent` (nothing in their place), and ⌘K is too, but it
+      closes and says so in a toast with Copy details (`recordCommandMenuError`), and it starts over when it opens
+      again.
+    Three looks, one owner (`ErrorFallback`): **page** is the kit's `EmptyState` with `IconExclamationTriangle`, the
+    title, the line under it, the error's message small in a bordered mono block (`rounded-lg`, `border-border`,
+    `bg-bg-2`, `text-2xs`, at most 128px tall, scrolling), and Try again (primary `sm`), Reload and Copy details
+    (`secondary sm`); **inline** is a `CARD` (`p-3`) with a 14px orange warning icon and "This part of Shinsa hit an
+    error." (medium `fg-4` `text-xs`), the same block and the same three buttons at `xs`; **icon** keeps the trigger's
+    place as a `secondary icon-sm` button with the orange warning icon, its tooltip the title over the message, and a
+    press opens the inline card's content in a popover. Try again renders the region again; Reload reloads the page;
+    Copy details copies the message, the stack and React's component stack. Every caught error is logged with
+    `console.error` and its component stack. A boundary resets on its `resetKey` (the route, or the task for a tab),
+    so going somewhere else and back recovers. A new top-level region or a widget that reads live state gets a
+    boundary of the right size; `/ui` shows all three under Shinsa composites · errors.
+
+39. **Chrome is never selected; content opts in** (since 2026-10-27; `packages/ui/src/styles/globals.css`,
+    `packages/ui/src/lib/selection.ts`, `packages/ui/src/hooks/use-select-all-scope.ts`). A Mac app does not let a
+    drag or ⌘A select its toolbar, its lists or its labels, and shows the arrow over them, never the I-beam. So the
+    whole app is chrome by default: `body` is `user-select: none` (and `-webkit-`) with `cursor: default`, and links
+    and images never ghost-drag (`-webkit-user-drag: none`). Real content a person may want to copy opts back in
+    through **one class, `selectable`** (the kit's `@utility selectable`, `SELECTABLE` in `lib/selection.ts`), which
+    makes it selectable and shows the I-beam together; there is no other way in.
+    - **What is content.** `Markdown` (every block of prose: the chat's agent text, review prose, plan and spec
+      bodies, findings, a suggested fix, the task's request, evidence notes, test steps) is `selectable` on its own
+      root; `CodeBlock` (fences, the chat's tool-call blocks, test and check output) and the `@pierre/diffs` view
+      (`CodeDiff`, `ChangeSnippet`) are too. Beyond those, a line of prose that is not a `Markdown` block opts in
+      where it renders: your chat message's bubble, the live card's latest agent text, an agent's error line, a
+      failed tool's message, the handover card's what changed, phase details, judgement calls, question and
+      answer, a review note's Why it matters and Also considered, a plan revision's lines, a check-in's notes, a
+      delegated question, an evidence comparison's detail and an error fallback's message. `InlineMarkdown` is not
+      selectable by itself: it is mostly titles and row text, so a prose use adds the class.
+    - **What is chrome.** Everything else: buttons and links styled as buttons, every list row (tasks, the queue,
+      Settings), tabs, menus, the rail and the top bar, headings and card and section titles, labels, badges,
+      status lines, times, the greeting and Home's guide, Settings' descriptions and hints, toasts, tooltips and
+      empty states. A control inside content stays chrome (`globals.css` keeps buttons, labels, tabs and the
+      other controls out of any selection under a `selectable` region), and so do a badge, a `Kbd`, an icon and a code
+      block's line numbers there, under the arrow.
+    - **Fields and editors keep their own.** Inputs, text areas and anything `contenteditable` (the Code tab's
+      CodeMirror) select and show the I-beam as always; the terminal keeps xterm.js's own selection.
+    - **⌘A is scoped** (`useSelectAllScope`, mounted once in `Root`; `scopeSelectAll`): in a field, an editor or a
+      terminal it is theirs; inside a content region (where the selection or the focus is) it selects that region
+      alone, the outermost `selectable` around it; anywhere else it selects nothing and never the page.
+    - **A drag selects nothing.** While a pane's edge is dragged, `body[data-dragging]` turns content off too
+      (`lib/preferences/pane-width.ts`); a drag that starts on chrome never starts a selection.
+
+    | Element | Selectable | Cursor |
+    | --- | --- | --- |
+    | Prose (`Markdown`, chat messages, review prose, plan bodies, findings, notes, error messages) | Yes, `selectable` | I-beam |
+    | Code blocks, command and test output, diffs (`CodeBlock`, `CodeDiff`) | Yes, `selectable` | I-beam |
+    | Inputs, text areas, the Code tab's editor | Natively | I-beam |
+    | The terminal | xterm.js's own | xterm.js's own |
+    | Buttons, links, tabs, menu and select items, list rows, chips (branch, PR, file, commit) | No | Pointer in a browser, arrow in the app (31) |
+    | Headings, card and section titles, labels, badges, `Kbd`, status, times, hints, the greeting, toasts, tooltips, empty states | No | Arrow |
+    | Line numbers and controls inside content | No | Arrow (pointer on a control in a browser) |
+
+    `bun lint:conventions` rejects `select-text`, `select-all`, `select-auto` and `cursor-text` anywhere in the
+    app, the kit and `/ui` (`scripts/lint-selection.ts`), and `user-select` set by hand (`userSelect`, `user-select`)
+    in the app's code and style sheets. `packages/ui/test/lib/selection.test.ts` covers ⌘A and
+    `apps/web/test/selection-policy.test.tsx` renders content and chrome and checks which is selectable.
+40. **Every collapsible remembers whether it is open** (since 2026-10-27; `lib/preferences/disclosure.ts`,
+    `scripts/lint-disclosure.ts`). Fold a Review card, an Overview panel, a Home section, a test run's output, a
+    tool row in the chat or a settings group, then refresh, leave and come back: it is as you left it.
+    - **One store.** `useDisclosure(persistId, defaultOpen)` reads `localStorage` key `shinsa.disclosures`
+      (`{ version: 1, entries: [[id, open], …] }`) synchronously on the first render, so a folded panel is never
+      drawn open and then snapped shut, and since the first frame already has the right state no fold or chevron
+      animates on load. The default holds until you toggle; after that your choice wins. Writes are kept in
+      memory, saved 250ms after the last toggle and on `pagehide`; another tab's save (the `storage` event) is
+      taken in, keeping this tab's unsaved toggles. Only the 600 entries toggled last are kept: a toggle moves its
+      entry to the end and the oldest fall off. `useDisclosureSet(prefix, marked)` is the same store for a tree,
+      one entry per folder (the Code tab's file and changes trees).
+    - **Stable ids from what it shows.** `createDisclosureId(scope, …parts)` joins a scope (`task`, `home`,
+      `queue`, `services`, `roadmap`, `settings`, `ui`) and parts with `:`, never an array index:
+      `task:<taskId>:review:card:<point>` (the point's kind and a hash of its place and text,
+      `resolveReviewItemIdentity`), `task:<taskId>:review:panel:<prose>`, `task:<taskId>:overview:panel:<panel>`
+      (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`,
+      `task:<taskId>:chat:tool:<callKey>` (the chat's rows under `DisclosureScope`, `useDisclosureScope`),
+      `task:<taskId>:code:files:<path>`, `home:section:<section>`, `queue:section:<section>`,
+      `services:project:<id>`, `roadmap:group:<group>`, `settings:mcp:server:<id>`, and `ui:…` for `/ui`.
+    - **Required.** Every collapsible primitive (`Panel`, `CompactSection`, `WideSection`, `FoldingBlock`,
+      `RoadmapSection`, `ChangeSnippet`, `ReviewNote`, `ExpandRow`, `ToolGroup`, `UserMessage`, `TestingPanel`,
+      `MergeStepsPanel`, `EvidencePanel`) takes a `persistId`; `DisclosureHeader` takes the `disclosure` the hook
+      returns, never its own open state. A fold that should be forgotten says why, `notPersisted('…')`: a finding
+      card (it never folds) and a search's result groups (new with every query). Popovers, menus and dialogs are
+      not collapsibles, and a one-way Show more on a long diff, code block or tool output is a reveal, not a fold.
+    - `bun lint:conventions` rejects a collapsible primitive without `persistId`, a `DisclosureHeader` without
+      `disclosure`, and fold state (`open`, `expanded`, `folded`, `collapsed`) in `useState` in a file that folds
+      (it sets `aria-expanded` or renders a `DisclosureHeader`).
+
+`bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`
 and `shadow-control*` are allowed), a `hover:` with no `active:` on its line (a `group-hover:` with no
@@ -2139,7 +2241,8 @@ highlight colour (`transition-colors`, `transition-shadow`, or a bare `transitio
 and those transitions only. Besides that it bans comments (outside `packages/ui`), enforces the verb catalog and rejects a
 global key listener (`keydown` or `keyup`) in the app outside `hooks/use-command-key.ts`, `hooks/use-code-keys.ts` and
 `hooks/use-review-keys.ts` and `hooks/use-terminal-keys.ts` (32, 34, 37); a terminal's keys go through xterm.js's own
-handler on its element (37).
+handler on its element (37). It also rejects an ad hoc selection (`select-text`, `select-all`,
+`select-auto`, `cursor-text`) in the app, the kit and `/ui`, and `user-select` set by hand in the app (39).
 
 ---
 
@@ -4966,8 +5069,8 @@ component names a role, never a number:
 
 | Role           | Token / utility                       | Value | Used by                                                                                                                   |
 | -------------- | ------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------- |
-| State feedback | none                                  | 0ms   | hover, press, focus, open, selection, a highlighted menu row — fill, border, text, icon colour, seams, a hover-revealed control, and the press itself: a button's or select trigger's fill deflating (`inset`), the link button's, ghost tab's and checkbox's press `scale`, a pressed highlight's deflate |
-| Movement       | `duration-move`                       | 200ms | tab / segmented / filter-tab indicators, chevron turns, accordion and collapsible height, sidebar collapse, the icon swap |
+| State feedback | none                                  | 0ms   | hover, press, focus, open, selection, a highlighted menu row's text — fill, border, text, icon colour, seams, a hover-revealed control, and the press itself: a button's or select trigger's fill deflating (`inset`), the link button's, ghost tab's and checkbox's press `scale`, a pressed highlight's deflate |
+| Movement       | `duration-move`                       | 200ms | tab / segmented / filter-tab indicators, the shared list highlight (menus, selects, ⌘K, the rail, the queue, option lists), chevron turns, accordion and collapsible height, sidebar collapse, the icon swap |
 | Popup          | `duration-popup`                      | 150ms | popover, tooltip, preview card (enter at scale 0.98 + opacity)                                                            |
 | Dialog         | `DIALOG_MOTION`, `DIALOG_SCRIM_MOTION` | 150ms in, 100ms out | dialog, alert dialog and their scrims (enter at scale 0.96 + opacity, `ease-out`)                                         |
 | ⌘K             | `COMMAND_MOTION`, `COMMAND_SCRIM_MOTION` | 75ms in, 75ms out | the command menu and its scrim (enter at scale 0.98 + opacity, `ease-out`)                                              |

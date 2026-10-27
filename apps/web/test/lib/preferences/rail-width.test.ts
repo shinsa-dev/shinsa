@@ -38,6 +38,7 @@ describe('useRailWidth', () => {
     act(() => result.current.startResize(down));
     expect(down.preventDefault).toHaveBeenCalled();
     expect(document.body.style.cursor).toBe('col-resize');
+    expect(document.body.dataset.dragging).toBe('');
     act(() => moveTo(150));
     expect(result.current.width).toBe(290);
     expect(localStorage.getItem('shinsa.rail-width')).toBeNull();
@@ -48,7 +49,7 @@ describe('useRailWidth', () => {
     });
     expect(localStorage.getItem('shinsa.rail-width')).toBe('420');
     expect(document.body.style.cursor).toBe('');
-    expect(document.body.style.userSelect).toBe('');
+    expect(document.body.dataset.dragging).toBeUndefined();
     act(() => moveTo(0));
     expect(result.current.width).toBe(420);
   });

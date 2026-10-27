@@ -1,6 +1,7 @@
 import type { ShinsaState } from '@shinsa/core';
 import { Toaster } from '@shinsa/ui/components/sonner';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
+import { useSelectAllScope } from '@shinsa/ui/hooks/use-select-all-scope';
 import * as React from 'react';
 import { SignInDialog } from '@/components/accounts/sign-in-dialog.tsx';
 import { CommandMenu } from '@/components/command/menu.tsx';
@@ -143,6 +144,8 @@ function App({ route }: { route: PageRoute }) {
 
 export function Root() {
   const route = useRoute();
+  const search = useSearchString();
+  useSelectAllScope();
   return (
     <TooltipProvider>
       {route.name === 'ui' ? (

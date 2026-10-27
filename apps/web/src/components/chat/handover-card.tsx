@@ -57,7 +57,7 @@ function PlanCard({ args }: { args: ChatToolArgs }) {
       {changed && (
         <div className='flex flex-col gap-px text-xs'>
           <span className='text-2xs text-fg-2'>What changed</span>
-          <InlineMarkdown text={changed} className='text-fg-4' />
+          <InlineMarkdown text={changed} className='selectable text-fg-4' />
         </div>
       )}
       {goal && <Markdown text={goal} />}
@@ -72,7 +72,7 @@ function PlanCard({ args }: { args: ChatToolArgs }) {
                   <InlineMarkdown text={readString(phase, 'title') ?? `Phase ${index + 1}`} />
                 </span>
                 {readString(phase, 'detail') && (
-                  <span className='text-fg-3 text-xs'>
+                  <span className='selectable text-fg-3 text-xs'>
                     <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
                   </span>
                 )}
@@ -134,7 +134,13 @@ function SummaryCard({
                 <IconSlot>
                   <Icon size='sm' name='IconLightbulbGlow' className='text-fg-4' />
                 </IconSlot>
-                <span className='min-w-0'>
+                <span className='selectable min-w-0'>
+                  {readString(call, 'title') && (
+                    <span className='font-medium text-fg-4'>
+                      <InlineMarkdown text={readString(call, 'title') ?? ''} />
+                      {': '}
+                    </span>
+                  )}
                   <span className='text-fg-4'>
                     <InlineMarkdown text={readString(call, 'call') ?? ''} />
                   </span>{' '}
@@ -182,7 +188,7 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
       title={delegated ? 'Asked the agent that delegated it' : 'Asked you'}
       meta={resolveAskMeta(call, delegated)}
     >
-      <span className='text-fg-4 text-xs'>
+      <span className='selectable text-fg-4 text-xs'>
         <InlineMarkdown text={call.description.target ?? ''} />
       </span>
       {context && <Markdown text={context} className='text-fg-3' />}
@@ -198,7 +204,7 @@ function AskCard({ call, args, delegated }: { call: ToolCall; args: ChatToolArgs
       {answer !== null && (
         <div className='flex gap-2 border-border border-t pt-2.5 text-xs'>
           <span className='shrink-0 text-fg-2'>{delegated ? 'Its answer' : 'Your answer'}</span>
-          <span className='min-w-0 whitespace-pre-wrap text-fg-4'>{answer}</span>
+          <span className='selectable min-w-0 whitespace-pre-wrap text-fg-4'>{answer}</span>
         </div>
       )}
     </Card>
@@ -234,7 +240,7 @@ function DeliveryCard({ title, args, field }: { title: string; args: ChatToolArg
       {proposal && (
         <div className='flex flex-col gap-px border-border border-t pt-2.5 text-xs'>
           <span className='text-2xs text-fg-2'>Proposed a change</span>
-          <InlineMarkdown text={proposal.why} className='text-fg-4' />
+          <InlineMarkdown text={proposal.why} className='selectable text-fg-4' />
         </div>
       )}
     </Card>
@@ -281,7 +287,7 @@ export function HandoverCard({
     return (
       <div className={cn('flex min-w-0 flex-col gap-1', CHAT_INSET)}>
         <ToolRow call={call} live={live} />
-        <p className={cn('line-clamp-3 whitespace-pre-wrap text-red-text text-xs', ROW_INDENT)}>
+        <p className={cn('selectable line-clamp-3 whitespace-pre-wrap text-red-text text-xs', ROW_INDENT)}>
           {call.result}
         </p>
       </div>
@@ -305,7 +311,7 @@ export function HandoverCard({
         />
       );
     case 'complete_fix':
-      return <SummaryCard icon='IconSend' title='Handed over the fix' args={tool.args} />;
+      return <SummaryCard icon='IconSend' title='Handed over the fix' args={tool.args} task={task} />;
     case 'report_review':
       return <ReviewCard args={tool.args} task={task} />;
     case 'ask':

@@ -38,7 +38,7 @@ export function usePaneWidth(key: string, given: PaneBounds, floor = 0, directio
     const onEnd = () => {
       localStorage.setItem(key, String(latest));
       document.body.style.removeProperty('cursor');
-      document.body.style.removeProperty('user-select');
+      delete document.body.dataset.dragging;
       removeEventListener('pointermove', onMove);
       removeEventListener('pointerup', onEnd);
       removeEventListener('pointercancel', onEnd);
@@ -47,7 +47,7 @@ export function usePaneWidth(key: string, given: PaneBounds, floor = 0, directio
     endDrag.current?.();
     endDrag.current = onEnd;
     document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+    document.body.dataset.dragging = '';
     addEventListener('pointermove', onMove);
     addEventListener('pointerup', onEnd);
     addEventListener('pointercancel', onEnd);

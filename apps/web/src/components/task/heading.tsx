@@ -27,7 +27,7 @@ export function TaskHeading({ task, className }: { task: Task; className?: strin
             {request.text}
           </button>
         ) : (
-          <p className={description}>{request.text}</p>
+          <p className={cn(description, 'selectable')}>{request.text}</p>
         ))
       }
     />

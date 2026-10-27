@@ -72,7 +72,7 @@ export function DelegationQuestion({ question, className }: { question: string; 
       <IconSlot>
         <Icon size='sm' name='IconBubbleQuestion' aria-hidden className='text-amber-text' />
       </IconSlot>
-      <InlineMarkdown text={question} className='min-w-0 text-fg-3' />
+      <InlineMarkdown text={question} className='selectable min-w-0 text-fg-3' />
     </div>
   );
 }

@@ -14,7 +14,7 @@ export function ErrorLine({ text }: { text: string }) {
       <IconSlot>
         <Icon size='sm' name='IconExclamationCircle' />
       </IconSlot>
-      <span className='min-w-0 whitespace-pre-wrap break-words'>{text}</span>
+      <span className='selectable min-w-0 whitespace-pre-wrap break-words'>{text}</span>
     </div>
   );
 }

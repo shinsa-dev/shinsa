@@ -298,7 +298,7 @@ function ImageViewerDialog({
           ref={stage}
           aria-label={caption}
           onKeyDown={onKeyDown}
-          className='fixed inset-0 z-50 select-none overflow-hidden outline-none'
+          className='dark fixed inset-0 z-50 select-none overflow-hidden text-foreground outline-none'
         >
           <button
             type='button'

@@ -92,7 +92,7 @@ export function UserMessage({
     <div data-message className='flex min-w-0 flex-col items-end gap-2'>
       <Attachments attachments={attachments} />
       {body && (
-        <div className='corner-superellipse/1.125 min-w-0 max-w-4/5 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed'>
+        <div className='corner-superellipse/1.125 selectable min-w-0 max-w-4/5 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed'>
           <p className={cn('whitespace-pre-wrap break-words', long && !expanded && 'line-clamp-12')}>
             {body}
           </p>
@@ -102,7 +102,7 @@ export function UserMessage({
         <button
           type='button'
           aria-expanded={expanded}
-          onClick={() => setExpanded(!expanded)}
+          onClick={toggle}
           className='cursor-pointer px-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
         >
           {expanded ? 'Show less' : 'Show more'}

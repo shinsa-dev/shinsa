@@ -918,10 +918,41 @@
     letter-spacing: -0.02em;
   }
 
-  /* Text is content: the browser's own `auto` shows the I-beam over glyphs and
-     the arrow over whitespace. Chrome opts out below — it is never selected,
-     so it takes the arrow over its text too. Zero specificity, so any
-     `cursor-*` utility still wins. */
+  /* A native app, not a page: nothing is selectable and every cursor is the
+     arrow, until a content region opts back in with `selectable` (below,
+     docs/design.md → Where Shinsa differs, 39). Links and images never ghost-
+     drag. Inputs, textareas and editors keep their own behaviour. */
+  body {
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+
+  :where(a, img) {
+    -webkit-user-drag: none;
+  }
+
+  /* Chrome inside a content region stays chrome: its controls, badges and
+     keys never join a selection. */
+  :where(.selectable)
+    :where(
+      button,
+      select,
+      label,
+      [role="button"],
+      [role="tab"],
+      [role="checkbox"],
+      [role="switch"],
+      [role="radio"],
+      [data-slot="badge"],
+      [data-slot="kbd"]
+    ) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Chrome inside a content region keeps the arrow over its text. Zero
+     specificity, so any `cursor-*` utility still wins. */
   :where(
     [data-slot="badge"],
     [data-slot="kbd"],
@@ -988,6 +1019,31 @@
   ),
   textarea {
     cursor: text;
+  }
+
+  /* An editor (the Code tab's CodeMirror) selects its own text, under the
+     app-wide none. */
+  [contenteditable]:not([contenteditable="false"]) {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+}
+
+/* The one way back in: real content a person may want to copy (prose, code,
+   output, an error) is `selectable`, which makes it selectable and shows the
+   I-beam. Everything else is chrome. While something is dragged
+   (`body[data-dragging]`, a pane's edge) nothing is selected, content
+   included. ⌘A inside a region selects that region alone
+   (`useSelectAllScope`). */
+@utility selectable {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+
+  :where(body[data-dragging]) & {
+    -webkit-user-select: none;
+    user-select: none;
   }
 }
 

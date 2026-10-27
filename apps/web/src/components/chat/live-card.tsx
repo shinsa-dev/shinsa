@@ -50,7 +50,7 @@ function SwapText({ id, text }: { id: string; text: string }) {
         <p
           key={shown.key}
           aria-live='polite'
-          className={cn('line-clamp-4 text-xs', shown.entering && 'chat-swap-in')}
+          className={cn('selectable line-clamp-4 text-xs', shown.entering && 'chat-swap-in')}
         >
           <InlineMarkdown text={flattenWhitespace(shown.text)} className='prose-chat' />
         </p>

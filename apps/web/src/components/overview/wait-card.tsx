@@ -44,7 +44,7 @@ export function WaitCard({
       footer={<TaskTrack task={task} />}
     >
       <div className='flex flex-col gap-px text-xs'>
-        <InlineMarkdown text={monitor.notes} className='text-fg-4' />
+        <InlineMarkdown text={monitor.notes} className='selectable text-fg-4' />
         <span className='text-2xs text-fg-2'>
           {describeCheckInCount(monitor)} ·{' '}
           <TimeAgo at={monitor.timeoutAt} text={(now) => describeGiveUp(monitor, now)} />

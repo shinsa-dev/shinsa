@@ -226,19 +226,19 @@ export function InputSpecimens() {
       >
         <Specimen label='badges · selectable here so the hue shows'>
           {BADGE_VARIANTS.map((v) => (
-            <Badge key={v} variant={v} className='cursor-text select-text'>
+            <Badge key={v} variant={v} className='selectable'>
               Select me
             </Badge>
           ))}
         </Specimen>
         <Specimen label='surfaces'>
-          <p className='rounded-xl bg-bg-2 px-3 py-2 text-fg-3 text-sm'>
+          <p className='selectable rounded-xl bg-bg-2 px-3 py-2 text-fg-3 text-sm'>
             Neutral surface, neutral selection.
           </p>
-          <p className='selection-amber rounded-xl bg-amber-a2 px-3 py-2 text-fg-3 text-sm'>
+          <p className='selectable selection-amber rounded-xl bg-amber-a2 px-3 py-2 text-fg-3 text-sm'>
             Amber surface selects amber.
           </p>
-          <p className='selection-inverse rounded-xl bg-fg-4 px-3 py-2 text-background text-sm'>
+          <p className='selectable selection-inverse rounded-xl bg-fg-4 px-3 py-2 text-background text-sm'>
             Solid surface flips the selection to light.
           </p>
         </Specimen>
