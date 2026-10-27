@@ -1,9 +1,8 @@
 import { Button } from '@shinsa/ui/components/button';
-import { Icon } from '@shinsa/ui/components/icon';
 import { Spinner } from '@shinsa/ui/components/spinner';
-import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { FileCard } from '@/components/chat/file-card.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import type { Attachments } from '@/hooks/use-attachments.ts';
@@ -28,7 +27,7 @@ function DraftChip({ draft, onRemove }: { draft: AttachmentDraft; onRemove: () =
     return (
       <li className='relative'>
         <Hint label={draft.name}>
-          <span className={cn(INSET, 'relative block size-12 overflow-hidden bg-bg-a1')}>
+          <span className={cn(INSET, 'relative block size-14 overflow-hidden bg-bg-a1')}>
             <img src={draft.preview} alt={draft.name} className='size-full object-cover' />
             {uploading && (
               <span className='absolute inset-0 grid place-items-center bg-background/60'>
@@ -42,17 +41,14 @@ function DraftChip({ draft, onRemove }: { draft: AttachmentDraft; onRemove: () =
     );
   }
   return (
-    <li className='relative'>
-      <span className={cn(INSET, 'flex h-12 min-w-0 max-w-56 items-center gap-2 bg-bg-a1 ps-2 pe-3')}>
-        <span className='grid size-8 shrink-0 place-items-center text-fg-2'>
-          {uploading ? (
-            <Spinner size='sm' aria-label={`Attaching ${draft.name}`} />
-          ) : (
-            <Icon size='md' name='IconFileText' />
-          )}
-        </span>
-        <Truncate className='text-fg-4 text-xs'>{draft.name}</Truncate>
-      </span>
+    <li className='relative max-w-full'>
+      <FileCard
+        name={draft.name}
+        mimeType={draft.mimeType}
+        size={draft.size}
+        busy={uploading}
+        busyLabel='Attaching…'
+      />
       <RemoveButton draft={draft} onRemove={onRemove} />
     </li>
   );

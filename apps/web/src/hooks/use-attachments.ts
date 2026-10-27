@@ -54,6 +54,8 @@ export function useAttachments() {
             key: crypto.randomUUID(),
             name: file.name || 'Pasted image',
             kind,
+            mimeType: file.type || null,
+            size: file.size,
             preview: kind === 'image' ? URL.createObjectURL(file) : null,
             stored: null,
           } satisfies AttachmentDraft,

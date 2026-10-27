@@ -228,6 +228,7 @@ export const ICON_NAMES = [
   'IconSidebar',
   'IconSidebarSimpleLeftWide',
   'IconSidebarSimpleRightWide',
+  'IconSlidesWide',
   'IconSparkle',
   'IconSpeedHigh',
   'IconSpeedMiddle',
@@ -952,6 +953,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconSidebarSimpleRightWide: {
     '3': '<g><path d="M3 8C3 6.34315 4.34315 5 6 5H18C19.6569 5 21 6.34315 21 8V16C21 17.6569 19.6569 19 18 19H6C4.34315 19 3 17.6569 3 16V8Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M15 5V12V19" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g>',
+  },
+  IconSlidesWide: {
+    '3': '<g><path d="M7 15H6C4.34315 15 3 13.6569 3 12V8C3 6.34315 4.34315 5 6 5H14C15.6569 5 17 6.34315 17 8V9" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/><path d="M10 19C8.34315 19 7 17.6569 7 16V12C7 10.3431 8.34315 9 10 9H18C19.6569 9 21 10.3431 21 12V16C21 17.6569 19.6569 19 18 19H10Z" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/></g>',
   },
   IconSparkle: {
     '3': '<g><path fill-rule="evenodd" clip-rule="evenodd" d="M21 12.5C14.75 12.5 12 15.4028 12 22C12 15.4028 9.25 12.5 3 12.5C9.25 12.5 12 9.59722 12 3C12 9.59722 14.75 12.5 21 12.5Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></g>',

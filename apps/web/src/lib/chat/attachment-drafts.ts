@@ -5,6 +5,8 @@ export interface AttachmentDraft {
   key: string;
   name: string;
   kind: 'image' | 'file';
+  mimeType: string | null;
+  size: number;
   preview: string | null;
   stored: StoredAttachment | null;
 }

@@ -1,12 +1,10 @@
 import { type ChatAttachment, splitMessageAttachments } from '@shinsa/core';
-import { Icon } from '@shinsa/ui/components/icon';
 import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
-import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { SHIMMER_LINE } from '@/components/chat/chat-line.tsx';
+import { FileCard } from '@/components/chat/file-card.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
-import { CARD } from '@/components/layout/surface/card.ts';
-import { describeAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
+import { canOpenAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
 import { type DisclosurePersistId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { describeMessageStatus } from '@/lib/tasks/messages.ts';
@@ -16,17 +14,13 @@ const CLAMP_LINES = 12;
 const CLAMP_CHARACTERS = CLAMP_LINES * 90;
 
 function FileChip({ attachment }: { attachment: ChatAttachment }) {
-  const meta = describeAttachment(attachment);
   return (
-    <div className={cn(CARD, 'flex h-10 min-w-0 max-w-64 items-center gap-2 p-1 pr-3')}>
-      <span className='corner-superellipse/1.125 grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-fg-2'>
-        <Icon size='md' name={attachment.kind === 'image' ? 'IconImages1' : 'IconFileText'} />
-      </span>
-      <span className='flex min-w-0 flex-col gap-px'>
-        <Truncate className='text-fg-4 text-xs'>{attachment.name}</Truncate>
-        {meta && <Truncate className='text-2xs text-fg-2'>{meta}</Truncate>}
-      </span>
-    </div>
+    <FileCard
+      name={attachment.name}
+      mimeType={attachment.mimeType}
+      size={attachment.size}
+      href={canOpenAttachment(attachment) ? attachment.url : null}
+    />
   );
 }
 

@@ -269,6 +269,29 @@ function SampleMessages() {
         ])}
       />
       <UserMessage
+        persistId={sample('files')}
+        text={serializeAttachments(
+          '',
+          [
+            ['Payments spec.pdf', 'application/pdf', 1_830_000],
+            ['Q3 revenue.xlsx', null, 284_000],
+            ['Launch deck.key', null, 12_400_000],
+            ['Brief.docx', null, 96_000],
+            ['build-logs.zip', 'application/zip', 4_200_000],
+            ['paywall.ts', 'text/plain', 3_400],
+            ['walkthrough.mp4', 'video/mp4', 22_100_000],
+            ['notes.txt', 'text/plain', 820],
+          ].map(([name, mimeType, size]) => ({
+            kind: 'file' as const,
+            name: String(name),
+            url: `/api/attachments/sample/${name}`,
+            path: `/Users/you/Desktop/${name}`,
+            mimeType: mimeType === null ? null : String(mimeType),
+            size: Number(size),
+          }))
+        )}
+      />
+      <UserMessage
         persistId={sample('sending')}
         text='Also add search to the settings page.'
         status='sending'
@@ -314,7 +337,7 @@ function ChatSpecimenList() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='UserMessage · delivered, with attachments, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
+      <Specimen label='UserMessage · delivered, with attachments, every kind of file, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
         <SampleMessages />
       </Specimen>
       <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (open a row for why)'>

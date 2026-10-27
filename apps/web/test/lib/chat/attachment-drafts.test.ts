@@ -17,12 +17,22 @@ const STORED = {
   size: 1,
 };
 
-const READY: AttachmentDraft = { key: 'r', name: 'a.txt', kind: 'file', preview: null, stored: STORED };
+const READY: AttachmentDraft = {
+  key: 'r',
+  name: 'a.txt',
+  kind: 'file',
+  mimeType: null,
+  size: 1,
+  preview: null,
+  stored: STORED,
+};
 
 const UPLOADING: AttachmentDraft = {
   key: 'u',
   name: 'b.png',
   kind: 'image',
+  mimeType: 'image/png',
+  size: 2,
   preview: 'blob:x',
   stored: null,
 };
