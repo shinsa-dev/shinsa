@@ -17,7 +17,7 @@ import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { BranchDetails } from '@/components/links/branch.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
 import { CheckList, PullRequestDetails } from '@/components/links/pull-request.tsx';
-import { RepoDetails } from '@/components/links/repo.tsx';
+import { RepoDetails, RepoIcon } from '@/components/links/repo.tsx';
 import { TaskPopoverRows } from '@/components/links/task.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import {
@@ -28,7 +28,6 @@ import {
   InfoSection,
 } from '@/components/overlays/info-popover.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
-import { ProjectLabel } from '@/components/status/project-dot.tsx';
 import { Pulse } from '@/components/status/pulse.tsx';
 import { PriorityChoices } from '@/components/task/action-items.tsx';
 import { WaitsOnItems } from '@/components/task/dependency-items.tsx';
@@ -40,7 +39,6 @@ import { formatCount } from '@/lib/format/count.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeChecksPassed, hasFailingCheck, isAgentWorking } from '@/lib/overview/now.ts';
-import { resolveTaskProjectLabel } from '@/lib/projects.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
 import { describePullRequestFact, describeStarted } from '@/lib/tasks/facts.ts';
 import { type Check, listTaskChecks, resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
@@ -175,13 +173,18 @@ function StatusFact({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
-function ProjectFact({ state, task }: { state: ShinsaState; task: Task }) {
-  const label = resolveTaskProjectLabel(state, task);
-  if (!label) return null;
+function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  if (!repo) return <ProjectLabel label={label} className={FACT} />;
+  if (!repo) return null;
   return (
-    <FactPopover trigger={<ProjectLabel label={label} />}>
+    <FactPopover
+      trigger={
+        <>
+          <RepoIcon state={state} repo={repo} icon='IconFolder1' />
+          <span className='truncate'>{repo.name}</span>
+        </>
+      }
+    >
       <RepoDetails state={state} repo={repo} />
     </FactPopover>
   );
@@ -427,7 +430,7 @@ export function TaskFacts({
       <HandleFact task={task} />
       <RoundFact task={task} />
       <StatusFact state={state} task={task} />
-      <ProjectFact state={state} task={task} />
+      <RepoFact state={state} task={task} />
       <BranchFact state={state} task={task} />
       <PullRequestFact state={state} task={task} checks={checks} />
       {!task.pullRequest && checks.length > 0 && <ChecksFact checks={checks} />}

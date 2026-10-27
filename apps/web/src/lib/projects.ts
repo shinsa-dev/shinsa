@@ -12,6 +12,7 @@ import {
   type Task,
   type WorkspaceMode,
 } from '@shinsa/core';
+import type { IconName } from '@shinsa/ui/components/icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import {
@@ -128,36 +129,12 @@ export function selectTaskProject(state: ShinsaState, task: Task) {
   return selectProject(state, resolveTaskProject(state, task));
 }
 
-export interface ProjectLabelView {
-  color: string;
-  name: string;
-  repo: string | null;
+export function resolveProjectInk(color: string) {
+  return color === 'gray' ? 'var(--fg-2)' : `var(--${color}-4, var(--fg-2))`;
 }
 
-function resolveLabel(
-  state: ShinsaState,
-  project: Project | null,
-  repo: Repo | undefined
-): ProjectLabelView | null {
-  if (!project) return repo ? { color: 'gray', name: repo.name, repo: null } : null;
-  const several = Object.values(state.repos).filter((each) => each.projectId === project.id).length > 1;
-  return {
-    color: project.color,
-    name: project.name,
-    repo: repo && repo.projectId === project.id && several ? repo.name : null,
-  };
-}
-
-export function resolveRepoProjectLabel(state: ShinsaState, repo: Repo) {
-  return resolveLabel(state, selectProject(state, repo.projectId), repo);
-}
-
-export function resolveTaskProjectLabel(state: ShinsaState, task: Task) {
-  return resolveLabel(
-    state,
-    selectTaskProject(state, task),
-    task.repoId ? state.repos[task.repoId] : undefined
-  );
+export function resolveRepoIcon(repo: Repo): IconName {
+  return repo.remote ? 'IconGithub' : 'IconFolder1';
 }
 
 export function listProjectRepoRows(state: ShinsaState, projectId: string) {

@@ -67,18 +67,18 @@ describe('ReferenceText', () => {
     expect(view.container.textContent).toBe('Next: Build the login form then ship.');
   });
 
-  it('leads a repository link with its project’s dot, grey when it has no project', () => {
+  it('marks a repository link in its project’s colour, and leaves one with no project plain', () => {
     const state = createShinsaState({
       projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
       repos: [
-        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p' }),
+        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p', remote: 'git@github.com:sw/web.git' }),
         createRepo({ id: 'scratch', name: 'scratch' }),
       ],
     });
     const view = renderText(state, 'See shinsa://repo/paywall-next and shinsa://repo/scratch.');
-    const dots = [...view.container.querySelectorAll('[data-project-dot]')];
-    expect(dots.map((dot) => dot.getAttribute('data-project-dot'))).toEqual(['purple', 'gray']);
-    expect(view.container.querySelector('svg')).toBeNull();
+    const inks = [...view.container.querySelectorAll('[data-project-ink]')];
+    expect(inks.map((ink) => ink.getAttribute('data-project-ink'))).toEqual(['purple']);
+    expect(view.container.querySelectorAll('svg[data-slot="icon"]')).toHaveLength(2);
     expect(view.container.textContent).toBe('See paywall-next and scratch.');
   });
 

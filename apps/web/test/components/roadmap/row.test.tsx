@@ -191,30 +191,38 @@ describe('the chain arrow', () => {
   });
 });
 
-describe('the project column', () => {
-  it('says No project for a task that works without one', () => {
+describe('the repository column', () => {
+  it('says No repository for a task that works without one', () => {
     renderRow(
       createTask({ id: 'research', title: 'Compare the search engines', stage: 'researching' }),
       'working'
     );
-    expect(screen.getByText('No project')).toBeTruthy();
+    expect(screen.getByText('No repository')).toBeTruthy();
   });
 
-  it('shows the project’s dot and name, and the repository after it when the project has several', () => {
+  it('names the repository beside its GitHub mark in its project’s colour, the project on hover', async () => {
     const state = createShinsaState({
       tasks: [createTask({ id: 'web', title: 'Fix the paywall', repoId: 'web' })],
       projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
       repos: [
-        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p' }),
-        createRepo({ id: 'api', name: 'superwall-api', projectId: 'p' }),
+        createRepo({ id: 'web', name: 'paywall-next', projectId: 'p', remote: 'git@github.com:sw/web.git' }),
       ],
     });
     const view = renderRow(state.tasks.web as Task, 'working', 0, state);
-    expect(view.container.querySelector('[data-project-dot]')?.getAttribute('data-project-dot')).toBe(
-      'purple'
-    );
-    expect(screen.getByText('Superwall')).toBeTruthy();
-    expect(screen.getByText('· paywall-next', { exact: false })).toBeTruthy();
+    const ink = view.container.querySelector('[data-project-ink]') as SVGElement;
+    expect(ink.getAttribute('data-project-ink')).toBe('purple');
+    expect(screen.getByText('paywall-next')).toBeTruthy();
+    expect(await findTooltipText(ink.parentElement as HTMLElement)).toBe('Superwall project');
+  });
+
+  it('leaves a repository with no project its plain mark and no hint', () => {
+    const state = createShinsaState({
+      tasks: [createTask({ id: 'loose', title: 'Try a thing', repoId: 'scratch' })],
+      repos: [createRepo({ id: 'scratch', name: 'scratch' })],
+    });
+    const view = renderRow(state.tasks.loose as Task, 'working', 0, state);
+    expect(view.container.querySelector('[data-project-ink]')).toBeNull();
+    expect(screen.getByText('scratch')).toBeTruthy();
   });
 });
 

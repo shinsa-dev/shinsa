@@ -5,13 +5,12 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { GlyphLabel, INLINE_TILE, InAppLink, SMART_LINK } from '@/components/links/link.tsx';
+import { RepoIcon } from '@/components/links/repo.tsx';
 import { InfoPopover } from '@/components/overlays/info-popover.tsx';
-import { ProjectLabel } from '@/components/status/project-dot.tsx';
 import { TaskMeta } from '@/components/status/text.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { resolveTaskProjectLabel } from '@/lib/projects.ts';
 import {
   describeWaited,
   resolveTaskAction,
@@ -26,7 +25,7 @@ import { navigate } from '@/router.ts';
 function TaskPreview({ state, task, action }: { state: ShinsaState; task: Task; action: TaskAction }) {
   const status = resolveTaskStatus(state, task);
   const now = resolveTaskNow(state, task);
-  const project = resolveTaskProjectLabel(state, task);
+  const repo = task.repoId ? state.repos[task.repoId] : undefined;
   return (
     <div className='flex flex-col'>
       <div className='flex flex-col gap-2.5 p-3'>
@@ -40,10 +39,15 @@ function TaskPreview({ state, task, action }: { state: ShinsaState; task: Task; 
             <p className='line-clamp-3 text-fg-3'>{now}</p>
           )}
         </div>
-        {(task.handle || project || task.branch || task.pullRequest) && (
+        {(task.handle || repo || task.branch || task.pullRequest) && (
           <div className='flex flex-wrap items-center gap-x-3 gap-y-1 ps-6 text-2xs text-fg-2'>
             {task.handle && <span className='tabular-nums'>{resolveHandleText(task)}</span>}
-            {project && <ProjectLabel label={project} className='gap-1' />}
+            {repo && (
+              <span className='inline-flex min-w-0 items-center gap-1'>
+                <RepoIcon state={state} repo={repo} />
+                <span className='truncate'>{repo.name}</span>
+              </span>
+            )}
             {task.branch && (
               <span className='inline-flex min-w-0 items-center gap-1'>
                 <Icon size='sm' name='IconBranch' />

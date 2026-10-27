@@ -1,17 +1,18 @@
-import { isTaskSettled, listWaitsOn, type ShinsaState, type Task } from '@shinsa/core';
+import { isTaskSettled, listWaitsOn, type Repo, type ShinsaState, type Task } from '@shinsa/core';
 import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@shinsa/ui/components/dropdown-menu';
 import { Icon } from '@shinsa/ui/components/icon';
+import { TooltipLabel } from '@shinsa/ui/components/tooltip';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
+import { RepoIcon } from '@/components/links/repo.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { PriorityIcon } from '@/components/status/priority-icon.tsx';
-import { ProjectLabel } from '@/components/status/project-dot.tsx';
 import { StatusText } from '@/components/status/text.tsx';
 import { PriorityChoices, TaskActionItems } from '@/components/task/action-items.tsx';
 import { DependencyItems } from '@/components/task/dependency-items.tsx';
@@ -19,7 +20,7 @@ import { TaskHandle } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
-import { resolveTaskProjectLabel } from '@/lib/projects.ts';
+import { selectProject } from '@/lib/projects.ts';
 import { listTaskActions, TASK_ACTION } from '@/lib/tasks/actions.ts';
 import type { RoadmapGroupKey } from '@/lib/tasks/roadmap.ts';
 import { describeTaskSteps, resolveShapeIcon, resolveShapeLabel } from '@/lib/tasks/shapes.ts';
@@ -72,6 +73,23 @@ function KindMark({ state, task }: { state: ShinsaState; task: Task }) {
   );
 }
 
+function RepoMark({ state, repo }: { state: ShinsaState; repo: Repo }) {
+  const project = selectProject(state, repo.projectId);
+  const icon = <RepoIcon state={state} repo={repo} />;
+  if (!project) return icon;
+  return (
+    <Hint
+      label={
+        <span className='whitespace-nowrap'>
+          {project.name} <TooltipLabel>project</TooltipLabel>
+        </span>
+      }
+    >
+      <span className='inline-flex shrink-0'>{icon}</span>
+    </Hint>
+  );
+}
+
 function RowStatus({ state, task, group }: { state: ShinsaState; task: Task; group: RoadmapGroupKey }) {
   if (group === 'waiting') return <WaitsOnLinks waitsOn={listWaitsOn(state, task)} />;
   return <StatusText state={state} task={task} className='truncate text-xs' />;
@@ -88,7 +106,7 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
   group: RoadmapGroupKey;
   depth: number;
 }) {
-  const project = resolveTaskProjectLabel(state, task);
+  const repo = task.repoId ? state.repos[task.repoId] : undefined;
   const level = Math.min(depth, 3);
   return (
     <LazyMenu kind='context' content={<TaskMenuItems state={state} task={task} />}>
@@ -121,8 +139,9 @@ export const RoadmapRow = React.memo(function RoadmapRowItem({
           <TaskHandle task={task} />
           <Truncate className='text-fg-4'>{task.title}</Truncate>
         </span>
-        <span className='flex min-w-0 items-center text-fg-2 max-md:hidden'>
-          {project ? <ProjectLabel label={project} /> : <Truncate>No project</Truncate>}
+        <span className='flex min-w-0 items-center gap-1.5 text-fg-2 max-md:hidden'>
+          {repo && <RepoMark state={state} repo={repo} />}
+          <Truncate>{repo?.name ?? 'No repository'}</Truncate>
         </span>
         <span className='flex min-w-0 items-center gap-1.5 max-md:hidden'>
           <KindMark state={state} task={task} />

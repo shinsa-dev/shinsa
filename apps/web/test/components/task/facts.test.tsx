@@ -54,39 +54,56 @@ function renderFacts(task: Task = createTask({ id: 't', handle: 'SW-7' }), other
   );
 }
 
-describe('the project fact', () => {
-  it('shows the project as its dot and name, never the repository’s folder, and nothing for a task with neither', () => {
+describe('a task with no repository', () => {
+  it('shows no repository fact, where a task with one names it', () => {
     const question = createTask({ id: 'hey', handle: 'T-1', stage: 'answering', pipeline: ['answer'] });
     const state = createShinsaState({
-      tasks: [
-        question,
-        { ...question, id: 'bound', repoId: 'kanna' },
-        { ...question, id: 'scoped', projectId: 'p' },
-        { ...question, id: 'loose', repoId: 'scratch' },
-      ],
-      projects: [createProject({ id: 'p', name: 'Personal', color: 'green' })],
+      tasks: [question, { ...question, id: 'bound', repoId: 'kanna' }],
+      repos: [createRepo({ id: 'kanna' })],
+    });
+    pushState(state);
+    const view = render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={question} />
+        <hr />
+        <TaskFacts state={state} task={state.tasks.bound as Task} />
+      </TooltipProvider>
+    );
+    const [unbound, bound] = view.container.querySelectorAll('div.flex-wrap');
+    expect(unbound?.textContent).not.toMatch(/kanna|repositor/i);
+    expect(bound?.textContent).toContain('kanna');
+  });
+
+  it('marks the repository with a folder in its project’s colour, and a plain folder without a project', () => {
+    const task = createTask({ id: 'web', handle: 'SW-1', repoId: 'web' });
+    const state = createShinsaState({
+      tasks: [task, { ...task, id: 'loose', repoId: 'scratch' }],
+      projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
       repos: [
-        createRepo({ id: 'kanna', name: 'kanna', projectId: 'p' }),
+        createRepo({
+          id: 'web',
+          name: 'paywall-next',
+          projectId: 'p',
+          remote: 'git@github.com:sw/paywall-next.git',
+        }),
         createRepo({ id: 'scratch', name: 'scratch' }),
       ],
     });
     pushState(state);
     const view = render(
       <TooltipProvider>
-        {['hey', 'bound', 'scoped', 'loose'].map((id) => (
-          <TaskFacts key={id} state={state} task={state.tasks[id] as Task} />
-        ))}
+        <TaskFacts state={state} task={task} />
+        <TaskFacts state={state} task={state.tasks.loose as Task} />
       </TooltipProvider>
     );
-    const [unbound, bound, scoped, loose] = view.container.querySelectorAll('div.flex-wrap');
-    expect(unbound?.textContent).not.toMatch(/kanna|personal|repositor/i);
-    expect(unbound?.querySelector('[data-project-dot]')).toBeNull();
-    expect(bound?.textContent).toContain('Personal');
-    expect(bound?.textContent).not.toContain('kanna');
-    expect(bound?.querySelector('[data-project-dot]')?.getAttribute('data-project-dot')).toBe('green');
-    expect(scoped?.textContent).toContain('Personal');
+    const [bound, loose] = view.container.querySelectorAll('div.flex-wrap');
+    const ink = bound?.querySelector('[data-project-ink]') as SVGElement | null;
+    expect(ink?.getAttribute('data-project-ink')).toBe('purple');
+    expect(ink?.style.getPropertyValue('--icon-color')).toBe('var(--purple-4, var(--fg-2))');
+    expect(bound?.textContent).toContain('paywall-next');
+    expect(bound?.textContent).not.toContain('Superwall');
     expect(loose?.textContent).toContain('scratch');
-    expect(loose?.querySelector('[data-project-dot]')?.getAttribute('data-project-dot')).toBe('gray');
+    expect(loose?.querySelector('[data-project-ink]')).toBeNull();
   });
 });
 

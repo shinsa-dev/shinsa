@@ -10,9 +10,9 @@ import {
   listRepoChoiceGroups,
   PROJECT_ACTIONS,
   resolveDraftInput,
+  resolveProjectInk,
   resolveProjectInput,
-  resolveRepoProjectLabel,
-  resolveTaskProjectLabel,
+  resolveRepoIcon,
   selectProject,
   selectTaskProject,
   validateFolderPath,
@@ -69,45 +69,13 @@ describe('reading projects', () => {
     expect(selectTaskProject(state, createTask({ id: 't', projectId: 'p2' }))?.name).toBe('Basket');
   });
 
-  it('labels a project by its dot and name, and names the repository only when the project has several', () => {
-    const state = createShinsaState({
-      projects: [SUPERWALL, BASKET],
-      repos: [
-        createRepo({ id: 'web', name: 'web', projectId: 'p1' }),
-        createRepo({ id: 'api', name: 'api', projectId: 'p1' }),
-        createRepo({ id: 'basket', name: 'basket-ios', projectId: 'p2' }),
-        createRepo({ id: 'loose', name: 'scratch' }),
-      ],
-    });
-    const repo = (id: string) => createRepo({ ...state.repos[id], id });
-    expect(resolveRepoProjectLabel(state, repo('web'))).toEqual({
-      color: 'purple',
-      name: 'Superwall',
-      repo: 'web',
-    });
-    expect(resolveRepoProjectLabel(state, repo('basket'))).toEqual({
-      color: 'green',
-      name: 'Basket',
-      repo: null,
-    });
-    expect(resolveRepoProjectLabel(state, repo('loose'))).toEqual({
-      color: 'gray',
-      name: 'scratch',
-      repo: null,
-    });
-    expect(resolveTaskProjectLabel(state, createTask({ id: 't', repoId: 'api' }))).toEqual({
-      color: 'purple',
-      name: 'Superwall',
-      repo: 'api',
-    });
-    expect(resolveTaskProjectLabel(state, createTask({ id: 't', projectId: 'p1' }))?.repo).toBeNull();
-    expect(resolveTaskProjectLabel(state, createTask({ id: 't', projectId: 'p2', repoId: 'web' }))).toEqual({
-      color: 'green',
-      name: 'Basket',
-      repo: null,
-    });
-    expect(resolveTaskProjectLabel(state, createTask({ id: 't', repoId: 'loose' }))?.name).toBe('scratch');
-    expect(resolveTaskProjectLabel(state, createTask({ id: 't' }))).toBeNull();
+  it('inks a project in its colour, grey for none, and marks a repository by where it lives', () => {
+    expect(resolveProjectInk('purple')).toBe('var(--purple-4, var(--fg-2))');
+    expect(resolveProjectInk('gray')).toBe('var(--fg-2)');
+    expect(resolveRepoIcon(createRepo({ id: 'web', remote: 'git@github.com:you/web.git' }))).toBe(
+      'IconGithub'
+    );
+    expect(resolveRepoIcon(createRepo({ id: 'local', remote: null }))).toBe('IconFolder1');
   });
 
   it('explains the key by the handles it makes', () => {
