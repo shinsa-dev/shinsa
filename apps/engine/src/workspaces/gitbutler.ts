@@ -164,7 +164,7 @@ export class GitButlerStrategy implements WorkspaceStrategy {
     await this.#serially(repo, async () => {
       const status = await readButStatus(repo.path, signal);
       if (listConflictedBranches(status).includes(branch)) throw new ConflictedBranchError(branch);
-      await runBut(['push', branch], repo.path, { signal });
+      await runBut(['push', '--no-verify', branch], repo.path, { signal });
     });
     return runCommandOrThrow(['git', 'rev-parse', `refs/heads/${branch}`], repo.path);
   }

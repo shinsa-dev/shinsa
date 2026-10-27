@@ -82,7 +82,7 @@ export class MainCheckoutStrategy implements WorkspaceStrategy {
   async push(repo: Repo, task: Task, signal?: AbortSignal) {
     const branch = assertRefName(requireCheckout(task).branch);
     await runCommandOrThrow(
-      ['git', 'push', '--quiet', '-u', 'origin', `refs/heads/${branch}:refs/heads/${branch}`],
+      ['git', 'push', '--quiet', '--no-verify', '-u', 'origin', `refs/heads/${branch}:refs/heads/${branch}`],
       repo.path,
       { timeoutMs: GIT_NETWORK_TIMEOUT_MS, signal }
     );

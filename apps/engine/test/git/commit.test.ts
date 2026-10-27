@@ -83,4 +83,14 @@ describe('commits and pushes', () => {
     expect(await git(origin, 'rev-parse', 'refs/heads/feat/a')).toBe(await resolveHead(path));
     await expect(pushBranch(path, '--force')).rejects.toThrow('is not a branch name');
   });
+
+  test('pushing skips the repository’s pre-push hook, which would run its whole suite', async () => {
+    const { path, origin } = await createGitRepo();
+    writeFiles(path, { '.git/hooks/pre-push': '#!/bin/sh\nexit 1\n' });
+    await runCommand(['chmod', '+x', '.git/hooks/pre-push'], path);
+    writeFiles(path, { 'a.txt': 'a' });
+    await commitWorktree(path, 'feat: a');
+    await pushBranch(path, 'feat/a');
+    expect(await git(origin, 'rev-parse', 'refs/heads/feat/a')).toBe(await resolveHead(path));
+  });
 });
