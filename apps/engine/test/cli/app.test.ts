@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Repo, UserCommand } from '@shinsa/core';
+import { APP_FLAVORS, type Repo, type UserCommand } from '@shinsa/core';
 import {
   isJobProgram,
   isPathArgument,
@@ -10,6 +10,7 @@ import {
   parseEngineJob,
   readAppBundleId,
   resolveEngineTarget,
+  resolveHomeLink,
   resolveLinkPage,
   resolvePathArgument,
   resolveRealPath,
@@ -64,6 +65,17 @@ describe('links into the app', () => {
     expect(resolveLinkPage('shinsa://task/SW-142')).toBe('/tasks/SW-142');
     expect(resolveLinkPage('shinsa://home')).toBe('/');
     expect(resolveEngineTarget(501)).toBe('gui/501/studio.overclock.shinsa.engine');
+    expect(resolveHomeLink()).toBe('shinsa://home');
+  });
+
+  test('Shinsa Canary links in its own scheme and runs its own job', () => {
+    expect(resolveTaskLink('SW-142', APP_FLAVORS.canary)).toBe('shinsa-canary://task/SW-142');
+    expect(resolveHomeLink(APP_FLAVORS.canary)).toBe('shinsa-canary://home');
+    expect(resolveLinkPage('shinsa-canary://task/SW-142')).toBe('/tasks/SW-142');
+    expect(resolveLinkPage('shinsa-canary://home')).toBe('/');
+    expect(resolveEngineTarget(501, APP_FLAVORS.canary.appId)).toBe(
+      'gui/501/studio.overclock.shinsa.canary.engine'
+    );
   });
 
   test('tells a folder from a task, and resolves it against where shinsa ran', () => {

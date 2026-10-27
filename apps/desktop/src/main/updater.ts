@@ -19,7 +19,12 @@ import {
   UPDATE_CHECK_MS,
   type UpdateState,
 } from '../lib/update.ts';
-import { resolveDowngradeOffer, resolveUpdateChannel, resolveUpdaterOptions } from '../lib/update-channel.ts';
+import {
+  resolveDowngradeOffer,
+  resolveUpdateChannel,
+  resolveUpdaterOptions,
+  UPDATE_FEED,
+} from '../lib/update-channel.ts';
 import { showNotice } from './notifications.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
 
@@ -71,12 +76,12 @@ export class Updater {
   async applyChannel(channel: UpdateChannel) {
     if (channel === this.#channel) return;
     this.#channel = channel;
-    writePrefs({ updateChannel: channel, keptBeta: null });
+    writePrefs({ updateChannel: channel, keptVersion: null });
     this.#changed();
     if (!this.#supported) return;
     this.#applyOptions();
     if (needsDiscard(this.#state, channel)) await this.#discard();
-    this.#ask = channel === 'stable';
+    this.#ask = true;
     await this.check(false);
   }
 
@@ -111,11 +116,11 @@ export class Updater {
   async answerDowngrade(accept: boolean) {
     if (this.#state.status !== 'downgrade') return;
     if (!accept) {
-      writePrefs({ keptBeta: app.getVersion() });
+      writePrefs({ keptVersion: app.getVersion() });
       this.#set({ status: 'current', latest: this.#state.version });
       return;
     }
-    writePrefs({ keptBeta: null });
+    writePrefs({ keptVersion: null });
     this.#applyOptions(true);
     try {
       await this.check(false);
@@ -142,7 +147,7 @@ export class Updater {
   #current(latest: string) {
     const manual = this.#state.status === 'checking' && this.#state.manual;
     const ask = manual || this.#ask;
-    const kept = readPrefs().keptBeta;
+    const kept = readPrefs().keptVersion;
     const version = resolveDowngradeOffer({
       channel: this.#channel,
       current: app.getVersion(),
@@ -158,7 +163,7 @@ export class Updater {
   async #askDowngrade(version: string) {
     const answer = await dialog.showMessageBox({
       type: 'question',
-      ...describeDowngradeDialog(version, app.getVersion()),
+      ...describeDowngradeDialog(version, app.getVersion(), this.#channel),
     });
     await this.answerDowngrade(answer.response === DOWNGRADE_ACCEPT);
   }
@@ -180,6 +185,7 @@ export class Updater {
 
   #applyOptions(downgrade = false) {
     const options = resolveUpdaterOptions(this.#channel, downgrade);
+    autoUpdater.setFeedURL(UPDATE_FEED);
     autoUpdater.channel = options.channel;
     autoUpdater.allowPrerelease = options.allowPrerelease;
     autoUpdater.allowDowngrade = options.allowDowngrade;

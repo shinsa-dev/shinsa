@@ -7,7 +7,7 @@ export interface DesktopNotice {
   path: string | null;
 }
 
-export type UpdateChannel = 'stable' | 'beta';
+export type UpdateChannel = 'stable' | 'beta' | 'canary';
 
 export type DesktopUpdate =
   | { status: 'none' }

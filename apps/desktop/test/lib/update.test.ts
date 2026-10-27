@@ -132,14 +132,26 @@ describe('resolveDesktopUpdate', () => {
 
 describe('describeDowngradeDialog', () => {
   it('asks to go back to the latest stable release, downloading it by default', () => {
-    expect(describeDowngradeDialog('1.2.0', '1.3.0-beta.2')).toEqual({
+    expect(describeDowngradeDialog('1.2.0', '1.3.0-beta.2', 'stable')).toEqual({
       message: 'Go back to 1.2.0 (stable)?',
       detail:
-        'You have the beta 1.3.0-beta.2, newer than 1.2.0, the latest stable release. Shinsa can download 1.2.0 and install it when you quit, like any update. Or stay on this beta until a stable release passes it.',
+        'You have the beta 1.3.0-beta.2, newer than 1.2.0, the latest on the Stable channel. Shinsa can download 1.2.0 and install it when you quit, like any update. Or stay on this beta until the Stable channel passes it.',
       buttons: ['Download and install', 'Stay on this beta'],
       defaultId: DOWNGRADE_ACCEPT,
       cancelId: 1,
     });
+  });
+
+  it('asks a canary on Beta to go back to the latest beta or stable release', () => {
+    expect(describeDowngradeDialog('1.3.0-beta.2', '1.3.1-canary.4', 'beta')).toMatchObject({
+      message: 'Go back to 1.3.0-beta.2 (beta)?',
+      detail:
+        'You have the canary 1.3.1-canary.4, newer than 1.3.0-beta.2, the latest on the Beta channel. Shinsa can download 1.3.0-beta.2 and install it when you quit, like any update. Or stay on this canary until the Beta channel passes it.',
+      buttons: ['Download and install', 'Stay on this canary'],
+    });
+    expect(describeDowngradeDialog('1.3.0', '1.3.1-canary.4', 'beta').message).toBe(
+      'Go back to 1.3.0 (stable)?'
+    );
   });
 });
 
@@ -151,9 +163,18 @@ describe('needsDiscard', () => {
     );
   });
 
-  it('keeps a stable update, any update on Beta, and does nothing without a download', () => {
+  it('drops a canary that is downloading or downloaded when you switch to Beta or Stable', () => {
+    expect(needsDiscard({ status: 'ready', version: '1.3.1-canary.2' }, 'beta')).toBe(true);
+    expect(needsDiscard({ status: 'downloading', version: '1.3.1-canary.2', percent: 5 }, 'stable')).toBe(
+      true
+    );
+  });
+
+  it('keeps an update of the chosen channel or a lower one, and does nothing without a download', () => {
     expect(needsDiscard({ status: 'ready', version: '1.3.0' }, 'stable')).toBe(false);
     expect(needsDiscard({ status: 'ready', version: '1.3.0-beta.3' }, 'beta')).toBe(false);
+    expect(needsDiscard({ status: 'ready', version: '1.3.0-beta.3' }, 'canary')).toBe(false);
+    expect(needsDiscard({ status: 'ready', version: '1.3.1-canary.2' }, 'canary')).toBe(false);
     expect(needsDiscard({ status: 'current', latest: '1.2.0' }, 'stable')).toBe(false);
   });
 });

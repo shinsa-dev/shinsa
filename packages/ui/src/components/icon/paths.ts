@@ -90,6 +90,7 @@ export const ICON_NAMES = [
   'IconEyeOpen',
   'IconEyeSlash',
   'IconEyeSparkle',
+  'IconFeather',
   'IconFileEdit',
   'IconFilePdf',
   'IconFileText',
@@ -538,6 +539,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconEyeSparkle: {
     '3': '<g><path d="M21.2245 10.6522C16.4093 3.11588 7.59067 3.11597 2.77546 10.6523C2.25147 11.4724 2.25147 12.5277 2.77546 13.3478C7.59067 20.8841 16.4093 20.884 21.2245 13.3477C21.7485 12.5276 21.7485 11.4723 21.2245 10.6522Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.2405 10.1852L12.5436 8.37334C12.4571 8.14842 12.241 8 12 8C11.759 8 11.5429 8.14842 11.4564 8.37334L10.7595 10.1852C10.658 10.4493 10.4493 10.658 10.1852 10.7595L8.37334 11.4564C8.14842 11.5429 8 11.759 8 12C8 12.241 8.14842 12.4571 8.37334 12.5436L10.1852 13.2405C10.4493 13.342 10.658 13.5507 10.7595 13.8148L11.4564 15.6267C11.5429 15.8516 11.759 16 12 16C12.241 16 12.4571 15.8516 12.5436 15.6267L13.2405 13.8148C13.342 13.5507 13.5507 13.342 13.8148 13.2405L15.6267 12.5436C15.8516 12.4571 16 12.241 16 12C16 11.759 15.8516 11.5429 15.6267 11.4564L13.8148 10.7595C13.5507 10.658 13.342 10.4493 13.2405 10.1852Z" fill="currentColor"/></g>',
+  },
+  IconFeather: {
+    '3': '<g><path d="M5 21C5 12.811 7.93738 4.62198 16.4512 3.04288C18.1435 2.729 19.5662 4.19167 18.7756 5.68251C17.4442 8.19294 14.8776 9.85964 14.8776 9.85964C15.9575 10.6485 16.8582 11.9697 15.9618 13.2737C14.625 15.2185 11.7203 17.9617 5.97043 17.9617" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconFileEdit: {
     '3': '<g><path d="M5 8V6C5 4.34315 6.34315 3 8 3H11.7574C12.553 3 13.3161 3.31607 13.8787 3.87868L18.1213 8.12132C18.6839 8.68393 19 9.44699 19 10.2426V18C19 19.6569 17.6569 21 16 21H11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 3.75V7C13 8.10457 13.8954 9 15 9H18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.5 20.9998L4 19.4998L4 13.5586C4 12.7302 4.67157 12.0586 5.5 12.0586C6.32843 12.0586 7 12.7302 7 13.5586L7 19.4998L5.5 20.9998Z" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="round"/></g>',

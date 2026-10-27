@@ -8,11 +8,13 @@ import {
   DOWNLOADS_BUCKET,
   describeDownloadUpload,
   listPointerUploads,
+  listStaleCanaryKeys,
   parseDownloadRelease,
   parseStoredPointer,
   parseTokenId,
   R2_ENDPOINT,
   RELEASE_VIEW_FIELDS,
+  RELEASES_PREFIX,
   resolveChannelUpdates,
   resolveR2Credentials,
   TOKEN_VERIFY_URL,
@@ -37,6 +39,17 @@ async function requestPointer(bucket: S3Client, key: string) {
   return parseStoredPointer(await file.text());
 }
 
+async function listReleaseKeys(bucket: S3Client) {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    const page = await bucket.list({ prefix: RELEASES_PREFIX, continuationToken });
+    keys.push(...(page.contents ?? []).map((object) => object.key));
+    continuationToken = page.isTruncated ? page.nextContinuationToken : undefined;
+  } while (continuationToken);
+  return keys;
+}
+
 async function requestSha256(path: string) {
   const hasher = new Bun.CryptoHasher('sha256');
   for await (const chunk of Bun.file(path).stream()) hasher.update(chunk);
@@ -54,13 +67,17 @@ try {
   const current = {
     stable: await requestPointer(bucket, resolveChannelKey('stable')),
     beta: await requestPointer(bucket, resolveChannelKey('beta')),
+    canary: await requestPointer(bucket, resolveChannelKey('canary')),
   };
   await bucket.write(release.pointer.key, Bun.file(dmg), { type: 'application/x-apple-diskimage' });
   const channels = resolveChannelUpdates(release, current);
   for (const upload of listPointerUploads(release, channels)) {
     await bucket.write(upload.key, upload.body, { type: 'application/json' });
   }
-  const summary = describeDownloadUpload(release, channels, current);
+  const stale = listStaleCanaryKeys(await listReleaseKeys(bucket));
+  for (const key of stale) await bucket.delete(key);
+  const removed = stale.length > 0 ? ` Removed ${stale.length} older canary disk images.` : '';
+  const summary = `${describeDownloadUpload(release, channels, current)}${removed}`;
   if (Bun.env.GITHUB_STEP_SUMMARY)
     appendFileSync(Bun.env.GITHUB_STEP_SUMMARY, `**Downloads:** ${summary}\n\n`);
   process.stdout.write(`${summary}\n`);

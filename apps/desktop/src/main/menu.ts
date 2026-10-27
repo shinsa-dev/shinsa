@@ -87,7 +87,7 @@ export function applyMenu({ show, open, step, reload, restartEngine, update }: M
         { role: 'minimize' },
         { role: 'zoom' },
         { type: 'separator' },
-        { label: 'Shinsa', click: show },
+        { label: APP_NAME, click: show },
         { type: 'separator' },
         { role: 'front' },
       ],

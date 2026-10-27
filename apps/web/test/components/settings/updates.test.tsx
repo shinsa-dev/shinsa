@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { type UpdateActions, UpdateSettings, UpdatesGroup } from '@/components/settings/updates.tsx';
-import type { DesktopUpdate } from '@/lib/desktop.ts';
+import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import { installDesktop } from '../../support/desktop.ts';
 
 let fake: ReturnType<typeof installDesktop> | null = null;
@@ -12,7 +12,7 @@ afterEach(() => {
   fake = null;
 });
 
-function renderGroup(update: DesktopUpdate) {
+function renderGroup(update: DesktopUpdate, version = '1.3.0-beta.2', channel: UpdateChannel = 'beta') {
   const actions: UpdateActions = {
     check: mock(() => undefined),
     install: mock(() => undefined),
@@ -21,7 +21,7 @@ function renderGroup(update: DesktopUpdate) {
   };
   render(
     <TooltipProvider>
-      <UpdatesGroup app={{ version: '1.3.0-beta.2', channel: 'beta', update }} actions={actions} />
+      <UpdatesGroup app={{ version, channel, update }} actions={actions} />
     </TooltipProvider>
   );
   return actions;
@@ -47,6 +47,30 @@ describe('the Updates settings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stay on this beta' }));
     expect(actions.answerDowngrade).toHaveBeenCalledWith(false);
     expect(screen.queryByRole('button', { name: 'Restart to update' })).toBeNull();
+  });
+
+  it('offers Stable and Beta, and Shinsa Canary as a separate download', () => {
+    renderGroup({ status: 'current' });
+    expect(screen.getByRole('combobox', { name: 'Update channel' })).toBeTruthy();
+    expect(screen.getByText('Shinsa Canary')).toBeTruthy();
+    const link = screen.getByRole('button', { name: 'Download Shinsa Canary' });
+    expect(link.getAttribute('href')).toBe('https://shinsa.dev/download/canary');
+    expect(link.getAttribute('target')).toBe('_blank');
+  });
+
+  it('in Shinsa Canary shows the channel as fixed and offers no other app', () => {
+    renderGroup({ status: 'downloading', version: '1.3.1-canary.5' }, '1.3.1-canary.4', 'canary');
+    expect(screen.getByText('Shinsa Canary')).toBeTruthy();
+    expect(screen.getByText('Downloading 1.3.1-canary.5…')).toBeTruthy();
+    expect(screen.getByText('Canary channel · Updates install when you quit Shinsa Canary')).toBeTruthy();
+    expect(screen.getByText('Canary')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Shinsa Canary is built from every change merged into main and updates only to the next canary.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Update channel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Shinsa Canary' })).toBeNull();
   });
 
   it('has no restart button and no status before the first check', () => {

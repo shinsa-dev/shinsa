@@ -6,7 +6,8 @@ import {
   resolveChannelKey,
   resolveReleaseKey,
 } from '../apps/marketing/src/worker/download.ts';
-import { resolveVersionOrder } from '../packages/core/src/protocol/engine.ts';
+import { resolveReleaseChannel, resolveVersionOrder } from '../packages/core/src/protocol/engine.ts';
+import { listStaleCanaries } from './release-version.ts';
 
 export interface DownloadRelease {
   tag: string;
@@ -26,6 +27,26 @@ export const R2_ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
 
 export const TOKEN_VERIFY_URL = `https://api.cloudflare.com/client/v4/accounts/${R2_ACCOUNT_ID}/tokens/verify`;
 
+export const RELEASES_PREFIX = 'releases/';
+
+const REACHED_CHANNELS: Record<Channel, Channel[]> = {
+  stable: ['stable', 'beta'],
+  beta: ['beta'],
+  canary: ['canary'],
+};
+
+const DESCRIBED_CHANNELS: Record<Channel, Channel[]> = {
+  stable: ['stable', 'beta'],
+  beta: ['stable', 'beta'],
+  canary: ['canary'],
+};
+
+const DOWNLOAD_PATHS: Record<Channel, string> = {
+  stable: 'shinsa.dev/download',
+  beta: 'shinsa.dev/download/beta',
+  canary: 'shinsa.dev/download/canary',
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -33,6 +54,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function selectDmgAsset(assets: unknown) {
   if (!Array.isArray(assets)) return null;
   return assets.find((asset) => isRecord(asset) && asset.name === DMG_NAME) ?? null;
+}
+
+function resolvePrereleaseChannel(version: string): Channel {
+  return resolveReleaseChannel(version) === 'canary' ? 'canary' : 'beta';
 }
 
 export function parseDownloadRelease(view: unknown): DownloadRelease {
@@ -52,7 +77,8 @@ export function parseDownloadRelease(view: unknown): DownloadRelease {
     publishedAt: view.publishedAt,
   });
   if (!pointer) throw new Error(`${tag} is not a version, or its ${DMG_NAME} has no size, digest or date.`);
-  return { tag, channel: view.isPrerelease === false ? 'stable' : 'beta', pointer };
+  const channel = view.isPrerelease === false ? 'stable' : resolvePrereleaseChannel(version);
+  return { tag, channel, pointer };
 }
 
 export function assertDownloadFile(release: DownloadRelease, file: { size: number; sha256: string }) {
@@ -85,8 +111,7 @@ export function resolveR2Credentials(token: string, tokenId: string) {
 }
 
 export function resolveChannelUpdates(release: DownloadRelease, current: ChannelPointers): Channel[] {
-  const channels: Channel[] = release.channel === 'stable' ? ['stable', 'beta'] : ['beta'];
-  return channels.filter((channel) => {
+  return REACHED_CHANNELS[release.channel].filter((channel) => {
     const pointer = current[channel];
     return !pointer || resolveVersionOrder(release.pointer.version, pointer.version) !== -1;
   });
@@ -99,19 +124,36 @@ export function listPointerUploads(release: DownloadRelease, channels: Channel[]
   }));
 }
 
+function describeChannel(
+  release: DownloadRelease,
+  channel: Channel,
+  channels: Channel[],
+  current: ChannelPointers
+) {
+  const url = DOWNLOAD_PATHS[channel];
+  if (channels.includes(channel)) return `${url} now serves ${release.pointer.version}.`;
+  const kept = current[channel]?.version;
+  if (!kept) return `${url} serves the beta until the first stable release.`;
+  if (REACHED_CHANNELS[release.channel].includes(channel)) return `${url} keeps ${kept}, which is newer.`;
+  return `${url} still serves ${kept}.`;
+}
+
 export function describeDownloadUpload(
   release: DownloadRelease,
   channels: Channel[],
   current: ChannelPointers
 ) {
   const file = `Uploaded \`${release.pointer.key}\` to R2 (\`${DOWNLOADS_BUCKET}\`).`;
-  const lines = (['stable', 'beta'] as const).map((channel) => {
-    const url = channel === 'stable' ? 'shinsa.dev/download' : 'shinsa.dev/download/beta';
-    if (channels.includes(channel)) return `${url} now serves ${release.pointer.version}.`;
-    const kept = current[channel]?.version;
-    return kept
-      ? `${url} keeps ${kept}, which is newer.`
-      : `${url} serves the beta until the first stable release.`;
-  });
+  const lines = DESCRIBED_CHANNELS[release.channel].map((channel) =>
+    describeChannel(release, channel, channels, current)
+  );
   return [file, ...lines].join(' ');
+}
+
+export function listStaleCanaryKeys(keys: readonly string[]) {
+  const versions = keys.flatMap((key) => {
+    const version = key.slice(RELEASES_PREFIX.length).split('/')[0] ?? '';
+    return resolveReleaseKey(version) === key ? [version] : [];
+  });
+  return listStaleCanaries(versions).map(resolveReleaseKey);
 }

@@ -1,0 +1,36 @@
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**
+  - static/**
+  - package.json
+extraResources:
+  - from: ../engine/dist/engine
+    to: engine
+mac:
+  target:
+    - target: dir
+      arch: arm64
+  artifactName: Shinsa-mac-${arch}.${ext}
+  category: public.app-category.developer-tools
+  minimumSystemVersion: "14.0"
+  hardenedRuntime: true
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
+dmg:
+  title: ${productName} ${version}
+  iconSize: 112
+  iconTextSize: 13
+  contents:
+    - x: 180
+      y: 196
+      type: file
+    - x: 480
+      y: 196
+      type: link
+      path: /Applications
+publish:
+  provider: github
+  owner: shinsa-dev
+  repo: shinsa

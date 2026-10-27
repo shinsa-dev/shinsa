@@ -4,7 +4,7 @@ import { app, clipboard, ipcMain, session, shell } from 'electron';
 import { resolveBadgeText } from '../lib/badge.ts';
 import { CHANNELS, type DesktopStart } from '../lib/bridge.ts';
 import { findDeepLink, parseDeepLink, URL_SCHEME } from '../lib/deep-link.ts';
-import { APP_NAME } from '../lib/dev-bundle.ts';
+import { APP_NAME, resolveUserDataDir } from '../lib/dev-bundle.ts';
 import {
   describeEngineScreen,
   type EngineAction,
@@ -42,9 +42,7 @@ let firstHealth: Promise<ServerHealth | null> | null = null;
 let aboutCredits: string | undefined;
 
 app.setName(APP_NAME);
-if (!app.isPackaged) app.setPath('userData', join(app.getPath('appData'), `${APP_NAME} Dev`));
-else if (process.env.SHINSA_APP_ID)
-  app.setPath('userData', join(app.getPath('appData'), process.env.SHINSA_APP_ID));
+app.setPath('userData', resolveUserDataDir(app.getPath('appData'), app.isPackaged));
 
 if (app.requestSingleInstanceLock()) {
   watchApp();
