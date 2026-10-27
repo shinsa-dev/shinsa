@@ -966,23 +966,25 @@
     letter-spacing: -0.02em;
   }
 
-  /* A native app, not a page: nothing is selectable and every cursor is the
-     arrow, until a content region opts back in with `selectable` (below,
-     docs/design.md → Where Shinsa differs, 39). Links and images never ghost-
-     drag. Inputs, textareas and editors keep their own behaviour. */
-  body {
+  /* In the desktop app (`html[data-desktop]`), a native app, not a page:
+     nothing is selectable and every cursor is the arrow, until a content
+     region opts back in with `selectable` (below, docs/design.md → Where
+     Shinsa differs, 39). Links and images never ghost-drag. Inputs, textareas
+     and editors keep their own behaviour. In a browser (the web app, the
+     site) a page selects and drags the way every page does. */
+  :where(html[data-desktop]) body {
     -webkit-user-select: none;
     user-select: none;
     cursor: default;
   }
 
-  :where(a, img) {
+  :where(html[data-desktop]) :where(a, img) {
     -webkit-user-drag: none;
   }
 
   /* Chrome inside a content region stays chrome: its controls, badges and
      keys never join a selection. */
-  :where(.selectable)
+  :where(html[data-desktop]) :where(.selectable)
     :where(
       button,
       select,

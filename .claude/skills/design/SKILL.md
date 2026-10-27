@@ -84,6 +84,6 @@ Checklist:
 - [ ] An icon that sits beside others at one size but draws smaller in Central's box is matched in
       `MATCHED_SCALE` (`packages/ui/scripts/icons.ts`), never sized at the call site; measure its ink.
 - [ ] Text a person would copy (prose, code, output, an error) is `selectable`, the kit's one class; everything
-      else is chrome, never selected and under the arrow. No `select-text`, `cursor-text` or `user-select` by hand
+      else is chrome, never selected and under the arrow in the desktop app (a browser keeps native selection). No `select-text`, `cursor-text` or `user-select` by hand
       (lint fails; docs/design.md → Where Shinsa differs, 39).
 - [ ] Looked at it on `/ui` and in the app, light and dark, desktop and ~900px.

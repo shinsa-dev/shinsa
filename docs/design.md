@@ -2475,8 +2475,10 @@ Only these, and they win over anything below:
 39. **Chrome is never selected; content opts in** (since 2026-10-27; `packages/ui/src/styles/globals.css`,
     `packages/ui/src/lib/selection.ts`, `packages/ui/src/hooks/use-select-all-scope.ts`). A Mac app does not let a
     drag or ⌘A select its toolbar, its lists or its labels, and shows the arrow over them, never the I-beam. So the
-    whole app is chrome by default: `body` is `user-select: none` (and `-webkit-`) with `cursor: default`, and links
-    and images never ghost-drag (`-webkit-user-drag: none`). Real content a person may want to copy opts back in
+    whole desktop app is chrome by default: under `html[data-desktop]`, `body` is `user-select: none` (and `-webkit-`)
+    with `cursor: default`, and links and images never ghost-drag (`-webkit-user-drag: none`). This is the desktop
+    app only, like the arrow over clickable controls: in a browser (the web app, shinsa.dev) a page selects, drags and
+    shows its cursors the way every page does, because that is what feels native there. Real content a person may want to copy opts back in
     through **one class, `selectable`** (the kit's `@utility selectable`, `SELECTABLE` in `lib/selection.ts`), which
     makes it selectable and shows the I-beam together; there is no other way in.
     - **What is content.** `Markdown` (every block of prose: the chat's agent text, review prose, plan and spec

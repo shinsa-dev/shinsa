@@ -804,7 +804,7 @@ The app adds one variant of its own, for the Mac app's window:
 ::selection { background-color: var(--selection); }
 ```
 
-**Content opts into selection.** The app is chrome by default (`body` is unselectable with the arrow cursor, base layer below); real content opts back in with the one class `selectable` (text selection and the text cursor), which a drag (`body[data-dragging]`) switches off again.
+**Content opts into selection.** The desktop app (`html[data-desktop]`) is chrome by default (`body` is unselectable with the arrow cursor, base layer below; a browser, the web app and the site, keeps native selection); real content opts back in with the one class `selectable` (text selection and the text cursor), which a drag (`body[data-dragging]`) switches off again.
 
 **Disclosure chevron turn.** `transition-disclosure` eases `rotate` and `transform` over 200ms on `cubic-bezier(0.22, 1, 0.36, 1)`, the movement clock (Motion).
 
@@ -834,10 +834,10 @@ The app adds one variant of its own, for the Mac app's window:
 
   :focus, :focus-visible { outline: none; }
 
-  body { -webkit-user-select: none; user-select: none; cursor: default; }
-  :where(a, img) { -webkit-user-drag: none; }
+  :where(html[data-desktop]) body { -webkit-user-select: none; user-select: none; cursor: default; }
+  :where(html[data-desktop]) :where(a, img) { -webkit-user-drag: none; }
 
-  :where(.selectable) :where(button, select, label, [role="button"], [role="tab"], [role="checkbox"],
+  :where(html[data-desktop]) :where(.selectable) :where(button, select, label, [role="button"], [role="tab"], [role="checkbox"],
     [role="switch"], [role="radio"], [data-slot="badge"], [data-slot="kbd"]) {
     -webkit-user-select: none; user-select: none;
   }
@@ -8637,16 +8637,16 @@ export function useDelayed(active: boolean, delayMs: number = LOADING_DELAY_MS) 
 
 **Rules**
 
-- The whole app is chrome by default, as in a native app: no drag or ⌘A selects toolbars, lists or labels, and they show the arrow, not the I-beam.
+- The desktop app is chrome by default, as in a native app: no drag or ⌘A selects toolbars, lists or labels, and they show the arrow, not the I-beam. Only under `html[data-desktop]`: in a browser (the web app, shinsa.dev) a page selects and drags the way every page does.
 
 ```css
-body {
+:where(html[data-desktop]) body {
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
 }
 
-:where(a, img) {
+:where(html[data-desktop]) :where(a, img) {
   -webkit-user-drag: none;
 }
 ```
