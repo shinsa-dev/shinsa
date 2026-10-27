@@ -46,19 +46,15 @@ function createGroupSection(
   };
 }
 
-export function listQueueSections(
-  state: ShinsaState,
-  queue: Queue,
-  briefed: ReadonlySet<string> | null
-): QueueSection[] {
+export function listQueueSections(state: ShinsaState, queue: Queue): QueueSection[] {
   return [
     {
       key: 'needs',
-      title: briefed ? 'Also needs you' : 'Needs you',
+      title: 'Needs you',
       icon: 'IconInboxEmpty',
       tone: 'neutral',
-      items: listGateItems(queue.ready.filter((entry) => !briefed?.has(entry.task.id))),
-      empty: briefed ? null : 'Nothing is waiting on you.',
+      items: listGateItems(queue.ready),
+      empty: 'Nothing is waiting on you.',
       startsCollapsed: false,
     },
     createGroupSection(
