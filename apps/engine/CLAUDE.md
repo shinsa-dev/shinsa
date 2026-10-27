@@ -1,4 +1,4 @@
-# @shinsa/server
+# @shinsa/engine
 
 The local server and the `shinsa` command. Everything with I/O lives here; every decision lives in `@shinsa/core`.
 One package on purpose: `shinsa engine` is the server, and the client commands are a few hundred lines of HTTP calls

@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EventLog } from '../../apps/server/src/store/index.ts';
+import { EventLog } from '../../apps/engine/src/store/index.ts';
 import {
   applyEvent,
   CHAT_PROTOCOL_VERSION,

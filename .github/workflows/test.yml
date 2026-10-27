@@ -52,8 +52,8 @@ jobs:
           git config --global user.email 'ci@shinsa.dev'
           SHINSA_SEED_DIR="$RUNNER_TEMP/seed" bun scripts/seed.ts
           SHINSA_DATA_DIR="$RUNNER_TEMP/seed/data" SHINSA_INSPECT=1 SHINSA_PORT=5720 \
-            nohup bun apps/server/src/main.ts serve > "$RUNNER_TEMP/serve.log" 2>&1 &
-          for attempt in $(seq 120); do
+            nohup bun apps/engine/src/main.ts engine > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 120); do
             curl -sf "$LOADING_ORIGIN/api/health" > /dev/null && exit 0
             sleep 1
           done

@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { convertClaudeSession } from '../apps/server/src/agents/index.ts';
-import { EventLog } from '../apps/server/src/store/index.ts';
+import { convertClaudeSession } from '../apps/engine/src/agents/index.ts';
+import { EventLog } from '../apps/engine/src/store/index.ts';
 import type {
   CodeSpot,
   Gate,
@@ -2178,7 +2178,7 @@ function seed() {
   if (session) writeSessionTranscript(session, runTimes, transcripts);
   console.info(`Seeded ${tasks.length} tasks into ${DATA}`);
   console.info(
-    `Run: SHINSA_DATA_DIR=${DATA} SHINSA_INSPECT=1 SHINSA_PORT=5190 bun run --cwd apps/server start`
+    `Run: SHINSA_DATA_DIR=${DATA} SHINSA_INSPECT=1 SHINSA_PORT=5190 bun run --cwd apps/engine start`
   );
 }
 

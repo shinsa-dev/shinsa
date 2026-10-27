@@ -14,7 +14,7 @@
     "apps/desktop": {
       "entry": ["src/main/index.ts", "src/preload/index.ts", "test/**/*.test.ts"]
     },
-    "apps/server": {
+    "apps/engine": {
       "entry": [
         "test/**/*.test.ts",
         "test/e2e/soak/child.ts",

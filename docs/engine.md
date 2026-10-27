@@ -5,7 +5,7 @@ T3 Code's orchestration v2 (events and effects committed together, effects in or
 results pushed back as commands, a split between process-bound and replay-safe work) and from
 Paperclip (an execution policy the runtime enforces, a liveness invariant, bounded recovery that
 escalates instead of looping). The rules live in `packages/core` (pure, `decide`) and the I/O in
-`apps/server`. An agent cannot skip a step by forgetting it. Every object, field and command name is listed in
+`apps/engine`. An agent cannot skip a step by forgetting it. Every object, field and command name is listed in
 `docs/protocol.md`.
 
 ## Agents
@@ -104,7 +104,7 @@ is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the righ
 `supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
 serves the default provider's list, the one setup's Model step offers.
 
-**Checks are not an agent.** Shinsa runs the repository's check commands itself (`apps/server/src/checks`:
+**Checks are not an agent.** Shinsa runs the repository's check commands itself (`apps/engine/src/checks`:
 the configured commands, otherwise `lint`, `check-types`, `typecheck` and `test` from
 `package.json`), so a green build is a fact, never an agent's claim.
 
@@ -211,7 +211,7 @@ or the one worked on last, and "hey", "what projects do you know", a general que
 whose choice is not clear binds none, and its work asks at the setup gate when it needs one.
 
 - **Triage may choose none.** The repository is a choice among the project's repositories (or every one, Projects and
-  task identity, below) plus `none` (`NO_REPOSITORY` in `apps/server/src/triage/index.ts`); the classifier is told
+  task identity, below) plus `none` (`NO_REPOSITORY` in `apps/engine/src/triage/index.ts`); the classifier is told
   when to answer none, never to pick a repository only because it is the only one listed or was worked on recently,
   and that "the repo" alone names none. The repositories are listed by name, with nothing saying which was used
   last, and the prompt has no preference for recent work.
@@ -252,7 +252,7 @@ whose choice is not clear binds none, and its work asks at the setup gate when i
 A repository says where its agents work (`Repo.workspace`, Settings → Projects on each repository's row, ⌘K "Where
 agents work in ‹repository›", `shinsa repos update --workspace`). It is a human-only repository field
 (`HUMAN_ONLY_REPO_FIELDS`): no agent tool, no shell command and nothing on your behalf changes it. There are three
-modes (`WORKSPACE_MODES`), each a strategy in `apps/server/src/workspaces/` behind one interface
+modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behind one interface
 (`WorkspaceStrategy`: prepare, claim, commit, push, remove), picked per task by `Workspaces.resolve`:
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
@@ -383,7 +383,7 @@ gone), so Shinsa keeps the assignment itself:
 The Code tab edits the task's code directly (`docs/design.md`, 32): there is no suggestion step, and Shinsa still makes
 every commit.
 
-- **Where they go.** `POST /api/tasks/<id>/file` (`apps/server/src/http/edits.ts`) takes `{ path, content, base }`
+- **Where they go.** `POST /api/tasks/<id>/file` (`apps/engine/src/http/edits.ts`) takes `{ path, content, base }`
   (`FileWrite`): the file's new text and the text the editor last knew on disk (`null` for none). It writes into the
   task's checkout, `worktreePath`, which each strategy sets: the worktree, or the repository itself for GitButler and
   the main checkout. The path passes `assertRepoPath` and must stay inside the checkout with its nearest existing
@@ -479,7 +479,7 @@ One task fits both ways of working: a huge chat that grows one goal until it is 
 added as they come) and one task per small thing. A task is the conversation; a **round** is one unit of work inside it,
 with its own steps composed by its Agent from the step schema exactly as for any task. A small task is a task with one
 round. The rules live in `packages/core/src/decide/rounds.ts` (decisions), `domain/rounds.ts` (the record and the
-predicates) and `state/rounds.ts` (the folds); the classifier is `apps/server/src/triage/message.ts`.
+predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/src/triage/message.ts`.
 
 - **Round 1 is the task's request.** `task.created` folds into round 1, so every task has one. The task's own fields (plan, phases, report, checks,
   findings, fix budget, result, proposal, pull request) are the current round's.
@@ -924,7 +924,7 @@ Ported from Paperclip's execution semantics, adapted to one developer. Each beha
 `costs.ts`, `silence.ts`, `shapes.ts`, `suggestions.ts`, `config.ts`, `fingerprints.ts`), its
 state folded by concern under `state/` (`waits.ts` for monitors and usage waits, `runs.ts` for
 metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its server side in
-`apps/server/src` as noted.
+`apps/engine/src` as noted.
 
 ### Plan versions
 
@@ -980,7 +980,7 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
   (default a day, at most a week) and a budget of check-ins (default 10, at most 100). A run that waits again
   continues the same monitor, so its check-ins and timeout carry over. The house rules forbid sleeping or polling
   in a shell.
-- `MonitorClock` (`apps/server/src/runtime/monitors.ts`) fires the earliest due monitor with
+- `MonitorClock` (`apps/engine/src/runtime/monitors.ts`) fires the earliest due monitor with
   `monitor.fire` (command id `monitor:<id>:<attempt>`, so a repeat is a receipt). A fire core
   refuses, or answers with no events, is not sent again: the receipt would answer it the same way,
   so the clock skips that entry until the monitor changes (`StateClock.refuse`; `ScheduleClock`
@@ -1044,7 +1044,7 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 
 ### Silent runs
 
-- `SilenceWatch` (`apps/server/src/agents/silence.ts`) watches transcripts. A running run with no
+- `SilenceWatch` (`apps/engine/src/agents/silence.ts`) watches transcripts. A running run with no
   output for five minutes is marked (`run.silence` with the time of its last output); output
   clears the mark. `resolveSilenceLevel`: suspicious from 5 minutes, critical from 15, nothing
   for a queued or finished run or a waiting one (`isRunWaiting` in core, which the watch uses too):
@@ -1079,7 +1079,7 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 ### Setup verification
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
-  `config.verify` (`apps/server/src/repos/setup.ts`) checks that
+  `config.verify` (`apps/engine/src/repos/setup.ts`) checks that
   the repository folder exists and is a git repository, that the default branch exists (fetching
   it from origin before calling it missing) and that there are checks to run (configured, or
   found in `package.json`). A task whose pipeline needs no worktree (an answer, research) checks the repository only, and
@@ -1097,7 +1097,7 @@ metering, silence and compaction, `suggestions.ts`, `reviews.ts`), and its serve
 
 Harness plan WS7, which names the sources. The rules are core (`packages/core/src/schedules/`,
 `decide/schedules.ts`, `decide/secrets.ts`); the clock, the webhook receiver and the secret store are the server's
-(`apps/server/src/schedules/`, `secrets/`).
+(`apps/engine/src/schedules/`, `secrets/`).
 
 - **A schedule is a trigger that sends a message**: it starts a new task (`new_task`, or an Ask task with
   `just_answer`) in the repository it was set from, or messages a task (`task_id`, the task it was set from by
@@ -1116,7 +1116,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
   server's for a new schedule and the schedule's own for a change),
   so a daylight-saving change keeps 09:00 at 09:00; a time the clocks skip moves on by the gap (02:30 runs
   at 03:30), and a time that occurs twice runs once, at the first.
-- **Firing** (`ScheduleClock`, `apps/server/src/schedules/clock.ts`): one timer for the earliest `nextRunAt` (at most an
+- **Firing** (`ScheduleClock`, `apps/engine/src/schedules/clock.ts`): one timer for the earliest `nextRunAt` (at most an
   hour, so a sleeping machine re-checks), re-armed on every state change. Each due schedule is re-read just before it
   fires and dispatched as `schedule.fire {dueAt}` with command id `schedule:<id>:<dueAt>`, so a restart that fires
   the same slot again replays the receipt. Core ignores a fire whose `dueAt` is not the schedule's `nextRunAt`, and
@@ -1131,7 +1131,7 @@ Harness plan WS7, which names the sources. The rules are core (`packages/core/sr
 - **Failure is recorded, never lost.** A fire core refuses (a `DomainError`) or that throws is written as a `failed`
   run through `schedule.fail`, and the schedule moves to its next slot, so a broken schedule cannot spin. Editing a
   schedule (`schedule_id`) keeps its next run unless the trigger changed or it is being resumed.
-- **Webhooks** (`apps/server/src/schedules/webhook.ts`): each webhook schedule has a URL with a 24-byte token
+- **Webhooks** (`apps/engine/src/schedules/webhook.ts`): each webhook schedule has a URL with a 24-byte token
   (`/api/hooks/<id>/<token>`, `secrets.json`), outside the host guard so services can reach it. The token is
   created when the schedule is written (and for any webhook schedule without one, on every state change), so
   showing the URL never writes. The URL is this machine's own address (`http://<host>:<port>`, from `SHINSA_HOST`
@@ -1167,7 +1167,7 @@ whose context can be thrown away. It is never a way to split a round by step or 
 no separate fixer. The house rules (`resolveOrchestrationRules`) and the `delegate_task` description say so. Ported from T3 Code's orchestration v2, Kanna's sub-chats and Paperclip's structure
 (harness plan WS6 names the sources). The rules live in `packages/core/src/decide/delegations.ts`
 and `couriers.ts`, the projection in `state/delegations.ts`, the tools in
-`apps/server/src/agents/tools/orchestration.ts` and the delivery in `agents/delegations.ts`, `agents/deliveries.ts`
+`apps/engine/src/agents/tools/orchestration.ts` and the delivery in `agents/delegations.ts`, `agents/deliveries.ts`
 and the run supervisor.
 
 - **A delegation is a sub-run, not a sub-task.** It is a `Run` of the same task with a
@@ -1257,9 +1257,9 @@ and the run supervisor.
 
 ## The command surface
 
-Everything you can do in Shinsa is one list of specs, `SURFACE` in `apps/server/src/surface/`, and both the command
+Everything you can do in Shinsa is one list of specs, `SURFACE` in `apps/engine/src/surface/`, and both the command
 line and every task agent's management tools are generated from it, so neither can fall behind the other. The full reference is
-`docs/cli.md`, whose reference half is written from the same specs by `bun run --cwd apps/server docs:cli`
+`docs/cli.md`, whose reference half is written from the same specs by `bun run --cwd apps/engine docs:cli`
 (`replaceReference`, `serializeReference`); a test fails when the file and the specs differ.
 
 - **A spec** (`surface/spec.ts`) has a path (`['tasks', 'create']`, the words after `shinsa`), a summary, typed fields
@@ -1277,7 +1277,7 @@ line and every task agent's management tools are generated from it, so neither c
   id; a project by id, key or name), and the server still runs every one through `parseUserCommand` and `decide`.
 - **What is not a command.** Reads (`GET /api/tasks`, `/api/tasks/<task>`, `/api/tasks/<task>/chat`, `/api/settings`,
   `/api/repos`, `/api/projects`, `/api/schedules`, `/api/delegations`, `/api/activity`, in
-  `apps/server/src/http/reads.ts`, and `/api/repos/local`, in `projects/routes.ts`), Claude accounts and usage
+  `apps/engine/src/http/reads.ts`, and `/api/repos/local`, in `projects/routes.ts`), Claude accounts and usage
   (`/api/accounts/*`), folders (`/api/onboarding/setup`), secrets and webhook signing secrets, the health check and
   the providers, and the Code tab's reads (below). `/api/tasks/<task>` takes an id, a handle, the start of an id or an exact title (more than one match
   is `task_ambiguous`) and answers the task's view, plan, findings, open gates, what it waits on, runs, suggested
@@ -1291,9 +1291,9 @@ line and every task agent's management tools are generated from it, so neither c
 - **Yours alone** (`humanOnly`): the specs listed in Who can change Shinsa, below.
 - **When the engine is down**: in the Mac app's bundle, a command the engine does not answer asks launchd to start it
   (`launchctl kickstart`) and waits up to 20 s for it, then tries once more; otherwise it says to open the Shinsa app
-  (`apps/server/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background).
+  (`apps/engine/src/cli/api.ts`, `createWakeEngine`; Configuration and data → The engine in the background).
   `shinsa status` and `shinsa version` only report, and never start it.
-- **Around the surface** (`apps/server/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`, `import`,
+- **Around the surface** (`apps/engine/src/cli`): the everyday commands (`shinsa [folder]`, `open`, `do`, `import`,
   `status`) and the engine's controls (`start`, `stop`, `restart`, `logs`, `version`) are the top level, one table in
   `cli/help.ts` that the help, each command's `--help` and `docs/cli.md` are written from; why it is shaped like
   Tailscale's and Docker's is `docs/cli.md` → How it is shaped. `shinsa engine` runs the engine itself, for the
@@ -1305,7 +1305,7 @@ line and every task agent's management tools are generated from it, so neither c
 
 ## The Code tab's reads
 
-The web's Code tab reads a task's code over HTTP (`apps/server/src/http/code.ts`, on `git/files.ts`,
+The web's Code tab reads a task's code over HTTP (`apps/engine/src/http/code.ts`, on `git/files.ts`,
 `git/task-refs.ts`, `git/diff.ts` and `git/read.ts`). Every route takes the task's id or its handle (`SW-142`, through
 core's `selectTaskByReference`, as `POST /api/tasks/<id>/open` does) and reads only the repository the task is
 registered to (`task.repoId`); a task with none, or no such task, is `404 code_unavailable`. The one write, saving a
@@ -1353,7 +1353,7 @@ file you edit, is `POST /api/tasks/<id>/file` (Where agents work → Your edits)
 
 ## Terminals
 
-Shinsa has a real terminal per project (`apps/server/src/terminals/`, the web's `routes/terminal.tsx`,
+Shinsa has a real terminal per project (`apps/engine/src/terminals/`, the web's `routes/terminal.tsx`,
 `components/terminal/` and `lib/terminal/`), for what agents leave to you: running your own dev server, signing in
 somewhere interactive, or a command an agent asked you to run. The engine owns every shell, so a terminal keeps
 running when the window closes or the app quits, and a page that comes back finds it as it was.
@@ -1494,7 +1494,7 @@ tools and T3's MCP toolkits.
 - **The tools.** Every task run (not a delegated run, not an idle compaction) gets, besides its role's tools
   (`listToolNames`), one tool per surface spec but the ones that are yours alone and `tasks create`, whose
   `agentTool` is `create_task` (`tasks_list`, `tasks_show`, `tasks_done`, `tasks_prioritize`, `tasks_message`…;
-  `apps/server/src/agents/manage/tools.ts`), with read-only, destructive and idempotent hints. A call runs the spec
+  `apps/engine/src/agents/manage/tools.ts`), with read-only, destructive and idempotent hints. A call runs the spec
   with an in-process client: reads go to the server's own HTTP API, commands go through the same router as yours
   (`createCommandRouter`) to `Engine.dispatch` with `onBehalf` and `byTask` (the run's task), under the tool call's id
   (`agent:<run>:<attempt>:call:<request>:<n>`). Adding a repository or a folder to a project runs in process too, on
@@ -1640,7 +1640,7 @@ their own UUIDv7.
 
 ## The briefing
 
-The guide at the top of Home. `Briefings` (`apps/server/src/briefing`) rewrites it 4 s after
+The guide at the top of Home. `Briefings` (`apps/engine/src/briefing`) rewrites it 4 s after
 the last command that asks for one (a gate opening or closing, a task finishing), so a burst of
 changes costs one call.
 
@@ -1779,7 +1779,7 @@ truth, and a snapshot only saves replaying it.
   (`readEvents(after)`, `replayEventLog(events, from)`). The snapshot is used only when its version is this code's, its
   anchor matches the row in the log and its checksum its JSON; otherwise the whole log is replayed (logged with the
   reason: `version`, `anchor`, `checksum` or `unreadable`) and a new snapshot written. The version is a hash of every
-  source file of `@shinsa/core` and the snapshot format (`resolveStateVersion`, `apps/server/src/store/snapshot.ts`),
+  source file of `@shinsa/core` and the snapshot format (`resolveStateVersion`, `apps/engine/src/store/snapshot.ts`),
   so a change to how events fold into state never reads an old snapshot; where those files cannot be read the version
   is null and the engine replays the whole log every boot and writes no snapshot. A snapshot is written 3 s after a
   boot that replayed events past it, 3 s after the last of 2,000 events since the last one (so a burst of work is never
@@ -1812,7 +1812,7 @@ truth, and a snapshot only saves replaying it.
 ## Command receipts
 
 From T3 Code's orchestration v2 (harness plan WS4 names the sources). The engine
-(`apps/server/src/runtime/engine.ts`) checks and records every command against a `receipts` table the event log
+(`apps/engine/src/runtime/engine.ts`) checks and records every command against a `receipts` table the event log
 keeps beside its events (`store/event-log.ts`).
 
 - **Every command has an id.** `Engine.dispatch(command, { id })` takes the caller's; without one
@@ -1910,7 +1910,7 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
 - **Nothing waits for one effect.** Shutdown waits for every running effect and its handler at once (`Engine.settle`)
   and a step waits for the runs before it, not for an effect, so the engine has no per-effect waiter
   (T3's `awaitSettled`). Tests wait for an effect's row to settle (`awaitEffect` in
-  `apps/server/test/helpers`).
+  `apps/engine/test/helpers`).
 - **Damaged rows.** A stored effect that is not JSON, or whose payload does not match its kind,
   is failed when it is claimed and the next effect in its lane runs in the same claim.
 - **No gap between claim and cancel.** A claimed effect registers its abort controller in the
@@ -2057,7 +2057,7 @@ until the next event: a tool call or another text makes it `interim`, the end of
 `final`. A turn that ends on a tool call has no final reply, and the chat falls back to the last
 interim text. `markFinalReplies` applies the same rule to a finished list (converters, migration).
 
-**The Claude adapter** is `apps/server/src/agents/providers/claude/`: `map.ts` (tools, results, prompts), used live
+**The Claude adapter** is `apps/engine/src/agents/providers/claude/`: `map.ts` (tools, results, prompts), used live
 by `createClaudeRecorder` in `recorder.ts` and offline by `convertClaudeSession` in
 `import.ts` (the seed). `Read`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash`, `BashOutput`,
 `KillShell`, `Grep`, `Glob`, `LS`, `WebFetch`, `WebSearch`, `Task`, `TodoWrite` map to their kinds;
@@ -2072,7 +2072,7 @@ recorder also writes the `notice` entries: compaction boundaries and summaries, 
 A transcript line that is not a chat entry of the current protocol version reads as one unreadable-line error
 entry.
 
-**The Codex adapter** is `apps/server/src/agents/providers/codex/map.ts` (`createCodexRecorder`, used live by the
+**The Codex adapter** is `apps/engine/src/agents/providers/codex/map.ts` (`createCodexRecorder`, used live by the
 session). It reads `item/started` and `item/completed` on the run's own
 thread: `commandExecution` → `command` (the `zsh -lc '…'` wrapper taken off, a nonzero exit or a declined command an
 error result), `fileChange` → one call per file (`write` for an added file, `edit` with one hunk per `@@` block, a
@@ -2126,7 +2126,7 @@ machine) or a watch that failed (out of file handles) never leaves it quiet.
 
 ## Providers
 
-Every agent run goes through one interface, `AgentProvider` in `apps/server/src/agents/providers/types.ts`. The run
+Every agent run goes through one interface, `AgentProvider` in `apps/engine/src/agents/providers/types.ts`. The run
 supervisor resolves the provider for the run's role (`resolveAgentProvider`: Settings → Agents, else
 `settings.defaultProvider`) through the `ProviderRegistry` (`agents/providers/index.ts`; an unknown id falls back to
 Claude with a warning) and never names one. A delegated run uses the provider it was delegated on (`run.provider`),
@@ -2185,7 +2185,7 @@ Claude to Codex and back alike (The agent loop, below).
 ### Versions and updates
 
 Settings → Agents → Versions shows each agent program Shinsa runs, Claude Code and Codex, and offers to update it
-(`apps/server/src/versions/`, after Kanna's `provider-auth.ts`, its latest-version check at 539-586 and its install at
+(`apps/engine/src/versions/`, after Kanna's `provider-auth.ts`, its latest-version check at 539-586 and its install at
 592-668, and `claude-executable.ts:13-16`, 59-65). A newer Claude Code or Codex brings new features, and the Agent
 SDK is built against one Claude Code (`claudeCodeVersion`; SDK 0.3.N pairs with Claude Code 2.1.N), so the program
 must keep up with the SDK, never the other way round.
@@ -2216,7 +2216,7 @@ must keep up with the SDK, never the other way round.
   the latest is "Claude Code is up to date.", and one still behind the latest is a failure ("The update finished, but
   Claude Code still reports …"; Kanna `provider-auth.ts:618-624`). A failed updater's message is its last line.
 - **The Agent SDK is not updated at runtime.** `@anthropic-ai/claude-agent-sdk` is a dependency of
-  `apps/server`; Shinsa takes a newer one by bumping it in `package.json` (and the minimum Claude Code with it), so
+  `apps/engine`; Shinsa takes a newer one by bumping it in `package.json` (and the minimum Claude Code with it), so
   the Versions row only says a newer one is published.
 - **Tests never run an updater.** The service takes `locate`, `readVersion`, `minimum`, `sdk`, `latest`, `updater`
   and `run` (`VersionsOptions`, `startShinsa`'s `versions`); the one test of the default runner points it at the fake
@@ -2226,7 +2226,7 @@ must keep up with the SDK, never the other way round.
 
 Agents load what you have set up, the same for Claude and Codex, and Settings → Integrations shows all of it with
 what it costs at the start of every run, so you can turn off what you do not use. You never need Claude Code's
-`/mcp`. The service is `Extensions` (`apps/server/src/extensions/`); the wire types are core's
+`/mcp`. The service is `Extensions` (`apps/engine/src/extensions/`); the wire types are core's
 `protocol/extensions.ts`.
 
 - **Where they come from** (`discover.ts`, read on every snapshot, never written): your Claude Code servers
@@ -2659,11 +2659,11 @@ start`'s port) would tie Shinsa's sessions to that instance's single global mode
 not edit, and its watchdog adds itself to `~/.claude/settings.json` and takes itself out again on its own schedule. Importing eunoe in
 process is not possible cleanly: the package exports no API (only `bin`), reads `EUNOE_DIR` once at import and keeps
 module-wide caches, and a proxy bug would take the server down with it. So Shinsa depends on the package (pinned,
-`apps/server/package.json`) and runs its CLI as a separate process it owns: `bun <package>/src/cli/main.ts serve`
+`apps/engine/package.json`) and runs its CLI as a separate process it owns: `bun <package>/src/cli/main.ts serve`
 (or `$SHINSA_EUNOE serve`), with `EUNOE_DIR` set to `data/eunoe`, so its config, request log, thread state and
 transcripts live beside Shinsa's data and never touch `~/.eunoe`. Taking a new eunoe is a version bump there.
 
-*The proxy* (`apps/server/src/eunoe/`). `EunoeProxy` starts eunoe lazily, the first time a Claude session needs it,
+*The proxy* (`apps/engine/src/eunoe/`). `EunoeProxy` starts eunoe lazily, the first time a Claude session needs it,
 on a port of its own: `SHINSA_EUNOE_PORT` when set, else the one `data/eunoe/config.json` remembers, else a free one.
 Shinsa writes that `config.json` (atomically; eunoe re-reads it on every request): `port`, `mode` (from the setting,
 so a change applies to the next request), `upstream` (`https://api.anthropic.com`) and `claudeConfigDirs`, every
@@ -2957,7 +2957,7 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 - **Usage waits** (core `waitForUsageReset`). A usage-limit failure with a reset later than now arms `task.usageWait`
   (`usage_wait.armed`: the run, role, phase, account, `resetAt` and `autoResume` frozen from `settings.autoResume`,
   default on) instead of a gate; the stage reason is "waiting for the usage limit to reset" ("paused until the usage
-  limit resets" without auto-resume) and the task counts as working, not as needing you. `UsageResumeClock` (server)
+  limit resets" without auto-resume) and the task counts as working, not as needing you. `UsageResumeClock` (engine)
   dispatches `usage_wait.resume` 5 s after `resetAt` with the id `usage-resume:<task>:<run>:<resetAt>:<wait>`, so a
   repeat is answered from its receipt; a resume that leaves the wait armed (the dispatch failed) is tried again every
   minute under that id with `:<n>` added, `n` the minute slot since the reset (2, 3…), so a retry is a new command and
@@ -3036,7 +3036,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   directories and the seeded copy (`SHINSA_DATA_DIR=~/.shinsa-seed/data`) use it. `SHINSA_WORKTREES_DIR` moves only the worktrees. `SHINSA_EUNOE` runs another eunoe (a path to its
   command) instead of the bundled one, and `SHINSA_EUNOE_PORT` pins the port it listens on. `SHINSA_WEB_DIR` serves
   the web app from another built folder and `SHINSA_PLUGIN_DIR` loads the agents' plugin from another folder (both
-  default to the checkout's own, beside `apps/server`), for a bundle that lays the files out differently.
+  default to the checkout's own, beside `apps/engine`), for a bundle that lays the files out differently.
 - **Inspect mode.** `SHINSA_INSPECT=1` serves a data directory for looking at it (a seeded copy, say), read-only: no
   effect runs (no agent, check, git or `gh`), no schedule or clock fires and no run is recovered, and every command
   is refused with `inspect_read_only` ("Shinsa is in inspect mode and only shows this data. Start it without
@@ -3084,7 +3084,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 ### One server per data directory
 
 Two servers on one data directory would both run every effect: two agents per run, two pushes, two merges. So
-`shinsa engine` takes `data/serve.lock` before it opens the event log (`apps/server/src/instance/lock.ts`). The lock
+`shinsa engine` takes `data/serve.lock` before it opens the event log (`apps/engine/src/instance/lock.ts`). The lock
 is created atomically (written to a draft file, then hard-linked into place, which fails when the lock exists) and
 records the holder: pid, port, URL, version, commit, install path, when it started and when the machine booted. A
 second server finds a live holder and refuses to start with `server_running`, naming it: "Shinsa is already running
@@ -3111,7 +3111,7 @@ agent starting a Shinsa of its own) inherits it.
 
 An app opened from the Dock and a launchd service start with a bare environment (`PATH=/usr/bin:/bin:/usr/sbin:/sbin`,
 none of the variables the shell profile sets), so the agents would not find `gh`, `claude`, `codex` or Homebrew's
-`git`. `shinsa engine` reads the user's login shell once at start (`apps/server/src/shell/login.ts`): `$SHELL -lic`
+`git`. `shinsa engine` reads the user's login shell once at start (`apps/engine/src/shell/login.ts`): `$SHELL -lic`
 (zsh when `SHELL` is unset) printing a marker and `env -0`, in the home folder, with a 5 s timeout that kills the
 shell's whole process group and `DISABLE_AUTO_UPDATE=true` so oh-my-zsh does not prompt. Whatever the profile prints
 before the marker is ignored. An interactive shell that prints no marker is read again as a plain login shell,
@@ -3136,7 +3136,7 @@ The Mac app carries the engine and runs it as a launchd job, `studio.overclock.s
 closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan.md`; the app's side is
 `apps/desktop/CLAUDE.md`). Nobody installs or starts it by hand.
 
-- **The bundle.** `apps/server/scripts/build-engine.ts` compiles `scripts/engine-main.ts` with `bun build --compile`
+- **The bundle.** `apps/engine/scripts/build-engine.ts` compiles `scripts/engine-main.ts` with `bun build --compile`
   into one executable, `Shinsa.app/Contents/Resources/engine/bin/shinsa`, the engine and the command line in one;
   beside it `plugin/` (the plugin agents load) and `web/` (the built interface it serves). The build bakes in the
   version, the commit, the state version and the Agent SDK's versions (`process.env.SHINSA_BUILD_*`, read by
@@ -3156,7 +3156,7 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
 - **Restarting.** A restart (`POST /api/engine/restart`, below) stops the engine cleanly and exits with 75
   (`EX_TEMPFAIL`, `EXIT_RESTART`); launchd starts the bundle's program again, which after an app update is the new
   version.
-- **By hand** (`apps/server/src/cli/engine.ts`, `docs/cli.md` → The engine). `shinsa start` is `launchctl
+- **By hand** (`apps/engine/src/cli/engine.ts`, `docs/cli.md` → The engine). `shinsa start` is `launchctl
   kickstart` on the job, `shinsa stop` is `launchctl kill SIGTERM` (a clean stop exits 0, so `KeepAlive` leaves it
   stopped until a start, the app, a command that needs it or the next login), `shinsa restart` is `launchctl
   kickstart -k` and `shinsa restart --when-idle` is `POST /api/engine/restart` with `when: idle`; each waits up to
@@ -3322,7 +3322,7 @@ how the tools are checked again.
 
 ## The socket
 
-Every page holds one WebSocket on `/ws` (`apps/server/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
+Every page holds one WebSocket on `/ws` (`apps/engine/src/http/socket.ts`, the web's `lib/connection/socket.ts`;
 the messages are `ClientMessage` and `ServerMessage` in `packages/core/src/protocol/messages.ts`, listed in
 `docs/protocol.md` → The socket). On connect the server sends the state without the runs' prompts (`serializeState`), the
 accounts, `surfaces` and `terminals` (Terminals, above); then every change of state goes to every socket as a patch, every change of the accounts
@@ -3404,7 +3404,7 @@ interface and the engine breaks; `busy` is whether an agent run is mid-turn (`is
 `running`), and `restart` is `idle` while the engine waits for that to end before restarting. **`POST
 /api/engine/restart`** `{ when: 'now' | 'idle' }` restarts the engine: at once or once no agent is mid-turn, it stops cleanly and exits with
 75 for launchd to start it again, and answers `{ restarting }` before it goes; it refuses with `restart_unsupported`
-unless launchd started this process (`createLaunchdRestarter`, `apps/server/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
+unless launchd started this process (`createLaunchdRestarter`, `apps/engine/src/instance/restart.ts`). The desktop app's page calls it when the app is newer than the engine
 (`docs/plans/app-plan.md` → Versions and updates); it has no surface spec, so no agent has a tool for it.
 
 ## Where the rules live
@@ -3415,7 +3415,7 @@ them, and other packages import only `@shinsa/core`. The folder table and the in
 
 ## Testing
 
-How tests are written (fakes, waiting on conditions, the coverage floor) is in `apps/server/CLAUDE.md` and
+How tests are written (fakes, waiting on conditions, the coverage floor) is in `apps/engine/CLAUDE.md` and
 `packages/core/CLAUDE.md`. This is what covers the engine.
 
 - **`decide`, case by case.** `packages/core/test/decide/` runs every path through `decide` with a fixed clock and id
@@ -3434,7 +3434,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   unless that one ended with a fresh-class failure). Every walk also checks that `decide` leaves its input alone, that
   the state it decided equals its events replayed, and that its patch rebuilds the state on a copy kept on the side.
   What each walk checks is listed once, in `packages/core/CLAUDE.md`.
-- **The engine and the outbox.** `apps/server/test/runtime/engine.test.ts` and `test/store/event-log.test.ts` run them
+- **The engine and the outbox.** `apps/engine/test/runtime/engine.test.ts` and `test/store/event-log.test.ts` run them
   on SQLite: retries and backoff, failure gates, lane ordering and the side lane, restart recovery per class, effect
   keys, cancellation (a running effect aborted, its late result ignored), damaged effect and event
   rows, and command receipts (a repeat answered, a reused id refused, a refusal remembered, receipts across a restart
@@ -3447,7 +3447,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   listener's state before and changes patch one state into the next. `test/agents/transcripts` covers a transcript
   line torn by a crash, reading from a position, the entries kept in memory and each new entry's position;
   `test/http/server.test.ts` the socket's patches, `state.sync` and transcript pages.
-- **Agents.** `apps/server/test/agents/providers/claude/` covers every `terminal_reason` and failure class
+- **Agents.** `apps/engine/test/agents/providers/claude/` covers every `terminal_reason` and failure class
   (`classify.test.ts`), executable discovery, session files under `CLAUDE_CONFIG_DIR`, prompt ids and echo matching,
   steering windows, context usage, the account, the compaction route and fast mode (`route.test.ts`, the
   `compaction and fast mode` block of `session.test.ts`), and the Claude mapping for every tool;
@@ -3538,7 +3538,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   - `projects.test.ts`: a task scoped to a project whose first agent's brief carries the project, its description and
     every repository's path, with the handle `<KEY>-1`; and triage across a project's three repositories found
     through its folder, which offers only those three and registers the one it picks into the project.
-- **The crash test.** `apps/server/test/e2e/soak.test.ts` runs the real `startShinsa` in a child process
+- **The crash test.** `apps/engine/test/e2e/soak.test.ts` runs the real `startShinsa` in a child process
   (`test/e2e/soak/child.ts`) with scripted agents, the fake `gh` and an automatic human who approves every gate, on
   two tasks, and SIGKILLs it at a seeded random moment (60 to 960 ms into each life) up to `SOAK_KILLS` times (10),
   then lets one last life run to the end. It replays the log and checks: both tasks merged, no failure gate ever
@@ -3548,7 +3548,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   start of each life, and a third task is cancelled at a seeded stage: every command in the outbox has a receipt, a
   command the client saw fail was really refused, no gate was answered twice, and the cancelled task ended with no
   worktree, pull request or open effect. `SOAK_SEEDS` (3) and `SOAK_FIRST_SEED` widen it.
-- **Fuzzing.** `apps/server/test/http/fuzz.test.ts` sends seeded random requests (wrong types, unknown commands and
+- **Fuzzing.** `apps/engine/test/http/fuzz.test.ts` sends seeded random requests (wrong types, unknown commands and
   fields, prototype keys, 20,000-character strings, broken JSON, wrong methods and content types, path tricks) to the
   HTTP API and the socket. Every answer must be 200, 400, 403, 404 or 415; a refused command commits nothing; the state stays well-formed; the log replays to the same state; and
   the server still takes a valid command at the end. `FUZZ_SEEDS` (3) and `FUZZ_STEPS` (150) widen it.
@@ -3572,7 +3572,7 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   Testing the packaged app): it registers and starts the engine, quitting the app leaves it running, `kill -9` brings
   it back within seconds, `POST /api/engine/restart` exits 75 and comes back, and a taken port shows the app's
   status screen until the port is free.
-- **Real agents.** `bun run --cwd apps/server test:live` runs a change, an Ask task, an investigation and a support
+- **Real agents.** `bun run --cwd apps/engine test:live` runs a change, an Ask task, an investigation and a support
   question through real Claude agents on a throwaway repository (GitHub stays faked). It costs real tokens, so it is not part of `bun test`. The real eunoe is
   checked by hand: `shinsa engine` on a throwaway `SHINSA_HOME` with `SHINSA_EUNOE_PORT` on a spare port, one task, and
   `data/eunoe/requests.jsonl` showing the run's requests.

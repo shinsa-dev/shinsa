@@ -18,7 +18,7 @@ agent working in their checkout.
   `waiting_on_tasks` before its setup is verified, the queue names the holder, and switching the mode releases the
   waiting tasks. A `workspace` setup problem opens the configuration gate. The property walk switches the mode at
   random and checks that no two tasks hold one checkout (`test/decide/workspace-invariants.ts`).
-- **Server.** `apps/server/src/workspaces/`: one `WorkspaceStrategy` per mode (prepare, claim, commit, push,
+- **Server.** `apps/engine/src/workspaces/`: one `WorkspaceStrategy` per mode (prepare, claim, commit, push,
   remove), used by the worktree, checks, push and removal effects and by the hand-over commit. The setup check
   verifies the mode (`but` installed, a GitButler workspace, a clean checkout that is not a GitButler workspace).
   `GET /api/repos/workspaces` says per repository whether GitButler can be chosen. The Code tab reads a GitButler

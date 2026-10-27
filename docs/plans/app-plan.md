@@ -58,7 +58,7 @@ Shinsa.app/Contents/
 - **The engine is compiled with `bun build --compile`** into one executable, so the Mac needs no Bun. The same
   executable is the command line: with no arguments under launchd it runs the engine, with arguments it is a
   command. Bun's SQLite is built in. What the compile has to carry beside it, the Claude Agent SDK's own CLI and
-  the plugin agents load (`apps/server/plugin`), goes into `Resources/` and is found relative to the executable.
+  the plugin agents load (`apps/engine/plugin`), goes into `Resources/` and is found relative to the executable.
   Proving this compile is the first step, since everything else depends on it.
 - **The interface ships in the app**, beside the engine, which serves it on its loopback port as before; the app and
   the engine are one build, so they are always the same version. Built that way rather than from a custom scheme
@@ -110,7 +110,7 @@ Shinsa.app/Contents/
   → Check for Updates… checks by hand and says when you are up to date. Quitting or restarting the app never stops
   the engine, so an app update cannot interrupt an agent.
 - **The engine follows the app, when it is safe** (built: `ENGINE_PROTOCOL` and `resolveEngineFit` in
-  `packages/core/src/protocol/engine.ts`, the engine's `EngineRestarter` in `apps/server/src/instance/restart.ts`,
+  `packages/core/src/protocol/engine.ts`, the engine's `EngineRestarter` in `apps/engine/src/instance/restart.ts`,
   the page's `lib/connection/engine.ts` and `components/status/engine-banner.tsx`). The app tells its page its own
   version and protocol over the bridge; the engine reports its version, `protocol`, whether an agent is mid-turn
   (`busy`) and a restart it waits for (`restart`) in `/api/health`. `protocol` goes up only when the contract
@@ -222,7 +222,7 @@ warning sign the next time the app opens.
 
 ## Phases
 
-1. **The compiled engine** (built). `apps/server/scripts/build-engine.ts`: one executable with Eunoe inside, the
+1. **The compiled engine** (built). `apps/engine/scripts/build-engine.ts`: one executable with Eunoe inside, the
    plugin and the interface beside it, the version, commit, state version and SDK versions baked in. Checked: a
    question task ran end to end on the compiled engine (triage, a Claude run through the SDK, the hand-over tools).
 2. **The bundle and the job** (built). The engine inside `Shinsa.app`, registered by the app through `SMAppService`

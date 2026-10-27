@@ -82,7 +82,7 @@ traffic in clear text; the security model below keeps secrets off the tunnel for
 
 ## What Shinsa reuses, copies and changes
 
-**Copy, close to as is** (into `apps/server/src/remote/`, Shinsa's verbs and no comments, 100% coverage like the rest):
+**Copy, close to as is** (into `apps/engine/src/remote/`, Shinsa's verbs and no comments, 100% coverage like the rest):
 
 - The tunnel supervisor and its timings, the `cloudflared` package and its install-on-first-use, the connect tokens,
   the device-code pairing loop and the identity file's shape and atomic, mode-600 write (as `remote.json` under the
@@ -170,7 +170,7 @@ differs, 12: mobile is a first-class target). What changes on a remote phone is 
 0. **Prerequisites (no network).** `surface: 'remote'` on hello, the request class in the HTTP layer, the
    `local_only` refusal and its tests, and the phone surface's In and Out rules behind a flag so they can be checked
    on a phone on the local network first.
-1. **Machine side.** `apps/server/src/remote/`: identity file, control-plane client, supervisor, connect tokens,
+1. **Machine side.** `apps/engine/src/remote/`: identity file, control-plane client, supervisor, connect tokens,
    pairing, the guard integration, `shinsa remote …`, Settings → General → Remote access. Tested against a fake
    control plane, as Kanna's tests do.
 2. **Hosted side.** The Worker on the Shinsa domain: passkey sign-in, pairing claim page, named tunnel creation,

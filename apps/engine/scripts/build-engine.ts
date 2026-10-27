@@ -3,14 +3,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveStateVersion } from '../src/store/snapshot.ts';
 
-const serverDir = resolve(import.meta.dirname, '..');
-const outDir = resolve(serverDir, 'dist/engine');
-const webDist = resolve(serverDir, '../web/dist');
+const engineDir = resolve(import.meta.dirname, '..');
+const outDir = resolve(engineDir, 'dist/engine');
+const webDist = resolve(engineDir, '../web/dist');
 const version = Bun.env.SHINSA_VERSION?.replace(/^v/, '') || '0.0.0';
 const target = Bun.env.SHINSA_ENGINE_TARGET || 'bun-darwin-arm64';
 
 function readCommit() {
-  const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: serverDir });
+  const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: engineDir });
   const commit = result.stdout.toString().trim();
   return result.exitCode === 0 && /^[0-9a-f]{40}$/.test(commit) ? commit : '';
 }
@@ -45,7 +45,7 @@ if (!stateVersion) throw new Error('Could not read the state version from @shins
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(join(outDir, 'bin'), { recursive: true });
 
-await compile(join(serverDir, 'scripts/engine-main.ts'), 'shinsa', {
+await compile(join(engineDir, 'scripts/engine-main.ts'), 'shinsa', {
   'process.env.SHINSA_BUILD_VERSION': JSON.stringify(version),
   'process.env.SHINSA_BUILD_COMMIT': JSON.stringify(readCommit()),
   'process.env.SHINSA_BUILD_STATE_VERSION': JSON.stringify(stateVersion),
@@ -53,7 +53,7 @@ await compile(join(serverDir, 'scripts/engine-main.ts'), 'shinsa', {
   'process.env.SHINSA_BUILD_SDK_CLAUDE_VERSION': JSON.stringify(sdkPackage.claudeCodeVersion),
 });
 
-cpSync(resolve(serverDir, 'plugin'), join(outDir, 'plugin'), { recursive: true });
+cpSync(resolve(engineDir, 'plugin'), join(outDir, 'plugin'), { recursive: true });
 cpSync(webDist, join(outDir, 'web'), { recursive: true });
 
 process.stdout.write(`Shinsa ${version} engine in ${outDir}\n`);

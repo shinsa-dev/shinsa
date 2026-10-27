@@ -5,7 +5,7 @@ A control plane for coding agents. Agents do the work end to end; the human only
 ## Project structure
 
 ```
-apps/server/      → @shinsa/server  The engine and the `shinsa` command. The engine (`shinsa engine`, which the Mac app
+apps/engine/      → @shinsa/engine  The engine and the `shinsa` command. The engine (`shinsa engine`, which the Mac app
                                     runs in the background from a compiled bundle, scripts/build-engine.ts) runs the event log
                                     (SQLite), effect outbox, agent runs (behind a provider interface: the Claude
                                     Agent SDK and Codex), accounts, the MCP servers, plugins and skills agents load,
@@ -14,8 +14,8 @@ apps/server/      → @shinsa/server  The engine and the `shinsa` command. The e
                                     `shinsa [folder]|open|do|import|status` and `shinsa <group> <action>` (src/cli, generated
                                     from src/surface; docs/cli.md) talk to it over HTTP, so agents can hand work to
                                     and manage Shinsa too; every task agent gets the same surface as tools
-                                    (src/agents/manage: tools, client). See apps/server/CLAUDE.md
-apps/server/plugin/                 The Claude Code plugin every agent loads: review, evidence, handover skills
+                                    (src/agents/manage: tools, client). See apps/engine/CLAUDE.md
+apps/engine/plugin/                 The Claude Code plugin every agent loads: review, evidence, handover skills
 apps/web/         → @shinsa/web     React 19 + Vite + Tailwind 4, laid out like Buzzkit's app (routes/, components/
                                     <domain>/, hooks/, lib/). Renders server state; owns nothing. See apps/web/CLAUDE.md
 apps/desktop/     → @shinsa/desktop Shinsa for Mac, how Shinsa runs: carries the compiled engine, registers it as a launchd
@@ -76,7 +76,7 @@ web ──WebSocket──► shinsa engine
   role has which tool is `listToolNames` (`packages/core/src/domain/tools.ts`), tabled in `docs/protocol.md` → Agent
   tools. Every task agent also has the command surface as tools (`tasks_done`, `tasks_prioritize`…) but the human-only
   specs: what it does to another task is logged as on your behalf from its task (`docs/engine.md` → Agents manage
-  Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/server/src/agents/policy.ts` (no commit, push, rebase, `git pull` without `--no-rebase`, `reset --hard`, `gh pr create|merge`, checkout of the default branch, a `but` command beyond reads and in-place conflict resolution, or a human-only `shinsa` command), through a PreToolUse hook for Claude.
+  Shinsa). Shinsa commits on `complete_phase` and `complete_fix` and owns pushes, PRs and merges; every command an agent runs is checked against `apps/engine/src/agents/policy.ts` (no commit, push, rebase, `git pull` without `--no-rebase`, `reset --hard`, `gh pr create|merge`, checkout of the default branch, a `but` command beyond reads and in-place conflict resolution, or a human-only `shinsa` command), through a PreToolUse hook for Claude.
 - **Nothing reaches the default branch without the human.** The merge gate is the only path to `gh pr merge` Shinsa
   takes; GitHub branch protection is what stops a shell from taking another (`docs/engine.md` → Who can change Shinsa).
 - **Some decisions are human-only**: closing any gate, the settings in `HUMAN_ONLY_SETTINGS` and a repository's
@@ -86,7 +86,7 @@ web ──WebSocket──► shinsa engine
 - **No backwards compatibility in code.** Shinsa has never shipped: a rename or a removal is done everywhere at once,
   with no readers for old events, stored shapes or transcripts and no redirects for old routes or ids
   (`docs/protocol.md` → Naming decisions). The one exception is the user's own event log: when a change would leave
-  old event shapes in it, `apps/server/src/store/legacy.ts` rewrites them once on start, versioned by SQLite's
+  old event shapes in it, `apps/engine/src/store/legacy.ts` rewrites them once on start, versioned by SQLite's
   `user_version` (bump `LOG_VERSION` in `store/event-log.ts`), so code never reads an old shape (`docs/engine.md` →
   State in memory).
 
@@ -107,14 +107,14 @@ web ──WebSocket──► shinsa engine
 Everything Shinsa keeps lives in `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa`): `config.json`, the Claude accounts
 and `data/`. `docs/engine.md` → Configuration and data has the layout, the overrides (`SHINSA_HOME`,
 `SHINSA_DATA_DIR`, `SHINSA_INSPECT` for looking at seeded state) and the split between `config.json` and the event
-log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cwd apps/server start`.
+log. Use a scratch directory when testing: `SHINSA_HOME=/tmp/shinsa-dev bun --cwd apps/engine start`.
 
 ## Key conventions
 
 - **No comments.** Names and structure carry the meaning; the reasons live here and in `docs/`. `bun lint:conventions` enforces it (`biome-ignore` and `@ts-` are allowed; `packages/ui`, a reusable kit, is exempt).
 - **The verb catalog**: `find*` throws, `select*` returns null, `list*`, `count*`, `resolve*` derives, `create*`/`update*`, `upsert*`/`write*`/`replace*`, `remove*`, `assert*`, `serialize*`, `request*`/`sync*`/`apply*`/`record*`. No `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*` (lint-enforced). The `conventions` skill has the examples.
 - **Skills** (`.claude/skills`): `conventions` is the pattern catalog, load it before writing code; `review` is the method for a cleanup or review pass (scope the diff, prove every finding by reverting its fix); `copy` for any string a person or an agent reads; `design` for UI.
-- **`packages/core` stays pure**: no `node:*`, no Bun, no I/O (Biome bans the imports). New behaviour is a command, events and effects there, and the I/O for the effect in `apps/server`.
+- **`packages/core` stays pure**: no `node:*`, no Bun, no I/O (Biome bans the imports). New behaviour is a command, events and effects there, and the I/O for the effect in `apps/engine`.
 - **Icons** are Central Icons through `<Icon name='Icon…' />` (`@shinsa/ui/components/icon`); run `bun run --cwd packages/ui generate:icons` after using a new name. Primitives size their icons; don't pass a size inside a Button, Badge, tab or menu row.
 - **UI copy** follows the `copy` skill: sentence case, full sentences, no em dashes, plain professional words (task, review, workspace), never playful labels (the two layout names in `LAYOUT_NAMES`, Desk and Shelf, are names chosen on purpose, each with a plain hint line).
 - **Desktop first, responsive.** Screens are built for a full desktop window and must still work in an ~900px

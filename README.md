@@ -78,7 +78,7 @@ folders hold your repositories and how agents work; then describe the first task
 
 ```
 apps/
-├── server/     The engine: agents, the event log, git, GitHub, and the shinsa command line
+├── engine/     The engine: agents, the event log, git, GitHub, and the shinsa command line
 ├── web/        The interface
 ├── desktop/    The Mac app
 └── marketing/  shinsa.dev

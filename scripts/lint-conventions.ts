@@ -22,8 +22,8 @@ interface ClassRule {
 }
 
 const ROOTS = [
-  'apps/server/src',
-  'apps/server/test',
+  'apps/engine/src',
+  'apps/engine/test',
   'apps/web/src',
   'apps/web/test',
   'apps/desktop/src',
@@ -41,7 +41,7 @@ const VERB_CATALOG =
   'find*, select*, list*, count*, resolve*, create*, update*, upsert*, write*, replace*, remove*, assert*, serialize*, parse*, validate*, describe*, request*, sync*, apply*, record*, is*, has*, needs*';
 
 const VERB_CHECK_ROOTS = [
-  'apps/server/src',
+  'apps/engine/src',
   'apps/web/src',
   'apps/desktop/src',
   'apps/marketing/src',

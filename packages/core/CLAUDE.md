@@ -1,6 +1,6 @@
 # @shinsa/core
 
-The pure domain. Every decision Shinsa makes is made here, from the event log alone; `apps/server` does the I/O and
+The pure domain. Every decision Shinsa makes is made here, from the event log alone; `apps/engine` does the I/O and
 reports back with commands. No `node:*`, no Bun, no clock, no randomness: `decide` gets `now` and `newId` from its
 caller. It runs in the browser too, so the web reads the same queue, progress and references.
 

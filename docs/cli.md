@@ -42,7 +42,7 @@ What Shinsa takes:
 ## How it looks
 
 The output is set the way gh, Bun, uv and Vercel set theirs: a terminal gets a little colour and structure, and a
-pipe gets the same words as plain text. One module draws it all, `apps/server/src/terminal/` (no dependency), and every
+pipe gets the same words as plain text. One module draws it all, `apps/engine/src/terminal/` (no dependency), and every
 command takes its `Display` (a style and a width) from it.
 
 - **When there is colour.** Colour and symbols only when the stream is a terminal. `FORCE_COLOR` turns colour on
@@ -86,7 +86,7 @@ app runs the engine and it is not answering, a command asks launchd to start it 
 `version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app puts on your PATH
 (`~/.local/bin/shinsa`, linked on every launch, in zsh, bash and fish), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
 
-<!-- Everything below is generated from apps/server/src/cli and apps/server/src/surface by `bun run --cwd apps/server docs:cli`, and a test fails when it falls behind. -->
+<!-- Everything below is generated from apps/engine/src/cli and apps/engine/src/surface by `bun run --cwd apps/engine docs:cli`, and a test fails when it falls behind. -->
 
 ## Open Shinsa and hand it work
 
@@ -223,7 +223,7 @@ $ shinsa version
 
 ## The groups
 
-Generated from the specs in `apps/server/src/surface`. How the surface works is `docs/engine.md` → The command
+Generated from the specs in `apps/engine/src/surface`. How the surface works is `docs/engine.md` → The command
 surface.
 
 `--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as

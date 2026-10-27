@@ -5,7 +5,7 @@ const PATHS = [
   'apps/web/src/lib/review/spots.ts',
   'apps/web/src/lib/review/spot-keys.ts',
   'apps/web/src/components/code/quick-open.tsx',
-  'apps/server/src/agents/supervisor.ts',
+  'apps/engine/src/agents/supervisor.ts',
   'packages/core/src/report/markdown.ts',
   'docs/design.md',
 ];
@@ -15,7 +15,7 @@ describe('rankPaths', () => {
     expect(rankPaths(PATHS, 'spots', 3).map((entry) => entry.path)).toEqual([
       'apps/web/src/lib/review/spots.ts',
       'apps/web/src/lib/review/spot-keys.ts',
-      'apps/server/src/agents/supervisor.ts',
+      'apps/engine/src/agents/supervisor.ts',
     ]);
   });
 

@@ -1,9 +1,9 @@
 import { appendFileSync, cpSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { Transcripts } from '../../apps/server/src/agents/transcripts/index.ts';
-import { createSocketHub, type SocketData } from '../../apps/server/src/http/socket.ts';
-import { Engine } from '../../apps/server/src/runtime/engine.ts';
-import { EventLog, resolveStateVersion } from '../../apps/server/src/store/index.ts';
+import { Transcripts } from '../../apps/engine/src/agents/transcripts/index.ts';
+import { createSocketHub, type SocketData } from '../../apps/engine/src/http/socket.ts';
+import { Engine } from '../../apps/engine/src/runtime/engine.ts';
+import { EventLog, resolveStateVersion } from '../../apps/engine/src/store/index.ts';
 import {
   type ShinsaState,
   serializeState,

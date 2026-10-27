@@ -364,7 +364,7 @@ A fresh codebase in the Polis/Buzzkit shape, enforced as strictly:
 - Bun workspaces + Turborepo. `apps/server` (Bun server and the `shinsa` command, also serves the web app),
   `apps/web` (React, the product UI), `packages/core` (domain, `decide`, queue, prompts and the
   wire protocol, all pure), `packages/ui` (design system). Provider adapters live in
-  `apps/server/src/agents/providers/<id>/` (Claude and Codex), since each one spawns and talks to a
+  `apps/engine/src/agents/providers/<id>/` (Claude and Codex), since each one spawns and talks to a
   local process.
 - Biome at Polis's settings (`noFloatingPromises`, exhaustive switches, sorted classes, no
   `lucide-react`), `lint-conventions.ts` (the comment ban, the verb catalog, class rules), knip,

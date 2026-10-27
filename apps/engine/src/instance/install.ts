@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { ENGINE_PROTOCOL } from '@shinsa/core';
-import serverPackage from '../../package.json' with { type: 'json' };
+import enginePackage from '../../package.json' with { type: 'json' };
 import { runCommand } from '../shell/index.ts';
 import { BUNDLE, type ShinsaBundle } from './bundle.ts';
 
@@ -54,7 +54,7 @@ export function resolveHealth(
 
 export const INSTALL_PATH = BUNDLE ? BUNDLE.root : resolve(import.meta.dirname, '../../../..');
 
-export const SERVER_ENTRY = resolve(import.meta.dirname, '../main.ts');
+export const ENGINE_ENTRY = resolve(import.meta.dirname, '../main.ts');
 
 const COMMIT_TIMEOUT_MS = 5_000;
 
@@ -64,7 +64,7 @@ export function createServerInstance(
   bundle: ShinsaBundle | null = BUNDLE
 ): ServerInstance {
   return {
-    version: bundle?.version ?? serverPackage.version,
+    version: bundle?.version ?? enginePackage.version,
     commit,
     installPath: INSTALL_PATH,
     pid: process.pid,

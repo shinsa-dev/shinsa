@@ -81,7 +81,7 @@ the original log are the same (checked by comparing them key by key on the `/tmp
 
 - **How it is measured.** Boot: `Engine` construction on copies (`sqlite3 .backup`) of the 50k log, seven runs each,
   median, the file cache warm; and a real `shinsa engine` on a `/tmp` copy (fake `claude`, `gh`, `eunoe` and login
-  shell from `apps/server/test/helpers/bin`, `SHINSA_QUICK=off`) timed from spawn to `/api/health` and to the first
+  shell from `apps/engine/test/helpers/bin`, `SHINSA_QUICK=off`) timed from spawn to `/api/health` and to the first
   state on a socket, then left idle 4.5 s before it is stopped, three or four runs. The first state: `bench.ts`
   (which now also reports the state as the page gets it, `client.wireStateBytes` and `client.wireStateParseMs`),
   median of three runs. Before is `/tmp/shinsa-perf2/base`, a clone of the tree before this pass.

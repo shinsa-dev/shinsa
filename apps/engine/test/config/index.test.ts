@@ -75,7 +75,7 @@ describe('resolveConfig', () => {
       'other.lan',
     ]);
     expect(existsSync(config.dataDir)).toBe(false);
-    expect(config.pluginDir.endsWith('apps/server/plugin')).toBe(true);
+    expect(config.pluginDir.endsWith('apps/engine/plugin')).toBe(true);
     expect(config.webDir.endsWith('apps/web/dist')).toBe(true);
   });
 

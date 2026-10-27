@@ -29,7 +29,7 @@ A stage reason says what is happening to the task now. A gate says what is being
 
 - A **task** is one piece of work you asked for. Not job, ticket or issue.
 - A **gate** is the code's word; on screen it is the decision itself: "Review", "Merge", "Plan to approve", "Question", "Paused". **Needs you** is the list of them.
-- **Plan** everywhere: on screen, in `shinsa status`, in prompts and in code (`Plan`, `planFirst`). "spec" means only a command-surface spec in `apps/server/src/surface`.
+- **Plan** everywhere: on screen, in `shinsa status`, in prompts and in code (`Plan`, `planFirst`). "spec" means only a command-surface spec in `apps/engine/src/surface`.
 - **Kind of task** on screen; shape is the code's word (`TaskShape`). No "shape" in any UI string.
 - **Request** for what you asked for, never intent.
 - **Suggested task** for what an agent suggests ("Suggested tasks", "Add the suggested task “‹title›”"). A **follow-up** is only a message to a finished answer, investigation or report.

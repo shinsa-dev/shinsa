@@ -122,7 +122,7 @@ describe('which engine job this shinsa may control', () => {
     const job = parseEngineJob(REGISTERED);
     expect(isJobProgram(job, identity(PROGRAM))).toBe(true);
     expect(isJobProgram(job, identity('/tmp/Copy.app/Contents/Resources/engine/bin/shinsa'))).toBe(false);
-    expect(isJobProgram(job, identity('/tmp/shinsa/apps/server/dist/engine/bin/shinsa'))).toBe(false);
+    expect(isJobProgram(job, identity('/tmp/shinsa/apps/engine/dist/engine/bin/shinsa'))).toBe(false);
     const testCopy = { [APP]: 'studio.overclock.shinsa.test' };
     expect(isJobProgram(job, identity(PROGRAM, testCopy))).toBe(false);
   });
@@ -131,7 +131,7 @@ describe('which engine job this shinsa may control', () => {
     const job = parseEngineJob(WRITTEN);
     expect(isJobProgram(job, identity(PROGRAM))).toBe(true);
     expect(isJobProgram({ ...job, program: `/private${PROGRAM}` }, identity(PROGRAM))).toBe(true);
-    expect(isJobProgram(job, identity('/tmp/shinsa/apps/server/dist/engine/bin/shinsa'))).toBe(false);
+    expect(isJobProgram(job, identity('/tmp/shinsa/apps/engine/dist/engine/bin/shinsa'))).toBe(false);
     expect(isJobProgram({ program: null, relative: null, bundleId: null }, identity(PROGRAM))).toBe(false);
   });
 });

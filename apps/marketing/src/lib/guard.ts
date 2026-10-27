@@ -23,7 +23,7 @@ const COMMANDS = [
 ];
 
 export async function listGuardedCommands(): Promise<GuardedCommand[]> {
-  const policyUrl = pathToFileURL(resolve(process.cwd(), '../server/src/agents/policy.ts')).href;
+  const policyUrl = pathToFileURL(resolve(process.cwd(), '../engine/src/agents/policy.ts')).href;
   const policy = (await import(policyUrl)) as Policy;
   return COMMANDS.map((command) => ({ command, refusal: policy.resolveForbiddenReason(command, 'main') }));
 }

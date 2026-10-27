@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EventLog } from '../../apps/server/src/store/index.ts';
+import { EventLog } from '../../apps/engine/src/store/index.ts';
 import type { ChatEvent, Run, ShinsaEvent, ShinsaEventInput } from '../../packages/core/src/index.ts';
 import { CHAT_PROTOCOL_VERSION } from '../../packages/core/src/index.ts';
 import { buildLongRun, LONG_CHAT_TASK, listScaledTasks, type ScaledTask } from './content-scale.ts';

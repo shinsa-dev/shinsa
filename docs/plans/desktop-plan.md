@@ -53,8 +53,8 @@ The plan keeps that path first-class and does not re-implement docking in Electr
 
 ## How the app finds and runs the daemon
 
-Today: `apps/server/package.json` `bin: { shinsa: 'src/main.ts' }` (bun-linked from the checkout); port
-`SHINSA_PORT` → `config.json` `port` → 5180, host 127.0.0.1 (`apps/server/src/config/index.ts:37,69`); data
+Today: `apps/engine/package.json` `bin: { shinsa: 'src/main.ts' }` (bun-linked from the checkout); port
+`SHINSA_PORT` → `config.json` `port` → 5180, host 127.0.0.1 (`apps/engine/src/config/index.ts:37,69`); data
 `~/.config/shinsa` (`config/paths.ts`); `webDir` and `pluginDir` resolve from `import.meta.dirname`
 (`config/index.ts:107-108`); no auth beyond the loopback Host and same-site Origin guard (`http/guard.ts`); and
 **no lock on the data directory**, so two daemons on one data dir would both run effects (two agents per run).
@@ -96,9 +96,9 @@ notifications keep working); clicking the Dock icon brings it back.
 
 ## What ships in the .app
 
-`Contents/Resources/shinsa/`: a pinned `bun` binary (arm64 and x64, or a universal app), `apps/server` (TypeScript
+`Contents/Resources/shinsa/`: a pinned `bun` binary (arm64 and x64, or a universal app), `apps/engine` (TypeScript
 sources; Bun runs them directly), `packages/core`, production `node_modules` (the Claude Agent SDK with its bundled
-CLI and ripgrep, eunoe, Codex), `apps/server/plugin`, `apps/web/dist`. Not `bun build --compile`: the server
+CLI and ripgrep, eunoe, Codex), `apps/engine/plugin`, `apps/web/dist`. Not `bun build --compile`: the server
 resolves files and packages through `import.meta.dirname` and `import.meta.resolve` (config, `claude/executable.ts:39`,
 `eunoe/proxy.ts:57`), which a compiled single file breaks; revisit once those go through explicit paths.
 
@@ -157,7 +157,7 @@ apps/desktop/                 @shinsa/desktop
    `SHINSA_PLUGIN_DIR`, `shinsa service`. Pass: a second `serve` on the same data dir refuses with the first one's
    port; `shinsa service install` survives `kill -9` (back within 5 s) and a reboot; agents started by the service
    find `gh` and `claude`.
-   - Built: `apps/server/src/instance/lock.ts` (`serve.lock`; the refusal names the holder's address; a server the
+   - Built: `apps/engine/src/instance/lock.ts` (`serve.lock`; the refusal names the holder's address; a server the
      service started that finds the lock held logs the holder and exits 0, so launchd does not restart it every 5 s;
      inspect mode takes no lock and is read-only, so it can serve a running server's data beside it), health with
      `version`, `pid`, `startedAt` and `installPath` (in place of `executable`; `docs/engine.md` → Health),

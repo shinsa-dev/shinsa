@@ -9,7 +9,7 @@ that keeps those references. What each feature does now is `docs/engine.md`; how
 the status at the end.
 
 References: Kanna at `~/Developer/Projects/kanna/src/server`, T3 at `/tmp/refs/t3code`
-(`apps/server/src/orchestration-v2`, `packages/provider-core`), Paperclip at `/tmp/refs/paperclip`,
+(`apps/engine/src/orchestration-v2`, `packages/provider-core`), Paperclip at `/tmp/refs/paperclip`,
 claude-swap 0.26 at `~/.local/share/uv/tools/claude-swap/lib/*/site-packages/claude_swap`.
 
 ## WS1 Agent loop (T3 + Kanna)
@@ -152,7 +152,7 @@ Sources: T3 `mcp/toolkits/orchestrator/tools.ts:68` `delegate_task`, `Orchestrat
 
 ## Status (2026-10-23, after the finishing round)
 
-Every item is built. Paths are under `packages/core/src` (core), `apps/server/src` (server) and `apps/web/src` (web).
+Every item is built. Paths are under `packages/core/src` (core), `apps/engine/src` (engine) and `apps/web/src` (web).
 The last column says where the build differs from the plan on purpose, in one line each.
 
 ### WS1 Agent loop
@@ -175,12 +175,12 @@ The last column says where the build differs from the plan on purpose, in one li
 
 | Item | Status | Where it lives | Built differently, on purpose |
 | --- | --- | --- | --- |
-| 1 Accounts | Built | server `accounts/store.ts`, `login.ts`, `paths.ts` (`resolveAccountEnv`), `index.ts` | Your own Claude Code login stays in `~/.claude` (`configDir: null`), so its single-use refresh token never forks |
-| 2 Binding | Built | core `decide/accounts.ts` (`bindAccount`), `decide/tasks.ts` (`task.retry` with `account`), `decide/decider.ts` (`bindNextRun`, `run.account`), `state/runs.ts`; server `agents/accounts.ts`, `accounts/rotation.ts`; web `components/accounts/account-items.tsx` (`RunAccount`: the run label's account and Run this step again on), `lib/command/accounts.ts` | |
-| 3 Picking and rotating | Built | core `accounts/pick.ts` (`pickAccount`), `accounts/usage.ts`; server `accounts/rotation.ts` (spent marks in `data/account-marks.json`), `agents/supervisor.ts` (other live runs on a spent account move at their next turn) | The budget is 3 accounts per execution instead of 3 per 2 minutes, since an execution is the unit that retries |
-| 4 Auto-resume | Built | core `decide/accounts.ts` (`waitForUsageReset`, `resumeUsageWait`); server `accounts/resume.ts` (`UsageResumeClock`) | |
-| 5 Usage limits | Built | server `accounts/usage.ts` (one id per window: `weekly:<model>` from every source), `limits.ts`; web `components/accounts/`, `components/settings/usage.tsx` | |
-| 6 Login needed | Built | server `providers/claude/classify.ts` (login detection); core `decide/accounts.ts` (`requestSignIn`, `recordSignedIn`) | Without a leased account an auth failure is an ordinary failure gate: there is no account to sign in to |
+| 1 Accounts | Built | engine `accounts/store.ts`, `login.ts`, `paths.ts` (`resolveAccountEnv`), `index.ts` | Your own Claude Code login stays in `~/.claude` (`configDir: null`), so its single-use refresh token never forks |
+| 2 Binding | Built | core `decide/accounts.ts` (`bindAccount`), `decide/tasks.ts` (`task.retry` with `account`), `decide/decider.ts` (`bindNextRun`, `run.account`), `state/runs.ts`; engine `agents/accounts.ts`, `accounts/rotation.ts`; web `components/accounts/account-items.tsx` (`RunAccount`: the run label's account and Run this step again on), `lib/command/accounts.ts` | |
+| 3 Picking and rotating | Built | core `accounts/pick.ts` (`pickAccount`), `accounts/usage.ts`; engine `accounts/rotation.ts` (spent marks in `data/account-marks.json`), `agents/supervisor.ts` (other live runs on a spent account move at their next turn) | The budget is 3 accounts per execution instead of 3 per 2 minutes, since an execution is the unit that retries |
+| 4 Auto-resume | Built | core `decide/accounts.ts` (`waitForUsageReset`, `resumeUsageWait`); engine `accounts/resume.ts` (`UsageResumeClock`) | |
+| 5 Usage limits | Built | engine `accounts/usage.ts` (one id per window: `weekly:<model>` from every source), `limits.ts`; web `components/accounts/`, `components/settings/usage.tsx` | |
+| 6 Login needed | Built | engine `providers/claude/classify.ts` (login detection); core `decide/accounts.ts` (`requestSignIn`, `recordSignedIn`) | Without a leased account an auth failure is an ordinary failure gate: there is no account to sign in to |
 
 ### WS3 Process and structure
 
@@ -189,14 +189,14 @@ The last column says where the build differs from the plan on purpose, in one li
 | 1 Plan versions | Built | core `decide/agents.ts` (`proposePlan`), `decide/gates.ts`, `state/project.ts`, `report/plan-changes.ts` | |
 | 2 Review escalation | Built | core `decide/fixes.ts` (`reactToFindings`, escalation), `state/reviews.ts` | |
 | 3 Liveness | Built | core `decide/liveness.ts`, `queue/stalls.ts` (`traceStalledLeaf`) | |
-| 4 Monitors | Built | core `decide/monitors.ts` (a wait out of check-ins or time opens the failure gate, `cause: monitor`); server `runtime/monitors.ts` (`MonitorClock`), `agents/tools/process.ts` | A fire resumes the waiting run's session instead of a fresh one, so the agent keeps what it knew |
-| 5 Cost | Built | core `costs/index.ts`, `decide/costs.ts` (`holdForBudget`); server `supervisor.ts` (`run.meter`); web task facts | Two per-task caps, a share of the weekly usage window (`taskUsageLimit`) and dollars (`taskBudgetUsd`), both off by default and checked when a step starts: a run is never stopped mid-turn |
-| 6 Silent runs | Built | server `agents/silence.ts`; core `decide/silence.ts`, `queue/silence.ts`; web `components/overview/silence-note.tsx` | |
+| 4 Monitors | Built | core `decide/monitors.ts` (a wait out of check-ins or time opens the failure gate, `cause: monitor`); engine `runtime/monitors.ts` (`MonitorClock`), `agents/tools/process.ts` | A fire resumes the waiting run's session instead of a fresh one, so the agent keeps what it knew |
+| 5 Cost | Built | core `costs/index.ts`, `decide/costs.ts` (`holdForBudget`); engine `supervisor.ts` (`run.meter`); web task facts | Two per-task caps, a share of the weekly usage window (`taskUsageLimit`) and dollars (`taskBudgetUsd`), both off by default and checked when a step starts: a run is never stopped mid-turn |
+| 6 Silent runs | Built | engine `agents/silence.ts`; core `decide/silence.ts`, `queue/silence.ts`; web `components/overview/silence-note.tsx` | |
 | 7 Fingerprints | Built | core `decide/fingerprints.ts` | |
-| 8 Questions and verdicts | Built | core `decide/gates.ts`, `decide/messages.ts` (`gate.superseded`); server `agents/questions.ts`; web `components/overview/question-choices.tsx`, `finding-verdicts.tsx` | |
-| 9 Ask mode | Built | core `decide/shapes.ts` (`recordDelivery` with step `answer`, the answer shape); server `supervisor.ts` (runs in the repository) | |
+| 8 Questions and verdicts | Built | core `decide/gates.ts`, `decide/messages.ts` (`gate.superseded`); engine `agents/questions.ts`; web `components/overview/question-choices.tsx`, `finding-verdicts.tsx` | |
+| 9 Ask mode | Built | core `decide/shapes.ts` (`recordDelivery` with step `answer`, the answer shape); engine `supervisor.ts` (runs in the repository) | |
 | 10 Suggested tasks | Built | core `decide/suggestions.ts`; web `components/overview/suggestions-panel.tsx` (When to start, the agent's pick first), `lib/tasks/suggestions.ts`, `lib/command/process.ts` | |
-| 11 Setup verification | Built | core `decide/config.ts`; server `repos/setup.ts` | |
+| 11 Setup verification | Built | core `decide/config.ts`; engine `repos/setup.ts` | |
 
 ### WS4 Engine hardening
 
@@ -211,27 +211,27 @@ The last column says where the build differs from the plan on purpose, in one li
 
 | Item | Status | Where it lives | Built differently, on purpose |
 | --- | --- | --- | --- |
-| Setup steps | Built | server `onboarding/steps.ts`, `flow.ts`, `prerequisites.ts`, `repos/discover.ts`; web `routes/onboarding.tsx`, `components/onboarding/` | One step at a time, any earlier one open to change; Claude logins imported without asking; every other route locked until setup is complete |
+| Setup steps | Built | engine `onboarding/steps.ts`, `flow.ts`, `prerequisites.ts`, `repos/discover.ts`; web `routes/onboarding.tsx`, `components/onboarding/` | One step at a time, any earlier one open to change; Claude logins imported without asking; every other route locked until setup is complete |
 
 ### WS6 Orchestration and delegation
 
 | Item | Status | Where it lives | Built differently, on purpose |
 | --- | --- | --- | --- |
-| 1 Tools and ids | Built | server `agents/tools/orchestration.ts`; core `decide/delegations.ts` (`requestDelegation`), `prompts/orchestration.ts` | A fresh delegation per review round is an instruction, not enforced: a round is the agent's judgement |
-| 2 Delivery | Built | core `decide/delegations.ts` (`planDelivery`, cohorts); server `agents/deliveries.ts`, `agents/delegations.ts` | Priority means delegated reports go ahead of your queued messages in one wake; there is no priority field |
-| 3 Questions, ceiling, isolation | Built | core `decide/delegations.ts` (`routeQuestion`, the ceiling); server `git/isolation.ts` | |
+| 1 Tools and ids | Built | engine `agents/tools/orchestration.ts`; core `decide/delegations.ts` (`requestDelegation`), `prompts/orchestration.ts` | A fresh delegation per review round is an instruction, not enforced: a round is the agent's judgement |
+| 2 Delivery | Built | core `decide/delegations.ts` (`planDelivery`, cohorts); engine `agents/deliveries.ts`, `agents/delegations.ts` | Priority means delegated reports go ahead of your queued messages in one wake; there is no priority field |
+| 3 Questions, ceiling, isolation | Built | core `decide/delegations.ts` (`routeQuestion`, the ceiling); engine `git/isolation.ts` | |
 | 4 Limits, batching, adoption, cascades, couriers | Built | core `decide/delegations.ts`, `decide/couriers.ts`, `decide/decider.ts` | |
-| 5 Restart recovery | Built | core `decide/delegations.ts` (`recoverDeliveries`); server `supervisor.ts` (`recover`) | |
+| 5 Restart recovery | Built | core `decide/delegations.ts` (`recoverDeliveries`); engine `supervisor.ts` (`recover`) | |
 
 ### WS7 Triggers, idle sessions and notifications
 
 | Item | Status | Where it lives | Built differently, on purpose |
 | --- | --- | --- | --- |
-| 1 Schedules | Built | core `schedules/`, `decide/schedules.ts`; server `schedules/clock.ts`, `schedules/tools.ts`; web `components/settings/schedules.tsx`, `lib/schedules.ts` | |
-| 2 Webhooks | Built | server `schedules/webhook.ts`, `verify.ts`, `template.ts`, `secrets/store.ts` | |
-| 3 Secrets | Built | core `decide/secrets.ts`; server `secrets/store.ts`, `schedules/routes.ts`; web `components/overview/secret-card.tsx`, `lib/secrets.ts` | |
-| 4 Idle release | Built | server `agents/idle.ts`, `agents/questions.ts` | |
-| 5 Idle compaction | Built | server `agents/compaction.ts`, `providers/claude/context.ts`; core `decide/compaction.ts` | It also skips split sub-tasks |
+| 1 Schedules | Built | core `schedules/`, `decide/schedules.ts`; engine `schedules/clock.ts`, `schedules/tools.ts`; web `components/settings/schedules.tsx`, `lib/schedules.ts` | |
+| 2 Webhooks | Built | engine `schedules/webhook.ts`, `verify.ts`, `template.ts`, `secrets/store.ts` | |
+| 3 Secrets | Built | core `decide/secrets.ts`; engine `secrets/store.ts`, `schedules/routes.ts`; web `components/overview/secret-card.tsx`, `lib/secrets.ts` | |
+| 4 Idle release | Built | engine `agents/idle.ts`, `agents/questions.ts` | |
+| 5 Idle compaction | Built | engine `agents/compaction.ts`, `providers/claude/context.ts`; core `decide/compaction.ts` | It also skips split sub-tasks |
 | 6 Notifications | Built | web `lib/notifications/`, `hooks/use-attention.ts`, `components/settings/notifications.tsx` | |
 
 No new effect kinds came with WS7: the clocks and the webhook receiver dispatch commands under deterministic ids,

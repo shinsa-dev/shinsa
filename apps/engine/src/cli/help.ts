@@ -283,7 +283,7 @@ function serializeCommandReference(command: CliCommand) {
 }
 
 export const REFERENCE_MARKER =
-  '<!-- Everything below is generated from apps/server/src/cli and apps/server/src/surface by `bun run --cwd apps/server docs:cli`, and a test fails when it falls behind. -->';
+  '<!-- Everything below is generated from apps/engine/src/cli and apps/engine/src/surface by `bun run --cwd apps/engine docs:cli`, and a test fails when it falls behind. -->';
 
 function serializeCliReference() {
   return [

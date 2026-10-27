@@ -1,6 +1,6 @@
 ---
 name: conventions
-description: Shinsa code conventions — load before writing or reviewing code anywhere in this monorepo (packages/core, apps/server, apps/web, packages/ui). The verb catalog, where things live, the core's event-sourcing rules, tests and coverage, errors and logs, and readability style, with right/wrong examples. Complements the terse rules in CLAUDE.md.
+description: Shinsa code conventions — load before writing or reviewing code anywhere in this monorepo (packages/core, apps/engine, apps/web, packages/ui). The verb catalog, where things live, the core's event-sourcing rules, tests and coverage, errors and logs, and readability style, with right/wrong examples. Complements the terse rules in CLAUDE.md.
 ---
 
 # Shinsa conventions
@@ -12,7 +12,7 @@ description: Shinsa code conventions — load before writing or reviewing code a
 | Path | What it is |
 |---|---|
 | `packages/core` | Pure domain: one folder per concern under `src/` (`domain`, `agent-models`, `events`, `commands`, `effects`, `state`, `decide`, `accounts`, `costs`, `schedules`, `queue`, `briefing`, `report`, `chat`, `prompts`, `progress`, `protocol`). No `node:*`, no Bun, no I/O. See `packages/core/CLAUDE.md` |
-| `apps/server` | All I/O: event log, effect runner, agent runs, git, GitHub, HTTP. Folder per concern; see `apps/server/CLAUDE.md` |
+| `apps/engine` | All I/O: event log, effect runner, agent runs, git, GitHub, HTTP. Folder per concern; see `apps/engine/CLAUDE.md` |
 | `apps/web` | Renders server state, owns nothing. Every action is a `UserCommand` through `sendCommand`. `routes/`, `components/<domain>/`, `hooks/`, `lib/` (all non-JSX logic, 100% covered); see `apps/web/CLAUDE.md` |
 | `packages/ui` | The design system. Reusable beyond Shinsa, imports nothing from the workspace |
 
@@ -38,7 +38,7 @@ description: Shinsa code conventions — load before writing or reviewing code a
 | `request*` · `sync*` · `apply*` · `record*` | ask for an effect · reconcile with the outside · fold an event · store a fact reported from outside |
 | `is*` / `has*` / `needs*` | boolean predicates |
 
-Banned in `apps/server/src`, `apps/web/src` and `packages/core` (lint-enforced): `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*`.
+Banned in `apps/engine/src`, `apps/web/src` and `packages/core` (lint-enforced): `get*`, `fetch*`, `load*`, `set*`, `delete*`, `destroy*`.
 
 **The `find*`/`select*` split is a contract callers rely on.** If you null-check the result it must be `select*`; if absence is an error it must be `find*`.
 
@@ -66,7 +66,7 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 ```
 
 - **State is the event log.** `decide` is pure given `now` and `newId`; it never mutates its input (the `Decider` works on a clone) and every change is an event folded by `applyEvent`. Replaying the log must rebuild the same state, so `applyEvent` reads only the event and the state before it, and never stores a shared constant by reference (`createSettings()`, not `DEFAULT_SETTINGS`).
-- **Events are facts, past tense** (`task.staged`, `pull_request.push_requested`). Shinsa has never shipped, so it keeps no backwards compatibility in code: a renamed or removed event, field or value changes everywhere at once, with no reader for the old shape and no default that only an old log needs. Old shapes already in the user's log are rewritten once on start by `apps/server/src/store/legacy.ts` (bump `LOG_VERSION`, SQLite's `user_version`), never read.
+- **Events are facts, past tense** (`task.staged`, `pull_request.push_requested`). Shinsa has never shipped, so it keeps no backwards compatibility in code: a renamed or removed event, field or value changes everywhere at once, with no reader for the old shape and no default that only an old log needs. Old shapes already in the user's log are rewritten once on start by `apps/engine/src/store/legacy.ts` (bump `LOG_VERSION`, SQLite's `user_version`), never read.
 - **Commands are idempotent where the world can repeat them.** A system or agent command that arrives twice (a retried effect, a duplicate tool call) is a no-op the second time: `checks.record` outside `checking` is ignored, an `agent.ask` with a known gate id opens nothing, a write that changes nothing emits nothing.
 - **Validation throws `DomainError(code, message)` before anything is emitted.** The code is `snake_case`; the message is a sentence the human or the agent can act on (`copy` skill).
 - **Exhaustive switches over unions.** `decide`'s `apply` lists every command type; `applyEvent` every event type. Don't add a `default` that swallows a new member; let the type checker and `useExhaustiveSwitchCases` fail instead.
@@ -82,7 +82,7 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 5. **No dead parameters.** When an argument stops meaning anything (a `required = true` nobody passes), remove it.
 6. **Narrow types, no `any`.** Untrusted input is `unknown` and narrowed once (`readField` in `briefing/parse.ts`, `Reader` in `report/validate.ts`); a cast is allowed only right after the runtime check that justifies it.
 
-## Errors and logs (apps/server)
+## Errors and logs (apps/engine)
 
 - One JSON line per log entry: `log.info/warn/error('[Area] Sentence', fields)` with every id in scope and `error: describeError(error)`. Never `console` outside `scripts/`.
 - A `catch` rethrows, converts to a typed result, or logs with context. `.catch(() => undefined)` is a silent swallow and is not allowed.
@@ -90,11 +90,11 @@ export function waitOnTasks(state: ShinsaState, command: CommandOf<'task.wait_on
 
 ## Tests and coverage
 
-- All four packages (`packages/core`, `apps/server`, `apps/web`, `packages/ui`) enforce 100% line and function coverage in their `bunfig.toml`; `bun test` fails below it. The web leaves `.tsx` components out of the count and `packages/ui` its `components/` (they are checked by rendering, not by coverage); everything in `lib/` and `hooks/` counts. Coverage is the floor, not the goal: every test names a behaviour in its title and asserts what a person or an agent would see.
+- All four packages (`packages/core`, `apps/engine`, `apps/web`, `packages/ui`) enforce 100% line and function coverage in their `bunfig.toml`; `bun test` fails below it. The web leaves `.tsx` components out of the count and `packages/ui` its `components/` (they are checked by rendering, not by coverage); everything in `lib/` and `hooks/` counts. Coverage is the floor, not the goal: every test names a behaviour in its title and asserts what a person or an agent would see.
 - A bug fix comes with the test that fails without it. Prove it: revert the fix, watch the test fail, restore.
 - `decide` tests go through `createHarness()` with real commands (`test/harness.ts`: `reachReviewGate`, `reachShipping`, `pushFix`, `shipAndMerge`), never by building state by hand, except for state an older version could have written.
 - When a test needs git, it creates a throwaway repository; in sandboxes set `GIT_CONFIG_GLOBAL` to a clean file.
-- A test waits on a condition, never on time, and leaves no process or timer running (`apps/server/CLAUDE.md` → Testing has the tools).
+- A test waits on a condition, never on time, and leaves no process or timer running (`apps/engine/CLAUDE.md` → Testing has the tools).
 
 ## Docs — in the same change
 

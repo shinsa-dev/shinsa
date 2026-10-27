@@ -32,7 +32,7 @@ describe('the shinsa command link', () => {
   it('never touches a shinsa that is not one the app made', () => {
     expect(planCommandLink({ kind: 'file' }, PROGRAM)).toBe('leave');
     expect(
-      planCommandLink({ kind: 'link', target: '/Users/ada/shinsa/apps/server/bin/shinsa' }, PROGRAM)
+      planCommandLink({ kind: 'link', target: '/Users/ada/shinsa/apps/engine/bin/shinsa' }, PROGRAM)
     ).toBe('leave');
   });
 });

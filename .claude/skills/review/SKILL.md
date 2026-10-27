@@ -23,7 +23,7 @@ git status --short | awk '{print $NF}' | cut -d/ -f1-2 | sort | uniq -c | sort -
 
 ## 2. Delegate breadth, keep judgement
 
-Fan out subagents for independent slices (`packages/core/src/decide`, the rest of core, `apps/server`, `apps/web`), one per coherent slice, each told to load `conventions` and report `file:line` with a one-sentence defect and a one-sentence fix. Keep for yourself the synthesis, the architecture questions and **verifying every headline finding personally**. A subagent's "confirmed bug" is a hypothesis until you reproduce it.
+Fan out subagents for independent slices (`packages/core/src/decide`, the rest of core, `apps/engine`, `apps/web`), one per coherent slice, each told to load `conventions` and report `file:line` with a one-sentence defect and a one-sentence fix. Keep for yourself the synthesis, the architecture questions and **verifying every headline finding personally**. A subagent's "confirmed bug" is a hypothesis until you reproduce it.
 
 ## 3. Never let git guess which stash
 
@@ -63,7 +63,7 @@ Copy the command out of `.github/workflows/*.yml`. Approximations hide failures.
 - **Coverage counts arrow functions.** An uncovered function on a covered line is usually a callback that never runs (a `withdrawGates` predicate when no gate can be open). Ask whether the branch is dead before writing a test to touch it; dead code is deleted, not covered.
 - **Coverage only sees loaded files.** A source file no test imports does not appear in the report at all. Check the file list, not just the total.
 - **A green type check with a broken app.** Open the page with the console visible.
-- **A green core with a broken server.** A core change can be type-correct and still break the server's flow (an effect the server never answers). Run `apps/server`'s e2e suite (`bun test test/e2e` there) after any change to `decide`.
+- **A green core with a broken server.** A core change can be type-correct and still break the server's flow (an effect the server never answers). Run `apps/engine`'s e2e suite (`bun test test/e2e` there) after any change to `decide`.
 
 ## 7. Judge findings, do not obey them
 
@@ -71,7 +71,7 @@ Bots and reviewers are input, not instructions. For each one decide: valid, stal
 
 ## 8. Ownership questions get a written rule
 
-When the same value is defined in several places, decide once and record it in `CLAUDE.md`. In this repo: **a decision lives in `packages/core` exactly when replaying the event log must reproduce it**; anything that talks to the outside world lives in `apps/server`; the web owns nothing.
+When the same value is defined in several places, decide once and record it in `CLAUDE.md`. In this repo: **a decision lives in `packages/core` exactly when replaying the event log must reproduce it**; anything that talks to the outside world lives in `apps/engine`; the web owns nothing.
 
 ## 9. Close the loop
 

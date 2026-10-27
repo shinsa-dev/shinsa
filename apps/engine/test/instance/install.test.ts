@@ -4,17 +4,17 @@ import { ENGINE_PROTOCOL } from '@shinsa/core';
 import {
   createServerInstance,
   describeVersion,
+  ENGINE_ENTRY,
   INSTALL_PATH,
   resolveHealth,
   resolveServerInstance,
-  SERVER_ENTRY,
 } from '../../src/instance/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 
 describe('which Shinsa is running', () => {
   test('the install path is the checkout, and the entry its server’s main.ts', () => {
     expect(INSTALL_PATH).toBe(join(import.meta.dirname, '../../../..'));
-    expect(SERVER_ENTRY).toBe(join(INSTALL_PATH, 'apps/server/src/main.ts'));
+    expect(ENGINE_ENTRY).toBe(join(INSTALL_PATH, 'apps/engine/src/main.ts'));
   });
 
   test('carries the package version, this process and the checkout’s commit when there is one', async () => {

@@ -253,7 +253,7 @@ const FIXTURE_FILES = [
   'apps/web/src/lib/code/diff.ts',
   'packages/core/src/decide/lifecycle.ts',
   'packages/core/src/report/assemble.ts',
-  'apps/server/src/git/diff.ts',
+  'apps/engine/src/git/diff.ts',
 ];
 
 const FIXTURE_WHY = [

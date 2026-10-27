@@ -8,7 +8,7 @@ files:
   - static/**
   - package.json
 extraResources:
-  - from: ../server/dist/engine
+  - from: ../engine/dist/engine
     to: engine
 extraFiles:
   - from: resources/LaunchAgents

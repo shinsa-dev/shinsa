@@ -69,7 +69,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
 | event | A past-tense fact; the only way state changes; replayed forever | `ShinsaEvent` | Activity (some of them) |
 | effect | Work with I/O that a decision asks for, run from the outbox, reporting back with commands | `ShinsaEffect` | not shown |
-| receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (server) | not shown |
+| receipt | The stored answer to a command id, so a repeat is answered and never applied twice | `CommandReceipt` (engine) | not shown |
 | on your behalf | A user command an agent's management tool sent for you from its task, recorded with the acting task | `onBehalf`, `byTask`, `OnBehalfAction` | "‹handle› agent (on your behalf)" |
 | message kind | What the classifier read a message to be: feedback on the current round (a follow-up on a finished one), a message that needs nothing (thanks, "ok"), new work for the task (a new round), or work for another task (a split-off) | `MessageKind` (`feedback`, `acknowledge`, `new_round`, `separate_task`) | not shown |
 | split-off | A suggested task saying something you asked for in this chat belongs in a task of its own; you make it a task or keep it here as the next round | `TaskSuggestion.splitOff` | "Make it a task", "Keep it here" |
@@ -102,13 +102,13 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | change | the change shape; the proposal (`ChangeProposal`, `task.change_*`, `propose_change`, "Change to approve", even when it proposes an operation); "Changes to review" |
 | fix | the fix shape (investigate, then a change); an agent run with purpose `fix`; a fix round; the review verdict `fix` |
 | review | the agent review; your review; the gate type `review`; the Code tab's review view |
-| spec | a command-surface spec (`apps/server/src/surface`, `humanOnly`) |
+| spec | a command-surface spec (`apps/engine/src/surface`, `humanOnly`) |
 
 ## Naming decisions
 
 All nineteen are decided and in the code. Shinsa has never shipped, so nothing reads the old names: every event,
 command, stored shape and route uses the current one. Old shapes already in the user's log are rewritten once on start
-(`apps/server/src/store/legacy.ts`, `docs/engine.md` → State in memory), so code never reads them.
+(`apps/engine/src/store/legacy.ts`, `docs/engine.md` → State in memory), so code never reads them.
 
 1. **Plan, not spec**: `Plan`, `PlanDocument`, `PlanRevision`, `PlanFile`, `PlanQuestion`, `Task.plan`, `planFirst`,
    `planHistory`, `planAnswers`, stage `awaiting_plan`, events `plan.*`, activity kind `plan`, `shinsa do --plan-first`.
@@ -861,7 +861,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 
 ## Effects
 
-`ShinsaEffect` (`effects/index.ts`), run by `EffectRunner` (`apps/server/src/runtime/effects.ts`) from the outbox.
+`ShinsaEffect` (`effects/index.ts`), run by `EffectRunner` (`apps/engine/src/runtime/effects.ts`) from the outbox.
 `process_bound` effects are cancelled on boot; `replay_safe` ones are requeued and must be safe to run twice.
 
 | Effect | Recovery | Lane | Reports back with |
@@ -928,7 +928,7 @@ may call only the hand-over its purpose names (`PURPOSE_HAND_OVERS`, the word af
 `planner` or `builder` has only the delegated tools. The reviewer cannot ask you anything.
 
 Three more tools come from the server, not from `listToolNames`, and only in a run the context optimizer left
-something out of (`apps/server/src/extensions/loader.ts`), any role, delegated runs too:
+something out of (`apps/engine/src/extensions/loader.ts`), any role, delegated runs too:
 
 | Tool | When it is there | Does |
 | --- | --- | --- |
@@ -1040,20 +1040,20 @@ a list that lost `drop` entries at its start and gained `append` at its end, the
 | Decisions | `packages/core/src/decide/` (`messages.ts` for `resolveMessageEffect`) |
 | State folds | `packages/core/src/state/` |
 | Chat protocol | `packages/core/src/chat/protocol.ts` |
-| Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/server/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
-| Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/server/src/terminals/`, `apps/web/src/lib/terminal/` |
-| Services, their states and suggestions | `packages/core/src/protocol/services.ts`; `apps/server/src/terminals/` (`detect.ts`, `routes.ts`), `apps/web/src/lib/terminal/services.ts` |
+| Socket messages, surfaces | `packages/core/src/protocol/messages.ts`; `apps/engine/src/http/socket.ts`, `apps/web/src/lib/connection/socket.ts` |
+| Terminals, their places and frames | `packages/core/src/protocol/terminals.ts`; `apps/engine/src/terminals/`, `apps/web/src/lib/terminal/` |
+| Services, their states and suggestions | `packages/core/src/protocol/services.ts`; `apps/engine/src/terminals/` (`detect.ts`, `routes.ts`), `apps/web/src/lib/terminal/services.ts` |
 | State patches, drafts | `packages/core/src/protocol/patch.ts`, `packages/core/src/state/draft.ts` |
-| State snapshots | `apps/server/src/store/snapshot.ts`, `apps/server/src/store/event-log.ts` |
-| Event log, receipts, outbox | `apps/server/src/store/event-log.ts`, `apps/server/src/runtime/engine.ts` |
-| Effect handlers | `apps/server/src/runtime/effects.ts` |
-| Agent tools (MCP) | `apps/server/src/agents/tools/`; the loader tools `apps/server/src/extensions/loader.ts` |
-| Management tools | `apps/server/src/agents/manage/` |
-| Command surface and `humanOnly` | `apps/server/src/surface/`, reference `docs/cli.md` |
-| Shell policy | `apps/server/src/agents/policy.ts` |
+| State snapshots | `apps/engine/src/store/snapshot.ts`, `apps/engine/src/store/event-log.ts` |
+| Event log, receipts, outbox | `apps/engine/src/store/event-log.ts`, `apps/engine/src/runtime/engine.ts` |
+| Effect handlers | `apps/engine/src/runtime/effects.ts` |
+| Agent tools (MCP) | `apps/engine/src/agents/tools/`; the loader tools `apps/engine/src/extensions/loader.ts` |
+| Management tools | `apps/engine/src/agents/manage/` |
+| Command surface and `humanOnly` | `apps/engine/src/surface/`, reference `docs/cli.md` |
+| Shell policy | `apps/engine/src/agents/policy.ts` |
 | Composer hint | `apps/web/src/lib/tasks/messages.ts` |
-| The Code tab's reads: `TaskRefs`, `RepoPaths`, `RepoTree`, `FileContent`, `SearchResult`, `TaskDiff`, `CODE_LIMITS` | `packages/core/src/protocol/code.ts`, `protocol/messages.ts`; served by `apps/server/src/http/code.ts` (`docs/engine.md` → The Code tab's reads) |
-| Saving a file from the Code tab: `FileWrite`, `FileWritten`, `FileChanged` | `packages/core/src/protocol/code.ts`; served by `apps/server/src/http/edits.ts` (`docs/engine.md` → Your edits) |
+| The Code tab's reads: `TaskRefs`, `RepoPaths`, `RepoTree`, `FileContent`, `SearchResult`, `TaskDiff`, `CODE_LIMITS` | `packages/core/src/protocol/code.ts`, `protocol/messages.ts`; served by `apps/engine/src/http/code.ts` (`docs/engine.md` → The Code tab's reads) |
+| Saving a file from the Code tab: `FileWrite`, `FileWritten`, `FileChanged` | `packages/core/src/protocol/code.ts`; served by `apps/engine/src/http/edits.ts` (`docs/engine.md` → Your edits) |
 
 ## Open protocol questions
 

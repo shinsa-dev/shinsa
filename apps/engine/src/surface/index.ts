@@ -296,7 +296,7 @@ export function serializeReference(specs: SurfaceSpec[] = SURFACE) {
   return [
     '## The groups',
     '',
-    'Generated from the specs in `apps/server/src/surface`. How the surface works is `docs/engine.md` → The command',
+    'Generated from the specs in `apps/engine/src/surface`. How the surface works is `docs/engine.md` → The command',
     'surface.',
     '',
     '`--help` on a group or a command prints its usage; `--json` prints the answer as JSON, and a refusal as',

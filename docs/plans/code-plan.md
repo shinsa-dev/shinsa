@@ -61,10 +61,10 @@ directly**: the file saves to the task's working copy as you type and goes into 
    (`review.tsx`, `CodePane`). The spec promises "a file tree and the full diff" (`docs/spec.md` → Second pass); the
    changes view is a directory-grouped flat list and shows one file at a time (`changes.tsx`, `listFileGroups`).
 2. **No code once the worktree is gone.** `CodeTab` returns "The worktree is gone" when `task.worktreePath` is unset,
-   and both endpoints read the worktree (`apps/server/src/http/routes.ts`, `respondDiff`, `respondFile`). A merged or
+   and both endpoints read the worktree (`apps/engine/src/http/routes.ts`, `respondDiff`, `respondFile`). A merged or
    cancelled task loses its code entirely.
 3. **The review is not pinned.** File contents come from the working copy (`respondFile` reads `Bun.file`), the diff is
-   recomputed on every request against a scratch index (`apps/server/src/git/diff.ts`). If the agent is still
+   recomputed on every request against a scratch index (`apps/engine/src/git/diff.ts`). If the agent is still
    editing, the spot line numbers from the report drift from the code shown.
 4. **Cache keyed on `task.updatedAt`.** `useTaskDiff(task.id, task.updatedAt)` and `useFileContent(..., revision)`
    (`lib/connection/files.ts`) refetch the diff and every file on any task event (a chat line, a priority change).
@@ -174,9 +174,9 @@ exist, so the menu stays the one complete place.
 - `packages/core/src/protocol/messages.ts`: `TaskRefs`, `RepoEntry`, `FileContent`, `SearchMatch`; `DiffFile.binary`.
   `packages/core/src/protocol/diff.ts`: parse `Binary files … differ`. Fuzzy path ranking either reuses
   `apps/web/src/lib/command/score.ts` or moves a pure ranker into core (T3: `packages/shared/src/searchRanking.ts`).
-- `apps/server/src/git/files.ts` (new): `listPaths`, `listTree`, `readBlob` (batch process), `searchFiles`,
+- `apps/engine/src/git/files.ts` (new): `listPaths`, `listTree`, `readBlob` (batch process), `searchFiles`,
   `resolveTaskRefs`; `git/diff.ts`: a sha-to-sha `resolveCommitDiff` beside today's working-copy diff;
-  `http/routes.ts`: the routes above; `http/paths.ts`: `assertRepoPath`. Tests under `apps/server/test/git` and
+  `http/routes.ts`: the routes above; `http/paths.ts`: `assertRepoPath`. Tests under `apps/engine/test/git` and
   `test/http` (throwaway repos, as today).
 - `apps/web`: `routes/task/code.tsx` becomes the workbench frame; `components/code/` gains `workbench.tsx`,
   `explorer.tsx` (tree on `components/settings/virtual-rows.tsx`), `editor-tabs.tsx`, `file-editor.tsx`,

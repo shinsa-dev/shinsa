@@ -3,10 +3,10 @@ export { createReadOnlyError, INSPECT_MESSAGE, INSPECT_READ_ONLY } from './inspe
 export {
   createServerInstance,
   describeVersion,
+  ENGINE_ENTRY,
   INSTALL_PATH,
   resolveHealth,
   resolveServerInstance,
-  SERVER_ENTRY,
   type ServerHealth,
   type ServerInstance,
 } from './install.ts';

@@ -16,7 +16,7 @@
     "noEmit": true,
     "types": ["bun"],
     "paths": {
-      "@xterm/xterm": ["./apps/server/src/terminals/xterm-types.d.ts"]
+      "@xterm/xterm": ["./apps/engine/src/terminals/xterm-types.d.ts"]
     }
   },
   "include": ["scripts/**/*.ts"],
