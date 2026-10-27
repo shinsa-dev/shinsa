@@ -98,10 +98,11 @@ The app updates itself with electron-updater from the releases of `shinsa-dev/sh
 - A new install starts on Beta when its version is a beta and on Stable otherwise; the choice is the app's own
   (Settings → General → Updates, ⌘K's Update channel) and switching checks again at once.
 
-Downloads: `https://shinsa.dev/download` is the latest stable DMG
-(`https://github.com/shinsa-dev/shinsa/releases/latest/download/Shinsa-mac-arm64.dmg`), and
-`https://shinsa.dev/download/beta` the DMG of the newest release, pre-releases included (`apps/marketing/CLAUDE.md` →
-Deploy).
+Downloads: `https://shinsa.dev/download` is the DMG of the newest stable release, and
+`https://shinsa.dev/download/beta` the DMG of the newest release, pre-releases included. The files stay on GitHub
+Releases (`Shinsa-mac-arm64.dmg` on each tag); the site's Worker finds the release and streams the file through, so the
+download comes from shinsa.dev as `Shinsa-<version>.dmg`, with no redirect to GitHub, and GitHub still counts it.
+Until the first stable release, `/download` shows a page offering the beta (`apps/marketing/CLAUDE.md` → Deploy).
 
 Apple Silicon only. A universal or an extra x64 build would need an x64 engine (`SHINSA_ENGINE_TARGET=bun-darwin-x64`)
 per architecture in `extraResources`, roughly doubles the build and the download, and needs the updater files to name

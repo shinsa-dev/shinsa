@@ -23,7 +23,10 @@ export default defineConfig({
   trailingSlash: 'never',
   build: { format: 'file' },
   devToolbar: { enabled: false },
-  integrations: [react(), sitemap({ filter: (page) => !page.endsWith('/404') })],
+  integrations: [
+    react(),
+    sitemap({ filter: (page) => !(page.endsWith('/404') || page.includes('/download/')) }),
+  ],
   vite: {
     plugins: [reactSnapshotPlugin, tailwindcss()],
     server: { allowedHosts: ['.ts.net'] },
