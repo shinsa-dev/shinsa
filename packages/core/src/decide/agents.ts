@@ -12,9 +12,17 @@ import {
 import { assembleReport } from '../report/assemble.ts';
 import { serializePlanMarkdown } from '../report/markdown.ts';
 import type { PlanDocument } from '../report/types.ts';
+import {
+  assertCheckIds,
+  findTaskCheck,
+  recordCheckChanges,
+  resolveCheckChanges,
+  startFixChecks,
+  startPhaseChecks,
+} from './checks.ts';
 import type { Decider } from './decider.ts';
 import { reactToFindings } from './fixes.ts';
-import { isLastPhase, needsPlanApproval, resolveCurrentPhase, startChecks, startPhase } from './lifecycle.ts';
+import { isLastPhase, needsPlanApproval, resolveCurrentPhase } from './lifecycle.ts';
 import { requestPush } from './pull-requests.ts';
 import { findCurrentRun } from './runs.ts';
 import { startAfterPlan } from './shapes.ts';
@@ -32,7 +40,7 @@ function assertPlanRules(task: Task, document: PlanDocument) {
 const EVIDENCE_NOUN: Record<PlanEvidenceKind, string> = {
   screenshot: 'a screenshot',
   recording: 'a recording',
-  test: 'test output',
+  test: 'a test run, linked to its check',
   note: 'a note',
   preview: 'a preview link',
 };
@@ -79,6 +87,7 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
   const { run, task } = findCurrentRun(decider, command.runId, 'complete_phase');
   const index = run.phaseIndex ?? resolveCurrentPhase(task);
   if (isLastPhase(task, index)) assertEvidence(decider, task, 'complete the last phase');
+  const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], index + 1);
   recordTree(decider, task.id, command.treeHash);
   decider.emit({
     type: 'phase.completed',
@@ -90,19 +99,17 @@ export function completePhase(decider: Decider, command: CommandOf<'agent.comple
       spots: command.spots,
       judgementCalls: command.judgementCalls,
       ...(command.walkthrough ? { walkthrough: command.walkthrough } : {}),
+      ...(command.files && command.files.length > 0 ? { files: command.files } : {}),
       at: decider.context.now,
     },
   });
   if (task.plan?.document?.phases[index]) {
     decider.emit({ type: 'phase.updated', taskId: task.id, index, status: 'done' });
   }
+  const changed = recordCheckChanges(decider, task.id, run.id, changes);
   decider.endRun(run, 'completed', command.summary);
   decider.progressed(task.id);
-  if (isLastPhase(decider.task(task.id), index)) {
-    startChecks(decider, task.id);
-    return;
-  }
-  startPhase(decider, task.id, index + 1);
+  startPhaseChecks(decider, task.id, index + 1, changed);
 }
 
 function isPushedFix(task: Task) {
@@ -112,6 +119,10 @@ function isPushedFix(task: Task) {
 
 export function completeFix(decider: Decider, command: CommandOf<'agent.complete_fix'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'complete_fix');
+  const named = command.checks ?? [];
+  assertCheckIds(decider, task, named);
+  const done = new Set(task.phaseReports.map((report) => report.index)).size;
+  const changes = resolveCheckChanges(decider, task, command.checkChanges ?? [], done);
   recordTree(decider, task.id, command.treeHash);
   decider.emit({ type: 'task.noted', taskId: task.id, note: command.summary, runId: run.id });
   if (command.walkthrough) {
@@ -122,10 +133,11 @@ export function completeFix(decider: Decider, command: CommandOf<'agent.complete
       runId: run.id,
     });
   }
+  const changed = recordCheckChanges(decider, task.id, run.id, changes);
   decider.endRun(run, 'completed', command.summary);
   decider.progressed(task.id);
   if (!isPushedFix(task)) {
-    startChecks(decider, task.id);
+    startFixChecks(decider, task.id, [...named, ...changed], command.files ?? []);
     return;
   }
   decider.stage(task.id, 'shipping', 'pushing the fix');
@@ -192,6 +204,26 @@ export function attachEvidence(decider: Decider, command: CommandOf<'agent.attac
       ...(command.width ? { width: command.width } : {}),
       ...(command.theme ? { theme: command.theme } : {}),
       ...(command.stage ? { stage: command.stage } : {}),
+    },
+  });
+}
+
+export function attachCheck(decider: Decider, command: CommandOf<'agent.attach_check'>) {
+  const { run, task } = findCurrentRun(decider, command.runId, 'attach_evidence');
+  const check = findTaskCheck(decider, task, command.checkId);
+  decider.emit({
+    type: 'evidence.attached',
+    evidence: {
+      id: decider.context.newId(),
+      taskId: task.id,
+      runId: run.id,
+      kind: command.kind,
+      title: check.label,
+      uri: `shinsa://check/${command.checkId}`,
+      attachedAt: decider.context.now,
+      checkId: command.checkId,
+      ...resolveRoundStamp(task),
+      ...(command.detail ? { detail: command.detail } : {}),
     },
   });
 }

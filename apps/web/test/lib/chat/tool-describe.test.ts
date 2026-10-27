@@ -229,6 +229,7 @@ describe('describeTool', () => {
     expect(shinsa('report_review')).toBe('Reported the review');
     expect(shinsa('ask', { question: 'Which one?' })).toBe('Asked you: Which one?');
     expect(shinsa('attach_evidence', { title: 'Login page' })).toBe('Attached evidence: Login page');
+    expect(shinsa('attach_evidence', { kind: 'test', check: 'c2' })).toBe('Linked the check as evidence: c2');
     expect(shinsa('find_tasks', { query: 'login' })).toBe('Looked up tasks: login');
     expect(shinsa('find_tasks')).toBe('Looked up tasks');
     expect(shinsa('read_task', { task_id: 't1' })).toBe('Read a task');

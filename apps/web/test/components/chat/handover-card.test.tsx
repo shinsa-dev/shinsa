@@ -47,21 +47,22 @@ describe('HandoverCard for the process tools', () => {
     expect(view.getByText('Split the work in two.')).toBeTruthy();
   });
 
-  it('shows the plan’s evidence, extra checks, impact and that it asked for your approval', () => {
+  it('shows the plan’s evidence, checks, impact and that it asked for your approval', () => {
     const view = renderCard(
       call('propose_plan', {
         goal: 'Backfill currencies.',
         phases: [{ title: 'Add the script', detail: 'With a dry run.' }],
         impact: 'About 400 rows.',
         evidence: ['test', 'preview'],
-        checks: ['bun test currency'],
+        verification: [{ label: 'Currency tests', command: 'bun test currency', phases: [1] }],
         approval: true,
       })
     );
     expect(view.getByText('Proposed the plan')).toBeTruthy();
     expect(view.getByText('About 400 rows.')).toBeTruthy();
-    expect(view.getByText('Test output · Preview link')).toBeTruthy();
-    expect(view.getByText('Extra checks')).toBeTruthy();
+    expect(view.getByText('Linked test · Preview link')).toBeTruthy();
+    expect(view.getByText('Checks')).toBeTruthy();
+    expect(view.getByText('Currency tests')).toBeTruthy();
     expect(view.getByText('bun test currency')).toBeTruthy();
     expect(view.getByText('The agent asked for your approval.')).toBeTruthy();
   });

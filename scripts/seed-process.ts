@@ -1,13 +1,14 @@
-import type {
-  CodeSpot,
-  PlanDocument,
-  Repo,
-  ReviewFinding,
-  RunUsage,
-  WorkReport,
-} from '../packages/core/src/index.ts';
+import type { CodeSpot, PlanDocument, Repo, ReviewFinding, RunUsage } from '../packages/core/src/index.ts';
 import { resolveLine } from './seed-code-kit.ts';
-import { MINUTE, NOW, type SeedTask } from './seed-kit.ts';
+import {
+  createPlanCheck,
+  HOUR,
+  MINUTE,
+  NOW,
+  type SeedReport,
+  type SeedTask,
+  type TimedSeedEvent,
+} from './seed-kit.ts';
 
 export const EXPORT_ROWS = `import { clickhouse } from '../clickhouse';
 
@@ -196,6 +197,35 @@ function createRunUsage(costUsd: number | null, tokens: number): RunUsage {
   };
 }
 
+const WEEKLY_RESET = NOW + 3 * 24 * HOUR;
+
+function createWeeklyRun(
+  runId: string,
+  from: number,
+  to: number,
+  usage: RunUsage,
+  [before, after]: [number, number]
+): TimedSeedEvent[] {
+  const attempt = {
+    type: 'run.attempted' as const,
+    runId,
+    attemptId: `${runId}-attempt`,
+    provider: 'claude',
+    model: null,
+    resumed: false,
+    handoff: null,
+    account: { id: 'seed-work', email: 'work@example.com' },
+  };
+  const readings = [
+    { percent: before, at: from, resetsAt: WEEKLY_RESET },
+    { percent: after, at: to, resetsAt: WEEKLY_RESET },
+  ];
+  return [
+    { at: from, event: attempt },
+    { at: to, event: { type: 'run.metered', runId, usage, readings } },
+  ];
+}
+
 const RATE_LIMIT_PLAN: PlanDocument = {
   goal: 'Rate-limit the public paywall API per app, so one noisy app cannot starve the others.',
   phases: [
@@ -207,7 +237,9 @@ const RATE_LIMIT_PLAN: PlanDocument = {
   approach: 'A sliding token bucket in Redis keyed by app id, checked in the API middleware.',
   files: [{ path: 'src/api/middleware/rate-limit.ts', change: 'New middleware.' }],
   outOfScope: ['Per-user limits.'],
-  verification: ['A load test that floods one app while another keeps working.'],
+  verification: [
+    createPlanCheck('Token bucket per app', 'bun test src/api/middleware/rate-limit.test.ts', [1, 2, 3]),
+  ],
   questions: [],
 };
 
@@ -253,7 +285,7 @@ const ESCALATED_FINDINGS: ReviewFinding[] = [
 
 const EXPORT_CHECKPOINT_CALL = 'Checkpointed the offset once per chunk, not per batch';
 
-const EXPORT_REPORT: WorkReport = {
+const EXPORT_REPORT: SeedReport = {
   headline:
     'Export retries resume inside the chunk that failed, and a restart resumes from the last finished chunk.',
   sections: [
@@ -337,11 +369,6 @@ const EXPORT_REPORT: WorkReport = {
         ),
       ],
     },
-  ],
-  checks: [
-    { name: 'bun lint', outcome: 'pass', detail: null },
-    { name: 'bun check-types', outcome: 'pass', detail: null },
-    { name: 'bun test', outcome: 'pass', detail: '2 new' },
   ],
   judgementCalls: [
     {
@@ -516,6 +543,13 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
           summary: 'Revised the plan to read limits from the billing plan.',
         },
       ],
+      timed: createWeeklyRun(
+        'task-rate-limit-run-0',
+        NOW - 2.9 * HOUR,
+        NOW - 2.8 * HOUR,
+        createRunUsage(1, 600_000),
+        [52, 54]
+      ),
       extra: [
         {
           type: 'plan.proposed',
@@ -544,6 +578,8 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
       branch: 'fix/export-retry-restart',
       ageHours: 4,
       worktreePath: exportBackoffPath,
+      verification: [createPlanCheck('Export chunk plan', `bun test ${EXPORT_PATHS.test}`, [1, 2, 3])],
+      checkResults: { c1: { detail: '2 new' } },
       summary: 'Retries now resume from the last written chunk.',
       report: EXPORT_REPORT,
       reviewSummary:
@@ -568,11 +604,37 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
         },
         { role: 'reviewer', minutes: 3, summary: 'The same two findings again.' },
       ],
+      timed: [
+        ...createWeeklyRun(
+          'task-export-backoff-run-0',
+          NOW - 3.6 * HOUR,
+          NOW - 3.5 * HOUR,
+          createRunUsage(1.84, 920_000),
+          [44, 48]
+        ),
+        ...createWeeklyRun(
+          'task-export-backoff-run-1',
+          NOW - 3.45 * HOUR,
+          NOW - 3.4 * HOUR,
+          createRunUsage(0.31, 210_000),
+          [48, 49]
+        ),
+        ...createWeeklyRun(
+          'task-export-backoff-run-2',
+          NOW - 3.35 * HOUR,
+          NOW - 3.25 * HOUR,
+          createRunUsage(1.12, 640_000),
+          [49, 52]
+        ),
+        ...createWeeklyRun(
+          'task-export-backoff-run-3',
+          NOW - 3.2 * HOUR,
+          NOW - 3.15 * HOUR,
+          createRunUsage(0.29, 190_000),
+          [52, 52]
+        ),
+      ],
       extra: [
-        { type: 'run.metered', runId: 'task-export-backoff-run-0', usage: createRunUsage(1.84, 920_000) },
-        { type: 'run.metered', runId: 'task-export-backoff-run-1', usage: createRunUsage(0.31, 210_000) },
-        { type: 'run.metered', runId: 'task-export-backoff-run-2', usage: createRunUsage(1.12, 640_000) },
-        { type: 'run.metered', runId: 'task-export-backoff-run-3', usage: createRunUsage(0.29, 190_000) },
         {
           type: 'review.escalated',
           taskId: 'task-export-backoff',
@@ -618,17 +680,21 @@ function listLimitTasks({ paywall, kanna }: SeedRepoPair, exportBackoffPath: str
           taskId: 'task-kanna-setup',
           problems: [
             {
-              kind: 'check_commands',
-              detail:
-                'No check commands are set, and package.json has no lint, check-types, typecheck or test script to run.',
+              kind: 'default_branch',
+              detail: 'The default branch “main” is not in the repository or on origin.',
             },
           ],
         },
       ],
       gate: {
         type: 'configuration',
-        title: 'No checks to run',
-        body: 'Checks: no check commands are set.',
+        title: 'The default branch is missing',
+        body: [
+          'Shinsa stopped before any agent started because the setup is not complete:',
+          '- The default branch “main” is not in the repository or on origin.',
+          '',
+          'Set the default branch in the repository settings, then verify the setup again.',
+        ].join('\n'),
       },
     },
   ];
@@ -691,6 +757,13 @@ function listWaitTasks({ paywall }: SeedRepoPair): SeedTask[] {
       branch: 'fix/pricing-cdn-check',
       ageHours: 6,
       runs: [{ role: 'agent', purpose: 'build', minutes: 5, summary: 'The wait ran out.' }],
+      timed: createWeeklyRun(
+        'task-wait-ran-out-run-0',
+        NOW - 5.9 * HOUR,
+        NOW - 5.8 * HOUR,
+        createRunUsage(0.9, 520_000),
+        [42, 44]
+      ),
       extra: [
         {
           type: 'run.ended',
@@ -768,18 +841,22 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
           outcome: 'completed',
           summary: 'Ported the first two event families.',
         },
-        {
-          type: 'run.metered',
-          runId: 'task-budget-cap-run-0',
-          usage: createRunUsage(0.62, 380_000),
-          weeklyPercent: 1.4,
-        },
-        {
-          type: 'run.metered',
-          runId: 'task-budget-cap-run-1',
-          usage: createRunUsage(4.71, 2_600_000),
-          weeklyPercent: 10.7,
-        },
+      ],
+      timed: [
+        ...createWeeklyRun(
+          'task-budget-cap-run-0',
+          NOW - 6.8 * HOUR,
+          NOW - 6.7 * HOUR,
+          createRunUsage(0.62, 380_000),
+          [30, 31]
+        ),
+        ...createWeeklyRun(
+          'task-budget-cap-run-1',
+          NOW - 6.6 * HOUR,
+          NOW - 6 * HOUR,
+          createRunUsage(4.71, 2_600_000),
+          [31, 42]
+        ),
       ],
       gate: {
         type: 'failure',
@@ -818,8 +895,14 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
       branch: 'ask/export-chunks',
       ageHours: 2.5,
       runs: [{ role: 'answerer', minutes: 3, summary: 'Answered the question.' }],
+      timed: createWeeklyRun(
+        'task-ask-export-run-0',
+        NOW - 2.4 * HOUR,
+        NOW - 2.35 * HOUR,
+        createRunUsage(0.18, 140_000),
+        [54, 54]
+      ),
       extra: [
-        { type: 'run.metered', runId: 'task-ask-export-run-0', usage: createRunUsage(0.18, 140_000) },
         {
           type: 'task.delivered',
           taskId: 'task-ask-export',

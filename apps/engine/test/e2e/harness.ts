@@ -48,7 +48,7 @@ export const PLAN: PlanDocument = {
   approach: 'Write them.',
   files: [],
   outOfScope: [],
-  verification: ['The checks pass.'],
+  verification: [{ label: 'Greeting files', command: 'test -f a.txt', phases: [1, 2] }],
   questions: [],
 };
 
@@ -56,6 +56,8 @@ export const IMPACT =
   'Removes the stale greeting files, two at most. The dry run lists them first; restoring them from git undoes it.';
 
 const IMPACT_REQUIRED = '`impact` is required';
+
+const NO_CODE = 'this task changes no code';
 
 export type ScriptKey = Exclude<RunRole, 'agent'> | RunPurpose;
 
@@ -109,8 +111,11 @@ interface SessionRecord {
 
 const DEFAULT_SCRIPTS: Record<ScriptKey, AgentScript> = {
   plan: async (agent) => {
-    const operates = agent.prompt.includes(IMPACT_REQUIRED);
-    await agent.call('propose_plan', toolPlan(operates ? { ...PLAN, impact: IMPACT } : PLAN));
+    const plan = agent.prompt.includes(IMPACT_REQUIRED) ? { ...PLAN, impact: IMPACT } : PLAN;
+    await agent.call('propose_plan', toolPlan(plan)).catch((error: Error) => {
+      if (!error.message.includes(NO_CODE)) throw error;
+      return agent.call('propose_plan', toolPlan({ ...plan, verification: [] }));
+    });
   },
   build: async (agent) => {
     const phase = (agent.phaseIndex ?? 0) + 1;
@@ -211,7 +216,6 @@ export function toolPlan(plan: PlanDocument) {
     ...(plan.impact === undefined ? {} : { impact: plan.impact }),
     ...(plan.operation === undefined ? {} : { operation: plan.operation }),
     ...(plan.evidence === undefined ? {} : { evidence: plan.evidence }),
-    ...(plan.checks === undefined ? {} : { checks: plan.checks }),
     ...(plan.approval === undefined ? {} : { approval: plan.approval }),
   };
 }
@@ -422,6 +426,7 @@ export interface FakePullRequest {
   unresolved: number;
   mergedWith: string | null;
   mergeCommit?: string | null;
+  checkRuns?: { name: string; status: string; conclusion: string | null; required: boolean }[];
 }
 
 interface GitHubState {

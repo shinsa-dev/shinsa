@@ -39,10 +39,12 @@ import type {
   TaskSuggestion,
   TriageDecisions,
   UsageWait,
+  WeeklyReading,
   WorkspaceMode,
 } from '../domain/index.ts';
 import type { PullRequestWatch, PullRequestWatchChange } from '../domain/pull-requests.ts';
 import type {
+  CheckChange,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -189,6 +191,8 @@ type EventBody =
       treeHash?: string | null;
     }
   | { type: 'checks.recorded'; taskId: string; results: ReportCheck[]; coverage?: Coverage }
+  | { type: 'checks.changed'; taskId: string; changes: CheckChange[]; runId: string }
+  | { type: 'checks.started'; taskId: string; checkIds: string[] }
   | { type: 'gate.opened'; gate: Gate }
   | {
       type: 'gate.answered';
@@ -251,7 +255,7 @@ type EventBody =
       usage: RunUsage;
       sessionId?: string;
       sessionUsage?: RunUsage;
-      weeklyPercent?: number;
+      readings?: WeeklyReading[];
     }
   | { type: 'run.silenced'; runId: string; since: number | null }
   | { type: 'run.silence_snoozed'; runId: string; until: number }

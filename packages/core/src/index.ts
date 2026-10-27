@@ -53,6 +53,7 @@ export {
   ATTACHED_EVIDENCE_KINDS,
   ATTENTION_LEVELS,
   assembleReport,
+  CHECK_CHANGE_ACTIONS,
   type Checklist,
   type ChecklistItem,
   type ChecklistProgress,

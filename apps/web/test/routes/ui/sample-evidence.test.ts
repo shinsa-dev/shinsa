@@ -21,8 +21,8 @@ describe('the /ui evidence samples', () => {
       'Comparison',
       'Recording',
       'Screenshot',
-      'Test run',
-      'Check run',
+      'Test',
+      'Check',
       'Note',
       'Preview',
     ]);

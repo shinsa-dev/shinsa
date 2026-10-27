@@ -1,4 +1,5 @@
 import type { FileSink, Subprocess } from 'bun';
+import { HEADLESS_BROWSER_ENV } from '../../../extensions/definitions.ts';
 import { describeError } from '../../../log/index.ts';
 import { killProcessGroup } from '../../../shell/index.ts';
 
@@ -63,7 +64,7 @@ function parseLine(line: string): Params | null {
 
 function resolveCodexEnv(extra: Record<string, string | undefined>) {
   const { CLAUDECODE: _claudeCode, ...env } = Bun.env;
-  return { ...env, ...extra };
+  return { ...env, ...HEADLESS_BROWSER_ENV, ...extra };
 }
 
 async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: string) => void) {

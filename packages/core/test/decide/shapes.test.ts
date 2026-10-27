@@ -544,7 +544,7 @@ describe('an operation', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'operation' });
     passSetup(harness, taskId);
-    proposePlan(harness, taskId, { ...PLAN, evidence: ['note'] });
+    proposePlan(harness, taskId, { ...PLAN, verification: [], evidence: ['note'] });
     approve(harness, taskId);
     const runId = harness.activeRun(taskId).id;
     expect(() => deliver(harness, taskId, 'operate')).toThrow(

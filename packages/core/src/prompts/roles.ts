@@ -23,15 +23,16 @@ import { resolveRepoCoverage } from '../test-coverage/setting.ts';
 import {
   describeApprovedPlan,
   describeBases,
-  describeCheckCommands,
   describeDismissedFindings,
   describeEarlierWork,
   describeGoal,
   describeNoRepository,
+  describePhaseChecks,
   describePlan,
   describePreviousPhases,
   describeRepository,
   describeRounds,
+  describeTaskChecks,
   describeTaskLink,
   describeWhatFollows,
   isStacked,
@@ -102,7 +103,7 @@ function describeReshapeNote(task: Task) {
     describeStepCatalog(),
     'The rules, which Shinsa checks. A question, research or an investigation that changes nothing takes none of the verification steps; anything that changes code or runs an operation takes all of them:',
     describeStepRules(),
-    'You cannot add a step or a gate of your own. You set the parameters in the plan instead: the verification plan, the evidence, extra checks, the impact of an operation, and whether the human approves the plan first.',
+    'You cannot add a step or a gate of your own. You set the parameters in the plan instead: the checks in `verification`, the evidence, the impact of an operation, and whether the human approves the plan first.',
     'For example, find the cause and then run an operation from the diagnosis: `investigate`, `your_ok`, `plan`, `operate`. Research the options, then change the code: `research`, `your_ok`, `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`. Ship a change, then backfill the data it needs: `plan`, `build`, `checks`, `agent_review`, `your_review`, `pull_request`, `merge`, `operate`.',
     `Shinsa checks the steps and tells you what to fix. \`reason\` says in one sentence why the task takes these steps, at most ${SHAPE_LIMITS.reason} characters.`,
   ].join('\n');
@@ -179,7 +180,7 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
       ? 'Before you edit anything a user sees, run the app and capture those screens as they are now, with `stage: "before"`: the human sees each with its after shot as one comparison.'
       : '',
     'For user-facing changes, run the app and capture the evidence the evidence skill describes: a before and after comparison of every screen you changed at the widths and in the themes it lists (the after shot with `stage: "after"` and the same title, width and theme as its before shot, or both at once as `kind: "comparison"` with `parts`), a short recording for an interaction, the browser console read. Attach each with `attach_evidence`.',
-    'For logic, write the test that fails without your change and passes with it, and attach its run output (`kind: "test"`, `text`).',
+    'For logic, write the test that fails without your change and passes with it, make sure one of the checks runs it (add one with `check_changes` when none does), and link that check with `attach_evidence` (`kind: "test"`, `check`: its id). Shinsa runs it and shows its command, outcome and output; never paste test output as evidence.',
     describeCoverageForPhase(repo),
     last && kinds.length > 0
       ? 'Attach all of it before you call `complete_phase`: Shinsa refuses the last phase until each kind is there.'
@@ -200,7 +201,7 @@ export function resolvePhaseInstruction(task: Task, repo: Repo | null, index: nu
       : 'Now build the whole change.',
     describeOperationForBuilder(task),
     'Do this phase completely, and only this phase. Work until it is done and verified, not until it compiles.',
-    describeCheckCommands(repo),
+    describePhaseChecks(task, repo, index + 1, last),
     last
       ? 'This is the last phase: the whole change must work end to end when you finish.'
       : 'Later phases build on this one; leave the code in a working state.',
@@ -375,7 +376,8 @@ export function resolveReviewerPrompt(
     describeEvidenceForReview(evidence),
     '',
     describeReviewScope(task, repo, stacked?.branch ?? null),
-    'Shinsa already ran the checks and they pass. Look for what checks miss.',
+    describeTaskChecks(task, repo),
+    "None of them blocks: a check that fails on the base branch too is not the change's, and CI runs the whole suite on the pull request. Look for what the checks miss, and run what the change touches that no check covers.",
     'A blocking finding is a bug, a missed requirement, a broken repository rule or a security problem. Everything optional is a suggestion.',
     'Anchor every finding to a file and line range. Reproduce a finding before you report it; one you cannot reproduce is a guess.',
     'Give every finding a title of at most 80 characters that says what is wrong in a few words.',

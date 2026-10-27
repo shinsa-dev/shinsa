@@ -19,6 +19,7 @@ import {
   listOpenBlockers,
   listOpenGates,
   listPendingDependencies,
+  listTaskChecks,
   type PlanDocument,
   type PullRequest,
   type ReportCheck,
@@ -31,6 +32,7 @@ import {
   resolveCurrentRound,
   resolveQueue,
   resolveStatePatch,
+  resolveTaskPipeline,
   type ShinsaCommand,
   type ShinsaEvent,
   type ShinsaState,
@@ -41,8 +43,10 @@ import {
   type Task,
   type WireState,
 } from '../../src/index.ts';
+import type { CheckChangeHandOver } from '../../src/report/types.ts';
 import { IMPACT, PLAN } from '../harness.ts';
 import { assertAgentInvariants, assertOneSessionPerTask } from './agent-invariants.ts';
+import { assertCheckInvariants } from './check-invariants.ts';
 import {
   assertDelegationInvariants,
   assertDelegationProgress,
@@ -121,26 +125,53 @@ const COMPOSITION_ODDS = 0.25;
 
 const STEPS = 400;
 
-const DECISIONS: GateDecision[] = [
-  'approve',
-  'approve',
-  'approve',
-  'approve',
-  'revise',
-  'reply',
-  'waive',
-  'reject',
-];
+const DECISIONS: GateDecision[] = ['approve', 'approve', 'approve', 'approve', 'revise', 'reply', 'reject'];
 
-function randomChecks(random: Random): ReportCheck[] {
-  return [
-    { name: 'lint', outcome: chance(random, 0.7) ? 'pass' : 'fail', detail: null },
-    {
-      name: pick(random, ['types', 'tests']) ?? 'types',
-      outcome: chance(random, 0.8) ? 'pass' : 'fail',
+const CHECK_NOTES = [undefined, undefined, undefined, 'passed_alone', 'fails_on_base'] as const;
+
+function randomChecks(state: ShinsaState, task: Task, random: Random): ReportCheck[] {
+  const repo = task.repoId ? (state.repos[task.repoId] ?? null) : null;
+  return listTaskChecks(task, repo).flatMap((check) => {
+    if (chance(random, 0.2)) return [];
+    const note = pick(random, [...CHECK_NOTES]);
+    const outcome = note === 'passed_alone' || chance(random, 0.75) ? 'pass' : 'fail';
+    const result = {
+      id: check.id,
+      label: check.label,
+      command: check.command,
+      outcome,
       detail: 'x',
+    } as const;
+    if (note === 'passed_alone' && outcome === 'pass') return [{ ...result, note }];
+    if (note === 'fails_on_base' && outcome === 'fail') return [{ ...result, note }];
+    return [result];
+  });
+}
+
+function listCheckChanges(state: ShinsaState, taskId: string, random: Random): CheckChangeHandOver[] {
+  if (!chance(random, 0.15)) return [];
+  const existing = state.tasks[taskId]?.checks ?? [];
+  const target = pick(random, existing);
+  const action = target ? (pick(random, ['add', 'change', 'remove'] as const) ?? 'add') : 'add';
+  return [
+    {
+      action,
+      id: action === 'add' ? null : (target?.id ?? null),
+      label: action === 'remove' ? null : `Check ${state.seq}`,
+      command: action === 'remove' ? null : `bun test src/part-${state.seq}`,
+      phases: null,
+      reason: 'New files came in.',
     },
   ];
+}
+
+function listNamedChecks(state: ShinsaState, taskId: string, random: Random) {
+  const task = state.tasks[taskId];
+  if (!task || !chance(random, 0.5)) return [];
+  return sample(
+    random,
+    (task.checks ?? []).map((check) => check.id)
+  ).slice(0, 2);
 }
 
 function randomFindings(random: Random): ReviewFinding[] {
@@ -168,11 +199,25 @@ function randomPullRequest(random: Random): PullRequest {
   };
 }
 
-function resolvePlanDocument(state: ShinsaState): PlanDocument {
-  if (state.seq % 11 === 0) return { ...PLAN, verification: [] };
-  if (state.seq % 13 === 0) return { ...PLAN, evidence: ['screenshot'], approval: true };
-  if (state.seq % 4 === 0) return PLAN;
-  return { ...PLAN, impact: IMPACT, operation: ['Run the backfill and check every row has a plan.'] };
+const MORE_CHECKS: PlanDocument['verification'] = [
+  { label: 'Panel tests', command: 'bun test src/panel', phases: [1, 2] },
+  { label: 'Web types', command: 'bun run --cwd apps/web check-types', phases: [1] },
+];
+
+function resolvePlanDocument(state: ShinsaState, taskId: string): PlanDocument {
+  const task = state.tasks[taskId];
+  const builds = task ? resolveTaskPipeline(task).includes('build') : true;
+  const verification = builds ? (state.seq % 3 === 0 ? MORE_CHECKS : PLAN.verification) : [];
+  if (state.seq % 11 === 0) return { ...PLAN, verification: builds ? [] : MORE_CHECKS };
+  if (state.seq % 13 === 0)
+    return { ...PLAN, verification, evidence: ['screenshot', 'test'], approval: true };
+  if (state.seq % 4 === 0) return { ...PLAN, verification };
+  return {
+    ...PLAN,
+    verification,
+    impact: IMPACT,
+    operation: ['Run the backfill and check every row has a plan.'],
+  };
 }
 
 function needsEvidence(state: ShinsaState, taskId: string) {
@@ -191,7 +236,11 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
     }
     switch (run.purpose ?? run.role) {
       case 'plan':
-        commands.push({ type: 'agent.propose_plan', runId, document: resolvePlanDocument(state) });
+        commands.push({
+          type: 'agent.propose_plan',
+          runId,
+          document: resolvePlanDocument(state, run.taskId),
+        });
         break;
       case 'build':
         commands.push({
@@ -200,6 +249,7 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
           summary: 'Done.',
           spots: [],
           judgementCalls: [],
+          checkChanges: listCheckChanges(state, run.taskId, random),
           ...resolvePhaseWalkthrough(runId),
         });
         if (needsEvidence(state, run.taskId) && chance(random, 0.5)) {
@@ -210,6 +260,8 @@ function listAgentCommands(state: ShinsaState, random: Random): ShinsaCommand[] 
             title: 'The panel',
             uri: 'shot.png',
           });
+          const check = pick(random, state.tasks[run.taskId]?.checks ?? []);
+          commands.push({ type: 'agent.attach_check', runId, kind: 'test', checkId: check?.id ?? 'c9' });
         }
         break;
       case 'reviewer':
@@ -410,7 +462,7 @@ function listSystemCommands(state: ShinsaState, random: Random): ShinsaCommand[]
       commands.push({ type: 'worktree.ready', taskId, path: `/wt/${taskId}`, branch: task.branch });
     }
     if (task.stage === 'checking')
-      commands.push({ type: 'checks.record', taskId, results: randomChecks(random) });
+      commands.push({ type: 'checks.record', taskId, results: randomChecks(state, task, random) });
     if (task.pushPending)
       commands.push({ type: 'pull_request.record_push', taskId, sha: `sha-${state.seq}` });
     commands.push(...listPullRequestReads(state, task, random));
@@ -483,7 +535,7 @@ const VERIFIED_PROBLEMS: ConfigProblem[][] = [
   [],
   [],
   [],
-  [{ kind: 'check_commands', detail: 'No checks.' }],
+  [{ kind: 'default_branch', detail: 'No main.' }],
   [{ kind: 'default_branch', detail: 'No main.' }],
 ];
 
@@ -533,7 +585,12 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         choices: ['A', 'B'],
         recommendation: 'A',
       },
-      { type: 'run.meter', runId, usage: randomUsage(random), weeklyPercent: (state.seq % 4) * 2 },
+      {
+        type: 'run.meter',
+        runId,
+        usage: randomUsage(random),
+        readings: [{ percent: (state.seq % 4) * 2, at: state.seq, resetsAt: null }],
+      },
       { type: 'run.silence', runId, since: chance(random, 0.7) ? state.seq : null },
     ];
     if (run.role === 'answerer')
@@ -544,6 +601,8 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
         runId,
         summary: 'Fixed.',
         treeHash: `t-${state.seq % 3}`,
+        checks: listNamedChecks(state, run.taskId, random),
+        checkChanges: listCheckChanges(state, run.taskId, random),
       };
       commands.push(fix, fix, fix);
     }
@@ -557,7 +616,12 @@ function listProcessAgentCommands(state: ShinsaState, random: Random): ShinsaCom
       commands.push(review, review, review);
     }
     if (run.purpose === 'plan') {
-      commands.push({ type: 'agent.propose_plan', runId, document: PLAN, changeSummary: 'Tightened it.' });
+      commands.push({
+        type: 'agent.propose_plan',
+        runId,
+        document: resolvePlanDocument(state, run.taskId),
+        changeSummary: 'Tightened it.',
+      });
     }
     return commands;
   });
@@ -843,6 +907,7 @@ function assertInvariants(state: ShinsaState, now: number) {
   for (const gate of Object.values(state.gates)) {
     if (gate.supersededBy !== undefined) expect(gate.status).toBe('withdrawn');
   }
+  assertCheckInvariants(state);
 }
 
 type SideStream =

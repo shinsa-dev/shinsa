@@ -1,3 +1,4 @@
+import { isBlockingCheck } from '../domain/checks.ts';
 import type {
   FixReason,
   GateDecision,
@@ -6,7 +7,7 @@ import type {
   TaskStage,
 } from '../domain/index.ts';
 import type { PullRequestWatchChange } from '../domain/pull-requests.ts';
-import type { ReportCheck, ReviewFinding } from '../report/types.ts';
+import type { CheckChange, CheckNote, ReportCheck, ReviewFinding } from '../report/types.ts';
 
 const STAGE_ACTIVITY: Partial<Record<TaskStage, string>> = {
   waiting_on_tasks: 'Waiting on another task',
@@ -39,7 +40,6 @@ const DECISION_TEXT: Record<GateDecision, string> = {
   revise: 'Asked for changes',
   reject: 'Rejected',
   reply: 'Answered',
-  waive: 'Started without checks',
 };
 
 export function describeStage(stage: TaskStage) {
@@ -61,17 +61,33 @@ export function describeDependencies(titles: string[]) {
 }
 
 export function describeChecks(results: ReportCheck[]) {
-  const failed = results.filter((check) => check.outcome === 'fail');
-  if (results.length === 0) return 'No checks are set up for this repository';
+  const failed = results.filter(isBlockingCheck);
   if (results.length === 1) return failed.length === 0 ? 'The check passed' : 'The check failed';
   if (failed.length === 0) return `All ${results.length} checks passed`;
   return `${failed.length} of ${results.length} checks failed`;
 }
 
+const NOTE_TEXT: Record<CheckNote, string> = {
+  passed_alone: 'passed when re-run alone',
+  fails_on_base: 'already failing on the base branch, so it does not block',
+};
+
 export function describeFailedChecks(results: ReportCheck[]) {
-  const failed = results.filter((check) => check.outcome === 'fail');
-  if (failed.length === 0) return null;
-  return failed.map((check) => `\`${check.name}\``).join(', ');
+  const lines = results.flatMap((check) => {
+    if (check.note) return [`${check.label}: ${NOTE_TEXT[check.note]}`];
+    return check.outcome === 'fail' ? [`${check.label}: \`${check.command}\` failed`] : [];
+  });
+  return lines.length === 0 ? null : lines.join('\n');
+}
+
+const CHANGE_VERB: Record<CheckChange['action'], string> = {
+  add: 'Added the check',
+  change: 'Changed the check',
+  remove: 'Removed the check',
+};
+
+export function describeCheckChange(change: CheckChange) {
+  return `${CHANGE_VERB[change.action]} “${change.check.label}”`;
 }
 
 export function describeFindings(findings: ReviewFinding[]) {

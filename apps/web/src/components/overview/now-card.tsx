@@ -10,6 +10,7 @@ import {
 import { Button } from '@shinsa/ui/components/button';
 import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
+import { ChecksBlock } from '@/components/checks/checks-list.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
@@ -49,6 +50,7 @@ import { describePlanEyebrow } from '@/lib/overview/plan-version.ts';
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
+import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import { describeSpent } from '@/lib/tasks/cost.ts';
 import {
   type GateReplier,
@@ -276,6 +278,7 @@ function ReviewCard({
 }) {
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
+  const checks = resolveChecksView(state, task);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -295,6 +298,7 @@ function ReviewCard({
           ? describeEscalationBody(gate.escalation)
           : describeReviewFacts(task, merge, describeSpent(state, task))}
       </p>
+      {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
       {merge && <MergeStepsBlock task={task} when='pre_merge' />}
     </NowFrame>
@@ -314,6 +318,7 @@ function WorkCard({
   const [run] = listActiveRuns(state, task.id);
   const current = progress.current;
   const leaf = traceStalledLeaf(state, task);
+  const checks = task.stage === 'checking' ? resolveChecksView(state, task) : null;
   return (
     <NowFrame
       eyebrow={
@@ -347,7 +352,10 @@ function WorkCard({
           Held up because <TaskLink state={state} task={leaf.task} /> {STALLED_REASON[leaf.reason]}.
         </p>
       )}
-      {current?.planned && current.detail && <Markdown text={current.detail} className='text-fg-3 text-xs' />}
+      {current?.planned && current.detail && !checks && (
+        <Markdown text={current.detail} className='text-fg-3 text-xs' />
+      )}
+      {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {run && <SilenceNote state={state} run={run} />}
       {run && <LiveFeed run={run} />}
     </NowFrame>

@@ -83,16 +83,4 @@ describe('EvidenceStore', () => {
       expect(store.selectFile(name)).toBeNull();
     }
   });
-
-  test('reads back stored text by its address, never a large file or one outside the store', () => {
-    const dir = createTempDir();
-    const store = new EvidenceStore(dir);
-    const text = store.writeText('4 pass', FOLDER, 'Tests');
-    const large = store.writeText('', FOLDER, 'Large');
-    truncateSync(join(dir, nameOf(large)), 1024 * 1024 + 1);
-    expect(store.selectText(text)).toBe('4 pass');
-    expect(store.selectText(large)).toBeNull();
-    expect(store.selectText(`${EVIDENCE_ROUTE}task-1/round-1/missing.txt`)).toBeNull();
-    expect(store.selectText('https://example.com/out.txt')).toBeNull();
-  });
 });

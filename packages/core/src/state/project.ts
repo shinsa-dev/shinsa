@@ -26,9 +26,10 @@ import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { resolveMergeStepKey } from '../report/merge-steps.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
 import { createTesting } from '../report/testing.ts';
-import type { ReportWalkthroughRevision } from '../report/types.ts';
+import type { ReportCheck, ReportWalkthroughRevision } from '../report/types.ts';
 import { applyAccountBound } from './accounts.ts';
 import {
+  describeCheckChange,
   describeChecks,
   describeDependencies,
   describeEscalation,
@@ -237,6 +238,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     stage,
     stageReason: event.reason,
     stageChangedAt: event.at,
+    ...(stage === 'checking' ? {} : { runningChecks: [] }),
   });
   const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');
   const text = answered ? null : describeStage(stage);
@@ -287,9 +289,16 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
           changes: resolvePlanChanges(previous.document, document),
           feedback: event.feedback ?? null,
         };
+  const checks = (document?.verification ?? []).map((check, index) => ({
+    id: `c${index + 1}`,
+    ...check,
+    phases: [...check.phases],
+    source: 'plan' as const,
+  }));
   updateTask(state, event.taskId, event.at, {
     plan: { version, body: event.body, document, proposedAt: event.at, ...revision },
     phases: (document?.phases ?? []).map(() => ({ status: 'pending' as const, at: event.at })),
+    checks,
     ...(previous === null ? {} : { planHistory: listPlanHistory(task) }),
   });
   record(state, event.taskId, event.at, {
@@ -512,17 +521,53 @@ function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported
   });
 }
 
+function mergeCheckResults(task: Task, results: ReportCheck[]) {
+  const ids = new Set(results.map((result) => result.id));
+  const kept = (task.checkResults ?? []).filter((result) => !ids.has(result.id));
+  return [...kept, ...structuredClone(results)];
+}
+
 function applyChecksRecorded(state: ShinsaState, event: EventOf<'checks.recorded'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
   updateTask(state, event.taskId, event.at, {
-    checkResults: event.results,
-    coverage: event.coverage ? structuredClone(event.coverage) : null,
+    checkResults: mergeCheckResults(task, event.results),
+    runningChecks: [],
+    ...(event.coverage ? { coverage: structuredClone(event.coverage) } : {}),
   });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
-    kind: 'review',
+    kind: 'check',
     text: describeChecks(event.results),
     detail: describeFailedChecks(event.results),
   });
+}
+
+function applyChecksChanged(state: ShinsaState, event: EventOf<'checks.changed'>) {
+  for (const change of event.changes) {
+    const task = state.tasks[event.taskId];
+    if (!task) return;
+    const checks = task.checks ?? [];
+    const id = change.check.id;
+    const next =
+      change.action === 'add'
+        ? [...checks, structuredClone(change.check)]
+        : checks.flatMap((check) => {
+            if (check.id !== id) return [check];
+            return change.action === 'remove' ? [] : [structuredClone(change.check)];
+          });
+    const results = (task.checkResults ?? []).filter((result) => result.id !== id);
+    updateTask(state, event.taskId, event.at, {
+      checks: next,
+      ...(change.action === 'add' ? {} : { checkResults: results }),
+    });
+    record(state, event.taskId, event.at, {
+      actor: 'agent',
+      kind: 'check',
+      text: describeCheckChange(change),
+      detail: `${change.action === 'remove' ? '' : `\`${change.check.command}\`: `}${change.reason}`,
+    });
+  }
 }
 
 function hasEvidenceItem(state: ShinsaState, itemId: string | undefined) {
@@ -694,6 +739,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
       break;
     case 'fix.started':
       applyFixStarted(state, event);
+      break;
+    case 'checks.changed':
+      applyChecksChanged(state, event);
+      break;
+    case 'checks.started':
+      updateTask(state, event.taskId, event.at, { runningChecks: [...event.checkIds] });
       break;
     case 'checks.recorded':
       applyChecksRecorded(state, event);

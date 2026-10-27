@@ -174,23 +174,46 @@ describe('the plan parameters propose_plan publishes', () => {
     expect(plan.impact.description).toContain(requirement('operation.impact'));
   });
 
-  test('evidence names each kind once, checks are capped, and both are only for a code change', () => {
+  test('evidence names each kind once and is only for a code change; the plan has no extra checks field', () => {
     expect(plan.evidence).toMatchObject({
       type: 'array',
       uniqueItems: true,
       maxItems: PLAN_EVIDENCE_KINDS.length,
       items: { type: 'string', enum: [...PLAN_EVIDENCE_KINDS] },
     });
-    expect(plan.checks).toMatchObject({
-      maxItems: PROTOCOL_LIMITS.planChecks,
-      items: { type: 'string', maxLength: PROTOCOL_LIMITS.checkCommand },
-    });
-    expect(plan.checks.description).toContain(requirement('code.checks'));
-    for (const field of [plan.evidence, plan.checks]) {
-      expect(field.description).toContain('Only for a task that changes code');
-    }
+    expect(plan.evidence.description).toContain('Only for a task that changes code');
+    expect('checks' in plan).toBe(false);
     expect(plan.approval.type).toBe('boolean');
     expect(TOOL_SPECS.propose_plan.inputSchema.required).not.toContain('impact');
+  });
+
+  test('each check in the plan is a label, a scoped command and its phases, within the protocol limits', () => {
+    expect(plan.verification).toMatchObject({ type: 'array', maxItems: PROTOCOL_LIMITS.checks });
+    expect(plan.verification.description).toContain(requirement('code.checks'));
+    expect(plan.verification.description).toContain('Never the whole suite');
+    const check = plan.verification.items;
+    expect(check.required).toEqual(['label', 'command', 'phases']);
+    expect(check.properties.label.maxLength).toBe(PROTOCOL_LIMITS.checkLabel);
+    expect(check.properties.command.maxLength).toBe(PROTOCOL_LIMITS.checkCommand);
+    expect(check.properties.command.description).toContain('scoped to what the change touches');
+    expect(check.properties.phases).toMatchObject({ minItems: 1, maxItems: PROTOCOL_LIMITS.planPhases });
+  });
+
+  test('a phase and a fix can change the checks, a fix can name more to run, and evidence links a check', () => {
+    const phase = TOOL_SPECS.complete_phase.inputSchema.properties;
+    const fix = TOOL_SPECS.complete_fix.inputSchema.properties;
+    expect(phase.check_changes).toBe(fix.check_changes);
+    expect(phase.check_changes).toMatchObject({ maxItems: PROTOCOL_LIMITS.checkChanges });
+    expect(phase.check_changes.items.properties.action.enum).toEqual(['add', 'change', 'remove']);
+    expect(phase.check_changes.items.properties.reason.maxLength).toBe(PROTOCOL_LIMITS.checkReason);
+    expect(phase.check_changes.items.required).toEqual(['action', 'reason']);
+    expect(fix.checks).toMatchObject({
+      maxItems: PROTOCOL_LIMITS.checks,
+      items: { maxLength: PROTOCOL_LIMITS.checkId },
+    });
+    const evidence = TOOL_SPECS.attach_evidence.inputSchema;
+    expect(evidence.properties.check.maxLength).toBe(PROTOCOL_LIMITS.checkId);
+    expect(evidence.required).toEqual(['kind']);
   });
 });
 

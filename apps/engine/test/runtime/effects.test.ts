@@ -3,9 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createPullRequestWatch,
-  type Evidence,
   evaluatePullRequestWatch,
-  type PlanDocument,
   type PullRequest,
   type ShinsaCommand,
   type ShinsaState,
@@ -408,7 +406,7 @@ describe('triage', () => {
 });
 
 describe('the setup check', () => {
-  test('asks only for what the task’s steps need: a default branch for a worktree, checks for a build', async () => {
+  test('asks only for what the task’s steps need: a default branch for a worktree', async () => {
     const { repo } = await createGitRepo({ remote: false });
     const broken = { ...repo, defaultBranch: 'trunk' };
     const cases: [Task['pipeline'], string[]][] = [
@@ -418,7 +416,7 @@ describe('the setup check', () => {
       [['plan', 'operate'], ['default_branch']],
       [
         ['plan', 'build', 'checks', 'agent_review', 'your_review', 'pull_request', 'merge'],
-        ['default_branch', 'check_commands'],
+        ['default_branch'],
       ],
     ];
     for (const [pipeline, kinds] of cases) {
@@ -658,135 +656,92 @@ describe('scratch folders', () => {
   });
 });
 
+function checksOf(...commands: string[]) {
+  return commands.map((command, index) => ({ id: `c${index + 1}`, label: `Check ${index + 1}`, command }));
+}
+
+function checksEffect(commands: string[], coverage = false) {
+  return { kind: 'checks.run' as const, taskId: 'task-1', round: 1, checks: checksOf(...commands), coverage };
+}
+
 describe('checks', () => {
   test('checks run after the agents stop, only while the task is checking, and record once per effect', async () => {
     const { repo, worktree } = await createShippingRepo();
     const { runner, dispatched, calls, commandIds } = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['test -f a.txt'] })
+      withTask({ stage: 'checking', worktreePath: worktree }, repo)
     );
     const context = createContext();
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, context);
+    await runner.apply(checksEffect(['test -f a.txt']), context);
     expect(calls).toEqual(['quiesce:task-1']);
-    expect(dispatched[0]).toMatchObject({ type: 'checks.record', results: [{ outcome: 'pass' }] });
+    expect(dispatched[0]).toMatchObject({
+      type: 'checks.record',
+      results: [{ id: 'c1', label: 'Check 1', command: 'test -f a.txt', outcome: 'pass' }],
+    });
     expect(commandIds).toEqual([`${context.key}:checks.record`]);
     const idle = setup(withTask({ stage: 'building' }, repo));
-    await idle.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    await idle.runner.apply(checksEffect(['true']), createContext());
     expect(idle.dispatched).toEqual([]);
   });
 
-  test("attaches the checks' output as evidence, leaving out output an agent attached this round", async () => {
+  test('runs exactly the checks of the effect and keeps each output as its own evidence', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const piece = (id: string, overrides: Partial<Evidence>): Evidence => ({
-      id,
-      taskId: 'task-1',
-      runId: 'run-1',
-      kind: 'test',
-      title: id,
-      uri: `/api/evidence/task-1/round-1/${id}.txt`,
-      attachedAt: 1,
-      ...overrides,
-    });
-    const { runner, dispatched, config } = setup((state) => {
-      withTask(
-        { stage: 'checking', worktreePath: worktree },
-        { ...repo, checkCommands: ['echo 4 pass', 'echo clean'] }
-      )(state);
-      for (const item of [
-        piece('agent-tests', {}),
-        piece('shinsa-earlier', { runId: null, kind: 'check' }),
-        piece('shot', { kind: 'screenshot' }),
-        piece('preview', { kind: 'note', uri: 'https://example.com/out.txt' }),
-        piece('later-round', { round: 2 }),
-        piece('other-task', { taskId: 'task-2' }),
-      ])
-        state.evidence[item.id] = item;
-    });
-    const folder = join(config.evidenceDir, 'task-1', 'round-1');
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(join(folder, 'agent-tests.txt'), '$ bun test\n4 pass [12.00ms]');
-    for (const name of ['shinsa-earlier', 'shot', 'later-round', 'other-task'])
-      writeFileSync(join(folder, `${name}.txt`), 'clean');
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
-    const uri = (dispatched[0] as { evidence: { uri: string } }).evidence.uri;
-    expect(readFileSync(join(config.evidenceDir, uri.slice('/api/evidence/'.length)), 'utf8')).toBe(
-      '$ echo clean\nPassed.\nclean'
+    const { runner, dispatched, config } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['touch repo-ran'] })
     );
-    expect(dispatched[0]).toMatchObject({
-      type: 'checks.record',
-      evidence: {
-        title: 'Checks run by Shinsa: 1 passed',
-        detail: expect.stringContaining('Left out echo 4 pass'),
-        uri: expect.stringMatching(
-          /^\/api\/evidence\/task-1\/round-1\/checks-run-by-shinsa-1-passed-\w+\.txt$/
-        ),
-      },
-    });
+    await runner.apply(checksEffect(['echo 4 pass', 'grep -q b a.txt']), createContext());
+    expect(existsSync(join(worktree, 'repo-ran'))).toBe(false);
+    const record = dispatched[0] as Extract<ShinsaCommand, { type: 'checks.record' }>;
+    expect(record.results.map((result) => [result.id, result.outcome])).toEqual([
+      ['c1', 'pass'],
+      ['c2', 'fail'],
+    ]);
+    expect(record.outputs?.map((output) => [output.checkId, output.title])).toEqual([
+      ['c1', 'Check 1'],
+      ['c2', 'Check 2'],
+    ]);
+    const read = (uri: string) =>
+      readFileSync(join(config.evidenceDir, uri.slice('/api/evidence/'.length)), 'utf8');
+    expect(read(record.outputs?.[0]?.uri ?? '')).toBe('$ echo 4 pass\nPassed.\n4 pass');
+    expect(read(record.outputs?.[1]?.uri ?? '')).toBe('$ grep -q b a.txt\nFailed.\nexit 1');
   });
 
-  test('attaches nothing when an agent attached the output of every check', async () => {
+  test('a failure whose errors all fail on the base commit too is noted and does not block; others do', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const { runner, dispatched, config } = setup((state) => {
-      withTask(
-        { stage: 'checking', worktreePath: worktree },
-        { ...repo, checkCommands: ['echo clean'] }
-      )(state);
-      state.evidence.lint = {
-        id: 'lint',
-        taskId: 'task-1',
-        runId: 'run-1',
-        kind: 'check',
-        title: 'Lint',
-        uri: '/api/evidence/task-1/round-1/lint.txt',
-        attachedAt: 1,
-      };
-    });
-    mkdirSync(join(config.evidenceDir, 'task-1', 'round-1'), { recursive: true });
-    writeFileSync(join(config.evidenceDir, 'task-1', 'round-1', 'lint.txt'), 'clean');
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
-    expect(dispatched[0]).not.toHaveProperty('evidence');
-  });
-
-  test("the plan's checks run after the repository's own, the same way, each named by its command", async () => {
-    const { repo, worktree } = await createShippingRepo();
-    const document: PlanDocument = {
-      goal: 'Add the file.',
-      phases: [],
-      behaviour: [],
-      approach: 'Write it.',
-      files: [],
-      outOfScope: [],
-      verification: ['The checks pass.'],
-      questions: [],
-      checks: ['test -f missing.txt'],
-    };
     const { runner, dispatched } = setup(
-      withTask(
-        {
-          stage: 'checking',
-          worktreePath: worktree,
-          plan: { version: 1, body: '', document, proposedAt: 1 },
-        },
-        { ...repo, checkCommands: ['test -f a.txt'] }
-      )
+      withTask({ stage: 'checking', worktreePath: worktree, branch: 'fix/tab-scroll' }, repo)
     );
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
-    expect(dispatched[0]).toMatchObject({
-      type: 'checks.record',
-      results: [
-        { name: 'test -f a.txt', outcome: 'pass' },
-        { name: 'test -f missing.txt', outcome: 'fail' },
-      ],
-    });
+    const named = (script: string, error: string) => `${script} || { echo '${error}'; exit 1; }`;
+    const checks = [
+      named('test -f missing.txt', 'missing.txt:1: is missing'),
+      named('grep -q b a.txt', 'a.txt:1: has no b'),
+      'test -f missing.txt',
+    ];
+    await runner.apply(checksEffect(checks), createContext());
+    const record = dispatched[0] as Extract<ShinsaCommand, { type: 'checks.record' }>;
+    expect(record.results.map((result) => [result.id, result.outcome, result.note ?? null])).toEqual([
+      ['c1', 'fail', 'fails_on_base'],
+      ['c2', 'fail', null],
+      ['c3', 'fail', null],
+    ]);
+    expect(record.results[0]?.detail).toStartWith('1 error, all already on the base branch.');
   });
 
-  test('after passing checks the changed lines are measured and recorded with them; failing checks skip it', async () => {
+  test('a task whose base cannot be found keeps its failures blocking', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'checking', worktreePath: worktree, branch: null }, repo)
+    );
+    await runner.apply(checksEffect(['test -f missing.txt']), createContext());
+    expect(dispatched[0]).toMatchObject({ results: [{ outcome: 'fail' }] });
+    expect((dispatched[0] as { results: { note?: string }[] }).results[0]?.note).toBeUndefined();
+  });
+
+  test('the run before review measures the changed lines with the task’s checks; other runs and failures skip it', async () => {
     const { repo, worktree } = await createShippingRepo();
     const report = "mkdir -p coverage && printf 'SF:a.txt\\nDA:1,0\\nend_of_record\\n' > coverage/lcov.info";
     const coverage = { mode: 'custom', command: report, report: 'coverage/lcov.info', format: null } as const;
-    const passing = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['true'], coverage })
-    );
-    await passing.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const passing = setup(withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage }));
+    await passing.runner.apply(checksEffect(['true'], true), createContext());
     expect(passing.dispatched[0]).toMatchObject({
       type: 'checks.record',
       coverage: {
@@ -796,21 +751,47 @@ describe('checks', () => {
         files: [{ path: 'a.txt', covered: 0, executable: 1, uncovered: [[1, 1]] }],
       },
     });
-    const failing = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['false'], coverage })
-    );
-    await failing.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const early = setup(withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage }));
+    await early.runner.apply(checksEffect(['true'], false), createContext());
+    expect(early.dispatched[0]).not.toHaveProperty('coverage');
+    const failing = setup(withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage }));
+    await failing.runner.apply(checksEffect(['grep -q b a.txt'], true), createContext());
     expect(failing.dispatched[0]).not.toHaveProperty('coverage');
+  });
+
+  test('Auto coverage runs only the tests among the task’s checks and the repository’s', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    writeFiles(worktree, {
+      'package.json': '{}',
+      'math.js': 'export function add(a, b) {\n  return a + b;\n}\n',
+      'math.test.js':
+        "import { test } from 'bun:test';\nimport { add } from './math.js';\ntest('adds', () => { add(1, 2); });\n",
+    });
+    await git(worktree, 'add', '-A');
+    await git(worktree, 'commit', '-q', '-m', 'feat: add');
+    const checks = [
+      { id: 'c1', label: 'Math', command: 'bun test ./math.test.js', phases: [1], source: 'plan' as const },
+    ];
+    const { runner, dispatched } = setup(
+      withTask(
+        { stage: 'checking', worktreePath: worktree, checks },
+        { ...repo, checkCommands: ['bunx biome check'] }
+      )
+    );
+    await runner.apply(checksEffect(['true'], true), createContext());
+    expect(dispatched[0]).toMatchObject({
+      coverage: { status: 'measured', command: expect.stringContaining('./math.test.js') },
+    });
   });
 
   test('coverage that cannot be measured is recorded as unavailable and logged, and the checks go on', async () => {
     const { repo, worktree } = await createShippingRepo();
     const coverage = { mode: 'custom', command: 'true', report: 'coverage/lcov.info', format: null } as const;
     const { runner, dispatched } = setup(
-      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, checkCommands: ['true'], coverage })
+      withTask({ stage: 'checking', worktreePath: worktree }, { ...repo, coverage })
     );
-    const warn = spyOn(log, 'warn');
-    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    await runner.apply(checksEffect(['true'], true), createContext());
     expect(warn).toHaveBeenCalledWith('[Coverage] Could not measure the changed lines', {
       taskId: 'task-1',
       reason: expect.stringContaining('wrote no report'),
@@ -823,23 +804,17 @@ describe('checks', () => {
     });
   });
 
-  test('cancelled checks stop the running command, skip the rest and record nothing', async () => {
+  test('cancelled checks stop the running commands and record nothing', async () => {
     const { repo, worktree } = await createShippingRepo();
-    const { runner, dispatched } = setup(
-      withTask(
-        { stage: 'checking', worktreePath: worktree },
-        { ...repo, checkCommands: ['touch started && sleep 30', 'touch second'] }
-      )
-    );
+    const { runner, dispatched } = setup(withTask({ stage: 'checking', worktreePath: worktree }, repo));
     const controller = new AbortController();
     const running = runner.apply(
-      { kind: 'checks.run', taskId: 'task-1', round: 1 },
+      checksEffect(['touch started && sleep 30', 'sleep 30']),
       createContext(controller.signal)
     );
     await until('the first check to start', () => existsSync(join(worktree, 'started')));
     controller.abort();
     await running;
-    expect(existsSync(join(worktree, 'second'))).toBe(false);
     expect(dispatched).toEqual([]);
   });
 });

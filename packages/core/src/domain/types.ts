@@ -8,10 +8,11 @@ import type {
   ReportWalkthrough,
   ReviewDisagreement,
   ReviewFinding,
+  TaskCheck,
   WorkReport,
 } from '../report/types.ts';
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
-import type { RunAccount, UsageWait } from './accounts.ts';
+import type { RunAccount, UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
 import type { CiRun, MergeQueueEntry, PullRequestWatch } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
@@ -107,6 +108,15 @@ export interface RunHandoff {
   approxTokens: number;
 }
 
+export interface RunMeter {
+  attemptId: string;
+  window: string;
+  from: number;
+  to: number;
+  usage: RunUsage;
+  readings: WeeklyReading[];
+}
+
 export interface RunAttempt {
   attemptId: string;
   provider: string;
@@ -122,7 +132,7 @@ export type RunContinuationReason = 'shutdown' | 'crash';
 
 export type GateStatus = 'open' | 'answered' | 'withdrawn';
 
-export type GateDecision = 'approve' | 'revise' | 'reject' | 'reply' | 'waive';
+export type GateDecision = 'approve' | 'revise' | 'reject' | 'reply';
 
 export type GateType =
   | 'plan'
@@ -173,12 +183,7 @@ export interface ReviewEscalation {
   at: number;
 }
 
-export type ConfigProblemKind =
-  | 'repository'
-  | 'no_repository'
-  | 'default_branch'
-  | 'check_commands'
-  | 'workspace';
+export type ConfigProblemKind = 'repository' | 'no_repository' | 'default_branch' | 'workspace';
 
 export interface ConfigProblem {
   kind: ConfigProblemKind;
@@ -205,7 +210,6 @@ export interface Repo {
   remote: string | null;
   projectId: string | null;
   checkCommands: string[];
-  checksWaived?: boolean;
   workspace?: WorkspaceMode;
   coverage?: CoverageSetting;
 }
@@ -255,6 +259,7 @@ export interface PhaseReport {
   spots: CodeSpot[];
   judgementCalls: JudgementCall[];
   walkthrough?: ReportWalkthrough | null;
+  files?: string[];
   at: number;
 }
 
@@ -327,6 +332,7 @@ export type ActivityKind =
   | 'decision'
   | 'work'
   | 'review'
+  | 'check'
   | 'fix'
   | 'pull_request'
   | 'evidence'
@@ -408,6 +414,8 @@ export interface Task {
   pushPending?: boolean;
   recoveries: number;
   phaseReports: PhaseReport[];
+  checks?: TaskCheck[];
+  runningChecks?: string[];
   checkResults: ReportCheck[] | null;
   coverage?: Coverage | null;
   pullRequest: PullRequest | null;
@@ -490,7 +498,7 @@ export interface Run {
   monitorId?: string | null;
   feedback?: string | null;
   usage?: RunUsage | null;
-  weeklyPercent?: number;
+  meters?: RunMeter[];
   silence?: RunSilence | null;
   usageWaitId?: string | null;
   account?: RunAccount | null;
@@ -543,6 +551,7 @@ export interface Evidence {
   stage?: EvidenceStage;
   itemId?: string;
   label?: string;
+  checkId?: string;
 }
 
 export interface EvidencePart {
@@ -553,7 +562,7 @@ export interface EvidencePart {
 }
 
 export interface CheckEvidence {
+  checkId: string;
   title: string;
   uri: string;
-  detail?: string;
 }

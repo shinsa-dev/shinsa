@@ -30,6 +30,7 @@ for await (const chunk of Bun.stdin.stream()) {
     appendFileSync(${JSON.stringify(received)}, line + '\\n');
     const message = JSON.parse(line);
     if (message.method === 'echo') out(JSON.stringify({ id: message.id, result: message.params }));
+    if (message.method === 'env') out(JSON.stringify({ id: message.id, result: { headless: process.env.PLAYWRIGHT_MCP_HEADLESS } }));
     if (message.method === 'refuse') out(JSON.stringify({ id: message.id, error: {} }));
     if (message.method === 'quit') {
       process.stderr.write('first\\n\\nbye from the server');
@@ -49,6 +50,7 @@ describe('the app server client', () => {
     const server = createServer();
     const client = new CodexClient({ path: server.path, cwd: server.cwd });
     expect(await client.request('echo', { value: 1 })).toEqual({ value: 1 });
+    expect(await client.request('env', {})).toEqual({ headless: 'true' });
     await expect(client.request('refuse', {})).rejects.toThrow(
       new CodexRequestError('refuse', 'Codex refused the request.')
     );

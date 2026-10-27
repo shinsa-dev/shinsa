@@ -21,7 +21,13 @@ function briefed(instruction: string) {
 describe('resolveFixFocus', () => {
   test('names what each fix prompt is for, after the house rules', () => {
     const cases = [
-      [resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]), 'checks'],
+      [
+        resolveChecksFixPrompt(
+          [{ id: 'c1', label: 'Tests', command: 'bun test src/a', outcome: 'fail', detail: '' }],
+          false
+        ),
+        'checks',
+      ],
       [resolveReviewFixPrompt([finding]), 'review'],
       [resolveHumanFixPrompt('Rename it.', []), 'changes'],
       [resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, []), 'changes'],

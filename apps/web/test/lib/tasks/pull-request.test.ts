@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'bun:test';
-import type { Task } from '@shinsa/core';
 import {
-  type Check,
-  CI_GLYPH,
-  countPassing,
   describeMergeable,
   describePullRequestChecks,
   describePullRequestState,
-  listTaskChecks,
   type PullRequest,
   resolvePullRequestTone,
 } from '@/lib/tasks/pull-request.ts';
-import { createTask, NOW } from '../../support/state.ts';
+import { NOW } from '../../support/state.ts';
 
 function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
   return {
@@ -25,9 +20,6 @@ function pullRequest(overrides: Partial<PullRequest> = {}): PullRequest {
     ...overrides,
   };
 }
-
-const PASS: Check = { name: 'test', outcome: 'pass', detail: null };
-const FAIL: Check = { name: 'lint', outcome: 'fail', detail: 'two errors' };
 
 describe('resolvePullRequestTone', () => {
   it('is green open, red failing, amber running, purple merged and neutral closed', () => {
@@ -92,32 +84,5 @@ describe('describePullRequestChecks', () => {
       label: 'Closed',
       tone: 'neutral',
     });
-  });
-});
-
-describe('CI_GLYPH', () => {
-  it('labels every CI state except passing, which its accent check already says', () => {
-    expect(CI_GLYPH.passing.label).toBeNull();
-    expect(CI_GLYPH.failing.label).toBe('Failing');
-    expect(CI_GLYPH.pending.label).toBe('Running');
-    expect(CI_GLYPH.none.label).toBe('None');
-  });
-});
-
-describe('listTaskChecks', () => {
-  it('prefers the latest check results, then the report, then nothing', () => {
-    const report = { headline: '', sections: [], checks: [PASS], judgementCalls: [] } as NonNullable<
-      Task['report']
-    >;
-    expect(listTaskChecks(createTask({ id: 't', checkResults: [FAIL], report }))).toEqual([FAIL]);
-    expect(listTaskChecks(createTask({ id: 't', report }))).toEqual([PASS]);
-    expect(listTaskChecks(createTask({ id: 't' }))).toEqual([]);
-  });
-});
-
-describe('countPassing', () => {
-  it('counts only checks that passed', () => {
-    expect(countPassing([PASS, FAIL, { ...PASS, outcome: 'skipped' }, PASS])).toBe(2);
-    expect(countPassing([])).toBe(0);
   });
 });

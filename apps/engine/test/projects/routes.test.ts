@@ -158,7 +158,7 @@ describe('a project’s repositories and folders', () => {
     older();
   });
 
-  test('every registered repository says which coverage command Auto would run, or none', async () => {
+  test('every registered repository says which coverage tool Auto would use, or none', async () => {
     const { home, engine, call, projectId } = await setup();
     const app = await createGitRepo({
       root: home,
@@ -174,7 +174,7 @@ describe('a project’s repositories and folders', () => {
       detected: {
         [ids.app ?? '']: {
           tool: 'go test',
-          command: "go test ./... -coverprofile='<report folder>/cover.out'",
+          command: "The test checks of each task, run once more with go test's coverage report.",
         },
         [ids.web ?? '']: null,
       },

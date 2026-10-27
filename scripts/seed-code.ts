@@ -40,7 +40,19 @@ import {
   serializeRectsPng,
   serializeReviewFixture,
 } from './seed-code-kit.ts';
-import { DAY, HOUR, MINUTE, NOW, type Push, resolveAgentSession, type SeedTask } from './seed-kit.ts';
+import {
+  createPlanCheck,
+  DAY,
+  HOUR,
+  listSeedCheckResults,
+  MINUTE,
+  NOW,
+  type Push,
+  resolveAgentSession,
+  type SeedTask,
+} from './seed-kit.ts';
+
+const SAMPLE_BASELINE = { checkCommands: ['bun lint', 'bunx knip'] };
 
 const SOURCE = join(import.meta.dir, '..');
 const SOURCE_COMMIT = '359025295bdde05bff64cbdd711ee9bb1aee7956';
@@ -798,7 +810,7 @@ export function createCodeSample(repos: string, worktrees: string): CodeSample {
       defaultBranch: 'main',
       remote: REMOTE,
       projectId: PROJECT_ID,
-      checkCommands: ['bun lint', 'bun check-types', 'bun run test', 'bunx knip'],
+      checkCommands: [...SAMPLE_BASELINE.checkCommands],
       coverage: {
         mode: 'custom',
         command: SAMPLE_COVERAGE_COMMAND,
@@ -978,8 +990,8 @@ export const REVIEW_PLAN: PlanDocument = {
   ],
   outOfScope: ['Schedule targets and MCP server targets, which are a different idea.'],
   verification: [
-    'The review tests pass against the recorded fixture.',
-    'The walkthrough looks the same by hand.',
+    createPlanCheck('Review spots', 'bun test apps/web/test/lib/review', [1, 2, 3]),
+    createPlanCheck('Web types', 'bun run --cwd apps/web check-types', [1, 2, 3]),
   ],
   questions: [],
 };
@@ -1634,23 +1646,19 @@ export function listReviewFindings(sample: CodeSample): ReviewFinding[] {
   ];
 }
 
-const FAILED_CHECKS: ReportCheck[] = [
-  { name: 'bun lint', outcome: 'pass', detail: null },
-  { name: 'bun check-types', outcome: 'pass', detail: null },
-  { name: 'bun run test', outcome: 'pass', detail: null },
-  {
-    name: 'bunx knip',
+const FAILED_CHECKS = listSeedCheckResults(REVIEW_PLAN.verification, SAMPLE_BASELINE, {
+  c1: { detail: '6 tests, 5 new' },
+  r2: {
     outcome: 'fail',
     detail: `Unused exported types (1)\nSpotKey  interface  ${SAMPLE_PATHS.spotKeys}:1:18`,
   },
-];
+});
 
-const PASSED_CHECKS: ReportCheck[] = [
-  { name: 'bun lint', outcome: 'pass', detail: null },
-  { name: 'bun check-types', outcome: 'pass', detail: null },
-  { name: 'bun run test', outcome: 'pass', detail: '5 new tests' },
-  { name: 'bunx knip', outcome: 'pass', detail: null },
-];
+const PASSED_CHECKS = listSeedCheckResults(REVIEW_PLAN.verification, SAMPLE_BASELINE, {
+  c1: { detail: '6 tests, 5 new' },
+});
+
+const FIX_CHECKS = PASSED_CHECKS.filter((check) => check.id === 'r2');
 
 function scriptReview(sample: CodeSample, push: Push) {
   const task = SAMPLE_REVIEW;
@@ -1719,7 +1727,7 @@ function scriptReview(sample: CodeSample, push: Push) {
   push(at(REVIEW_MARKS.passedChecks), {
     type: 'checks.recorded',
     taskId: task,
-    results: PASSED_CHECKS,
+    results: FIX_CHECKS,
     coverage: sample.review.coverage,
   });
   stage(push, task, at(REVIEW_MARKS.passedChecks + 0.2), 'reviewing', 'agent review');
@@ -1777,16 +1785,13 @@ export const MERGED_PLAN: PlanDocument = {
     { path: SAMPLE_PATHS.queueTest, change: 'New tests.' },
   ],
   outOfScope: ['Changing how gates are ranked against each other.'],
-  verification: ['bun test packages/core/test/queue'],
+  verification: [createPlanCheck('Queue order', 'bun test packages/core/test/queue', [1, 2])],
   questions: [],
 };
 
-const MERGED_CHECKS: ReportCheck[] = [
-  { name: 'bun lint', outcome: 'pass', detail: null },
-  { name: 'bun check-types', outcome: 'pass', detail: null },
-  { name: 'bun run test', outcome: 'pass', detail: '2 new tests' },
-  { name: 'bunx knip', outcome: 'pass', detail: null },
-];
+const MERGED_CHECKS = listSeedCheckResults(MERGED_PLAN.verification, SAMPLE_BASELINE, {
+  c1: { detail: '2 tests, both new' },
+});
 
 function describeMergedWalkthrough(merged: MergedNotes): ReportWalkthrough {
   return {
@@ -2115,7 +2120,14 @@ export const LIVE_PLAN: PlanDocument = {
     { path: SAMPLE_PATHS.highlight, change: 'Uses the theme.' },
   ],
   outOfScope: ['The chat’s code fences.'],
-  verification: ['Screenshots in both themes.'],
+  verification: [
+    createPlanCheck('Code theme types', 'bun run --cwd packages/ui check-types', [1, 2, 3]),
+    createPlanCheck(
+      'Lint the code view',
+      'bunx biome check packages/ui/src/code apps/web/src/components/code',
+      [2, 3]
+    ),
+  ],
   questions: [],
   evidence: ['screenshot'],
 };

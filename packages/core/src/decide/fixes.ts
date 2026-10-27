@@ -1,19 +1,9 @@
-import type { CommandOf } from '../commands/index.ts';
-import {
-  type CheckEvidence,
-  type FixReason,
-  type ReviewEscalation,
-  type ReviewEscalationReason,
-  resolveRoundStamp,
-  type Task,
-} from '../domain/index.ts';
-import { resolveAgentPrompt, resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
-import type { ReportCheck, ReviewFinding } from '../report/types.ts';
+import type { FixReason, ReviewEscalation, ReviewEscalationReason, Task } from '../domain/index.ts';
+import { resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
+import type { ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
-import { applyEditsApproval } from './edits.ts';
 import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
-import { openReviewGate, startReview } from './lifecycle.ts';
-import { shipReviewedWork } from './pull-requests.ts';
+import { openReviewGate } from './lifecycle.ts';
 
 const MAX_STALLED_FIXES = 2;
 
@@ -119,23 +109,6 @@ export function startFix(
   });
 }
 
-function reactToChecks(decider: Decider, taskId: string, results: ReportCheck[]) {
-  const failed = results.filter((check) => check.outcome === 'fail');
-  if (failed.length === 0) {
-    decider.progressed(taskId);
-    if (applyEditsApproval(decider, taskId, 'review')) shipReviewedWork(decider, taskId);
-    else startReview(decider, taskId);
-    return;
-  }
-  startFix(
-    decider,
-    taskId,
-    'checks',
-    resolveChecksFixPrompt(results),
-    resolveSignature(failed.map((check) => check.name))
-  );
-}
-
 function isDismissed(task: Task, finding: ReviewFinding) {
   return (task.dismissedFindings ?? []).some(
     (dismissed) =>
@@ -169,34 +142,4 @@ export function reactToFindings(decider: Decider, taskId: string, findings: Revi
     resolveReviewFixPrompt(findings),
     resolveSignature(blocking.map((finding) => finding.file ?? ''))
   );
-}
-
-export function recordChecks(decider: Decider, command: CommandOf<'checks.record'>) {
-  const task = decider.task(command.taskId);
-  if (task.stage !== 'checking') return;
-  decider.emit({
-    type: 'checks.recorded',
-    taskId: command.taskId,
-    results: command.results,
-    ...(command.coverage ? { coverage: command.coverage } : {}),
-  });
-  if (command.evidence) attachCheckEvidence(decider, task, command.evidence);
-  reactToChecks(decider, command.taskId, command.results);
-}
-
-function attachCheckEvidence(decider: Decider, task: Task, evidence: CheckEvidence) {
-  decider.emit({
-    type: 'evidence.attached',
-    evidence: {
-      id: decider.context.newId(),
-      taskId: task.id,
-      runId: null,
-      kind: 'check',
-      title: evidence.title,
-      uri: evidence.uri,
-      attachedAt: decider.context.now,
-      ...resolveRoundStamp(task),
-      ...(evidence.detail ? { detail: evidence.detail } : {}),
-    },
-  });
 }

@@ -115,7 +115,16 @@ describe('effects where agents work', () => {
       butler,
       workspaces
     );
-    const checks = runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const checks = runner.apply(
+      {
+        kind: 'checks.run',
+        taskId: 'task-1',
+        round: 1,
+        checks: [{ id: 'r1', label: 'true', command: 'true' }],
+        coverage: false,
+      },
+      createContext()
+    );
     await Bun.sleep(20);
     expect(dispatched).toEqual([]);
     await release();
@@ -191,7 +200,16 @@ describe('effects where agents work', () => {
       editedPaths: ['a.txt'],
     };
     const approved = setup({ ...task, approvedEdits: 'review' } as Partial<Task>, checked);
-    await approved.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 0 }, createContext());
+    await approved.runner.apply(
+      {
+        kind: 'checks.run',
+        taskId: 'task-1',
+        round: 0,
+        checks: [{ id: 'r1', label: 'true', command: 'true' }],
+        coverage: false,
+      },
+      createContext()
+    );
     expect(approved.dispatched.map((command) => command.type)).toEqual([
       'task.commit_edits',
       'checks.record',
@@ -200,7 +218,16 @@ describe('effects where agents work', () => {
 
     writeFiles(path, { 'a.txt': 'a, by you again\n' });
     const plain = setup(task as Partial<Task>, checked);
-    await plain.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 0 }, createContext());
+    await plain.runner.apply(
+      {
+        kind: 'checks.run',
+        taskId: 'task-1',
+        round: 0,
+        checks: [{ id: 'r1', label: 'true', command: 'true' }],
+        coverage: false,
+      },
+      createContext()
+    );
     expect(plain.dispatched.map((command) => command.type)).toEqual(['checks.record']);
     expect(await git(path, 'status', '--porcelain')).toBe('M a.txt');
   });

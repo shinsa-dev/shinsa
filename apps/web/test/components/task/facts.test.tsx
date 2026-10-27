@@ -7,6 +7,7 @@ import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createPartialCoverage } from '../../support/coverage.ts';
 import { findTooltipText } from '../../support/hover.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createRound } from '../../support/rounds.ts';
 import {
   listSentCommands,
@@ -258,5 +259,40 @@ describe('the coverage fact', () => {
       })
     );
     expect(screen.queryByText(/changed lines/)).toBeNull();
+  });
+});
+
+describe('the checks fact', () => {
+  const checks = [
+    { id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', phases: [1], source: 'plan' as const },
+    { id: 'c2', label: 'Types', command: 'bun run check-types', phases: [1], source: 'agent' as const },
+  ];
+
+  it('sums up the checks before the pull request, and leaves them to the pull request’s fact after it', () => {
+    const view = renderFacts(
+      createTask({
+        id: 't',
+        handle: 'SW-7',
+        checks,
+        checkResults: [
+          { id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', outcome: 'pass', detail: null },
+          { id: 'c2', label: 'Types', command: 'bun run check-types', outcome: 'fail', detail: null },
+        ],
+      })
+    );
+    expect(screen.getByText('1 of 2 checks passed')).toBeTruthy();
+    view.unmount();
+    renderFacts(
+      createTask({
+        id: 't',
+        handle: 'SW-7',
+        checks,
+        stage: 'checking',
+        stageReason: 'running the checks before review',
+        pullRequest: createPullRequest({ number: 9 }),
+      })
+    );
+    expect(screen.getByText('#9')).toBeTruthy();
+    expect(screen.queryByText(/checks? passed|Running/)).toBeNull();
   });
 });

@@ -72,7 +72,7 @@ describe('resolveQueueSummary', () => {
       branch: 'fix/setup',
       waitsOn: [],
     });
-    verifySetup(harness, taskId, [{ kind: 'check_commands', detail: 'No checks.' }]);
+    verifySetup(harness, taskId, [{ kind: 'default_branch', detail: 'No main.' }]);
     const summary = resolveQueueSummary(harness.state, 0, 'http://localhost:5180');
     expect(summary.decisions.map((decision) => decision.label)).toEqual(['Paused']);
   });

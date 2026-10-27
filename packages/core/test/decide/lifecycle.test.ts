@@ -205,7 +205,18 @@ describe('phases', () => {
     const task = harness.task(taskId);
     expect(task.stage).toBe('checking');
     expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
-    expect(harness.lastEffect('checks.run')).toEqual({ kind: 'checks.run', taskId, round: 0 });
+    expect(task.stageReason).toBe('running the checks before review');
+    expect(harness.lastEffect('checks.run')).toEqual({
+      kind: 'checks.run',
+      taskId,
+      round: 0,
+      checks: [
+        { id: 'c1', label: 'Panel tests', command: 'bun test src/panel' },
+        { id: 'r1', label: 'bun lint', command: 'bun lint' },
+        { id: 'r2', label: 'bun check-types', command: 'bun check-types' },
+      ],
+      coverage: true,
+    });
     expect(isTaskLive(harness.state, task)).toBe(true);
   });
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import type { Plan } from '@shinsa/core';
 import {
   ACTOR_LABEL,
+  listActivityDetail,
   listActivityNewestFirst,
   resolveActivityActor,
   resolveActivityGlyph,
@@ -70,6 +71,25 @@ describe('listActivityNewestFirst', () => {
       'Building started',
       'Late note',
     ]);
+  });
+});
+
+describe('listActivityDetail', () => {
+  it('splits a check entry’s detail into its lines, and keeps every other detail whole', () => {
+    const entry = { at: 1, actor: 'shinsa', text: '1 of 2 checks failed', evidenceId: null } as const;
+    expect(
+      listActivityDetail({
+        ...entry,
+        kind: 'check',
+        detail: 'Types: `tsc` failed\n\nLint: passed when re-run alone',
+      })
+    ).toEqual(['Types: `tsc` failed', 'Lint: passed when re-run alone']);
+    expect(listActivityDetail({ ...entry, kind: 'note', detail: 'One\nTwo' })).toEqual(['One\nTwo']);
+    expect(listActivityDetail({ ...entry, kind: 'check', detail: null })).toEqual([]);
+    expect(resolveActivityGlyph({ ...entry, kind: 'check', detail: null })).toEqual({
+      icon: 'IconTestTube',
+      tone: 'blue',
+    });
   });
 });
 

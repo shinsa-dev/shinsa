@@ -25,11 +25,14 @@ import type {
   TaskPriority,
   TaskShape,
   TaskSize,
+  WeeklyReading,
 } from '../domain/index.ts';
 import type { PullRequestRemark } from '../domain/pull-requests.ts';
 import type {
+  CheckChangeHandOver,
   CodeSpot,
   JudgementCall,
+  LinkedEvidenceKind,
   PlanDocument,
   ReportCheck,
   ReportWalkthrough,
@@ -128,14 +131,19 @@ type AgentCommand =
       spots: CodeSpot[];
       judgementCalls: JudgementCall[];
       walkthrough?: ReportWalkthrough | null;
+      checkChanges?: CheckChangeHandOver[];
       treeHash?: string | null;
+      files?: string[];
     }
   | {
       type: 'agent.complete_fix';
       runId: string;
       summary: string;
       walkthrough?: ReportWalkthroughRevision | null;
+      checks?: string[];
+      checkChanges?: CheckChangeHandOver[];
       treeHash?: string | null;
+      files?: string[];
     }
   | {
       type: 'agent.report_review';
@@ -156,7 +164,7 @@ type AgentCommand =
   | {
       type: 'agent.attach_evidence';
       runId: string;
-      kind: EvidenceKind;
+      kind: Exclude<EvidenceKind, LinkedEvidenceKind>;
       title: string;
       uri: string;
       detail?: string | null;
@@ -172,6 +180,13 @@ type AgentCommand =
       detail?: string | null;
       width?: number | null;
       theme?: EvidenceTheme | null;
+    }
+  | {
+      type: 'agent.attach_check';
+      runId: string;
+      kind: LinkedEvidenceKind;
+      checkId: string;
+      detail?: string | null;
     }
   | { type: 'agent.note'; runId: string; note: string }
   | {
@@ -266,7 +281,7 @@ type SystemCommand =
       type: 'checks.record';
       taskId: string;
       results: ReportCheck[];
-      evidence?: CheckEvidence;
+      outputs?: CheckEvidence[];
       coverage?: Coverage;
     }
   | { type: 'effect.fail'; taskId: string; title: string; detail: string }
@@ -276,7 +291,13 @@ type SystemCommand =
   | { type: 'message.drop'; taskId: string; messageIds: string[]; reason: string }
   | { type: 'runs.dispatch' }
   | { type: 'monitor.fire'; taskId: string; monitorId: string; attempt: number }
-  | { type: 'run.meter'; runId: string; usage: RunUsage; sessionId?: string | null; weeklyPercent?: number }
+  | {
+      type: 'run.meter';
+      runId: string;
+      usage: RunUsage;
+      sessionId?: string | null;
+      readings?: WeeklyReading[];
+    }
   | { type: 'run.silence'; runId: string; since: number | null }
   | { type: 'config.record'; taskId: string; problems: ConfigProblem[]; repoId?: string }
   | { type: 'pull_request.record_push'; taskId: string; sha: string }

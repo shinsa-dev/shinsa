@@ -7,7 +7,7 @@ import { describeFailure, runCommand, runCommandOrThrow } from '../shell/index.t
 import { assertRefName, slugify } from './refs.ts';
 import { runGitOrThrow } from './run.ts';
 
-export const GIT_NETWORK_TIMEOUT_MS = 2 * 60 * 1000;
+const GIT_NETWORK_TIMEOUT_MS = 2 * 60 * 1000;
 
 async function isBranchTaken(repo: Repo, branch: string, signal?: AbortSignal) {
   for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {

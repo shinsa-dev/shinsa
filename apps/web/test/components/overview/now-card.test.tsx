@@ -111,6 +111,62 @@ describe('NowCard on the Overview', () => {
     expect(eyebrow.textContent).not.toMatch(/round 2|started/);
   });
 
+  it('names the run of the checks between phases and spins the checks it runs, so it never looks stuck', () => {
+    const checks = [
+      { id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', phases: [1], source: 'plan' as const },
+      { id: 'c2', label: 'Types', command: 'bun run check-types', phases: [2], source: 'plan' as const },
+    ];
+    const task = createTask({
+      id: 'task-1',
+      stage: 'checking',
+      stageReason: 'running the checks for phase 1 of 2',
+      plan: {
+        version: 1,
+        body: '',
+        proposedAt: 0,
+        document: {
+          goal: 'Ship it.',
+          phases: [
+            { title: 'First', detail: 'The first half.' },
+            { title: 'Second', detail: 'The second half.' },
+          ],
+          behaviour: [],
+          approach: '',
+          files: [],
+          outOfScope: [],
+          verification: [],
+          questions: [],
+        },
+      },
+      phases: [{ status: 'done', at: 0 }],
+      phaseReports: [{ index: 1, summary: '', spots: [], judgementCalls: [], at: 0 }],
+      checks,
+      runningChecks: ['c1'],
+    });
+    const { view } = renderOverview(createShinsaState({ tasks: [task] }), task, undefined);
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('Running the checks for phase 1 of 2')).toBeTruthy();
+    expect(card.getByText('Running 1 check')).toBeTruthy();
+    expect(card.getByRole('status', { name: 'Running' })).toBeTruthy();
+    expect(card.queryByText('The second half.')).toBeNull();
+  });
+
+  it('lists the checks on the review card', () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'awaiting_review',
+      checks: [{ id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', phases: [1], source: 'plan' }],
+      checkResults: [
+        { id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', outcome: 'pass', detail: null },
+      ],
+    });
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1' });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    const card = within(view.container.querySelector('section') as HTMLElement);
+    expect(card.getByText('Building')).toBeTruthy();
+    expect(card.getByText('bun test a.test.ts')).toBeTruthy();
+  });
+
   it('offers Review then Approve changes on a review gate', () => {
     const { task, gate, state } = reviewing();
     const { view } = renderOverview(state, task, gate);
@@ -237,7 +293,7 @@ describe('NowCard on the Overview', () => {
     expect(view.queryByText('Approved. Building now.')).toBeNull();
   });
 
-  it('shows the plan’s evidence, extra checks and impact under its phases, and that it asked for your approval', () => {
+  it('shows the plan’s evidence, checks and impact under its phases, and that it asked for your approval', () => {
     const task = createTask({
       id: 'task-1',
       stage: 'awaiting_plan',
@@ -252,11 +308,13 @@ describe('NowCard on the Overview', () => {
           approach: '',
           files: [],
           outOfScope: [],
-          verification: ['A test for a product without a currency'],
+          verification: [
+            { label: 'Currency tests', command: 'bun test currency', phases: [1] },
+            { label: 'Backfill dry run', command: 'bun scripts/backfill.ts --dry-run', phases: [1] },
+          ],
           questions: [],
           impact: 'About 12,400 products.',
           evidence: ['screenshot', 'recording'],
-          checks: ['bun test currency', 'bun scripts/backfill.ts --dry-run'],
           approval: true,
         },
       },
@@ -268,7 +326,8 @@ describe('NowCard on the Overview', () => {
     expect(card.getByText('About 12,400 products.')).toBeTruthy();
     expect(card.getByText('Evidence')).toBeTruthy();
     expect(card.getByText('Screenshot · Recording')).toBeTruthy();
-    expect(card.getByText('Extra checks')).toBeTruthy();
+    expect(card.getByText('Checks')).toBeTruthy();
+    expect(card.getByText('Backfill dry run')).toBeTruthy();
     expect(card.getByText('bun scripts/backfill.ts --dry-run')).toBeTruthy();
     expect(card.getByText('The agent asked for your approval.')).toBeTruthy();
   });
@@ -493,32 +552,31 @@ describe('NowCard on the Overview', () => {
     expect((view.getByRole('button', { name: 'Approve changes' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('shows what the setup is missing, verifies it again, waives the checks or cancels', async () => {
+  it('shows what the setup is missing, verifies it again or cancels, and never offers to skip checks', async () => {
     const task = createTask({
       id: 'task-1',
       stage: 'triage',
-      configProblems: [{ kind: 'check_commands', detail: 'No check commands are set.' }],
+      configProblems: [{ kind: 'default_branch', detail: 'The repository has no default branch.' }],
     });
     const gate = createGate({
       id: 'gate-1',
       taskId: 'task-1',
       type: 'configuration',
-      title: 'No checks to run',
-      body: 'Shinsa stopped before any agent started because the setup is not complete:\n- No check commands are set.',
+      title: 'The default branch is missing',
+      body: 'Shinsa stopped before any agent started because the setup is not complete:\n- The repository has no default branch.',
     });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
-    expect(view.getByText('No checks to run')).toBeTruthy();
-    expect(view.getByText('No check commands are set.')).toBeTruthy();
-    fireEvent.click(view.getByRole('button', { name: 'Verify again' }));
-    const start = view.getByRole('button', { name: 'Start without checks' }) as HTMLButtonElement;
-    await waitFor(() => expect(start.disabled).toBe(false));
-    fireEvent.click(start);
+    expect(view.getByText('The default branch is missing')).toBeTruthy();
+    expect(view.getByText('The repository has no default branch.')).toBeTruthy();
+    expect(view.queryByRole('button', { name: 'Start without checks' })).toBeNull();
+    const verify = view.getByRole('button', { name: 'Verify again' }) as HTMLButtonElement;
+    fireEvent.click(verify);
+    await waitFor(() => expect(verify.hasAttribute('aria-busy')).toBe(false));
     const cancel = view.getByRole('button', { name: 'Cancel task' }) as HTMLButtonElement;
     await waitFor(() => expect(cancel.disabled).toBe(false));
     fireEvent.click(cancel);
     expect(listSentCommands().map((command) => (command as { decision: string }).decision)).toEqual([
       'approve',
-      'waive',
       'reject',
     ]);
   });
@@ -558,15 +616,50 @@ describe('NowCard on the Overview', () => {
   });
 
   it('offers to allow more on a task that reached its usage or cost limit', () => {
+    const spent = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 6 };
     const task = createTask({ id: 'task-1' });
     const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'failure', cause: 'budget' });
     const run = createRun({
       id: 'run-1',
       taskId: 'task-1',
-      usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 6 },
-      weeklyPercent: 12,
+      usage: spent,
+      meters: [
+        {
+          attemptId: 'attempt-1',
+          window: 'account:work',
+          from: 0,
+          to: 100,
+          usage: spent,
+          readings: [
+            { percent: 40, at: 0, resetsAt: null },
+            { percent: 52, at: 100, resetsAt: null },
+          ],
+        },
+      ],
     });
-    const state = createShinsaState({ tasks: [task], gates: [gate], runs: [run] });
+    const history = Array.from({ length: 4 }, (_, index) => {
+      const cost = { ...spent, costUsd: 1 };
+      const from = 1_000 + index * 1_000;
+      return createRun({
+        id: `history-${index}`,
+        taskId: `history-${index}`,
+        usage: cost,
+        meters: [
+          {
+            attemptId: `history-${index}`,
+            window: 'account:work',
+            from,
+            to: from + 100,
+            usage: cost,
+            readings: [
+              { percent: 52 + index * 2, at: from, resetsAt: null },
+              { percent: 54 + index * 2, at: from + 100, resetsAt: null },
+            ],
+          },
+        ],
+      });
+    });
+    const state = createShinsaState({ tasks: [task], gates: [gate], runs: [run, ...history] });
     state.settings.taskBudgetUsd = 5;
     const { view } = renderOverview(state, task, gate);
     expect(view.getByRole('button', { name: 'Allow another $5.00' })).toBeTruthy();

@@ -40,9 +40,9 @@ function listForbiddenCommands(defaultBranch: string): ForbiddenCommand[] {
     },
     {
       pattern:
-        /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|waive-checks|workspace|coverage(?:-command|-report|-format)?)(?![\w-])/,
+        /\bshinsa\s+repos\s+update\b[^;&|\n]*?\s--(?:no-)?(?:checks|workspace|coverage(?:-command|-report|-format)?)(?![\w-])/,
       reason:
-        'Only the human changes a repository’s check commands, works without checks, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
+        'Only the human changes a repository’s check commands, chooses where agents work or sets how test coverage is measured. Tell them what you would change and why.',
     },
     {
       pattern: /\/(?:api|ws)\/(?:terminals|services)(?![\w-])/,

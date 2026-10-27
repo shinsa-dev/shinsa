@@ -27,7 +27,14 @@ const remark = {
 describe('fix prompts', () => {
   test('each fix prompt opens with the words its run’s focus is read from', () => {
     const focusOf = (prompt: string) => resolveFixFocus({ purpose: 'fix', prompt });
-    expect(focusOf(resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]))).toBe('checks');
+    expect(
+      focusOf(
+        resolveChecksFixPrompt(
+          [{ id: 'c1', label: 'Tests', command: 'bun test src/a', outcome: 'fail', detail: '' }],
+          false
+        )
+      )
+    ).toBe('checks');
     expect(focusOf(resolveReviewFixPrompt([finding]))).toBe('review');
     expect(focusOf(resolveHumanFixPrompt('Rename it.', []))).toBe('changes');
     expect(focusOf(resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, []))).toBe('changes');
@@ -37,13 +44,44 @@ describe('fix prompts', () => {
 
   test('a fix of the work says the checks and the review follow it', () => {
     expect(resolveHumanFixPrompt('Rename it.', [])).toContain(
-      "Afterwards Shinsa runs the task's checks and agent review, where it has them, and then the human reviews the work."
+      'Afterwards Shinsa runs those checks, then the agent review where the task has one, and then the human reviews the work.'
+    );
+  });
+
+  test('a checks fix names each failing check by id, leaves out what fails on the base branch, and says what comes next', () => {
+    const results = [
+      { id: 'c1', label: 'Panel tests', command: 'bun test src/panel', outcome: 'fail', detail: 'boom' },
+      {
+        id: 'c2',
+        label: 'Engine tests',
+        command: 'bun test apps/engine/test/a',
+        outcome: 'fail',
+        detail: 'old',
+        note: 'fails_on_base',
+      },
+      {
+        id: 'c3',
+        label: 'Types',
+        command: 'bun run --cwd apps/web check-types',
+        outcome: 'pass',
+        detail: null,
+      },
+    ] as const;
+    const building = resolveChecksFixPrompt([...results], true);
+    expect(building).toContain('- c1, Panel tests: `bun test src/panel` failed:\n```\nboom\n```');
+    expect(building).not.toContain('Engine tests');
+    expect(building).toContain('Afterwards Shinsa runs those checks, then you build the next phase.');
+    expect(resolveChecksFixPrompt([...results], false)).toContain(
+      'then the agent review where the task has one'
     );
   });
 
   test('every fix prompt says when to send the parts of the walkthrough that changed', () => {
     for (const prompt of [
-      resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]),
+      resolveChecksFixPrompt(
+        [{ id: 'c1', label: 'Tests', command: 'bun test src/a', outcome: 'fail', detail: '' }],
+        false
+      ),
       resolveReviewFixPrompt([finding]),
       resolvePullRequestFixPrompt(pullRequest({ number: 42 })),
     ]) {

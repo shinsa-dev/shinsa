@@ -12,6 +12,7 @@ import {
 } from './accounts.ts';
 import {
   askQuestion,
+  attachCheck,
   attachComparison,
   attachEvidence,
   completeFix,
@@ -20,6 +21,7 @@ import {
   proposePlan,
   reportReview,
 } from './agents.ts';
+import { recordChecks } from './checks.ts';
 import { recordCompaction } from './compaction.ts';
 import { recordConfig } from './config.ts';
 import { recordConflict, recordWorkspaceUpdate } from './conflicts.ts';
@@ -28,7 +30,6 @@ import { type DecideContext, Decider, type Decision } from './decider.ts';
 import { assertDelegationScope, routeQuestion } from './delegations.ts';
 import { releaseWaiting, stackTask } from './dependencies.ts';
 import { commitEdits, recordEdit } from './edits.ts';
-import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
@@ -229,6 +230,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return routeQuestion(decider, command, askQuestion);
     case 'agent.attach_evidence':
       return attachEvidence(decider, command);
+    case 'agent.attach_check':
+      return attachCheck(decider, command);
     case 'agent.attach_comparison':
       return attachComparison(decider, command);
     case 'agent.note':
