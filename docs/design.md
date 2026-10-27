@@ -2346,6 +2346,22 @@ Only these, and they win over anything below:
       disabled, at none) and Done. Remove asks in the footer itself, with no dialog: "Remove 2 services?" over "They
       stop and their terminals close.", Cancel and Remove; Remove removes them all in one call (`POST
       /api/services/remove`) and clears the ticks, and a refusal keeps them.
+    - **A task's runs under its service** (since 2026-10-27; `docs/engine.md` → Services → Runs for a task). Under
+      a service's row the popover lists each task that runs it, or whose run failed (`listTaskServiceRuns`; a stopped
+      one is left out, so the list stays what is running): `TaskRunRow`, indented 24px (`ps-6`) under the row, one
+      line of the state's small tile, the task's handle and title ("LOC-10 Add task-scoped services", `fg-3`,
+      `text-xs`, truncated; "A finished task" once it is gone) and the state at its end in its tone, then the same
+      run buttons as a service's row. Pressing it opens that run's terminal. The trigger and a project's header still
+      count your own runs only, so a task starting its dev server never turns the top bar's label. On the Terminal
+      page a task run's tab is a service tab like yours: the toolbar's Restart and Stop act on that run
+      (`listProjectServiceRuns` finds the service in front among every run).
+    - **A task's Services** (`components/services/task-menu.tsx`, `TaskServicesMenu`). A task's header has a
+      Services button beside its `•••` (`secondary sm`, the top bar's trigger label: the server glyph and the count
+      in its tone) whenever its project has a service the task can run (`listTaskServices`, core); none, and the
+      button is not there. Its popover (`SERVICES_PANEL`, the same 352px) has the forms' header, "Services for
+      ‹handle›" over "Each runs in this task’s worktree, beside your own run." (`describeTaskServices`), then a
+      `ServiceRow` per service for this task: its state is the task's run's, Start starts it in the worktree, and
+      the row opens that run's terminal. It has no footer: adding and editing stay in the top bar's popover.
     - **Where it is.** `/terminal?project=<key>&terminal=<id>` (the URL is the view: project and tab), a hub page kept
       mounted once you have been to it and rendered ahead at idle (35). Services → Terminal, Open terminal on a
       service and ⌘K's Terminal under Go to all go there. A task's `•••` menu and ⌘K's Open a terminal open one in
@@ -2361,8 +2377,9 @@ Only these, and they win over anything below:
       stays open for how long to keep it). A project with no terminal shows the `EmptyState` with
       Open a terminal (`primary sm`, no tooltip).
     - **Tabs** (`tab-bar.tsx`). A tab is the kit's segmented tab, 22px inside the 26px list: its mark, the label (the
-      name you gave it, else the shell's title, else the folder's name; a service's tab is its name;
-      `resolveTerminalLabel` in core), and a close button (`icon-2xs`, 18px) revealed on hover and always on the
+      name you gave it, else the shell's title, else the folder's name; a service's tab is its name, and a task's
+      run of one adds the task's handle, "api · LOC-10"; `resolveTerminalLabel` in core, `resolveTerminalTabLabel`),
+      and a close button (`icon-2xs`, 18px) revealed on hover and always on the
       active tab. The button sits in an even 2px inset: 2px from the tab's top and bottom, and the tab's end padding
       is 2px too (`pe-0.5` over the kit's `px-2`; measured), so the × is centred in its corner. A shell's mark is
       `IconConsole`, `IconConsoleFilled` on the tab in front (19, the filled rule); a service's is its state's glyph

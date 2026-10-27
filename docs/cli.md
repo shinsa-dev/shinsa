@@ -1519,7 +1519,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 Start a service in its terminal, as Start does in Shinsa.
 
 ```
-shinsa services start <service> [--project <text>] [--json]
+shinsa services start <service> [--project <text>] [--task <text>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
@@ -1528,13 +1528,14 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<service>` | text, required | The service, by its name. |
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
 #### shinsa services stop
 
 Stop a service: its programs get a hang-up, as closing a terminal does.
 
 ```
-shinsa services stop <service> [--project <text>] [--json]
+shinsa services stop <service> [--project <text>] [--task <text>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
@@ -1543,13 +1544,14 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<service>` | text, required | The service, by its name. |
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
 #### shinsa services restart
 
 Stop a service and start it again.
 
 ```
-shinsa services restart <service> [--project <text>] [--json]
+shinsa services restart <service> [--project <text>] [--task <text>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
@@ -1558,6 +1560,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it.
 | --- | --- | --- |
 | `<service>` | text, required | The service, by its name. |
 | `--project` | text, optional | The project the service belongs to, when two have one by that name. |
+| `--task` | text, optional | Run it for this task, in its worktree: its handle (SW-142), id or exact title. |
 
 ### mcp
 

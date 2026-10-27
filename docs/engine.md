@@ -1639,7 +1639,8 @@ running when the window closes or the app quits, and a page that comes back find
   and `ps -o comm=` names it). The page asks it before closing a running shell and closes an idle one at once; a
   running service always counts as busy and answers its own name. `test/terminals/routes.test.ts` checks it against a
   real shell running `sleep`.
-- **Your terminals are yours.** No agent tool reaches a terminal; every write route needs a browser's Origin
+- **Your terminals are yours.** No agent tool reaches a terminal, but for its own task's service runs (Services →
+  Agents run their own task's services, below); every write route needs a browser's Origin
   (`browser_only` otherwise, so `curl` and the command line cannot type into one); `shinsa terminals` is human-only;
   and `agents/policy.ts` refuses a shell command that names `/api/terminals` or `/ws/terminals`. As everywhere in Who
   can change Shinsa, this keeps an agent from doing it by accident, not one set on it.
@@ -1657,11 +1658,13 @@ running when the window closes or the app quits, and a page that comes back find
 ### Services
 
 A service is a command you keep running for a project, such as `bun run dev` in `apps/api`: started with one press,
-then only watched (`docs/design.md`, 37). It is a terminal under the hood, so everything above holds for it.
+then only watched (`docs/design.md`, 37). It is a terminal under the hood, so everything above holds for it. A service
+is defined once per project and runs in your own checkout; it can also run for any open task, in that task's worktree,
+beside your run (Runs for a task, below).
 
 - **What one is.** `ServiceDefinition` (core's `protocol/services.ts`): an id, its project, a name (40 characters, one
   per name in a project), the folder it runs in (one of the project's repositories or folders, or a folder inside one;
-  not a task worktree, which goes away; `resolveServicePlace` in `routes.ts`), the command (4,000 characters) and
+  never a task worktree, which goes away: a task gets its own run instead; `resolveServicePlace` in `routes.ts`), the command (4,000 characters) and
   variables added to your environment (50 at most, names a shell can export). It runs as `<login shell> -l -c
   <command>` in its own terminal tab (`TerminalInfo.serviceId`), with the terminal's environment and its variables
   over it, so the shell that started it is the program: it ends when the command ends.
@@ -1681,8 +1684,25 @@ then only watched (`docs/design.md`, 37). It is a terminal under the hood, so ev
   process group, so a dev server and the watchers it started end together, and the tab stays with its last screen.
   `/restart` stops and starts. `POST /api/services/start-all { projectId }` starts every service of a project that is
   not running. Closing a service's tab stops it and forgets the tab; the service stays.
+- **Runs for a task.** A run is a service's terminal with its `taskId`: `null` for yours, in the service's own
+  folder, and a task's id for that task's, so one service has at most one run per task and one of yours
+  (`selectServiceTerminal`; `ServiceView.taskId`). A task's run uses the same command and variables in the same
+  folder of the task's worktree: `resolveTaskServiceCwd` (core) takes the folder relative to the task's repository
+  and puts it under `task.worktreePath` (`/code/shop/apps/api` becomes `<worktree>/apps/api`). A service has no
+  run for a task that is settled, has no worktree of its own (one that works in the repository's own checkout uses
+  your run), belongs to another project, or whose repository does not hold the service's folder (a project folder
+  outside every repository). `listTaskServices` lists what a task can run, `listServiceTaskRuns` every task's run of
+  one service. Start, stop and restart take an optional `{ taskId }` in their body (`resolveServiceRunIn` in
+  `routes.ts`; no body is your run, as before); an unknown task is `task_not_found`, a service the task cannot run
+  `service_place_invalid`, a worktree without the folder `terminal_place_missing`. Renaming a service renames every
+  run's tab and removing one closes them all. Two runs of one dev server may want one port: Shinsa leaves that to
+  the service (its variables, or a port its framework picks), and a run that cannot bind fails like any other.
+- **When a task's worktree goes.** `worktree.remove` closes the task's service runs first
+  (`Terminals.closeTaskServices`, from `EffectRunner`, the `services` option), so no dev server keeps running in a
+  deleted folder; your own shells opened in that worktree are left as they are.
 - **Across a restart of the engine.** `Terminals.stop()` saves a service that was running as running, and the next
-  engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; plain
+  engine starts it again (`resumeServices`, from `serve.ts`), where its folder is still one of its project's; a
+  task's run starts again only while the task is open and still holds the folder. Plain
   shells come back as `stopped`, as before. Inspect mode starts nothing.
 - **Found for you.** `GET /api/services/suggestions?projectId=` (`detect.ts`, `listServiceSuggestions`) reads each of
   the project's repositories and folders, fast enough to run when the Services popover turns to Add services (a few file reads,
@@ -1711,8 +1731,15 @@ then only watched (`docs/design.md`, 37). It is a terminal under the hood, so ev
   before any is removed, each running one stopped and its tab closed, and the answer is the snapshot) need a
   browser's Origin, like every terminal change: a definition is a
   command that runs as you. Start, stop and restart do not, so `shinsa services start|stop|restart` work from your own
-  terminal.
-- **Agents.** No tool reaches a service, `shinsa services` is human-only, and `agents/policy.ts` refuses a shell
+  terminal, `--task <handle>` for a task's run; `shinsa services list` adds how many tasks run each one.
+- **Agents run their own task's services, nothing else.** The Agent, the reviewer and the investigator have
+  `list_services` and `run_service` (`agents/services.ts`, `ToolCalls`; the answerer and the researcher are served
+  them with the session's one tool list and refused by `assertRunTool`, as a delegated agent is). No input names a
+  task: the tool takes the task from the calling run, so it can start, stop or restart only that task's run, never
+  yours or another task's. `list_services` lists the services the task can run with their state and folder in the
+  worktree, and with `service` the run's last 60 lines of output as plain text (`TerminalMirror.readLines`); a start
+  of a running one says so. The house rules ask an agent to stop what it started. Definitions stay yours: no tool
+  adds, changes or removes one, `shinsa services` stays human-only, and `agents/policy.ts` still refuses a shell
   command naming `/api/services` as it does `/api/terminals`.
 
 ## Agents manage Shinsa
