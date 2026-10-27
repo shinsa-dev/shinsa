@@ -372,6 +372,10 @@ export class Terminals {
     return this.startService(id, run);
   }
 
+  async readServiceOutput(id: string, taskId: string | null, lines: number) {
+    return (await this.#serviceSession(id, taskId)?.readOutput(lines)) ?? [];
+  }
+
   closeTaskServices(taskId: string) {
     const sessions = [...this.#sessions.values()].filter(
       (session) => session.info.serviceId && session.info.taskId === taskId

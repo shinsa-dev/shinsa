@@ -233,6 +233,11 @@ export class TerminalSession {
     return this.#mirror.serializeSaved();
   }
 
+  async readOutput(lines: number) {
+    await this.#mirror.flush();
+    return this.#mirror.readLines(lines);
+  }
+
   hangUp() {
     this.#process?.hangUp();
   }

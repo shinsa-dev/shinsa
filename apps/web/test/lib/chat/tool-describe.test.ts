@@ -233,6 +233,11 @@ describe('describeTool', () => {
     expect(shinsa('find_tasks')).toBe('Looked up tasks');
     expect(shinsa('read_task', { task_id: 't1' })).toBe('Read a task');
     expect(shinsa('list_repository_work')).toBe('Listed the other work in the repository');
+    expect(shinsa('list_services')).toBe('Listed the task’s services');
+    expect(shinsa('run_service', { service: 'api', action: 'start' })).toBe('Started a service: api');
+    expect(shinsa('run_service', { service: 'api', action: 'stop' })).toBe('Stopped a service: api');
+    expect(shinsa('run_service', { service: 'api', action: 'restart' })).toBe('Restarted a service: api');
+    expect(shinsa('run_service', { service: 'api' })).toBe('Ran a service: api');
     expect(shinsa('note', { note: 'Remember' })).toBe('Left a note: Remember');
     expect(shinsa('wait_for', { notes: 'The deploy' })).toBe('Scheduled a check-in: The deploy');
     expect(shinsa('suggest_tasks', { tasks: [{ title: 'a' }, { title: 'b' }] })).toBe('Suggested 2 tasks');
@@ -442,6 +447,11 @@ describe('resolveGroupPhrase', () => {
     expect([phrase('list_repository_work', 1), phrase('list_repository_work', 2)]).toEqual([
       'Listed the other work in the repository',
       'Listed the other work in the repository 2 times',
+    ]);
+    expect([phrase('list_services', 1), phrase('list_services', 2), phrase('run_service', 2)]).toEqual([
+      'Listed the task’s services',
+      'Listed the task’s services 2 times',
+      'Ran 2 services',
     ]);
     expect([phrase('wait_for', 1), phrase('suggest_tasks', 1), phrase('answer', 1)]).toEqual([
       'Scheduled a check-in',

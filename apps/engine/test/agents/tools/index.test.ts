@@ -36,6 +36,8 @@ describe('the shinsa tool server', () => {
       'find_tasks',
       'note',
       'suggest_tasks',
+      'list_services',
+      'run_service',
       'read_task',
       'list_repository_work',
       'delegate_task',

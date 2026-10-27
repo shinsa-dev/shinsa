@@ -87,6 +87,7 @@ import {
 
 export type { DecideContext, Decision } from './decider.ts';
 export { type MessageEffect, needsMessageKind, resolveMessageEffect } from './messages.ts';
+export { assertRunTool } from './runs.ts';
 export {
   createPullRequestWatch,
   evaluatePullRequestWatch,

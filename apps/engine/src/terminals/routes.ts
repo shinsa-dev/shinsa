@@ -48,6 +48,11 @@ function readOptionalText(body: JsonObject, field: string, limit: number) {
   return body[field] === undefined || body[field] === null ? null : readText(body, field, limit);
 }
 
+async function readTaskId(request: Request) {
+  if (!request.body) return null;
+  return readOptionalText(await readJsonObject(request), 'taskId', 200);
+}
+
 function isFolder(path: string) {
   try {
     return statSync(path).isDirectory();
@@ -220,8 +225,7 @@ export function createTerminalRoutes(engine: Engine, terminals: Terminals): Term
   const withTask =
     (handler: (match: RegExpExecArray, taskId: string | null) => unknown) =>
     async (match: RegExpExecArray, request: Request) => {
-      const body = request.body ? await readJsonObject(request) : {};
-      const taskId = readOptionalText(body, 'taskId', 200);
+      const taskId = await readTaskId(request);
       return respond((await handler(match, taskId)) ?? terminals.snapshot());
     };
   const id = (match: RegExpExecArray) => decodeURIComponent(match[1] ?? '');

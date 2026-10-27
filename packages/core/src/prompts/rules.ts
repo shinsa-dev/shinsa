@@ -60,6 +60,11 @@ function listToolRules(tools: readonly ShinsaToolName[]) {
     describeWaitingRule(tools),
     'To read another task (its status, plan, report, open decisions and latest agent replies), call `read_task` with an id from `find_tasks`. It reads; it never changes the task.',
     'To see the other open tasks in this repository, their branches, the files they changed and whether an agent works on them now, call `list_repository_work`.',
+    ...(tools.includes('run_service')
+      ? [
+          'To run one of the project’s services for this task, such as its dev server, in this task’s worktree, call `list_services` and `run_service`; read its output with `list_services` and the service’s name. Stop the services you started once you no longer need them.',
+        ]
+      : []),
     'When you notice work worth doing that is outside this task, propose it with `suggest_tasks` instead of doing it. The human decides whether it joins the roadmap.',
     'When the human asks in this chat for something that does not belong in this task, suggest it with `suggest_tasks`, with `split_off` set on it; the human makes it a task of its own or keeps it here as the next round.',
   ];
