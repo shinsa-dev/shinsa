@@ -1,20 +1,22 @@
 'use client';
 
-import { useAnimatedIndicator } from '@shinsa/ui/hooks/use-animated-indicator';
+import { INDICATOR_TRANSITION, useAnimatedIndicator } from '@shinsa/ui/hooks/use-animated-indicator';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 
 const INDICATOR_STYLE: React.CSSProperties = {
-  transition: 'none',
+  transition: INDICATOR_TRANSITION,
   willChange: 'transform, opacity',
   contain: 'layout paint',
   transformOrigin: 'center',
 };
 
 /**
- * Menu/list wrapper: a relative container with an absolutely positioned
- * indicator that jumps to the `data-highlighted` item, with no transition. Owns the list
- * padding so the indicator can sit flush inside the popup's edge.
+ * Menu/list wrapper: a relative container with one absolutely positioned
+ * indicator that slides to the `data-highlighted` item on the movement clock
+ * (transform only, see `useAnimatedIndicator`). Items draw no highlight
+ * background of their own. Owns the list padding so the indicator can sit
+ * flush inside the popup's edge.
  *
  * When a wrapper div isn't possible (e.g. inside Base UI's Tabs.List, which
  * expects Tab children directly), use `useAnimatedIndicator` directly.
@@ -33,12 +35,15 @@ function HighlightList({
   press?: boolean;
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const indicatorRef = useAnimatedIndicator(rootRef, { attribute, press, slide: false });
+  const indicatorRef = useAnimatedIndicator(rootRef, { attribute, press });
 
   return (
     <div ref={rootRef} className={cn('relative isolate p-1', className)}>
       <div
         ref={indicatorRef}
+        aria-hidden
+        data-slot='highlight-indicator'
+        data-motion='move'
         className={cn(
           'pointer-events-none absolute top-0 left-0 -z-10 rounded-item bg-bg-a2 opacity-0',
           indicatorClassName
@@ -52,7 +57,7 @@ function HighlightList({
 
 /**
  * The menu highlight for a plain list (a sidebar, a nav): one shared surface
- * that jumps, with no transition, to the hovered `[data-highlight-item]` and
+ * that slides to the hovered `[data-highlight-item]` and
  * rests on the current one (`data-active="true"`) when the pointer leaves.
  * Items draw no hover or selected background of their own.
  */
@@ -66,11 +71,7 @@ function HoverHighlight({
   indicatorClassName?: string;
 }) {
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const indicatorRef = useAnimatedIndicator(rootRef, {
-    attribute: 'data-hovered',
-    parkWhenEmpty: true,
-    slide: false,
-  });
+  const indicatorRef = useAnimatedIndicator(rootRef, { attribute: 'data-hovered', parkWhenEmpty: true });
 
   React.useEffect(() => {
     const root = rootRef.current;
@@ -118,6 +119,9 @@ function HoverHighlight({
     <div ref={rootRef} className={cn('relative isolate', className)}>
       <div
         ref={indicatorRef}
+        aria-hidden
+        data-slot='highlight-indicator'
+        data-motion='move'
         className={cn(
           'pointer-events-none absolute top-0 left-0 -z-10 rounded-control bg-bg-a2 opacity-0',
           indicatorClassName

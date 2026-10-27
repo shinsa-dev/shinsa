@@ -16,6 +16,7 @@ import * as React from 'react';
 import { ProjectMenuTrigger } from '@/components/focus/menu.tsx';
 import { NAV_ITEM } from '@/components/layout/nav-item.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { SERVICES_PANEL, ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
 import type { ServicesPanelActions } from '@/components/services/panel-views.tsx';
 import { type ServiceHandlers, ServiceRow } from '@/components/services/service-row.tsx';
@@ -148,12 +149,7 @@ function PanelSample({
     (actions): ServicesPanelState => actions.reduce(reduceServicesPanel, createServicesPanel('list', 'shop'))
   );
   return (
-    <div
-      className={cn(
-        SERVICES_PANEL,
-        'overflow-hidden rounded-lg border border-border bg-popover [--available-height:28rem]'
-      )}
-    >
+    <div className={cn(INSET, SERVICES_PANEL, 'overflow-hidden bg-popover [--available-height:28rem]')}>
       <ServicesPanel
         groups={groups}
         scope={scope}
@@ -223,7 +219,7 @@ function Palette() {
   return (
     <div
       style={{ background: theme.background, color: theme.foreground }}
-      className='flex w-full flex-col gap-1 rounded-lg p-3 font-mono text-xs'
+      className={cn(INSET, 'flex w-full flex-col gap-1 p-3 font-mono text-xs')}
     >
       <span>The --terminal-* tokens, in Shinsa’s mono font</span>
       <span className='flex flex-wrap gap-3'>
@@ -238,6 +234,7 @@ function Palette() {
 }
 
 export function TerminalSpecimens() {
+  const [active, setActive] = React.useState('t-api');
   return (
     <>
       <Specimen label='Services in the top bar · nothing running, running, starting, failed, and on the Terminal page'>
@@ -276,7 +273,7 @@ export function TerminalSpecimens() {
         </div>
       </Specimen>
       <Specimen label='ServiceRow · running, starting, failed, exited and never started (hover a running row for Restart and Stop)'>
-        <HoverHighlight className='flex w-88 flex-col gap-px rounded-lg border border-border p-1'>
+        <HoverHighlight className={cn(INSET, 'flex w-88 flex-col gap-px p-1')}>
           {VIEWS.map((view) => (
             <ServiceRow key={view.service.id} view={view} project={PROJECT} now={NOW} handlers={HANDLERS} />
           ))}
@@ -341,9 +338,9 @@ export function TerminalSpecimens() {
             terminals={TERMINALS}
             services={VIEWS}
             now={NOW}
-            activeId='t-api'
+            activeId={active}
             renamingId={null}
-            onSelect={acknowledgeSample}
+            onSelect={(terminal) => setActive(terminal.id)}
             onClose={acknowledgeSample}
             onRenameStart={acknowledgeSample}
             onRename={acknowledgeSample}

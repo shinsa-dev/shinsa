@@ -6,6 +6,7 @@ import {
   type Task,
 } from '@shinsa/core';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@shinsa/ui/components/dropdown-menu';
+import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { Tooltip, TooltipContent, TooltipLabel, TooltipTrigger } from '@shinsa/ui/components/tooltip';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -14,6 +15,7 @@ import type * as React from 'react';
 import { AccountChoiceItems } from '@/components/accounts/account-items.tsx';
 import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { BranchDetails } from '@/components/links/branch.tsx';
+import { InAppLink } from '@/components/links/link.tsx';
 import { CheckList, PullRequestDetails } from '@/components/links/pull-request.tsx';
 import { RepoDetails } from '@/components/links/repo.tsx';
 import { TaskPopoverRows } from '@/components/links/task.tsx';

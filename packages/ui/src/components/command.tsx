@@ -98,10 +98,19 @@ function CommandInput({
   );
 }
 
-function readOffset(element: HTMLElement, list: HTMLElement) {
-  const box = element.getBoundingClientRect();
-  const frame = list.getBoundingClientRect();
-  return { x: box.left - frame.left, y: box.top - frame.top };
+const TRANSLATE = /translate\((-?[\d.e-]+)px, (-?[\d.e-]+)px\)/;
+
+// Keeps the indicator where it is on screen while the list's scroll jumps to
+// the next page's, so it slides from there to the page's highlighted item.
+function holdOnScreen(indicator: HTMLElement, shift: number) {
+  const transition = indicator.style.transition;
+  indicator.style.transition = 'none';
+  indicator.style.transform = indicator.style.transform.replace(
+    TRANSLATE,
+    (_, x: string, y: string) => `translate(${x}px, ${Number(y) + shift}px)`
+  );
+  void indicator.offsetHeight;
+  indicator.style.transition = transition;
 }
 
 function useAnimatedPages(
@@ -133,17 +142,10 @@ function useAnimatedPages(
     if (saved === undefined) scrolls.current.set(previous, lastScroll.current);
     else scrolls.current.delete(page);
     const target = saved ?? 0;
-    const visible = indicator.style.opacity === '1';
-    const from = readOffset(indicator, list);
+    const shift = target - lastScroll.current;
     list.scrollTop = target;
     lastScroll.current = target;
-    if (visible) {
-      const transition = indicator.style.transition;
-      indicator.style.transition = 'none';
-      indicator.style.transform = `translate(${from.x}px, ${from.y + target}px) scale(var(--hl-press-scale, 1))`;
-      void indicator.offsetHeight;
-      indicator.style.transition = transition;
-    }
+    if (indicator.style.opacity === '1' && shift !== 0) holdOnScreen(indicator, shift);
     const frame = requestAnimationFrame(() => {
       list
         .querySelector<HTMLElement>('[cmdk-item][data-selected="true"]')
@@ -161,11 +163,7 @@ function CommandList({
 }: React.ComponentProps<typeof CommandPrimitive.List> & { page?: string }) {
   const listRef = React.useRef<HTMLDivElement>(null);
   React.useImperativeHandle(ref, () => listRef.current as HTMLDivElement);
-  const indicatorRef = useAnimatedIndicator(listRef, {
-    attribute: 'data-selected',
-    value: 'true',
-    slide: false,
-  });
+  const indicatorRef = useAnimatedIndicator(listRef, { attribute: 'data-selected', value: 'true' });
   useAnimatedPages(listRef, indicatorRef, page);
 
   return (
@@ -182,6 +180,8 @@ function CommandList({
         <div
           ref={indicatorRef}
           aria-hidden
+          data-slot='highlight-indicator'
+          data-motion='move'
           className='pointer-events-none absolute top-0 left-0 -z-10 rounded-item bg-bg-a2 opacity-0 data-[variant=destructive]:bg-red-a2'
           style={{ willChange: 'transform, opacity', contain: 'layout paint', transformOrigin: 'center' }}
         />

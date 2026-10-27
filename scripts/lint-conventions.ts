@@ -93,7 +93,52 @@ const OWN_TEXT_STEP =
 const HOVER_TRANSITION_MESSAGE =
   'A transition on a hover, press or highlight colour. Washes, text and border colours on hover, press and selection appear at once; only motion (a sheet, a popup, a turning chevron, a sliding indicator) eases (docs/design.md → Motion)';
 
+const TAB_BAR_MESSAGE =
+  'A hand-rolled tab bar. Every row of tabs is the kit’s Tabs (Choice for a labelled switch), whose selected pill or line slides on the movement clock (docs/design.md → Components → Every tab bar is the kit’s)';
+
+const TAB_ROLES = new Set(['tab', 'tablist']);
+
+const TAB_PRIMITIVE = '@base-ui/react/tabs';
+
+const STILL_INDICATOR_MESSAGE =
+  'Transitions turned off for a whole subtree without sparing the tab indicators. Skip [data-motion=move] in the selector, so a selected pill still slides (docs/design.md → Components → Every tab bar is the kit’s)';
+
+const OWN_HIGHLIGHT_MESSAGE =
+  'A row that draws its own hover or highlight background. A list of rows you pick from (a menu, a select, ⌘K, the rail, a queue, an option list) shares one highlight that slides to the row: put the rows in HighlightList or HoverHighlight and mark them data-highlight-item; the row only changes its text colour (docs/design.md → Motion → Highlights slide)';
+
+const LONE_OPTION_MESSAGE =
+  'An option or menu item outside the shared highlight. Render it inside HighlightList or HoverHighlight (or use the kit’s menu, select and command items), so one highlight slides between the rows (docs/design.md → Motion → Highlights slide)';
+
+const PICKED_ROLES = new Set(['option', 'menuitem', 'menuitemradio', 'menuitemcheckbox']);
+
+const HIGHLIGHT_LISTS = new Set(['HighlightList', 'HoverHighlight']);
+
+const OWN_ROW_BACKGROUND =
+  /(?:^|\s)(?:[\w-]+:)*(?:hover|active|data-selected|aria-selected|data-\[selected=true\]|data-active|data-\[active=true\]):bg-/;
+
+const INSET_FILL =
+  /(?:^|[\s'"`])(?:rounded-lg\b.*[\s'"`]bg-(?:bg-a?[1-3]|muted|card|background|[a-z]+-a[12])(?=[\s'"`]|$)|bg-(?:bg-a?[1-3]|muted|card|background|[a-z]+-a[12])(?=[\s'"`]|$).*[\s'"`]rounded-lg\b)/;
+
 const CLASS_RULES: ClassRule[] = [
+  {
+    pattern:
+      /(?:^|[\s'"`:])(?:data-indicator-here|data-hovered|data-highlighted|data-\[highlighted\]|data-\[hovered\]):(?:[\w-]+:)*bg-/,
+    message: OWN_HIGHLIGHT_MESSAGE,
+    roots: APP_AND_KIT,
+    inCatalog: true,
+  },
+  {
+    pattern: /\]:(?:[\w-]+:)*(?:before|after):transition-none/,
+    message:
+      'The before: or after: variant on a subtree. It also sets content, so every element gains an empty box that a flex row lays out as an item; name the pseudo-element in the selector instead, [&_*::before]:… (docs/design.md → Components → Every tab bar is the kit’s)',
+    roots: APP,
+  },
+  {
+    pattern: /\[&_\*(?!::)[^\]\s'"`]*\]:(?:[\w-]+:)*transition-none/,
+    unless: /data-motion=move/,
+    message: STILL_INDICATOR_MESSAGE,
+    roots: APP,
+  },
   {
     pattern: /(?:^|[\s'"`:])transition-(?:colors|shadow)(?=[\s'"`]|$)/,
     message: HOVER_TRANSITION_MESSAGE,
@@ -471,22 +516,45 @@ function isGlobalKeyListener(node: BabelNode) {
   return event?.type === 'StringLiteral' && (event.value === 'keydown' || event.value === 'keyup');
 }
 
+function isHandRolledTabBar(node: BabelNode) {
+  if (node.type === 'ImportDeclaration')
+    return (node.source as BabelNode & { value?: string }).value === TAB_PRIMITIVE;
+  if (node.type !== 'JSXAttribute' || readKey(node) !== 'role') return false;
+  return listStrings(node.value as BabelNode | null).some((value) => TAB_ROLES.has(value));
+}
+
+function isPickedRow(props: Map<string, string[]>) {
+  return props.has('data-highlight-item') || hasValue(props, 'role', (value) => PICKED_ROLES.has(value));
+}
+
+function isSelfHighlightedRow(node: BabelNode) {
+  if (node.type !== 'JSXOpeningElement') return false;
+  const props = readProps(node);
+  return isPickedRow(props) && hasValue(props, 'className', (value) => OWN_ROW_BACKGROUND.test(value));
+}
+
+function isLoneOption(node: BabelNode, ancestors: BabelNode[]) {
+  if (node.type !== 'JSXOpeningElement') return false;
+  if (!hasValue(readProps(node), 'role', (value) => PICKED_ROLES.has(value))) return false;
+  return !ancestors.some((ancestor) => HIGHLIGHT_LISTS.has(readElementName(ancestor) ?? ''));
+}
+
 function collectSyntaxViolations(file: string, program: BabelNode, violations: Violation[]): void {
   const timed = file.endsWith('.tsx') && file !== TIME_COMPONENT_FILE && isUnder(file, TIME_CHECK_ROOTS);
   const styled = isUnder(file, APP_AND_KIT) && !CATALOG.includes(file);
-  const keyed = isUnder(file, APP) && !SHORTCUT_FILES.includes(file);
+  const app = isUnder(file, APP);
+  const keyed = app && !SHORTCUT_FILES.includes(file);
+  const tipped = isUnder(file, APP_AND_KIT);
   walk(program, (node, ancestors) => {
     const line = node.loc?.start.line ?? 0;
     if (keyed && isGlobalKeyListener(node)) violations.push({ file, line, message: SHORTCUT_MESSAGE });
+    if (app && isHandRolledTabBar(node)) violations.push({ file, line, message: TAB_BAR_MESSAGE });
+    if (app && isLoneOption(node, ancestors)) violations.push({ file, line, message: LONE_OPTION_MESSAGE });
     if (timed && isUntimedFormatter(node, ancestors)) violations.push({ file, line, message: TIME_MESSAGE });
     if (timed && isStretchedTrigger(node))
       violations.push({ file, line, message: STRETCHED_TRIGGER_MESSAGE });
     if (!styled) return;
-    if (isFadedIcon(node)) violations.push({ file, line, message: ICON_FADE_MESSAGE });
-    if (isClassSizedIcon(node)) violations.push({ file, line, message: ICON_SIZE_MESSAGE });
-    if (isBrighterIcon(node, ancestors)) violations.push({ file, line, message: ICON_BRIGHTER_MESSAGE });
-    if (isRawSvg(file, node)) violations.push({ file, line, message: RAW_SVG_MESSAGE });
-    if (isGreenCheckmark(node, ancestors)) violations.push({ file, line, message: GREEN_MESSAGE });
+    for (const message of listStyleMessages(file, node, ancestors)) violations.push({ file, line, message });
   });
 }
 

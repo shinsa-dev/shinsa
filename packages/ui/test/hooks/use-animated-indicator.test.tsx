@@ -17,6 +17,28 @@ function List({ options, children, bare }: { options?: Options; children: React.
   );
 }
 
+function Sized() {
+  const root = React.useRef<HTMLDivElement>(null);
+  const indicator = useAnimatedIndicator(root);
+  const measure = (box: { top: number; height: number }) => (element: HTMLDivElement | null) => {
+    if (element)
+      place(element, {
+        offsetLeft: 4,
+        offsetTop: box.top,
+        offsetWidth: 100,
+        offsetHeight: box.height,
+        offsetParent: null,
+      });
+  };
+  return (
+    <div ref={root}>
+      <div ref={indicator} data-testid='indicator' />
+      <div ref={measure({ top: 4, height: 24 })} data-testid='short' data-highlighted='' />
+      <div ref={measure({ top: 30, height: 40 })} data-testid='tall' />
+    </div>
+  );
+}
+
 function setup(ui: React.ReactElement) {
   const view = render(ui);
   return { ...view, indicator: view.getByTestId('indicator'), root: view.getByTestId('root') };
@@ -29,26 +51,63 @@ function items(attribute = 'data-highlighted') {
   ];
 }
 
+function Watched({ trail, children }: { trail: string[][]; children: React.ReactNode }) {
+  const root = React.useRef<HTMLDivElement>(null);
+  const indicator = useAnimatedIndicator(root, { parkWhenEmpty: true });
+  const watch = (element: HTMLDivElement | null) => {
+    indicator.current = element;
+    if (!element) return;
+    const styles: string[] = [];
+    trail.push(styles);
+    new MutationObserver((records) => {
+      for (const record of records) styles.push(record.oldValue ?? '');
+    }).observe(element, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
+  };
+  return (
+    <div ref={root}>
+      <div ref={watch} data-testid='indicator' />
+      {children}
+    </div>
+  );
+}
+
+function firstShown(styles: string[], last: string) {
+  return [...styles, last].find((style) => style.includes('opacity: 1'));
+}
+
 describe('useAnimatedIndicator', () => {
-  it('lands on the marked item without travelling, then fades in', () => {
+  it('shows the item marked when it mounts at once: no fade and no slide', async () => {
+    const trail: string[][] = [];
+    const view = render(<Watched trail={trail}>{items()}</Watched>);
+    const indicator = view.getByTestId('indicator');
+    await act(flush);
+    expect(firstShown(trail[0] ?? [], indicator.getAttribute('style') ?? '')).toContain('transition: none');
+    expect(indicator.style.transition).toBe(INDICATOR_TRANSITION);
+  });
+
+  it('fades in when an item is marked again after it parked', async () => {
+    const trail: string[][] = [];
+    const view = render(<Watched trail={trail}>{items()}</Watched>);
+    const indicator = view.getByTestId('indicator');
+    const a = view.getByTestId('a');
+    a.removeAttribute('data-highlighted');
+    await act(flush);
+    expect(indicator.style.opacity).toBe('0');
+    const styles = trail[0] ?? [];
+    styles.length = 0;
+    a.setAttribute('data-highlighted', '');
+    await act(flush);
+    expect(firstShown(styles, indicator.getAttribute('style') ?? '')).toContain(
+      `transition: ${INDICATOR_TRANSITION}`
+    );
+  });
+
+  it('lands on the marked item without travelling', () => {
     const { indicator, getByTestId } = setup(<List>{items()}</List>);
     expect(getByTestId('a').hasAttribute('data-indicator-here')).toBe(true);
     expect(indicator.style.opacity).toBe('1');
     expect(indicator.style.transition).toBe(INDICATOR_TRANSITION);
-    expect(indicator.style.transform).toBe('translate(0px, 0px) scale(var(--hl-press-scale, 1))');
-  });
-
-  it('appears and moves at once, with no transition, when it does not slide', async () => {
-    const { indicator, getByTestId } = setup(<List options={{ slide: false }}>{items()}</List>);
-    expect(indicator.style.opacity).toBe('1');
-    expect(indicator.style.transition).toBe('none');
-    const b = getByTestId('b');
-    place(b, { offsetLeft: 0, offsetTop: 28, offsetWidth: 120, offsetHeight: 24, offsetParent: null });
-    getByTestId('a').removeAttribute('data-highlighted');
-    b.setAttribute('data-highlighted', '');
-    await act(flush);
-    expect(indicator.style.transition).toBe('none');
-    expect(indicator.style.transform).toBe('translate(0px, 28px) scale(var(--hl-press-scale, 1))');
+    expect(indicator.style.transform).toBe('translate(0px, 0px) scale(1, 1) scale(var(--hl-press-scale, 1))');
   });
 
   it('slides to the next marked item and mirrors its variant', async () => {
@@ -64,7 +123,9 @@ describe('useAnimatedIndicator', () => {
     expect(a.hasAttribute('data-indicator-here')).toBe(false);
     expect(b.hasAttribute('data-indicator-here')).toBe(true);
     expect(indicator.getAttribute('data-variant')).toBe('destructive');
-    expect(indicator.style.transform).toBe('translate(0px, 28px) scale(var(--hl-press-scale, 1))');
+    expect(indicator.style.transform).toBe(
+      'translate(0px, 28px) scale(1, 1) scale(var(--hl-press-scale, 1))'
+    );
     expect(indicator.style.width).toBe('120px');
     expect(indicator.style.height).toBe('24px');
 
@@ -72,6 +133,60 @@ describe('useAnimatedIndicator', () => {
     a.setAttribute('data-highlighted', '');
     await act(flush);
     expect(indicator.hasAttribute('data-variant')).toBe(false);
+  });
+
+  it('slides onto an item of another size by scaling, never by laying itself out', async () => {
+    const measured = render(<Sized />);
+    const indicator = measured.getByTestId('indicator');
+    expect(indicator.style.width).toBe('100px');
+    expect(indicator.style.height).toBe('24px');
+    expect(indicator.style.transform).toBe('translate(4px, 4px) scale(1, 1) scale(var(--hl-press-scale, 1))');
+
+    const tall = measured.getByTestId('tall');
+    measured.getByTestId('short').removeAttribute('data-highlighted');
+    tall.setAttribute('data-highlighted', '');
+    await act(flush);
+    expect(indicator.style.width).toBe('100px');
+    expect(indicator.style.height).toBe('24px');
+    expect(indicator.style.transform).toBe(
+      'translate(4px, 38px) scale(1, 1.6666666666666667) scale(var(--hl-press-scale, 1))'
+    );
+    expect(indicator.style.transition).toBe(INDICATOR_TRANSITION);
+  });
+
+  it('lays itself out at the new size once the slide ends, with no transition', async () => {
+    const measured = render(<Sized />);
+    const indicator = measured.getByTestId('indicator');
+    measured.getByTestId('short').removeAttribute('data-highlighted');
+    measured.getByTestId('tall').setAttribute('data-highlighted', '');
+    await act(flush);
+
+    const end = (propertyName: string, target: Element = indicator) => {
+      const event = new Event('transitionend', { bubbles: true });
+      Object.defineProperty(event, 'propertyName', { value: propertyName });
+      target.dispatchEvent(event);
+    };
+    const seen: string[] = [];
+    const write = indicator.style.setProperty.bind(indicator.style);
+    indicator.style.setProperty = (name, value) => {
+      if (name === 'height') seen.push(indicator.style.transition);
+      write(name, value);
+    };
+
+    end('opacity');
+    end('transform', measured.getByTestId('tall'));
+    expect(indicator.style.height).toBe('24px');
+
+    end('transform');
+    expect(indicator.style.height).toBe('40px');
+    expect(indicator.style.transform).toBe(
+      'translate(4px, 30px) scale(1, 1) scale(var(--hl-press-scale, 1))'
+    );
+    expect(indicator.style.transition).toBe(INDICATOR_TRANSITION);
+
+    end('transform');
+    expect(indicator.style.height).toBe('40px');
+    expect(seen.every((transition) => transition === 'none')).toBe(true);
   });
 
   it('adds up offsets through positioned wrappers inside the list, and stops at its edge', async () => {
@@ -89,7 +204,9 @@ describe('useAnimatedIndicator', () => {
 
     item.setAttribute('data-highlighted', '');
     await act(flush);
-    expect(view.indicator.style.transform).toBe('translate(6px, 46px) scale(var(--hl-press-scale, 1))');
+    expect(view.indicator.style.transform).toBe(
+      'translate(6px, 46px) scale(1, 1) scale(var(--hl-press-scale, 1))'
+    );
   });
 
   it('matches an attribute value when one is given', () => {
@@ -123,9 +240,11 @@ describe('useAnimatedIndicator', () => {
     expect(view.indicator.style.opacity).toBe('0');
   });
 
-  it('deflates by the press inset while an item is held, and restores on release', () => {
+  it('deflates by the press inset while an item is held, and restores on release', async () => {
     const { indicator, getByTestId, root } = setup(<List>{items()}</List>);
-    place(indicator, { offsetWidth: 100, offsetHeight: 20 });
+    place(getByTestId('a'), { offsetWidth: 100, offsetHeight: 20 });
+    getByTestId('a').setAttribute('data-highlighted', 'again');
+    await act(flush);
 
     getByTestId('b').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     expect(indicator.style.getPropertyValue('--hl-press-scale')).toBe('');
@@ -147,7 +266,6 @@ describe('useAnimatedIndicator', () => {
 
   it('lands the press and its release with no transition, keeping the slide for the next move', () => {
     const { indicator, getByTestId } = setup(<List>{items()}</List>);
-    place(indicator, { offsetWidth: 100, offsetHeight: 20 });
     expect(indicator.style.transition).toBe(INDICATOR_TRANSITION);
     const seen: string[] = [];
     const write = indicator.style.setProperty.bind(indicator.style);
@@ -175,7 +293,6 @@ describe('useAnimatedIndicator', () => {
     pressed.unmount();
 
     const still = setup(<List options={{ press: false }}>{items()}</List>);
-    place(still.indicator, { offsetWidth: 100, offsetHeight: 20 });
     still.getByTestId('a').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     expect(still.indicator.style.getPropertyValue('--hl-press-scale')).toBe('');
   });

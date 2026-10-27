@@ -2,6 +2,7 @@ import { resolveServiceView, resolveTerminalLabel, type ServiceView, type Termin
 import { Button } from '@shinsa/ui/components/button';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Input } from '@shinsa/ui/components/input';
+import { Tabs, TabsList, TabsTrigger } from '@shinsa/ui/components/tabs';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Hint } from '@/components/overlays/hint.tsx';
@@ -9,9 +10,6 @@ import { useNow } from '@/hooks/use-now.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeServiceState, SERVICE_GLYPHS } from '@/lib/terminal/services.ts';
 import { describeTerminalTab, moveTerminal } from '@/lib/terminal/tabs.ts';
-
-const TAB =
-  'group/tab corner-superellipse/1.125 relative flex h-6 min-w-0 max-w-56 shrink-0 items-center gap-1.5 rounded-control-sm ps-2 pe-0.75 text-fg-3 text-xs outline-none hover:bg-bg-a2 hover:text-fg-4 active:bg-bg-a2 active:text-fg-4 data-[active=true]:bg-bg-a2 data-[active=true]:text-fg-4 data-[active=true]:faux-medium data-[dragging=true]:opacity-50';
 
 function RenameField({
   terminal,
@@ -32,7 +30,7 @@ function RenameField({
       autoFocus
       value={value}
       aria-label='Terminal name'
-      className='h-6 w-40 text-xs'
+      className='h-full w-40 text-xs'
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => setValue(event.target.value)}
       onBlur={() => finish(value)}
@@ -123,7 +121,6 @@ function TerminalTab({
   now,
   active,
   dragging,
-  onSelect,
   onClose,
   onRename,
   onDragStart,
@@ -134,7 +131,6 @@ function TerminalTab({
   now: number | undefined;
   active: boolean;
   dragging: boolean;
-  onSelect: () => void;
   onClose: () => void;
   onRename: () => void;
   onDragStart: () => void;
@@ -143,12 +139,11 @@ function TerminalTab({
   const label = resolveTerminalLabel(terminal);
   const ended = terminal.status !== 'running';
   return (
-    <div
-      role='tab'
-      tabIndex={0}
-      aria-selected={active}
-      data-active={active}
-      data-dragging={dragging}
+    <TabsTrigger
+      value={terminal.id}
+      nativeButton={false}
+      render={<div />}
+      data-dragging={dragging || undefined}
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -165,12 +160,8 @@ function TerminalTab({
           onClose();
         }
       }}
-      onClick={onSelect}
       onDoubleClick={onRename}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') onSelect();
-      }}
-      className={TAB}
+      className='group/tab min-w-0 max-w-56 shrink-0 data-dragging:opacity-50 group-data-[variant=default]/tabs-list:pe-0.5'
     >
       {service ? (
         <ServiceTabLabel label={label} service={service} now={now} ended={ended} active={active} />
@@ -196,7 +187,7 @@ function TerminalTab({
           }}
         />
       </Hint>
-    </div>
+    </TabsTrigger>
   );
 }
 
@@ -226,33 +217,37 @@ export function TerminalTabs({
   const [dragged, setDragged] = React.useState<string | null>(null);
   const ids = terminals.map((terminal) => terminal.id);
   return (
-    <div
-      role='tablist'
-      aria-label='Terminals'
-      className='flex min-w-0 flex-1 items-center gap-px overflow-x-auto'
+    <Tabs
+      value={activeId}
+      onValueChange={(id) => {
+        const terminal = terminals.find((candidate) => candidate.id === id);
+        if (terminal) onSelect(terminal);
+      }}
+      className='min-w-0 flex-1'
     >
-      {terminals.map((terminal) =>
-        terminal.id === renamingId ? (
-          <RenameField key={terminal.id} terminal={terminal} onDone={(name) => onRename(terminal, name)} />
-        ) : (
-          <TerminalTab
-            key={terminal.id}
-            terminal={terminal}
-            service={services.find((view) => view.terminal?.id === terminal.id) ?? null}
-            now={now}
-            active={terminal.id === activeId}
-            dragging={terminal.id === dragged}
-            onSelect={() => onSelect(terminal)}
-            onClose={() => onClose(terminal)}
-            onRename={() => onRenameStart(terminal)}
-            onDragStart={() => setDragged(terminal.id)}
-            onDrop={() => {
-              if (dragged) onReorder(moveTerminal(ids, dragged, terminal.id));
-              setDragged(null);
-            }}
-          />
-        )
-      )}
-    </div>
+      <TabsList aria-label='Terminals' className='max-w-full justify-start overflow-x-auto'>
+        {terminals.map((terminal) =>
+          terminal.id === renamingId ? (
+            <RenameField key={terminal.id} terminal={terminal} onDone={(name) => onRename(terminal, name)} />
+          ) : (
+            <TerminalTab
+              key={terminal.id}
+              terminal={terminal}
+              service={services.find((view) => view.terminal?.id === terminal.id) ?? null}
+              now={now}
+              active={terminal.id === activeId}
+              dragging={terminal.id === dragged}
+              onClose={() => onClose(terminal)}
+              onRename={() => onRenameStart(terminal)}
+              onDragStart={() => setDragged(terminal.id)}
+              onDrop={() => {
+                if (dragged) onReorder(moveTerminal(ids, dragged, terminal.id));
+                setDragged(null);
+              }}
+            />
+          )
+        )}
+      </TabsList>
+    </Tabs>
   );
 }

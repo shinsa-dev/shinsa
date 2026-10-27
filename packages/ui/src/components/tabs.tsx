@@ -60,6 +60,7 @@ function TabsList({
         // overflow inflates. The line sits on the list's bottom edge instead.
         <TabsPrimitive.Indicator
           data-slot='tab-indicator'
+          data-motion='move'
           className='absolute bottom-0 left-0 z-10 h-0.5 w-(--active-tab-width) translate-x-(--active-tab-left) translate-y-px rounded-full bg-primary transition-[width,translate] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none'
         />
       ) : null}
@@ -67,6 +68,8 @@ function TabsList({
         <div
           ref={indicatorRef}
           aria-hidden
+          data-slot='tab-indicator'
+          data-motion='move'
           className='corner-superellipse/1.125 pointer-events-none absolute top-0 left-0 -z-10 rounded-segment bg-background opacity-0 shadow-1 dark:bg-bg-4'
           style={{ willChange: 'transform, opacity', contain: 'layout paint', transformOrigin: 'center' }}
         />

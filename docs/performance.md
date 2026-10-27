@@ -398,9 +398,14 @@ did after the shared tooltip, against 947 before the kept pages and 796 before t
   of 417, and a push on All tasks 742 instead of 1,426. A clipped `Truncate` also keeps the same span when it gains
   its tooltip, so its observers stay on the live element (two clipped task lines on Home had lost their tooltip that
   way).
-- **Hover and highlight trailed the pointer.** Washes and text colours eased over 150 ms and menu highlights slid
-  over 180 ms; they now land in the frame of the hover (`docs/design.md` → Motion). This is felt, not measured
-  here.
+- **Hover trailed the pointer.** Washes and text colours eased over 150 ms; they now land in the frame of the hover
+  (`docs/design.md` → Motion). The shared list highlight (menus, selects, ⌘K, the rail, the queue, option lists)
+  still slides, on the movement clock, but only through `transform`: it used to animate `width` and `height` too,
+  which laid out and painted the indicator on every frame of a slide. It now scales from the box it was laid out at
+  and is laid out once when the slide ends. Sampled every animation frame in headless Chromium on the seed (the
+  rail, the queue, ⌘K, Go to file, a select, a context menu, setup's options): 11 to 16 positions between the two
+  rows per slide, no long task, no layout while it moves (the one layout is the settle onto a row of another
+  height).
 - **Every row of All tasks mounted two menus** (third pass). A row's context menu and its chain arrow's dropdown
   were Base UI roots with their stores, positioners and effects, for menus almost never opened. `LazyMenu`
   (`components/controls/lazy-menu.tsx`, `hooks/use-lazy-menu.ts`) renders only the trigger, with the closed menu's

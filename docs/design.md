@@ -3670,6 +3670,24 @@ underline meets a line under it — a card's header strip (filter tabs), a
 bordered frame's top edge. A switcher floating in content (a step's
 SPM / CocoaPods, a card body's Skill / MCP) is the default framed list, its
 scroll fade on a wrapper, never on the frame.
+**Every tab bar is the kit's.** In Shinsa a row of tabs is `Tabs` from
+`@shinsa/ui/components/tabs`, or `Choice` (`components/controls/choice.tsx`)
+for a labelled switch: the task tabs, the Code explorer's Changes / Files, the
+Settings tabs and Appearance's choices, a finding's Fix / Dismiss, the
+terminal tabs and the `/ui` specimens. The selected pill (or the underline's
+line) slides on the movement clock, 200ms `cubic-bezier(0.22, 1, 0.36, 1)`
+(`INDICATOR_TRANSITION`), and the tab colours change at once. Every one
+slides, Settings → Appearance's Layout included: Desk and Shelf are one frame
+(`AppFrame`, `components/layout/frame.tsx`) that adds or drops the top bar and
+the rail around the same `main`, so switching keeps the page under it mounted,
+with its tab bar, its scroll and the focused tab. The indicator
+carries `data-motion="move"`, and anything that turns transitions off for a
+subtree (the Code tab's `INSTANT`) skips it. `bun lint:conventions` rejects a
+`role="tab"` or `role="tablist"` written in `apps/web/src`, an import of
+`@base-ui/react/tabs` outside the kit, a subtree-wide `transition-none`
+that does not spare `[data-motion=move]`, and `before:` or `after:` on a
+subtree (the variant sets `content`, so every element gains a box). The command menu's pages are a
+stack, not tabs, and All tasks filters with a status button, not tabs.
 
 **Segmented control.** Same height as a default button: a 32px frame (1px
 border, 2px padding) around 26px segments, 2px apart. The segments and the
@@ -4940,13 +4958,46 @@ Rules:
   `DisclosureChevron` (or `transition-disclosure`: `rotate` and `transform`
   on the move clock), never a hand-rotated icon; its colour follows its
   trigger's hover at once like everything else.
-- **Highlights jump.** Menus, selects, the command menu (⌘K) and the rail's
-  nav share one highlight surface (`HighlightList`, `HoverHighlight`,
-  `useAnimatedIndicator` with `slide: false`) that jumps to the hovered or
-  keyboard-highlighted row with no transition, so it never trails the pointer
-  or the arrow keys. Only a selection that changes on a click slides: the
-  segmented control's pill and the underline tabs' line. The command palette
-  enters like every dialog, and list popups open instantly.
+- **Highlights slide.** Every list of rows you pick from shares one highlight
+  surface: `HighlightList` (rows marked `data-highlighted` by the primitive) or
+  `HoverHighlight` (rows marked `data-highlight-item`, resting on the
+  `data-active="true"` one), both on `useAnimatedIndicator`. It slides to the
+  hovered or keyboard-highlighted row on the movement clock (200ms
+  `cubic-bezier(0.22, 1, 0.36, 1)`, `INDICATOR_TRANSITION`) and only through
+  `transform`: a translate, and a scale from the box it was laid out at when
+  the next row is another size, so no frame of the slide lays out or paints.
+  When a slide ends on a row of another size, the indicator is laid out once
+  at that size and its scale returns to 1, so its corners never rest stretched. A
+  row draws no hover, highlighted or selected background of its own; it only
+  changes its text colour (`data-indicator-here`, `data-hovered`), in the frame
+  it happens. A press deflates the surface in the frame of the press. The
+  indicator carries `data-slot="highlight-indicator"` and `data-motion="move"`,
+  so a subtree that turns transitions off (the Code tab's `INSTANT`) spares it.
+  It slides in:
+  - the kit's `DropdownMenu` (every dropdown and context menu, sub menus,
+    `LazyMenu`'s menus, the task, project, MCP server, usage, Focus and queue
+    menus), `Select` (`SelectField`, the workspace select, every settings
+    choice list), and `Command`'s `CommandList`: the command menu (⌘K, its
+    pages included) and Go to file (⌘P);
+  - the rail's nav (`NavItem`), the queue in the rail and in the "need you"
+    popover, Home's queue sections, Recently finished and Recent
+    conversations (`ListRow`), setup's option lists (`OptionList`), the task
+    rows in a popover (`TaskPopoverRows`: the guide, a pull request, a fact),
+    the Who worked on this list, and the Review tab's Every point index.
+
+  Instant, on purpose: the Code tab's file tree, changes tree and search
+  results (their rows' hover and selection change in the frame they are
+  asked to, `INSTANT` in `workbench.tsx`), and single controls that are not
+  rows in a list (buttons, a trigger's open fill). `bun lint:conventions`
+  rejects a row that draws its own highlight background (`data-highlighted:`,
+  `data-hovered:` or `data-indicator-here:` with a `bg-`, or a
+  `data-highlight-item` / `role="option"` / `role="menuitem"` row with a
+  `hover:`, `active:`, selected or active `bg-`), and an option or menu item
+  written in `apps/web/src` outside `HighlightList` or `HoverHighlight`;
+  `shared-highlight.test.tsx` in the kit renders the menu, select and command
+  rows and fails if any of them loses the sliding surface. The segmented
+  control's pill and the underline tabs' line slide the same way. The command
+  palette enters like every dialog, and list popups open instantly.
 - **Hover is colour, not motion.** No hover scale or translate. The only press
   shapes are the fixed `inset` deflate and the scale of the link button, a
   ghost tab, a checkbox and the image viewer's round buttons, and they land at

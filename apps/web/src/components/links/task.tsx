@@ -1,5 +1,6 @@
 import type { ShinsaState, Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
+import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -92,14 +93,15 @@ export function TaskLink({ state, task }: { state: ShinsaState; task: Task }) {
 
 export function TaskPopoverRows({ state, tasks }: { state: ShinsaState; tasks: Task[] }) {
   return (
-    <div className='flex flex-col gap-px'>
+    <HoverHighlight className='flex flex-col gap-px' indicatorClassName='rounded-item'>
       {tasks.map((task) => (
         <button
           key={task.id}
           type='button'
           data-task={task.id}
+          data-highlight-item=''
           onClick={() => navigate(resolveTaskAction(state, task).path)}
-          className='corner-superellipse/1.125 flex w-full cursor-pointer items-start gap-2 rounded-item px-2 py-1.5 text-left text-xs outline-none hover:bg-bg-a2 active:bg-bg-a2'
+          className='corner-superellipse/1.125 flex w-full cursor-pointer items-start gap-2 rounded-item px-2 py-1.5 text-left text-xs outline-none'
         >
           <StatusTile {...resolveTaskGlyph(state, task)} size='sm' className='mt-px' />
           <span className='flex min-w-0 flex-col gap-px'>
@@ -110,6 +112,6 @@ export function TaskPopoverRows({ state, tasks }: { state: ShinsaState; tasks: T
           </span>
         </button>
       ))}
-    </div>
+    </HoverHighlight>
   );
 }

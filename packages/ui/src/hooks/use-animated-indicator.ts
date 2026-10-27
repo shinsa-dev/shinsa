@@ -1,14 +1,24 @@
 import * as React from 'react';
 
-export const INDICATOR_TRANSITION =
-  'transform 180ms cubic-bezier(0.22, 1, 0.36, 1), width 180ms cubic-bezier(0.22, 1, 0.36, 1), height 180ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease-out';
+export const INDICATOR_TRANSITION = 'transform 200ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease-out';
 
 const PRESS_INSET = { x: 1, y: 0.5 };
+
+type Box = { left: number; top: number; width: number; height: number };
 
 /**
  * Attaches a sliding indicator to any container whose items expose a
  * boolean-ish attribute (e.g. `data-highlighted`, `data-active`). Pure
  * imperative DOM — no React re-renders on hover/active change.
+ *
+ * The indicator moves on the compositor only: its position and its size
+ * change through `transform` (a translate and a scale from the box it was
+ * laid out at), on the movement clock (`INDICATOR_TRANSITION`). When a slide
+ * ends on an item of another size, the indicator is laid out once at that
+ * size and its scale drops back to 1, so its corners never rest stretched. An
+ * indicator with no size yet (an item not measured) is laid out at once.
+ * The item selected when it mounts shows at once, with no fade or slide; it
+ * moves only when the selection changes after that.
  *
  * Items get `data-indicator-here` while the indicator sits on them, so they
  * can style their own text/icon color for the highlighted state. The
@@ -35,8 +45,7 @@ export function useAnimatedIndicator<T extends HTMLElement>(
     value,
     press = true,
     parkWhenEmpty = false,
-    slide = true,
-  }: { attribute?: string; value?: string; press?: boolean; parkWhenEmpty?: boolean; slide?: boolean } = {}
+  }: { attribute?: string; value?: string; press?: boolean; parkWhenEmpty?: boolean } = {}
 ): React.RefObject<HTMLDivElement | null> {
   const indicatorRef = React.useRef<HTMLDivElement>(null);
 
@@ -46,19 +55,40 @@ export function useAnimatedIndicator<T extends HTMLElement>(
     if (!root || !indicator) return;
 
     let hasAppeared = false;
-    let translate = '';
+    let mounting = true;
     let activeEl: HTMLElement | null = null;
+    let laidOut = { width: 0, height: 0 };
+    let target: Box = { left: 0, top: 0, width: 0, height: 0 };
     const selector = value === undefined ? `[${attribute}]` : `[${attribute}="${value}"]`;
 
     const applyTransform = () => {
-      indicator.style.transform = `${translate} scale(var(--hl-press-scale, 1))`;
+      const x = target.left + (target.width - laidOut.width) / 2;
+      const y = target.top + (target.height - laidOut.height) / 2;
+      const scaleX = target.width / laidOut.width;
+      const scaleY = target.height / laidOut.height;
+      indicator.style.transform = `translate(${x}px, ${y}px) scale(${scaleX}, ${scaleY}) scale(var(--hl-press-scale, 1))`;
+    };
+
+    const layOut = () => {
+      laidOut = { width: target.width, height: target.height };
+      indicator.style.width = `${target.width}px`;
+      indicator.style.height = `${target.height}px`;
+      indicator.style.transform = `translate(${target.left}px, ${target.top}px) scale(1, 1) scale(var(--hl-press-scale, 1))`;
+    };
+
+    const snap = (change: () => void) => {
+      const transition = indicator.style.transition;
+      indicator.style.transition = 'none';
+      change();
+      void indicator.offsetWidth;
+      indicator.style.transition = transition;
     };
 
     const park = () => {
       activeEl?.removeAttribute('data-indicator-here');
       activeEl = null;
       hasAppeared = false;
-      translate = '';
+      laidOut = { width: 0, height: 0 };
       indicator.style.transition = 'none';
       indicator.style.opacity = '0';
       indicator.style.transform = '';
@@ -96,25 +126,30 @@ export function useAnimatedIndicator<T extends HTMLElement>(
         if (!next || !root.contains(next)) break;
         current = next;
       }
-      translate = `translate(${left}px, ${top}px)`;
+      target = { left, top, width: el.offsetWidth, height: el.offsetHeight };
 
       if (!hasAppeared) {
         hasAppeared = true;
         indicator.style.transition = 'none';
-        applyTransform();
-        indicator.style.width = `${el.offsetWidth}px`;
-        indicator.style.height = `${el.offsetHeight}px`;
+        layOut();
+        if (mounting) indicator.style.opacity = '1';
         void indicator.offsetHeight;
-        indicator.style.transition = slide ? INDICATOR_TRANSITION : 'none';
+        indicator.style.transition = INDICATOR_TRANSITION;
         indicator.style.opacity = '1';
         return;
       }
-      applyTransform();
-      indicator.style.width = `${el.offsetWidth}px`;
-      indicator.style.height = `${el.offsetHeight}px`;
+      if (laidOut.width && laidOut.height) applyTransform();
+      else snap(layOut);
+    };
+
+    const settle = (event: TransitionEvent) => {
+      if (event.target !== indicator || event.propertyName !== 'transform') return;
+      if (laidOut.width === target.width && laidOut.height === target.height) return;
+      snap(layOut);
     };
 
     update();
+    mounting = false;
     const observer = new MutationObserver(update);
     observer.observe(root, {
       subtree: true,
@@ -124,16 +159,9 @@ export function useAnimatedIndicator<T extends HTMLElement>(
     });
     const resizeObserver = new ResizeObserver(update);
     resizeObserver.observe(root);
+    indicator.addEventListener('transitionend', settle);
 
     let releasing: (() => void) | null = null;
-
-    const snap = (change: () => void) => {
-      const transition = indicator.style.transition;
-      indicator.style.transition = 'none';
-      change();
-      void indicator.offsetWidth;
-      indicator.style.transition = transition;
-    };
 
     const release = () => {
       snap(() => indicator.style.removeProperty('--hl-press-scale'));
@@ -148,10 +176,8 @@ export function useAnimatedIndicator<T extends HTMLElement>(
       const styles = getComputedStyle(root);
       const insetX = Number.parseFloat(styles.getPropertyValue('--press-inset-x')) || PRESS_INSET.x;
       const insetY = Number.parseFloat(styles.getPropertyValue('--press-inset-y')) || PRESS_INSET.y;
-      const width = indicator.offsetWidth;
-      const height = indicator.offsetHeight;
-      const scaleX = width ? 1 - (2 * insetX) / width : 1;
-      const scaleY = height ? 1 - (2 * insetY) / height : 1;
+      const scaleX = target.width ? 1 - (2 * insetX) / target.width : 1;
+      const scaleY = target.height ? 1 - (2 * insetY) / target.height : 1;
       snap(() => indicator.style.setProperty('--hl-press-scale', `${scaleX}, ${scaleY}`));
       releasing?.();
       const doc = root.ownerDocument;
@@ -168,11 +194,12 @@ export function useAnimatedIndicator<T extends HTMLElement>(
     return () => {
       observer.disconnect();
       resizeObserver.disconnect();
+      indicator.removeEventListener('transitionend', settle);
       root.removeEventListener('pointerdown', onPointerDown);
       release();
       activeEl?.removeAttribute('data-indicator-here');
     };
-  }, [rootRef, attribute, value, press, parkWhenEmpty, slide]);
+  }, [rootRef, attribute, value, press, parkWhenEmpty]);
 
   return indicatorRef;
 }

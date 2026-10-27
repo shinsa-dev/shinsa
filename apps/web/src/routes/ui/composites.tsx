@@ -1,6 +1,7 @@
 import { PROJECT_COLORS, TASK_PRIORITIES } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { DropdownMenu } from '@shinsa/ui/components/dropdown-menu';
+import { HoverHighlight } from '@shinsa/ui/components/highlight-list';
 import { useDialogState } from '@shinsa/ui/hooks/use-dialog-state';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
