@@ -24,7 +24,8 @@ disagrees. You built it and know why it is the way it is, so you write the expla
 - **spots**: the few lines that carry the idea, not the whole function. `why` says what could go wrong or which
   judgement call it holds, never what the code does. Leave out boilerplate, renames, formatting and mechanical edits.
 - **judgement_calls** matter more than the code: name every one a reader would ask about, with the alternatives you
-  rejected.
+  rejected. Title each as the decision ("Poll instead of webhooks"), never "Decision 1"; title a risk the same way
+  ("Offsets shift during an export").
 - **walkthrough** (last phase): whenever the change has structure or a flow, draw it in `flow` (or `approach` for
   structure) as a text diagram in a fenced block, at most 72 columns, a few words beside each step. Reviewers read it
   first. Skip it only for one small edit.
@@ -41,7 +42,8 @@ disagrees. You built it and know why it is the way it is, so you write the expla
 
 - **testing.manual** starts from where to go (the preview URL, or the command that starts the app and its local URL),
   then one concrete step each, then the edge cases worth trying (an empty field, a narrow window, a second tab). An
-  `expect` is concrete enough to tell pass from fail; "it works" is not a result. Leave `manual` empty only when
+  `expect` is concrete enough to tell pass from fail; "it works" is not a result. Link a file in an action as
+  `[duplicate.ts](shinsa://file/src/paywalls/duplicate.ts#L12-L20)`. Leave `manual` empty only when
   nothing can be tried by hand, and say so in `automated`.
 - **steps** are only what needs a person with production access. Do everything in the repository yourself first (code,
   tests, docs, `.env.example`, the migration file). Name every variable and secret production does not have yet, give
@@ -68,5 +70,6 @@ change; the human decides whether the task becomes it.
 
 ## Copy
 
-Sentence case, plain words, no em dashes, no exclamation marks, no filler, no markdown inside short fields. Commands in
-structured fields (a `command` target, a step's `command`) are always runnable, so never fence them.
+Sentence case, plain words, no em dashes, no exclamation marks, no filler, no markdown inside short fields. In a
+Markdown field, a command the human runs themselves goes in a ```bash run block; commands in structured fields (a
+`command` target, a step's `command`) are always runnable, so never fence them.
