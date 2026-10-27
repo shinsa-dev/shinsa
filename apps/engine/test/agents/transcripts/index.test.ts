@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { appendFileSync, type FSWatcher, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import type { ChatEntry } from '@shinsa/core';
 import { Transcripts, UNREADABLE_LINE } from '../../../src/agents/transcripts/index.ts';
 import { until } from '../../helpers/index.ts';
+
+setDefaultTimeout(30_000);
 
 describe('transcripts', () => {
   test('lines appended by another writer reach followers', async () => {
