@@ -1,6 +1,6 @@
 import { ReviewTab } from '@/routes/task/review.tsx';
 import { primeReview } from '../../lib/review-prime.ts';
-import { createTintState, TINT_TITLE } from '../../lib/tint-scene.ts';
+import { createTintState } from '../../lib/tint-scene.ts';
 import { DemoRoot, Window } from './frame.tsx';
 import { useLiveElements } from './live.ts';
 
@@ -20,7 +20,7 @@ export function ReviewDemo() {
   return (
     <DemoRoot>
       <div ref={ref} className='demo-static demo-scroll h-full'>
-        <Window title={`SW-214 · ${TINT_TITLE} · Review`}>
+        <Window state={state} route={{ name: 'task', reference: 'SW-214' }}>
           <div className='flex h-full min-h-0 flex-col'>
             <ReviewTab state={state} task={task} />
           </div>

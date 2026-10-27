@@ -25,6 +25,7 @@ export function serializeLlms() {
     `- [Website](${site.url})`,
     `- [Source code](${site.githubUrl})`,
     `- [Download for Mac](${site.downloadUrl})`,
+    `- [Download the beta for Mac](${site.betaUrl})`,
     '',
   ].join('\n');
 }

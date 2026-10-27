@@ -15,7 +15,11 @@ astro-island {
   --window-w: var(--wide-w);
   --window-h: var(--wide-h);
   --window-scale: min(1, tan(atan2(100cqw, var(--window-w))));
-  height: calc(var(--window-extra) + 37px + var(--window-h) * var(--window-scale));
+  height: calc(var(--window-extra) + var(--window-h) * var(--window-scale));
+}
+
+.demo-bar-browser {
+  display: none;
 }
 
 @container (width < 640px) {
@@ -24,12 +28,62 @@ astro-island {
     --window-h: var(--narrow-h);
     --window-scale: 1;
   }
+
+  .demo-bar-app {
+    display: none;
+  }
+
+  .demo-bar-browser {
+    display: block;
+  }
 }
 
 .demo-window-content {
   width: var(--window-w);
   height: var(--window-h);
   transform: scale(var(--window-scale));
+}
+
+.demo-lights {
+  position: absolute;
+  top: 15px;
+  left: 16px;
+  display: flex;
+  gap: 9px;
+  pointer-events: none;
+}
+
+.demo-lights span {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: linear-gradient(to bottom, var(--light-top), var(--light-bottom));
+  box-shadow:
+    inset 0.5px 0 0 var(--light-rim),
+    inset -0.5px 0 0 var(--light-rim),
+    inset 0 0 0 0.5px rgb(0 0 0 / 0.04),
+    0 0.5px 1.5px var(--light-glow);
+}
+
+.demo-light-close {
+  --light-top: #eb7466;
+  --light-bottom: #e8918a;
+  --light-rim: #b50a0a;
+  --light-glow: rgb(235 116 102 / 0.25);
+}
+
+.demo-light-minimize {
+  --light-top: #edb74e;
+  --light-bottom: #f7d562;
+  --light-rim: #921a0b;
+  --light-glow: rgb(237 183 78 / 0.25);
+}
+
+.demo-light-zoom {
+  --light-top: #7ac745;
+  --light-bottom: #abdc88;
+  --light-rim: #0b540b;
+  --light-glow: rgb(122 199 69 / 0.25);
 }
 
 body {

@@ -45,7 +45,7 @@ export function HeroDemo() {
           if (event.target instanceof HTMLElement) event.target.blur();
         }}
       >
-        <Window title='Shinsa'>
+        <Window state={state} route={{ name: 'home' }}>
           <HomePage state={state} />
         </Window>
         <div className='pointer-events-none absolute inset-x-0 bottom-0 h-40 rounded-b-2xl bg-linear-to-t from-background to-transparent' />

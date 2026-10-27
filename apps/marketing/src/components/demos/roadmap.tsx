@@ -7,7 +7,7 @@ export function RoadmapDemo() {
   const [state] = React.useState(() => createHomeScene(Date.now()));
   return (
     <DemoRoot>
-      <Window title='All tasks' inert>
+      <Window state={state} route={{ name: 'tasks' }} inert>
         <TasksPage state={state} />
       </Window>
     </DemoRoot>

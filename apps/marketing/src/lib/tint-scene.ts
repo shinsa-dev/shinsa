@@ -103,6 +103,7 @@ const REPORT: WorkReport = {
   checks: CHECKS,
   judgementCalls: [
     {
+      title: 'Colour icons through the text tone',
       call: 'Coloured through the text tone, not an opacity',
       file: ROW_PATH,
       line: lineOf(ROW, 'TONE_TEXT[resolveTaskStatus'),
@@ -116,6 +117,7 @@ const REPORT: WorkReport = {
       ],
     },
     {
+      title: 'A shared hover map',
       call: 'A hover map beside the surfaces, not inline classes',
       file: TONE_PATH,
       line: lineOf(TONE, 'export const TONE_SURFACE_HOVER'),
@@ -134,6 +136,7 @@ const REPORT: WorkReport = {
     flow: 'Each roadmap row resolves its status with `resolveTaskStatus`, and `KindMark` colours itself with that tone. The badge resolves its pull request’s tone once and takes `TONE_SURFACE` at rest and `TONE_SURFACE_HOVER` under the pointer.',
     risks: [
       {
+        title: 'Gray icons for neutral statuses',
         risk: 'A neutral status keeps a gray icon, so a waiting task reads as quieter than before. That is the intent, but worth a look.',
         file: ROW_PATH,
         line: lineOf(ROW, 'TONE_TEXT[resolveTaskStatus'),
@@ -171,7 +174,7 @@ const DISAGREEMENTS = [
   },
 ];
 
-export const TINT_TITLE = 'Tint the status icons and pull request badges on All tasks';
+const TINT_TITLE = 'Tint the status icons and pull request badges on All tasks';
 
 export function createTintState(now: number): { state: ShinsaState; task: Task } {
   const task = createSampleTask(now, {

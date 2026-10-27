@@ -11,6 +11,6 @@
       "@/*": ["../web/src/*"]
     }
   },
-  "include": [".astro/types.d.ts", "src", "astro.config.mjs"],
+  "include": [".astro/types.d.ts", "src", "test", "astro.config.mjs"],
   "exclude": ["dist"]
 }

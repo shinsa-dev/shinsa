@@ -120,6 +120,7 @@ export const REVIEW_REPORT: WorkReport = {
   checks: REVIEW_CHECKS,
   judgementCalls: [
     {
+      title: 'One draft per owner',
       call: 'Kept the draft per owner, not per browser',
       file: 'src/onboarding/draft-store.ts',
       line: lineOf(DRAFT_STORE_AFTER, 'where: { ownerId } });'),
@@ -129,6 +130,7 @@ export const REVIEW_REPORT: WorkReport = {
       ],
     },
     {
+      title: 'Validate each step once',
       call: 'Validated per step, not again at the end',
       file: 'src/onboarding/steps.ts',
       line: lineOf(STEPS_AFTER, 'export function validateStep'),
@@ -147,6 +149,7 @@ export const REVIEW_REPORT: WorkReport = {
     flow: 'Opening onboarding asks `resolveResumeStep` where to land, renders that step, and `saveStep` writes the answers to `storeDrafts` on Continue. Finishing the third step calls `createStore`, which turns the draft into a store and removes the draft.',
     risks: [
       {
+        title: 'Leftover draft on a failed delete',
         risk: 'A failed delete leaves a draft behind, and finishing again would create a second store.',
         file: 'src/onboarding/draft-store.ts',
         line: lineOf(DRAFT_STORE_AFTER, 'export async function createStore'),

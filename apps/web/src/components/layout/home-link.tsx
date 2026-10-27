@@ -1,6 +1,7 @@
+import * as React from 'react';
 import { BrandLink } from '@/components/layout/brand-link.tsx';
 import { NavButton } from '@/components/layout/nav-button.tsx';
-import { HOME_SHORTCUT, isDesktop } from '@/lib/desktop.ts';
+import { DesktopChrome, HOME_SHORTCUT, isDesktop } from '@/lib/desktop.ts';
 
 export function HomeLink({
   onNavigate,
@@ -9,7 +10,8 @@ export function HomeLink({
   onNavigate?: () => void;
   brandClassName?: string;
 }) {
-  if (isDesktop())
+  const chrome = React.useContext(DesktopChrome);
+  if (chrome || isDesktop())
     return (
       <NavButton
         page='home'

@@ -1,5 +1,5 @@
 import { type ShinsaState, selectTaskByReference, type Task } from '@shinsa/core';
-import { useSyncExternalStore } from 'react';
+import { createContext, useContext, useSyncExternalStore } from 'react';
 import { createSignal } from '@/lib/signal.ts';
 
 export type Route =
@@ -88,8 +88,12 @@ export function useSearchString() {
   return useSyncExternalStore(signal.subscribe, () => search);
 }
 
+export const RouteScope = createContext<Route | null>(null);
+
 export function useRoute() {
-  return useSyncExternalStore(signal.subscribe, () => current);
+  const scoped = useContext(RouteScope);
+  const live = useSyncExternalStore(signal.subscribe, () => current);
+  return scoped ?? live;
 }
 
 export function resolveRouteTaskId(state: ShinsaState | null, route: Route) {

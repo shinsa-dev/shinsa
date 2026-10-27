@@ -101,6 +101,7 @@ packages/
 | `bun lint` | Biome, the repository's conventions checker and spelling |
 | `bun check-types` | TypeScript across every package |
 | `bun format:fix` | Format |
+| `bun scripts/screenshots/readme.ts` | Take the screenshots above again, from the Mac app on seeded data |
 
 How Shinsa works inside is in [`docs/`](docs): start with [`docs/spec.md`](docs/spec.md).
 

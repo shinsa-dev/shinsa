@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import {
   navigate,
   parseRoute,
+  RouteScope,
   replaceRoute,
   resolveCanonicalTaskPath,
   resolveRouteTaskId,
@@ -205,5 +207,19 @@ describe('resolveRouteTaskId', () => {
     expect(result.current).toBe('t1');
     act(() => navigate('/settings'));
     expect(result.current).toBeNull();
+  });
+});
+
+describe('RouteScope', () => {
+  it('renders a subtree at its own route while the page stays where it is', () => {
+    act(() => navigate('/'));
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(RouteScope, { value: parseRoute('/tasks/SW-1') }, children);
+    const state = createShinsaState({ tasks: [createTask({ id: 't1', handle: 'SW-1' })] });
+    const scoped = renderHook(() => [useRoute(), useRouteTaskId(state)], { wrapper });
+    expect(scoped.result.current).toEqual([{ name: 'task', reference: 'SW-1' }, 't1']);
+    act(() => navigate('/settings'));
+    expect(scoped.result.current).toEqual([{ name: 'task', reference: 'SW-1' }, 't1']);
+    expect(renderHook(() => useRoute()).result.current).toEqual({ name: 'settings' });
   });
 });

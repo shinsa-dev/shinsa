@@ -30,6 +30,17 @@ screen's height and width in CSS alone (`components/layout/DemoWindow.astro`, `l
 up a window is the desktop app scaled to fit; below it, on a phone, it renders the web app at the phone's own width
 and its `narrow` height, since the web app is responsive and a scaled desktop is too small to read. Keep it
 that way: a demo whose height depends on its content gets fixed inner heights and a reserved height in `index.astro`.
+A window's height is the whole window, its top bar included.
+
+A window looks like the Mac app, which has no title strip: `Window` (`frame.tsx`) starts with the web's own
+`CardsTopBar`, fed the demo's state and rendered at the demo's page through `RouteScope` (so All tasks marks Tasks and
+a task page shows its queue menu), inside `data-desktop="window"` and `DesktopChrome` so it takes the app's look (the
+room for the lights, Home in place of the wordmark). The traffic lights are drawn over it where macOS puts them
+(`.demo-lights` in `global.css`), measured from Shinsa.app on macOS 27 at 2x: 14px circles, centres 23px apart, the
+first centre 23px from the left and 22px down (the bar's middle), each a top-to-bottom gradient with a darker 0.5px
+edge on its sides and a faint glow under it. Below 640px the page shows the web app as a phone's browser would: a
+second copy of the bar without `data-desktop`, the wordmark and no lights, swapped in by the container query in CSS so
+nothing changes when the islands mount. Both bars are `inert`; the demo below them is the part you use.
 `Backdrop.astro` draws a circuit board behind it (`lib/board.ts`): each demo
 window is a chip, two traces per side run from one chip to the next, and a signal travels down them as you scroll.
 
@@ -50,7 +61,8 @@ src/
                             its point index, its evidence and scrolling), code (the Code workbench, side by side and
                             editable: the stand-in keeps your saves in memory), roadmap (All tasks), loop (the
                             pull request activity), guard (agent commands and the policy's verdicts); frame.tsx holds
-                            DemoRoot (installs the stand-in server), Window and Stage; focus.ts (`useFocus`) plays a demo only
+                            DemoRoot (installs the stand-in server), Window (the app's top bar and traffic lights over
+                            the demo's page) and Stage; focus.ts (`useFocus`) plays a demo only
                             while it is the main thing on screen (half of it in view, or 45% of the screen), and its first step comes 300ms after
   lib/content.ts            Every headline and paragraph on the page, the principles and the feature grid
   lib/site.ts               Name, URL, description, the download and GitHub links
@@ -69,7 +81,9 @@ src/
   lib/llms.ts               `/llms.txt`, written from `content.ts` so it never drifts from the page
   pages/                    index, 404, og.png, llms.txt; public/ holds the
                             PNG icons, site.webmanifest and robots.txt; @astrojs/sitemap writes the sitemap
-  lib/guard.ts              Runs `apps/server/src/agents/policy.ts` at build time on a fixed list of commands
+  lib/guard.ts              Runs `apps/engine/src/agents/policy.ts` at build time on a fixed list of commands
+  worker/                   The Worker in front of the assets: index.ts wires Cloudflare's globals into download.ts,
+                            which answers the download paths (tested in test/worker/ at 100%, `bun run test`)
 ```
 
 ## Rules

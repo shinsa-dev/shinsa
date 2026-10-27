@@ -154,7 +154,11 @@ export function GatesDemo() {
         <p className='flex h-7 shrink-0 items-center justify-center gap-2 text-fg-2 text-sm'>
           <WorkStatus step={step} onRestart={restart} />
         </p>
-        <Window title='NW-155 · Split store onboarding into steps' className='min-h-0 w-full flex-1'>
+        <Window
+          state={scene.state}
+          route={{ name: 'task', reference: 'NW-155' }}
+          className='min-h-0 w-full flex-1'
+        >
           <div className='flex h-full min-h-0 flex-col'>
             <TaskPage state={scene.state} taskId='NW-155' />
           </div>

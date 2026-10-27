@@ -10,7 +10,8 @@
     "deploy": "wrangler deploy",
     "deploy:preview": "wrangler preview",
     "dev": "bun --bun astro dev --port 5182",
-    "preview": "bun --bun astro preview --port 5182"
+    "preview": "bun --bun astro preview --port 5182",
+    "test": "bun test"
   },
   "dependencies": {
     "@astrojs/react": "^6.0.6",

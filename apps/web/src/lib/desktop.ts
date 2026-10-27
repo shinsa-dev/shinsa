@@ -1,4 +1,5 @@
 import { isQuietSurface, type ShinsaBuild, type Surface } from '@shinsa/core';
+import { createContext } from 'react';
 import { createSignal } from '@/lib/signal.ts';
 
 type DesktopWindowState = 'window' | 'fullscreen';
@@ -53,6 +54,8 @@ function selectDesktop() {
 export function isDesktop() {
   return selectDesktop() !== null;
 }
+
+export const DesktopChrome = createContext(false);
 
 export function resolveSurface(): Surface {
   return isDesktop() ? 'desktop' : 'browser';

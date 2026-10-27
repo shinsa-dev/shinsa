@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useCommandMenuOpen } from '@/lib/command/registry.ts';
 import { resetOnboardingStatus } from '@/lib/connection/onboarding.ts';
+import { writeLayoutPreference } from '@/lib/preferences/layout.ts';
 import { Root } from '@/root.tsx';
 import { navigate, updateSearchParams } from '@/router.ts';
 import { createFlow, createOnboardingStatus, createStep, startFakeOnboarding } from './support/onboarding.ts';
@@ -92,6 +93,24 @@ describe('pages you have been to stay ready', () => {
     act(() => updateSearchParams({ tab: null }));
     expect(overview?.isConnected).toBe(true);
     expect(isShown(overview ?? null)).toBe(true);
+  });
+});
+
+describe('switching the layout keeps the page', () => {
+  it('keeps the open page and the same main across Desk and Shelf', async () => {
+    render(<Root />);
+    pushState(STATE);
+    const home = composer();
+    const main = document.querySelector('main');
+    expect(home).not.toBeNull();
+    act(() => writeLayoutPreference('sidebar'));
+    expect(screen.getByRole('complementary')).not.toBeNull();
+    expect(document.querySelector('main')).toBe(main);
+    expect(composer()).toBe(home);
+    act(() => writeLayoutPreference('cards'));
+    expect(screen.queryByRole('complementary')).toBeNull();
+    expect(document.querySelector('main')).toBe(main);
+    expect(composer()).toBe(home);
   });
 });
 

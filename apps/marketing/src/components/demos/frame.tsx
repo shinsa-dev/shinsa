@@ -1,6 +1,10 @@
+import type { ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
+import { CardsTopBar } from '@/components/layout/cards/top-bar.tsx';
+import { DesktopChrome } from '@/lib/desktop.ts';
+import { type Route, RouteScope } from '@/router.ts';
 import { installDemoApi, installDemoConnection, installDemoServer } from '../../lib/demo-server.ts';
 
 if (import.meta.env.SSR) {
@@ -15,12 +19,14 @@ export function DemoRoot({ children }: { children: React.ReactNode }) {
 }
 
 export function Window({
-  title,
+  state,
+  route,
   inert = false,
   className,
   children,
 }: {
-  title: string;
+  state: ShinsaState;
+  route: Route;
   inert?: boolean;
   className?: string;
   children: React.ReactNode;
@@ -28,20 +34,29 @@ export function Window({
   return (
     <div
       className={cn(
-        'corner-superellipse/1.125 flex h-full flex-col overflow-hidden rounded-2xl bg-background ring-1 ring-bg-4/70 dark:ring-bg-3',
+        'corner-superellipse/1.125 relative h-full overflow-hidden rounded-2xl bg-background ring-1 ring-bg-4/70 dark:ring-bg-3',
         className
       )}
     >
-      <div className='relative flex h-9 shrink-0 items-center gap-1.5 border-bg-3 border-b bg-sidebar px-3.5'>
-        <span className='size-2.5 rounded-full bg-bg-4' />
-        <span className='size-2.5 rounded-full bg-bg-4' />
-        <span className='size-2.5 rounded-full bg-bg-4' />
-        <span className='absolute inset-x-16 truncate text-center text-2xs text-fg-2'>{title}</span>
-      </div>
-      <div className='relative min-h-0 flex-1 overflow-hidden'>
-        <div className='demo-window-content absolute top-0 left-0 origin-top-left' inert={inert}>
-          {children}
-        </div>
+      <div className='demo-window-content absolute top-0 left-0 flex origin-top-left flex-col'>
+        <RouteScope value={route}>
+          <div className='demo-bar-app relative' data-desktop='window' inert>
+            <DesktopChrome value>
+              <CardsTopBar state={state} />
+            </DesktopChrome>
+            <div aria-hidden className='demo-lights'>
+              <span className='demo-light-close' />
+              <span className='demo-light-minimize' />
+              <span className='demo-light-zoom' />
+            </div>
+          </div>
+          <div className='demo-bar-browser' inert>
+            <CardsTopBar state={state} />
+          </div>
+          <div className='flex min-h-0 flex-1 flex-col' inert={inert}>
+            {children}
+          </div>
+        </RouteScope>
       </div>
     </div>
   );
