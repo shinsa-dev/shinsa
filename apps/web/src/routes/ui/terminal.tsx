@@ -20,10 +20,11 @@ import { INSET } from '@/components/layout/surface/card.ts';
 import { SERVICES_PANEL, ServicesPanel, ServicesTriggerLabel } from '@/components/services/menu.tsx';
 import type { ServicesPanelActions } from '@/components/services/panel-views.tsx';
 import { type ServiceHandlers, ServiceRow } from '@/components/services/service-row.tsx';
+import { TaskServicesPanel } from '@/components/services/task-menu.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
-import type { ServiceGroup } from '@/lib/terminal/services.ts';
+import type { ServiceGroup, TaskServiceRun } from '@/lib/terminal/services.ts';
 import {
   createServicesPanel,
   reduceServicesPanel,
@@ -73,6 +74,25 @@ const RUNNING = serviceTerminal('api', { startedAt: NOW - 3_720_000 });
 
 const FAILED = serviceTerminal('worker', { status: 'exited', exitCode: 1, endedAt: NOW - 60_000 });
 
+const TASK_RUN = serviceTerminal('api', {
+  id: 't-api-sh-4',
+  taskId: 'sh-4',
+  place: 'worktree',
+  cwd: '~/.config/shinsa/data/worktrees/sh-4/apps/api',
+  startedAt: NOW - 540_000,
+});
+
+const TASK_FAILED = serviceTerminal('api', {
+  id: 't-api-sh-7',
+  taskId: 'sh-7',
+  place: 'worktree',
+  status: 'exited',
+  exitCode: 1,
+  endedAt: NOW - 120_000,
+});
+
+const TASK_HANDLES = { 'sh-4': { handle: 'SH-4' }, 'sh-7': { handle: 'SH-7' } };
+
 const VIEWS: ServiceView[] = [
   resolveServiceView(service('api'), RUNNING, NOW),
   resolveServiceView(service('web'), serviceTerminal('web', { startedAt: NOW - 1000 }), NOW),
@@ -85,8 +105,19 @@ const VIEWS: ServiceView[] = [
   resolveServiceView(service('storybook', 'bun run storybook'), null, NOW),
 ];
 
+const TASK_VIEWS: ServiceView[] = [
+  resolveServiceView(service('api'), TASK_RUN, NOW),
+  resolveServiceView(service('web'), null, NOW, 'sh-4'),
+];
+
+const TASK_RUNS: TaskServiceRun[] = [
+  { view: resolveServiceView(service('api'), TASK_RUN, NOW), label: 'SH-4 Fix the cart' },
+  { view: resolveServiceView(service('api'), TASK_FAILED, NOW), label: 'SH-7 Show the order total' },
+];
+
 const TERMINALS: TerminalInfo[] = [
   RUNNING,
+  TASK_RUN,
   FAILED,
   BASE,
   { ...BASE, id: 'shell', name: null, title: 'fish' },
@@ -172,7 +203,7 @@ const NOTES: Project = { ...PROJECT, id: 'notes', name: 'Notes', key: 'NOTE', co
 const GROUPS_MANY: ServiceGroup[] = [
   { project: BLOG, views: VIEWS.slice(0, 1) },
   { project: NOTES, views: VIEWS.slice(3, 5) },
-  { project: PROJECT, views: VIEWS },
+  { project: PROJECT, views: VIEWS, runs: { api: TASK_RUNS } },
 ];
 
 const HANDLERS: ServiceHandlers = {
@@ -279,8 +310,19 @@ export function TerminalSpecimens() {
           ))}
         </HoverHighlight>
       </Specimen>
-      <Specimen label='The Services popover · three projects, each folding from its header, the play button that starts all where two or more are stopped'>
+      <Specimen label='The Services popover · three projects, each folding from its header, the play button that starts all where two or more are stopped, and a service’s runs in tasks under it'>
         <PanelSample groups={GROUPS_MANY} start={[]} />
+      </Specimen>
+      <Specimen label='A task’s Services popover · one running in its worktree, one it has not started'>
+        <div className={cn(INSET, SERVICES_PANEL, 'overflow-hidden bg-popover')}>
+          <TaskServicesPanel
+            task={{ handle: 'SH-4' }}
+            views={TASK_VIEWS}
+            project={PROJECT}
+            now={NOW}
+            handlers={HANDLERS}
+          />
+        </div>
       </Specimen>
       <Specimen label='The Services popover · a project with none yet, and no project at all'>
         <div className='flex flex-wrap items-start gap-3'>
@@ -336,7 +378,8 @@ export function TerminalSpecimens() {
         <Toolbar className='w-full gap-1.5 ps-2'>
           <TerminalTabs
             terminals={TERMINALS}
-            services={VIEWS}
+            tasks={TASK_HANDLES}
+            services={[...VIEWS, TASK_VIEWS[0] as ServiceView]}
             now={NOW}
             activeId={active}
             renamingId={null}

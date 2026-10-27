@@ -2,6 +2,7 @@ import {
   isServiceActive,
   isServiceEnvKey,
   listProjectServices,
+  listServiceTaskRuns,
   type Project,
   resolveFocusProject,
   resolveServicesSummary,
@@ -11,6 +12,7 @@ import {
   type ServiceSuggestion,
   type ServiceView,
   type ShinsaState,
+  type Task,
   type TerminalInfo,
   type TerminalPlace,
   type TerminalsSnapshot,
@@ -41,9 +43,43 @@ export const SERVICES_ICON: IconName = 'IconServer';
 
 export const SERVICES_ACTIVE_ICON: IconName = 'IconServerFilled';
 
+export interface TaskServiceRun {
+  view: ServiceView;
+  label: string;
+}
+
 export interface ServiceGroup {
   project: Project;
   views: ServiceView[];
+  runs?: Record<string, TaskServiceRun[]>;
+}
+
+export function describeTaskRunLabel(task: Pick<Task, 'handle' | 'title'> | undefined) {
+  if (!task) return 'A finished task';
+  return task.handle ? `${task.handle} ${task.title}` : task.title;
+}
+
+export function listTaskServiceRuns(
+  snapshot: TerminalsSnapshot | null,
+  serviceId: string,
+  tasks: Record<string, Task>,
+  now: number
+): TaskServiceRun[] {
+  return listServiceTaskRuns(snapshot, serviceId, now)
+    .filter((view) => isServiceActive(view) || view.state === 'failed')
+    .map((view) => ({ view, label: describeTaskRunLabel(tasks[view.taskId ?? '']) }));
+}
+
+export function describeTaskServices(task: Pick<Task, 'handle'>) {
+  return {
+    title: task.handle ? `Services for ${task.handle}` : 'Services for this task',
+    description: 'Each runs in this task’s worktree, beside your own run.',
+  };
+}
+
+export function listProjectServiceRuns(snapshot: TerminalsSnapshot | null, projectId: string, now: number) {
+  const main = listProjectServices(snapshot, projectId, now);
+  return [...main, ...main.flatMap((view) => listServiceTaskRuns(snapshot, view.service.id, now))];
 }
 
 export function describeServiceState(view: ServiceView, now: number) {
@@ -111,11 +147,15 @@ export function resolveServicesProjects(state: ShinsaState, current: string | nu
 export function listServiceGroups(
   snapshot: TerminalsSnapshot | null,
   projects: Project[],
-  now: number
+  now: number,
+  tasks: Record<string, Task> = {}
 ): ServiceGroup[] {
   return projects.flatMap((project) => {
     const views = listProjectServices(snapshot, project.id, now);
-    return views.length > 0 || projects.length === 1 ? [{ project, views }] : [];
+    const runs = Object.fromEntries(
+      views.map((view) => [view.service.id, listTaskServiceRuns(snapshot, view.service.id, tasks, now)])
+    );
+    return views.length > 0 || projects.length === 1 ? [{ project, views, runs }] : [];
   });
 }
 

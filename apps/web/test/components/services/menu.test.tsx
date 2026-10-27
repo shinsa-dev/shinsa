@@ -198,6 +198,45 @@ describe('the Services popover', () => {
     expect(screen.getByRole('button', { name: 'Terminal' })).toBeTruthy();
   });
 
+  it('lists a service’s runs in tasks under it, each opening, stopping or starting that task’s run', () => {
+    const forTask = resolveServiceView(
+      createService({ id: 'api' }),
+      createTerminal({ id: 't-fix', serviceId: 'api', taskId: 'fix', startedAt: NOW }),
+      LATER
+    );
+    const failed = resolveServiceView(
+      createService({ id: 'api' }),
+      createTerminal({
+        id: 't-cart',
+        serviceId: 'api',
+        taskId: 'cart',
+        status: 'exited',
+        exitCode: 1,
+        endedAt: NOW,
+      }),
+      LATER
+    );
+    const { calls } = renderPanel([
+      {
+        project: SHOP,
+        views: [stopped('api')],
+        runs: {
+          api: [
+            { view: forTask, label: 'SH-4 Fix the cart' },
+            { view: failed, label: 'SH-7 Show the total' },
+          ],
+        },
+      },
+    ]);
+    expect(screen.getByText('SH-4 Fix the cart')).toBeTruthy();
+    expect(screen.getByText('Failed with code 1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open the terminal of api for SH-4 Fix the cart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Stop api' }));
+    const starts = screen.getAllByRole('button', { name: 'Start api' });
+    for (const start of starts) fireEvent.click(start);
+    expect(calls).toEqual(['open api', 'stop api', 'start api', 'start api']);
+  });
+
   it('draws each project as the compact queue draws a section, the play button in the column of the rows’ buttons', () => {
     renderPanel([{ project: SHOP, views: [running('api'), stopped('web'), stopped('docs')] }]);
     const shop = screen.getByText('Shop').closest('section') as HTMLElement;
