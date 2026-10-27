@@ -31,6 +31,7 @@ import { commitEdits, recordEdit } from './edits.ts';
 import { recordChecks } from './fixes.ts';
 import { answerGate, assertGatesStayOpen, assertHumanDecides } from './gates.ts';
 import { enforceLiveness } from './liveness.ts';
+import { acceptMemory, rememberRule, removeMemory, writeMemory } from './memory.ts';
 import { syncMergeSteps, tickMergeStep } from './merge-steps.ts';
 import { dropMessage, messageTask, receiveMessage, redeliverMessage, routeMessage } from './messages.ts';
 import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
@@ -173,6 +174,14 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return waitFor(decider, command);
     case 'agent.suggest_tasks':
       return suggestTasks(decider, command);
+    case 'agent.remember':
+      return rememberRule(decider, command);
+    case 'memory.write':
+      return writeMemory(decider, command);
+    case 'memory.accept':
+      return acceptMemory(decider, command);
+    case 'memory.remove':
+      return removeMemory(decider, command);
     case 'agent.deliver':
       return recordDelivery(decider, command);
     case 'agent.reshape':

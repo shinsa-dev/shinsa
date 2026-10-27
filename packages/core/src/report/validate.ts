@@ -5,6 +5,9 @@ import {
   EVIDENCE_KINDS,
   EVIDENCE_STAGES,
   EVIDENCE_THEMES,
+  MEMORY_LIMITS,
+  MEMORY_SCOPES,
+  type MemoryScope,
   type PipelineStep,
   PLAN_EVIDENCE_KINDS,
   SHAPE_LIMITS,
@@ -736,6 +739,17 @@ export function validateSuggestions(input: Record<string, unknown>): Validation<
     };
   });
   return reader.result(tasks);
+}
+
+export function validateMemoryProposal(
+  input: Record<string, unknown>
+): Validation<{ scope: MemoryScope; text: string; why: string }> {
+  const reader = new Reader();
+  return reader.result({
+    scope: reader.pick(input.scope, 'scope', MEMORY_SCOPES),
+    text: reader.text(input.text, 'text', MEMORY_LIMITS.text),
+    why: reader.text(input.why, 'why', MEMORY_LIMITS.why),
+  });
 }
 
 function readProposal(reader: Reader, value: unknown): ChangeProposalInput | null {

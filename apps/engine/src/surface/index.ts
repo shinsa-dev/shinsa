@@ -11,6 +11,7 @@ import { CONFIG_SPECS } from './config.ts';
 import { EXTENSION_SPECS } from './extensions.ts';
 import { type FieldSpec, serializeFlag, type Values } from './fields.ts';
 import { GATE_SPECS } from './gates.ts';
+import { MEMORY_SPECS } from './memory.ts';
 import { SCHEDULE_SPECS } from './schedules.ts';
 import { SERVICE_SPECS } from './services.ts';
 import { describeTaskLink, type SurfaceSpec } from './spec.ts';
@@ -51,6 +52,7 @@ export const SURFACE: SurfaceSpec[] = [
   ...GATE_SPECS,
   ...WORK_SPECS,
   ...SCHEDULE_SPECS,
+  ...MEMORY_SPECS,
   ...CONFIG_SPECS,
   ...SYSTEM_SPECS,
   ...SERVICE_SPECS,
@@ -184,6 +186,15 @@ const SURFACE_SECTIONS: readonly SurfaceSection[] = [
   {
     title: 'Start tasks on a schedule or from a webhook',
     groups: [['schedules', 'List, create, pause, resume or delete schedules, and manage webhook URLs.']],
+  },
+  {
+    title: 'Choose what agents remember',
+    groups: [
+      [
+        'memory',
+        'List the rules every agent follows, write or remove one, and keep the ones agents propose.',
+      ],
+    ],
   },
   {
     title: 'Set up projects, repositories and accounts',

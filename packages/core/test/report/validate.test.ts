@@ -5,6 +5,7 @@ import {
   validateDelivery,
   validateEvidence,
   validateFixHandOver,
+  validateMemoryProposal,
   validatePhaseHandOver,
   validatePlanHandOver,
   validateQuestion,
@@ -825,6 +826,28 @@ describe('validateSuggestions', () => {
     ).toEqual({
       ok: false,
       errors: ['tasks[0].request is required.', 'tasks[0].after_this must be true or false.'],
+    });
+  });
+});
+
+describe('validateMemoryProposal', () => {
+  test('reads the scope, the rule and why, trimmed', () => {
+    expect(
+      validateMemoryProposal({ scope: 'project', text: ' Keep plans short. ', why: 'You said so.' })
+    ).toEqual({
+      ok: true,
+      value: { scope: 'project', text: 'Keep plans short.', why: 'You said so.' },
+    });
+  });
+
+  test('needs a known scope, a rule within the limit and why', () => {
+    expect(validateMemoryProposal({ scope: 'repo', text: 'x'.repeat(241) })).toEqual({
+      ok: false,
+      errors: [
+        'scope must be one of global, project.',
+        'text is 241 characters; the limit is 240.',
+        'why is required.',
+      ],
     });
   });
 });

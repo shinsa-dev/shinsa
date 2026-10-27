@@ -577,6 +577,15 @@ function readScheduleWrite(fields: Fields): UserCommand {
   };
 }
 
+function readMemoryWrite(fields: Fields): UserCommand {
+  return {
+    type: 'memory.write',
+    memoryId: readNullableId(fields, 'memoryId'),
+    projectId: readNullableId(fields, 'projectId'),
+    text: readText(fields, 'text'),
+  };
+}
+
 const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'repo.update': (fields) => ({
     type: 'repo.update',
@@ -617,6 +626,9 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'schedule.enable': readScheduleEnable,
   'schedule.remove': (fields) => ({ type: 'schedule.remove', scheduleId: readId(fields, 'scheduleId') }),
   'schedule.write': readScheduleWrite,
+  'memory.write': readMemoryWrite,
+  'memory.accept': (fields) => ({ type: 'memory.accept', memoryId: readId(fields, 'memoryId') }),
+  'memory.remove': (fields) => ({ type: 'memory.remove', memoryId: readId(fields, 'memoryId') }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

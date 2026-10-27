@@ -43,6 +43,7 @@ import type {
   DelegationSystemCommand,
   DelegationUserCommand,
 } from './delegations.ts';
+import type { MemoryAgentCommand, MemoryUserCommand } from './memory.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
 
@@ -117,7 +118,8 @@ export type UserCommand =
   | { type: 'usage_wait.change'; taskId: string; autoResume: boolean }
   | { type: 'usage_wait.resume_now'; taskId: string }
   | DelegationUserCommand
-  | ScheduleUserCommand;
+  | ScheduleUserCommand
+  | MemoryUserCommand;
 
 type AgentCommand =
   | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
@@ -196,7 +198,8 @@ type AgentCommand =
     ))
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
   | DelegationAgentCommand
-  | ScheduleAgentCommand;
+  | ScheduleAgentCommand
+  | MemoryAgentCommand;
 
 type SystemCommand =
   | {
