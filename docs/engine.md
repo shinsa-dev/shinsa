@@ -630,7 +630,7 @@ predicates) and `state/rounds.ts` (the folds); the classifier is `apps/engine/sr
     the queue, the waiting rounds after it moving up one number (`round.updated`, `round.removed`, activity
     "Changed queued round 3: …" and "Removed queued round 3: …"). A round that started is refused
     (`round_started`: send a message instead), as is a closed task. Both are on the surface (`shinsa rounds update`,
-    `rounds remove`, an agent's `rounds_update` and `rounds_remove`) and done on your behalf like `round.ship`.
+    `rounds remove`; yours alone, so no agent has a tool for them) and done on your behalf like `round.ship`.
 - **One active round, and when the next one starts.** A new round waits (`round.queued`, round status `waiting`, at
   most five waiting) and
   starts by itself once the current round rests (`startQueuedRounds`, after every command, like `releaseWaiting`):
