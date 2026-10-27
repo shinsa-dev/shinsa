@@ -19,7 +19,16 @@ export const OUT = resolve(import.meta.dirname, '../src/components/icon/paths.ts
 
 const INDEX = resolve(import.meta.dirname, '../node_modules/@central-icons-react/all/icons-index.json');
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'test', '.turbo', '.react-router', '.wrangler']);
+const SKIP_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  'test',
+  '.turbo',
+  '.react-router',
+  '.wrangler',
+  'release',
+]);
 const SOURCE_FILE = /\.(tsx?|jsx?|mdx|astro)$/;
 const TEST_FILE = /\.test\.[jt]sx?$/;
 
