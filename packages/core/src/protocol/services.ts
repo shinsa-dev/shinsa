@@ -88,7 +88,7 @@ export function listProjectServices(
   now: number
 ): ServiceView[] {
   if (!snapshot || !projectId) return [];
-  return snapshot.services
+  return (snapshot.services ?? [])
     .filter((service) => service.projectId === projectId)
     .map((service) =>
       resolveServiceView(

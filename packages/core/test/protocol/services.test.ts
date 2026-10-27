@@ -75,6 +75,14 @@ describe('listProjectServices', () => {
     expect(listProjectServices(snapshot, null, 0)).toEqual([]);
   });
 
+  it('lists none for a snapshot that carries no services', () => {
+    const terminalsOnly = {
+      terminals: [terminal({ id: 'shell' })],
+      home: '/home',
+    } as unknown as TerminalsSnapshot;
+    expect(listProjectServices(terminalsOnly, 'p1', 0)).toEqual([]);
+  });
+
   it('sums the states for the header and says which ones still run', () => {
     const views = listProjectServices(snapshot, 'p1', LATER + 5);
     expect(resolveServicesSummary(views)).toEqual({ total: 2, running: 1, starting: 0, failed: 1 });
