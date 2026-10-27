@@ -203,6 +203,7 @@ describe('the Evidence section', () => {
   });
 
   it('files a piece under its kind whatever its file is', () => {
+    answer({});
     renderSection([piece('look', { kind: 'preview', title: 'Look', uri: `${STORED}/look.txt` })]);
     expect(screen.getByText('Look')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Preview' })).toBeTruthy();

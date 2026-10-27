@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import type { ShinsaState } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -79,12 +79,18 @@ function headings() {
   return [...document.querySelectorAll('[cmdk-group-heading]')].map((heading) => heading.textContent);
 }
 
-beforeEach(() => showState());
+beforeEach(() => {
+  spyOn(globalThis, 'fetch').mockImplementation(
+    (async () => new Response(null, { status: 503 })) as unknown as typeof fetch
+  );
+  showState();
+});
 
 afterEach(async () => {
   act(() => writeCommandMenuOpen(false));
   await waitFor(() => expect(isMenuOpen()).toBe(false));
   stopFakeServer();
+  mock.restore();
 });
 
 describe('opening the command menu', () => {

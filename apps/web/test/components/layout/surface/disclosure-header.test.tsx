@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Round, Task } from '@shinsa/core';
@@ -236,6 +236,9 @@ describe('the headers that fold', () => {
   });
 
   it('fold a change snippet from its header, its place a link that does not fold it', () => {
+    const fetch = spyOn(globalThis, 'fetch').mockImplementation(
+      (async () => new Response(null, { status: 503 })) as unknown as typeof globalThis.fetch
+    );
     for (const repoId of [null, 'r-1']) {
       const view = render(
         <TooltipProvider>
@@ -260,6 +263,7 @@ describe('the headers that fold', () => {
       }
       view.unmount();
     }
+    fetch.mockRestore();
   });
 
   it('fold a settings block and a section from anywhere on their header', () => {
