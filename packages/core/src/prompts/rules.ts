@@ -58,17 +58,15 @@ function listToolRules(tools: readonly ShinsaToolName[]) {
         ]
       : []),
     describeWaitingRule(tools),
-    'To read another task (its status, plan, report, open decisions and latest agent replies), call `read_task` with an id from `find_tasks`. It reads; it never changes the task.',
-    'To see the other open tasks in this repository, their branches, the files they changed and whether an agent works on them now, call `list_repository_work`.',
-    'When you notice work worth doing that is outside this task, propose it with `suggest_tasks` instead of doing it. The human decides whether it joins the roadmap.',
-    'When the human asks in this chat for something that does not belong in this task, suggest it with `suggest_tasks`, with `split_off` set on it; the human makes it a task of its own or keeps it here as the next round.',
-    ...(tools.includes('remember')
-      ? [
-          'When the human corrects how you work (in a plan, a review, a comment or the chat) and the correction would hold for later tasks too, propose it with `remember` as one short rule. The human decides whether agents keep it. Never propose what the code or the repository’s own files already say.',
-        ]
-      : []),
   ];
 }
+
+export const WRITING_RULES = [
+  'Write for a reader with ten seconds per item: plain sentences, no filler, no restating the request.',
+  'Wrap code identifiers, file paths and commands in backticks, for example `reset()` or `src/chat/session.ts`. No headings or lists inside short fields.',
+  'Mark a command the human should run themselves in a fenced block whose language is followed by `run`, as ```bash run (sh, zsh, fish, shell and console work too): Shinsa gives that block a Run in terminal button. Use a plain ```bash block for an example, an illustration or a command you ran; it can only be copied.',
+  REFERENCE_RULES,
+].join('\n');
 
 export function resolveHouseRules(role: RunRole) {
   const tools = listCallableToolNames(role);
@@ -79,11 +77,7 @@ export function resolveHouseRules(role: RunRole) {
     'Everything you hand the human must be ready for a decision. Do not ask the human to do work you can do yourself.',
     "Follow the repository's own rules: its CLAUDE.md and AGENTS.md files, its lint and conventions. They are not suggestions.",
     ...listToolRules(tools),
-    'Every hand-over goes through a Shinsa tool with fixed fields and hard length limits. Shinsa rejects one that breaks a limit and tells you which; fix it and call the tool again.',
-    'Write for a reader with ten seconds per item: plain sentences, no filler, no restating the request.',
-    'Wrap code identifiers, file paths and commands in backticks, for example `reset()` or `src/chat/session.ts`. No headings or lists inside short fields.',
-    'Mark a command the human should run themselves in a fenced block whose language is followed by `run`, as ```bash run (sh, zsh, fish, shell and console work too): Shinsa gives that block a Run in terminal button. Use a plain ```bash block for an example, an illustration or a command you ran; it can only be copied.',
-    REFERENCE_RULES,
+    WRITING_RULES,
     resolveOrchestrationRules(tools),
     MANAGE_RULES,
   ].join('\n');

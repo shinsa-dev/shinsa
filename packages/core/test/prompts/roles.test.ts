@@ -272,23 +272,6 @@ describe('the answerer prompt', () => {
   });
 });
 
-describe('reading another task', () => {
-  test('every step agent is told to read another task with read_task, which never changes it', () => {
-    const harness = createHarness();
-    const taskId = createTask(harness);
-    const planner = harness.activeRun(taskId).prompt ?? '';
-    proposePlan(harness, taskId);
-    const builder = harness.activeRun(taskId).prompt ?? '';
-    const answerer = resolveAnswererPrompt(harness.task(taskId), null, null);
-    for (const prompt of [planner, builder, answerer]) {
-      expect(prompt).toContain(
-        'call `read_task` with an id from `find_tasks`. It reads; it never changes the task.'
-      );
-      expect(prompt).toContain('whether an agent works on them now, call `list_repository_work`.');
-    }
-  });
-});
-
 describe('a later round’s reviewer', () => {
   test('is told to review the commits made since the round started', () => {
     const harness = createHarness();

@@ -17,7 +17,7 @@ import {
   resolveReviewFixPrompt,
   splitHouseRules,
 } from '../../src/prompts/index.ts';
-import { resolveHouseRules } from '../../src/prompts/rules.ts';
+import { REFERENCE_RULES, resolveHouseRules, WRITING_RULES } from '../../src/prompts/rules.ts';
 import { createHarness, createTask, proposePlan, pullRequest } from '../harness.ts';
 
 const WORKING_ROLES: RunRole[] = ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'];
@@ -113,12 +113,32 @@ describe('the role and fix prompts', () => {
   });
 });
 
-describe('remembering a rule', () => {
-  test('every working role is told to propose a correction that would hold for later tasks, the reviewer never', () => {
-    for (const role of ['agent', 'answerer', 'investigator', 'researcher'] as const) {
-      expect(resolveHouseRules(role)).toContain('propose it with `remember` as one short rule');
+describe('what the house rules leave to the tools', () => {
+  test('no role is told again what a tool’s own description already says', () => {
+    for (const role of ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'] as const) {
+      const rules = resolveHouseRules(role);
+      for (const tool of [
+        'read_task',
+        'list_repository_work',
+        'suggest_tasks',
+        'remember',
+        'delegation_status',
+      ]) {
+        expect(rules).not.toContain(`\`${tool}\``);
+      }
+      expect(rules).not.toContain('client_request_id');
+      expect(rules).not.toContain('fixed fields and hard length limits');
     }
-    expect(resolveHouseRules('reviewer')).not.toContain('`remember`');
+  });
+
+  test('the writing rules are one block every role gets once', () => {
+    for (const role of ['agent', 'reviewer', 'answerer', 'investigator', 'researcher'] as const) {
+      const rules = resolveHouseRules(role);
+      expect(rules.split(WRITING_RULES)).toHaveLength(2);
+    }
+    expect(WRITING_RULES).toContain('ten seconds per item');
+    expect(WRITING_RULES).toContain('```bash run');
+    expect(WRITING_RULES).toContain(REFERENCE_RULES);
   });
 });
 
