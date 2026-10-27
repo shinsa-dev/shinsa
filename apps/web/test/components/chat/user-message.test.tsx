@@ -6,6 +6,23 @@ import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 const ID = createDisclosureId('task', 't1', 'chat', 'block', 'm1', 'message');
 
 describe('UserMessage', () => {
+  it('shows the files a message carries in its text instead of the markup', () => {
+    const view = render(
+      <UserMessage
+        persistId={ID}
+        text={
+          'Fix this\n\n<attachments>\n<attachment kind="image" display_name="shot.png" mime_type="image/png" path="/d/shot.png" url="/api/attachments/1/shot.png" />\n<attachment kind="file" display_name="log.txt" path="/d/log.txt" url="/api/attachments/2/log.txt" />\n</attachments>'
+        }
+      />
+    );
+    expect(view.getByText('Fix this')).toBeTruthy();
+    expect(view.container.textContent).not.toContain('<attachment');
+    expect(view.getByRole('img', { name: 'shot.png' }).getAttribute('src')).toBe(
+      '/api/attachments/1/shot.png'
+    );
+    expect(view.getByText('log.txt')).toBeTruthy();
+  });
+
   it('clamps a long message behind Show more', () => {
     const text = Array.from({ length: 20 }, (_, index) => `Line ${index}`).join('\n');
     const view = render(<UserMessage persistId={ID} text={text} />);

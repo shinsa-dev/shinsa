@@ -42,7 +42,8 @@ src/
 │                        the steps around the merge on the merge gate, a merged task and the Review tab, ticking in place; samples.ts also has the toast every action
 │                        shows; /ui never connects or sends anything)
 ├── components/<domain>/ Pieces a route composes, one folder per domain, files named for what they are:
-│                        task (header, facts with why each was chosen, menus, composer, review draft, the
+│                        task (header, facts with why each was chosen, menus, composer (attach, paste and drop
+│                        through chat/attachment-chips.tsx and hooks/use-attachments.ts, which Home's composer shares), review draft, the
 │                        handle, command-runner.tsx: TaskCommandRunner, Run in terminal's runner for the task's
 │                        page while it has a folder), overview (now card and its
 │                        frame, the wait, usage-wait, setup, sign-in, secret and operation cards, merge-steps-card.tsx (a merged task's
@@ -120,7 +121,8 @@ src/
     │                    start has no prompt and a fix its focus), selectors.ts (useShinsaSelector, useTask, useRun,
     │                    useGate: render again only when the part read changes), commands.ts
     │                    (sendCommandWithToast, requestWithToast, copyText), http.ts (requestJson: a JSON
-    │                    request whose refusal becomes the server's message), code.ts (the Code tab's reads: refs, paths, tree, blob,
+    │                    request whose refusal becomes the server's message), attachments.ts (requestAttachmentUpload: a
+    │                    file you attach, as base64 to POST /api/attachments, and the files of a paste or drop), code.ts (the Code tab's reads: refs, paths, tree, blob,
     │                    search and diff, cached by commit in a bounded least-recently-used cache, the last answer shown
     │                    while a newer version loads, never read again for an unrelated task event, and requestFileWrite, the one
     │                    write: saving a file you edit), models.ts, worktree.ts (open in editor / Finder), onboarding.ts
@@ -148,7 +150,8 @@ src/
     │                    which row it marks), limits.ts (switch thresholds, the Limits settings), providers.ts (a
     │                    provider's sign-in block: its header, state, the fix, the sign-in command), sign-in.ts (resolveSignInProvider: the Sign in gate's provider),
     │                    usage-wait.ts
-    ├── chat/            Transcript → timeline → turns, tool descriptions and output, run roles and headlines,
+    ├── chat/            attachment-drafts.ts (the files a composer holds until you send: the 10-file and 25 MB
+    │                    limits, what is ready, whether it can send), transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
     │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),
     │                    the transcript's blocks and the window of them rendered (window.ts), prefetch.ts (a

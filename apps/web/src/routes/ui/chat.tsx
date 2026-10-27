@@ -1,3 +1,4 @@
+import { serializeAttachments } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { ChatLine, DetailRail, ExpandRow, FoldLine } from '@/components/chat/chat-line.tsx';
@@ -237,11 +238,36 @@ export function ChatSpecimens() {
   );
 }
 
+const SAMPLE_SCREENSHOT = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#f4f4f5"/><rect width="320" height="36" fill="#e4e4e7"/><rect x="16" y="12" width="80" height="12" rx="3" fill="#a1a1aa"/><rect x="16" y="28" width="120" height="16" rx="3" fill="#3b82f6"/><rect x="16" y="64" width="288" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="88" width="220" height="12" rx="3" fill="#d4d4d8"/><rect x="16" y="112" width="250" height="12" rx="3" fill="#d4d4d8"/></svg>'
+)}`;
+
 function SampleMessages() {
   const sample = (name: string) => createDisclosureId('ui', 'chat', 'message', name);
   return (
     <div className='flex w-full max-w-xl flex-col gap-2'>
       <UserMessage persistId={sample('delivered')} text='Use the cheaper plan.' />
+      <UserMessage
+        persistId={sample('attachments')}
+        text={serializeAttachments('The header overlaps the toolbar here, and the log is attached.', [
+          {
+            kind: 'image',
+            name: 'settings.png',
+            url: SAMPLE_SCREENSHOT,
+            path: '/Users/you/Desktop/settings.png',
+            mimeType: 'image/png',
+            size: 48_213,
+          },
+          {
+            kind: 'file',
+            name: 'checks.txt',
+            url: '/api/attachments/sample/checks.txt',
+            path: '/Users/you/Desktop/checks.txt',
+            mimeType: 'text/plain',
+            size: 1_204,
+          },
+        ])}
+      />
       <UserMessage
         persistId={sample('sending')}
         text='Also add search to the settings page.'
@@ -288,7 +314,7 @@ function ChatSpecimenList() {
           ))}
         </div>
       </Specimen>
-      <Specimen label='UserMessage · delivered, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
+      <Specimen label='UserMessage · delivered, with attachments, sending, queued until Shinsa routes it, noted with no reply, not delivered'>
         <SampleMessages />
       </Specimen>
       <Specimen label='NoticeLine · account switched, compaction, fast mode, what a run loaded, session restored, provider switch (open a row for why)'>

@@ -1,4 +1,4 @@
-import type { ChatAttachment } from '@shinsa/core';
+import { type ChatAttachment, splitMessageAttachments } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { ShimmeringText } from '@shinsa/ui/components/shimmering-text';
 import { Truncate } from '@shinsa/ui/components/truncate';
@@ -87,12 +87,14 @@ export function UserMessage({
   attachments?: ChatAttachment[];
 } & Pick<HumanMessage, 'status' | 'reason'>) {
   const { open: expanded, toggle } = useDisclosure(persistId, false);
-  const body = text.trim();
-  if (!body && attachments.length === 0) return null;
+  const split = splitMessageAttachments(text);
+  const body = split.text;
+  const shown = [...attachments, ...split.attachments];
+  if (!body && shown.length === 0) return null;
   const long = body.split('\n').length > CLAMP_LINES || body.length > CLAMP_CHARACTERS;
   return (
     <div data-message className='flex min-w-0 flex-col items-end gap-2'>
-      <Attachments attachments={attachments} />
+      <Attachments attachments={shown} />
       {body && (
         <div className='corner-superellipse/1.125 selectable min-w-0 max-w-4/5 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed'>
           <p className={cn('whitespace-pre-wrap break-words', long && !expanded && 'line-clamp-12')}>
