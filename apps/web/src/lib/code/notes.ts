@@ -15,6 +15,7 @@ export interface CodeSpotMark {
   from: number;
   to: number;
   tone: Tone;
+  label: string;
   selected: boolean;
 }
 
@@ -79,6 +80,12 @@ export function listFileNotes(input: {
   return notes;
 }
 
+function describeSpotMark(target: Pick<ReviewTarget, 'attention' | 'why'>) {
+  const label = ATTENTION[target.attention].label;
+  const why = target.why.trim();
+  return why ? `${label}: ${why}` : label;
+}
+
 export function listSpotMarks(
   targets: readonly ReviewTarget[],
   path: string,
@@ -91,6 +98,7 @@ export function listSpotMarks(
       from: target.start,
       to: Math.max(target.start, target.end),
       tone: ATTENTION[target.attention].tone,
+      label: describeSpotMark(target),
       selected: target.key === selected,
     }));
 }

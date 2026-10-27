@@ -52,13 +52,13 @@ export function FileTree({
     [stored, revealed, activePath]
   );
   const changed = React.useMemo(() => new Map(changes.map((file) => [file.path, file])), [changes]);
+  const latestStored = React.useRef(stored);
+  latestStored.current = stored;
   React.useEffect(() => {
-    if (!activePath) return;
-    setExpanded((current) => {
-      const missing = listAncestors(activePath).filter((dir) => !current.has(dir));
-      return missing.length === 0 ? current : new Set([...current, ...missing]);
-    });
-  }, [activePath]);
+    for (const dir of listAncestors(activePath ?? ''))
+      if (!latestStored.current.has(dir)) markOpen(dir, true);
+    replaceRevealed(activePath);
+  }, [activePath, markOpen]);
   const folders = useRepoTrees(task, gitRef, listOpenFolders(expanded));
   const listed = listRepoRows(folders, expanded);
   const settled = React.useRef<{ ref: string; rows: RepoRow[] } | null>(null);
@@ -103,13 +103,7 @@ export function FileTree({
   const toggle = (path: string) => {
     markCode(CODE_MARKS.toggle, path);
     toggled.current = path;
-    const flip = () =>
-      setExpanded((current) => {
-        const next = new Set(current);
-        if (next.has(path)) next.delete(path);
-        else next.add(path);
-        return next;
-      });
+    const flip = () => markOpen(path, !expanded.has(path));
     if (expanded.has(path)) {
       flip();
       return;

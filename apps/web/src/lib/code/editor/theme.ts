@@ -20,6 +20,17 @@ function listSpotTones() {
   );
 }
 
+const ADDED_BAR = 'inset 2px 0 0 var(--green-4)';
+
+const REMOVED_BAR = 'inset 2px 0 0 var(--red-4)';
+
+const STICKY_BLOCK = {
+  position: 'sticky',
+  left: 'var(--cm-gutter-width, 0px)',
+  boxSizing: 'border-box',
+  width: 'calc(100cqw - var(--cm-gutter-width, 0px))',
+};
+
 function listTokenStyles() {
   const styles: Record<string, Record<string, string>> = {};
   for (const color of listThemeColors()) {
@@ -58,7 +69,7 @@ const codeTheme = EditorView.theme({
     border: 'none',
     fontVariantNumeric: 'tabular-nums',
   },
-  '.cm-lineNumbers .cm-gutterElement': { padding: '0 4px 0 16px', minWidth: '44px', cursor: 'pointer' },
+  '.cm-lineNumbers .cm-gutterElement': { padding: '0 4px 0 6px', minWidth: '34px', cursor: 'pointer' },
   '.cm-foldGutter .cm-gutterElement': {
     display: 'flex',
     alignItems: 'center',
@@ -86,31 +97,43 @@ const codeTheme = EditorView.theme({
   ...listTokenStyles(),
   '.cm-lineNumbers .cm-gutterElement:hover': { color: 'var(--primary-text)' },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },
-  '.cm-insertedLine, &.cm-merge-b .cm-changedLine': { backgroundColor: 'var(--code-added)' },
+  '.cm-line.cm-insertedLine, &.cm-merge-b .cm-line.cm-changedLine': {
+    backgroundColor: 'var(--code-added)',
+    boxShadow: ADDED_BAR,
+  },
   '.cm-insertedText, &.cm-merge-b .cm-changedText': {
     backgroundColor: 'var(--code-added-strong)',
     background: 'var(--code-added-strong)',
     textDecoration: 'none',
   },
-  '.cm-deletedLine, &.cm-merge-a .cm-changedLine': { backgroundColor: 'var(--code-removed)' },
+  '.cm-deletedChunk .cm-deletedLine, &.cm-merge-a .cm-line.cm-changedLine': {
+    backgroundColor: 'var(--code-removed)',
+    boxShadow: REMOVED_BAR,
+  },
   '.cm-deletedText, &.cm-merge-a .cm-changedText': {
     backgroundColor: 'var(--code-removed-strong)',
     background: 'var(--code-removed-strong)',
     textDecoration: 'none',
   },
+  'ins.cm-insertedLine, del.cm-deletedLine': {
+    backgroundColor: 'transparent',
+    padding: '0',
+    textDecoration: 'none',
+  },
   '.cm-deletedChunk': { padding: '0', backgroundColor: 'transparent' },
-  '.cm-deletedLine': { padding: '0 24px 0 8px', textDecoration: 'none' },
+  '.cm-deletedChunk .cm-deletedLine': { padding: '0 24px 0 8px', textDecoration: 'none' },
   '.cm-deletedLine del': { textDecoration: 'none' },
   '.cm-oldLines': { display: 'flex', flexDirection: 'column', color: 'var(--red-text)' },
   '.cm-oldLines > div': { height: '18px', cursor: 'pointer' },
   '.cm-oldLines > div:hover': { color: 'var(--primary-text)' },
   '.cm-collapsedLines': {
+    ...STICKY_BLOCK,
     backgroundColor: 'var(--bg-a1)',
     backgroundImage: 'none',
     color: 'var(--fg-2)',
     fontFamily: 'var(--font-sans)',
     fontSize: 'var(--text-2xs)',
-    padding: '3px 8px 3px calc(8px + var(--scroll-left, 0px))',
+    padding: '3px 8px',
     cursor: 'pointer',
   },
   '.cm-collapsedLines:before, .cm-collapsedLines:after': { content: 'none', display: 'none' },
@@ -120,6 +143,10 @@ const codeTheme = EditorView.theme({
   '.cm-spotGutter .cm-gutterElement': { display: 'flex', justifyContent: 'flex-end' },
   '.cm-spotMark': { width: '3px', height: '100%', marginLeft: 'auto', cursor: 'default' },
   ...listSpotTones(),
+  '.cm-line.cm-spot-selected, .cm-line.cm-focus-line': {
+    backgroundImage: 'linear-gradient(var(--primary-a1), var(--primary-a1))',
+  },
+  '.cm-line.cm-focus-flash': { backgroundImage: 'linear-gradient(var(--primary-a3), var(--primary-a3))' },
   '.cm-searchMatch': { backgroundColor: 'var(--amber-a2)', outline: 'none' },
   '.cm-searchMatch-selected': { backgroundColor: 'var(--amber-a4)' },
   '.cm-selectionMatch': { backgroundColor: 'var(--bg-a2)' },
@@ -156,10 +183,10 @@ const codeTheme = EditorView.theme({
     color: 'var(--fg-4)',
   },
   '.cm-note-slot': {
+    ...STICKY_BLOCK,
     padding: '6px 8px',
     fontFamily: 'var(--font-sans)',
     whiteSpace: 'normal',
-    transform: 'translateX(var(--scroll-left, 0px))',
   },
 });
 

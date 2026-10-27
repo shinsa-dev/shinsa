@@ -2,10 +2,11 @@ import { describe, expect, it } from 'bun:test';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import {
-  followHorizontalScroll,
   listHiddenSpans,
+  pinBlocksToGutter,
   resolveSkippedCursor,
   skipCollapsedLines,
+  writeGutterWidth,
 } from '@/lib/code/editor/collapsed.ts';
 
 class Fold extends WidgetType {
@@ -53,17 +54,34 @@ describe('the cursor skips folded unchanged lines', () => {
   });
 });
 
-describe('folds and notes follow a sideways scroll', () => {
-  it('writes how far the code is scrolled, and stops once the editor is gone', () => {
+describe('folds and notes stay beside the gutter while the code scrolls sideways', () => {
+  it('writes the gutter’s width for the sticky blocks, only when it changes', () => {
+    const dom = document.createElement('div');
+    const spy = { dom };
+    writeGutterWidth(spy, 62);
+    expect(dom.style.getPropertyValue('--cm-gutter-width')).toBe('62px');
+    let writes = 0;
+    const setProperty = dom.style.setProperty.bind(dom.style);
+    dom.style.setProperty = (...args: Parameters<typeof setProperty>) => {
+      writes += 1;
+      setProperty(...args);
+    };
+    writeGutterWidth(spy, 62);
+    writeGutterWidth(spy, 70);
+    expect(writes).toBe(1);
+    expect(dom.style.getPropertyValue('--cm-gutter-width')).toBe('70px');
+  });
+
+  it('measures the gutter when the editor opens and when its geometry changes', async () => {
     const parent = document.createElement('div');
     document.body.appendChild(parent);
     const view = new EditorView({
-      state: EditorState.create({ doc: 'a', extensions: [followHorizontalScroll] }),
+      state: EditorState.create({ doc: 'a', extensions: [pinBlocksToGutter] }),
       parent,
     });
-    view.scrollDOM.scrollLeft = 40;
-    view.scrollDOM.dispatchEvent(new Event('scroll'));
-    expect(view.dom.style.getPropertyValue('--scroll-left')).toBe(`${view.scrollDOM.scrollLeft}px`);
+    view.dispatch({ changes: { from: 1, insert: '\nb'.repeat(400) } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(view.dom.style.getPropertyValue('--cm-gutter-width')).toBe('0px');
     view.destroy();
     parent.remove();
   });

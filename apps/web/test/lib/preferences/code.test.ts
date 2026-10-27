@@ -11,6 +11,7 @@ import {
   useUnifiedDiff,
   useViewedFiles,
   writeExplorerSide,
+  writeViewedFiles,
 } from '@/lib/preferences/code.ts';
 
 describe('code preferences', () => {
@@ -85,6 +86,15 @@ describe('code preferences', () => {
     act(() => toggleViewedFile('t1', 'h1', 'a.ts'));
     expect([...result.current]).toEqual([]);
     expect([...renderHook(() => useViewedFiles('t1', null)).result.current]).toEqual([]);
+  });
+
+  it('marks a folder’s files viewed at once, and clears them at once', () => {
+    const { result } = renderHook(() => useViewedFiles('t1', 'h1'));
+    act(() => toggleViewedFile('t1', 'h1', 'b.ts'));
+    act(() => writeViewedFiles('t1', 'h1', ['a/x.ts', 'a/y.ts', 'b.ts'], true));
+    expect([...result.current].sort()).toEqual(['a/x.ts', 'a/y.ts', 'b.ts']);
+    act(() => writeViewedFiles('t1', 'h1', ['a/x.ts', 'a/y.ts'], false));
+    expect([...result.current]).toEqual(['b.ts']);
   });
 
   it('reads a damaged mark list as nothing viewed', () => {

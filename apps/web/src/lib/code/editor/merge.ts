@@ -1,7 +1,8 @@
-import { Chunk, MergeView } from '@codemirror/merge';
+import { Chunk, MergeView, uncollapseUnchanged } from '@codemirror/merge';
 import { EditorState, type Extension, type StateEffect, Text } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { COLLAPSE } from '@/lib/code/collapse.ts';
+import { listHiddenSpans } from './collapsed.ts';
 import { DIFF_CONFIG } from './unified.ts';
 
 export interface SplitSides {
@@ -23,6 +24,37 @@ const SPLIT_THEME = EditorView.theme({
   '.cm-scroller': { overflowX: 'auto', overflowY: 'hidden' },
 });
 
+export function mapToOriginal(chunks: readonly Chunk[], position: number) {
+  let ours = 0;
+  let theirs = 0;
+  for (const chunk of chunks) {
+    if (chunk.fromB >= position) break;
+    ours = chunk.toB;
+    theirs = chunk.toA;
+  }
+  return theirs + Math.max(0, position - ours);
+}
+
+function listFoldStarts(view: EditorView, positions: readonly number[]) {
+  const starts = listHiddenSpans(view.state)
+    .filter((span) => positions.some((position) => span.from <= position && position <= span.to))
+    .map((span) => span.from);
+  return [...new Set(starts)].map((start) => uncollapseUnchanged.of(start));
+}
+
+export function revealSplitLines(merge: Pick<MergeView, 'a' | 'b' | 'chunks'>, lines: readonly number[]) {
+  const doc = merge.b.state.doc;
+  const positions = lines.filter((line) => line >= 1 && line <= doc.lines).map((line) => doc.line(line).from);
+  const b = listFoldStarts(merge.b, positions);
+  if (b.length === 0) return;
+  const a = listFoldStarts(
+    merge.a,
+    positions.map((position) => mapToOriginal(merge.chunks, position))
+  );
+  merge.b.dispatch({ effects: b });
+  if (a.length > 0) merge.a.dispatch({ effects: a });
+}
+
 export function findConfigBase(state: EditorState): Extension {
   const config: unknown = Reflect.get(state, 'config');
   const base: unknown = typeof config === 'object' && config !== null ? Reflect.get(config, 'base') : null;
@@ -43,7 +75,7 @@ export class SplitView {
       b: { doc: '' },
       collapseUnchanged: { margin: COLLAPSE.margin, minSize: COLLAPSE.minSize },
       diffConfig: DIFF_CONFIG,
-      gutter: true,
+      gutter: false,
     });
     merge.dom.style.height = '100%';
     merge.dom.style.overflow = 'auto';

@@ -12,12 +12,16 @@ import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { resolveFileIcon, resolveFolderIcon } from '@/lib/code/file-icons.ts';
 import { scheduleIdle } from '@/lib/code/prefetch.ts';
 import {
+  type TreeRow as ChangeRow,
   FILE_STATUS,
+  type FolderViewed,
   findActiveGuide,
   listChangeRows,
+  listFolderPaths,
   listNeighbourPaths,
   listShownChanges,
   pickGuideLevel,
+  resolveFolderViewed,
   sumChanges,
 } from '@/lib/code/tree.ts';
 import { formatCount } from '@/lib/format/count.ts';
@@ -53,7 +57,7 @@ function ViewedBox({
   return (
     <Checkbox
       size='sm'
-      aria-label='Viewed'
+      aria-label={label}
       checked={viewed}
       indeterminate={indeterminate}
       onCheckedChange={onToggle}
@@ -173,6 +177,49 @@ const ChangeFileRow = React.memo(function ChangedFileRow({
   );
 });
 
+function FolderRow({
+  row,
+  guide,
+  open,
+  state,
+  onOpen,
+  onMarkViewed,
+}: {
+  row: ChangeRow;
+  guide: number | undefined;
+  open: boolean;
+  state: FolderViewed;
+  onOpen: () => void;
+  onMarkViewed: (seen: boolean) => void;
+}) {
+  const muted = state === 'all';
+  return (
+    <TreeRow
+      depth={row.depth}
+      guide={guide}
+      expanded={open}
+      icon={resolveFolderIcon(row.path, open)}
+      label={row.path}
+      className={cn(muted && 'file-icons-muted')}
+      onOpen={onOpen}
+      end={
+        <ViewedBox
+          viewed={muted}
+          indeterminate={state === 'some'}
+          label={`Viewed: every file in ${row.name}`}
+          onToggle={() => onMarkViewed(!muted)}
+        />
+      }
+    >
+      <Truncate className={cn('flex-1', muted ? 'text-fg-1' : 'text-fg-2')}>{row.name}</Truncate>
+    </TreeRow>
+  );
+}
+
+function EveryFileViewed() {
+  return <p className='py-1 ps-1 text-2xs text-fg-2'>Every file is viewed.</p>;
+}
+
 function HideViewedToggle({ hidden, onToggle }: { hidden: boolean; onToggle: () => void }) {
   const label = hidden ? 'Show viewed files' : 'Hide viewed files';
   return (
@@ -191,11 +238,13 @@ function HideViewedToggle({ hidden, onToggle }: { hidden: boolean; onToggle: () 
 }
 
 export function ChangesTree({
+  persistId,
   diff,
   activePath,
   commentCounts,
   viewed,
   onToggleViewed,
+  onMarkViewed,
   onOpen,
   onPrefetch,
 }: {
@@ -205,6 +254,7 @@ export function ChangesTree({
   commentCounts: ReadonlyMap<string, number>;
   viewed: ReadonlySet<string>;
   onToggleViewed: (path: string) => void;
+  onMarkViewed: (paths: string[], seen: boolean) => void;
   onOpen: (path: string) => void;
   onPrefetch: (path: string) => void;
 }) {
@@ -254,27 +304,21 @@ export function ChangesTree({
         <DiffStats added={totals.added} removed={totals.removed} />
         <HideViewedToggle hidden={hideViewed} onToggle={toggleHideViewed} />
       </div>
-      {rows.length === 0 && <p className='py-1 ps-1 text-2xs text-fg-2'>Every file is viewed.</p>}
+      {rows.length === 0 && <EveryFileViewed />}
       <div role='tree' aria-label='Changed files' className='flex flex-col'>
         <VirtualRows items={rows} rowHeight={TREE_ROW_HEIGHT} keyOf={(row) => `${row.kind}:${row.path}`}>
           {(row) => {
             if (row.kind === 'directory') {
+              const folderPaths = listFolderPaths(diff.files, row.path);
               return (
-                <TreeRow
-                  depth={row.depth}
+                <FolderRow
+                  row={row}
                   guide={pickGuideLevel(guide, row.path)}
-                  expanded={!collapsed.has(row.path)}
-                  icon={resolveFolderIcon(row.path, !collapsed.has(row.path))}
-                  label={row.path}
-                  onOpen={() => {
-                    const next = new Set(collapsed);
-                    if (next.has(row.path)) next.delete(row.path);
-                    else next.add(row.path);
-                    setCollapsed(next);
-                  }}
-                >
-                  <Truncate className='flex-1 text-fg-2'>{row.name}</Truncate>
-                </TreeRow>
+                  open={!collapsed.has(row.path)}
+                  state={resolveFolderViewed(folderPaths, viewed)}
+                  onOpen={() => markCollapsed(row.path, !collapsed.has(row.path))}
+                  onMarkViewed={(ticked) => onMarkViewed(folderPaths, ticked)}
+                />
               );
             }
             return (

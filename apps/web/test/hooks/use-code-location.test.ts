@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
-import { useCodeLocation } from '@/hooks/use-code-location.ts';
+import { hasFileInAddress, useCodeLocation } from '@/hooks/use-code-location.ts';
 import { navigate } from '@/router.ts';
 
 describe('useCodeLocation', () => {
@@ -18,5 +18,14 @@ describe('useCodeLocation', () => {
     act(() => dispatchEvent(new PopStateEvent('popstate')));
     act(() => result.current.apply({ mode: null }, { replace: true }));
     expect(result.current.location.mode).toBe('changes');
+  });
+});
+
+describe('hasFileInAddress', () => {
+  it('reads the address as it is now, not as a hidden tab last saw it', () => {
+    navigate('/tasks/t?tab=review');
+    expect(hasFileInAddress()).toBe(false);
+    navigate('/tasks/t?tab=code&file=a.ts&line=4');
+    expect(hasFileInAddress()).toBe(true);
   });
 });

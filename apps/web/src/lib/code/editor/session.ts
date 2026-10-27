@@ -10,7 +10,7 @@ import {
   NO_ANNOTATIONS,
   resolveSelectedLines,
 } from './annotations.ts';
-import { followHorizontalScroll, skipCollapsedLines } from './collapsed.ts';
+import { pinBlocksToGutter, skipCollapsedLines } from './collapsed.ts';
 import { FindHost } from './find.ts';
 import { createChevronMarkers, indentFolding } from './folding.ts';
 import { type SplitPair, SplitView } from './merge.ts';
@@ -111,6 +111,10 @@ export class EditorSession {
 
   get current() {
     return this.#current;
+  }
+
+  get chunks() {
+    return this.#splitShown && this.#split ? this.#split.merge.chunks : [];
   }
 
   selectView(key: string) {
@@ -276,8 +280,12 @@ export class EditorSession {
       }),
       this.language.of(indentFolding),
       skipCollapsedLines,
-      followHorizontalScroll,
-      annotationsField(this.registry, side === 'new' ? input.annotations.b : input.annotations.a),
+      pinBlocksToGutter,
+      annotationsField(
+        this.registry,
+        side === 'new' ? input.annotations.b : input.annotations.a,
+        this.spotHints
+      ),
       syntaxTokens({ client: this.#tokens, doc: `${input.key}\0${side}`, grammar, initial: tokens }),
     ];
     if (side === 'new') extensions.push(this.#changes());

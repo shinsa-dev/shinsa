@@ -6,9 +6,14 @@ type DiffViewModule = typeof import('@/components/text/code-diff-view.tsx');
 
 let loadedView: DiffViewModule | null = null;
 
-export async function requestCodeDiffView() {
+async function requestCodeDiffView() {
   loadedView = await import('@/components/text/code-diff-view.tsx');
   return loadedView;
+}
+
+export async function prepareCodeDiff(paths: readonly string[]) {
+  const view = loadedView ?? (await requestCodeDiffView());
+  await view.prepareLanguages(paths);
 }
 
 const NOTE = 'px-3 py-2 text-2xs text-fg-2';

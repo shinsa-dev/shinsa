@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { navigate } from '@/router.ts';
 import { CodeTab } from '@/routes/task/code.tsx';
+import { findTooltipText } from '../../support/hover.ts';
 import { createTask } from '../../support/state.ts';
 import { waitForGone } from '../../support/wait.ts';
 
@@ -84,7 +85,13 @@ const REPORT: WorkReport = {
   ],
   checks: [{ name: 'bun test', outcome: 'pass', detail: '12 tests' }],
   judgementCalls: [
-    { call: 'Kept the old reader', reason: 'Other callers still use it.', file: 'README.md', line: 1 },
+    {
+      title: 'Keep the old reader',
+      call: 'Kept the old reader',
+      reason: 'Other callers still use it.',
+      file: 'README.md',
+      line: 1,
+    },
   ],
 };
 
@@ -251,6 +258,8 @@ describe('changes and files', () => {
     renderCode(nextTask(), '&mode=changes');
     const tree = await screen.findByRole('tree', { name: 'Changed files' });
     expect(screen.getByText('2 files · 0 viewed')).toBeDefined();
+    const added = within(within(tree).getByRole('treeitem', { name: 'docs/beta.txt' })).getByText('A');
+    expect(await findTooltipText(added)).toBe('Added');
     fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs/beta.txt' }));
     expect(params().get('file')).toBe('docs/beta.txt');
     expect(params().get('diff')).toBe('1');
@@ -276,6 +285,28 @@ describe('changes and files', () => {
     expect(within(tree).queryByRole('treeitem', { name: 'docs/alpha.txt' })).toBeNull();
     fireEvent.click(within(tree).getByRole('treeitem', { name: 'docs' }));
     expect(within(tree).getByRole('treeitem', { name: 'docs/alpha.txt' })).toBeDefined();
+  });
+
+  it('marks a folder viewed with every file under it, and says so calmly once nothing is left', async () => {
+    renderCode(nextTask(), '&mode=changes&file=docs%2Falpha.txt&diff=1');
+    const tree = await screen.findByRole('tree', { name: 'Changed files' });
+    const folder = () => within(tree).getByRole('checkbox', { name: 'Viewed: every file in docs' });
+    expect(folder().getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(within(tree).getAllByRole('checkbox', { name: 'Viewed' })[0] as HTMLElement);
+    expect(folder().getAttribute('aria-checked')).toBe('mixed');
+    fireEvent.click(folder());
+    expect(screen.getByText('2 files · 2 viewed')).toBeDefined();
+    expect(folder().getAttribute('aria-checked')).toBe('true');
+    expect(within(tree).getByRole('treeitem', { name: 'docs' }).className).toContain('file-icons-muted');
+    fireEvent.click(screen.getByRole('button', { name: 'Hide viewed files' }));
+    expect(screen.getByText('Every file is viewed.')).toBeDefined();
+    expect(within(tree).queryByRole('treeitem', { name: 'docs/alpha.txt' })).toBeNull();
+    expect(params().get('file')).toBe('docs/alpha.txt');
+    expect(screen.queryByRole('button', { name: 'Show viewed files' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide viewed files' }));
+    expect(within(tree).getByRole('treeitem', { name: 'docs/alpha.txt' })).toBeDefined();
+    fireEvent.click(folder());
+    expect(screen.getByText('2 files · 0 viewed')).toBeDefined();
   });
 
   it('browses the repository at the head, folder by folder, and opens any file', async () => {

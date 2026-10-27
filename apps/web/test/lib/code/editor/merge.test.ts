@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { getChunks } from '@codemirror/merge';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { findConfigBase, SplitView } from '@/lib/code/editor/merge.ts';
+import { findConfigBase, mapToOriginal, revealSplitLines, SplitView } from '@/lib/code/editor/merge.ts';
 
 const views: SplitView[] = [];
 
@@ -83,5 +83,28 @@ describe('SplitView', () => {
     split.merge.dom.dispatchEvent(new Event('scroll'));
     split.show(second);
     expect(split.merge.dom.scrollTop).toBe(0);
+  });
+
+  it('opens the folds holding the lines a note, a spot or a link needs, on both sides', () => {
+    const split = createSplit();
+    const pair = split.createPair(listLines(60, 5), listLines(60, 50), SIDES);
+    split.show(pair);
+    const folds = () => [...split.merge.dom.querySelectorAll('.cm-collapsedLines')].length;
+    const before = folds();
+    revealSplitLines(split.merge, [0, 999]);
+    expect(folds()).toBe(before);
+    revealSplitLines(split.merge, [30]);
+    expect(folds()).toBeLessThan(before);
+    expect(split.merge.b.state.doc.line(30).text).toBe('line 29');
+  });
+});
+
+describe('mapToOriginal', () => {
+  it('finds the old file’s position for an unchanged line of the new one', () => {
+    const split = createSplit();
+    const pair = split.createPair('a\nb\nc\nd', 'a\nx\ny\nc\nd', SIDES);
+    expect(mapToOriginal(pair.chunks, 0)).toBe(0);
+    expect(mapToOriginal(pair.chunks, 8)).toBe(6);
+    expect(mapToOriginal([], 3)).toBe(3);
   });
 });

@@ -1,6 +1,8 @@
+import type { Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { ReviewNote } from '@/components/review/note.tsx';
 import { FindingVerdictChoice } from '@/components/review/verdict-choice.tsx';
 import type { CodeNote } from '@/lib/code/notes.ts';
@@ -11,9 +13,17 @@ import { toCommentItem } from '@/lib/review/report.ts';
 
 const NOTE_WIDTH = 'max-w-[min(36rem,calc(100cqw-6rem))]';
 
-const NOTE = `flex ${NOTE_WIDTH} flex-col gap-1.5 rounded-lg px-3 py-2 font-sans text-xs`;
+const NOTE = `${INSET} flex ${NOTE_WIDTH} flex-col gap-1.5 px-3 py-2 font-sans text-xs`;
 
-function CommentNote({ comment, onRemove }: { comment: LineComment; onRemove: (() => void) | null }) {
+function CommentNote({
+  task,
+  comment,
+  onRemove,
+}: {
+  task: Task | null;
+  comment: LineComment;
+  onRemove: (() => void) | null;
+}) {
   return (
     <ReviewNote
       persistId={
@@ -50,7 +60,7 @@ function CommentComposer({
 }) {
   const [text, setText] = React.useState('');
   return (
-    <div className={cn(NOTE, 'border border-border bg-background')}>
+    <div className={cn(NOTE, 'bg-background')}>
       <span className='text-2xs text-fg-2'>{label}</span>
       <textarea
         // biome-ignore lint/a11y/noAutofocus: opened by a click on the line
@@ -81,11 +91,13 @@ function CommentComposer({
 
 export function CodeNoteView({
   note,
+  task = null,
   onRemove,
   onSave,
   onCancel,
 }: {
   note: CodeNote;
+  task?: Task | null;
   onRemove: ((id: string) => void) | null;
   onSave: (text: string) => void;
   onCancel: () => void;
@@ -103,7 +115,11 @@ export function CodeNoteView({
   }
   if (note.kind === 'comment') {
     return (
-      <CommentNote comment={note.comment} onRemove={onRemove ? () => onRemove(note.comment.id) : null} />
+      <CommentNote
+        task={task}
+        comment={note.comment}
+        onRemove={onRemove ? () => onRemove(note.comment.id) : null}
+      />
     );
   }
   return (

@@ -17,6 +17,10 @@ export function resolveFenceLanguage(fence: string | null) {
   return resolveFenceGrammar(fence);
 }
 
+export function isTextDiagram(code: string) {
+  return /[\u2500-\u257f]/.test(code);
+}
+
 export interface ThemedToken {
   content: string;
   color?: string | undefined;

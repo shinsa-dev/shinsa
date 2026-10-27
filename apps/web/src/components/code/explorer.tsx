@@ -34,6 +34,7 @@ export interface ExplorerProps {
   onMatch: (path: string, line: number) => void;
   onSearch: (search: CodeSearch) => void;
   onToggleViewed: (path: string) => void;
+  onMarkViewed: (paths: string[], seen: boolean) => void;
   onPrefetch: (file: CodeFileRef) => void;
   onPrefetchPath: (path: string) => void;
   onPrefetchFolder: (dir: string) => void;
@@ -85,6 +86,7 @@ function ExplorerBody(props: ExplorerProps) {
       commentCounts={props.commentCounts}
       viewed={props.viewed}
       onToggleViewed={props.onToggleViewed}
+      onMarkViewed={props.onMarkViewed}
       onOpen={props.onChange}
       onPrefetch={(path) => props.onPrefetch({ kind: 'diff', path })}
     />

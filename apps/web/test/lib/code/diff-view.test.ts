@@ -72,6 +72,38 @@ describe('narrowHunks', () => {
     const removed = ['@@ -1,2 +0,0 @@', '-a', '-b'].join('\n');
     expect(narrowHunks(removed, { start: 1, end: 1 })).toBe(['@@ -1,2 +0,0 @@', '-a', '-b'].join('\n'));
   });
+
+  it('shows the marked lines and two rows around them, not a long removal before them', () => {
+    const replaced = [
+      '@@ -1,12 +1,4 @@',
+      ' keep',
+      ...Array.from({ length: 10 }, (_, index) => `-old ${index + 1}`),
+      '+new',
+      ' after one',
+      ' after two',
+      ' after three',
+    ].join('\n');
+    expect(narrowHunks(replaced, { start: 2, end: 2 })).toBe(
+      ['@@ -9,5 +2,3 @@', '-old 8', '-old 9', '-old 10', '+new', ' after one', ' after two'].join('\n')
+    );
+  });
+
+  it('keeps a whole removal when the marked line is where the lines were removed', () => {
+    const removed = ['@@ -4,5 +4,2 @@', ' four', '-five', '-six', '-seven', ' eight'].join('\n');
+    expect(narrowHunks(removed, { start: 5, end: 5 })).toBe(
+      ['@@ -4,5 +4,2 @@', ' four', '-five', '-six', '-seven', ' eight'].join('\n')
+    );
+  });
+
+  it('numbers an insertion in the middle of a file after the line it follows', () => {
+    const inserted = ['@@ -5,0 +6,2 @@', '+a', '+b'].join('\n');
+    expect(narrowHunks(inserted, { start: 6, end: 6 })).toBe(['@@ -5,0 +6,2 @@', '+a', '+b'].join('\n'));
+  });
+
+  it('has nothing when the marked lines are unchanged lines of a hunk far from its change', () => {
+    const far = ['@@ -1,8 +1,8 @@', '-a', '+A', ' b', ' c', ' d', ' e', ' f', ' g'].join('\n');
+    expect(narrowHunks(far, { start: 7, end: 7 })).toBeNull();
+  });
 });
 
 describe('createContextHunk', () => {

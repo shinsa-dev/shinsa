@@ -1,5 +1,21 @@
-import { type Extension, type Range, StateEffect, StateField, type Text } from '@codemirror/state';
-import { Decoration, type DecorationSet, EditorView, lineNumbers, WidgetType } from '@codemirror/view';
+import {
+  type Extension,
+  Prec,
+  type Range,
+  RangeSet,
+  StateEffect,
+  StateField,
+  type Text,
+} from '@codemirror/state';
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  GutterMarker,
+  gutter,
+  lineNumbers,
+  WidgetType,
+} from '@codemirror/view';
 import type { CodeSpotMark } from '@/lib/code/notes.ts';
 import { attachSlot, detachSlot, type SlotRegistry } from './slots.ts';
 import type { SpotHintRegistry } from './spot-hints.ts';
@@ -9,11 +25,18 @@ interface NoteAnchor {
   line: number;
 }
 
+export interface FocusLines {
+  from: number;
+  to: number;
+  flash: boolean;
+}
+
 export interface EditorAnnotations {
   notes: readonly NoteAnchor[];
   oldNotes: readonly NoteAnchor[];
   spots: readonly CodeSpotMark[];
   keep: readonly number[];
+  focus: FocusLines | null;
 }
 
 export const NO_ANNOTATIONS: EditorAnnotations = {
@@ -49,12 +72,16 @@ export class SlotWidget extends WidgetType {
     return other.key === this.key && other.registry === this.registry;
   }
 
+  override get estimatedHeight() {
+    return this.registry.readHeight(this.key);
+  }
+
   toDOM() {
-    return createSlotElement(this.key, this.registry);
+    return attachSlot(this.key, this.registry);
   }
 
   override destroy(dom: HTMLElement) {
-    this.registry.release(this.key, dom);
+    detachSlot(this.key, this.registry, dom);
   }
 
   override ignoreEvent() {
@@ -173,11 +200,19 @@ export function annotationsField(
     create: (state) => buildSets(state.doc, initial, registry, hints),
     update(sets, transaction) {
       const next = selectAnnotations(transaction.effects);
-      if (next) return buildAnnotations(transaction.state.doc, next, registry);
-      return decorations.map(transaction.changes);
+      if (next) return buildSets(transaction.state.doc, next, registry, hints);
+      if (!transaction.docChanged) return sets;
+      return {
+        decorations: sets.decorations.map(transaction.changes),
+        markers: sets.markers.map(transaction.changes),
+      };
     },
-    provide: (field) => EditorView.decorations.from(field),
+    provide: (value) => EditorView.decorations.from(value, (sets) => sets.decorations),
   });
+  return [
+    field,
+    Prec.highest(gutter({ class: 'cm-spotGutter', markers: (view) => view.state.field(field).markers })),
+  ];
 }
 
 export function resolveSelectedLines(view: EditorView) {

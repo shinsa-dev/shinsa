@@ -1,5 +1,5 @@
 import { EditorSelection, EditorState, type Extension, type Transaction } from '@codemirror/state';
-import { type DecorationSet, EditorView, ViewPlugin } from '@codemirror/view';
+import { type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 
 interface Span {
   from: number;
@@ -40,12 +40,26 @@ function skipHiddenLines(transaction: Transaction) {
 
 export const skipCollapsedLines: Extension = EditorState.transactionFilter.of(skipHiddenLines);
 
-function writeScrollOffset(view: Pick<EditorView, 'dom' | 'scrollDOM'>) {
-  view.dom.style.setProperty('--scroll-left', `${view.scrollDOM.scrollLeft}px`);
+export function writeGutterWidth(view: Pick<EditorView, 'dom'>, width: number) {
+  const value = `${width}px`;
+  if (view.dom.style.getPropertyValue('--cm-gutter-width') !== value) {
+    view.dom.style.setProperty('--cm-gutter-width', value);
+  }
 }
 
-export const followHorizontalScroll: Extension = ViewPlugin.define((view) => {
-  const onScroll = () => writeScrollOffset(view);
-  view.scrollDOM.addEventListener('scroll', onScroll, { passive: true });
-  return { destroy: () => view.scrollDOM.removeEventListener('scroll', onScroll) };
+function measureGutterWidth(view: EditorView) {
+  view.requestMeasure({
+    key: 'shinsa-gutter-width',
+    read: () => view.dom.querySelector<HTMLElement>('.cm-gutters')?.offsetWidth ?? 0,
+    write: (width) => writeGutterWidth(view, width),
+  });
+}
+
+export const pinBlocksToGutter: Extension = ViewPlugin.define((view) => {
+  measureGutterWidth(view);
+  return {
+    update: (update: ViewUpdate) => {
+      if (update.geometryChanged || update.viewportChanged) measureGutterWidth(update.view);
+    },
+  };
 });

@@ -3,6 +3,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { EmptyState } from '@shinsa/ui/components/empty-state';
 import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
+import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CodeLoading } from '@/components/code/code-loading.tsx';
 import type {
@@ -12,6 +13,7 @@ import type {
 } from '@/components/code/editor/code-editor.tsx';
 import { CodeNoteView } from '@/components/code/notes.tsx';
 import { Toolbar } from '@/components/layout/page/toolbar.tsx';
+import { INSET } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { DiffStats } from '@/components/text/diff-stats.tsx';
 import { FilePath } from '@/components/text/file-path.tsx';
@@ -22,9 +24,11 @@ import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 import type { CodeLocation } from '@/lib/code/location.ts';
 import { type CodeNote, type Composer, listFileNotes, listSpotMarks } from '@/lib/code/notes.ts';
 import {
+  FOCUS_FLASH_MS,
   holdPaneContent,
   listKeptLines,
   type PaneContent,
+  resolveFocusLines,
   resolvePaneContent,
   resolvePaneKey,
   resolveTextGuard,
@@ -55,6 +59,29 @@ function CodeEditor(props: React.ComponentProps<EditorModule['default']>) {
   return <module.default {...props} />;
 }
 
+function useFlash(key: string | null) {
+  const [flashed, setFlashed] = React.useState<string | null>(key);
+  React.useEffect(() => {
+    if (!key) return;
+    setFlashed(key);
+    const timer = setTimeout(() => setFlashed(null), FOCUS_FLASH_MS);
+    return () => clearTimeout(timer);
+  }, [key]);
+  return key !== null && flashed === key;
+}
+
+function useLinkFocus(path: string, location: CodeLocation) {
+  const reveal: EditorReveal | null = location.line
+    ? {
+        key: `${path}:${location.line}:${location.end ?? ''}:${location.spot ?? ''}`,
+        line: location.line,
+        side: 'new',
+      }
+    : null;
+  const flash = useFlash(reveal?.key ?? null);
+  return { reveal, focus: resolveFocusLines(location.line, location.end, flash) };
+}
+
 function Waiting({ path }: { path: string }) {
   return <CodeLoading label={`Opening ${path}…`} />;
 }
@@ -79,7 +106,10 @@ function ImageView({
         alt={path}
         onLoad={() => setLoaded(true)}
         style={{ visibility: loaded ? 'visible' : 'hidden' }}
-        className='max-h-[60vh] max-w-full rounded-lg border border-border bg-[length:16px_16px] bg-[repeating-conic-gradient(var(--bg-2)_0_25%,transparent_0_50%)] object-contain'
+        className={cn(
+          INSET,
+          'max-h-[60vh] max-w-full bg-[length:16px_16px] bg-[repeating-conic-gradient(var(--bg-2)_0_25%,transparent_0_50%)] object-contain'
+        )}
       />
     </figure>
   );
@@ -160,7 +190,7 @@ function PaneToolbar({
   showLayout: boolean;
   saving: boolean;
   toolbar: React.ReactNode;
-  onSplit: () => void;
+  onSplit: (() => void) | null;
 }) {
   const path = source.file.path;
   return (
@@ -178,7 +208,7 @@ function PaneToolbar({
       )}
       <span className='flex-1' />
       {saving && <span className='shrink-0 text-2xs text-fg-2'>Saving…</span>}
-      {showLayout && <LayoutToggle split={split} onToggle={onSplit} />}
+      {showLayout && onSplit && <LayoutToggle split={split} onToggle={onSplit} />}
     </Toolbar>
   );
 }
@@ -212,7 +242,7 @@ export function EditorPane({
   location: CodeLocation;
   targets: ReviewTarget[];
   split: boolean;
-  onSplit: () => void;
+  onSplit: (() => void) | null;
   handle: React.RefObject<EditorHandle | null>;
   session?: EditorSessionHolder;
   toolbar: React.ReactNode;
@@ -262,14 +292,13 @@ export function EditorPane({
     composer,
   });
   const spots = pinned ? listSpotMarks(targets, path, location.spot) : [];
-  const reveal: EditorReveal | null = location.line
-    ? { key: `${path}:${location.line}:${location.spot ?? ''}`, line: location.line, side: 'new' }
-    : null;
+  const { reveal, focus } = useLinkFocus(path, location);
 
   function renderNote(note: CodeNote) {
     return (
       <CodeNoteView
         note={note}
+        task={task}
         onRemove={draft.enabled ? draft.removeComment : null}
         onCancel={() => setComposer(null)}
         onSave={(text) => {
@@ -328,6 +357,7 @@ export function EditorPane({
           notes={notes}
           spots={spots}
           keep={listKeptLines(notes, spots, location.line, location.end)}
+          focus={focus}
           reveal={reveal}
           onComment={draft.enabled ? (side, line, endLine) => setComposer({ side, line, endLine }) : null}
           onEdit={saver.edit}

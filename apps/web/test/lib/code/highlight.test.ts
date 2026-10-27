@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { renderHook, waitFor } from '@testing-library/react';
 import {
+  isTextDiagram,
   requestTokens,
   resolveFenceLanguage,
   resolveLanguage,

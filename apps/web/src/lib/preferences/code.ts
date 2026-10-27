@@ -68,6 +68,16 @@ export function toggleViewedFile(taskId: string, head: string, path: string) {
   viewed.publish();
 }
 
+export function writeViewedFiles(taskId: string, head: string, paths: readonly string[], seen: boolean) {
+  const current = new Set(readViewedFiles(taskId, head));
+  for (const path of paths) {
+    if (seen) current.add(path);
+    else current.delete(path);
+  }
+  localStorage.setItem(resolveViewedKey(taskId, head), JSON.stringify([...current]));
+  viewed.publish();
+}
+
 export function useViewedFiles(taskId: string, head: string | null) {
   const serialized = useSyncExternalStore(viewed.subscribe, () =>
     head ? (localStorage.getItem(resolveViewedKey(taskId, head)) ?? '') : ''

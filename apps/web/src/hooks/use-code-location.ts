@@ -15,3 +15,7 @@ export function useCodeLocation(modes: CodeMode[]) {
   }, [search, key]);
   return { location, apply: applyCodePatch };
 }
+
+export function hasFileInAddress() {
+  return new URLSearchParams(window.location.search).has('file');
+}

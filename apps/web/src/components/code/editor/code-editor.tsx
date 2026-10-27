@@ -6,9 +6,11 @@ import { Icon } from '@shinsa/ui/components/icon';
 import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { FindBar } from '@/components/code/editor/find-bar.tsx';
-import { NO_ANNOTATIONS, setAnnotations } from '@/lib/code/editor/annotations.ts';
+import { Hint } from '@/components/overlays/hint.tsx';
+import { type FocusLines, NO_ANNOTATIONS, setAnnotations } from '@/lib/code/editor/annotations.ts';
 import { selectEditorCommand } from '@/lib/code/editor/commands.ts';
 import { requestLanguage } from '@/lib/code/editor/language.ts';
+import { revealSplitLines } from '@/lib/code/editor/merge.ts';
 import { EditorSession, fromDisk } from '@/lib/code/editor/session.ts';
 import { gotoLine, resolveEditable } from '@/lib/code/editor/setup.ts';
 import type { SpotHintRegistry } from '@/lib/code/editor/spot-hints.ts';
@@ -45,6 +47,7 @@ export interface CodeEditorProps {
   notes: CodeNote[];
   spots: CodeSpotMark[];
   keep: number[];
+  focus: FocusLines | null;
   reveal: EditorReveal | null;
   onComment: ((side: CommentSide, line: number, endLine: number | null) => void) | null;
   onEdit: () => void;
@@ -126,7 +129,6 @@ export default function CodeEditor(props: CodeEditorProps) {
   const chevron = React.useRef<HTMLSpanElement>(null);
   const latest = React.useRef(props);
   latest.current = props;
-  const slots = React.useSyncExternalStore(session.registry.subscribe, session.registry.read);
   const find = React.useSyncExternalStore(session.findHost.subscribe, session.findHost.read);
   const annotationsKey = JSON.stringify(splitAnnotations(notes, spots, keep, focus, split && diffing));
   const noteKeys = notes.map((note) => note.key).join('\0');
@@ -161,6 +163,7 @@ export default function CodeEditor(props: CodeEditorProps) {
     const value = JSON.parse(annotationsKey) as ReturnType<typeof splitAnnotations>;
     views.b.dispatch({ effects: setAnnotations.of(value.b) });
     views.a?.dispatch({ effects: setAnnotations.of(value.a) });
+    if (views.a) revealSplitLines({ a: views.a, b: views.b, chunks: session.chunks }, value.b.keep);
   }, [session, annotationsKey, docKey, original, split]);
 
   React.useLayoutEffect(() => {
@@ -175,14 +178,21 @@ export default function CodeEditor(props: CodeEditorProps) {
   }, [session, reveal?.key, docKey, original, split]);
 
   React.useLayoutEffect(() => {
-    if (typeof ResizeObserver === 'undefined' || slots.size === 0) return;
-    const observer = new ResizeObserver(() => {
+    const registry = session.registry;
+    const keys = new Set(noteKeys ? noteKeys.split('\0') : []);
+    registry.retain(keys);
+    if (typeof ResizeObserver === 'undefined' || keys.size === 0) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const key = (entry.target as HTMLElement).dataset.slot;
+        if (key) registry.recordHeight(key, (entry.target as HTMLElement).offsetHeight);
+      }
       session.views?.b.requestMeasure();
       session.views?.a?.requestMeasure();
     });
-    for (const slot of slots.values()) observer.observe(slot);
+    for (const slot of registry.list()) observer.observe(slot);
     return () => observer.disconnect();
-  }, [session, slots]);
+  }, [session, noteKeys]);
 
   React.useImperativeHandle(
     handle,

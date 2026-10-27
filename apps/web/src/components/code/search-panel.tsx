@@ -61,7 +61,10 @@ export function SearchPanel({
   latest.current = onChange;
   React.useEffect(() => latest.current(delayed), [delayed]);
   const { loaded, searching } = useRepoSearch(task, gitRef, delayed);
-  const [folded, setFolded] = React.useState<ReadonlySet<string>>(new Set());
+  const [folded, markFolded] = useDisclosureSet(
+    notPersisted('a search’s results, new with every query'),
+    false
+  );
   const result = loaded.status === 'ready' ? loaded.value : null;
   const rows = React.useMemo(
     () => listResultRows(groupMatches(result?.matches ?? []), folded),
@@ -105,14 +108,7 @@ export function SearchPanel({
                 end={
                   <span className='shrink-0 text-2xs text-fg-2 tabular-nums'>{row.group.matches.length}</span>
                 }
-                onOpen={() =>
-                  setFolded((current) => {
-                    const next = new Set(current);
-                    if (next.has(row.group.path)) next.delete(row.group.path);
-                    else next.add(row.group.path);
-                    return next;
-                  })
-                }
+                onOpen={() => markFolded(row.group.path, !folded.has(row.group.path))}
               >
                 <FilePath path={row.group.path} className='flex-1' />
               </TreeRow>

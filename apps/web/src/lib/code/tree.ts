@@ -96,7 +96,21 @@ export function listShownChanges(
   hideViewed: boolean,
   activePath: string | null
 ) {
-  return hideViewed ? files.filter((file) => file.path === activePath || !viewed.has(file.path)) : files;
+  if (!hideViewed) return files;
+  if (files.every((file) => viewed.has(file.path))) return [];
+  return files.filter((file) => file.path === activePath || !viewed.has(file.path));
+}
+
+export type FolderViewed = 'all' | 'some' | 'none';
+
+export function listFolderPaths(files: readonly DiffFile[], dir: string) {
+  return files.flatMap((file) => (file.path.startsWith(`${dir}/`) ? [file.path] : []));
+}
+
+export function resolveFolderViewed(paths: readonly string[], viewed: ReadonlySet<string>): FolderViewed {
+  const seen = paths.filter((path) => viewed.has(path)).length;
+  if (seen === 0) return 'none';
+  return seen === paths.length ? 'all' : 'some';
 }
 
 export function listNeighbourPaths(paths: readonly string[], active: string | null, before = 1, after = 2) {

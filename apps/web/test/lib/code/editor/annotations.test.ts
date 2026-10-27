@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'bun:test';
-import { EditorState, Text } from '@codemirror/state';
+import { Text } from '@codemirror/state';
 import {
   annotationsField,
   buildAnnotations,
+  buildSpotMarkers,
   createLineMouseDown,
   NO_ANNOTATIONS,
   resolveSelectedLines,
   SlotWidget,
+  SpotMarker,
   selectAnnotations,
   setAnnotations,
 } from '@/lib/code/editor/annotations.ts';
@@ -52,6 +54,8 @@ describe('buildAnnotations', () => {
       { from: 0, className: 'cm-spot-selected', key: null },
       { from: 4, className: 'cm-spot-selected', key: null },
       { from: 7, className: null, key: 'n1' },
+      { from: 8, className: 'cm-focus-line cm-focus-flash', key: null },
+      { from: 14, className: 'cm-focus-line cm-focus-flash', key: null },
       { from: 18, className: null, key: 'n2' },
     ]);
     const settled = buildAnnotations(
@@ -119,35 +123,35 @@ describe('the spot gutter', () => {
 describe('annotationsField', () => {
   it('takes the latest annotations and keeps them in place while the text changes', () => {
     const registry = new SlotRegistry();
-    const field = annotationsField(registry, NO_ANNOTATIONS);
-    let state = EditorState.create({ doc: DOC, extensions: field });
-    expect(state.field(field).size).toBe(0);
+    const view = createView(DOC.toString(), [annotationsField(registry, NO_ANNOTATIONS)]);
     const value = { ...NO_ANNOTATIONS, notes: [{ key: 'n', line: 1 }] };
     const effects = [setAnnotations.of(NO_ANNOTATIONS), setAnnotations.of(value)];
     expect(selectAnnotations(effects)).toBe(value);
     expect(selectAnnotations([])).toBeNull();
-    state = state.update({ effects }).state;
-    expect(state.field(field).size).toBe(1);
-    state = state.update({ changes: { from: 0, insert: 'zero\n' } }).state;
-    const positions: number[] = [];
-    state.field(field).between(0, state.doc.length, (from) => {
-      positions.push(from);
-    });
-    expect(positions).toEqual([8]);
+    expect(view.dom.querySelector('.cm-note-block')).toBeNull();
+    view.dispatch({ effects });
+    expect(view.dom.querySelector('[data-slot="n"]')).not.toBeNull();
+    view.dispatch({ selection: { anchor: 1 } });
+    view.dispatch({ changes: { from: 0, insert: 'zero\n' } });
+    const block = view.dom.querySelector('.cm-note-block');
+    expect(block?.previousElementSibling?.textContent).toBe('one');
   });
 });
 
 describe('SlotWidget', () => {
-  it('draws a slot React fills, ignores the editor’s events and releases the slot when removed', () => {
+  it('shows the note’s element, ignores the editor’s events and gives it back when removed', () => {
     const registry = new SlotRegistry();
     const widget = new SlotWidget('n', registry);
     expect(widget.eq(new SlotWidget('n', registry))).toBe(true);
     expect(widget.eq(new SlotWidget('m', registry))).toBe(false);
+    expect(widget.estimatedHeight).toBe(-1);
+    registry.recordHeight('n', 80);
+    expect(widget.estimatedHeight).toBe(80);
     const dom = widget.toDOM();
-    expect(registry.read().get('n')).toBe(dom);
+    expect(registry.select('n')?.parentElement).toBe(dom);
     expect(widget.ignoreEvent()).toBe(true);
     widget.destroy(dom);
-    expect(registry.read().size).toBe(0);
+    expect(registry.select('n')?.parentElement).toBeNull();
   });
 });
 

@@ -3,6 +3,7 @@ import type { FileContent } from '@shinsa/core';
 import {
   holdPaneContent,
   listKeptLines,
+  resolveFocusLines,
   resolvePaneContent,
   resolveTextGuard,
   TEXT_GUARD,
@@ -106,12 +107,21 @@ describe('listKeptLines', () => {
           { kind: 'composer', key: 'c', side: 'new', line: 4, start: 4, endLine: null },
           { kind: 'composer', key: 'o', side: 'old', line: 9, start: 9, endLine: null },
         ],
-        [{ key: 's', from: 10, to: 12, tone: 'red', selected: false }],
+        [{ key: 's', from: 10, to: 12, tone: 'red', label: 'Critical', selected: false }],
         20,
         null
       )
-    ).toEqual([4, 10, 12, 20, 20]);
+    ).toEqual([4, 10, 11, 12, 20, 20]);
     expect(listKeptLines([], [], null, null)).toEqual([]);
+  });
+});
+
+describe('resolveFocusLines', () => {
+  it('washes the lines a link points at, strongly while it flashes', () => {
+    expect(resolveFocusLines(null, null, true)).toBeNull();
+    expect(resolveFocusLines(12, null, true)).toEqual({ from: 12, to: 12, flash: true });
+    expect(resolveFocusLines(12, 18, false)).toEqual({ from: 12, to: 18, flash: false });
+    expect(resolveFocusLines(12, 3, false)).toEqual({ from: 12, to: 12, flash: false });
   });
 });
 

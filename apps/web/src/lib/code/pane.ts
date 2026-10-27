@@ -68,6 +68,13 @@ export function listKeptLines(
   ];
 }
 
+export const FOCUS_FLASH_MS = 2000;
+
+export function resolveFocusLines(line: number | null, end: number | null, flash: boolean) {
+  if (!line) return null;
+  return { from: line, to: Math.max(line, end ?? line), flash };
+}
+
 export const TEXT_GUARD = { bytes: 1024 * 1024, lineLength: 10_000 } as const;
 
 function measureLongestLine(text: string) {

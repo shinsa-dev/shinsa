@@ -36,17 +36,32 @@ function splitContent(content: string) {
   return content.replace(/\n$/, '').split('\n');
 }
 
+interface PatchHunk {
+  oldStart: number;
+  newStart: number;
+  body: string[];
+}
+
+function resolveFirstLine(start: string | undefined, count: string | undefined) {
+  return Number(start) + (count === '0' ? 1 : 0);
+}
+
 function listHunks(patch: string) {
-  const hunks: { oldStart: number; newStart: number; body: string[] }[] = [];
+  const hunks: PatchHunk[] = [];
   for (const line of patch.split('\n')) {
     const header = HUNK_HEADER.exec(line);
-    if (header) hunks.push({ oldStart: Number(header[1]), newStart: Number(header[3]), body: [] });
-    else if (/^[ +-]/.test(line)) hunks.at(-1)?.body.push(line);
+    if (header) {
+      hunks.push({
+        oldStart: resolveFirstLine(header[1], header[2]),
+        newStart: resolveFirstLine(header[3], header[4]),
+        body: [],
+      });
+    } else if (/^[ +-]/.test(line)) hunks.at(-1)?.body.push(line);
   }
   return hunks;
 }
 
-function listPatchLines(hunk: { oldStart: number; newStart: number; body: string[] }) {
+function listPatchLines(hunk: PatchHunk) {
   let oldLine = hunk.oldStart;
   let newLine = hunk.newStart;
   return hunk.body.map((text): PatchLine => {
@@ -72,11 +87,32 @@ export function hasHunks(hunks: string) {
   return listHunks(hunks).some((hunk) => hunk.body.length > 0);
 }
 
+function isRemoved(line: PatchLine) {
+  return line.text.startsWith('-');
+}
+
+function listMarkedLines(rows: PatchLine[], lines: DiffLines) {
+  const inRange = (row: PatchLine) => row.newLine >= lines.start && row.newLine <= lines.end;
+  const replaces = rows.some((row) => row.text.startsWith('+') && inRange(row));
+  const leading = rows.filter((row) => isRemoved(row) && row.newLine === lines.start);
+  const replaced = new Set(replaces ? leading.slice(-(lines.end - lines.start + 1)) : leading);
+  return rows.map((row) => {
+    if (!isRemoved(row)) return inRange(row);
+    return replaced.has(row) || (row.newLine > lines.start && row.newLine <= lines.end);
+  });
+}
+
+function sliceMarkedLines(rows: PatchLine[], lines: DiffLines) {
+  const marked = listMarkedLines(rows, lines);
+  const first = marked.indexOf(true);
+  if (first < 0) return [];
+  const last = marked.lastIndexOf(true);
+  return rows.slice(Math.max(0, first - SPOT_CONTEXT), last + SPOT_CONTEXT + 1);
+}
+
 export function narrowHunks(patch: string, lines: DiffLines) {
-  const from = lines.start - SPOT_CONTEXT;
-  const to = lines.end + SPOT_CONTEXT;
   const kept = listHunks(patch)
-    .map((hunk) => listPatchLines(hunk).filter((line) => line.newLine >= from && line.newLine <= to))
+    .map((hunk) => sliceMarkedLines(listPatchLines(hunk), lines))
     .filter((hunk) => hunk.some((line) => !line.text.startsWith(' ')))
     .map(serializeHunk);
   return kept.length > 0 ? kept.join('\n') : null;

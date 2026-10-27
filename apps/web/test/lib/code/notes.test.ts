@@ -97,24 +97,28 @@ describe('listFileNotes', () => {
 
 describe('listSpotMarks', () => {
   it('marks the spots of this file in their attention tone, the selected one too', () => {
-    const target = (key: string, file: string, start: number, end: number): ReviewTarget => ({
+    const target = (key: string, file: string, start: number, end: number, why = ''): ReviewTarget => ({
       key,
       file,
       start,
       end,
       attention: 'critical',
-      why: '',
+      why,
       section: '',
     });
     expect(
       listSpotMarks(
-        [target('0:0', 'a.ts', 4, 6), target('0:1', 'b.ts', 1, 1), target('0:2', 'a.ts', 9, 2)],
+        [
+          target('0:0', 'a.ts', 4, 6, ' The order changed. '),
+          target('0:1', 'b.ts', 1, 1),
+          target('0:2', 'a.ts', 9, 2),
+        ],
         'a.ts',
         '0:0'
       )
     ).toEqual([
-      { key: '0:0', from: 4, to: 6, tone: 'red', selected: true },
-      { key: '0:2', from: 9, to: 9, tone: 'red', selected: false },
+      { key: '0:0', from: 4, to: 6, tone: 'red', label: 'Critical: The order changed.', selected: true },
+      { key: '0:2', from: 9, to: 9, tone: 'red', label: 'Critical', selected: false },
     ]);
   });
 });

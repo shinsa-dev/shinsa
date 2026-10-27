@@ -12,7 +12,7 @@ import { QuickOpen } from '@/components/code/quick-open.tsx';
 import { ResizeHandle } from '@/components/layout/sidebar/resize-handle.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { useCodeKeyLabel, useCodeKeys } from '@/hooks/use-code-keys.ts';
-import { useCodeLocation } from '@/hooks/use-code-location.ts';
+import { hasFileInAddress, useCodeLocation } from '@/hooks/use-code-location.ts';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import { TOKEN_PRIORITY } from '@/lib/code/editor/tokens.ts';
 import { resolveEditState } from '@/lib/code/edits.ts';
@@ -49,12 +49,14 @@ import {
   useUnifiedDiff,
   useViewedFiles,
   writeExplorerSide,
+  writeViewedFiles,
 } from '@/lib/preferences/code.ts';
 import { resolveFallbackReport } from '@/lib/review/fallback-report.ts';
 import { listFindingTargets, listReviewTargets } from '@/lib/review/targets.ts';
 import type { ExplorerMode } from '@/lib/tasks/tabs.ts';
 
-const INSTANT = '[&_*]:transition-none! [&_*::before]:transition-none! [&_*::after]:transition-none!';
+const INSTANT =
+  '[&_*:not([data-motion=move])]:transition-none! [&_*::before]:transition-none! [&_*::after]:transition-none!';
 
 export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; modes: ExplorerMode[] }) {
   const { location, apply } = useCodeLocation(modes);
@@ -65,7 +67,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   const side = useExplorerSide();
   const width = useExplorerWidth(explorerFloor, side);
   const [unified, toggleSplit] = useUnifiedDiff();
-  const split = !unified;
+  const split = !unified && !narrow;
   const [hideViewed, toggleHideViewed] = useHideViewed();
   const [quickOpen, setQuickOpen] = React.useState(false);
   const [sheetOpen, setSheetOpen] = React.useState(false);
@@ -140,7 +142,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
   }
 
   React.useEffect(() => {
-    if (location.active || (reviewing && !diffValue)) return;
+    if (location.active || hasFileInAddress() || (reviewing && !diffValue)) return;
     const file = location.mode === 'changes' ? diffValue?.files[0] : undefined;
     if (file) apply(resolveOpenPatch({ kind: 'diff', path: file.path }), { replace: true });
   }, [location, diffValue, reviewing, apply]);
@@ -205,6 +207,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
     onMatch: openLine,
     onSearch: (search) => apply(resolveSearchPatch(search), { replace: true }),
     onToggleViewed: (path) => toggleViewedFile(task.id, gitRef, path),
+    onMarkViewed: (paths, seen) => writeViewedFiles(task.id, gitRef, paths, seen),
     onPrefetch: prefetchOpen,
     onPrefetchPath: (path) => prefetchOpen({ kind: changed.has(path) ? 'diff' : 'file', path }),
     onPrefetchFolder: (dir) => prefetchFolder(task, gitRef, dir),
@@ -259,7 +262,7 @@ export function Workbench({ task, refs, modes }: { task: Task; refs: TaskRefs; m
             location={location}
             targets={targets}
             split={split}
-            onSplit={toggleSplit}
+            onSplit={narrow ? null : toggleSplit}
             handle={editor}
             session={session}
             toolbar={explorerButton}

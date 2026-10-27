@@ -42,6 +42,10 @@ function prepareHighlighter(language: string) {
   return pending;
 }
 
+export function prepareLanguages(paths: readonly string[]) {
+  return Promise.all([...new Set(paths.map(getFiletypeFromFileName))].map(prepareHighlighter));
+}
+
 function useHighlighter(path: string) {
   const language = getFiletypeFromFileName(path);
   const [ready, setReady] = React.useState<string | null>(prepared.has(language) ? language : null);
@@ -92,7 +96,7 @@ export default function CodeDiffView({ source, numbered = false, selected = null
   return (
     <>
       <div
-        className='min-w-0 overflow-hidden'
+        className='selectable min-w-0 overflow-hidden'
         style={clamp.maxHeight === null ? undefined : { maxHeight: clamp.maxHeight }}
       >
         <FileDiff
