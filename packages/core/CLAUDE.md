@@ -177,7 +177,9 @@ src/
 ├── chat/            The chat protocol (ChatEntry), shinsa:// references, inline code marking, a task as text for
 │                    an agent (task-detail.ts: serializeTaskDetail, what `read_task` and `tasks_show` read), the
 │                    other open work in a task's repository (repository-work.ts: listRepositoryWork,
-│                    serializeRepositoryWork, what `list_repository_work` reads), and
+│                    serializeRepositoryWork, what `list_repository_work` reads), the `<attachments>` block a
+│                    message or request carries its files in (attachments.ts: splitMessageAttachments,
+│                    serializeAttachments), and
 │                    sentence helpers (text.ts: describeCount, describeList, capitalise, lowerFirst)
 ├── prompts/         House rules and splitting them off a brief (rules.ts) and the delegation rules
 │                    (orchestration-rules.ts), the step catalog, rules and plan parameters the agent reads while it
