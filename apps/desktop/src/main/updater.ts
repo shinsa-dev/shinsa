@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { app, dialog } from 'electron';
 import electronUpdater from 'electron-updater';
 import type { UpdateChannel } from '../lib/bridge.ts';
@@ -15,6 +17,7 @@ import {
   isUpdateSupported,
   needsDiscard,
   resolveDesktopUpdate,
+  resolveInitialUpdate,
   resolveStagedUpdate,
   UPDATE_CHECK_MS,
   type UpdateState,
@@ -31,10 +34,14 @@ interface Download {
 }
 
 export class Updater {
-  #state: UpdateState = { status: 'idle' };
+  readonly #supported = isUpdateSupported({
+    packaged: app.isPackaged,
+    platform: process.platform,
+    updateFile: existsSync(join(process.resourcesPath, 'app-update.yml')),
+  });
+  #state: UpdateState = resolveInitialUpdate(this.#supported);
   readonly #changed: () => void;
   readonly #open: () => void;
-  readonly #supported = isUpdateSupported({ packaged: app.isPackaged, platform: process.platform });
   #channel: UpdateChannel = resolveUpdateChannel(readPrefs().updateChannel, app.getVersion());
   #download: Download | null = null;
   #ask = false;

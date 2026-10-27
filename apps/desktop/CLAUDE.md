@@ -120,7 +120,10 @@ resources/          The app icon: icon.svg (the source), icon.png (1024px), icon
 `shinsa-dev/shinsa` (`publish` in `electron-builder.yml`), downloads a new version in the background and installs it
 when you quit, or at once from Shinsa → Restart to Update. Quitting never stops the server, so an update never
 interrupts an agent. Squirrel.Mac installs only an update signed by the same Developer ID, so ad hoc builds download
-but do not install. There are two channels (`lib/update-channel.ts`): Stable reads `latest-mac.yml` from the release
+but do not install. A build without `Contents/Resources/app-update.yml`, which electron-builder writes only for a
+release (`bun run package` builds the `dir` target and has none), never runs electron-updater: its update status is
+`unavailable`, the menu has no Check for Updates and Settings → Updates says the build does not update itself
+(`isUpdateSupported`, `resolveInitialUpdate`). There are two channels (`lib/update-channel.ts`): Stable reads `latest-mac.yml` from the release
 marked latest, Beta reads `beta-mac.yml` from the newest release, pre-releases included (`allowPrerelease`), and
 `allowDowngrade` stays false (electron-updater turns it on when `channel` is set) except for one accepted go-back: on
 Stable, a beta newer than the latest stable is offered that stable ("Go back to 1.2.0 (stable)?", update status

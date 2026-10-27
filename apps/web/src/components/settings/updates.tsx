@@ -68,13 +68,16 @@ export function UpdatesGroup({
     );
   }
   const status = describeUpdateStatus(app.update);
+  const checkable = app.update.status !== 'unavailable';
   return (
     <SettingsGroup
       title={UPDATES_SECTION}
-      action={<RefreshButton label={UPDATES_LABEL.check} onRefresh={async () => actions.check()} />}
+      action={
+        checkable && <RefreshButton label={UPDATES_LABEL.check} onRefresh={async () => actions.check()} />
+      }
     >
       <div className={SETTING_ROW}>
-        <RowText title={UPDATES_LABEL.app} detail={describeAppDetail(app.channel)}>
+        <RowText title={UPDATES_LABEL.app} detail={describeAppDetail(app.channel, app.update)}>
           <span className={TOKEN_TEXT}>{app.version}</span>
           {status && <Truncate className={cn('min-w-0', TONE_TEXT[status.tone])}>{status.label}</Truncate>}
         </RowText>

@@ -16,7 +16,8 @@ export type DesktopUpdate =
   | { status: 'failed'; message: string }
   | { status: 'downloading'; version: string }
   | { status: 'ready'; version: string }
-  | { status: 'downgrade'; version: string };
+  | { status: 'downgrade'; version: string }
+  | { status: 'unavailable' };
 
 export interface DesktopStart {
   version: string;

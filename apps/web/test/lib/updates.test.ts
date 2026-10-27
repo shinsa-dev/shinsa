@@ -21,8 +21,18 @@ describe('the Updates settings', () => {
   });
 
   it('names the channel under the version', () => {
-    expect(describeAppDetail('beta')).toBe('Beta channel · Updates install when you quit Shinsa');
-    expect(describeAppDetail('stable')).toBe('Stable channel · Updates install when you quit Shinsa');
+    expect(describeAppDetail('beta', { status: 'none' })).toBe(
+      'Beta channel · Updates install when you quit Shinsa'
+    );
+    expect(describeAppDetail('stable', { status: 'current' })).toBe(
+      'Stable channel · Updates install when you quit Shinsa'
+    );
+  });
+
+  it('points a build that cannot update to a release', () => {
+    expect(describeAppDetail('stable', { status: 'unavailable' })).toBe(
+      'Install a release from shinsa.dev/download to get updates'
+    );
   });
 
   it('says what the updater is doing, and nothing before its first check', () => {
@@ -47,6 +57,10 @@ describe('the Updates settings', () => {
     expect(describeUpdateStatus({ status: 'downgrade', version: '1.2.0' })).toEqual({
       label: 'Go back to 1.2.0 (stable)?',
       tone: 'blue',
+    });
+    expect(describeUpdateStatus({ status: 'unavailable' })).toEqual({
+      label: 'This build does not update itself',
+      tone: 'neutral',
     });
   });
 });

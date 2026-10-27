@@ -55,6 +55,13 @@ describe('the Updates settings', () => {
     expect(screen.getByText('Update channel')).toBeTruthy();
   });
 
+  it('on a build that cannot update says so, with no check to run', () => {
+    renderGroup({ status: 'unavailable' });
+    expect(screen.getByText('This build does not update itself')).toBeTruthy();
+    expect(screen.getByText('Install a release from shinsa.dev/download to get updates')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Check for updates' })).toBeNull();
+  });
+
   it('in a browser points to the app', () => {
     render(
       <TooltipProvider>

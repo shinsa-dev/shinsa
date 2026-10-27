@@ -9,15 +9,25 @@ import {
   isUpdateSupported,
   needsDiscard,
   resolveDesktopUpdate,
+  resolveInitialUpdate,
   resolveStagedUpdate,
   UPDATE_CHECK_MS,
 } from '../../src/lib/update.ts';
 
 describe('isUpdateSupported', () => {
   it('updates only the packaged Mac app, never a development run', () => {
-    expect(isUpdateSupported({ packaged: true, platform: 'darwin' })).toBe(true);
-    expect(isUpdateSupported({ packaged: false, platform: 'darwin' })).toBe(false);
-    expect(isUpdateSupported({ packaged: true, platform: 'linux' })).toBe(false);
+    expect(isUpdateSupported({ packaged: true, platform: 'darwin', updateFile: true })).toBe(true);
+    expect(isUpdateSupported({ packaged: false, platform: 'darwin', updateFile: true })).toBe(false);
+    expect(isUpdateSupported({ packaged: true, platform: 'linux', updateFile: true })).toBe(false);
+  });
+
+  it('never updates a packaged build without its update file, such as a local package', () => {
+    expect(isUpdateSupported({ packaged: true, platform: 'darwin', updateFile: false })).toBe(false);
+  });
+
+  it('starts idle when it can update, and says so when it cannot', () => {
+    expect(resolveInitialUpdate(true)).toEqual({ status: 'idle' });
+    expect(resolveInitialUpdate(false)).toEqual({ status: 'unavailable' });
   });
 
   it('checks every four hours', () => {
@@ -127,6 +137,7 @@ describe('resolveDesktopUpdate', () => {
       version: '1.2.0',
     });
     expect(resolveDesktopUpdate({ status: 'idle' })).toEqual({ status: 'none' });
+    expect(resolveDesktopUpdate({ status: 'unavailable' })).toEqual({ status: 'unavailable' });
   });
 });
 

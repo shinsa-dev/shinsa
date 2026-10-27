@@ -11,7 +11,8 @@ export type UpdateState =
   | { status: 'ready'; version: string }
   | { status: 'current'; latest: string | null }
   | { status: 'downgrade'; version: string }
-  | { status: 'failed'; message: string };
+  | { status: 'failed'; message: string }
+  | { status: 'unavailable' };
 
 export interface UpdateMenuItem {
   label: string;
@@ -19,8 +20,20 @@ export interface UpdateMenuItem {
   install: boolean;
 }
 
-export function isUpdateSupported({ packaged, platform }: { packaged: boolean; platform: string }) {
-  return packaged && platform === 'darwin';
+export function isUpdateSupported({
+  packaged,
+  platform,
+  updateFile,
+}: {
+  packaged: boolean;
+  platform: string;
+  updateFile: boolean;
+}) {
+  return packaged && platform === 'darwin' && updateFile;
+}
+
+export function resolveInitialUpdate(supported: boolean): UpdateState {
+  return supported ? { status: 'idle' } : { status: 'unavailable' };
 }
 
 export function describeUpdateItem(state: UpdateState): UpdateMenuItem {
@@ -107,6 +120,8 @@ export function resolveDesktopUpdate(state: UpdateState): DesktopUpdate {
       return { status: 'ready', version: state.version };
     case 'downgrade':
       return { status: 'downgrade', version: state.version };
+    case 'unavailable':
+      return { status: 'unavailable' };
     default:
       return { status: 'none' };
   }

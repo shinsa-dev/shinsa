@@ -28,7 +28,8 @@ export function describeChannelDetail(channel: UpdateChannel) {
   return CHANNEL_DETAIL[channel];
 }
 
-export function describeAppDetail(channel: UpdateChannel) {
+export function describeAppDetail(channel: UpdateChannel, update: DesktopUpdate) {
+  if (update.status === 'unavailable') return 'Install a release from shinsa.dev/download to get updates';
   const label = UPDATE_CHANNEL_ITEMS.find((item) => item.value === channel)?.label ?? channel;
   return `${label} channel · Updates install when you quit Shinsa`;
 }
@@ -47,6 +48,8 @@ export function describeUpdateStatus(update: DesktopUpdate): { label: string; to
       return { label: `${update.version} is ready`, tone: 'blue' };
     case 'downgrade':
       return { label: `Go back to ${update.version} (stable)?`, tone: 'blue' };
+    case 'unavailable':
+      return { label: 'This build does not update itself', tone: 'neutral' };
     case 'none':
       return null;
   }
