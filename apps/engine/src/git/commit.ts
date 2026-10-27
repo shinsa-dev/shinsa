@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
 import { assertRefName } from './refs.ts';
 import { runGitOrThrow } from './run.ts';
-import { GIT_NETWORK_TIMEOUT_MS } from './worktree.ts';
 
 async function resolveGitPath(path: string, name: string) {
   return resolve(path, await runCommandOrThrow(['git', 'rev-parse', '--git-path', name], path));
@@ -66,9 +65,9 @@ export async function stashEdits(path: string, message: string) {
 
 export async function pushBranch(path: string, branch: string, signal?: AbortSignal) {
   await runCommandOrThrow(
-    ['git', 'push', '--quiet', '--no-verify', '-u', 'origin', `HEAD:refs/heads/${assertRefName(branch)}`],
+    ['git', 'push', '--quiet', '-u', 'origin', `HEAD:refs/heads/${assertRefName(branch)}`],
     path,
-    { timeoutMs: GIT_NETWORK_TIMEOUT_MS, signal }
+    { timeoutMs: null, signal }
   );
 }
 

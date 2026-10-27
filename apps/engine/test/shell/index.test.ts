@@ -60,6 +60,18 @@ describe('runCommand', () => {
     expect(result.timedOut).toBe(true);
   });
 
+  test('a command with no time limit runs to the end, and a cancel still stops it', async () => {
+    const done = await runCommand(['sh', '-c', 'sleep 0.2; echo done'], createTempDir(), { timeoutMs: null });
+    expect(done).toMatchObject({ ok: true, stdout: 'done', timedOut: false });
+    const controller = new AbortController();
+    const running = runCommand(['sh', '-c', 'sleep 30'], createTempDir(), {
+      timeoutMs: null,
+      signal: controller.signal,
+    });
+    controller.abort();
+    expect(await running).toMatchObject({ ok: false, timedOut: false });
+  });
+
   test('a command whose effect was cancelled before it started never runs', async () => {
     const dir = createTempDir();
     const controller = new AbortController();
