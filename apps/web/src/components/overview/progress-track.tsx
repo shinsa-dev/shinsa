@@ -49,7 +49,7 @@ function StepMark({ status }: { status: StepStatus }) {
       </span>
     );
   }
-  return <span className='size-4 shrink-0 rounded-full border-2 border-bg-a3' />;
+  return <span className='size-4 shrink-0 rounded-full border border-bg-a3' />;
 }
 
 function StepItem({ step, fold }: { step: Step; fold: LabelFold }) {
