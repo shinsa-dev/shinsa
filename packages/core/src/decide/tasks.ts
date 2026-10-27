@@ -63,6 +63,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
   assertRepo(decider, command.repoId);
   const waitsOn = resolveDependencies(decider, null, command.waitsOn ?? []);
   const projectId = resolveCreatedProject(decider, command);
+  if (command.forkOf !== undefined) decider.task(command.forkOf);
   const taskId = decider.context.newId();
   const auto: TaskAuto = {
     shape: command.mode === undefined && lineage.shape === undefined,
@@ -81,6 +82,7 @@ export function createTask(decider: Decider, command: CommandOf<'task.create'>, 
     ...(command.mode === 'ask' ? { mode: 'ask' as const } : {}),
     auto,
     ...(command.account ? { account: command.account } : {}),
+    ...(command.forkOf ? { forkOf: command.forkOf } : {}),
     ...lineage,
   });
   if (waitsOn.length > 0) decider.emit({ type: 'task.waits_on_changed', taskId, waitsOn, by: 'you' });

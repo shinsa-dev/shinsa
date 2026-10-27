@@ -270,6 +270,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `suggestions?` | `TaskSuggestion[]` | tasks agents suggested |
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`) or `split` (`split_task`), with the run and request key |
+| `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
 | `scheduleId?` | string \| null | the schedule that started it |
 
@@ -442,6 +443,7 @@ executable changed line (`selectMeasuredCoverage`).
 | `account?` | `RunAccount` | the account this run is bound to |
 | `delegation?`, `cohort?`, `waitingOn?` | | set on a delegated run; its parent's delivery state and what it waits on |
 | `compactions?` | string[] | sessions compacted while idle |
+| `fork?` | `RunFork` \| null | a forked task's first session: the source task's run and session to copy (`taskId`, `runId`, `sessionId`); the run starts with `resume: false` and `sessionId: null` until the copy reports its own id |
 | `round?` | number | the round it works for (Rounds, above) |
 
 `RunAttempt`: `attemptId`, `provider`, `model`, `resumed`, `handoff` (`provider_switch` or `session_restore`, entry
@@ -681,7 +683,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 
 | Command | Does | Command line | Who |
 | --- | --- | --- | --- |
-| `task.create` | creates a task (request, project, priority, plan first, waits on, mode, account) | `tasks create` | you; task agents file tasks with `create_task` |
+| `task.create` | creates a task (request, project, priority, plan first, waits on, mode, account, the task it forks: `forkOf`) | `tasks create` | you; task agents file tasks with `create_task` |
 | `task.message` | your message; what it does: Messages, above; `kind` says whether it is feedback, a new round or work for another task | `tasks message [--as]` | agent |
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
@@ -767,7 +769,7 @@ role without the tool (`hasTool`).
 | `agent.cancel_delegation` | `delegation_cancel` | stops one |
 | `agent.answer_delegation` | `delegation_answer` | answers a delegation's question |
 | `agent.acknowledge_delegation` | `delegation_status` | marks a finished result read |
-| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it |
+| `agent.create_task` | `create_task` | files a courier task from its `request`, optionally waiting on it or forked from a task (`forkOf`) |
 | `agent.split_task` | `split_task` | splits the approved plan into tasks (`requests`) |
 | `agent.set_schedule` | `set_schedule` | writes one of its task's schedules |
 | `agent.delete_schedule` | `delete_schedule` | deletes one |

@@ -150,6 +150,7 @@ export const ICON_NAMES = [
   'IconFolderSource',
   'IconFolderTest',
   'IconFolders',
+  'IconFork',
   'IconGauge',
   'IconGit',
   'IconGithub',
@@ -718,6 +719,9 @@ export const ICON_PATHS: Record<IconName, Partial<Record<IconRadius, string>>> =
   },
   IconFolders: {
     '3': '<g><path d="M2 11V17C2 18.6569 3.34315 20 5 20H15C16.6569 20 18 18.6569 18 17V13C18 11.3431 16.6569 10 15 10H10.8284C10.298 10 9.78929 9.78929 9.41421 9.41421L8.58579 8.58579C8.21071 8.21071 7.70201 8 7.17157 8H5C3.34315 8 2 9.34315 2 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 16H19C20.6569 16 22 14.6569 22 13V9C22 7.34315 20.6569 6 19 6H14.8284C14.298 6 13.7893 5.78929 13.4142 5.41421L12.5858 4.58579C12.2107 4.21071 11.702 4 11.1716 4H9C7.34315 4 6 5.34315 6 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
+  },
+  IconFork: {
+    '3': '<g><path d="M6.00029 3L5.11584 13.6134C5.04256 14.4928 5.36017 15.3599 5.98416 15.9839L8.12161 18.1213C8.68422 18.6839 9.00029 19.447 9.00029 20.2426V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3V13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 3L18.8845 13.6134C18.9577 14.4928 18.6401 15.3599 18.0161 15.9839L15.8787 18.1213C15.3161 18.6839 15 19.447 15 20.2426V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 13V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',
   },
   IconGauge: {
     '3': '<g><path d="M10 10L5.75 5.75M12 5V3C16.9706 3 21 7.02944 21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 10.9481 3.18046 9.93834 3.51212 9M14.5 12C14.5 13.3807 13.3807 14.5 12 14.5C10.6193 14.5 9.5 13.3807 9.5 12C9.5 10.6193 10.6193 9.5 12 9.5C13.3807 9.5 14.5 10.6193 14.5 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>',

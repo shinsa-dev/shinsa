@@ -81,6 +81,7 @@ type EventBody =
       parentTaskId?: string | null;
       createdBy?: TaskCreator | null;
       scheduleId?: string | null;
+      forkOf?: string | null;
     }
   | DelegationEventBody
   | ScheduleEventBody

@@ -13,6 +13,7 @@ import {
   type RunAccount,
   type RunFailure,
   type RunFailureClass,
+  type RunFork,
   type RunOutcome,
   type RunPurpose,
   type RunRole,
@@ -23,6 +24,7 @@ import {
 } from '../domain/index.ts';
 import type { EffectCancellation, ShinsaEffect, ShinsaEffectKind } from '../effects/index.ts';
 import type { ShinsaEventInput } from '../events/index.ts';
+import { describeForkSource, resolveForkNote } from '../prompts/forks.ts';
 import { resolveAdoptionNote } from '../prompts/orchestration.ts';
 import { resolveProjectContext } from '../prompts/project.ts';
 import { listTaskBases, needsRoundBrief, resolveRoundBrief } from '../prompts/root.ts';
@@ -177,6 +179,29 @@ export class Decider {
       : null;
   }
 
+  #forkSession(task: Task, role: RunRole): RunFork | null {
+    if (!task.forkOf || !isTaskSessionRole(role) || this.#hasHadSession(task.id)) return null;
+    const source = this.taskSession(task.forkOf, role);
+    if (!source?.sessionId || source.sessionLost) return null;
+    const provider = resolveAgentProvider(this.state.settings, RUN_AGENT_ROLE[role]);
+    if ((source.sessionProvider ?? source.provider) !== provider) return null;
+    return { taskId: source.taskId, runId: source.id, sessionId: source.sessionId };
+  }
+
+  #hasHadSession(taskId: string) {
+    return Object.values(this.state.runs).some(
+      (run) =>
+        run.taskId === taskId && !isDelegatedRun(run) && isTaskSessionRole(run.role) && run.sessionId !== null
+    );
+  }
+
+  #describeFreshContext(task: Task, role: RunRole, fork: RunFork | null) {
+    const project = fork ? '' : resolveProjectContext(this.state, task);
+    const source = task.forkOf ? this.state.tasks[task.forkOf] : undefined;
+    if (!source || !isTaskSessionRole(role)) return project;
+    return `${project}${fork ? resolveForkNote(source) : describeForkSource(source)}`;
+  }
+
   resumableFrom(run: Run | null) {
     if (!run || run.sessionId || isDelegatedRun(run)) return run;
     return this.taskSession(run.taskId, run.role);
@@ -256,6 +281,7 @@ export class Decider {
       usageWaitId: options.usageWaitId ?? null,
     });
     const resumeFrom = options.resumeFrom?.sessionId ? options.resumeFrom : null;
+    const fork = resumeFrom ? null : this.#forkSession(task, role);
     const account = this.#runAccounts.get(task.id) ?? options.account ?? null;
     this.#runAccounts.delete(task.id);
     const placement = { purpose: purpose ?? undefined, phaseIndex: options.phaseIndex ?? null };
@@ -263,7 +289,8 @@ export class Decider {
       !resumeFrom && needsRoundBrief({ role, ...placement })
         ? resolveRoundBrief(this.state, task, placement, prompt)
         : prompt;
-    const appended = `${resumeFrom ? '' : resolveProjectContext(this.state, task)}${adoption.note}${this.#tellEdits(task.id)}${tellOverlaps(this, task.id, role)}${tellHeldConflict(this, task.id, role, purpose)}`;
+    const fresh = resumeFrom ? '' : this.#describeFreshContext(task, role, fork);
+    const appended = `${fresh}${adoption.note}${this.#tellEdits(task.id)}${tellOverlaps(this, task.id, role)}${tellHeldConflict(this, task.id, role, purpose)}`;
     const run: Run = {
       id: adoption.id ?? this.context.newId(),
       taskId: task.id,
@@ -282,6 +309,7 @@ export class Decider {
       outcome: null,
       summary: null,
       ...(resumeFrom ? resolveInheritedSession(resumeFrom) : {}),
+      ...(fork ? { fork } : {}),
       ...(options.feedback ? { feedback: options.feedback } : {}),
       ...(options.monitorId ? { monitorId: options.monitorId } : {}),
       ...(options.usageWaitId ? { usageWaitId: options.usageWaitId } : {}),

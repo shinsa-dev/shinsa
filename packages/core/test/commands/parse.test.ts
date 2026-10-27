@@ -128,6 +128,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          forkOf: 't0',
         },
         {
           type: 'task.create',
@@ -137,6 +138,7 @@ describe('parseUserCommand', () => {
           planFirst: true,
           origin: '/code/app',
           waitsOn: ['t1'],
+          forkOf: 't0',
         },
       ],
       [

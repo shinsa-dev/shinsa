@@ -87,6 +87,7 @@ export type UserCommand =
       waitsOn?: string[];
       mode?: TaskMode;
       account?: RunAccount | null;
+      forkOf?: string;
     }
   | { type: 'task.prioritize'; taskId: string; priority: TaskPriority }
   | { type: 'task.wait_on'; taskId: string; waitsOn: string[] }

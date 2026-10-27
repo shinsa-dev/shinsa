@@ -170,6 +170,34 @@ marks executable, and of those the ones a test ran (`apps/engine/src/test-covera
   with tests and that Shinsa measures it, unless the repository turned coverage off. All of it is in the user turn,
   never a system prompt (Caching).
 
+### Forking a task
+
+A fork is a new task whose Agent carries on from another task's conversation: feature A shipped, a user reports an
+edge case in it, and the fix becomes its own task, kept apart on screen with its own branch, worktree, review and pull
+request, while its Agent still knows everything A's Agent learned. It is the one place a task's first session is not
+fresh, and it keeps the first rule: the fork has one session of its own from then on, and the source's session is
+never resumed by it. The rules are core (`Decider.startRun`, `prompts/forks.ts`, the fold in `state/forks.ts`).
+
+- **Asking for one.** `task.create` and `agent.create_task` take `forkOf`, the source task's id; an unknown id is
+  refused (`task_not_found`) before anything is created. The task keeps it as `Task.forkOf`, and both tasks record it
+  in their activity (`kind: 'fork'`: "Forked from LOC-14 “…”" on the new one, "Forked into LOC-15 “…”" with the
+  request on the source, which a courier forking its own task records only as the task it created).
+- **The first session is a copy.** The forked task's first run of a task-session role (planning, or an inquiry)
+  carries `Run.fork {taskId, runId, sessionId}`: the source's session as `Decider.taskSession` reads it, with
+  `resume: false` and `sessionId: null`. The provider copies that session (Claude's `forkSession`, Codex
+  `thread/fork`) and the run links the copy's own id, so every later run resumes the copy (`Decider.taskSession`) and
+  the source session is never touched. A fork run that failed before it linked a session forks again on its retry.
+  Its prompt ends with what happened (`resolveForkNote`): everything above was the source task's work, that task stays
+  as it is, and from here on the agent works on this task only, with its own request. The system prompt and tools are
+  the same, so the copy keeps the source's prompt-cache prefix (Caching).
+- **No session to copy, a brief instead.** When the source has no session, its session is on another provider than
+  the run's, or the provider lost it, or the fork's own session once existed and can no longer go on (a context
+  overflow), the run starts fresh and its prompt ends with the source's brief (`describeForkSource`): the source's
+  request and its rounds, each with its state, pull request and headline, result or goal, and `read_task` for more. A
+  fork is never made twice: once any task-session run of the task had a session, a new one starts fresh.
+- **The reviewer never forks.** It is not a task-session role, so it reviews a fork with its own fresh session and
+  is not told about the source.
+
 ### Who is who
 
 Shinsa is a control plane for coding agents. It does not think or write code itself: it runs the harnesses (Claude

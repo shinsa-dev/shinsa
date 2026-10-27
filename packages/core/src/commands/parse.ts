@@ -358,6 +358,7 @@ function readTaskCreate(fields: Fields): UserCommand {
     ...(fields.waitsOn === undefined ? {} : { waitsOn: readList(fields, 'waitsOn', readId) }),
     ...(fields.mode === undefined ? {} : { mode: readChoice(fields, 'mode', MODES) }),
     ...(fields.account === undefined ? {} : { account: readAccount(fields, 'account') }),
+    ...(fields.forkOf === undefined ? {} : { forkOf: readId(fields, 'forkOf') }),
   };
 }
 

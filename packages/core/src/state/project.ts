@@ -39,6 +39,7 @@ import {
 } from './activity.ts';
 import { applyDelegationEvent, recordCourierTask, resolveLineage } from './delegations.ts';
 import { removeEntry, writeEntry } from './draft.ts';
+import { recordFork } from './forks.ts';
 import { applyGateEvent } from './gates.ts';
 import { applyInboxEvent } from './inbox.ts';
 import { applyOnBehalfActed } from './on-behalf.ts';
@@ -177,6 +178,7 @@ function createTask(event: EventOf<'task.created'>): Task {
     ...(event.shape ? { pipeline: [...SHAPE_PIPELINES[event.shape]] } : {}),
     auto: { ...event.auto },
     ...(event.account ? { account: event.account } : {}),
+    ...(event.forkOf ? { forkOf: event.forkOf } : {}),
     rounds: [createFirstRound(title, request, pipeline, event.at)],
   };
 }
@@ -590,6 +592,7 @@ function applyTaskCreated(state: ShinsaState, event: EventOf<'task.created'>) {
   writeEntry(state, 'tasks', event.taskId, { ...createTask(event), ...resolveLineage(event) });
   if (event.handle) recordHandle(state, event.handle);
   recordCourierTask(state, event);
+  recordFork(state, event);
   applyScheduledTask(state, event);
 }
 

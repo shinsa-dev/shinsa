@@ -340,7 +340,8 @@ export type ActivityKind =
   | 'account'
   | 'delegation'
   | 'shape'
-  | 'round';
+  | 'round'
+  | 'fork';
 
 export interface Activity {
   at: number;
@@ -436,6 +437,7 @@ export interface Task {
   usageWait?: UsageWait | null;
   parentTaskId?: string | null;
   createdBy?: TaskCreator | null;
+  forkOf?: string | null;
   splits?: TaskSplit[];
   scheduleId?: string | null;
   pipeline?: PipelineStep[];
@@ -498,7 +500,14 @@ export interface Run {
   cohort?: DeliveryCohort | null;
   waitingOn?: RunWait | null;
   compactions?: string[];
+  fork?: RunFork | null;
   round?: number;
+}
+
+export interface RunFork {
+  taskId: string;
+  runId: string;
+  sessionId: string;
 }
 
 export interface Gate {
