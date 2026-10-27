@@ -1,13 +1,14 @@
 import type { ShinsaState } from '@shinsa/core';
 import * as React from 'react';
-import { requestCodeDiffView } from '@/components/text/code-diff.tsx';
+import { prepareCodeDiff } from '@/components/text/code-diff.tsx';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 import { listPrefetchRuns, prefetchTranscript } from '@/lib/chat/prefetch.ts';
 import { prefetchSnippets, scheduleIdle } from '@/lib/code/prefetch.ts';
 import { refreshExtensions } from '@/lib/connection/extensions.ts';
 import { connection } from '@/lib/connection/socket.ts';
 import { refreshVersions } from '@/lib/connection/versions.ts';
-import { listAttentionItems } from '@/lib/review/report.ts';
+import { prefetchEvidence } from '@/lib/evidence/prefetch.ts';
+import { listReviewChapters, listReviewPoints } from '@/lib/review/report.ts';
 import { findTaskTarget, listIdleTasks } from '@/lib/tasks/prefetch.ts';
 import { hasReview, listTaskTabs } from '@/lib/tasks/tabs.ts';
 import { prefetchCode } from './lazy-code.tsx';
@@ -21,6 +22,7 @@ function skipFailure() {
 function prefetchTaskCode(state: ShinsaState, taskId: string, search: string) {
   const task = state.tasks[taskId];
   if (!task) return null;
+  prefetchEvidence(state, task);
   if (hasReview(task)) {
     void requestCodeDiffView().then(undefined, skipFailure);
     if (task.repoId)

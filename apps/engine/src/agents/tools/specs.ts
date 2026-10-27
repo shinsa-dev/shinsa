@@ -247,15 +247,58 @@ export const TOOL_SPECS = {
   attach_evidence: {
     name: 'attach_evidence',
     description:
-      'Attach proof that the work does what was asked: a screenshot or recording file, a test run, or a preview URL. The human sees it before the diff.',
+      'Attach proof that the work does what was asked: a comparison of one view before and after, a screenshot or recording file, a test or check run, a note, or a preview URL. The human sees it in the review before the diff, each call as one item. Give exactly one of path, url or text, or for a comparison its parts. For screenshots set width, theme and stage; a before shot and an after shot with the same title, width and theme show as one comparison, so a before taken early and its after taken later still pair.',
     inputSchema: {
       type: 'object',
       properties: {
-        kind: { type: 'string', enum: ['screenshot', 'recording', 'test', 'check', 'note', 'preview'] },
-        title: { type: 'string', description: 'What it shows, in a few words.' },
-        path: {
+        kind: {
           type: 'string',
-          description: 'A file (image, video, log), absolute or relative to the worktree.',
+          enum: [...ATTACHED_EVIDENCE_KINDS],
+          description:
+            'comparison: one view in two or more states (before and after) as one item, with parts; screenshot: one image; recording: a short video of an interaction; test or check: run output; note: markdown, a table for measurements; preview: a URL.',
+        },
+        title: limitedText(
+          'What it shows, in a few words: the screen or flow, never the file name.',
+          L.evidenceTitle
+        ),
+        detail: limitedText('What to look at in it, in one sentence.', L.evidenceDetail),
+        width: {
+          type: 'integer',
+          description: 'The viewport width in CSS pixels, for a screenshot or recording.',
+          minimum: 1,
+          maximum: L.evidenceWidth,
+        },
+        theme: {
+          type: 'string',
+          enum: [...EVIDENCE_THEMES],
+          description: 'The colour theme it was captured in.',
+        },
+        stage: {
+          type: 'string',
+          enum: [...EVIDENCE_STAGES],
+          description: 'before: the app as it was, captured before your change; after: with your change.',
+        },
+        path: limitedPath('A file (image, video, log), absolute or relative to the worktree.'),
+        url: limitedText('A URL, for previews.', L.evidenceUrl),
+        text: limitedText('Text evidence: test or check output, or a note in markdown.', L.evidenceText),
+        parts: {
+          type: 'array',
+          description:
+            'For a comparison only: each state of the view as an image or video file, in order, named by its stage (before, after) or a short label (Empty, Loading, Light, Dark).',
+          minItems: 2,
+          maxItems: L.evidenceParts,
+          items: {
+            type: 'object',
+            properties: {
+              path: limitedPath('The file, absolute or relative to the worktree.'),
+              stage: { type: 'string', enum: [...EVIDENCE_STAGES] },
+              label: limitedText(
+                'The state it shows, when it is not simply before or after.',
+                L.evidenceLabel
+              ),
+            },
+            required: ['path'],
+          },
         },
         url: { type: 'string', description: 'A URL, for previews.' },
         text: { type: 'string', description: 'Text evidence, for test output or notes.' },

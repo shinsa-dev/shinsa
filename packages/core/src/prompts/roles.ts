@@ -1,4 +1,6 @@
 import {
+  type Evidence,
+  type EvidenceItem,
   hasStep,
   isComposedByAgent,
   isLaterRound,
@@ -150,6 +152,37 @@ function describePhaseOpening(task: Task, index: number) {
   return 'The plan is in, so building starts.';
 }
 
+function describePlannedEvidence(task: Task) {
+  const kinds = task.plan?.document?.evidence ?? [];
+  return kinds.length > 0
+    ? `The plan asks for ${kinds.map((kind) => `\`${kind}\``).join(', ')} as evidence.`
+    : '';
+}
+
+function describeCoverageForPhase(repo: Repo | null) {
+  if (resolveRepoCoverage(repo).mode === 'off') return '';
+  return 'Cover every piece of new logic with tests. After the checks, Shinsa measures how many of your changed lines the tests run and shows the lines they miss to the reviewer and the human.';
+}
+
+function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, last: boolean) {
+  const kinds = task.plan?.document?.evidence ?? [];
+  const visual = kinds.includes('screenshot') || kinds.includes('recording');
+  return [
+    describePlannedEvidence(task),
+    index === 0 && visual
+      ? 'Before you edit anything a user sees, run the app and capture those screens as they are now, with `stage: "before"`: the human sees each with its after shot as one comparison.'
+      : '',
+    'For user-facing changes, run the app and capture the evidence the evidence skill describes: a before and after comparison of every screen you changed at the widths and in the themes it lists (the after shot with `stage: "after"` and the same title, width and theme as its before shot, or both at once as `kind: "comparison"` with `parts`), a short recording for an interaction, the browser console read. Attach each with `attach_evidence`.',
+    'For logic, write the test that fails without your change and passes with it, and attach its run output (`kind: "test"`, `text`).',
+    describeCoverageForPhase(repo),
+    last && kinds.length > 0
+      ? 'Attach all of it before you call `complete_phase`: Shinsa refuses the last phase until each kind is there.'
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 export function resolvePhaseInstruction(task: Task, repo: Repo | null, index: number) {
   const plan = task.plan?.document?.phases ?? [];
   const phase = plan[index];
@@ -225,7 +258,32 @@ function describeReviewScope(task: Task, repo: Repo | null, stacked: string | nu
 const REVIEW_AGAIN =
   'You reviewed earlier work on this task in this conversation. Judge this review on its own: check that your earlier blocking findings are fixed, read the new commits as closely as the first time, and never pass something because you passed it before.';
 
-export function resolveReviewerPrompt(task: Task, repo: Repo | null, bases: Task[], again = false) {
+function describeEvidenceItem({ kind, title, parts }: EvidenceItem) {
+  const [first] = parts;
+  const names =
+    kind === 'comparison' ? parts.map((part) => part.label ?? part.stage).join(' and ') : first?.stage;
+  const facts = [names, first?.width ? `${first.width}px` : null, first?.theme].filter(Boolean).join(', ');
+  return `- ${kind}: ${title}${facts ? ` (${facts})` : ''}`;
+}
+
+function describeEvidenceForReview(evidence: readonly Evidence[]) {
+  if (evidence.length === 0) {
+    return 'The agent attached no evidence this round. If the change is visible to a user, capture your own as the evidence skill describes and attach it with `attach_evidence`: the human sees it as independent evidence from the review.';
+  }
+  return [
+    'The evidence the agent attached this round (the human sees it in the review):',
+    ...listEvidenceItems(evidence).map(describeEvidenceItem),
+    'Check it shows what the change claims. Where a user-visible claim has none, or you doubt one, capture your own as the evidence skill describes and attach it with `attach_evidence`: the human sees it as independent evidence from the review.',
+  ].join('\n');
+}
+
+export function resolveReviewerPrompt(
+  task: Task,
+  repo: Repo | null,
+  bases: Task[],
+  again = false,
+  evidence: readonly Evidence[] = []
+) {
   const stacked = bases.find((base) => base.branch && isStacked(base));
   return [
     resolveHouseRules('reviewer'),

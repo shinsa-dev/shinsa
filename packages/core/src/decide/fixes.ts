@@ -1,5 +1,12 @@
 import type { CommandOf } from '../commands/index.ts';
-import type { FixReason, ReviewEscalation, ReviewEscalationReason, Task } from '../domain/index.ts';
+import {
+  type CheckEvidence,
+  type FixReason,
+  type ReviewEscalation,
+  type ReviewEscalationReason,
+  resolveRoundStamp,
+  type Task,
+} from '../domain/index.ts';
 import { resolveAgentPrompt, resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
@@ -165,7 +172,31 @@ export function reactToFindings(decider: Decider, taskId: string, findings: Revi
 }
 
 export function recordChecks(decider: Decider, command: CommandOf<'checks.record'>) {
-  if (decider.task(command.taskId).stage !== 'checking') return;
-  decider.emit({ type: 'checks.recorded', taskId: command.taskId, results: command.results });
+  const task = decider.task(command.taskId);
+  if (task.stage !== 'checking') return;
+  decider.emit({
+    type: 'checks.recorded',
+    taskId: command.taskId,
+    results: command.results,
+    ...(command.coverage ? { coverage: command.coverage } : {}),
+  });
+  if (command.evidence) attachCheckEvidence(decider, task, command.evidence);
   reactToChecks(decider, command.taskId, command.results);
+}
+
+function attachCheckEvidence(decider: Decider, task: Task, evidence: CheckEvidence) {
+  decider.emit({
+    type: 'evidence.attached',
+    evidence: {
+      id: decider.context.newId(),
+      taskId: task.id,
+      runId: null,
+      kind: 'check',
+      title: evidence.title,
+      uri: evidence.uri,
+      attachedAt: decider.context.now,
+      ...resolveRoundStamp(task),
+      ...(evidence.detail ? { detail: evidence.detail } : {}),
+    },
+  });
 }

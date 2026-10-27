@@ -198,8 +198,9 @@ export class ToolCalls {
 
   async #attachEvidence({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {
     const { task } = this.#findCurrent(runId, attemptId);
-    const evidence = storeEvidence(input, task.worktreePath, this.#options.evidence);
-    await dispatch({ type: 'agent.attach_evidence', runId, attemptId, ...evidence });
+    const folder = { taskId: task.id, round: resolveCurrentRound(task).number };
+    const evidence = storeEvidence(input, task.worktreePath, this.#options.evidence, folder);
+    await dispatch({ ...evidence, runId, attemptId });
     return 'Attached.';
   }
 

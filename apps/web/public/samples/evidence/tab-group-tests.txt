@@ -1,0 +1,10 @@
+bun test src/ui/tab-group.test.tsx
+bun test v1.3.0
+
+src/ui/tab-group.test.tsx:
+✓ TabGroup > scrolls the active tab to the centre [4.12ms]
+✓ TabGroup > keeps every tab at its natural width [1.87ms]
+
+ 2 pass
+ 0 fail
+Ran 2 tests across 1 file. [182.00ms]

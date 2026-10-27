@@ -11,7 +11,7 @@ import { Button } from '@shinsa/ui/components/button';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
-import { Choice } from '@/components/controls/choice.tsx';
+import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';

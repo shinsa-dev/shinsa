@@ -1,15 +1,14 @@
-import type { Gate, ShinsaState, Task } from '@shinsa/core';
+import { type Gate, listOpenGates, type ShinsaState, type Task } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
-import { Icon } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
+import { EvidencePointer } from '@/components/evidence/evidence-pointer.tsx';
+import { EvidenceSection } from '@/components/evidence/evidence-section.tsx';
 import { PAGE_COLUMN } from '@/components/layout/page/column.ts';
 import { PageScroll } from '@/components/layout/page/page-scroll.tsx';
-import { CHIP } from '@/components/layout/surface/card.ts';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { ActivityRow } from '@/components/overview/activity-row.tsx';
 import { DelegationsPanel } from '@/components/overview/delegations-panel.tsx';
-import { EvidenceItem } from '@/components/overview/evidence-item.tsx';
 import { NowCard } from '@/components/overview/now-card.tsx';
 import { ResultPanel } from '@/components/overview/result-panel.tsx';
 import { RoundsPanel } from '@/components/overview/rounds-panel.tsx';
@@ -19,35 +18,27 @@ import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { listActivityNewestFirst, resolveOverviewSummary } from '@/lib/overview/activity.ts';
-import { isVisualEvidence, listRoundEvidence } from '@/lib/overview/evidence.ts';
-import { type NowTarget, resolveResultPlace } from '@/lib/overview/now.ts';
-import { describeFindingPlace } from '@/lib/review/findings.ts';
+import { type NowTarget, resolveNowKind, resolveResultPlace } from '@/lib/overview/now.ts';
+import { resolveOverviewPanelId } from '@/lib/preferences/disclosure.ts';
+import { MERGE_STEP_TITLE } from '@/lib/review/merge-steps.ts';
+import { describePointCount, listReviewChapters, listReviewPoints } from '@/lib/review/report.ts';
 import { resolveMessageHint, sendTaskMessage } from '@/lib/tasks/messages.ts';
 import { isCodeTask } from '@/lib/tasks/shapes.ts';
-
-const SPOTS_SHOWN = 2;
+import { hasReview } from '@/lib/tasks/tabs.ts';
 
 const FIRST_ACTIVITY = 24;
 
-function EvidencePanel({ state, task }: { state: ShinsaState; task: Task }) {
-  const evidence = listRoundEvidence(state.evidence, task);
-  if (evidence.length === 0) return null;
-  const visuals = evidence.filter((item) => isVisualEvidence(item.uri));
-  const others = evidence.filter((item) => !isVisualEvidence(item.uri));
-  return (
-    <Panel title='Evidence' icon='IconImages1'>
-      {visuals.length > 0 && (
-        <div className='grid gap-3 sm:grid-cols-2'>
-          {visuals.map((item) => (
-            <EvidenceItem key={item.id} evidence={item} />
-          ))}
-        </div>
-      )}
-      {others.map((item) => (
-        <EvidenceItem key={item.id} evidence={item} />
-      ))}
-    </Panel>
-  );
+function EvidencePlace({
+  state,
+  task,
+  onOpen,
+}: {
+  state: ShinsaState;
+  task: Task;
+  onOpen: (target: NowTarget) => void;
+}) {
+  if (hasReview(task)) return <EvidencePointer state={state} task={task} onOpen={() => onOpen('review')} />;
+  return <EvidenceSection state={state} task={task} />;
 }
 
 function ChangesPanel({ task, onOpen }: { task: Task; onOpen: (target: NowTarget) => void }) {
@@ -175,7 +166,7 @@ export function OverviewTab({
               )}
             </Panel>
           )}
-          <EvidencePanel state={state} task={task} />
+          <EvidencePlace state={state} task={task} onOpen={onOpen} />
           {code && <ChangesPanel task={task} onOpen={onOpen} />}
           {code && <JudgementCallsPanel task={task} />}
           <RoundsPanel state={state} task={task} onOpen={(runId) => onOpen('agent', runId)} />

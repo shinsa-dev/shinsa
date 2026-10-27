@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createPullRequestWatch,
+  type Evidence,
   evaluatePullRequestWatch,
   type PlanDocument,
   type PullRequest,
@@ -671,6 +672,78 @@ describe('checks', () => {
     const idle = setup(withTask({ stage: 'building' }, repo));
     await idle.runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
     expect(idle.dispatched).toEqual([]);
+  });
+
+  test("attaches the checks' output as evidence, leaving out output an agent attached this round", async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const piece = (id: string, overrides: Partial<Evidence>): Evidence => ({
+      id,
+      taskId: 'task-1',
+      runId: 'run-1',
+      kind: 'test',
+      title: id,
+      uri: `/api/evidence/task-1/round-1/${id}.txt`,
+      attachedAt: 1,
+      ...overrides,
+    });
+    const { runner, dispatched, config } = setup((state) => {
+      withTask(
+        { stage: 'checking', worktreePath: worktree },
+        { ...repo, checkCommands: ['echo 4 pass', 'echo clean'] }
+      )(state);
+      for (const item of [
+        piece('agent-tests', {}),
+        piece('shinsa-earlier', { runId: null, kind: 'check' }),
+        piece('shot', { kind: 'screenshot' }),
+        piece('preview', { kind: 'note', uri: 'https://example.com/out.txt' }),
+        piece('later-round', { round: 2 }),
+        piece('other-task', { taskId: 'task-2' }),
+      ])
+        state.evidence[item.id] = item;
+    });
+    const folder = join(config.evidenceDir, 'task-1', 'round-1');
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, 'agent-tests.txt'), '$ bun test\n4 pass [12.00ms]');
+    for (const name of ['shinsa-earlier', 'shot', 'later-round', 'other-task'])
+      writeFileSync(join(folder, `${name}.txt`), 'clean');
+    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    const uri = (dispatched[0] as { evidence: { uri: string } }).evidence.uri;
+    expect(readFileSync(join(config.evidenceDir, uri.slice('/api/evidence/'.length)), 'utf8')).toBe(
+      '$ echo clean\nPassed.\nclean'
+    );
+    expect(dispatched[0]).toMatchObject({
+      type: 'checks.record',
+      evidence: {
+        title: 'Checks run by Shinsa: 1 passed',
+        detail: expect.stringContaining('Left out echo 4 pass'),
+        uri: expect.stringMatching(
+          /^\/api\/evidence\/task-1\/round-1\/checks-run-by-shinsa-1-passed-\w+\.txt$/
+        ),
+      },
+    });
+  });
+
+  test('attaches nothing when an agent attached the output of every check', async () => {
+    const { repo, worktree } = await createShippingRepo();
+    const { runner, dispatched, config } = setup((state) => {
+      withTask(
+        { stage: 'checking', worktreePath: worktree },
+        { ...repo, checkCommands: ['echo clean'] }
+      )(state);
+      state.evidence.lint = {
+        id: 'lint',
+        taskId: 'task-1',
+        runId: 'run-1',
+        kind: 'check',
+        title: 'Lint',
+        uri: '/api/evidence/task-1/round-1/lint.txt',
+        attachedAt: 1,
+      };
+    });
+    mkdirSync(join(config.evidenceDir, 'task-1', 'round-1'), { recursive: true });
+    writeFileSync(join(config.evidenceDir, 'task-1', 'round-1', 'lint.txt'), 'clean');
+    await runner.apply({ kind: 'checks.run', taskId: 'task-1', round: 1 }, createContext());
+    expect(dispatched[0]).not.toHaveProperty('evidence');
   });
 
   test("the plan's checks run after the repository's own, the same way, each named by its command", async () => {

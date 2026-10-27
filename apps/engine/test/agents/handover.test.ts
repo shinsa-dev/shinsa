@@ -87,29 +87,108 @@ describe('storeEvidence', () => {
     const stored = storeEvidence(
       { kind: 'screenshot', title: 'Home', path: 'shots/home.png' },
       worktree,
-      evidence
+      evidence,
+      FOLDER
     );
-    expect(stored).toMatchObject({ kind: 'screenshot', title: 'Home' });
-    expect(stored.uri).toMatch(/^\/api\/evidence\/.+\.png$/);
-    expect(storeEvidence({ path: join(worktree, 'shots/home.png') }, null, evidence)).toMatchObject({
-      kind: 'note',
-      title: 'note',
+    expect(stored).toEqual({
+      type: 'agent.attach_evidence',
+      kind: 'screenshot',
+      title: 'Home page',
+      detail: 'The header wraps.',
+      width: 390,
+      theme: 'dark',
+      stage: 'after',
+      uri: expect.stringMatching(/^\/api\/evidence\/task-1\/round-2\/home-page-\w+\.png$/),
     });
+    expect(
+      storeEvidence(
+        { kind: 'note', title: 'Home', path: join(worktree, 'shots/home.png') },
+        null,
+        evidence,
+        FOLDER
+      )
+    ).toMatchObject({ kind: 'note', title: 'Home', detail: null, width: null });
   });
 
   test('a URL must be a web address and text is written to a file', () => {
     const evidence = new EvidenceStore(createTempDir());
     expect(
-      storeEvidence({ kind: 'preview', title: 'Preview', url: 'https://preview.dev' }, null, evidence).uri
-    ).toBe('https://preview.dev');
-    expect(() => storeEvidence({ url: 'javascript:alert(1)' }, null, evidence)).toThrow('http or https');
-    expect(() => storeEvidence({ url: 'not a url' }, null, evidence)).toThrow('http or https');
-    expect(storeEvidence({ kind: 'test', text: '12 pass' }, null, evidence).uri).toMatch(/\.txt$/);
+      storeEvidence({ kind: 'preview', title: 'Preview', url: 'https://preview.dev' }, null, evidence, FOLDER)
+    ).toMatchObject({ uri: 'https://preview.dev' });
+    expect(() =>
+      storeEvidence({ kind: 'preview', title: 'P', url: 'javascript:alert(1)' }, null, evidence, FOLDER)
+    ).toThrow('http or https');
+    expect(() =>
+      storeEvidence({ kind: 'preview', title: 'P', url: 'not a url' }, null, evidence, FOLDER)
+    ).toThrow('http or https');
+    expect(
+      storeEvidence({ kind: 'test', title: 'Tests', text: '12 pass' }, null, evidence, FOLDER)
+    ).toMatchObject({ uri: expect.stringMatching(/\/round-2\/tests-\w+\.txt$/) });
+    expect(
+      storeEvidence({ kind: 'note', title: 'Ratios', text: '| a | b |' }, null, evidence, FOLDER)
+    ).toMatchObject({ uri: expect.stringMatching(/\/round-2\/ratios-\w+\.md$/) });
   });
 
   test('an unknown kind or nothing to attach is refused', () => {
     const evidence = new EvidenceStore(createTempDir());
-    expect(() => storeEvidence({ kind: 'virus', text: 'x' }, null, evidence)).toThrow('kind must be one of');
-    expect(() => storeEvidence({ kind: 'note' }, null, evidence)).toThrow('Give a path, a url or text.');
+    const stored = storeEvidence(
+      {
+        kind: 'comparison',
+        title: 'Tabs',
+        width: 1280,
+        parts: [
+          { path: 'before.png', stage: 'before' },
+          { path: join(worktree, 'after.webm'), stage: 'after', label: 'Scrolled' },
+        ],
+      },
+      worktree,
+      evidence,
+      FOLDER
+    );
+    expect(stored).toEqual({
+      type: 'agent.attach_comparison',
+      title: 'Tabs',
+      detail: null,
+      width: 1280,
+      theme: null,
+      parts: [
+        {
+          kind: 'screenshot',
+          uri: expect.stringMatching(/\/round-2\/tabs-before-\w+\.png$/),
+          stage: 'before',
+          label: null,
+        },
+        {
+          kind: 'recording',
+          uri: expect.stringMatching(/\/round-2\/tabs-scrolled-\w+\.webm$/),
+          stage: 'after',
+          label: 'Scrolled',
+        },
+      ],
+    });
+  });
+
+  test('a comparison with a missing part copies none of them', () => {
+    const worktree = createTempDir();
+    writeFiles(worktree, { 'before.png': 'png' });
+    const dir = createTempDir();
+    const parts = [
+      { path: 'before.png', stage: 'before' },
+      { path: 'gone.png', stage: 'after' },
+    ];
+    expect(() =>
+      storeEvidence({ kind: 'comparison', title: 'Tabs', parts }, worktree, new EvidenceStore(dir), FOLDER)
+    ).toThrow(`No file at ${join(worktree, 'gone.png')}.`);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
+  test('a hand-over that breaks the protocol is refused with every reason', () => {
+    const evidence = new EvidenceStore(createTempDir());
+    expect(() => storeEvidence({ kind: 'virus', text: 'x' }, null, evidence, FOLDER)).toThrow(
+      'Shinsa did not attach it. Fix these and call `attach_evidence` again:\n- kind must be one of screenshot, recording, test, check, note, preview, comparison.\n- title is required.'
+    );
+    expect(() => storeEvidence({ kind: 'note', title: 'Nothing' }, null, evidence, FOLDER)).toThrow(
+      'Give exactly one of path, url or text.'
+    );
   });
 });

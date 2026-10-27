@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Settings</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; }
+body.light { --bg:#fafafa; --panel:#fff; --fg:#18181b; --muted:#6b6f76; --border:#e6e6e8; --disabled:#a6a9ae; --accent:#2563eb; --chip:#f1f1f3; }
+body.dark.before { --bg:#111214; --panel:#18191b; --fg:#e8e9eb; --muted:#55585e; --border:#222327; --disabled:#36383c; --accent:#3b82f6; --chip:#1f2023; }
+body.dark.after { --bg:#111214; --panel:#18191b; --fg:#ededef; --muted:#a1a4aa; --border:#34363b; --disabled:#71757c; --accent:#3b82f6; --chip:#24262a; }
+body.dark.fixed { --bg:#111214; --panel:#18191b; --fg:#ededef; --muted:#a1a4aa; --border:#34363b; --disabled:#8c9097; --accent:#3b82f6; --chip:#24262a; }
+body { background: var(--bg); color: var(--fg); }
+.app { display: flex; min-height: 100vh; }
+nav { width: 220px; padding: 20px 12px; border-right: 1px solid var(--border); flex-shrink: 0; }
+nav .brand { font-weight: 600; padding: 0 8px 16px; }
+nav a { display: block; padding: 6px 8px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 13px; }
+nav a.on { background: var(--chip); color: var(--fg); font-weight: 500; }
+main { flex: 1; padding: 32px 40px; max-width: 760px; }
+h1 { font-size: 20px; margin: 0 0 4px; }
+.lead { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+section { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; }
+section h2 { font-size: 13px; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.row { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.row:last-child { border-bottom: 0; }
+.row .text { flex: 1; min-width: 0; }
+.row .label { font-weight: 500; font-size: 13px; }
+.row .hint { color: var(--muted); font-size: 12px; }
+.row.disabled .label, .row.disabled .hint { color: var(--disabled); }
+.toggle { width: 32px; height: 18px; border-radius: 9px; background: var(--border); position: relative; flex-shrink: 0; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+.toggle.on { background: var(--accent); }
+.toggle.on::after { left: 16px; }
+.row.disabled .toggle { opacity: .4; }
+select { background: var(--chip); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; font: inherit; font-size: 12px; }
+@media (max-width: 600px) { nav { display: none; } main { padding: 20px 16px; } }
+</style></head>
+<body>
+<div class="app">
+<nav><div class="brand">Kanna</div>
+<a href="#general">General</a><a href="#appearance" class="on">Appearance</a><a href="#models">Models</a><a href="#keyboard">Keyboard</a><a href="#accounts">Accounts</a><a href="#about">About</a></nav>
+<main>
+<h1>Appearance</h1>
+<p class="lead">How Kanna looks on this computer. Changes apply to every window.</p>
+<section><h2>Theme</h2>
+<div class="row"><div class="text"><div class="label">Colour scheme</div><div class="hint">Follow the system, or pick light or dark.</div></div><select><option>System</option></select></div>
+<div class="row"><div class="text"><div class="label">Accent colour</div><div class="hint">Used for buttons, links and the selection.</div></div><select><option>Blue</option></select></div>
+<div class="row"><div class="text"><div class="label">Reduce transparency</div><div class="hint">Solid backgrounds behind menus and sheets.</div></div><span class="toggle"></span></div>
+</section>
+<section><h2>Chat</h2>
+<div class="row"><div class="text"><div class="label">Compact messages</div><div class="hint">Less space between messages in a long chat.</div></div><span class="toggle on"></span></div>
+<div class="row"><div class="text"><div class="label">Show tool output</div><div class="hint">Expand command output under each tool call.</div></div><span class="toggle on"></span></div>
+<div class="row disabled"><div class="text"><div class="label">Syntax themes</div><div class="hint">Needs the code view, which is off on this machine.</div></div><span class="toggle"></span></div>
+</section>
+<section><h2>Sidebar</h2>
+<div class="row"><div class="text"><div class="label">Show finished chats</div><div class="hint">Keep chats marked done in the list for a day.</div></div><span class="toggle on"></span></div>
+<div class="row disabled"><div class="text"><div class="label">Group by project</div><div class="hint">Available once you add a second project.</div></div><span class="toggle"></span></div>
+</section>
+</main></div>
+<script>document.body.className = new URLSearchParams(location.search).get('mode') || 'light';</script>
+</body></html>

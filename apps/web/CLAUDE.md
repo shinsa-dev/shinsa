@@ -12,13 +12,14 @@ themes, from sample data.
 src/
 ├── main.tsx             Mounts Root; applies the stored theme and a `?layout=` override before the first paint
 ├── root.tsx             Providers (the page's one tooltip, toaster), the ⌘K menu, the setup lock (every route goes to
-│                        /onboarding until setup is complete, resolveOnboardingRedirect), the shell switch (Cards,
+│                        /onboarding until setup is complete, resolveOnboardingRedirect), the frame (AppFrame for Cards and
 │                        Sidebar, or setup's own OnboardingShell on /onboarding, which has no ⌘K)
 │                        and the route switch, which keeps the pages you have been to mounted and hidden in
 │                        React's Activity and renders Home, All tasks and Settings ahead at idle
 │                        (lib/kept-views.ts, docs/design.md 35); starts the connection unless the route is /ui
 ├── router.ts            The pushState router: parseRoute, navigate, replaceRoute, updateSearchParams,
-│                        useRoute, useSearchParam, resolveTaskPath (the only place a task URL is built)
+│                        useRoute, useSearchParam, resolveTaskPath (the only place a task URL is built);
+│                        RouteScope renders a subtree at a fixed route (the site's demos)
 ├── app.css              Tailwind entry, prose styles, code tokens, chat motion; imports desktop.css (in the Mac app
 │                        the arrow where a browser shows the pointer hand, every other cursor kept, and no
 │                        rubber-band on the page root, docs/design.md 31)
@@ -32,8 +33,9 @@ src/
 │   │                    reads on hover and ⌘K highlight, the queue's at idle, Settings' at idle; docs/design.md 36)
 │   └── ui/              The showcase: index.tsx (the page, the section nav in page order, the theme switch),
 │                        section.tsx (Section, Specimen), tokens.tsx, inputs.tsx, overlays.tsx and surfaces.tsx
-│                        (the kit), composites.tsx (Shinsa's shared building blocks and the
-│                        composer), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), code.tsx (the editor, its diffs and Go to
+│                        (the kit), checklist.tsx (the checklist: ticking, commands, a disabled row, read-only, a
+│                        Markdown task list), composites.tsx (Shinsa's shared building blocks and the
+│                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once), code.tsx (the editor, its diffs and Go to
 │                        file) and settings.tsx (the feature pieces in
 │                        each state), samples.ts, sample-accounts.ts, sample-delegations.ts, sample-extensions.ts,
 │                        sample-versions.ts, sample-code.ts and sample-overview.ts (their sample data; samples.ts also has the toast every action
@@ -186,7 +188,11 @@ src/
     │                    report, the line-comment draft (sides, ranges, kept in localStorage per gate, and your
     │                    Fix / Dismiss verdicts; serializeComments is what `gate.answer` sends as `comments`),
     │                    finding places
-    ├── overview/        Now card titles, progress steps, activity glyphs, evidence kinds, waits,
+    ├── evidence/        The Evidence section: media.ts (image, video, text, file or link from the URL; the round's
+    │                    evidence), runs.ts (a test or check run's commands, outcomes and counts), layout.ts (the round's items grouped by kind, comparisons as one item, the viewer's images
+    │                    numbered item by item with their parts, the count of items by kind, the folder on disk), texts.ts (the bounded text cache; /ui records its samples in it), prefetch.ts (images and texts
+    │                    read ahead with the task)
+    ├── overview/        Now card titles, progress steps, activity glyphs, waits,
     │                    questions, verdicts, plan versions, plan parameters, the operation gate and its notes, setup
     ├── tasks/           prefetch.ts (the task under the pointer or highlighted in ⌘K, the queue's tasks read at idle),
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting

@@ -18,6 +18,7 @@ export interface ServerHealth {
   protocol?: number;
   busy?: boolean;
   restart?: 'idle' | null;
+  dataDir?: string;
 }
 
 export interface HealthBannerView {

@@ -61,6 +61,13 @@ export const PROTOCOL_LIMITS = {
   impact: 1_000,
   planChecks: 6,
   checkCommand: 200,
+  evidenceTitle: 80,
+  evidenceDetail: 280,
+  evidenceWidth: 7_680,
+  evidenceText: 40_000,
+  evidenceUrl: 2_000,
+  evidenceParts: 6,
+  evidenceLabel: 40,
 } as const;
 
 export const ATTENTION_LEVELS: readonly [Attention, ...Attention[]] = ['critical', 'high', 'normal'];
@@ -370,6 +377,80 @@ export function validateQuestion(input: Record<string, unknown>): Validation<Que
     question: reader.text(input.question, 'question', PROTOCOL_LIMITS.question),
     context: reader.optionalText(input.context, 'context', PROTOCOL_LIMITS.questionContext),
     ...readChoices(reader, input),
+  });
+}
+
+function readEvidenceSource(reader: Reader, input: Record<string, unknown>): EvidenceSource {
+  const path = reader.optionalText(input.path, 'path', PROTOCOL_LIMITS.path);
+  const url = reader.optionalText(input.url, 'url', PROTOCOL_LIMITS.evidenceUrl);
+  const text = reader.optionalText(input.text, 'text', PROTOCOL_LIMITS.evidenceText);
+  const given = [path, url, text].filter((value) => value !== null).length;
+  if (given !== 1) reader.errors.push('Give exactly one of path, url or text.');
+  if (path !== null) return { path };
+  return url !== null ? { url } : { text: text ?? '' };
+}
+
+function readOptionalPick<T extends string>(
+  reader: Reader,
+  value: unknown,
+  path: string,
+  allowed: readonly [T, ...T[]]
+): T | null {
+  if (value === undefined || value === null || value === '') return null;
+  return reader.pick(value, path, allowed);
+}
+
+function readEvidenceFacts(reader: Reader, input: Record<string, unknown>) {
+  return {
+    title: reader.text(input.title, 'title', PROTOCOL_LIMITS.evidenceTitle),
+    detail: reader.optionalText(input.detail, 'detail', PROTOCOL_LIMITS.evidenceDetail),
+    width: reader.optionalCount(input.width, 'width', PROTOCOL_LIMITS.evidenceWidth),
+    theme: readOptionalPick(reader, input.theme, 'theme', EVIDENCE_THEMES),
+  };
+}
+
+function readComparisonPart(reader: Reader, value: unknown, path: string): ComparisonPartHandOver {
+  const record = reader.record(value, path);
+  const part = {
+    path: reader.text(record.path, `${path}.path`, PROTOCOL_LIMITS.path),
+    stage: readOptionalPick(reader, record.stage, `${path}.stage`, EVIDENCE_STAGES),
+    label: reader.optionalText(record.label, `${path}.label`, PROTOCOL_LIMITS.evidenceLabel),
+  };
+  if (part.stage === null && part.label === null) reader.errors.push(`${path} needs a stage or a label.`);
+  return part;
+}
+
+function readComparisonParts(reader: Reader, input: Record<string, unknown>) {
+  const parts = reader
+    .list(input.parts, 'parts', PROTOCOL_LIMITS.evidenceParts, 2)
+    .map((part, index) => readComparisonPart(reader, part, `parts[${index}]`));
+  const names = parts.map((part) => part.label ?? part.stage);
+  if (new Set(names).size !== names.length) {
+    reader.errors.push('Each part needs its own stage or label; two parts are named the same.');
+  }
+  if (['path', 'url', 'text', 'stage'].some((field) => input[field] !== undefined && input[field] !== null)) {
+    reader.errors.push('A comparison takes its files in parts: leave out path, url, text and stage.');
+  }
+  return parts;
+}
+
+export function validateEvidence(input: Record<string, unknown>): Validation<EvidenceHandOver> {
+  const reader = new Reader();
+  const kind = reader.pick(input.kind, 'kind', ATTACHED_EVIDENCE_KINDS);
+  if (kind === 'comparison') {
+    return reader.result<EvidenceHandOver>({
+      kind,
+      ...readEvidenceFacts(reader, input),
+      parts: readComparisonParts(reader, input),
+    });
+  }
+  if (input.parts !== undefined && input.parts !== null)
+    reader.errors.push('parts is only for kind comparison.');
+  return reader.result<EvidenceHandOver>({
+    kind,
+    ...readEvidenceFacts(reader, input),
+    stage: readOptionalPick(reader, input.stage, 'stage', EVIDENCE_STAGES),
+    source: readEvidenceSource(reader, input),
   });
 }
 

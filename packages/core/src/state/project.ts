@@ -453,8 +453,14 @@ function applyChecksRecorded(state: ShinsaState, event: EventOf<'checks.recorded
   });
 }
 
+function hasEvidenceItem(state: ShinsaState, itemId: string | undefined) {
+  return itemId !== undefined && Object.values(state.evidence).some((piece) => piece.itemId === itemId);
+}
+
 function applyEvidenceAttached(state: ShinsaState, event: EventOf<'evidence.attached'>) {
+  const known = hasEvidenceItem(state, event.evidence.itemId);
   writeEntry(state, 'evidence', event.evidence.id, event.evidence);
+  if (known) return;
   record(state, event.evidence.taskId, event.at, {
     actor: 'agent',
     kind: 'evidence',

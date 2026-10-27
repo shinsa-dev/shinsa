@@ -287,8 +287,9 @@ Review is where Shinsa earns its name. It replaces "open GitHub, read the diff t
 - **Evidence first.** Before the diff: what was asked, what was done, and proof. Agents attach it
   with `attach_evidence`, guided by the evidence skill: for UI work screenshots and a short screen
   recording of the flows it touched (both themes, desktop and phone width); for iOS, simulator
-  recordings; for logic, the test it wrote, shown failing before and passing after. Shinsa does not
-  capture any of it itself yet (M5).
+  recordings; for logic, the test it wrote, shown failing before and passing after. It opens the
+  Review tab, before and after side by side (Evidence in the review, below). Shinsa does not run a
+  browser of its own yet (M5).
 - **Diff ranked by risk, not by file order.** Hot spots first (public API, data, auth, money),
   boilerplate collapsed. The ranking explains itself.
 - **Comments go to the agent.** A comment on a line is a change request. (Planned: a second review
@@ -361,7 +362,7 @@ Remote access (deferred): `docs/plans/remote-plan.md`.
 
 A fresh codebase in the Polis/Buzzkit shape, enforced as strictly:
 
-- Bun workspaces + Turborepo. `apps/server` (Bun server and the `shinsa` command, also serves the web app),
+- Bun workspaces + Turborepo. `apps/engine` (the Bun engine and the `shinsa` command, also serves the web app),
   `apps/web` (React, the product UI), `packages/core` (domain, `decide`, queue, prompts and the
   wire protocol, all pure), `packages/ui` (design system). Provider adapters live in
   `apps/engine/src/agents/providers/<id>/` (Claude and Codex), since each one spawns and talks to a
@@ -804,8 +805,28 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   xterm.js compatibility is partial. xterm.js 6 is what VS Code ships: the WebGL renderer, the add-ons this needs, and
   the same parser headless in the engine, so the screen the engine keeps and the one you see agree cell for cell.
   The renderer sits behind `lib/terminal/view.ts`, so it can be swapped once ghostty-web matures.
-- **Agents point, you press.** The `ask` tool tells agents to put a command for you in a ```` ```sh ```` block; the
-  question card offers Run in terminal on it. No agent tool, command or route lets an agent type into your terminals.
+- **Agents point, you press.** Agents mark a command for you to run as ```` ```bash run ````, and the `ask` tool
+  tells them to put one in their question; the question card offers Run in terminal in its corner, as every block
+  marked `run` on a task's pages does. A plain ```` ```bash ```` block is an example you can only copy. No agent tool, command or route lets an agent type into your terminals.
+
+### Evidence in the review (2026-10-26)
+
+- **Why you never saw any.** Nothing failed: nothing asked for it. The builder's prompt had one generic line about
+  screenshots, the reviewer's none, the skill described captures without saying what makes them useful (before and
+  after, widths, themes), files went into one flat folder, and the only display was a panel on the Overview that the
+  seed never filled (one test log).
+- **The agents capture it.** The Agent captures before shots ahead of its first edit when the plan asks for
+  screenshots, after shots at the same title, width and theme, a recording for interactions and the test that fails
+  without the change; the reviewer gets the list of what was attached and adds its own where a claim has none or it
+  doubts one, shown as from the agent review. `attach_evidence` gains `detail`, `width`, `theme` and `stage`; the
+  `evidence` skill is the recipe (Playwright's command line or a script in a scratch folder, 1280px and 390px, light
+  and dark). Prompts stay cache-stable: the list and the planned kinds ride in the user turn.
+- **Kept per task and round, served properly.** `<data>/evidence/<task id>/round-<n>/`, files named after their
+  title, cached as immutable, recordings served in byte ranges so they seek (`docs/engine.md` → Evidence).
+- **Seen in the Review tab, first.** An Evidence section right under the summary: before and after pairs side by side,
+  shots and recordings in a grid, test output as code, links, and where it is stored; images open in the image viewer
+  and step through the section; a missing proof says so. The Overview keeps one line pointing there
+  (`docs/design.md` 34). The seed carries real screenshots, a recording and test runs on six review tasks.
 
 ## 11. Open questions
 

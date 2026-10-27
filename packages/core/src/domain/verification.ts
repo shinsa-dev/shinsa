@@ -1,6 +1,6 @@
 import type { PlanDocument } from '../report/types.ts';
 import { type PipelineStep, STEP_SCHEMA, type StepClass } from './steps.ts';
-import type { Evidence, EvidenceKind, GateType } from './types.ts';
+import type { Evidence, EvidenceKind, EvidenceStage, EvidenceTheme, GateType } from './types.ts';
 
 export type VerifiedClass = Extract<StepClass, 'code' | 'operation'>;
 
@@ -25,6 +25,19 @@ export interface VerificationRule {
 }
 
 export type PlanEvidenceKind = Exclude<EvidenceKind, 'check'>;
+
+export const EVIDENCE_KINDS: readonly [EvidenceKind, ...EvidenceKind[]] = [
+  'screenshot',
+  'recording',
+  'test',
+  'check',
+  'note',
+  'preview',
+];
+
+export const EVIDENCE_THEMES: readonly [EvidenceTheme, ...EvidenceTheme[]] = ['light', 'dark'];
+
+export const EVIDENCE_STAGES: readonly [EvidenceStage, ...EvidenceStage[]] = ['before', 'after'];
 
 export const PLAN_EVIDENCE_KINDS: readonly [PlanEvidenceKind, ...PlanEvidenceKind[]] = [
   'screenshot',

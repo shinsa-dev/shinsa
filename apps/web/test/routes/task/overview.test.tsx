@@ -284,6 +284,34 @@ describe('the evidence on the Overview', () => {
     expect(view.queryByText('Round one log')).toBeNull();
     expect(view.queryByText(/First round output\./)).toBeNull();
   });
+
+  it('points at the review once there is one, instead of showing the evidence twice', () => {
+    const task = createTask({ id: 't', stage: 'awaiting_review', pipeline: FIX.slice(1) });
+    const evidence = [
+      createEvidence({ id: 'shot', taskId: 't', title: 'Settings page' }),
+      createEvidence({
+        id: 'log',
+        taskId: 't',
+        kind: 'test',
+        title: 'Tests',
+        uri: '/api/evidence/second.log',
+      }),
+    ];
+    const state = createShinsaState({ tasks: [task], evidence });
+    pushState(state);
+    const onOpen = mock();
+    const view = render(
+      <TooltipProvider>
+        <ReviewDraftProvider enabled draftKey={task.id}>
+          <OverviewTab state={state} task={task} gate={undefined} onOpen={onOpen} />
+        </ReviewDraftProvider>
+      </TooltipProvider>
+    );
+    expect(view.getByText('1 screenshot and 1 test run in the review')).toBeTruthy();
+    expect(view.queryByText('Settings page')).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'See the evidence' }));
+    expect(onOpen).toHaveBeenCalledWith('review');
+  });
 });
 
 describe('the Overview while the steps are still being worked out', () => {

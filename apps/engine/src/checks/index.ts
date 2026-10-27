@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { Repo, ReportCheck } from '@shinsa/core';
 import { runCommand } from '../shell/index.ts';
 
-const CHECK_TIMEOUT_MS = 15 * 60 * 1000;
+export const CHECK_TIMEOUT_MS = 15 * 60 * 1000;
 
 const OUTPUT_TAIL = 4000;
 
@@ -13,7 +13,7 @@ const SIGNAL = /(error|fail|✗|expected|received|panic|exception|\(fail\))/i;
 
 const SIGNAL_LINES = 60;
 
-const CHECK_ENV = { CI: '1', FORCE_COLOR: '0', NO_COLOR: '1' };
+export const CHECK_ENV = { CI: '1', FORCE_COLOR: '0', NO_COLOR: '1' };
 
 const PACKAGE_MANAGERS: { lockfiles: string[]; run: string; install: string[] | null }[] = [
   { lockfiles: ['bun.lock', 'bun.lockb'], run: 'bun run', install: ['bun', 'install'] },
@@ -63,20 +63,28 @@ export function tailOutput(text: string) {
   return signal ? `${signal}\n…\n${tail}` : `…\n${tail}`;
 }
 
+export interface CheckRun {
+  check: ReportCheck;
+  output: string;
+}
+
 export async function runCheck(
   command: string,
   cwd: string,
   timeoutMs: number,
   signal?: AbortSignal
-): Promise<ReportCheck> {
+): Promise<CheckRun> {
   const result = await runCommand(['sh', '-c', command], cwd, { env: CHECK_ENV, timeoutMs, signal });
-  if (result.ok) return { name: command, outcome: 'pass', detail: null };
   const output = [result.stdout, result.stderr].filter((part) => part.length > 0).join('\n');
+  if (result.ok) return { check: { name: command, outcome: 'pass', detail: null }, output };
   const stopped = result.timedOut ? `Stopped after ${Math.round(timeoutMs / 60_000)} minutes.\n` : '';
   return {
-    name: command,
-    outcome: 'fail',
-    detail: `${stopped}${tailOutput(output)}`.trim() || `exit ${result.code}`,
+    check: {
+      name: command,
+      outcome: 'fail',
+      detail: `${stopped}${tailOutput(output)}`.trim() || `exit ${result.code}`,
+    },
+    output,
   };
 }
 
@@ -86,10 +94,10 @@ export async function runChecks(
   planChecks: readonly string[],
   signal?: AbortSignal
 ) {
-  const results: ReportCheck[] = [];
+  const runs: CheckRun[] = [];
   for (const command of new Set([...resolveCheckCommands(repo, path), ...planChecks])) {
     if (signal?.aborted) break;
-    results.push(await runCheck(command, path, CHECK_TIMEOUT_MS, signal));
+    runs.push(await runCheck(command, path, CHECK_TIMEOUT_MS, signal));
   }
-  return results;
+  return runs;
 }

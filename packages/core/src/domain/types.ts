@@ -182,6 +182,14 @@ export interface ConfigProblem {
 
 export type EvidenceKind = 'screenshot' | 'recording' | 'test' | 'check' | 'note' | 'preview';
 
+export type EvidenceTheme = 'light' | 'dark';
+
+export type EvidenceStage = 'before' | 'after';
+
+export type EvidenceItemKind = 'comparison' | EvidenceKind;
+
+export type EvidencePartKind = Extract<EvidenceKind, 'screenshot' | 'recording'>;
+
 export type CiState = 'passing' | 'failing' | 'pending' | 'none';
 
 export interface Repo {
@@ -518,4 +526,23 @@ export interface Evidence {
   uri: string;
   attachedAt: number;
   round?: number;
+  detail?: string;
+  width?: number;
+  theme?: EvidenceTheme;
+  stage?: EvidenceStage;
+  itemId?: string;
+  label?: string;
+}
+
+export interface EvidencePart {
+  kind: EvidencePartKind;
+  uri: string;
+  stage?: EvidenceStage | null;
+  label?: string | null;
+}
+
+export interface CheckEvidence {
+  title: string;
+  uri: string;
+  detail?: string;
 }

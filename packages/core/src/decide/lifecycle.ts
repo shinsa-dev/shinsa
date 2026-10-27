@@ -1,5 +1,6 @@
 import {
   hasStep,
+  isOfCurrentRound,
   isTaskSettled,
   needsRepository,
   PLAN_GATE_RULE,
@@ -135,7 +136,15 @@ export function startReview(decider: Decider, taskId: string) {
   decider.startRun(
     task,
     'reviewer',
-    resolveReviewerPrompt(task, decider.repoOf(task), decider.basesOf(task), resumeFrom !== null),
+    resolveReviewerPrompt(
+      task,
+      decider.repoOf(task),
+      decider.basesOf(task),
+      resumeFrom !== null,
+      Object.values(decider.state.evidence).filter(
+        (item) => item.taskId === taskId && item.runId !== null && isOfCurrentRound(task, item)
+      )
+    ),
     { resumeFrom }
   );
 }

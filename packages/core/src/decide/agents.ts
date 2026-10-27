@@ -166,6 +166,32 @@ export function attachEvidence(decider: Decider, command: CommandOf<'agent.attac
   });
 }
 
+export function attachComparison(decider: Decider, command: CommandOf<'agent.attach_comparison'>) {
+  const { run, task } = findCurrentRun(decider, command.runId, 'attach_evidence');
+  const itemId = decider.context.newId();
+  for (const part of command.parts) {
+    decider.emit({
+      type: 'evidence.attached',
+      evidence: {
+        id: decider.context.newId(),
+        taskId: task.id,
+        runId: run.id,
+        kind: part.kind,
+        title: command.title,
+        uri: part.uri,
+        attachedAt: decider.context.now,
+        itemId,
+        ...resolveRoundStamp(task),
+        ...(command.detail ? { detail: command.detail } : {}),
+        ...(command.width ? { width: command.width } : {}),
+        ...(command.theme ? { theme: command.theme } : {}),
+        ...(part.stage ? { stage: part.stage } : {}),
+        ...(part.label ? { label: part.label } : {}),
+      },
+    });
+  }
+}
+
 export function noteProgress(decider: Decider, command: CommandOf<'agent.note'>) {
   const { run, task } = findCurrentRun(decider, command.runId, 'note');
   decider.emit({ type: 'task.noted', taskId: task.id, note: command.note, runId: run.id });

@@ -256,7 +256,11 @@ describe('the Review tab', () => {
   it('says so when the changes cannot be read', async () => {
     globalThis.fetch = (async () => new Response('gone', { status: 500 })) as unknown as typeof fetch;
     const { task, state } = reviewing({ report: null });
-    renderReview(state, task);
+    const withEvidence = {
+      ...state,
+      evidence: { shot: createEvidence({ id: 'shot', taskId: task.id, title: 'Settings page' }) },
+    };
+    renderReview(withEvidence, task);
     await waitFor(() => expect(document.body.textContent).not.toContain('Reading the changes'));
   });
 });

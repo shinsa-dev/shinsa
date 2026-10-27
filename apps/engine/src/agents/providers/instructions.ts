@@ -12,7 +12,7 @@ export const SHINSA_INSTRUCTIONS = [
 const SKILLS = [
   ['handover', 'before every hand-over'],
   ['review', 'when you review a change, or check your own before handing it over'],
-  ['evidence', 'when your change is visible to a user'],
+  ['evidence', 'when your change is visible to a user, and when you review one'],
 ] as const;
 
 export const SHINSA_SKILL_NAMES = SKILLS.map(([name]) => name);

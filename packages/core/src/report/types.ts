@@ -1,4 +1,4 @@
-import type { EvidenceKind } from '../domain/types.ts';
+import type { EvidenceKind, EvidenceStage, EvidenceTheme } from '../domain/types.ts';
 
 export type Attention = 'critical' | 'high' | 'normal';
 
@@ -112,3 +112,31 @@ export interface SuggestedTask {
   waitsOnThis: boolean;
   splitOff?: boolean;
 }
+
+export type EvidenceSource = { path: string } | { url: string } | { text: string };
+
+interface EvidenceFacts {
+  title: string;
+  detail: string | null;
+  width: number | null;
+  theme: EvidenceTheme | null;
+}
+
+export interface PieceHandOver extends EvidenceFacts {
+  kind: EvidenceKind;
+  stage: EvidenceStage | null;
+  source: EvidenceSource;
+}
+
+export interface ComparisonPartHandOver {
+  path: string;
+  stage: EvidenceStage | null;
+  label: string | null;
+}
+
+export interface ComparisonHandOver extends EvidenceFacts {
+  kind: 'comparison';
+  parts: ComparisonPartHandOver[];
+}
+
+export type EvidenceHandOver = PieceHandOver | ComparisonHandOver;

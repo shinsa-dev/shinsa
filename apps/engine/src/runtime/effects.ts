@@ -10,6 +10,7 @@ import {
   type PullRequest,
   type Repo,
   type RoundPullRequest,
+  resolveCurrentRound,
   resolvePullRequestBase,
   resolveTaskPipeline,
   resolveTaskWorkspace,
@@ -18,7 +19,8 @@ import {
 } from '@shinsa/core';
 import type { RunSupervisor } from '../agents/supervisor.ts';
 import type { Briefings } from '../briefing/index.ts';
-import { runChecks } from '../checks/index.ts';
+import { serializeCheckEvidence } from '../checks/evidence.ts';
+import { type CheckRun, runChecks } from '../checks/index.ts';
 import { resolveScratchPath, type ServerConfig } from '../config/index.ts';
 import { removeIsolatedWorktrees, syncRemoteBranch } from '../git/index.ts';
 import {
@@ -38,9 +40,12 @@ import {
   upsertRepo,
   verifySetup,
 } from '../repos/index.ts';
+import { EvidenceStore } from '../store/evidence.ts';
+import { measureTaskCoverage } from '../test-coverage/index.ts';
 import { resolveRepoProject, type TriageResolver } from '../triage/index.ts';
 import type { RepositoryFinder } from '../triage/message.ts';
 import { ConflictedBranchError, describeWorkspaceProblem, Workspaces } from '../workspaces/index.ts';
+import { LedgerStore } from '../workspaces/ledger.ts';
 import type { EffectContext, Engine } from './engine.ts';
 
 export interface EffectRunnerOptions {
@@ -53,6 +58,8 @@ export interface EffectRunnerOptions {
 }
 
 const WATCH_INTERVAL_MS = 45_000;
+
+const OUTPUT_KINDS = new Set(['test', 'check', 'note']);
 
 const FAILURE_TITLE: Partial<Record<ShinsaEffect['kind'], string>> = {
   'task.triage': 'Could not start the task',
@@ -100,6 +107,8 @@ export class EffectRunner {
   readonly #roots: RootSource;
   readonly #watchIntervalMs: number;
   readonly #workspaces: Workspaces;
+  readonly #evidence: EvidenceStore;
+  readonly #ledgers: LedgerStore;
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
   readonly #taskSyncs = new Map<string, Promise<unknown>>();
   readonly #background = new Set<Promise<unknown>>();
@@ -123,6 +132,8 @@ export class EffectRunner {
     this.#resolveLogin = options.resolveLogin ?? createLoginResolver(config.userHome);
     this.#roots = options.roots ?? { listRoots: () => Promise.resolve(config.roots) };
     this.#watchIntervalMs = options.watchIntervalMs ?? WATCH_INTERVAL_MS;
+    this.#evidence = new EvidenceStore(config.evidenceDir);
+    this.#ledgers = new LedgerStore(config.dataDir);
     this.#workspaces =
       options.workspaces ?? new Workspaces({ dataDir: config.dataDir, worktreesDir: config.worktreesDir });
   }
@@ -437,9 +448,31 @@ export class EffectRunner {
     }
     if (context.signal.aborted) return;
     await this.#engine.dispatch(
-      { type: 'checks.record', taskId, results },
+      {
+        type: 'checks.record',
+        taskId,
+        results: runs.map((run) => run.check),
+        ...(evidence ? { evidence } : {}),
+        ...(coverage ? { coverage } : {}),
+      },
       { id: `${context.key}:checks.record` }
     );
+  }
+
+  #storeCheckEvidence(task: Task, runs: readonly CheckRun[]) {
+    const attached = Object.values(this.#engine.state.evidence).flatMap((item) => {
+      if (item.taskId !== task.id || item.runId === null || !OUTPUT_KINDS.has(item.kind)) return [];
+      const text = isOfCurrentRound(task, item) ? this.#evidence.selectText(item.uri) : null;
+      return text === null ? [] : [text];
+    });
+    const piece = serializeCheckEvidence(runs, attached);
+    if (!piece) return null;
+    const folder = { taskId: task.id, round: resolveCurrentRound(task).number };
+    return {
+      title: piece.title,
+      detail: piece.detail,
+      uri: this.#evidence.writeText(piece.text, folder, piece.title),
+    };
   }
 
   async #pushHead(task: Task, repo: Repo, context: EffectContext) {

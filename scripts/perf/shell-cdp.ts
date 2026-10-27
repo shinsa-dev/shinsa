@@ -32,16 +32,22 @@ export class ShellPage {
   #socket: WebSocket;
   #id = 0;
   #pending = new Map<number, Pending>();
+  #listeners = new Map<string, Set<(params: unknown) => void>>();
 
   private constructor(socket: WebSocket) {
     this.#socket = socket;
     socket.addEventListener('message', (event) => {
       const message = JSON.parse(String(event.data)) as {
         id?: number;
+        method?: string;
+        params?: unknown;
         result?: unknown;
         error?: { message: string };
       };
-      if (message.id === undefined) return;
+      if (message.id === undefined) {
+        for (const listener of this.#listeners.get(message.method ?? '') ?? []) listener(message.params);
+        return;
+      }
       const pending = this.#pending.get(message.id);
       this.#pending.delete(message.id);
       if (message.error) pending?.reject(new Error(message.error.message));
@@ -64,6 +70,14 @@ export class ShellPage {
     return new Promise<T>((resolve, reject) => {
       this.#pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
     });
+  }
+
+  on<T>(method: string, listener: (params: T) => void) {
+    const listeners = this.#listeners.get(method) ?? new Set();
+    const wrapped = listener as (params: unknown) => void;
+    listeners.add(wrapped);
+    this.#listeners.set(method, listeners);
+    return () => listeners.delete(wrapped);
   }
 
   async evaluate<T>(expression: string): Promise<T> {

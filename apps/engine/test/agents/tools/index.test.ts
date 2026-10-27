@@ -96,6 +96,12 @@ describe('the shinsa tool server', () => {
     for (const spec of Object.values(TOOL_SPECS)) expect(spec.inputSchema.type).toBe('object');
   });
 
+  test('a comparison names its parts by stage or by a short label, a theme among them', () => {
+    const parts = TOOL_SPECS.attach_evidence.inputSchema.properties.parts;
+    expect(parts.description).toContain('(before, after) or a short label (Empty, Loading, Light, Dark)');
+    expect(parts.items.properties.label.maxLength).toBe(PROTOCOL_LIMITS.evidenceLabel);
+  });
+
   test('the schemas publish the limits Shinsa enforces on questions and file paths', () => {
     const ask = TOOL_SPECS.ask.inputSchema.properties;
     expect(ask.question.maxLength).toBe(PROTOCOL_LIMITS.question);

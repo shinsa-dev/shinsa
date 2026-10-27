@@ -1,12 +1,10 @@
 import type { Activity, ReviewComment, ShinsaState } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
 import { InAppLink } from '@/components/links/link.tsx';
-import { EvidenceItem } from '@/components/overview/evidence-item.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { type ActivityActor, resolveActivityActor, resolveActivityGlyph } from '@/lib/overview/activity.ts';
-import { isVisualEvidence } from '@/lib/overview/evidence.ts';
 import { describeCommentPlace } from '@/lib/review/draft.ts';
 import { resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
@@ -45,7 +43,6 @@ export function ActivityRow({
   onOpenRun: (runId: string) => void;
 }) {
   const run = entry.runId ? state.runs[entry.runId] : undefined;
-  const evidence = entry.evidenceId ? state.evidence[entry.evidenceId] : undefined;
   return (
     <li className='group relative flex gap-3 pb-4 last:pb-0'>
       <span aria-hidden className='absolute top-6 bottom-0 left-2.5 w-px bg-border group-last:hidden' />
@@ -73,11 +70,6 @@ export function ActivityRow({
             Open in chat
             <Icon size='sm' name='IconChevronRightSmall' />
           </button>
-        )}
-        {evidence && isVisualEvidence(evidence.uri) && (
-          <div className='max-w-sm'>
-            <EvidenceItem evidence={evidence} />
-          </div>
         )}
       </div>
     </li>

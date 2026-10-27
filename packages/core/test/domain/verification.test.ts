@@ -83,7 +83,7 @@ describe('the verification rules', () => {
     const ids = (steps: readonly PipelineStep[]) => listVerificationRules(steps).map((rule) => rule.id);
     expect(ids(SHAPE_PIPELINES.operation)).toContain('operation.evidence');
     expect(ids(['investigate', 'your_ok', 'plan', 'operate'])).toContain('operation.evidence');
-    expect(ids(AFTER_MERGE)).not.toContain('operation.evidence');
+    expect(ids(POST_MERGE)).not.toContain('operation.evidence');
     expect(ids(SHAPE_PIPELINES.change)).not.toContain('operation.evidence');
     expect(VERIFICATION_RULES.find((rule) => rule.id === 'operation.evidence')).toMatchObject({
       scope: 'alone',

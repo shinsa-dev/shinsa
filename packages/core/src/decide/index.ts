@@ -12,6 +12,7 @@ import {
 } from './accounts.ts';
 import {
   askQuestion,
+  attachComparison,
   attachEvidence,
   completeFix,
   completePhase,
@@ -221,6 +222,8 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return routeQuestion(decider, command, askQuestion);
     case 'agent.attach_evidence':
       return attachEvidence(decider, command);
+    case 'agent.attach_comparison':
+      return attachComparison(decider, command);
     case 'agent.note':
       return noteProgress(decider, command);
     case 'task.bind_account':

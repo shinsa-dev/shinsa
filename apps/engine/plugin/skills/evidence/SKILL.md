@@ -1,23 +1,123 @@
 ---
 name: evidence
-description: How to prove user-facing work before handing it over in Shinsa: screenshots and recordings for web UI, simulator captures for iOS, failing-then-passing tests for logic. Use whenever your change is visible to a user.
+description: How to prove user-facing work in Shinsa before the human reviews it: a before and after comparison of each view you changed at the right widths and themes, a short recording for behaviour, simulator captures for iOS, and the focused test run for logic. Use whenever your change is visible to a user, and as the reviewer when the evidence is missing or doubtful.
 ---
 
 # Evidence
 
-The human reviews the evidence before the diff. Without it they have to run your change themselves, which is the work Shinsa exists to save. Attach every piece with `attach_evidence`.
+The human reviews the evidence before the diff, in the review's Evidence section, as items, each with its kind: a
+comparison (one view before and after, or in light and dark) side by side, a recording that plays in the image viewer,
+a screenshot, a test or check run as its result, a note. "4 pieces of evidence" counts items, not files: a before and
+its after are one comparison, and so are a view's light and dark shots. Without it they have to run your change
+themselves, which is the work Shinsa exists to save. Attach every item with `attach_evidence`; Shinsa copies the files
+into its own store (`<data>/evidence/<task id>/round-<n>/`), so a file you leave in `/tmp` is fine.
+
+## Which kind
+
+| The change | Attach | Kind |
+|---|---|---|
+| A screen looks different | A comparison of each view you changed, the same view before and after, at 1280px and 390px wide, light and dark | `comparison` |
+| One view in several states (empty, loading, error, filled) | One comparison with a part per state, each named by its `label` | `comparison` |
+| Something moves or responds (a menu, a drag, a scroll, a form) | A recording of the flow, 5 to 20 seconds, at 1280px | `recording` |
+| A new screen with nothing before it | Per width, its light and dark as one comparison, parts labelled `Light` and `Dark` | `comparison` |
+| One view in light and dark | One comparison, never two screenshots: a part per theme, labelled `Light` and `Dark` | `comparison` |
+| Logic, an API, a script | The focused test that fails without your change and passes with it: its run output | `test` |
+| What a run cannot show (a failing run before the fix, a manual check, a measurement) | A short note in markdown | `note` |
+| A preview deployment exists | Its URL | `preview` |
+
+Skip a width or a theme only when it cannot differ (a command's output has no theme), and say so in `detail`. A
+comparison counts as the screenshots (or recordings) a plan asks for.
+
+## Fill the fields
+
+- `title`: what it shows: "Settings, appearance section". Never a file name.
+- `width`, `theme`: the viewport width in CSS pixels, and `light` or `dark`.
+- `detail`: what to look at, in one sentence: "The muted labels now pass 4.5:1 contrast."
+- A comparison takes `parts`, two to six files in order, each with its `path` and a `stage` (`before`, `after`) or a
+  short `label` ("Empty", "Loading", "Light", "Dark"):
+
+  ```json
+  { "kind": "comparison", "title": "Settings, appearance section", "width": 1280, "theme": "dark",
+    "parts": [{ "path": "/tmp/evidence/settings-before.png", "stage": "before" },
+              { "path": "/tmp/evidence/settings-after.png", "stage": "after" }] }
+  ```
+
+  Light and dark shots of one view are one comparison too, a part per theme named by its `label`, with no `theme`
+  on the comparison (the labels say it):
+
+  ```json
+  { "kind": "comparison", "title": "Review tab, a finding with its fix", "width": 1280,
+    "parts": [{ "path": "/tmp/evidence/review-light.png", "label": "Light" },
+              { "path": "/tmp/evidence/review-dark.png", "label": "Dark" }] }
+  ```
+
+  You take the before shot before you edit, so you may attach it on its own then (`kind: "screenshot"`,
+  `stage: "before"`) and its after later with the same title, width and theme (`stage: "after"`): Shinsa shows the
+  two as one comparison.
+- Every other kind takes exactly one source: `path` for a file (absolute, or relative to the worktree), `text` for
+  output or a note, `url` for a preview.
+- A note is markdown, rendered as it is in the chat: lists, code, links. Put measurements in a table, one row per
+  thing measured, and link the file you changed with a reference (`[theme.css](shinsa://file/src/theme.css#L12-L16)`)
+  so the human can open it. Test and check output is shown as plain text, so attach it as `test` or `check`, never as
+  a note.
+
+  ```md
+  | Token | Before | After | Needs |
+  | --- | --- | --- | --- |
+  | Hint text (`--muted`) | 2.6:1 | 6.9:1 | 4.5:1 |
+  | Borders (`--border`) | 1.2:1 | 1.6:1 | none, decorative |
+  ```
 
 ## Web UI
 
-1. Start the app the way the repository says (its CLAUDE.md, README, package scripts). Use a free port.
-2. Drive the changed flow with Playwright (the browser MCP tools if you have them, otherwise a short Playwright script with `bunx playwright`).
-3. Capture, for every screen you changed:
-   - light and dark mode,
-   - tablet width (about 820px) and phone width (about 390px),
-   - every state that changed: empty, loading, error, filled.
-4. For interactions, record a short video (Playwright `recordVideo`) of the flow from start to finish.
-5. Read the browser console. An error you introduced is a bug, not evidence.
-6. Attach each file with `attach_evidence` (`kind: "screenshot"` or `"recording"`, absolute `path`, a title that says what it shows).
+1. Start the app the way the repository says (its CLAUDE.md, README, package scripts), on a free port, with its own
+   data or seed if it has one. Never stop or reuse a server you did not start, and stop yours when you are done.
+2. **Before shots first.** Capture the before shots before you edit anything a user sees. If you already changed the
+   code, capture them from a scratch checkout of the base: `git worktree add --detach /tmp/before <base commit>`,
+   install, run it on another port, capture, then `git worktree remove /tmp/before`.
+3. Capture with the browser tools you have (the Playwright MCP tools), or the Playwright command line for a single
+   page:
+
+   ```sh
+   bunx playwright screenshot --viewport-size=1280,800 --color-scheme=dark --wait-for-timeout=500 \
+     http://localhost:5900/settings /tmp/evidence/settings-1280-dark-after.png
+   ```
+
+   For a page you must click through first, or a recording, write a short script and run it from a scratch folder,
+   so the repository's dependencies stay as they are:
+
+   ```sh
+   mkdir -p /tmp/evidence && cd /tmp/evidence && bun add playwright && bunx playwright install chromium
+   ```
+
+   ```ts
+   import { chromium } from 'playwright';
+
+   const browser = await chromium.launch();
+   for (const theme of ['light', 'dark'] as const) {
+     for (const width of [1280, 390]) {
+       const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme });
+       await page.goto('http://localhost:5900/settings');
+       await page.getByRole('button', { name: 'Appearance' }).click();
+       await page.screenshot({ path: `/tmp/evidence/settings-${width}-${theme}-after.png` });
+       await page.close();
+     }
+   }
+   const context = await browser.newContext({
+     viewport: { width: 1280, height: 800 },
+     recordVideo: { dir: '/tmp/evidence/video', size: { width: 1280, height: 800 } },
+   });
+   const page = await context.newPage();
+   await page.goto('http://localhost:5900/settings');
+   await page.getByRole('button', { name: 'Appearance' }).click();
+   await context.close();
+   console.log(await page.video()?.path());
+   await browser.close();
+   ```
+
+4. Read the browser console on every page you captured. An error you introduced is a bug, not evidence.
+5. Look at every image before you attach it: the right screen, the change visible, nothing half loaded.
+6. Attach each view's before and after as one comparison, each recording as a `recording`, with the fields above.
 
 ## iOS
 
@@ -25,7 +125,18 @@ Build for a simulator with `xcodebuild`, install it with `xcrun simctl install`,
 
 ## Logic
 
-Write the test that fails without your change and passes with it. Attach the run output with `kind: "test"` and `text`.
+Write the test that fails without your change and passes with it. Run it once before the fix and once after, and
+attach the passing run with `kind: "test"` and `text` (the command on the first line). Attach the failing run as a
+`note` when it shows something the passing run does not. Shinsa runs the repository's checks itself after you hand
+over and attaches their output to the review, so attach the run of the test that proves your change, not the whole
+suite.
+
+## As the reviewer
+
+You did not write the change, so your evidence is independent. Check the agent's evidence against the diff: the
+right screens, both themes, the states it claims. Where a user-visible claim has no evidence, or you doubt one,
+capture your own the same way and attach it; the human sees it marked as from the agent review. You may run the app;
+never edit the worktree.
 
 ## When you cannot
 

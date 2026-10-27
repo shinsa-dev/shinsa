@@ -942,6 +942,27 @@ describe('hand-overs', () => {
       type: 'agent.attach_evidence',
       kind: 'screenshot',
       title: 'Home',
+      uri: expect.stringMatching(/^\/api\/evidence\/task-1\/round-1\/home-\w+\.png$/),
+    });
+    writeFiles(path, { 'after.png': 'png' });
+    expect(
+      await call('attach_evidence', {
+        kind: 'comparison',
+        title: 'Home',
+        parts: [
+          { path: 'shot.png', stage: 'before' },
+          { path: 'after.png', stage: 'after' },
+        ],
+      })
+    ).toBe('Attached.');
+    expect(dispatched.at(-1)).toMatchObject({
+      type: 'agent.attach_comparison',
+      runId: expect.any(String),
+      title: 'Home',
+      parts: [
+        { kind: 'screenshot', stage: 'before' },
+        { kind: 'screenshot', stage: 'after' },
+      ],
     });
     expect(await call('note', { note: 'Follow up on dark mode.' })).toBe('Noted.');
     expect(call('note', {})).rejects.toThrow('note is required.');

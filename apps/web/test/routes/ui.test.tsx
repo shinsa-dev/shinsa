@@ -179,4 +179,17 @@ describe('the /ui gallery', () => {
     fireEvent.click(dialog.getByRole('button', { name: 'Submit code' }));
     await expectNothingSent();
   });
+
+  it('shows the evidence panel on sample files, a note as markdown, without reading anything from Shinsa', async () => {
+    await renderGallery();
+    const evidence = findSection('shinsa-evidence');
+    expect(evidence.getAllByText('Before')).toHaveLength(2);
+    expect(evidence.getAllByText('After')).toHaveLength(2);
+    expect(evidence.getByRole('cell', { name: '6.9:1' })).toBeTruthy();
+    expect(evidence.getByLabelText(/Scrolling the tab group/)).toBeTruthy();
+    expect(evidence.getByText('2 pass, 0 fail')).toBeTruthy();
+    expect(evidence.getByText('Checks run by Shinsa: all 2 passed')).toBeTruthy();
+    expect(evidence.getByText('~/.config/shinsa/data/evidence/sample/round-1')).toBeTruthy();
+    expect(requests).not.toHaveBeenCalled();
+  });
 });

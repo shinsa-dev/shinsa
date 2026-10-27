@@ -1,6 +1,6 @@
 # @shinsa/engine
 
-The local server and the `shinsa` command. Everything with I/O lives here; every decision lives in `@shinsa/core`.
+The engine and the `shinsa` command. Everything with I/O lives here; every decision lives in `@shinsa/core`.
 One package on purpose: `shinsa engine` is the server, and the client commands are a few hundred lines of HTTP calls
 that share its config and types, so a separate `apps/cli` would only add a workspace to keep in step. How the
 engine behaves (receipts, the outbox, the pull request watch, providers, the agent loop, accounts, schedules,
@@ -72,7 +72,9 @@ src/
 │                        out of the log, versioned by user_version, its rules in legacy.ts; applyLegacyView, the
 │                        same rewrite in memory for inspect mode, which never writes),
 │                        the state snapshot (snapshot.ts: verifySnapshot, resolveStateVersion, a hash of
-│                        @shinsa/core's source) and EvidenceStore (evidence.ts: files under /api/evidence)
+│                        @shinsa/core's source) and EvidenceStore (evidence.ts: attached evidence under
+│                        `<task id>/round-<n>/`, chat tool images at the top, all served under /api/evidence by
+│                        http/evidence.ts, immutable and in byte ranges)
 ├── runtime/             Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
@@ -325,7 +327,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   stopped there too.
 - **Hand-overs are validated here** (`agents/handover.ts`, `assertProtocol`): a plan, report or findings list that
   breaks the protocol is returned to the agent as a tool error listing every problem, and nothing reaches the event
-  log. An evidence path is absolute or relative to the worktree; evidence URLs must be http or https.
+  log. Evidence is checked by core's `validateEvidence` (`storeEvidence`): exactly one of a path (absolute or relative
+  to the worktree, at most 200 MB), an http or https URL, or text.
 - **Code reads are pinned and confined** (`http/code.ts`, `docs/engine.md` → The Code tab's reads): only the task's
   registered repository, a ref is a full commit id the repository has or `working`, paths are relative with no `.`
   or `..` segment and pass git as literal pathspecs after `--`, working-copy reads go through `resolveInside`, and

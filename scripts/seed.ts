@@ -30,6 +30,7 @@ import {
 import { createCodeSample, listCodeTasks } from './seed-code.ts';
 import { writeCodeTranscripts } from './seed-code-transcripts.ts';
 import { listDelegationTasks, writeDelegationTranscripts } from './seed-delegation.ts';
+import { listSeedEvidenceEvents, writeSeedEvidence } from './seed-evidence.ts';
 import {
   CHOSEN_BY_YOU,
   callTool,
@@ -1146,15 +1147,6 @@ function listBasketTasks({ basketServer, basketSdk }: { basketServer: Repo; bask
   ];
 }
 
-function writeEvidenceFiles() {
-  const evidence = join(DATA, 'evidence');
-  mkdirSync(evidence, { recursive: true });
-  writeFileSync(
-    join(evidence, DEFAULTS_TEST_EVIDENCE),
-    'bun test v1.3.0\n\nsrc/shared/defaults.test.ts:\n✓ keeps the preferred model below 85%\n✓ falls back at 85% of the window\n✓ keeps the preferred model without usage data\n\n 3 pass\n 0 fail\n'
-  );
-}
-
 function writeSessionTranscript(session: string, runTimes: [string, SeedRunTimes][], transcripts: string) {
   const evidence = join(DATA, 'evidence');
   let images = 0;
@@ -2038,20 +2030,6 @@ function listPersonalTasks({ paywall, kanna, prints }: SeedRepos, worktrees: See
       },
       provider: 'codex',
       runs: [{ role: 'agent', purpose: 'build', minutes: 11, summary: 'Added the fallback.' }],
-      extra: [
-        {
-          type: 'evidence.attached',
-          evidence: {
-            id: 'evidence-usage-defaults-test',
-            taskId: 'task-usage-defaults',
-            runId: 'task-usage-defaults-run-0',
-            kind: 'test',
-            title: 'bun test src/shared',
-            uri: `/api/evidence/${DEFAULTS_TEST_EVIDENCE}`,
-            attachedAt: NOW - 69 * HOUR,
-          },
-        },
-      ],
       gate: { type: 'review', title: 'Review the usage-aware defaults', body: 'Ready for review.' },
     },
     {
@@ -2172,7 +2150,7 @@ function seed() {
   }
   writeDelegationTranscripts(transcripts, timeline);
   writeCodeTranscripts(transcripts, timeline, sample);
-  writeEvidenceFiles();
+  writeSeedEvidence(DATA);
   writeAccountTranscripts(transcripts);
   const session = Bun.env.SHINSA_SEED_SESSION;
   if (session) writeSessionTranscript(session, runTimes, transcripts);

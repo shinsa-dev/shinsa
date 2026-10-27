@@ -25,7 +25,8 @@ When you are the reviewer, Shinsa has already run the repository's checks and th
 - A missed requirement from the request or the plan.
 - A broken repository rule (its CLAUDE.md, AGENTS.md, lint, conventions).
 - A failing check, a test that encodes the old behaviour, a test that passes with and without the fix.
-- UI work without evidence, or evidence that does not show the changed flow.
+- UI work without evidence, or evidence that does not show the changed flow. Capture your own as the evidence skill
+  says, so the human has independent evidence either way.
 
 Everything else is a suggestion. Do not report taste as blocking.
 

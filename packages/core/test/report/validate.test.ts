@@ -484,3 +484,137 @@ describe('the shape hand-overs', () => {
     });
   });
 });
+
+describe('validateEvidence', () => {
+  test('reads a screenshot with what it shows, its width, theme and stage', () => {
+    expect(
+      readValue(
+        validateEvidence({
+          kind: 'screenshot',
+          title: ' Settings ',
+          detail: 'The labels read clearly.',
+          width: 1280,
+          theme: 'dark',
+          stage: 'before',
+          path: 'shots/settings.png',
+        })
+      )
+    ).toEqual({
+      kind: 'screenshot',
+      title: 'Settings',
+      detail: 'The labels read clearly.',
+      width: 1280,
+      theme: 'dark',
+      stage: 'before',
+      source: { path: 'shots/settings.png' },
+    });
+  });
+
+  test('the optional fields may be left out, and a url or text is the source', () => {
+    expect(readValue(validateEvidence({ kind: 'preview', title: 'Preview', url: 'https://a.dev' }))).toEqual({
+      kind: 'preview',
+      title: 'Preview',
+      detail: null,
+      width: null,
+      theme: null,
+      stage: null,
+      source: { url: 'https://a.dev' },
+    });
+    expect(
+      readValue(validateEvidence({ kind: 'test', title: 'Tests', text: '3 pass', theme: '', stage: null }))
+    ).toMatchObject({ source: { text: '3 pass' } });
+  });
+
+  test('names every broken field, and wants exactly one source', () => {
+    expect(
+      errorsOf(
+        validateEvidence({
+          kind: 'virus',
+          title: 'x'.repeat(PROTOCOL_LIMITS.evidenceTitle + 1),
+          width: 0,
+          theme: 'sepia',
+          stage: 'during',
+        })
+      )
+    ).toEqual([
+      'kind must be one of screenshot, recording, test, check, note, preview, comparison.',
+      `title is ${PROTOCOL_LIMITS.evidenceTitle + 1} characters; the limit is ${PROTOCOL_LIMITS.evidenceTitle}.`,
+      `width must be a whole number from 1 to ${PROTOCOL_LIMITS.evidenceWidth}.`,
+      'theme must be one of light, dark.',
+      'stage must be one of before, after.',
+      'Give exactly one of path, url or text.',
+    ]);
+    expect(
+      errorsOf(validateEvidence({ kind: 'note', title: 'Both', url: 'https://a.dev', text: 'x' }))
+    ).toEqual(['Give exactly one of path, url or text.']);
+    expect(
+      errorsOf(validateEvidence({ kind: 'screenshot', title: 'Shot', path: 'a.png', parts: [] }))
+    ).toEqual(['parts is only for kind comparison.']);
+  });
+
+  test('reads a comparison: its parts, each named by its stage or label, and the facts they share', () => {
+    expect(
+      readValue(
+        validateEvidence({
+          kind: 'comparison',
+          title: 'Settings',
+          width: 1280,
+          theme: 'light',
+          parts: [
+            { path: 'before.png', stage: 'before' },
+            { path: 'empty.png', label: ' Empty list ' },
+            { path: 'after.png', stage: 'after', label: null },
+          ],
+        })
+      )
+    ).toEqual({
+      kind: 'comparison',
+      title: 'Settings',
+      detail: null,
+      width: 1280,
+      theme: 'light',
+      parts: [
+        { path: 'before.png', stage: 'before', label: null },
+        { path: 'empty.png', stage: null, label: 'Empty list' },
+        { path: 'after.png', stage: 'after', label: null },
+      ],
+    });
+  });
+
+  test('a comparison needs two to six named parts and no source of its own', () => {
+    expect(
+      errorsOf(
+        validateEvidence({ kind: 'comparison', title: 'One', parts: [{ path: 'a.png', stage: 'after' }] })
+      )
+    ).toEqual(['parts needs at least 2 items.']);
+    expect(
+      errorsOf(
+        validateEvidence({
+          kind: 'comparison',
+          title: 'Broken',
+          path: 'a.png',
+          stage: 'after',
+          parts: [
+            { path: 'a.png' },
+            { path: 'b.png', stage: 'after' },
+            { path: 'c.png', stage: 'after' },
+            'd.png',
+            { stage: 'before', label: 'x'.repeat(PROTOCOL_LIMITS.evidenceLabel + 1) },
+            { path: 'f.png', label: 'F' },
+            { path: 'g.png', label: 'G' },
+          ],
+        })
+      )
+    ).toEqual([
+      `parts has 7 items; the limit is ${PROTOCOL_LIMITS.evidenceParts}.`,
+      'parts[0] needs a stage or a label.',
+      'parts[3] must be an object.',
+      'parts[3].path is required.',
+      'parts[3] needs a stage or a label.',
+      'parts[4].path is required.',
+      `parts[4].label is ${PROTOCOL_LIMITS.evidenceLabel + 1} characters; the limit is ${PROTOCOL_LIMITS.evidenceLabel}.`,
+      'Each part needs its own stage or label; two parts are named the same.',
+      'A comparison takes its files in parts: leave out path, url, text and stage.',
+    ]);
+  });
+});

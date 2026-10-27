@@ -70,6 +70,7 @@ export {
   validateDelegationReference,
   validateDelegationRequest,
   validateDelivery,
+  validateEvidence,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,

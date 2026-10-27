@@ -25,6 +25,7 @@ const ROW_DISCLOSURES: Record<string, string> = {
   'components/chat/chat-line.tsx': 'a chat line is one row button, not a header',
   'components/code/tree-row.tsx': 'a tree item, opened by the tree',
   'components/chat/user-message.tsx': 'Show more under a message',
+  'components/evidence/evidence-text.tsx': 'Show the output of a test or check run, a button in its caption',
   'components/task/heading.tsx': 'the request under the title is itself the button',
   'components/settings/agents.tsx': 'the inline Per role toggle',
   'components/settings/mcp-server-row.tsx': 'a settings row with a leading chevron, not a header',

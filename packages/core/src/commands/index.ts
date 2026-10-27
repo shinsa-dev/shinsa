@@ -1,7 +1,11 @@
 import type {
+  CheckEvidence,
   ConfigProblem,
   DeliveringStep,
   EvidenceKind,
+  EvidencePart,
+  EvidenceStage,
+  EvidenceTheme,
   FindingVerdict,
   GateDecision,
   MessageKind,
@@ -130,7 +134,26 @@ type AgentCommand =
       choices?: string[];
       recommendation?: string | null;
     }
-  | { type: 'agent.attach_evidence'; runId: string; kind: EvidenceKind; title: string; uri: string }
+  | {
+      type: 'agent.attach_evidence';
+      runId: string;
+      kind: EvidenceKind;
+      title: string;
+      uri: string;
+      detail?: string | null;
+      width?: number | null;
+      theme?: EvidenceTheme | null;
+      stage?: EvidenceStage | null;
+    }
+  | {
+      type: 'agent.attach_comparison';
+      runId: string;
+      title: string;
+      parts: EvidencePart[];
+      detail?: string | null;
+      width?: number | null;
+      theme?: EvidenceTheme | null;
+    }
   | { type: 'agent.note'; runId: string; note: string }
   | {
       type: 'agent.wait_for';
@@ -220,7 +243,13 @@ type SystemCommand =
       viewer?: string | null;
     }
   | { type: 'pull_request.read_failed'; taskId: string; detail: string }
-  | { type: 'checks.record'; taskId: string; results: ReportCheck[] }
+  | {
+      type: 'checks.record';
+      taskId: string;
+      results: ReportCheck[];
+      evidence?: CheckEvidence;
+      coverage?: Coverage;
+    }
   | { type: 'effect.fail'; taskId: string; title: string; detail: string }
   | { type: 'message.deliver'; taskId: string; text: string }
   | { type: 'message.receive'; taskId: string; text: string }

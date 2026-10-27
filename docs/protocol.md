@@ -41,7 +41,8 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | hard gate | A gate only you decide (plan, review, merge, question, secret, proposal, operation, failure, setup, sign-in) | `GateType`, `HardGateDefinition` | Needs you |
 | soft gate | An automatic check a step must pass (checks, agent review, CI); it passes, fails back to the round's agent, or escalates to the hard gate it names | `SoftGateType`, `SoftGateDefinition` | not a gate on screen |
 | decision | Your answer to a hard gate: approve, revise, reject, reply (with words) or waive (start without checks) | `GateDecision` | Approve, Ask for changes, Reject… |
-| evidence | A file or link an agent attached to prove something (screenshot, recording, test, check, note, preview) | `Evidence`, `EvidenceKind` | Evidence |
+| evidence | A file or link an agent attached to prove something (screenshot, recording, test, check, note, preview), with the width, theme and stage (before or after) it was captured at, or the output of Shinsa's own checks (a `check` of no run) | `Evidence`, `EvidenceKind`, `EvidenceTheme`, `EvidenceStage` | Evidence |
+| evidence item | What you review as one piece of evidence: a comparison (one view before and after, or in several states, its parts sharing an `itemId`) or a single piece of its own kind | `EvidenceItem`, `EvidenceItemKind`, `listEvidenceItems` | a comparison, a recording, a screenshot, a test run… |
 | check | A command Shinsa runs in the worktree (the repository's and the plan's own), recorded pass or fail | `ReportCheck`, step `checks` | Checks |
 | CI run | One CI check GitHub reports on the pull request | `CiRun`, `CiState` (stored as `PullRequest.checkRuns`, `PullRequest.checks`) | CI |
 | check-in | A monitor's next look at what it waits for | `Monitor.nextCheckAt`, `monitor.check_in_now` | "Check in now", "Check-in 2 of 10" |
@@ -725,7 +726,8 @@ role without the tool (`hasTool`).
 | `agent.deliver` | `answer`, `report_diagnosis`, `submit_report`, `report_outcome` | hands over an answer, a diagnosis, a report or an outcome (step `answer`, `investigate`, `research`, `operate`), an inquiry optionally with a proposal; an operation without a code change needs its evidence first |
 | `agent.reshape` | `reshape_task` | recomposes the steps before planning |
 | `agent.ask` | `ask` | asks you (or, from a delegated run, its parent) |
-| `agent.attach_evidence` | `attach_evidence` | attaches evidence |
+| `agent.attach_evidence` | `attach_evidence` | attaches evidence, stored under its task and round (`validateEvidence`; `docs/engine.md` → Evidence) |
+| `agent.attach_comparison` | `attach_evidence` with `kind: "comparison"` | attaches one comparison: a piece per part, sharing one `itemId` (`docs/engine.md` → Evidence) |
 | `agent.note` | `note` | keeps a note on the task |
 | `agent.wait_for` | `wait_for` | ends the run and arms a monitor |
 | `agent.suggest_tasks` | `suggest_tasks` | suggests up to five tasks |

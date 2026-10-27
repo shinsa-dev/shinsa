@@ -335,12 +335,34 @@ describe('read endpoints', () => {
     ).toBe(404);
   });
 
-  test('evidence is served by name only', async () => {
+  test('evidence is served by its task, round and name only, cached and in ranges', async () => {
     const { call, evidence, config } = await start();
-    const uri = evidence.writeText('proof');
+    const uri = evidence.writeText('proof of work', { taskId: 'task-1', round: 1 }, 'Proof');
     writeFileSync(join(config.dataDir, 'secret.txt'), 'secret');
-    expect(await (await call(uri)).text()).toBe('proof');
-    for (const path of ['/api/evidence/..%2Fsecret.txt', '/api/evidence/..', '/api/evidence/missing.png']) {
+    const whole = await call(uri);
+    expect(await whole.text()).toBe('proof of work');
+    expect(whole.headers.get('cache-control')).toBe('private, max-age=31536000, immutable');
+    expect(whole.headers.get('accept-ranges')).toBe('bytes');
+    const ranged = (range: string) => call(uri, { headers: { range } });
+    const middle = await ranged('bytes=6-7');
+    expect(middle.status).toBe(206);
+    expect(await middle.text()).toBe('of');
+    expect(middle.headers.get('content-range')).toBe('bytes 6-7/13');
+    expect(await (await ranged('bytes=9-')).text()).toBe('work');
+    expect(await (await ranged('bytes=-4')).text()).toBe('work');
+    expect(await (await ranged('bytes=0-99')).text()).toBe('proof of work');
+    for (const range of ['bytes=20-30', 'bytes=-0', 'bytes=-', 'items=0-1', 'bytes=5-2']) {
+      const refused = await ranged(range);
+      expect(refused.status).toBe(416);
+      expect(refused.headers.get('content-range')).toBe('bytes */13');
+    }
+    for (const path of [
+      '/api/evidence/..%2Fsecret.txt',
+      '/api/evidence/..',
+      '/api/evidence/missing.png',
+      '/api/evidence/task-1/round-1/missing.txt',
+      '/api/evidence/task-1/..%2F..%2Fsecret.txt',
+    ]) {
       expect((await call(path)).status).toBe(404);
     }
   });

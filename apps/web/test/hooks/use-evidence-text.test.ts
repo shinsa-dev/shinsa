@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { EVIDENCE_TEXT_LIMIT, useEvidenceText } from '@/hooks/use-evidence-text.ts';
+import { useEvidenceText } from '@/hooks/use-evidence-text.ts';
+import { EVIDENCE_TEXT_LIMIT } from '@/lib/evidence/texts.ts';
 
 const realFetch = globalThis.fetch;
 

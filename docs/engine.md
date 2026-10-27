@@ -2817,7 +2817,7 @@ tokens their resumed counterparts would not have.
 ## Accounts and usage limits
 
 Shinsa manages its Claude logins itself instead of shelling out to claude-swap (harness plan WS2, which names the
-claude-swap, Kanna, T3 and Paperclip sources). The server side is `apps/server/src/accounts/`; the rules that replay
+claude-swap, Kanna, T3 and Paperclip sources). The server side is `apps/engine/src/accounts/`; the rules that replay
 (bindings, waits, the Sign in gate) are core (`decide/accounts.ts`), and so is the picker (`accounts/pick.ts`).
 
 Several accounts with rotation are Claude-only (`capabilities.accounts`). Codex runs on the one login `codex login`
@@ -3012,7 +3012,8 @@ Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shi
     ├── workspaces/    One ledger per GitButler repository (`<repo id>.json`): which uncommitted paths belong to which
     │                  task (Where agents work → GitButler, above)
     ├── transcripts/   One JSONL chat transcript per run
-    ├── evidence/      Screenshots, logs and files agents attached
+    ├── evidence/      What agents attached as evidence, per task and round (`<task id>/round-<n>/`), and the
+    │                  chat's tool images at the top (Evidence, above)
     ├── terminals/     Your terminals (`terminals.json`), each one's last screen (`<id>.screen`), so a restarted
     │                  engine shows how each ended, and your services (`services.json`, mode 600; Terminals, above)
     ├── usage-limits.json  The last usage reading per account
@@ -3050,7 +3051,16 @@ scratch copy is one directory, and the event log, worktrees and config.json only
 - **The seeded copy.** `bun run seed` writes a data folder full of tasks to look at to `~/.shinsa-seed`
   (`SHINSA_SEED_DIR` moves it): `data/` and the throwaway repositories under `repos/`, then prints the command that
   serves it in inspect mode. It covers tasks across shapes and stages, Codex runs, actions on your behalf, evidence, a review
-  that is revised and then fixed, and operation-gate notes. Transcripts are synthetic; `SHINSA_SEED_SESSION`, a Claude
+  that is revised and then fixed, and operation-gate notes. The evidence (`scripts/seed-evidence.ts`) is real files in
+  `scripts/seed-media/`: before and after screenshots of a settings page in dark mode at 1280px and 390px and of a
+  crowded tab row, a WebM recording of it scrolling, a reviewer's own dark-mode shot and contrast note, screenshots of
+  Shinsa's own Review tab for SMP-2, and test output for five tasks, each attached shortly before its run ended. The
+  pages are rendered by `bun scripts/seed-media/generate.ts [origin]` (`shots.ts` lists every file and what it shows,
+  `shots.test.ts` checks each checked-in file is listed): it drives Chromium over CDP (`scripts/perf/shell-cdp.ts`)
+  through the fixture pages in `scripts/seed-media/fixtures/` (the settings page, the tab row), records the tab row
+  with a screencast that ffmpeg encodes to WebM, and takes the SMP-2 shots from a running seeded copy at `origin`
+  (skipped without one; `SEED_MEDIA_ONLY` picks files by name). It also writes the `/ui` showcase's evidence samples
+  to `apps/web/public/samples/evidence/`. Transcripts are synthetic; `SHINSA_SEED_SESSION`, a Claude
   Code session `.jsonl`, replaces one task's transcript with that real session.
 - **The sample repository.** For the code views the seed also builds `repos/shinsa-sample` offline from Shinsa's own
   tree at a pinned commit, `3590252` (`SOURCE_COMMIT`; `git archive`, about 1,250 files, imported as eight commits

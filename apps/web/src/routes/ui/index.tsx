@@ -17,11 +17,14 @@ import { AccountSpecimens } from './accounts.tsx';
 import { ChatSpecimens } from './chat.tsx';
 import { CodeSpecimens } from './code.tsx';
 import { CompositeSpecimens } from './composites.tsx';
+import { ErrorSpecimens } from './errors.tsx';
+import { EvidenceSpecimens } from './evidence.tsx';
 import { INPUT_SECTIONS, InputSpecimens } from './inputs.tsx';
 import { OnboardingSpecimens } from './onboarding.tsx';
 import { OVERLAY_SECTIONS, OverlaySpecimens } from './overlays.tsx';
 import { OverviewSpecimens } from './overview.tsx';
 import { ReviewSpecimens } from './review.tsx';
+import { SAMPLE_RUNNER } from './samples.ts';
 import { Section } from './section.tsx';
 import { SettingsSpecimens } from './settings.tsx';
 import { SURFACE_SECTIONS, SurfaceSpecimens } from './surfaces.tsx';
@@ -33,15 +36,18 @@ const SECTIONS = [
   ...INPUT_SECTIONS,
   ...OVERLAY_SECTIONS,
   ...SURFACE_SECTIONS,
+  ...CHECKLIST_SECTIONS,
   { id: 'shinsa', label: 'Shinsa composites' },
   { id: 'shinsa-setup', label: 'Setup' },
   { id: 'shinsa-accounts', label: 'Accounts' },
   { id: 'shinsa-overview', label: 'Overview cards' },
   { id: 'shinsa-chat', label: 'Chat' },
   { id: 'shinsa-review', label: 'Review' },
+  { id: 'shinsa-evidence', label: 'Evidence' },
   { id: 'shinsa-code', label: 'Code' },
   { id: 'shinsa-terminal', label: 'Terminal' },
   { id: 'shinsa-settings', label: 'Settings rows' },
+  { id: 'shinsa-errors', label: 'Errors' },
 ];
 
 function SectionNav() {

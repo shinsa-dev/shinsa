@@ -39,6 +39,7 @@ import { LedgerStore } from '../workspaces/ledger.ts';
 import { type JsonObject, readJson, readJsonObject } from './body.ts';
 import { createCodeRoutes } from './code.ts';
 import { createEditRoutes } from './edits.ts';
+import { respondEvidenceFile } from './evidence.ts';
 import { resolveInside } from './paths.ts';
 import { createReadRoutes } from './reads.ts';
 
@@ -187,10 +188,10 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
     return respondJson({ ok: true, taskId, handle });
   }
 
-  function respondEvidence(name: string) {
+  function respondEvidence(name: string, request: Request) {
     const path = evidence.selectFile(name);
     if (!path) return Promise.resolve(new Response('Not found', { status: 404 }));
-    return Promise.resolve(new Response(Bun.file(path)));
+    return Promise.resolve(respondEvidenceFile(Bun.file(path), request.headers.get('range')));
   }
 
   return [
@@ -243,8 +244,8 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
     },
     {
       method: 'GET',
-      pattern: /^\/api\/evidence\/([^/]+)$/,
-      respond: ([, name = '']) => respondEvidence(name),
+      pattern: /^\/api\/evidence\/(.+)$/,
+      respond: ([, name = ''], request) => respondEvidence(name, request),
     },
   ];
 }

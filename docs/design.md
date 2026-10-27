@@ -39,9 +39,13 @@ Only these, and they win over anything below:
    notice rows and context meter, the schedule and notification rows, the MCP, plugin and skill
    rows in every state (29), and the Code tab's pieces (`routes/ui/code.tsx`: the `--code-*` tokens, one snippet as a
    chat fence beside the editor, a diff side by side with its new side editable, the same diff unified with a spot,
-   a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32). A piece that reads live state has a
+   a blocking finding, a suggestion finding and a comment inline, and Go to file on `QuickOpenDialog`, 32), and the
+   Review tab's Evidence panel (`routes/ui/evidence.tsx`: `EvidencePanel` with a before and after pair, a recording,
+   test output, Shinsa's own check run and a markdown note with a table, on sample files in `apps/web/public/samples/evidence` that
+   `scripts/seed-media/generate.ts` renders, 34), and the error fallbacks in their three sizes (`routes/ui/errors.tsx`,
+   38). A piece that reads live state has a
    presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
-   `AccountChoiceList`, `ContextGauge`, `HealthCard`, `NotificationGroup`, `ScheduleRow`), and every action
+   `AccountChoiceList`, `ContextGauge`, `HealthCard`, `NotificationGroup`, `ScheduleRow`, `EvidencePanel`), and every action
    there takes a callback, so `/ui` never opens the connection or sends anything: an action only shows a
    toast. Still checked only in the app, since they need the live state or a transcript: the rail and the
    queue, the work card's live feed, the review and merge cards, the chat's run sections and live card, and ⌘K.
@@ -157,14 +161,45 @@ Only these, and they win over anything below:
      long output capped with "Show N more lines"; images from tool results and evidence show as thumbnails
      that open in the image viewer.
    - **The image viewer** (`components/overlays/image-viewer.tsx`, `hooks/use-image-viewer.ts`) opens every image in
-     the chat and in evidence: attachments, tool results, evidence. A `black/85` backdrop, the image
-     fitted to the window (never upscaled) and morphing out of its thumbnail (a fade under reduced
-     motion). Click toggles fit and 100% (2× for small images) around the pointer, and so does a
-     double-click; the wheel, a trackpad pinch or a two-finger pinch zooms toward the pointer; drag
-     pans while zoomed; `+`, `-` and `0` zoom from the keyboard. Arrows (on screen and the arrow
-     keys) step through the images of the same message or tool group. A close button, Esc or a
-     click on the backdrop closes it, back into the thumbnail. A pill at the bottom carries the
-     caption (attachment name, evidence title or file name), "2 of 5" and the zoom level.
+     the chat and in evidence: attachments, tool results, evidence, and an evidence recording, which plays only there
+     (`controls`, autoplay; no zoom or pan). A `black/85` backdrop, the image fitted to the window (never upscaled)
+     and morphing out of its thumbnail. A recording never morphs: it mounts at its fitted size, from the thumbnail's
+     own `videoWidth` or a hidden probe's metadata, with that width and height set on the element, so Chromium lays out
+     its controls once at the right width; scaling a video while it opens leaves its controls at the size they started.
+     Click toggles fit and 100% (2× for small images) around the pointer, and so does a double-click; the wheel, a
+     trackpad pinch or a two-finger pinch zooms toward the pointer; drag pans while zoomed; `+`, `-` and `0` zoom from
+     the keyboard. Arrows (on screen and the arrow keys) step through the images of the same message or tool group,
+     or, in evidence, item by item. **Stepping is a cross-fade, never the open run again**: the incoming image or
+     recording appears at its own fitted size from the first frame (its size read from its thumbnail, or held back
+     until it has loaded while the outgoing one stays put, so the stage never goes empty and nothing morphs from the
+     last image's size), and fades in over the outgoing one, which fades out as it was (zoom and pan included); a step
+     moves both 10px in the direction of travel over 200ms on `cubic-bezier(0.23, 1, 0.32, 1)`, and zoom and pan reset
+     to fit at once. Switching parts of one comparison (the bar's `Choice`, or an arrow that lands on the next part)
+     is the same view, so it does not slide: the incoming part fades in over 150ms on top of the outgoing one, which
+     stays opaque under it when the two share a rect, so the stage never dims. Under reduced motion every swap is the
+     150ms fade with no slide. A press during a swap takes over from where the images are (`commitStyles`, no queued
+     or stacked animation), the decisions are `resolveSwap`, `resolveSwapMotion` and `isLeavingHeld` in
+     `lib/image-view.ts`, and the bar keeps one width while there is more than one image (`w-xl`, the caption
+     truncating in the space left), so the counter, zoom and parts swap their text without moving it. A close button, Esc or a click on the backdrop closes it. **Everything moves
+     together, and the close is the open run backwards**: the backdrop and the chrome (buttons, the bar) fade over 240ms
+     on `cubic-bezier(0.22, 1, 0.36, 1)` while the image, opaque the whole way, flies between its thumbnail and the
+     window on the same curve and duration. The flight (`resolveLanding` in `lib/image-view.ts`) is one transform that
+     keeps the image's aspect (a translate and a single scale, never a stretch) onto the image the thumbnail draws (its
+     `object-fit` box), and a `clip-path` inset to the part of it the thumbnail shows (a cover crop, a scrolled or
+     clipped parent, the window), with each corner rounded like the thumbnail's or the clipping card's corner it sits
+     on. Closing starts from where the image is on screen, zoom and pan included, and lands on the thumbnail of the
+     image open now, measured at that moment (after stepping or scrolling, it is not the one you opened); the
+     thumbnail stays hidden until the image lands on it and shows in that frame, so nothing flashes or doubles. With
+     no thumbnail in view (scrolled away, gone), the image fades out while it shrinks to 96% where it is, and opens
+     the same way. The open waits for the portal to mount before it animates, so it never falls through to the next
+     render. A recording, and anything under reduced motion, only fades. The viewer is laid
+     out under `.dark`, so its chrome reads the same on the black in both themes (a `.dark` region reads dark aliases too:
+     `globals.css` declares every alias, `foreground`, `popover-foreground`, `muted-foreground`, `primary-*`, `code-*`,
+     on `:root, .dark`, so it resolves against the region's tokens): Close, Previous and Next are the
+     kit's `Button` (`outline`, `icon`, 26px with a 16px glyph), and the bar at the bottom is a `rounded-popup`
+     `bg-popover` `shadow-3` strip (`h-8`, `text-xs`, `popover-foreground`; never a pill) with the caption (attachment name, evidence
+     title and facts, or file name), "2 of 5" (items, not files), the zoom level and, on a comparison, a `Choice` of its
+     parts (Before, After, or each state's label) that switches the image in place.
    - The user's own message is just its bubble (`rounded-3xl`, `border border-border`, `bg-muted`, `px-3.5 py-1.5`);
      attachments sit above it as thumbnails, or as file chips when the browser can't load the path.
      `?tab=chat&run=<id>` scrolls to that run and washes it in `primary-a1`, with a 2px `primary-a1` outline
@@ -1868,11 +1903,20 @@ Only these, and they win over anything below:
       them, the file at the head around them as unchanged lines (`createContextHunk`). A finding's place is its
       header, so a finding with a snippet drops its place chip. A blocking finding's snippet starts open
       (`startsOpen`); a suggestion's and every spot's stay folded.
-34. **Review is a report** (`routes/task/review.tsx`, `components/review/note.tsx`, `lib/review/report.ts`, since
-    2026-10-25). Review is a task tab of its own, after Overview and before Code: Overview, Review, Code, Chat. It
-    shows once there is something to review (`hasReview` in `lib/tasks/tabs.ts`): the task builds, and it has a work
-    report or agent findings, or it reached the review gate or anything after it. It reads like the Overview, top to
-    bottom in the same centred column, never a split with a file list:
+34. **Review is the technical read; the Overview is the decision** (`routes/task/review.tsx`,
+    `components/review/note.tsx`, `lib/review/report.ts`, since 2026-10-25; the deep read since 2026-10-26). Review is
+    a task tab of its own, after Overview and before Code: Overview, Review, Code, Chat. It shows once there is something
+    to review (`hasReview` in `lib/tasks/tabs.ts`): the task builds, and it has a work report or agent findings, or it
+    reached the review gate or anything after it. The two never say the same thing twice. The Overview is the quick
+    decision layer: the findings with Fix / Dismiss, suggestions, the checks in the facts, What changed (each phase's
+    title and summary, no code) and one line pointing here. Evidence is shown once: on the Overview it is one card
+    whose only content is its 36px header band, "4 pieces of evidence in the review" with See the evidence at the
+    right (`components/evidence/evidence-pointer.tsx`), and the Activity panel's "Attached …" rows carry no
+    thumbnail; a task with no Review tab (an operation) shows the Evidence panel on the Overview instead. Review is the in-depth read of how the change works: what it
+    does, the structure and flow of the new logic, the pieces of code that carry it explained simply, and above all the
+    judgement calls made on the way, with the alternatives and why. It guides you through everything the change asks you to
+    know, every important point marked; forty or fifty points on a large change is normal. It reads top to bottom as a
+    document in the same centred column, never a split with a file list:
     - **What the change does.** A `NowFrame`: the status and the diff counts as the eyebrow, the report's headline as
       the title, and how many places need you ("3 places need your attention, the most critical first."). The
       decision sits at its top right exactly as on the Overview's now card (`ReviewActions`,
@@ -1943,7 +1987,9 @@ Only these, and they win over anything below:
     line is a design bug unless the work could not be foreseen.
     - **Read before the click.** Hovering a task anywhere (a queue row, Home's lists, All tasks, a task reference,
       the sidebar) for 40ms, or highlighting it in ⌘K, reads what its page shows: the Code tab's refs, diff
-      summary, root folder, ⌘P's paths and first file, the review's snippets, the diff view's chunk, and the
+      summary, root folder, ⌘P's paths and first file, the review's snippets, the diff view's chunk, the
+      evidence (its images decoded ahead, its texts read into the cache; `lib/evidence/prefetch.ts`, the last 64
+      images, `EVIDENCE_IMAGE_LIMIT`; the server marks evidence immutable, so they stay in the browser's cache), and the
       transcripts of its last two runs. Once the browser is idle, the first four tasks of the queue get the same
       code reads, and Settings' versions and integrations are read. An open task page reads its own at idle; the
       Code tab reads the other refs (head, base, working copy) of the open file and its folders, the folders above
@@ -1983,7 +2029,7 @@ Only these, and they win over anything below:
       dot in the 20px icon slot, its name (`text-2xs` medium `fg-2`, `fg-4` under the pointer) and its counts in normal
       weight, worst first and in their tones ("1 failed", "1 starting", "3 running", else "4 stopped";
       `describeServiceGroup`), and the queue's fold chevron, revealed on hover, right after the counts (6px after "1 running"). The whole header folds the project,
-      as a queue section folds, and each project remembers its fold (`resolveServiceGroupFlag`). When two or more of
+      as a queue section folds, and each project remembers its fold (`services:project:<projectId>`, `resolveServiceGroupId`, 40). When two or more of
       the project's services are not running, the header ends with a play button (`icon-sm`, `IconPlay`, no text,
       the tooltip "Start all services in ‹project›", `describeStartAll`; the section's action, so a press on it never
       folds) that starts every one that is not; the header then ends 4px in (`pe-1`), as a row does, so the play

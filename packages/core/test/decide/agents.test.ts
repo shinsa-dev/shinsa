@@ -117,6 +117,164 @@ describe('agent hand-overs', () => {
     ]);
   });
 
+  test('evidence keeps what it shows, its width, theme and stage', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const runId = harness.activeRun(taskId).id;
+    harness.send({
+      type: 'agent.attach_evidence',
+      runId,
+      kind: 'screenshot',
+      title: 'Settings',
+      uri: '/e/after.png',
+      detail: 'The muted labels now read clearly.',
+      width: 1280,
+      theme: 'dark',
+      stage: 'after',
+    });
+    harness.send({
+      type: 'agent.attach_evidence',
+      runId,
+      kind: 'test',
+      title: 'Tests',
+      uri: '/e/out.txt',
+      detail: null,
+      width: null,
+      theme: null,
+      stage: null,
+    });
+    const [shot, run] = Object.values(harness.state.evidence);
+    expect(shot).toMatchObject({
+      detail: 'The muted labels now read clearly.',
+      width: 1280,
+      theme: 'dark',
+      stage: 'after',
+    });
+    expect(run).not.toHaveProperty('detail');
+    expect(run).not.toHaveProperty('stage');
+  });
+
+  test('a comparison attaches each part as a piece of one item, with one activity entry', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    const runId = harness.activeRun(taskId).id;
+    harness.send({
+      type: 'agent.attach_comparison',
+      runId,
+      title: 'Settings',
+      detail: 'The labels read clearly now.',
+      width: 1280,
+      theme: 'dark',
+      parts: [
+        { kind: 'screenshot', uri: '/e/before.png', stage: 'before' },
+        { kind: 'screenshot', uri: '/e/empty.png', label: 'Empty list' },
+        { kind: 'recording', uri: '/e/after.webm', stage: 'after', label: null },
+      ],
+    });
+    const pieces = Object.values(harness.state.evidence);
+    const [before, empty, after] = pieces;
+    expect(pieces).toHaveLength(3);
+    expect(before).toMatchObject({
+      kind: 'screenshot',
+      title: 'Settings',
+      detail: 'The labels read clearly now.',
+      width: 1280,
+      theme: 'dark',
+      stage: 'before',
+    });
+    expect(empty).toMatchObject({ label: 'Empty list', itemId: before?.itemId });
+    expect(empty).not.toHaveProperty('stage');
+    expect(after).toMatchObject({ kind: 'recording', stage: 'after', itemId: before?.itemId });
+    expect(after).not.toHaveProperty('label');
+    expect(harness.task(taskId).activity.filter((entry) => entry.kind === 'evidence')).toMatchObject([
+      { text: 'Attached Settings', evidenceId: before?.id },
+    ]);
+    harness.send({ type: 'agent.attach_comparison', runId, title: 'Bare', parts: [] });
+    expect(Object.values(harness.state.evidence)).toHaveLength(3);
+  });
+
+  test('the reviewer is told what evidence the agent attached, or that there is none', () => {
+    const bare = createHarness();
+    const bareTask = createTask(bare);
+    buildAll(bare, bareTask);
+    bare.send({
+      type: 'checks.record',
+      taskId: bareTask,
+      results: PASSING,
+      evidence: { title: 'Checks: 1 passed', uri: '/e/checks.txt' },
+    });
+    expect(bare.activeRun(bareTask).prompt).toContain('The agent attached no evidence this round.');
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    harness.send({
+      type: 'agent.attach_evidence',
+      runId: harness.activeRun(taskId).id,
+      kind: 'screenshot',
+      title: 'Settings',
+      uri: '/e/after.png',
+      width: 390,
+      theme: 'light',
+      stage: 'after',
+    });
+    harness.send({
+      type: 'agent.attach_evidence',
+      runId: harness.activeRun(taskId).id,
+      kind: 'test',
+      title: 'Tests',
+      uri: '/e/out.txt',
+    });
+    harness.send({
+      type: 'agent.attach_comparison',
+      runId: harness.activeRun(taskId).id,
+      title: 'Tabs',
+      width: 1280,
+      parts: [
+        { kind: 'screenshot', uri: '/e/tabs-before.png', stage: 'before' },
+        { kind: 'screenshot', uri: '/e/tabs-after.png', stage: 'after' },
+      ],
+    });
+    for (const _phase of harness.task(taskId).plan?.document?.phases ?? []) completePhase(harness, taskId);
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
+    const prompt = harness.activeRun(taskId).prompt ?? '';
+    expect(prompt).toContain('- screenshot: Settings (after, 390px, light)');
+    expect(prompt).toContain('- comparison: Tabs (before and after, 1280px)');
+    expect(prompt).toContain('- test: Tests\n');
+    expect(prompt).toContain('independent evidence from the review');
+  });
+
+  test('Shinsa attaches the output of its own checks run, of no run, while the task is checking', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    buildAll(harness, taskId);
+    harness.send({
+      type: 'checks.record',
+      taskId,
+      results: failing(),
+      evidence: { title: 'Checks: 1 of 2 failed', uri: '/e/checks-1.txt', detail: 'Run by Shinsa.' },
+    });
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Fixed it.' });
+    harness.send({
+      type: 'checks.record',
+      taskId,
+      results: PASSING,
+      evidence: { title: 'Checks: 1 passed', uri: '/e/checks-2.txt' },
+    });
+    harness.send({
+      type: 'checks.record',
+      taskId,
+      results: PASSING,
+      evidence: { title: 'Late', uri: '/e/late.txt' },
+    });
+    const pieces = Object.values(harness.state.evidence);
+    expect(pieces.map((piece) => piece.uri)).toEqual(['/e/checks-1.txt', '/e/checks-2.txt']);
+    expect(pieces[0]).toMatchObject({ taskId, runId: null, kind: 'check', detail: 'Run by Shinsa.' });
+    expect(pieces[0]).not.toHaveProperty('round');
+    expect(pieces[1]).not.toHaveProperty('detail');
+  });
+
   test('an agent is refused a tool its role does not have', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
