@@ -166,7 +166,7 @@ export function OverviewTab({
           placeholder={hint.placeholder}
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}
-          dock={<MessageQueue task={task} />}
+          dock={<MessageQueue state={state} task={task} />}
         />
       )}
     </div>

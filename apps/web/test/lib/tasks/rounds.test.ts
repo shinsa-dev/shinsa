@@ -19,7 +19,11 @@ import {
 } from '@/lib/tasks/rounds.ts';
 import { spyOnCommands } from '../../support/commands.ts';
 import { createRound } from '../../support/rounds.ts';
-import { createRun, createTask } from '../../support/state.ts';
+import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
+
+const NO_STATE = createShinsaState({});
+
+const NO_TASK = createTask({ id: 'none' });
 
 let spies: ReturnType<typeof spyOnCommands>;
 
@@ -216,11 +220,13 @@ describe('a round, named and opened', () => {
   });
 
   it('sums up an ended round: what it was about, what it did and where it shipped', () => {
-    expect(resolveRoundSummary(createRound({ number: 1 }))).toBe(
+    expect(resolveRoundSummary(NO_STATE, NO_TASK, createRound({ number: 1 }))).toBe(
       'Add MCP v2. Added MCP v2. Merged in pull request #12.'
     );
     expect(
       resolveRoundSummary(
+        NO_STATE,
+        NO_TASK,
         createRound({
           number: 1,
           status: 'shipped',
@@ -236,6 +242,8 @@ describe('a round, named and opened', () => {
     ).toBe('Add MCP v2. It finished 2 phases: wire it and test it. Shipped on pull request #14.');
     expect(
       resolveRoundSummary(
+        NO_STATE,
+        NO_TASK,
         createRound({
           number: 1,
           title: 'Round one',
@@ -249,6 +257,8 @@ describe('a round, named and opened', () => {
   it('sums up an inquiry round with the first sentence of its result, without markdown', () => {
     expect(
       resolveRoundSummary(
+        NO_STATE,
+        NO_TASK,
         createRound({
           number: 2,
           title: 'Why exports stall',
@@ -266,6 +276,8 @@ describe('a round, named and opened', () => {
     ).toBe('Why exports stall. The export **times out** after 30s.');
     expect(
       resolveRoundSummary(
+        NO_STATE,
+        NO_TASK,
         createRound({
           number: 2,
           title: 'Hi',
@@ -278,11 +290,13 @@ describe('a round, named and opened', () => {
   });
 
   it('says a stopped round stopped, and a round without an outcome only what it was about', () => {
-    expect(resolveRoundSummary(createRound({ number: 3, status: 'cancelled', outcome: null }))).toBe(
-      'Round 3 work. It stopped before it finished.'
-    );
+    expect(
+      resolveRoundSummary(NO_STATE, NO_TASK, createRound({ number: 3, status: 'cancelled', outcome: null }))
+    ).toBe('Round 3 work. It stopped before it finished.');
     expect(
       resolveRoundSummary(
+        NO_STATE,
+        NO_TASK,
         createRound({
           number: 3,
           status: 'finished',
@@ -294,11 +308,38 @@ describe('a round, named and opened', () => {
   });
 
   it('says why a waiting round was queued and when it starts', () => {
-    expect(resolveRoundSummary(createRound({ number: 4, status: 'waiting', why: 'Cache the schemas' }))).toBe(
-      'Cache the schemas. It starts once round 3 is finished.'
-    );
-    expect(resolveRoundSummary(createRound({ number: 4, status: 'waiting' }))).toBe(
+    expect(
+      resolveRoundSummary(
+        NO_STATE,
+        NO_TASK,
+        createRound({ number: 4, status: 'waiting', why: 'Cache the schemas' })
+      )
+    ).toBe('Cache the schemas. It starts once round 3 is finished.');
+    expect(resolveRoundSummary(NO_STATE, NO_TASK, createRound({ number: 4, status: 'waiting' }))).toBe(
       'Round 4 work. It starts once round 3 is finished.'
+    );
+  });
+
+  it('says when the next round waits for your merge or your review instead of finishing by itself', () => {
+    const next = createRound({ number: 2, status: 'waiting', why: 'Try it', pipeline: ['operate'] });
+    const later = createRound({ number: 3, status: 'waiting', pipeline: ['operate'] });
+    const rounds = [createRound({ number: 1, status: 'active' }), next, later];
+    const merging = createTask({ id: 't', stage: 'awaiting_merge', rounds });
+    const atMerge = createShinsaState({
+      tasks: [merging],
+      gates: [createGate({ id: 'g', taskId: 't', type: 'merge' })],
+    });
+    expect(resolveRoundSummary(atMerge, merging, next)).toBe('Try it. It starts after you merge round 1.');
+    expect(resolveRoundSummary(atMerge, merging, later)).toBe(
+      'Round 3 work. It starts once round 2 is finished.'
+    );
+    const reviewing = createTask({ id: 't', stage: 'awaiting_review', rounds });
+    const atReview = createShinsaState({
+      tasks: [reviewing],
+      gates: [createGate({ id: 'g', taskId: 't', type: 'review' })],
+    });
+    expect(resolveRoundSummary(atReview, reviewing, next)).toBe(
+      'Try it. It starts after you approve and merge round 1.'
     );
   });
 });
