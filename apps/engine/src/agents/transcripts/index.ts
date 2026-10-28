@@ -4,10 +4,8 @@ import {
   existsSync,
   type FSWatcher,
   openSync,
-  watchFile as pollFile,
   readSync,
   statSync,
-  unwatchFile,
   watch,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -19,7 +17,7 @@ type TranscriptListener = (runId: string, entries: ChatEntry[], start: number | 
 interface Follower {
   count: number;
   watcher: FSWatcher | null;
-  poll: (() => void) | null;
+  poll: ReturnType<typeof setInterval> | null;
 }
 
 interface RunFile {
@@ -184,8 +182,7 @@ export class Transcripts {
     const size = readSize(path);
     this.#sync(runId, Math.max(size, 0));
     if (size < 0) return;
-    follower.poll = () => this.#readAppended(runId);
-    pollFile(path, { interval: this.#pollMs }, follower.poll);
+    follower.poll = setInterval(() => this.#readAppended(runId), this.#pollMs);
     follower.watcher = this.#watch(path, () => this.#readAppended(runId));
     follower.watcher.on('error', (error) => {
       log.warn('[Transcripts] Watching a transcript failed; the check every second carries on', {
@@ -210,7 +207,7 @@ export class Transcripts {
     follower.count -= 1;
     if (follower.count > 0) return;
     follower.watcher?.close();
-    if (follower.poll) unwatchFile(this.#pathOf(runId), follower.poll);
+    if (follower.poll) clearInterval(follower.poll);
     this.#followers.delete(runId);
   }
 
