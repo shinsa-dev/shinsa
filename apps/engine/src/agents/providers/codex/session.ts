@@ -134,6 +134,11 @@ function resolveThreadParams(input: AgentSessionInput, endpoint: ToolEndpoint): 
   };
 }
 
+function resolveThreadMethod(input: AgentSessionInput) {
+  if (!input.resume) return 'thread/start';
+  return input.fork ? 'thread/fork' : 'thread/resume';
+}
+
 function wait(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms).unref());
 }
@@ -360,7 +365,7 @@ export function startCodexSession(
 
   const openThread = async (active: CodexClient, tools: ToolEndpoint) => {
     const params = resolveThreadParams(input, tools);
-    const method = input.resume ? 'thread/resume' : 'thread/start';
+    const method = resolveThreadMethod(input);
     const response = await active.request(
       method,
       input.resume ? { threadId: input.resume, ...params } : params

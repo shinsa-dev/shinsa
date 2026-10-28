@@ -383,6 +383,7 @@ describe('the This task section', () => {
       'Open in editor',
       'Open a terminal',
       'Show in Finder',
+      'Fork into a new task',
       'Restart the current step',
       'Mark as done',
       'Cancel task',
@@ -419,6 +420,7 @@ describe('the This task section', () => {
       'Run on account…',
       'Set priority',
       'Message the agent',
+      'Fork into a new task',
       'Restart the current step',
       'Mark as done',
       'Cancel task',
@@ -434,6 +436,7 @@ describe('the This task section', () => {
     expect(labels(section(sections(state, task), 'task.actions'))).toEqual([
       'Set priority',
       'Copy branch name',
+      'Fork into a new task',
     ]);
   });
 

@@ -10,7 +10,7 @@ describe('the Codex provider', () => {
     const provider = createCodexProvider();
     expect(provider).toMatchObject({ id: 'codex', label: 'Codex', capabilities: CODEX_CAPABILITIES });
     expect(CODEX_CAPABILITIES).toMatchObject({
-      sessions: { resume: true, inspect: false },
+      sessions: { resume: true, inspect: false, fork: true },
       turns: { steering: true },
       approvals: true,
       planning: { readOnly: true },

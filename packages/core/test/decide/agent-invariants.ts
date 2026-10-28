@@ -26,6 +26,7 @@ const PURPOSE_STAGE: Record<RunPurpose, TaskStage> = {
   build: 'building',
   fix: 'fixing',
   operate: 'operating',
+  watch: 'watching',
 };
 
 const FRESH_FAILURES: ReadonlySet<RunFailureClass> = new Set<RunFailureClass>([

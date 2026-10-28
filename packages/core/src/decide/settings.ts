@@ -214,6 +214,7 @@ export function writeProject(decider: Decider, command: CommandOf<'project.write
     key: resolveKey(decider, command, existing),
     description,
     folders,
+    ...(existing?.watchSources ? { watchSources: existing.watchSources } : {}),
   };
   if (existing && isSameValue(project, existing)) return;
   decider.emit({ type: 'project.written', project });

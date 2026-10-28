@@ -62,7 +62,7 @@ src/
 │                    concern, each an apply*Event:
 │                    runs.ts (attempts, links, lost sessions, metering, silence, compaction), gates.ts (opened,
 │                    answered, withdrawn, noted, superseded), pull-requests.ts, waits.ts (monitors and usage waits),
-│                    delegations.ts, schedules.ts, suggestions.ts, reviews.ts (verdicts), accounts.ts (binding),
+│                    delegations.ts, schedules.ts, watchdogs.ts (watchdogs and a project's data sources), suggestions.ts, reviews.ts (verdicts), accounts.ts (binding),
 │                    shapes.ts (reshapes, results, proposed changes), on-behalf.ts (what agents did on your behalf),
 │                    inbox.ts (messages accepted and not yet routed), overlaps.ts (task.overlapped, task.overlaps_told),
 │                    rounds.ts (round 1 on task.created, archiving a round and starting the next, a round's branch
@@ -134,6 +134,10 @@ src/
 │   │                removing a round that waits (updateRound, removeRound)
 │   ├── config.ts    Setup verification and its configuration gate
 │   ├── monitors.ts  wait_for: arming, waking and checking a monitor
+│   ├── watchdogs.ts Watchdogs after a merge: arming them from the walkthrough (syncWatchdogs, after every command),
+│   │                firing a check as a read-only `watch` turn of the task's session, deferring it while the task
+│   │                works, recording report_watch, tripping into a forked task, stopping them, connecting a source;
+│   │                a project's data sources (watch_source.write, watch_source.remove)
 │   ├── costs.ts     Metering runs (cost and the weekly usage they used) and the per-task usage and cost limits
 │   ├── silence.ts   Snoozing and dismissing a quiet run
 │   ├── settings.ts  Repositories, projects (keys, folders, moving repositories in), focus, settings, the guide;

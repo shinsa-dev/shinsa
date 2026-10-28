@@ -159,6 +159,62 @@ const WALKTHROUGH_PARTS = {
       required: ['when', 'kind', 'title', 'detail'],
     },
   },
+  watchdogs: {
+    type: 'array',
+    description:
+      'Checks that watch the change after it merges, when something outside the tests can show it broke (logs, traces, errors, analytics, support messages). Each runs as a read-only turn of this conversation on its interval, and an issue it finds becomes a task forked from this one. Leave it out when nothing after the merge would show more than the tests did.',
+    maxItems: L.watchdogs,
+    items: {
+      type: 'object',
+      properties: {
+        title: limitedText('What it watches, in a few words. Unique in the list.', L.watchdogTitle),
+        check: limitedText(
+          'What to look at and what counts as an issue, with the numbers: "p95 of POST /checkout under 400 ms".',
+          L.watchdogCheck
+        ),
+        source: {
+          type: 'object',
+          description:
+            'An MCP server you have that holds the data. Leave it out when none does and give source_request.',
+          properties: {
+            server: limitedText('The MCP server, by name.', L.watchdogServer),
+            data: limitedText('What it holds that this check reads.', L.watchdogData),
+          },
+          required: ['server', 'data'],
+        },
+        source_request: {
+          type: 'object',
+          description: 'When no server you have holds the data: what the human should connect.',
+          properties: {
+            data: limitedText('The data the check needs.', L.watchdogData),
+            evidence: limitedText(
+              'Where the code sends that data: the file and the service.',
+              L.watchdogEvidence
+            ),
+            suggestions: textList(
+              'Servers the human could connect, by name and where they come from (an official MCP server, Composio).',
+              L.watchdogSuggestions,
+              L.watchdogSuggestion
+            ),
+          },
+          required: ['data', 'evidence', 'suggestions'],
+        },
+        every_hours: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.watchdogEveryHours,
+          description: 'Hours between checks.',
+        },
+        for_hours: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.watchdogForHours,
+          description: 'Hours it watches after the merge.',
+        },
+      },
+      required: ['title', 'check', 'every_hours', 'for_hours'],
+    },
+  },
 };
 
 const WALKTHROUGH = {

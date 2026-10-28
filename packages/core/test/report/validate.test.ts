@@ -12,6 +12,7 @@ import {
   validateReview,
   validateSuggestions,
   validateWait,
+  validateWatchReport,
 } from '../../src/index.ts';
 
 function errorsOf<T>(result: Validation<T>) {
@@ -478,7 +479,7 @@ describe('validateFixHandOver', () => {
 
   test('refuses an empty walkthrough and names every broken part', () => {
     expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: {} }))).toEqual([
-      'walkthrough needs at least one of approach, flow, risks, testing or steps. Leave it out when the fix changes none of them.',
+      'walkthrough needs at least one of approach, flow, risks, testing, steps or watchdogs. Leave it out when the fix changes none of them.',
     ]);
     expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', walkthrough: 'flow' }))).toEqual([
       'walkthrough must be an object.',
@@ -1035,6 +1036,128 @@ describe('validateEvidence', () => {
       `parts[4].label is ${PROTOCOL_LIMITS.evidenceLabel + 1} characters; the limit is ${PROTOCOL_LIMITS.evidenceLabel}.`,
       'Each part needs its own stage or label; two parts are named the same.',
       'A comparison takes its files in parts: leave out path, url, text and stage.',
+    ]);
+  });
+});
+
+const WATCHED = { approach: 'Cache the price.', flow: 'checkout → cache' };
+
+const LATENCY = {
+  title: 'Checkout latency',
+  check: 'p95 of POST /checkout stays under 400 ms.',
+  source: { server: 'maple', data: 'API traces' },
+  every_hours: 6,
+  for_hours: 48,
+};
+
+const EVENTS = {
+  title: 'Paywall events',
+  check: 'paywall_open keeps arriving.',
+  source_request: {
+    data: 'Web analytics',
+    evidence: 'src/analytics.ts sends to PostHog.',
+    suggestions: ['PostHog’s MCP server'],
+  },
+  every_hours: 12,
+  for_hours: 24,
+};
+
+describe('watchdogs in the walkthrough', () => {
+  test('reads a watchdog with a source and one with a source request', () => {
+    const walkthrough = readValue(
+      validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WATCHED, watchdogs: [LATENCY, EVENTS] } })
+    ).walkthrough;
+    expect(walkthrough?.watchdogs).toEqual([
+      {
+        title: 'Checkout latency',
+        check: 'p95 of POST /checkout stays under 400 ms.',
+        source: { server: 'maple', data: 'API traces' },
+        sourceRequest: null,
+        everyHours: 6,
+        forHours: 48,
+      },
+      {
+        title: 'Paywall events',
+        check: 'paywall_open keeps arriving.',
+        source: null,
+        sourceRequest: {
+          data: 'Web analytics',
+          evidence: 'src/analytics.ts sends to PostHog.',
+          suggestions: ['PostHog’s MCP server'],
+        },
+        everyHours: 12,
+        forHours: 24,
+      },
+    ]);
+    expect(
+      readValue(validatePhaseHandOver({ summary: 'Done.', walkthrough: { ...WATCHED, watchdogs: [] } }))
+        .walkthrough?.watchdogs
+    ).toBeUndefined();
+    expect(
+      readValue(validateFixHandOver({ summary: 'Fixed.', walkthrough: { watchdogs: [] } })).walkthrough
+    ).toEqual({
+      watchdogs: [],
+    });
+  });
+
+  test('names a watchdog with both or neither source, no suggestions, a repeated title and a check past its window', () => {
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          walkthrough: {
+            ...WATCHED,
+            watchdogs: [
+              { ...LATENCY, source_request: EVENTS.source_request },
+              { ...LATENCY, title: 'No source', source: undefined },
+              { ...EVENTS, source_request: { data: 'd', evidence: 'e' } },
+              EVENTS,
+              { ...LATENCY, title: 'Short', every_hours: 24, for_hours: 12 },
+            ],
+          },
+        })
+      )
+    ).toEqual([
+      'walkthrough.watchdogs[0] needs exactly one of source (a server that has the data) or source_request (what to connect).',
+      'walkthrough.watchdogs[1] needs exactly one of source (a server that has the data) or source_request (what to connect).',
+      'walkthrough.watchdogs[2].source_request.suggestions needs at least 1 server to connect, by name and where it comes from.',
+      'walkthrough.watchdogs[3].title repeats walkthrough.watchdogs[2]; give each watchdog its own title.',
+      'walkthrough.watchdogs[4] checks every 24 hours but watches for only 12; check at least once in the window.',
+    ]);
+  });
+});
+
+describe('validateWatchReport', () => {
+  test('reads a healthy check and one with an issue', () => {
+    expect(readValue(validateWatchReport({ healthy: true, summary: 'p95 210 ms.' }))).toEqual({
+      healthy: true,
+      summary: 'p95 210 ms.',
+      issue: null,
+    });
+    expect(
+      readValue(
+        validateWatchReport({
+          healthy: false,
+          summary: 'Slow.',
+          issue: { title: 'Slow in Safari', request: 'Fix it.' },
+        })
+      ).issue
+    ).toEqual({ title: 'Slow in Safari', request: 'Fix it.' });
+  });
+
+  test('refuses a missing verdict, a healthy check with an issue and an issue without its fields', () => {
+    expect(errorsOf(validateWatchReport({ summary: 'ok' }))).toEqual([
+      'healthy is required: true when nothing is wrong.',
+    ]);
+    expect(
+      errorsOf(validateWatchReport({ healthy: true, summary: 'ok', issue: { title: 't', request: 'r' } }))
+    ).toEqual(['A healthy check has no issue. Leave issue out, or set healthy to false.']);
+    expect(errorsOf(validateWatchReport({ healthy: false, summary: 'bad' }))).toEqual([
+      'An unhealthy check needs issue: a title and the request for the task that fixes it.',
+    ]);
+    expect(errorsOf(validateWatchReport({ healthy: false, summary: 'bad', issue: { title: '' } }))).toEqual([
+      'issue.title is required.',
+      'issue.request is required.',
     ]);
   });
 });

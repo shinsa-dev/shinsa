@@ -1,4 +1,10 @@
-import { type Activity, type Gate, resolveCurrentRound, type Task } from '../domain/index.ts';
+import {
+  type Activity,
+  type Gate,
+  resolveCurrentRound,
+  type Task,
+  type WatchdogStatus,
+} from '../domain/index.ts';
 import { resolveRequest } from '../prompts/context.ts';
 import { listWaitsOn } from '../queue/rank.ts';
 import { assembleReport } from '../report/assemble.ts';
@@ -8,6 +14,7 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { describeCoverage } from '../test-coverage/describe.ts';
 import { STAGE_WORDS, serializeReference } from './references.ts';
+import { describeCount } from './text.ts';
 
 const REQUEST_LIMIT = 1_500;
 
@@ -74,6 +81,27 @@ function describeMergeSteps(task: Task) {
   ];
 }
 
+const WATCHDOG_STATE: Record<WatchdogStatus, string> = {
+  needs_source: 'waits for a data source',
+  watching: 'watching',
+  passed: 'passed',
+  tripped: 'found an issue',
+  stopped: 'stopped',
+};
+
+function describeWatchdogs(task: Task) {
+  const watchdogs = task.watchdogs ?? [];
+  if (watchdogs.length === 0) return [];
+  return [
+    'Watchdogs on the merged change:',
+    ...watchdogs.map((watchdog, index) => {
+      const source = watchdog.source ? ` from ${watchdog.source.server}` : '';
+      const checks = describeCount(watchdog.checks.length, 'check');
+      return `  ${index + 1}. ${watchdog.title}${source} (${WATCHDOG_STATE[watchdog.status]}, ${checks}): ${watchdog.check}`;
+    }),
+  ];
+}
+
 function describeTesting(task: Task) {
   const lines = listTestingLines(assembleReport(task).walkthrough?.testing);
   if (lines.length === 0) return [];
@@ -114,6 +142,7 @@ export function serializeTaskDetail(state: ShinsaState, taskId: string) {
     ...describeTesting(task),
     ...describeTestCoverage(task),
     ...describeMergeSteps(task),
+    ...describeWatchdogs(task),
     ...(waits.length > 0 ? [`Waits on: ${waits.map(describeLink).join(', ')}`] : []),
     ...(gates.length > 0 ? ['Open decisions:', ...gates.map(describeGate)] : ['No open decisions.']),
     'Recent activity:',

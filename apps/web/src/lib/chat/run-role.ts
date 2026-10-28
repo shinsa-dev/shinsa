@@ -77,6 +77,8 @@ function resolveAgentHeadline(
       return resolveFixHeadline(done, run);
     case 'operate':
       return done ? 'Reported the outcome' : 'Running the operation';
+    case 'watch':
+      return done ? 'Checked a watchdog' : 'Checking a watchdog';
   }
 }
 

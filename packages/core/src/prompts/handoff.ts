@@ -161,6 +161,9 @@ function resolveIntro(reason: RunHandoffReason, fromProvider: string) {
   if (reason === 'session_restore') {
     return 'Your previous session for this step could not be resumed: the agent no longer has it. Shinsa restored the conversation from its own transcript. You are continuing the same work, not taking over from another agent.';
   }
+  if (reason === 'fork') {
+    return 'The conversation below is the one of the task this task was forked from. Its session could not be copied, so Shinsa restored the conversation from its own transcript. You carry that work on in this new task.';
+  }
   return `This step is being handed to you from another coding agent (${fromProvider}). You are taking over in the middle of the step.`;
 }
 

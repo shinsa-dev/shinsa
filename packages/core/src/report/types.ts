@@ -82,12 +82,44 @@ export interface ReportTesting {
   manual: ManualTestStep[];
 }
 
+export interface WatchdogSource {
+  server: string;
+  data: string;
+}
+
+export interface WatchdogSourceRequest {
+  data: string;
+  evidence: string;
+  suggestions: string[];
+}
+
+export interface WatchdogSpec {
+  title: string;
+  check: string;
+  source: WatchdogSource | null;
+  sourceRequest: WatchdogSourceRequest | null;
+  everyHours: number;
+  forHours: number;
+}
+
+export interface WatchIssue {
+  title: string;
+  request: string;
+}
+
+export interface WatchReport {
+  healthy: boolean;
+  summary: string;
+  issue: WatchIssue | null;
+}
+
 export interface ReportWalkthrough {
   approach: string;
   flow: string;
   risks: ReportRisk[];
   testing: ReportTesting;
   steps?: MergeStep[];
+  watchdogs?: WatchdogSpec[];
 }
 
 export type ReportWalkthroughRevision = Partial<ReportWalkthrough>;

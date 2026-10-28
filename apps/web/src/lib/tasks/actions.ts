@@ -4,6 +4,7 @@ import { copyText, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { openTaskTerminal } from '@/lib/connection/terminals.ts';
 import { openWorktree } from '@/lib/connection/worktree.ts';
 import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
+import { FORK_TITLE, openForkDialog } from '@/lib/tasks/fork.ts';
 import { navigate, resolveTaskPath } from '@/router.ts';
 
 export type TaskActionKey =
@@ -13,6 +14,7 @@ export type TaskActionKey =
   | 'editor'
   | 'terminal'
   | 'finder'
+  | 'fork'
   | 'restart'
   | 'complete'
   | 'cancel';
@@ -24,6 +26,7 @@ export const TASK_ACTION: Record<TaskActionKey, { label: string; icon: IconName 
   editor: { label: 'Open in editor', icon: 'IconCodeLines' },
   terminal: { label: 'Open a terminal', icon: 'IconConsole' },
   finder: { label: 'Show in Finder', icon: 'IconFolder1' },
+  fork: { label: FORK_TITLE, icon: 'IconFork' },
   restart: { label: 'Restart the current step', icon: 'IconArrowsRepeat' },
   complete: { label: 'Mark as done', icon: 'IconCheckCircle2' },
   cancel: { label: 'Cancel task', icon: 'IconCircleX' },
@@ -35,7 +38,8 @@ export function listTaskActions(task: Task): TaskActionKey[][] {
   if (task.branch) links.push('branch');
   const worktree: TaskActionKey[] = task.worktreePath ? ['editor', 'terminal', 'finder'] : [];
   const lifecycle: TaskActionKey[] = isTaskSettled(task) ? [] : ['restart', 'complete', 'cancel'];
-  return [links, worktree, lifecycle].filter((group) => group.length > 0);
+  const fork: TaskActionKey[] = task.stage === 'cancelled' ? [] : ['fork'];
+  return [links, worktree, fork, lifecycle].filter((group) => group.length > 0);
 }
 
 export function runTaskAction(task: Task, key: TaskActionKey) {
@@ -55,6 +59,9 @@ export function runTaskAction(task: Task, key: TaskActionKey) {
     case 'editor':
     case 'finder':
       void openWorktree(task.id, key);
+      return;
+    case 'fork':
+      openForkDialog(task.id);
       return;
     case 'restart':
       void sendCommandWithToast({ type: 'task.retry', taskId: task.id }, 'Restarted.');

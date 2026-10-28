@@ -391,6 +391,35 @@ describe('create_task and split_task', () => {
     );
   });
 
+  test('create_task forks the task it names by id or handle, and refuses one it does not know', async () => {
+    const { core, run, taskId } = await building();
+    const { call } = createCall(core, run.id);
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Fix it in Safari.', fork_from: taskId, client_request_id: 'f1' },
+      call
+    );
+    const byId = Object.values(core.state.tasks).find((task) => task.request === 'Fix it in Safari.');
+    expect(byId?.forkOf).toBe(taskId);
+    const handle = core.state.tasks[taskId]?.handle ?? '';
+    expect(handle).not.toBe('');
+    await handleOrchestrationTool(
+      'create_task',
+      { request: 'Fix it in Firefox.', fork_from: handle.toLowerCase(), client_request_id: 'f2' },
+      call
+    );
+    expect(
+      Object.values(core.state.tasks).find((task) => task.request === 'Fix it in Firefox.')?.forkOf
+    ).toBe(taskId);
+    await handleOrchestrationTool('create_task', { request: 'Unrelated.', client_request_id: 'f3' }, call);
+    expect(
+      Object.values(core.state.tasks).find((task) => task.request === 'Unrelated.')?.forkOf
+    ).toBeUndefined();
+    await expect(
+      handleOrchestrationTool('create_task', { request: 'Do it.', fork_from: 'LOC-999' }, call)
+    ).rejects.toThrow('There is no task "LOC-999" to fork.');
+  });
+
   test('create_task refuses a repository Shinsa does not know, naming the ones it does', async () => {
     const { core, run } = await building();
     await expect(

@@ -208,6 +208,18 @@ export {
   validateVerification,
 } from './verification.ts';
 export {
+  isSourceForRepo,
+  isWatchdogActive,
+  listActiveWatchdogs,
+  listRepoWatchSources,
+  selectWatchingRun,
+  WATCHDOG_LIMITS,
+  type Watchdog,
+  type WatchdogCheck,
+  type WatchdogStatus,
+  type WatchSource,
+} from './watchdogs.ts';
+export {
   type ApprovalPath,
   canUseGitButler,
   DEFAULT_WORKSPACE_MODE,

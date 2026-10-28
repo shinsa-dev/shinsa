@@ -66,6 +66,15 @@ describe('resolveRunHeadline', () => {
     expect(resolveRunHeadline(done({ role: 'researcher' }), task, [])).toBe('Wrote the report');
   });
 
+  it('describes the agent checking a watchdog and once it reported the check', () => {
+    expect(resolveRunHeadline(live({ role: 'agent', purpose: 'watch' }), task, [])).toBe(
+      'Checking a watchdog'
+    );
+    expect(resolveRunHeadline(done({ role: 'agent', purpose: 'watch' }), task, [])).toBe(
+      'Checked a watchdog'
+    );
+  });
+
   it('describes the agent running the operation and once it reported the outcome', () => {
     expect(resolveRunHeadline(live({ role: 'agent', purpose: 'operate' }), task, [])).toBe(
       'Running the operation'

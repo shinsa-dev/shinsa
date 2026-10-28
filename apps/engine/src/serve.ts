@@ -42,7 +42,13 @@ import {
   type LoginResolver,
   Roots,
 } from './repos/index.ts';
-import { EffectRunner, Engine, MonitorClock, type StateClockOptions } from './runtime/index.ts';
+import {
+  EffectRunner,
+  Engine,
+  MonitorClock,
+  type StateClockOptions,
+  WatchdogClock,
+} from './runtime/index.ts';
 import { Schedules } from './schedules/index.ts';
 import { SecretStore } from './secrets/index.ts';
 import { EventLog, EvidenceStore, resolveStateVersion } from './store/index.ts';
@@ -191,7 +197,12 @@ function createServices(config: ServerConfig, options: ShinsaOptions, instance: 
     providers,
     eunoe,
     models: options.models ?? providers.resolve(engine.state.settings.defaultProvider),
-    clocks: [new MonitorClock(engine), new UsageResumeClock(engine), new SilenceWatch(engine, transcripts)],
+    clocks: [
+      new MonitorClock(engine),
+      new WatchdogClock(engine),
+      new UsageResumeClock(engine),
+      new SilenceWatch(engine, transcripts),
+    ],
     effects: new EffectRunner(engine, config, runs, briefings, {
       workspaces: runs.workspaces,
       triage: options.triage ?? ((state, task, local) => resolveTriage(state, task, local, quick.classify)),

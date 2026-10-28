@@ -2575,6 +2575,27 @@ Only these, and they win over anything below:
       `disclosure`, and fold state (`open`, `expanded`, `folded`, `collapsed`) in `useState` in a file that folds
       (it sets `aria-expanded` or renders a `DisclosureHeader`).
 
+41. **A merged change keeps being watched, and a follow-up is a fork** (since 2026-10-28;
+    `components/overview/watchdogs-panel.tsx`, `components/task/fork-dialog.tsx`, `lib/tasks/watchdogs.ts`,
+    `lib/tasks/fork.ts`; `docs/engine.md` → Watchdogs, Forking a task).
+    - **Watching is a status.** A merged task with a watchdog still watching or waiting for a source reads Watching
+      (`IconRadar`, blue) wherever its status shows, and its Now card says "Merged. Its watchdogs keep watching the
+      change." A check running is the stage Checking a watchdog.
+    - **The Watchdogs panel** sits under the Now card on the Overview (`Panel`, `IconRadar`, its own `persistId`): how
+      many still watch and how long is left, then one row per watchdog, its title and status in its tone, the check,
+      then a quiet line with the schedule, the source and its progress ("18 h left · 5 checks", "Passed after 2
+      checks, nothing wrong.", "Filed SW-9 to fix it."), and the last check's summary. Stop is a secondary button on
+      the rows still active.
+    - **A source request asks, it never connects.** A watchdog waiting for a source shows, in a tinted block under its
+      row, the data it needs, where the code sends it and the servers it suggests, then a server and a "what it holds"
+      field with Connect. Connecting a server happens in Settings → Integrations; this only names it.
+    - **A project's data sources** are rows under its repositories in Settings → Projects (`IconRadar`): the server,
+      what it holds, the repositories it covers ("every repository"), "added by an agent" when one did, and a remove
+      button.
+    - **Fork into a new task** is a task action (the task menu, a roadmap row's menu, ⌘K) on every task but a cancelled
+      one. It opens a dialog with one field, what the new task should do, and Fork; the facts row then shows Forked
+      from and Forked into (`IconFork`) like Unblocks.
+
 `bun lint:conventions` (`scripts/lint-conventions.ts`) checks the app (`apps/web/src`) for raw `text-[N]` sizes, a
 weight other than normal, `font-medium` and `font-semibold`, `gap-0.5` (outside `SectionLabel`), Tailwind's own
 shadows (`shadow-2xs` … `shadow-2xl`, `shadow-inner`) and raw `shadow-[…]` or `ring-[…]` (the tokens `shadow-1…4`

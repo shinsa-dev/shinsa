@@ -30,6 +30,7 @@ import { settleTask, startWork } from './lifecycle.ts';
 import { assertNoMergeStepsLeft } from './merge-steps.ts';
 import { retryTask } from './retry.ts';
 import { isShapeLocked, resolveNextStep, startStep } from './shapes.ts';
+import { assertNoWatchdogsLeft, stopAllWatchdogs } from './watchdogs.ts';
 
 function assertRepo(decider: Decider, repoId: string | null) {
   if (repoId !== null && !decider.state.repos[repoId]) {
@@ -162,6 +163,7 @@ export function waitOnTasks(decider: Decider, command: CommandOf<'task.wait_on'>
 
 export function cancelTask(decider: Decider, command: CommandOf<'task.cancel'>) {
   settleTask(decider, command.taskId, 'cancelled', 'cancelled by you', 'you');
+  stopAllWatchdogs(decider, command.taskId);
 }
 
 function assertNothingOpen(task: Task) {
@@ -192,9 +194,13 @@ function assertNoShippedRoundOpen(task: Task) {
 
 export function completeTask(decider: Decider, command: CommandOf<'task.complete'>) {
   const task = decider.task(command.taskId);
-  if (decider.context.onBehalf) assertNothingOpen(task);
+  if (decider.context.onBehalf) {
+    assertNothingOpen(task);
+    assertNoWatchdogsLeft(task);
+  }
   assertNoShippedRoundOpen(task);
   assertNoMergeStepsLeft(task);
+  stopAllWatchdogs(decider, task.id);
   if (isTaskResting(task)) {
     decider.stage(task.id, 'done', 'marked done by you', 'you');
     decider.requestBriefing(task.id);

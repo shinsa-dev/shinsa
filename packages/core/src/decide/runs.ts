@@ -63,6 +63,7 @@ const PURPOSE_REFUSAL: Record<RunPurpose, string> = {
   build: 'You are building a phase: hand it over with `complete_phase`.',
   fix: 'You are fixing the work: hand the fix over with `complete_fix`.',
   operate: 'You are running the operation: report how it went with `report_outcome`.',
+  watch: 'You are checking a watchdog: report what you found with `report_watch`.',
 };
 
 const ROLE_REFUSAL: Partial<Record<RunRole, string>> = {

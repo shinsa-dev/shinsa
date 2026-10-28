@@ -267,6 +267,14 @@ describe('tasks create', () => {
     ]);
   });
 
+  test('forks the task it names, found by its handle', async () => {
+    const fake = createFakeClient(TASKS);
+    await runSpec(fake, ['tasks', 'create', 'fix it in Safari', '--fork-from', 'fix']);
+    expect(fake.sent).toEqual([
+      { type: 'task.create', request: 'fix it in Safari', repoId: null, forkOf: 'task-123' },
+    ]);
+  });
+
   test('an unknown repository or account is refused before anything is sent', async () => {
     const fake = createFakeClient(TASKS);
     await expect(runSpec(fake, ['tasks', 'create', 'x', '--repo', 'web'])).rejects.toThrow(

@@ -1,9 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { createState, type Run, type ShinsaState } from '@shinsa/core';
+import { createState, type Run, resolveHouseRules, type ShinsaState } from '@shinsa/core';
 import { Transcripts } from '../../src/agents/index.ts';
 import { CLAUDE_CAPABILITIES } from '../../src/agents/providers/claude/index.ts';
 import type { AgentProvider } from '../../src/agents/providers/index.ts';
-import { resolveTurnPlan, type TurnContext } from '../../src/agents/turns.ts';
+import {
+  resolveRestorePlan,
+  resolveTurnPlan,
+  resolveTurnPrompt,
+  type TurnContext,
+} from '../../src/agents/turns.ts';
 import { createTempDir } from '../helpers/index.ts';
 import { createRun } from '../helpers/state.ts';
 
@@ -49,6 +54,7 @@ describe('resolveTurnPlan', () => {
   test('a run without a session starts fresh', async () => {
     expect(await resolveTurnPlan(context(createRun(), []))).toEqual({
       resume: null,
+      fork: false,
       handoff: null,
       record: null,
     });
@@ -81,5 +87,112 @@ describe('resolveTurnPlan', () => {
     turn.transcripts.record(run.id, { type: 'user', from: 'shinsa', text: 'Brief.', attachments: [] });
     const plan = await resolveTurnPlan(turn);
     expect(plan.handoff?.text).toContain('from another coding agent (gemini)');
+  });
+});
+
+describe('forking a task', () => {
+  const fork = { taskId: 'source-task', runId: 'source-run', sessionId: 'source-session' };
+  const source = createRun({
+    id: 'source-run',
+    taskId: 'source-task',
+    sessionId: 'source-session',
+    startedAt: 10,
+    endedAt: 20,
+    attempts: [
+      {
+        attemptId: 'a1',
+        provider: 'claude',
+        model: 'opus',
+        resumed: false,
+        handoff: null,
+        cwd: '/source-worktree',
+        startedAt: 10,
+      },
+    ],
+  });
+
+  function forkContext(overrides: Partial<TurnContext> = {}) {
+    const turn = context(createRun({ id: 'forked-run', fork, startedAt: 30 }), [source], overrides);
+    turn.transcripts.record('source-run', {
+      type: 'user',
+      from: 'shinsa',
+      text: 'The source task’s brief.',
+      attachments: [],
+    });
+    return turn;
+  }
+
+  test('the first run copies the source session when the provider can fork it and still has it', async () => {
+    const inspected: string[] = [];
+    const turn = forkContext({
+      provider: provider({
+        inspectSession: (query) => {
+          inspected.push(query.sessionId);
+          return Promise.resolve('present');
+        },
+      }),
+    });
+    expect(await resolveTurnPlan(turn)).toEqual({
+      resume: 'source-session',
+      fork: true,
+      handoff: null,
+      record: null,
+    });
+    expect(inspected).toEqual(['source-session']);
+  });
+
+  test('a provider that cannot check its sessions forks without checking', async () => {
+    const plan = await resolveTurnPlan(forkContext());
+    expect(plan).toMatchObject({ resume: 'source-session', fork: true });
+  });
+
+  test('a source session the provider lost is restored from the source task’s transcript', async () => {
+    const turn = forkContext({ provider: provider({ inspectSession: () => Promise.resolve('missing') }) });
+    const plan = await resolveTurnPlan(turn);
+    expect(plan).toMatchObject({ resume: null, fork: false });
+    expect(plan.handoff?.text).toContain('The source task’s brief.');
+    expect(plan.handoff?.text).toContain('the task this task was forked from');
+    expect(plan.record).toMatchObject({ reason: 'fork', fromProvider: 'claude', totalEntries: 1 });
+    expect(turn.lost).toEqual([]);
+  });
+
+  test('a provider that cannot fork gets the source task’s conversation as a handoff', async () => {
+    const capabilities = { ...CLAUDE_CAPABILITIES, sessions: { resume: true, inspect: true, fork: false } };
+    const plan = await resolveTurnPlan(forkContext({ provider: provider({ capabilities }) }));
+    expect(plan.record).toMatchObject({ reason: 'fork', fromProvider: 'claude' });
+  });
+
+  test('a source session on another provider is handed over instead of forked', async () => {
+    const turn = forkContext({ provider: provider({ id: 'codex', label: 'Codex' }) });
+    const plan = await resolveTurnPlan(turn);
+    expect(plan).toMatchObject({ resume: null, fork: false });
+    expect(plan.record).toMatchObject({ reason: 'fork', fromProvider: 'claude' });
+  });
+
+  test('a fork the provider refuses mid-start is restored from the source task’s transcript', () => {
+    const turn = forkContext();
+    const plan = resolveRestorePlan(
+      turn,
+      { resume: 'source-session', fork: true, handoff: null, record: null },
+      'source-session'
+    );
+    expect(plan.record).toMatchObject({ reason: 'fork', totalEntries: 1 });
+    const own = resolveRestorePlan(turn, { resume: 's', fork: false, handoff: null, record: null }, 's');
+    expect(own).toMatchObject({ resume: null, handoff: null });
+  });
+
+  test('the forked turn reads the source session’s house rules and is told where it works now', () => {
+    const rules = resolveHouseRules('agent');
+    const turn = forkContext();
+    turn.transcripts.record('source-run', { type: 'user', from: 'shinsa', text: rules, attachments: [] });
+    const plan = { resume: 'source-session', fork: true, handoff: null, record: null };
+    const prompt = resolveTurnPrompt(
+      turn,
+      plan,
+      `${rules}\n\nThe instruction.`,
+      `${rules}\n\nThe full brief.`
+    );
+    expect(prompt.startsWith('The instruction.')).toBe(true);
+    expect(prompt).toContain('You now work in `/work`');
   });
 });

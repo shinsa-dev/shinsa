@@ -51,6 +51,7 @@ import { applyScheduledTask, applyScheduleEvent, describeSchedule } from './sche
 import { applyShapeEvent, describeShape } from './shapes.ts';
 import { applySuggested, applySuggestionSettled } from './suggestions.ts';
 import { applyWaitEvent } from './waits.ts';
+import { applyWatchdogEvent } from './watchdogs.ts';
 import { applyOnBehalf, record, updateTask } from './write.ts';
 
 export interface ShinsaState {
@@ -828,6 +829,16 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'schedule.removed':
     case 'schedule.fired':
       applyScheduleEvent(state, event);
+      break;
+    case 'watchdog.armed':
+    case 'watchdog.started':
+    case 'watchdog.checking':
+    case 'watchdog.deferred':
+    case 'watchdog.checked':
+    case 'watchdog.ended':
+    case 'watch_source.written':
+    case 'watch_source.removed':
+      applyWatchdogEvent(state, event);
       break;
   }
   return state;

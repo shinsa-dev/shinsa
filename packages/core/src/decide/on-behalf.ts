@@ -79,6 +79,13 @@ const DESCRIPTIONS: Descriptions = {
   'schedule.remove': () => 'Deleted a schedule',
   'schedule.write': (_state, command) =>
     command.scheduleId ? 'Changed a schedule' : `Saved the schedule “${command.name ?? 'Schedule'}”`,
+  'watchdog.stop': (state, command) => `Stopped a watchdog of ${quoteTask(state, command.taskId)}`,
+  'watchdog.connect': (state, command) =>
+    `Connected ${command.server} to a watchdog of ${quoteTask(state, command.taskId)}`,
+  'watch_source.write': (state, command) =>
+    `Saved ${command.server} as a data source of ${state.projects[command.projectId]?.name ?? 'a project'}`,
+  'watch_source.remove': (state, command) =>
+    `Removed ${command.server} from the data sources of ${state.projects[command.projectId]?.name ?? 'a project'}`,
 };
 
 function selectCreatedTask(decider: Decider) {

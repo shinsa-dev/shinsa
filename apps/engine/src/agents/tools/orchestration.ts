@@ -141,7 +141,7 @@ export const ORCHESTRATION_TOOL_SPECS = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task on the roadmap for work outside this one, for example the same change in another repository. It starts at once and ends at the human’s review like any task. Whoever picks it up sees nothing of this task, so the request must stand on its own. Set this_task_waits only when this task cannot be merged before that one.',
+      'Create a new task on the roadmap for work outside this one, for example the same change in another repository. It starts at once and ends at the human’s review like any task. Whoever picks it up sees nothing of this task unless it is forked, so the request must stand on its own. Set fork_from for follow-up work on what a task did, such as a bug in a change it shipped: the new task’s agent starts from a copy of that task’s conversation. Set this_task_waits only when this task cannot be merged before that one.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -154,6 +154,12 @@ export const ORCHESTRATION_TOOL_SPECS = {
           type: 'string',
           maxLength: DELEGATION_LIMITS.name,
           description: 'The repository it belongs in, by name. Defaults to this one.',
+        },
+        fork_from: {
+          type: 'string',
+          maxLength: DELEGATION_LIMITS.name,
+          description:
+            'A task to fork, by id or handle (this one included): the new task starts from its conversation.',
         },
         this_task_waits: { type: 'boolean' },
         client_request_id: CLIENT_REQUEST_ID,
@@ -350,6 +356,16 @@ function resolveRepoId(state: ShinsaState, task: Task, name: string | null) {
   return repo.id === task.repoId ? null : repo.id;
 }
 
+function resolveForkOf(state: ShinsaState, reference: string | null) {
+  if (reference === null) return {};
+  const handle = reference.toUpperCase();
+  const task =
+    state.tasks[reference] ?? Object.values(state.tasks).find((candidate) => candidate.handle === handle);
+  if (!task)
+    throw new Error(`There is no task "${reference}" to fork. Find it with find_tasks and pass its id.`);
+  return { forkOf: task.id };
+}
+
 function listLinks(tasks: Task[]) {
   return tasks
     .map((task) => `- [${task.title}](${serializeReference({ kind: 'task', id: task.id })})`)
@@ -374,6 +390,7 @@ async function createCourier(input: Record<string, unknown>, call: Orchestration
       requestKey,
       request: request.request,
       repoId: resolveRepoId(call.state(), source, request.repository),
+      ...resolveForkOf(call.state(), request.forkFrom),
       thisWaits: request.thisTaskWaits,
     },
     resolveCommandId(call, 'create_task', request.requestKey)

@@ -3970,6 +3970,111 @@ function listActiveTasks({ paywall, docs }: SeedRepos): SeedTask[] {
       ageHours: 50,
       pullRequest: { number: 339, checks: 'passing' },
       merged: true,
+      extra: listDocsGateWatchdogs(),
+    },
+  ];
+}
+
+function listDocsGateWatchdogs(): ShinsaEventInput[] {
+  const mergedAt = NOW - 30 * HOUR;
+  const base = {
+    round: 1,
+    sourceRequest: null,
+    runId: null,
+    forkTaskId: null,
+    armedAt: mergedAt,
+    startedAt: mergedAt,
+  };
+  return [
+    {
+      type: 'watch_source.written',
+      projectId: 'project-superwall',
+      source: {
+        server: 'maple',
+        data: 'OpenTelemetry traces and logs of the docs site and the API',
+        repoIds: [],
+        addedBy: 'you',
+        addedAt: NOW - 9 * DAY,
+      },
+    },
+    {
+      type: 'watch_source.written',
+      projectId: 'project-superwall',
+      source: {
+        server: 'composio-slack',
+        data: 'The #support channel in Slack',
+        repoIds: ['repo-docs'],
+        addedBy: 'agent',
+        addedAt: mergedAt,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: 'watchdog-docs-traffic',
+        title: 'Framework docs traffic',
+        check: 'Requests to /docs/framework keep returning 200, and the 404 rate stays under 0.5%.',
+        source: { server: 'maple', data: 'OpenTelemetry traces and logs of the docs site and the API' },
+        everyMinutes: 6 * 60,
+        forMinutes: 48 * 60,
+        status: 'watching',
+        endsAt: mergedAt + 48 * HOUR,
+        nextCheckAt: mergedAt + 36 * HOUR,
+        checks: [6, 12, 18, 24, 30].map((hours) => ({
+          at: mergedAt + hours * HOUR,
+          healthy: true,
+          summary: `1,${200 + hours * 7} requests in the last 6 h, all 200; 404 rate 0.1%.`,
+        })),
+        endedAt: null,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: 'watchdog-docs-support',
+        title: 'Support messages about the docs',
+        check: 'No message in #support says the framework docs ask for access or are blank.',
+        source: { server: 'composio-slack', data: 'The #support channel in Slack' },
+        everyMinutes: 12 * 60,
+        forMinutes: 24 * 60,
+        status: 'passed',
+        endsAt: mergedAt + 24 * HOUR,
+        nextCheckAt: null,
+        checks: [12, 24].map((hours) => ({
+          at: mergedAt + hours * HOUR,
+          healthy: true,
+          summary: 'No message in #support mentions the framework docs since the merge.',
+        })),
+        endedAt: mergedAt + 24 * HOUR,
+      },
+    },
+    {
+      type: 'watchdog.armed',
+      taskId: 'task-docs-gate',
+      watchdog: {
+        ...base,
+        id: 'watchdog-docs-search',
+        title: 'Docs search clicks',
+        check: 'Search clicks on the framework pages do not drop below last week’s daily average.',
+        source: null,
+        sourceRequest: {
+          data: 'Product analytics events from the docs site',
+          evidence: '`src/analytics.ts` sends `docs_search_click` to PostHog.',
+          suggestions: ['PostHog’s official MCP server', 'Composio’s PostHog toolkit'],
+        },
+        everyMinutes: 12 * 60,
+        forMinutes: 48 * 60,
+        status: 'needs_source',
+        startedAt: null,
+        endsAt: null,
+        nextCheckAt: null,
+        checks: [],
+        endedAt: null,
+      },
     },
   ];
 }

@@ -105,6 +105,8 @@ and says where it disagrees. Mark every point the reader needs: on a large chang
   - `testing`: how to test it, in two parts (see below).
   - `steps`: what the human must do around the merge that needs a person or production access (see below). Leave it
     out when there is nothing.
+  - `watchdogs`: checks that watch the change after it merges (see below). Leave it out when nothing after the merge
+    would show more than the tests did.
 
 ### How to test it (`walkthrough.testing`)
 
@@ -170,6 +172,27 @@ steps and their ticks in `read_task`; only the human ticks them, and you leave a
 open. A fix that sends the list again keeps a tick only on a step it sends unchanged: changing a step's title,
 detail, kind or command asks the human to do it again, so change one only when what they must do changed.
 
+### Watchdogs (`walkthrough.watchdogs`)
+
+A watchdog watches the change once it merged, for a window of hours, through data the tests never see: traces and
+logs, error rates, analytics events, support messages. Each check is a read-only turn of this conversation, so you
+write it for yourself. An issue a check finds becomes a new task forked from this one.
+
+| Field | Fill it with |
+|---|---|
+| title | What it watches, in a few words: "Checkout latency" |
+| check | What to look at and what counts as an issue, with the numbers: "p95 of `POST /checkout` stays under 400 ms and its error rate under 1%" |
+| source | A server you have that holds the data: `server` by name, `data` what it holds. The last phase's prompt lists the project's data sources for this repository |
+| source_request | Only when no server you have holds it: the `data` it needs, the `evidence` in the code of where it goes (`src/analytics.ts` sends `paywall_open` to PostHog), and `suggestions`, the servers the human could connect (an official MCP server, a provider such as Composio) |
+| every_hours, for_hours | How often it checks, and for how long after the merge (at most 168) |
+
+- Add one where the change sends something the world reads or writes: an API other services call, a webhook, logs,
+  events, a page users load. Leave them out for a refactor or a docs change no data would show.
+- Read the code for where its data goes before you pick a source. A server the project already lists for this
+  repository is the first choice; one you have that it does not list is added to the project's sources for you.
+- Ask with `source_request` only for data the change really makes; a request with no evidence in the code is a
+  review finding.
+
 Attach evidence with `attach_evidence` before the last phase (the `evidence` skill). Shinsa commits each phase; never
 commit yourself.
 
@@ -180,7 +203,7 @@ and the agent review again, or pushes it to the pull request.
 
 When the fix changes how the change works (the approach, the flow, a risk, how to test it or the steps around the
 merge), also send `walkthrough` with only the parts that changed. Each part you send replaces that part of the
-walkthrough whole, so send the full new `risks`, `testing` (both `automated` and `manual`) or `steps`, not just the
+walkthrough whole, so send the full new `risks`, `testing` (both `automated` and `manual`), `steps` or `watchdogs`, not just the
 new item. A step keeps its tick while its
 timing and title stay the same. Leave `walkthrough` out when the fix changes none of them.
 

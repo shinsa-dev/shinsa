@@ -24,11 +24,27 @@ When you are the reviewer, Shinsa has already run the repository's checks and th
 - A bug: something that breaks, crashes, loses data, or behaves differently from the request.
 - A missed requirement from the request or the plan.
 - A broken repository rule (its CLAUDE.md, AGENTS.md, lint, conventions).
+- Pattern drift that a rule names: new code that does something the repository already has a way to do, and does it
+  another way (see below).
 - A failing check, a test that encodes the old behaviour, a test that passes with and without the fix.
 - UI work without evidence, or evidence that does not show the changed flow. Capture your own as the evidence skill
   says, so the human has independent evidence either way.
 
 Everything else is a suggestion. Do not report taste as blocking.
+
+## 3a. Check the patterns
+
+The checks catch what a tool can. Read the new code next to the code it sits beside and look for what only a reader
+sees:
+
+- A helper, hook, component or query re-implemented when the repository already has one that does the job. Find the
+  existing one (`grep` for its name and for the idea) and name it in the finding.
+- A new way of doing what the repository does one way everywhere: error handling, naming, a data-loading pattern, the
+  folder a kind of file lives in, how tests are set up.
+- A new dependency for something the repository already does without it.
+
+When the repository's rules name the pattern (its CLAUDE.md, a conventions skill, a lint rule), the drift is a broken
+rule and blocking. Otherwise it is a suggestion, with the existing code to follow.
 
 ## 4. Prove it
 

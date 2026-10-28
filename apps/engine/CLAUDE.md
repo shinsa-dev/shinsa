@@ -80,7 +80,7 @@ src/
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
 │                        effect pump, cancellation, settle), EffectRunner (effects.ts: one handler per
 │                        ShinsaEffect, the pull request watcher), StateClock (clock.ts: the
-│                        base of every timer that fires from state) and MonitorClock (monitors.ts)
+│                        base of every timer that fires from state), MonitorClock (monitors.ts) and WatchdogClock (watchdogs.ts: a watchdog's next check)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
 │   │                    config/paths.ts, removed by the scratch.remove effect once the task settles), the live state of a run (active.ts), resume or

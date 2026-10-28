@@ -578,6 +578,26 @@ function readScheduleWrite(fields: Fields): UserCommand {
   };
 }
 
+function readWatchSourceWrite(fields: Fields): UserCommand {
+  return {
+    type: 'watch_source.write',
+    projectId: readId(fields, 'projectId'),
+    server: readText(fields, 'server', MAX_ID),
+    data: readText(fields, 'data', MAX_NOTE),
+    repoIds: fields.repoIds === undefined ? [] : readList(fields, 'repoIds', readId),
+  };
+}
+
+function readWatchdogConnect(fields: Fields): UserCommand {
+  return {
+    type: 'watchdog.connect',
+    taskId: readId(fields, 'taskId'),
+    watchdogId: readId(fields, 'watchdogId'),
+    server: readText(fields, 'server', MAX_ID),
+    data: readText(fields, 'data', MAX_NOTE),
+  };
+}
+
 const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'repo.update': (fields) => ({
     type: 'repo.update',
@@ -618,6 +638,18 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
   'schedule.enable': readScheduleEnable,
   'schedule.remove': (fields) => ({ type: 'schedule.remove', scheduleId: readId(fields, 'scheduleId') }),
   'schedule.write': readScheduleWrite,
+  'watchdog.stop': (fields) => ({
+    type: 'watchdog.stop',
+    taskId: readId(fields, 'taskId'),
+    watchdogId: readId(fields, 'watchdogId'),
+  }),
+  'watchdog.connect': readWatchdogConnect,
+  'watch_source.write': readWatchSourceWrite,
+  'watch_source.remove': (fields) => ({
+    type: 'watch_source.remove',
+    projectId: readId(fields, 'projectId'),
+    server: readText(fields, 'server', MAX_ID),
+  }),
 };
 
 export const USER_COMMAND_TYPES = Object.keys(READERS) as UserCommand['type'][];

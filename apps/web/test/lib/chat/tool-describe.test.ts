@@ -389,6 +389,10 @@ describe('resolveRunningLabel', () => {
 });
 
 describe('resolveGroupPhrase', () => {
+  it('names a watchdog check the agent reported', () => {
+    expect(resolveGroupPhrase(['report_watch'])).toBe('Reported the watchdog check');
+  });
+
   it('counts each kind of step in the order it first appeared', () => {
     expect(resolveGroupPhrase(['command', 'read', 'command', 'read', 'command'])).toBe(
       'Ran 3 commands and read 2 files'

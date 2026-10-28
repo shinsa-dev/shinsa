@@ -62,4 +62,5 @@ export {
   validateReview,
   validateSuggestions,
   validateWait,
+  validateWatchReport,
 } from './validate.ts';

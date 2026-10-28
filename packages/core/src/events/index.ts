@@ -53,6 +53,7 @@ import type {
 import type { Coverage } from '../test-coverage/types.ts';
 import type { DelegationEventBody } from './delegations.ts';
 import type { ScheduleEventBody } from './schedules.ts';
+import type { WatchdogEventBody } from './watchdogs.ts';
 
 type QueuedRound = Pick<Round, 'number' | 'title' | 'request' | 'why' | 'shipping' | 'pipeline'>;
 
@@ -85,6 +86,7 @@ type EventBody =
     }
   | DelegationEventBody
   | ScheduleEventBody
+  | WatchdogEventBody
   | {
       type: 'task.triaged';
       taskId: string;

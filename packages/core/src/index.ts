@@ -103,6 +103,7 @@ export {
   validateSplit,
   validateSuggestions,
   validateWait,
+  validateWatchReport,
 } from './report/index.ts';
 export type * from './report/types.ts';
 export * from './schedules/index.ts';

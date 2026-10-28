@@ -181,6 +181,21 @@ describe('a Codex turn', () => {
     expect(codex.requests('thread/resume')).toEqual([expect.objectContaining({ threadId })]);
   });
 
+  test('a fork copies the thread it is given into a new one and leaves the source alone', async () => {
+    const codex = new FakeCodex();
+    const source = createInput('plan');
+    await start(codex, source).done;
+    const threadId = source.sessions[0] ?? '';
+    const forked = createInput('plan', { resume: threadId, fork: true });
+    expect((await start(codex, forked).done).outcome).toBe('completed');
+    expect(forked.sessions).toHaveLength(1);
+    expect(forked.sessions[0]).not.toBe(threadId);
+    expect(codex.requests('thread/fork')).toEqual([
+      expect.objectContaining({ threadId, sandbox: 'read-only', approvalPolicy: 'never' }),
+    ]);
+    expect(codex.requests('thread/resume')).toEqual([]);
+  });
+
   test('the round agent plans in the read-only sandbox, then builds on the same thread with write access', async () => {
     const codex = new FakeCodex();
     const planning = createInput('plan');

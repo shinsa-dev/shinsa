@@ -2,6 +2,7 @@ import {
   hasStep,
   isOfCurrentRound,
   isTaskSettled,
+  listRepoWatchSources,
   needsRepository,
   PLAN_GATE_RULE,
   type PlanGateReason,
@@ -114,7 +115,8 @@ export function startPhase(decider: Decider, taskId: string, index: number, addi
     decider.emit({ type: 'phase.updated', taskId, index, status: 'active' });
   }
   const task = decider.task(taskId);
-  const instruction = resolvePhaseInstruction(task, decider.repoOf(task), index) + addition;
+  const sources = listRepoWatchSources(decider.projectOf(task), task.repoId);
+  const instruction = resolvePhaseInstruction(task, decider.repoOf(task), index, sources) + addition;
   decider.startRun(task, 'agent', resolveAgentPrompt(instruction), {
     purpose: 'build',
     phaseIndex: index,

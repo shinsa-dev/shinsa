@@ -14,6 +14,7 @@ import {
 } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
+import { restartWatchCheck } from './watchdogs.ts';
 
 function dropCancelledDependencies(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
@@ -80,6 +81,9 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       return;
     case 'operating':
       startOperation(decider, taskId, guidance);
+      return;
+    case 'watching':
+      restartWatchCheck(decider, task, guidance);
       return;
     case 'awaiting_proposal':
     case 'awaiting_operation':

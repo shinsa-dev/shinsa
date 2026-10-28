@@ -93,6 +93,14 @@ describe('what a prompt says about the work it builds on', () => {
     expect(resolveReviewerPrompt(task, null, [])).toContain('Diff the branch against the default branch');
   });
 
+  test('the reviewer checks that new code follows the patterns around it, blocking when a rule names one', () => {
+    const { task } = tasks();
+    const prompt = resolveReviewerPrompt(task, null, []);
+    expect(prompt).toContain('Check the new code follows the patterns of the code around it');
+    expect(prompt).toContain('It is blocking when the repository’s rules name the pattern.');
+    expect(prompt).toContain('The agent listed no watchdogs for after the merge.');
+  });
+
   test('without a repository the agent is told to find the checks itself', () => {
     const { task } = tasks();
     expect(resolvePhaseInstruction(task, null, 0)).toContain('Run whatever lint, type check and tests');

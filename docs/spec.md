@@ -178,6 +178,14 @@ not chat text.
 - **The briefing** says which decision to take now and why, the two or three after it, what agents
   are doing, and gives a heads-up when something is stuck (`docs/engine.md` → The briefing).
 - **Notes.** Agents keep notes on a task (`note`), so nothing depends on you remembering it.
+- **Watchdogs after the merge.** You cannot verify everything before a merge. The Agent writes watchdogs for a change
+  whose effects only real traffic shows: each reads a data source (an MCP server the project lists: traces, logs,
+  analytics, support messages) on an interval for a window after the merge, as a read-only turn of the task's own
+  conversation, and an issue it finds becomes a new task forked from this one. When no server has the data, it asks you
+  for one with what the code sends where and the servers worth connecting (`docs/engine.md` → Watchdogs).
+- **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
+  agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
+  `docs/engine.md` → Forking a task).
 - Nothing in it approves a gate, merges or commits to the default branch on its own.
 
 ### Focus
@@ -856,6 +864,19 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   shots and recordings in a grid, test output as code, links, and where it is stored; images open in the image viewer
   and step through the section; a missing proof says so. The Overview keeps one line pointing there
   (`docs/design.md` 34). The seed carries real screenshots, a recording and test runs on six review tasks.
+
+### Watchdogs, forks and the pattern check (2026-10-28)
+
+- **Forks.** A task can start from a copy of another task's agent session: Claude's `forkSession`, Codex `thread/fork`,
+  behind the `sessions.fork` capability, with the transcript handoff when there is nothing to copy. The source task
+  is never touched, and the reviewer never forks.
+- **Watchdogs.** The last phase's walkthrough lists them; they arm when the pull request merges, check on their own
+  clock as a read-only `watch` turn of the task's session, defer while the task works, pass at the end of their window
+  and file a forked task for an issue. Data sources live on the project and are added by the agent when it names a
+  server the project does not list yet, or asked of you with suggestions when none holds the data.
+- **The pattern check.** The reviewer reads new code against the code around it: a helper re-implemented, or a new way
+  of doing what the repository does one way, is a finding, blocking when the repository's rules name the pattern.
+  This is the validation harness for now; a rule engine for patterns waits until a project needs one.
 
 ## 11. Open questions
 

@@ -13,6 +13,7 @@ import {
   SHAPE_LIMITS,
   selectShippingTarget,
   type Task,
+  type WatchSource,
 } from '../domain/index.ts';
 import { assembleReport } from '../report/assemble.ts';
 import { listMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts';
@@ -41,6 +42,7 @@ import {
 } from './context.ts';
 import { resolveHouseRules } from './rules.ts';
 import { describePlanParameters, describeStepCatalog, describeStepRules } from './steps.ts';
+import { describeWatchdogGuide, describeWatchdogsForReview } from './watchdogs.ts';
 
 const OPERATION_NOTE = [
   'This task is an operation: something to run in the repository (a script, a migration, a cleanup), not code to ship. Nothing it does goes through a pull request.',
@@ -189,7 +191,12 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
     .join('\n');
 }
 
-export function resolvePhaseInstruction(task: Task, repo: Repo | null, index: number) {
+export function resolvePhaseInstruction(
+  task: Task,
+  repo: Repo | null,
+  index: number,
+  sources: readonly WatchSource[] = []
+) {
   const plan = task.plan?.document?.phases ?? [];
   const phase = plan[index];
   const last = index >= plan.length - 1;
@@ -213,7 +220,8 @@ export function resolvePhaseInstruction(task: Task, repo: Repo | null, index: nu
     '  Leave boilerplate and mechanical edits out.',
     '- judgement_calls: every choice the human might make differently, each with the alternatives you rejected and why.',
     last
-      ? '- walkthrough: required now, for the whole change: the approach, how it works behind the scenes, the risks and edge cases with their lines, how to test it, and the steps the human must take around the merge.\n  `steps` lists only what needs a person or production access, before or after the merge: an environment variable or secret to set (name it and where; never its value), a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files). Give each step its exact command when it has one. Leave `steps` out when there is nothing.\n  `testing` has two parts. `automated`: one or two lines on what the tests cover, naming the test files. `manual`: the steps the human follows in order, each an `action`, a `target` when it happens in one place (a `url`, a `file` as `path:line`, a `command` or a `screen`) and `expect`, what they should see. Start from where to go (the preview deployment URL, or the command that starts the app and its local URL), then what to click and type, then the edge cases worth trying.\n  Whenever the change has structure or a flow worth drawing (pieces that call each other, a path a request or data takes, states, a tree of files), draw it in `flow` (or `approach`) as a text diagram in a fenced code block: a tree, or boxes and arrows (`a ──► b`), at most 72 columns wide, aligned for a monospace font, with a few words on each step.'
+      ? '- walkthrough: required now, for the whole change: the approach, how it works behind the scenes, the risks and edge cases with their lines, how to test it, and the steps the human must take around the merge.\n  `steps` lists only what needs a person or production access, before or after the merge: an environment variable or secret to set (name it and where; never its value), a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files). Give each step its exact command when it has one. Leave `steps` out when there is nothing.\n  `testing` has two parts. `automated`: one or two lines on what the tests cover, naming the test files. `manual`: the steps the human follows in order, each an `action`, a `target` when it happens in one place (a `url`, a `file` as `path:line`, a `command` or a `screen`) and `expect`, what they should see. Start from where to go (the preview deployment URL, or the command that starts the app and its local URL), then what to click and type, then the edge cases worth trying.\n  Whenever the change has structure or a flow worth drawing (pieces that call each other, a path a request or data takes, states, a tree of files), draw it in `flow` (or `approach`) as a text diagram in a fenced code block: a tree, or boxes and arrows (`a ──► b`), at most 72 columns wide, aligned for a monospace font, with a few words on each step.' +
+        describeWatchdogGuide(sources)
       : '',
     'Then stop.',
   ]
@@ -369,6 +377,7 @@ export function resolveReviewerPrompt(
     ...task.phaseReports.map((report) => `- ${report.summary}`),
     describeJudgementCallsForReview(task),
     describeMergeStepsForReview(task),
+    describeWatchdogsForReview(assembleReport(task).walkthrough?.watchdogs ?? []),
     describeTestingForReview(task),
     describeCoverageForReview(task),
     '',
@@ -377,6 +386,7 @@ export function resolveReviewerPrompt(
     describeReviewScope(task, repo, stacked?.branch ?? null),
     'Shinsa already ran the checks and they pass. Look for what checks miss.',
     'A blocking finding is a bug, a missed requirement, a broken repository rule or a security problem. Everything optional is a suggestion.',
+    'Check the new code follows the patterns of the code around it: a helper, component or query the repository already has re-implemented, or a new way of doing what it does one way everywhere, is a finding that names the existing code. It is blocking when the repository’s rules name the pattern.',
     'Anchor every finding to a file and line range. Reproduce a finding before you report it; one you cannot reproduce is a guess.',
     'Give every finding a title of at most 80 characters that says what is wrong in a few words.',
     'Use its message, at most 280 characters, for what is wrong and why it matters.',

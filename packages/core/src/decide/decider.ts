@@ -147,6 +147,11 @@ export class Decider {
     return task.repoId ? (this.state.repos[task.repoId] ?? null) : null;
   }
 
+  projectOf(task: Task) {
+    const projectId = resolveTaskProject(this.state, task);
+    return projectId ? (this.state.projects[projectId] ?? null) : null;
+  }
+
   basesOf(task: Task) {
     return listTaskBases(this.state, task);
   }

@@ -45,6 +45,7 @@ import type {
 } from './delegations.ts';
 import { isUserCommandType } from './parse.ts';
 import type { ScheduleAgentCommand, ScheduleSystemCommand, ScheduleUserCommand } from './schedules.ts';
+import type { WatchdogAgentCommand, WatchdogSystemCommand, WatchdogUserCommand } from './watchdogs.ts';
 
 export interface ChangeProposalInput {
   request: string;
@@ -118,7 +119,8 @@ export type UserCommand =
   | { type: 'usage_wait.change'; taskId: string; autoResume: boolean }
   | { type: 'usage_wait.resume_now'; taskId: string }
   | DelegationUserCommand
-  | ScheduleUserCommand;
+  | ScheduleUserCommand
+  | WatchdogUserCommand;
 
 type AgentCommand =
   | { type: 'agent.propose_plan'; runId: string; document: PlanDocument; changeSummary?: string | null }
@@ -197,7 +199,8 @@ type AgentCommand =
     ))
   | { type: 'agent.request_secret'; runId: string; gateId: string; label: string; reason: string }
   | DelegationAgentCommand
-  | ScheduleAgentCommand;
+  | ScheduleAgentCommand
+  | WatchdogAgentCommand;
 
 type SystemCommand =
   | {
@@ -286,7 +289,8 @@ type SystemCommand =
   | { type: 'provider.record_sign_in'; provider: string }
   | { type: 'account.removed'; accountId: string }
   | DelegationSystemCommand
-  | ScheduleSystemCommand;
+  | ScheduleSystemCommand
+  | WatchdogSystemCommand;
 
 type ScopedAgentCommand = AgentCommand & { attemptId?: string | null };
 

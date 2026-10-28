@@ -470,7 +470,7 @@ export function restartAnswer(decider: Decider, task: Task, text: string | null)
   startInquiry(decider, task.id, 'answer', text);
 }
 
-function resolveRestingStage(task: Task) {
+export function resolveRestingStage(task: Task) {
   const merged = task.pullRequest?.state === 'merged';
   return merged && resolveOperationTiming(resolveTaskPipeline(task)) !== 'post_merge' ? 'merged' : 'done';
 }

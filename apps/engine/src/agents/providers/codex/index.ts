@@ -7,7 +7,7 @@ import { CODEX_RUNTIME, type CodexRuntime, type CodexSessionOptions, startCodexS
 import { type CodexUsageOptions, readCodexUsage } from './usage.ts';
 
 export const CODEX_CAPABILITIES: ProviderCapabilities = {
-  sessions: { resume: true, inspect: false },
+  sessions: { resume: true, inspect: false, fork: true },
   turns: { steering: true },
   approvals: true,
   planning: { readOnly: true },

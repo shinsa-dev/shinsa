@@ -40,7 +40,7 @@ import { PRIORITY_LABEL } from '@/lib/format/labels.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import { describeChecksPassed, hasFailingCheck, isAgentWorking } from '@/lib/overview/now.ts';
 import { resolveCostFacts } from '@/lib/tasks/cost.ts';
-import { describePullRequestFact, describeStarted } from '@/lib/tasks/facts.ts';
+import { describePullRequestFact, describeStarted, listForkSources, listForks } from '@/lib/tasks/facts.ts';
 import { type Check, listTaskChecks, resolvePullRequestTone } from '@/lib/tasks/pull-request.ts';
 import { ROUND_ICON, resolveRoundFact } from '@/lib/tasks/rounds.ts';
 import { resolveTaskStatus, resolveTaskStatusIcon } from '@/lib/tasks/status.ts';
@@ -447,6 +447,8 @@ export function TaskFacts({
         verb='Unblocks'
         tasks={listDependents(state, task.id)}
       />
+      <RelatedFact state={state} icon='IconFork' verb='Forked from' tasks={listForkSources(state, task)} />
+      <RelatedFact state={state} icon='IconFork' verb='Forked into' tasks={listForks(state, task)} />
     </div>
   );
 }

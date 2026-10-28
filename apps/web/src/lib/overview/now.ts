@@ -20,6 +20,7 @@ import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { type Check, countPassing } from '@/lib/tasks/pull-request.ts';
 import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
+import { isWatchedTask } from '@/lib/tasks/watchdogs.ts';
 
 export type NowTarget = 'review' | 'changes' | 'agent';
 
@@ -40,6 +41,8 @@ const SETTLED_TITLE: Partial<Record<Task['stage'], string>> = {
   cancelled: 'Cancelled.',
 };
 
+const WATCHED_TITLE = 'Merged. Its watchdogs keep watching the change.';
+
 export function resolveNowTitle(
   task: Task,
   waitsOn: Task[],
@@ -48,6 +51,7 @@ export function resolveNowTitle(
 ) {
   if (waitsOn.length > 0) return describeWaitsOn(waitsOn);
   if (current?.planned) return current.title;
+  if (!run && isWatchedTask(task)) return WATCHED_TITLE;
   if (!run && SETTLED_TITLE[task.stage]) return SETTLED_TITLE[task.stage] ?? '';
   return capitalise(task.stageReason);
 }
