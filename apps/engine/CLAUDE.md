@@ -419,6 +419,12 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   with the preload, and a test that ends with one still running fails (the stray is killed): stop and await the work that runs it (`await runner.stop()`,
   `engine.settle()`). The fake `gh` gives up on a state folder that is gone and breaks a lock its killed holder left
   behind.
+- **A test leaves no folder behind.** The preload points `TMPDIR` at one `shinsa-run-*` folder per run and removes
+  it once the run ends, so every `tmpdir()` folder goes with it; `createTempDir` (`test/helpers/temp.ts`) folders go
+  after each test. A hook that must run for every test file lives in the preload: Bun registers a top-level
+  `afterEach` in a shared helper module only for the first file that imports it. Leftover folders are not harmless:
+  every fake CLI is a Bun script, and Bun reads its working folder's parents as it starts, so a temporary folder
+  with many thousands of entries makes each fake `gh` call take a second or two.
 - The fake `gh` answers `pr view` with a `mergeCommit`: the one a test puts on the pull request, or the head's sha
   once it merges one, so a test can follow a task past the merge (the operation gate shows that commit).
 - **Tests wait on conditions, never on time.** Use `awaitEffect(log, key)` from `test/helpers` (keys come from

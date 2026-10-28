@@ -2,8 +2,12 @@ import { afterAll, afterEach } from 'bun:test';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { removeTempDirs } from './temp.ts';
 
 const STRAY_GH_WAIT_MS = 3_000;
+
+const runDir = mkdtempSync(join(tmpdir(), 'shinsa-run-'));
+process.env.TMPDIR = runDir;
 
 const home = mkdtempSync(join(tmpdir(), 'shinsa-test-home-'));
 const gitConfig = join(home, 'gitconfig');
@@ -89,5 +93,12 @@ async function assertNoStrays() {
   await assertNoStray(mcpRegistry, 'MCP stdio server');
 }
 
-afterEach(assertNoStrays);
-afterAll(assertNoStrays);
+afterEach(async () => {
+  await assertNoStrays();
+  removeTempDirs();
+});
+
+afterAll(async () => {
+  await assertNoStrays();
+  rmSync(runDir, { recursive: true, force: true });
+});
