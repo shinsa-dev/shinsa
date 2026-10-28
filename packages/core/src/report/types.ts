@@ -18,10 +18,47 @@ export interface ReportSection {
   spots: CodeSpot[];
 }
 
+export type CheckSource = 'plan' | 'agent' | 'repo';
+
+export interface PlanCheck {
+  label: string;
+  command: string;
+  phases: number[];
+}
+
+export interface TaskCheck extends PlanCheck {
+  id: string;
+  source: CheckSource;
+}
+
+export type CheckOutcome = 'pass' | 'fail' | 'skipped';
+
+export type CheckNote = 'passed_alone' | 'fails_on_base';
+
 export interface ReportCheck {
-  name: string;
-  outcome: 'pass' | 'fail' | 'skipped';
+  id: string;
+  label: string;
+  command: string;
+  outcome: CheckOutcome;
   detail: string | null;
+  note?: CheckNote;
+}
+
+export type CheckChangeAction = 'add' | 'change' | 'remove';
+
+export interface CheckChangeHandOver {
+  action: CheckChangeAction;
+  id: string | null;
+  label: string | null;
+  command: string | null;
+  phases: number[] | null;
+  reason: string;
+}
+
+export interface CheckChange {
+  action: CheckChangeAction;
+  check: TaskCheck;
+  reason: string;
 }
 
 export interface JudgementAlternative {
@@ -95,6 +132,9 @@ export type ReportWalkthroughRevision = Partial<ReportWalkthrough>;
 export interface FixHandOver {
   summary: string;
   walkthrough: ReportWalkthroughRevision | null;
+  checks: string[];
+  checkChanges: CheckChangeHandOver[];
+  evidenceKept: string[];
 }
 
 export interface WorkReport {
@@ -128,12 +168,11 @@ export interface PlanDocument {
   approach: string;
   files: PlanFile[];
   outOfScope: string[];
-  verification: string[];
+  verification: PlanCheck[];
   questions: PlanQuestion[];
   operation?: string[];
   impact?: string;
   evidence?: Exclude<EvidenceKind, 'check'>[];
-  checks?: string[];
   approval?: boolean;
 }
 
@@ -165,6 +204,7 @@ export interface PhaseHandOver {
   spots: CodeSpot[];
   judgementCalls: JudgementCall[];
   walkthrough: ReportWalkthrough | null;
+  checkChanges: CheckChangeHandOver[];
 }
 
 export interface PlanHandOver {
@@ -201,10 +241,14 @@ interface EvidenceFacts {
   detail: string | null;
   width: number | null;
   theme: EvidenceTheme | null;
+  key: string | null;
+  replaces: string[];
 }
 
+export type LinkedEvidenceKind = Extract<EvidenceKind, 'test' | 'check'>;
+
 export interface PieceHandOver extends EvidenceFacts {
-  kind: EvidenceKind;
+  kind: Exclude<EvidenceKind, LinkedEvidenceKind>;
   stage: EvidenceStage | null;
   source: EvidenceSource;
 }
@@ -220,4 +264,16 @@ export interface ComparisonHandOver extends EvidenceFacts {
   parts: ComparisonPartHandOver[];
 }
 
-export type EvidenceHandOver = PieceHandOver | ComparisonHandOver;
+export interface CheckLinkHandOver {
+  kind: LinkedEvidenceKind;
+  check: string;
+  detail: string | null;
+  replaces: string[];
+}
+
+export type EvidenceHandOver = PieceHandOver | ComparisonHandOver | CheckLinkHandOver;
+
+export interface EvidenceRemovalHandOver {
+  items: string[];
+  reason: string;
+}

@@ -16,9 +16,14 @@ function createSampleWindow(
 
 function createSampleAccount(
   now: number,
-  overrides: Partial<AccountSummary> & { id: string; email: string; usedPercent: number }
+  overrides: Partial<AccountSummary> & {
+    id: string;
+    email: string;
+    usedPercent: number;
+    weeklyPercent?: number;
+  }
 ): AccountSummary {
-  const { usedPercent, ...account } = overrides;
+  const { usedPercent, weeklyPercent = usedPercent / 2, ...account } = overrides;
   return {
     organization: null,
     plan: 'max',
@@ -36,7 +41,7 @@ function createSampleAccount(
           id: `${overrides.id}-weekly`,
           kind: 'weekly',
           label: 'Weekly · All models',
-          usedPercent: usedPercent / 2,
+          usedPercent: weeklyPercent,
           resetsAt: now + 4 * 24 * HOUR,
         }),
       ],
@@ -65,6 +70,12 @@ export function createSampleAccounts(now: number): AccountsSnapshot {
         email: 'agents@superwall.com',
         usedPercent: 100,
         spentUntil: now + 2 * HOUR,
+      }),
+      createSampleAccount(now, {
+        id: 'weekly',
+        email: 'weekly@example.com',
+        usedPercent: 0,
+        weeklyPercent: 92,
       }),
       createSampleAccount(now, { id: 'old', email: 'old@example.com', usedPercent: 12, paused: true }),
       createSampleAccount(now, {

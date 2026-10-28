@@ -21,6 +21,7 @@ import { SilenceNote } from '@/components/overview/silence-note.tsx';
 import { SuggestionsPanel } from '@/components/overview/suggestions-panel.tsx';
 import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
+import { TaskFacts } from '@/components/task/facts.tsx';
 import { ReviewDraftProvider } from '@/components/task/review-draft.tsx';
 import { useReviewDraft } from '@/hooks/use-review-draft.ts';
 import {
@@ -93,7 +94,7 @@ export function OverviewSpecimens() {
             task={tasks.signIn}
             gate={{
               ...gates.signIn,
-              title: 'Sign in to Codex as christo@openai.example',
+              title: 'Paused: christo@openai.example needs signing in',
               body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
               provider: 'codex',
               account: null,
@@ -131,6 +132,12 @@ export function OverviewSpecimens() {
             onSave={acknowledgeSample}
             onDecline={acknowledgeSample}
           />
+        </Card>
+      </Specimen>
+      <Specimen label='TaskFacts · the cost as its icon and value, the details in its popover, the one place a task’s cost shows, in the task’s unit: its share of the weekly limit on a subscription, past its limit · dollars on an API key'>
+        <Card>
+          <TaskFacts state={state} task={tasks.budget} />
+          <TaskFacts state={state} task={tasks.keyed} />
         </Card>
       </Specimen>
       <Specimen label='PausedCard · a failure · a usage limit · a wait that ran out of checks'>
@@ -190,7 +197,7 @@ export function OverviewSpecimens() {
           </ReviewDraftProvider>
         </Card>
       </Specimen>
-      <Specimen label='PlanCard · a revised plan: what you asked, what changed, the plan'>
+      <Specimen label='PlanCard · a revised plan: what you asked on its own inset, what changed above the goal, its new and reworked phases tagged'>
         <Card>
           <PlanCard
             state={state}

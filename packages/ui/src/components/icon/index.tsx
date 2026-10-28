@@ -40,11 +40,15 @@ type IconProps = Omit<SVGProps<SVGSVGElement>, 'name' | 'radius'> & {
  * Colour: an icon draws in `--icon-color`, the solid icon ink its text's
  * colour utility sets (`icon-N` beside `fg-N`, the tone itself beside a tone);
  * see globals.css. Never an opacity.
+ *
+ * Chevrons and crosses always draw in the `sm` box: the generator scales them
+ * to one ink size (7.7px), so they match wherever they sit.
  */
 export function Icon({ name, size, radius, ariaLabel, className, children: _children, ...props }: IconProps) {
   const ariaHidden = ariaLabel === undefined ? true : undefined;
   const variants = ICON_PATHS[name];
   const chevron = name.startsWith('IconChevron');
+  const glyph = chevron || name.startsWith('IconCross');
   const implicitRadius: IconRadius = chevron ? '0' : DEFAULT_ICON_RADIUS;
   const resolved = radius ?? implicitRadius;
   const inner = variants[resolved] ?? variants[DEFAULT_ICON_RADIUS] ?? '';
@@ -59,7 +63,7 @@ export function Icon({ name, size, radius, ariaLabel, className, children: _chil
       xmlns='http://www.w3.org/2000/svg'
       className={cn(
         'shrink-0',
-        chevron ? ICON_SIZE_CLASS.sm : size ? ICON_SIZE_CLASS[size] : 'size-(--icon-size)',
+        glyph ? ICON_SIZE_CLASS.sm : size ? ICON_SIZE_CLASS[size] : 'size-(--icon-size)',
         className
       )}
       {...props}

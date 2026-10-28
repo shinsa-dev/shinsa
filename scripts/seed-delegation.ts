@@ -11,6 +11,7 @@ import { resolveDeliveryPrompt } from '../packages/core/src/index.ts';
 import {
   CHOSEN_BY_YOU,
   callTool,
+  createPlanCheck,
   MINUTE,
   NO_TRIAGE_DECISIONS,
   NOW,
@@ -139,7 +140,7 @@ const RETRY_PLAN: PlanDocument = {
   approach: 'One helper in the export module, so the nightly job and the admin button share it.',
   files: [{ path: 'src/export/clickhouse.ts', change: 'The chunk write goes through the retry helper.' }],
   outOfScope: ['The ClickHouse client timeouts.'],
-  verification: ['bun test src/export'],
+  verification: [createPlanCheck('Chunk retries', 'bun test src/export/clickhouse.test.ts', [1, 2])],
   questions: [],
 };
 

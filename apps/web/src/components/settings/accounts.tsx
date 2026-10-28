@@ -20,6 +20,7 @@ import { PercentDialog } from '@/components/accounts/percent-dialog.tsx';
 import { RefreshButton } from '@/components/accounts/refresh-button.tsx';
 import { OptionsTrigger } from '@/components/controls/options-trigger.tsx';
 import { ConfirmDialog } from '@/components/overlays/confirm-dialog.tsx';
+import { useUsageRecheck } from '@/hooks/use-usage-recheck.ts';
 import {
   ACCOUNT_LABEL,
   describeDefaultChanged,
@@ -313,6 +314,7 @@ export function AccountsGroup({
 
 export function AccountSettings({ settings }: { settings: Settings }) {
   const snapshot = useAccounts();
+  useUsageRecheck(true);
   if (!snapshot) return null;
   return <AccountsGroup snapshot={snapshot} settings={settings} actions={LIVE_ACTIONS} />;
 }

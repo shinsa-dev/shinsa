@@ -4,14 +4,17 @@ import {
   commitWorktree,
   createWorktree,
   discardEdits,
+  listChangedFiles,
   pushBranch,
   refreshWorktree,
   removeWorktree,
   resolveHead,
   resolveTree,
+  updateOntoBase,
   writeMergeHead,
 } from '../git/index.ts';
 import { runGitOrThrow } from '../git/run.ts';
+import type { UpdateOptions } from '../git/update.ts';
 import {
   NO_CLAIM,
   refuseUpdate,
@@ -25,6 +28,7 @@ export async function commitCheckout(path: string, message: string): Promise<Wor
   const committed = await commitWorktree(path, message);
   return {
     treeHash: await resolveTree(path),
+    files: await listChangedFiles(path, before, 'HEAD'),
     undo: async () => {
       if (!committed) return;
       await runGitOrThrow(['reset', '--soft', before], path);
@@ -82,5 +86,10 @@ export class WorktreeStrategy implements WorkspaceStrategy {
 
   update() {
     return refuseUpdate();
+  }
+
+  syncBase(_repo: Repo, task: Task, base: string, options: UpdateOptions) {
+    const { path, branch } = requireCheckout(task);
+    return updateOntoBase(path, base, branch, options);
   }
 }

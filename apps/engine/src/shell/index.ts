@@ -11,7 +11,7 @@ export interface CommandResult {
 export interface CommandOptions {
   input?: string;
   env?: Record<string, string | undefined>;
-  timeoutMs?: number;
+  timeoutMs?: number | null;
   signal?: AbortSignal;
   onLine?: (line: string) => void;
 }
@@ -92,17 +92,29 @@ export async function runCommand(
   const child = spawn(command, cwd, options);
   if (typeof child === 'string') return { ok: false, code: 127, stdout: '', stderr: child, timedOut: false };
   let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
+  let stopped = false;
+  const stop = () => {
+    stopped = true;
     killProcessGroup(child.pid);
-  }, options.timeoutMs ?? COMMAND_TIMEOUT_MS);
-  const stop = () => killProcessGroup(child.pid);
+  };
+  const timeoutMs = options.timeoutMs === undefined ? COMMAND_TIMEOUT_MS : options.timeoutMs;
+  const timer =
+    timeoutMs === null
+      ? undefined
+      : setTimeout(() => {
+          timedOut = true;
+          stop();
+        }, timeoutMs);
   options.signal?.addEventListener('abort', stop, { once: true });
+  const exited = child.exited.then((code) => {
+    if (stopped) killProcessGroup(child.pid);
+    return code;
+  });
   try {
     const [stdout, stderr, code] = await Promise.all([
       readOutput(child.stdout, options.onLine),
       readOutput(child.stderr, options.onLine),
-      child.exited,
+      exited,
     ]);
     return { ok: code === 0 && !timedOut, code, stdout: stdout.trim(), stderr: stderr.trim(), timedOut };
   } finally {

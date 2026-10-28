@@ -297,6 +297,16 @@ describe('the task commands', () => {
       { type: 'round.ship', taskId: 'task-123', number: 2, shipping: 'stacked' },
       'Saved how the round ships.',
     ],
+    [
+      ['rounds', 'update', 'fix', '3', 'add', 'dark', 'mode'],
+      { type: 'round.update', taskId: 'task-123', number: 3, request: 'add dark mode' },
+      'Changed the queued round.',
+    ],
+    [
+      ['rounds', 'remove', 'fix', '3'],
+      { type: 'round.remove', taskId: 'task-123', number: 3 },
+      'Removed the queued round.',
+    ],
     [['tasks', 'retry', 'fix'], { type: 'task.retry', taskId: 'task-123' }, 'Retrying.'],
     [
       ['tasks', 'retry', 'fix', '--account', 'acc-1'],

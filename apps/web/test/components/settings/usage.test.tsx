@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createSettings, type Settings } from '@shinsa/core';
+import { createSettings, type Settings, type UsageRate } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { LimitSettings } from '@/components/settings/usage.tsx';
+import { createAccount, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
-import { listSentCommands, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import { listSentCommands, pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 
 let toasts: ReturnType<typeof spyOnToasts>;
 
@@ -23,10 +24,13 @@ async function settle() {
 }
 
 describe('the Limits settings', () => {
-  function renderLimits(settings: Settings = createSettings()) {
+  function renderLimits(
+    settings: Settings = createSettings(),
+    rates: Map<string, UsageRate | null> | null = null
+  ) {
     return render(
       <TooltipProvider>
-        <LimitSettings settings={settings} />
+        <LimitSettings settings={settings} rates={rates} />
       </TooltipProvider>
     );
   }
@@ -60,6 +64,18 @@ describe('the Limits settings', () => {
     expect(screen.getByRole('combobox', { name: 'Cost limit per task' }).textContent).toBe('$5.00 per task');
     await choose('Cost limit per task', 'No limit');
     expect(listSentCommands()).toEqual([{ type: 'settings.change', patch: { taskBudgetUsd: null } }]);
+  });
+
+  it('while an account is learning its rate, offers the cost limit and says what the usage limit counts', async () => {
+    const account = createAccount({ id: 'weekly' });
+    const window = createWindow({ id: 'seven_day', kind: 'weekly', usedPercent: 10 });
+    pushAccounts(
+      createSnapshot({ accounts: [{ ...account, usage: { ...account.usage, windows: [window] } }] })
+    );
+    await settle();
+    renderLimits({ ...createSettings(), taskUsageLimit: 10 }, new Map());
+    expect(screen.getByText(/the usage limit counts an early estimate/)).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Cost limit per task' }).textContent).toBe('No limit');
   });
 
   it('hides Ask me what to do while runs resume on their own after a usage limit', () => {

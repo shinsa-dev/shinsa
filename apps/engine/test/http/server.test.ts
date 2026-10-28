@@ -95,6 +95,24 @@ async function startWithWorktree(launch?: Launcher) {
   return { ...server, taskId, worktree: worktree.path };
 }
 
+describe('a taken port', () => {
+  test('names the port and where to change it, in the words the Mac app looks for', async () => {
+    const other = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('other') });
+    try {
+      const port = other.port ?? 0;
+      const attempt = start({ config: { port } });
+      await expect(attempt).rejects.toThrow(`Is port ${port} in use?`);
+      await expect(attempt).rejects.toThrow(/set another `port` in .*config\.json\./);
+    } finally {
+      other.stop(true);
+    }
+  });
+
+  test('passes any other failure to listen through unchanged', async () => {
+    await expect(start({ config: { port: 70_000 } })).rejects.not.toThrow('in use');
+  });
+});
+
 describe('request size', () => {
   test('a body over 8 MB is refused before it is read', async () => {
     const { post, engine } = await start();
@@ -113,6 +131,7 @@ describe('the health endpoint', () => {
       problems: [],
       version: '0.0.0',
       protocol: ENGINE_PROTOCOL,
+      flavor: 'stable',
       busy: false,
       restart: null,
       commit: null,

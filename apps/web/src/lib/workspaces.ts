@@ -46,7 +46,8 @@ const CHANGED: Record<WorkspaceMode, string> = {
 export function describeGitButlerSupport(support: WorkspaceSupport | undefined) {
   if (!support) return 'Checking whether GitButler is set up here.';
   if (!support.butInstalled) return 'Install GitButler’s command line (`but`) to use it.';
-  if (!support.gitButlerWorkspace) return 'Run `but setup` in this repository to use it.';
+  if (!support.gitButlerWorkspace)
+    return 'Run `but setup` in this repository, or update `but` to 0.23 or newer, to use it.';
   return null;
 }
 

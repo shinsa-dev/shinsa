@@ -16,6 +16,7 @@ import {
 import { createReadOnlyError } from '../instance/index.ts';
 import { describeError, log } from '../log/index.ts';
 import type { CancelledEffect, CommandReceipt, EventLog, LogProblem, StoredEffect } from '../store/index.ts';
+import { resolveRetryPolicy } from './failures.ts';
 
 export interface StateChange {
   previous: ShinsaState;
@@ -26,12 +27,22 @@ type StateListener = (state: ShinsaState, change: StateChange) => void;
 
 export interface EffectContext {
   key: string;
+  attempt: number;
   signal: AbortSignal;
+}
+
+export interface EffectRetry {
+  attempt: number;
+  attempts: number;
+  retryAt: number;
+  error: unknown;
 }
 
 type EffectHandler = (effect: ShinsaEffect, context: EffectContext) => Promise<void>;
 
 type ExhaustedHandler = (effect: ShinsaEffect, error: string, key: string) => Promise<void>;
+
+type RetryHandler = (effect: ShinsaEffect, retry: EffectRetry, key: string) => Promise<void>;
 
 export interface DispatchOptions {
   id?: string;
@@ -103,6 +114,7 @@ export class Engine {
   readonly #controllers = new Map<number, AbortController>();
   #effectHandler: EffectHandler = () => Promise.resolve();
   #exhaustedHandler: ExhaustedHandler = () => Promise.resolve();
+  #retryHandler: RetryHandler = () => Promise.resolve();
   #timer: ReturnType<typeof setTimeout> | null = null;
   #snapshotTimer: ReturnType<typeof setTimeout> | null = null;
   #snapshotSeq = 0;
@@ -200,6 +212,10 @@ export class Engine {
 
   onEffectExhausted(handler: ExhaustedHandler) {
     this.#exhaustedHandler = handler;
+  }
+
+  onEffectRetry(handler: RetryHandler) {
+    this.#retryHandler = handler;
   }
 
   subscribe(listener: StateListener) {
@@ -378,7 +394,11 @@ export class Engine {
       controller.signal.addEventListener('abort', () => resolve('cancelled'), { once: true });
     });
     const work = (async () =>
-      this.#effectHandler(stored.effect, { key: stored.key, signal: controller.signal }))();
+      this.#effectHandler(stored.effect, {
+        key: stored.key,
+        attempt: stored.attempts,
+        signal: controller.signal,
+      }))();
     this.#handlers.add(work);
     work.then(
       () => this.#handlers.delete(work),
@@ -392,7 +412,7 @@ export class Engine {
       }
       if (this.#started) this.#log.settleEffect(stored.id, Date.now());
     } catch (error) {
-      if (this.#started) await this.#recordFailure(stored, describeError(error));
+      if (this.#started) await this.#recordFailure(stored, error);
     } finally {
       this.#controllers.delete(stored.id);
     }
@@ -410,23 +430,47 @@ export class Engine {
     );
   }
 
-  async #recordFailure(stored: StoredEffect, message: string) {
-    const final = PROCESS_BOUND_EFFECTS.has(stored.effect.kind) || stored.attempts >= MAX_EFFECT_ATTEMPTS;
+  async #recordFailure(stored: StoredEffect, error: unknown) {
+    const message = describeError(error);
+    const policy = resolveRetryPolicy(error);
+    const final =
+      PROCESS_BOUND_EFFECTS.has(stored.effect.kind) ||
+      stored.attempts >= MAX_EFFECT_ATTEMPTS ||
+      !policy.retryable;
     if (!final) {
+      const retryAt = Date.now() + (policy.delayMs ?? resolveBackoff(stored.attempts));
       log.warn('[Engine] Effect failed, retrying', {
         kind: stored.effect.kind,
         attempt: stored.attempts,
+        retryAt,
         error: message,
       });
-      this.#log.retryEffect(stored.id, Date.now() + resolveBackoff(stored.attempts), message);
+      await this.#reportRetry(stored, {
+        attempt: stored.attempts,
+        attempts: MAX_EFFECT_ATTEMPTS,
+        retryAt,
+        error,
+      });
+      this.#log.retryEffect(stored.id, retryAt, message);
       return;
     }
     log.error('[Engine] Effect failed for good', { kind: stored.effect.kind, error: message });
     if (!this.#log.failEffect(stored.id, Date.now(), message)) return;
     try {
       await this.#exhaustedHandler(stored.effect, message, stored.key);
+    } catch (thrown) {
+      log.error('[Engine] Could not report a failed effect', { error: describeError(thrown) });
+    }
+  }
+
+  async #reportRetry(stored: StoredEffect, retry: EffectRetry) {
+    try {
+      await this.#retryHandler(stored.effect, retry, stored.key);
     } catch (error) {
-      log.error('[Engine] Could not report a failed effect', { error: describeError(error) });
+      log.warn('[Engine] Could not report an effect retry', {
+        kind: stored.effect.kind,
+        error: describeError(error),
+      });
     }
   }
 }

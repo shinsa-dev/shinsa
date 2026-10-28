@@ -44,7 +44,38 @@ describe('resolvePaneContent', () => {
       kind: 'text',
       content: 'x',
       original: null,
+      baseline: null,
     });
+  });
+
+  it('reads a changed file opened on its own against its base, to find its first change', () => {
+    const file = (base: Loaded<FileContent>) =>
+      resolvePaneContent({
+        headPath: 'a',
+        basePath: null,
+        baselinePath: 'a',
+        diffing: false,
+        head: ready('new'),
+        base,
+      });
+    expect(file(LOADING)).toEqual({ kind: 'waiting' });
+    expect(file(ready('old'))).toEqual({ kind: 'text', content: 'new', original: null, baseline: 'old' });
+    expect(file({ status: 'error', message: 'Gone.' })).toEqual({
+      kind: 'text',
+      content: 'new',
+      original: null,
+      baseline: null,
+    });
+    expect(
+      resolvePaneContent({
+        headPath: 'a',
+        basePath: 'a',
+        baselinePath: 'a',
+        diffing: true,
+        head: ready('new'),
+        base: ready('old'),
+      })
+    ).toEqual({ kind: 'text', content: 'new', original: 'old', baseline: null });
   });
 
   it('shows an added file against nothing and a deleted one against its last text', () => {
@@ -54,6 +85,7 @@ describe('resolvePaneContent', () => {
       kind: 'text',
       content: 'new',
       original: '',
+      baseline: null,
     });
     expect(
       resolvePaneContent({ headPath: null, basePath: 'a', diffing: true, head: IDLE, base: ready('old') })
@@ -61,6 +93,7 @@ describe('resolvePaneContent', () => {
       kind: 'text',
       content: '',
       original: 'old',
+      baseline: null,
     });
   });
 
@@ -127,7 +160,7 @@ describe('resolveFocusLines', () => {
 
 describe('holdPaneContent', () => {
   it('keeps the text on screen while the same file is read again, and takes anything else as it comes', () => {
-    const text = { kind: 'text', content: 'a', original: null } as const;
+    const text = { kind: 'text', content: 'a', original: null, baseline: null } as const;
     const waiting = { kind: 'waiting' } as const;
     expect(holdPaneContent(text, waiting)).toBe(text);
     expect(holdPaneContent(null, waiting)).toBe(waiting);

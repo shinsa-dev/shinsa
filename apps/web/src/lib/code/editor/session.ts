@@ -1,4 +1,5 @@
 import type { LanguageSupport } from '@codemirror/language';
+import type { Chunk } from '@codemirror/merge';
 import { Annotation, Compartment, EditorState, type Extension, type StateEffect } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import type { CommentSide } from '@shinsa/core';
@@ -12,6 +13,7 @@ import {
 } from './annotations.ts';
 import { pinBlocksToGutter, skipCollapsedLines } from './collapsed.ts';
 import { FindHost } from './find.ts';
+import { findFirstChangedLine, listBaselineChunks, revealFirstChange } from './first-change.ts';
 import { createChevronMarkers, indentFolding } from './folding.ts';
 import { type SplitPair, SplitView } from './merge.ts';
 import { createEditorExtensions } from './setup.ts';
@@ -19,7 +21,7 @@ import { SlotRegistry } from './slots.ts';
 import { SpotHintRegistry } from './spot-hints.ts';
 import { syntaxTokens } from './syntax.ts';
 import { resolveTextGrammar, type TokenClient, type TokenSet, tokenClient } from './tokens.ts';
-import { setOriginalTokens, unifiedDiff } from './unified.ts';
+import { diffChunks, setOriginalTokens, unifiedDiff } from './unified.ts';
 
 export const fromDisk = Annotation.define<boolean>();
 
@@ -34,6 +36,8 @@ export interface ShowInput {
   path: string;
   content: string;
   original: string | null;
+  baseline: string | null;
+  target: boolean;
   split: boolean;
   annotations: { a: EditorAnnotations; b: EditorAnnotations };
 }
@@ -54,6 +58,7 @@ interface Attachable {
   key: string;
   path: string;
   attached: boolean;
+  placed: boolean;
 }
 
 interface Entry extends Attachable {
@@ -95,6 +100,7 @@ export class EditorSession {
   #split: SplitView | null = null;
   #splitShown = false;
   #shown: Attachable | null = null;
+  #settling: Entry | null = null;
   #current: string | null = null;
   #destroyed = false;
 
@@ -139,6 +145,8 @@ export class EditorSession {
     this.#split ??= new SplitView();
     this.#selectPair(this.#split, {
       ...source,
+      baseline: null,
+      target: false,
       split: true,
       annotations: { a: NO_ANNOTATIONS, b: NO_ANNOTATIONS },
     });
@@ -176,7 +184,7 @@ export class EditorSession {
     const entry = this.#entries.get(this.#current);
     if (!view || !entry) return;
     entry.state = view.state;
-    entry.scroll = view.scrollSnapshot();
+    if (this.#settling !== entry) entry.scroll = view.scrollSnapshot();
   }
 
   #showSingle(host: HTMLElement, input: ShowInput) {
@@ -189,6 +197,9 @@ export class EditorSession {
     this.#shown = entry;
     view.setState(entry.state);
     if (entry.scroll) view.dispatch({ effects: entry.scroll });
+    else if (!entry.placed) this.#placeSingle(view, input);
+    entry.placed = true;
+    this.#settle(view, entry);
     if (input.original !== null) this.#requestOriginalTokens(view, input, input.original);
     this.#scheduleLanguage(entry, [view]);
   }
@@ -202,6 +213,8 @@ export class EditorSession {
     const pair = this.#selectPair(split, { ...input, original });
     this.#shown = pair;
     split.show(pair);
+    if (!pair.placed && !input.target) this.#place(split.merge.b, split.merge.dom, pair.chunks);
+    pair.placed = true;
     this.#scheduleLanguage(pair, [split.merge.a, split.merge.b]);
   }
 
@@ -217,6 +230,7 @@ export class EditorSession {
       path: input.path,
       original,
       attached: false,
+      placed: false,
       ...split.createPair(original, input.content, {
         a: this.#extensions('old', input, false),
         b: this.#extensions('new', input, false),
@@ -260,9 +274,34 @@ export class EditorSession {
       }),
       scroll: null,
       attached: false,
+      placed: false,
     };
     this.#keep(this.#entries, entry);
     return entry;
+  }
+
+  #settle(view: EditorView, entry: Entry) {
+    this.#settling = entry;
+    view.requestMeasure({
+      key: 'shinsa-settled',
+      read: () => null,
+      write: () => {
+        if (this.#settling === entry) this.#settling = null;
+      },
+    });
+  }
+
+  #placeSingle(view: EditorView, input: ShowInput) {
+    view.scrollDOM.scrollTop = 0;
+    if (input.target) return;
+    if (input.original !== null) this.#place(view, view.scrollDOM, view.state.facet(diffChunks));
+    else if (input.baseline !== null)
+      this.#place(view, view.scrollDOM, listBaselineChunks(input.baseline, view.state.doc));
+  }
+
+  #place(view: EditorView, scroller: HTMLElement, chunks: readonly Chunk[]) {
+    const line = findFirstChangedLine(view.state.doc, chunks);
+    if (line !== null) revealFirstChange(view, scroller, line);
   }
 
   #extensions(side: CommentSide, input: ShowInput, unified: boolean): Extension[] {

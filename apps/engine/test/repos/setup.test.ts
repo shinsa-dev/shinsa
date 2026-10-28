@@ -2,17 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { verifySetup } from '../../src/repos/index.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { createGitRepo, createTempDir, git } from '../helpers/index.ts';
 
-const BUILD = { defaultBranch: true, checks: true };
+const BUILD = { defaultBranch: true };
 
 describe('verifySetup', () => {
-  test('a repository with its default branch and check scripts is ready', async () => {
-    const { repo } = await createGitRepo({
-      remote: false,
-      files: { 'package.json': JSON.stringify({ scripts: { test: 'bun test' } }) },
-    });
+  test('a repository with its default branch is ready, with or without check commands', async () => {
+    const { repo } = await createGitRepo({ remote: false });
     expect(await verifySetup(repo, BUILD)).toEqual([]);
+    expect(await verifySetup({ ...repo, defaultBranch: 'trunk' }, { defaultBranch: false })).toEqual([]);
   });
 
   test('a missing folder or one that is not a git repository stops everything else', async () => {
@@ -52,23 +50,5 @@ describe('verifySetup', () => {
       { kind: 'default_branch', detail: `"${defaultBranch}" is not a branch name Shinsa will pass to git.` },
     ]);
     expect(existsSync(marker)).toBe(false);
-  });
-
-  test('missing checks are a problem unless set, waived or out of scope, and a broken manifest says why', async () => {
-    const { repo, path } = await createGitRepo({ remote: false });
-    expect(await verifySetup(repo, BUILD)).toEqual([
-      {
-        kind: 'check_commands',
-        detail:
-          'No check commands are set, and package.json has no lint, check-types, typecheck or test script to run.',
-      },
-    ]);
-    expect(await verifySetup({ ...repo, checkCommands: ['make test'] }, BUILD)).toEqual([]);
-    expect(await verifySetup({ ...repo, checksWaived: true }, BUILD)).toEqual([]);
-    expect(await verifySetup(repo, { defaultBranch: false, checks: false })).toEqual([]);
-    writeFiles(path, { 'package.json': '{' });
-    const [problem] = await verifySetup(repo, BUILD);
-    expect(problem).toMatchObject({ kind: 'check_commands' });
-    expect(problem?.detail).toContain('is not valid JSON');
   });
 });

@@ -93,6 +93,13 @@ const SEED_MEDIA: readonly ShotSpec[] = [
     theme: 'light',
   },
   {
+    file: 'settings-1280-dark-revised.png',
+    source: settings('dark fixed'),
+    width: 1280,
+    height: 800,
+    theme: 'dark',
+  },
+  {
     file: 'disabled-1280-dark-before.png',
     source: settings('dark after'),
     width: 1280,

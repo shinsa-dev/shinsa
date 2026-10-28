@@ -122,13 +122,6 @@ export function startPhase(decider: Decider, taskId: string, index: number, addi
   });
 }
 
-export function startChecks(decider: Decider, taskId: string, reason = 'running the checks') {
-  decider.cancelRuns(taskId);
-  decider.cancelEffects(taskId, ['checks.run'], 'A new round of checks replaced it.');
-  decider.stage(taskId, 'checking', reason);
-  decider.run({ kind: 'checks.run', taskId, round: decider.task(taskId).fixRounds });
-}
-
 export function startReview(decider: Decider, taskId: string) {
   decider.stage(taskId, 'reviewing', 'agent review');
   const task = decider.task(taskId);

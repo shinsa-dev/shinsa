@@ -1,4 +1,4 @@
-import { DomainError, type InboxMessage, type MessageRoute, type Task } from '@shinsa/core';
+import { DomainError, type InboxMessage, type MessageRoute, needsMessageKind, type Task } from '@shinsa/core';
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import { type MessageClassifier, resolveMessageRoute } from './message.ts';
@@ -67,6 +67,7 @@ export class MessageInbox {
   }
 
   async #resolveRoute(task: Task, batch: InboxMessage[]): Promise<MessageRoute> {
+    if (!needsMessageKind(this.#engine.state, task)) return {};
     const text = batch.map((message) => message.text).join('\n\n');
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {

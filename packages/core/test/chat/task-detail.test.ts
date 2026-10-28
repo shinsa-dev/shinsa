@@ -90,6 +90,27 @@ describe('a task described for an agent', () => {
     expect(building).toContain('  2. Fix and verify (');
   });
 
+  test('lists the checks with where each stands, then the pull request’s CI', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    proposePlan(harness, taskId);
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      'The checks Shinsa ran on the change, and where each stands:\n- c1, Panel tests: `bun test src/panel` (not run yet)'
+    );
+    const shipped = createTask(harness);
+    reachShipping(harness, shipped);
+    harness.send({
+      type: 'pull_request.record',
+      taskId: shipped,
+      pullRequest: pullRequest({
+        checkRuns: [{ name: 'ci / test', status: 'action_required', required: true, url: null }],
+      }),
+    });
+    const detail = serializeTaskDetail(harness.state, shipped);
+    expect(detail).toContain('- r2, bun check-types: `bun check-types` (passed)');
+    expect(detail).toContain('CI on the pull request:\n- ci / test (action required)');
+  });
+
   test('names the repository, branch and pull request, and what the task waits on', () => {
     const harness = createHarness();
     const blocker = createTask(harness, { request: 'First' });

@@ -13,6 +13,7 @@ import {
   type WorkspaceMode,
 } from '@shinsa/core';
 import { toast } from '@shinsa/ui/components/sonner';
+import { changeBaseline } from '@/lib/baseline.ts';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import {
   type LocalRepo,
@@ -263,6 +264,7 @@ export interface ProjectActions {
   removeFolder: (project: Project, folder: string) => Promise<boolean>;
   changeWorkspace: (repo: Repo, mode: WorkspaceMode) => Promise<boolean>;
   changeCoverage: (repo: Repo, setting: CoverageSetting) => Promise<boolean>;
+  changeBaseline: (repo: Repo, commands: string[]) => Promise<boolean>;
 }
 
 async function saveProject(input: ProjectInput, done: string) {
@@ -310,4 +312,5 @@ export const PROJECT_ACTIONS: ProjectActions = {
     ),
   changeWorkspace,
   changeCoverage,
+  changeBaseline,
 };

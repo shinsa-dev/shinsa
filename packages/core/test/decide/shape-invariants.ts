@@ -141,6 +141,12 @@ const OPERATION_PLAN = {
   operation: ['Run the backfill and check every row has a plan.'],
 };
 
+function resolveOperationPlan(state: ShinsaState, taskId: string) {
+  const task = state.tasks[taskId];
+  const builds = task ? resolveTaskPipeline(task).includes('build') : false;
+  return builds ? OPERATION_PLAN : { ...OPERATION_PLAN, verification: [] };
+}
+
 const MERGED = {
   number: 9,
   url: 'https://github.com/o/r/pull/9',
@@ -153,7 +159,9 @@ const MERGED = {
 function listProgressCommands(state: ShinsaState, random: Random): ShinsaCommand[] {
   const runs = listActiveRuns(state).flatMap((run): ShinsaCommand[] => {
     if (run.purpose === 'plan')
-      return [{ type: 'agent.propose_plan', runId: run.id, document: OPERATION_PLAN }];
+      return [
+        { type: 'agent.propose_plan', runId: run.id, document: resolveOperationPlan(state, run.taskId) },
+      ];
     if (run.purpose === 'build') {
       return [
         { type: 'agent.complete_phase', runId: run.id, summary: 'Done.', spots: [], judgementCalls: [] },

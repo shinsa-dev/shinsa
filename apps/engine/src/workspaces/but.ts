@@ -4,9 +4,11 @@ import { type CommandOptions, describeFailure, runCommand } from '../shell/index
 
 const GITBUTLER_BRANCH = 'gitbutler/workspace';
 
+const FIRST_VERSION_WITHOUT_SETUP = 23;
+
 const BUT_TIMEOUT_MS = 2 * 60 * 1000;
 
-const BUT_MISSING = 'GitButler’s command line (`but`) is not installed or not on the PATH.';
+export const BUT_MISSING = 'GitButler’s command line (`but`) is not installed or not on the PATH.';
 
 interface ButChange {
   cliId: string;
@@ -23,9 +25,15 @@ interface ButStatus {
   stacks: { branches: ButBranch[] }[];
 }
 
-export async function isButInstalled(signal?: AbortSignal) {
+export async function readButVersion(signal?: AbortSignal) {
   const result = await runCommand(['but', '--version'], process.cwd(), { signal, timeoutMs: 10_000 });
-  return result.ok;
+  if (!result.ok) return null;
+  return result.stdout.trim().replace(/^but\s+/, '');
+}
+
+export function needsButSetup(version: string) {
+  const [major, minor] = version.split('.').map(Number);
+  return major === 0 && (minor ?? 0) < FIRST_VERSION_WITHOUT_SETUP;
 }
 
 function readHead(path: string) {
@@ -38,6 +46,11 @@ export function isGitButlerWorkspace(path: string) {
   return (
     readHead(path) === `ref: refs/heads/${GITBUTLER_BRANCH}` && existsSync(join(path, '.git', 'gitbutler'))
   );
+}
+
+export function isGitButlerReady(path: string, version: string | null) {
+  if (version === null) return false;
+  return !needsButSetup(version) || isGitButlerWorkspace(path);
 }
 
 export async function runBut(args: string[], cwd: string, options: CommandOptions = {}) {

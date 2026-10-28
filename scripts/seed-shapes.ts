@@ -1,6 +1,6 @@
 import type { ChatTool, PlanDocument, Repo, RunRole, TriageDecisions } from '../packages/core/src/index.ts';
 import { resolveProposalUpgrade, SHAPE_PIPELINES } from '../packages/core/src/index.ts';
-import type { SeedTask } from './seed-kit.ts';
+import { createPlanCheck, type SeedTask } from './seed-kit.ts';
 
 const AUTO = { shape: true, start: true, priority: true };
 
@@ -27,7 +27,7 @@ const ROTATE_PLAN: PlanDocument = {
   approach: 'Two secrets per app for a day, then one.',
   files: [],
   outOfScope: ['Changing the signing algorithm.'],
-  verification: ['A delivery signed with either secret verifies during the overlap.'],
+  verification: [],
   questions: [],
   impact:
     'Adds a second secret to each of the 412 apps with webhooks; no delivery changes until the switch. The dry run lists the 412 apps and signs a test delivery with both secrets. Undo by removing the new secrets before the switch.',
@@ -55,8 +55,8 @@ const TIER_PLAN: PlanDocument = {
   files: [{ path: 'src/billing/tier.ts', change: 'Read and write `plan_tier`.' }],
   outOfScope: ['Changing how tiers are priced.'],
   verification: [
-    'A test writes an invoice and reads the tier back.',
-    'The billing page shows the same tier for 20 sampled accounts before and after.',
+    createPlanCheck('Tier written on invoice', 'bun test src/billing/tier.test.ts', [1, 2]),
+    createPlanCheck('Billing types', 'bunx tsc --noEmit -p src/billing', [2]),
   ],
   questions: [],
   operation: BACKFILL_STEPS,
@@ -107,12 +107,11 @@ const RISKY_PLAN: PlanDocument = {
   files: [{ path: 'src/auth/session.ts', change: 'Set and read the cookie.' }],
   outOfScope: ['Single sign-on.'],
   verification: [
-    'An end-to-end test signs in, reloads and stays signed in with only the cookie.',
-    'A screenshot of the storage panel shows no token in local storage.',
+    createPlanCheck('Session cookie', 'bun test test/auth', [1, 2, 3]),
+    createPlanCheck('Sign in survives a reload', 'bunx playwright test e2e/sign-in.spec.ts', [2, 3]),
   ],
   questions: [],
   evidence: ['screenshot', 'test'],
-  checks: ['bun test test/auth'],
   approval: true,
 };
 

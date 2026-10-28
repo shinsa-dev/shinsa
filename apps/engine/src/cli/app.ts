@@ -1,19 +1,21 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import { type FlavorIdentity, resolveEngineLabel } from '@shinsa/core';
+import { FLAVOR } from '../instance/flavor.ts';
 
-export const APP_BUNDLE_ID = process.env.SHINSA_APP_ID || 'studio.overclock.shinsa';
+export const APP_BUNDLE_ID = process.env.SHINSA_APP_ID || FLAVOR.appId;
 
-const ENGINE_LABEL = `${APP_BUNDLE_ID}.engine`;
+export function resolveHomeLink(flavor: FlavorIdentity = FLAVOR) {
+  return `${flavor.scheme}://home`;
+}
 
-export const HOME_LINK = 'shinsa://home';
-
-export function resolveTaskLink(reference: string) {
-  return `shinsa://task/${encodeURIComponent(reference)}`;
+export function resolveTaskLink(reference: string, flavor: FlavorIdentity = FLAVOR) {
+  return `${flavor.scheme}://task/${encodeURIComponent(reference)}`;
 }
 
 export function resolveLinkPage(link: string) {
-  const task = /^shinsa:\/\/task\/(.+)$/.exec(link);
+  const task = /^[a-z-]+:\/\/task\/(.+)$/.exec(link);
   return task?.[1] ? `/tasks/${task[1]}` : '/';
 }
 
@@ -26,8 +28,8 @@ export function resolvePathArgument(arg: string, cwd: string, home = homedir()) 
   return resolve(cwd, arg.startsWith('~/') ? `${home}${arg.slice(1)}` : arg);
 }
 
-export function resolveEngineTarget(uid: number) {
-  return `gui/${uid}/${ENGINE_LABEL}`;
+export function resolveEngineTarget(uid: number, appId = APP_BUNDLE_ID) {
+  return `gui/${uid}/${resolveEngineLabel(appId)}`;
 }
 
 export interface EngineJob {

@@ -12,7 +12,6 @@ import { type Command, type MenuPage, RANK } from '@/lib/command/registry.ts';
 import { refreshUsage, startSignIn } from '@/lib/connection/accounts.ts';
 import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { OPERATION_SKIP } from '@/lib/overview/operation.ts';
-import { canSkipChecks } from '@/lib/overview/setup.ts';
 import {
   describeApproveHint,
   isVerdictActionBlocked,
@@ -69,12 +68,11 @@ function listAnswerCommands(gate: Gate): Command[] {
   }));
 }
 
-function listSetupCommands(task: Task, gate: Gate): Command[] {
-  const id = resolveGateId(gate);
-  const commands: Command[] = [
+function listSetupCommands(gate: Gate): Command[] {
+  return [
     {
       kind: 'run',
-      id: `${id}.recheck`,
+      id: `${resolveGateId(gate)}.recheck`,
       label: 'Verify the setup again',
       hint: gate.title,
       icon: resolveGateGlyph(gate).icon,
@@ -82,17 +80,6 @@ function listSetupCommands(task: Task, gate: Gate): Command[] {
       run: () => void replyToGate(gate, 'recheck'),
     },
   ];
-  if (canSkipChecks(task)) {
-    commands.push({
-      kind: 'run',
-      id: `${id}.skip-checks`,
-      label: 'Start without checks',
-      icon: 'IconShieldCheck',
-      keywords: ['configuration', 'setup', 'skip', 'checks', 'waive'],
-      run: () => void replyToGate(gate, 'skipChecks'),
-    });
-  }
-  return commands;
 }
 
 function resolveSignInCommand(gate: Gate): Command {
@@ -424,7 +411,7 @@ function listOperationCommands(gate: Gate): Command[] {
 function listGateCommands(state: ShinsaState, task: Task, gate: Gate, context: GateContext): Command[] {
   switch (gate.type) {
     case 'configuration':
-      return listSetupCommands(task, gate);
+      return listSetupCommands(gate);
     case 'sign_in':
       return listSignInCommands(gate);
     case 'secret':

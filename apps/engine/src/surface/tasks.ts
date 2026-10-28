@@ -309,6 +309,58 @@ export const TASK_SPECS: SurfaceSpec[] = [
     done: () => 'Saved how the round ships.',
   }),
   defineCommand({
+    path: ['rounds', 'update'],
+    summary: 'Change what a queued round asks for, before it starts.',
+    command: 'round.update',
+    humanOnly: true,
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'round',
+        kind: 'integer',
+        positional: 'one',
+        required: true,
+        description: 'The number of a round that waits to start, from `shinsa tasks show`.',
+      },
+      {
+        name: 'text',
+        kind: 'text',
+        positional: 'rest',
+        required: true,
+        description: 'What the round asks for instead.',
+      },
+    ],
+    build: async (values, client) => ({
+      type: 'round.update',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+      number: values.round as number,
+      request: readValue(values, 'text'),
+    }),
+    done: () => 'Changed the queued round.',
+  }),
+  defineCommand({
+    path: ['rounds', 'remove'],
+    summary: 'Remove a queued round before it starts. The rounds after it move up.',
+    command: 'round.remove',
+    humanOnly: true,
+    fields: [
+      TASK_FIELD,
+      {
+        name: 'round',
+        kind: 'integer',
+        positional: 'one',
+        required: true,
+        description: 'The number of a round that waits to start, from `shinsa tasks show`.',
+      },
+    ],
+    build: async (values, client) => ({
+      type: 'round.remove',
+      taskId: await findTaskId(client, readValue(values, 'task')),
+      number: values.round as number,
+    }),
+    done: () => 'Removed the queued round.',
+  }),
+  defineCommand({
     path: ['tasks', 'retry'],
     summary: "Restart a paused task's current step with a fresh fix budget.",
     command: 'task.retry',

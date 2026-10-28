@@ -13,7 +13,7 @@ import type { QueueSection } from '@/lib/queue.ts';
 
 const RECENT_LIMIT = 5;
 
-const FINISHED_WINDOW_MS = 7 * DAY_MS;
+const FINISHED_WINDOW_MS = DAY_MS;
 
 const RUNNING_VERB: Partial<Record<TaskStage, string>> = {
   triage: 'sorting out',

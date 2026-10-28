@@ -68,12 +68,13 @@ describe('listRecentConversations', () => {
 });
 
 describe('listRecentlyFinished', () => {
-  it('lists merged and done tasks from the last seven days, newest first', () => {
+  it('lists merged and done tasks from the last 24 hours, newest first', () => {
     const tasks = [
-      createTask({ id: 'merged', stage: 'merged', stageChangedAt: NOW - DAY }),
+      createTask({ id: 'merged', stage: 'merged', stageChangedAt: NOW - DAY / 2 }),
       createTask({ id: 'done', stage: 'done', stageChangedAt: NOW - 1000 }),
-      createTask({ id: 'edge', stage: 'done', stageChangedAt: NOW - 7 * DAY }),
-      createTask({ id: 'old', stage: 'merged', stageChangedAt: NOW - 7 * DAY - 1 }),
+      createTask({ id: 'edge', stage: 'done', stageChangedAt: NOW - DAY }),
+      createTask({ id: 'old', stage: 'merged', stageChangedAt: NOW - DAY - 1 }),
+      createTask({ id: 'last-week', stage: 'done', stageChangedAt: NOW - 3 * DAY }),
       createTask({ id: 'cancelled', stage: 'cancelled', stageChangedAt: NOW }),
       createTask({ id: 'open', stageChangedAt: NOW }),
     ];

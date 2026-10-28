@@ -1,6 +1,7 @@
 import type { AccountImport, AccountPatch, AccountsSnapshot, RunAccount } from '@shinsa/core';
 import { useSyncExternalStore } from 'react';
 import { describeBinding, describeImported, describeRerun } from '@/lib/accounts/account.ts';
+import { createUsageRecheck } from '@/lib/accounts/recheck.ts';
 import { type SignInDialogState, selectDialogLogin } from '@/lib/accounts/sign-in.ts';
 import { describeUsageWaitToggled } from '@/lib/accounts/usage-wait.ts';
 import {
@@ -38,8 +39,17 @@ export function useAccounts() {
   return useSyncExternalStore(connection.subscribeAccounts, connection.selectAccounts);
 }
 
+const usageRecheck = createUsageRecheck({ refresh: () => requestAccounts('/api/accounts/refresh', {}) });
+
 export function refreshUsage() {
-  return updateAccounts('/api/accounts/refresh', {});
+  return requestWithToast(async () => {
+    const result = await usageRecheck.check();
+    if (!result.ok) throw result.error;
+  });
+}
+
+export function watchUsage() {
+  return usageRecheck.watch();
 }
 
 export function submitLoginCode(loginId: string, code: string) {

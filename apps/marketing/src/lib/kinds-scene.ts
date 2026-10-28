@@ -96,9 +96,15 @@ function createKindScenes(now: number): Record<TaskShape, KindScene> {
       { status: 'done', at: now - 20 * MINUTE },
     ],
     checkResults: [
-      { name: 'bun lint', outcome: 'pass', detail: null },
-      { name: 'bun check-types', outcome: 'pass', detail: null },
-      { name: 'bun run test', outcome: 'pass', detail: '318 tests, 6 new' },
+      { id: 'r1', label: 'bun lint', command: 'bun lint', outcome: 'pass', detail: null },
+      { id: 'r2', label: 'bun check-types', command: 'bun check-types', outcome: 'pass', detail: null },
+      {
+        id: 'r3',
+        label: 'bun run test',
+        command: 'bun run test',
+        outcome: 'pass',
+        detail: '318 tests, 6 new',
+      },
     ],
     pullRequest: createPullRequest(now, 812),
   });

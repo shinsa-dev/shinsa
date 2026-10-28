@@ -14,6 +14,10 @@ const MISSING_THREAD = /no rollout found|no such thread|unknown thread|thread .*
 
 const USAGE_CODES = new Set(['usageLimitExceeded', 'rateLimitExceeded']);
 
+const LIMIT_TEXT = /(?:usage\s+limit|hit\s+your\s+limit)/i;
+
+const CREDITS_TEXT = /(?:out\s+of\s+credits|insufficient\s+credits|credit\s+balance\s+is\s+too\s+low)/i;
+
 const TRANSPORT_CODES = new Set([
   'httpConnectionFailed',
   'responseStreamConnectionFailed',
@@ -30,7 +34,7 @@ const DECLARED: Partial<Record<string, { class: RunFailureClass; message: string
     class: 'budget_exhausted',
     message: 'Codex stopped: the session’s budget ran out.',
   },
-  serverOverloaded: { class: 'overloaded', message: 'Codex’s API is overloaded. It retries shortly.' },
+  serverOverloaded: { class: 'overloaded', message: 'Codex’s API is overloaded.' },
   sandboxError: { class: 'setup_failed', message: 'Codex could not run its sandbox.' },
   cyberPolicy: { class: 'model_error', message: 'The model refused the request.' },
   misalignmentPolicyViolation: { class: 'model_error', message: 'The model refused the request.' },
@@ -69,10 +73,22 @@ function createFailure(
   };
 }
 
+function isServerError(code: string | null, info: unknown) {
+  return code === 'internalServerError' || (resolveHttpStatus(info) ?? 0) >= 500;
+}
+
 export function isUsageLimit(error: CodexTurnError | null) {
   const info = error?.codexErrorInfo;
   const code = resolveErrorCode(info);
-  return (code !== null && USAGE_CODES.has(code)) || resolveHttpStatus(info) === 429;
+  if ((code !== null && USAGE_CODES.has(code)) || resolveHttpStatus(info) === 429) return true;
+  const text = resolveText(error);
+  return LIMIT_TEXT.test(text) || CREDITS_TEXT.test(text);
+}
+
+function describeUsageLimit(code: string | null, text: string) {
+  if (code === 'rateLimitExceeded') return 'Codex’s rate limit is reached.';
+  if (CREDITS_TEXT.test(text)) return 'The Codex account is out of credits.';
+  return 'Codex’s usage limit is reached.';
 }
 
 export function resolveCodexFailure(error: CodexTurnError | null): RunFailure {
@@ -80,9 +96,7 @@ export function resolveCodexFailure(error: CodexTurnError | null): RunFailure {
   const code = resolveErrorCode(info);
   const text = resolveText(error);
   if (isUsageLimit(error)) {
-    const message =
-      code === 'rateLimitExceeded' ? 'Codex’s rate limit is reached.' : 'Codex’s usage limit is reached.';
-    return createFailure('usage_limit', message, code, { retryable: true });
+    return createFailure('usage_limit', describeUsageLimit(code, text), code, { retryable: true });
   }
   if (code === 'unauthorized' || resolveHttpStatus(info) === 401)
     return createFailure('auth', SIGNED_OUT, code);
@@ -93,6 +107,10 @@ export function resolveCodexFailure(error: CodexTurnError | null): RunFailure {
     return createFailure('transport_error', text || 'Codex lost the connection to its API.', code, {
       retryable: true,
     });
+  }
+  if (isServerError(code, info)) {
+    const message = text ? `Codex’s API had a server error. ${text}` : 'Codex’s API had a server error.';
+    return createFailure('overloaded', message, code, { retryable: true });
   }
   return createFailure('provider_error', text || 'Codex stopped with an error.', code);
 }

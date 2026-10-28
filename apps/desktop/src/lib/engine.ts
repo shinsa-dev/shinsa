@@ -1,14 +1,18 @@
 import { join } from 'node:path';
+import { type FlavorIdentity, resolveEngineLabel } from '@shinsa/core';
+import { FLAVOR } from './flavor.ts';
 
-export const APP_ID = process.env.SHINSA_APP_ID || 'studio.overclock.shinsa';
+export const APP_ID = process.env.SHINSA_APP_ID || FLAVOR.appId;
 
-export const ENGINE_LABEL = `${APP_ID}.engine`;
+export const ENGINE_LABEL = resolveEngineLabel(APP_ID);
 
 export const ENGINE_PLIST = `${ENGINE_LABEL}.plist`;
 
 export const ENGINE_BUNDLE_PROGRAM = 'Contents/Resources/engine/bin/shinsa';
 
 export const ENGINE_LOG = 'engine.log';
+
+export const ENGINE_LOCK = 'serve.lock';
 
 export const LOGIN_ITEMS_URL = 'x-apple.systempreferences:com.apple.LoginItems-Settings.extension';
 
@@ -73,7 +77,8 @@ export function listEngineVariables(env: Record<string, string | undefined>) {
 
 export function serializeEngineAgent(
   program: { bundle: string } | { path: string },
-  variables: Record<string, string> = { SHINSA_SERVICE: '1' }
+  variables: Record<string, string> = { SHINSA_SERVICE: '1' },
+  appId = APP_ID
 ) {
   const location =
     'bundle' in program
@@ -82,7 +87,7 @@ export function serializeEngineAgent(
           `  ${serializeString(program.bundle)}`,
           '  <key>AssociatedBundleIdentifiers</key>',
           '  <array>',
-          `    ${serializeString(APP_ID)}`,
+          `    ${serializeString(appId)}`,
           '  </array>',
         ]
       : [];
@@ -93,7 +98,7 @@ export function serializeEngineAgent(
     '<plist version="1.0">',
     '<dict>',
     '  <key>Label</key>',
-    `  ${serializeString(ENGINE_LABEL)}`,
+    `  ${serializeString(resolveEngineLabel(appId))}`,
     ...location,
     '  <key>ProgramArguments</key>',
     '  <array>',
@@ -160,6 +165,23 @@ export function parseLaunchdJob(printed: string): LaunchdJob {
   };
 }
 
+function readLockHolder(text: string | null) {
+  if (!text) return null;
+  try {
+    const holder: unknown = JSON.parse(text);
+    if (typeof holder !== 'object' || holder === null) return null;
+    const { pid, port } = holder as { pid?: unknown; port?: unknown };
+    return typeof pid === 'number' && typeof port === 'number' ? { pid, port } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isOnOtherPort(job: LaunchdJob, lockText: string | null, port: number) {
+  const holder = readLockHolder(lockText);
+  return job.pid !== null && holder?.pid === job.pid && holder.port !== port;
+}
+
 export function isSpawnRefused(job: LaunchdJob) {
   return job.spawnFailed || job.lastExitCode === EX_CONFIG;
 }
@@ -196,35 +218,35 @@ export function selectBusyPort(log: string) {
   return match?.[1] ? Number(match[1]) : null;
 }
 
-export function describeEngineScreen(screen: EngineScreen): EngineScreenView {
+export function describeEngineScreen(screen: EngineScreen, name = FLAVOR.appName): EngineScreenView {
   switch (screen.kind) {
     case 'starting':
       return {
-        title: 'Starting Shinsa',
-        text: 'Shinsa’s engine is starting. It keeps running in the background, also when this window is closed.',
+        title: `Starting ${name}`,
+        text: `${name}’s engine is starting. It keeps running in the background, also when this window is closed.`,
         actions: [],
         detail: '',
         busy: true,
       };
     case 'dev':
       return {
-        title: 'Waiting for Shinsa',
-        text: 'Start the dev servers with “bun dev” in the checkout. The window opens Shinsa as soon as they answer.',
+        title: `Waiting for ${name}`,
+        text: `Start the dev servers with “bun dev” in the checkout. The window opens ${name} as soon as they answer.`,
         actions: [],
         detail: '',
         busy: true,
       };
     case 'approval':
       return {
-        title: 'Allow Shinsa to run in the background',
-        text: 'Shinsa’s engine runs your agents and schedules while the app is closed. Turn Shinsa on in System Settings → General → Login Items & Extensions, then come back.',
+        title: `Allow ${name} to run in the background`,
+        text: `${name}’s engine runs your agents and schedules while the app is closed. Turn ${name} on in System Settings → General → Login Items & Extensions, then come back.`,
         actions: ['open-login-items', 'retry'],
         detail: '',
         busy: false,
       };
     case 'crashing':
       return {
-        title: 'Shinsa’s engine keeps stopping',
+        title: `${name}’s engine keeps stopping`,
         text: 'It stopped several times in a row. Start it again, and if it stops again, copy the details below into a bug report.',
         actions: ['restart', 'copy-details'],
         detail: screen.detail,
@@ -233,15 +255,15 @@ export function describeEngineScreen(screen: EngineScreen): EngineScreenView {
     case 'port':
       return {
         title: `Port ${screen.port} is taken`,
-        text: `Another program listens on port ${screen.port}, where Shinsa’s engine runs. Quit that program and start the engine again, or set another "port" in Shinsa’s config.json.`,
+        text: `Another program listens on port ${screen.port}, where ${name}’s engine runs. Quit that program and start the engine again, or set another "port" in ${name}’s config.json.`,
         actions: ['restart', 'copy-details'],
         detail: screen.detail,
         busy: false,
       };
     case 'stopped':
       return {
-        title: 'Shinsa’s engine is not running',
-        text: 'The engine did not start. Start it again; if a folder Shinsa works in is in Desktop, Documents or Downloads, give Shinsa Full Disk Access first.',
+        title: `${name}’s engine is not running`,
+        text: `The engine did not start. Start it again; if a folder ${name} works in is in Desktop, Documents or Downloads, give ${name} Full Disk Access first.`,
         actions: ['restart', 'open-privacy', 'copy-details'],
         detail: screen.detail,
         busy: false,
@@ -263,8 +285,12 @@ export function parseEngineAction(url: string): EngineAction | null {
   return action && action in ENGINE_ACTION_LABEL ? (action as EngineAction) : null;
 }
 
-export function resolveDataDir(env: Record<string, string | undefined>, home: string) {
+export function resolveDataDir(
+  env: Record<string, string | undefined>,
+  home: string,
+  flavor: FlavorIdentity = FLAVOR
+) {
   if (env.SHINSA_HOME) return join(env.SHINSA_HOME, 'data');
   if (env.SHINSA_DATA_DIR) return env.SHINSA_DATA_DIR;
-  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), 'shinsa', 'data');
+  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), flavor.configDir, 'data');
 }

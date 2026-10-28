@@ -2,6 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import {
   listActiveRuns,
   listOpenGates,
+  type MessageEffect,
+  type MessageKind,
+  MINUTE_MS,
+  needsMessageKind,
   resolveCurrentRound,
   resolveMessageEffect,
   resolveTaskRounds,
@@ -14,6 +18,7 @@ import {
   type Harness,
   linkSession,
   PASSING,
+  PLAN,
   proposePlan,
   pullRequest,
   pushed,
@@ -326,6 +331,174 @@ describe('the inbox', () => {
         .task(taskId)
         .activity.flatMap((entry) => (entry.kind === 'round' && entry.detail ? [entry.detail] : []))
     ).toEqual(['Add an export button', 'as CSV']);
+  });
+});
+
+interface DecisionPlace {
+  effect: MessageEffect;
+  reach: (harness: Harness) => string;
+  expectDone: (harness: Harness, taskId: string, text: string) => void;
+}
+
+function reachPlanGate(harness: Harness) {
+  const taskId = createTask(harness);
+  proposePlan(harness, taskId, { ...PLAN, approval: true });
+  return taskId;
+}
+
+function expectPlanRevised(harness: Harness, taskId: string, text: string) {
+  expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+  expect(harness.task(taskId).stage).toBe('planning');
+  expect(harness.activeRun(taskId)).toMatchObject({ role: 'agent', purpose: 'plan' });
+  expect(harness.activeRun(taskId).prompt).toContain(text);
+}
+
+const DECISION_PLACES: DecisionPlace[] = [
+  {
+    effect: 'revise_plan',
+    reach: reachPlanGate,
+    expectDone: expectPlanRevised,
+  },
+  {
+    effect: 'request_changes',
+    reach: (harness) => {
+      const taskId = createTask(harness);
+      reachReviewGate(harness, taskId);
+      return taskId;
+    },
+    expectDone: (harness, taskId) => {
+      expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+      expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'you' });
+    },
+  },
+  {
+    effect: 'supersede_question',
+    reach: (harness) => {
+      const taskId = createTask(harness);
+      const runId = harness.activeRun(taskId).id;
+      harness.send({ type: 'agent.ask', runId, gateId: 'q1', question: 'Which?', context: null });
+      return taskId;
+    },
+    expectDone: (harness, _taskId, text) => {
+      expect(harness.state.gates.q1).toMatchObject({ status: 'withdrawn', supersededBy: text });
+    },
+  },
+  {
+    effect: 'retry',
+    reach: (harness) => {
+      const taskId = createTask(harness);
+      proposePlan(harness, taskId);
+      harness.send({ type: 'effect.fail', taskId, title: 'Broke', detail: 'x' });
+      return taskId;
+    },
+    expectDone: (harness, taskId, text) => {
+      expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+      expect(harness.activeRun(taskId).prompt).toContain(`Guidance from the human: ${text}`);
+    },
+  },
+  {
+    effect: 'verify_setup',
+    reach: (harness) => {
+      const repoId = registerRepo(harness);
+      harness.send({ type: 'task.create', request: 'Fix the scroll', repoId });
+      const taskId = Object.keys(harness.state.tasks)[0] ?? '';
+      harness.send({
+        type: 'task.triage',
+        taskId,
+        title: 'Fix the scroll',
+        repoId,
+        size: 'small',
+        branch: 'fix/scroll',
+        waitsOn: [],
+      });
+      verifySetup(harness, taskId, [{ kind: 'default_branch', detail: 'No main.' }]);
+      return taskId;
+    },
+    expectDone: (harness, taskId) => {
+      expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+      expect(harness.task(taskId).stageReason).toBe('verifying the setup');
+    },
+  },
+];
+
+describe('a message where you decide', () => {
+  for (const place of DECISION_PLACES) {
+    for (const kind of ['new_round', 'separate_task', 'acknowledge'] as MessageKind[]) {
+      test(`at ${place.effect}, a message read as ${kind} still does what the composer says and queues no round`, () => {
+        const harness = createHarness();
+        const taskId = place.reach(harness);
+        expect(effectOf(harness, taskId)).toBe(place.effect);
+        expect(needsMessageKind(harness.state, harness.task(taskId))).toBe(false);
+        const text = 'Alright, I agree. And then add the projects page.';
+        harness.send({
+          type: 'task.message',
+          taskId,
+          text,
+          kind,
+          title: 'Add the projects page',
+          shape: 'change',
+        });
+        const task = harness.task(taskId);
+        expect(resolveTaskRounds(task)).toHaveLength(1);
+        expect(task.suggestions ?? []).toEqual([]);
+        const messages = task.activity.filter((entry) => entry.kind === 'message');
+        expect(messages.at(-1)).toMatchObject({ detail: text });
+        expect(messages.at(-1)?.noted).toBeUndefined();
+        place.expectDone(harness, taskId, text);
+      });
+    }
+  }
+
+  test('a message routed from the inbox at the plan gate revises the plan, whatever the classifier read', () => {
+    const harness = createHarness();
+    const taskId = reachPlanGate(harness);
+    const text = 'Alright, sweet, I agree with this. And then group the projects.';
+    harness.send({ type: 'message.receive', taskId, text });
+    const messageIds = (harness.task(taskId).inbox ?? []).map((message) => message.id);
+    harness.send({ type: 'message.route', taskId, messageIds, kind: 'new_round', shape: 'change' });
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(1);
+    expectPlanRevised(harness, taskId, text);
+  });
+
+  test('a message to a working agent or a merge gate is still classified', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(needsMessageKind(harness.state, harness.task(taskId))).toBe(true);
+    reachShipping(harness, taskId);
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+    expect(effectOf(harness, taskId)).toBe('send_back');
+    expect(needsMessageKind(harness.state, harness.task(taskId))).toBe(true);
+  });
+});
+
+describe('a message sent twice', () => {
+  test('the same text while the first waits in the inbox is accepted once, and again once the window passes', () => {
+    const harness = createHarness();
+    const taskId = reachPlanGate(harness);
+    harness.send({ type: 'message.receive', taskId, text: 'Group the projects.' });
+    const again = harness.send({ type: 'message.receive', taskId, text: '  Group the projects. ' });
+    expect(again.events).toEqual([]);
+    harness.send({ type: 'message.receive', taskId, text: 'Group the folders.' });
+    expect(harness.task(taskId).inbox?.map((message) => message.text)).toEqual([
+      'Group the projects.',
+      'Group the folders.',
+    ]);
+    harness.advance(10 * MINUTE_MS);
+    harness.send({ type: 'message.receive', taskId, text: 'Group the projects.' });
+    expect(harness.task(taskId).inbox).toHaveLength(3);
+  });
+
+  test('the same new work while its round waits to start queues no second round', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const text = 'Add an export button';
+    harness.send({ type: 'task.message', taskId, text, kind: 'new_round', shape: 'change' });
+    expect(harness.send({ type: 'message.receive', taskId, text }).events).toEqual([]);
+    expect(harness.send({ type: 'task.message', taskId, text, kind: 'new_round' }).events).toEqual([]);
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(2);
+    harness.advance(10 * MINUTE_MS);
+    harness.send({ type: 'task.message', taskId, text, kind: 'new_round', shape: 'change' });
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(3);
   });
 });
 

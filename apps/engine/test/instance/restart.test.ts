@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, jest, spyOn, test } from 'bun:test';
 import {
   createLaunchdRestarter,
   EngineRestarter,
@@ -7,6 +7,10 @@ import {
 } from '../../src/instance/index.ts';
 import { log } from '../../src/log/index.ts';
 import { createRun, createStubEngine } from '../helpers/state.ts';
+
+afterEach(() => {
+  jest.useRealTimers();
+});
 
 function createRestarter(options: { service?: boolean; fail?: boolean } = {}) {
   const stub = createStubEngine();
@@ -88,6 +92,7 @@ describe('EngineRestarter', () => {
   });
 
   test('restarts a moment after answering, so the app hears that it will', async () => {
+    jest.useFakeTimers();
     const stub = createStubEngine();
     let restarted = false;
     const restarter = new EngineRestarter(stub.engine, {
@@ -98,8 +103,9 @@ describe('EngineRestarter', () => {
       },
     });
     await restarter.request('now');
+    jest.advanceTimersByTime(249);
     expect(restarted).toBe(false);
-    await Bun.sleep(300);
+    jest.advanceTimersByTime(1);
     expect(restarted).toBe(true);
   });
 
@@ -119,18 +125,24 @@ describe('EngineRestarter', () => {
 
 describe('createLaunchdRestarter', () => {
   test('restarts by stopping cleanly and exiting with the restart code, so launchd starts it again', async () => {
+    jest.useFakeTimers();
     const stub = createStubEngine();
     const steps: string[] = [];
+    const exited = Promise.withResolvers<void>();
     const restarter = createLaunchdRestarter(stub.engine, {
       byService: true,
       stop: () => {
         steps.push('stop');
         return Promise.resolve();
       },
-      exit: (code) => steps.push(`exit ${code}`),
+      exit: (code) => {
+        steps.push(`exit ${code}`);
+        exited.resolve();
+      },
     });
     await restarter.request('now');
-    await Bun.sleep(300);
+    jest.advanceTimersByTime(250);
+    await exited.promise;
     expect(steps).toEqual(['stop', `exit ${EXIT_RESTART}`]);
   });
 
@@ -138,11 +150,14 @@ describe('createLaunchdRestarter', () => {
     const stub = createStubEngine();
     const terminal = createLaunchdRestarter(stub.engine, { byService: false, stop: () => Promise.resolve() });
     await expect(terminal.request('now')).rejects.toMatchObject({ code: 'restart_unsupported' });
-    const exit = spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const exited = Promise.withResolvers<void>();
+    const exit = spyOn(process, 'exit').mockImplementation((() => exited.resolve()) as () => never);
     try {
+      jest.useFakeTimers();
       const service = createLaunchdRestarter(stub.engine, { byService: true, stop: () => Promise.resolve() });
       await service.request('now');
-      await Bun.sleep(300);
+      jest.advanceTimersByTime(250);
+      await exited.promise;
       expect(exit).toHaveBeenCalledWith(EXIT_RESTART);
     } finally {
       exit.mockRestore();

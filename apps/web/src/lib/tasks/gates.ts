@@ -23,10 +23,10 @@ const GATE_REPLY = {
   answer: { decision: 'reply', done: 'Answered. The agent carries on.' },
   retry: { decision: 'approve', done: 'Picking it up again.' },
   updateWorkspace: { decision: 'approve', done: 'Updating the workspace with but pull.' },
+  sendToAgent: { decision: 'approve', done: 'Sent to the agent again.' },
   guide: { decision: 'reply', done: 'Retrying with your guidance.' },
   cancel: { decision: 'reject', done: 'Cancelled.' },
   recheck: { decision: 'approve', done: 'Verifying the setup again.' },
-  skipChecks: { decision: 'waive', done: 'Starting without checks for this repository.' },
   approvePlan: { decision: 'approve', done: 'Approved. Building now.' },
   approveOperationPlan: { decision: 'approve', done: 'Approved. Running the operation now.' },
   revisePlan: { decision: 'revise', done: 'Sent back to the agent.' },
@@ -35,7 +35,7 @@ const GATE_REPLY = {
   approveEdits: { decision: 'approve', done: 'Approved. Committing your edits and running the checks.' },
   requestChanges: { decision: 'revise', done: 'Sent back to the agent.' },
   fixFindings: { decision: 'revise', done: 'Sent. The agent works on what you kept.' },
-  merge: { decision: 'approve', done: 'Merging.' },
+  merge: { decision: 'approve', done: 'Approved. Merging the pull request.' },
   mergeEdits: {
     decision: 'approve',
     done: 'Approved. Pushing your edits. The pull request merges once CI passes.',
@@ -69,12 +69,18 @@ export function replyToGate(
 
 export function resolveRetryLabel(state: ShinsaState, gate: Gate) {
   if (gate.cause === 'workspace_update') return 'Update the workspace';
+  if (gate.cause === 'push_hook') return 'Send to the agent again';
   const task = state.tasks[gate.taskId];
   return (gate.cause === 'budget' && task && describeBudgetRetry(state, task)) || 'Retry';
 }
 
+const RETRY_REPLY: Partial<Record<NonNullable<Gate['cause']>, GateReply>> = {
+  workspace_update: 'updateWorkspace',
+  push_hook: 'sendToAgent',
+};
+
 export function resolveRetryReply(gate: Gate): GateReply {
-  return gate.cause === 'workspace_update' ? 'updateWorkspace' : 'retry';
+  return (gate.cause && RETRY_REPLY[gate.cause]) || 'retry';
 }
 
 export function resolvePlanReply(task: Task): GateReply {

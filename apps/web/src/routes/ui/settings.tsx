@@ -15,8 +15,10 @@ import { NotificationGroup } from '@/components/settings/notifications.tsx';
 import { PluginsGroup } from '@/components/settings/plugins.tsx';
 import { type ScheduleActions, ScheduleRow } from '@/components/settings/schedules.tsx';
 import { SkillsGroup } from '@/components/settings/skills.tsx';
+import { type UpdateActions, UpdatesGroup } from '@/components/settings/updates.tsx';
 import { type VersionActions, VersionsGroup } from '@/components/settings/versions.tsx';
 import type { ExtensionActions } from '@/lib/connection/extensions.ts';
+import type { DesktopUpdate, UpdateChannel } from '@/lib/desktop.ts';
 import { DEFAULT_PREFERENCES } from '@/lib/preferences/notifications.ts';
 import { createSampleAccounts, createSampleProviderLogins } from './sample-accounts.ts';
 import { createSampleExtensions, SAMPLE_PLACES } from './sample-extensions.ts';
@@ -58,6 +60,52 @@ const SAMPLE_EXTENSION_ACTIONS: ExtensionActions = {
   choosePlugin: acknowledgeSample,
   chooseOptimizer: acknowledgeSample,
 };
+
+const SAMPLE_UPDATE_ACTIONS: UpdateActions = {
+  check: () => void acknowledgeSample(),
+  install: () => void acknowledgeSample(),
+  changeChannel: () => void acknowledgeSample(),
+  answerDowngrade: () => void acknowledgeSample(),
+};
+
+const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; update: DesktopUpdate }[] = [
+  {
+    label: 'UpdatesGroup · Stable, up to date',
+    version: '1.3.0',
+    channel: 'stable',
+    update: { status: 'current' },
+  },
+  {
+    label: 'UpdatesGroup · Beta, the next beta ready to install',
+    version: '1.3.0-beta.2',
+    channel: 'beta',
+    update: { status: 'ready', version: '1.3.0-beta.3' },
+  },
+  {
+    label: 'UpdatesGroup · a beta switched to Stable, offered the latest stable',
+    version: '1.3.0-beta.2',
+    channel: 'stable',
+    update: { status: 'downgrade', version: '1.2.0' },
+  },
+  {
+    label: 'UpdatesGroup · Shinsa Canary, the next canary downloading',
+    version: '1.3.1-canary.4',
+    channel: 'canary',
+    update: { status: 'downloading', version: '1.3.1-canary.5', percent: 42 },
+  },
+  {
+    label: 'UpdatesGroup · Beta, the downloaded beta being prepared to install',
+    version: '1.3.0-beta.2',
+    channel: 'beta',
+    update: { status: 'preparing', version: '1.3.0-beta.3' },
+  },
+  {
+    label: 'UpdatesGroup · Beta, restarting into the next beta',
+    version: '1.3.0-beta.2',
+    channel: 'beta',
+    update: { status: 'installing', version: '1.3.0-beta.3' },
+  },
+];
 
 const SAMPLE_VERSION_ACTIONS: VersionActions = {
   refresh: acknowledgeSample,
@@ -207,6 +255,13 @@ export function SettingsSpecimens() {
               updating={[]}
               actions={SAMPLE_VERSION_ACTIONS}
             />
+          </div>
+        </Specimen>
+      ))}
+      {UPDATE_SCENES.map(({ label, ...app }) => (
+        <Specimen key={label} label={label}>
+          <div className='w-full max-w-xl'>
+            <UpdatesGroup app={app} actions={SAMPLE_UPDATE_ACTIONS} />
           </div>
         </Specimen>
       ))}

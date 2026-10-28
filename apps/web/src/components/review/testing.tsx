@@ -2,12 +2,12 @@ import {
   type Coverage,
   type CoverageFile,
   type ManualTestStep,
-  type ReportCheck,
   type ReportTesting,
   selectMeasuredCoverage,
   type Task,
 } from '@shinsa/core';
 import { Icon } from '@shinsa/ui/components/icon';
+import { ChecksBlock } from '@/components/checks/checks-list.tsx';
 import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
@@ -22,10 +22,10 @@ import {
   describeRangeLabel,
   isFileCovered,
 } from '@/lib/coverage.ts';
-import { describeChecksPassed } from '@/lib/overview/now.ts';
 import { type DisclosurePersistId, extendDisclosureId, useDisclosure } from '@/lib/preferences/disclosure.ts';
 import { REVIEW_PROSE_ICON, REVIEW_PROSE_TITLE } from '@/lib/review/report.ts';
 import { resolveTestTarget } from '@/lib/review/testing.ts';
+import type { ChecksView } from '@/lib/tasks/checks.ts';
 
 const PART_LABEL = 'text-2xs text-fg-2';
 
@@ -152,7 +152,7 @@ export function TestingPanel({
   persistId: DisclosurePersistId;
   task: Task;
   testing: ReportTesting | null;
-  checks: ReportCheck[];
+  checks: ChecksView | null;
   coverage?: Coverage | null;
 }) {
   const automated = testing?.automated ?? [];
@@ -160,17 +160,13 @@ export function TestingPanel({
   const measured = selectMeasuredCoverage(coverage) !== null;
   return (
     <Panel persistId={persistId} title={REVIEW_PROSE_TITLE.testing} icon={REVIEW_PROSE_ICON.testing}>
-      {(automated.length > 0 || checks.length > 0 || measured) && (
+      {(automated.length > 0 || checks || measured) && (
         <div className='flex flex-col gap-1.5'>
           <span className={PART_LABEL}>Covered by tests</span>
           {automated.map((line) => (
             <Markdown key={line} text={line} className={PROSE} />
           ))}
-          {checks.length > 0 && (
-            <p className='text-fg-2 text-xs'>
-              {describeChecksPassed(checks)}. The Overview lists each check.
-            </p>
-          )}
+          {checks && <ChecksBlock taskId={task.id} view={checks} />}
           <CoverageLines
             persistId={extendDisclosureId(persistId, 'coverage')}
             task={task}

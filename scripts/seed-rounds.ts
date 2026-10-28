@@ -5,7 +5,14 @@ import type {
   RoundShipping,
   RunPurpose,
 } from '../packages/core/src/index.ts';
-import { type Push, resolveAgentSession, type SeedClock, type SeedTask } from './seed-kit.ts';
+import {
+  createPlanCheck,
+  listSeedCheckResults,
+  type Push,
+  resolveAgentSession,
+  type SeedClock,
+  type SeedTask,
+} from './seed-kit.ts';
 
 const TASK = 'task-mcp-rounds';
 const BRANCH = 'feat/mcp-v2-agent';
@@ -34,7 +41,13 @@ function createPlan(goal: string, phases: [string, string][]): PlanDocument {
     approach: goal,
     files: [],
     outOfScope: [],
-    verification: ['bun test'],
+    verification: [
+      createPlanCheck(
+        'Tests for the round',
+        'bun test test/agent',
+        phases.map((_, index) => index + 1)
+      ),
+    ],
     questions: [],
   };
 }
@@ -205,7 +218,7 @@ function finishRound(push: Push, clock: SeedClock, script: RoundScript, counter:
   push(clock.step(0.3), {
     type: 'checks.recorded',
     taskId: TASK,
-    results: [{ name: 'bun test', outcome: 'pass', detail: null }],
+    results: listSeedCheckResults(script.plan.verification, null),
   });
   push(clock.step(0.1), { type: 'work.submitted', taskId: TASK, summary: `${script.title}.`, report: null });
   run(push, clock, [counter.runs++, counter.round] as [number, number], null, 4, 'No findings.');
@@ -355,6 +368,25 @@ function scriptRounds(push: Push, clock: SeedClock, worktree: string) {
       number: 6,
       title: 'Show tool latency in the chat header',
       request: 'Then show each tool’s latency in the chat header.',
+      why: null,
+      shipping: 'onto_pull_request',
+      pipeline: PIPELINE,
+    },
+  });
+  push(clock.step(0.4), {
+    type: 'task.messaged',
+    taskId: TASK,
+    text: 'And a legend under the header that says what each latency colour means.',
+    kind: 'new_round',
+    round: 7,
+  });
+  push(clock.step(0.1), {
+    type: 'round.queued',
+    taskId: TASK,
+    round: {
+      number: 7,
+      title: 'Explain the latency colours',
+      request: 'And a legend under the header that says what each latency colour means.',
       why: null,
       shipping: 'onto_pull_request',
       pipeline: PIPELINE,

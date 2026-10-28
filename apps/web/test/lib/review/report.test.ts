@@ -129,7 +129,10 @@ describe('listReviewChapters', () => {
   });
 
   it('builds with How to test for the checks alone, and has no such chapter without a walkthrough or checks', () => {
-    const checked: WorkReport = { ...REPORT, checks: [{ name: 'Tests', outcome: 'pass', detail: null }] };
+    const checked: WorkReport = {
+      ...REPORT,
+      checks: [{ id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: null }],
+    };
     expect(
       listReviewChapters(checked, []).map((chapter) => [chapter.id, chapter.prose.map((prose) => prose.key)])
     ).toEqual([

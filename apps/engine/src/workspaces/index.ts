@@ -6,7 +6,7 @@ import {
   type WorkspaceMode,
   type WorkspaceSupport,
 } from '@shinsa/core';
-import { isButInstalled, isGitButlerWorkspace } from './but.ts';
+import { isGitButlerReady, isGitButlerWorkspace, readButVersion } from './but.ts';
 import { describeNotWorkspace, GitButlerStrategy } from './gitbutler.ts';
 import { describeDirtyCheckout, isCheckoutClean, MainCheckoutStrategy } from './main-checkout.ts';
 import type { WorkspaceStrategy } from './types.ts';
@@ -20,10 +20,13 @@ export interface WorkspacesOptions {
 }
 
 export async function listWorkspaceSupport(repos: Pick<Repo, 'id' | 'path'>[]) {
-  const butInstalled = await isButInstalled();
+  const version = await readButVersion();
   const support: Record<string, WorkspaceSupport> = {};
   for (const repo of repos) {
-    support[repo.id] = { butInstalled, gitButlerWorkspace: isGitButlerWorkspace(repo.path) };
+    support[repo.id] = {
+      butInstalled: version !== null,
+      gitButlerWorkspace: isGitButlerReady(repo.path, version),
+    };
   }
   return support;
 }
@@ -35,14 +38,16 @@ export async function describeWorkspaceProblem(
   signal?: AbortSignal
 ): Promise<ConfigProblem | null> {
   if (mode === 'gitbutler') {
-    if (!(await isButInstalled(signal))) {
+    const version = await readButVersion(signal);
+    if (version === null) {
       return {
         kind: 'workspace',
         detail:
           'Agents work on GitButler branches here, but GitButler’s command line (`but`) is not installed.',
       };
     }
-    if (!isGitButlerWorkspace(repo.path)) return { kind: 'workspace', detail: describeNotWorkspace(repo) };
+    if (!isGitButlerReady(repo.path, version))
+      return { kind: 'workspace', detail: describeNotWorkspace(repo, version) };
     return null;
   }
   if (mode !== 'main_checkout' || holdsCheckout) return null;

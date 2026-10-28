@@ -7,7 +7,7 @@ description: How to prove user-facing work in Shinsa before the human reviews it
 
 The human reviews the evidence before the diff, in the review's Evidence section, as items, each with its kind: a
 comparison (one view before and after, or in light and dark) side by side, a recording that plays in the image viewer,
-a screenshot, a test or check run as its result, a note. "4 pieces of evidence" counts items, not files: a before and
+a screenshot, a test or check run as the result and output of the check Shinsa ran, a note. "4 pieces of evidence" counts items, not files: a before and
 its after are one comparison, and so are a view's light and dark shots. Without it they have to run your change
 themselves, which is the work Shinsa exists to save. Attach every item with `attach_evidence`; Shinsa copies the files
 into its own store (`<data>/evidence/<task id>/round-<n>/`), so a file you leave in `/tmp` is fine.
@@ -21,7 +21,7 @@ into its own store (`<data>/evidence/<task id>/round-<n>/`), so a file you leave
 | Something moves or responds (a menu, a drag, a scroll, a form) | A recording of the flow, 5 to 20 seconds, at 1280px | `recording` |
 | A new screen with nothing before it | Per width, its light and dark as one comparison, parts labelled `Light` and `Dark` | `comparison` |
 | One view in light and dark | One comparison, never two screenshots: a part per theme, labelled `Light` and `Dark` | `comparison` |
-| Logic, an API, a script | The focused test that fails without your change and passes with it: its run output | `test` |
+| Logic, an API, a script | The focused test that fails without your change and passes with it, as a check you link | `test` |
 | What a run cannot show (a failing run before the fix, a manual check, a measurement) | A short note in markdown | `note` |
 | A preview deployment exists | Its URL | `preview` |
 
@@ -52,14 +52,20 @@ comparison counts as the screenshots (or recordings) a plan asks for.
   ```
 
   You take the before shot before you edit, so you may attach it on its own then (`kind: "screenshot"`,
-  `stage: "before"`) and its after later with the same title, width and theme (`stage: "after"`): Shinsa shows the
-  two as one comparison.
-- Every other kind takes exactly one source: `path` for a file (absolute, or relative to the worktree), `text` for
-  output or a note, `url` for a preview.
+  `stage: "before"`) and its after later with the same `key` (`stage: "after"`): Shinsa shows the two as one
+  comparison.
+- Give every item a `key` for what it shows (`settings-dark-900`); without one its title, width and theme are its key.
+  Evidence shows the work as it is now: when a later change alters a view, attach it again with the same key and it
+  replaces the earlier item (a new after keeps its before). Remove an item that no longer applies with
+  `remove_evidence` and a reason. The human sees only the current items; the old ones fold under Earlier versions.
+- A `test` or `check` takes only `check`, the id of one of the task's checks (`c1`, as `read_task` lists them), and
+  an optional `detail`: `{ "kind": "test", "check": "c2", "detail": "Fails before the fix with the empty name." }`.
+  Shinsa shows that check's result and the output of its last run; never paste test output.
+- Every other kind takes exactly one source: `path` for a file (absolute, or relative to the worktree), `text` for a
+  note, `url` for a preview.
 - A note is markdown, rendered as it is in the chat: lists, code, links. Put measurements in a table, one row per
   thing measured, and link the file you changed with a reference (`[theme.css](shinsa://file/src/theme.css#L12-L16)`)
-  so the human can open it. Test and check output is shown as plain text, so attach it as `test` or `check`, never as
-  a note.
+  so the human can open it. A test or check run is a linked check, never a note.
 
   ```md
   | Token | Before | After | Needs |
@@ -76,7 +82,9 @@ comparison counts as the screenshots (or recordings) a plan asks for.
    code, capture them from a scratch checkout of the base: `git worktree add --detach /tmp/before <base commit>`,
    install, run it on another port, capture, then `git worktree remove /tmp/before`.
 3. Capture with the browser tools you have (the Playwright MCP tools), or the Playwright command line for a single
-   page:
+   page. Every browser you start runs headless: the human works on this machine, and a window that opens takes their
+   screen. Shinsa starts the Playwright MCP headless for you. In a script, launch with `headless: true`, never with
+   `headless: false` or `--headed`, and never open a page with `open` or in a desktop browser.
 
    ```sh
    bunx playwright screenshot --viewport-size=1280,800 --color-scheme=dark --wait-for-timeout=500 \
@@ -93,7 +101,7 @@ comparison counts as the screenshots (or recordings) a plan asks for.
    ```ts
    import { chromium } from 'playwright';
 
-   const browser = await chromium.launch();
+   const browser = await chromium.launch({ headless: true });
    for (const theme of ['light', 'dark'] as const) {
      for (const width of [1280, 390]) {
        const page = await browser.newPage({ viewport: { width, height: 800 }, colorScheme: theme });
@@ -127,11 +135,11 @@ Build for a simulator with `xcodebuild`, install it with `xcrun simctl install`,
 
 ## Logic
 
-Write the test that fails without your change and passes with it. Run it once before the fix and once after, and
-attach the passing run with `kind: "test"` and `text` (the command on the first line). Attach the failing run as a
-`note` when it shows something the passing run does not. Shinsa runs the repository's checks itself after you hand
-over and attaches their output to the review, so attach the run of the test that proves your change, not the whole
-suite.
+Write the test that fails without your change and passes with it, and make it a check: in the plan's
+`verification`, or with `check_changes` on the phase that adds it (the `handover` skill). Shinsa runs it after that
+phase and keeps its output, so link it with `kind: "test"` and `check` (its id) instead of pasting the run. Run it once
+before the fix yourself and attach that failing run as a `note` when it shows something the passing run does not.
+Scope the check to the test that proves your change, never the whole suite: CI runs that on the pull request.
 
 ## As the reviewer
 

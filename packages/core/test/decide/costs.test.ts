@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { isOverBudget, listOpenGates, type RunUsage, resolveTaskCost } from '../../src/index.ts';
+import {
+  isOverBudget,
+  listOpenGates,
+  type RunUsage,
+  resolveTaskCost,
+  USAGE_RATE_LIMITS,
+} from '../../src/index.ts';
 import { createHarness, createTask, type Harness, proposePlan } from '../harness.ts';
 
 function usage(costUsd: number | null, tokens = 1_000): RunUsage {
@@ -80,7 +86,7 @@ describe('the cost limit per task', () => {
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ type: 'failure', cause: 'budget', title: 'Reached its cost limit' });
     expect(gate.body).toBe(
-      'This task has used $6.00, past its $5.00 limit, so the next step did not start. Continue to allow another $5.00, or cancel the task.'
+      'This task reached its $5.00 cost limit, so the next step did not start. Continue to allow another $5.00, or cancel the task.'
     );
     expect(harness.task(taskId).stage).toBe('building');
   });
@@ -147,20 +153,77 @@ describe('the cost limit per task', () => {
   });
 });
 
-function meterWeekly(harness: Harness, taskId: string, weeklyPercent: number, sessionId?: string) {
+function learnUsageRate(harness: Harness) {
+  const start = harness.now - 100_000;
+  for (let index = 0; index < USAGE_RATE_LIMITS.minTasks; index += 1) {
+    const from = start + index * 1_000;
+    const id = `learned-${index}`;
+    const readings = [
+      { percent: index * 2, at: from, resetsAt: null },
+      { percent: index * 2 + 2, at: from + 100, resetsAt: null },
+    ];
+    harness.state.runs[id] = {
+      id,
+      taskId: `learned-task-${index}`,
+      role: 'agent',
+      purpose: 'build',
+      provider: 'claude',
+      model: null,
+      sessionId: null,
+      startedAt: from,
+      endedAt: from + 100,
+      outcome: 'completed',
+      summary: null,
+      usage: usage(2),
+      meters: [{ attemptId: id, window: 'account:acc-1', from, to: from + 100, usage: usage(2), readings }],
+    };
+  }
+}
+
+function meterWeekly(
+  harness: Harness,
+  taskId: string,
+  percent: number,
+  sessionId?: string,
+  costUsd = percent
+) {
+  const run = harness.activeRun(taskId);
+  if ((run.attempts ?? []).length === 0) {
+    harness.send({
+      type: 'run.attempt',
+      runId: run.id,
+      attemptId: `${run.id}-attempt`,
+      provider: 'claude',
+      model: null,
+      resumed: false,
+      handoff: null,
+      account: { id: 'acc-1', email: null },
+    });
+  }
+  const attempt = harness.activeRun(taskId).attempts?.at(-1);
+  const last = run.meters?.at(-1)?.readings.at(-1) ?? {
+    percent: 0,
+    at: attempt?.startedAt ?? 0,
+    resetsAt: null,
+  };
   return harness.send({
     type: 'run.meter',
-    runId: harness.activeRun(taskId).id,
-    usage: usage(0.1),
-    weeklyPercent,
+    runId: run.id,
+    usage: usage(costUsd),
+    readings: [last, { percent: last.percent + percent, at: harness.now + 1, resetsAt: null }],
     ...(sessionId ? { sessionId } : {}),
   });
+}
+
+function weeklyShare(harness: Harness, taskId: string) {
+  return resolveTaskCost(harness.state, harness.task(taskId)).total.weeklyPercent;
 }
 
 function limitedByUsage(percent: number) {
   const harness = createHarness();
   harness.send({ type: 'settings.change', patch: { taskUsageLimit: percent } });
   const taskId = createTask(harness);
+  learnUsageRate(harness);
   return { harness, taskId };
 }
 
@@ -174,34 +237,72 @@ function answerGate(harness: Harness, taskId: string) {
 }
 
 describe('metering the weekly usage a run used', () => {
-  test('adds each measured share to the run, and a share of nothing records nothing', () => {
+  test('keeps the readings on the attempt, and charges the run its cost at the account’s rate', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
+    learnUsageRate(harness);
     const runId = harness.activeRun(taskId).id;
     meterWeekly(harness, taskId, 1.5);
     meterWeekly(harness, taskId, 2);
-    expect(harness.state.runs[runId]?.weeklyPercent).toBe(3.5);
+    expect(weeklyShare(harness, taskId)).toBe(3.5);
     meterWeekly(harness, taskId, 0);
-    expect(harness.state.runs[runId]?.weeklyPercent).toBe(3.5);
+    expect(weeklyShare(harness, taskId)).toBe(3.5);
+    expect(harness.state.runs[runId]?.meters).toEqual([
+      expect.objectContaining({
+        attemptId: `${runId}-attempt`,
+        window: 'account:acc-1',
+        readings: expect.any(Array),
+      }),
+    ]);
   });
 
-  test('a session that reports the same totals still records the weekly usage it measured', () => {
+  test('a session that reports the same totals still records the readings it took', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     const runId = harness.activeRun(taskId).id;
-    meterWeekly(harness, taskId, 1, 's1');
-    expect(meterWeekly(harness, taskId, 0, 's1').events).toEqual([]);
-    expect(meterWeekly(harness, taskId, 2, 's1').events).toHaveLength(1);
-    expect(harness.state.runs[runId]).toMatchObject({ weeklyPercent: 3, usage: { costUsd: 0.1 } });
+    meterWeekly(harness, taskId, 1, 's1', 0.1);
+    const same = {
+      inputTokens: 1_000,
+      outputTokens: 1_000,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      costUsd: 0.1,
+    };
+    expect(harness.send({ type: 'run.meter', runId, sessionId: 's1', usage: same }).events).toEqual([]);
+    expect(meterWeekly(harness, taskId, 2, 's1', 0.1).events).toHaveLength(1);
+    expect(harness.state.runs[runId]?.meters?.[0]?.readings).toHaveLength(4);
+    expect(harness.state.runs[runId]).toMatchObject({ usage: { costUsd: 0.1 } });
   });
 
-  test('a share outside 0 to 100 is refused', () => {
+  test('a run metered before it had an attempt keeps its cost and has no weekly share', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    expect(() => meterWeekly(harness, taskId, -1)).toThrow(
-      'The weekly usage a run used must be a percentage from 0 to 100.'
+    const runId = harness.activeRun(taskId).id;
+    harness.send({
+      type: 'run.meter',
+      runId,
+      usage: usage(0.2),
+      readings: [{ percent: 4, at: 1, resetsAt: null }],
+    });
+    expect(harness.state.runs[runId]?.meters).toBeUndefined();
+    expect(resolveTaskCost(harness.state, harness.task(taskId)).total).toMatchObject({
+      knownUsd: 0.2,
+      weeklyRuns: 0,
+    });
+  });
+
+  test('a reading outside 0 to 100, or without a time, is refused', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    const runId = harness.activeRun(taskId).id;
+    const meterReading = (percent: number, at: number, resetsAt: number | null = null) =>
+      harness.send({ type: 'run.meter', runId, usage: usage(0.1), readings: [{ percent, at, resetsAt }] });
+    expect(() => meterReading(-1, 1)).toThrow(
+      'A weekly reading must be a percentage from 0 to 100 with a time and a reset time or none.'
     );
-    expect(() => meterWeekly(harness, taskId, 101)).toThrow('from 0 to 100');
+    expect(() => meterReading(101, 1)).toThrow('from 0 to 100');
+    expect(() => meterReading(5, Number.NaN)).toThrow('from 0 to 100');
+    expect(() => meterReading(5, 1, -1)).toThrow('from 0 to 100');
   });
 });
 
@@ -217,7 +318,7 @@ describe('the usage limit per task', () => {
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ type: 'failure', cause: 'budget', title: 'Reached its usage limit' });
     expect(gate.body).toBe(
-      'This task has used 12% of the weekly usage limit, past its 10% limit, so the next step did not start. Continue to allow another 10%, or cancel the task.'
+      'This task reached its usage limit of 10% of the weekly limit, so the next step did not start. Continue to allow another 10%, or cancel the task.'
     );
   });
 
@@ -234,16 +335,11 @@ describe('the usage limit per task', () => {
   test('continuing past both limits allows another of each', () => {
     const { harness, taskId } = limitedByUsage(10);
     harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 1 } });
-    harness.send({
-      type: 'run.meter',
-      runId: harness.activeRun(taskId).id,
-      usage: usage(2),
-      weeklyPercent: 11,
-    });
+    meterWeekly(harness, taskId, 11);
     proposePlan(harness, taskId);
     expect(harness.openGate(taskId).title).toBe('Reached its usage limit');
     answerGate(harness, taskId);
-    expect(harness.task(taskId)).toMatchObject({ usageAcknowledgedPercent: 11, budgetAcknowledgedUsd: 2 });
+    expect(harness.task(taskId)).toMatchObject({ usageAcknowledgedPercent: 11, budgetAcknowledgedUsd: 11 });
   });
 
   test('raising or switching off the limit releases the tasks it paused', () => {
@@ -264,6 +360,61 @@ describe('the usage limit per task', () => {
     meter(harness, taskId, 50);
     proposePlan(harness, taskId);
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+  });
+
+  test('on an account still learning its rate, the usage limit counts the early estimate and says so', () => {
+    const harness = createHarness();
+    harness.send({ type: 'settings.change', patch: { taskUsageLimit: 10 } });
+    const taskId = createTask(harness);
+    meterWeekly(harness, taskId, 12);
+    expect(weeklyShare(harness, taskId)).toBe(0);
+    proposePlan(harness, taskId);
+    const gate = harness.openGate(taskId);
+    expect(gate).toMatchObject({ cause: 'budget', title: 'Reached its usage limit' });
+    expect(gate.body).toBe(
+      'This task reached its usage limit of 10% of the weekly limit, so the next step did not start. The share is an early estimate while Shinsa learns the account’s rate. Continue to allow another 10%, or cancel the task.'
+    );
+  });
+
+  test('before an account has any estimate, the usage limit cannot count, and a cost limit still holds', () => {
+    const idle = (harness: Harness, taskId: string) => {
+      const run = harness.activeRun(taskId);
+      harness.send({
+        type: 'run.attempt',
+        runId: run.id,
+        attemptId: `${run.id}-attempt`,
+        provider: 'claude',
+        model: null,
+        resumed: false,
+        handoff: null,
+        account: { id: 'acc-1', email: null },
+      });
+      harness.send({
+        type: 'run.meter',
+        runId: run.id,
+        usage: usage(6),
+        readings: [
+          { percent: 0, at: harness.now, resetsAt: null },
+          { percent: 40, at: harness.now + 60 * 60_000, resetsAt: null },
+        ],
+      });
+    };
+    const usageOnly = createHarness();
+    usageOnly.send({ type: 'settings.change', patch: { taskUsageLimit: 1 } });
+    const unlimited = createTask(usageOnly);
+    idle(usageOnly, unlimited);
+    expect(resolveTaskCost(usageOnly.state, usageOnly.task(unlimited)).total).toMatchObject({
+      learningRuns: 1,
+      estimatedPercent: 0,
+    });
+    proposePlan(usageOnly, unlimited);
+    expect(listOpenGates(usageOnly.state, unlimited)).toHaveLength(0);
+    const both = createHarness();
+    both.send({ type: 'settings.change', patch: { taskUsageLimit: 1, taskBudgetUsd: 5 } });
+    const capped = createTask(both);
+    idle(both, capped);
+    proposePlan(both, capped);
+    expect(both.openGate(capped)).toMatchObject({ cause: 'budget', title: 'Reached its cost limit' });
   });
 
   test('the limit must be a whole percentage from 1 to 100', () => {

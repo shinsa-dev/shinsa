@@ -30,7 +30,9 @@ describe('resolveEffectKey', () => {
 
   test('repeatable effects are keyed by the event that asked for them', () => {
     expect(resolveEffectKey({ kind: 'run.steer', runId: 'r', text: 'x' }, 4)).toBe('run.steer:r:4');
-    expect(resolveEffectKey({ kind: 'checks.run', taskId: 't', round: 2 }, 4)).toBe('checks.run:t:2:4');
+    expect(
+      resolveEffectKey({ kind: 'checks.run', taskId: 't', round: 2, checks: [], coverage: false }, 4)
+    ).toBe('checks.run:t:2:4');
     expect(resolveEffectKey({ kind: 'briefing.request', projectId: null }, 4)).toBe('briefing.request:*:4');
     expect(resolveEffectKey({ kind: 'briefing.request', projectId: 'a' }, 4)).toBe('briefing.request:a:4');
     for (const effect of TASK_EFFECTS) {
@@ -49,7 +51,8 @@ describe('resolveEffectLane', () => {
   });
 
   test('everything else about a task runs in order in the task lane, except the cheap watch in its side lane', () => {
-    for (const effect of [...TASK_EFFECTS, { kind: 'checks.run', taskId: 't', round: 0 } as const]) {
+    const checks: ShinsaEffect = { kind: 'checks.run', taskId: 't', round: 0, checks: [], coverage: true };
+    for (const effect of [...TASK_EFFECTS, checks]) {
       expect(resolveEffectLane(effect)).toBe(effect.kind === 'pull_request.watch' ? 'side:t' : 'task:t');
     }
   });

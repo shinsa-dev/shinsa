@@ -1,4 +1,4 @@
-import { type ChatToolArgs, capitalise, type Run, type Task } from '@shinsa/core';
+import { type ChatToolArgs, capitalise, type Run, resolvePhaseChange, type Task } from '@shinsa/core';
 import { Icon, type IconName } from '@shinsa/ui/components/icon';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
@@ -9,6 +9,7 @@ import { IconSlot } from '@/components/layout/surface/icon-slot.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
+import { PlanChangeSummary, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ChangeSnippet } from '@/components/text/change-snippet.tsx';
 import { FindingText } from '@/components/text/finding-text.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
@@ -24,6 +25,7 @@ import {
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { readList, readString, readStrings } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
+import { listRevisionChanges } from '@/lib/overview/plan-version.ts';
 import { resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeReportedFindings, readReportedFindings } from '@/lib/review/findings.ts';
 import { resolveReviewPath } from '@/lib/review/places.ts';
@@ -48,41 +50,38 @@ function Card({
   );
 }
 
-function PlanCard({ args }: { args: ChatToolArgs }) {
+function PlanCard({ args, task }: { args: ChatToolArgs; task: Task | null }) {
   const goal = readString(args, 'goal');
   const phases = readList(args, 'phases');
   const changed = readString(args, 'change_summary');
+  const changes = listRevisionChanges(task, changed);
   return (
     <Card
       icon='IconMap'
       title={changed ? 'Revised the plan' : 'Proposed the plan'}
       meta={phases.length > 0 ? formatCount(phases.length, 'phase', 'phases') : null}
     >
-      {changed && (
-        <div className='flex flex-col gap-px text-xs'>
-          <span className='text-2xs text-fg-2'>What changed</span>
-          <InlineMarkdown text={changed} className='selectable text-fg-4' />
-        </div>
-      )}
+      <PlanChangeSummary summary={changed} />
       {goal && <Markdown text={goal} />}
       {phases.length > 0 && (
         <ol className='flex flex-col gap-2'>
-          {phases.map((phase, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: plan phases are positional
-            <li key={index} className='flex gap-2.5'>
-              <StepNumber index={index} />
-              <div className='flex min-w-0 flex-col gap-px pt-px'>
-                <span className='font-medium text-fg-4 text-xs'>
-                  <InlineMarkdown text={readString(phase, 'title') ?? `Phase ${index + 1}`} />
-                </span>
-                {readString(phase, 'detail') && (
-                  <span className='selectable text-fg-3 text-xs'>
-                    <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
-                  </span>
-                )}
-              </div>
-            </li>
-          ))}
+          {phases.map((phase, index) => {
+            const title = readString(phase, 'title') ?? `Phase ${index + 1}`;
+            return (
+              // biome-ignore lint/suspicious/noArrayIndexKey: plan phases are positional
+              <li key={index} className='flex gap-2.5'>
+                <StepNumber index={index} />
+                <div className='flex min-w-0 flex-col gap-px'>
+                  <PlanPhaseTitle title={title} change={resolvePhaseChange(changes, title)} />
+                  {readString(phase, 'detail') && (
+                    <span className='selectable text-fg-3 text-xs'>
+                      <InlineMarkdown text={readString(phase, 'detail') ?? ''} />
+                    </span>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ol>
       )}
       <PlanParameterList document={readPlanParameters(args)} headingClassName='text-2xs text-fg-2' />
@@ -308,7 +307,7 @@ export function HandoverCard({
   }
   switch (tool.name) {
     case 'propose_plan':
-      return <PlanCard args={tool.args} />;
+      return <PlanCard args={tool.args} task={task} />;
     case 'complete_phase':
       return (
         <SummaryCard
@@ -342,6 +341,7 @@ export function HandoverCard({
     case 'reshape_task':
       return <ReshapeCard args={tool.args} />;
     case 'attach_evidence':
+    case 'remove_evidence':
     case 'find_tasks':
     case 'read_task':
     case 'list_repository_work':
