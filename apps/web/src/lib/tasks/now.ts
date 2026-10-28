@@ -31,8 +31,11 @@ export function resolveGateNow(task: Task, gate: Gate) {
 }
 
 function resolveActivePhase(task: Task) {
+  const phases = task.plan?.document?.phases ?? [];
   const index = task.phases.findIndex((phase) => phase.status === 'active');
-  return task.plan?.document?.phases[index]?.title ?? null;
+  const title = phases[index]?.title;
+  if (!title) return null;
+  return phases.length > 1 ? `Phase ${index + 1} of ${phases.length}: ${title}` : title;
 }
 
 export function resolveTaskNow(state: ShinsaState, task: Task): string {

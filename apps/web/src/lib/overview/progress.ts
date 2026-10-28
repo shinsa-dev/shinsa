@@ -90,6 +90,20 @@ export function isStepReached(step: Step) {
   return step.status === 'done' || step.status === 'skipped';
 }
 
+export function selectCurrentStep(steps: Step[]) {
+  return steps.find((step) => step.status === 'current' || step.status === 'waiting') ?? null;
+}
+
+export function describeStep(step: Step) {
+  return step.count ? `${step.label} ${step.count}` : step.label;
+}
+
+export function describeTrackPosition(steps: Step[]) {
+  const current = selectCurrentStep(steps);
+  if (current) return `Step ${steps.indexOf(current) + 1} of ${steps.length}: ${describeStep(current)}`;
+  return `${steps.filter(isStepReached).length} of ${steps.length} steps done`;
+}
+
 const LONG_STRIP = 6;
 
 const LONGEST_FULL_STRIP = 8;

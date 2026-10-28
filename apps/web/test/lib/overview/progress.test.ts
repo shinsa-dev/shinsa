@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import { type PhaseProgress, resolveTaskProgress, type Task, type TaskProgress } from '@shinsa/core';
 import {
+  describeStep,
+  describeTrackPosition,
   isStepReached,
   resolveLabelFold,
   resolveSteps,
   STEP_STATUS_LABEL,
   type Step,
+  selectCurrentStep,
 } from '@/lib/overview/progress.ts';
 import { createTask } from '../../support/state.ts';
 
@@ -387,5 +390,34 @@ describe('resolveLabelFold', () => {
     expect(before).toMatchObject({ label: 'Pre-merge', count: '0/1', status: 'waiting', detail: [] });
     expect(steps.find((candidate) => candidate.key === 'post-merge')?.label).toBe('Post-merge');
     expect(steps.map((candidate) => resolveLabelFold(candidate, steps))[0]).toBe('always');
+  });
+});
+
+function step(key: string, status: Step['status'], count: string | null = null): Step {
+  return { key, label: key, count, status, detail: [] };
+}
+
+describe('the current step', () => {
+  it('picks the step in progress or the one waiting on you, and names it with its count', () => {
+    const building = [step('Plan', 'done'), step('Build', 'current', '1/2'), step('Checks', 'pending')];
+    expect(selectCurrentStep(building)?.key).toBe('Build');
+    expect(describeStep(building[1] as Step)).toBe('Build 1/2');
+    expect(describeTrackPosition(building)).toBe('Step 2 of 3: Build 1/2');
+
+    const review = [step('Build', 'done'), step('Your review', 'waiting')];
+    expect(describeStep(selectCurrentStep(review) as Step)).toBe('Your review');
+    expect(describeTrackPosition(review)).toBe('Step 2 of 2: Your review');
+  });
+
+  it('counts the steps done when none is current', () => {
+    const between = [step('Plan', 'done'), step('Run', 'skipped'), step('Build', 'pending')];
+    expect(selectCurrentStep(between)).toBeNull();
+    expect(describeTrackPosition(between)).toBe('2 of 3 steps done');
+  });
+
+  it('follows a real task through the track', () => {
+    const task = withPlan({ id: 'task-1', stage: 'building' }, ['Set up', 'Wire'], ['done', 'active']);
+    const current = selectCurrentStep(resolveSteps(resolveTaskProgress(task)));
+    expect(current && describeStep(current)).toBe('Build 1/2');
   });
 });

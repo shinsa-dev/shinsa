@@ -7,6 +7,7 @@ import {
   isTaskWatchable,
   listFeedLines,
   RESULT_TITLE,
+  resolveLatestActivity,
   resolveNowKind,
   resolveNowTitle,
   resolveResultPlace,
@@ -195,6 +196,37 @@ describe('listFeedLines', () => {
     const entries = ['one', 'two', 'three'].map((text) => createAgentEntry(text, 'interim'));
     expect(listFeedLines(entries, 2).map((line) => line.text)).toEqual(['two', 'three']);
     expect(listFeedLines([], 2)).toEqual([]);
+  });
+});
+
+describe('resolveLatestActivity', () => {
+  it('names the newest tool call in the present tense with its target', () => {
+    const entries = [
+      createAgentEntry('Reading the export code.', 'interim'),
+      createCallEntry('call-1', {
+        kind: 'command',
+        action: 'run',
+        command: 'bun test apps/web',
+        description: null,
+      }),
+    ];
+    expect(resolveLatestActivity(entries)).toBe('Running bun test apps/web');
+  });
+
+  it('gives the first line of the newest agent message, or the verb alone for a tool without a target', () => {
+    expect(resolveLatestActivity([createAgentEntry('Wiring the form.\nThen the tests.', 'interim')])).toBe(
+      'Wiring the form.'
+    );
+    expect(
+      resolveLatestActivity([
+        createCallEntry('call-1', { kind: 'command', action: 'stop', command: 'bun dev', description: null }),
+      ])
+    ).toBe('Stopping a command');
+  });
+
+  it('is null before the run has done anything', () => {
+    expect(resolveLatestActivity([])).toBeNull();
+    expect(resolveLatestActivity([createBrief('Build the change.')])).toBeNull();
   });
 });
 
