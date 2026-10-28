@@ -3,10 +3,11 @@ import type { ChatAttachment } from '@shinsa/core';
 import {
   canOpenAttachment,
   describeAttachment,
-  resolveFileLook,
+  resolveFileGlyph,
   resolveFileType,
   splitAttachments,
 } from '@/lib/chat/attachments.ts';
+import { resolveFileIcon } from '@/lib/code/file-icons.ts';
 
 function attachment(overrides: Partial<ChatAttachment>): ChatAttachment {
   return {
@@ -67,47 +68,23 @@ describe('resolveFileType', () => {
   });
 });
 
-describe('resolveFileLook', () => {
-  it('gives each kind of file its icon and tone', () => {
-    expect(resolveFileLook({ name: 'spec.pdf', mimeType: null })).toEqual({
-      icon: 'IconFileTypePdf',
-      tone: 'red',
-    });
-    expect(resolveFileLook({ name: 'sales.xlsx', mimeType: null })).toEqual({
-      icon: 'IconFileTypeTable',
-      tone: 'green',
-    });
-    expect(resolveFileLook({ name: 'pitch.key', mimeType: null })).toEqual({
-      icon: 'IconSlidesWide',
-      tone: 'orange',
-    });
-    expect(resolveFileLook({ name: 'brief.docx', mimeType: null })).toEqual({
-      icon: 'IconFileText',
-      tone: 'blue',
-    });
-    expect(resolveFileLook({ name: 'build.zip', mimeType: null })).toEqual({
-      icon: 'IconFileTypeArchive',
-      tone: 'amber',
-    });
-    expect(resolveFileLook({ name: 'index.ts', mimeType: null })).toEqual({
-      icon: 'IconFileTypeTypescript',
-      tone: 'blue',
-    });
-    expect(resolveFileLook({ name: 'demo.mov', mimeType: null })).toEqual({
-      icon: 'IconFileTypeMedia',
-      tone: 'purple',
-    });
+describe('resolveFileGlyph', () => {
+  it('gives each kind of file its icon, by extension first', () => {
+    expect(resolveFileGlyph({ name: 'spec.pdf', mimeType: null })).toBe('IconFileTypePdf');
+    expect(resolveFileGlyph({ name: 'sales.xlsx', mimeType: null })).toBe('IconFileTypeTable');
+    expect(resolveFileGlyph({ name: 'pitch.key', mimeType: null })).toBe('IconSlidesWide');
+    expect(resolveFileGlyph({ name: 'brief.docx', mimeType: null })).toBe('IconFileText');
+    expect(resolveFileGlyph({ name: 'build.zip', mimeType: null })).toBe('IconFileTypeArchive');
+    expect(resolveFileGlyph({ name: 'index.ts', mimeType: null })).toBe('IconFileTypeTypescript');
+    expect(resolveFileGlyph({ name: 'demo.mov', mimeType: null })).toBe('IconFileTypeMedia');
   });
 
-  it('falls back to the MIME type, then to a plain neutral file', () => {
-    expect(resolveFileLook({ name: 'recording', mimeType: 'audio/mpeg' }).tone).toBe('purple');
-    expect(resolveFileLook({ name: 'download', mimeType: 'application/pdf' }).tone).toBe('red');
-    expect(resolveFileLook({ name: 'bundle', mimeType: 'application/zip' }).tone).toBe('amber');
-    expect(resolveFileLook({ name: 'notes.txt', mimeType: 'text/plain' })).toEqual({
-      icon: 'IconFileText',
-      tone: 'neutral',
-    });
-    expect(resolveFileLook({ name: 'README', mimeType: null }).tone).toBe('neutral');
+  it('falls back to the MIME type when the name has no extension, then to a plain file', () => {
+    expect(resolveFileGlyph({ name: 'recording', mimeType: 'audio/mpeg' })).toBe('IconFileTypeMedia');
+    expect(resolveFileGlyph({ name: 'download', mimeType: 'application/pdf' })).toBe('IconFileTypePdf');
+    expect(resolveFileGlyph({ name: 'bundle', mimeType: 'application/zip' })).toBe('IconFileTypeArchive');
+    expect(resolveFileGlyph({ name: 'notes.txt', mimeType: 'text/plain' })).toBe('IconFileText');
+    expect(resolveFileGlyph({ name: 'blob', mimeType: null })).toBe(resolveFileIcon('blob'));
   });
 });
 

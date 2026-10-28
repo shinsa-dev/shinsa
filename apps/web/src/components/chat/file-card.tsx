@@ -3,9 +3,8 @@ import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { CARD } from '@/components/layout/surface/card.ts';
-import { describeAttachment, resolveFileLook } from '@/lib/chat/attachments.ts';
-import { TONE_EDGE, TONE_SURFACE, TONE_TEXT } from '@/lib/format/tone.ts';
+import { CARD, INSET } from '@/components/layout/surface/card.ts';
+import { describeAttachment, resolveFileGlyph } from '@/lib/chat/attachments.ts';
 
 const FILE_CARD = cn(
   CARD,
@@ -13,17 +12,12 @@ const FILE_CARD = cn(
 );
 
 function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | null; busy: boolean }) {
-  const { icon, tone } = resolveFileLook({ name, mimeType });
   return (
     <span
       aria-hidden
-      className={cn(
-        'corner-superellipse/1.125 grid size-10 shrink-0 place-items-center rounded-lg border',
-        TONE_SURFACE[tone],
-        TONE_EDGE[tone]
-      )}
+      className={cn(INSET, 'file-icons-muted grid size-10 shrink-0 place-items-center bg-bg-a1 text-fg-3')}
     >
-      {busy ? <Spinner size='md' /> : <Icon size='lg' name={icon} className={TONE_TEXT[tone]} />}
+      {busy ? <Spinner size='md' /> : <Icon size='lg' name={resolveFileGlyph({ name, mimeType })} />}
     </span>
   );
 }
