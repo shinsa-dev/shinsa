@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { APP_FLAVORS } from '@shinsa/core';
 import {
   APP_ID,
   describeEngineScreen,
@@ -10,6 +11,7 @@ import {
   ENGINE_PLIST,
   type EngineScreen,
   isCrashing,
+  isOnOtherPort,
   isSpawnRefused,
   listEngineVariables,
   parseEngineAction,
@@ -46,6 +48,17 @@ describe('the engine’s launchd job', () => {
     expect(shipped).toContain('<key>BundleProgram</key>');
     expect(shipped).toContain('<string>studio.overclock.shinsa</string>');
     expect(shipped).toContain('<key>SuccessfulExit</key>\n    <false/>');
+  });
+
+  it('ships in Shinsa Canary under a label and bundle id of its own, so it never replaces Shinsa’s', () => {
+    const { appId } = APP_FLAVORS.canary;
+    const shipped = readFileSync(
+      join(import.meta.dirname, '../../resources/LaunchAgents-canary', `${appId}.engine.plist`),
+      'utf8'
+    );
+    expect(shipped).toBe(serializeEngineAgent({ bundle: ENGINE_BUNDLE_PROGRAM }, undefined, appId));
+    expect(shipped).toContain('<string>studio.overclock.shinsa.canary.engine</string>');
+    expect(shipped).toContain('<string>studio.overclock.shinsa.canary</string>');
   });
 
   it('as a plain LaunchAgent names the program by its path and carries the data folder', () => {
@@ -92,6 +105,28 @@ describe('the engine’s launchd job', () => {
   });
 });
 
+describe('an engine left on another port', () => {
+  const job = { pid: 812, runs: 1, lastExitCode: null, spawnFailed: false };
+  const lock = (holder: object) =>
+    JSON.stringify({ version: '0.4.0', url: 'http://127.0.0.1:5180', ...holder });
+
+  it('is the job’s own engine still on the port of the version before an update', () => {
+    expect(isOnOtherPort(job, lock({ pid: 812, port: 5180 }), 7446)).toBe(true);
+  });
+
+  it('is not an engine on this port, another program’s lock, or a job that is not running', () => {
+    expect(isOnOtherPort(job, lock({ pid: 812, port: 7446 }), 7446)).toBe(false);
+    expect(isOnOtherPort(job, lock({ pid: 9001, port: 5180 }), 7446)).toBe(false);
+    expect(isOnOtherPort({ ...job, pid: null }, lock({ pid: 812, port: 5180 }), 7446)).toBe(false);
+  });
+
+  it('reads no holder from a missing, broken or partial lock', () => {
+    for (const text of [null, '', '{ broken', 'null', '7', JSON.stringify({ pid: 812 })]) {
+      expect(isOnOtherPort(job, text, 7446)).toBe(false);
+    }
+  });
+});
+
 describe('the engine log', () => {
   it('keeps the warnings, errors and plain lines, once each, in plain words', () => {
     const log = [
@@ -123,6 +158,7 @@ describe('the engine log', () => {
     expect(resolveDataDir({ XDG_CONFIG_HOME: '/x' }, '/u')).toBe('/x/shinsa/data');
     expect(resolveDataDir({ HOME: '/me' }, '/u')).toBe('/me/.config/shinsa/data');
     expect(resolveDataDir({}, '/u')).toBe('/u/.config/shinsa/data');
+    expect(resolveDataDir({}, '/u', APP_FLAVORS.canary)).toBe('/u/.config/shinsa-canary/data');
   });
 });
 
@@ -136,7 +172,7 @@ describe('the status screen', () => {
       { kind: 'port', port: 5180, detail: 'log' },
       { kind: 'stopped', detail: 'log' },
     ];
-    const views = screens.map(describeEngineScreen);
+    const views = screens.map((screen) => describeEngineScreen(screen));
     expect(views.map((view) => view.title)).toEqual([
       'Starting Shinsa',
       'Waiting for Shinsa',
@@ -155,6 +191,12 @@ describe('the status screen', () => {
     ]);
     expect(views.map((view) => view.busy)).toEqual([true, true, false, false, false, false]);
     expect(views[3]?.detail).toBe('log');
+  });
+
+  it('names Shinsa Canary in its own app, where Login Items lists it so', () => {
+    const view = describeEngineScreen({ kind: 'approval' }, 'Shinsa Canary');
+    expect(view.title).toBe('Allow Shinsa Canary to run in the background');
+    expect(view.text).toContain('Turn Shinsa Canary on in System Settings');
   });
 
   it('takes an action only from its own links', () => {

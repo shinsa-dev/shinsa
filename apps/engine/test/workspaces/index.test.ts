@@ -1,18 +1,27 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
-import { isButInstalled, runBut } from '../../src/workspaces/but.ts';
+import { needsButSetup, readButVersion, runBut } from '../../src/workspaces/but.ts';
 import { describeWorkspaceProblem, listWorkspaceSupport, Workspaces } from '../../src/workspaces/index.ts';
-import { createGitRepo, createTempDir, overrideEnv, writeFiles } from '../helpers/index.ts';
+import {
+  createGitRepo,
+  createTempDir,
+  overrideEnv,
+  startParallelBranches,
+  writeFiles,
+} from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
 const restores: (() => void)[] = [];
 
 afterEach(() => {
-  for (const restore of restores.splice(0)) restore();
+  for (const restore of restores.splice(0).reverse()) restore();
 });
 
 function hideBut() {
   restores.push(overrideEnv({ FAKE_BUT_MISSING: '1' }));
+}
+
+function pretendBut(version: string) {
+  restores.push(overrideEnv({ FAKE_BUT_VERSION: version }));
 }
 
 describe('where agents work', () => {
@@ -23,24 +32,41 @@ describe('where agents work', () => {
     expect(workspaces.resolve(createTask({ workspace: 'main_checkout' })).mode).toBe('main_checkout');
   });
 
-  test('GitButler is offered for a repository only when `but` is installed and it is a GitButler workspace', async () => {
+  test('GitButler is offered where `but` is installed: in any repository from 0.23, before that only once set up', async () => {
     const plain = await createGitRepo();
     const butler = await createGitRepo();
-    await runCommandOrThrow(['but', 'setup', '--json'], butler.path);
-    expect(
-      await listWorkspaceSupport([
-        { id: 'plain', path: plain.path },
-        { id: 'butler', path: butler.path },
-      ])
-    ).toEqual({
+    await startParallelBranches(butler.path);
+    const repos = [
+      { id: 'plain', path: plain.path },
+      { id: 'butler', path: butler.path },
+    ];
+    pretendBut('0.23.0');
+    expect(await listWorkspaceSupport(repos)).toEqual({
+      plain: { butInstalled: true, gitButlerWorkspace: true },
+      butler: { butInstalled: true, gitButlerWorkspace: true },
+    });
+    pretendBut('0.22.3');
+    expect(await listWorkspaceSupport(repos)).toEqual({
       plain: { butInstalled: true, gitButlerWorkspace: false },
       butler: { butInstalled: true, gitButlerWorkspace: true },
     });
     hideBut();
-    expect(await isButInstalled()).toBe(false);
+    expect(await readButVersion()).toBeNull();
+    expect(await listWorkspaceSupport(repos)).toEqual({
+      plain: { butInstalled: false, gitButlerWorkspace: false },
+      butler: { butInstalled: false, gitButlerWorkspace: false },
+    });
     await expect(runBut(['status'], butler.path)).rejects.toThrow(
       'GitButler’s command line (`but`) is not installed or not on the PATH.'
     );
+  });
+
+  test('only a `but` older than 0.23 needs `but setup` in a repository first', async () => {
+    pretendBut('0.22.3');
+    expect(await readButVersion()).toBe('0.22.3');
+    expect(needsButSetup('0.22.3')).toBe(true);
+    expect(needsButSetup('0.23.0')).toBe(false);
+    expect(needsButSetup('1.0.0')).toBe(false);
   });
 
   test('a failing `but` command says which one failed', async () => {
@@ -53,12 +79,15 @@ describe('where agents work', () => {
   test('the setup check names what stops agents working where the repository says', async () => {
     const plain = await createGitRepo();
     const butler = await createGitRepo();
-    await runCommandOrThrow(['but', 'setup', '--json'], butler.path);
+    await startParallelBranches(butler.path);
     expect(await describeWorkspaceProblem(plain.repo, 'worktrees', false)).toBeNull();
+    pretendBut('0.23.0');
+    expect(await describeWorkspaceProblem(plain.repo, 'gitbutler', false)).toBeNull();
+    pretendBut('0.22.3');
     expect(await describeWorkspaceProblem(butler.repo, 'gitbutler', false)).toBeNull();
     expect(await describeWorkspaceProblem(plain.repo, 'gitbutler', false)).toEqual({
       kind: 'workspace',
-      detail: `${plain.path} is not a GitButler workspace. Run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`,
+      detail: `${plain.path} is not a GitButler workspace, which \`but\` 0.22.3 needs. Update \`but\` (0.23 and newer work in any repository) or run \`but setup\` in it, or choose another place for agents to work in Settings → Projects.`,
     });
     expect(await describeWorkspaceProblem(butler.repo, 'main_checkout', false)).toEqual({
       kind: 'workspace',

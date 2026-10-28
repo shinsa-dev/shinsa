@@ -58,6 +58,7 @@ import {
   toCommentItem,
   toFindingItem,
 } from '@/lib/review/report.ts';
+import { type ChecksView, resolveChecksView } from '@/lib/tasks/checks.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 function useReviewDiff(task: Task): Loaded<TaskDiff> {
@@ -190,7 +191,17 @@ function Prose({ text, className }: { text: string; className?: string }) {
   return <Markdown text={text} className={cn('text-fg-4 text-xs', className)} />;
 }
 
-function BuiltPart({ task, report, prose }: { task: Task; report: WorkReport; prose: ReviewProseId }) {
+function BuiltPart({
+  task,
+  report,
+  checks,
+  prose,
+}: {
+  task: Task;
+  report: WorkReport;
+  checks: ChecksView | null;
+  prose: ReviewProseId;
+}) {
   const walkthrough = report.walkthrough;
   switch (prose) {
     case 'approach':
@@ -210,7 +221,7 @@ function BuiltPart({ task, report, prose }: { task: Task; report: WorkReport; pr
           persistId={resolveReviewDisclosure(task, 'panel', prose)}
           task={task}
           testing={walkthrough?.testing ?? null}
-          checks={task.checkResults ?? report.checks}
+          checks={checks}
           coverage={task.coverage}
         />
       );
@@ -225,11 +236,13 @@ function BuiltPart({ task, report, prose }: { task: Task; report: WorkReport; pr
 function HowItIsBuilt({
   task,
   report,
+  checks,
   chapter,
   selected,
 }: {
   task: Task;
   report: WorkReport;
+  checks: ChecksView | null;
   chapter: ReviewChapter;
   selected: string | null;
 }) {
@@ -237,7 +250,7 @@ function HowItIsBuilt({
     <Chapter title={chapter.title}>
       {chapter.prose.map((prose) => (
         <Stop key={prose.key} stop={prose.key} selected={selected}>
-          <BuiltPart task={task} report={report} prose={prose.key} />
+          <BuiltPart task={task} report={report} checks={checks} prose={prose.key} />
         </Stop>
       ))}
     </Chapter>
@@ -502,18 +515,27 @@ function ReviewSummary({
 function ReviewChapters({
   task,
   report,
+  checks,
   chapters,
   selected,
 }: {
   task: Task;
   report: WorkReport;
+  checks: ChecksView | null;
   chapters: ReviewChapter[];
   selected: string | null;
 }) {
   return chapters.map((chapter) => {
     if (chapter.id === 'built') {
       return (
-        <HowItIsBuilt key={chapter.id} task={task} report={report} chapter={chapter} selected={selected} />
+        <HowItIsBuilt
+          key={chapter.id}
+          task={task}
+          report={report}
+          checks={checks}
+          chapter={chapter}
+          selected={selected}
+        />
       );
     }
     if (chapter.id === 'careful')
@@ -542,6 +564,8 @@ export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
     [report, task]
   );
   const points = React.useMemo(() => listReviewPoints(chapters), [chapters]);
+  const { repos, evidence } = state;
+  const checks = React.useMemo(() => resolveChecksView({ repos, evidence }, task), [repos, evidence, task]);
   const stops = React.useMemo(() => listReviewStops(chapters), [chapters]);
   const selected = useSearchParam('spot');
   const [request, setRequest] = React.useState(0);
@@ -603,7 +627,7 @@ export function ReviewTab({ state, task }: { state: ShinsaState; task: Task }) {
             diff={diffValue}
           />
           <EvidenceSection state={state} task={task} showEmpty />
-          <ReviewChapters task={task} report={report} chapters={chapters} selected={lit} />
+          <ReviewChapters task={task} report={report} checks={checks} chapters={chapters} selected={lit} />
           <AgentReview
             task={task}
             chapter={chapters.find((chapter) => chapter.id === 'review')}

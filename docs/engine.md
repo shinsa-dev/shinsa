@@ -104,48 +104,165 @@ is "Opus 5.5", and the curated `KNOWN_CODEX_MODELS`), so Settings shows the righ
 `supportedModels`, Codex's `model/list`), labelled the same way (`resolveModelLabel`). `GET /api/models` still
 serves the default provider's list, the one setup's Model step offers.
 
-**Checks are not an agent.** Shinsa runs the repository's check commands itself (`apps/engine/src/checks`:
-the configured commands, otherwise `lint`, `check-types`, `typecheck` and `test` from
-`package.json`), so a green build is a fact, never an agent's claim. When they pass, Shinsa also measures how much of
-the change the tests run (Test coverage of the change, below), the same way: a number Shinsa read from a report, never
-an agent's claim.
+**The agent chooses the checks; Shinsa runs them.** A check is not an agent: it is a command the Agent chose for its
+task and Shinsa ran, so its result is a fact, never an agent's claim (Checks, below).
+
+### Checks
+
+A check is one command that proves part of the change: a test file or folder, one package's type check, the linter
+on the changed paths. The Agent chooses a task's checks, as it chooses its evidence, and Shinsa runs them. The whole
+suite is CI's job on the pull request, never a check's, so no task runs the whole suite on every fix (since
+2026-10-27; the rules are `packages/core/src/domain/checks.ts` and `decide/checks.ts`, the runner
+`apps/engine/src/checks/`).
+
+- **Who chooses.** The Agent, in its plan: `verification` is a list of checks (`PlanCheck`: a `label` of at most 60
+  characters, a `command` of at most 200 and the `phases` it covers, 1-based, at least one; at most 12 checks,
+  `PROTOCOL_LIMITS`). `propose_plan` refuses a command that runs the whole suite (`isWholeSuiteCommand`: a bare
+  `bun test`, `npm test`, `bun run test`, `vitest`, `jest`, `pytest`, `go test ./...`, `cargo test`, `make test` or
+  `make check`, `<package manager> run check|ci|verify|test:all` or `turbo run test|check`, with no path or filter
+  left once options are dropped, found in any part of a chain or pipe, behind redirects, `cd x &&`, `--cwd`,
+  `timeout`, `nice`, `env`, `bash -c` and variable assignments) with `describeWholeSuiteRefusal`, which tells the
+  agent how to scope it, and `validatePlanRules` needs at least one check for a code change and none for a task
+  without `build`. `plan.proposed` sets the task's checks from the plan (`Task.checks`, each a `TaskCheck` with an id
+  `c1`…`cn` and the source `plan`). The planning prompt asks for scoped commands, and each phase instruction lists
+  that phase's checks (`describePhaseChecks`).
+- **No agent runs a whole suite itself either** (since 2026-10-28). Six tasks' agents each running the engine's
+  suite in their shell made every run crawl. `agents/policy.ts` refuses a shell command `isWholeSuiteCommand`
+  matches, in every role, and tells the agent to run the test files or folders it changed or its task's checks,
+  which Shinsa runs itself after the hand-over. Scoped runs stay allowed: a file or folder, `--cwd` with a path
+  argument, a `-t` filter. The house rules, the phase and fix instructions and the plugin's handover and review
+  skills say the same. Claude is refused through its PreToolUse hook and a writing Codex run through its command
+  approvals, where Codex sends each command wrapped in its shell (`/bin/zsh -lc 'bun test'`), so the wrapper is
+  matched by its file name. A read-only Codex run stays on `approvalPolicy: never` and only its prompt stops it:
+  under `untrusted` a command Shinsa accepts runs outside the `read-only` sandbox (checked against codex 0.164.0,
+  where an accepted `touch` and `echo x > README.md` both wrote), `on-request` never asks about a plain command, and
+  the granular policy needs Codex's experimental API.
+- **The Agent keeps them current** while it builds and fixes: `complete_phase` and `complete_fix` take
+  `check_changes` (at most 6, each `add`, `change` or `remove` with a `reason` of at most 200 characters; an `add`
+  needs a label and a command, and covers the current phase onward unless it names its phases). A new file in a later
+  phase gets a new check. Core records `checks.changed` (each change with the check as it is after it, source
+  `agent`) and an activity entry ("Added the check “Label”", its detail "`command`: reason"). It refuses an id the
+  task does not have (`check_unknown`), a command the task already has (`check_exists`), a phase the plan does not
+  have (`check_phases_invalid`) and the repository's own commands (`check_human_only`). A changed or removed check
+  loses its last result.
+- **The repository's commands** (`repo.checkCommands`, Settings → Projects, `shinsa repos update --checks`) are an
+  optional baseline every task of the repository runs once, before review. They are derived, never stored on the task
+  (`listRepoChecks`: ids `r1`…, no phases, the source `repo`; `listTaskChecks` gives the task's checks and the
+  baseline), and only you change them (Who can change Shinsa, below). Nothing is guessed from `package.json`: a
+  repository with none runs only its tasks' own checks, and setup verification has nothing to ask for.
+- **When they run.** Core decides; the task's stage is `checking` while they run:
+  - after phase k: the checks that cover phase k and the ones its hand-over added or changed ("running the checks
+    for phase 1 of 3"); after the last phase also the repository's commands ("running the checks before review");
+  - after a fix (not a pull request fix, whatever it fixes: failed checks, the agent review's findings, the changes
+    you asked for at the review gate): the checks that still block, the ones the fix names in `checks`, the ones it
+    added or changed, and the checks of every phase whose files the fix changed ("running the checks again after the
+    fix"). Shinsa commits each hand-over and records the files that commit changed (`files` on `agent.complete_phase`
+    and `agent.complete_fix`, from `WorkspaceCommit.files`; a phase keeps them on its `PhaseReport`), and a fix that
+    changes a file a phase changed runs the checks that cover that phase (`listTouchedPhaseChecks`). A fix that
+    changes only files no phase changed runs only the failing and named ones: never the whole set;
+  - when you approve the review with your edits: every check of the task and the repository's commands
+    ("committing your edits and running the checks", Your edits, below).
+
+  An empty set skips the stage. Core records which checks the run holds (`checks.started`, `Task.runningChecks`,
+  cleared by its result or when the stage moves on), so the web shows exactly those as running, and a retry after a
+  run that could not start runs the same set again with the checks that still block. When nothing blocks, the next
+  phase starts (Build stays current in the progress strip while phases are left), else the agent review, or the push
+  after your edits.
+- **What blocks.** Only a failure the change caused: a `fail` without the note `fails_on_base` (`isBlockingCheck`).
+  A blocking failure starts a fix (`fixFor: 'checks'`) whose prompt starts "The checks failed after the last
+  change." and names each failing check by its id; the fix loop is keyed to those ids (Recovery, below).
+  `Task.checkResults` keeps the latest result of each check (`checks.recorded` merges by id), so a check that did not
+  run this time keeps its last result.
+- **Who runs them.** Shinsa, in the task's checkout, each command through `sh -c` at low priority (`nice -n 10`
+  where the machine has `nice`) with `CHECK_ENV` (`CI=1`, no colour), and stops one after 15 minutes
+  (`CHECK_TIMEOUT_MS`). The checks of one run run in parallel, and a command that appears twice runs once. There is
+  no machine-wide limit or queue: tasks check at once, as they build at once (Scheduling, below).
+- **Load is not a failure.** When a failing check's output names its failing test files (Bun, Vitest or Jest), those
+  files run again alone, once (`checks/reruns.ts`). When each of them passes, so does the check, with the note
+  `passed_alone` ("passed when re-run alone") and the files in its detail, so a timeout on a loaded machine does not
+  start a fix.
+- **A coverage floor is CI's.** A scoped Bun run in a package with a coverage floor (`coverageThreshold` in its
+  `bunfig.toml`, as every Shinsa package has) exits non-zero even when every test passed, since a few files cannot
+  cover the package. When the output shows no failed test and only the coverage table below the floor
+  (`isCoverageFloorOnly`), the check passes and its detail says the floor is left to CI.
+- **Already failing on the base branch.** A check that still fails runs the same command on the task's base commit,
+  in a detached checkout of it (`BaseCheckouts` in `checks/base.ts`; cached per base commit and command, the last few
+  checkouts kept under `data/check-bases/`, each with its dependencies installed once). A command failing on the base
+  is not enough: Shinsa compares the failures themselves (`checks/failures.ts`). It reads each output into failures
+  with an identity (`listCheckFailures`):
+  - a test run (Bun, Vitest, Jest, read as in the re-run above): each failing test, keyed by its file (relative to the
+    checkout) and its full name, durations dropped; a file that failed without a named test is keyed by the file;
+  - otherwise each diagnostic: tsc (`file(line,col): error TS2322: …` and the pretty `file:line:col - error …`, a
+    type error), Biome (the `file:line:col lint/…` or `file format` header and the first message line under it),
+    ESLint's stylish blocks (rule and message), Prettier's `[warn] file`, and any `path:line[:col] message` line
+    (gcc, Go, Python type checkers, Ruff, ESLint's unix format), keyed by file, code (the TS code or the rule) and message. Line and
+    column numbers are never part of the key, and `line 12` inside a message is read as `line #`, so an error that
+    only moved because lines above it changed is the same error. Colour codes are stripped and a base checkout's
+    absolute paths read as relative.
+
+  The task's failures are matched against the base's one for one (a repeated identity counts each time,
+  `resolveFailureDiff`). Only a failure with no match is the change's. When none is new, the result gets the note
+  `fails_on_base` ("already failing on the base branch") and its detail starts "14 type errors, all already on the
+  base branch.": it is shown and does not block. When some are new, it blocks and its detail starts with them, "2 new
+  type errors, 14 already on the base branch:" and the new ones listed (ten at most, `describeFailureDiff`), so the fix
+  prompt names exactly what the change broke. A test file that failed again alone keeps only its own tests in the
+  comparison. Nothing is waved through blindly: the failure blocks as it is when Shinsa cannot name a failure in the
+  task's output or in the base's (the output is not one of the formats above), when the command passes on the base,
+  when a failing test file or a path in the command does not exist on the base (the change added it), when the check
+  timed out, when its output says no test ran at all (a filter that matched nothing is a broken command, on the base
+  as on the change, and the agent fixes the command), or when the base cannot be resolved.
+- **Two stages.** Before the pull request, the task's checks, as above. After it, CI: the pull request watch reads
+  GitHub's check runs (`PullRequest.checkRuns`, The pull request watch, below), and the web shows them in the same
+  Checks list as the task's own. A CI failure goes back to the Agent as a pull request fix, as before, and the fix is
+  pushed without running the task's checks again.
+- **Coverage of the change** is measured once, by the run before review (`checks.run` with `coverage: true`, once
+  every phase is reported), and only from the tests among the task's checks, never the whole suite (Test coverage of
+  the change, below).
+- **Evidence links a check.** Shinsa keeps the output of each check run as one piece of evidence, and an agent that
+  proves its change with a test or a check links that check by its id instead of pasting its output (Evidence,
+  below).
+- **Headless.** Checks run with `CI=1`, which test runners and Playwright read as headless, and every browser Shinsa
+  or its agents start is headless (`HEADLESS_BROWSER_ENV`), so nothing a check runs opens a window on your screen.
 
 ### Test coverage of the change
 
-After a checks run in which no check failed, the server runs the repository's tests with coverage in the task's
-checkout and works out **changed-line coverage**: of the lines the task's diff adds or modifies, the ones the report
-marks executable, and of those the ones a test ran (`apps/engine/src/test-coverage/`, the pure parts in
-`packages/core/src/test-coverage/`).
+Once before review, after a checks run in which nothing blocked, the server runs the tests among the task's checks
+again with coverage in the task's checkout and works out **changed-line coverage**: of the lines the task's diff adds
+or modifies, the ones the report marks executable, and of those the ones a test ran
+(`apps/engine/src/test-coverage/`, the pure parts in `packages/core/src/test-coverage/`).
 
 - **The setting** is per repository (`Repo.coverage`, `CoverageSetting`), a human-only repository field
   (`HUMAN_ONLY_REPO_FIELDS`) like the checks: whether coverage is measured, and by what command, decides what the
   reviewer and you are told about the tests, so no agent changes it. Settings → Projects shows it on each repository's
   row; `shinsa repos update --coverage auto|custom|off` (with `--coverage-command`, `--coverage-report` and
   `--coverage-format` for custom) changes it. Three modes (`COVERAGE_MODES`):
-  - **Auto**, the default: detect a coverage command from the repository's files, or measure nothing;
+  - **Auto**, the default: run the test checks among the task's checks again with their runner's coverage report,
+    or measure nothing when none of them is a test runner Shinsa knows;
   - **Custom**: your command and the report it writes (a path inside the repository), with the format when the
     report's name does not tell it (`resolveCoverageFormat`: `.info`/`lcov*` is lcov, `.xml` Cobertura, `.out` and
     `.coverprofile` a Go profile);
   - **Off**: nothing runs, and the agent's phase instruction does not mention coverage.
-- **Detection** (`resolveCoveragePlan`) reads only files, and detects nothing rather than guess. The first that applies:
+- **Auto's commands** (`resolveCoverageRun`) are the task's check commands, each turned into the same run with a
+  coverage report, never a guess at a suite: a command with shell operators, or whose runner is not one of these, is
+  left out. A leading `cd <folder> &&` and Bun's `--cwd` are kept.
 
-  | What it finds | Command (in the lockfile's runner: `bunx`, `pnpm exec`, `yarn`, else `npx`) | Report |
+  | The check runs | It runs again as | Report |
   |---|---|---|
-  | a `test` script that is `c8 …` or `nyc …` with no shell operators | the script with `--reporter=lcov --report-dir=<dir>` added | lcov |
-  | a `test` script that is `bun test …` with no shell operators | `bun test --coverage --coverage-reporter=lcov --coverage-dir=<dir> …` | lcov |
-  | `vitest` and `@vitest/coverage-v8` or `-istanbul` in the dependencies | `vitest run --coverage --coverage.reporter=lcov --coverage.reportsDirectory=<dir>` | lcov |
-  | `jest` in the dependencies | `jest --coverage --coverageReporters=lcov --coverageDirectory=<dir>` | lcov |
-  | `pytest-cov` in `pyproject.toml`, `setup.cfg`, `setup.py`, `Pipfile`, `tox.ini` or a `requirements*.txt` | `pytest --cov=. --cov-report=xml:<dir>/coverage.xml` (through `uv run`, `poetry run` or `pipenv run` when their lockfile is there, else `python3 -m pytest`) | Cobertura |
-  | a `go.mod` | `go test ./... -coverprofile=<dir>/cover.out` | Go profile |
+  | `bun test …` | `bun test --coverage --coverage-reporter=lcov --coverage-dir=<dir> …` | lcov |
+  | `vitest …` (also through `bunx`, `npx`, `pnpm exec`, `pnpm` or `yarn`) | `vitest run --coverage.enabled=true --coverage.reporter=lcov --coverage.reportsDirectory=<dir> …` | lcov |
+  | `jest …` (the same prefixes) | `jest --coverage --coverageReporters=lcov --coverageDirectory=<dir> …` | lcov |
+  | `pytest …` (also through `python -m`, `uv run`, `poetry run` or `pipenv run`) | `pytest --cov=. --cov-report=xml:<dir>/coverage.xml …` | Cobertura |
+  | `go test …` | `go test -coverprofile=<dir>/cover.out …` | Go profile |
 
-  `<dir>` is a fresh temporary folder Shinsa removes afterwards, so a stale report is never read; a custom report is
-  deleted before its command runs. `GET /api/repos/coverage` says what Auto would run in each repository, for
+  Each run writes into its own fresh temporary folder (`<dir>`) that Shinsa removes afterwards, so a stale report is
+  never read, and the reports are merged; a custom report is deleted before its command runs.
+  `GET /api/repos/coverage` says which runner Auto found in each repository (`resolveCoverageDetection`), for
   Settings.
 - **The run** shares the checks' environment, timeout (15 minutes) and cancellation, while the task still holds its
   workspace. A command that exits non-zero but leaves a report still counts (a coverage floor fails the run, not the
   report); one that times out, leaves no report or a report with no files, or any error while reading it or the diff,
-  gives `{ status: 'unavailable', reason }`, which is logged and shown nowhere. Checks that fail measure nothing: a fix
-  comes first.
+  gives `{ status: 'unavailable', reason }`, which is logged and shown nowhere. A run before review whose checks
+  block measures nothing: a fix comes first, and the run after it measures.
 - **In a GitButler workspace** one checkout holds every applied branch, so the report covers other tasks' code too,
   and only the task's own lines count, read the way the Code tab assembles its working copy (What the Code tab reads
   in GitButler, below): the lines its branch changes since the base (`git diff -U0 <base> <branch>`), moved to where
@@ -161,8 +278,8 @@ marks executable, and of those the ones a test ran (`apps/engine/src/test-covera
   Go module path from `go.mod`; a path still unmatched matches the shortest report path that ends with it. A changed
   line the report does not list is not executable. The base is the one the Code tab diffs against
   (`resolveTaskRefs`), so the whole task's change is measured, every round.
-- **Where it goes.** `checks.record` carries it as `coverage`, `checks.recorded` folds it onto `Task.coverage` (cleared
-  by checks without it and by a new round, like `checkResults`). The web shows a measured result with an executable
+- **Where it goes.** `checks.record` carries it as `coverage`, `checks.recorded` folds it onto `Task.coverage` (kept
+  until the next measurement, cleared by a new round, like `checkResults`). The web shows a measured result with an executable
   line under the checks in Review → How to test, with the files and their missed ranges linking into Code, and as a
   fact on the Overview's checks; `read_task` names the summary (`describeCoverage`). The reviewer's brief has the
   summary and up to 20 files with their missed ranges (`listCoverageGaps`), and the review skill tells it to flag
@@ -232,10 +349,13 @@ create → classify → (wait for the tasks it waits on) → worktree → plan �
 3. **Build.** Each phase is a run of its own on the session that planned it, now able to edit. Its prompt is short
    (`resolvePhaseInstruction`: "Phase 1 is committed. Now build phase 2 of 3: …" and how to hand it over), since the
    session already holds the request, the plan and every earlier phase. Phases run in order in one worktree.
-   `complete_phase` commits the phase (`<type>: <phase title>`) and starts the next one.
-4. **Checks.** After the last phase Shinsa runs the checks. A failure goes back to the Agent's session with the
-   output. Every fix prompt says what follows the fix: the task's checks and agent review where it
-   has them, then your review; for a pull request fix, the push.
+   `complete_phase` commits the phase (`<type>: <phase title>`), runs that phase's checks (Checks, above) and
+   starts the next one.
+4. **Checks.** After each phase Shinsa runs the checks the Agent chose for it, and after the last one also the
+   repository's own commands, once, before review. A failure the change caused goes back to the Agent's session with
+   the output; one that passes when re-run alone, or whose failures all already fail on the base branch, does not. Every fix
+   prompt says what follows the fix: the task's failing checks and the agent review where it has them, then your
+   review; for a pull request fix, the push.
 5. **Agent review.** A fresh reviewer reads the diff. It hands over one `report_review`: a summary of what it checked
    and its view of the change, each finding anchored to lines with a title, what is wrong and why it matters,
    and a suggested fix when it has one, and the Agent's judgement calls it would have made differently
@@ -319,11 +439,11 @@ A repository says where its agents work (`Repo.workspace`, Settings → Projects
 agents work in ‹repository›", `shinsa repos update --workspace`). It is a human-only repository field
 (`HUMAN_ONLY_REPO_FIELDS`): no agent tool, no shell command and nothing on your behalf changes it. There are three
 modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behind one interface
-(`WorkspaceStrategy`: prepare, claim, commit, push, remove), picked per task by `Workspaces.resolve`:
+(`WorkspaceStrategy`: prepare, claim, commit, syncBase, push, remove), picked per task by `Workspaces.resolve`:
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|---|
-| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
+| **Worktrees** (`worktrees`, the default) | its own git worktree on a fresh branch (`data/worktrees/…`), made detached at the base and then named, so a crash never leaves a branch without its worktree: a worktree found unnamed is named again, taking back a local branch it left at that commit (`createWorktree`) | `git commit` in the worktree | `git push origin HEAD:<branch>` | the worktree is removed |
 | **GitButler** (`gitbutler`) | its own virtual branch in the repository's GitButler workspace (`but branch new`), applied next to every other task's and your own branches, in the main checkout | `but commit -b <branch>` with exactly the files the task changed | `but push <branch>` | cancelled or done without a merge: the branch is taken out of its stack, if any, and unapplied (`but unapply`) and its untouched uncommitted edits discarded; merged: left for GitButler, which marks it merged upstream and drops it on your next `but pull` |
 | **Main checkout** (`main_checkout`) | the repository's own checkout, switched to a branch Shinsa makes from the freshly fetched default branch | `git commit` on that branch, only while the checkout is on it | `git push origin refs/heads/<branch>` | the checkout goes back to the branch it was on when the task took it (`returnBranch`), or to the default branch when that branch is gone or the checkout was detached; with uncommitted changes it stays where it is |
 
@@ -340,11 +460,19 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
   ignored. The property test checks that no two tasks of one repository ever hold its checkout
   (`workspace-invariants.ts`).
 - **The setup check covers the mode** (`describeWorkspaceProblem`, a `workspace` configuration problem, "Agents
-  cannot work in this repository yet"): GitButler needs `but` on the PATH and the repository to be a GitButler
-  workspace (`.git/HEAD` on `gitbutler/workspace` and `.git/gitbutler`); the main checkout needs a checkout with no
-  uncommitted changes (only for a task that does not hold it yet) and refuses a GitButler workspace, since switching
-  its branch would take it out of GitButler. Settings only offers GitButler where `GET /api/repos/workspaces` says
-  both hold (`canUseGitButler`), and says why otherwise.
+  cannot work in this repository yet"): GitButler needs `but` on the PATH, and the engine reads its version
+  (`readButVersion`). `but` 0.23 and newer works in any git repository with no setup: it stays on your branch while
+  one branch is applied and moves to `gitbutler/workspace` when a second is. `but` 0.22 needs the repository set
+  up first (`but setup`: `.git/HEAD` on `gitbutler/workspace` and `.git/gitbutler`, `needsButSetup`,
+  `isGitButlerReady`). The main checkout needs a checkout with no uncommitted changes (only for a task that does not
+  hold it yet) and refuses a repository on `gitbutler/workspace` (`isGitButlerWorkspace`), since switching its branch
+  would take every applied branch out of it. Settings only offers GitButler where `GET /api/repos/workspaces` says
+  both hold (`canUseGitButler`; `gitButlerWorkspace` there means `but` can work in the repository), and says why
+  otherwise.
+- **The `but` CI tests against** is pinned in `.github/workflows/test.yml` (`BUT_VERSION`, passed to GitButler's
+  install script), so a new GitButler release cannot change CI on its own. Bump it on purpose, after running the
+  engine's GitButler tests on the new version (`test/helpers/bin/but` runs whichever `but` comes first on the PATH;
+  `FAKE_BUT_VERSION` makes it report another version, which is how both setup rules are tested on either).
 - **Agents work where the strategy puts them.** For GitButler and the main checkout a task's `worktreePath` is the
   repository itself, so every role works in your checkout; a read-only agent's edits are never set aside there,
   as in any shared checkout. Checks run in the same checkout, so in GitButler they test every applied branch
@@ -353,7 +481,7 @@ modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behi
 ### GitButler: whose change is whose
 
 GitButler applies several branches in one working directory and decides at commit time which branch a change goes
-to; its CLI (0.22) has no lasting per-branch assignment of uncommitted changes (`but rub` and `but stage` are
+to; its CLI (0.22 and 0.23) has no lasting per-branch assignment of uncommitted changes (`but rub` and `but stage` are
 gone), so Shinsa keeps the assignment itself:
 
 - **One agent that changes files at a time per GitButler workspace.** A run whose role can write claims the
@@ -477,20 +605,20 @@ every commit.
 - **Committed with the round.** A phase or fix hand-over commits everything in the checkout as before, your edits
   included (`work.committed` clears `editedPaths`). Edits no hand-over took yet are committed by Shinsa
   (`fix: apply the edits made in the Code tab`, then `task.commit_edits`) and never ship unchecked:
-  - Approving the review with them (`task.edits_approved`, `Task.approvedEdits: 'review'`) commits them and runs the
-    checks again ("committing your edits and running the checks"; the checks effect commits first). Passing checks
-    push straight away, without another agent review or review gate, since you approved; failing ones go to a fix
+  - Approving the review with them (`task.edits_approved`, `Task.approvedEdits: 'review'`) commits them and runs
+    every check of the task and the repository's commands ("committing your edits and running the checks"; the checks
+    effect commits first). Checks with nothing blocking push straight away, without another agent review or review gate, since you approved; failing ones go to a fix
     turn as usual, and that fix goes through the checks, agent review and your review again.
   - Approving the merge with them (`Task.approvedEdits: 'merge'`) does not merge yet: it pushes them ("pushing your
     edits"; the push effect commits first), waits for CI, and merges when the pull request is clean again
     (`openMergeGate` takes the approval instead of opening the gate). A CI failure, a new comment or a conflict goes
     to a fix turn as usual, and the merge gate opens again after it.
-  - On a pipeline without the checks step there is nothing to run again, so approving the review with them pushes
-    straight away, as approving without edits does: the push effect commits them first.
+  - On a pipeline without the checks step, or a task with no checks at all, there is nothing to run, so approving the
+    review with them pushes straight away, as approving without edits does: the push effect commits them first.
   - What an approval does is `resolveApprovalPath` (core), so the decision and the toast after it agree: "Approved.
     Committing your edits and running the checks.", "Approved. Pushing your edits. The pull request merges once CI
     passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
-    request is open) or "Merging." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
+    request is open) or "Approved. Merging the pull request." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
   - A commit of your edits made while a merge is in progress in the checkout (a hand-over that was undone put it
     back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
     tab`: `commitWorktree` builds every commit that concludes a merge that way (The pull request watch → Conflicts).
@@ -775,7 +903,7 @@ folds in `state/shapes.ts`).
   carries on and it can try again. Steps the task already has change nothing, and the tool tells the Agent to plan them.
   Otherwise the planning run ends, `task.reshaped` records the steps (`by: agent`, its reason), and the first new step
   starts: when the work step changed (a change became an operation, or the other way), the setup is verified again
-  first, so a change gets its checks verified and the Agent plans again, on the same session, with the right prompt.
+  first, so a change gets its default branch verified and the Agent plans again, on the same session, with the right prompt.
 - **Your OK** (`your_ok`) owns the proposal gate (gate type `proposal`, stage `awaiting_proposal`); an inquiry step has
   no gate of its own, and there is one path to it. The inquiry agent's prompt says the human decides whether the task
   goes on and asks it to end with what the next step should do. When it hands over, Shinsa records a proposal (the agent's own `propose_change`, or the Agent's reason and what comes next: "Plan the
@@ -861,12 +989,13 @@ The tables (`STEP_SCHEMA`, `GATE_SCHEMA`, the `Gate` record) are `docs/protocol.
 `VERIFICATION_RULES` is David's workflow written as rules over the schema (`docs/protocol.md` → Verification). A rule
 applies exactly when the composition contains work of its class, so a question, research or an investigation that
 changes nothing never meets one, and a change always meets all of them. So a code change always runs: a verification
-plan in its plan → the build, with the evidence the plan asks for → Shinsa's checks (the repository's and the plan's)
-→ an independent agent review → your review → the pull request → CI and bots → your merge. An operation runs only from
+plan in its plan, whose checks are scoped commands the Agent chose (Checks, above) → the build, with the evidence
+the plan asks for → those checks, run by Shinsa after each phase, and the repository's own commands before review →
+an independent agent review → your review → the pull request → CI and bots → your merge. An operation runs only from
 a plan you approved that states its `impact` (and its steps in `operation` when it comes with code), and one after the
 merge asks you again on the merged commit. A plan may ask for `evidence` for an operation as for a change; an
-operation without a code change must attach it before `report_outcome` (`operation.evidence`), while `checks` stay for
-code changes. `validateComposition` adds `validateVerification` to the guards for every composition, `proposePlan`
+operation without a code change must attach it before `report_outcome` (`operation.evidence`), while the `checks`
+step and the plan's `verification` stay for code changes. `validateComposition` adds `validateVerification` to the guards for every composition, `proposePlan`
 refuses a plan with `validatePlanRules`, and `completePhase` refuses the last phase, and `report_outcome` an operation
 on its own, while `listMissingEvidence` names a kind (`evidence_missing`). The invariants that hold the shapes and the rules are `packages/core/CLAUDE.md`.
 
@@ -874,7 +1003,8 @@ on its own, while `listMissingEvidence` names a kind (`evidence_missing`). The i
 
 While it plans, the Agent cannot invent a step or a gate. It composes steps with `reshape_task` (`steps`, an enum of
 `PIPELINE_ORDER` described from `STEP_SCHEMA`) and sets the plan's parameters in `propose_plan` (`verification`,
-`evidence`, `checks`, `impact`, `operation`, `approval`; `docs/protocol.md` → Composing). A change you see in the UI
+`evidence`, `impact`, `operation`, `approval`; `docs/protocol.md` → Composing). The checks are the plan's
+`verification`, and the Agent changes them later with `check_changes` (Checks, above). A change you see in the UI
 always asks for a screenshot, and `approval` is the Agent's way to put your OK before a risky change. A composition
 that breaks a rule throws `pipeline_invalid`, a plan `plan_invalid`, each naming every problem in one message; the
 server returns it as the tool's error and the planning run carries on and tries again. The only hard gates an agent
@@ -962,7 +1092,10 @@ above), and `operation` an operation after the merge waiting for your OK on the 
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
 reached its usage or cost limit (`cause: budget`), or a GitButler task's pull request conflicts with its base and only
 updating the workspace can bring it in (`cause: workspace_update`; its approve is Update the workspace, which runs
-`but pull`, and its `reply` does the same with your words for the agent; Where agents work → GitButler, above). `configuration` means setup verification found something missing
+`but pull`, and its `reply` does the same with your words for the agent; Where agents work → GitButler, above), or the
+repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
+approve is Send to the agent again, another fix round with the hook's output, and its `reply` adds your words; there is
+no way to push without the hook; Pushing the branch, below). `configuration` means setup verification found something missing
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
@@ -977,9 +1110,8 @@ a plan, review or merge takes approve, revise (ask for changes) or reject; an ag
 words in it; a secret takes `reply` with a secret ref or reject; your OK takes approve or reject; an operation after the
 merge takes approve (run it with the notes on the gate), `reply` (replace the notes with your words, empty clears
 them, then run) or reject (finish without it); a failure or Sign in gate takes approve (retry), `reply` (retry with
-your words as guidance) or reject, which cancels the task; the setup gate takes approve (verify the setup again),
-`waive` (start without checks, only when checks are all that is missing) or reject. `reply` is the one decision that
-takes words. The table of what each gate takes and does is `GATE_SCHEMA` (`docs/protocol.md` → Steps and gates). A
+your words as guidance) or reject, which cancels the task; the setup gate takes approve (verify the setup again)
+or reject. `reply` is the one decision that takes words. The table of what each gate takes and does is `GATE_SCHEMA` (`docs/protocol.md` → Steps and gates). A
 question belongs to the run that asked it: when that run ends for any reason the question is withdrawn and the
 waiting tool call is released. A failure gate is withdrawn as soon as a new agent step starts or the pull request
 turns clean, since the problem it reported no longer applies.
@@ -1146,15 +1278,17 @@ steps takes its step out again.
 
 ### Evidence
 
-The review opens with proof, not the diff: screenshots before and after, a recording of an interaction, test output
-(`docs/spec.md` 6). Shinsa does not run a browser of its own; the agents capture evidence with the tools they have
-and hand it over with `attach_evidence` (since 2026-10-26).
+The review opens with proof, not the diff: screenshots before and after, a recording of an interaction, the checks
+that prove the logic (`docs/spec.md` 6). Shinsa does not run a browser of its own; the agents capture evidence with
+the tools they have and hand it over with `attach_evidence` (since 2026-10-26), and Shinsa keeps the output of the
+checks it ran.
 
 - **Who captures it.** The Agent proves its own work. Every phase instruction (`resolvePhaseInstruction`,
   `describeEvidenceForPhase`) names the kinds the plan's `evidence` asks for; on the first phase of a plan that asks for
   a `screenshot` or a `recording` it says to capture the screens as they are, `stage: "before"`, before editing
   anything a user sees; every phase asks for after shots at the same title, width and theme, a recording for an
-  interaction and the run output of the test that fails without the change; the last phase says Shinsa refuses it
+  interaction and a link to the check that runs the test that fails without the change; the last phase says Shinsa
+  refuses it
   until each planned kind is attached (`code.evidence`, `evidence_missing`). The reviewer is given the list of what
   the Agent attached this round (`describeEvidenceForReview`: kind, title, stage, width, theme) or told there is none,
   checks it against the diff, and may attach its own; its pieces show as from the agent review, independent of the
@@ -1163,22 +1297,57 @@ and hand it over with `attach_evidence` (since 2026-10-26).
   simulator for iOS) is the `evidence` skill (`apps/engine/plugin/skills/evidence/SKILL.md`), which the skill index
   in the system prompt points to for a change a user sees and for a review of one.
 - **What it carries.** `attach_evidence` takes `kind`, a `title` (80) that a before and its after share, an optional
-  `detail` (280, what to look at), `width` (CSS pixels), `theme` (`light`, `dark`), `stage` (`before`, `after`) and
-  exactly one of `path`, `url` or `text` (40,000). A note's text is markdown (a table for measurements, `shinsa://`
-  references for files and tasks), and the Review tab renders it so; test and check output stays plain text. Core's `validateEvidence` checks it and the server refuses with every
-  reason (`Shinsa did not attach it. Fix these…`). `evidence.attached` keeps the optional fields only when set.
+  `detail` (280, what to look at), `width` (CSS pixels), `theme` (`light`, `dark`), `stage` (`before`, `after`), an
+  optional `key` (60, what it shows, below) and `replaces` (items by key or id) and exactly one of `path`, `url` or
+  `text` (40,000). A note's text is markdown (a table for measurements, `shinsa://`
+  references for files and tasks), and the Review tab renders it so. Core's `validateEvidence` checks it and the
+  server refuses with every reason (`Shinsa did not attach it. Fix these…`). `evidence.attached` keeps the optional
+  fields only when set.
+- **A test or check run links a check** (since 2026-10-27). `kind: "test"` or `"check"` takes only `check`, the id
+  of one of the task's checks, and an optional `detail` (`CheckLinkHandOver`); anything else is refused with a line
+  that says to add the command with `check_changes` first when it is not a check yet. The server dispatches
+  `agent.attach_check`, and core records `evidence.attached` with `checkId`, the check's label as its `title` and
+  `shinsa://check/<id>` as its `uri` (`check_unknown` for an id the task does not have). So an agent never pastes test
+  output: the result and the output are the ones Shinsa recorded for that check, and the Review tab shows them under
+  the link. A planned `test` kind is met by a linked check.
 - **Items, not files** (since 2026-10-26). One call is one item of one kind: a **comparison** (one view in two to six
   states: before and after, or empty, loading and full), a **recording**, a **screenshot**, a **test** or **check**
-  run, a **note** or a **preview**. A comparison is `kind: "comparison"` with `parts` (2 to 6,
+  run (a link to a check, above), a **note** or a **preview**. A comparison is `kind: "comparison"` with `parts` (2 to 6,
   `PROTOCOL_LIMITS.evidenceParts`, each a `path` with a `stage` or a `label` of 40); the server stores each part and dispatches `agent.attach_comparison`, which
   `decide` folds into one `evidence.attached` per part sharing a fresh `itemId` (each part a `screenshot` or
   `recording` by its file, carrying its `stage` and `label`), so the event stays the one it was and a planned
-  `screenshot` is met by a comparison of screenshots. Core's `listEvidenceItems` turns a round's pieces back into
-  items (`EvidenceItem`: `id`, `kind`, `title`, `parts`): the pieces of one `itemId` are one comparison; a `before`
-  and an `after` screenshot or recording attached by separate calls with the same title, width and theme pair into
-  one too (the latest of each stage, so a retaken after replaces the earlier one), which is how a before shot taken
-  early meets its after; every other piece is an item of its own kind. The Review tab and the Overview count these
-  items, never files.
+  `screenshot` is met by a comparison of screenshots. Core's `listEvidenceItems` turns a round's current pieces back
+  into items (`EvidenceItem`: `id`, `key`, `kind`, `title`, `parts`, and `updated`, below): the pieces of one
+  `itemId` are one comparison; a `before` and an `after` screenshot or recording attached by separate calls with the
+  same key pair into one too, which is how a before shot taken early meets its after; every other piece is an item of
+  its own kind. The Review tab and the Overview count these items, never files.
+- **Evidence shows the work as it is now** (since 2026-10-28). Every piece has an identity for what it shows,
+  `resolveEvidenceKey`: the `key` the agent gave (lower-case words and hyphens, like `settings-dark-900`), else the
+  check it links (`check-c1`), else a slug of its title, width and theme (prefixed with its kind for a note, a
+  preview or an unlinked run). When a piece is attached, `decide` replaces the current pieces of the same key that the
+  same side attached this round (the agent's never replace the reviewer's, or the other way round): a piece with a
+  `stage` replaces the piece of its stage and a plain shot of that key, so a new after keeps its before; a piece
+  without one, a comparison or a check link replaces every piece of the key; `replaces` names further items by key or
+  id. `evidence.attached` carries the replaced ids as `replaces`, and the fold sets `replacedBy` on each. An item that
+  no longer applies is removed with the `remove_evidence` tool (`agent.remove_evidence`: `items` by key or id, a
+  `reason` of 200; `evidence.removed` sets `removedAt` and `removedReason`). Neither deletes anything: a replaced or
+  removed piece stays in the log and on disk, out of `listEvidenceItems` and the plan's evidence count
+  (`assertEvidence` counts current pieces only), and in `listEarlierEvidenceItems`. A piece attached in a fix carries
+  the fix's reason (`fixFor`), so the item it replaced says after what it was updated (`updated`: `you` for your
+  review, `review`, `checks`, … or `work` outside a fix). A key or id that names no current item of the side is
+  refused (`evidence_unknown`). Shinsa's own check outputs are untouched: the Review tab shows the latest one.
+- **A fix accounts for the evidence before it** (since 2026-10-28). `complete_fix` takes `evidence_kept` (items by key
+  or id that still apply). Before a fix hands over, core takes the agent's current screenshots, recordings,
+  comparisons and notes of the round that no part of was attached in this fix run, and for each the files it covers:
+  the files of the phase it was attached in (`PhaseReport.files`); an item attached outside a phase (in an earlier
+  fix), or in a phase that recorded no files, covers every file. When the fix changed a file an item covers (the
+  committed `files`) and the item is not named in `evidence_kept`, `complete_fix` is refused (`evidence_stale`), and
+  the commit undone, with a message that names each item by key: "Your fix changed files this evidence shows, so it
+  may still show the work as it was before the fix: - `settings-dark`: Settings (comparison) … For each one, attach a
+  new one with the same `key` (it replaces the old one), remove it with `remove_evidence` when it no longer applies,
+  or name its key in `evidence_kept` when it still shows the work as it is. Then call `complete_fix` again." A fix
+  that changed no file needs nothing. Every fix prompt lists the round's items by key (`describeEvidenceForFix`), and
+  the fix closing asks the agent to refresh them, so the refusal is the backstop, not the first it hears.
 - **Where it is kept.** The server copies a file, or writes the text (a note as `.md`, other text as `.txt`), into
   `<data>/evidence/<task id>/round-<n>/<slug of the title>-<id>.<ext>` (`EvidenceStore`, 200 MB a file), so the
   agent's own temporary files can go; a URL is kept as given. `/api/evidence/<task id>/round-<n>/<name>` serves it
@@ -1186,18 +1355,15 @@ and hand it over with `attach_evidence` (since 2026-10-26).
   `Cache-Control: private, max-age=31536000, immutable` and byte ranges (206, 416), so a recording seeks.
 - **Cache-stable.** The schema and the skill index are static; the kinds the plan asks for and what was attached reach
   the agents only in the user turn (Caching, below).
-- **Shinsa's own checks are evidence too** (since 2026-10-26). After every checks run (`checks.run`), the server
-  writes each command with Passed or Failed and the tail of its output (`tailOutput`, the whole piece at most 40,000
-  characters) as one text file in the round's folder, titled "Checks run by Shinsa: all 3 passed" or "1 of 3 failed"
-  (`serializeCheckEvidence`, `apps/engine/src/checks/evidence.ts`), and `checks.record` carries it as `evidence`;
-  `decide` attaches it as `evidence.attached`, kind `check`, of no run (`runId: null`), while the task is checking.
-  The changed-line coverage measured after passing checks travels on the same `checks.record` as `coverage`
-  (Test coverage of the change).
-  So a change always shows the output of its checks, even when no agent attached any, and a later round of checks
-  after a fix adds its own piece. A command whose output an agent already attached this round (a `test`, `check` or
-  `note` piece whose lines, timings aside, hold every line of it) is left out and the detail names it; when every
-  command is, nothing is attached. The reviewer's list of attached evidence leaves Shinsa's pieces out, since its
-  prompt already says the checks pass.
+- **Shinsa's own checks are evidence too.** After every checks run (`checks.run`), the server writes the output of
+  each check, the command, its result and note and the tail of its output (`tailOutput`, at most 40,000 characters),
+  as one text file in the round's folder (`serializeCheckOutput`, `apps/engine/src/checks/evidence.ts`), and
+  `checks.record` carries one `CheckEvidence` per check (`outputs`: `checkId`, `title`, `uri`); `decide` attaches each
+  as `evidence.attached`, kind `check`, of no run (`runId: null`), with its `checkId`, while the task is checking. The
+  changed-line coverage measured before review travels on the same `checks.record` as `coverage` (Test coverage of
+  the change). So every check has its output beside its result, even when no agent linked it, and a later run of a
+  check after a fix adds its own piece. The reviewer's list of attached evidence leaves Shinsa's pieces out, since its
+  brief already lists the checks and their results (`describeTaskChecks`), and names each item by its key.
 - **Where you see it.** The Review tab's Evidence section (`docs/design.md` 34), also when the task has no work report
   and its changes cannot be read (a merged branch that was cleaned up); the Overview keeps one line pointing there,
   or shows the section itself for a task with no review (an operation).
@@ -1282,23 +1448,75 @@ and hand it over with `attach_evidence` (since 2026-10-26).
   Shinsa already metered for it (`usageBaseline`, the session's last totals), so Codex's running totals are not
   charged twice, and the agents a Codex agent starts report their own sessions (`subagentUsage`), each metered under
   `run.meter:<attempt>:<session>`. So a Codex run counts toward Cost limit per task like a Claude run.
-- `resolveTaskCost` rolls usage up per task, per role and per plan phase. The overview's facts
-  show the total with the breakdown in its popover, and the review card adds what was spent.
+- `resolveTaskCost` rolls usage up per task, per role and per plan phase. The web shows it in one place, the popover
+  of the task's cost fact (the total and the breakdown, in the task's unit: `resolveCostUnit`, below, its share of
+  the weekly window on a subscription whose rate is learned, else dollars), and nowhere else (`docs/design.md` →
+  Where Shinsa differs, 25).
 - **What a step used of the weekly window.** For a run on a Claude account the supervisor reads the account's
-  weekly window ("Weekly · All models", `resolveWeeklyPercent`) when the attempt starts, from the reading when it is
-  under a minute old, and again when it ends, read fresh (`AccountBroker.readWeeklyPercent`; for a provider with a
-  login of its own, Codex, `readProviderWeeklyPercent` reads its "Weekly limit" the same way), and
-  sends the difference with `run.meter` as `weeklyPercent` (`resolveWeeklyUsed`; a window that reset in between
-  counts from zero, and a missing reading sends nothing). The core adds it to the run (`run.weeklyPercent`) and
-  rolls it up with the cost (`CostLine.weeklyPercent`). It is the account's usage over the run's time, so two
-  steps running at once on one account are each charged all of it: the limit errs early, never late.
+  weekly window ("Weekly · All models") when the attempt starts, from the reading when it is under a minute old, and
+  again when it ends, read fresh (`AccountBroker.readWeeklyReading`; for a provider with a login of its own, Codex,
+  `readProviderWeeklyReading` reads its "Weekly limit" the same way). Each reading is the window's percentage, when
+  it was read and when the window resets (`WeeklyReading`, `resolveWeeklyReading`); a value a session pushed has no
+  read time of its own, so a pushed snapshot is read again first, and a reading that cannot be had is left out. The
+  readings go with `run.meter` (`readings`), and the core keeps them on the run per attempt with that attempt's usage
+  and time (`run.meters`: `RunMeter`, its `window` the attempt's account, `account:<id>`, or `provider:<id>` for a
+  provider's own login, so an account switched mid-run charges each account its own movement).
+- **A run's share is its cost at the account's learned rate** (`resolveUsageShares` over `resolveUsageRates` in
+  `costs/rate.ts`, each worked out once per `state.runs`), the way its cost is its tokens at the model's prices. The subscription meter tracks
+  model-weighted compute, which the API-equivalent cost already weighs by model and token type, so the rate is
+  "percent of the weekly window per dollar", learned per window (each account, or a provider's own login), so plans
+  of different sizes (Max 5x, Max 20x) and providers (Claude, Codex) each have their own. It is derived from the log
+  every time state is built, never stored.
+  - **What it learns from.** Every attempt with two readings is an observation: the window moved from its first
+    reading to its last, while every run on that window cost something in that interval (each attempt's cost spread
+    evenly over its time, counted for the part inside the interval). An observation is left out when the window's
+    reset time passed in between, when the reading dropped (a dip, never a negative movement), when more than
+    2 minutes of it had no run on the window (movement while nothing ran: your own use, or a stale reading), when a
+    run in it has no price, and while a run in it is still working (it counts once that run is metered).
+  - **The estimate** is a ratio: the movement of the observations over their cost, each weighted by
+    `2^(-age / 7 days)` so the rate follows a plan change or a new limit within a couple of weeks. A ratio rather than
+    least squares, because the readings are whole percentages: one short run moves 0 or 1, and only the sum evens
+    out.
+  - **When it is trusted.** A window has an estimate from its first usable observation, and the estimate is trusted
+    once its observations come from at least 5 tasks and add up to at least 10 points of movement
+    (`USAGE_RATE_LIMITS`; `UsageRate.trusted`); below that the window is learning. On a real log, 5 points gave a
+    first estimate twice the final rate (one-point jumps on cheap runs dominate); 10 points gave one within 20% of
+    it.
+  - **One live rate.** Every run on a window is charged at the window's current rate, worked out from every
+    observation in the log (the age weights count back from the newest one), so early tasks are not left at the low
+    first estimate. A task's number can move a little as the rate improves, and the same log always gives the same
+    numbers. Tasks from before any readings (old logs, below) get a share too once enough new ones ran on the same
+    account.
+  - Runs at once on one account never count the same movement twice: each is charged its own cost, so the shares
+    of a stretch add up to the rate times what was spent in it. The movement includes anything else on the account,
+    such as your own use of it while a run worked; it raises the rate a little, never one task's number alone.
+  - A run on a window that is learning carries its early estimate (`trusted: false`), or the state `learning` while
+    its window has observations but none it could use yet; one with no price, or on a window that never had a
+    reading (an API key), has no share at all rather than zero. `CostLine.weeklyPercent` sums the trusted shares,
+    `weeklyRuns` counts the runs that had one, `weeklyTasks` is the most tasks a rate behind them was learned from,
+    `learningRuns` counts the runs still learning and `estimatedPercent` sums their early estimates, which only the
+    usage limit reads (below). `resolveCostUnit` makes a line's unit the weekly window when
+    every priced run has a share, and dollars otherwise: a task that ran partly on an account still learning, or on
+    an API key, shows dollars rather than a share that leaves part out.
+- **Logs before log version 4** carried one number per meter, `weeklyPercent`: the account's movement over the
+  attempt, charged in full to every run on the account at the time; nothing when it was zero; and, when a reading
+  dropped, the account's whole percentage (a task could show more than 100%). It is not a reading, so the rewrite drops
+  it, and those runs get their share from their cost once the account's rate is learned from new readings.
 - **Limits per task** (`listTaskBudgets`), both off by default and both soft: a run never stops mid-turn, but a
-  run that would start past a limit does not start, and the task pauses with a failure gate (`cause: budget`).
-  Settings → Agent usage → Limits, Usage limit per task (`taskUsageLimit`, a whole percentage) counts the weekly window the
-  task's steps used ("Reached its usage limit"); it is what a subscription has. Cost limit per task
-  (`taskBudgetUsd`) counts dollars ("Reached its cost limit"), for API keys, where there is no weekly window, and
-  for any provider whose cost Shinsa knows; Settings shows it only while it is set or when no account reports a
-  weekly window, so a cost limit you set stays visible and can be switched off. The usage limit is checked first. Continuing ("Allow another
+  run that would start past a limit does not start, and the task pauses with a failure gate (`cause: budget`)
+  whose body names the limit it reached, not what the task spent ("This task reached its $5.00 cost limit, so the
+  next step did not start.").
+  Settings → Agent usage → Limits, Usage limit per task (`taskUsageLimit`, a whole percentage) counts the task's
+  share of the weekly window, as above ("Reached its usage limit"); it is what a subscription has. On an account
+  still learning its rate it counts the early estimate (`TaskBudget.estimated`), and its gate adds "The share is an
+  early estimate while Shinsa learns the account's rate."; a run with no estimate yet (no usable observation on its
+  account), or with no share at all (an API key), counts nothing toward it. Cost limit per task (`taskBudgetUsd`)
+  counts dollars ("Reached its cost limit") on every task, whatever its account: it is the limit for API keys,
+  where there is no weekly window, and it stands in for the usage limit while an account is learning, so with both
+  set a limit always holds. Settings shows it while it is set, when no account reports a weekly window, or while an
+  account that does is still learning its rate; with only the usage limit set during that time, Settings → Limits
+  says the usage limit counts an early estimate, nothing before the first measured step, and that a cost limit holds
+  from the start. The usage limit is checked first. Continuing ("Allow another
   10%" or "Allow another $5.00") acknowledges what was used of every limit it passed (`budget.acknowledged` with
   `spentPercent` and `spentUsd`, `task.usageAcknowledgedPercent` and `budgetAcknowledgedUsd`) and allows one more
   of each; raising or switching off a limit releases held tasks by itself.
@@ -1313,6 +1531,10 @@ and hand it over with `attach_evidence` (since 2026-10-26).
   waiting on its delegated runs.
 - It is informational only: it never stops, retries or reassigns anything. Snooze (30 minutes)
   and Dismiss (for the rest of that run) are `run.snooze_silence` and `run.dismiss_silence`.
+- A run whose transcript has a tool call with no result yet (`selectRunningTool` in
+  `apps/web/src/lib/overview/wait.ts`: the newest such call) is busy, not quiet, so the note says what runs: "A
+  command has been running for 5 minutes" with the command, or "A tool has been running for 5 minutes" for any
+  other tool. "No output for 5 minutes" is kept for a run with nothing running.
 
 ### Ask mode
 
@@ -1340,19 +1562,18 @@ and hand it over with `attach_evidence` (since 2026-10-26).
 ### Setup verification
 
 - Before a task's first agent, the task stage reads "verifying the setup" (`VERIFYING_SETUP`) while
-  `config.verify` (`apps/engine/src/repos/setup.ts`) checks that
-  the repository folder exists and is a git repository, that the default branch exists (fetching
-  it from origin before calling it missing) and that there are checks to run (configured, or
-  found in `package.json`). A task whose pipeline needs no worktree (an answer, research) checks the repository only, and
-  one without `build` (an investigation, an operation) skips the checks. A task with no repository whose steps need
-  none never comes here; one whose steps need one finds it first (A task without a repository, above), and the
-  problem when none is found is `no_repository`.
+  `config.verify` (`apps/engine/src/repos/setup.ts`) checks that the repository folder exists and is a git
+  repository, that the default branch exists (fetching it from origin before calling it missing) and that agents can
+  work in the repository's workspace mode (Where agents work, above). A task whose pipeline needs no worktree (an
+  answer, research) checks the repository only. A task with no repository whose steps need none never comes here; one
+  whose steps need one finds it first (A task without a repository, above), and the problem when none is found is
+  `no_repository`. Checks are not part of it: a task's checks come from its plan, and a repository without its own
+  commands runs nothing extra, so nothing about them can be missing (Checks, above).
 - Problems open their own `configuration` gate, not a failure: nothing ran. Its title names the problem ("The
-  repository is missing", "No checks to run", or "The setup has 2 problems") and its body lists what is wrong and
-  how to fix each; the web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again;
-  Start without checks (`waive`, only when checks are all that is missing) sets `checksWaived` on the repository;
-  Cancel ends the task. A message at the gate verifies the setup again too (`verify_setup`) and is kept for the first
-  agent. The same problems twice record nothing new.
+  repository is missing", or "The setup has 2 problems") and its body lists what is wrong and how to fix each; the
+  web labels the task "Setup incomplete". Verify again (`approve`) verifies the setup again; Cancel ends the task. A
+  message at the gate verifies the setup again too (`verify_setup`) and is kept for the first agent. The same
+  problems twice record nothing new.
 
 ### Schedules and webhooks
 
@@ -1805,9 +2026,9 @@ plainly what protects what.
   - giving or declining a secret (`gates secret`, `gates decline-secret`, `schedules webhook-secret`);
   - the settings that spend money, merge or decide for you (`HUMAN_ONLY_SETTINGS` in `domain/settings.ts`:
     `approvePlans`, `mergeMethod`, `taskBudgetUsd`, `taskUsageLimit`, `autoResume`, `snoozeLimited`,
-    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's checks, workspace and coverage
-    (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `checksWaived`, `workspace`, `coverage`); agents keep the rest (models,
-    providers, fix rounds, attention, compaction);
+    `accountSwitchAt`, `fastMode`, `agentFastModes`, `delegationLimit`) and a repository's own check commands,
+    workspace and coverage (`HUMAN_ONLY_REPO_FIELDS`: `checkCommands`, `workspace`, `coverage`); agents keep the rest
+    (models, providers, fix rounds, attention, compaction), and a task's own checks are the agent's (Checks, above);
   - signing in and the accounts Shinsa runs on (`accounts sign-in`, `sign-in-code`, `import`, `remove`);
   - MCP servers, plugins and skills (`mcp check`, `add`, `remove`, `sign-in`, `sign-out`, and every on and off switch);
   - updating Claude Code or Codex (`versions update`, Versions and updates, below);
@@ -1823,7 +2044,7 @@ plainly what protects what.
   specs are `humanOnly`, so `listAgentSpecs` leaves them out of every agent's tools, the prompt says they wait for you
   at their gate, and `agents/policy.ts` refuses in an agent's shell (Claude through its PreToolUse hook, Codex through
   its command approvals) `shinsa <path>` for each of them, `shinsa settings set` naming a human-only setting and
-  `shinsa repos update` with `--checks`, `--no-checks`, `--waive-checks` or `--no-waive-checks`. Nothing checks words
+  `shinsa repos update` with `--checks`, `--no-checks`, `--workspace` or a `--coverage` flag. Nothing checks words
   or keys: the first lock is that no agent tool exists for them. Core is the second lock: a command sent on your
   behalf is refused with `human_only` and records nothing when it is a `gate.answer` (`assertHumanDecides`), when a
   gate that was open before it is no longer open after it (`assertGatesStayOpen`, run at the end of `decide`, so
@@ -1832,10 +2053,10 @@ plainly what protects what.
   A message sent on your behalf to a task with an open gate is kept for the next agent instead (Gates, above). So
   even a tool that reached the command could not decide a gate or step past it.
 - **What a shell can still do.** Anything your account can. An agent that sets out to could post a command to
-  `localhost:5180/api/commands` itself, or run `gh pr merge` or `git push` directly, and Shinsa would not know.
+  `localhost:7446/api/commands` itself, or run `gh pr merge` or `git push` directly, and Shinsa would not know.
   `agents/policy.ts` refuses the obvious ones (`gh pr merge|create`, `git commit|push|rebase|reset --hard`, a
   `git pull` without `--no-rebase`, the default branch, every `but` command but the reads and the in-place conflict
-  resolution, the human-only `shinsa` commands) so an agent does not do them by accident, but a policy over
+  resolution, the human-only `shinsa` commands, a whole test suite) so an agent does not do them by accident, but a policy over
   command text is a guard rail, not a lock. **The real safeguard for merges is GitHub's branch protection:** require
   a pull request review (from someone other than the account agents run as, or a code owner) and passing checks on
   the default branch, so a merge cannot happen without you whatever runs on your machine. Shinsa recommends it for
@@ -1954,7 +2175,10 @@ changes costs one call.
   (`resolveEffectLane`; the lane of every kind is `docs/protocol.md` → Effects): one per task, a side lane per task
   for the cheap pull request watch, one for the briefing, and separate lanes per run for its session, its cancel and
   its steers, so a cancel is never stuck behind the session it cancels. Effects in a lane run in order. A failed replay-safe effect retries
-  after 100 ms × 2ⁿ (capped at 30 s), up to 5 attempts; a process-bound one fails on its first error.
+  after 100 ms × 2ⁿ (capped at 30 s), up to 5 attempts; a process-bound one fails on its first error. An error can
+  say otherwise (`EffectError`, `apps/engine/src/runtime/failures.ts`): never retried (a push the remote refuses as
+  non-fast-forward fails at once), or retried after a delay of its own (a remote that cannot be reached, 30 s).
+  Every retry of opening or pushing the pull request shows on its task (Pushing the branch, below).
   An effect that gives up opens a failure gate on its task when its kind has one (triage, setup
   verification, the worktree, checks, opening, pushing or merging the pull request); the others are logged.
   Effects report back only by dispatching commands.
@@ -1988,7 +2212,7 @@ changes costs one call.
   handoff (Resume fallback, The agent loop). Core does the same when it starts an Agent run with no session to resume
   (a fresh-class failure), so `run.prompt` holds the brief and `run.rolePrompt` the short form.
 - A fix loop stops with "not making progress" when the same failures come back after two fix
-  rounds (checks by failing check names, the pull request by the names of its failing checks, the
+  rounds (checks by the ids of the checks that block, the pull request by the names of its failing CI checks, the
   ids of its unresolved review threads and a conflict). New comments alone key nothing: they have
   their own limit, ten updates in a row that bring only comments (The pull request watch, below).
   `maxFixRounds` caps the automatic rounds; "until clean" keeps going, up to 12, while each round
@@ -1998,7 +2222,7 @@ changes costs one call.
   ask for never use it up.
 - **Recovery budgets are keyed to durable state, never to prose** (`resolveRecoveryFingerprint`).
   A recovery records the fingerprint of the task's stage, plan version, finished phases, the tree
-  of its last commit, its failing checks, the files of its blocking findings and its pull
+  of its last commit, its blocking checks, the files of its blocking findings and its pull
   request's checks, comments, conflicts and head. Progress only resets the budget when that
   fingerprint changed: an agent that writes a hopeful summary and changes nothing does not buy
   itself another round. A fix round records its reason, signature and tree (`fixFingerprints`);
@@ -2065,9 +2289,10 @@ truth, and a snapshot only saves replaying it.
   kept in `seq_floor`, so the next event never takes a position an earlier event had (server ids such as `boot:<seq>`
   name it). Logs from before the walkthrough's guide for testing (log version 3) have a `testing` list of strings in
   `phase.completed`, `work.submitted` and `walkthrough.revised`; it becomes `{ automated: <the list>, manual: [] }`.
-  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 3) marks the log so
-  each pass runs once: a log at 1 or 2 only has its briefings moved and its testing lists rewritten
-  (`listLegacyEventTypes`). A role it does not know stays as written:
+  Logs from before weekly readings (log version 4) have `weeklyPercent` on `run.metered`; it is dropped (Cost, above).
+  A pass that changes a row drops the snapshot, and SQLite's `user_version` (`LOG_VERSION`, now 4) marks the log so
+  each pass runs once: a log at 1 or 2 only has its briefings moved, its testing lists and its meters rewritten, and
+  a log at 3 only its meters (`listLegacyEventTypes`). A role it does not know stays as written:
   the run fold refuses a run whose role or purpose the current model does not have (`run_role_unknown`,
   `run_purpose_unknown`, `run_purpose_unexpected`), so it shows in `/api/health` problems instead of reaching a page.
   Inspect mode writes nothing: it runs the same rules in memory on its read-only view instead
@@ -2109,7 +2334,10 @@ keeps beside its events (`store/event-log.ts`).
   never share an id, and the same cause sent again gets the same id, so it is answered from its receipt instead of
   applied twice. An effect that reports back names its command after itself: `<effect key>:task.triage`,
   `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.record_push:<sha>`,
-  `:task.commit_edits:<tree>`, `:task.record_workspace_update`, and `<effect key>:effect.fail` when it gives up, and a repository triage or the setup check registers
+  `:task.commit_edits:<tree>`, `:task.record_workspace_update`, and `<effect key>:effect.fail` when it gives up; the
+  push names each report after its attempt too (`<effect key>:<attempt>:pull_request.record_step:<step>`,
+  `:<attempt>:pull_request.record_update_conflict`, `:<attempt>:pull_request.record_hook_failure`), so a retry shows its
+  steps again, and the engine reports a retry as `<effect key>:<attempt>:pull_request.record_retry`; a repository triage or the setup check registers
   `<effect key>:repo.register`. The
   clocks name theirs after what they fire (`monitor:<id>:<attempt>`, `schedule:<id>:<dueAt>` and
   `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`). The files two open tasks both change go
@@ -2133,7 +2361,9 @@ keeps beside its events (`store/event-log.ts`).
     `agent:<run>:<attempt>:delegate:<id>` and `agent:<run>:<attempt>:create_task:<id>`. A call that comes without a
     request id (only tests) gets a fresh id.
   - The accounts service: `login:<sign-in>:account.signed_in`, `account.removed:<account>`, and
-    `provider-login:<provider>:<gates>` for `provider.record_sign_in` when a provider's own sign-in is back. A secret pasted or declined at its
+    `provider-login:<provider>:<gates>` for `provider.record_sign_in` when a provider's own sign-in is back, and
+    `login-renewed:<account>:<fingerprint>` for `account.signed_in` when a login that needed signing in works again
+    outside Shinsa (the fingerprint is the first 16 hex of the sha256 of its refresh token). A secret pasted or declined at its
     gate: `secret:<gate>:saved`, `secret:<gate>:declined`. A repository added to a project (`POST
     /api/projects/<id>/repos` or `/folders`, or an agent's tool): `repo:<path>:<seq>` (the log position, so
     registering a path again after `repo.remove` is a new command); the project change it makes gets a fresh id.
@@ -2177,12 +2407,78 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
   and a step waits for the runs before it, not for an effect, so the engine has no per-effect waiter
   (T3's `awaitSettled`). Tests wait for an effect's row to settle (`awaitEffect` in
   `apps/engine/test/helpers`).
+- **What an error says about a retry.** The handler throws; `Engine` reads `resolveRetryPolicy(error)`: an
+  `EffectError` carries `retryable` and `delayMs`, any other error is retried on the backoff. Before it requeues a
+  retry it calls the retry handler (`onEffectRetry`, `EffectRunner.reportRetry`) with the attempt that failed, the
+  attempts there are (5), when the next one runs and the error, so a retry is never silent. A handler that knows a
+  failure is not the outside world's (a pre-push hook, a conflict) does not throw at all: it reports the fact as a
+  command and settles.
 - **Damaged rows.** A stored effect that is not JSON, or whose payload does not match its kind,
   is failed when it is claimed and the next effect in its lane runs in the same claim.
 - **No gap between claim and cancel.** A claimed effect registers its abort controller in the
   same synchronous step that claims it, and commits run on the same thread, so a cancellation can
   never land between the two (T3 re-reads the row for this; one process with one connection does
   not need to).
+
+## Pushing the branch
+
+`pull_request.open` and `pull_request.push` (`apps/engine/src/runtime/effects.ts`) take the branch from "approved" to
+GitHub in four steps, and report each one to the task as `pull_request.record_step`, which core turns into the stage
+reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open:
+
+1. **Commit your edits** from the Code tab, if any (as before).
+2. **Update onto the base.** The base is the pull request's base (`resolvePullRequestBase`: an earlier round's branch
+   for a stacked round, another task's branch for a stacked GitButler task, else the default branch). Shinsa fetches
+   it (`git fetch origin -- +refs/heads/<base>:refs/remotes/origin/<base>`) and, only when the branch does not already
+   contain it, says "updating the branch onto ‹base›" and **merges** it in (`git merge --no-edit -m "Merge branch
+   '‹base›' into ‹branch›"`, `updateOntoBase` in `git/update.ts`). A branch cut before a fix on the base, a newer
+   hook or a repaired test then pushes with all of them. A base the remote does not have is skipped.
+   - **Merge, not rebase.** Shinsa's code already chose merge: the agents' shell policy refuses `rebase` and force
+     pushes, every fix prompt about a conflicting pull request says "merge the base in; never rebase or force-push",
+     and `commitWorktree` finishes a merge an agent left uncommitted. A merge keeps the branch's commits, so the push
+     is a fast-forward and needs no `--force-with-lease`, open review threads stay on their lines, and the merge
+     method you choose on GitHub still decides what reaches the default branch.
+   - **Conflicts go to the agent.** When the merge conflicts, Shinsa lists the conflicted files, aborts the merge
+     (`git merge --abort`, so the checkout is never left mid-merge, whatever happens next) and sends
+     `pull_request.record_update_conflict`. Core starts a fix round (`fixFor: 'update'`, "resolving conflicts with the
+     base branch") whose prompt says the branch was being updated onto ‹base›, lists the files, and asks the agent to
+     `git merge origin/‹base›`, resolve, `git add` and hand over with the merge uncommitted. Shinsa commits the merge
+     with the fix, runs the checks the resolved files touch (`startFixChecks`: the failing, named and touched ones),
+     and, since a push is still pending, pushes again (`proceedAfterChecks` → `shipReviewedWork`) instead of going back
+     to your review.
+   - **GitButler skips this step** (`GitButlerStrategy.syncBase` answers `skipped`). The only update `but` offers is
+     `but pull`, which rebases every applied branch, yours and other tasks' included, so it stays behind the Update
+     the workspace gate you answer (GitButler: whose change is whose). Its working directory is the workspace itself,
+     so its hooks are your checkout's current ones anyway. The main checkout merges like a worktree, on the task's
+     branch (`MainCheckoutStrategy.syncBase` checks the checkout is still on it).
+3. **Push.** Shinsa reads whether the repository has a pre-push hook (`hasPrePushHook`: `git rev-parse --git-path
+   hooks/pre-push`, which follows `core.hooksPath`, executable, and for a husky stub in `…/_/` the hook it runs) and
+   says "pushing the branch (the repository’s pre-push hook is running)", or "pushing the changes (…)" to an open pull
+   request. The hook always runs: no push Shinsa makes skips it, and no gate offers to. A failed push is a typed
+   `PushError` (`git/push.ts`, `classifyPushFailure`): `non_fast_forward` (a `[rejected]` line), `network` (git's own
+   `fatal:`, `ssh:` or `RPC failed` line naming an unreachable host, a refused or reset connection, a 5xx or an
+   authentication failure), `hook` (a hook is there and git refused with no rejected ref), or `other`.
+   - **A hook rejection is deterministic and never retried.** The effect sends
+     `pull_request.record_hook_failure` with the last 80 lines of the output (6000 characters at most) and the
+     failures `listCheckFailures` reads from it (failing tests by file and name, or diagnostics), and settles. Core
+     starts a fix round (`fixFor: 'hook'`, "fixing what the pre-push hook found") with the output and the failures, and
+     tells the agent to run only those tests or checks, scoped to their files, never the whole suite the hook runs.
+     After the fix the touched checks run and Shinsa pushes again, which runs the hook again. Its failure identity is
+     the sorted failures (output it cannot read is one identity, `unreadable`); when the same identity comes back
+     after a fix round (`task.pushHookFailure` holds the last one until a push gets through), core stops with a
+     failure gate (`cause: 'push_hook'`, "The pre-push hook failed again", "the pre-push hook failed again") showing
+     the failures and the last 40 lines of output. Send to the agent again resets the fix budget and starts another
+     round with the same output (Retry with guidance adds your words); Cancel cancels the task.
+   - **The network is retried, visibly.** A `network` error is an `EffectError` retried after 30 s
+     (`SHINSA_PUSH_RETRY_MS`), up to 5 attempts;
+     each retry reaches the task as `pull_request.record_retry` with its step, so the stage reason reads "pushing again
+     in 30s, attempt 2 of 5: Could not resolve host: github.com" (`updating the branch again…` when the fetch failed,
+     `opening the pull request again…` when GitHub did) and the activity gets one entry per retry ("Pushing failed on
+     attempt 1 of 5, trying again in 30s", the error as its detail). The fifth failure opens the effect's failure gate.
+     `other` errors retry on the outbox's backoff and show the same way.
+   - **Non-fast-forward fails at once** with a failure gate: the remote branch has commits the task's does not
+     (someone pushed to it, or GitHub updated it), and a retry would only fail again.
+4. **Open the pull request** ("opening the pull request") for `pull_request.open`, or reuse the open one.
 
 ## The pull request watch
 
@@ -2388,7 +2684,10 @@ repository, branch and pull request, so agents never guess an id.
 **Live transcripts.** `Transcripts.record` appends and pushes to subscribers. While a socket
 watches a run, `Transcripts.follow` also tails the file, so lines another writer appends stream
 too. The follower also checks the file every second, so a change the file watch missed (a busy
-machine) or a watch that failed (out of file handles) never leaves it quiet.
+machine) or a watch that failed (out of file handles) never leaves it quiet. The check reads whatever
+the file holds past what the follower has already read, never comparing one look at the file with an
+earlier one, so a line appended the moment following starts arrives too. Both the watch and the check
+are the constructor's to replace, which is how the tests trigger them.
 
 ## Providers
 
@@ -2402,7 +2701,7 @@ and a session is resumed only by the provider that owns it. Two providers are re
 | Member | Contract |
 | --- | --- |
 | `id`, `label` | `claude` / `Claude`, `codex` / `Codex`. The id is what `settings.defaultProvider` and `settings.agentProviders` store |
-| `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no `but` command beyond reads and in-place conflict resolution) |
+| `startSession(input)` | Starts a run in `input.cwd` with `input.prompt`, or resumes the provider's own session when `input.resume` is set (Shinsa stores it from `onSession`). `input.account` names the leased account and its folder; `input.compaction` and `input.fastMode` carry the compaction setting and the role's speed (Compaction and fast mode, below); `input.onActivity` is called for everything the session does, so the idle timer restarts. `input.readOnly` says the run must not edit files (`isReadOnlyRun` in core: the Agent while it plans, the reviewer, answerer and researcher, a delegated planner), and `input.role` still picks its tools; a provider that cannot keep a run read-only (`planning.readOnly`) fails every such run as `setup_failed`. The role's Shinsa tools arrive as `input.tools`: an MCP `Server` and its `handle` function; the provider exposes them to its agent however it can. `input.extensions` carries the MCP servers, skills and plugins the run loads (MCP servers, plugins and skills, below), which the provider hands over its own way and records as an `extensions` notice; `input.usageBaseline` is what Shinsa already metered for a resumed session; `input.onEntry` receives everything the session does, mapped into the chat protocol (above) and nothing else, and the supervisor writes the transcript and the `status` entries. Every command the agent runs is checked against `agents/policy.ts` (no commits, pushes, rebases, `git pull` without `--no-rebase` or `reset --hard`, no PR creation or merges, no checkout of the default branch, no `but` command beyond reads and in-place conflict resolution, no whole test suite) |
 | `capabilities` | What the provider can do: `sessions` (`resume`, `inspect`), `turns.steering`, `approvals` (it can block a tool call before it runs), `planning.readOnly`, `contextHandoff`, `structuredOutput`, `accounts` (it runs on a leased account folder), `compaction` (it can compact an idle session) and `fastMode` (it can run at a faster, pricier speed). Policy branches on these flags, never on the provider's name; a provider that declares none gets `MINIMAL_CAPABILITIES` (all off) |
 | `inspectSession({ cwd, sessionId })` | Optional. Whether the provider still has a session: `present`, `missing`, `empty` (metadata only, so it can neither be resumed nor recreated) or `unknown` |
 | `AgentSession.done` | Resolves to `{ outcome: completed \| failed \| cancelled, summary, failure?, undelivered?, usage?, subagentUsage?, context? }` when the run ends: `failure` is the classified `RunFailure`, `undelivered` the steered messages the agent never answered, `usage` the session's running totals (metered with `run.meter`), `subagentUsage` the totals of each agent it started on its own thread (Codex), `context` the tokens in use, when the prompt cache expires and whether background work is pending (idle compaction reads it) |
@@ -2665,19 +2964,38 @@ result as `failure: { class, message, code, retryable, resetAt }`:
 
 | Class | From | Recovery |
 | --- | --- | --- |
-| `usage_limit` | 429, a rejected rate-limit window (overage aside), a gateway's 503 wrapping a 429; `resetAt` is the latest reset of every spent window, or unknown | Another account, else a usage wait until the reset; a failure gate when the reset is unknown or past |
-| `auth` | the assistant's `authentication_failed` and other account errors, 401, or a failed turn whose text asks to log in or reports a dead token (login wins over quota) | Another account, else a Sign in gate for the account; a failure gate when the account is unknown |
+| `usage_limit` | 429, a rejected rate-limit window (overage aside), a gateway's 503 wrapping a 429, a failed turn whose text says the limit is reached ("Claude AI usage limit reached\|‹reset›", "hit your limit") or the account is out of credits ("Credit balance is too low", `code: out_of_credits`); `resetAt` is the latest reset of every spent window, the reset the text names, or unknown | Another account, else a usage wait until the reset; when the reset is unknown or already past the wait is 15 minutes, and a resumed step that hits the same window again waits at least 15 minutes more, so a usage limit never fails a task |
+| `auth` | the assistant's `authentication_failed` and other account errors, Claude Code's synthetic assistant message (`model: '<synthetic>'`) whose text asks to log in or reports a dead token, 401, or a failed turn whose text does (login wins over quota) | For a dead token, the login read again and the same account tried once; then another account, else a Sign in gate for the account; a failure gate when the account is unknown |
 | `setup_failed` | `turn_setup_failed`, a startup failure, a missing or outdated `claude`, a provider that cannot block forbidden commands | Failure gate at once |
 | `context_window_full` | `prompt_too_long`, `blocking_limit` without limit evidence, `rapid_refill_breaker`, a handoff too large to send | Fresh session |
 | `image_error` | `image_error` | Fresh session |
 | `session_lost` | the CLI cannot find the session to resume | Restored in place once, then a fresh session |
-| `overloaded` | 529 or the assistant's `overloaded` | Resume |
+| `overloaded` | 529, any other 5xx from the API ("Claude’s API had a server error (500).") or the assistant's `overloaded` | The same turn again after a short wait, three times, in the run (Overloaded providers, below); then Resume |
 | `aborted` | `aborted_tools` / `aborted_streaming` reported as success (an interruption, never "done"), or a restart loop | Resume |
 | `budget_exhausted`, `malformed_tool_use`, `model_error`, `provider_error` | the CLI's own reasons, the budget subtypes, anything else | Resume |
 | `transport_error` | the process crashed, or the stream ended with no result for the prompt | Resume |
 
 A stream that ends without a terminal result fails the run explicitly. During a shutdown the supervisor has
-cancelled the session first, so it ends as cancelled and nothing is recorded.
+cancelled the session first, so it ends as cancelled and nothing is recorded. A process that exits after its turn
+already settled as failed keeps that turn's failure: a login Claude could not refresh makes the CLI print "Failed to
+authenticate: OAuth session expired and could not be refreshed", answer the turn with an error result and then exit
+with code 1, and that run is an `auth` failure, not a `transport_error` (an account error the assistant reported
+fails its turn even when the result claims success). A process that exits before any result is
+classified from what the turn saw (an account error from the assistant) and from the exit text (a login prompt or a
+dead token), and only otherwise is a `transport_error`. The exit text is cleaned before anyone sees it
+(`cleanProcessError`): the SDK appends the CLI's stderr after ". stderr: ", and every line a Claude Code hook printed
+about itself (`SessionEnd hook [node "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.mjs"] failed: Hook cancelled`,
+from a plugin in your user settings, which every run loads) is dropped, and the SDK's own words are put plainly, so
+the run error and the failure gate show "Claude Code stopped unexpectedly (exit code 1)." ("Claude Code was stopped
+by the system (SIGKILL)." for a signal) followed by "It printed: " and any other line the CLI wrote.
+
+**Overloaded providers.** A turn that fails as `overloaded` (Claude's 529 or another 5xx, Codex's `serverOverloaded`,
+`internalServerError` or an HTTP 5xx) is not a failure of the task: the supervisor tries the same turn again as a new
+attempt on the same account, after 15 s, then 30 s, then 60 s (`config.overloadRetryMs`, `SHINSA_OVERLOAD_RETRY_MS`,
+doubled each time), and only a fourth overloaded attempt ends the run, for core to resume it once. It never reaches
+the rejection seam, so the account is not marked or switched. Each wait is a `retrying` notice in the chat
+(`{ provider, detail, attempt, attempts, retryAt }`, the line "Claude was busy, trying again · 1 of 3"). A cancel, a
+restart or the run's time limit ends the wait at once (`waitToRetry` and `stopActiveRun` in `agents/active.ts`).
 
 **Steering by prompt id.** Every prompt the adapter sends carries a uuid, and a turn is matched to its prompts by the
 ids the CLI echoes on its result (`user_message_uuids`), never by counting. A result that answers none of our prompts
@@ -2780,7 +3098,8 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
   `agents/policy.ts` forbids (and steers the reason into the turn, since a decision carries none) and accepts the
   rest, and accepts file changes. A read-only run (the Agent while it plans, a reviewer, answerer, researcher or delegated planner;
   `isReadOnlyRun`) runs with `approvalPolicy: never` and
-  `sandbox: read-only`: nothing it runs can write or reach the network, so a commit, a push or `gh pr merge` fails in
+  `sandbox: read-only`, since an approved command would leave the sandbox (the whole-suite rule, above): nothing it
+  runs can write or reach the network, so a commit, a push or `gh pr merge` fails in
   the sandbox and a patch is rejected. Elicitations from Shinsa's own MCP server are accepted, others declined;
   anything that needs a person (`item/tool/requestUserInput`, a permissions request) is refused, since no one is there to answer it mid-turn.
 - **Steering and stopping.** A message steers the running turn with `turn/steer` against its turn id. When Codex
@@ -2792,18 +3111,18 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 
   | `codexErrorInfo` | Class |
   | --- | --- |
-  | `usageLimitExceeded`, `rateLimitExceeded`, `responseTooManyFailedAttempts` with HTTP 429 | `usage_limit`; the session leaves `resetAt` unknown and the accounts service fills it in (Accounts and usage limits, below) |
+  | `usageLimitExceeded`, `rateLimitExceeded`, `responseTooManyFailedAttempts` with HTTP 429, or any error whose text says the usage limit is reached ("hit your limit") or the account is out of credits ("The Codex account is out of credits.") | `usage_limit`; the session leaves `resetAt` unknown and the accounts service fills it in (Accounts and usage limits, below) |
   | `unauthorized`, or any HTTP 401 | `auth` ("Run `codex login`"); with no leased account this is a failure gate |
   | `contextWindowExceeded` | `context_window_full` |
   | `sessionBudgetExceeded` | `budget_exhausted` |
-  | `serverOverloaded` | `overloaded` |
+  | `serverOverloaded`, `internalServerError`, or any other HTTP 5xx | `overloaded` (tried again in the run: Overloaded providers, above) |
   | `sandboxError` | `setup_failed` |
   | `cyberPolicy`, `misalignmentPolicyViolation` | `model_error` |
   | `httpConnectionFailed`, `responseStream*`, `responseTooManyFailedAttempts` (not 429) | `transport_error` |
   | anything else | `provider_error` |
 
   A turn Codex ends as `interrupted` by itself is `aborted`; the app server exiting mid-turn is `transport_error`
-  with the last line it printed; a codex that cannot start is `setup_failed`; a `thread/resume` Codex answers with
+  with the last line it printed, or "Codex stopped unexpectedly (exit code 1)." when it printed nothing; a codex that cannot start is `setup_failed`; a `thread/resume` Codex answers with
   "no rollout found" (or not found, no such thread) is `session_lost`, so the supervisor restores the step on a fresh
   thread with the context handoff (Kanna falls back to `thread/start` silently; Shinsa hands the transcript over).
 - **Usage, context and compaction.** `thread/tokenUsage/updated` on the run's thread gives the running totals the
@@ -3097,7 +3416,7 @@ accounts snapshot as `providers` (refreshed with the accounts, a failed read log
 Agent usage shows it under the Claude accounts with the sign-in command, and onboarding's tools check lists codex
 and its sign-in as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
 arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
-names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Sign in to Codex as ‹email›", and
+names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Paused: ‹email› needs signing in", and
 every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
 Settings, on the card or in ⌘K) sends `provider.record_sign_in { provider: 'codex' }` under
 `provider-login:codex:<gates>`, which answers every open Sign in gate of that provider and retries those tasks. The
@@ -3208,7 +3527,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   `account_switched` notice.
 - **Rotation on a rejection** (`accounts/rotation.ts`). A usage limit marks the account spent until its reset (15
   minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too); a
-  signed-out account is marked signed out. The spent marks are kept in `data/account-marks.json` (written on every
+  signed-out account is marked signed out (a dead token is read again first: A login Claude could not refresh,
+  below). The spent marks are kept in `data/account-marks.json` (written on every
   mark and every sign-in that clears one; read at start without the marks that have run out, and an unreadable file
   is logged and starts empty), so a restart still skips a spent account. An unbound run then retries the same turn on
   another usable account, one try per account and three accounts at most per execution, counted from the rejection's
@@ -3220,6 +3540,39 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   (idle release), so the answer resumes it as a new attempt on another account. The flag belongs to the attempt; the
   next attempt leases afresh. When no account qualifies, the run ends with the failure, its account, and for a usage
   limit the earliest reset of the pool (or of the bound account).
+- **A run's failure shows on its account at once.** The mark a rejection makes (spent until the reset, or signed out)
+  is pushed in the same moment as the accounts snapshot on every socket, so Settings → Agent usage, the usage menu and
+  every account picker read "Out of usage until 3:40 PM" or "Needs sign-in" within a second, with no refresh; a
+  sign-in that works again (the login flow, or a renewed login) clears it the same way. Codex, which has one login and
+  no accounts to rotate, is marked too: a sign-out sets its `providers` entry to `signed_out` with the reason until the
+  next sign-in check reads it again, and a usage limit with a known reset reads Codex's usage again at once (one with
+  an unknown reset already does, to find the reset).
+- **A login Claude could not refresh** (`accounts/renewal.ts`). Refresh tokens are single-use: when another
+  program refreshes a login Shinsa also holds a copy of (claude-swap's usage polling or its switch of `~/.claude` to
+  that account, a Claude Code session on it, an import of the same login), Shinsa's copy is dead the next time its
+  access token expires, and the run's `claude` stops with "Failed to authenticate: OAuth session expired and could
+  not be refreshed". A rejection whose failure is a dead token (`auth` with `authentication_failed`, `login_required`
+  or `api_error_401`; not billing, a hold or a verification) is first read again, once per account and execution
+  (`RunRejection.renewed`): an account imported from claude-swap takes claude-swap's current copy (`cswap export`)
+  when its refresh token differs from Shinsa's, written into the account's keychain entry (`security -i` with the
+  value hex-encoded on stdin, so it never shows in the process list, or as arguments when it is too long for one line;
+  only `claudeAiOauth` is replaced, the rest of the entry such as MCP sign-ins is kept; `.credentials.json` off a
+  Mac); any account counts as renewed when its stored access token has not expired (another process refreshed it
+  meanwhile). A renewed account is tried again for the same turn (the verdict's `renewed`; the supervisor leases that
+  account for the next attempt and takes it out of the tried list, logged "Read a login again after Claude could not
+  refresh it"). Otherwise the account is marked signed out and the turn moves to the next usable account as for any
+  sign-out, and its chat row reads "Account switched · b@example.com" with "Claude account a@example.com needed
+  signing in again; continued on b@example.com." When no account can take over (or the run or task is bound to the
+  account) the Sign in gate's body names the account, the other accounts of this execution that need signing in, and
+  what to run: "Claude could not refresh the login of a@example.com, and b@example.com needs signing in again too."
+  then "Sign in to it here, or sign in to Claude Code as a@example.com and run `cswap add`: Shinsa takes the new login
+  from claude-swap." (claude-swap's account), "Sign in to it here, or run `claude auth login` in a terminal." (your
+  Claude Code login) or "Sign in to it here." (`failure.code` `login_expired`). Shinsa remembers the fingerprint of the
+  login that failed, in memory, and every usage refresh (5 minutes) and every refresh you ask for reads it again (a
+  claude-swap account taking claude-swap's copy when it changed): once it is another login, the account is signed
+  in again and `account.signed_in` answers its Sign in gates and retries those tasks, so a sign-in in claude-swap or
+  `claude auth login` carries the task on by itself. A sign-in through Shinsa clears the mark. The task is never
+  failed for a dead token: it moves, or waits at the Sign in gate.
 - **Usage waits** (core `waitForUsageReset`). A usage-limit failure with a reset later than now arms `task.usageWait`
   (`usage_wait.armed`: the run, role, phase, account, `resetAt` and `autoResume` frozen from `settings.autoResume`,
   default on) instead of a gate; the stage reason is "waiting for the usage limit to reset" ("paused until the usage
@@ -3232,12 +3585,15 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   previous turn stopped because the usage limit was reached. The limit has reset. Continue where you left off and
   finish the step with the hand-over tool." A wait without auto-resume (Settings → Agent usage → Limits, After a usage
   limit, with `settings.snoozeLimited` on) opens a failure gate at the reset instead; with both off the limit opens
-  the failure gate at once. Loop guards: no wait for an unknown or past reset, and a resumed step that hits a window
-  no later than the one it waited for opens the failure gate. `usage_wait.change` (auto-resume on or off) replaces the
+  the failure gate at once. A usage limit never fails a task on its own: a reset that is unknown or already past
+  waits 15 minutes (`ESTIMATED_RESET_MS`), and a resumed step that hits a window no later than the one it waited for
+  waits at least 15 minutes more instead of looping at once. The web titles the wait "Waiting for usage: continues at
+  3:40 PM on a@b.com" (`docs/design.md` → Waiting for the usage limit). `usage_wait.change` (auto-resume on or off) replaces the
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
   cancelling or any new step end the wait.
 - **The Sign in gate.** An `auth` failure with a known account opens a `sign_in` gate naming its provider
-  (`Gate.provider`, `claude`) and the account (`Gate.account`), "Sign in to Claude as ‹email›". Its body says what stopped (the classifier's reason when it is
+  (`Gate.provider`, `claude`) and the account (`Gate.account`), titled "Paused: ‹email› needs signing in" (the
+  provider's name, "Paused: Claude needs signing in", when the email is not known), one status for the one cause. Its body says what stopped (the classifier's reason when it is
   more than signed out: on hold, verification, billing) and that signing in starts the step again; its activity
   entry is Shinsa's, like a failure gate's. It is answered like a failure gate (approve retries anyway, `reply`
   retries with your words as guidance, reject cancels; a message is a `reply`), only by you, and `account.signed_in` (a
@@ -3257,7 +3613,11 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 
 ## Configuration and data
 
-Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa` when that is set):
+Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa` when that is set). Shinsa
+Canary's engine, built with `SHINSA_FLAVOR=canary` (`APP_FLAVORS` in `packages/core/src/protocol/flavor.ts`), keeps the
+same layout in `~/.config/shinsa-canary` and listens on 7447 instead of 7446, so the two run side by side, each under
+its own data directory lock; `/api/health` and `shinsa version --json` report which one answers (`flavor`), and the
+canary's links use `shinsa-canary://` (`apps/desktop/CLAUDE.md` → Shinsa Canary):
 
 ```
 ~/.config/shinsa/
@@ -3346,8 +3706,11 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   works in it (`repo.register`, `repos/index.ts`) and filed into a project by the rule in Projects and task identity,
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
-  (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal` and `onboardedAt`.
-  The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds
+  (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
+  the engine takes its flavor's (`APP_FLAVORS`): 7446 for Shinsa, 7447 for Shinsa Canary, both in the unassigned
+  7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
+  server. Is port 7446 in use? Quit the program on it, or set another `port` in <config.json>." (`listenOnPort` in
+  `http/server.ts`; the Mac app shows it as Port 7446 is taken). The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds
   folders). Everything `decide` reads stays domain state, changed by `settings.change` events: the default model,
   the merge method, the model per role, plan approval, fix rounds. The rule: if replaying the log on another
   machine must reproduce it, it is an event; if it only describes this machine, it is `config.json`.
@@ -3365,7 +3728,7 @@ Two servers on one data directory would both run every effect: two agents per ru
 is created atomically (written to a draft file, then hard-linked into place, which fails when the lock exists) and
 records the holder: pid, port, URL, version, commit, install path, when it started and when the machine booted. A
 second server finds a live holder and refuses to start with `server_running`, naming it: "Shinsa is already running
-on ~/.config/shinsa/data: http://127.0.0.1:5180 (pid 4242, version 0.0.0 (1a2b3c4)). Stop it first, or set
+on ~/.config/shinsa/data: http://127.0.0.1:7446 (pid 4242, version 0.0.0 (1a2b3c4)). Stop it first, or set
 SHINSA_HOME to another folder." The port and URL are written again once the server listens (a port of 0 becomes the
 real one). A clean stop removes the lock, after the log is closed, and only when it is still this server's; a
 server that could not listen gives it back at once.
@@ -3451,7 +3814,9 @@ closing the window, quitting the app, a crash and a reboot (`docs/plans/app-plan
   chosen at setup that the engine may not read is refused with `roots_unreadable`, which says to give Shinsa Full Disk
   Access (`resolveChosenRoots`).
 
-Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies.
+Developing Shinsa itself keeps `bun dev`: the engine runs from source in a terminal, and nothing above applies. Its
+`dev` and `start` scripts (`apps/engine/package.json`) pass `SHINSA_PORT=5180` unless one is exported, so a checkout
+never takes the Mac app's 7446, whatever `config.json` says.
 
 ## Onboarding API
 
@@ -3663,10 +4028,11 @@ says hello counts as no desktop.
 
 ## Health
 
-`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
+`GET /api/health` answers `{ ok, seq, problems, version, protocol, flavor, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
 (`resolveHealth`, `apps/engine/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
 which Shinsa answered: `version` is the engine package's version, `commit` the checkout's `HEAD` (null outside a git
-checkout), `installPath` the folder holding `apps/engine`, and `startedAt` and `uptimeMs` count from when the server
+checkout), `installPath` the folder holding `apps/engine`, `flavor` whether it is Shinsa's engine or Shinsa Canary's (`stable` or
+`canary`; each desktop app takes only its own), and `startedAt` and `uptimeMs` count from when the server
 started. `problems` lists every event row the engine skipped at boot:
 `{ seq, type, kind: 'unreadable' | 'unappliable', error }` (a payload that is not JSON or does not match its type,
 or an event `applyEvent` threw on). Replay never stops at a damaged row: every later event is still applied, the
@@ -3708,8 +4074,9 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   (`delegation-invariants.ts`), rounds (`round-invariants.ts`), schedules (`schedule-invariants.ts`), projects and
   handles (`project-invariants.ts`), and the round agent (`agent-invariants.ts`: no top-level planner or builder, a
   purpose on every Agent run that matches its stage, and every new Agent run resuming the task's last Agent session
-  unless that one ended with a fresh-class failure). Every walk also checks that `decide` leaves its input alone, that
-  the state it decided equals its events replayed, and that its patch rebuilds the state on a copy kept on the side.
+  unless that one ended with a fresh-class failure). Every walk also checks that `decide` leaves its input alone (the
+  walk freezes each state it keeps, so a write throws where it happens, at a fraction of the cost of comparing the
+  state serialized before and after every step), that the state it decided equals its events replayed, and that its patch rebuilds the state on a copy kept on the side.
   What each walk checks is listed once, in `packages/core/CLAUDE.md`.
 - **The engine and the outbox.** `apps/engine/test/runtime/engine.test.ts` and `test/store/event-log.test.ts` run them
   on SQLite: retries and backoff, failure gates, lane ordering and the side lane, restart recovery per class, effect
@@ -3722,7 +4089,8 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   the state version following the source (`test/serve.test.ts`: a real server keeps one and its next start reads it);
   `test/store/legacy.test.ts` the one-time rewrite and the move of briefings out of the log; and that a
   listener's state before and changes patch one state into the next. `test/agents/transcripts` covers a transcript
-  line torn by a crash, reading from a position, the entries kept in memory and each new entry's position;
+  line torn by a crash, reading from a position, the entries kept in memory, each new entry's position and
+following a file through its watch and the check every second, both triggered by hand, never waited for;
   `test/http/server.test.ts` the socket's patches, `state.sync` and transcript pages.
 - **Agents.** `apps/engine/test/agents/providers/claude/` covers every `terminal_reason` and failure class
   (`classify.test.ts`), executable discovery, session files under `CLAUDE_CONFIG_DIR`, prompt ids and echo matching,
@@ -3742,6 +4110,13 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   without the bundled package, another eunoe on the port, adopting an orphan, stopping mid-start, and folds reaching
   the session that watches them. `packages/core/test/chat/`
   covers references and `markFinalReplies`.
+- **Checks.** `packages/core/test/decide/checks.test.ts` covers when checks run and what they run (per phase, after a
+  fix, after your edits, an empty set skipped), the agent's check changes and their refusals, and that only blocking
+  failures start a fix; the random walk changes checks at random hand-overs and checks after every step that no two
+  checks share an id, that a task without `build` has none, that every check covers a phase the plan has and that no
+  result outlives its check (`check-invariants.ts`). `apps/engine/test/checks/` covers the runner: commands in
+  parallel at low priority, the timeout, a failing test file re-run alone (`reruns.test.ts`), the base comparison and
+  its cache (`base.test.ts`) and the output kept per check (`evidence.test.ts`).
 - **The whole server.** `apps/engine/test/e2e/` runs the engine, outbox, effects, run supervisor, real checks and real
   git with a bare `origin` against scripted agents (`FakeAgents`) and the fake `gh`. `World` (`e2e/harness.ts`)
   restarts it two ways: `restartGracefully()` as a shutdown does, and `restart()` as a crash, which stops the old
@@ -3782,7 +4157,8 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
     lost thread restored on a fresh one; a usage limit, a sign-out and a crashed app server; a role moved from Claude
     to Codex mid-step, and delegation across the two providers both ways;
   - `compositions.test.ts`: a change then an operation, run or declined after the merge; plans refused for a missing
-    verification plan, compositions without checks or an agent review, and the plan's evidence and checks;
+    verification plan or a whole-suite check, compositions without checks or an agent review, and the plan's
+    evidence and checks;
   - `extensions.test.ts`: MCP servers and skills found, checked over stdio and HTTP, signed in inside Shinsa and handed
     to the agent; one server defined in three places as one row; the context optimizer leaving one out and the agent
     loading it, mid-run where the session can take it;

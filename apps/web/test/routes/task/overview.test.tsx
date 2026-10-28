@@ -307,7 +307,7 @@ describe('the evidence on the Overview', () => {
         </ReviewDraftProvider>
       </TooltipProvider>
     );
-    expect(view.getByText('1 screenshot and 1 test run in the review')).toBeTruthy();
+    expect(view.getByText('1 screenshot and 1 test in the review')).toBeTruthy();
     expect(view.queryByText('Settings page')).toBeNull();
     fireEvent.click(view.getByRole('button', { name: 'See the evidence' }));
     expect(onOpen).toHaveBeenCalledWith('review');

@@ -2,12 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo, Task } from '@shinsa/core';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { GitButlerStrategy } from '../../src/workspaces/gitbutler.ts';
 import { adoptPath, createLedger, LedgerStore, selectOtherOwner } from '../../src/workspaces/ledger.ts';
 import { MainCheckoutStrategy } from '../../src/workspaces/main-checkout.ts';
 import { WorktreeStrategy } from '../../src/workspaces/worktrees.ts';
-import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
+import { createGitRepo, createTempDir, git, startGitButler, writeFiles } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
 
 function writer(path: string, text: string) {
@@ -55,7 +54,7 @@ describe('your edits from the Code tab, in each place agents work', () => {
 
   test('in GitButler the edit becomes the task’s, goes into its next commit, and never mixes with another task’s', async () => {
     const made = await createGitRepo({ files: { 'a.txt': 'a\n', 'b.txt': 'b\n' } });
-    await runCommandOrThrow(['but', 'setup', '--json'], made.path);
+    await startGitButler(made.path);
     const strategy = new GitButlerStrategy(createTempDir());
     const first = await startButTask(strategy, made.repo, 'task-1', 'fix/a');
     const second = await startButTask(strategy, made.repo, 'task-2', 'fix/b');

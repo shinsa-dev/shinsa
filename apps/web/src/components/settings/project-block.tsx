@@ -22,6 +22,7 @@ import {
   resolveFolderName,
   validateFolderPath,
 } from '@/lib/projects.ts';
+import { BaselineSelect } from './baseline-select.tsx';
 import { CoverageSelect } from './coverage-select.tsx';
 import { PathRow, SETTING_ROW, SettingsBlock, SettingsEmpty } from './group.tsx';
 import { ProjectDialog } from './project-dialog.tsx';
@@ -127,6 +128,7 @@ function RepoSettings({
 }) {
   return (
     <>
+      <BaselineSelect repo={repo} onChange={actions.changeBaseline} />
       <CoverageSelect repo={repo} detected={detected} onChange={actions.changeCoverage} />
       <WorkspaceSelect repo={repo} support={support} onChange={actions.changeWorkspace} />
     </>

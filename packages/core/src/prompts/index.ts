@@ -1,10 +1,13 @@
 export {
   resolveChecksFixPrompt,
+  resolveCodeFence,
   resolveConflictFixPrompt,
   resolveConflictSteer,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
+  resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
   resolveWorkspaceUpdatedFixPrompt,
 } from './fixes.ts';
@@ -29,6 +32,7 @@ export {
 } from './orchestration.ts';
 export { resolveProjectContext } from './project.ts';
 export {
+  describeEvidenceForFix,
   resolveAgentPrompt,
   resolveAnswererPrompt,
   resolveInvestigatorPrompt,

@@ -1,10 +1,17 @@
-import { PLAN_EVIDENCE_KINDS, type PlanDocument, type PlanEvidenceKind } from '@shinsa/core';
+import { capitalise, PLAN_EVIDENCE_KINDS, type PlanDocument, type PlanEvidenceKind } from '@shinsa/core';
+import { describeCheckPhases } from '@/lib/tasks/checks.ts';
 
-export type PlanParameters = Pick<PlanDocument, 'impact' | 'evidence' | 'checks' | 'approval'>;
+export type PlanParameters = Partial<Pick<PlanDocument, 'impact' | 'evidence' | 'verification' | 'approval'>>;
+
+interface PlanCheckView {
+  label: string;
+  command: string;
+  phases: string | null;
+}
 
 export interface PlanParameterView {
   evidence: string[];
-  checks: string[];
+  checks: PlanCheckView[];
   impact: string | null;
   approval: boolean;
 }
@@ -12,7 +19,7 @@ export interface PlanParameterView {
 const EVIDENCE_LABEL: Record<PlanEvidenceKind, string> = {
   screenshot: 'Screenshot',
   recording: 'Recording',
-  test: 'Test output',
+  test: 'Linked test',
   note: 'Note',
   preview: 'Preview link',
 };
@@ -28,7 +35,11 @@ export function listPlanEvidenceKinds(values: readonly string[]): PlanEvidenceKi
 export function resolvePlanParameters(document: PlanParameters): PlanParameterView | null {
   const view = {
     evidence: (document.evidence ?? []).map((kind) => EVIDENCE_LABEL[kind]),
-    checks: document.checks ?? [],
+    checks: (document.verification ?? []).map((check) => ({
+      label: check.label,
+      command: check.command,
+      phases: capitalise(describeCheckPhases(check.phases) ?? '') || null,
+    })),
     impact: document.impact?.trim() || null,
     approval: document.approval === true,
   };

@@ -193,7 +193,7 @@ a UI change.
 - **A command the human runs is fenced ```` ```bash run ````** (Run in terminal); any other fence is an example.
   Code is linked as `[file.ts](shinsa://file/src/file.ts#L12-L20)`.
 - **Evidence before review**: each changed view as one before and after `comparison`, at 1280px and the narrow
-  width, light and dark; a recording of 5 to 20 seconds for behaviour; the focused test run as `test`. Before shots
+  width, light and dark; a recording of 5 to 20 seconds for behaviour; the focused test as `test`, linked to its check (never its output pasted). Before shots
   first; the console read on every page; never claim what was not seen working.
 - **A review proves every blocking finding** (`file:line`, what breaks, how it was seen), runs what CI runs, judges
   earlier comments as valid, stale or a nitpick, leads with the verdict, and says nothing about what is fine. Taste
@@ -959,7 +959,7 @@ Rows inside a card never borrow a stat value's size; a figure in a row is `text-
 | Popover | `w-64` (256px), `p-2.5`, `gap-2`, 8px from its trigger |
 | Preview card (`InfoPopover`) | `w-72` (288px) |
 | Tooltip | `min-h-6`, `max-w-72`, `px-2 py-1`, `gap-1` |
-| Toast | `padding: 6px 10px`, `gap: 8px`, `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
+| Toast | `padding: 6px 10px`, `gap: 8px` (6px from the icon, whose box takes 2px back), `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
 | Command menu | 40px input row (`h-10 px-3 gap-2`, bottom hairline), list in a `SizeAnimator`, 28px footer (`h-7 px-3 gap-3`, top hairline) |
 | Card | `CARD`: `corner-superellipse/1.125 rounded-xl border border-border bg-card`; inset 12px (`p-3`) on all four sides; a list card `p-1` |
 | Inset (anything nested in a card or the chat column) | `INSET`: `corner-superellipse/1.125 rounded-lg border border-border` with its fill on top |
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs, toasts |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -1755,7 +1755,7 @@ Do: sentence case ("Default", "Recommended"), never all caps. Don't: restate the
 | --- | --- | --- |
 | `primary` (default) | the one filled accent action of a group: Approve, Save limit, Create project | two in one group |
 | `secondary` | the only variant that sits beside a primary (Cancel, Back, Request changes); every icon-only button that isn't `bare`; every button on an already-filled surface (Settings shelf) | |
-| `outline` | a standalone action or trigger with no primary near it (a picker, a menu button, "Try again" in an empty state) | next to a primary, except a decision or now card's alternatives (Review, Start without checks, Resume now) |
+| `outline` | a standalone action or trigger with no primary near it (a picker, a menu button, "Try again" in an empty state) | next to a primary, except a decision or now card's alternatives (Review, Resume now, Check in now) |
 | `destructive` | the confirming action of something irreversible; its companion is `secondary` | beside `outline` |
 | `bare` | an icon-only quiet action inside a row that already has its own hover wash (a row's edit pencil) | anywhere a row doesn't wash |
 | `link` | inline text action in `primary-text`, no box | |
@@ -3566,7 +3566,7 @@ The live card uses `duration={240}`; the default 180ms is for popup content.
 | cancel button | `bk-toast-button corner-superellipse/1.125 !h-6 !cursor-pointer !rounded-control-sm !bg-bg-a2 !px-2.5 !font-medium !text-fg-3 !text-xs` |
 | close button | `bk-toast-button corner-superellipse/1.125 !cursor-pointer !rounded-control !bg-bg-2 !text-fg-3` |
 
-Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='md'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
+Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='sm'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
 
 **Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet):
 
@@ -3595,7 +3595,8 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
   color: var(--fg-2); margin-top: 6px; font-size: var(--text-2xs); line-height: 1.2;
 }
 [data-sonner-toast].bk-toast [data-icon] {
-  width: 16px; height: 16px; margin: 0; flex-shrink: 0;
+  width: 14px; height: 14px; flex-shrink: 0;
+  margin: 0 -2px 0 0;   /* the 8px gap less 2px: 6px to the text, as a menu row; the action stays 8px away */
   display: flex; align-items: center; justify-content: center; position: relative;
 }
 [data-sonner-toast].bk-toast [data-icon] > svg { margin: 0; }
@@ -3603,10 +3604,10 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   text-box: trim-both cap alphabetic;   /* glyph edges line up with flex alignment */
 }
-[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2px; }
+[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
 ```
 
-So a one-line toast is 34px tall: a 16px icon, 8px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
+So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
 
 **Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot.
 
@@ -5800,7 +5801,7 @@ Shinsa's kit has no `Table` primitive today; lists are rows. When tabular data i
 **Rules**
 
 - Six variants: `primary` (the default; blue fill, white label, `shadow-control` highlight, the fill at 80% on hover and press), `secondary` (no fill at rest, `text-fg-2`, hover and press lay `bg-bg-a2/70` and brighten to `text-fg-4`), `outline` (`text-fg-4` on `bg-background`, `dark:bg-bg-3`, edged by `shadow-control-elevated`), `destructive` (`text-white` on `bg-red-4`, `shadow-control-destructive`, the fill at 90% on hover and press), `bare` (icon-only, no wash at all, glyph `fg-2` to `fg-4`) and `link` (`text-primary-text`, no box, `opacity-80` on hover and press, the content scales to 0.975 on press).
-- At most one `primary` per group of actions. Its companion is `secondary`. `outline` stands alone (a trigger, a standalone action) and never sits next to a primary, with one exception in the code: a decision or now card's alternatives. A review's decision card puts Review (`outline`, it opens the review) beside its primary decision (Decision cards and action naming, in 11.2), and a now card's alternatives are `outline` beside its one primary (Start without checks, Resume now, Check in now). A `destructive` confirm's companion is `secondary`.
+- At most one `primary` per group of actions. Its companion is `secondary`. `outline` stands alone (a trigger, a standalone action) and never sits next to a primary, with one exception in the code: a decision or now card's alternatives. A review's decision card puts Review (`outline`, it opens the review) beside its primary decision (Decision cards and action naming, in 11.2), and a now card's alternatives are `outline` beside its one primary (Resume now, Check in now). A `destructive` confirm's companion is `secondary`.
 - An icon button is `secondary` everywhere, except a quiet action in a row that already washes on its own, which is `bare`.
 - Sizes are one value at every width; there is no touch step-up.
 
@@ -6802,7 +6803,7 @@ Example: "(chevron) Worked for 3m · 14 steps" over the agent's final paragraph,
 - Your message is its bubble: `corner-superellipse/1.125 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed` inside a `relative min-w-0 max-w-4/5` frame that also holds the delivery light, right-aligned (`flex flex-col items-end gap-2`), `whitespace-pre-wrap break-words`. Over 12 lines (or 1080 characters) it clamps to 12 with a "Show more"/"Show less" toggle (`px-1 text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`).
 - Attachments sit above the bubble: images as a large thumbnail strip (`max-w-4/5 justify-end`), other files as chips (`CARD`, `h-10 max-w-64 gap-2 p-1 pr-3`, a 32px `rounded-lg bg-muted` icon box with a 16px icon, name `text-xs fg-4` over meta `text-2xs fg-2`, `gap-px`), wrapping `gap-2`.
 - Acting never moves you: approving, merging, answering, replying or cancelling stays on the page and confirms with a toast. There is no previous/next stepper; the queue and the command menu move between items.
-- A sent message shows at once, and while it is delivered (on its way to the server, then routed into the task) the bubble, border included, is at 50% opacity and a blue light travels around its border: a 1px ring over the border (`message-delivery`), outside the dimmed bubble so it keeps its strength, a conic gradient of `primary-4` (both themes) with a soft tail turning once every 2.4s, only `transform`. No text line. It fades in; when the message is delivered the light fades out and the bubble eases to full opacity, both over 400ms on the strong ease-out (`transition-opacity duration-400 ease-out`). Under reduced motion the bubble is still at 50% and the ring is a still `primary-4` border. Delivered: no line. "Noted. It needs no reply." in `text-fg-2` when nothing will answer it. "Not delivered. ‹reason›" in `text-red-text`, and the message stays. Every message ends in a visible state.
+- A sent message shows at once, and while it is delivered (on its way to the server, then routed into the task) the bubble stays at full opacity and a blue light travels around its border: a 1px ring over the border (`message-delivery`), a conic gradient of `primary-4` (both themes) with a soft tail turning once every 2.4s, only `transform`. No text line. It fades in; when the message is delivered the light fades out over 400ms on the strong ease-out. Under reduced motion the ring is a still `primary-4` border. Delivered: no line. "Noted. It needs no reply." in `text-fg-2` when nothing will answer it. "Not delivered. ‹reason›" in `text-red-text`, and the message stays. Every message ends in a visible state.
 - A message that waits for the round in progress to finish (it asked for new work, so it is the next round) is not a bubble: it sits in a queue docked above the composer, a `CARD` with a 32px `text-2xs` header ("Queued · Sends once round 2 is finished.", an hourglass) over one row per message (`text-xs fg-3`, three lines at most, a pencil and a cross 1px apart). The pencil turns the row into a `Textarea` with Cancel and Save (Enter saves, Escape cancels); the cross removes it. When the round starts, the message moves into the chat under its round's divider, delivering until the round's agent starts.
 - A deep link to a run scrolls to it and washes it: `outline-2 outline-transparent transition-[background-color,outline-color] duration-500 data-focused:bg-primary-a1 data-focused:outline-primary-a1`, the 2px outline outside the box so the wash wraps full-width content instead of sitting flush; it fades with the wash. Because the run's box hugs its content, the wash is the same 2px on all four sides.
 
@@ -7326,9 +7327,9 @@ A top-bar reading that opens more on hover.
 
 - Trigger: a `secondary` `sm` button with the icon (`IconGauge`) and the one figure that matters next, in the usage
   tone from 75%; without a figure it reads its name ("Agent usage"). Hidden when there is nothing to read.
-- Pick the figure the way the server picks: the window of what the next run uses (its 5-hour window, or the fullest
-  window that applies when there is no 5-hour one). A window at 100% that blocks the next run takes the figure's
-  place, so a spent resource never reads low while it is blocked.
+- Pick the figure the way the server picks: of the windows that apply to what the next run uses, the one closest to
+  running out (the fullest; the 5-hour one when two are as full once rounded). An empty 5-hour window never hides a
+  nearly spent weekly one, and the row's label says which limit binds.
 - Popover (`w-72`), titled with the name alone, no description; one shared row per resource:
   `flex flex-col gap-1.5 px-3 py-1.5`: name and percentage
   (`flex items-center justify-between gap-4 text-xs`), the bar, then the window's label and its reset or its status
@@ -7549,18 +7550,18 @@ Every waiting or result state of a running process is one card on the same frame
   disabled while a sibling action runs. Cancel, veto and "not now" actions are quiet links, never buttons.
 - Name a retry for what it does: "Allow another 10%", "Allow another $5.00", "Check the Codex sign-in again", not
   "Retry", wherever the action appears (card and command menu).
-- One primary at the top right; alternatives are `outline` (Start without checks, Resume now, Check in now) or quiet
+- One primary at the top right; alternatives are `outline` (Resume now, Check in now) or quiet
   links.
 - The variants, with the shape each teaches:
 
 | State | Tone and icon | Title / body | Actions |
 | --- | --- | --- | --- |
 | Paused (a failure) | orange, Paused group | the gate's title, a link to the agent's last message or the body | Retry (primary, named for what it does); Cancel task as a quiet link |
-| Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown | Verify again (primary), Start without checks (`outline`, only when checks are all that is missing); Cancel task quiet |
-| Sign-in needed | orange, `IconUserKey` | title and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
+| Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown | Verify again (primary); Cancel task quiet. Nothing configured to check is never a setup problem |
+| Sign-in needed | orange, `IconUserKey` | the title ("Paused: a@b.com needs signing in", one status for the cause) and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
 | A wait | blue, "Waiting to check in again" | "The agent is waiting on something outside the repository", the notes (`selectable text-fg-4`) over "Check-in 2 of 10 · gives up in 3 hours" (`text-2xs text-fg-2`) | Check in now (`outline`); eyebrow counts down |
-| Waiting on a limit | blue, In progress | "Resumes when the usage limit resets", the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |
-| A revised plan | | eyebrow "Version 2 · 4 phases", then an inset with "You asked" and "What changed" | Approve plan sends the version on screen |
+| Waiting on a limit | blue, In progress | "Waiting for usage: continues at 3:40 PM on a@b.com" (when and where it carries on, in one line), the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |
+| A revised plan | | eyebrow "Version 2 · 4 phases", an inset with "You asked" and your words alone, then the plan: "What changed" and the summary right before the goal, a quiet "New" or "Changed" `Badge` `sm` beside each added or reworked phase (the chat's plan card the same) | Approve plan sends the version on screen |
 | A proposed change | | eyebrow names who proposes it, title the question, the why, "What it would change" on an inset | Make it a change (primary); "Keep it as an investigation" quiet |
 | An operation to run | | the merge line with a mono copyable commit chip, the steps and impact as markdown, one editable notes box | Run the operation (primary); "Finish without it" quiet, behind a confirm |
 | A secret request | | eyebrow "The agent asked for the ‹label›", the reason, a password `Input` ("Paste the ‹label›") with Save | footer note "It goes to Shinsa’s secret store. The agent and the chat never see it." and "Don’t give it" quiet |
@@ -7580,13 +7581,15 @@ A secondary block inside a card sits on an inset: `INSET` + `bg-bg-a1`.
 
 | Use | Classes |
 | --- | --- |
-| A block of context ("You asked" / "What changed") | `flex flex-col gap-2 px-3 py-2.5 text-xs`; each part `flex flex-col gap-px`, its label `text-2xs text-fg-2`, its text `selectable text-fg-3` (the summary `text-fg-4`); a computed list as `·` rows (`flex gap-1.5`, the dot `text-fg-2`) |
+| A block of context (a revised plan's "You asked") | `flex flex-col gap-px px-3 py-2.5 text-xs`: the label `text-2xs text-fg-2`, the person's words `selectable text-fg-3`; only their words go here, the agent's summary belongs to the card's body |
 | A one-line strip with quiet links | `flex items-center gap-2 px-3 py-2 text-2xs text-fg-2`: icon and sentence (`text-fg-3`, `text-orange-text` once it is serious), a spacer, then quiet links |
 | A fix with a command to copy | `flex items-center gap-1.5 py-1 pr-1 pl-2`: the fix as inline markdown (`min-w-0 flex-1 text-fg-3 text-xs`) and a `CopyButton` |
 
 - An inset note never changes the process's status; it informs.
 - Example: "No output for 23 minutes" above the live feed (`IconClock`, `fg-3`, orange from 15 minutes) with Snooze
   and Dismiss.
+- Say what is happening when you know it: while a tool call is still running the strip reads "A command has been
+  running for 23 minutes" with the command's first line in mono (`font-mono text-fg-2`, truncated), not "No output".
 
 #### Choice buttons
 
@@ -7862,7 +7865,20 @@ An entry an agent caused through its management tools reads "‹handle› agent 
 it has a handle), a link to the acting task, and "Shinsa (on your behalf)" when no task is named. Its tool calls show
 in its turn like any tool, folded with the other Shinsa tools as "Used 2 Shinsa tools".
 
-#### Unknown costs
+#### A task's cost
+
+A task's cost shows in one place only: the cost control in its facts row, the unit's icon and the amount (a gauge icon
+and "1.8%" on a subscription, a coins icon and "$18.55" on an API key), whose popover on hover holds the rest. No other
+surface repeats it: not a now card, a run or round divider, a task row, an activity entry, the review, a preview card
+or the command menu. An account's usage (its weekly window, in the top bar's usage menu and Settings) is not a task's cost and
+stays. A limit's gate names the limit it reached, never what the task spent.
+
+In that popover the cost is in one unit: its share of the weekly window when it ran on a subscription ("1.8% of the
+weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
+learned ("$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
+as estimated by the agent provider."), never beside the total as a second number. A share is an estimate, said once
+and quietly in that same line ("The share is learned from 12 tasks on this account."), never as a badge. It follows
+the account's current rate, so it can move a little as the rate improves. Shares show a tenth below 10% ("0.4%") and whole percentages above.
 
 A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
 names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
@@ -7875,7 +7891,7 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 
 **Rules**
 
-- The desktop app is a thin native shell that loads the same web UI from the local server (`http://127.0.0.1:5180` by default). The app window, a browser tab and the floating companion window always show one version of the UI; the companion stays the small floating window and the app is the full one.
+- The desktop app is a thin native shell that loads the same web UI from the local server (`http://127.0.0.1:7446` by default). The app window, a browser tab and the floating companion window always show one version of the UI; the companion stays the small floating window and the app is the full one.
 - The page learns it runs in the app only from a preload bridge object on `window` (`window.shinsaDesktop`). A browser and the floating window have no bridge, and nothing in the desktop patterns below applies there.
 - On start, the page sets `data-desktop` on `<html>` to `window`, or `fullscreen` while the window is full screen (the traffic lights are gone), and keeps it in sync with the bridge's window-state events.
 - A Tailwind custom variant holds every desktop-only adjustment:
@@ -7991,7 +8007,7 @@ These patterns cover the desktop window, the code workbench, how code and diffs 
 | Problem | Buttons |
 | --- | --- |
 | Allow Shinsa to run in the background | Open Login Items, Try again |
-| Port 5180 is taken | Start engine, Copy details (the sentence says to quit the other program or set another `port` in Shinsa's config) |
+| Port 7446 is taken | Start engine, Copy details (the sentence says to quit the other program or set another `port` in Shinsa's config) |
 | The engine keeps stopping | Start engine, Copy details; the engine log's warnings and errors under them |
 | The engine is not running | Start engine, Open Privacy & Security, Copy details |
 
@@ -8395,10 +8411,10 @@ Row class:
 **Rules**
 
 - A `Panel` with `IconImages1`, the count right after the title, placed before the code.
-- Items grouped by kind, in order: Comparison, Recording, Screenshot, Test run, Check run, Note, Preview. Each group under a `SectionLabel` naming its kind (plural with the count when more than one). 20px between groups, 4px from a label to its items.
+- Items grouped by kind, in order: Comparison, Recording, Screenshot, Test, Check, Note, Preview. Each group under a `SectionLabel` naming its kind (plural with the count when more than one). 20px between groups, 4px from a label to its items.
 - A comparison is one item: title and facts ("1280px · Dark"), what to look at, then its parts side by side (three across from `sm` when more than two), each labelled Before, After or its state. A light/dark pair is a comparison labelled Light and Dark with only the width as facts.
 - Recordings and screenshots: a two-column grid (one below `sm`), each with title, facts and what to look at. A lone screenshot shows no before/after stage.
-- Test or check run: a bordered list of each command (a `$ ` line starts a command, else the first line is the command), each with the check glyph and counts ("2 pass, 0 fail"), or Passed / Failed without counts. Raw output behind "Show the output" (`secondary` `xs`, chevron) in the caption's trailing slot. Checks the product ran itself are titled "Checks run by Shinsa: …".
+- A test or check is a reference to one of the task's checks, never a text blob of its own: the agent links a check (its id) instead of pasting test output, and the output the product keeps each time it runs a check belongs to that check. Every piece of one check folds into one item, a Test when the agent linked it as one, else a Check, drawn as that check's row from the Checks list (below): label, who added it, command, outcome, the agent's note on what it proves, and "Show the output" on the latest output kept this round. A check the task no longer has reads "No longer one of the task’s checks".
 - A note: `IconNote1`, the shared markdown renderer at `text-xs` in an inset (`px-3.5 py-2.5`).
 - A run with no command is a code block (monospace, copy on hover, max 320px tall). A preview is a link row.
 - Last line: where the files are on disk ("Stored in ~/…/evidence/<task>/round-1", `IconFolder1`, a copy button).
@@ -8406,7 +8422,7 @@ Row class:
 - A recording shows its first frame (muted, metadata preloaded) under a round play glyph and plays only in the viewer with controls (server supports byte ranges).
 - Evidence from the reviewer, not the author, carries a purple "From the agent review" badge.
 - Empty: "No screenshots, recordings or test runs were attached this round. Request changes to ask the agent for them." A missing proof is visible, not silent.
-- Decision layer summary line counts by kind: "1 comparison, 1 recording and 2 test runs in the review".
+- Decision layer summary line counts by kind, a check once: "1 comparison, 1 recording and 2 tests in the review".
 
 #### Chaptered reading order
 
@@ -8414,7 +8430,7 @@ Row class:
 
 - Chapters follow how a reader comes to understand a change: How it's built (Approach, How it works, How to test, then Pre-merge steps and Post-merge steps when present), Key code, Judgement calls, Read carefully (critical spots, then risks), then Agent review. Then your comments (each with Remove), then Everything else, collapsed (changed files nothing points at, with counts; findings dismissed in earlier rounds, compact).
 - A chapter with more than one block opens with a `SectionLabel` (count beside it) 4px over its cards; 8px between cards; 20px between chapters.
-- Every point appears in exactly one chapter; no duplicate attention list, phase walkthrough or checks list.
+- Every point appears in exactly one chapter; no duplicate attention list or phase walkthrough, and the Checks list only in How to test.
 - Every section is a `Panel` card (36px `CARD_HEADER` band, icon slot, title, count right after the title, disclosure header with the box chevron), never loose text under a heading.
 - Walkthrough prose includes a text diagram in a code fence whenever the change has structure or flow worth drawing.
 - Judgement call cards: tag Judgement call (purple), titled by the decision in a few words, then the call and reason, "Also considered" with each alternative and why rejected, then the snippet. If the reviewer disagrees, the card is Disputed (orange) and carries "The agent review disagrees" with its reason on an orange inset note (`orange-a2` on the inset's hairline).
@@ -8426,9 +8442,22 @@ Row class:
 **Rules**
 
 - Two parts, each under a quiet `text-2xs` label; never a checklist.
-- Covered by tests: one or two lines of plain text, then one line on checks ("All 4 checks passed. The Overview lists each check."). When measured, changed-line coverage in one `fg-2` line ("85% of changed lines are covered (36 of 42) · 2 files have uncovered lines." or "All 42 changed lines are covered.") and a quiet `text-2xs` toggle "Show 3 files" listing each file link, "10 of 14 lines" and, if missed, "Not covered:" with each range a file link. Nothing at all when coverage is off, unmeasurable or no changed line is code.
+- Covered by tests: one or two lines of plain text, then the Checks list in both stages. When measured, changed-line coverage in one `fg-2` line ("85% of changed lines are covered (36 of 42) · 2 files have uncovered lines." or "All 42 changed lines are covered.") and a quiet `text-2xs` toggle "Show 3 files" listing each file link, "10 of 14 lines" and, if missed, "Not covered:" with each range a file link. Nothing at all when coverage is off, unmeasurable or no changed line is code.
 - Try it yourself: ordered steps, each a `StepNumber`, the action (markdown), its target, and "You should see" over the expected result. Targets render by kind: an `http`/`https` address is a link with `IconGlobe` opening in the browser; a file a file link at its lines; a command a shell code block with Copy and Run; a screen, or an unreadable address or file, plain text with its icon.
 - Shown when either part exists, there are checks, or coverage was measured.
+
+#### Checks list
+
+**Rules**
+
+- One list, two stages, read as a bonus, never a wall: **Building** (before the pull request: the checks the plan chose and the agent added as it built, then the repository's optional "Always run before review" commands) and **CI** (after the pull request: its CI checks).
+- Each stage opens on a `text-2xs` line: the stage's title (medium `fg-2`) and its summary in its state's colour ("All 4 passed" in the check ink, "1 of 4 failed" in red, "Running 2 checks" in blue, "2 passed, 2 not run yet" in `fg-2`). Its rows sit in one inset with hairlines between them.
+- A row: the state glyph on the first line, the label (`text-xs fg-4`) with who added it beside it (`text-2xs fg-2`: "From the plan · phases 1 to 3", "Added by the agent · phase 3", "Repository · before review"; a CI check "Required" or "Optional", its name a link to the run), the command under it (mono `text-2xs fg-3`, selectable), then a note or what failed, and at the end the state's word and "Show the output" when the product kept the check's output (the latest run only, never one block per run).
+- States: Passed (the check ink, never green), Failed (red, with what failed under the command), Not run yet (dotted circle), Running (a spinner in the accent: a check in the current run is never shown as its old result, so a run of the checks never looks stuck), Passed with "Passed when re-run alone" under it, and "Already failing on main, so it does not block" (a grey failed glyph, "Not blocking").
+- While the checks run between phases, the now card's title is the stage reason ("Running the checks for phase 1 of 3"), never the next phase's title, and the card shows the list.
+- Where it shows: the review card, the now card while the checks run, How to test, and compact (no output) in the checks fact's and the pull request's popovers.
+- The plan names its checks the same way: a "Checks" parameter with each label, its phases ("Phases 1 to 3") and its command as a mono chip.
+- A repository's "Always run before review" is a setting with a default of nothing: nothing configured means nothing extra runs, and it is never a setup problem.
 
 #### Pinned index line
 
@@ -8950,7 +8979,7 @@ Rules that sit behind the table:
 | `’` (U+2019) | Every apostrophe a person reads: "Don’t", "Couldn’t", "Shinsa’s", "task’s" | `'` |
 | `“ ”` (U+201C, U+201D) | Every quotation and every quoted task title: "waiting for “Base” to finish" | `"` |
 | `…` (U+2026) | Truncation, in-progress labels, actions that ask for more, an elided value ("Create task: …") | `...` |
-| `·` (U+00B7), spaced | Separator between facts on one line: "Building · Round 2", "Claude · a@b.com", "$1.75 · 12% of the weekly limit" | `•`, `|`, ` - ` |
+| `·` (U+00B7), spaced | Separator between facts on one line: "Building · Round 2", "Claude · a@b.com" | `•`, `|`, ` - ` |
 | `–` (U+2013), no spaces around it, in a number range | Ranges: "lines 4–9" | `-` |
 | `−` (U+2212) | The minus of a diff count: "+12 −3" | `-` |
 | `→` | A change from one value to another, or a path through the app: "2.1.287 → 2.1.310", "Settings → Agent usage" | `->` |
@@ -9247,9 +9276,10 @@ change works, it sends `walkthrough` with only the parts that changed, each whol
 #### Review findings
 
 At most 12 findings, one per problem, most severe first, each anchored to a `file` and `line`/`end`. `blocking` is a
-bug, a missed requirement, a broken rule, a failing check, a test that encodes the old behaviour or passes either
-way, or UI work without evidence of the changed flow; everything else is a `suggestion`, and taste is never
-blocking. Each finding has a `title` (what is wrong, a few words), a `message` (what is wrong and why it matters) and,
+bug, a missed requirement, a broken rule, a check the change makes fail, a test that encodes the old behaviour or
+passes either way, or UI work without evidence of the changed flow; everything else is a `suggestion`, and taste is
+never blocking. A check that fails because of the change is always a blocking finding; one already failing on the
+base branch is not the change's and does not count against it. Each finding has a `title` (what is wrong, a few words), a `message` (what is wrong and why it matters) and,
 when known, a `fix` (a sentence or a short code block). A `summary` of one or two sentences says what was checked and
 the overall view. `disagreements` names a judgement call by its number with the `reason` and what the reviewer would
 do instead; calls it agrees with are left out. Nothing about what is fine, and nothing restated after the call. The
@@ -10581,7 +10611,7 @@ const [stage, setStage] = useState(task.stage);
 | --- | --- |
 | `commit-msg` | The first line must match `^(feat\|fix\|docs\|refactor\|test\|chore\|perf\|ci\|build\|style\|revert)(\([a-z0-9./-]+\))?!?: .{1,100}$`; lines starting `Merge`, `Revert`, `fixup!`, `squash!` pass. The hook reads only the first line; by convention a commit message is that one subject line and nothing else. |
 | `pre-commit` | `lint-staged` (`biome check --write --no-errors-on-unmatched --files-ignore-unknown=true` on staged `*.{ts,tsx,js,jsx,json,jsonc,css}`), `bun lint:conventions`, `bunx sherif -i @types/node` |
-| `pre-push` | `bun check-types`, `bun run test` |
+| `pre-push` | `bun check-types` (Turbo-cached, seconds). A hook stays a short validation: anything that takes minutes, like the full test suite, runs in CI. |
 | CI Lint | `bunx biome ci .`, `bun lint:conventions`, `bun lint:spelling`, `bunx sherif -i @types/node`, `bunx knip`; separately `bun check-types` |
 | CI Test | `bun run test`; and the loading walk: a production build, seeded and served, must show no loading state in normal use (two attempts) |
 

@@ -31,9 +31,8 @@ export function describeStepRules() {
 
 const PLAN_PARAMETERS = {
   code: [
-    '`verification` is the verification plan and is required: for each phase and the whole change, the existing tools that prove it (tests, the type check, lint, the app in a browser, a script) and anything you build to prove it.',
+    "`verification` is required: the checks that prove the change, which Shinsa runs itself. Each is a `label`, the exact `command` scoped to what the change touches (`bun test --cwd apps/engine test/checks`, `bun run --cwd apps/web check-types`, `bunx biome check <the changed paths>`), and the `phases` it covers. Shinsa runs a phase's checks after you hand that phase over, never the whole suite: CI runs that on the pull request, and Shinsa refuses a bare `bun test` or `npm test`.",
     `\`evidence\` names what the builders attach as evidence before the human reviews (${PLAN_EVIDENCE_KINDS.map((kind) => `\`${kind}\``).join(', ')}). A change the human sees in the UI always asks for a \`screenshot\`. Shinsa refuses the last phase until each kind is attached.`,
-    "`checks` adds commands Shinsa runs with the repository's own checks (a targeted test, a build). Leave it empty when the repository's checks prove the change.",
     '`approval`: set it to true when the change is risky enough that the human should approve the plan before anything is built.',
   ],
   operation: [

@@ -68,7 +68,7 @@ function MessageStatus(message: Pick<HumanMessage, 'status' | 'reason'>) {
 }
 
 const BUBBLE =
-  'corner-superellipse/1.125 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed transition-opacity duration-400 ease-out';
+  'corner-superellipse/1.125 rounded-3xl border border-border bg-muted px-3.5 py-1.5 text-fg-4 text-xs leading-relaxed';
 
 function DeliveryEdge({ phase }: { phase: SettlingPhase }) {
   if (!phase) return null;
@@ -100,7 +100,7 @@ export function UserMessage({
       <Attachments attachments={attachments} />
       {body && (
         <div className='relative min-w-0 max-w-4/5'>
-          <div className={cn(BUBBLE, 'selectable', delivery === 'active' ? 'opacity-50' : 'opacity-100')}>
+          <div className={cn(BUBBLE, 'selectable')}>
             <p className={cn('whitespace-pre-wrap break-words', long && !expanded && 'line-clamp-12')}>
               {body}
             </p>

@@ -18,7 +18,7 @@ const PLAN: PlanDocument = {
   approach: 'Clamp the width.',
   files: [{ path: 'src/tabs.tsx', change: 'Clamp the width' }],
   outOfScope: ['Mobile'],
-  verification: ['Open the page'],
+  verification: [{ label: 'Tab tests', command: 'bun test src/tabs', phases: [2] }],
   questions: [
     { question: 'Which width?', options: ['200', '240'], recommendation: null },
     { question: 'Animate it?', options: [], recommendation: null },
@@ -35,22 +35,27 @@ describe('serializePlanMarkdown', () => {
         '## Approach\nClamp the width.',
         '## Files\n- `src/tabs.tsx`: Clamp the width',
         '## Out of scope\n- Mobile',
-        '## Verification\n- Open the page',
+        '## Checks\n- Tab tests: `bun test src/tabs` (phase 2)',
         '## Questions\n- Which width? (200 / 240)\n- Animate it?',
       ].join('\n\n')
     );
   });
 
-  test('writes the plan parameters: the evidence, the extra checks and the impact', () => {
+  test('writes the plan parameters: the checks with their phases, the evidence and the impact', () => {
     const markdown = serializePlanMarkdown({
       ...PLAN,
+      verification: [
+        { label: 'Tab tests', command: 'bun test src/tabs', phases: [1, 2] },
+        { label: 'Types', command: 'bun run --cwd apps/web check-types', phases: [2] },
+      ],
       evidence: ['screenshot', 'test'],
-      checks: ['bun test tabs'],
       operation: ['Backfill the widths.'],
       impact: 'Touches 40 rows.',
     });
+    expect(markdown).toContain(
+      '## Checks\n- Tab tests: `bun test src/tabs` (phases 1, 2)\n- Types: `bun run --cwd apps/web check-types` (phase 2)'
+    );
     expect(markdown).toContain('## Evidence\nscreenshot, test');
-    expect(markdown).toContain('## Extra checks\n- `bun test tabs`');
     expect(markdown).toContain('## Operation\n1. Backfill the widths.\n\n## Impact\nTouches 40 rows.');
   });
 
@@ -92,9 +97,25 @@ const REPORT: WorkReport = {
     },
   ],
   checks: [
-    { name: 'lint', outcome: 'pass', detail: null },
-    { name: 'test', outcome: 'fail', detail: null },
-    { name: 'e2e', outcome: 'skipped', detail: null },
+    { id: 'r1', label: 'Lint', command: 'bun lint', outcome: 'pass', detail: null },
+    { id: 'c1', label: 'Tab tests', command: 'bun test src/tabs', outcome: 'fail', detail: null },
+    { id: 'c2', label: 'E2E', command: 'bun test e2e/tabs', outcome: 'skipped', detail: null },
+    {
+      id: 'c3',
+      label: 'Flaky',
+      command: 'bun test src/flaky',
+      outcome: 'pass',
+      detail: null,
+      note: 'passed_alone',
+    },
+    {
+      id: 'c4',
+      label: 'Old',
+      command: 'bun test src/old',
+      outcome: 'fail',
+      detail: null,
+      note: 'fails_on_base',
+    },
   ],
   judgementCalls: [
     {
@@ -121,7 +142,7 @@ describe('serializeReportMarkdown', () => {
       [
         'Clamp the tab width',
         '### What changed\n- **Find it**: Traced it.\n- **Fix it**: Clamped it.',
-        '### Checks\n- ✓ lint\n- ✗ test\n- – e2e',
+        '### Checks\n- ✓ Lint: `bun lint`\n- ✗ Tab tests: `bun test src/tabs`\n- – E2E: `bun test e2e/tabs`\n- ✓ Flaky: `bun test src/flaky` (passed when re-run alone)\n- ✗ Old: `bun test src/old` (already failing on the base branch)',
         '### Judgement calls\n- **No new prop**: Kept the props as they are. Not needed.',
       ].join('\n\n')
     );

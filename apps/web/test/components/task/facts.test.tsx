@@ -7,6 +7,7 @@ import { createAccount, createSnapshot } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
 import { createPartialCoverage } from '../../support/coverage.ts';
 import { findTooltipText } from '../../support/hover.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createRound } from '../../support/rounds.ts';
 import {
   listSentCommands,
@@ -271,6 +272,40 @@ describe('the round and the agents in the facts row', () => {
   });
 });
 
+describe('the cost fact', () => {
+  it('shows its icon and value in the row and the breakdown in its popover, the one place a task’s cost shows', async () => {
+    const task = createTask({ id: 't', handle: 'SW-7' });
+    const usage = {
+      inputTokens: 2_000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      costUsd: 3,
+    };
+    const state = createShinsaState({
+      tasks: [task],
+      runs: [createRun({ id: 'k', taskId: 't', role: 'answerer', usage })],
+    });
+    pushState(state);
+    render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+      </TooltipProvider>
+    );
+    const trigger = screen.getByRole('button', { name: '$3.00' });
+    expect(trigger.textContent).toBe('$3.00');
+    expect(screen.queryByText('By step')).toBeNull();
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    expect(await screen.findByText('By step')).toBeTruthy();
+    expect(screen.getAllByText('$3.00').length).toBeGreaterThan(1);
+  });
+});
+
 describe('the coverage fact', () => {
   it('says how much of the change the tests run and links to How to test in Review', async () => {
     renderFacts(createTask({ id: 't', handle: 'SW-7', coverage: createPartialCoverage() }));
@@ -290,5 +325,40 @@ describe('the coverage fact', () => {
       })
     );
     expect(screen.queryByText(/changed lines/)).toBeNull();
+  });
+});
+
+describe('the checks fact', () => {
+  const checks = [
+    { id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', phases: [1], source: 'plan' as const },
+    { id: 'c2', label: 'Types', command: 'bun run check-types', phases: [1], source: 'agent' as const },
+  ];
+
+  it('sums up the checks before the pull request, and leaves them to the pull request’s fact after it', () => {
+    const view = renderFacts(
+      createTask({
+        id: 't',
+        handle: 'SW-7',
+        checks,
+        checkResults: [
+          { id: 'c1', label: 'Unit tests', command: 'bun test a.test.ts', outcome: 'pass', detail: null },
+          { id: 'c2', label: 'Types', command: 'bun run check-types', outcome: 'fail', detail: null },
+        ],
+      })
+    );
+    expect(screen.getByText('1 of 2 checks passed')).toBeTruthy();
+    view.unmount();
+    renderFacts(
+      createTask({
+        id: 't',
+        handle: 'SW-7',
+        checks,
+        stage: 'checking',
+        stageReason: 'running the checks before review',
+        pullRequest: createPullRequest({ number: 9 }),
+      })
+    );
+    expect(screen.getByText('#9')).toBeTruthy();
+    expect(screen.queryByText(/checks? passed|Running/)).toBeNull();
   });
 });

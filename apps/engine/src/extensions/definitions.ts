@@ -15,6 +15,8 @@ type Fields = Record<string, unknown>;
 
 export type Env = Record<string, string | undefined>;
 
+export const HEADLESS_BROWSER_ENV = { PLAYWRIGHT_MCP_HEADLESS: 'true' };
+
 const TRANSPORTS = new Set<McpTransport>(['stdio', 'http', 'sse']);
 
 const VARIABLE = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g;

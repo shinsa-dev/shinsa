@@ -88,13 +88,21 @@ describe('readPlanParameters', () => {
       readPlanParameters({
         impact: 'About 400 rows.',
         evidence: ['screenshot', 'check', 'test'],
-        checks: ['bun test', ''],
+        verification: [
+          { label: 'Tests', command: 'bun test a.test.ts', phases: [1, 0, 'x', 2] },
+          { command: 'bun run lint' },
+          { label: 'No command' },
+          'bun test',
+        ],
         approval: true,
       })
     ).toEqual({
       impact: 'About 400 rows.',
       evidence: ['screenshot', 'test'],
-      checks: ['bun test'],
+      verification: [
+        { label: 'Tests', command: 'bun test a.test.ts', phases: [1, 2] },
+        { label: 'bun run lint', command: 'bun run lint', phases: [] },
+      ],
       approval: true,
     });
   });
@@ -103,7 +111,7 @@ describe('readPlanParameters', () => {
     expect(readPlanParameters({ goal: 'Ship it.' })).toEqual({
       impact: undefined,
       evidence: [],
-      checks: [],
+      verification: [],
       approval: false,
     });
   });

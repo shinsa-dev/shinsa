@@ -15,18 +15,26 @@ A finding you cannot reproduce is a guess. A fix you have not watched fail witho
   against the branch a stacked task sits on, or, in a later round, only that round's commits. Read every file in it.
 - Read the request and the approved plan first. The change is judged against them, then against the repository rules.
 
-## 2. Run what CI runs
+## 2. The checks, and what they miss
 
-When you are the reviewer, Shinsa has already run the repository's checks and they passed. Look for what checks miss, and run anything CI runs that the checks do not (copy the commands from the workflows and package scripts). A claim in a summary that something passes is not evidence. A failing check is always a blocking finding.
+When you are the reviewer, Shinsa has already run the task's checks: the scoped commands the agent chose for each phase (a test file or folder, a package's type check, the linter on the changed paths) and the repository's own commands, once before review. Your brief lists each with its result. Nothing in them blocks, or you would not be reviewing. Look for what they miss:
+
+- Code the change touches that no check covers: a changed module with no test among the checks, a package whose types no check runs. Run what covers it yourself, scoped to those files or that package (copy the commands from the workflows and package scripts), and report a failure as blocking.
+- A check scoped so narrowly that it proves nothing about the change, or one that passes with and without it.
+- Changed lines no test runs, when your brief lists coverage gaps.
+
+CI runs the whole suite on the pull request after your review, so never run it yourself: other agents share this machine, and Shinsa refuses the command. A result marked "passed when re-run alone" passed; one marked "already failing on the base branch" fails on main too, so it is not the change's and does not count against it. A claim in a summary that something passes is not evidence. A check that fails because of the change is always a blocking finding.
 
 ## 3. What is blocking
 
 - A bug: something that breaks, crashes, loses data, or behaves differently from the request.
 - A missed requirement from the request or the plan.
 - A broken repository rule (its CLAUDE.md, AGENTS.md, lint, conventions).
-- A failing check, a test that encodes the old behaviour, a test that passes with and without the fix.
+- A check the change makes fail (not one already failing on main), a test that encodes the old behaviour, a test that
+  passes with and without the fix.
 - UI work without evidence, or evidence that does not show the changed flow. Capture your own as the evidence skill
-  says, so the human has independent evidence either way.
+  says, so the human has independent evidence either way. When you capture a view again in a later review, attach it
+  with the same `key` so it replaces your earlier shot, and remove your own that no longer applies.
 
 Everything else is a suggestion. Do not report taste as blocking.
 

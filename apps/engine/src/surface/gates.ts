@@ -5,7 +5,7 @@ import { findMergeStep, findOpenGate } from './resolve.ts';
 import { defineAction, defineCommand, encode, readValue, type SurfaceSpec } from './spec.ts';
 import { TASK_FIELD } from './tasks.ts';
 
-const DECISIONS = ['approve', 'revise', 'reject', 'reply', 'waive'] as const;
+const DECISIONS = ['approve', 'revise', 'reject', 'reply'] as const;
 
 const FEEDBACK_FIELD: FieldSpec = {
   name: 'feedback',
@@ -43,7 +43,6 @@ const DONE_TEXT: Record<GateDecision, string> = {
   revise: 'Asked for changes. The agent picks them up.',
   reject: 'Rejected.',
   reply: 'Answered. The agent carries on.',
-  waive: 'Starting without checks.',
 };
 
 async function answerGate(
@@ -135,7 +134,7 @@ export const GATE_SPECS: SurfaceSpec[] = [
         kind: 'choice',
         choices: DECISIONS,
         required: true,
-        description: 'approve, revise, reject, reply or waive.',
+        description: 'approve, revise, reject or reply.',
       },
       { name: 'response', kind: 'text', description: 'Your reply or feedback.' },
       { name: 'planVersion', kind: 'integer', description: 'The plan version you read, for a plan.' },

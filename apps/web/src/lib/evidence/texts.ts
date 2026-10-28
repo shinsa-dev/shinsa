@@ -16,6 +16,11 @@ export function recordEvidenceText(uri: string, body: string) {
   texts.read(uri, () => body);
 }
 
+export function resetEvidenceTexts() {
+  texts.clear();
+  pending.clear();
+}
+
 export function requestEvidenceText(uri: string) {
   const known = selectEvidenceText(uri);
   if (known !== null) return Promise.resolve(known);

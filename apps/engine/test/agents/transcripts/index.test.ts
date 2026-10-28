@@ -1,16 +1,49 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
 import { appendFileSync, type FSWatcher, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChatEntry } from '@shinsa/core';
 import { Transcripts, UNREADABLE_LINE } from '../../../src/agents/transcripts/index.ts';
-import { until } from '../../helpers/index.ts';
+
+function createWatched() {
+  const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
+  const watchers: {
+    onChange: () => void;
+    emitter: EventEmitter & { close: () => void };
+    closed: boolean;
+  }[] = [];
+  const checks: { check: () => void; stopped: boolean }[] = [];
+  const transcripts = new Transcripts(
+    dir,
+    (_path, onChange) => {
+      const emitter = Object.assign(new EventEmitter(), {
+        close: () => {
+          watcher.closed = true;
+        },
+      });
+      const watcher = { onChange, emitter, closed: false };
+      watchers.push(watcher);
+      return emitter as unknown as FSWatcher;
+    },
+    (check) => {
+      const repeated = { check, stopped: false };
+      checks.push(repeated);
+      return () => {
+        repeated.stopped = true;
+      };
+    }
+  );
+  const seen: string[] = [];
+  transcripts.subscribe((runId, entries) => {
+    for (const entry of entries) seen.push(`${runId}:${entry.type}`);
+  });
+  return { dir, transcripts, watchers, checks, seen };
+}
 
 describe('transcripts', () => {
-  test('lines appended by another writer reach followers', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
-    const transcripts = new Transcripts(dir);
+  test('lines appended by another writer reach followers', () => {
+    const { dir, transcripts, watchers } = createWatched();
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'one' });
     const seen: string[] = [];
     transcripts.subscribe((_runId, entries) => {
@@ -20,7 +53,7 @@ describe('transcripts', () => {
     transcripts.record('run-1', { type: 'agent', phase: 'interim', text: 'two' });
     const external: ChatEntry = { v: 2, id: 'x', at: 3, type: 'agent', phase: 'interim', text: 'three' };
     appendFileSync(join(dir, 'run-1.jsonl'), `${JSON.stringify(external)}\n`);
-    await until('the appended line to reach the follower', () => seen.length === 2);
+    watchers[0]?.onChange();
     unfollow();
     expect(seen).toEqual(['two', 'three']);
     expect(transcripts.listEntries('run-1').map((entry) => entry.type === 'agent' && entry.text)).toEqual([
@@ -119,36 +152,8 @@ describe('reading a transcript', () => {
 });
 
 describe('following a transcript', () => {
-  function createWatched(pollMs?: number) {
-    const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
-    const watchers: {
-      onChange: () => void;
-      emitter: EventEmitter & { close: () => void };
-      closed: boolean;
-    }[] = [];
-    const transcripts = new Transcripts(
-      dir,
-      (_path, onChange) => {
-        const emitter = Object.assign(new EventEmitter(), {
-          close: () => {
-            watcher.closed = true;
-          },
-        });
-        const watcher = { onChange, emitter, closed: false };
-        watchers.push(watcher);
-        return emitter as unknown as FSWatcher;
-      },
-      pollMs
-    );
-    const seen: string[] = [];
-    transcripts.subscribe((runId, entries) => {
-      for (const entry of entries) seen.push(`${runId}:${entry.type}`);
-    });
-    return { dir, transcripts, watchers, seen };
-  }
-
   test('half-written lines wait, a truncated file restarts, a deleted file is ignored', () => {
-    const { dir, transcripts, watchers, seen } = createWatched();
+    const { dir, transcripts, watchers, checks, seen } = createWatched();
     const path = join(dir, 'run-1.jsonl');
     writeFileSync(path, '');
     const unfollow = transcripts.follow('run-1');
@@ -170,31 +175,65 @@ describe('following a transcript', () => {
     again();
     again();
     expect(watchers[0]?.closed).toBe(true);
+    expect(checks.map((repeated) => repeated.stopped)).toEqual([true]);
   });
 
-  test('a watcher error falls back to checking the file, so appended lines still arrive, and a missing transcript is not watched', async () => {
-    const { dir, transcripts, watchers, seen } = createWatched();
+  test('a watcher error falls back to checking the file, so appended lines still arrive, and a missing transcript is not watched', () => {
+    const { dir, transcripts, watchers, checks, seen } = createWatched();
     const path = join(dir, 'run-2.jsonl');
     writeFileSync(path, '');
     const unfollow = transcripts.follow('run-2');
     watchers[0]?.emitter.emit('error', new Error('EMFILE'));
     expect(watchers[0]?.closed).toBe(true);
     appendFileSync(path, `${JSON.stringify({ v: 2, id: 'y', at: 1, type: 'error', text: 'later' })}\n`);
-    await until('the polled line', () => seen.includes('run-2:error'));
+    checks[0]?.check();
+    expect(seen).toEqual(['run-2:error']);
     unfollow();
-    transcripts.follow('never');
+    expect(checks[0]?.stopped).toBe(true);
+    const unfollowMissing = transcripts.follow('never');
     expect(watchers).toHaveLength(1);
+    expect(checks).toHaveLength(1);
     expect(transcripts.listEntries('never')).toEqual([]);
+    unfollowMissing();
   });
 
-  test('a change the watch never reports still arrives with the periodic check', async () => {
-    const { dir, transcripts, seen } = createWatched(20);
+  test('a line appended right after following arrives at the next check, though the watch never reports it', () => {
+    const { dir, transcripts, checks, seen } = createWatched();
     const path = join(dir, 'run-3.jsonl');
     writeFileSync(path, '');
     const unfollow = transcripts.follow('run-3');
     appendFileSync(path, `${JSON.stringify({ v: 2, id: 'z', at: 1, type: 'error', text: 'missed' })}\n`);
-    await until('the line the watch missed', () => seen.includes('run-3:error'));
+    checks[0]?.check();
+    checks[0]?.check();
+    expect(seen).toEqual(['run-3:error']);
     unfollow();
+  });
+
+  test('follows with the file system watch and a check every second, and stops the check when the last follower leaves', () => {
+    const started = spyOn(globalThis, 'setInterval');
+    const cleared = spyOn(globalThis, 'clearInterval');
+    try {
+      const dir = mkdtempSync(join(tmpdir(), 'shinsa-transcripts-'));
+      const path = join(dir, 'run-4.jsonl');
+      writeFileSync(path, '');
+      const transcripts = new Transcripts(dir);
+      const seen: string[] = [];
+      transcripts.subscribe((runId, entries) => {
+        for (const entry of entries) seen.push(`${runId}:${entry.type}`);
+      });
+      const unfollow = transcripts.follow('run-4');
+      expect(started).toHaveBeenCalledTimes(1);
+      const [check, ms] = started.mock.calls[0] ?? [];
+      expect(ms).toBe(1_000);
+      appendFileSync(path, `${JSON.stringify({ v: 2, id: 'w', at: 1, type: 'error', text: 'checked' })}\n`);
+      (check as () => void)();
+      expect(seen).toEqual(['run-4:error']);
+      unfollow();
+      expect(cleared).toHaveBeenCalledWith(started.mock.results[0]?.value);
+    } finally {
+      started.mockRestore();
+      cleared.mockRestore();
+    }
   });
 
   test('an unsubscribed listener hears nothing', () => {

@@ -63,7 +63,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  jest.useRealTimers();
   stopFakeServer();
   setSystemTime();
 });

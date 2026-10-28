@@ -1,11 +1,13 @@
 import { parseTestFile, serializeTestFile } from './testing.ts';
 import type {
   Attention,
+  CheckNote,
   ManualTestStep,
   ManualTestTarget,
   ManualTestTargetKind,
   MergeStep,
   MergeStepTiming,
+  PlanCheck,
   PlanDocument,
   ReportCheck,
   ReportTesting,
@@ -24,6 +26,24 @@ function describeSection(heading: string, body: string) {
   return body ? `${heading}\n${body}` : '';
 }
 
+function describePhaseNumbers(phases: number[]) {
+  return `${phases.length === 1 ? 'phase' : 'phases'} ${phases.join(', ')}`;
+}
+
+function describePlanCheck(check: PlanCheck) {
+  return `${check.label}: \`${check.command}\` (${describePhaseNumbers(check.phases)})`;
+}
+
+const CHECK_NOTE: Record<CheckNote, string> = {
+  passed_alone: 'passed when re-run alone',
+  fails_on_base: 'already failing on the base branch',
+};
+
+function describeReportCheck(check: ReportCheck) {
+  const note = check.note ? ` (${CHECK_NOTE[check.note]})` : '';
+  return `${CHECK_MARK[check.outcome]} ${check.label}: \`${check.command}\`${note}`;
+}
+
 export function serializePlanMarkdown(plan: PlanDocument) {
   return [
     `## Goal\n${plan.goal}`,
@@ -35,9 +55,8 @@ export function serializePlanMarkdown(plan: PlanDocument) {
     `## Approach\n${plan.approach}`,
     describeSection('## Files', bulletList(plan.files.map((file) => `\`${file.path}\`: ${file.change}`))),
     describeSection('## Out of scope', bulletList(plan.outOfScope)),
-    describeSection('## Verification', bulletList(plan.verification)),
+    describeSection('## Checks', bulletList(plan.verification.map(describePlanCheck))),
     describeSection('## Evidence', (plan.evidence ?? []).join(', ')),
-    describeSection('## Extra checks', bulletList((plan.checks ?? []).map((command) => `\`${command}\``))),
     describeSection(
       '## Operation',
       (plan.operation ?? []).map((step, index) => `${index + 1}. ${step}`).join('\n')
@@ -130,10 +149,7 @@ export function serializeReportMarkdown(report: WorkReport) {
       '### What changed',
       bulletList(report.sections.map((section) => `**${section.title}**: ${section.summary}`))
     ),
-    describeSection(
-      '### Checks',
-      bulletList(report.checks.map((check) => `${CHECK_MARK[check.outcome]} ${check.name}`))
-    ),
+    describeSection('### Checks', bulletList(report.checks.map(describeReportCheck))),
     describeSection(
       '### Judgement calls',
       bulletList(report.judgementCalls.map((call) => `**${call.title}**: ${call.call}. ${call.reason}`))

@@ -1,5 +1,5 @@
 import { type Activity, type Gate, resolveCurrentRound, type Task } from '../domain/index.ts';
-import { resolveRequest } from '../prompts/context.ts';
+import { describeTaskChecks, resolveRequest } from '../prompts/context.ts';
 import { listWaitsOn } from '../queue/rank.ts';
 import { assembleReport } from '../report/assemble.ts';
 import { listMergeSteps, MERGE_STEP_WHEN_WORDS } from '../report/merge-steps.ts';
@@ -74,6 +74,21 @@ function describeMergeSteps(task: Task) {
   ];
 }
 
+function describeChecks(state: ShinsaState, task: Task) {
+  const repo = task.repoId ? (state.repos[task.repoId] ?? null) : null;
+  const built = describeTaskChecks(task, repo);
+  const runs = task.pullRequest?.checkRuns ?? [];
+  return [
+    ...(built ? [built] : []),
+    ...(runs.length > 0
+      ? [
+          'CI on the pull request:',
+          ...runs.map((run) => `- ${run.name} (${run.status.replaceAll('_', ' ')})`),
+        ]
+      : []),
+  ];
+}
+
 function describeTesting(task: Task) {
   const lines = listTestingLines(assembleReport(task).walkthrough?.testing);
   if (lines.length === 0) return [];
@@ -112,6 +127,7 @@ export function serializeTaskDetail(state: ShinsaState, taskId: string) {
     ...(task.summary ? [`Summary: ${task.summary}`] : []),
     ...(task.result ? [`Result (${task.result.step}): ${cut(task.result.body, REQUEST_LIMIT)}`] : []),
     ...describeTesting(task),
+    ...describeChecks(state, task),
     ...describeTestCoverage(task),
     ...describeMergeSteps(task),
     ...(waits.length > 0 ? [`Waits on: ${waits.map(describeLink).join(', ')}`] : []),

@@ -1,4 +1,5 @@
 import { resolveModelFamily } from '../agent-models/index.ts';
+import type { WeeklyReading } from '../domain/index.ts';
 import type { AccountUsage, UsageWindow } from '../protocol/accounts.ts';
 
 const SPENT_PERCENT = 100;
@@ -36,7 +37,8 @@ export function resolveWeeklyPercent(usage: AccountUsage) {
   return usage.windows.find((window) => window.kind === 'weekly')?.usedPercent ?? null;
 }
 
-export function resolveWeeklyUsed(before: number | null, after: number | null) {
-  if (before === null || after === null) return null;
-  return after >= before ? after - before : after;
+export function resolveWeeklyReading(usage: AccountUsage): WeeklyReading | null {
+  const window = usage.windows.find((candidate) => candidate.kind === 'weekly');
+  if (!window || usage.checkedAt === null || usage.source === 'push') return null;
+  return { percent: window.usedPercent, at: usage.checkedAt, resetsAt: window.resetsAt };
 }

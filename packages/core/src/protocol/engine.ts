@@ -14,6 +14,8 @@ export type EngineFit =
 
 export type EngineRestartWhen = 'now' | 'idle';
 
+export type ReleaseChannel = 'stable' | 'beta' | 'canary';
+
 const VERSION_PATTERN = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 
 const NUMERIC = /^\d+$/;
@@ -60,6 +62,12 @@ function comparePrerelease(left: string[], right: string[]): -1 | 0 | 1 {
 
 export function isPrereleaseVersion(version: string) {
   return (parseVersion(version)?.prerelease.length ?? 0) > 0;
+}
+
+export function resolveReleaseChannel(version: string): ReleaseChannel {
+  const [identifier] = parseVersion(version)?.prerelease ?? [];
+  if (identifier === undefined) return 'stable';
+  return identifier === 'canary' ? 'canary' : 'beta';
 }
 
 export function resolveVersionOrder(a: string, b: string): -1 | 0 | 1 | null {

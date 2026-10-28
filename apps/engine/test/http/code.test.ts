@@ -7,7 +7,6 @@ import { Transcripts } from '../../src/agents/index.ts';
 import { createWorktree, removeWorktree } from '../../src/git/index.ts';
 import { startServer } from '../../src/http/index.ts';
 import { Engine } from '../../src/runtime/index.ts';
-import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { EventLog, EvidenceStore } from '../../src/store/index.ts';
 import { GitButlerStrategy } from '../../src/workspaces/gitbutler.ts';
 import {
@@ -16,6 +15,7 @@ import {
   createTestConfig,
   createTestOnboarding,
   git,
+  startGitButler,
   writeFiles,
 } from '../helpers/index.ts';
 import { createTask } from '../helpers/state.ts';
@@ -301,7 +301,7 @@ async function startWithButlerTask() {
     files: { 'src/app.ts': 'export const value = 1;\n', 'src/other.ts': 'export const other = 1;\n' },
   });
   const baseSha = await git(made.path, 'rev-parse', 'HEAD');
-  await runCommandOrThrow(['but', 'setup', '--json'], made.path);
+  await startGitButler(made.path);
   const repo = { ...made.repo, workspace: 'gitbutler' as const, checkCommands: [] };
   const strategy = new GitButlerStrategy(config.dataDir);
   await engine.dispatch({ type: 'repo.register', repo, projectName: null });

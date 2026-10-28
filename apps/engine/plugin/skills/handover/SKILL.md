@@ -41,7 +41,7 @@ bun run export --app app_9f2c --from-offset 150000
 | approach | How it will be built and the choices you made on the way: modules and data, not code |
 | files | Each file that changes and what changes in it |
 | out_of_scope | What this deliberately does not do |
-| verification | How the change is proven: the failing test, the checks, the runs, the screenshots. Required for any code change |
+| verification | The checks that prove the change, each a `label`, the exact `command` and the `phases` it covers (see below). Required for any code change, empty for anything else |
 | questions | Only decisions the human must make, 2 to 4 concrete options each, your recommendation worded exactly as one option |
 
 Set these only when they apply:
@@ -53,10 +53,33 @@ Set these only when they apply:
 - `evidence`: the kinds of evidence you must attach before the human reviews (`screenshot`, `recording`,
   `test`, `note`, `preview`). A change the user sees asks for a screenshot. Shinsa refuses the last phase until each
   kind is attached.
-- `checks`: up to 6 commands Shinsa runs in the worktree after the repository's own checks, when those do not prove
-  the change.
 - `approval`: true when the change is risky, so the human approves the plan before anything is built.
 - `change_summary`: only when revising a plan, what you changed since the last version and why.
+
+### The checks (`verification`)
+
+A check is one command Shinsa runs for you after the phases it covers: a fact for the reviewer and the human, never
+your claim. Choose them like evidence, for what this change touches, and scope each one:
+
+```json
+[
+  { "label": "Transcript tests", "command": "bun test --cwd apps/engine test/agents/transcripts", "phases": [1, 2] },
+  { "label": "Web types", "command": "bun run --cwd apps/web check-types", "phases": [2] },
+  { "label": "Lint the changed files", "command": "bunx biome check apps/web/src/lib/chat", "phases": [2] }
+]
+```
+
+- One test file or folder, one package's type check, the linter on the paths you change. Never the whole suite
+  (`bun test`, `npm test`, `vitest`, `pytest`, `go test ./...`, `bun run check` and the like): Shinsa refuses it, and
+  CI runs the whole suite on the pull request.
+- Run each command once yourself before you plan it, from the repository root, where Shinsa runs it. Where each
+  package has its own test config (a monorepo), point the runner at the package (`bun test --cwd apps/engine …`): a
+  path that matches no test file is a broken check, and Shinsa sends it back for you to fix. A scoped run that passes
+  every test but misses the package's coverage floor passes; the floor is CI's, on the whole suite.
+- `phases` are the phase numbers (1-based) after which the check runs; a test you write in phase 2 is a check from
+  phase 2 on.
+- The repository's own commands, when it has any, run once before review on their own; never list them.
+- At most 12 checks, a label of 60 characters and a command of 200.
 
 When the steps Shinsa chose do not fit the request, call `reshape_task` instead of a plan: `shape` to make the task an
 answer, an investigation or research, or `steps` to compose it from the building blocks the tool lists, with a
@@ -128,8 +151,9 @@ Two parts, so the human can tell what is proven from what they should try:
   window, a slow network, a second tab).
 - Link a file in an action with the reference syntax, `[duplicate.ts](shinsa://file/src/paywalls/duplicate.ts#L12-L20)`.
 - Leave `manual` empty only when there is nothing a person can try (a refactor the tests prove); say so in `automated`.
-- Cover every piece of new logic with tests. Unless the repository turned it off, Shinsa runs the tests with coverage
-  after the checks and shows the reviewer and the human which of your changed lines no test runs.
+- Cover every piece of new logic with tests, and make those tests checks. Unless the repository turned it off,
+  Shinsa runs the tests among your checks once more with coverage before review and shows the reviewer and the human
+  which of your changed lines no test runs.
 
 ```json
 {
@@ -170,13 +194,48 @@ steps and their ticks in `read_task`; only the human ticks them, and you leave a
 open. A fix that sends the list again keeps a tick only on a step it sends unchanged: changing a step's title,
 detail, kind or command asks the human to do it again, so change one only when what they must do changed.
 
-Attach evidence with `attach_evidence` before the last phase (the `evidence` skill). Shinsa commits each phase; never
-commit yourself.
+### Changing the checks (`check_changes`)
+
+Keep the checks current as you build: when a phase adds a file, a test or a package the checks do not cover, add a
+check for it in that phase's `complete_phase`. Each change is an `action` with a one-sentence `reason` the human reads
+in the task's activity:
+
+```json
+[
+  { "action": "add", "label": "Export tests", "command": "bun test src/export", "reason": "Phase 2 added the export module and its tests." },
+  { "action": "change", "id": "c2", "command": "bun run --cwd apps/web check-types", "reason": "The types moved into the web package." },
+  { "action": "remove", "id": "c3", "reason": "The file it tested was deleted in this phase." }
+]
+```
+
+- `add` needs a `label` and a `command`, and covers this phase onward unless you give `phases`.
+- `change` and `remove` name the check by its `id` (`c1`, `c2`… as `read_task` lists them); a `change` sends only
+  what changes.
+- The repository's own checks (`r1`…) are the human's; you cannot change them.
+- Shinsa runs this phase's checks and the ones you just added or changed after the hand-over. A failure your change
+  caused comes back to you as a fix; one that passes when its test files run alone, or that already fails on the base
+  branch, does not.
+
+Attach evidence with `attach_evidence` before the last phase (the `evidence` skill): for a test or a check, link the
+check by its id instead of pasting output. Shinsa commits each phase; never commit yourself.
 
 ## A fix (`complete_fix`, while you fix)
 
-A `summary`: what you changed and, for anything you chose not to change, why. Shinsa commits it, then runs the checks
-and the agent review again, or pushes it to the pull request.
+A `summary`: what you changed and, for anything you chose not to change, why. Shinsa commits it, then runs again
+the failing checks and the checks of every phase whose files the fix changed, then the agent review, or pushes it to
+the pull request (CI then runs on it).
+
+- `checks`: the ids of other checks to run again, when the fix touches what they cover and no phase's files show it
+  (a repository check, or a file no phase changed).
+- `check_changes`: as on a phase, when the fix needs a new check, or a check whose command was wrong or too wide
+  (with the reason). Never widen a check to the whole suite to make it pass.
+
+While you fix, run the test files or folders the fix touches, never the whole suite: Shinsa refuses it in the shell
+too, and runs the checks itself after you hand over.
+
+Evidence must show the work as it is after the fix. Take again what the fix changed and attach it with the same `key`:
+it replaces the old item, never sits beside it. Remove what no longer applies with `remove_evidence`, and name in
+`evidence_kept` each earlier item the fix touched that still holds. Shinsa refuses the fix until each is accounted for.
 
 When the fix changes how the change works (the approach, the flow, a risk, how to test it or the steps around the
 merge), also send `walkthrough` with only the parts that changed. Each part you send replaces that part of the
@@ -187,7 +246,7 @@ timing and title stay the same. Leave `walkthrough` out when the fix changes non
 ## Review findings (`report_review`, reviewer)
 
 Up to 12 findings, one per problem, anchored to `file` and `line`/`end`. `blocking` is a bug, a missed requirement, a
-broken rule or a failing check; everything else is a `suggestion`. Each finding has a `title` (what is wrong, in a few
+broken rule or a check the change makes fail (not one already failing on main); everything else is a `suggestion`. Each finding has a `title` (what is wrong, in a few
 words, at most 80 characters), a `message` (what is wrong and why it matters, at most 280) and, when you know what to
 change, a `fix` (a sentence or a short code block, at most 600). A `summary` of one or two sentences (at most 400) says
 what you checked and your overall view of the change. An empty list means you found nothing wrong.

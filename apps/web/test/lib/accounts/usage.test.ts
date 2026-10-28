@@ -72,56 +72,64 @@ describe('usage rows', () => {
     ]);
   });
 
-  it('glances at the 5-hour window, not the fuller weekly one', () => {
+  it('glances at the fullest window that applies to the agent’s model, so a nearly spent week never reads low', () => {
     const settings: Settings = { ...SETTINGS, agentModels: { agent: 'claude-fable-1' } };
     expect(resolveUsageModel(settings)).toBe('claude-fable-1');
     const account = createAccount({
       id: 'a',
       usage: usage(
+        createWindow({ id: 's', usedPercent: 0 }),
         createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 70 }),
-        createWindow({ id: 's', usedPercent: 30 }),
-        createWindow({ id: 'f', kind: 'model', label: 'Weekly · Fable', model: 'fable', usedPercent: 80 })
+        createWindow({ id: 'f', kind: 'model', label: 'Weekly · Fable', model: 'fable', usedPercent: 92 }),
+        createWindow({ id: 'o', kind: 'model', label: 'Weekly · Opus', model: 'opus', usedPercent: 99 })
       ),
     });
     expect(selectGlanceRow(account, 'claude-fable-1')).toMatchObject({
-      id: 's',
-      label: '5-hour limit',
-      percent: 30,
-      tone: 'neutral',
+      id: 'f',
+      label: 'Weekly · Fable',
+      percent: 92,
+      tone: 'red',
     });
-  });
-
-  it('glances at a spent weekly window instead of the 5-hour one, so a blocked account never reads low', () => {
-    const weekly = createAccount({
-      id: 'a',
+    const spent = createAccount({
+      id: 'b',
       usage: usage(
         createWindow({ id: 's', usedPercent: 12 }),
         createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 100 })
       ),
     });
-    expect(selectGlanceRow(weekly, 'claude-fable-1')).toMatchObject({ id: 'w', percent: 100, tone: 'red' });
-    const model = createAccount({
-      id: 'b',
-      usage: usage(
-        createWindow({ id: 's', usedPercent: 12 }),
-        createWindow({ id: 'o', kind: 'model', label: 'Weekly · Opus', model: 'opus', usedPercent: 100 }),
-        createWindow({ id: 'f', kind: 'model', label: 'Weekly · Fable', model: 'fable', usedPercent: 100 })
-      ),
-    });
-    expect(selectGlanceRow(model, 'claude-fable-1')).toMatchObject({ id: 'f', label: 'Weekly · Fable' });
+    expect(selectGlanceRow(spent, 'claude-fable-1')).toMatchObject({ id: 'w', percent: 100, tone: 'red' });
   });
 
-  it('falls back to the fullest window that applies to the agent’s model when there is no 5-hour one', () => {
-    const account = createAccount({
+  it('glances at the 5-hour window when it is the fullest, or as full as the fullest once rounded', () => {
+    const fuller = createAccount({
       id: 'a',
       usage: usage(
-        createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 60 }),
-        createWindow({ id: 'f', kind: 'model', label: 'Weekly · Fable', model: 'fable', usedPercent: 80 }),
-        createWindow({ id: 'o', kind: 'model', label: 'Weekly · Opus', model: 'opus', usedPercent: 95 })
+        createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 30 }),
+        createWindow({ id: 's', usedPercent: 60 })
       ),
     });
-    expect(selectGlanceRow(account, 'claude-fable-1')).toMatchObject({ id: 'f', percent: 80, tone: 'amber' });
-    expect(selectGlanceRow(createAccount({ id: 'b', usage: usage() }), 'opus')).toBeNull();
+    expect(selectGlanceRow(fuller, 'claude-fable-1')).toMatchObject({
+      id: 's',
+      label: '5-hour limit',
+      percent: 60,
+    });
+    const tied = createAccount({
+      id: 'b',
+      usage: usage(
+        createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 40.2 }),
+        createWindow({ id: 's', usedPercent: 39.8 })
+      ),
+    });
+    expect(selectGlanceRow(tied, 'claude-fable-1')).toMatchObject({ id: 's', percent: 40 });
+    const fresh = createAccount({
+      id: 'c',
+      usage: usage(
+        createWindow({ id: 'w', kind: 'weekly', label: 'Weekly · All models', usedPercent: 0 }),
+        createWindow({ id: 's', usedPercent: 0 })
+      ),
+    });
+    expect(selectGlanceRow(fresh, 'claude-fable-1')).toMatchObject({ id: 's' });
+    expect(selectGlanceRow(createAccount({ id: 'd', usage: usage() }), 'opus')).toBeNull();
   });
 });
 
@@ -172,7 +180,7 @@ describe('the usage glance follows the server’s pick', () => {
     expect(resolveUsageGlance(null, SETTINGS, NOW)).toBeNull();
   });
 
-  it('glances at Codex’s 5-hour window when it does the work, or when it is the only provider with a reading', () => {
+  it('glances at Codex’s fullest window when it does the work, or when it is the only provider with a reading', () => {
     const codex = createProviderLogin();
     const both = createSnapshot({ accounts: [at('a', 42, { isDefault: true })], providers: [codex] });
     expect(resolveUsageGlance(both, SETTINGS, NOW)).toMatchObject({
@@ -183,7 +191,7 @@ describe('the usage glance follows the server’s pick', () => {
     expect(resolveUsageGlance(both, onCodex, NOW)).toEqual({
       provider: 'codex',
       account: null,
-      row: expect.objectContaining({ id: 'five_hour', label: '5-hour limit', percent: 12 }),
+      row: expect.objectContaining({ id: 'seven_day', label: 'Weekly limit', percent: 64 }),
     });
     expect(resolveUsageGlance(createSnapshot({ providers: [codex] }), SETTINGS, NOW)).toMatchObject({
       provider: 'codex',
@@ -194,7 +202,7 @@ describe('the usage glance follows the server’s pick', () => {
 });
 
 describe('every provider with a reading of its own', () => {
-  it('shows its account, its 5-hour window and whether it is out of usage or signed out', () => {
+  it('shows its account, its fullest window and whether it is out of usage or signed out', () => {
     const spent = createProviderLogin({
       email: null,
       usage: {

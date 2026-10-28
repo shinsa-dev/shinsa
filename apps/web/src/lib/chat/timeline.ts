@@ -47,8 +47,25 @@ export type TimelineItem =
   | { kind: 'agent'; key: string; at: number; text: string; phase: 'interim' | 'final' }
   | { kind: 'tools'; key: string; at: number; calls: ToolCall[] }
   | { kind: 'handover'; key: string; at: number; call: ToolCall }
-  | { kind: 'error'; key: string; at: number; text: string }
-  | { kind: 'account'; key: string; at: number; email: string | null; reason: AccountSwitchReason }
+  | { kind: 'error'; key: string; at: number; text: string; count: number }
+  | {
+      kind: 'retrying';
+      key: string;
+      at: number;
+      provider: string;
+      detail: string;
+      attempt: number;
+      attempts: number;
+      retryAt: number;
+    }
+  | {
+      kind: 'account';
+      key: string;
+      at: number;
+      email: string | null;
+      previous: string | null;
+      reason: AccountSwitchReason;
+    }
   | { kind: 'compaction'; key: string; at: number; trigger: ChatCompactionTrigger; by: ChatCompactor }
   | { kind: 'proxy'; key: string; at: number; detail: string | null }
   | { kind: 'fast_mode'; key: string; at: number; status: ChatFastModeStatus; reason: string | null }
@@ -58,7 +75,14 @@ export type TimelineItem =
 
 type HandoffNotice = Extract<ChatNotice, { kind: 'handoff' }>;
 
-export type QuietNoticeKind = 'account' | 'compaction' | 'handoff' | 'proxy' | 'fast_mode' | 'extensions';
+export type QuietNoticeKind =
+  | 'account'
+  | 'retrying'
+  | 'compaction'
+  | 'handoff'
+  | 'proxy'
+  | 'fast_mode'
+  | 'extensions';
 
 type NoticeKind = QuietNoticeKind | 'delegation';
 
@@ -195,7 +219,20 @@ function attachEcho(items: TimelineItem[], entry: ChatEntryOf<'user'>) {
 function resolveNoticeItems(entry: ChatEntryOf<'notice'>): TimelineItem[] {
   const { notice } = entry;
   if (notice.kind === 'account_switched') {
-    return [{ kind: 'account', key: entry.id, at: entry.at, email: notice.email, reason: notice.reason }];
+    return [
+      {
+        kind: 'account',
+        key: entry.id,
+        at: entry.at,
+        email: notice.email,
+        previous: notice.previous,
+        reason: notice.reason,
+      },
+    ];
+  }
+  if (notice.kind === 'retrying') {
+    const { provider, detail, attempt, attempts, retryAt } = notice;
+    return [{ kind: 'retrying', key: entry.id, at: entry.at, provider, detail, attempt, attempts, retryAt }];
   }
   if (notice.kind === 'compaction') {
     return [
@@ -318,7 +355,7 @@ function applyEntry(builder: TimelineBuilder, entry: ChatEntry) {
       return;
     case 'error':
       builder.group = null;
-      builder.items.push({ kind: 'error', key: entry.id, at: entry.at, text: entry.text });
+      builder.items.push({ kind: 'error', key: entry.id, at: entry.at, text: entry.text, count: 1 });
       return;
   }
 }
@@ -365,6 +402,7 @@ function isWork(item: TimelineItem): item is WorkItem {
 function isNotice(item: TimelineItem): item is TimelineItemOf<NoticeKind> {
   return (
     item.kind === 'account' ||
+    item.kind === 'retrying' ||
     item.kind === 'compaction' ||
     item.kind === 'proxy' ||
     item.kind === 'fast_mode' ||
@@ -428,12 +466,24 @@ function foldRejectedHandovers(items: TimelineItem[], running: boolean): Timelin
   });
 }
 
+function collapseErrors(errors: TimelineItemOf<'error'>[]) {
+  const collapsed: TimelineItemOf<'error'>[] = [];
+  for (const error of errors) {
+    const same = collapsed.find((kept) => kept.text.trim() === error.text.trim());
+    if (same) same.count += error.count;
+    else collapsed.push({ ...error });
+  }
+  return collapsed;
+}
+
 function closeTurn(
   { human, body }: TurnGroup,
   { key, live, failed, startedAt, endedAt }: TurnClose,
   now: number
 ): RunTurn {
-  const errors = body.filter((item): item is TimelineItemOf<'error'> => item.kind === 'error');
+  const errors = collapseErrors(
+    body.filter((item): item is TimelineItemOf<'error'> => item.kind === 'error')
+  );
   const reply = selectReply(body, live || failed || errors.length > 0);
   return {
     key,

@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 export const EVIDENCE_ROUTE = '/api/evidence/';
@@ -14,8 +14,6 @@ const SLUG_LIMIT = 48;
 const NAME_ID_LENGTH = 12;
 
 const MEGABYTE = 1024 * 1024;
-
-const TEXT_READ_LIMIT_BYTES = MEGABYTE;
 
 export interface EvidenceFolder {
   taskId: string;
@@ -96,12 +94,5 @@ export class EvidenceStore {
     if (!isEvidencePath(segments)) return null;
     const path = join(this.#dir, ...segments);
     return existsSync(path) && statSync(path).isFile() ? path : null;
-  }
-
-  selectText(uri: string) {
-    if (!uri.startsWith(EVIDENCE_ROUTE)) return null;
-    const path = this.selectFile(uri.slice(EVIDENCE_ROUTE.length));
-    if (!path || statSync(path).size > TEXT_READ_LIMIT_BYTES) return null;
-    return readFileSync(path, 'utf8');
   }
 }

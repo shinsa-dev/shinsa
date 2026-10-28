@@ -1,19 +1,26 @@
-import { describePlanChange, type Task } from '@shinsa/core';
+import type { PlanChange, Task } from '@shinsa/core';
 import { formatCount } from '@/lib/format/count.ts';
 
 export interface PlanVersion {
   summary: string | null;
-  changes: string[];
+  changes: PlanChange[];
   feedback: string | null;
 }
 
 export function resolvePlanVersion(task: Task): PlanVersion | null {
   const plan = task.plan;
   if (!plan || plan.version < 2) return null;
-  const summary = plan.changeSummary ?? null;
-  const changes = (plan.changes ?? []).map(describePlanChange);
-  if (!summary && changes.length === 0) return null;
-  return { summary, changes, feedback: plan.feedback ?? null };
+  return {
+    summary: plan.changeSummary ?? null,
+    changes: plan.changes ?? [],
+    feedback: plan.feedback ?? null,
+  };
+}
+
+export function listRevisionChanges(task: Task | null, summary: string | null): PlanChange[] {
+  if (!task || !summary) return [];
+  const revisions = [...(task.planHistory ?? []), ...(task.plan ? [task.plan] : [])].reverse();
+  return revisions.find((revision) => revision.changeSummary === summary.trim())?.changes ?? [];
 }
 
 export function describePlanEyebrow(task: Task) {

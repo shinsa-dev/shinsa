@@ -4,10 +4,8 @@ import {
   existsSync,
   type FSWatcher,
   openSync,
-  watchFile as pollFile,
   readSync,
   statSync,
-  unwatchFile,
   watch,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -19,7 +17,7 @@ type TranscriptListener = (runId: string, entries: ChatEntry[], start: number | 
 interface Follower {
   count: number;
   watcher: FSWatcher | null;
-  poll: (() => void) | null;
+  stopChecking: (() => void) | null;
 }
 
 interface RunFile {
@@ -32,7 +30,7 @@ export interface TranscriptRead {
   start: number;
 }
 
-const POLL_MS = 1_000;
+const CHECK_MS = 1_000;
 
 const CACHED_RUNS = 8;
 
@@ -83,8 +81,16 @@ function readSize(path: string) {
 
 type FileWatcher = (path: string, onChange: () => void) => FSWatcher;
 
+type CheckRepeater = (check: () => void) => () => void;
+
 function watchFile(path: string, onChange: () => void) {
   return watch(path, onChange);
+}
+
+function repeatEverySecond(check: () => void) {
+  const timer = setInterval(check, CHECK_MS);
+  timer.unref();
+  return () => clearInterval(timer);
 }
 
 export class Transcripts {
@@ -94,12 +100,16 @@ export class Transcripts {
   readonly #followers = new Map<string, Follower>();
   readonly #files = new Map<string, RunFile>();
   readonly #checked = new Set<string>();
-  readonly #pollMs: number;
+  readonly #repeat: CheckRepeater;
 
-  constructor(dir: string, watchChanges: FileWatcher = watchFile, pollMs = POLL_MS) {
+  constructor(
+    dir: string,
+    watchChanges: FileWatcher = watchFile,
+    repeatCheck: CheckRepeater = repeatEverySecond
+  ) {
     this.#dir = dir;
     this.#watch = watchChanges;
-    this.#pollMs = pollMs;
+    this.#repeat = repeatCheck;
   }
 
   #pathOf(runId: string) {
@@ -179,14 +189,14 @@ export class Transcripts {
 
   #startFollowing(runId: string) {
     const path = this.#pathOf(runId);
-    const follower: Follower = { count: 1, watcher: null, poll: null };
+    const follower: Follower = { count: 1, watcher: null, stopChecking: null };
     this.#followers.set(runId, follower);
     const size = readSize(path);
     this.#sync(runId, Math.max(size, 0));
     if (size < 0) return;
-    follower.poll = () => this.#readAppended(runId);
-    pollFile(path, { interval: this.#pollMs }, follower.poll);
-    follower.watcher = this.#watch(path, () => this.#readAppended(runId));
+    const check = () => this.#readAppended(runId);
+    follower.stopChecking = this.#repeat(check);
+    follower.watcher = this.#watch(path, check);
     follower.watcher.on('error', (error) => {
       log.warn('[Transcripts] Watching a transcript failed; the check every second carries on', {
         runId,
@@ -210,7 +220,7 @@ export class Transcripts {
     follower.count -= 1;
     if (follower.count > 0) return;
     follower.watcher?.close();
-    if (follower.poll) unwatchFile(this.#pathOf(runId), follower.poll);
+    follower.stopChecking?.();
     this.#followers.delete(runId);
   }
 

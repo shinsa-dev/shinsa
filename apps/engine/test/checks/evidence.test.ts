@@ -1,67 +1,53 @@
 import { describe, expect, test } from 'bun:test';
-import { PROTOCOL_LIMITS } from '@shinsa/core';
-import { serializeCheckEvidence } from '../../src/checks/evidence.ts';
+import { type CheckNote, PROTOCOL_LIMITS, type ReportCheck } from '@shinsa/core';
+import { serializeCheckOutput } from '../../src/checks/evidence.ts';
 import type { CheckRun } from '../../src/checks/index.ts';
 
-function passed(name: string, output: string): CheckRun {
-  return { check: { name, outcome: 'pass', detail: null }, output };
+function runOf(check: Partial<ReportCheck>, output = ''): CheckRun {
+  return {
+    check: {
+      id: 'c1',
+      label: 'Unit tests',
+      command: 'bun test test/a',
+      outcome: 'pass',
+      detail: null,
+      ...check,
+    },
+    output,
+    timedOut: false,
+    failedFiles: [],
+    failures: [],
+  };
 }
 
-function failed(name: string, detail: string | null, output = ''): CheckRun {
-  return { check: { name, outcome: 'fail', detail }, output };
-}
-
-const TESTS = `bun test v1.3.0
-
-src/a.test.ts:
-✓ a > works [4.12ms]
-
- 1 pass
- 0 fail
-Ran 1 test across 1 file. [182.00ms]`;
-
-describe('the evidence of a checks run', () => {
-  test('lists every command with its outcome and output, the failures counted in the title', () => {
-    const piece = serializeCheckEvidence(
-      [passed('bun run lint', ''), failed('bun run test', 'expected 2, received 3', 'noise')],
-      []
+describe('the output of one check run', () => {
+  test('a pass shows the command, the outcome and the end of the output', () => {
+    expect(serializeCheckOutput(runOf({}, ' 4 pass\n 0 fail '))).toBe(
+      '$ bun test test/a\nPassed.\n4 pass\n 0 fail'
     );
-    expect(piece).toEqual({
-      title: 'Checks run by Shinsa: 1 of 2 failed',
-      detail: "Shinsa ran these in the task's worktree after the agent's work.",
-      text: '$ bun run lint\nPassed.\nNo output.\n\n$ bun run test\nFailed.\nexpected 2, received 3',
-    });
-    expect(serializeCheckEvidence([failed('false', null)], [])?.text).toBe('$ false\nFailed.');
+    expect(serializeCheckOutput(runOf({}))).toBe('$ bun test test/a\nPassed.\nNo output.');
   });
 
-  test('says how many passed', () => {
-    expect(serializeCheckEvidence([passed('true', '')], [])?.title).toBe('Checks run by Shinsa: 1 passed');
-    expect(serializeCheckEvidence([passed('a', ''), passed('b', '')], [])?.title).toBe(
-      'Checks run by Shinsa: all 2 passed'
+  test('a failure shows its detail, and each note says what Shinsa found', () => {
+    expect(serializeCheckOutput(runOf({ outcome: 'fail', detail: 'expected 2' }, 'noise'))).toBe(
+      '$ bun test test/a\nFailed.\nexpected 2'
     );
+    expect(serializeCheckOutput(runOf({ outcome: 'fail', detail: null }, 'noise'))).toBe(
+      '$ bun test test/a\nFailed.\nnoise'
+    );
+    const notes: [CheckNote, ReportCheck['outcome'], string][] = [
+      ['passed_alone', 'pass', 'Passed when the failing test files were re-run alone.'],
+      ['fails_on_base', 'fail', 'Failed, and fails on the base commit too.'],
+    ];
+    for (const [note, outcome, line] of notes) {
+      expect(serializeCheckOutput(runOf({ note, outcome, detail: 'why' }, 'out')).split('\n')[1]).toBe(line);
+    }
   });
 
-  test('leaves out a command whose output an agent already attached, timings aside', () => {
-    const attached = `$ bun test\n${TESTS.replace('[4.12ms]', '[3.80ms]').replace('[182.00ms]', '[201.00ms]')}`;
-    const piece = serializeCheckEvidence(
-      [passed('bun run test', TESTS), passed('bun run lint', 'ok')],
-      [attached]
-    );
-    expect(piece?.title).toBe('Checks run by Shinsa: 1 passed');
-    expect(piece?.text).toBe('$ bun run lint\nPassed.\nok');
-    expect(piece?.detail).toBe(
-      "Shinsa ran these in the task's worktree after the agent's work. Left out bun run test: an agent attached the same output."
-    );
-    expect(serializeCheckEvidence([passed('bun run test', TESTS)], [attached])).toBeNull();
-    expect(serializeCheckEvidence([passed('bun run test', `${TESTS}\nextra`)], [attached])).not.toBeNull();
-  });
-
-  test('attaches nothing without a command, and keeps a long run within the evidence limit', () => {
-    expect(serializeCheckEvidence([], [])).toBeNull();
-    const runs = Array.from({ length: 12 }, (_, index) => failed(`check ${index}`, 'x'.repeat(4000)));
-    const text = serializeCheckEvidence(runs, [])?.text ?? '';
-    expect(text.length).toBe(PROTOCOL_LIMITS.evidenceText);
+  test('very long output keeps its end within the evidence limit', () => {
+    const text = serializeCheckOutput(runOf({ outcome: 'fail', detail: `${'x'.repeat(50_000)}END` }));
+    expect(text.length).toBeLessThanOrEqual(PROTOCOL_LIMITS.evidenceText);
     expect(text.startsWith('…\n')).toBe(true);
-    expect(text.endsWith('x')).toBe(true);
+    expect(text.endsWith('END')).toBe(true);
   });
 });

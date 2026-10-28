@@ -49,7 +49,6 @@ afterEach(() => {
   globalThis.requestAnimationFrame = original.requestAnimationFrame;
   globalThis.cancelAnimationFrame = original.cancelAnimationFrame;
   HTMLElement.prototype.scrollIntoView = original.scrollIntoView;
-  jest.useRealTimers();
 });
 
 function runFrames() {

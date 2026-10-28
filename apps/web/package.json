@@ -8,7 +8,7 @@
     "build": "vite build",
     "check-types": "tsc --noEmit",
     "dev": "vite --port 5181 --strictPort",
-    "test": "bun test"
+    "test": "bun test --randomize"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

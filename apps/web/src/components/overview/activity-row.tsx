@@ -4,7 +4,12 @@ import { InAppLink } from '@/components/links/link.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
 import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
-import { type ActivityActor, resolveActivityActor, resolveActivityGlyph } from '@/lib/overview/activity.ts';
+import {
+  type ActivityActor,
+  listActivityDetail,
+  resolveActivityActor,
+  resolveActivityGlyph,
+} from '@/lib/overview/activity.ts';
 import { describeCommentPlace } from '@/lib/review/draft.ts';
 import { resolveTaskPath, resolveTaskTarget } from '@/router.ts';
 
@@ -43,6 +48,7 @@ export function ActivityRow({
   onOpenRun: (runId: string) => void;
 }) {
   const run = entry.runId ? state.runs[entry.runId] : undefined;
+  const detail = listActivityDetail(entry);
   return (
     <li className='group relative flex gap-3 pb-4 last:pb-0'>
       <span aria-hidden className='absolute top-6 bottom-0 left-2.5 w-px bg-border group-last:hidden' />
@@ -55,11 +61,11 @@ export function ActivityRow({
             <TimeAgo at={entry.at} compact />
           </span>
         </div>
-        {entry.detail && (
-          <div className='line-clamp-2'>
-            <Markdown text={entry.detail} className='text-fg-4 text-xs' />
+        {detail.map((line) => (
+          <div key={line} className='line-clamp-2'>
+            <Markdown text={line} className='text-fg-4 text-xs' />
           </div>
-        )}
+        ))}
         {entry.comments && entry.comments.length > 0 && <SentComments comments={entry.comments} />}
         {run && (
           <button

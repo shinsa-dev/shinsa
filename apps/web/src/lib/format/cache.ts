@@ -2,6 +2,7 @@ export interface Cache<Value> {
   read: (key: string, create: () => Value) => Value;
   peek: (key: string) => Value | undefined;
   size: () => number;
+  clear: () => void;
 }
 
 export function createCache<Value>(limit: number): Cache<Value> {
@@ -21,6 +22,7 @@ export function createCache<Value>(limit: number): Cache<Value> {
     },
     peek: (key) => entries.get(key),
     size: () => entries.size,
+    clear: () => entries.clear(),
   };
 }
 

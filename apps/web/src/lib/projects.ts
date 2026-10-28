@@ -16,6 +16,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { toast } from '@shinsa/ui/components/sonner';
 import type { CSSProperties } from 'react';
+import { changeBaseline } from '@/lib/baseline.ts';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import {
   type LocalRepo,
@@ -279,6 +280,7 @@ export interface ProjectActions {
   removeFolder: (project: Project, folder: string) => Promise<boolean>;
   changeWorkspace: (repo: Repo, mode: WorkspaceMode) => Promise<boolean>;
   changeCoverage: (repo: Repo, setting: CoverageSetting) => Promise<boolean>;
+  changeBaseline: (repo: Repo, commands: string[]) => Promise<boolean>;
 }
 
 async function saveProject(input: ProjectInput, done: string) {
@@ -326,4 +328,5 @@ export const PROJECT_ACTIONS: ProjectActions = {
     ),
   changeWorkspace,
   changeCoverage,
+  changeBaseline,
 };

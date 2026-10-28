@@ -235,7 +235,6 @@ describe('acting for the human', () => {
     };
     const fields: Required<Pick<Repo, (typeof HUMAN_ONLY_REPO_FIELDS)[number]>> = {
       checkCommands: ['bun test'],
-      checksWaived: true,
       workspace: 'main_checkout',
       coverage: { mode: 'off' },
     };
@@ -263,8 +262,12 @@ describe('acting for the human', () => {
       'Only the human changes the settings approvePlans. Tell them what you would change and why.'
     );
     expect(() =>
-      actOnBehalf(harness, { type: 'repo.update', repoId, patch: { checkCommands: [], checksWaived: true } })
-    ).toThrow('Only the human changes the repository’s checkCommands, checksWaived.');
+      actOnBehalf(harness, {
+        type: 'repo.update',
+        repoId,
+        patch: { checkCommands: [], workspace: 'worktrees' },
+      })
+    ).toThrow('Only the human changes the repository’s checkCommands, workspace.');
     actOnBehalf(harness, {
       type: 'settings.change',
       patch: { maxFixRounds: 4, defaultModel: 'sonnet', attentionLimit: 2, idleCompaction: false },

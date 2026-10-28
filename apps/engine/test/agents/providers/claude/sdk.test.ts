@@ -8,7 +8,7 @@ import {
 import { overrideEnv } from '../../../helpers/index.ts';
 
 describe('resolveClaudeProcess', () => {
-  test("points the SDK at the user's claude and never passes CLAUDECODE or another proxy's route on", async () => {
+  test("points the SDK at the user's claude, keeps its browsers headless and never passes CLAUDECODE or another proxy's route on", async () => {
     const restore = overrideEnv({
       CLAUDECODE: '1',
       ANTHROPIC_BASE_URL: 'http://127.0.0.1:38663',
@@ -25,6 +25,7 @@ describe('resolveClaudeProcess', () => {
       expect(process.options.env.ANTHROPIC_BASE_URL).toBeUndefined();
       expect(process.options.env.CLAUDE_CODE_BLOCKING_LIMIT_OVERRIDE).toBeUndefined();
       expect(process.options.env.EUNOE_DIR).toBeUndefined();
+      expect(process.options.env.PLAYWRIGHT_MCP_HEADLESS).toBe('true');
     } finally {
       restore();
     }

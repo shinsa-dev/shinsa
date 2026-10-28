@@ -1,0 +1,16 @@
+extends: electron-builder.shared.yml
+appId: studio.overclock.shinsa.canary
+productName: Shinsa Canary
+extraMetadata:
+  productName: Shinsa Canary
+extraFiles:
+  - from: resources/LaunchAgents-canary
+    to: Library/LaunchAgents
+protocols:
+  - name: Shinsa Canary
+    schemes:
+      - shinsa-canary
+mac:
+  icon: icon-canary.icns
+dmg:
+  background: dmg/background-canary.png

@@ -59,8 +59,12 @@ Shinsa is a Mac app for Apple Silicon: [shinsa.dev/download](https://shinsa.dev/
 release. It needs git, the GitHub CLI signed in (`gh auth login`) and Claude Code signed in; Codex is optional.
 
 To get new versions first, take the beta: [shinsa.dev/download/beta](https://shinsa.dev/download/beta) fetches the
-newest release, betas included. Betas update to newer betas and to each stable release once it is newer; switch between Stable
-and Beta in Settings → General → Updates, where a beta switched to Stable can go back to the latest stable release. All releases are on the
+newest release, betas included. Betas update to newer betas and to each stable release once it is newer. For every
+change as it lands, take Shinsa Canary: [shinsa.dev/download/canary](https://shinsa.dev/download/canary) fetches the
+build of the latest merge to `main` that passed the tests. It is a separate app that installs beside Shinsa, with its
+own engine, data (`~/.config/shinsa-canary`), port (7447) and `shinsa-canary` command, and updates only to newer
+canaries, so it never replaces the Shinsa you use. Switch Shinsa between Stable and Beta in Settings → General →
+Updates, where a beta switched to Stable can go back to the latest stable release. All releases are on the
 [releases page](https://github.com/shinsa-dev/shinsa/releases), and how they are made is
 [`docs/release.md`](docs/release.md).
 
@@ -77,9 +81,9 @@ bun install
 bun dev
 ```
 
-`bun dev` starts Shinsa's engine on :5180 and the interface on http://localhost:5181. Six short setup steps ask which
-folders hold your repositories and how agents work; then describe the first task. To work on the Mac app, run `bun run dev` in
-`apps/desktop` while `bun dev` is running. Keep a scratch data directory while developing:
+`bun dev` starts Shinsa's engine on :5180 and the interface on http://localhost:5181, away from the Mac app's engine on
+:7446. Six short setup steps ask which folders hold your repositories and how agents work; then describe the first
+task. To work on the Mac app, run `bun run dev` in `apps/desktop` while `bun dev` is running. Keep a scratch data directory while developing:
 `SHINSA_HOME=/tmp/shinsa-dev bun dev`.
 
 ```

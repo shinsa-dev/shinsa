@@ -27,9 +27,24 @@ const LOGIN_PROMPT =
   /(?:not\s+logged\s+in|please\s+log\s+in|please\s+run\s+(?:`?claude\s+login`?|\/login)|login\s+required|requires\s+login|unauthorized|authentication\s+required|invalid\s+api\s+key[\s\S]{0,120}(?:\/login|claude\s+login|log\s+in))/i;
 
 const TOKEN_FAILURE =
-  /(?:authentication[_\s-](?:failed|error)|failed\s+to\s+authenticate|invalid\s+bearer\s+token|(?:invalid|expired|revoked)[\s\S]{0,40}(?:bearer|oauth|access)\s+token|(?:bearer|oauth|access)\s+token[\s\S]{0,40}(?:is\s+)?(?:invalid|expired|revoked))/i;
+  /(?:authentication[_\s-](?:failed|error)|failed\s+to\s+authenticate|invalid\s+bearer\s+token|(?:invalid|expired|revoked)[\s\S]{0,40}(?:bearer|oauth|access)\s+token|(?:bearer|oauth|access)\s+token[\s\S]{0,40}(?:is\s+)?(?:invalid|expired|revoked)|oauth\s+session[\s\S]{0,40}(?:expired|could\s+not\s+be\s+refreshed))/i;
 
 const CONTEXT_FULL = 'Claude stopped: the conversation no longer fits the model’s context window.';
+
+const SYNTHETIC_MODEL = '<synthetic>';
+
+const STDERR_MARK = '. stderr: ';
+
+const HOOK_NOISE = /^\s*[\w:-]+ hook \[[\s\S]*\] failed: /;
+
+const PROCESS_EXIT = /^Claude Code process exited with code (\S+?)\.?$/;
+
+const PROCESS_SIGNAL = /^Claude Code process terminated by signal (\S+?)\.?$/;
+
+const OUT_OF_CREDITS =
+  /(?:credit\s+balance\s+is\s+too\s+low|out\s+of\s+(?:usage\s+)?credits|insufficient\s+credits|extra\s+usage\s+(?:is\s+)?(?:exhausted|used\s+up))/i;
+
+const LIMIT_TEXT = /(?:usage\s+limit\s+reached|hit\s+your\s+(?:usage\s+)?limit)(?:\|(\d{9,11}))?/i;
 
 const ACCOUNT_PROBLEMS: Record<string, string> = {
   authentication_failed: 'Claude is signed out. Run `claude` in a terminal and sign in again.',
@@ -121,12 +136,51 @@ function readBlockedLimit(message: SDKAssistantMessage) {
   return { type: info.rateLimitType ?? 'unknown', resetAt: resolveResetAt(info.resetsAt) };
 }
 
+function readSyntheticText(message: SDKAssistantMessage) {
+  const body = message.message as { model?: unknown; content?: unknown };
+  if (body.model !== SYNTHETIC_MODEL || !Array.isArray(body.content)) return '';
+  return body.content
+    .flatMap((block: { type?: unknown; text?: unknown }) =>
+      block.type === 'text' && typeof block.text === 'string' ? [block.text] : []
+    )
+    .join('\n');
+}
+
+function isLoginText(text: string) {
+  return LOGIN_PROMPT.test(text) || TOKEN_FAILURE.test(text);
+}
+
+function createSignedOutProblem() {
+  return { code: 'authentication_failed', message: ACCOUNT_PROBLEMS.authentication_failed as string };
+}
+
 export function recordAssistantError(evidence: TurnEvidence, message: SDKAssistantMessage) {
   if (message.parent_tool_use_id !== null) return;
   evidence.assistantLimit = message.error === 'rate_limit' ? readBlockedLimit(message) : null;
   const problem = message.error ? ACCOUNT_PROBLEMS[message.error] : undefined;
   if (message.error && problem) evidence.accountProblem = { code: message.error, message: problem };
   if (message.error && !problem && message.error !== 'rate_limit') evidence.assistantError = message.error;
+  if (!message.error && isLoginText(readSyntheticText(message)))
+    evidence.accountProblem = createSignedOutProblem();
+}
+
+function describeProcessEnd(head: string) {
+  const exit = PROCESS_EXIT.exec(head);
+  if (exit) return `Claude Code stopped unexpectedly (exit code ${exit[1]}).`;
+  const signal = PROCESS_SIGNAL.exec(head);
+  if (signal) return `Claude Code was stopped by the system (${signal[1]}).`;
+  return head;
+}
+
+export function cleanProcessError(text: string) {
+  const at = text.indexOf(STDERR_MARK);
+  if (at === -1) return describeProcessEnd(text);
+  const kept = text
+    .slice(at + STDERR_MARK.length)
+    .split('\n')
+    .filter((line) => line.trim() && !HOOK_NOISE.test(line));
+  const head = describeProcessEnd(text.slice(0, at));
+  return kept.length > 0 ? `${head} It printed: ${kept.join('\n')}` : head;
 }
 
 function listErrors(message: SDKResultMessage) {
@@ -185,9 +239,22 @@ function resolveGatewayLimit(message: SDKResultMessage, now: number) {
   return seconds > 0 ? now + seconds * 1000 : null;
 }
 
+function resolveTextLimit(text: string) {
+  if (OUT_OF_CREDITS.test(text)) {
+    return createFailure('usage_limit', 'The Claude account is out of usage credits.', 'out_of_credits', {
+      retryable: true,
+    });
+  }
+  const limit = LIMIT_TEXT.exec(text);
+  if (!limit) return null;
+  return createFailure('usage_limit', 'Claude’s usage limit is reached.', 'rate_limit', {
+    retryable: true,
+    resetAt: resolveResetAt(Number(limit[1])),
+  });
+}
+
 function isLoginRequired(message: SDKResultMessage) {
-  const text = resolveResultText(message);
-  return LOGIN_PROMPT.test(text) || TOKEN_FAILURE.test(text);
+  return isLoginText(resolveResultText(message));
 }
 
 function resolveApiFailure(message: SDKResultMessage, evidence: TurnEvidence, now: number) {
@@ -212,15 +279,20 @@ function resolveApiFailure(message: SDKResultMessage, evidence: TurnEvidence, no
       resetAt: resolveUsageLimitReset(evidence),
     });
   }
-  if (status === 529 || evidence.assistantError === 'overloaded') {
+  const textLimit = resolveTextLimit(resolveResultText(message));
+  if (textLimit) return textLimit;
+  if (status !== null && status >= 500 && status !== 529) {
     return createFailure(
       'overloaded',
-      'Claude’s API is overloaded (529). It retries shortly.',
-      code ?? 'overloaded',
-      {
-        retryable: true,
-      }
+      `Claude’s API had a server error (${status}).`,
+      code ?? 'server_error',
+      { retryable: true }
     );
+  }
+  if (status === 529 || evidence.assistantError === 'overloaded') {
+    return createFailure('overloaded', 'Claude’s API is overloaded (529).', code ?? 'overloaded', {
+      retryable: true,
+    });
   }
   if (evidence.assistantError === 'model_not_found') {
     return createFailure(
@@ -283,7 +355,7 @@ export function resolveClaudeVerdict(
       ),
     };
   }
-  if (!isFailedResult(message)) return { status: 'completed', failure: null };
+  if (!isFailedResult(message) && !evidence.accountProblem) return { status: 'completed', failure: null };
   const errorText = listErrors(message).join('\n').toLowerCase();
   if (message.subtype !== 'success' && errorText.includes('interrupt')) {
     return {
@@ -305,6 +377,14 @@ export function resolveClaudeVerdict(
 
 export function createTransportFailure(message: string): RunFailure {
   return createFailure('transport_error', message, 'stream_ended', { retryable: true });
+}
+
+export function resolveEndedFailure(text: string, evidence: TurnEvidence): RunFailure {
+  if (evidence.accountProblem)
+    return createFailure('auth', evidence.accountProblem.message, evidence.accountProblem.code);
+  if (isLoginText(text))
+    return createFailure('auth', ACCOUNT_PROBLEMS.authentication_failed as string, 'login_required');
+  return createTransportFailure(text);
 }
 
 export function createSetupFailure(message: string): RunFailure {
