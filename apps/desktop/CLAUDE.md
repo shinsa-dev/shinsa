@@ -21,7 +21,8 @@ src/
 │                   the build), update.ts (the updater's states, its menu item, notice and answers, the go-back
 │                   dialog, which download a channel switch discards, where macOS stages one), update-channel.ts
 │                   (the channels each app offers, the updater options each sets, when a version ahead of its
-│                   channel is offered the latest there)
+│                   channel is offered the latest there), update-log.ts (the updater log's lines and rotation),
+│                   window-close.ts (whether closing the window closes it or hides it)
 ├── main/           The Electron glue, kept thin and outside coverage: index.ts (single instance, deep links,
 │                   connecting to the server, its first health check sent before the app is ready, IPC, the
 │                   session's permissions), window.ts (MainWindow: hide on close, navigation, Back and Forward,
@@ -29,7 +30,8 @@ src/
 │                   Back ⌘[, Forward ⌘], Home ⇧⌘H), notifications.ts, server.ts (health, starting
 │                   the service in the login shell), prefs.ts (window bounds, the update channel and the version you
 │                   chose to stay on in userData/prefs.json),
-│                   updater.ts (Updater: electron-updater, checked at start and every four hours)
+│                   updater.ts (Updater: electron-updater, checked at start and every four hours), update-log.ts
+│                   (the updater log, `~/Library/Logs/<app>/updater.log`)
 └── preload/        index.ts: exposes `window.shinsaDesktop` (version, protocol, update, channel, windowState,
                     updateBadge, notify, installUpdate, checkForUpdates, applyUpdateChannel, answerDowngrade, onNavigate,
                     onWindowState, onUpdate) to the server's page
@@ -136,7 +138,18 @@ electron-builder.shared.yml    What both builds share; electron-builder.yml (Shi
 **Updates.** The packaged app updates itself (`main/updater.ts`): electron-updater reads the GitHub releases of
 `shinsa-dev/shinsa` (`publish` in `electron-builder.shared.yml`), downloads a new version in the background and installs it
 when you quit, or at once from Shinsa → Restart to Update. Quitting never stops the server, so an update never
-interrupts an agent. Squirrel.Mac installs only an update signed by the same Developer ID, so ad hoc builds download
+interrupts an agent. Everything that waits happens before Restart is offered, so the click only quits and the swap
+and relaunch follow: the updater goes `downloading` (with its percent) → `preparing` (electron-updater has the zip,
+Squirrel.Mac pulls it from electron-updater's local proxy, unpacks and verifies it and stages ShipIt; about 10 s) →
+`ready` only on Squirrel.Mac's own `update-downloaded` → `installing` after the click. The menu, Settings → General →
+Updates and the page's bridge (`DesktopUpdate`) show each state, and Restart appears only at `ready`.
+`quitAndInstall()` closes every window before `before-quit`, so the window marks itself quitting on the built-in
+updater's `before-quit-for-update`; without it the close would hide the window, cancel the quit and leave ShipIt
+refusing to replace a running app (`App Still Running Error`). If the app still runs `INSTALL_TIMEOUT_MS` (15 s)
+after the click, it goes back to `ready` with a notice to quit Shinsa; an error while preparing or installing also
+shows a notice, while a failed background check stays in the menu. electron-updater's lines and each state change
+go to `~/Library/Logs/Shinsa/updater.log` (`Shinsa Canary` for the canary), started afresh past 1 MB, beside
+ShipIt's own `~/Library/Caches/<bundle id>.ShipIt/ShipIt_stderr.log`. Squirrel.Mac installs only an update signed by the same Developer ID, so ad hoc builds download
 but do not install. Squirrel.Mac also installs an update only into the same bundle id, so each app has its own
 channels (`lib/update-channel.ts`): Shinsa offers Stable and Beta, and Shinsa Canary is always on Canary. Stable
 reads `latest-mac.yml` from the release marked latest, Beta reads `beta-mac.yml` from the newest beta or stable

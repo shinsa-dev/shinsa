@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { app, dialog, autoUpdater as nativeUpdater } from 'electron';
 import electronUpdater from 'electron-updater';
 import type { UpdateChannel } from '../lib/bridge.ts';
+import { APP_NAME } from '../lib/dev-bundle.ts';
 import { APP_ID } from '../lib/engine.ts';
 import {
   DOWNGRADE_ACCEPT,
@@ -31,8 +32,10 @@ import {
   resolveUpdaterOptions,
   UPDATE_FEED,
 } from '../lib/update-channel.ts';
+import { describeStateChange } from '../lib/update-log.ts';
 import { showNotice } from './notifications.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
+import { createUpdateLog } from './update-log.ts';
 
 const { autoUpdater } = electronUpdater;
 
@@ -49,13 +52,24 @@ export class Updater {
   #channel: UpdateChannel = resolveUpdateChannel(readPrefs().updateChannel, app.getVersion());
   #download: Download | null = null;
   #ask = false;
+  #log: ReturnType<typeof createUpdateLog> | null = null;
 
   constructor(changed: () => void, open: () => void, markQuitting: () => void) {
     this.#changed = changed;
     this.#open = open;
     if (!this.#supported) return;
-    nativeUpdater.on('before-quit-for-update', markQuitting);
-    nativeUpdater.on('update-downloaded', () => this.#ready());
+    const log = createUpdateLog();
+    this.#log = log;
+    autoUpdater.logger = log;
+    log.info(`${APP_NAME} ${app.getVersion()} on the ${this.#channel} channel`);
+    nativeUpdater.on('before-quit-for-update', () => {
+      log.info('Squirrel: quitting to install');
+      markQuitting();
+    });
+    nativeUpdater.on('update-downloaded', () => {
+      log.info('Squirrel: update staged');
+      this.#ready();
+    });
     this.#applyOptions();
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -221,6 +235,8 @@ export class Updater {
   }
 
   #set(next: UpdateState) {
+    const change = describeStateChange(this.#state, next);
+    if (change) this.#log?.info(change);
     this.#state = next;
     this.#changed();
   }
