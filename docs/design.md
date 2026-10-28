@@ -1120,9 +1120,13 @@ Only these, and they win over anything below:
       again (primary, `approve`) at the top right, and Cancel task as the footer's quiet link. A repository without
       check commands is not a problem: nothing extra runs.
     - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
-      plan an inset (`bg-bg-a1` on `INSET`) shows "You asked" with your words, then "What changed"
-      with the agent's summary and the computed changes as a quiet `·` list. Approve plan sends
-      the version on screen.
+      plan an inset (`bg-bg-a1` on `INSET`, `PlanFeedback`) holds only "You asked" and your words, and
+      none at all when the revision came without a message. In the plan itself "What changed" with the
+      agent's summary sits right before the goal (`PlanChangeSummary`), and each phase the revision added
+      or reworked carries a quiet `Badge` `sm` beside its title, "New" or "Changed" (`PlanPhaseTitle`,
+      core's `resolvePhaseChange`); a dropped phase is not listed and a changed goal or approach gets no
+      mark, the summary says it. The chat's Revised the plan card renders the same three pieces, so the
+      two never disagree. Approve plan sends the version on screen.
     - **Questions with choices** (`question-choices.tsx`): `outline` `sm` buttons in a wrapping
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
       same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes

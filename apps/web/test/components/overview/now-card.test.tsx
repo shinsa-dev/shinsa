@@ -417,20 +417,28 @@ describe('NowCard on the Overview', () => {
     ]);
   });
 
-  it('names a revised plan’s version, what changed since the last one and what you asked for', () => {
-    const task = createTask({
+  function createRevisedPlan(revision: { changeSummary?: string; feedback?: string }) {
+    return createTask({
       id: 'task-1',
       stage: 'awaiting_plan',
       plan: {
         version: 2,
         body: '',
         proposedAt: 0,
-        changeSummary: 'Split validation into its own phase.',
-        changes: [{ kind: 'phase_added', title: 'Validate input' }],
-        feedback: 'Validate on the server too.',
+        changes: [
+          { kind: 'goal' },
+          { kind: 'phase_added', title: 'Validate input' },
+          { kind: 'phase_changed', title: 'Show errors' },
+          { kind: 'phase_removed', title: 'Style the form' },
+        ],
+        ...revision,
         document: {
           goal: 'Ship a login form.',
-          phases: [{ title: 'Validate input', detail: 'With zod.' }],
+          phases: [
+            { title: 'Build the form', detail: 'Two fields.' },
+            { title: 'Validate input', detail: 'With zod.' },
+            { title: 'Show errors', detail: 'Under each field.' },
+          ],
           behaviour: [],
           approach: '',
           files: [],
@@ -440,13 +448,34 @@ describe('NowCard on the Overview', () => {
         },
       },
     });
+  }
+
+  it('names a revised plan’s version, keeps your words apart and marks the new and reworked phases', () => {
+    const task = createRevisedPlan({
+      changeSummary: 'Split validation into its own phase.',
+      feedback: 'Validate on the server too.',
+    });
     const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan', planVersion: 2 });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
-    expect(view.getByText(/Version 2 · 1 phase/)).toBeTruthy();
-    expect(view.getByText('What changed')).toBeTruthy();
-    expect(view.getByText('Split validation into its own phase.')).toBeTruthy();
-    expect(view.getByText('Added the phase “Validate input”')).toBeTruthy();
-    expect(view.getByText('Validate on the server too.')).toBeTruthy();
+    expect(view.getByText(/Version 2 · 3 phases/)).toBeTruthy();
+    const asked = view.getByText('You asked').parentElement;
+    expect(asked?.textContent).toBe('You askedValidate on the server too.');
+    const summary = view.getByText('What changed').parentElement;
+    expect(summary?.textContent).toBe('What changedSplit validation into its own phase.');
+    expect(summary?.nextElementSibling?.textContent).toBe('Ship a login form.');
+    expect(view.getByText('Validate input').parentElement?.textContent).toBe('Validate inputNew');
+    expect(view.getByText('Show errors').parentElement?.textContent).toBe('Show errorsChanged');
+    expect(view.getByText('Build the form').parentElement?.textContent).toBe('Build the form');
+    expect(view.queryByText(/Style the form|Changed the goal|Added the phase/)).toBeNull();
+  });
+
+  it('shows neither your words nor what changed when a revision has none', () => {
+    const task = createRevisedPlan({});
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan', planVersion: 2 });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.queryByText('You asked')).toBeNull();
+    expect(view.queryByText('What changed')).toBeNull();
+    expect(view.getByText('New')).toBeTruthy();
   });
 
   it('answers a question with one of its choices in one click', async () => {

@@ -271,8 +271,10 @@ export function createOverviewScene(now: number) {
         feedback: 'Keep the folder step first; people expect it.',
         changeSummary: 'Moved the folder step back to the start and merged the two account steps.',
         changes: [
-          { kind: 'phases_reordered' },
+          { kind: 'phase_changed', title: 'Check accounts and tools in one step' },
+          { kind: 'phase_added', title: 'Save each answer as it is given' },
           { kind: 'phase_removed', title: 'Ask for a second account' },
+          { kind: 'phases_reordered' },
           { kind: 'files', added: 1, removed: 2 },
         ],
       },

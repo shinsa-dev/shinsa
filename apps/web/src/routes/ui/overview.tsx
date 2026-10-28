@@ -197,7 +197,7 @@ export function OverviewSpecimens() {
           </ReviewDraftProvider>
         </Card>
       </Specimen>
-      <Specimen label='PlanCard · a revised plan: what you asked, what changed, the plan'>
+      <Specimen label='PlanCard · a revised plan: what you asked on its own inset, what changed above the goal, its new and reworked phases tagged'>
         <Card>
           <PlanCard
             state={state}

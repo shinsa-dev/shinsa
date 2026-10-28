@@ -7576,7 +7576,7 @@ A secondary block inside a card sits on an inset: `INSET` + `bg-bg-a1`.
 
 | Use | Classes |
 | --- | --- |
-| A block of context ("You asked" / "What changed") | `flex flex-col gap-2 px-3 py-2.5 text-xs`; each part `flex flex-col gap-px`, its label `text-2xs text-fg-2`, its text `selectable text-fg-3` (the summary `text-fg-4`); a computed list as `·` rows (`flex gap-1.5`, the dot `text-fg-2`) |
+| A block of context (a revised plan's "You asked") | `flex flex-col gap-px px-3 py-2.5 text-xs`: the label `text-2xs text-fg-2`, the person's words `selectable text-fg-3`; only their words go here, the agent's summary belongs to the card's body |
 | A one-line strip with quiet links | `flex items-center gap-2 px-3 py-2 text-2xs text-fg-2`: icon and sentence (`text-fg-3`, `text-orange-text` once it is serious), a spacer, then quiet links |
 | A fix with a command to copy | `flex items-center gap-1.5 py-1 pr-1 pl-2`: the fix as inline markdown (`min-w-0 flex-1 text-fg-3 text-xs`) and a `CopyButton` |
 

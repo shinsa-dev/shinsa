@@ -32,7 +32,7 @@ export {
   validateDelegationRequest,
   validateSplit,
 } from './orchestration.ts';
-export { describePlanChange, type PlanChange, resolvePlanChanges } from './plan-changes.ts';
+export { type PhaseChange, type PlanChange, resolvePhaseChange, resolvePlanChanges } from './plan-changes.ts';
 export {
   createTesting,
   hasTesting,

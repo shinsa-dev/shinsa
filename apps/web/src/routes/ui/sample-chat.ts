@@ -1,4 +1,4 @@
-import { type ChatTool, resolveAnsweredReply } from '@shinsa/core';
+import { type ChatTool, resolveAnsweredReply, type Task } from '@shinsa/core';
 import type { ToolCall } from '@/lib/chat/timeline.ts';
 import { describeTool } from '@/lib/chat/tool-describe.ts';
 
@@ -24,6 +24,19 @@ const PLAN: ChatTool = {
     phases: [{ title: 'Create the projects', detail: 'One project per owner, each with its folder.' }],
   },
 };
+
+export function createSampleRevisionCall(task: Task) {
+  const document = task.plan?.document;
+  return createSampleCall('revised', {
+    kind: 'shinsa',
+    name: 'propose_plan',
+    args: {
+      goal: document?.goal ?? '',
+      phases: (document?.phases ?? []).map((phase) => ({ title: phase.title, detail: phase.detail })),
+      change_summary: task.plan?.changeSummary ?? '',
+    },
+  });
+}
 
 export function createSampleChatCalls() {
   return {

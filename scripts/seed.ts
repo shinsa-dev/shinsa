@@ -1914,7 +1914,9 @@ function listSeedDisagreements(task: SeedTask) {
   }));
 }
 
-function resolveHandover({ task, role, purpose }: SeedRunTimes): ChatTool {
+function resolveHandover({ task, role, purpose, index }: SeedRunTimes): ChatTool {
+  const seeded = task.runs?.[index]?.handover;
+  if (seeded) return seeded;
   const body = task.summary ?? task.title;
   if (purpose === 'plan') {
     return { kind: 'shinsa', name: 'propose_plan', args: { goal: task.request, phases: SMALL_PLAN } };
