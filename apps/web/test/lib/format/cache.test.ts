@@ -15,6 +15,14 @@ describe('createCache', () => {
     expect(cache.peek('b')).toBeUndefined();
     expect(cache.size()).toBe(2);
   });
+
+  it('forgets every value when cleared', () => {
+    const cache = createCache<number>(2);
+    cache.read('a', () => 1);
+    cache.clear();
+    expect(cache.peek('a')).toBeUndefined();
+    expect(cache.size()).toBe(0);
+  });
 });
 
 describe('createScopedCache', () => {

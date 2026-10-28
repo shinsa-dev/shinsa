@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from 'bun:test';
+import { beforeEach, describe, expect, it, jest } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, render, screen } from '@testing-library/react';
 import { SilenceNote } from '@/components/overview/silence-note.tsx';
@@ -9,10 +9,6 @@ const MINUTE = 60_000;
 beforeEach(() => {
   jest.useFakeTimers();
   jest.setSystemTime(new Date(NOW));
-});
-
-afterEach(() => {
-  jest.useRealTimers();
 });
 
 function renderNote(snoozedUntil: number | null) {

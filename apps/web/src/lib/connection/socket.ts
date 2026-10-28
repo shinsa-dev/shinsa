@@ -207,6 +207,26 @@ export class Connection {
     };
   }
 
+  reset() {
+    this.#confirmed = null;
+    this.#incomingState = undefined;
+    this.#incomingPatches = [];
+    this.#incomingTranscripts.clear();
+    this.#syncing = false;
+    this.#accounts = null;
+    this.#terminals = null;
+    this.#desktopConnected = false;
+    this.#pending.clear();
+    this.#optimistic.clear();
+    this.#transcripts.clear();
+    this.#transcriptRefs.clear();
+    this.#update({ state: null });
+    this.#transcriptSignal.publish();
+    this.#accountsSignal.publish();
+    this.#surfacesSignal.publish();
+    this.#terminalsSignal.publish();
+  }
+
   flush() {
     this.#flushing = false;
     if (this.#flushState()) this.#publishState();

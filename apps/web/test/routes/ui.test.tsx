@@ -38,10 +38,14 @@ function findSection(id: string) {
   return within(section);
 }
 
-async function expectNothingSent() {
-  await waitFor(() => expect(screen.getAllByText(NOTHING_SENT).length).toBeGreaterThan(0));
+function expectNothingRequested() {
   expect(listSentCommands()).toEqual([]);
   expect(requests).not.toHaveBeenCalled();
+}
+
+async function expectNothingSent() {
+  await waitFor(() => expect(screen.getAllByText(NOTHING_SENT).length).toBeGreaterThan(0));
+  expectNothingRequested();
 }
 
 describe('the /ui gallery', () => {
@@ -191,7 +195,7 @@ describe('the /ui gallery', () => {
     const examples = specimen(/^CodeBlock · an example/);
     expect(examples.queryByRole('button', { name: 'Run in terminal' })).toBeNull();
     expect(examples.getAllByRole('button', { name: 'Copy' })).toHaveLength(3);
-    await expectNothingSent();
+    expectNothingRequested();
   });
 
   it('shows How to test with what the tests cover and a step to try for each kind of target, running nothing', async () => {

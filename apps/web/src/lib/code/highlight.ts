@@ -122,6 +122,11 @@ export function requestTokens(code: string, language: string) {
   return pending;
 }
 
+export function resetHighlights() {
+  cache.clear();
+  resolved.clear();
+}
+
 function scheduleIdle(work: () => void) {
   if (typeof requestIdleCallback === 'function') {
     const handle = requestIdleCallback(work, { timeout: IDLE_TIMEOUT_MS });

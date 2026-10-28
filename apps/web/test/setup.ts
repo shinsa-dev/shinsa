@@ -4,12 +4,24 @@ GlobalRegistrator.register({ url: 'http://localhost/' });
 
 const { afterEach } = await import('bun:test');
 const { cleanup } = await import('@testing-library/react');
+const { toast } = await import('@shinsa/ui/components/sonner');
+const { resetHighlights } = await import('@/lib/code/highlight.ts');
+const { resetAgentProviders } = await import('@/lib/connection/models.ts');
+const { connection } = await import('@/lib/connection/socket.ts');
+const { resetEvidenceTexts } = await import('@/lib/evidence/texts.ts');
 const { resetDisclosures } = await import('@/lib/preferences/disclosure.ts');
 const { runTeardowns } = await import('./support/teardown.ts');
+const { restoreRealTimers } = await import('./support/timers.ts');
 
 afterEach(() => {
+  restoreRealTimers();
   runTeardowns();
   cleanup();
+  toast.dismiss();
+  connection.reset();
+  resetHighlights();
+  resetEvidenceTexts();
+  resetAgentProviders();
   localStorage.clear();
   resetDisclosures();
   history.replaceState(null, '', '/');
