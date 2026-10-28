@@ -238,14 +238,34 @@ describe('a watch check', () => {
     expect(watchdog(harness, taskId)).toMatchObject({ status: 'passed', checks: [{ healthy: true }] });
   });
 
-  test('a check deferred past the window’s end passes it without a run', () => {
+  test('a last check deferred past the window’s end still stops the watchdog when the task is still at work', () => {
     const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 24, forHours: 24 }]);
     harness.send({ type: 'task.message', taskId, text: 'Add a retry button too.', kind: 'new_round' });
     fire(harness, taskId);
     expect(watchdog(harness, taskId).nextCheckAt).toBe(harness.now + 15 * MINUTE_MS);
     fire(harness, taskId);
-    expect(watchdog(harness, taskId)).toMatchObject({ status: 'passed', checks: [] });
-    expect(harness.task(taskId).activity.at(-1)?.text).toBe('The watchdog “Checkout latency” passed');
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'stopped', checks: [], nextCheckAt: null });
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe(
+      'Could not check the watchdog “Checkout latency”, and its window has ended, so it stopped'
+    );
+  });
+
+  test('a last check deferred past the window’s end runs late once the task rests', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 24, forHours: 24 }]);
+    harness.send({ type: 'task.message', taskId, text: 'Why a cache?', kind: 'feedback' });
+    const answerer = harness.activeRun(taskId);
+    fire(harness, taskId);
+    harness.send({
+      type: 'agent.deliver',
+      runId: answerer.id,
+      step: 'answer',
+      body: 'Prices change rarely.',
+    });
+    expect(harness.task(taskId).stage).toBe('merged');
+    fire(harness, taskId);
+    expect(harness.activeRun(taskId).purpose).toBe('watch');
+    report(harness, taskId, true);
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'passed', checks: [{ healthy: true }] });
   });
 
   test('a fire for another slot, or for a watchdog that is not watching, does nothing', () => {
@@ -305,8 +325,6 @@ describe('a watch check', () => {
       type: 'watchdog.ended',
       taskId,
       watchdogId: watchdog(harness, taskId).id,
-      status: 'stopped',
-      by: 'you',
     });
     expect(
       refusal(() =>
@@ -418,8 +436,6 @@ describe('a watch check', () => {
       type: 'watchdog.ended',
       taskId,
       watchdogId: watchdog(harness, taskId).id,
-      status: 'stopped',
-      by: 'you',
     });
     harness.send({ type: 'task.retry', taskId });
     expect(harness.task(taskId).stage).toBe('merged');

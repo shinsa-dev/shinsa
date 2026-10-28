@@ -883,7 +883,7 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `watchdog.checking`, `watchdog.deferred` | a check started on a run (`runId`), or moved on 15 minutes while the task worked (`nextCheckAt`) |
 | `watchdog.checked` | a check's result (`check`, `status`, `nextCheckAt`, `forkTaskId`) |
 | `watchdog.missed` | a check that could not run, given up without a gate (`reason`, `nextCheckAt`; none left stops the watchdog) |
-| `watchdog.ended` | a watchdog passed or was stopped (`status`, `by`) |
+| `watchdog.ended` | you stopped a watchdog (Stop, or the task marked done or cancelled) |
 | `watch_source.written`, `watch_source.removed` | a project's data source added or changed, or removed |
 | `merge_step.ticked` | you ticked or unticked a step around the merge (`key`, `title`, `done`); adds or removes its key in `mergeStepsDone`, or marks the carried step, and records it in the activity |
 | `work.submitted` | the work report was assembled (`sections`, `judgementCalls`) |

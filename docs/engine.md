@@ -1215,9 +1215,10 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   servers it suggests. Connecting one (`watchdog.connect {server, data}`, or `shinsa watchdogs connect`) adds the server
   to the project's sources for the repository and starts its window then (`watchdog.started`).
 - **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
-  `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot, and
-  passes the watchdog without a check only when the slot falls after its window (`watchdog.ended`, `passed`); a slot
-  due exactly as the window ends still checks, however late the fire arrives. A task that is not resting, or has a
+  `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
+  slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the
+  end runs late once the task rests; if the task is still at work then, the watchdog stops (`watchdog.missed` with no
+  next check) rather than passing without it. A watchdog passes only on a check's report. A task that is not resting, or has a
   live run (a later round at work), defers it 15 minutes (`watchdog.deferred`), so a check never shares the session
   with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
   (`isReadOnlyRun`), in the repository itself, resuming the task's session (`Decider.taskSession`), so it knows what

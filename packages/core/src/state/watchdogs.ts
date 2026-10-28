@@ -93,19 +93,16 @@ function applyMissed(state: ShinsaState, event: EventOf<'watchdog.missed'>) {
 
 function applyEnded(state: ShinsaState, event: EventOf<'watchdog.ended'>) {
   const next = updateWatchdog(state, event, () => ({
-    status: event.status,
+    status: 'stopped',
     nextCheckAt: null,
     runId: null,
     endedAt: event.at,
   }));
   if (!next) return;
   record(state, event.taskId, event.at, {
-    actor: event.by,
+    actor: 'you',
     kind: 'watchdog',
-    text:
-      event.status === 'passed'
-        ? `The watchdog “${next.title}” passed`
-        : `Stopped the watchdog “${next.title}”`,
+    text: `Stopped the watchdog “${next.title}”`,
   });
 }
 

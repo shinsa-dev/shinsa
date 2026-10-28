@@ -129,24 +129,21 @@ function canCheckNow(decider: Decider, task: Task) {
   return isTaskResting(task) && listLiveRuns(decider.state, task.id).length === 0;
 }
 
-function passWatchdog(decider: Decider, task: Task, watchdog: Watchdog) {
-  decider.emit({
-    type: 'watchdog.ended',
-    taskId: task.id,
-    watchdogId: watchdog.id,
-    status: 'passed',
-    by: 'shinsa',
-  });
-}
-
 export function fireWatchdog(decider: Decider, command: CommandOf<'watchdog.fire'>) {
   const task = decider.state.tasks[command.taskId];
   const watchdog = task ? selectWatchdog(task, command.watchdogId) : null;
   if (!task || watchdog?.status !== 'watching' || watchdog.runId !== null) return;
   if (watchdog.nextCheckAt !== command.dueAt || isTaskClosed(task)) return;
   const now = decider.context.now;
-  if (watchdog.endsAt !== null && command.dueAt > watchdog.endsAt) {
-    passWatchdog(decider, task, watchdog);
+  const late = watchdog.endsAt !== null && command.dueAt > watchdog.endsAt;
+  if (!canCheckNow(decider, task) && late) {
+    decider.emit({
+      type: 'watchdog.missed',
+      taskId: task.id,
+      watchdogId: watchdog.id,
+      reason: 'The task was still at work when the window ended, so its last check never ran.',
+      nextCheckAt: null,
+    });
     return;
   }
   if (!canCheckNow(decider, task)) {
@@ -248,18 +245,12 @@ export function stopWatchdog(decider: Decider, command: CommandOf<'watchdog.stop
   const watchdog = findWatchdog(task, command.watchdogId);
   if (!isWatchdogActive(watchdog)) return;
   endCheckRun(decider, task, watchdog);
-  decider.emit({
-    type: 'watchdog.ended',
-    taskId: task.id,
-    watchdogId: watchdog.id,
-    status: 'stopped',
-    by: 'you',
-  });
+  decider.emit({ type: 'watchdog.ended', taskId: task.id, watchdogId: watchdog.id });
 }
 
 export function stopAllWatchdogs(decider: Decider, taskId: string) {
   for (const watchdog of listActiveWatchdogs(decider.task(taskId))) {
-    decider.emit({ type: 'watchdog.ended', taskId, watchdogId: watchdog.id, status: 'stopped', by: 'you' });
+    decider.emit({ type: 'watchdog.ended', taskId, watchdogId: watchdog.id });
   }
 }
 
