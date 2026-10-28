@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { resolveQueue } from '@shinsa/core';
 import {
   describeNeedsCount,
+  isQueueButtonShown,
   listQueueSections,
   type QueueSection,
   resolveSectionDefault,
@@ -120,5 +121,17 @@ describe('describeNeedsCount', () => {
     expect(describeNeedsCount(0)).toBe('Nothing needs you');
     expect(describeNeedsCount(1)).toBe('1 needs you');
     expect(describeNeedsCount(3)).toBe('3 need you');
+  });
+});
+
+describe('isQueueButtonShown', () => {
+  it('shows the queue button everywhere but Home, the task list and setup', () => {
+    expect(isQueueButtonShown({ name: 'task', reference: 'SW-1' })).toBe(true);
+    expect(isQueueButtonShown({ name: 'settings' })).toBe(true);
+    expect(isQueueButtonShown({ name: 'terminal' })).toBe(true);
+    expect(isQueueButtonShown({ name: 'ui' })).toBe(true);
+    expect(isQueueButtonShown({ name: 'home' })).toBe(false);
+    expect(isQueueButtonShown({ name: 'tasks' })).toBe(false);
+    expect(isQueueButtonShown({ name: 'onboarding' })).toBe(false);
   });
 });
