@@ -13,7 +13,9 @@ import {
   type WorkspaceMode,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
+import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
 import { toast } from '@shinsa/ui/components/sonner';
+import type { CSSProperties } from 'react';
 import { describeFailure, requestWithToast, sendCommandWithToast } from '@/lib/connection/commands.ts';
 import {
   type LocalRepo,
@@ -131,6 +133,11 @@ export function selectTaskProject(state: ShinsaState, task: Task) {
 
 export function resolveProjectInk(color: string) {
   return color === 'gray' ? 'var(--fg-2)' : `var(--${color}-4, var(--fg-2))`;
+}
+
+export function resolveProjectMark(icon: IconName, color: string | null | undefined): MenuItemIcon {
+  if (!color) return icon;
+  return { name: icon, style: { '--icon-color': resolveProjectInk(color) } as CSSProperties };
 }
 
 export function resolveRepoIcon(repo: Repo): IconName {

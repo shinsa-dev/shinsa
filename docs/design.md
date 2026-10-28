@@ -813,8 +813,9 @@ Only these, and they win over anything below:
       `lib/projects.ts`, the same ink as the dot), plain `fg-2` when the repository has no project. Where the
       repository is a place it is `IconGithub` with a remote and `IconFolder1` without (`resolveRepoIcon`): a task
       link's hover card, the roadmap's Repository column (its tooltip names the project, "Superwall project") and a
-      repository link (`RepoChip`). Where it is the folder the agent works in, the task's facts row, it is always the
-      folder.
+      repository link (`RepoChip`). Where it is a folder something works in, it is always `IconFolder1`: the task's
+      facts row, an MCP server's "Only in ‹repo›" choice and the Terminal page's Repositories (a menu row's icon takes
+      the ink through `resolveProjectMark`).
     - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
       card surface. A card pads the same on all four sides; the shared `Card` slot carries no
       padding of its own, so nothing doubles up. Settings groups are `p-1.5` (`SettingsCard`, which setup's cards use too; 6px on every side,
