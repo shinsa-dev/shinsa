@@ -175,7 +175,8 @@ src/
     │                    languages, the unified diff with removed lines highlighted in context, note slots, spot-hints.ts
     │                    (the spot marks the editor renders a `Hint` into), the
     │                    comment gutter, find.ts: the find bar's panel, its replace row and match count, commands.ts: VS Code's editing keys as CodeMirror commands, one list for the keymap and ⌘K, collapsed.ts: the cursor
-    │                    stepping over folded lines and the gutter width the sticky folds and notes sit beside); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
+    │                    stepping over folded lines and the gutter width the sticky folds and notes sit beside, first-change.ts:
+    │                    where a changed file opens, its first change 3 lines from the top); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
     │                    the task diff, notes, the 14-line fold), diff-theme.ts (`@pierre/diffs` on the `--code-*`
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)

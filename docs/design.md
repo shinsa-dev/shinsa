@@ -1910,6 +1910,14 @@ Only these, and they win over anything below:
       address names, `hasFileInAddress`), scrolls the line to the centre, opening any fold over it (in side by side
       both sides' folds, `revealSplitLines`), and washes the line or range `primary-a3` for 2 s
       (`FOCUS_FLASH_MS`), then leaves it `primary-a1` while the file stays open.
+    - **A changed file opens at its first change** (`revealFirstChange`, `lib/code/editor/first-change.ts`). Opened
+      without a line (from Changes, the Files tree, quick open, a search's file, a Review place or a smart link with no
+      line), a diff in either layout, or a changed file opened as a plain file (read against the base, `baselinePath`),
+      scrolls once the editor has measured so its first changed hunk sits near the top with 3 lines of context above it
+      (the margin a fold keeps, so the change is never behind a fold); when the change already starts in the top half
+      of the pane nothing moves, and an unchanged file opens at the top. A line or spot in the address keeps going to
+      that target. Each file is placed once: coming back to it puts back where you left it, and a show, hide and show
+      again before a frame (React's StrictMode in development) keeps that place (`EditorSession`'s settling entry).
     - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
       each file with a red risk dot with its reason, your comment count, the diff counts (or Binary), its status
       letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
@@ -3534,8 +3542,8 @@ the glyphs inside it.
 
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, toasts, ⌘K's search glyph, the logo |
+| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
 | `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
@@ -5135,8 +5143,11 @@ anchor (`sideOffset` 4).
   differs, 13); without it nothing opens.
 - **Toast.** Neutral surface; the type sets only the icon. Content `p-3`,
   `text-sm`, 2px between title and description, 8px to the action. Icons
-  follow the 32px row (14px, 8px to the text, 11px from
-  the edge). `Alert` shares the 12px inset and the 2px title → description.
+  are `sm` (14px, the size beside the toast's 13px text), 11px from the edge
+  and 6px to the text, the icon ↔ label of a menu row or a button (Where Shinsa
+  differs, 20): the toast's 8px gap less the icon box's -2px end margin, so the
+  action stays 8px from the text. A one-line toast centres the icon on the
+  title's cap height; with a description it sits on the title, 2.5px up. `Alert` shares the 12px inset and the 2px title → description.
   A status alert's buttons speak in its status: an outline or secondary
   button takes the hue's 8% fill (14% hover) and a 32% border (48% hover)
   with the status ink; a ghost button the ink and an 8% hover wash. `Alert`

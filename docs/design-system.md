@@ -959,7 +959,7 @@ Rows inside a card never borrow a stat value's size; a figure in a row is `text-
 | Popover | `w-64` (256px), `p-2.5`, `gap-2`, 8px from its trigger |
 | Preview card (`InfoPopover`) | `w-72` (288px) |
 | Tooltip | `min-h-6`, `max-w-72`, `px-2 py-1`, `gap-1` |
-| Toast | `padding: 6px 10px`, `gap: 8px`, `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
+| Toast | `padding: 6px 10px`, `gap: 8px` (6px from the icon, whose box takes 2px back), `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
 | Command menu | 40px input row (`h-10 px-3 gap-2`, bottom hairline), list in a `SizeAnimator`, 28px footer (`h-7 px-3 gap-3`, top hairline) |
 | Card | `CARD`: `corner-superellipse/1.125 rounded-xl border border-border bg-card`; inset 12px (`p-3`) on all four sides; a list card `p-1` |
 | Inset (anything nested in a card or the chat column) | `INSET`: `corner-superellipse/1.125 rounded-lg border border-border` with its fill on top |
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs, toasts |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -3566,7 +3566,7 @@ The live card uses `duration={240}`; the default 180ms is for popup content.
 | cancel button | `bk-toast-button corner-superellipse/1.125 !h-6 !cursor-pointer !rounded-control-sm !bg-bg-a2 !px-2.5 !font-medium !text-fg-3 !text-xs` |
 | close button | `bk-toast-button corner-superellipse/1.125 !cursor-pointer !rounded-control !bg-bg-2 !text-fg-3` |
 
-Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='md'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
+Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='sm'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
 
 **Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet):
 
@@ -3595,7 +3595,8 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
   color: var(--fg-2); margin-top: 6px; font-size: var(--text-2xs); line-height: 1.2;
 }
 [data-sonner-toast].bk-toast [data-icon] {
-  width: 16px; height: 16px; margin: 0; flex-shrink: 0;
+  width: 14px; height: 14px; flex-shrink: 0;
+  margin: 0 -2px 0 0;   /* the 8px gap less 2px: 6px to the text, as a menu row; the action stays 8px away */
   display: flex; align-items: center; justify-content: center; position: relative;
 }
 [data-sonner-toast].bk-toast [data-icon] > svg { margin: 0; }
@@ -3603,10 +3604,10 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   text-box: trim-both cap alphabetic;   /* glyph edges line up with flex alignment */
 }
-[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2px; }
+[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
 ```
 
-So a one-line toast is 34px tall: a 16px icon, 8px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
+So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
 
 **Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot.
 

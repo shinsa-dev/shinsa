@@ -1,6 +1,7 @@
 import { Chunk } from '@codemirror/merge';
 import {
   type Extension,
+  Facet,
   type Range,
   StateEffect,
   StateField,
@@ -42,6 +43,10 @@ interface UnifiedState {
 }
 
 export const revealLine = StateEffect.define<number>();
+
+export const diffChunks = Facet.define<readonly Chunk[], readonly Chunk[]>({
+  combine: (values) => values[0] ?? [],
+});
 
 export const setOriginalTokens = StateEffect.define<TokenSet>();
 
@@ -312,6 +317,7 @@ export function unifiedDiff(options: UnifiedDiffOptions): Extension {
   });
   return [
     field,
+    diffChunks.from(field, (value) => value.chunks),
     lineNumberWidgetMarker.of((_view, widget) =>
       widget instanceof DeletionWidget ? new OldLinesMarker(widget.lines, options.onOldLine) : null
     ),
