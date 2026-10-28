@@ -886,7 +886,7 @@ function listBudgetTasks({ paywall }: SeedRepoPair): SeedTask[] {
       gate: {
         type: 'failure',
         title: 'Reached its usage limit',
-        body: 'This task has used 12% of the weekly usage limit, past its 10% limit, so the next step did not start. Continue to allow another 10%, or cancel the task.',
+        body: 'This task reached its usage limit of 10% of the weekly limit, so the next step did not start. Continue to allow another 10%, or cancel the task.',
         details: { cause: 'budget', runId: null },
       },
     },

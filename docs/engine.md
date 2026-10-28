@@ -1418,9 +1418,10 @@ checks it ran.
   Shinsa already metered for it (`usageBaseline`, the session's last totals), so Codex's running totals are not
   charged twice, and the agents a Codex agent starts report their own sessions (`subagentUsage`), each metered under
   `run.meter:<attempt>:<session>`. So a Codex run counts toward Cost limit per task like a Claude run.
-- `resolveTaskCost` rolls usage up per task, per role and per plan phase. The overview's facts
-  show the total with the breakdown in its popover, and the review card adds what was spent, each in the task's unit
-  (`resolveCostUnit`, below: its share of the weekly window on a subscription whose rate is learned, else dollars).
+- `resolveTaskCost` rolls usage up per task, per role and per plan phase. The web shows it in one place, the popover
+  of the task's cost fact (the total and the breakdown, in the task's unit: `resolveCostUnit`, below, its share of
+  the weekly window on a subscription whose rate is learned, else dollars), and nowhere else (`docs/design.md` →
+  Where Shinsa differs, 25).
 - **What a step used of the weekly window.** For a run on a Claude account the supervisor reads the account's
   weekly window ("Weekly · All models") when the attempt starts, from the reading when it is under a minute old, and
   again when it ends, read fresh (`AccountBroker.readWeeklyReading`; for a provider with a login of its own, Codex,
@@ -1472,7 +1473,9 @@ checks it ran.
   dropped, the account's whole percentage (a task could show more than 100%). It is not a reading, so the rewrite drops
   it, and those runs get their share from their cost once the account's rate is learned from new readings.
 - **Limits per task** (`listTaskBudgets`), both off by default and both soft: a run never stops mid-turn, but a
-  run that would start past a limit does not start, and the task pauses with a failure gate (`cause: budget`).
+  run that would start past a limit does not start, and the task pauses with a failure gate (`cause: budget`)
+  whose body names the limit it reached, not what the task spent ("This task reached its $5.00 cost limit, so the
+  next step did not start.").
   Settings → Agent usage → Limits, Usage limit per task (`taskUsageLimit`, a whole percentage) counts the task's
   share of the weekly window, as above ("Reached its usage limit"); it is what a subscription has. On an account
   still learning its rate it counts the early estimate (`TaskBudget.estimated`), and its gate adds "The share is an

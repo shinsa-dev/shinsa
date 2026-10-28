@@ -52,7 +52,6 @@ import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
 import { resolveChecksView } from '@/lib/tasks/checks.ts';
-import { describeSpent } from '@/lib/tasks/cost.ts';
 import {
   type GateReplier,
   type GateReply,
@@ -300,9 +299,7 @@ function ReviewCard({
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
       <p className='text-fg-3 text-xs'>
-        {gate.escalation
-          ? describeEscalationBody(gate.escalation)
-          : describeReviewFacts(task, merge, describeSpent(state, task))}
+        {gate.escalation ? describeEscalationBody(gate.escalation) : describeReviewFacts(task, merge)}
       </p>
       {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}

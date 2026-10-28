@@ -7860,17 +7860,23 @@ An entry an agent caused through its management tools reads "‹handle› agent 
 it has a handle), a link to the acting task, and "Shinsa (on your behalf)" when no task is named. Its tool calls show
 in its turn like any tool, folded with the other Shinsa tools as "Used 2 Shinsa tools".
 
-#### Unknown costs
+#### A task's cost
 
-A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
-names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
+A task's cost shows in one place only: the cost control in its facts row, the unit's icon and the amount (a gauge icon
+and "1.8%" on a subscription, a coins icon and "$18.55" on an API key), whose popover on hover holds the rest. No other
+surface repeats it: not a now card, a run or round divider, a task row, an activity entry, the review, a preview card
+or the command menu. An account's usage (its weekly window, in the top bar's usage menu and Settings) is not a task's cost and
+stays. A limit's gate names the limit it reached, never what the task spent.
 
-A task's cost shows in one unit: its share of the weekly window when it ran on a subscription (a gauge icon, "1.8%
-of weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
-learned (a coins icon, "$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
+In that popover the cost is in one unit: its share of the weekly window when it ran on a subscription ("1.8% of the
+weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
+learned ("$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
 as estimated by the agent provider."), never beside the total as a second number. A share is an estimate, said once
 and quietly in that same line ("The share is learned from 12 tasks on this account."), never as a badge. It follows
 the account's current rate, so it can move a little as the rate improves. Shares show a tenth below 10% ("0.4%") and whole percentages above.
+
+A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
+names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
 
 ### 11.4 The desktop window, code, review, navigation, errors, selection and folding
 

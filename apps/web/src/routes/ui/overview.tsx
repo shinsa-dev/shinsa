@@ -134,7 +134,7 @@ export function OverviewSpecimens() {
           />
         </Card>
       </Specimen>
-      <Specimen label='TaskFacts · cost in the task’s unit: its share of the weekly limit on a subscription, past its limit · dollars on an API key'>
+      <Specimen label='TaskFacts · the cost as its icon and value, the details in its popover, the one place a task’s cost shows, in the task’s unit: its share of the weekly limit on a subscription, past its limit · dollars on an API key'>
         <Card>
           <TaskFacts state={state} task={tasks.budget} />
           <TaskFacts state={state} task={tasks.keyed} />

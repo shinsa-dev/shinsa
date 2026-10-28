@@ -91,7 +91,7 @@ export function isTaskWatchable(state: ShinsaState, task: Task) {
   return resolveTaskStatus(state, task).tone !== 'neutral';
 }
 
-export function describeReviewFacts(task: Task, merge: boolean, spent: string | null) {
+export function describeReviewFacts(task: Task, merge: boolean) {
   const checks = task.checkResults ?? [];
   const findings = task.findings;
   const facts = [
@@ -100,7 +100,6 @@ export function describeReviewFacts(task: Task, merge: boolean, spent: string | 
       ? 'agent review found nothing'
       : `agent review left ${formatCount(findings.length, 'note', 'notes')}`,
     merge && task.pullRequest ? `PR #${task.pullRequest.number} is clean` : null,
-    spent,
   ];
   return capitalise(facts.filter(Boolean).join(' · '));
 }

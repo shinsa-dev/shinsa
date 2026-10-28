@@ -218,7 +218,8 @@ src/
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
     │                    queued messages and whether a started round is still delivering (message-queue.ts), the
     │                    messages on their way to the server (outbox.ts, read with hooks/use-outbox.ts), process
-    │                    actions (process.ts), suggested tasks, cost, pull request facts, branch and request text,
+    │                    actions (process.ts), suggested tasks, cost (cost.ts: the facts row's cost control and its
+    │                    popover, the one place a task's cost shows, and a limit's Allow another), pull request facts, branch and request text,
     │                    kinds of task (shapes.ts: labels, composed steps, the result panel per step, your OK's
     │                    proposal gate, the steps a task takes), why triage decided each fact (triage.ts)
     ├── notifications/   attention.ts (decisions, the tab badge and status), watcher.ts, sounds.ts,

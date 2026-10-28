@@ -496,7 +496,8 @@ Ported from Paperclip's execution semantics (`docs/engine.md` → Process and st
   then and on an API key. Two optional per-task limits pause the task: a share of the weekly window (for
   subscriptions; an early estimate while the account is learning) and a dollar amount (for API keys and Codex, and
   the limit that always holds while an account is learning). Both are off by default.
-  Unknown prices stay unknown.
+  Unknown prices stay unknown. A task's cost shows in one place, the popover of the cost icon among its facts;
+  nothing else on screen repeats it, and a paused task names the limit it reached, not what it spent.
 - **Quiet agents are flagged**, informationally, after 5 and 15 minutes without output.
 - **Recovery budgets follow durable state** (failing checks, finding files, the tree), so prose
   never resets them.

@@ -551,7 +551,7 @@ Only these, and they win over anything below:
       still open the task (core's `selectTaskByReference`) and are replaced by the canonical URL. Until triage gives
       a task its handle, its URL and links use the id and nothing shows a handle.
     - **The facts row is one colour.** Every fact under the title (the handle, the status, the repository, the
-      branch, priority, times, cost, account, related tasks) is `text-xs` `fg-2`, the muted
+      branch, priority, times, the cost icon, account, related tasks) is `text-xs` `fg-2`, the muted
       foreground the handle always had (`FACT` in `components/task/facts.tsx`), turning `fg-4` on hover when it opens
       something. A state glyph or a warning note (the status's icon, failing checks, a pull request's conflicts, a
       budget gone over) keeps its own colour; the words around them do not.
@@ -1233,8 +1233,16 @@ Only these, and they win over anything below:
       `·` list: Screenshot, Recording, Linked test, Note, Preview link), **Checks** (the plan's `verification`: each
       label in `fg-3`, its phases beside it in `text-2xs fg-2`, "Phases 1 to 3", and its command a mono chip)
       and, when the agent asked for your approval, the quiet line "The agent asked for your approval."
-    - **Cost** is a task fact in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
-      on a subscription shows its share of the weekly window (`IconGauge`, "1.8% of weekly limit"), and a task on an
+    - **Cost shows in one place: the facts row's cost control, icon and value.** A task's cost, its share of the
+      weekly limit and its tokens appear nowhere else: not on the now card, a run or round divider, a row of All
+      tasks, Home or the rail, an activity entry, the Review tab, a preview card or ⌘K. The control is the unit's
+      icon and the amount ("$18.55", or "1.8%" of the weekly limit on a subscription), and hovering it opens the
+      popover with the heading, the tokens and the split by step and by phase. The
+      account's usage (the top bar's usage menu, Settings → Agent usage) is not a task's cost and stays where it is;
+      the limits (Settings → Limits, the paused card and its Allow another) keep working and name the limit, never
+      what the task spent.
+    - **Cost** is in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
+      on a subscription shows its share of the weekly window (`IconGauge`, "1.8% of the weekly limit"), and a task on an
       API key, or on a provider with no weekly window, its dollars (`IconCoins`, "$1.75"). The two are never shown
       side by side as rival totals: the popover's header is the primary one ("1.8% of the weekly limit", or
       "$1.75"), the line under it carries the other ("$4.31 and 8.2M tokens, as estimated by the agent provider.")
@@ -1246,8 +1254,7 @@ Only these, and they win over anything below:
       whole percentages above. The icon turns orange past a limit; against a limit the header reads "12% of the
       weekly limit, 10% allowed" (the usage limit) or "$1.75 of $5.00" (the cost limit): a limit already passed
       always shows, otherwise only the limit in the task's unit (a learning task that passed its usage limit on an
-      early estimate shows that header over its dollars; the gate says it is an estimate). The review card's facts line ends with "1.8% of the
-      weekly limit so far" or "$3.56 so far". Unknown prices read "Unknown" or "$0.30 + unknown", never $0. Tasks
+      early estimate shows that header over its dollars; the gate says it is an estimate). Unknown prices read "Unknown" or "$0.30 + unknown", never $0. Tasks
       from before weekly readings were kept (`docs/engine.md` → Cost) get their share from their cost once the
       account's rate is learned.
     - ⌘K adds, on the task: Answer "‹choice›" per choice (Recommended as its hint), Verify the
