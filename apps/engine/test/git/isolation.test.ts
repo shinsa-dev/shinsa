@@ -71,7 +71,7 @@ describe('a delegation’s own checkout', () => {
     expect(existsSync(join(worktreesDir, 'delegations', 'task-1'))).toBe(false);
     expect(warn.mock.calls.some(([message]) => String(message).includes('delegation’s checkout'))).toBe(true);
     warn.mockRestore();
-    expect(await git(repo.path, 'worktree', 'list')).not.toContain('run-1');
+    expect(await git(repo.path, 'worktree', 'list')).not.toContain(join('delegations', 'task-1', 'run-1'));
     await removeIsolatedWorktrees(repo, worktreesDir, 'task-2');
   });
 });
