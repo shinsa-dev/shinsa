@@ -3893,8 +3893,9 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   (`delegation-invariants.ts`), rounds (`round-invariants.ts`), schedules (`schedule-invariants.ts`), projects and
   handles (`project-invariants.ts`), and the round agent (`agent-invariants.ts`: no top-level planner or builder, a
   purpose on every Agent run that matches its stage, and every new Agent run resuming the task's last Agent session
-  unless that one ended with a fresh-class failure). Every walk also checks that `decide` leaves its input alone, that
-  the state it decided equals its events replayed, and that its patch rebuilds the state on a copy kept on the side.
+  unless that one ended with a fresh-class failure). Every walk also checks that `decide` leaves its input alone (the
+  walk freezes each state it keeps, so a write throws where it happens, at a fraction of the cost of comparing the
+  state serialized before and after every step), that the state it decided equals its events replayed, and that its patch rebuilds the state on a copy kept on the side.
   What each walk checks is listed once, in `packages/core/CLAUDE.md`.
 - **The engine and the outbox.** `apps/engine/test/runtime/engine.test.ts` and `test/store/event-log.test.ts` run them
   on SQLite: retries and backoff, failure gates, lane ordering and the side lane, restart recovery per class, effect

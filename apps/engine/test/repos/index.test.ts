@@ -48,7 +48,7 @@ describe('project names', () => {
 
   test('the GitHub login is read from gh once it answers, and a failed read is tried again', async () => {
     const resolveLogin = createLoginResolver(createTempDir());
-    const restores = [overrideEnv({ FAKE_GH_LOGIN: undefined })];
+    const restores = [overrideEnv({ FAKE_GH_LOGIN: undefined, FAKE_GH_STATE: undefined })];
     try {
       expect(await resolveLogin()).toBeNull();
       restores.push(overrideEnv({ FAKE_GH_LOGIN: 'Christo' }));

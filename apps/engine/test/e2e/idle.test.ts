@@ -25,15 +25,22 @@ interface Boot {
   repoId: string;
   dataDir: string;
   compactions: string[];
+  compacted: Promise<void>;
 }
 
-function createProvider(agents: FakeAgents, compactions: string[]): AgentProvider {
+function isLastPhase(prompt: string) {
+  const [, phase, of] = [...prompt.matchAll(/Now build phase (\d+) of (\d+)/g)].at(-1) ?? [];
+  return phase !== undefined && phase === of;
+}
+
+function createProvider(agents: FakeAgents, compactions: string[], compacted: () => void): AgentProvider {
   const base = agents.provider('claude', 'Claude');
   return {
     ...base,
     capabilities: { ...CLAUDE_CAPABILITIES, compaction: true },
     startSession: (input) => {
       const session = base.startSession(input);
+      if (!isLastPhase(input.prompt)) return session;
       const context = {
         usedTokens: 170_000,
         maxTokens: 200_000,
@@ -44,6 +51,7 @@ function createProvider(agents: FakeAgents, compactions: string[]): AgentProvide
     },
     compactSession: (input): AgentSession => {
       compactions.push(input.resume ?? '');
+      compacted();
       input.onEntry({
         type: 'notice',
         notice: { kind: 'compaction', trigger: 'manual', preTokens: 150_000, summary: null },
@@ -70,10 +78,11 @@ async function boot(options: { idleMs?: number; compaction?: boolean }): Promise
   const config = createTestConfig(createTempDir(), { roots: [repo.root] });
   const agents = new FakeAgents();
   const compactions: string[] = [];
+  const compacted = Promise.withResolvers<void>();
   const shinsa = await startShinsa(config, {
     models,
     resolveLogin: () => Promise.resolve(null),
-    providers: new ProviderRegistry([createProvider(agents, compactions)]),
+    providers: new ProviderRegistry([createProvider(agents, compactions, compacted.resolve)]),
     triage: (_state, task) =>
       Promise.resolve({
         title: task.request.split('\n')[0]?.slice(0, 40) ?? 'Task',
@@ -98,7 +107,7 @@ async function boot(options: { idleMs?: number; compaction?: boolean }): Promise
     projectName: null,
   });
   const repoId = Object.keys(shinsa.engine.state.repos)[0] ?? '';
-  return { shinsa, agents, repoId, dataDir: config.dataDir, compactions };
+  return { shinsa, agents, repoId, dataDir: config.dataDir, compactions, compacted: compacted.promise };
 }
 
 async function withWorld(
@@ -166,7 +175,7 @@ describe('idle sessions, end to end', () => {
         () => openGate(world, taskId, (gate) => gate.type === 'review') !== undefined,
         30_000
       );
-      await until('the compaction', () => world.compactions.length === 1);
+      await world.compacted;
       const builder = Object.values(world.shinsa.engine.state.runs)
         .filter((run) => run.purpose === 'build')
         .sort((a, b) => b.startedAt - a.startedAt)[0];

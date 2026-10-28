@@ -1018,6 +1018,13 @@ function assertSameChanges(state: ShinsaState, copies: ShinsaState[], changes: S
   }
 }
 
+function freezeState<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  Object.freeze(value);
+  for (const child of Object.values(value)) freezeState(child);
+  return value;
+}
+
 function simulate(
   seed: number,
   steps: number,
@@ -1050,6 +1057,7 @@ function simulate(
     seq: 1,
     at: 0,
   });
+  freezeState(state);
   const log: ShinsaEvent[] = [{ type: 'repo.registered', repo: state.repos.repo!, seq: 1, at: 0 }];
   let client = JSON.parse(JSON.stringify(serializeState(state))) as WireState;
   let replayed = JSON.parse(JSON.stringify(state)) as ShinsaState;
@@ -1062,16 +1070,13 @@ function simulate(
     newId: () => string,
     onBehalf = false
   ) => {
-    const before = JSON.stringify(state);
     let decision: ReturnType<typeof decide>;
     try {
       decision = decide(state, command, { now, newId, onBehalf });
     } catch (error) {
       if (!(error instanceof DomainError)) throw error;
-      expect(JSON.stringify(state)).toBe(before);
       return;
     }
-    expect(JSON.stringify(state), `decide mutated its input on ${command.type}`).toBe(before);
     const prior = state;
     if (onBehalf) assertHumanGatesKept(prior, decision.events, command);
     for (const event of decision.events) {
@@ -1080,7 +1085,7 @@ function simulate(
       log.push(stamped);
       replayed = applyEvent(replayed, stamped);
     }
-    state = decision.state;
+    state = freezeState(decision.state);
     const patch = JSON.parse(JSON.stringify(resolveStatePatch(prior, state, decision.changes))) as StatePatch;
     client = applyStatePatch(client, patch) ?? createState();
     assertSameChanges(state, [replayed], decision.changes, command.type);
@@ -1383,7 +1388,7 @@ describe('decide under random command sequences', () => {
 
   test('is deterministic for the same state, command, clock and ids', () => {
     const random = createRandom(7);
-    let state = simulate(7, 120);
+    let state = structuredClone(simulate(7, 120));
     for (let step = 0; step < 50; step += 1) {
       const command = nextCommand(state, random);
       const attempt = () => {
