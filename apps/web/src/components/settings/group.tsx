@@ -16,7 +16,7 @@ export const ROW_INSET =
 
 export const SETTING_ROW = `flex min-h-10 items-center gap-4 py-1 ${ROW_INSET}`;
 
-export const SETTINGS_SHELF = `${INSET} flex flex-col divide-y divide-border bg-bg-a1 [--shelf-edge:1px]`;
+export const SETTINGS_SHELF = `${INSET} flex flex-col divide-y divide-border bg-bg-a1 [--shelf-edge:1px] [--input-hover:var(--bg-4)] [--input:var(--bg-3)]`;
 
 export const TOKEN_TEXT = 'shrink-0 text-2xs text-fg-2 tabular-nums';
 

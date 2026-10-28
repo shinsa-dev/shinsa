@@ -3,6 +3,7 @@ import type { MemoryEntry } from '@shinsa/core';
 import {
   describeProposal,
   describeRuleCount,
+  describeRuleLength,
   describeRuleSubmit,
   describeScopeName,
   EVERY_PROJECT,
@@ -105,6 +106,7 @@ describe('scopes', () => {
 
   it('counts the rules against the limit', () => {
     expect(describeRuleCount(3)).toBe('3 of 20');
+    expect(describeRuleLength('  Keep plans short.  ')).toBe('17 / 240');
   });
 });
 

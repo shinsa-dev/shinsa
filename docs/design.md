@@ -1032,7 +1032,9 @@ Only these, and they win over anything below:
     the page, a card and a dialog. A dark popover is itself `bg-2`, so inside one (`.dark
     [data-slot="popover-content"]` in `globals.css`) a field fills `bg-3` and hovers `bg-4`; without that it drew as
     bare text (the Services popover's form, measured: popover and field both `oklch(0.228 …)`, now the field
-    `oklch(0.257 …)`). Never a border or a call-site fill to make a field show.
+    `oklch(0.257 …)`). A Settings shelf (`SETTINGS_SHELF`, a card's rows on `bg-a1`) lands on the field's own fill too, so
+    it sets the same `--input` step in both themes for every form inside it (Memory's rule editor, a folder you add). Never a
+    border or a call-site fill to make a field show.
     `Checkbox` is `filled` (the default: the page's fill at rest, an accent fill and a white check once ticked) or
     `outline` (no fill at rest, only its edge; ticked it fills like `filled`), the second for a list of boxes inside a popover (the Services
     popover's Manage and Add services). `Button` `bare` is an icon-only action with no wash at all, only its glyph
@@ -1388,8 +1390,9 @@ Only these, and they win over anything below:
     - **Settings → Agents → Memory** (`components/settings/memory.tsx`, `lib/memory.ts`; `docs/engine.md` → Memory)
       sits between Engine and Versions: the rules agents proposed first (each with its project and why, Keep, Edit and
       Dismiss), then Every project, then a block per project that has rules, each headed by its count of 20 ("3 of
-      20"), each rule with Edit and Remove. New rule opens an inline row (the rule and its scope, Add rule); editing a
-      proposal ends in Keep, which keeps it with your words. Errors stay in the row ("Keep it to 240 characters. It
+      20"), each rule with Edit and Remove. New rule and Edit open the rule in place: a field on a line of its own that
+      grows with the text (Enter saves, Shift Enter breaks, Escape cancels), and under it the scope, the length out of
+      240, Cancel and the primary Add rule, Save or, for a proposal, Keep, which keeps it with your words. Errors stay in the row ("Keep it to 240 characters. It
       has 251."). A `remember` call in the chat is a card with the rule, the agent's why and "In Settings → Memory".
     - **The sign-in dialog** (`sign-in-dialog.tsx`, one `Dialog` mounted by `Root`, opened by
       `startSignIn`): Starting sign-in… with a spinner; "Sign in to Claude" with the browser note,

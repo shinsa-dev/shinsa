@@ -2,7 +2,7 @@ import type { MemoryEntry, ShinsaState } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Field, FieldError } from '@shinsa/ui/components/field';
 import { Icon } from '@shinsa/ui/components/icon';
-import { Input } from '@shinsa/ui/components/input';
+import { Textarea } from '@shinsa/ui/components/textarea';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -13,6 +13,7 @@ import { useBusy } from '@/hooks/use-busy.ts';
 import {
   describeProposal,
   describeRuleCount,
+  describeRuleLength,
   describeRuleSubmit,
   EVERY_PROJECT_LABEL,
   listMemoryGroups,
@@ -24,7 +25,7 @@ import {
   resolveScopeValue,
   validateRule,
 } from '@/lib/memory.ts';
-import { SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
+import { ROW_INSET, SETTING_ROW, SettingsBlock, SettingsEmpty, SettingsGroup, TOKEN_TEXT } from './group.tsx';
 
 interface Draft {
   memoryId: string | null;
@@ -61,22 +62,27 @@ function RuleForm({
 
   return (
     <form
-      className={cn(SETTING_ROW, 'items-start gap-1.5')}
+      className={cn(ROW_INSET, 'flex flex-col gap-1.5 py-2')}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
       }}
     >
-      <Field data-invalid={error ? true : undefined} className='min-w-0 flex-1'>
-        <Input
-          size='sm'
+      <Field data-invalid={error ? true : undefined}>
+        <Textarea
           autoFocus
+          rows={1}
           value={text}
           placeholder='One short rule, such as “Keep plans to three phases or fewer.”'
           aria-label='The rule'
           aria-invalid={error ? true : undefined}
+          className='min-h-0 resize-none'
           onKeyDown={(event) => {
             if (event.key === 'Escape') onDone();
+            if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              void save();
+            }
           }}
           onChange={(event) => {
             setText(event.target.value);
@@ -85,19 +91,22 @@ function RuleForm({
         />
         {error && <FieldError>{error}</FieldError>}
       </Field>
-      <SelectField
-        label='For'
-        size='sm'
-        items={listScopeItems(state)}
-        value={scope}
-        onValueChange={setScope}
-      />
-      <Button type='submit' variant='secondary' size='sm' disabled={!text.trim()} loading={busy}>
-        {describeRuleSubmit(draft.memoryId, draft.proposed)}
-      </Button>
-      <Button type='button' variant='secondary' size='sm' onClick={onDone}>
-        Cancel
-      </Button>
+      <div className='flex items-center gap-1.5'>
+        <SelectField
+          label='For'
+          size='sm'
+          items={listScopeItems(state)}
+          value={scope}
+          onValueChange={setScope}
+        />
+        <span className={cn(TOKEN_TEXT, 'ml-auto')}>{describeRuleLength(text)}</span>
+        <Button type='button' variant='secondary' size='sm' onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type='submit' size='sm' disabled={!text.trim()} loading={busy}>
+          {describeRuleSubmit(draft.memoryId, draft.proposed)}
+        </Button>
+      </div>
     </form>
   );
 }

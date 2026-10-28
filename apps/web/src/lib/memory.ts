@@ -68,6 +68,10 @@ export function describeRuleCount(count: number) {
   return `${count} of ${MEMORY_LIMITS.keptPerScope}`;
 }
 
+export function describeRuleLength(text: string) {
+  return `${text.trim().length} / ${MEMORY_LIMITS.text}`;
+}
+
 export function validateRule(text: string) {
   const length = text.trim().length;
   if (length === 0) return 'Write the rule for agents to follow.';
