@@ -7,6 +7,7 @@ import { CompactSection, CompactSections } from '@/components/layout/compact-sec
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
+import { RowActivity } from '@/components/queue/row-activity.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
 import { TaskMeta } from '@/components/status/text.tsx';
 import { TaskHandlePrefix } from '@/components/task/handle.tsx';
@@ -132,6 +133,7 @@ function QueueSectionView({
           <TaskMeta state={state} task={item.task} />
         </>
       }
+      detail={<RowActivity state={state} task={item.task} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {
         navigate(resolveTaskPath(item.task));

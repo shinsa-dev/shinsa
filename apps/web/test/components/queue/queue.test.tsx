@@ -1,10 +1,20 @@
-import { describe, expect, it, mock } from 'bun:test';
-import type { ShinsaState } from '@shinsa/core';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { ShinsaState, Task } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { TaskQueue } from '@/components/queue/queue.tsx';
 import { createDisclosureId, readDisclosure, writeDisclosure } from '@/lib/preferences/disclosure.ts';
-import { createGate, createProject, createRepo, createShinsaState, createTask } from '../../support/state.ts';
+import { createAgentEntry, createCallEntry } from '../../support/chat.ts';
+import { pushTranscript, startFakeServer, stopFakeServer } from '../../support/server.ts';
+import {
+  createGate,
+  createProject,
+  createRepo,
+  createRun,
+  createShinsaState,
+  createTask,
+  NOW,
+} from '../../support/state.ts';
 
 const FULL = createShinsaState({
   projects: [createProject({ id: 'work', name: 'Work' }), createProject({ id: 'home', name: 'Home' })],
@@ -177,5 +187,143 @@ describe('wide queue', () => {
     view.unmount();
     renderQueue();
     expect(screen.getByRole('button', { name: /Review the login fix/ }).querySelector('time')).toBeNull();
+  });
+});
+
+describe('a row’s activity line', () => {
+  beforeEach(() => {
+    startFakeServer();
+  });
+
+  afterEach(() => {
+    stopFakeServer();
+  });
+
+  function plan(titles: string[]) {
+    return {
+      version: 1,
+      document: {
+        goal: '',
+        phases: titles.map((title) => ({ title, detail: title })),
+        behaviour: [],
+        approach: '',
+        files: [],
+        outOfScope: [],
+        verification: [],
+        questions: [],
+      },
+    } as unknown as Task['plan'];
+  }
+
+  const BUILDING = createTask({
+    id: 'build',
+    title: 'Build the export',
+    stage: 'building',
+    pipeline: ['plan', 'build', 'checks', 'your_review'],
+    plan: plan(['Set up', 'Wire the form']),
+    phases: [
+      { status: 'done', at: NOW },
+      { status: 'active', at: NOW },
+    ],
+  });
+
+  function row(title: RegExp) {
+    return screen.getByRole('button', { name: title });
+  }
+
+  it('shows where the task is in its steps and the agent’s latest action', () => {
+    renderQueue({
+      variant: 'wide',
+      state: createShinsaState({
+        tasks: [BUILDING],
+        runs: [createRun({ id: 'run-build', taskId: 'build', purpose: 'build' })],
+      }),
+    });
+    pushTranscript('run-build', [
+      createCallEntry('call-1', {
+        kind: 'command',
+        action: 'run',
+        command: 'bun test apps/web',
+        description: null,
+      }),
+    ]);
+    expect(
+      within(row(/Build the export/))
+        .getByRole('img', { name: /^Step/ })
+        .getAttribute('aria-label')
+    ).toBe('Step 2 of 4: Build 1/2');
+    expect(row(/Build the export/).textContent).toContain('Phase 2 of 2: Wire the form');
+    expect(row(/Build the export/).textContent).toContain('Running bun test apps/web');
+  });
+
+  it('names the current step until the agent has done anything', () => {
+    renderQueue({
+      state: createShinsaState({
+        tasks: [BUILDING],
+        runs: [createRun({ id: 'run-quiet', taskId: 'build', purpose: 'build' })],
+      }),
+    });
+    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+  });
+
+  it('names the current step when no agent runs', () => {
+    renderQueue({
+      state: createShinsaState({
+        tasks: [
+          BUILDING,
+          createTask({ id: 'triaged', title: 'Fresh task', stage: 'building', pipeline: ['build'] }),
+        ],
+      }),
+    });
+    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+    expect(
+      within(row(/Fresh task/))
+        .getByRole('img', { name: /^Step/ })
+        .getAttribute('aria-label')
+    ).toBe('Step 2 of 2: Build');
+  });
+
+  it('names the step instead of the agent’s action while it waits on you', () => {
+    renderQueue({
+      state: createShinsaState({
+        tasks: [BUILDING],
+        runs: [createRun({ id: 'run-ask', taskId: 'build', purpose: 'build' })],
+        gates: [createGate({ id: 'g-ask', taskId: 'build', type: 'question', runId: 'run-ask' })],
+      }),
+    });
+    pushTranscript('run-ask', [createAgentEntry('Which export format?', 'interim')]);
+    expect(row(/Build the export/).textContent).not.toContain('Which export format?');
+    expect(row(/Build the export/).textContent).toContain('Build 1/2');
+  });
+
+  it('keeps a waiting agent’s action still', () => {
+    renderQueue({
+      state: createShinsaState({
+        tasks: [BUILDING],
+        runs: [createRun({ id: 'run-wait', taskId: 'build', purpose: 'build', status: 'waiting' })],
+      }),
+    });
+    pushTranscript('run-wait', [createAgentEntry('Waiting on the planner.', 'interim')]);
+    expect(row(/Build the export/).textContent).toContain('Waiting on the planner.');
+  });
+
+  it('says the steps are still being worked out while triage shapes the task', () => {
+    writeDisclosure(createDisclosureId('queue', 'section', 'waiting'), true);
+    renderQueue({
+      state: createShinsaState({
+        tasks: [
+          createTask({
+            id: 'shaping',
+            title: 'Shape me',
+            stage: 'waiting_on_tasks',
+            waitsOn: ['build'],
+            auto: { shape: true, start: false, priority: false },
+            pipeline: [],
+          }),
+          BUILDING,
+        ],
+      }),
+    });
+    expect(row(/Shape me/).textContent).toContain('Working out the steps');
   });
 });

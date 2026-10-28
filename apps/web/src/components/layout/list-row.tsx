@@ -17,6 +17,7 @@ export function ListRow({
   leading,
   title,
   meta,
+  detail,
   trailing,
   active = false,
   revealWhenActive = false,
@@ -25,6 +26,7 @@ export function ListRow({
   leading?: React.ReactNode;
   title: React.ReactNode;
   meta?: React.ReactNode;
+  detail?: React.ReactNode;
   trailing?: React.ReactNode;
   active?: boolean;
   revealWhenActive?: boolean;
@@ -48,6 +50,7 @@ export function ListRow({
       <span className='flex min-w-0 flex-1 flex-col gap-px'>
         <Truncate className={LIST_ROW_TITLE}>{title}</Truncate>
         {meta && <Truncate className={LIST_ROW_META}>{meta}</Truncate>}
+        {detail && <span className={cn(LIST_ROW_META, 'flex h-4 min-w-0 items-center')}>{detail}</span>}
       </span>
       {trailing && <span className='shrink-0 text-2xs text-fg-2 tabular-nums leading-5'>{trailing}</span>}
     </button>
