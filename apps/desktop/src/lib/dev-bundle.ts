@@ -1,7 +1,7 @@
 import { dirname, join } from 'node:path';
-import { FLAVOR } from './flavor.ts';
+import { APP_IDENTITY } from '@shinsa/core';
 
-export const APP_NAME = FLAVOR.appName;
+export const APP_NAME = APP_IDENTITY.appName;
 
 export const DEV_BUNDLE_ID = 'studio.overclock.shinsa.dev';
 

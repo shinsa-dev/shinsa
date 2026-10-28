@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  CI_GRACE_MS,
   createPullRequestWatch,
   evaluatePullRequestWatch,
   type PullRequest,
@@ -42,6 +43,7 @@ interface FakeGitHub {
   calls: string[][];
   failReads?: number;
   mergeQueue?: boolean;
+  workflows?: Record<string, string>;
 }
 
 function useFakeGitHub(pulls: unknown[] = [], extra: Partial<FakeGitHub> = {}) {
@@ -972,7 +974,11 @@ describe('getting the branch to GitHub', () => {
     );
 
     const count = dispatched.length;
-    await runner.reportRetry({ kind: 'pull_request.merge', taskId: 'task-1' }, retryOf(new Error('x')), 'k');
+    await runner.reportRetry(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+      retryOf(new Error('x')),
+      'k'
+    );
     expect(dispatched).toHaveLength(count);
     await runner.reportRetry(
       { kind: 'pull_request.push', taskId: 'task-1' },
@@ -1080,12 +1086,12 @@ describe('pull requests', () => {
     update((state) => {
       state.settings = { ...state.settings, mergeMethod: 'rebase' };
     });
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(readGitHub().pulls[0]).toMatchObject({ state: 'MERGED', mergedWith: '--rebase' });
     expect(dispatched[0]).toMatchObject({ type: 'pull_request.record', pullRequest: { state: 'merged' } });
     const none = setup(withTask({ pullRequest: null }, repo));
     await expect(
-      none.runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext())
+      none.runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext())
     ).rejects.toThrow('no pull request to merge');
   });
 
@@ -1095,7 +1101,7 @@ describe('pull requests', () => {
     ]);
     const { repo } = await createGitRepo();
     const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(readGitHub().calls.some((call) => call[0] === 'pr' && call[1] === 'merge')).toBe(false);
     expect(dispatched[0]).toMatchObject({ type: 'pull_request.record', pullRequest: { state: 'merged' } });
   });
@@ -1106,7 +1112,7 @@ describe('pull requests', () => {
     const { repo } = await createGitRepo();
     const { runner } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
     await expect(
-      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext())
+      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext())
     ).rejects.toThrow('GitHub still shows the pull request as open after merging it.');
   });
 
@@ -1114,12 +1120,12 @@ describe('pull requests', () => {
     const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll')], { mergeQueue: true });
     const { repo } = await createGitRepo();
     const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(records(dispatched).at(-1)?.pullRequest).toMatchObject({
       state: 'open',
       mergeQueue: { state: 'queued', position: 1 },
     });
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(readGitHub().calls.filter((call) => call[0] === 'pr' && call[1] === 'merge')).toHaveLength(1);
   });
 
@@ -1129,9 +1135,64 @@ describe('pull requests', () => {
     const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
     const controller = new AbortController();
     controller.abort();
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext(controller.signal));
+    await runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+      createContext(controller.signal)
+    );
     expect(readGitHub().calls.some((call) => call[1] === 'merge')).toBe(false);
     expect(dispatched).toEqual([]);
+  });
+
+  test('merging names the head you approved, and a head that moved since is recorded, never merged', async () => {
+    const readGitHub = useFakeGitHub([fakePull('main')]);
+    const { repo, path } = await createGitRepo();
+    const head = (await git(path, 'rev-parse', 'main')).trim();
+    const moved = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    await moved.runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: 'c0ffee0' },
+      createContext()
+    );
+    expect(readGitHub().calls.some((call) => call[1] === 'merge')).toBe(false);
+    expect(records(moved.dispatched)).toMatchObject([{ pullRequest: { state: 'open', headSha: head } }]);
+    const approved = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    await approved.runner.apply(
+      { kind: 'pull_request.merge', taskId: 'task-1', headSha: head },
+      createContext()
+    );
+    expect(readGitHub().calls.find((call) => call[1] === 'merge')).toEqual([
+      'pr',
+      'merge',
+      '7',
+      '--squash',
+      '--match-head-commit',
+      head,
+    ]);
+    expect(readGitHub().pulls[0]).toMatchObject({ state: 'MERGED' });
+  });
+
+  test('a head that moves between the read and the merge is recorded; any other refusal fails the merge', async () => {
+    const readGitHub = useFakeGitHub([fakePull('main')]);
+    const { repo, path } = await createGitRepo();
+    const head = (await git(path, 'rev-parse', 'main')).trim();
+    const merge = github.mergePullRequest;
+    const spy = spyOn(github, 'mergePullRequest').mockImplementation(async (...args) => {
+      await git(path, 'commit', '-q', '--allow-empty', '-m', 'chore: someone else');
+      await merge(...args);
+    });
+    const { runner, dispatched } = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    try {
+      await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: head }, createContext());
+    } finally {
+      spy.mockRestore();
+    }
+    const moved = (await git(path, 'rev-parse', 'main')).trim();
+    expect(records(dispatched)).toMatchObject([{ pullRequest: { state: 'open', headSha: moved } }]);
+    expect(readGitHub().pulls[0]).toMatchObject({ state: 'OPEN' });
+    useFailingGh('pr merge');
+    const refused = setup(withTask({ stage: 'awaiting_merge', pullRequest: PULL }, repo));
+    await expect(
+      refused.runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: moved }, createContext())
+    ).rejects.toThrow('gh is down');
   });
 });
 
@@ -1173,7 +1234,7 @@ describe('merging a stack of pull requests', () => {
   test('merges the task’s pull request, then each one below it top down, skipping one already merged', async () => {
     const readGitHub = useFakeGitHub(stackedPulls({ 8: { state: 'MERGED' } }));
     const { runner } = await setupStack();
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(listMerged(readGitHub().calls)).toEqual(['9', '7']);
     expect(readGitHub().pulls.map((pull) => pull.state)).toEqual(['MERGED', 'MERGED', 'MERGED']);
   });
@@ -1183,14 +1244,14 @@ describe('merging a stack of pull requests', () => {
     useFailingGh('pr merge 7', 0);
     const { runner } = await setupStack();
     await expect(
-      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext())
+      runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext())
     ).rejects.toThrow('GitHub still shows pull request #7 below this one as open after merging it.');
   });
 
   test('pull requests below that GitHub puts in its merge queue are waiting, not a failed merge', async () => {
     const readGitHub = useFakeGitHub(stackedPulls(), { mergeQueue: true });
     const { runner } = await setupStack();
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(listMerged(readGitHub().calls)).toEqual(['9', '8', '7']);
   });
 
@@ -1198,7 +1259,7 @@ describe('merging a stack of pull requests', () => {
     const queue = { queue: { state: 'QUEUED', position: 1 } };
     const readGitHub = useFakeGitHub(stackedPulls({ 7: queue, 8: queue, 9: queue }), { mergeQueue: true });
     const { runner } = await setupStack();
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1', headSha: null }, createContext());
     expect(listMerged(readGitHub().calls)).toEqual([]);
   });
 
@@ -1213,7 +1274,10 @@ describe('merging a stack of pull requests', () => {
     });
     try {
       await expect(
-        runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext(controller.signal))
+        runner.apply(
+          { kind: 'pull_request.merge', taskId: 'task-1', headSha: null },
+          createContext(controller.signal)
+        )
       ).rejects.toThrow();
     } finally {
       spy.mockRestore();
@@ -1264,6 +1328,59 @@ describe('syncing a pull request', () => {
     await runner.syncPullRequest('task-1');
     expect(records(dispatched)).toHaveLength(2);
     expect(records(dispatched)[1]?.remarks?.map((remark) => remark.id)).toEqual(['c1']);
+  });
+
+  test('a read without checks says whether the repository has CI, read once; a read with checks does not ask', async () => {
+    const readGitHub = useFakeGitHub([fakePull('fix/tab-scroll', { checks: 'none' })], {
+      workflows: { 'test.yml': 'on: pull_request\n' },
+    });
+    const { repo } = await createGitRepo();
+    const { runner, dispatched } = setup(withTask({ stage: 'shipping', pullRequest: null }, repo));
+    await runner.syncPullRequest('task-1', true);
+    await runner.syncPullRequest('task-1', true);
+    expect(records(dispatched).map((command) => command.ci)).toEqual(['workflows', 'workflows']);
+    const ciReads = () =>
+      readGitHub().calls.filter((call) => call.some((arg) => arg.startsWith('workflows=')));
+    expect(ciReads()).toHaveLength(1);
+    readGitHub.change((state) => {
+      state.pulls[0] = { ...state.pulls[0], checks: 'passing' };
+    });
+    await runner.syncPullRequest('task-1', true);
+    expect(records(dispatched).at(-1)?.ci).toBe('unknown');
+    expect(ciReads()).toHaveLength(1);
+  });
+
+  test('a read that is otherwise the same is news once the grace window for CI to start has passed', async () => {
+    useFakeGitHub([fakePull('fix/tab-scroll', { checks: 'none' })], {
+      workflows: { 'test.yml': 'on: pull_request\n' },
+    });
+    const { repo } = await createGitRepo();
+    const { runner, dispatched, update } = setup(withTask({ stage: 'shipping', pullRequest: PULL }, repo));
+    await runner.syncPullRequest('task-1');
+    const [first] = records(dispatched);
+    const settle = (pushedAt: number) =>
+      update((state) => {
+        const task = state.tasks['task-1'];
+        if (!task || !first) return;
+        const watch = evaluatePullRequestWatch(
+          createPullRequestWatch(1),
+          first.pullRequest,
+          first.remarks ?? null,
+          first.viewer ?? null
+        ).next;
+        state.tasks['task-1'] = {
+          ...task,
+          pullRequest: first.pullRequest,
+          pullRequestWatch: watch,
+          pushedAt,
+        };
+      });
+    settle(Date.now());
+    await runner.syncPullRequest('task-1');
+    expect(records(dispatched)).toHaveLength(1);
+    settle(Date.now() - CI_GRACE_MS);
+    await runner.syncPullRequest('task-1');
+    expect(records(dispatched)).toHaveLength(2);
   });
 
   test('a branch with no pull request yet records nothing', async () => {

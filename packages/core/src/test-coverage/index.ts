@@ -5,7 +5,7 @@ export {
   listCoverageGaps,
   selectMeasuredCoverage,
 } from './describe.ts';
-export { mapChangedLines, parseChangedLines } from './diff.ts';
+export { parseChangedLines } from './diff.ts';
 export { type CoverageInput, measureCoverage, resolveCoverageRanges, resolveReportPath } from './measure.ts';
 export { parseCobertura, parseCoverageReport, parseGoProfile, parseLcov } from './reports.ts';
 export {

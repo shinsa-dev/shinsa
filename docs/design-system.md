@@ -1443,11 +1443,11 @@ Keyframes used by the app stylesheet:
 @keyframes bk-toast-bump { 0%, 100% { scale: 1; } 50% { scale: 1.015; } }
 [data-sonner-toast].bk-toast-shake { animation: bk-toast-shake 0.35s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
 [data-sonner-toast].bk-toast-bump { animation: bk-toast-bump 0.3s ease-out; }
-[data-sonner-toast].bk-toast .sonner-loader { transition: opacity 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+[data-sonner-toast].bk-toast .sonner-loader { width: 100%; height: 100%; transition: opacity 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1); }
 [data-sonner-toast].bk-toast .sonner-loader[data-visible="false"] { opacity: 0; transform: scale(0.85) translate(-50%, -50%); }
 @keyframes bk-toast-icon-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
-  transform: none; transform-origin: center; animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: none; transform-origin: center; animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 ```
 
@@ -3568,7 +3568,7 @@ The live card uses `duration={240}`; the default 180ms is for popup content.
 
 Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='sm'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
 
-**Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet):
+**Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet). Unlayered is not enough: sonner appends its `<style>` to `<head>` when its module runs, after the app's stylesheet `<link>` in a production build (the dev server injects ours later, which hides this), so a tie in specificity goes to sonner. **Every rule that replaces one of sonner's must be strictly more specific than it:** the toast's parts are scoped under `[data-sonner-toast][data-styled="true"].bk-toast` (0,4,0), one step above sonner's `[data-sonner-toast][data-styled=true] [data-icon]` (0,3,0). `packages/ui/test/styles/toast-cascade.test.ts` reads sonner's injected stylesheet and fails on any toast rule that only ties.
 
 ```css
 [data-sonner-toast][data-styled="true"].bk-toast {
@@ -3590,29 +3590,30 @@ Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconC
 /* With an action: the button sits against the right edge. 34px toast, 24px button → 5px. */
 [data-sonner-toast][data-styled="true"].bk-toast:has([data-content] + *) { padding-right: 5px; }
 [data-sonner-toast][data-styled="true"].bk-toast:has([data-description]):has([data-content] + *) { padding-right: 10px; }
-[data-sonner-toast].bk-toast [data-content] { gap: 0; flex: 1 1 auto; min-width: 0; }
+[data-sonner-toast][data-styled="true"].bk-toast [data-content] { gap: 0; flex: 1 1 auto; min-width: 0; }
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   color: var(--fg-2); margin-top: 6px; font-size: var(--text-2xs); line-height: 1.2;
 }
-[data-sonner-toast].bk-toast [data-icon] {
+[data-sonner-toast][data-styled="true"].bk-toast [data-icon] {
   width: 14px; height: 14px; flex-shrink: 0;
   margin: 0 -2px 0 0;   /* the 8px gap less 2px: 6px to the text, as a menu row; the action stays 8px away */
   display: flex; align-items: center; justify-content: center; position: relative;
 }
-[data-sonner-toast].bk-toast [data-icon] > svg { margin: 0; }
+[data-sonner-toast][data-styled="true"].bk-toast [data-icon] svg { margin: 0; }   /* sonner's -1px nudge, the loader's svg too */
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-title],
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   text-box: trim-both cap alphabetic;   /* glyph edges line up with flex alignment */
 }
-[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
+[data-sonner-toast][data-styled="true"].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
 ```
 
 So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
 
-**Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot.
+**Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot. It takes the box's full size (sonner's `left: 50%` would shrink it to 13px and leave the spinner half a pixel off). The result icon's animation fills `both`: sonner hides a promise toast's icon with `opacity: 0` and only its own fade-in (replaced here) brings it back, so without the fill a settled loading toast shows no icon.
 
 ```css
 [data-sonner-toast].bk-toast .sonner-loader {
+  width: 100%; height: 100%;
   transition: opacity 200ms ease, transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 [data-sonner-toast].bk-toast .sonner-loader[data-visible="false"] {
@@ -3621,7 +3622,7 @@ So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px 
 @keyframes bk-toast-icon-in { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
 [data-sonner-toast][data-styled="true"].bk-toast [data-icon] > svg {
   transform: none; transform-origin: center;
-  animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  animation: bk-toast-icon-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 ```
 
@@ -4596,7 +4597,7 @@ button ("3 need you"); the connection status; a `flex-1` spacer; the Update butt
 `me-0.5`); the usage menu; the Focus menu (hidden below 640px, `max-sm:hidden`). On `/onboarding` only the home link,
 the connection status and Update show. Every widget that reads live state sits in `ErrorBoundary size='icon'`.
 
-**Shelf rail (`Rail`).** `<nav className='flex h-full w-full select-none flex-col bg-sidebar [--glyph-ring:var(--color-sidebar)]'>`:
+**Shelf rail (`Rail`).** `<nav className='flex h-full w-full select-none flex-col bg-sidebar'>`:
 
 1. Top row `data-window-drag` `flex h-11 shrink-0 items-center gap-2 desktop:ps-20 ps-3.5 pe-2`: `HomeLink`, connection
    status, spacer, Update, usage menu (not on `/onboarding`), the ⌘K button.
@@ -4621,15 +4622,12 @@ turns `bg-primary-4` on hover and press. Its `Hint` follows the pointer down the
 side): "Resize the sidebar · Double-click to reset" (the qualifier muted). Props: `label?`, `edge = 'right'`,
 `onPointerDown`, `onDoubleClick` (resets the width).
 
-`--glyph-ring` is set to the surface colour (`--color-sidebar`, `--color-popover`) so a pulse dot on a tile cuts a
-ring of the background around itself.
-
 #### CompactSections, CompactSection, COMPACT_POPOVER
 
 A popover list grouped in sections: the queue button's popover, the sidebar's compact queue, the Services popover.
 Never build a look-alike.
 
-- `COMPACT_POPOVER` = `max-h-(--available-height) w-80 gap-0 p-0 [--glyph-ring:var(--color-popover)]`: 320px wide, as
+- `COMPACT_POPOVER` = `max-h-(--available-height) w-80 gap-0 p-0`: 320px wide, as
   tall as its content up to the room under the trigger, then it scrolls. (The Services popover, `SERVICES_PANEL`, is
   `COMPACT_POPOVER` plus `flex w-88 max-w-[calc(100vw-1rem)] flex-col overflow-hidden`: 352px, never wider than the
   window less 16px; a view of it that needs a fixed height takes `h-[min(var(--available-height),28rem)]`, 448px at
@@ -5075,7 +5073,7 @@ link tiles, service rows.
 - Never a border on a tile.
 - `GateGlyph({ gate })` and `TaskGlyph({ state, task })` resolve icon, tone and label from the status resolver.
   `WorkingGlyph({ task })` adds a `Pulse` at the tile's corner:
-  `pointer-events-none absolute -top-px -right-px ring-(--glyph-ring) ring-2`, inside
+  `pointer-events-none absolute -top-px -right-px`, inside
   `relative grid size-5 shrink-0 place-items-center`.
 
 ```tsx
@@ -6556,7 +6554,7 @@ Example: moving the pointer down Home's In progress card, one grey block glides 
 - Compact (sidebar and queue popover): collapsible `h-6` headers, the whole header folds. Header: `w-full gap-2 rounded-control ps-1.5 pe-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`; a 14px section icon in its tone in a 20px slot; the title truncating; the count in `font-normal tabular-nums`; the chevron shown only on hover (`opacity-0 group-hover/disclosure:opacity-100`) 6px after the count (`gap-1.5`), 5px from the header's top and bottom, never at the header's end: the chevron belongs to what it folds, and the end is where a section's action goes. Section: `flex flex-col border-border border-t px-2 py-1.5`, no top border on the first; rows `pt-0.5` below the header; the same rows as wide without the age; empty text `py-1 ps-8.5 pe-2.5 text-2xs text-fg-2`.
 - Open and closed state is shared by sidebar and popover through `localStorage` (key per section). A section can always be collapsed, including the one holding the task on screen. Until you have toggled a section yourself it opens when it holds the task on screen; after that your choice wins everywhere.
 - Queue popover: `max-h-(--available-height) w-80 gap-0 p-0` (320px, as tall as its content up to the room under the button, then it scrolls), list inset 6px more at the top (`pt-1.5`) so the first header's icon is as far from the top as from the side.
-- Status tiles with a pulse ring use `--glyph-ring` set to the surface colour (`[--glyph-ring:var(--color-card)]` on a card, `var(--color-popover)` in a popover) so the pulse's 2px ring cuts cleanly into the tile.
+- A status tile under a pulse is masked (`PULSE_CUTOUT`, a radial-gradient `mask-image` 2px wider than the dot), so the cut is transparent and stays clean on any surface, hovered rows included. Never a ring in the surface colour: it shows as a box when the row's hover wash changes the background.
 
 Example: the "3 need you" popover shows Needs you, In progress and a folded Waiting section, each header a 12px grey label with a coloured 14px icon, the current task's row highlighted.
 
@@ -6584,7 +6582,7 @@ Example: "Plan to approve" is a purple tile with a document glyph in the queue, 
 #### Status tiles, glyphs and the pulse
 
 - Status tile: `corner-superellipse/1.125 inline-grid shrink-0 place-items-center rounded-control-sm` plus the tone's surface, a 14px icon in the tone's text colour. Sizes: `md` 20px (`size-5`, it is the icon slot), `sm` 18px (`size-4.5`, inline and in popover rows). A labelled tile is `role='img'` with `aria-label`, and gets a tooltip: the label in its tone, then " · detail" muted, in one `whitespace-nowrap` span. An unlabelled tile is `aria-hidden`.
-- A working glyph is a tile with a pulse in its top right (`absolute -top-px -right-px ring-2 ring-(--glyph-ring)`), tooltip "Building · Agent working".
+- A working glyph is a tile with a pulse in its top right (`absolute -top-px -right-px`, the tile masked by `PULSE_CUTOUT`), tooltip "Building · Agent working".
 - Pulse: a 6px dot (`relative flex size-1.5 shrink-0`), a ping layer `absolute inset-0 animate-ping rounded-full opacity-60 motion-reduce:animate-none` in the tone's fill, over a solid `relative size-full rounded-full` in the same fill. Blue for working, amber for waiting.
 - Each status has its own icon; a gate's status takes the gate's glyph, each wait its own (snooze clock, gauge for a usage limit, agents for delegations, hourglass for another task), each stage its own (hammer for building, eye with sparkle for agent review, check circle for done). In a facts row the icon is the tone's text colour at 70% and the label stays `fg-2`; a working agent adds the pulse after the label.
 - A task's kind is not shown as a fact: the task's steps and screens already show it.
@@ -6805,7 +6803,7 @@ Example: "(chevron) Worked for 3m · 14 steps" over the agent's final paragraph,
 - Attachments sit above the bubble: images as a large thumbnail strip (`max-w-4/5 justify-end`), other files as chips (`CARD`, `h-10 max-w-64 gap-2 p-1 pr-3`, a 32px `rounded-lg bg-muted` icon box with a 16px icon, name `text-xs fg-4` over meta `text-2xs fg-2`, `gap-px`), wrapping `gap-2`.
 - Acting never moves you: approving, merging, answering, replying or cancelling stays on the page and confirms with a toast. There is no previous/next stepper; the queue and the command menu move between items.
 - A sent message shows at once, and while it is delivered (on its way to the server, then routed into the task) the bubble stays at full opacity and a blue light travels around its border: a 1px ring over the border (`message-delivery`), a conic gradient of `primary-4` (both themes) with a soft tail turning once every 2.4s, only `transform`. No text line. It fades in; when the message is delivered the light fades out over 400ms on the strong ease-out. Under reduced motion the ring is a still `primary-4` border. Delivered: no line. "Noted. It needs no reply." in `text-fg-2` when nothing will answer it. "Not delivered. ‹reason›" in `text-red-text`, and the message stays. Every message ends in a visible state.
-- A message that waits for the round in progress to finish (it asked for new work, so it is the next round) is not a bubble: it sits in a queue docked above the composer, a `CARD` with a 32px `text-2xs` header ("Queued · Sends once round 2 is finished.", an hourglass) over one row per message (`text-xs fg-3`, three lines at most, a pencil and a cross 1px apart). The pencil turns the row into a `Textarea` with Cancel and Save (Enter saves, Escape cancels); the cross removes it. When the round starts, the message moves into the chat under its round's divider, delivering until the round's agent starts.
+- A message that waits for the round in progress to finish (it asked for new work, so it is the next round) is not a bubble: it sits in a queue docked above the composer, a `CARD` with a 32px `text-2xs` header ("Queued · Sends once round 2 is finished.", an hourglass; while round 2 waits for you it names what you do first: "Sends after you merge round 2.") over one row per message (`text-xs fg-3`, three lines at most, an up arrow, a pencil and a cross 1px apart). The arrow sends it now, to the round in progress, as a message; the pencil turns the row into a `Textarea` with Cancel and Save (Enter saves, Escape cancels); the cross removes it. When the round starts, the message moves into the chat under its round's divider, delivering until the round's agent starts.
 - A deep link to a run scrolls to it and washes it: `outline-2 outline-transparent transition-[background-color,outline-color] duration-500 data-focused:bg-primary-a1 data-focused:outline-primary-a1`, the 2px outline outside the box so the wash wraps full-width content instead of sitting flush; it fades with the wash. Because the run's box hugs its content, the wash is the same 2px on all four sides.
 
 Example: you type "also handle logout", it appears at once right-aligned with a light circling its border, which fades once the agent has it. "Then add a logout page" while round 2 works goes to the queue above the composer instead, and joins the chat when round 3 starts.
@@ -6821,7 +6819,7 @@ Example: "(icon) Round 2 · Handle logout too · In progress", followed by a hai
 #### Image viewer
 
 - One viewer opens every image (attachments, tool results, evidence) and plays recordings (controls, autoplay, no zoom or pan).
-- Backdrop `black/85`; image fitted to the window, never upscaled. It is laid out under the dark theme so its chrome reads the same on black in both themes.
+- Backdrop `black/85`; image fitted to the window, never upscaled. An image that knows the width it was taken at (an evidence shot's width in CSS pixels) is laid out at that width, so a 2x screenshot keeps two file pixels to a CSS pixel and stays sharp on a Retina screen; its 100% is that size. It is laid out under the dark theme so its chrome reads the same on black in both themes.
 - Open and close are one run in reverse: backdrop and chrome fade over 240ms on `cubic-bezier(0.22, 1, 0.36, 1)` while the image, opaque the whole way, flies between its thumbnail and the window on the same curve and duration. The flight is one transform keeping the aspect (translate plus a single scale, never a stretch) onto the thumbnail's drawn box (its `object-fit` box) with a `clip-path` inset to what the thumbnail shows, each corner rounded like the thumbnail's (or its clipping card's) corner. Closing starts from where the image is (zoom and pan included) and lands on the thumbnail of the image open now, measured at that moment; the thumbnail stays hidden until the image lands and shows in that frame. With no thumbnail in view, the image fades while shrinking to 96% in place, and opens the same way. The open waits for the portal to mount. A recording, and anything under reduced motion, only fades. A recording never morphs: it mounts at its fitted size (from the thumbnail's `videoWidth` or a hidden probe), with width and height set, so its controls lay out once at the right width.
 - Zoom: click or double-click toggles between fit and the larger of 100% and twice the fitted size, around the pointer; wheel and pinch zoom toward the pointer; drag pans while zoomed; `+` (or `=`) and `-` step by 1.5x and `0` returns to fit.
 - Stepping (on-screen arrows and arrow keys) moves through the images of one message or tool group, or item by item in evidence. Stepping is a cross-fade, never the open run again: the incoming image appears at its own fitted size from the first frame (size from its thumbnail, or held until loaded while the outgoing stays), fades in over the outgoing, which fades out as it was; both move 10px in the direction of travel over 200ms on `cubic-bezier(0.23, 1, 0.32, 1)`; zoom and pan reset to fit at once. Switching parts of one comparison does not slide: the incoming part fades in over 150ms on top of the outgoing, which stays opaque under it when they share a rect, so the stage never dims. Under reduced motion every swap is the 150ms fade with no slide. A press during a swap takes over from where the images are, with no queued or stacked animation.
@@ -8835,7 +8833,7 @@ Mistakes that were made before and must not come back:
   and select items, ⌘K commands, field labels, placeholders, table headers, badges, tooltips, toasts, empty
   states, dialog titles, status labels. Capitalise the first word and proper nouns only: "All tasks", "Agent
   usage", "Pre-merge steps", "Run in terminal", "Add a Claude account".
-- **Proper nouns keep their casing**: Shinsa, GitHub, GitButler, Claude, Claude Code, Codex, macOS, Finder,
+- **Proper nouns keep their casing**: Shinsa, GitHub, Claude, Claude Code, Codex, macOS, Finder,
   Electron, Ghostty, Terminal.app, Desk, Shelf. A product's own term keeps its owner's casing.
 - **Acronyms stay upper**: CI, MCP, PR, ID, URL, API, SDK, JSON, CLI. Write "ID", never "Id" or "id"; "MCPs" for
   the plural.

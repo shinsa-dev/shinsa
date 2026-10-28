@@ -2,7 +2,6 @@ import { isPausingGate } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
 import { retryChecks } from './checks.ts';
-import { UPDATING_WORKSPACE, updateWorkspace } from './conflicts.ts';
 import type { Decider } from './decider.ts';
 import { resetFixBudget } from './fixes.ts';
 import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
@@ -56,8 +55,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       return;
     case 'shipping':
       decider.cancelRuns(taskId);
-      if (task.stageReason === UPDATING_WORKSPACE) updateWorkspace(decider, taskId, guidance);
-      else requestPush(decider, taskId);
+      requestPush(decider, taskId);
       return;
     case 'awaiting_merge':
       decider.cancelRuns(taskId);

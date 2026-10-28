@@ -32,7 +32,6 @@ describe('worktrees', () => {
     expect(nothing.files).toEqual([]);
     await nothing.undo();
     expect(await git(checkout.path, 'rev-parse', 'HEAD')).toBe(head);
-    expect(await (await strategy.claim())()).toBeUndefined();
   });
 
   test('a resolved merge of the base is committed as git’s merge, and undo puts it back in progress', async () => {

@@ -3,7 +3,6 @@ import type { Repo, ShinsaCommand, Task } from '@shinsa/core';
 import { RepositoryWork } from '../../src/agents/repository-work.ts';
 import { createWorktree } from '../../src/git/index.ts';
 import { log } from '../../src/log/index.ts';
-import { LedgerStore } from '../../src/workspaces/ledger.ts';
 import { createGitRepo, createTempDir, git, writeFiles } from '../helpers/index.ts';
 import { createRun, createStubEngine, createTask } from '../helpers/state.ts';
 
@@ -31,8 +30,7 @@ async function setup(tasks: (repo: Repo) => Promise<Task[]>) {
     state.repos[repo.id] = repo;
     for (const task of created) state.tasks[task.id] = task;
   });
-  const ledgers = new LedgerStore(createTempDir());
-  return { repo, stub, ledgers, work: new RepositoryWork(stub.engine, ledgers) };
+  return { repo, stub, work: new RepositoryWork(stub.engine) };
 }
 
 function overlapsOf(dispatched: ShinsaCommand[]) {
@@ -52,28 +50,13 @@ describe('the other work in a task’s repository', () => {
     expect(text).toContain('  Changed files: src/a.ts, src/b.ts. This task changes src/a.ts too.');
   });
 
-  test('a GitButler task’s uncommitted files come from the ledger, and an unreadable checkout is not known', async () => {
-    const { stub, work, ledgers, repo } = await setup(async (created) => [
+  test('a task whose checkout cannot be read lists its files as not known', async () => {
+    const { stub, work } = await setup(async (created) => [
       await createWorkingTask(created, 'mine', { 'src/a.ts': '1\n' }),
     ]);
-    stub.state.tasks.butler = createTask({
-      id: 'butler',
-      title: 'Butler',
-      branch: 'feat/missing',
-      worktreePath: repo.path,
-      workspace: 'gitbutler',
-    });
     stub.state.tasks.broken = createTask({ id: 'broken', title: 'Broken', worktreePath: createTempDir() });
-    ledgers.write(repo.id, {
-      owners: {
-        'src/a.ts': { taskId: 'butler', hash: 'h1' },
-        'src/other.ts': { taskId: 'someone', hash: 'h2' },
-      },
-      baselines: {},
-    });
     const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
     const text = await work.describe('mine');
-    expect(text).toContain('  Changed files: src/a.ts. This task changes src/a.ts too.');
     expect(text).toContain('  Changed files: not known.');
     expect(warn).toHaveBeenCalledWith(
       '[RepositoryWork] Could not list the files a task changed',

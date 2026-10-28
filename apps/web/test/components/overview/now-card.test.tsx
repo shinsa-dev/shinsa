@@ -627,23 +627,6 @@ describe('NowCard on the Overview', () => {
     await waitFor(() => expect(cancel.disabled).toBe(false));
   });
 
-  it('updates the workspace in one click on a GitButler pull request that conflicts with its base', async () => {
-    const task = createTask({ id: 'task-1', stage: 'shipping' });
-    const gate = createGate({
-      id: 'gate-1',
-      taskId: 'task-1',
-      type: 'failure',
-      cause: 'workspace_update',
-      title: 'Pull request #42 conflicts with main',
-    });
-    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
-    fireEvent.click(view.getByRole('button', { name: 'Update the workspace' }));
-    expect(listSentCommands()).toEqual([
-      { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null },
-    ]);
-    expect(await view.findByText('Updating the workspace with but pull.')).toBeTruthy();
-  });
-
   it('offers to allow more on a task that reached its usage or cost limit', () => {
     const spent = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 6 };
     const task = createTask({ id: 'task-1' });

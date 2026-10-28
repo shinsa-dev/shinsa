@@ -75,6 +75,8 @@ describe('the /ui gallery', () => {
       'The change merged. Run the operation now?',
       'Checks',
       'The agent asked for your approval.',
+      'Resolving conflicts with main',
+      'Resolving conflicts',
     ]) {
       expect(overview.getAllByText(text).length).toBeGreaterThan(0);
     }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { APP_FLAVORS } from '@shinsa/core';
 import {
   APP_ID,
   describeEngineScreen,
@@ -48,17 +47,6 @@ describe('the engine’s launchd job', () => {
     expect(shipped).toContain('<key>BundleProgram</key>');
     expect(shipped).toContain('<string>studio.overclock.shinsa</string>');
     expect(shipped).toContain('<key>SuccessfulExit</key>\n    <false/>');
-  });
-
-  it('ships in Shinsa Canary under a label and bundle id of its own, so it never replaces Shinsa’s', () => {
-    const { appId } = APP_FLAVORS.canary;
-    const shipped = readFileSync(
-      join(import.meta.dirname, '../../resources/LaunchAgents-canary', `${appId}.engine.plist`),
-      'utf8'
-    );
-    expect(shipped).toBe(serializeEngineAgent({ bundle: ENGINE_BUNDLE_PROGRAM }, undefined, appId));
-    expect(shipped).toContain('<string>studio.overclock.shinsa.canary.engine</string>');
-    expect(shipped).toContain('<string>studio.overclock.shinsa.canary</string>');
   });
 
   it('as a plain LaunchAgent names the program by its path and carries the data folder', () => {
@@ -158,7 +146,6 @@ describe('the engine log', () => {
     expect(resolveDataDir({ XDG_CONFIG_HOME: '/x' }, '/u')).toBe('/x/shinsa/data');
     expect(resolveDataDir({ HOME: '/me' }, '/u')).toBe('/me/.config/shinsa/data');
     expect(resolveDataDir({}, '/u')).toBe('/u/.config/shinsa/data');
-    expect(resolveDataDir({}, '/u', APP_FLAVORS.canary)).toBe('/u/.config/shinsa-canary/data');
   });
 });
 
@@ -191,12 +178,6 @@ describe('the status screen', () => {
     ]);
     expect(views.map((view) => view.busy)).toEqual([true, true, false, false, false, false]);
     expect(views[3]?.detail).toBe('log');
-  });
-
-  it('names Shinsa Canary in its own app, where Login Items lists it so', () => {
-    const view = describeEngineScreen({ kind: 'approval' }, 'Shinsa Canary');
-    expect(view.title).toBe('Allow Shinsa Canary to run in the background');
-    expect(view.text).toContain('Turn Shinsa Canary on in System Settings');
   });
 
   it('takes an action only from its own links', () => {

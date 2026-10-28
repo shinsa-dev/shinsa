@@ -24,7 +24,6 @@ import { useAccounts } from '@/lib/connection/accounts.ts';
 import { useExtensions } from '@/lib/connection/extensions.ts';
 import { useAgentProviders } from '@/lib/connection/models.ts';
 import { useOnboardingStatus } from '@/lib/connection/onboarding.ts';
-import { useWorkspaceSupport } from '@/lib/connection/workspaces.ts';
 import { readDesktopChannel, subscribeDesktopUpdate } from '@/lib/desktop.ts';
 import { useExplorerSide } from '@/lib/preferences/code.ts';
 import { useNotificationPreferences } from '@/lib/preferences/notifications.ts';
@@ -36,7 +35,6 @@ import {
   resolveSettingsTabParam,
   type SettingsTabId,
 } from '@/lib/settings-tabs.ts';
-import { resolveRepoKey } from '@/lib/workspaces.ts';
 import { updateSearchParams, useSearchParam } from '@/router.ts';
 
 function useSectionScroll(
@@ -109,7 +107,6 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
   const current = findSettingsTab(tab);
   const scroller = React.useRef<HTMLDivElement>(null);
   const repos = Object.values(state.repos);
-  const support = useWorkspaceSupport(resolveRepoKey(repos));
   const explorerSide = useExplorerSide();
   const updateChannel = React.useSyncExternalStore(subscribeDesktopUpdate, readDesktopChannel);
   useRegisterCommands(
@@ -118,7 +115,7 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
       providers,
       notifications,
       accounts,
-      { repos, support },
+      repos,
       explorerSide,
       updateChannel,
       resolveUsageRates(state.runs)

@@ -215,11 +215,13 @@ src/
     │                    results, which run now, Shinsa's latest output per check, the pull request's CI checks, the
     │                    summaries; the row a linked test or check renders as),
     │                    Rounds (rounds.ts: the handle with its round, chat sections per round and their dividers, earlier and waiting
-    │                    rounds, a round's track and pull request, how a round ships), status and tone per task,
+    │                    rounds, a round's track and pull request, how a round ships), status and tone per task (Resolving conflicts on a conflict fix),
     │                    roadmap groups and chains, next action, the now line,
     │                    references, tabs, facts, dependencies, task actions, gate replies (gates.ts), what a message does
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
-    │                    queued messages and whether a started round is still delivering (message-queue.ts), the
+    │                    queued messages, when they send (describeQueue, describeRoundRelease: after you merge or
+    │                    approve when the round waits for you, from core's resolveRoundRelease), Send now (round.send)
+    │                    and whether a started round is still delivering (message-queue.ts), the
     │                    messages on their way to the server (outbox.ts, read with hooks/use-outbox.ts), process
     │                    actions (process.ts), suggested tasks, cost (cost.ts: the facts row's cost control and its
     │                    popover, the one place a task's cost shows, and a limit's Allow another), pull request facts, branch and request text,
@@ -243,9 +245,8 @@ src/
     ├── kept-views.ts    Which pages stay mounted: the hub pages (Home, All tasks, Settings and Terminal, each rendered
     │                    ahead at idle) and the last three task pages, by key, with the URL each was left at
     └── errors.ts (a render error's message and details, the reset key, ⌘K's error toast), queue.ts, home.ts, focus.ts, projects.ts (Settings → Projects: rows, the key line, the dialog's copy and
-        checks, repository choices, the actions), workspaces.ts (where agents work: the three modes, why GitButler is
-        not offered yet, changing a repository's mode; its support comes from connection/workspaces.ts,
-        useWorkspaceSupport over GET /api/repos/workspaces), coverage.ts (a repository's test coverage setting, Auto / Custom /
+        checks, repository choices, the actions), workspaces.ts (where agents work: worktrees or the main checkout,
+        changing a repository's mode), coverage.ts (a repository's test coverage setting, Auto / Custom /
         Off and the Custom dialog's draft, and the changed-line coverage lines the Review tab and the Overview show; what
         Auto finds comes from connection/coverage.ts, useCoverageDetection over GET /api/repos/coverage), settings.ts, settings-tabs.ts, schedules.ts, secrets.ts,
         onboarding.ts, baseline.ts (a repository's Always run before review commands: the choice, the dialog's copy and
@@ -289,7 +290,7 @@ called there.
   landed, so a repeated message stays delivering until it lands too. In the inbox it is still delivering, then
   delivered, noted (needs no reply) or not delivered with the reason (`listHumanMessages` in `lib/chat/timeline.ts`,
   `describeMessageStatus` in `lib/tasks/messages.ts`), or, when it asked for new work while a round runs, queued
-  above the composer as a waiting round you can edit or remove (`lib/tasks/message-queue.ts`,
+  above the composer as a waiting round you can send now to the current round, edit or remove (`lib/tasks/message-queue.ts`,
   `components/chat/message-queue.tsx`; `docs/engine.md` → Rounds).
 - **Setup is the server's steps.** The steps, their order, what each answer saves, going back and the accounts it
   imports all live on the server (`docs/engine.md` → The setup steps); `routes/onboarding.tsx` only renders

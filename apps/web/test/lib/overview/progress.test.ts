@@ -6,6 +6,8 @@ import {
   describeTrackPosition,
   isStepReached,
   resolveLabelFold,
+  resolveStageNote,
+  resolveStepStatusLabel,
   resolveSteps,
   STEP_STATUS_LABEL,
   type Step,
@@ -207,6 +209,41 @@ describe('STEP_STATUS_LABEL', () => {
       waiting: 'Waiting on you',
       pending: 'Not started',
     });
+  });
+});
+
+describe('resolveStageNote', () => {
+  it('names the conflict being resolved while the agent fixes one, and nothing otherwise', () => {
+    const fixing = { stage: 'fixing', stageReason: 'resolving conflicts with main' } as const;
+    expect(resolveStageNote({ ...fixing, fixFor: 'conflict' })).toBe('Resolving conflicts with main');
+    expect(
+      resolveStageNote({
+        ...fixing,
+        fixFor: 'update',
+        stageReason: 'resolving conflicts with the base branch',
+      })
+    ).toBe('Resolving conflicts with the base branch');
+    expect(resolveStageNote({ ...fixing, fixFor: 'checks' })).toBeNull();
+    expect(resolveStageNote({ ...fixing, fixFor: 'conflict', stageReason: '' })).toBeNull();
+    expect(resolveStageNote({ ...fixing, stage: 'shipping', fixFor: 'conflict' })).toBeNull();
+  });
+});
+
+describe('resolveStepStatusLabel', () => {
+  const step: Step = {
+    key: 'pull-request',
+    label: 'Pull request',
+    count: null,
+    status: 'current',
+    detail: [],
+  };
+
+  it('puts the stage note in place of In progress on the current step only', () => {
+    expect(resolveStepStatusLabel(step, 'Resolving conflicts with main')).toBe(
+      'Resolving conflicts with main'
+    );
+    expect(resolveStepStatusLabel(step, null)).toBe('In progress');
+    expect(resolveStepStatusLabel({ ...step, status: 'done' }, 'Resolving conflicts with main')).toBe('Done');
   });
 });
 

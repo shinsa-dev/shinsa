@@ -441,12 +441,17 @@ function listWorkingCopyCommands(task: Task, random: Random): ShinsaCommand[] {
       path: 'src/a.ts',
       changed: chance(random, 0.7),
     });
-  if (chance(random, 0.02) && task.branch)
-    commands.push({ type: 'task.record_conflict', taskId: task.id, branch: task.branch });
+  const pullRequest = task.pullRequest?.state === 'open' ? task.pullRequest : null;
+  if (chance(random, 0.05) && pullRequest)
+    commands.push({
+      type: 'pull_request.record',
+      taskId: task.id,
+      pullRequest: { ...pullRequest, mergeable: false, updatedAt: pullRequest.updatedAt + 1 },
+    });
   if (task.stage === 'checking' && chance(random, 0.3))
     commands.push({ type: 'task.commit_edits', taskId: task.id, treeHash: null });
-  if (task.stage === 'shipping' && chance(random, 0.5))
-    commands.push({ type: 'task.record_workspace_update', taskId: task.id, guidance: null });
+  if (task.stage === 'shipping' && chance(random, 0.5) && pullRequest)
+    commands.push({ type: 'pull_request.record', taskId: task.id, pullRequest });
   return commands;
 }
 
@@ -1381,11 +1386,7 @@ describe('decide under random command sequences', () => {
         for (const mark of listWorkspaceMarks(state)) if (mark) reached.add(mark);
       };
       for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'workspaces', collect);
-      expect([...reached].sort()).toEqual([
-        'waited for the checkout',
-        'worked in the checkout',
-        'worked on a GitButler branch',
-      ]);
+      expect([...reached].sort()).toEqual(['waited for the checkout', 'worked in the checkout']);
     },
     SEEDS * 2_000
   );

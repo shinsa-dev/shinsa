@@ -13,6 +13,7 @@ import {
   resolveResultPlace,
 } from '@/lib/overview/now.ts';
 import { createAgentEntry, createBrief, createCallEntry, createResultEntry } from '../../support/chat.ts';
+import { createPullRequest } from '../../support/pull-request.ts';
 import { createGate, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function phase(overrides: Partial<DisplayPhase>): DisplayPhase {
@@ -84,6 +85,27 @@ describe('resolveNowTitle', () => {
   it('falls back to the stage reason, capitalised', () => {
     const task = createTask({ id: 'task-1', stage: 'shipping', stageReason: 'waiting for CI' });
     expect(resolveNowTitle(task, [], phase({ key: 'pull-request' }), undefined)).toBe('Waiting for CI');
+  });
+
+  it('names the conflict instead of CI while a pull request conflicts and no fix runs', () => {
+    const task = createTask({
+      id: 'task-1',
+      stage: 'shipping',
+      stageReason: 'waiting for CI',
+      pullRequest: createPullRequest({ number: 7, mergeable: false, base: 'main' }),
+    });
+    expect(resolveNowTitle(task, [], phase({ key: 'pull-request' }), undefined)).toBe(
+      'PR #7 conflicts with main'
+    );
+    const fixing = createTask({
+      id: 'task-1',
+      stage: 'fixing',
+      fixFor: 'conflict',
+      stageReason: 'resolving conflicts with main',
+    });
+    expect(resolveNowTitle(fixing, [], phase({ key: 'pull-request' }), undefined)).toBe(
+      'Resolving conflicts with main'
+    );
   });
 
   it('uses the stage reason for a settled task while a run is still going', () => {

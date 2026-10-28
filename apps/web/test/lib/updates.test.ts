@@ -1,50 +1,33 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  CANARY_DOWNLOAD_URL,
   describeAppDetail,
   describeChannelDetail,
   describeStayLabel,
   describeUpdateStatus,
-  isChannelFixed,
   parseUpdateChannel,
-  resolveAppName,
-  resolveChannelItem,
   UPDATE_CHANNEL_ITEMS,
 } from '@/lib/updates.ts';
 
 describe('the Updates settings', () => {
-  it('offers Stable and Beta in Shinsa', () => {
-    expect(UPDATE_CHANNEL_ITEMS.map((item) => item.label)).toEqual(['Stable', 'Beta']);
-  });
-
-  it('fixes the channel only in Shinsa Canary', () => {
-    expect(isChannelFixed('canary')).toBe(true);
-    expect(isChannelFixed('beta')).toBe(false);
-    expect(isChannelFixed('stable')).toBe(false);
-    expect(resolveChannelItem('canary')).toEqual({ value: 'canary', label: 'Canary', icon: 'IconFeather' });
-  });
-
-  it('names the app Shinsa Canary on the canary channel', () => {
-    expect(resolveAppName('canary')).toBe('Shinsa Canary');
-    expect(resolveAppName('beta')).toBe('Shinsa');
-    expect(CANARY_DOWNLOAD_URL).toBe('https://shinsa.dev/download/canary');
+  it('offers Stable, Beta and Canary', () => {
+    expect(UPDATE_CHANNEL_ITEMS.map((item) => item.label)).toEqual(['Stable', 'Beta', 'Canary']);
   });
 
   it('reads a channel from a menu value, Stable for anything else', () => {
     expect(parseUpdateChannel('beta')).toBe('beta');
-    expect(parseUpdateChannel('canary')).toBe('stable');
+    expect(parseUpdateChannel('canary')).toBe('canary');
     expect(parseUpdateChannel('nightly')).toBe('stable');
   });
 
-  it('says what each channel gets, and that leaving a beta can go back to the latest stable', () => {
+  it('says what each channel gets, and that leaving a beta or a canary can go back to the latest stable', () => {
     expect(describeChannelDetail('stable')).toBe(
-      'Releases only. Coming from a beta, you can go back to the latest stable.'
+      'Releases only. Coming from a beta or a canary, you can go back to the latest stable.'
     );
     expect(describeChannelDetail('beta')).toBe(
       'New versions first, as pre-releases, and every stable release once it is newer than yours.'
     );
     expect(describeChannelDetail('canary')).toBe(
-      'Shinsa Canary is built from every change merged into main and updates only to the next canary.'
+      'Every merge into main once its tests pass. Less tested than Beta.'
     );
   });
 
@@ -55,7 +38,7 @@ describe('the Updates settings', () => {
   it('names the channel under the version', () => {
     expect(describeAppDetail('beta')).toBe('Beta channel · Updates install when you quit Shinsa');
     expect(describeAppDetail('stable')).toBe('Stable channel · Updates install when you quit Shinsa');
-    expect(describeAppDetail('canary')).toBe('Canary channel · Updates install when you quit Shinsa Canary');
+    expect(describeAppDetail('canary')).toBe('Canary channel · Updates install when you quit Shinsa');
   });
 
   it('says what the updater is doing, and nothing before its first check', () => {

@@ -202,7 +202,7 @@ export function ChatTab({
           submitLabel='Send message'
           onSubmit={(text) => sendTaskMessage(task, hint, text)}
           aside={<ContextMeter runIds={runs.map((run) => run.id)} />}
-          dock={<MessageQueue task={task} />}
+          dock={<MessageQueue state={state} task={task} />}
         />
       )}
     </div>

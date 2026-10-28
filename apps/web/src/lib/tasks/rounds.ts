@@ -13,6 +13,7 @@ import {
   type Run,
   resolveCurrentRound,
   resolveTaskRounds,
+  type ShinsaState,
   selectShippingTarget,
   type Task,
 } from '@shinsa/core';
@@ -21,6 +22,7 @@ import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { endSentence, flattenWhitespace, formatCount } from '@/lib/format/count.ts';
 import { formatSince } from '@/lib/format/time.ts';
 import type { Tone } from '@/lib/format/tone.ts';
+import { describeRoundRelease } from '@/lib/tasks/message-queue.ts';
 
 export interface RoundSection {
   round: Round;
@@ -166,9 +168,9 @@ function describeRoundEnd(round: Round) {
   return `Shipped on pull request #${pullRequest.number}.`;
 }
 
-export function resolveRoundSummary(round: Round) {
+export function resolveRoundSummary(state: ShinsaState, task: Task, round: Round) {
   if (round.status === 'waiting') {
-    return `${endSentence(round.why ?? round.title)} It starts once round ${round.number - 1} is finished.`;
+    return `${endSentence(round.why ?? round.title)} It starts ${describeRoundRelease(state, task, round)}.`;
   }
   const outcome = round.outcome;
   const about = outcome?.goal ?? round.title;

@@ -8,7 +8,10 @@ import {
   needsMessageKind,
   resolveCurrentRound,
   resolveMessageEffect,
+  resolveRoundRelease,
   resolveTaskRounds,
+  SHAPE_PIPELINES,
+  type TaskShape,
 } from '../../src/index.ts';
 import {
   approve,
@@ -688,5 +691,149 @@ describe('a message to a resting task', () => {
     verifySetup(harness, taskId);
     expect(harness.activeRun(taskId)).toMatchObject({ role: 'answerer' });
     expect(harness.task(taskId).stage).toBe('answering');
+  });
+});
+
+function reachMergeGate(harness: Harness, taskId: string) {
+  reachShipping(harness, taskId);
+  harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest() });
+  expect(harness.openGate(taskId).type).toBe('merge');
+}
+
+function sendNewWork(
+  harness: Harness,
+  taskId: string,
+  text: string,
+  shape: TaskShape,
+  kind: MessageKind = 'new_round'
+) {
+  harness.send({ type: 'task.message', taskId, text, kind, shape, title: text.slice(0, 30) });
+}
+
+function releaseOf(harness: Harness, taskId: string, shape: TaskShape) {
+  return resolveRoundRelease(harness.state, harness.task(taskId), SHAPE_PIPELINES[shape]);
+}
+
+function queueWhileWorking(harness: Harness, taskId: string, text: string) {
+  linkSession(harness, taskId);
+  sendNewWork(harness, taskId, text, 'operation');
+  expect(resolveTaskRounds(harness.task(taskId)).map((round) => round.status)).toEqual(['active', 'waiting']);
+}
+
+describe('new work while the round waits for you', () => {
+  test('at the merge gate, something to run before the merge goes back to this round instead of queueing behind the merge', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachMergeGate(harness, taskId);
+    expect(releaseOf(harness, taskId, 'operation')).toBe('merge');
+    const text = 'Can you start the dev server so I can test the UI?';
+    sendNewWork(harness, taskId, text, 'operation');
+    const task = harness.task(taskId);
+    expect(resolveTaskRounds(task)).toHaveLength(1);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(task.stage).toBe('fixing');
+    expect(task.fixFor).toBe('you');
+    expect(harness.activeRun(taskId).prompt).toContain(text);
+    expect(task.activity.filter((entry) => entry.kind === 'message').at(-1)).toMatchObject({ detail: text });
+  });
+
+  test('at the merge gate, work for another goal that finds no room for a suggestion goes back to this round too', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachMergeGate(harness, taskId);
+    for (let number = 1; number <= 10; number += 1) {
+      sendNewWork(harness, taskId, `Redo billing ${number}`, 'answer', 'separate_task');
+    }
+    expect(harness.task(taskId).suggestions).toHaveLength(10);
+    expect(harness.task(taskId).stage).toBe('awaiting_merge');
+    sendNewWork(harness, taskId, 'Redo billing 11', 'answer', 'separate_task');
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(1);
+    expect(harness.task(taskId).stage).toBe('fixing');
+  });
+
+  test('at the merge gate, a next change that ships through the pull request still starts at once', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachMergeGate(harness, taskId);
+    expect(releaseOf(harness, taskId, 'change')).toBe('now');
+    sendNewWork(harness, taskId, 'Also stream the tool results', 'change');
+    expect(resolveTaskRounds(harness.task(taskId)).map((round) => round.status)).toEqual([
+      'shipped',
+      'active',
+    ]);
+  });
+
+  test('at the review gate, new work is feedback for the round under review', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    expect(releaseOf(harness, taskId, 'change')).toBe('approve');
+    expect(releaseOf(harness, taskId, 'operation')).toBe('approve_and_merge');
+    sendNewWork(harness, taskId, 'Start the dev server for me.', 'operation');
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(1);
+    expect(harness.task(taskId).stage).toBe('fixing');
+    expect(harness.task(taskId).fixFor).toBe('you');
+  });
+
+  test('while an agent works, new work still waits for the round, which finishes on its own', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(releaseOf(harness, taskId, 'operation')).toBe('finish');
+    queueWhileWorking(harness, taskId, 'Then restart the service.');
+    expect(harness.effectsOf('run.steer')).toEqual([]);
+  });
+
+  test('a resting task starts new work at once, and a closed one releases nothing', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    shipAndMerge(harness, taskId);
+    expect(releaseOf(harness, taskId, 'operation')).toBe('now');
+    harness.send({ type: 'task.complete', taskId });
+    expect(releaseOf(harness, taskId, 'operation')).toBe('finish');
+  });
+});
+
+describe('sending a queued round now', () => {
+  test('while the agent works, the queued round leaves the queue and steers the agent', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    queueWhileWorking(harness, taskId, 'Then restart the service.');
+    const run = harness.activeRun(taskId);
+    harness.send({ type: 'round.send', taskId, number: 2 });
+    const task = harness.task(taskId);
+    expect(resolveTaskRounds(task)).toHaveLength(1);
+    expect(harness.lastEffect('run.steer')).toEqual({
+      kind: 'run.steer',
+      runId: run.id,
+      text: 'Then restart the service.',
+    });
+    expect(task.activity.filter((entry) => entry.kind === 'message').at(-1)).toMatchObject({
+      detail: 'Then restart the service.',
+    });
+  });
+
+  test('at the merge gate, the queued round becomes a change to the round, and the merge comes back after it', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    queueWhileWorking(harness, taskId, 'Start the dev server.');
+    reachMergeGate(harness, taskId);
+    expect(releaseOf(harness, taskId, 'operation')).toBe('merge');
+    harness.send({ type: 'round.send', taskId, number: 2 });
+    const task = harness.task(taskId);
+    expect(resolveTaskRounds(task)).toHaveLength(1);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(task.stage).toBe('fixing');
+    expect(harness.activeRun(taskId).prompt).toContain('Start the dev server.');
+  });
+
+  test('a round that started, or one that does not exist, cannot be sent', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    expect(() => harness.send({ type: 'round.send', taskId, number: 1 })).toThrow(
+      'Round 1 has already started'
+    );
+    expect(() => harness.send({ type: 'round.send', taskId, number: 4 })).toThrow(
+      'This task has no round 4.'
+    );
   });
 });

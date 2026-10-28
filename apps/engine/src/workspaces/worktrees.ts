@@ -15,13 +15,7 @@ import {
 } from '../git/index.ts';
 import { runGitOrThrow } from '../git/run.ts';
 import type { UpdateOptions } from '../git/update.ts';
-import {
-  NO_CLAIM,
-  refuseUpdate,
-  requireCheckout,
-  type WorkspaceCommit,
-  type WorkspaceStrategy,
-} from './types.ts';
+import { requireCheckout, type WorkspaceCommit, type WorkspaceStrategy } from './types.ts';
 
 export async function commitCheckout(path: string, message: string): Promise<WorkspaceCommit> {
   const before = await resolveHead(path);
@@ -71,21 +65,9 @@ export class WorktreeStrategy implements WorkspaceStrategy {
     if (task.worktreePath) await removeWorktree(repo, task.worktreePath);
   }
 
-  claim() {
-    return Promise.resolve(NO_CLAIM);
-  }
-
   writeEdit(_repo: Repo, _task: Task, _path: string, write: () => boolean) {
     write();
     return Promise.resolve();
-  }
-
-  listConflicted() {
-    return Promise.resolve([]);
-  }
-
-  update() {
-    return refuseUpdate();
   }
 
   syncBase(_repo: Repo, task: Task, base: string, options: UpdateOptions) {

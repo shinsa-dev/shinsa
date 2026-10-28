@@ -37,8 +37,6 @@ const PILLS = {
 
 const HINT = { size: 13, y: 330 };
 
-const HINT_APPS = { stable: 'Shinsa', beta: 'Shinsa', canary: 'Shinsa Canary' };
-
 const desktopDir = resolve(import.meta.dirname, '..');
 
 const outDir = join(desktopDir, 'resources', 'dmg');
@@ -140,8 +138,8 @@ function serializeWordmark(channel: Channel) {
   return `${mark}${word}${tile}${label}`;
 }
 
-function serializeHint(channel: Channel) {
-  return `<text x="${WIDTH / 2}" y="${HINT.y}" font-size="${HINT.size}" fill="${INK.muted}" text-anchor="middle">Drag ${HINT_APPS[channel]} into Applications to install</text>`;
+function serializeHint() {
+  return `<text x="${WIDTH / 2}" y="${HINT.y}" font-size="${HINT.size}" fill="${INK.muted}" text-anchor="middle">Drag Shinsa into Applications to install</text>`;
 }
 
 function serializeBackground(channel: Channel) {
@@ -163,7 +161,7 @@ function serializeBackground(channel: Channel) {
   ${serializeEdgeTraces()}
   ${serializeGuide()}
   ${serializeWordmark(channel)}
-  ${serializeHint(channel)}
+  ${serializeHint()}
 </svg>
 `;
 }

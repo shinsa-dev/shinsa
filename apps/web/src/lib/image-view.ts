@@ -38,6 +38,11 @@ export function describeOpenImage(image: { src: string; caption?: string | null 
   return `Open ${image.caption || resolveImageName(image.src)}`;
 }
 
+export function resolveShownSize(natural: Size, width: number | null | undefined): Size {
+  if (!width || natural.width <= width) return natural;
+  return { width, height: (natural.height * width) / natural.width };
+}
+
 export function resolveFit(natural: Size | null, viewport: Size, gutter: number) {
   if (!natural) return null;
   const room = {

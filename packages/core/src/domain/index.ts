@@ -232,7 +232,6 @@ export {
 } from './verification.ts';
 export {
   type ApprovalPath,
-  canUseGitButler,
   DEFAULT_WORKSPACE_MODE,
   describeHumanEdits,
   isSettingUpWorkspace,
@@ -243,5 +242,4 @@ export {
   WORKSPACE_MODES,
   WORKSPACE_SETUP_REASON,
   type WorkspaceMode,
-  type WorkspaceSupport,
 } from './workspaces.ts';

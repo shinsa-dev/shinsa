@@ -1,5 +1,4 @@
-import { type AppFlavor, DomainError, type FlavorIdentity } from '@shinsa/core';
-import { FLAVOR } from '../instance/flavor.ts';
+import { DomainError } from '@shinsa/core';
 import {
   BUNDLE,
   createServerInstance,
@@ -41,7 +40,6 @@ export interface EngineIo extends EngineControl {
 export interface CommandVersion {
   version: string;
   commit: string | null;
-  flavor: AppFlavor;
 }
 
 export const HUMAN_ONLY_ENGINE_COMMANDS = ['stop', 'restart', 'engine'] as const;
@@ -198,12 +196,9 @@ export async function restartEngine(io: EngineIo, whenIdle: boolean) {
   writeOutcome(io, 'success', 'check', `Restarted the engine in ${took}.`, `${describeEngine(health)}.`);
 }
 
-export function resolveCommandVersion(
-  bundle: ShinsaBundle | null = BUNDLE,
-  flavor: FlavorIdentity = FLAVOR
-): CommandVersion {
+export function resolveCommandVersion(bundle: ShinsaBundle | null = BUNDLE): CommandVersion {
   const instance = createServerInstance(bundle?.commit ?? null, 0, bundle);
-  return { version: instance.version, commit: instance.commit, flavor: flavor.flavor };
+  return { version: instance.version, commit: instance.commit };
 }
 
 export async function printVersion(io: EngineIo, json: boolean, bundle: ShinsaBundle | null = BUNDLE) {

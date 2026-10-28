@@ -118,14 +118,14 @@ describe('resolveEvidenceLayout', () => {
     expect(settings?.parts.map((part) => part.evidence.id)).toEqual(['dark-before', 'dark-after']);
     expect([settings?.facts, settings?.detail, inbox?.detail]).toEqual(['1280px · Dark', null, null]);
     expect(layout.groups[1]?.entries[0]?.fromReview).toBe(true);
-    expect(layout.images.map((image) => [image.caption, image.item, image.part])).toEqual([
-      ['Settings · 1280px · Dark', 'dark-before', 'Before'],
-      ['Settings · 1280px · Dark', 'dark-before', 'After'],
-      ['Inbox', 'inbox', 'Empty'],
-      ['Inbox', 'inbox', 'Full'],
-      ['Scrolling', 'clip', undefined],
-      ['Settings · 1280px · Light', 'light-after', undefined],
-      ['Menu', 'plain', undefined],
+    expect(layout.images.map((image) => [image.caption, image.item, image.part, image.width])).toEqual([
+      ['Settings · 1280px · Dark', 'dark-before', 'Before', 1280],
+      ['Settings · 1280px · Dark', 'dark-before', 'After', 1280],
+      ['Inbox', 'inbox', 'Empty', null],
+      ['Inbox', 'inbox', 'Full', null],
+      ['Scrolling', 'clip', undefined, null],
+      ['Settings · 1280px · Light', 'light-after', undefined, 1280],
+      ['Menu', 'plain', undefined, null],
     ]);
     expect(layout.images[4]?.media).toBe('video');
     expect(inbox?.parts[1]?.image).toBe(3);

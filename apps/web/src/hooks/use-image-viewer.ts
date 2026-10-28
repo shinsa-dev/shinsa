@@ -4,6 +4,7 @@ export interface ViewerImage {
   src: string;
   caption?: string | null;
   media?: 'image' | 'video';
+  width?: number | null;
   item?: string;
   part?: string;
 }

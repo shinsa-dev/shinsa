@@ -56,6 +56,8 @@ const GATE_STATUS: Record<GateType, Status> = {
   post_merge: { label: 'Post-merge', tone: 'amber' },
 };
 
+const RESOLVING_CONFLICTS = 'Resolving conflicts';
+
 const WAITING_TO_CHECK_IN: Status = { label: 'Waiting to check in again', tone: 'blue' };
 
 const WAITING_FOR_USAGE: Status = { label: 'Waiting for the usage limit', tone: 'blue' };
@@ -86,6 +88,14 @@ function isWaitingForDelegations(state: ShinsaState, task: Task) {
   );
 }
 
+export function isResolvingConflicts(task: Task) {
+  return task.stage === 'fixing' && (task.fixFor === 'conflict' || task.fixFor === 'update');
+}
+
+export function resolveStageLabel(task: Task) {
+  return isResolvingConflicts(task) ? RESOLVING_CONFLICTS : STAGE_LABEL[task.stage];
+}
+
 export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   const gate = selectLeadGate(state, task);
   if (gate?.type === 'post_merge') return { label: describePostMergeStatus(task), tone: 'amber' };
@@ -98,13 +108,13 @@ export function resolveTaskStatus(state: ShinsaState, task: Task): Status {
   if (task.stage !== 'waiting_on_tasks' && resolveRoadmapGroup(state, task) === 'waiting') {
     return { label: ROADMAP_GROUP.waiting.title, tone: ROADMAP_GROUP.waiting.tone };
   }
-  return { label: STAGE_LABEL[task.stage], tone: STAGE_TONE[task.stage] };
+  return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
 }
 
 export function resolveRowStatus(state: ShinsaState, task: Task): Status {
   const status = resolveTaskStatus(state, task);
   if (status !== WAITING_TO_CHECK_IN) return status;
-  return { label: STAGE_LABEL[task.stage], tone: STAGE_TONE[task.stage] };
+  return { label: resolveStageLabel(task), tone: STAGE_TONE[task.stage] };
 }
 
 const STAGE_STATUS_ICON: Record<TaskStage, IconName> = {

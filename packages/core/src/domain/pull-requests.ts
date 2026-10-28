@@ -51,6 +51,15 @@ export interface PullRequestWatch {
   conflicting: boolean;
   wakes: number;
   stopped: PullRequestWatchStop | null;
+  ciAbsent: boolean;
+}
+
+export type RepoCi = 'none' | 'workflows' | 'required' | 'unknown';
+
+export interface PullRequestCi {
+  repo: RepoCi;
+  since: number;
+  now: number;
 }
 
 export type PullRequestWatchChange =

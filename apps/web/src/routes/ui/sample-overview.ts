@@ -214,6 +214,24 @@ export function createOverviewScene(now: number) {
     }),
     secret: createSampleTask(now, { id: 'secret', title: 'Test the checkout flow end to end' }),
     failure: createSampleTask(now, { id: 'failure', title: 'Stream MCP tool results', stage: 'fixing' }),
+    conflict: createSampleTask(now, {
+      id: 'conflict',
+      title: 'Move the paywall cache to the edge',
+      stage: 'fixing',
+      fixFor: 'conflict',
+      stageReason: 'resolving conflicts with main',
+      branch: 'feat/edge-cache',
+      pullRequest: {
+        number: 427,
+        url: 'https://github.com/superwall/paywall-next/pull/427',
+        state: 'open',
+        base: 'main',
+        checks: 'passing',
+        unresolvedComments: 0,
+        mergeable: false,
+        updatedAt: now - 4 * MINUTE,
+      },
+    }),
     budget: createSampleTask(now, { id: 'budget', title: 'Rewrite the framework commands' }),
     keyed: createSampleTask(now, { id: 'keyed', title: 'Rename the billing webhooks' }),
     ranOut: createSampleTask(now, { id: 'ran-out', title: 'Check the preview link once staging deploys' }),
@@ -546,6 +564,7 @@ export function createOverviewScene(now: number) {
   const runs = {
     quietShort: createQuietRun(now, 'quiet-short', 6),
     quietLong: createQuietRun(now, 'quiet-long', 23),
+    conflict: createSampleRun(now, { id: 'conflict-run', taskId: 'conflict', purpose: 'fix' }),
   };
   const state = createSampleState({
     tasks: [...Object.values(tasks), ...usageWaits.map((entry) => entry.task)],

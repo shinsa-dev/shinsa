@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createProjectChanges, createProjectRoutes } from '../../src/projects/routes.ts';
 import { Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
-import { createGitRepo, createTempDir, overrideEnv } from '../helpers/index.ts';
+import { createGitRepo, createTempDir } from '../helpers/index.ts';
 
 const logs: EventLog[] = [];
 
@@ -139,23 +139,6 @@ describe('a project’s repositories and folders', () => {
       { path: realpathSync(loose.path), name: 'loose', repoId: null, projectId: null },
       { path: realpathSync(web.path), name: 'web', repoId: null, projectId },
     ]);
-  });
-
-  test('every registered repository says whether GitButler can hold its agents', async () => {
-    const { home, engine, call, projectId } = await setup();
-    const app = await createGitRepo({ root: home, name: 'app', remote: false });
-    await call('POST', `/api/projects/${projectId}/repos`, { path: app.path });
-    const repoId = Object.keys(engine.state.repos)[0] ?? '';
-    const newer = overrideEnv({ FAKE_BUT_VERSION: '0.23.0' });
-    expect(await call('GET', '/api/repos/workspaces')).toEqual({
-      support: { [repoId]: { butInstalled: true, gitButlerWorkspace: true } },
-    });
-    newer();
-    const older = overrideEnv({ FAKE_BUT_VERSION: '0.22.3' });
-    expect(await call('GET', '/api/repos/workspaces')).toEqual({
-      support: { [repoId]: { butInstalled: true, gitButlerWorkspace: false } },
-    });
-    older();
   });
 
   test('every registered repository says which coverage tool Auto would use, or none', async () => {

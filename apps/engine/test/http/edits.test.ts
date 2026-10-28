@@ -36,7 +36,7 @@ async function startWithTask() {
     evidence: new EvidenceStore(config.evidenceDir),
     models: { listModels: () => Promise.resolve([]) } as unknown as ModelSource,
     onboarding: createTestOnboarding(engine, config).onboarding,
-    workspaces: new Workspaces({ dataDir: config.dataDir, worktreesDir: config.worktreesDir }),
+    workspaces: new Workspaces({ worktreesDir: config.worktreesDir }),
   });
   running.push(http.stop);
   const { repo } = await createGitRepo({ files: { 'src/app.ts': 'export const value = 1;\n' } });

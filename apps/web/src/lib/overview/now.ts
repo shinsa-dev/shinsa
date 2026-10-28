@@ -18,6 +18,7 @@ import { describeTool, resolvePresentVerb } from '@/lib/chat/tool-describe.ts';
 import { formatCount } from '@/lib/format/count.ts';
 import { AGENT_STAGES } from '@/lib/format/labels.ts';
 import { describeChecksPassed } from '@/lib/tasks/checks.ts';
+import { describeConflict } from '@/lib/tasks/now.ts';
 import { describeWaitsOn } from '@/lib/tasks/roadmap.ts';
 import { resolveTaskStatus } from '@/lib/tasks/status.ts';
 
@@ -50,7 +51,7 @@ export function resolveNowTitle(
   if (task.stage === 'checking') return capitalise(task.stageReason);
   if (current?.planned) return current.title;
   if (!run && SETTLED_TITLE[task.stage]) return SETTLED_TITLE[task.stage] ?? '';
-  return capitalise(task.stageReason);
+  return describeConflict(task) ?? capitalise(task.stageReason);
 }
 
 export function describeFollowUpNote(step: DeliveringStep, role: Run['role'] | null) {
