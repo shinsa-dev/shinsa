@@ -296,29 +296,26 @@ describe('reading Codex’s usage', () => {
     expect(reading.read.ok && reading.read.windows.map((window) => window.usedPercent)).toEqual([20, 50]);
   });
 
-  test('without a ChatGPT token the app server answers: signed out, an API key, or another sign-in', async () => {
+  test.each([
+    ['signed out', null, { read: { ok: false, reason: 'expired' } }],
+    [
+      'an API key',
+      { type: 'apiKey' },
+      { read: { ok: true, windows: [], fastMode: 'available' }, email: null, plan: null },
+    ],
+    [
+      'another sign-in',
+      { type: 'amazonBedrock', usesCodexManagedCredentials: false },
+      { read: { ok: false, detail: 'Codex reports usage limits only when it is signed in with ChatGPT.' } },
+    ],
+    [
+      'ChatGPT with no email',
+      { type: 'chatgpt', email: null, planType: 'team' },
+      { read: { ok: true, windows: [] }, email: null, plan: 'team' },
+    ],
+  ])('without a ChatGPT token the app server answers: %s', async (_name, account, reading) => {
     const env = { CODEX_HOME: createHome(undefined) };
-    const signedOut = await readCodexUsage(new FakeCodex({ account: null }).runtime, { env });
-    expect(signedOut.read).toMatchObject({ ok: false, reason: 'expired' });
-    const apiKey = await readCodexUsage(new FakeCodex({ account: { type: 'apiKey' } }).runtime, { env });
-    expect(apiKey).toEqual({
-      read: { ok: true, windows: [], fastMode: 'available' },
-      email: null,
-      plan: null,
-    });
-    const bedrock = await readCodexUsage(
-      new FakeCodex({ account: { type: 'amazonBedrock', usesCodexManagedCredentials: false } }).runtime,
-      { env }
-    );
-    expect(bedrock.read).toMatchObject({
-      ok: false,
-      detail: 'Codex reports usage limits only when it is signed in with ChatGPT.',
-    });
-    const plan = await readCodexUsage(
-      new FakeCodex({ account: { type: 'chatgpt', email: null, planType: 'team' } }).runtime,
-      { env }
-    );
-    expect(plan).toMatchObject({ read: { ok: true, windows: [] }, email: null, plan: 'team' });
+    expect(await readCodexUsage(new FakeCodex({ account }).runtime, { env })).toMatchObject(reading);
   });
 
   test('a codex that is missing, refuses or never answers is a failed read, not a crash', async () => {

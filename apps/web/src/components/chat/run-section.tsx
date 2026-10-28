@@ -135,7 +135,7 @@ function TurnView({
       )}
       {turn.errors.map((item) => (
         <div key={item.key} className={LINE_ROW}>
-          <ErrorLine text={item.text} />
+          <ErrorLine text={item.text} count={item.count} />
         </div>
       ))}
     </>

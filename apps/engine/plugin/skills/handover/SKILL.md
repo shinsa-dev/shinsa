@@ -230,6 +230,13 @@ the pull request (CI then runs on it).
 - `check_changes`: as on a phase, when the fix needs a new check, or a check whose command was wrong or too wide
   (with the reason). Never widen a check to the whole suite to make it pass.
 
+While you fix, run the test files or folders the fix touches, never the whole suite: Shinsa refuses it in the shell
+too, and runs the checks itself after you hand over.
+
+Evidence must show the work as it is after the fix. Take again what the fix changed and attach it with the same `key`:
+it replaces the old item, never sits beside it. Remove what no longer applies with `remove_evidence`, and name in
+`evidence_kept` each earlier item the fix touched that still holds. Shinsa refuses the fix until each is accounted for.
+
 When the fix changes how the change works (the approach, the flow, a risk, how to test it or the steps around the
 merge), also send `walkthrough` with only the parts that changed. Each part you send replaces that part of the
 walkthrough whole, so send the full new `risks`, `testing` (both `automated` and `manual`) or `steps`, not just the

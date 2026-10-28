@@ -9,6 +9,7 @@ import {
   type ShinsaEvent,
   selectStackTarget,
   serializeTaskReferences,
+  validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
@@ -94,6 +95,8 @@ export class ToolCalls {
         return this.#options.questions.requestSecret(runId, attemptId, input, signal, dispatch);
       case 'attach_evidence':
         return this.#attachEvidence(call, dispatch);
+      case 'remove_evidence':
+        return this.#removeEvidence(call, dispatch);
       case 'find_tasks':
         return Promise.resolve(
           serializeTaskReferences(this.#options.engine.state, readString(input, 'query') ?? '')
@@ -209,6 +212,13 @@ export class ToolCalls {
     const evidence = storeEvidence(input, task.worktreePath, this.#options.evidence, folder);
     await dispatch({ ...evidence, runId, attemptId });
     return 'Attached.';
+  }
+
+  async #removeEvidence({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {
+    const { items, reason } = assertProtocol(validateEvidenceRemoval(input));
+    this.#findCurrent(runId, attemptId);
+    await dispatch({ type: 'agent.remove_evidence', runId, attemptId, items, reason });
+    return 'Removed.';
   }
 
   #readTask(input: Record<string, unknown>) {

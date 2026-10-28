@@ -6,7 +6,8 @@ import type {
   ReviewEscalationReason,
   TaskStage,
 } from '../domain/index.ts';
-import type { PullRequestWatchChange } from '../domain/pull-requests.ts';
+import type { PullRequestWatchChange, PushHookFailure, ShippingStepKind } from '../domain/pull-requests.ts';
+import type { EventOf } from '../events/index.ts';
 import type { CheckChange, CheckNote, ReportCheck, ReviewFinding } from '../report/types.ts';
 
 const STAGE_ACTIVITY: Partial<Record<TaskStage, string>> = {
@@ -33,7 +34,33 @@ const FIX_REASON_TEXT: Record<Exclude<FixReason, 'you'>, string> = {
   review: 'fixing what the agent review found',
   pull_request: 'fixing the pull request',
   conflict: 'resolving the conflicts GitButler left',
+  update: 'resolving conflicts with the base branch',
+  hook: 'fixing what the pre-push hook found',
 };
+
+const SHIPPING_STEP_TEXT: Record<ShippingStepKind, string> = {
+  updating: 'Updating the branch',
+  pushing: 'Pushing',
+  opening: 'Opening the pull request',
+};
+
+export function describeRetryDelay(retryAt: number, now: number) {
+  return `${Math.max(1, Math.round((retryAt - now) / 1000))}s`;
+}
+
+export function describePushRetry(event: EventOf<'pull_request.push_retrying'>) {
+  return {
+    text: `${SHIPPING_STEP_TEXT[event.step]} failed on attempt ${event.attempt} of ${event.attempts}, trying again in ${describeRetryDelay(event.retryAt, event.at)}`,
+    detail: event.detail,
+  };
+}
+
+export function describeHookFailure(failure: PushHookFailure) {
+  return {
+    text: 'The pre-push hook rejected the push',
+    detail: failure.failures && failure.failures.length > 0 ? failure.failures.join('\n') : null,
+  };
+}
 
 const DECISION_TEXT: Record<GateDecision, string> = {
   approve: 'Approved',

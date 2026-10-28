@@ -82,11 +82,11 @@ function Toaster(props: ToasterProps) {
       mobileOffset={{ top: 12 }}
       gap={8}
       icons={{
-        success: <Icon name='IconCheckCircle2Filled' size='md' className='text-primary-4' />,
-        info: <Icon name='IconInfoSimple' size='md' className='text-primary-4' />,
-        warning: <Icon name='IconExclamationTriangleFilled' size='md' className='text-amber-4' />,
-        error: <Icon name='IconExclamationCircleFilled' size='md' className='text-red-4' />,
-        loading: <Spinner size='md' className='text-fg-2' />,
+        success: <Icon name='IconCheckCircle2Filled' size='sm' className='text-primary-4' />,
+        info: <Icon name='IconInfoSimple' size='sm' className='text-primary-4' />,
+        warning: <Icon name='IconExclamationTriangleFilled' size='sm' className='text-amber-4' />,
+        error: <Icon name='IconExclamationCircleFilled' size='sm' className='text-red-4' />,
+        loading: <Spinner size='sm' className='text-fg-2' />,
       }}
       style={
         {

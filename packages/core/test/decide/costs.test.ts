@@ -86,7 +86,7 @@ describe('the cost limit per task', () => {
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ type: 'failure', cause: 'budget', title: 'Reached its cost limit' });
     expect(gate.body).toBe(
-      'This task has used $6.00, past its $5.00 limit, so the next step did not start. Continue to allow another $5.00, or cancel the task.'
+      'This task reached its $5.00 cost limit, so the next step did not start. Continue to allow another $5.00, or cancel the task.'
     );
     expect(harness.task(taskId).stage).toBe('building');
   });
@@ -318,7 +318,7 @@ describe('the usage limit per task', () => {
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ type: 'failure', cause: 'budget', title: 'Reached its usage limit' });
     expect(gate.body).toBe(
-      'This task has used 12% of the weekly usage limit, past its 10% limit, so the next step did not start. Continue to allow another 10%, or cancel the task.'
+      'This task reached its usage limit of 10% of the weekly limit, so the next step did not start. Continue to allow another 10%, or cancel the task.'
     );
   });
 
@@ -372,7 +372,7 @@ describe('the usage limit per task', () => {
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({ cause: 'budget', title: 'Reached its usage limit' });
     expect(gate.body).toBe(
-      'This task has used 12% of the weekly usage limit, past its 10% limit, so the next step did not start. The share is an early estimate while Shinsa learns the account’s rate. Continue to allow another 10%, or cancel the task.'
+      'This task reached its usage limit of 10% of the weekly limit, so the next step did not start. The share is an early estimate while Shinsa learns the account’s rate. Continue to allow another 10%, or cancel the task.'
     );
   });
 

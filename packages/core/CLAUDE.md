@@ -28,7 +28,7 @@ src/
 │                    validatePipeline read from each step's needs), the verification rules
 │                    (verification.ts: VERIFICATION_RULES, validateVerification, validatePlanRules,
 │                    listMissingEvidence), a task's checks (checks.ts: isWholeSuiteCommand and
-│                    describeWholeSuiteRefusal for a plan's command, listRepoChecks (the repository's commands as
+│                    describeWholeSuiteRefusal for a plan's command and an agent's shell, listRepoChecks (the repository's commands as
 │                    r1…), listTaskChecks, listPhaseChecks, listTouchedPhaseChecks (the checks of the phases whose
 │                    files a fix changed, from PhaseReport.files), resolveNextCheckId, isBlockingCheck and
 │                    listBlockingChecks: a fail not noted fails_on_base), projects (projects.ts: keys, task handles,
@@ -96,7 +96,11 @@ src/
 │   │                repository's checks)
 │   ├── fixes.ts     Fix loops: checks and review reactions, the automatic budget, stall detection, review escalation
 │   ├── fingerprints.ts  Recovery and fix fingerprints, so prose never resets a budget
-│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues
+│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues; the
+│   │                steps of a push as stage reasons (recordShippingStep), a visible retry (recordPushRetry), a
+│   │                conflict while updating onto the base (recordUpdateConflict, `fixFor: 'update'`) and a pre-push
+│   │                hook rejection (recordHookFailure, `fixFor: 'hook'`; the same failures again open the `push_hook`
+│   │                gate, retryHookFix answers it); after the checks of such a fix the push follows (checks.ts)
 │   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
 │   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks, stacking a GitButler
@@ -130,8 +134,9 @@ src/
 │   ├── runs.ts      Agent run ends, recovery by failure class (one nudge, a fresh session, or a gate at once),
 │   │                attempts and stale writes, restart continuation and its loop guards, lost sessions, dispatch
 │   ├── agents.ts    Agent hand-overs (propose_plan with the plan rules, complete_phase with the evidence the plan
-│   │                asks for and its check changes, complete_fix with the checks it names, report_review, ask,
-│   │                evidence, a linked check (attachCheck), note)
+│   │                asks for and its check changes, complete_fix with the checks it names and the earlier evidence
+│   │                it must account for (evidence_stale), report_review, ask, evidence that replaces what it shows
+│   │                again by key, a linked check (attachCheck), removing evidence (removeEvidence), note)
 │   ├── shapes.ts    Task shapes: the next step of a pipeline, the inquiry steps (answer, research, investigate)
 │   │                and the operation, results and proposals, your OK and its proposal gate, the agent's
 │   │                presets and composed steps, the operation gate and its notes after a merge, follow-ups (an
@@ -340,7 +345,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
 ## Tests
 
 `bun test` here enforces 100% line and function coverage (`bunfig.toml`). The property test runs each walk (the base
-one, outages, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
+one, outages, pushes, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
 seeds of 400 random commands, in about three minutes; when it fails it names the seed, the step and the command. Set
 `SHINSA_SEEDS` to sweep wider before landing a change to `decide` (`SHINSA_SEEDS=1000 bun test
 test/decide/invariants.test.ts` takes about an hour).

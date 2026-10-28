@@ -45,6 +45,22 @@ for await (const chunk of Bun.stdin.stream()) {
   return { path, cwd: dir, received: () => readFileSync(received, 'utf8') };
 }
 
+function createDeafServer() {
+  const dir = createTempDir();
+  const path = join(dir, 'server');
+  writeFileSync(
+    path,
+    `#!/bin/sh
+exec 0<&-
+printf 'stopped reading' >&2
+echo '{"method":"deaf"}'
+exec sleep 30
+`
+  );
+  chmodSync(path, 0o755);
+  return { path, cwd: dir };
+}
+
 describe('the app server client', () => {
   test('talks JSON-RPC over lines, skips noise and answers requests it has no handler for', async () => {
     const server = createServer();
@@ -76,5 +92,18 @@ describe('the app server client', () => {
     expect(notes).toContain('note');
     expect(notes).toContain('last');
     await expect(client.request('echo', {})).rejects.toThrow('Codex’s app server has stopped.');
+  });
+
+  test('a server that stops reading is stopped, and its requests fail with its last words', async () => {
+    const server = createDeafServer();
+    const client = new CodexClient({ path: server.path, cwd: server.cwd });
+    const deaf = Promise.withResolvers<void>();
+    const exits: string[] = [];
+    client.onNotification(() => deaf.resolve());
+    client.onExit((message) => exits.push(message));
+    await deaf.promise;
+    await expect(client.request('echo', {})).rejects.toThrow('stopped reading');
+    await client.exited;
+    expect(exits).toEqual(['stopped reading']);
   });
 });

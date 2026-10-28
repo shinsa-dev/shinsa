@@ -67,6 +67,7 @@ export interface SeedRun {
   summary: string;
   reply?: string;
   failed?: boolean;
+  handover?: ChatTool;
 }
 
 export function resolveAgentSession(taskId: string) {

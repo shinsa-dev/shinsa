@@ -959,7 +959,7 @@ Rows inside a card never borrow a stat value's size; a figure in a row is `text-
 | Popover | `w-64` (256px), `p-2.5`, `gap-2`, 8px from its trigger |
 | Preview card (`InfoPopover`) | `w-72` (288px) |
 | Tooltip | `min-h-6`, `max-w-72`, `px-2 py-1`, `gap-1` |
-| Toast | `padding: 6px 10px`, `gap: 8px`, `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
+| Toast | `padding: 6px 10px`, `gap: 8px` (6px from the icon, whose box takes 2px back), `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
 | Command menu | 40px input row (`h-10 px-3 gap-2`, bottom hairline), list in a `SizeAnimator`, 28px footer (`h-7 px-3 gap-3`, top hairline) |
 | Card | `CARD`: `corner-superellipse/1.125 rounded-xl border border-border bg-card`; inset 12px (`p-3`) on all four sides; a list card `p-1` |
 | Inset (anything nested in a card or the chat column) | `INSET`: `corner-superellipse/1.125 rounded-lg border border-border` with its fill on top |
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs, toasts |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -3566,7 +3566,7 @@ The live card uses `duration={240}`; the default 180ms is for popup content.
 | cancel button | `bk-toast-button corner-superellipse/1.125 !h-6 !cursor-pointer !rounded-control-sm !bg-bg-a2 !px-2.5 !font-medium !text-fg-3 !text-xs` |
 | close button | `bk-toast-button corner-superellipse/1.125 !cursor-pointer !rounded-control !bg-bg-2 !text-fg-3` |
 
-Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='md'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
+Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='sm'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
 
 **Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet):
 
@@ -3595,7 +3595,8 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
   color: var(--fg-2); margin-top: 6px; font-size: var(--text-2xs); line-height: 1.2;
 }
 [data-sonner-toast].bk-toast [data-icon] {
-  width: 16px; height: 16px; margin: 0; flex-shrink: 0;
+  width: 14px; height: 14px; flex-shrink: 0;
+  margin: 0 -2px 0 0;   /* the 8px gap less 2px: 6px to the text, as a menu row; the action stays 8px away */
   display: flex; align-items: center; justify-content: center; position: relative;
 }
 [data-sonner-toast].bk-toast [data-icon] > svg { margin: 0; }
@@ -3603,10 +3604,10 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   text-box: trim-both cap alphabetic;   /* glyph edges line up with flex alignment */
 }
-[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2px; }
+[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
 ```
 
-So a one-line toast is 34px tall: a 16px icon, 8px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
+So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
 
 **Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot.
 
@@ -7553,10 +7554,10 @@ Every waiting or result state of a running process is one card on the same frame
 | --- | --- | --- | --- |
 | Paused (a failure) | orange, Paused group | the gate's title, a link to the agent's last message or the body | Retry (primary, named for what it does); Cancel task as a quiet link |
 | Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown | Verify again (primary); Cancel task quiet. Nothing configured to check is never a setup problem |
-| Sign-in needed | orange, `IconUserKey` | title and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
+| Sign-in needed | orange, `IconUserKey` | the title ("Paused: a@b.com needs signing in", one status for the cause) and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
 | A wait | blue, "Waiting to check in again" | "The agent is waiting on something outside the repository", the notes (`selectable text-fg-4`) over "Check-in 2 of 10 · gives up in 3 hours" (`text-2xs text-fg-2`) | Check in now (`outline`); eyebrow counts down |
-| Waiting on a limit | blue, In progress | "Resumes when the usage limit resets", the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |
-| A revised plan | | eyebrow "Version 2 · 4 phases", then an inset with "You asked" and "What changed" | Approve plan sends the version on screen |
+| Waiting on a limit | blue, In progress | "Waiting for usage: continues at 3:40 PM on a@b.com" (when and where it carries on, in one line), the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |
+| A revised plan | | eyebrow "Version 2 · 4 phases", an inset with "You asked" and your words alone, then the plan: "What changed" and the summary right before the goal, a quiet "New" or "Changed" `Badge` `sm` beside each added or reworked phase (the chat's plan card the same) | Approve plan sends the version on screen |
 | A proposed change | | eyebrow names who proposes it, title the question, the why, "What it would change" on an inset | Make it a change (primary); "Keep it as an investigation" quiet |
 | An operation to run | | the merge line with a mono copyable commit chip, the steps and impact as markdown, one editable notes box | Run the operation (primary); "Finish without it" quiet, behind a confirm |
 | A secret request | | eyebrow "The agent asked for the ‹label›", the reason, a password `Input` ("Paste the ‹label›") with Save | footer note "It goes to Shinsa’s secret store. The agent and the chat never see it." and "Don’t give it" quiet |
@@ -7576,13 +7577,15 @@ A secondary block inside a card sits on an inset: `INSET` + `bg-bg-a1`.
 
 | Use | Classes |
 | --- | --- |
-| A block of context ("You asked" / "What changed") | `flex flex-col gap-2 px-3 py-2.5 text-xs`; each part `flex flex-col gap-px`, its label `text-2xs text-fg-2`, its text `selectable text-fg-3` (the summary `text-fg-4`); a computed list as `·` rows (`flex gap-1.5`, the dot `text-fg-2`) |
+| A block of context (a revised plan's "You asked") | `flex flex-col gap-px px-3 py-2.5 text-xs`: the label `text-2xs text-fg-2`, the person's words `selectable text-fg-3`; only their words go here, the agent's summary belongs to the card's body |
 | A one-line strip with quiet links | `flex items-center gap-2 px-3 py-2 text-2xs text-fg-2`: icon and sentence (`text-fg-3`, `text-orange-text` once it is serious), a spacer, then quiet links |
 | A fix with a command to copy | `flex items-center gap-1.5 py-1 pr-1 pl-2`: the fix as inline markdown (`min-w-0 flex-1 text-fg-3 text-xs`) and a `CopyButton` |
 
 - An inset note never changes the process's status; it informs.
 - Example: "No output for 23 minutes" above the live feed (`IconClock`, `fg-3`, orange from 15 minutes) with Snooze
   and Dismiss.
+- Say what is happening when you know it: while a tool call is still running the strip reads "A command has been
+  running for 23 minutes" with the command's first line in mono (`font-mono text-fg-2`, truncated), not "No output".
 
 #### Choice buttons
 
@@ -7858,17 +7861,23 @@ An entry an agent caused through its management tools reads "‹handle› agent 
 it has a handle), a link to the acting task, and "Shinsa (on your behalf)" when no task is named. Its tool calls show
 in its turn like any tool, folded with the other Shinsa tools as "Used 2 Shinsa tools".
 
-#### Unknown costs
+#### A task's cost
 
-A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
-names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
+A task's cost shows in one place only: the cost control in its facts row, the unit's icon and the amount (a gauge icon
+and "1.8%" on a subscription, a coins icon and "$18.55" on an API key), whose popover on hover holds the rest. No other
+surface repeats it: not a now card, a run or round divider, a task row, an activity entry, the review, a preview card
+or the command menu. An account's usage (its weekly window, in the top bar's usage menu and Settings) is not a task's cost and
+stays. A limit's gate names the limit it reached, never what the task spent.
 
-A task's cost shows in one unit: its share of the weekly window when it ran on a subscription (a gauge icon, "1.8%
-of weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
-learned (a coins icon, "$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
+In that popover the cost is in one unit: its share of the weekly window when it ran on a subscription ("1.8% of the
+weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
+learned ("$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
 as estimated by the agent provider."), never beside the total as a second number. A share is an estimate, said once
 and quietly in that same line ("The share is learned from 12 tasks on this account."), never as a badge. It follows
 the account's current rate, so it can move a little as the rate improves. Shares show a tenth below 10% ("0.4%") and whole percentages above.
+
+A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
+names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
 
 ### 11.4 The desktop window, code, review, navigation, errors, selection and folding
 

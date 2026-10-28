@@ -246,6 +246,7 @@ async function startWork(services: Services) {
   const { engine, effects } = services;
   engine.onEffect((effect, context) => effects.apply(effect, context));
   engine.onEffectExhausted((effect, error, key) => effects.reportExhausted(effect, error, key));
+  engine.onEffectRetry((effect, retry, key) => effects.reportRetry(effect, retry, key));
   engine.start();
   effects.startWatching();
   services.schedules.start();

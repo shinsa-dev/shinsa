@@ -1,6 +1,7 @@
 import { type Repo, resolveRoundBase, type Task } from '@shinsa/core';
-import { assertRefName } from '../git/index.ts';
+import { assertRefName, runPush, updateOntoBase } from '../git/index.ts';
 import { runGitOrThrow } from '../git/run.ts';
+import type { UpdateOptions } from '../git/update.ts';
 import { resolveFreeBranch, resolveStartPoint } from '../git/worktree.ts';
 import { log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
@@ -81,10 +82,10 @@ export class MainCheckoutStrategy implements WorkspaceStrategy {
 
   async push(repo: Repo, task: Task, signal?: AbortSignal) {
     const branch = assertRefName(requireCheckout(task).branch);
-    await runCommandOrThrow(
+    await runPush(
       ['git', 'push', '--quiet', '-u', 'origin', `refs/heads/${branch}:refs/heads/${branch}`],
       repo.path,
-      { timeoutMs: null, signal }
+      signal
     );
     return runCommandOrThrow(['git', 'rev-parse', `refs/heads/${branch}`], repo.path);
   }
@@ -120,5 +121,11 @@ export class MainCheckoutStrategy implements WorkspaceStrategy {
 
   update() {
     return refuseUpdate();
+  }
+
+  async syncBase(repo: Repo, task: Task, base: string, options: UpdateOptions) {
+    const { branch } = requireCheckout(task);
+    await assertOnBranch(repo.path, branch);
+    return updateOntoBase(repo.path, base, branch, options);
   }
 }

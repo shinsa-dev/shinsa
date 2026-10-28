@@ -18,7 +18,7 @@ export type PaneContent =
   | { kind: 'waiting' }
   | { kind: 'failed'; message: string }
   | { kind: 'absent'; head: FileContent | null }
-  | { kind: 'text'; content: string; original: string | null };
+  | { kind: 'text'; content: string; original: string | null; baseline: string | null };
 
 function readText(loaded: Loaded<FileContent>, path: string | null) {
   if (path === null) return '';
@@ -32,12 +32,18 @@ function isPending(loaded: Loaded<FileContent>, path: string | null) {
 export function resolvePaneContent(input: {
   headPath: string | null;
   basePath: string | null;
+  baselinePath?: string | null;
   diffing: boolean;
   head: Loaded<FileContent>;
   base: Loaded<FileContent>;
 }): PaneContent {
   const { head, base, diffing } = input;
-  if (isPending(head, input.headPath) || (diffing && isPending(base, input.basePath)))
+  const baselinePath = diffing ? null : (input.baselinePath ?? null);
+  if (
+    isPending(head, input.headPath) ||
+    (diffing && isPending(base, input.basePath)) ||
+    isPending(base, baselinePath)
+  )
     return { kind: 'waiting' };
   if (head.status === 'error') return { kind: 'failed', message: head.message };
   if (diffing && base.status === 'error') return { kind: 'failed', message: base.message };
@@ -46,7 +52,8 @@ export function resolvePaneContent(input: {
   if (content === null || (diffing && original === null)) {
     return { kind: 'absent', head: head.status === 'ready' ? head.value : null };
   }
-  return { kind: 'text', content, original };
+  const baseline = baselinePath && base.status === 'ready' ? base.value.content : null;
+  return { kind: 'text', content, original, baseline };
 }
 
 export function holdPaneContent(shown: PaneContent | null, next: PaneContent): PaneContent {

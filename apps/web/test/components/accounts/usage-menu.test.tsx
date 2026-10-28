@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { UsageMenu } from '@/components/accounts/usage-menu.tsx';
+import * as accounts from '@/lib/connection/accounts.ts';
 import { createAccount, createProviderLogin, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { pushAccounts, startFakeServer, stopFakeServer } from '../../support/server.ts';
 import { createShinsaState } from '../../support/state.ts';
@@ -107,6 +108,25 @@ describe('the usage menu', () => {
     expect(screen.getByText('Resets in 3d')).toBeTruthy();
     expect(screen.getByText('Signed out.')).toBeTruthy();
     expect(screen.getByText('No usage reported yet.')).toBeTruthy();
+  });
+
+  it('reads usage again by itself while its popover is open, and only then', async () => {
+    const stop = mock(() => undefined);
+    const watch = spyOn(accounts, 'watchUsage').mockReturnValue(stop);
+    try {
+      pushAccounts(
+        createSnapshot({ accounts: [createAccount({ id: 'a', isDefault: true, usage: usage(10) })] })
+      );
+      const view = renderMenu();
+      expect(watch).not.toHaveBeenCalled();
+      await hover(screen.getByRole('button', { name: 'Agent usage' }));
+      expect(await screen.findByText('Claude · a@example.com')).toBeTruthy();
+      expect(watch).toHaveBeenCalledTimes(1);
+      view.unmount();
+      expect(stop).toHaveBeenCalledTimes(1);
+    } finally {
+      watch.mockRestore();
+    }
   });
 
   it('reads Agent usage when the next account has no figure, and goes to Settings → Agent usage → Accounts on click', async () => {

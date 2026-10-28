@@ -49,6 +49,8 @@ import {
   createActiveRun,
   isSteerable,
   resolveAttemptKey,
+  stopActiveRun,
+  waitToRetry,
 } from './active.ts';
 import { type ClockTimers, MINUTE_MS, RunClock } from './clock.ts';
 import { IdleCompaction, type IdleCompactionOptions } from './compaction.ts';
@@ -122,6 +124,8 @@ const MAX_RUN_MS = 2 * 60 * 60 * 1000;
 const SCRATCH_BRANCH = 'main';
 
 const QUIESCE_MS = 60_000;
+
+const OVERLOAD_RETRIES = 3;
 
 const UNGUARDED = 'This agent provider cannot stop the commands Shinsa forbids, so Shinsa will not run it.';
 
@@ -403,6 +407,7 @@ export class RunSupervisor {
       () => {
         timedOut = true;
         if (active.session) this.#cancelSession(run.id, active);
+        active.wake?.();
       },
       this.#clockTimers
     );
@@ -422,8 +427,18 @@ export class RunSupervisor {
           plan = resolveHandoffPlan(this.#context(turn), 'session_restore', plan.resume, provider.id);
           continue;
         }
+        if (this.#isOverloadRetry(active, result)) {
+          await this.#waitForOverload(turn, result.failure?.message ?? '');
+          if (timedOut)
+            return { outcome: 'failed', summary: 'It ran past its time limit without handing over.' };
+          if (active.stopping)
+            return { outcome: 'cancelled', summary: null, undelivered: result.undelivered };
+          carryUndelivered(active, result.undelivered);
+          continue;
+        }
         const verdict = await this.#review(turn, attemptId, result);
         if (!verdict.retry) return verdict.failure ? { ...result, failure: verdict.failure } : result;
+        if (verdict.renewed) this.#retryRenewed(active, verdict.renewed);
         carryUndelivered(active, result.undelivered);
       }
     } catch (error) {
@@ -431,6 +446,33 @@ export class RunSupervisor {
     } finally {
       active.clock.stop();
     }
+  }
+
+  #isOverloadRetry(active: ActiveRun, result: AgentSessionResult) {
+    if (result.outcome !== 'failed' || result.failure?.class !== 'overloaded') return false;
+    return active.overloads < OVERLOAD_RETRIES && !active.stopping && !this.#shuttingDown;
+  }
+
+  async #waitForOverload({ run, active, provider }: Turn, detail: string) {
+    active.overloads += 1;
+    const delay = this.#config.overloadRetryMs * 2 ** (active.overloads - 1);
+    log.info('[Runs] The provider is overloaded; trying the same turn again shortly', {
+      runId: run.id,
+      attempt: active.overloads,
+      delayMs: delay,
+    });
+    this.#recordEntry(run.id, {
+      type: 'notice',
+      notice: {
+        kind: 'retrying',
+        provider: provider.id,
+        detail,
+        attempt: active.overloads,
+        attempts: OVERLOAD_RETRIES,
+        retryAt: Date.now() + delay,
+      },
+    });
+    await waitToRetry(active, delay);
   }
 
   #recordSessionLost(runId: string, sessionId: string) {
@@ -459,8 +501,15 @@ export class RunSupervisor {
       attemptId,
       accountId,
       tried: [...active.rejected],
+      renewed: [...active.renewed],
       failure: result.failure,
     });
+  }
+
+  #retryRenewed(active: ActiveRun, accountId: string) {
+    active.renewed.push(accountId);
+    active.rejected = active.rejected.filter((id) => id !== accountId);
+    active.renewing = { id: accountId, email: active.lease?.email ?? null };
   }
 
   #markLeaseSpent(except: string, accountId: string) {
@@ -475,9 +524,11 @@ export class RunSupervisor {
     }
   }
 
-  #leaseAttempt(turn: Turn) {
-    if (!resolveCapabilities(turn.provider).accounts) return null;
-    return this.#leasing.leaseAttempt(turn.run, [...turn.active.rejected]);
+  #leaseAttempt({ provider, run, active }: Turn) {
+    if (!resolveCapabilities(provider).accounts) return null;
+    const renewing = active.renewing;
+    active.renewing = null;
+    return this.#leasing.leaseAttempt(run, [...active.rejected], renewing);
   }
 
   #resolveModel({ run, provider }: Turn) {
@@ -682,7 +733,7 @@ export class RunSupervisor {
   }
 
   #cancelSession(runId: string, active: ActiveRun) {
-    active.stopping = true;
+    stopActiveRun(active);
     active.session?.cancel().catch((error: unknown) => {
       log.warn('[Runs] Could not stop a session', { runId, error: describeError(error) });
     });
@@ -779,7 +830,7 @@ export class RunSupervisor {
     this.#claims.get(runId)?.abort();
     const active = this.#active.get(runId);
     if (!active) return;
-    active.stopping = true;
+    stopActiveRun(active);
     await active.session?.cancel();
   }
 
@@ -805,7 +856,7 @@ export class RunSupervisor {
     }
     await Promise.allSettled(
       live.map(([, active]) => {
-        active.stopping = true;
+        stopActiveRun(active);
         return active.session?.cancel();
       })
     );

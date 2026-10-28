@@ -4,17 +4,98 @@ import type { Repo, Task } from './types.ts';
 const WHOLE_SUITES = [
   /^(?:bun|npm|pnpm|yarn)(?: run)? test$/,
   /^(?:bunx |npx |pnpm exec |yarn )?(?:vitest(?: run)?|jest)$/,
-  /^(?:python3? -m )?pytest$/,
+  /^(?:python3? )?pytest$/,
   /^(?:uv run |poetry run )pytest$/,
   /^go test \.\/\.\.\.$/,
   /^cargo test$/,
   /^make (?:test|check)$/,
   /^(?:bun|npm|pnpm|yarn)(?: run)? (?:check|ci|verify|test:all)$/,
+  /^(?:bunx |npx |pnpm exec |yarn )?turbo(?: run)? (?:test|check|ci|verify|test:all)$/,
 ];
 
+const SEGMENT_SEPARATOR = /\$\(|`|&&|\|\||[;|\n]|(?<![<>])&(?!>)/;
+
+const FLAG = /^-/;
+
+const DURATION = /^(?:-|\d+(?:\.\d+)?[a-z]?$|[A-Z]+$)/;
+
+const WRAPPERS: ReadonlyMap<string, RegExp> = new Map([
+  ['env', FLAG],
+  ['timeout', DURATION],
+  ['gtimeout', DURATION],
+  ['nice', /^(?:-|\d+$)/],
+  ['nohup', FLAG],
+  ['time', FLAG],
+  ['command', FLAG],
+  ['exec', FLAG],
+  ['sh', FLAG],
+  ['bash', FLAG],
+  ['zsh', FLAG],
+]);
+
+const VALUED_OPTIONS = new Set([
+  '--cwd',
+  '--filter',
+  '-C',
+  '--prefix',
+  '--dir',
+  '--timeout',
+  '--seed',
+  '--rerun-each',
+  '--reporter',
+  '--concurrency',
+  '--max-workers',
+]);
+
+const REDIRECT = /^\d*(?:[<>]{1,2}|&>{1,2})&?(\S*)$/;
+
+function removeRedirects(words: string[]) {
+  const kept: string[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const redirect = REDIRECT.exec(words[index] ?? '');
+    if (!redirect) kept.push(words[index] ?? '');
+    else if (!redirect[1]) index += 1;
+  }
+  return kept;
+}
+
+function removeWrappers(words: string[]) {
+  let start = 0;
+  while (start < words.length) {
+    const word = words[start] ?? '';
+    const options = WRAPPERS.get(word.slice(word.lastIndexOf('/') + 1));
+    if (/^\w+=/.test(word)) start += 1;
+    else if (options) {
+      start += 1;
+      while (start < words.length - 1 && options.test(words[start] ?? '')) start += 1;
+    } else break;
+  }
+  return words.slice(start);
+}
+
+function removeOptions(words: string[]) {
+  const kept: string[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index] ?? '';
+    if (VALUED_OPTIONS.has(word)) index += 1;
+    else if (!word.startsWith('-')) kept.push(word);
+  }
+  return kept;
+}
+
+function resolveSuiteCore(segment: string) {
+  const words = segment
+    .replace(/\$\(|["'`(){}]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  return removeOptions(removeWrappers(removeRedirects(words))).join(' ');
+}
+
 export function isWholeSuiteCommand(command: string) {
-  const normalised = command.trim().replace(/\s+/g, ' ');
-  return WHOLE_SUITES.some((pattern) => pattern.test(normalised));
+  return command
+    .split(SEGMENT_SEPARATOR)
+    .map(resolveSuiteCore)
+    .some((core) => WHOLE_SUITES.some((pattern) => pattern.test(core)));
 }
 
 export function describeWholeSuiteRefusal(path: string, command: string) {

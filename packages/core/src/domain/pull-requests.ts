@@ -58,3 +58,16 @@ export type PullRequestWatchChange =
   | { kind: 'checks_passed'; count: number; required: boolean }
   | { kind: 'remarks'; remarks: PullRequestRemark[]; total?: number }
   | { kind: 'conflicting' };
+
+export type ShippingStep =
+  | { kind: 'updating'; base: string }
+  | { kind: 'pushing'; hook: boolean }
+  | { kind: 'opening' };
+
+export type ShippingStepKind = ShippingStep['kind'];
+
+export interface PushHookFailure {
+  output: string;
+  failures: string[] | null;
+  signature: string;
+}

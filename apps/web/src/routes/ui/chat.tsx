@@ -24,8 +24,9 @@ import {
   useDisclosure,
   useDisclosureScope,
 } from '@/lib/preferences/disclosure.ts';
-import { createSampleChatCalls } from './sample-chat.ts';
+import { createSampleChatCalls, createSampleRevisionCall } from './sample-chat.ts';
 import { createSampleDelegations } from './sample-delegations.ts';
+import { createOverviewScene } from './sample-overview.ts';
 import {
   acknowledgeSample,
   createSampleQueueTask,
@@ -39,7 +40,24 @@ const CONTEXT_TOKENS = [48_000, 156_000, 188_000];
 
 function createNoticeItems(now: number): TimelineItemOf<QuietNoticeKind>[] {
   return [
-    { kind: 'account', key: 'account', at: now, email: 'christo@example.com', reason: 'usage_limit' },
+    {
+      kind: 'account',
+      key: 'account',
+      at: now,
+      email: 'christo@example.com',
+      previous: null,
+      reason: 'usage_limit',
+    },
+    {
+      kind: 'retrying',
+      key: 'retrying',
+      at: now,
+      provider: 'claude',
+      detail: 'Claude’s API is overloaded (529).',
+      attempt: 1,
+      attempts: 3,
+      retryAt: now + 15_000,
+    },
     { kind: 'compaction', key: 'compaction', at: now, trigger: 'auto', by: 'claude' },
     { kind: 'compaction', key: 'eunoe-cut', at: now, trigger: 'auto', by: 'eunoe' },
     { kind: 'compaction', key: 'eunoe-fold', at: now, trigger: 'fold', by: 'eunoe' },
@@ -215,6 +233,10 @@ function IconColumnSpecimen({ view }: { view: DelegationView | undefined }) {
 
 function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<QuietNoticeKind>[] }) {
   const [calls] = React.useState(createSampleChatCalls);
+  const [revised] = React.useState(() => {
+    const task = createOverviewScene(now).tasks.plan;
+    return { task, call: createSampleRevisionCall(task) };
+  });
   const [run] = React.useState(() =>
     createSampleRun(now, {
       id: 'agent',
@@ -255,6 +277,11 @@ function LineSpecimens({ now, notices }: { now: number; notices: TimelineItemOf<
           <HandoverCard call={calls.ask} run={run} live={false} />
           <HandoverCard call={calls.reshape} run={run} live={false} />
           <HandoverCard call={calls.failed} run={run} live={false} />
+        </div>
+      </Specimen>
+      <Specimen label='Hand-over cards · a revised plan: what changed above the goal, its new and reworked phases tagged, the same as the plan gate'>
+        <div className='flex w-full max-w-xl flex-col gap-4'>
+          <HandoverCard call={revised.call} run={run} live={false} task={revised.task} />
         </div>
       </Specimen>
     </>

@@ -82,8 +82,10 @@ src/
 ├── runtime/             Engine (engine.ts: boot from the snapshot and the events after it, serialised dispatch →
 │                        receipt → decide → commit → adopt the decided state → listeners with the state before and
 │                        what changed, snapshots once quiet, the Home guide beside the log (writeBriefing), the
-│                        effect pump, cancellation, settle), EffectRunner (effects.ts: one handler per
-│                        ShinsaEffect, the pull request watcher), StateClock (clock.ts: the
+│                        effect pump, cancellation, settle, the retry policy an error carries and onEffectRetry),
+│                        EffectRunner (effects.ts: one handler per ShinsaEffect, the pull request watcher, the push's
+│                        steps, conflicts, hook rejections and reportRetry), failures.ts (EffectError with its retry
+│                        policy, ShippingError naming the push's step), StateClock (clock.ts: the
 │                        base of every timer that fires from state) and MonitorClock (monitors.ts)
 ├── agents/              RunSupervisor (supervisor.ts: the run loop, and where each run works: the worktree, the
 │   │                    repository, or data/scratch/<task> for a task with no repository, resolveScratchPath in
@@ -95,7 +97,7 @@ src/
 │   │                    account seam: leases and rejections (accounts.ts), idle
 │   │                    compaction (compaction.ts), quiet runs (silence.ts), hand-over checks and evidence
 │   │                    (handover.ts), RunClock (clock.ts), the commands no agent may run (policy.ts: also the
-│   │                    human-only `shinsa` commands, read from the surface), what `read_task` reads (reading.ts),
+│   │                    human-only `shinsa` commands, read from the surface, and whole test suites), what `read_task` reads (reading.ts),
 │   │                    the other open work in a task's repository and the files two tasks both change
 │   │                    (repository-work.ts: `list_repository_work` and task.record_overlaps before a hand-over),
 │   │                    the task's own service runs (services.ts: `list_services` and `run_service`),
@@ -142,9 +144,11 @@ src/
 ├── accounts/            Claude accounts and usage limits: store.ts (accounts.json, one CLAUDE_CONFIG_DIR per
 │                        account, shared entries linked), paths.ts (folders, the Claude config dir and
 │                        resolveAccountEnv, the environment every command for an account runs with), login.ts
-│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder),
+│                        (`claude auth login` in a PTY), status.ts, credentials.ts (the keychain entry per folder, read and written),
 │                        usage.ts and limits.ts (reading and caching usage), rotation.ts (leases, the spent marks in
 │                        account-marks.json and the one retry budget; the picker itself is core's `pickAccount`),
+│                        renewal.ts (a login Claude could not refresh: read again, claude-swap's copy taken, the
+│                        Sign in gate's text, noticing it works again),
 │                        imports.ts and cswap.ts (imports), patch.ts (an account's settings from the API),
 │                        resume.ts (the usage-wait clock), routes.ts (/api/accounts), index.ts (the Accounts
 │                        service: sign-ins, snapshot, notices, the weekly reading a run is charged against)
@@ -169,7 +173,11 @@ src/
 │                        the latest from the npm registry (registry.ts), each program's own updater, found from
 │                        where its binary lives (updaters.ts), /api/versions with the streamed update
 │                        (routes.ts), the Versions service: snapshot, the 3-hour cache, updates (index.ts)
-├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, isolation.ts (detached
+├── git/                 refs (assertRefName, slugify), repo, worktree, commit, diff, push.ts (runPush, pushBranch and
+│                        PushError: a failed push typed as hook, network, non_fast_forward or other by
+│                        classifyPushFailure; hasPrePushHook, core.hooksPath and husky's stubs followed; the output's
+│                        tail), update.ts (updateOntoBase: fetch the base, merge it in when the branch lacks it, or
+│                        list the conflicts and abort the merge), isolation.ts (detached
 │                        checkouts for isolated delegations), run.ts (git writes that wait out another process's
 │                        index.lock); the Code tab's reads: read.ts (readGit: raw bytes, a 5 s timeout, a byte or line cap,
 │                        each chunk as it comes, the request's abort, literal pathspecs), files.ts (paths, a folder, a file at a commit or in
@@ -180,7 +188,8 @@ src/
 │                        files a task's branch committed since its base plus what its checkout has not committed)
 ├── workspaces/          Where agents work (docs/engine.md → Where agents work): one WorkspaceStrategy per mode
 │                        (types.ts: prepare, claim, commit, push, remove, writeEdit, listConflicted, update: `but
-│                        pull` for GitButler only), worktrees.ts,
+│                        pull` for GitButler only, syncBase: the merge of the base before a push, skipped in
+│                        GitButler), worktrees.ts,
 │                        main-checkout.ts and gitbutler.ts (a branch per task through `but`, one writing agent at a
 │                        time, stacked on another task's branch when its commit needs that branch's lines, taken out
 │                        of its stack before it is unapplied, never pushed while a commit on it is conflicted:
@@ -280,6 +289,11 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
 - **Effects report back as commands.** An effect never writes state; it dispatches `run.end`, `pull_request.record`,
   `effect.fail` and so on. One that gives up becomes a failure gate when its kind has one, never a silent log line
   (`docs/engine.md` → Guarantees).
+- **A failure that is not the outside world's is not thrown.** A deterministic failure (a pre-push hook rejection, a
+  conflict while updating onto the base) is reported as a command and the effect settles, so the outbox never
+  retries it; one that is never worth retrying throws an `EffectError` with `retryable: false`; and every retry of a
+  push is reported to its task (`reportRetry`). No push skips the repository's hooks (`docs/engine.md` → Pushing the
+  branch).
 - **Every command the server sends gets a fixed id from its cause** (`Engine.dispatch(command, { id })`), unique for
   distinct causes and identical for a repeat, naming everything the decision depends on; the list is
   `docs/engine.md` → Command receipts → Deterministic server ids.
@@ -421,6 +435,15 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   with the preload, and a test that ends with one still running fails (the stray is killed): stop and await the work that runs it (`await runner.stop()`,
   `engine.settle()`). The fake `gh` gives up on a state folder that is gone and breaks a lock its killed holder left
   behind.
+- **A test leaves no folder behind.** The preload points `TMPDIR` at a folder of the run's own, removed when the run
+  ends, and removes every `createTempDir` folder after each test (`test/helpers/temp.ts`). A hook lives in the
+  preload or a test file: Bun never runs an `afterEach` that a helper module registers. Leftover folders slow every
+  test that starts a fake: Bun reads each folder above its working directory when it starts, so a `TMPDIR` holding
+  a hundred thousand of them adds a second to each fake `gh`, `codex` or `eunoe`.
+- **A test starts as few processes as it can.** Under load each one costs about a second, so a test that runs one
+  scenario after another through the fake `codex` passes a runtime or runner that answers in process where the
+  scenario is about Shinsa's reading (`readCodexLogin`'s runner, a `resolveExecutable` that says what it found), and
+  gives each scenario that needs the fake its own test (`test.each`).
 - The fake `gh` answers `pr view` with a `mergeCommit`: the one a test puts on the pull request, or the head's sha
   once it merges one, so a test can follow a task past the merge (the operation gate shows that commit).
 - **Tests wait on conditions, never on time.** Use `awaitEffect(log, key)` from `test/helpers` (keys come from
@@ -435,4 +458,8 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   `planner` or `builder`); the fake `codex` picks its script the same way, `plan` by the read-only sandbox.
 - `SHINSA_SETTLE_DELAY_MS` sets how long the watch waits before it reads a pull request Shinsa just pushed to or
   opened (15 s); tests set it low.
+- `SHINSA_PUSH_RETRY_MS` sets how long a push waits before it tries an unreachable remote again (30 s,
+  `config.pushRetryMs`); the test config sets it to 10 ms.
+- `SHINSA_OVERLOAD_RETRY_MS` sets the first wait before an overloaded turn is tried again (15 s, doubled for each of
+  the three retries, `config.overloadRetryMs`); the test config sets it to 10 ms.
 - `bun run test` fails below 100% line and function coverage (`bunfig.toml`).

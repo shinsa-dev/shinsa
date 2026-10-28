@@ -242,7 +242,7 @@ describe('NowCard on the Overview', () => {
     expect(listSentCommands()).toEqual([
       { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null },
     ]);
-    expect(await view.findByText('Merging.')).toBeTruthy();
+    expect(await view.findByText('Approved. Merging the pull request.')).toBeTruthy();
   });
 
   it('shows Approve plan over the plan itself on a plan gate', async () => {
@@ -417,20 +417,28 @@ describe('NowCard on the Overview', () => {
     ]);
   });
 
-  it('names a revised plan’s version, what changed since the last one and what you asked for', () => {
-    const task = createTask({
+  function createRevisedPlan(revision: { changeSummary?: string; feedback?: string }) {
+    return createTask({
       id: 'task-1',
       stage: 'awaiting_plan',
       plan: {
         version: 2,
         body: '',
         proposedAt: 0,
-        changeSummary: 'Split validation into its own phase.',
-        changes: [{ kind: 'phase_added', title: 'Validate input' }],
-        feedback: 'Validate on the server too.',
+        changes: [
+          { kind: 'goal' },
+          { kind: 'phase_added', title: 'Validate input' },
+          { kind: 'phase_changed', title: 'Show errors' },
+          { kind: 'phase_removed', title: 'Style the form' },
+        ],
+        ...revision,
         document: {
           goal: 'Ship a login form.',
-          phases: [{ title: 'Validate input', detail: 'With zod.' }],
+          phases: [
+            { title: 'Build the form', detail: 'Two fields.' },
+            { title: 'Validate input', detail: 'With zod.' },
+            { title: 'Show errors', detail: 'Under each field.' },
+          ],
           behaviour: [],
           approach: '',
           files: [],
@@ -440,13 +448,34 @@ describe('NowCard on the Overview', () => {
         },
       },
     });
+  }
+
+  it('names a revised plan’s version, keeps your words apart and marks the new and reworked phases', () => {
+    const task = createRevisedPlan({
+      changeSummary: 'Split validation into its own phase.',
+      feedback: 'Validate on the server too.',
+    });
     const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan', planVersion: 2 });
     const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
-    expect(view.getByText(/Version 2 · 1 phase/)).toBeTruthy();
-    expect(view.getByText('What changed')).toBeTruthy();
-    expect(view.getByText('Split validation into its own phase.')).toBeTruthy();
-    expect(view.getByText('Added the phase “Validate input”')).toBeTruthy();
-    expect(view.getByText('Validate on the server too.')).toBeTruthy();
+    expect(view.getByText(/Version 2 · 3 phases/)).toBeTruthy();
+    const asked = view.getByText('You asked').parentElement;
+    expect(asked?.textContent).toBe('You askedValidate on the server too.');
+    const summary = view.getByText('What changed').parentElement;
+    expect(summary?.textContent).toBe('What changedSplit validation into its own phase.');
+    expect(summary?.nextElementSibling?.textContent).toBe('Ship a login form.');
+    expect(view.getByText('Validate input').parentElement?.textContent).toBe('Validate inputNew');
+    expect(view.getByText('Show errors').parentElement?.textContent).toBe('Show errorsChanged');
+    expect(view.getByText('Build the form').parentElement?.textContent).toBe('Build the form');
+    expect(view.queryByText(/Style the form|Changed the goal|Added the phase/)).toBeNull();
+  });
+
+  it('shows neither your words nor what changed when a revision has none', () => {
+    const task = createRevisedPlan({});
+    const gate = createGate({ id: 'gate-1', taskId: 'task-1', type: 'plan', planVersion: 2 });
+    const { view } = renderOverview(createShinsaState({ tasks: [task], gates: [gate] }), task, gate);
+    expect(view.queryByText('You asked')).toBeNull();
+    expect(view.queryByText('What changed')).toBeNull();
+    expect(view.getByText('New')).toBeTruthy();
   });
 
   it('answers a question with one of its choices in one click', async () => {
@@ -796,7 +825,7 @@ describe('NowCard about an account', () => {
       id: 'g',
       taskId: 't',
       type: 'sign_in',
-      title: 'Sign in to Claude as a@example.com',
+      title: 'Paused: a@example.com needs signing in',
       body: 'Claude says the login expired. Sign in again and the step starts again by itself.',
       account: { id: 'a', email: 'a@example.com' },
     });
@@ -805,7 +834,7 @@ describe('NowCard about an account', () => {
       renderCard(createTask({ id: 't' }), gate);
       expect(screen.getByText('Sign in needed')).toBeTruthy();
       expect(
-        screen.getByText((_, element) => element?.textContent === 'Sign in to Claude as a@example.com')
+        screen.getByText((_, element) => element?.textContent === 'Paused: a@example.com needs signing in')
       ).toBeTruthy();
       expect(screen.getByText(/the login expired/)).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
@@ -841,9 +870,11 @@ describe('NowCard about an account', () => {
     it('says the task resumes at the reset, and resumes now or stops resuming by itself', async () => {
       renderCard(createTask({ id: 't', usageWait: wait() }));
       expect(screen.getByText('Waiting for the usage limit')).toBeTruthy();
-      expect(screen.getByText('Resumes when the usage limit resets')).toBeTruthy();
+      expect(screen.getByText(/^Waiting for usage: continues at .+ on$/).textContent).toMatch(
+        / on a@example\.com$/
+      );
       expect(screen.getByText('Resets in 3h')).toBeTruthy();
-      expect(screen.getByText(/on a@example.com/)).toBeTruthy();
+      expect(screen.getByText('The agent stopped at the Claude usage limit on a@example.com.')).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Resume now' }));
       const stop = screen.getByRole('button', { name: 'Don’t resume automatically' }) as HTMLButtonElement;
       await waitFor(() => expect(stop.disabled).toBe(false));
@@ -858,7 +889,7 @@ describe('NowCard about an account', () => {
 
     it('says the task is paused until the reset, and resumes at it on request', async () => {
       renderCard(createTask({ id: 't', usageWait: wait({ autoResume: false }) }));
-      expect(screen.getByText('Paused until the usage limit resets')).toBeTruthy();
+      expect(screen.getByText(/^Waiting for usage: pauses for you at /)).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Resume at the reset' }));
       await waitFor(() =>
         expect(listSentCommands()).toEqual([{ type: 'usage_wait.change', taskId: 't', autoResume: true }])
@@ -867,7 +898,7 @@ describe('NowCard about an account', () => {
 
     it('shows the work again once the wait has resumed', () => {
       renderCard(createTask({ id: 't', usageWait: wait({ status: 'resumed' }) }));
-      expect(screen.queryByText('Resumes when the usage limit resets')).toBeNull();
+      expect(screen.queryByText(/^Waiting for usage/)).toBeNull();
     });
   });
 });

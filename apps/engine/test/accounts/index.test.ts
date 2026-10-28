@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ProviderLogin, RunAccount, RunFailure, ShinsaCommand } from '@shinsa/core';
+import type { AccountsSnapshot, ProviderLogin, RunAccount, RunFailure, ShinsaCommand } from '@shinsa/core';
 import { Cswap } from '../../src/accounts/cswap.ts';
 import { Accounts, createOnboardingAccounts } from '../../src/accounts/index.ts';
 import type { LoginProcess, LoginSpawner } from '../../src/accounts/login.ts';
@@ -65,6 +65,7 @@ function createWorld(options: WorldOptions = {}) {
   let cswapList: unknown = { accounts: [] };
   let cswapExport: unknown = null;
   let now = options.now ?? 1_000_000;
+  let keychainBroken = false;
   const stub: StubEngine = createStubEngine();
   const run = (command: string[], _cwd: string, commandOptions: CommandOptions): Promise<CommandResult> => {
     const env = commandOptions.env ?? {};
@@ -101,7 +102,12 @@ function createWorld(options: WorldOptions = {}) {
     run,
     readSecret: (service) => {
       secretReads.push(service);
+      if (keychainBroken) return Promise.reject(new Error('keychain locked'));
       return Promise.resolve(secrets.get(service) ?? null);
+    },
+    writeSecret: (service, _account, value) => {
+      secrets.set(service, value);
+      return Promise.resolve(true);
     },
     requestHttp: (_url, init) => {
       const token = (init.headers as Record<string, string>).Authorization?.replace('Bearer ', '') ?? '';
@@ -131,6 +137,9 @@ function createWorld(options: WorldOptions = {}) {
     processes,
     advance: (ms: number) => {
       now += ms;
+    },
+    breakKeychain: (broken: boolean) => {
+      keychainBroken = broken;
     },
     get now() {
       return now;
@@ -204,6 +213,7 @@ function reject(
     attemptId: 'attempt-1',
     accountId,
     tried,
+    renewed: [],
     failure: failure(overrides),
   };
   const verdict = world.accounts.onRejection(rejection);
@@ -930,12 +940,201 @@ describe('moving a rejected attempt to another account', () => {
     expect(reject(world, a.id, { class: 'auth', message: 'Signed out.' })).toEqual({ retry: true });
   });
 
+  function storeLogin(world: World, dir: string | null, refreshToken: string, expiresAt: number) {
+    world.secrets.set(
+      resolveKeychainService(dir ?? world.shared),
+      JSON.stringify({ claudeAiOauth: { accessToken: `at-${refreshToken}`, refreshToken, expiresAt } })
+    );
+  }
+
+  function readRefreshToken(world: World, dir: string) {
+    return JSON.parse(world.secrets.get(resolveKeychainService(dir)) ?? '{}').claudeAiOauth?.refreshToken;
+  }
+
+  function rejectToken(world: World, accountId: string, tried: string[], renewed: string[] = []) {
+    return world.accounts.onRejection({
+      runId: 'run-1',
+      taskId: 'task-1',
+      provider: 'claude',
+      attemptId: 'attempt-1',
+      accountId,
+      tried,
+      renewed,
+      failure: failure({
+        class: 'auth',
+        code: 'authentication_failed',
+        message: 'Claude is signed out. Run `claude` in a terminal and sign in again.',
+        retryable: null,
+      }),
+    });
+  }
+
+  test('a login Claude could not refresh is read again from claude-swap and its account tried once more', async () => {
+    const world = createWorld({ registry: true });
+    const swapped = world.accounts.store.create('cswap', { email: 'a@example.com' });
+    const dir = swapped.configDir as string;
+    storeLogin(world, dir, 'dead', world.now - HOUR);
+    world.setCswap(
+      { accounts: [] },
+      {
+        accounts: [
+          {
+            email: 'a@example.com',
+            credentials: {
+              claudeAiOauth: { accessToken: 'at-fresh', refreshToken: 'fresh', expiresAt: world.now + HOUR },
+            },
+          },
+        ],
+      }
+    );
+    expect(await rejectToken(world, swapped.id, [swapped.id])).toEqual({ retry: true, renewed: swapped.id });
+    expect(readRefreshToken(world, dir)).toBe('fresh');
+    const last = await rejectToken(world, swapped.id, [swapped.id], [swapped.id]);
+    expect(last).toEqual({
+      retry: false,
+      failure: failure({
+        class: 'auth',
+        code: 'login_expired',
+        retryable: null,
+        message:
+          'Claude could not refresh the login of a@example.com. Sign in to it here, or sign in to Claude Code as a@example.com and run `cswap add`: Shinsa takes the new login from claude-swap.',
+        account: { id: swapped.id, email: 'a@example.com' },
+      }),
+    });
+    expect(world.accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
+  });
+
+  test('a login that stays dead moves the run to the next account; when none is left the Sign in gate names them all', async () => {
+    const world = createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const b = await addAccount(world, 'b@example.com', 20);
+    storeLogin(world, a.configDir, 'dead-a', world.now - HOUR);
+    storeLogin(world, b.configDir, 'dead-b', world.now - HOUR);
+    expect(await rejectToken(world, a.id, [a.id])).toEqual({ retry: true });
+    expect(await lease(world, { previous: { id: a.id, email: a.email }, exclude: [a.id] })).toMatchObject({
+      id: b.id,
+      reason: 'signed_out',
+    });
+    const last = await rejectToken(world, b.id, [a.id, b.id]);
+    expect(last.retry).toBe(false);
+    expect(last.failure).toMatchObject({
+      code: 'login_expired',
+      message:
+        'Claude could not refresh the login of b@example.com, and a@example.com needs signing in again too. Sign in to it here.',
+      account: { id: b.id, email: 'b@example.com' },
+    });
+  });
+
+  test('a login that works again carries on the tasks waiting for a sign-in, once', async () => {
+    const world = createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    storeLogin(world, a.configDir, 'dead', world.now - HOUR);
+    await rejectToken(world, a.id, [a.id]);
+    await world.accounts.refresh();
+    const signedIn = () => dispatched(world).filter((command) => command.type === 'account.signed_in');
+    const before = signedIn().length;
+    storeLogin(world, a.configDir, 'again', world.now + HOUR);
+    const info = spyOn(log, 'info').mockImplementation(() => undefined);
+    try {
+      await world.accounts.refresh();
+      await world.accounts.refresh();
+      expect(info).toHaveBeenCalledWith(
+        '[Accounts] A login that needed signing in works again; carrying on',
+        {
+          accountId: a.id,
+          email: 'a@example.com',
+        }
+      );
+    } finally {
+      info.mockRestore();
+    }
+    expect(signedIn().slice(before)).toEqual([
+      { type: 'account.signed_in', account: { id: a.id, email: 'a@example.com' } },
+    ]);
+    expect(world.stub.commandIds.at(-1)).toMatch(new RegExp(`^login-renewed:${a.id}:[0-9a-f]{16}$`));
+  });
+
+  test('a login check or a carry-on that fails is logged', async () => {
+    const world = createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    storeLogin(world, a.configDir, 'dead', world.now - HOUR);
+    await rejectToken(world, a.id, [a.id]);
+    const warn = spyOn(log, 'warn').mockImplementation(() => undefined);
+    try {
+      world.breakKeychain(true);
+      await world.accounts.refresh();
+      world.breakKeychain(false);
+      storeLogin(world, a.configDir, 'again', world.now + HOUR);
+      world.stub.reject((command) => command.type === 'account.signed_in');
+      await world.accounts.refresh();
+      const messages = warn.mock.calls.map((call) => call[0]);
+      expect(messages).toContain('[Accounts] Could not check the logins that needed signing in');
+      expect(messages).toContain('[Accounts] Could not carry on after a login works again');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test('other failures, and attempts without a known account, are left alone', async () => {
     const world = createWorld({ registry: true });
     const a = await addAccount(world, 'a@example.com', 10);
     expect(reject(world, a.id, { class: 'overloaded' })).toEqual({ retry: false });
     expect(reject(world, null, {})).toEqual({ retry: false });
     expect(reject(world, 'removed', {})).toEqual({ retry: false });
+  });
+});
+
+describe('a run’s failure shows on its account at once', () => {
+  test('a usage limit and a sign-out reach every listener as the rejection is answered, and signing in clears it', async () => {
+    const world = createWorld({ registry: true });
+    const a = await addAccount(world, 'a@example.com', 10);
+    const heard: AccountsSnapshot[] = [];
+    const unsubscribe = world.accounts.subscribe((snapshot) => heard.push(snapshot));
+    reject(world, a.id, { resetAt: world.now + HOUR });
+    expect(heard.at(-1)?.accounts[0]).toMatchObject({ id: a.id, spentUntil: world.now + HOUR });
+    reject(world, a.id, { class: 'auth', message: 'Signed out.' });
+    expect(heard.at(-1)?.accounts[0]).toMatchObject({ signIn: 'signed_out', signInDetail: 'Signed out.' });
+    await world.accounts.startLogin(a.id);
+    world.processes.at(-1)?.exit(0);
+    await until('the account to be signed in', () => heard.at(-1)?.accounts[0]?.signIn === 'signed_in');
+    expect(heard.at(-1)?.accounts[0]).toMatchObject({ spentUntil: null, signInDetail: null });
+    unsubscribe();
+  });
+
+  test('Codex signed out reads as signed out at once, and its usage limit is read again at once', async () => {
+    const codex = createCodexSource([codexReading(10), codexReading(100)]);
+    const world = createWorld({
+      registry: true,
+      providerUsage: [codex.source],
+      providerLogins: () => Promise.resolve([CODEX_LOGIN]),
+    });
+    await world.accounts.refresh();
+    const heard: AccountsSnapshot[] = [];
+    const unsubscribe = world.accounts.subscribe((snapshot) => heard.push(snapshot));
+    const rejection = (overrides: Partial<RunFailure>): RunRejection => ({
+      runId: 'run-1',
+      taskId: 'task-1',
+      provider: 'codex',
+      attemptId: 'attempt-1',
+      accountId: null,
+      tried: [],
+      renewed: [],
+      failure: failure(overrides),
+    });
+    await world.accounts.onRejection(rejection({ class: 'auth', message: 'Codex is signed out.' }));
+    expect(heard.at(-1)?.providers?.[0]).toMatchObject({
+      status: 'signed_out',
+      detail: 'Codex is signed out.',
+    });
+    const reads = codex.count();
+    await world.accounts.onRejection(rejection({ resetAt: 9_000_000 }));
+    await until('the usage read again', () =>
+      (world.accounts.snapshot().providers?.[0]?.usage?.windows ?? []).some(
+        (window) => window.usedPercent === 100
+      )
+    );
+    expect(codex.count()).toBe(reads + 1);
+    unsubscribe();
   });
 });
 
@@ -1406,6 +1605,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       attemptId: 'attempt-1',
       accountId: null,
       tried: [],
+      renewed: [],
       failure: failure(overrides),
     });
     expect(await world.accounts.onRejection(rejection({ resetAt: 5_000_000 }))).toEqual({ retry: false });
@@ -1448,6 +1648,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       attemptId: 'run-1:1',
       accountId: null,
       tried: [],
+      renewed: [],
       failure: failure({ resetAt: null }),
     });
     expect(verdict).toEqual({ retry: false, failure: failure({ resetAt: 9_500_000 }) });
@@ -1469,6 +1670,7 @@ describe('a provider with a sign-in of its own (Codex)', () => {
       attemptId: 'attempt-1',
       accountId: null,
       tried: [],
+      renewed: [],
       failure: failure({ class: 'auth', retryable: false }),
     });
     expect(verdict).toEqual({

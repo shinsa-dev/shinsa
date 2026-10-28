@@ -62,6 +62,8 @@ describe('resolveConfig', () => {
       SHINSA_EDITOR: 'zed',
       SHINSA_TERMINAL: 'Ghostty',
       SHINSA_SETTLE_DELAY_MS: '10',
+      SHINSA_PUSH_RETRY_MS: '20',
+      SHINSA_OVERLOAD_RETRY_MS: '30',
     });
     expect(config).toMatchObject({
       home,
@@ -74,6 +76,8 @@ describe('resolveConfig', () => {
       editor: 'zed',
       terminal: 'Ghostty',
       settleDelayMs: 10,
+      pushRetryMs: 20,
+      overloadRetryMs: 30,
       userHome: '/home/me',
       roots: ['/work', '/more'],
     });
@@ -133,6 +137,8 @@ describe('resolveConfig', () => {
       editor: null,
       terminal: 'Terminal',
       settleDelayMs: 15_000,
+      pushRetryMs: 30_000,
+      overloadRetryMs: 15_000,
       roots: [],
     });
   });

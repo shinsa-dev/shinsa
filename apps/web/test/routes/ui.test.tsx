@@ -54,8 +54,8 @@ describe('the /ui gallery', () => {
     const overview = findSection('shinsa-overview');
     for (const text of [
       'The default branch is missing',
-      'Resumes when the usage limit resets',
-      'Paused until the usage limit resets',
+      /^Waiting for usage: continues at /,
+      /^Waiting for usage: pauses for you at /,
       'The agent is waiting on something outside the repository',
       'The checkout test needs a Stripe test key to create a payment intent.',
       'Out of automatic fix rounds',
@@ -80,7 +80,7 @@ describe('the /ui gallery', () => {
     }
     expect(overview.getByRole('button', { name: 'Run the operation' })).toBeTruthy();
     expect(document.getElementById('shinsa-overview')?.textContent).toContain(
-      'Sign in to Claude as christo@example.com'
+      'Paused: christo@example.com needs signing in'
     );
     expect(overview.getByRole('button', { name: 'Allow another 10%' })).toBeTruthy();
     expect(overview.getAllByText(/^No output for/)).toHaveLength(2);
@@ -95,6 +95,7 @@ describe('the /ui gallery', () => {
       'Waiting for the agent that delegated it to answer',
       'Account switched',
       '· christo@example.com',
+      'Claude was busy, trying again',
       'Conversation compacted',
       'Session restored from the transcript',
       'Conversation handed over',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Run, RunUsage } from '@shinsa/core';
-import { describeBudgetRetry, describeSpent, resolveCostFacts } from '@/lib/tasks/cost.ts';
+import { describeBudgetRetry, resolveCostFacts } from '@/lib/tasks/cost.ts';
 import { createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 function usage(costUsd: number | null, tokens = 1_000): RunUsage {
@@ -68,7 +68,6 @@ describe('the cost of a task', () => {
       byRole: [{ key: 'agent', label: 'Agent', cost: '$1.75', tokens: '1.2M tokens' }],
       byPhase: [{ key: 'phase-0', label: 'Write a', cost: '$1.25', tokens: '1.2M tokens' }],
     });
-    expect(describeSpent(state, task)).toBe('$1.75 so far');
     expect(describeBudgetRetry(state, task)).toBe('Allow another $1.00');
   });
 
@@ -76,7 +75,6 @@ describe('the cost of a task', () => {
     const task = createTask({ id: 't' });
     const empty = createShinsaState({ tasks: [task] });
     expect(resolveCostFacts(empty, task)).toBeNull();
-    expect(describeSpent(empty, task)).toBeNull();
     expect(describeBudgetRetry(empty, task)).toBeNull();
     const unpriced = createShinsaState({
       tasks: [task],
@@ -106,7 +104,7 @@ describe('the cost of a task', () => {
     const measured = createShinsaState({ tasks: [task], runs });
     expect(resolveCostFacts(measured, task)).toEqual({
       icon: 'IconGauge',
-      total: '4% of weekly limit',
+      total: '4%',
       heading: '4% of the weekly limit',
       detail:
         '$2.00 and 5k tokens, as estimated by the agent provider. The share is learned from 5 tasks on this account.',
@@ -114,7 +112,6 @@ describe('the cost of a task', () => {
       byRole: [{ key: 'agent', label: 'Agent', cost: '4%', tokens: '5k tokens' }],
       byPhase: [{ key: 'phase-0', label: 'Write a', cost: '3%', tokens: '3k tokens' }],
     });
-    expect(describeSpent(measured, task)).toBe('4% of the weekly limit so far');
     const costLimited = createShinsaState({
       tasks: [task],
       runs,

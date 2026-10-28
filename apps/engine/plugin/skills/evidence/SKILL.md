@@ -52,8 +52,12 @@ comparison counts as the screenshots (or recordings) a plan asks for.
   ```
 
   You take the before shot before you edit, so you may attach it on its own then (`kind: "screenshot"`,
-  `stage: "before"`) and its after later with the same title, width and theme (`stage: "after"`): Shinsa shows the
-  two as one comparison.
+  `stage: "before"`) and its after later with the same `key` (`stage: "after"`): Shinsa shows the two as one
+  comparison.
+- Give every item a `key` for what it shows (`settings-dark-900`); without one its title, width and theme are its key.
+  Evidence shows the work as it is now: when a later change alters a view, attach it again with the same key and it
+  replaces the earlier item (a new after keeps its before). Remove an item that no longer applies with
+  `remove_evidence` and a reason. The human sees only the current items; the old ones fold under Earlier versions.
 - A `test` or `check` takes only `check`, the id of one of the task's checks (`c1`, as `read_task` lists them), and
   an optional `detail`: `{ "kind": "test", "check": "c2", "detail": "Fails before the fix with the empty name." }`.
   Shinsa shows that check's result and the output of its last run; never paste test output.

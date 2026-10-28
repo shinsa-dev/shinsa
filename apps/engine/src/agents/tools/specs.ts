@@ -394,6 +394,14 @@ export const TOOL_SPECS = {
           items: { type: 'string', maxLength: L.checkId },
         },
         check_changes: CHECK_CHANGES,
+        evidence_kept: {
+          type: 'array',
+          description:
+            'Earlier evidence your fix touched that still shows the work as it is, by key or id. Shinsa refuses the fix while an item whose files it changed is not replaced, removed or named here.',
+          maxItems: L.evidenceItems,
+          uniqueItems: true,
+          items: { type: 'string', maxLength: L.evidenceKey },
+        },
       },
       required: ['summary'],
     },
@@ -461,7 +469,7 @@ export const TOOL_SPECS = {
   attach_evidence: {
     name: 'attach_evidence',
     description:
-      'Attach proof that the work does what was asked: a comparison of one view before and after, a screenshot or recording file, a check Shinsa runs, a note, or a preview URL. The human sees it in the review before the diff, each call as one item. Give exactly one of path, url or text, for a comparison its parts, and for a test or check only `check`. For screenshots set width, theme and stage; a before shot and an after shot with the same title, width and theme show as one comparison, so a before taken early and its after taken later still pair.',
+      'Attach proof that the work does what was asked: a comparison of one view before and after, a screenshot or recording file, a check Shinsa runs, a note, or a preview URL. The human sees it in the review before the diff, each call as one item. Give exactly one of path, url or text, for a comparison its parts, and for a test or check only `check`. For screenshots set width, theme and stage; a before shot and an after shot with the same key show as one comparison, so a before taken early and its after taken later still pair. Evidence shows the work as it is now: a new item with the same key replaces the earlier one (an after replaces the earlier after), so after a change attach it again rather than beside it, and remove what no longer applies with `remove_evidence`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -476,6 +484,20 @@ export const TOOL_SPECS = {
           L.evidenceTitle
         ),
         detail: limitedText('What to look at in it, in one sentence.', L.evidenceDetail),
+        key: {
+          type: 'string',
+          description:
+            'What it shows, the same every time you capture it again: lower-case words and hyphens, like settings-dark-900. Without one, its title, width and theme are its key. Not for a test or check, whose check is its key.',
+          maxLength: L.evidenceKey,
+        },
+        replaces: {
+          type: 'array',
+          description:
+            'Earlier items this one replaces, by key or id, when their key differs from this one. An item with the same key is replaced without naming it.',
+          maxItems: L.evidenceItems,
+          uniqueItems: true,
+          items: { type: 'string', maxLength: L.evidenceKey },
+        },
         width: {
           type: 'integer',
           description: 'The viewport width in CSS pixels, for a screenshot or recording.',
@@ -520,6 +542,26 @@ export const TOOL_SPECS = {
         },
       },
       required: ['kind'],
+    },
+  },
+  remove_evidence: {
+    name: 'remove_evidence',
+    description:
+      'Remove evidence you attached this round that no longer applies, so the human never reads it as the current state. Shinsa keeps it under Earlier versions in the review. To show the new state instead, attach it with the same key: that replaces it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          description: 'The items to remove, by key or id.',
+          minItems: 1,
+          maxItems: L.evidenceItems,
+          uniqueItems: true,
+          items: { type: 'string', maxLength: L.evidenceKey },
+        },
+        reason: limitedText('Why it no longer applies, in one sentence.', L.evidenceReason),
+      },
+      required: ['items', 'reason'],
     },
   },
   find_tasks: {

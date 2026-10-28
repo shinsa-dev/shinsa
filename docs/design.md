@@ -50,7 +50,9 @@ Only these, and they win over anything below:
    failing, passed when re-run alone, already failing on main, an agent's check, the repository's baseline, CI after the
    pull request, a linked test, the plan's Checks, check activity and Always run before review), the
    Review tab's Evidence panel (`routes/ui/evidence.tsx`: `EvidencePanel` with a before and after pair, a recording,
-   a test the agent linked (read as its check), a check Shinsa ran and a markdown note with a table, on sample files in `apps/web/public/samples/evidence` that
+   a test the agent linked (read as its check), a check Shinsa ran and a markdown note with a table, and a second panel
+   after a revision: a shot marked "Updated after your review" with the replaced shot and a removed note under Earlier
+   versions, on sample files in `apps/web/public/samples/evidence` that
    `scripts/seed-media/generate.ts` renders, 34), and the error fallbacks in their three sizes (`routes/ui/errors.tsx`,
    38). A piece that reads live state has a
    presentational part that takes props (`UsageMenuButton`, `SignInPrompt`, `RunAccountLabel`,
@@ -551,7 +553,7 @@ Only these, and they win over anything below:
       still open the task (core's `selectTaskByReference`) and are replaced by the canonical URL. Until triage gives
       a task its handle, its URL and links use the id and nothing shows a handle.
     - **The facts row is one colour.** Every fact under the title (the handle, the status, the repository, the
-      branch, priority, times, cost, account, related tasks) is `text-xs` `fg-2`, the muted
+      branch, priority, times, the cost icon, account, related tasks) is `text-xs` `fg-2`, the muted
       foreground the handle always had (`FACT` in `components/task/facts.tsx`), turning `fg-4` on hover when it opens
       something. A state glyph or a warning note (the status's icon, failing checks, a pull request's conflicts, a
       budget gone over) keeps its own colour; the words around them do not.
@@ -1114,15 +1116,31 @@ Only these, and they win over anything below:
       link. Every failure gate uses it, an agent's wait that ran out ("The agent’s wait ran out", or "The agent’s
       wait ran out of checks") included; a task
       stopped at its usage or cost limit ("Reached its usage limit", "Reached its cost limit") names its Retry
-      for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too.
+      for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too; its body
+      names the limit it reached ("This task reached its $5.00 cost limit, so the next step did not start."), never
+      what the task spent.
+      A pre-push hook that rejected the push again with the same failures ("The pre-push hook failed again") names
+      its Retry "Send to the agent again" (`resolveRetryLabel`, toast "Sent to the agent again."), in ⌘K too; its body
+      lists the failures and shows the hook's last lines in a code block, and nothing on the card or in ⌘K pushes
+      without the hook.
+    - **A push in progress** has no card of its own: the now card's title is the stage reason, which says each step
+      as it happens: "Updating the branch onto main", "Pushing the branch (the repository’s pre-push hook is
+      running)" ("Pushing the changes (…)" to an open pull request), "Opening the pull request", and on a retry
+      "Pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com". Each retry is also one activity
+      entry ("Pushing failed on attempt 1 of 5, trying again in 30s", the error as its detail), and a hook fix run is
+      headed "Fixing what the pre-push hook found".
     - **Setup incomplete** (`setup-card.tsx`): status orange in the Paused group with the
       `IconToolbox` tile; the card renders the gate's body (each problem and its fix) as markdown, with Verify
       again (primary, `approve`) at the top right, and Cancel task as the footer's quiet link. A repository without
       check commands is not a problem: nothing extra runs.
     - **A revised plan** (`plan-revision.tsx`): the eyebrow reads "Version 2 · 4 phases"; above the
-      plan an inset (`bg-bg-a1` on `INSET`) shows "You asked" with your words, then "What changed"
-      with the agent's summary and the computed changes as a quiet `·` list. Approve plan sends
-      the version on screen.
+      plan an inset (`bg-bg-a1` on `INSET`, `PlanFeedback`) holds only "You asked" and your words, and
+      none at all when the revision came without a message. In the plan itself "What changed" with the
+      agent's summary sits right before the goal (`PlanChangeSummary`), and each phase the revision added
+      or reworked carries a quiet `Badge` `sm` beside its title, "New" or "Changed" (`PlanPhaseTitle`,
+      core's `resolvePhaseChange`); a dropped phase is not listed and a changed goal or approach gets no
+      mark, the summary says it. The chat's Revised the plan card renders the same three pieces, so the
+      two never disagree. Approve plan sends the version on screen.
     - **Questions with choices** (`question-choices.tsx`): `outline` `sm` buttons in a wrapping
       row (`gap-1.5`) above the answer box, the recommended one with a muted "Recommended", the
       same pattern as `ChoiceButtons` everywhere. One click answers; the box placeholder becomes
@@ -1150,7 +1168,9 @@ Only these, and they win over anything below:
     - **A quiet agent** (`silence-note.tsx`): a `bg-bg-a1` `rounded-lg` strip above the live
       feed, "No output for 23 minutes" (`fg-3`, orange from 15 minutes; the thresholds are
       `docs/engine.md` → Silent runs) with Snooze and Dismiss as quiet links. It never changes the
-      task's status.
+      task's status. While a tool call is still running it says so instead: "A command has been
+      running for 23 minutes" followed by the command's first line in mono (`fg-2`, `Truncate`, so a cut
+      line shows whole in its tooltip), or "A tool has been running for 23 minutes" for any other tool.
     - **Held up by another task**: under "Waits on ‹A›" the work card names the stalled leaf of
       the chain with its `TaskLink`: "Held up because ‹C› is waiting on you."
     - **Suggested tasks** is a `Panel` right under the now card; a suggested task's
@@ -1227,8 +1247,16 @@ Only these, and they win over anything below:
       `·` list: Screenshot, Recording, Linked test, Note, Preview link), **Checks** (the plan's `verification`: each
       label in `fg-3`, its phases beside it in `text-2xs fg-2`, "Phases 1 to 3", and its command a mono chip)
       and, when the agent asked for your approval, the quiet line "The agent asked for your approval."
-    - **Cost** is a task fact in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
-      on a subscription shows its share of the weekly window (`IconGauge`, "1.8% of weekly limit"), and a task on an
+    - **Cost shows in one place: the facts row's cost control, icon and value.** A task's cost, its share of the
+      weekly limit and its tokens appear nowhere else: not on the now card, a run or round divider, a row of All
+      tasks, Home or the rail, an activity entry, the Review tab, a preview card or ⌘K. The control is the unit's
+      icon and the amount ("$18.55", or "1.8%" of the weekly limit on a subscription), and hovering it opens the
+      popover with the heading, the tokens and the split by step and by phase. The
+      account's usage (the top bar's usage menu, Settings → Agent usage) is not a task's cost and stays where it is;
+      the limits (Settings → Limits, the paused card and its Allow another) keep working and name the limit, never
+      what the task spent.
+    - **Cost** is in one unit, the task's (`resolveCostUnit`, `docs/engine.md` → Cost): a task that ran
+      on a subscription shows its share of the weekly window (`IconGauge`, "1.8% of the weekly limit"), and a task on an
       API key, or on a provider with no weekly window, its dollars (`IconCoins`, "$1.75"). The two are never shown
       side by side as rival totals: the popover's header is the primary one ("1.8% of the weekly limit", or
       "$1.75"), the line under it carries the other ("$4.31 and 8.2M tokens, as estimated by the agent provider.")
@@ -1240,8 +1268,7 @@ Only these, and they win over anything below:
       whole percentages above. The icon turns orange past a limit; against a limit the header reads "12% of the
       weekly limit, 10% allowed" (the usage limit) or "$1.75 of $5.00" (the cost limit): a limit already passed
       always shows, otherwise only the limit in the task's unit (a learning task that passed its usage limit on an
-      early estimate shows that header over its dollars; the gate says it is an estimate). The review card's facts line ends with "1.8% of the
-      weekly limit so far" or "$3.56 so far". Unknown prices read "Unknown" or "$0.30 + unknown", never $0. Tasks
+      early estimate shows that header over its dollars; the gate says it is an estimate). Unknown prices read "Unknown" or "$0.30 + unknown", never $0. Tasks
       from before weekly readings were kept (`docs/engine.md` → Cost) get their share from their cost once the
       account's rate is learned.
     - ⌘K adds, on the task: Answer "‹choice›" per choice (Recommended as its hint), Verify the
@@ -1351,7 +1378,7 @@ Only these, and they win over anything below:
       accounts at (Other…
       opens the same percentage dialog as an account's), After a usage limit (Resume automatically /
       Wait for me) and, only while that is Wait for me, Ask me what to do (When the limit resets / Right
-      away: the task waits as "Paused until the usage limit resets" and its failure gate opens at the
+      away: the task waits as "Waiting for usage: pauses for you at 3:40 PM" and its failure gate opens at the
       reset, or the failure gate opens at once; nothing is hidden). ⌘K's Change a setting has the same
       rows, without Other….
     - **Settings → Agents → Engine** is titles-only rows: Approve plans, Automatic fix rounds, Delegations at once
@@ -1399,6 +1426,14 @@ Only these, and they win over anything below:
       next turn uses (`isNextAccount`, `isNextProvider` over the glance) carries a 6px blue dot (`TONE_FILL.blue`)
       right after its name, "Used for the next turn" in its tooltip and `aria-label`. A click goes to Settings →
       Agent usage → Accounts. Hidden without accounts or a provider reading.
+    - **Usage re-checks itself while you look at it** (`lib/accounts/recheck.ts`, `useUsageRecheck`). Settings →
+      Agent usage and the usage menu's popover each read the accounts again when they open (unless a read finished
+      in the last 5 seconds) and then every 60 seconds while they stay open, and stop when they close or the page is
+      hidden; a hidden page that comes back reads again when the last read is a minute old. Every read, Refresh usage
+      and the Sign in card's check included, goes through one request: a read already on its way is shared, never
+      sent twice. A failed automatic read says nothing; Refresh usage shows its toast. A run that finds an account out
+      of usage or signed out changes the account the moment it fails, without any read (`docs/engine.md` → A run's
+      failure shows on its account at once).
     - **Every account names its provider.** Wherever an account is listed with its usage (Settings → Agent usage, the
       usage popover) it reads "Claude · a@b.com" or "Codex · a@b.com" ("Codex" alone without an email) after the
       provider's icon (`IconClaudeai`, `IconOpenaiCodex`; `IconRobot` for one Shinsa does not know): one helper,
@@ -1406,15 +1441,22 @@ Only these, and they win over anything below:
       `resolveProviderIcon` Settings → Agents uses for its model groups), rendered by `AccountName`
       (`components/accounts/account-name.tsx`: the icon at `size='sm'`, then the label as a `Truncate`).
     - **Sign in needed** (`sign-in-card.tsx`): a `sign_in` gate is orange with `IconUserKey`, in the
-      Paused group; the card shows the gate's title and body, Sign in (primary) opens the dialog for
-      that account, and Retry anyway / Cancel task are the footer's quiet links. The card reads the gate's provider
+      Paused group; the card shows the gate's title ("Paused: a@b.com needs signing in", the one status for that
+      cause) and body, Sign in (primary) opens the dialog for
+      that account, and Retry anyway / Cancel task are the footer's quiet links. For a login Claude could not
+      refresh the body names the account, the others that need signing in too, and what to run, from where the login
+      comes from ("…or sign in to Claude Code as a@b.com and run `cswap add`: Shinsa takes the new login from
+      claude-swap.", "…or run `claude auth login` in a terminal."), and the gate closes by itself once that login
+      works again (`docs/engine.md` → A login Claude could not refresh). The card reads the gate's provider
       (`resolveSignInProvider(gate)` over `gate.provider`: `claude` is a Claude account, anything else a provider with a
       sign-in of its own). A gate for such a provider (Codex) has no Sign in: Shinsa never signs Codex in. Its
       primary is "Check the Codex sign-in again" (it refreshes the sign-ins, and one that finds Codex signed in
       answers the gate), and under the body, on a `bg-bg-a1` `rounded-lg` strip, the fix with its `CopyButton`
       ("Run `codex login` in a terminal, then refresh."); ⌘K offers the same check. **Waiting for the
-      usage limit** (`usage-wait-card.tsx`): an armed usage wait is blue and In progress, titled
-      "Resumes when the usage limit resets" or "Paused until the usage limit resets", the reset in
+      usage limit** (`usage-wait-card.tsx`): an armed usage wait is blue and In progress, titled in one
+      line with when and where it carries on, "Waiting for usage: continues at 3:40 PM on a@b.com" or, with automatic
+      resume off, "Waiting for usage: pauses for you at 3:40 PM on a@b.com" (`formatMoment`: a weekday or date
+      before the time when it is not today; no account when the wait names none), the reset in
       the eyebrow, Resume now (outline) and the quiet "Don’t resume automatically" / "Resume at the
       reset".
     - **Run on account**: a bound task has a "Runs on a@b.com" fact whose click menu, the task
@@ -1428,9 +1470,12 @@ Only these, and they win over anything below:
       the toast "Running this step again on a@b.com." ⌘K's This task has the same as "Run this step again on…".
       Earlier runs show the account as plain text.
     - **In the chat** every notice kind (`lib/chat/timeline.ts`, rows from `lib/chat/notices.ts`) does one of
-      these. Six are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
-      happened, the meta the value, and opening it shows the reason): `account_switched`
-      (`IconArrowsRepeatRightLeft`, "Account switched" · "a@b.com", the reason), `compaction` (Claude Code's or Codex's: `IconBubbleText`, "Conversation
+      these. Seven are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
+      happened, the meta the value, and opening it shows the reason): `retrying` (`IconArrowRotateClockwise`, "Claude
+      was busy, trying again" · "1 of 3", the provider's message and "Shinsa tries the same step again by itself at
+      3:41 PM."; an overloaded provider is never shown as an error), `account_switched`
+      (`IconArrowsRepeatRightLeft`, "Account switched" · "a@b.com", the reason; after a sign-out it names both
+      accounts: "Claude account a@b.com needed signing in again; continued on c@d.com."), `compaction` (Claude Code's or Codex's: `IconBubbleText`, "Conversation
       compacted", why: the context filled up and the agent summarised it, or idle compaction; eunoe's: `IconMinimize`, "Conversation compacted by Eunoe"
       at the limit, or `IconLayersTwo`, "Finished turns folded" for a fold, the tooltip saying nothing was
       summarised), `proxy` (`IconCloudSimpleDisconnected`, "Eunoe unavailable · Claude Code compacts this run",
@@ -1451,6 +1496,10 @@ Only these, and they win over anything below:
       tones (neutral, amber from 75%, red from 90%), "84k of 200k tokens" over a muted "Context 42% full" in
       its tooltip. `rate_limit`, `account` and `interrupted` stay in the transcript and are not shown: the
       usage menu and the `account_switched` row already say it.
+      A turn's errors (`ErrorLine`: `IconExclamationCircle`, `red-text`) are one line per message: the same message
+      said again in a turn collapses into its first line, which ends in a `fg-2` "3 times" (`collapseErrors` in
+      `lib/chat/timeline.ts`), so a cause shows once however many attempts hit it. The task's state is the Overview's
+      one card for it (Sign in needed, Waiting for the usage limit), never a stack of errors.
     - **Delegations** (`components/chat/delegation-card.tsx`, `lib/chat/delegations.ts`) never
       gets a run section of its own: it lives in the turn of the step that delegated it. A
       `delegation` `started` notice is a spawn card (`CARD`, 36px row): a status mark (a pulse
@@ -1861,6 +1910,14 @@ Only these, and they win over anything below:
       address names, `hasFileInAddress`), scrolls the line to the centre, opening any fold over it (in side by side
       both sides' folds, `revealSplitLines`), and washes the line or range `primary-a3` for 2 s
       (`FOCUS_FLASH_MS`), then leaves it `primary-a1` while the file stays open.
+    - **A changed file opens at its first change** (`revealFirstChange`, `lib/code/editor/first-change.ts`). Opened
+      without a line (from Changes, the Files tree, quick open, a search's file, a Review place or a smart link with no
+      line), a diff in either layout, or a changed file opened as a plain file (read against the base, `baselinePath`),
+      scrolls once the editor has measured so its first changed hunk sits near the top with 3 lines of context above it
+      (the margin a fold keeps, so the change is never behind a fold); when the change already starts in the top half
+      of the pane nothing moves, and an unchanged file opens at the top. A line or spot in the address keeps going to
+      that target. Each file is placed once: coming back to it puts back where you left it, and a show, hide and show
+      again before a frame (React's StrictMode in development) keeps that place (`EditorSession`'s settling entry).
     - **Changes** is the changed files as a tree (folders first; a chain of single folders is one row, `apps/web`),
       each file with a red risk dot with its reason, your comment count, the diff counts (or Binary), its status
       letter (Added green, Deleted red, Modified and Renamed `fg-2`, the name in a tooltip) and a viewed box: the
@@ -2132,7 +2189,16 @@ Only these, and they win over anything below:
       image viewer on it, whose arrows step item by item ("1 of 4") and whose bar switches Before and After inside a
       comparison. A recording's frame shows its first frame (muted, metadata preloaded) under a round play glyph, and
       plays only in the viewer, with its controls (the server answers byte ranges so it seeks). An item the reviewer
-      attached carries a purple "From the agent review" badge: evidence from outside the author. With nothing
+      attached carries a purple "From the agent review" badge: evidence from outside the author. Only current evidence
+      shows (`docs/engine.md` → Evidence): an item that replaced an earlier one says so beside its title in a quiet
+      `text-2xs` `fg-2` line, never a badge ("Updated after your review", "Updated after the agent review", "Updated
+      after the checks", "Updated after the pull request feedback", else "Updated"), and the replaced and removed items
+      sit under a collapsed **Earlier versions** line at the end of the panel (`DisclosureHeader` as Advanced in a
+      service form: `line`, `glyph`, `text-2xs` `fg-2`, the count beside it; `task:<taskId>:evidence:panel:earlier`),
+      each over its status ("Replaced by a later version", "Removed: " and the agent's reason) and drawn as in the panel
+      (the image viewer steps through them only while the line is open), so stale proof is never read as the work as
+      it is. With every item removed the panel says "The agents removed
+      the evidence they attached this round." over that line. With nothing
       attached, the panel says so ("No screenshots, recordings or test runs were attached this round. Request changes
       to ask the agent for them."), so a missing proof is visible, not silent. 20px between groups, 4px from a group's
       label to its items. When the task has no work report and its changes cannot be read (a merged branch that was
@@ -2637,7 +2703,7 @@ Only these, and they win over anything below:
       `queue`, `services`, `roadmap`, `settings`, `ui`) and parts with `:`, never an array index:
       `task:<taskId>:review:card:<point>` (the point's kind and a hash of its place and text,
       `resolveReviewItemIdentity`), `task:<taskId>:review:panel:<prose>`, `task:<taskId>:overview:panel:<panel>`
-      (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`,
+      (`resolveOverviewPanelId`), `task:<taskId>:overview:round:<n>`, `task:<taskId>:evidence:<evidenceId>:output`, `task:<taskId>:evidence:panel:earlier`,
       `task:<taskId>:chat:tool:<callKey>` (the chat's rows under `DisclosureScope`, `useDisclosureScope`),
       `task:<taskId>:code:files:<path>`, `home:section:<section>`, `queue:section:<section>`,
       `services:project:<id>`, `roadmap:group:<group>`, `settings:mcp:server:<id>`, and `ui:…` for `/ui`.
@@ -3493,8 +3559,8 @@ the glyphs inside it.
 
 | Size | Pixels | Where                                                                                                                                                      |
 | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
-| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, toasts, ⌘K's search glyph, the logo |
+| `sm` | 14     | Beside 12–13px text: every chat row, facts, notices, list and menu rows, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, `StatusTile`'s glyph, the default |
+| `md` | 16     | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, `default` selects and inputs, tabs, nav rows, ⌘K's search glyph, the logo |
 | `lg` | 20     | Rare and large: the `EmptyState` tile, a full-page wait's spinner, an evidence recording's play glyph, the icon specimens on `/ui`                       |
 
 - 14 for 12–13px text keeps the glyph's drawn part (about 10px of the 24-unit
@@ -5094,8 +5160,11 @@ anchor (`sideOffset` 4).
   differs, 13); without it nothing opens.
 - **Toast.** Neutral surface; the type sets only the icon. Content `p-3`,
   `text-sm`, 2px between title and description, 8px to the action. Icons
-  follow the 32px row (14px, 8px to the text, 11px from
-  the edge). `Alert` shares the 12px inset and the 2px title → description.
+  are `sm` (14px, the size beside the toast's 13px text), 11px from the edge
+  and 6px to the text, the icon ↔ label of a menu row or a button (Where Shinsa
+  differs, 20): the toast's 8px gap less the icon box's -2px end margin, so the
+  action stays 8px from the text. A one-line toast centres the icon on the
+  title's cap height; with a description it sits on the title, 2.5px up. `Alert` shares the 12px inset and the 2px title → description.
   A status alert's buttons speak in its status: an outline or secondary
   button takes the hue's 8% fill (14% hover) and a 32% border (48% hover)
   with the status ink; a ghost button the ink and an 8% hover wash. `Alert`

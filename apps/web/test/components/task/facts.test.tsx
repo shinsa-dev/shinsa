@@ -240,6 +240,40 @@ describe('the round and the agents in the facts row', () => {
   });
 });
 
+describe('the cost fact', () => {
+  it('shows its icon and value in the row and the breakdown in its popover, the one place a task’s cost shows', async () => {
+    const task = createTask({ id: 't', handle: 'SW-7' });
+    const usage = {
+      inputTokens: 2_000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      costUsd: 3,
+    };
+    const state = createShinsaState({
+      tasks: [task],
+      runs: [createRun({ id: 'k', taskId: 't', role: 'answerer', usage })],
+    });
+    pushState(state);
+    render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+      </TooltipProvider>
+    );
+    const trigger = screen.getByRole('button', { name: '$3.00' });
+    expect(trigger.textContent).toBe('$3.00');
+    expect(screen.queryByText('By step')).toBeNull();
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    expect(await screen.findByText('By step')).toBeTruthy();
+    expect(screen.getAllByText('$3.00').length).toBeGreaterThan(1);
+  });
+});
+
 describe('the coverage fact', () => {
   it('says how much of the change the tests run and links to How to test in Review', async () => {
     renderFacts(createTask({ id: 't', handle: 'SW-7', coverage: createPartialCoverage() }));

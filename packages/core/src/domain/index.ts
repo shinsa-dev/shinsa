@@ -35,7 +35,19 @@ export {
   type TaskSplit,
 } from './delegations.ts';
 export { DomainError } from './errors.ts';
-export { type EvidenceItem, listEvidenceItems } from './evidence.ts';
+export {
+  type CurrentEvidenceItem,
+  type EarlierEvidenceItem,
+  type EvidenceItem,
+  type EvidenceRemoval,
+  type EvidenceUpdate,
+  isCurrentEvidence,
+  isEvidenceKey,
+  listEarlierEvidenceItems,
+  listEvidenceItems,
+  resolveEvidenceKey,
+  selectEvidenceItem,
+} from './evidence.ts';
 export { isAgentQuestion, isDecisionGate, isPausingGate } from './gates.ts';
 export { ON_BEHALF_ACTION_LIMIT, type OnBehalfAction } from './on-behalf.ts';
 export {

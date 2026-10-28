@@ -388,25 +388,45 @@ describe('usage-limit waits', () => {
     expect(harness.task(taskId).usageWait).toBeUndefined();
   });
 
-  test('a limit whose reset is unknown or already past pauses at once instead of looping', () => {
+  test('a limit whose reset is unknown or already past waits 15 minutes and carries on, never failing', () => {
     for (const resetAt of [null, 1]) {
       const harness = createHarness();
       const taskId = createTask(harness);
       fail(harness, taskId, limit(resetAt));
-      expect(harness.openGate(taskId).title).toBe('The agent hit its usage limit');
-      expect(harness.task(taskId).usageWait).toBeUndefined();
+      const wait = harness.task(taskId).usageWait;
+      expect(wait).toMatchObject({ status: 'armed', autoResume: true, account: WORK });
+      expect(wait?.resetAt).toBe((wait?.armedAt ?? 0) + 15 * 60_000);
+      expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+      harness.advance(15 * 60_000);
+      fire(harness, taskId);
+      expect(harness.task(taskId).usageWait?.status).toBe('resumed');
+      expect(listActiveRuns(harness.state, taskId)).toHaveLength(1);
     }
   });
 
-  test('a resumed step that hits the same window again pauses instead of waiting again', () => {
+  test('a resumed step that hits the same window again waits at least 15 minutes more instead of failing', () => {
     const harness = createHarness();
     const { taskId } = waitingTask(harness);
     const resetAt = resetAtOf(harness, taskId);
     harness.advance(resetAt);
     fire(harness, taskId);
     fail(harness, taskId, limit(resetAt));
-    expect(harness.openGate(taskId).title).toBe('The agent hit its usage limit');
-    expect(harness.task(taskId).usageWait).toBeNull();
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    const wait = harness.task(taskId).usageWait;
+    expect(wait).toMatchObject({ status: 'armed' });
+    expect(wait?.resetAt).toBe((wait?.armedAt ?? 0) + 15 * 60_000);
+  });
+
+  test('a step resumed early that hits the same soon window again waits 15 minutes rather than looping', () => {
+    const harness = createHarness();
+    const { taskId } = waitingTask(harness, 5 * 60_000);
+    const resetAt = resetAtOf(harness, taskId);
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    fail(harness, taskId, limit(resetAt));
+    const wait = harness.task(taskId).usageWait;
+    expect(wait).toMatchObject({ status: 'armed' });
+    expect(wait?.resetAt).toBe((wait?.armedAt ?? 0) + 15 * 60_000);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
 
   test('a resumed step that hits a later window waits for that one', () => {
@@ -500,7 +520,7 @@ describe('the sign-in gate', () => {
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({
       type: 'sign_in',
-      title: 'Sign in to Claude as work@example.com',
+      title: 'Paused: work@example.com needs signing in',
       provider: 'claude',
       account: WORK,
       runId: run.id,
@@ -511,7 +531,7 @@ describe('the sign-in gate', () => {
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'shinsa',
       kind: 'failure',
-      text: 'Sign in to Claude as work@example.com',
+      text: 'Paused: work@example.com needs signing in',
       runId: run.id,
       gateType: 'sign_in',
     });
@@ -539,7 +559,7 @@ describe('the sign-in gate', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     fail(harness, taskId, signedOut({ id: 'acc-x', email: null }));
-    expect(harness.openGate(taskId).title).toBe('Sign in to Claude');
+    expect(harness.openGate(taskId).title).toBe('Paused: Claude needs signing in');
   });
 
   test('signing the account in again retries every task waiting on it, and only those', () => {
@@ -633,7 +653,7 @@ describe('the sign-in gate', () => {
     });
     expect(harness.openGate(taskId)).toMatchObject({
       type: 'sign_in',
-      title: 'Sign in to Codex as me@example.com',
+      title: 'Paused: me@example.com needs signing in',
       body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
       provider: 'codex',
       account: null,
@@ -641,7 +661,7 @@ describe('the sign-in gate', () => {
     });
     const other = createTask(harness, { request: 'Other' });
     fail(harness, other, { ...signedOut(null), login: { provider: 'codex', email: null } });
-    expect(harness.openGate(other).title).toBe('Sign in to Codex');
+    expect(harness.openGate(other).title).toBe('Paused: Codex needs signing in');
   });
 
   test('a provider’s sign-in answers only that provider’s gates, and an account’s only its own', () => {

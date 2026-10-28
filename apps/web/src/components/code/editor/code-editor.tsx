@@ -42,6 +42,7 @@ export interface CodeEditorProps {
   docKey?: string;
   content: string;
   original: string | null;
+  baseline?: string | null;
   split: boolean;
   editable: boolean;
   notes: CodeNote[];
@@ -144,6 +145,8 @@ export default function CodeEditor(props: CodeEditorProps) {
       path,
       content: latest.current.content,
       original,
+      baseline: latest.current.baseline ?? null,
+      target: latest.current.reveal !== null,
       split: split && original !== null,
       annotations: JSON.parse(latestAnnotations.current) as ReturnType<typeof splitAnnotations>,
     });

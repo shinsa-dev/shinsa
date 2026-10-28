@@ -78,6 +78,7 @@ export function resolveHouseRules(role: RunRole) {
     ROLE_RULE[role] ?? WORKTREE_RULE,
     'Everything you hand the human must be ready for a decision. Do not ask the human to do work you can do yourself.',
     "Follow the repository's own rules: its CLAUDE.md and AGENTS.md files, its lint and conventions. They are not suggestions.",
+    'Never run a whole test suite yourself (`bun test`, `npm test`, `pytest`, `bun run check` with no path): other agents share this machine and it slows every one of them, so Shinsa refuses it. Run the test files or folders you changed, or the task’s checks; Shinsa runs the checks itself after you hand over.',
     ...listToolRules(tools),
     'Every hand-over goes through a Shinsa tool with fixed fields and hard length limits. Shinsa rejects one that breaks a limit and tells you which; fix it and call the tool again.',
     'Write for a reader with ten seconds per item: plain sentences, no filler, no restating the request.',

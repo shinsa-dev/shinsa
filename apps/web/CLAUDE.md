@@ -35,7 +35,7 @@ src/
 │                        section.tsx (Section, Specimen), tokens.tsx, inputs.tsx, overlays.tsx and surfaces.tsx
 │                        (the kit), checklist.tsx (the checklist: ticking, commands, a disabled row, read-only, a
 │                        Markdown task list), composites.tsx (Shinsa's shared building blocks and the
-│                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once), checks.tsx (the Checks list in each state, both stages, a linked test, the plan's Checks, check activity and Always run before review, on sample-checks.ts), code.tsx (the editor, its diffs and Go to
+│                        composer), errors.tsx (the error fallbacks in each size), onboarding.tsx (each kind of setup step and the finished page), accounts.tsx, overview.tsx, chat.tsx, review.tsx (the review card in each form), evidence.tsx (the Evidence panel on sample files from public/samples/evidence, every kind once, and after a revision: an updated shot and the earlier versions), checks.tsx (the Checks list in each state, both stages, a linked test, the plan's Checks, check activity and Always run before review, on sample-checks.ts), code.tsx (the editor, its diffs and Go to
 │                        file) and settings.tsx (the feature pieces in
 │                        each state), samples.ts, sample-accounts.ts, sample-delegations.ts, sample-extensions.ts,
 │                        sample-versions.ts, sample-code.ts, sample-evidence.ts, sample-checks.ts, sample-overview.ts and sample-merge-steps.ts (their sample data; merge-steps.tsx,
@@ -54,7 +54,7 @@ src/
 │                        the queued messages docked above the composer), review (merge-steps.tsx: the steps around the
 │                        merge as a checklist, its block on a now card and its panel on the Review tab, a step's command as a shell code block;
 │                        testing.tsx: the Review tab's How to test, what the tests cover and the steps to try with their targets;
-│                        note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and NoteHead with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue, home (guide,
+│                        note.tsx: ReviewNote, the one card every review comment is, on the Review tab and inline in the Code tab, with a foldable header bar for points and comments and NoteHead with Fix / Dismiss for findings; verdict-choice.tsx: a finding's Fix / Dismiss on the shared review draft, the only one, which the Overview's finding verdicts use too, and VerdictChoice, the same control on a value alone, for /ui; point-index.tsx: the Review tab's pinned Every point line and its popover index), checks (checks-list.tsx: the Checks list in its two stages, Building and CI, ChecksBlock with each check's output behind a toggle, CheckRowItem, the row the Evidence panel's linked checks reuse, and ChecksSections, the compact form the checks fact's and the pull request's popovers show), evidence (evidence-section.tsx: the Review tab's Evidence panel, its current items grouped by kind (comparisons, recordings, screenshots, tests and checks, each a reference to its check, notes, previews), an updated item's quiet mark, the replaced and removed items under a collapsed Earlier versions, the folder on disk; evidence-figure.tsx and evidence-text.tsx its pieces; evidence-pointer.tsx: the Overview's one line pointing at it, counting the items by kind), code (the Code tab's workbench: explorer, changes and file trees, search panel and its search field, quick open, tree rows, editor pane, inline notes, code-loading.tsx (the centred wait every Code tab read shows), and editor/code-editor.tsx, the lazily loaded CodeMirror view with editor/find-bar.tsx: find and replace), command (⌘K), queue, home (guide,
 │                        new task, recently finished and recent conversations), roadmap, settings (one file per
 │                        section, group.tsx the shared rows, SettingsBlock, FoldingBlock and TOKEN_TEXT;
 │                        projects.tsx with project-block.tsx, project-menu.tsx, workspace-select.tsx (where agents work) and baseline-select.tsx (Always run before review);
@@ -113,7 +113,8 @@ src/
 │                        (use-transcript-window), the rows in view of a list (use-row-window) and a long list's rows a
 │                        batch at a time (use-progressive-count), use-delayed (useDelayed: true once a wait has
 │                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
-│                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light)…)
+│                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
+│                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
     │                    patches applied once per frame, acks, transcripts from the position held (every followed
@@ -132,7 +133,7 @@ src/
     │                    terminals.ts (useTerminals over the snapshot the socket holds, /api/terminals changes,
     │                    openTerminal and openTaskTerminal, the foreground check, every /api/services read and change),
     │                    accounts.ts (useAccounts over the snapshot the socket holds, /api/accounts/* changes,
-    │                    the sign-in dialog state), health.ts (/api/health on start and after each reconnect,
+    │                    the sign-in dialog state, refreshUsage and watchUsage over one shared usage recheck), health.ts (/api/health on start and after each reconnect,
     │                    the banner's text and its dismissal), engine.ts (the app against the engine: the engine
     │                    banner's view, the automatic restart and requestEngineRestart), extensions.ts (useExtensions over
     │                    /api/extensions, the server check, every /api/extensions/* change and the MCP
@@ -150,7 +151,8 @@ src/
     │                    an account's status and header, the glance at the account the server picks next and
     │                    which row it marks), limits.ts (switch thresholds, the Limits settings), providers.ts (a
     │                    provider's sign-in block: its header, state, the fix, the sign-in command), sign-in.ts (resolveSignInProvider: the Sign in gate's provider),
-    │                    usage-wait.ts
+    │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
+    │                    60 s while watched and the page is visible)
     ├── chat/            Transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
     │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),
@@ -174,7 +176,8 @@ src/
     │                    languages, the unified diff with removed lines highlighted in context, note slots, spot-hints.ts
     │                    (the spot marks the editor renders a `Hint` into), the
     │                    comment gutter, find.ts: the find bar's panel, its replace row and match count, commands.ts: VS Code's editing keys as CodeMirror commands, one list for the keymap and ⌘K, collapsed.ts: the cursor
-    │                    stepping over folded lines and the gutter width the sticky folds and notes sit beside); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
+    │                    stepping over folded lines and the gutter width the sticky folds and notes sit beside, first-change.ts:
+    │                    where a changed file opens, its first change 3 lines from the top); diff-view.ts (every diff outside the Code tab: sources, a spot's slice of
     │                    the task diff, notes, the 14-line fold), diff-theme.ts (`@pierre/diffs` on the `--code-*`
     │                    tokens), line-changes.ts (an edit's added and removed counts), and highlight.ts (Shiki for
     │                    the chat on a theme of the `--code-*` tokens the editor reads)
@@ -219,7 +222,8 @@ src/
     │                    at each gate (messages.ts: the composer hint and toast, from core's resolveMessageEffect), the
     │                    queued messages and whether a started round is still delivering (message-queue.ts), the
     │                    messages on their way to the server (outbox.ts, read with hooks/use-outbox.ts), process
-    │                    actions (process.ts), suggested tasks, cost, pull request facts, branch and request text,
+    │                    actions (process.ts), suggested tasks, cost (cost.ts: the facts row's cost control and its
+    │                    popover, the one place a task's cost shows, and a limit's Allow another), pull request facts, branch and request text,
     │                    kinds of task (shapes.ts: labels, composed steps, the result panel per step, your OK's
     │                    proposal gate, the steps a task takes), why triage decided each fact (triage.ts)
     ├── notifications/   attention.ts (decisions, the tab badge and status), watcher.ts, sounds.ts,

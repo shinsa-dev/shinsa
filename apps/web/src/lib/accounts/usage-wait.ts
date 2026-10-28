@@ -1,11 +1,14 @@
 import { CLAUDE_PROVIDER, resolveProviderLabel, type Task, type UsageWait } from '@shinsa/core';
+import { formatMoment } from '@/lib/format/time.ts';
 
 export function isUsageWaitArmed(task: Task): task is Task & { usageWait: UsageWait } {
   return task.usageWait?.status === 'armed';
 }
 
-export function describeUsageWaitTitle(wait: UsageWait) {
-  return wait.autoResume ? 'Resumes when the usage limit resets' : 'Paused until the usage limit resets';
+export function describeUsageWaitTitle(wait: UsageWait, now = Date.now()) {
+  const next = wait.autoResume ? 'continues' : 'pauses for you';
+  const account = wait.account?.email ? ` on ${wait.account.email}` : '';
+  return `Waiting for usage: ${next} at ${formatMoment(wait.resetAt, now)}${account}`;
 }
 
 export function describeUsageWaitBody(wait: UsageWait) {

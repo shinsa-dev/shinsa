@@ -981,6 +981,13 @@ describe('hand-overs', () => {
         { kind: 'screenshot', stage: 'after' },
       ],
     });
+    expect(await call('remove_evidence', { items: ['home'], reason: 'The page changed.' })).toBe('Removed.');
+    expect(dispatched.at(-1)).toMatchObject({
+      type: 'agent.remove_evidence',
+      items: ['home'],
+      reason: 'The page changed.',
+    });
+    expect(call('remove_evidence', { items: [] })).rejects.toThrow('items names no evidence.');
     expect(await call('note', { note: 'Follow up on dark mode.' })).toBe('Noted.');
     expect(call('note', {})).rejects.toThrow('note is required.');
     expect(await call('find_tasks', { query: 'tab' })).toContain('Fix the tab scroll');
@@ -1119,7 +1126,7 @@ describe('attempts and conditional writes', () => {
     const fake = sessions.started[0] as FakeSession;
     await fake.input.tools.handle('note', { note: 'Working.' }, new AbortController().signal);
     const failure = {
-      class: 'overloaded',
+      class: 'provider_error',
       message: 'Busy.',
       code: null,
       retryable: true,
@@ -1681,6 +1688,99 @@ describe('the rejection seam', () => {
     sessions.started[0]?.finish();
     await running;
     expect(heard).toEqual(['run-1:rate_limit']);
+  });
+});
+
+describe('an overloaded provider', () => {
+  const overloaded = {
+    class: 'overloaded',
+    message: 'Claude’s API is overloaded (529).',
+    code: 'api_error_529',
+    retryable: true,
+    resetAt: null,
+  } as const;
+
+  function listRetries(transcripts: Transcripts) {
+    return transcripts
+      .listEntries('run-1')
+      .flatMap((entry) =>
+        entry.type === 'notice' && entry.notice.kind === 'retrying' ? [entry.notice] : []
+      );
+  }
+
+  test('is tried again after a short wait, each wait in the chat, and never offered as a rejection', async () => {
+    const sessions = createSessions();
+    const rejections: RunRejection[] = [];
+    const { supervisor, dispatched, transcripts } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      onRejection: (rejection) => {
+        rejections.push(rejection);
+        return { retry: false };
+      },
+    });
+    const running = supervisor.execute('run-1');
+    for (const count of [1, 2]) {
+      await until('a session', () => sessions.started.length === count);
+      sessions.started[count - 1]?.finish('failed', { failure: overloaded, summary: overloaded.message });
+    }
+    await until('the third session', () => sessions.started.length === 3);
+    sessions.started[2]?.finish('completed');
+    await running;
+    expect(rejections).toEqual([]);
+    expect(listRetries(transcripts)).toEqual([
+      expect.objectContaining({ provider: 'claude', detail: overloaded.message, attempt: 1, attempts: 3 }),
+      expect.objectContaining({ attempt: 2, attempts: 3 }),
+    ]);
+    expect(endedRuns(dispatched)).toEqual([expect.objectContaining({ outcome: 'completed' })]);
+  });
+
+  test('ends the run as overloaded once the retries are spent, for core to resume or pause it', async () => {
+    const sessions = createSessions();
+    const { supervisor, dispatched, transcripts } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+    });
+    const running = supervisor.execute('run-1');
+    for (const count of [1, 2, 3, 4]) {
+      await until('a session', () => sessions.started.length === count);
+      sessions.started[count - 1]?.finish('failed', { failure: overloaded, summary: overloaded.message });
+    }
+    await running;
+    expect(listRetries(transcripts).map((notice) => notice.attempt)).toEqual([1, 2, 3]);
+    expect(endedRuns(dispatched)).toEqual([
+      expect.objectContaining({ outcome: 'failed', failure: overloaded }),
+    ]);
+  });
+
+  test('a cancel or a restart during the wait ends it at once, and its time limit still holds', async () => {
+    for (const stop of ['cancel', 'shutdown'] as const) {
+      const sessions = createSessions();
+      const context = setup(withTask(createTempDir()), { startSession: sessions.startSession });
+      context.config.overloadRetryMs = 60 * 60_000;
+      const running = context.supervisor.execute('run-1');
+      await until('the session', () => sessions.started.length === 1);
+      sessions.started[0]?.finish('failed', { failure: overloaded });
+      await until('the wait', () => listRetries(context.transcripts).length === 1);
+      if (stop === 'cancel') await context.supervisor.cancel('run-1');
+      else await context.supervisor.interruptForShutdown();
+      await running;
+      expect(sessions.started).toHaveLength(1);
+      expect(endedRuns(context.dispatched)).toEqual(
+        stop === 'cancel' ? [expect.objectContaining({ outcome: 'cancelled' })] : []
+      );
+    }
+    const sessions = createSessions();
+    const timed = setup(withTask(createTempDir()), { startSession: sessions.startSession, maxRunMs: 200 });
+    timed.config.overloadRetryMs = 60 * 60_000;
+    const running = timed.supervisor.execute('run-1');
+    await until('the session', () => sessions.started.length === 1);
+    sessions.started[0]?.finish('failed', { failure: overloaded });
+    await running;
+    expect(endedRuns(timed.dispatched)).toEqual([
+      expect.objectContaining({
+        outcome: 'failed',
+        summary: 'It ran past its time limit without handing over.',
+      }),
+    ]);
   });
 });
 
@@ -2407,6 +2507,40 @@ describe('accounts', () => {
     await running;
     expect(offered).toBe(3);
     expect(endedRuns(dispatched)[0]).toMatchObject({ failure: { resetAt: 42 } });
+  });
+
+  test('a login read again is tried once more on the same account before the turn moves on', async () => {
+    const sessions = createSessions();
+    const work = { id: 'acc-work', email: 'work@example.com', configDir: '/accounts/work' };
+    const home = { id: 'acc-home', email: 'home@example.com', configDir: null };
+    const { broker, requests } = leases(work, work, home);
+    const rejections: RunRejection[] = [];
+    const expired = { ...limit, class: 'auth', code: 'authentication_failed', resetAt: null } as const;
+    const { supervisor } = setup(withTask(createTempDir()), {
+      startSession: sessions.startSession,
+      accounts: broker,
+      onRejection: (rejection) => {
+        rejections.push(rejection);
+        if (rejection.renewed.length === 0) return { retry: true, renewed: rejection.accountId as string };
+        return { retry: rejection.tried.length < 2 };
+      },
+    });
+    const running = supervisor.execute('run-1');
+    for (let index = 0; index < 3; index += 1) {
+      await until(`attempt ${index + 1}`, () => sessions.started.length === index + 1);
+      sessions.started[index]?.finish('failed', { failure: expired });
+    }
+    await running;
+    expect(rejections.map((rejection) => [rejection.tried, rejection.renewed])).toEqual([
+      [['acc-work'], []],
+      [['acc-work'], ['acc-work']],
+      [['acc-work', 'acc-home'], ['acc-work']],
+    ]);
+    expect(requests).toEqual([
+      expect.objectContaining({ bound: null, exclude: [] }),
+      expect.objectContaining({ bound: { id: 'acc-work', email: 'work@example.com' }, exclude: [] }),
+      expect.objectContaining({ bound: null, exclude: ['acc-work'] }),
+    ]);
   });
 
   test('the accounts handler alone decides how often a turn moves, and a restored session costs it no account', async () => {
