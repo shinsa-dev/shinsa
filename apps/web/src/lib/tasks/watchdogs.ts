@@ -16,6 +16,7 @@ export const WATCHDOGS_TITLE = 'Watchdogs';
 
 export const WATCHDOG_STATUS: Record<WatchdogStatus, { label: string; tone: Tone }> = {
   needs_source: { label: 'Needs a data source', tone: 'amber' },
+  awaiting_production: { label: 'Waiting for production', tone: 'amber' },
   watching: { label: 'Watching', tone: 'blue' },
   passed: { label: 'Passed', tone: 'green' },
   tripped: { label: 'Found an issue', tone: 'red' },
@@ -26,8 +27,13 @@ function formatHours(ms: number) {
   return `${Math.max(1, Math.ceil(ms / HOUR_MS))} h`;
 }
 
+function formatMinutes(minutes: number) {
+  return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
+}
+
 export function describeWatchdogSchedule(watchdog: Watchdog) {
-  return `Every ${watchdog.everyMinutes / 60} h for ${watchdog.forMinutes / 60} h`;
+  const start = watchdog.startsOn === 'production' ? ' once live in production' : '';
+  return `First check after ${formatMinutes(watchdog.firstCheckMinutes)}, then up to every ${formatMinutes(watchdog.maxGapMinutes)}, for ${formatMinutes(watchdog.forMinutes)}${start}`;
 }
 
 export function describeWatchdogProgress(state: ShinsaState, watchdog: Watchdog, now: number) {
@@ -35,6 +41,9 @@ export function describeWatchdogProgress(state: ShinsaState, watchdog: Watchdog,
   switch (watchdog.status) {
     case 'needs_source':
       return 'Starts once you connect a data source.';
+    case 'awaiting_production':
+      if (watchdog.runId) return 'Checking whether the change is live in production.';
+      return 'Starts once the change is live in production.';
     case 'watching':
       if (watchdog.runId) return `Checking now · ${checks} so far`;
       return `${formatHours((watchdog.endsAt ?? now) - now)} left · ${checks}`;
@@ -59,7 +68,10 @@ export function resolveWatchingReason(task: Task, now: number) {
   if (active.length === 0) return null;
   const count = formatCount(active.length, 'watchdog', 'watchdogs');
   const ends = active.map((watchdog) => watchdog.endsAt).filter((at): at is number => at !== null);
-  if (ends.length === 0) return `${count} · waiting for a data source`;
+  if (ends.length === 0) {
+    const waiting = active.some((watchdog) => watchdog.status === 'awaiting_production');
+    return `${count} · ${waiting ? 'waiting for production' : 'waiting for a data source'}`;
+  }
   return `${count} · ${formatHours(Math.max(...ends) - now)} left`;
 }
 

@@ -15,7 +15,8 @@ const WATCHDOG = {
   title: 'Greeting renders',
   check: 'The greeting still renders for every visitor.',
   source: { server: 'maple', data: 'Logs of the greeting service' },
-  every_hours: 6,
+  first_check_minutes: 360,
+  max_gap_hours: 6,
   for_hours: 48,
 };
 

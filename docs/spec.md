@@ -180,9 +180,12 @@ not chat text.
 - **Notes.** Agents keep notes on a task (`note`), so nothing depends on you remembering it.
 - **Watchdogs after the merge.** You cannot verify everything before a merge. The Agent writes watchdogs for a change
   whose effects only real traffic shows: each reads a data source (an MCP server the project lists: traces, logs,
-  analytics, support messages) on an interval for a window after the merge, as a read-only turn of the task's own
-  conversation, and an issue it finds becomes a new task forked from this one. When no server has the data, it asks you
-  for one with what the code sends where and the servers worth connecting (`docs/engine.md` → Watchdogs).
+  analytics, support messages) for a window once the change is live (72 hours by default), checking soon after and less
+  often as it holds up, as a read-only turn of the task's own conversation, and an issue it finds becomes a new task
+  forked from this one. Where the merge is not the release, a watchdog starts only once the change is live in
+  production. The agent sets each one's schedule from what the change needs; Settings → Agents → Watchdogs holds the
+  defaults. When no server has the data, it asks you for one with what the code sends where and the servers worth
+  connecting (`docs/engine.md` → Watchdogs).
 - **Forks.** A follow-up on what a task did (a bug in a change it shipped) is its own task, kept apart on screen, whose
   agent starts from a copy of that task's conversation (Fork into a new task, `create_task`'s `fork_from`;
   `docs/engine.md` → Forking a task).

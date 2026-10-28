@@ -29,8 +29,11 @@ const LATENCY: WatchdogSpec = {
   check: 'p95 of POST /checkout stays under 400 ms and its error rate under 1%.',
   source: { server: 'maple', data: 'OpenTelemetry traces and logs of the API' },
   sourceRequest: null,
-  everyHours: 6,
+  firstCheckMinutes: 360,
+  maxGapHours: 6,
   forHours: 48,
+  startsOn: 'merge',
+  productionCheck: null,
 };
 
 const EVENTS: WatchdogSpec = {
@@ -42,8 +45,11 @@ const EVENTS: WatchdogSpec = {
     evidence: 'src/analytics.ts sends paywall_open to PostHog.',
     suggestions: ['PostHog’s official MCP server', 'Composio’s PostHog toolkit'],
   },
-  everyHours: 12,
+  firstCheckMinutes: 720,
+  maxGapHours: 12,
   forHours: 24,
+  startsOn: 'merge',
+  productionCheck: null,
 };
 
 function refusal(run: () => unknown) {
@@ -217,7 +223,7 @@ describe('a watch check', () => {
   });
 
   test('passes once the next check would fall past its window, and later checks see the earlier ones', () => {
-    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 6, forHours: 16 }]);
+    const { harness, taskId } = mergeWith([{ ...LATENCY, forHours: 16 }]);
     fire(harness, taskId);
     report(harness, taskId, true);
     fire(harness, taskId);
@@ -230,7 +236,9 @@ describe('a watch check', () => {
   });
 
   test('a check due exactly when the window ends still runs, and its report passes the watchdog', () => {
-    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 24, forHours: 24 }]);
+    const { harness, taskId } = mergeWith([
+      { ...LATENCY, firstCheckMinutes: 1440, maxGapHours: 24, forHours: 24 },
+    ]);
     expect(watchdog(harness, taskId).nextCheckAt).toBe(watchdog(harness, taskId).endsAt);
     fire(harness, taskId);
     expect(harness.activeRun(taskId).purpose).toBe('watch');
@@ -239,7 +247,9 @@ describe('a watch check', () => {
   });
 
   test('a last check deferred past the window’s end still stops the watchdog when the task is still at work', () => {
-    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 24, forHours: 24 }]);
+    const { harness, taskId } = mergeWith([
+      { ...LATENCY, firstCheckMinutes: 1440, maxGapHours: 24, forHours: 24 },
+    ]);
     harness.send({ type: 'task.message', taskId, text: 'Add a retry button too.', kind: 'new_round' });
     fire(harness, taskId);
     expect(watchdog(harness, taskId).nextCheckAt).toBe(harness.now + 15 * MINUTE_MS);
@@ -251,7 +261,9 @@ describe('a watch check', () => {
   });
 
   test('a last check deferred past the window’s end runs late once the task rests', () => {
-    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 24, forHours: 24 }]);
+    const { harness, taskId } = mergeWith([
+      { ...LATENCY, firstCheckMinutes: 1440, maxGapHours: 24, forHours: 24 },
+    ]);
     harness.send({ type: 'task.message', taskId, text: 'Why a cache?', kind: 'feedback' });
     const answerer = harness.activeRun(taskId);
     fire(harness, taskId);
@@ -380,7 +392,9 @@ describe('a watch check', () => {
   });
 
   test('a check that keeps ending without a report gives up after its nudges, and stops when no slot is left', () => {
-    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 30, forHours: 48 }]);
+    const { harness, taskId } = mergeWith([
+      { ...LATENCY, firstCheckMinutes: 1800, maxGapHours: 24, forHours: 48 },
+    ]);
     fire(harness, taskId);
     const first = harness.activeRun(taskId);
     harness.send({ type: 'run.end', runId: first.id, outcome: 'completed', summary: null });
@@ -439,6 +453,149 @@ describe('a watch check', () => {
     });
     harness.send({ type: 'task.retry', taskId });
     expect(harness.task(taskId).stage).toBe('merged');
+  });
+});
+
+const DEFAULTED: WatchdogSpec = { ...LATENCY, firstCheckMinutes: null, maxGapHours: null, forHours: null };
+
+const RELEASED: WatchdogSpec = {
+  ...LATENCY,
+  startsOn: 'production',
+  productionCheck: 'The production deployment on Vercel includes the merge commit.',
+};
+
+function reportLive(harness: Harness, taskId: string, live: boolean) {
+  return harness.send({
+    type: 'agent.report_watch',
+    runId: harness.activeRun(taskId).id,
+    live,
+    healthy: true,
+    summary: live ? 'Live in production; p95 is 210 ms.' : 'Production still runs the previous release.',
+    issue: null,
+  });
+}
+
+describe('a watchdog’s schedule', () => {
+  test('takes the settings’ defaults: the first check after 30 minutes, then gaps that double up to 6 hours, for 72 hours', () => {
+    const { harness, taskId } = mergeWith([DEFAULTED]);
+    const armed = watchdog(harness, taskId);
+    expect(armed).toMatchObject({ firstCheckMinutes: 30, maxGapMinutes: 360, forMinutes: 72 * 60 });
+    expect(armed.nextCheckAt).toBe(harness.now + 30 * MINUTE_MS);
+    expect(armed.endsAt).toBe(harness.now + 72 * HOUR_MS);
+    const gaps: number[] = [];
+    for (let check = 0; check < 5; check += 1) {
+      fire(harness, taskId);
+      report(harness, taskId, true);
+      gaps.push(((watchdog(harness, taskId).nextCheckAt ?? 0) - harness.now) / MINUTE_MS);
+    }
+    expect(gaps).toEqual([60, 120, 240, 360, 360]);
+  });
+
+  test('a change to the settings applies to the watchdogs armed after it', () => {
+    const harness = createHarness();
+    harness.send({
+      type: 'settings.change',
+      patch: { watchdogHours: 24, watchdogFirstCheckMinutes: 10, watchdogMaxGapHours: 2 },
+    });
+    expect(harness.state.settings).toMatchObject({ watchdogHours: 24, watchdogFirstCheckMinutes: 10 });
+    expect(() => harness.send({ type: 'settings.change', patch: { watchdogHours: 0 } })).toThrow(
+      'Watchdogs watch for 1 to 720 hours.'
+    );
+    expect(() => harness.send({ type: 'settings.change', patch: { watchdogMaxGapHours: 25 } })).toThrow(
+      'Checks are at most 1 to 24 hours apart.'
+    );
+  });
+
+  test('the agent’s own schedule wins over the defaults', () => {
+    const { harness, taskId } = mergeWith([
+      { ...DEFAULTED, firstCheckMinutes: 5, maxGapHours: 1, forHours: 12 },
+    ]);
+    expect(watchdog(harness, taskId)).toMatchObject({
+      firstCheckMinutes: 5,
+      maxGapMinutes: 60,
+      forMinutes: 720,
+      nextCheckAt: harness.now + 5 * MINUTE_MS,
+    });
+  });
+});
+
+describe('a watchdog that starts on production', () => {
+  test('waits after the merge and asks every half hour whether the change is live', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'awaiting_production',
+      startedAt: null,
+      endsAt: null,
+      nextCheckAt: harness.now + 30 * MINUTE_MS,
+    });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      'The watchdog “Checkout latency” waits for the change to reach production'
+    );
+    fire(harness, taskId);
+    const prompt = readInstruction(harness.activeRun(taskId));
+    expect(prompt).toContain('is live in production yet');
+    expect(prompt).toContain('How to tell: The production deployment on Vercel includes the merge commit.');
+    expect(harness.activeRun(taskId).purpose).toBe('watch');
+  });
+
+  test('a check that does not say whether it is live is refused, and one that is not live asks again later', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    fire(harness, taskId);
+    expect(refusal(() => report(harness, taskId, true)).code).toBe('live_required');
+    reportLive(harness, taskId, false);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'awaiting_production',
+      runId: null,
+      checks: [],
+      nextCheckAt: harness.now + 30 * MINUTE_MS,
+    });
+  });
+
+  test('once live, the window starts then and the first check is recorded', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    fire(harness, taskId);
+    reportLive(harness, taskId, true);
+    const live = watchdog(harness, taskId);
+    expect(live).toMatchObject({
+      status: 'watching',
+      startedAt: harness.now,
+      endsAt: harness.now + 48 * HOUR_MS,
+      checks: [{ healthy: true }],
+      nextCheckAt: harness.now + 6 * HOUR_MS,
+    });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      'The change is live in production, so the watchdog “Checkout latency” started watching'
+    );
+  });
+
+  test('stops waiting after a week without reaching production', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    fire(harness, taskId);
+    harness.advance(168 * HOUR_MS);
+    reportLive(harness, taskId, false);
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'stopped', nextCheckAt: null });
+    expect(harness.task(taskId).activity.map((entry) => entry.detail)).toContain(
+      'The change did not reach production within 168 hours, so the watchdog stopped waiting.'
+    );
+  });
+
+  test('a source connected later starts it waiting for production too', () => {
+    const { harness, taskId } = mergeWith([
+      { ...RELEASED, source: null, sourceRequest: EVENTS.sourceRequest },
+    ]);
+    harness.send({
+      type: 'watchdog.connect',
+      taskId,
+      watchdogId: watchdog(harness, taskId).id,
+      server: 'maple',
+      data: 'Traces',
+    });
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'awaiting_production',
+      startedAt: null,
+      nextCheckAt: harness.now + 30 * MINUTE_MS,
+    });
   });
 });
 
@@ -605,9 +762,11 @@ describe('watchdogs in the prompts', () => {
     expect(readInstruction(last as never)).toContain('- `maple`: Traces');
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     const review = readInstruction(harness.activeRun(taskId));
-    expect(review).toContain('- Checkout latency: every 6 h for 48 h, from maple.');
     expect(review).toContain(
-      '- Paywall events: every 12 h for 24 h, needs a source: Product analytics events'
+      '- Checkout latency: first check after 360 min, gaps up to 6 h, for 48 h, from maple.'
+    );
+    expect(review).toContain(
+      '- Paywall events: first check after 720 min, gaps up to 12 h, for 24 h, needs a source: Product analytics events'
     );
   });
 

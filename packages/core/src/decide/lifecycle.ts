@@ -8,6 +8,7 @@ import {
   type PlanGateReason,
   type ReviewEscalation,
   resolveTaskPipeline,
+  resolveWatchdogDefaults,
   type Task,
 } from '../domain/index.ts';
 import type { ShinsaEffectKind } from '../effects/index.ts';
@@ -116,7 +117,9 @@ export function startPhase(decider: Decider, taskId: string, index: number, addi
   }
   const task = decider.task(taskId);
   const sources = listRepoWatchSources(decider.projectOf(task), task.repoId);
-  const instruction = resolvePhaseInstruction(task, decider.repoOf(task), index, sources) + addition;
+  const defaults = resolveWatchdogDefaults(decider.state.settings);
+  const instruction =
+    resolvePhaseInstruction(task, decider.repoOf(task), index, sources, defaults) + addition;
   decider.startRun(task, 'agent', resolveAgentPrompt(instruction), {
     purpose: 'build',
     phaseIndex: index,

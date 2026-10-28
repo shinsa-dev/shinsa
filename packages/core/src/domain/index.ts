@@ -91,8 +91,11 @@ export {
   resolveDelegationLimit,
   resolveFastMode,
   resolveIdleCompaction,
+  resolveWatchdogDefaults,
   SETTINGS_KEYS,
   type Settings,
+  WATCHDOG_DEFAULTS,
+  WATCHDOG_SETTING_LIMITS,
 } from './settings.ts';
 export {
   type AutoChoice,
@@ -210,6 +213,7 @@ export {
 export {
   isSourceForRepo,
   isWatchdogActive,
+  isWatchdogScheduled,
   listActiveWatchdogs,
   listRepoWatchSources,
   selectWatchingRun,

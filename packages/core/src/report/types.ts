@@ -93,13 +93,18 @@ export interface WatchdogSourceRequest {
   suggestions: string[];
 }
 
+export type WatchdogStart = 'merge' | 'production';
+
 export interface WatchdogSpec {
   title: string;
   check: string;
   source: WatchdogSource | null;
   sourceRequest: WatchdogSourceRequest | null;
-  everyHours: number;
-  forHours: number;
+  firstCheckMinutes: number | null;
+  maxGapHours: number | null;
+  forHours: number | null;
+  startsOn: WatchdogStart;
+  productionCheck: string | null;
 }
 
 export interface WatchIssue {
@@ -108,6 +113,7 @@ export interface WatchIssue {
 }
 
 export interface WatchReport {
+  live: boolean | null;
   healthy: boolean;
   summary: string;
   issue: WatchIssue | null;

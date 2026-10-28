@@ -12,6 +12,7 @@ import {
   resolveProjectKey,
   type Settings,
   selectFolderProject,
+  WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
 import { releaseBudgetHolds } from './costs.ts';
 import type { Decider } from './decider.ts';
@@ -58,6 +59,7 @@ function assertSettings(patch: Partial<Settings>) {
       `Compact from 1 to ${MAX_COMPACTION_LEAD_MINUTES} minutes before the cache expires.`
     );
   }
+  assertWatchdogSettings(patch);
   const budget = patch.taskBudgetUsd;
   if (budget !== undefined && budget !== null && !(Number.isFinite(budget) && budget > 0)) {
     throw new DomainError('settings_invalid', 'The cost limit must be an amount above zero, or off.');
@@ -68,6 +70,25 @@ function assertSettings(patch: Partial<Settings>) {
       'settings_invalid',
       'The usage limit must be a whole percentage from 1 to 100, or off.'
     );
+  }
+}
+
+const WATCHDOG_SETTING_RULES = [
+  ['watchdogHours', WATCHDOG_SETTING_LIMITS.hours, 'Watchdogs watch for 1 to {max} hours.'],
+  [
+    'watchdogFirstCheckMinutes',
+    WATCHDOG_SETTING_LIMITS.firstCheckMinutes,
+    'The first check comes 1 to {max} minutes in.',
+  ],
+  ['watchdogMaxGapHours', WATCHDOG_SETTING_LIMITS.maxGapHours, 'Checks are at most 1 to {max} hours apart.'],
+] as const;
+
+function assertWatchdogSettings(patch: Partial<Settings>) {
+  for (const [key, max, message] of WATCHDOG_SETTING_RULES) {
+    const value = patch[key];
+    if (value !== undefined && !isWholeBetween(value, 1, max)) {
+      throw new DomainError('settings_invalid', message.replace('{max}', String(max)));
+    }
   }
 }
 

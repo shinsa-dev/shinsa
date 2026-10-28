@@ -36,6 +36,9 @@ export interface Settings {
   compactionLeadMinutes?: number;
   compaction?: CompactionMode;
   fastMode?: boolean;
+  watchdogHours?: number;
+  watchdogFirstCheckMinutes?: number;
+  watchdogMaxGapHours?: number;
 }
 
 export const SETTINGS_KEYS = [
@@ -58,6 +61,9 @@ export const SETTINGS_KEYS = [
   'compactionLeadMinutes',
   'compaction',
   'fastMode',
+  'watchdogHours',
+  'watchdogFirstCheckMinutes',
+  'watchdogMaxGapHours',
 ] as const satisfies readonly (keyof Settings)[];
 
 export const HUMAN_ONLY_SETTINGS = [
@@ -85,6 +91,18 @@ const DEFAULT_COMPACTION_LEAD_MINUTES = 2;
 
 export const MAX_COMPACTION_LEAD_MINUTES = 30;
 
+export const WATCHDOG_DEFAULTS = { hours: 72, firstCheckMinutes: 30, maxGapHours: 6 } as const;
+
+export const WATCHDOG_SETTING_LIMITS = { hours: 720, firstCheckMinutes: 720, maxGapHours: 24 } as const;
+
+export function resolveWatchdogDefaults(settings: Settings) {
+  return {
+    hours: settings.watchdogHours ?? WATCHDOG_DEFAULTS.hours,
+    firstCheckMinutes: settings.watchdogFirstCheckMinutes ?? WATCHDOG_DEFAULTS.firstCheckMinutes,
+    maxGapHours: settings.watchdogMaxGapHours ?? WATCHDOG_DEFAULTS.maxGapHours,
+  };
+}
+
 const DEFAULT_SETTINGS: Settings = {
   defaultProvider: CLAUDE_PROVIDER,
   defaultModel: DEFAULT_MODEL,
@@ -104,6 +122,9 @@ const DEFAULT_SETTINGS: Settings = {
   compactionLeadMinutes: DEFAULT_COMPACTION_LEAD_MINUTES,
   compaction: DEFAULT_COMPACTION,
   fastMode: false,
+  watchdogHours: WATCHDOG_DEFAULTS.hours,
+  watchdogFirstCheckMinutes: WATCHDOG_DEFAULTS.firstCheckMinutes,
+  watchdogMaxGapHours: WATCHDOG_DEFAULTS.maxGapHours,
 };
 
 export function createSettings(): Settings {

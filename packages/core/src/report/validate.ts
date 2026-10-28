@@ -8,6 +8,7 @@ import {
   type PipelineStep,
   PLAN_EVIDENCE_KINDS,
   SHAPE_LIMITS,
+  WATCHDOG_SETTING_LIMITS,
 } from '../domain/index.ts';
 import type { EvidenceItemKind } from '../domain/types.ts';
 import { createTesting, isWebUrl, MANUAL_TEST_TARGETS, parseTestFile } from './testing.ts';
@@ -40,6 +41,7 @@ import type {
   WatchdogSource,
   WatchdogSourceRequest,
   WatchdogSpec,
+  WatchdogStart,
   WatchReport,
 } from './types.ts';
 
@@ -79,8 +81,10 @@ export const PROTOCOL_LIMITS = {
   watchdogEvidence: 300,
   watchdogSuggestions: 4,
   watchdogSuggestion: 160,
-  watchdogEveryHours: 24,
-  watchdogForHours: 168,
+  watchdogFirstCheckMinutes: WATCHDOG_SETTING_LIMITS.firstCheckMinutes,
+  watchdogMaxGapHours: WATCHDOG_SETTING_LIMITS.maxGapHours,
+  watchdogForHours: WATCHDOG_SETTING_LIMITS.hours,
+  watchdogProductionCheck: 400,
   watchSummary: 600,
   watchIssueTitle: 80,
   watchIssueRequest: 2_000,
@@ -134,6 +138,8 @@ export const ATTACHED_EVIDENCE_KINDS: readonly [EvidenceItemKind, ...EvidenceIte
   ...EVIDENCE_KINDS,
   'comparison',
 ];
+
+export const WATCHDOG_STARTS: readonly [WatchdogStart, ...WatchdogStart[]] = ['merge', 'production'];
 
 export const MERGE_STEP_TIMINGS: readonly [MergeStepTiming, ...MergeStepTiming[]] = [
   'pre_merge',
@@ -444,9 +450,36 @@ function readWatchdog(reader: Reader, raw: unknown, path: string): WatchdogSpec 
     check: reader.text(record.check, `${path}.check`, PROTOCOL_LIMITS.watchdogCheck),
     source,
     sourceRequest,
-    everyHours: reader.count(record.every_hours, `${path}.every_hours`, PROTOCOL_LIMITS.watchdogEveryHours),
-    forHours: reader.count(record.for_hours, `${path}.for_hours`, PROTOCOL_LIMITS.watchdogForHours),
+    firstCheckMinutes: reader.optionalCount(
+      record.first_check_minutes,
+      `${path}.first_check_minutes`,
+      PROTOCOL_LIMITS.watchdogFirstCheckMinutes
+    ),
+    maxGapHours: reader.optionalCount(
+      record.max_gap_hours,
+      `${path}.max_gap_hours`,
+      PROTOCOL_LIMITS.watchdogMaxGapHours
+    ),
+    forHours: reader.optionalCount(record.for_hours, `${path}.for_hours`, PROTOCOL_LIMITS.watchdogForHours),
+    ...readWatchdogStart(reader, record, path),
   };
+}
+
+function readWatchdogStart(reader: Reader, record: Record<string, unknown>, path: string) {
+  const startsOn = isGiven(record.starts)
+    ? reader.pick(record.starts, `${path}.starts`, WATCHDOG_STARTS)
+    : 'merge';
+  const productionCheck = reader.optionalText(
+    record.production_check,
+    `${path}.production_check`,
+    PROTOCOL_LIMITS.watchdogProductionCheck
+  );
+  if (startsOn === 'production' && productionCheck === null) {
+    reader.errors.push(
+      `${path}.production_check is required when it starts on production: how to tell the merged change is live there.`
+    );
+  }
+  return { startsOn, productionCheck: startsOn === 'production' ? productionCheck : null };
 }
 
 function readWatchdogs(reader: Reader, value: unknown) {
@@ -460,9 +493,13 @@ function readWatchdogs(reader: Reader, value: unknown) {
         `walkthrough.watchdogs[${index}].title repeats walkthrough.watchdogs[${first}]; give each watchdog its own title.`
       );
     }
-    if (watchdog.everyHours > watchdog.forHours) {
+    if (
+      watchdog.firstCheckMinutes !== null &&
+      watchdog.forHours !== null &&
+      watchdog.firstCheckMinutes > watchdog.forHours * 60
+    ) {
       reader.errors.push(
-        `walkthrough.watchdogs[${index}] checks every ${watchdog.everyHours} hours but watches for only ${watchdog.forHours}; check at least once in the window.`
+        `walkthrough.watchdogs[${index}] checks first after ${watchdog.firstCheckMinutes} minutes but watches for only ${watchdog.forHours} hours; check at least once in the window.`
       );
     }
   });
@@ -873,15 +910,21 @@ function readSteps(reader: Reader, value: unknown) {
 
 export function validateWatchReport(input: Record<string, unknown>): Validation<WatchReport> {
   const reader = new Reader();
-  const healthy = reader.flag(input.healthy, 'healthy');
+  const live = isGiven(input.live) ? reader.flag(input.live, 'live') : null;
   const issue = isGiven(input.issue) ? reader.record(input.issue, 'issue') : null;
-  if (input.healthy === undefined) reader.errors.push('healthy is required: true when nothing is wrong.');
+  const healthy = live === false || reader.flag(input.healthy, 'healthy');
+  if (live === false) {
+    if (issue)
+      reader.errors.push('A change that is not live in production yet has no issue. Leave issue out.');
+  } else if (input.healthy === undefined)
+    reader.errors.push('healthy is required: true when nothing is wrong.');
   else if (healthy && issue) {
     reader.errors.push('A healthy check has no issue. Leave issue out, or set healthy to false.');
   } else if (!healthy && !issue) {
     reader.errors.push('An unhealthy check needs issue: a title and the request for the task that fixes it.');
   }
   return reader.result({
+    live,
     healthy,
     summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.watchSummary),
     issue: issue

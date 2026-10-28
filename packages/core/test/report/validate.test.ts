@@ -1046,7 +1046,8 @@ const LATENCY = {
   title: 'Checkout latency',
   check: 'p95 of POST /checkout stays under 400 ms.',
   source: { server: 'maple', data: 'API traces' },
-  every_hours: 6,
+  first_check_minutes: 15,
+  max_gap_hours: 4,
   for_hours: 48,
 };
 
@@ -1058,8 +1059,8 @@ const EVENTS = {
     evidence: 'src/analytics.ts sends to PostHog.',
     suggestions: ['PostHog’s MCP server'],
   },
-  every_hours: 12,
-  for_hours: 24,
+  starts: 'production',
+  production_check: 'The Vercel production deployment of paywall-next includes the merge commit.',
 };
 
 describe('watchdogs in the walkthrough', () => {
@@ -1073,8 +1074,11 @@ describe('watchdogs in the walkthrough', () => {
         check: 'p95 of POST /checkout stays under 400 ms.',
         source: { server: 'maple', data: 'API traces' },
         sourceRequest: null,
-        everyHours: 6,
+        firstCheckMinutes: 15,
+        maxGapHours: 4,
         forHours: 48,
+        startsOn: 'merge',
+        productionCheck: null,
       },
       {
         title: 'Paywall events',
@@ -1085,8 +1089,11 @@ describe('watchdogs in the walkthrough', () => {
           evidence: 'src/analytics.ts sends to PostHog.',
           suggestions: ['PostHog’s MCP server'],
         },
-        everyHours: 12,
-        forHours: 24,
+        firstCheckMinutes: null,
+        maxGapHours: null,
+        forHours: null,
+        startsOn: 'production',
+        productionCheck: 'The Vercel production deployment of paywall-next includes the merge commit.',
       },
     ]);
     expect(
@@ -1112,7 +1119,7 @@ describe('watchdogs in the walkthrough', () => {
               { ...LATENCY, title: 'No source', source: undefined },
               { ...EVENTS, source_request: { data: 'd', evidence: 'e' } },
               EVENTS,
-              { ...LATENCY, title: 'Short', every_hours: 24, for_hours: 12 },
+              { ...LATENCY, title: 'Short', first_check_minutes: 120, for_hours: 1 },
             ],
           },
         })
@@ -1122,7 +1129,24 @@ describe('watchdogs in the walkthrough', () => {
       'walkthrough.watchdogs[1] needs exactly one of source (a server that has the data) or source_request (what to connect).',
       'walkthrough.watchdogs[2].source_request.suggestions needs at least 1 server to connect, by name and where it comes from.',
       'walkthrough.watchdogs[3].title repeats walkthrough.watchdogs[2]; give each watchdog its own title.',
-      'walkthrough.watchdogs[4] checks every 24 hours but watches for only 12; check at least once in the window.',
+      'walkthrough.watchdogs[4] checks first after 120 minutes but watches for only 1 hours; check at least once in the window.',
+    ]);
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          walkthrough: {
+            ...WATCHED,
+            watchdogs: [
+              { ...LATENCY, title: 'No way to tell', starts: 'production' },
+              { ...LATENCY, title: 'Staging', starts: 'staging', production_check: 'x' },
+            ],
+          },
+        })
+      )
+    ).toEqual([
+      'walkthrough.watchdogs[0].production_check is required when it starts on production: how to tell the merged change is live there.',
+      'walkthrough.watchdogs[1].starts must be one of merge, production.',
     ]);
   });
 });
@@ -1130,6 +1154,7 @@ describe('watchdogs in the walkthrough', () => {
 describe('validateWatchReport', () => {
   test('reads a healthy check and one with an issue', () => {
     expect(readValue(validateWatchReport({ healthy: true, summary: 'p95 210 ms.' }))).toEqual({
+      live: null,
       healthy: true,
       summary: 'p95 210 ms.',
       issue: null,
@@ -1143,6 +1168,21 @@ describe('validateWatchReport', () => {
         })
       ).issue
     ).toEqual({ title: 'Slow in Safari', request: 'Fix it.' });
+  });
+
+  test('reads a change not live in production yet without a verdict, and refuses an issue with it', () => {
+    expect(readValue(validateWatchReport({ live: false, summary: 'Still on staging.' }))).toEqual({
+      live: false,
+      healthy: true,
+      summary: 'Still on staging.',
+      issue: null,
+    });
+    expect(
+      errorsOf(validateWatchReport({ live: false, summary: 'x', issue: { title: 't', request: 'r' } }))
+    ).toEqual(['A change that is not live in production yet has no issue. Leave issue out.']);
+    expect(readValue(validateWatchReport({ live: true, healthy: true, summary: 'Live, fine.' })).live).toBe(
+      true
+    );
   });
 
   test('refuses a missing verdict, a healthy check with an issue and an issue without its fields', () => {

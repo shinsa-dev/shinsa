@@ -11,6 +11,7 @@ import {
   PROTOCOL_LIMITS,
   type ShinsaToolName,
   VERIFICATION_RULES,
+  WATCHDOG_STARTS,
 } from '@shinsa/core';
 import { ORCHESTRATION_TOOL_SPECS } from './orchestration.ts';
 import { CHANGE_SUMMARY_SPEC, CHOICES_SPEC, PROCESS_TOOL_SPECS } from './process.ts';
@@ -199,20 +200,37 @@ const WALKTHROUGH_PARTS = {
           },
           required: ['data', 'evidence', 'suggestions'],
         },
-        every_hours: {
+        first_check_minutes: {
           type: 'integer',
           minimum: 1,
-          maximum: L.watchdogEveryHours,
-          description: 'Hours between checks.',
+          maximum: L.watchdogFirstCheckMinutes,
+          description:
+            'Minutes from the change going live to the first check. Left out, the setting’s default.',
+        },
+        max_gap_hours: {
+          type: 'integer',
+          minimum: 1,
+          maximum: L.watchdogMaxGapHours,
+          description:
+            'The longest gap between checks; each gap doubles up to it. Left out, the setting’s default.',
         },
         for_hours: {
           type: 'integer',
           minimum: 1,
           maximum: L.watchdogForHours,
-          description: 'Hours it watches after the merge.',
+          description: 'Hours it watches once the change is live. Left out, the setting’s default.',
         },
+        starts: {
+          type: 'string',
+          enum: [...WATCHDOG_STARTS],
+          description: 'merge (the default) when merging deploys it; production when it goes live later.',
+        },
+        production_check: limitedText(
+          'With starts production: how to tell the merged change is live in production.',
+          L.watchdogProductionCheck
+        ),
       },
-      required: ['title', 'check', 'every_hours', 'for_hours'],
+      required: ['title', 'check'],
     },
   },
 };

@@ -343,6 +343,11 @@ function readSettingsPatch(value: unknown): Partial<Settings> {
   }
   if ('compaction' in fields) patch.compaction = readChoice(fields, 'compaction', COMPACTION_MODES);
   if ('fastMode' in fields) patch.fastMode = readBoolean(fields, 'fastMode');
+  if ('watchdogHours' in fields) patch.watchdogHours = readInteger(fields, 'watchdogHours');
+  if ('watchdogFirstCheckMinutes' in fields) {
+    patch.watchdogFirstCheckMinutes = readInteger(fields, 'watchdogFirstCheckMinutes');
+  }
+  if ('watchdogMaxGapHours' in fields) patch.watchdogMaxGapHours = readInteger(fields, 'watchdogMaxGapHours');
   return patch;
 }
 

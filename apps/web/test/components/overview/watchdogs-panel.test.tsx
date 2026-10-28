@@ -14,8 +14,11 @@ function watchdog(overrides: Partial<Watchdog>): Watchdog {
     check: 'p95 of POST /checkout under 400 ms.',
     source: { server: 'maple', data: 'Traces' },
     sourceRequest: null,
-    everyMinutes: 360,
+    firstCheckMinutes: 360,
+    maxGapMinutes: 360,
     forMinutes: 2_880,
+    startsOn: 'merge',
+    productionCheck: null,
     status: 'watching',
     armedAt: NOW,
     startedAt: NOW,
@@ -78,7 +81,9 @@ describe('the watchdogs panel', () => {
     expect(screen.getByText(/1 watchdog · 31 h left/)).toBeTruthy();
     const row = rowOf('Checkout latency');
     expect(within(row).getByText('Watching')).toBeTruthy();
-    expect(row.textContent).toContain('Every 6 h for 48 h · maple · 31 h left · 1 check');
+    expect(row.textContent).toContain(
+      'First check after 6 h, then up to every 6 h, for 48 h · maple · 31 h left · 1 check'
+    );
     expect(row.textContent).toContain('Last check: p95 is 210 ms.');
     expect(within(rowOf('Done one')).queryByRole('button', { name: 'Stop' })).toBeNull();
     fireEvent.click(within(row).getByRole('button', { name: 'Stop' }));

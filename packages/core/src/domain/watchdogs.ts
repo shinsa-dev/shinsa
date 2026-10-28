@@ -1,6 +1,12 @@
-import type { WatchdogSource, WatchdogSourceRequest } from '../report/types.ts';
+import type { WatchdogSource, WatchdogSourceRequest, WatchdogStart } from '../report/types.ts';
 
-export type WatchdogStatus = 'needs_source' | 'watching' | 'passed' | 'tripped' | 'stopped';
+export type WatchdogStatus =
+  | 'needs_source'
+  | 'awaiting_production'
+  | 'watching'
+  | 'passed'
+  | 'tripped'
+  | 'stopped';
 
 export interface WatchdogCheck {
   at: number;
@@ -15,8 +21,11 @@ export interface Watchdog {
   check: string;
   source: WatchdogSource | null;
   sourceRequest: WatchdogSourceRequest | null;
-  everyMinutes: number;
+  firstCheckMinutes: number;
+  maxGapMinutes: number;
   forMinutes: number;
+  startsOn: WatchdogStart;
+  productionCheck: string | null;
   status: WatchdogStatus;
   armedAt: number;
   startedAt: number | null;
@@ -40,12 +49,24 @@ export const WATCHDOG_LIMITS = {
   checksKept: 20,
   deferMinutes: 15,
   projectSources: 20,
+  productionPollMinutes: 30,
+  productionWaitHours: 168,
 } as const;
 
 const ACTIVE_WATCHDOG_STATUSES: ReadonlySet<WatchdogStatus> = new Set<WatchdogStatus>([
   'needs_source',
+  'awaiting_production',
   'watching',
 ]);
+
+const SCHEDULED_WATCHDOG_STATUSES: ReadonlySet<WatchdogStatus> = new Set<WatchdogStatus>([
+  'awaiting_production',
+  'watching',
+]);
+
+export function isWatchdogScheduled(watchdog: Pick<Watchdog, 'status'>) {
+  return SCHEDULED_WATCHDOG_STATUSES.has(watchdog.status);
+}
 
 export function isWatchdogActive(watchdog: Pick<Watchdog, 'status'>) {
   return ACTIVE_WATCHDOG_STATUSES.has(watchdog.status);

@@ -42,7 +42,7 @@ import {
 } from './context.ts';
 import { resolveHouseRules } from './rules.ts';
 import { describePlanParameters, describeStepCatalog, describeStepRules } from './steps.ts';
-import { describeWatchdogGuide, describeWatchdogsForReview } from './watchdogs.ts';
+import { describeWatchdogGuide, describeWatchdogsForReview, type WatchdogDefaults } from './watchdogs.ts';
 
 const OPERATION_NOTE = [
   'This task is an operation: something to run in the repository (a script, a migration, a cleanup), not code to ship. Nothing it does goes through a pull request.',
@@ -195,7 +195,8 @@ export function resolvePhaseInstruction(
   task: Task,
   repo: Repo | null,
   index: number,
-  sources: readonly WatchSource[] = []
+  sources: readonly WatchSource[] = [],
+  defaults?: WatchdogDefaults
 ) {
   const plan = task.plan?.document?.phases ?? [];
   const phase = plan[index];
@@ -221,7 +222,7 @@ export function resolvePhaseInstruction(
     '- judgement_calls: every choice the human might make differently, each with the alternatives you rejected and why.',
     last
       ? '- walkthrough: required now, for the whole change: the approach, how it works behind the scenes, the risks and edge cases with their lines, how to test it, and the steps the human must take around the merge.\n  `steps` lists only what needs a person or production access, before or after the merge: an environment variable or secret to set (name it and where; never its value), a migration or deploy to run, a config or feature flag to change, a service to restart, a backfill, a third-party setting. Do everything you can in the repository yourself (code, tests, docs, `.env.example`, migration files). Give each step its exact command when it has one. Leave `steps` out when there is nothing.\n  `testing` has two parts. `automated`: one or two lines on what the tests cover, naming the test files. `manual`: the steps the human follows in order, each an `action`, a `target` when it happens in one place (a `url`, a `file` as `path:line`, a `command` or a `screen`) and `expect`, what they should see. Start from where to go (the preview deployment URL, or the command that starts the app and its local URL), then what to click and type, then the edge cases worth trying.\n  Whenever the change has structure or a flow worth drawing (pieces that call each other, a path a request or data takes, states, a tree of files), draw it in `flow` (or `approach`) as a text diagram in a fenced code block: a tree, or boxes and arrows (`a ──► b`), at most 72 columns wide, aligned for a monospace font, with a few words on each step.' +
-        describeWatchdogGuide(sources)
+        describeWatchdogGuide(sources, defaults)
       : '',
     'Then stop.',
   ]

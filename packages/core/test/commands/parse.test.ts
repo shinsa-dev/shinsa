@@ -688,6 +688,14 @@ describe('schedules and idle compaction from Settings', () => {
     ).toThrow('compactionLeadMinutes must be a whole number.');
   });
 
+  test('takes the watchdog defaults: how long, the first check and the longest gap', () => {
+    const patch = { watchdogHours: 72, watchdogFirstCheckMinutes: 30, watchdogMaxGapHours: 6 };
+    expect(parseUserCommand({ type: 'settings.change', patch })).toEqual({ type: 'settings.change', patch });
+    expect(() => parseUserCommand({ type: 'settings.change', patch: { watchdogHours: 'long' } })).toThrow(
+      'watchdogHours must be a whole number.'
+    );
+  });
+
   test('takes the compaction choice and the fast mode switch, and refuses anything else', () => {
     expect(
       parseUserCommand({ type: 'settings.change', patch: { compaction: 'eunoe_default', fastMode: false } })

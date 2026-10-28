@@ -39,8 +39,8 @@ export function ForkDialog() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{FORK_TITLE}</DialogTitle>
+          <DialogDescription>{FORK_DESCRIPTION}</DialogDescription>
         </DialogHeader>
-        <DialogDescription>{FORK_DESCRIPTION}</DialogDescription>
         <form
           id={formId}
           className='w-full'

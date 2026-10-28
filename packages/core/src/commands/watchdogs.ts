@@ -9,6 +9,7 @@ export type WatchdogUserCommand =
 export type WatchdogAgentCommand = {
   type: 'agent.report_watch';
   runId: string;
+  live?: boolean | null;
   healthy: boolean;
   summary: string;
   issue: WatchIssue | null;

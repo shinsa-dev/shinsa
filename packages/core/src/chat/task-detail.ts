@@ -83,6 +83,7 @@ function describeMergeSteps(task: Task) {
 
 const WATCHDOG_STATE: Record<WatchdogStatus, string> = {
   needs_source: 'waits for a data source',
+  awaiting_production: 'waits for the change to reach production',
   watching: 'watching',
   passed: 'passed',
   tripped: 'found an issue',

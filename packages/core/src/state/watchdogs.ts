@@ -10,6 +10,7 @@ type WatchdogEvent = Extract<
     type:
       | 'watchdog.armed'
       | 'watchdog.started'
+      | 'watchdog.live'
       | 'watchdog.checking'
       | 'watchdog.deferred'
       | 'watchdog.missed'
@@ -36,17 +37,22 @@ function updateWatchdog(
   return next;
 }
 
+function describeArmed(watchdog: Watchdog) {
+  if (watchdog.status === 'needs_source') return `The watchdog “${watchdog.title}” waits for a data source`;
+  if (watchdog.status === 'awaiting_production') {
+    return `The watchdog “${watchdog.title}” waits for the change to reach production`;
+  }
+  return `Started the watchdog “${watchdog.title}”`;
+}
+
 function applyArmed(state: ShinsaState, event: EventOf<'watchdog.armed'>) {
   const task = state.tasks[event.taskId];
   if (!task) return;
   updateTask(state, task.id, event.at, { watchdogs: [...(task.watchdogs ?? []), event.watchdog] });
-  const waiting = event.watchdog.status === 'needs_source';
   record(state, task.id, event.at, {
     actor: 'shinsa',
     kind: 'watchdog',
-    text: waiting
-      ? `The watchdog “${event.watchdog.title}” waits for a data source`
-      : `Started the watchdog “${event.watchdog.title}”`,
+    text: describeArmed(event.watchdog),
     detail: event.watchdog.check,
   });
 }
@@ -106,11 +112,25 @@ function applyEnded(state: ShinsaState, event: EventOf<'watchdog.ended'>) {
   });
 }
 
-function applyStarted(state: ShinsaState, event: EventOf<'watchdog.started'>) {
+function applyLive(state: ShinsaState, event: EventOf<'watchdog.live'>) {
   const next = updateWatchdog(state, event, () => ({
     status: 'watching',
-    source: event.source,
     startedAt: event.at,
+    endsAt: event.endsAt,
+  }));
+  if (!next) return;
+  record(state, event.taskId, event.at, {
+    actor: 'agent',
+    kind: 'watchdog',
+    text: `The change is live in production, so the watchdog “${next.title}” started watching`,
+  });
+}
+
+function applyStarted(state: ShinsaState, event: EventOf<'watchdog.started'>) {
+  const next = updateWatchdog(state, event, () => ({
+    status: event.status,
+    source: event.source,
+    startedAt: event.startedAt,
     endsAt: event.endsAt,
     nextCheckAt: event.nextCheckAt,
   }));
@@ -130,11 +150,14 @@ export function applyWatchdogEvent(state: ShinsaState, event: WatchdogEvent) {
     case 'watchdog.started':
       applyStarted(state, event);
       return;
+    case 'watchdog.live':
+      applyLive(state, event);
+      return;
     case 'watchdog.checking':
       updateWatchdog(state, event, () => ({ runId: event.runId }));
       return;
     case 'watchdog.deferred':
-      updateWatchdog(state, event, () => ({ nextCheckAt: event.nextCheckAt }));
+      updateWatchdog(state, event, () => ({ nextCheckAt: event.nextCheckAt, runId: null }));
       return;
     case 'watchdog.missed':
       applyMissed(state, event);

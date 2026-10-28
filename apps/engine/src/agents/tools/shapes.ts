@@ -98,9 +98,15 @@ export const SHAPE_TOOL_SPECS = {
     inputSchema: {
       type: 'object',
       properties: {
+        live: {
+          type: 'boolean',
+          description:
+            'Only for a watchdog waiting for production: true once the change is live there (then also check it), false while it is not.',
+        },
         healthy: {
           type: 'boolean',
-          description: 'True when nothing is wrong with what the watchdog watches.',
+          description:
+            'True when nothing is wrong with what the watchdog watches. Not needed while live is false.',
         },
         summary: limitedText(
           'What you looked at and what you saw, with the numbers.',
@@ -119,7 +125,7 @@ export const SHAPE_TOOL_SPECS = {
           required: ['title', 'request'],
         },
       },
-      required: ['healthy', 'summary'],
+      required: ['summary'],
     },
   },
   reshape_task: {

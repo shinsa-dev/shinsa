@@ -63,4 +63,5 @@ export {
   validateSuggestions,
   validateWait,
   validateWatchReport,
+  WATCHDOG_STARTS,
 } from './validate.ts';

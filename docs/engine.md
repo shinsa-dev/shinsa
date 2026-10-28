@@ -1196,10 +1196,12 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
 `state/watchdogs.ts`, the prompts in `prompts/watchdogs.ts`); the clock is the engine's (`runtime/watchdogs.ts`).
 
 - **The Agent writes them.** The last phase's walkthrough takes `watchdogs` (at most 5; `WatchdogSpec`: a `title`, a
-  `check` with what counts as an issue, `every_hours` from 1 to 24, `for_hours` from 1 to 168, and either a `source`
+  `check` with what counts as an issue, an optional schedule (`first_check_minutes`, `max_gap_hours`, `for_hours`, up to
+  720 hours; each left out takes the setting's default, below), `starts` `merge` or `production` with the
+  `production_check` that tells the change is live there, and either a `source`
   `{server, data}`, an MCP server that holds the data, or a `source_request` `{data, evidence, suggestions}` when no
   server it has does; `validatePhaseHandOver` refuses both or neither, a repeated title, and a check slower than its
-  window). The last phase's instruction lists the project's data sources for the repository
+  window, and a production start with no `production_check`). The last phase's instruction lists the project's data sources for the repository
   (`describeWatchdogGuide`, in the user turn), the handover skill says when one is worth it, a fix revises them like
   `steps`, and the reviewer's brief lists them (`describeWatchdogsForReview`).
 - **Data sources live on the project.** `Project.watchSources` (`WatchSource`: `server`, `data`, the `repoIds` it
@@ -1210,10 +1212,23 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   connects one for you.
 - **Armed by the merge.** After every command, `syncWatchdogs` looks at the tasks it changed: a round whose pull
   request merged with watchdogs in its walkthrough arms each once (`watchdog.armed`, keyed by the round). One with a
-  source starts watching at once (`endsAt` the merge plus its window, `nextCheckAt` one interval in); one with a source
+  source starts watching at once (`endsAt` the merge plus its window, `nextCheckAt` its first check in); one with a source
   request waits (`needs_source`) and asks you on the Overview, with the data it needs, where the code sends it and the
   servers it suggests. Connecting one (`watchdog.connect {server, data}`, or `shinsa watchdogs connect`) adds the server
   to the project's sources for the repository and starts its window then (`watchdog.started`).
+- **Checks back off.** The first check comes `firstCheckMinutes` after the window starts, and each gap after that
+  doubles, up to `maxGapMinutes` (`resolveNextGapMinutes`: the first check's minutes times two to the number of checks
+  so far), so a change is watched closely right after it goes live and less often as it proves itself. What the agent
+  leaves out comes from three settings (Settings → Agents → Watchdogs, `settings.change`): `watchdogHours` (72 by
+  default, 1 to 720), `watchdogFirstCheckMinutes` (30, 1 to 720) and `watchdogMaxGapHours` (6, 1 to 24),
+  read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
+- **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
+  branch, a manual deploy), the agent sets `starts: production` and says how to tell (`production_check`). Armed, the
+  watchdog waits (`awaiting_production`) and its checks every 30 minutes (`productionPollMinutes`) only ask whether the
+  change is live (`resolveProductionPrompt`): `report_watch {live: false}` asks again later (`watchdog.deferred`), and
+  `live: true` starts the window then (`watchdog.live`) with that turn's check as its first. A change that is not live
+  within a week (`productionWaitHours`) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves
+  out `live` is refused (`live_required`).
 - **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
   `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
   slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the

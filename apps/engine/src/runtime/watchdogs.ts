@@ -1,4 +1,4 @@
-import type { ShinsaState } from '@shinsa/core';
+import { isWatchdogScheduled, type ShinsaState } from '@shinsa/core';
 import { type ClockEntry, StateClock, type StateClockOptions } from './clock.ts';
 import type { Engine } from './engine.ts';
 
@@ -15,7 +15,7 @@ export class WatchdogClock extends StateClock {
     return Object.values(state.tasks).flatMap((task) =>
       (task.watchdogs ?? []).flatMap((watchdog) => {
         const dueAt = watchdog.nextCheckAt;
-        if (watchdog.status !== 'watching' || watchdog.runId !== null || dueAt === null) return [];
+        if (!isWatchdogScheduled(watchdog) || watchdog.runId !== null || dueAt === null) return [];
         const id = `watchdog:${watchdog.id}:${dueAt}`;
         const fire = async () => {
           const events = await this.engine.dispatch(

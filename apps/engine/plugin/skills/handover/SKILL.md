@@ -184,10 +184,13 @@ write it for yourself. An issue a check finds becomes a new task forked from thi
 | check | What to look at and what counts as an issue, with the numbers: "p95 of `POST /checkout` stays under 400 ms and its error rate under 1%" |
 | source | A server you have that holds the data: `server` by name, `data` what it holds. The last phase's prompt lists the project's data sources for this repository |
 | source_request | Only when no server you have holds it: the `data` it needs, the `evidence` in the code of where it goes (`src/analytics.ts` sends `paywall_open` to PostHog), and `suggestions`, the servers the human could connect (an official MCP server, a provider such as Composio) |
-| every_hours, for_hours | How often it checks, and for how long after the merge (at most 168) |
+| first_check_minutes, max_gap_hours, for_hours | Its schedule, each optional: the first check this many minutes after the change is live, then each gap doubles up to `max_gap_hours`, for `for_hours` (at most 720). Left out, the settings' defaults (the last phase's prompt names them: 30 minutes, 6 hours, 72 hours out of the box). Check a payment flow or a busy API sooner and longer; a rarely used page less often |
+| starts, production_check | `production` when the merge is not the release: a staging environment, a release branch or tag, a manual deploy. Then `production_check` says how to tell the merged change is live there (the deploy platform, a release tag, a version endpoint). Until it is, each check only asks that; the window starts once it is live. Leave `starts` out when merging deploys it |
 
 - Add one where the change sends something the world reads or writes: an API other services call, a webhook, logs,
   events, a page users load. Leave them out for a refactor or a docs change no data would show.
+- Read the repository for how it ships (deploy workflows, `vercel.json`, release scripts, a staging branch) before
+  you pick `starts`: a watchdog that watches staging for three days proves nothing.
 - Read the code for where its data goes before you pick a source. A server the project already lists for this
   repository is the first choice; one you have that it does not list is added to the project's sources for you.
 - Ask with `source_request` only for data the change really makes; a request with no evidence in the code is a

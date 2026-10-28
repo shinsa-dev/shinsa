@@ -32,8 +32,11 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
     check: 'p95 under 400 ms.',
     source: { server: 'maple', data: 'Traces' },
     sourceRequest: null,
-    everyMinutes: 360,
+    firstCheckMinutes: 360,
+    maxGapMinutes: 360,
     forMinutes: 2_880,
+    startsOn: 'merge',
+    productionCheck: null,
     status: 'watching',
     armedAt: NOW,
     startedAt: NOW,
@@ -51,7 +54,25 @@ describe('describing a watchdog', () => {
   it('says how often it checks and where it stands in each status', () => {
     const fork = createTask({ id: 'f', handle: 'SW-9' });
     const state = createShinsaState({ tasks: [fork] });
-    expect(describeWatchdogSchedule(createWatchdog())).toBe('Every 6 h for 48 h');
+    expect(describeWatchdogSchedule(createWatchdog())).toBe(
+      'First check after 6 h, then up to every 6 h, for 48 h'
+    );
+    expect(
+      describeWatchdogSchedule(
+        createWatchdog({
+          firstCheckMinutes: 30,
+          maxGapMinutes: 360,
+          forMinutes: 4_320,
+          startsOn: 'production',
+        })
+      )
+    ).toBe('First check after 30 min, then up to every 6 h, for 72 h once live in production');
+    expect(describeWatchdogProgress(state, createWatchdog({ status: 'awaiting_production' }), NOW)).toBe(
+      'Starts once the change is live in production.'
+    );
+    expect(
+      describeWatchdogProgress(state, createWatchdog({ status: 'awaiting_production', runId: 'r' }), NOW)
+    ).toBe('Checking whether the change is live in production.');
     expect(describeWatchdogProgress(state, createWatchdog(), NOW)).toBe('31 h left · 1 check');
     expect(describeWatchdogProgress(state, createWatchdog({ runId: 'r' }), NOW)).toBe(
       'Checking now · 1 check so far'
@@ -85,6 +106,12 @@ describe('describing a watchdog', () => {
       watchdogs: [createWatchdog({ status: 'needs_source', endsAt: null })],
     });
     expect(resolveWatchingReason(waiting, NOW)).toBe('1 watchdog · waiting for a data source');
+    const released = createTask({
+      id: 't',
+      stage: 'merged',
+      watchdogs: [createWatchdog({ status: 'awaiting_production', endsAt: null })],
+    });
+    expect(resolveWatchingReason(released, NOW)).toBe('1 watchdog · waiting for production');
     const closed = createTask({ id: 't', stage: 'done', closedAt: NOW, watchdogs: [createWatchdog()] });
     expect(isWatchedTask(closed)).toBe(false);
     expect(resolveWatchingReason(closed, NOW)).toBeNull();

@@ -1,4 +1,4 @@
-import type { ShinsaState, Task, Watchdog } from '@shinsa/core';
+import { isWatchdogActive, type ShinsaState, type Task, type Watchdog } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { Input } from '@shinsa/ui/components/input';
 import { cn } from '@shinsa/ui/lib/utils';
@@ -86,7 +86,7 @@ function WatchdogRow({
 }) {
   const { busy, run } = useBusy<'stop'>();
   const status = WATCHDOG_STATUS[watchdog.status];
-  const active = watchdog.status === 'watching' || watchdog.status === 'needs_source';
+  const active = isWatchdogActive(watchdog);
   const last = watchdog.checks.at(-1);
   return (
     <li className='flex flex-col gap-2 py-2.5 first:pt-0 last:pb-0'>
@@ -135,8 +135,8 @@ export function WatchdogsPanel({
   return (
     <Panel persistId={resolveOverviewPanelId(task, 'watchdogs')} title={WATCHDOGS_TITLE} icon='IconRadar'>
       <p className='text-fg-3 text-xs'>
-        {watching ? `${watching}. ` : ''}After the merge, each watchdog checks the change on its interval. An
-        issue it finds becomes a new task that starts from this task’s conversation.
+        {watching ? `${watching}. ` : ''}Once the change is live, each watchdog checks it soon and then less
+        often as it holds up. An issue it finds becomes a new task that starts from this task’s conversation.
       </p>
       <ul className='flex flex-col divide-y divide-border'>
         {watchdogs.map((watchdog) => (
