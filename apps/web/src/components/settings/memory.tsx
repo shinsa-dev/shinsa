@@ -96,6 +96,7 @@ function RuleForm({
         <SelectField
           label='For'
           size='sm'
+          align='start'
           items={listScopeItems(state)}
           value={scope}
           onValueChange={setScope}
