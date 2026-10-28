@@ -71,9 +71,13 @@ export function describeUpdateStatus(update: DesktopUpdate): { label: string; to
     case 'failed':
       return { label: update.message, tone: 'orange' };
     case 'downloading':
-      return { label: `Downloading ${update.version}…`, tone: 'neutral' };
+      return { label: `Downloading ${update.version}… ${update.percent}%`, tone: 'neutral' };
+    case 'preparing':
+      return { label: `Preparing ${update.version}…`, tone: 'neutral' };
     case 'ready':
       return { label: `${update.version} is ready`, tone: 'blue' };
+    case 'installing':
+      return { label: `Restarting to install ${update.version}…`, tone: 'neutral' };
     case 'downgrade':
       return {
         label: `Go back to ${update.version} (${resolveReleaseChannel(update.version)})?`,

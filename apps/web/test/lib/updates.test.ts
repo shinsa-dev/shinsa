@@ -69,13 +69,21 @@ describe('the Updates settings', () => {
       label: 'offline',
       tone: 'orange',
     });
-    expect(describeUpdateStatus({ status: 'downloading', version: '1.3.0' })).toEqual({
-      label: 'Downloading 1.3.0…',
+    expect(describeUpdateStatus({ status: 'downloading', version: '1.3.0', percent: 42 })).toEqual({
+      label: 'Downloading 1.3.0… 42%',
+      tone: 'neutral',
+    });
+    expect(describeUpdateStatus({ status: 'preparing', version: '1.3.0' })).toEqual({
+      label: 'Preparing 1.3.0…',
       tone: 'neutral',
     });
     expect(describeUpdateStatus({ status: 'ready', version: '1.3.0' })).toEqual({
       label: '1.3.0 is ready',
       tone: 'blue',
+    });
+    expect(describeUpdateStatus({ status: 'installing', version: '1.3.0' })).toEqual({
+      label: 'Restarting to install 1.3.0…',
+      tone: 'neutral',
     });
     expect(describeUpdateStatus({ status: 'downgrade', version: '1.2.0' })).toEqual({
       label: 'Go back to 1.2.0 (stable)?',
