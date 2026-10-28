@@ -27,11 +27,9 @@ function readIdentity(flavor: string) {
     "import { URL_SCHEME } from './src/lib/deep-link.ts';",
     "import { resolveCommandLink } from './src/lib/command-line.ts';",
     "import { resolveServerUrl } from './src/lib/server-url.ts';",
-    "import { resolveUpdateChannel } from './src/lib/update-channel.ts';",
     'console.log(JSON.stringify({ APP_ID, ENGINE_LABEL, APP_NAME, URL_SCHEME,',
     "  command: resolveCommandLink('/u'), data: resolveDataDir({}, '/u'),",
-    '  url: resolveServerUrl({ env: {}, packaged: true, configPort: null }),',
-    "  channel: resolveUpdateChannel('beta', '1.0.0') }));",
+    '  url: resolveServerUrl({ env: {}, packaged: true, configPort: null }) }));',
   ].join('\n');
   const env = { ...process.env, SHINSA_BUILD_FLAVOR: flavor, SHINSA_APP_ID: '' };
   const result = Bun.spawnSync([process.execPath, '-e', script], { cwd: desktopDir, env });
@@ -82,8 +80,7 @@ describe('the Shinsa Canary build', () => {
       command: '/u/.local/bin/shinsa-canary',
       data: '/u/.config/shinsa-canary/data',
       url: 'http://127.0.0.1:7447',
-      channel: 'canary',
     });
-    expect(readIdentity('stable')).toMatchObject({ APP_ID: 'studio.overclock.shinsa', channel: 'beta' });
+    expect(readIdentity('stable')).toMatchObject({ APP_ID: 'studio.overclock.shinsa' });
   });
 });

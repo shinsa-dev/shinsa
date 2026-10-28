@@ -137,7 +137,7 @@ describe('the release feed, read by electron-updater as each channel sets it up'
     });
   });
 
-  it('offers Shinsa Canary the newest canary, even when a beta or stable release came after it', async () => {
+  it('offers the newest canary on Canary, even when a beta or stable release came after it', async () => {
     const releases = [
       { tag: 'v3.1.0-beta.1', prerelease: true },
       { tag: 'v3.0.1', prerelease: false },

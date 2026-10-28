@@ -49,32 +49,28 @@ describe('the Updates settings', () => {
     expect(screen.queryByRole('button', { name: 'Restart to update' })).toBeNull();
   });
 
-  it('offers Stable and Beta, and Shinsa Canary as a separate download', () => {
+  it('offers Stable, Beta and Canary in one picker, with no separate app to download', () => {
     renderGroup({ status: 'current' });
-    expect(screen.getByRole('combobox', { name: 'Update channel' })).toBeTruthy();
-    expect(screen.getByText('Shinsa Canary')).toBeTruthy();
-    const link = screen.getByRole('button', { name: 'Download Shinsa Canary' });
-    expect(link.getAttribute('href')).toBe('https://shinsa.dev/download/canary');
-    expect(link.getAttribute('target')).toBe('_blank');
+    fireEvent.click(screen.getByRole('combobox', { name: 'Update channel' }));
+    const options = screen.getAllByRole('option').map((option) => option.textContent);
+    expect(options).toEqual(['Stable', 'Beta', 'Canary']);
+    expect(screen.queryByText('Shinsa Canary')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Download Shinsa Canary' })).toBeNull();
   });
 
-  it('in Shinsa Canary shows the channel as fixed and offers no other app', () => {
+  it('on Canary shows Shinsa with the picker, so you can leave the channel', () => {
     renderGroup(
       { status: 'downloading', version: '1.3.1-canary.5', percent: 42 },
       '1.3.1-canary.4',
       'canary'
     );
-    expect(screen.getByText('Shinsa Canary')).toBeTruthy();
+    expect(screen.getByText('Shinsa')).toBeTruthy();
     expect(screen.getByText('Downloading 1.3.1-canary.5… 42%')).toBeTruthy();
-    expect(screen.getByText('Canary channel · Updates install when you quit Shinsa Canary')).toBeTruthy();
-    expect(screen.getByText('Canary')).toBeTruthy();
+    expect(screen.getByText('Canary channel · Updates install when you quit Shinsa')).toBeTruthy();
     expect(
-      screen.getByText(
-        'Shinsa Canary is built from every change merged into main and updates only to the next canary.'
-      )
+      screen.getByText('Every merge into main once its tests pass. Less tested than Beta.')
     ).toBeTruthy();
-    expect(screen.queryByRole('combobox', { name: 'Update channel' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Download Shinsa Canary' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Update channel' })).toBeTruthy();
   });
 
   it('offers the restart only once the update is prepared, and not again while it restarts', () => {
