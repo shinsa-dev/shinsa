@@ -7322,9 +7322,9 @@ A top-bar reading that opens more on hover.
 
 - Trigger: a `secondary` `sm` button with the icon (`IconGauge`) and the one figure that matters next, in the usage
   tone from 75%; without a figure it reads its name ("Agent usage"). Hidden when there is nothing to read.
-- Pick the figure the way the server picks: the window of what the next run uses (its 5-hour window, or the fullest
-  window that applies when there is no 5-hour one). A window at 100% that blocks the next run takes the figure's
-  place, so a spent resource never reads low while it is blocked.
+- Pick the figure the way the server picks: of the windows that apply to what the next run uses, the one closest to
+  running out (the fullest; the 5-hour one when two are as full once rounded). An empty 5-hour window never hides a
+  nearly spent weekly one, and the row's label says which limit binds.
 - Popover (`w-72`), titled with the name alone, no description; one shared row per resource:
   `flex flex-col gap-1.5 px-3 py-1.5`: name and percentage
   (`flex items-center justify-between gap-4 text-xs`), the bar, then the window's label and its reset or its status
