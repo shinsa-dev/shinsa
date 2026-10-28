@@ -62,6 +62,32 @@ describe('reading which test files failed', () => {
     });
   });
 
+  test('reads Bun output grouped for GitHub Actions, alone or in a Turbo run', () => {
+    const root = createRepo(MONOREPO);
+    const alone = [
+      'bun test v1.4.4',
+      '::group::test/c.test.ts:',
+      '(fail) c > works [1.00ms]',
+      '::endgroup::',
+      ' 1 fail',
+    ];
+    expect(listFailedTests(alone.join('\n'), join(root, 'packages/core'))).toEqual({
+      kind: 'files',
+      groups: [{ runner: 'bun', packageDir: join(root, 'packages/core'), files: ['test/c.test.ts'] }],
+    });
+    const turbo = [
+      '@acme/core:test: bun test v1.4.4',
+      '@acme/core:test: ::group::test/c.test.ts:',
+      '@acme/core:test: (fail) c > works [1.00ms]',
+      '@acme/core:test: ::endgroup::',
+      '@acme/core:test:  1 fail',
+    ];
+    expect(listFailedTests(turbo.join('\n'), root)).toEqual({
+      kind: 'files',
+      groups: [{ runner: 'bun', packageDir: join(root, 'packages/core'), files: ['test/c.test.ts'] }],
+    });
+  });
+
   test('finds Vitest and Jest files, and the runner from the package', () => {
     const root = createRepo({
       ...MONOREPO,

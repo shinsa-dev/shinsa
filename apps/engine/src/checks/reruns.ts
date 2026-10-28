@@ -63,6 +63,8 @@ const RUNNER_FAIL = new RegExp(String.raw`^(|.*?\s)FAIL\s+(?:\|[^|]*\|\s+)?${TES
 
 const BUN_ERROR = /Unhandled error|errors? between tests/i;
 
+const GROUP_MARKER = /::group::/;
+
 const UNATTRIBUTED =
   /Unhandled (?:errors?|rejection)|errors? between tests|coverage threshold|does not meet (?:the )?(?:global )?threshold/i;
 
@@ -200,7 +202,7 @@ function parseOutput(output: string): ParsedOutput {
   const parsed: ParsedOutput = { files: [], attributed: true, bun: false, bunFails: 0 };
   const current = new Map<string, string | null>();
   let attributedFails = 0;
-  for (const line of output.split(/\r?\n/)) {
+  for (const line of output.split(/\r?\n/).map((text) => text.replace(GROUP_MARKER, ''))) {
     if (BUN_MARK.test(line)) parsed.bun = true;
     if (UNATTRIBUTED.test(line)) parsed.attributed = false;
     attributedFails += parseBunLine(line, current, parsed);
