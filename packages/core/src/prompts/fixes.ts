@@ -78,7 +78,17 @@ export function resolveHumanFixPrompt(message: string | null, comments: readonly
     note || comments.length === 0
       ? ['The human looked at the work and wrote:', '', note || 'Revise the work.']
       : ['The human looked at the work and left line comments.'];
-  return [...opening, ...describeLineComments(comments), describeFixClosing(WORK_FIX_NEXT)].join('\n');
+  return [
+    ...opening,
+    ...describeLineComments(comments),
+    ...(note
+      ? [
+          '',
+          'When it asks you to run or start something so the human can try the work (a dev server, a service), to check something or to answer a question, rather than to change the work, do that, say what you did in the summary, and call `complete_fix` all the same.',
+        ]
+      : []),
+    describeFixClosing(WORK_FIX_NEXT),
+  ].join('\n');
 }
 
 function describeVerdict(finding: ReviewFinding) {
@@ -163,48 +173,11 @@ function describeStandingProblems(pullRequest: PullRequest) {
   ].filter(Boolean);
 }
 
-function describeResolving(branch: string) {
-  return [
-    'Resolve them in place:',
-    `- List the conflicts with \`but resolve conflicts ${branch}\`.`,
-    `- Resolve each with \`but resolve apply <path>:<N> --commit ${branch}\`, piping in the content you want, or with \`--ours\` (the default branch's side) or \`--theirs\` (your commit's side).`,
-    '- Check with `but status` that no commit on the branch is still conflicted.',
-    '',
-    "Never run `but resolve <commit>`: it checks the commit out and moves the human's checkout. When you cannot tell which side is right, ask the human with `ask`.",
-  ];
-}
-
-function describeConflictedBranch(branch: string) {
-  return [
-    `GitButler left commits on your branch \`${branch}\` conflicted. The task your branch was stacked on settled without merging, so Shinsa took your branch out of the stack and GitButler moved your commits onto the default branch.`,
-    '',
-    ...describeResolving(branch),
-  ];
-}
-
-export function resolveConflictFixPrompt(branch: string) {
-  return [
-    ...describeConflictedBranch(branch),
-    describeFixClosing(
-      'Afterwards Shinsa pushes the branch, or first runs the checks and agent review when the human has not approved the work yet.'
-    ),
-  ].join('\n');
-}
-
-export function resolveConflictSteer(branch: string) {
-  return [...describeConflictedBranch(branch), '', 'Resolve them before you hand over.'].join('\n');
-}
-
-export function resolveWorkspaceUpdatedFixPrompt(branch: string, guidance: string | null) {
-  return [
-    `Your pull request conflicted with its base, so at the human's request Shinsa updated their GitButler workspace with \`but pull\`. GitButler rebased your branch \`${branch}\` onto the new default branch, kept everyone's uncommitted work, and marked any commit that no longer applies as conflicted. Check with \`but status\` whether a commit on your branch is conflicted.`,
-    '',
-    ...describeResolving(branch),
-    ...(guidance?.trim() ? ['', `Guidance from the human: ${guidance.trim()}`] : []),
-    describeFixClosing(
-      'When nothing on the branch is conflicted, call it even if you changed nothing. Afterwards Shinsa pushes the branch to the pull request.'
-    ),
-  ].join('\n');
+function describePullRequestOpening(pullRequest: PullRequest) {
+  if (pullRequest.mergeable !== false)
+    return `Pull request #${pullRequest.number} needs work before the human can merge it.`;
+  const base = pullRequest.base ? `\`${pullRequest.base}\`` : 'its base';
+  return `The pull request conflicts with ${base}, so the human cannot merge #${pullRequest.number} until you resolve the conflicts.`;
 }
 
 export function resolvePullRequestFixPrompt(
@@ -216,7 +189,7 @@ export function resolvePullRequestFixPrompt(
   const news = changes.flatMap((change) => describeChange(change, commit));
   const standing = describeStandingProblems(pullRequest);
   return [
-    `Pull request #${pullRequest.number} needs work before the human can merge it.`,
+    describePullRequestOpening(pullRequest),
     ...(rejection ? ['', rejection] : []),
     ...(news.length > 0 ? ['', 'New since Shinsa last looked:', ...news] : []),
     ...(standing.length > 0 ? ['', 'Where it stands:', ...standing] : []),

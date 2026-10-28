@@ -155,15 +155,12 @@ type EventBody =
       returnBranch?: string;
     }
   | { type: 'worktree.removed'; taskId: string }
-  | { type: 'task.stacked'; taskId: string; onTaskId: string; branch: string }
   | { type: 'task.edited'; taskId: string; path: string; changed: boolean }
   | { type: 'task.edits_told'; taskId: string }
   | { type: 'task.overlapped'; taskId: string; otherTaskId: string; paths: string[] }
   | { type: 'task.overlaps_told'; taskId: string }
   | { type: 'task.edits_committed'; taskId: string }
   | { type: 'task.edits_approved'; taskId: string; gate: EditsApproval | null }
-  | { type: 'task.conflict_held'; taskId: string; branch: string | null }
-  | { type: 'task.unstacked'; taskId: string; fromTaskId: string }
   | {
       type: 'plan.proposed';
       taskId: string;

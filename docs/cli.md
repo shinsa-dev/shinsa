@@ -560,6 +560,21 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
 | `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
 
+#### shinsa rounds send
+
+Send a queued round to the current round now, as a message, instead of waiting.
+
+```
+shinsa rounds send <task> <round> [--json]
+```
+
+Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `round.send`.
+
+| Argument | Kind | What it is |
+| --- | --- | --- |
+| `<task>` | text, required | The task: its handle (SW-142), its id, the start of its id, or its exact title. |
+| `<round>` | integer, required | The number of a round that waits to start, from `shinsa tasks show`. |
+
 ### gates
 
 #### shinsa gates answer
@@ -1224,7 +1239,7 @@ Every task agent's tool: `repos_list` (reads).
 Change a repository's name, default branch, project, check commands, where agents work or how test coverage is measured.
 
 ```
-shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--workspace <worktrees|gitbutler|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
+shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--workspace <worktrees|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
 ```
 
 Every task agent's tool: `repos_update`. Sends `repo.update`.
@@ -1236,7 +1251,7 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--default-branch` | text, optional | The branch pull requests target. |
 | `--project` | text, optional | Its project (key, name or id), or none. |
 | `--checks` | list, optional | The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. Only the human changes them. |
-| `--workspace` | choice, optional | Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it. |
+| `--workspace` | choice, optional | Where agents work: worktrees (a worktree each) or main_checkout (one task at a time in the checkout). Only the human changes it. |
 | `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
 | `--coverage-command` | text, optional | With --coverage custom: the command that runs the tests with coverage. |
 | `--coverage-report` | text, optional | With --coverage custom: the report it writes, relative to the repository. |

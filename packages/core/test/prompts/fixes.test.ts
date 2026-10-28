@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import {
   resolveChecksFixPrompt,
-  resolveConflictFixPrompt,
   resolveFixFocus,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
@@ -9,7 +8,6 @@ import {
   resolveReviewFixPrompt,
   resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
-  resolveWorkspaceUpdatedFixPrompt,
 } from '../../src/prompts/index.ts';
 import { pullRequest } from '../harness.ts';
 
@@ -41,7 +39,7 @@ describe('fix prompts', () => {
     expect(focusOf(resolveHumanFixPrompt('Rename it.', []))).toBe('changes');
     expect(focusOf(resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, []))).toBe('changes');
     expect(focusOf(resolvePullRequestFixPrompt(pullRequest({ number: 42 })))).toBe('pull_request');
-    expect(focusOf(resolveConflictFixPrompt('feat/banner'))).toBe('conflicts');
+    expect(focusOf(resolvePullRequestFixPrompt(pullRequest({ mergeable: false })))).toBe('conflicts');
     expect(focusOf(resolveUpdateConflictFixPrompt('main', ['a.ts']))).toBe('conflicts');
     expect(focusOf(resolvePushHookFixPrompt('FAIL', null, null))).toBe('push_hook');
   });
@@ -71,6 +69,9 @@ describe('fix prompts', () => {
   test('a fix of the work says the checks and the review follow it', () => {
     expect(resolveHumanFixPrompt('Rename it.', [])).toContain(
       'Afterwards Shinsa runs those checks, then the agent review where the task has one, and then the human reviews the work.'
+    );
+    expect(resolveHumanFixPrompt('Start the dev server so I can try it.', [])).toContain(
+      'Start the dev server so I can try it.\n\nWhen it asks you to run or start something so the human can try the work (a dev server, a service), to check something or to answer a question, rather than to change the work, do that, say what you did in the summary, and call `complete_fix` all the same.'
     );
   });
 
@@ -125,22 +126,18 @@ describe('fix prompts', () => {
 
   test('a conflict is merged from the fetched base by name and never rebased', () => {
     const conflicting = pullRequest({ mergeable: false, base: 'main' });
+    expect(resolvePullRequestFixPrompt(conflicting)).toStartWith(
+      'The pull request conflicts with `main`, so the human cannot merge #42 until you resolve the conflicts.'
+    );
+    expect(resolvePullRequestFixPrompt({ ...conflicting, base: undefined })).toStartWith(
+      'The pull request conflicts with its base, so'
+    );
     expect(resolvePullRequestFixPrompt(conflicting)).toContain(
       '- The branch has merge conflicts with its base, `main`. Shinsa fetched it: merge it in with `git merge origin/main`, resolve every conflict and `git add` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.'
     );
     expect(resolvePullRequestFixPrompt({ ...conflicting, base: undefined })).toContain(
       'Fetch the base branch, merge it in with `git merge`'
     );
-  });
-
-  test('after the workspace update the agent resolves what is left in place, with the human’s guidance', () => {
-    const prompt = resolveWorkspaceUpdatedFixPrompt('fix/a', ' Keep their version. ');
-    expect(prompt).toContain('Shinsa updated their GitButler workspace with `but pull`');
-    expect(prompt).toContain('`but resolve conflicts fix/a`');
-    expect(prompt).toContain('Never run `but resolve <commit>`');
-    expect(prompt).toContain('Guidance from the human: Keep their version.');
-    expect(prompt).toContain('Afterwards Shinsa pushes the branch to the pull request.');
-    expect(resolveWorkspaceUpdatedFixPrompt('fix/a', null)).not.toContain('Guidance');
   });
 
   test('one unresolved comment and one new comment read in the singular', () => {

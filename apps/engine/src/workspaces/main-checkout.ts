@@ -5,8 +5,7 @@ import type { UpdateOptions } from '../git/update.ts';
 import { resolveFreeBranch, resolveStartPoint } from '../git/worktree.ts';
 import { log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
-import { isGitButlerWorkspace } from './but.ts';
-import { NO_CLAIM, refuseUpdate, requireCheckout, type WorkspaceStrategy } from './types.ts';
+import { requireCheckout, type WorkspaceStrategy } from './types.ts';
 import { commitCheckout } from './worktrees.ts';
 
 async function resolveCurrentBranch(path: string, signal?: AbortSignal) {
@@ -52,11 +51,6 @@ export class MainCheckoutStrategy implements WorkspaceStrategy {
   readonly mode = 'main_checkout';
 
   async prepare(repo: Repo, task: Task, signal?: AbortSignal) {
-    if (isGitButlerWorkspace(repo.path)) {
-      throw new Error(
-        `${repo.name} is a GitButler workspace. Choose GitButler or worktrees for it in Settings → Projects.`
-      );
-    }
     if (!task.branch) throw new Error('The task has no branch yet.');
     if (task.worktreePath === repo.path && (await resolveCurrentBranch(repo.path, signal)) === task.branch) {
       return { path: repo.path, branch: task.branch };
@@ -106,21 +100,9 @@ export class MainCheckoutStrategy implements WorkspaceStrategy {
     );
   }
 
-  claim() {
-    return Promise.resolve(NO_CLAIM);
-  }
-
   async writeEdit(repo: Repo, task: Task, _path: string, write: () => boolean) {
     await assertOnBranch(repo.path, requireCheckout(task).branch);
     write();
-  }
-
-  listConflicted() {
-    return Promise.resolve([]);
-  }
-
-  update() {
-    return refuseUpdate();
   }
 
   async syncBase(repo: Repo, task: Task, base: string, options: UpdateOptions) {

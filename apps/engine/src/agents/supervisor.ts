@@ -34,7 +34,7 @@ import {
 import { describeError, log } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
 import type { EvidenceStore } from '../store/index.ts';
-import { type ReleaseClaim, Workspaces } from '../workspaces/index.ts';
+import { Workspaces } from '../workspaces/index.ts';
 import {
   type AccountBroker,
   type AccountLease,
@@ -174,7 +174,6 @@ export class RunSupervisor {
   readonly #extensions: SessionExtensionSource | null;
   readonly #extensionSets: SessionExtensionSets;
   readonly #manages: boolean;
-  readonly #claims = new Map<string, AbortController>();
   readonly workspaces: Workspaces;
   #shuttingDown = false;
 
@@ -189,8 +188,7 @@ export class RunSupervisor {
     this.#config = config;
     this.#transcripts = transcripts;
     this.#evidence = evidence;
-    this.workspaces =
-      options.workspaces ?? new Workspaces({ dataDir: config.dataDir, worktreesDir: config.worktreesDir });
+    this.workspaces = options.workspaces ?? new Workspaces({ worktreesDir: config.worktreesDir });
     this.#providers = options.providers ?? new ProviderRegistry();
     this.#startSession = options.startSession ?? null;
     this.#maxRunMs = options.maxRunMs ?? MAX_RUN_MS;
@@ -218,7 +216,6 @@ export class RunSupervisor {
       minuteMs: options.minuteMs ?? MINUTE_MS,
       manage: options.manage ?? null,
       workspaces: this.workspaces,
-      dataDir: config.dataDir,
     });
     this.#manages = options.manage !== undefined;
     this.#deliveries = new Deliveries({
@@ -256,13 +253,11 @@ export class RunSupervisor {
     });
     this.#active.set(runId, active);
     let result: AgentSessionResult;
-    let release: ReleaseClaim | null = null;
     try {
       if (!delegated) await this.#compaction.settle(task.id);
       if (!delegated) await this.quiesce(task.id, runId);
-      release = await this.#claimWorkspace(run, task, workspace.repo);
       const current = this.#engine.state.runs[runId];
-      if (!release || !current || current.endedAt !== null || this.#shuttingDown) return;
+      if (!current || current.endedAt !== null || this.#shuttingDown) return;
       const prompt = override ?? run.prompt ?? '';
       const brief = resolveTurnBrief(this.#engine.state, current, override);
       const { cwd, defaultBranch } = this.#prepareWorkspace(workspace);
@@ -271,7 +266,6 @@ export class RunSupervisor {
       if (isReadOnlyRun(run) && !isSharedCheckout(run, workspace)) await this.#discardEdits(cwd, run.role);
       if (isDelegatedRun(current)) result = await this.#resolveDelegatedResult(current, cwd, result);
     } finally {
-      await release?.();
       this.#active.delete(runId);
       this.#questions.forget(runId);
       released.resolve();
@@ -297,23 +291,6 @@ export class RunSupervisor {
       ...active.queued,
       ...undelivered,
     ]);
-  }
-
-  async #claimWorkspace(run: Run, task: Task, repo: Repo | null): Promise<ReleaseClaim | null> {
-    if (!repo || isReadOnlyRun(run)) return () => Promise.resolve();
-    const claim = new AbortController();
-    this.#claims.set(run.id, claim);
-    try {
-      return await this.workspaces.resolve(task).claim(repo, task, claim.signal);
-    } catch (error) {
-      if (!claim.signal.aborted) {
-        const summary = `Shinsa could not claim the checkout for this agent: ${describeError(error)}`;
-        await this.#end(run.id, { outcome: 'failed', summary }, null);
-      }
-      return null;
-    } finally {
-      this.#claims.delete(run.id);
-    }
   }
 
   #resolveWorkspace(run: Run, task: Task): Workspace | null {
@@ -824,7 +801,6 @@ export class RunSupervisor {
   }
 
   async cancel(runId: string) {
-    this.#claims.get(runId)?.abort();
     const active = this.#active.get(runId);
     if (!active) return;
     stopActiveRun(active);
@@ -833,7 +809,6 @@ export class RunSupervisor {
 
   async interruptForShutdown() {
     this.#shuttingDown = true;
-    for (const claim of this.#claims.values()) claim.abort();
     const compacting = this.#compaction.stop();
     const live = [...this.#active.entries()];
     for (const [runId, active] of live) {

@@ -131,7 +131,7 @@ function describeCheckMeta(check: TaskCheck, planPhases: number) {
 
 export function resolveBaseBranch(state: Pick<ShinsaState, 'repos'>, task: Task) {
   const repo = task.repoId ? state.repos[task.repoId] : undefined;
-  return task.stackedOn?.branch ?? task.pullRequest?.base ?? repo?.defaultBranch ?? null;
+  return task.pullRequest?.base ?? repo?.defaultBranch ?? null;
 }
 
 function describeCheckNote(result: ReportCheck, base: string | null) {

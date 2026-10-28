@@ -24,7 +24,6 @@ import {
 } from '@/lib/accounts/limits.ts';
 import { type Command, type CommandSection, RANK } from '@/lib/command/registry.ts';
 import { restartOnboarding } from '@/lib/connection/onboarding.ts';
-import type { WorkspaceSupportMap } from '@/lib/connection/workspaces.ts';
 import { applyDesktopChannel, type UpdateChannel } from '@/lib/desktop.ts';
 import { EXTENSION_ICON, EXTENSION_SECTION } from '@/lib/extensions.ts';
 import { updateNotifications } from '@/lib/notifications/settings.ts';
@@ -189,7 +188,6 @@ const SECTIONS: { title: string; icon: Command['icon']; keywords: string[] }[] =
       'colours',
       'where agents work',
       'worktrees',
-      'gitbutler',
       'checkout',
     ],
   },
@@ -444,24 +442,19 @@ function listUsageChoices(
   return choices;
 }
 
-export interface WorkspaceChoices {
-  repos: Repo[];
-  support: WorkspaceSupportMap | null;
-}
-
-function listWorkspaceChoices({ repos, support }: WorkspaceChoices): Command[] {
+function listWorkspaceChoices(repos: Repo[]): Command[] {
   return [...repos]
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((repo) => {
       const choice = settingChoice(
         `workspace.${repo.id}`,
         `${WORKSPACE_TITLE} in ${repo.name}`,
-        listWorkspaceItems(repo, support),
+        listWorkspaceItems(),
         resolveRepoWorkspace(repo),
         (value) => void changeWorkspace(repo, value as Parameters<typeof changeWorkspace>[1]),
         true
       );
-      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'gitbutler', 'main checkout'] };
+      return { ...choice, keywords: [...(choice.keywords ?? []), 'worktrees', 'main checkout'] };
     });
 }
 
@@ -479,7 +472,7 @@ export function listSettingsSections(
   providers: AgentProviderInfo[],
   notifications: NotificationPreferences,
   snapshot: AccountsSnapshot | null = null,
-  workspaces: WorkspaceChoices = { repos: [], support: null },
+  repos: Repo[] = [],
   explorerSide: ExplorerSide = 'left',
   updateChannel: UpdateChannel | null = null,
   rates: Map<string, UsageRate | null> | null = null
@@ -496,7 +489,7 @@ export function listSettingsSections(
         ...listGroupChoices(settings, providers, snapshot),
         ...listRoleChoices(settings, providers, snapshot),
         ...listUsageChoices(settings, snapshot, rates),
-        ...listWorkspaceChoices(workspaces),
+        ...listWorkspaceChoices(repos),
         settingChoice('explorer-side', EXPLORER_SIDE_TITLE, EXPLORER_SIDES, explorerSide, (value) =>
           writeExplorerSide(value === 'right' ? 'right' : 'left')
         ),

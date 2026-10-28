@@ -30,6 +30,12 @@ export function resolveGateNow(task: Task, gate: Gate) {
   }
 }
 
+export function describeConflict(task: Task) {
+  const { pullRequest } = task;
+  if (task.stage !== 'shipping' || task.pushPending || pullRequest?.mergeable !== false) return null;
+  return `PR #${pullRequest.number} conflicts with ${pullRequest.base ?? 'the base branch'}`;
+}
+
 function resolveActivePhase(task: Task) {
   const index = task.phases.findIndex((phase) => phase.status === 'active');
   return task.plan?.document?.phases[index]?.title ?? null;
@@ -45,5 +51,5 @@ export function resolveTaskNow(state: ShinsaState, task: Task): string {
   const phase = task.stage === 'building' ? resolveActivePhase(task) : null;
   if (phase) return phase;
   if (task.stage === 'merged' && task.pullRequest) return `PR #${task.pullRequest.number} merged`;
-  return capitalise(task.stageReason);
+  return describeConflict(task) ?? capitalise(task.stageReason);
 }

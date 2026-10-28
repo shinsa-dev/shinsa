@@ -174,16 +174,14 @@ not chat text.
   → Scheduling).
 - **The pull request loop.** CI failures, review-bot comments and conflicts go back to the task’s agent until
   the pull request is clean; you are asked only when it cannot go on (`docs/engine.md` → The pull
-  request watch, Merge queues). A conflict is resolved by merging the base in, never by rebasing, and one GitButler
-  leaves when a task below a stack is cancelled is resolved in place in your workspace (`docs/engine.md` → The pull
-  request watch → Conflicts, Where agents work → GitButler).
+  request watch, Merge queues). A conflict is resolved by the agent merging the base in, never by rebasing, in every workspace
+  (`docs/engine.md` → The pull request watch → Conflicts).
 - **Every push is current and passes the hooks.** Before each push Shinsa merges the latest base into the branch
   (never a rebase, so no force push), so it carries the base's fixes and its current pre-push hook; a conflict goes
   to the agent, which resolves it before Shinsa checks and pushes again. The repository's pre-push hook always runs:
   a rejection goes to the agent with the hook's output and the failing tests, never to a blind retry, and the same
   failure twice stops at a gate (Send to the agent again, or Cancel). A network failure is retried, and the task shows
-  each attempt and why ("Pushing again in 30s, attempt 2 of 5: …"). GitButler workspaces skip the update: `but pull`
-  stays your choice (`docs/engine.md` → Pushing the branch).
+  each attempt and why, as in "Pushing again in 30s, attempt 2 of 5: …" (`docs/engine.md` → Pushing the branch).
 - **The briefing** says which decision to take now and why, the two or three after it, what agents
   are doing, and gives a heads-up when something is stuck (`docs/engine.md` → The briefing).
 - **Notes.** Agents keep notes on a task (`note`), so nothing depends on you remembering it.
@@ -661,7 +659,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   next round on the same branch, worktree and sessions. Old tasks replay as one round.
 - **Feedback or new work.** The classifier reads each message as feedback (it steers, revises or
   fixes as before), a new round (waiting until the current round is at its merge gate or done), or
-  another task's work (a split-off you can keep here). One round works at a time. Your message shows
+  another task's work (a split-off you can keep here). One round works at a time. New work never
+  waits behind your own review or merge: while a round waits for you, what you ask for (a change, starting
+  the dev server so you can try it, a question) goes to that round, and the gate comes back after it;
+  a round already queued says what releases it ("Sends after you merge round 1.") and Send now gives
+  it to the current round instead. Your message shows
   as sent the moment you send it; the classifier reads it afterwards and Shinsa delivers it when it
   has.
 - **How each round ships.** Onto the open pull request by default, or as its own stacked pull
@@ -709,14 +711,11 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 ### Where agents work (2026-10-24)
 
-- **A repository chooses where its agents work**: Worktrees (the default: a worktree and a fresh branch per task),
-  GitButler (a branch per task in your GitButler workspace, all applied together in your checkout so you can
-  test them at once, each still its own pull request) or Main checkout (agents work in your checkout on a branch
-  Shinsa makes, one task at a time; the next waits). Settings → Projects on each repository, or ⌘K. GitButler is
-  offered only once `but` is installed and the repository is a GitButler workspace, and the setup check stops a task
-  whose repository is not ready for its mode. Your own uncommitted work is never committed: in GitButler one agent
-  that changes files works at a time and only what it changed goes on its branch (`docs/engine.md` → Where agents
-  work; what is left is `docs/plans/gitbutler-plan.md`).
+- **A repository chooses where its agents work**: Worktrees (the default: a worktree and a fresh branch per task)
+  or Main checkout (agents work in your checkout on a branch Shinsa makes, one task at a time; the next waits).
+  Settings → Projects on each repository, or ⌘K. The setup check stops a task whose repository is not ready for its
+  mode: the main checkout needs no uncommitted changes before a task takes it (`docs/engine.md` → Where agents
+  work).
 
 ### One agent per task (2026-10-24)
 
@@ -752,9 +751,9 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   stacks, changed files and whether an agent works on them now, and the Agent is told once when another task changes
   the same files (`docs/engine.md` → Other work in the repository).
 - **Conflicts resolve themselves.** A pull request that conflicts with its base (main moved, or a stacked base merged
-  or moved) and a GitButler branch left conflicted when the task below it was cancelled go to the task's Agent as a
-  fix in its own session; a GitButler commit refused for another task's lines stacks on that task. The agent asks you
-  only what it cannot resolve itself (`docs/engine.md` → The pull request watch → Conflicts).
+  or moved) goes to the task's Agent as a fix in its own session, whatever the workspace: it merges the base in and
+  resolves the conflicts, and the task shows "resolving conflicts with ‹base›". The agent asks you only what it cannot
+  resolve itself (`docs/engine.md` → The pull request watch → Conflicts).
 - **Disabled commands say why.** A ⌘K command or option that cannot run now is shown greyed with the reason as its
   hint (`docs/design.md`, 14).
 
@@ -762,22 +761,17 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
 
 - **You edit the code where you read it.** At Head of the branch or the Working copy of an open task the editor is
   simply editable: typing edits, ⌘Z undoes, and each pause saves the file to the task's working copy (the worktree,
-  or your checkout in GitButler and main-checkout mode). There is no Suggest a change and no suggestions; line
+  or your checkout in main-checkout mode). There is no Suggest a change and no suggestions; line
   comments are words only. Shinsa still makes every commit: your edits go into the round's next commit; approving
   the review with edits no commit took yet commits them and runs the checks again before the push, and approving the
   merge with them pushes them and merges once CI passes. The agent is told which files you edited, at once if it is
-  working and in its next turn either way. In GitButler the working copy shows the files the task owns from disk and
-  the rest from its branch, so a reload shows your edit. A merged or finished task, an earlier commit and the base are read-only, with a
+  working and in its next turn either way. A merged or finished task, an earlier commit and the base are read-only, with a
   one-line reason. A file that changed on disk under you keeps your unsaved edit when it touched other lines, and
   otherwise shows the disk version with a notice (`docs/engine.md` → Your edits).
 - **Side by side first.** A diff opens side by side with its new side editable; unified is the toggle and is
   remembered, and on a phone or a window below `md` every diff is unified. Each side scrolls sideways under its own pinned line numbers, folded "N unchanged lines" are no place
   for the cursor, and a comment box for a long selection fits the visible pane. Open in editor left the toolbar:
   Shinsa is the editor (the task's ⌘K and menu still open the checkout elsewhere).
-- **GitButler stacks, decided.** Shinsa stacks a task only onto a branch it created. Cancelling a task another is
-  stacked on first takes its branch out of the stack, so the task above stays applied with its own commits and its
-  pull request goes back to the default branch; while the task below is open, the task above keeps waiting on it and
-  that dependency cannot be removed (the Waits on menu shows it as "Stacked on “‹title›”").
 
 ### Review is a report (2026-10-25)
 
@@ -865,7 +859,7 @@ agent loop; `docs/design.md`, Where Shinsa differs, 27):
   without the change; the reviewer gets the list of what was attached and adds its own where a claim has none or it
   doubts one, shown as from the agent review. `attach_evidence` gains `detail`, `width`, `theme` and `stage`; the
   `evidence` skill is the recipe (Playwright's command line or a script in a scratch folder, 1280px and 390px, light
-  and dark). Prompts stay cache-stable: the list and the planned kinds ride in the user turn.
+  and dark, at a device scale factor of 2 so shots stay sharp on a Retina screen). Prompts stay cache-stable: the list and the planned kinds ride in the user turn.
 - **Kept per task and round, served properly.** `<data>/evidence/<task id>/round-<n>/`, files named after their
   title, cached as immutable, recordings served in byte ranges so they seek (`docs/engine.md` → Evidence).
 - **Seen in the Review tab, first.** An Evidence section right under the summary: before and after pairs side by side,

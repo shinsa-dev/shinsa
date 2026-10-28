@@ -216,13 +216,11 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `report` | `WorkReport` \| null | the review built from every phase: headline, sections, the check results, judgement calls, `walkthrough?` |
 | `mergeStepsDone?` | string[] | the steps around the merge you ticked, by key (`resolveMergeStepKey`: `when:` and a hash of the step's kind, title, detail and command, so any change to a step clears its tick); the steps themselves are the latest walkthrough's `steps` (`listMergeSteps`); a new round starts it empty |
 | `carriedMergeSteps?` | `CarriedMergeStep[]` (`MergeStep` with `round`, `done`) | the open steps a new round carried over from the round before it: every step after the merge, and the steps before the merge of a round still shipping onto the next one's pull request; ticks of a carried step land here; done ones are dropped at the next round |
-| `worktreePath` | string \| null | the task's worktree; for a GitButler or main-checkout task, the repository itself |
+| `worktreePath` | string \| null | the task's worktree; for a main-checkout task, the repository itself |
 | `workspace?` | `WorkspaceMode` | where the task works, taken from its repository when it set up (`worktree.requested`) and kept |
 | `returnBranch?` | string | main checkout: the branch the checkout was on when the task took it, where it goes back when the task settles |
-| `stackedOn?` | `TaskStack` (`taskId`, `branch`) | GitButler: the other task whose branch this task's branch is stacked on (`task.stack`); its pull request targets that branch while that task's pull request is open (`resolvePullRequestBase`); while that task is open the dependency on it cannot be removed (`dependency_stacked`), and cleared by `task.unstacked` when it settles without a merge |
 | `editedPaths?` | string[] | files you changed in the Code tab that no commit has taken yet (`task.edited`; cleared by `work.committed` and `task.edits_committed`) |
 | `approvedEdits?` | `review` \| `merge` \| null | you approved that gate while `editedPaths` had files: every check runs before the push (`review`), or CI before the merge (`merge`); `task.edits_approved`, dropped by a real fix turn |
-| `heldConflict?` | string \| null | a branch GitButler left conflicted while the task could not take a fix (planning, reviewing, checking, merging); told to the Agent at its next build, fix or operation turn (the note at the end of its prompt), else the fix starts where its next review or merge gate would open (`task.conflict_held`) |
 | `untoldEdits?` | string[] | those of them no agent has been told about; the next run's prompt names them (`task.edits_told`) |
 | `overlaps?` | `TaskOverlap[]` (`taskId`, `paths`, `untold`) | per other open task of the repository, the files both change (`task.overlapped`), and those the Agent has not been told yet; its next run's prompt names them (`task.overlaps_told`) |
 | `treeHash?` | string \| null | the tree of the last commit Shinsa made |
@@ -240,7 +238,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `reviewDisagreements?` | `ReviewDisagreement[]` | the judgement calls the last agent review would have made differently: the call's text and why |
 | `dismissedFindings?` | `ReviewFinding[]` (last 30) | findings you dismissed, never reported again |
 | `fixRounds` | number | automatic fix rounds used |
-| `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| `update` \| `hook` \| null | what the current fix is for (`conflict`: commits GitButler left conflicted on the task's branch; `update`: conflicts while updating the branch onto its base before a push; `hook`: the repository's pre-push hook rejected the push) |
+| `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| `update` \| `hook` \| null | what the current fix is for (`conflict`: the pull request conflicts with its base, read by the pull request watch; `update`: conflicts while updating the branch onto its base before a push; `hook`: the repository's pre-push hook rejected the push) |
 | `fixSignature`, `stalledFixes`, `fixFingerprints?` | | repeat detection: the same failures after the same tree |
 | `recoveries`, `recoveryFingerprint?` | number, string | the recovery budget and the durable state it is keyed to |
 
@@ -249,9 +247,9 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `pullRequest` | `PullRequest` \| null | number, url, state, CI (`checks: CiState`, `checkRuns: CiRun[]`), comments, mergeable, head, merge queue, merge commit |
-| `pullRequestWatch?` | `PullRequestWatch` \| null | the watch's memory: per-check states, comment watermark, conflict, stop reason |
+| `pullRequestWatch?` | `PullRequestWatch` \| null | the watch's memory: per-check states, comment watermark, conflict, stop reason, and whether no checks on this head means it has no CI (`ciAbsent`) |
 | `pullRequestReadFailures?` | number | failed reads in a row (stops at 8) |
-| `pushedSha?`, `pushedFrom?`, `pushPending?` | | the push Shinsa made and whether GitHub has shown it |
+| `pushedSha?`, `pushedAt?`, `pushedFrom?`, `pushPending?` | | the push Shinsa made (or the head someone else pushed), when, and whether GitHub has shown it; the wait for CI to start counts from `pushedAt` |
 | `pushHookFailure?` | `PushHookFailure` \| null | the last pre-push hook rejection: its output tail, the failures read from it (null when unreadable) and their identity (`signature`); cleared by a push that gets through and by a new round |
 
 **Results**
@@ -410,7 +408,7 @@ the merge gate, so an open pull request is never left without one.
 | `remote` | string \| null | `origin`'s URL |
 | `projectId` | string \| null | its project |
 | `checkCommands` | string[] | the repository's own commands, an optional baseline every task runs once before review (`r1`…); empty runs nothing extra; only you change it |
-| `workspace?` | `WorkspaceMode` | where agents work: `worktrees` (the default), `gitbutler` or `main_checkout`; only you change it (`docs/engine.md` → Where agents work) |
+| `workspace?` | `WorkspaceMode` | where agents work: `worktrees` (the default) or `main_checkout`; only you change it (`docs/engine.md` → Where agents work) |
 | `coverage?` | `CoverageSetting` | how test coverage is measured from the tests among a task's checks: `{ mode: 'auto' }` (the default, absent), `{ mode: 'off' }` or `{ mode: 'custom', command, report, format }` (`report` a path inside the repository, `format` `lcov` \| `cobertura` \| `go` or null to read it from the report's name, `resolveCoverageFormat`); only you change it (`docs/engine.md` → Test coverage of the change) |
 
 `Coverage` (`packages/core/src/test-coverage/types.ts`) is either `{ status: 'measured', command, covered, executable,
@@ -578,14 +576,14 @@ Soft gates, decided by Shinsa or the reviewer:
 | `openedAt`, `answeredAt`, `decision`, `response` | | your answer and its words |
 | `planVersion?` | number | the plan version a plan gate is for |
 | `choices?`, `recommendation?` | | a question's one-click answers |
-| `cause?` | `budget` \| `monitor` \| `workspace_update` \| `push_hook` | why a failure gate opened, when not plain recovery; `workspace_update` is a GitButler pull request that conflicts with its base, whose approve runs `but pull`; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round |
+| `cause?` | `budget` \| `monitor` \| `push_hook` | why a failure gate opened, when not plain recovery; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
 | `provider?` | string | the provider a Sign in gate is for, set on every one (`claude` for a Claude account) |
 | `account?` | `RunAccount` \| null | the Claude account a Sign in gate names, or null for a provider with its own login |
 | `secret?` | `{ label }` | what a secret gate asks for |
-| `commit?` | string \| null | the merged commit an operation gate shows |
+| `commit?` | string \| null | the merged commit an operation gate shows; on a merge gate, the head it was opened for, which approving merges and nothing newer |
 | `notes?` | string \| null | the notes for the operation, kept only here: a message at the operation gate replaces them (`gate.noted`, null clears them), `reply` replaces them with its words, and the agent runs the operation with them |
 | `round?` | number | the round it belongs to (Rounds, above) |
 
@@ -715,6 +713,7 @@ your behalf (`onBehalf`, `byTask`). **Human** = only you: its specs are `humanOn
 | `round.ship` | how a round ships: onto the open pull request or stacked | `rounds ship` | agent |
 | `round.update` | replaces what a round waiting to start asks for (`request`; its title becomes the request's first line); a round that started is refused (`round_started`) | `rounds update` | agent |
 | `round.remove` | removes a round waiting to start; the waiting rounds after it move up one number; a round that started is refused (`round_started`) | `rounds remove` | agent |
+| `round.send` | sends a round waiting to start to the current round now: it leaves the queue (`round.removed`) and its request is delivered as your message, read as `feedback` (What a message does); a round that started is refused (`round_started`) | `rounds send` | agent |
 | `task.prioritize` | sets the priority | `tasks prioritize` | agent |
 | `task.wait_on` | replaces the tasks it waits on (`waitsOn`) | `tasks wait-on`, `tasks stop-waiting` | agent |
 | `task.retry` | restarts the current step with a fresh budget, optionally on an account | `tasks retry`, `tasks rerun` | agent |
@@ -817,14 +816,11 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `repo.register` | `repos/index.ts` | registers a repository on first use |
 | `config.record` | `config.verify` effect | records what setup verification found, with the repository it found (`repoId`) for a task that had none |
 | `worktree.ready`, `worktree.gone` | worktree effects | the worktree exists (with the branch a main checkout was on, `returnBranch`), or is gone |
-| `task.stack` | the hand-over commit (`agents/tool-calls.ts`) | GitButler stacked the task's branch on another task's (`branch`): records it and makes the task wait on that task |
-| `task.record_conflict` | the worktree removal and push effects | GitButler left commits on the task's branch (`branch`) conflicted: steers its Agent, starts a fix (`fixFor: 'conflict'`) at the review gate, the merge gate or while shipping, or holds it for the Agent's next build, fix or operation turn or the next of those gates (`task.conflict_held`) |
-| `task.record_workspace_update` | the `workspace.update` effect, after `but pull` | `guidance`: your words from the gate, if any; starts the conflict fix in the Agent's session |
 | `task.record_edit` | the file route after a save from the Code tab (`http/edits.ts`) | you saved `path`; `changed` says whether it now differs from the checkout's commit. Records the edit (once per file) or drops it, and steers a running agent of the task |
 | `task.commit_edits` | the push effect before it pushes, and the checks effect when the review was approved with edits | Shinsa committed your uncommitted edits (`treeHash`); clears `editedPaths` |
 | `task.record_overlaps` | an agent's `propose_plan`, `complete_phase` or `complete_fix`, before it dispatches (`agents/repository-work.ts`) | `overlaps`: the other open tasks of the repository and the files this task shares with each; `from`: the task whose hand-over compared them; records the ones not known yet (`task.overlapped`) and steers this task's Agent at work with them at once when `from` is another task, else they wait for its next turn |
 | `checks.record` | `checks.run` effect | records a round of checks (`results: ReportCheck[]`), with `outputs?` (`CheckEvidence[]`, one per check run: the output the server stored, attached as Shinsa's own `check` evidence with its `checkId`) and `coverage?` (`Coverage`) when the run before review measured it; ignored outside `checking` or with no results |
-| `pull_request.record` | open, merge and watch effects | records a pull request read |
+| `pull_request.record` | open, merge and watch effects | records a pull request read; `ci` says whether the repository has CI for its base (`RepoCi`: `none`, `workflows`, `required`, `unknown` when absent), read only when the head has no checks |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
 | `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
@@ -888,15 +884,12 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `budget.acknowledged` | you allowed more past a usage or cost limit |
 | `worktree.requested` | the task asked for its workspace, in this mode (`workspace`) |
 | `worktree.created`, `worktree.removed` | the worktree, branch or checkout was made (with its `workspace`, and `returnBranch` for a main checkout), given back |
-| `task.stacked` | the task's branch was stacked on another task's (`onTaskId`, `branch`) |
-| `task.unstacked` | the task it was stacked on (`fromTaskId`) settled without a merge, so its branch left that stack; clears `stackedOn` |
 | `task.edited` | you saved `path` from the Code tab (`changed`), or put it back the way it was committed; keeps `editedPaths` and `untoldEdits` |
 | `task.edits_told` | a new run's prompt named the files in `untoldEdits`; clears it |
 | `task.overlapped` | the task and another open one (`otherTaskId`) both change `paths`, none of them recorded before; adds them to `overlaps` and its `untold` |
 | `task.overlaps_told` | a steer or a new Agent run's prompt named the untold overlaps; clears every `untold` |
 | `task.edits_committed` | Shinsa committed your edits before a push or the checks; clears `editedPaths` |
 | `task.edits_approved` | `gate`: the review or merge you approved with uncommitted edits (`approvedEdits`), or null once the checks or CI it waited for passed |
-| `task.conflict_held` | `branch`: a conflict kept for the Agent's next build, fix or operation turn or the task's next review or merge gate, or null once an Agent at work or a new turn of it was told |
 | `plan.proposed`, `plan.answered`, `plan.approved` | a plan version was proposed; you answered it; approved |
 | `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`, and the last phase's `walkthrough`) |
 | `walkthrough.revised` | a fix changed how the change works (`walkthrough`: only the parts that changed, `runId`); merged into the latest phase report's walkthrough (`docs/engine.md` → The review report) |
@@ -951,14 +944,13 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `checks.run` | replay_safe | `task:<id>` | `task.commit_edits` first when the review was approved with edits, then `checks.record`; payload `round`, `checks: CheckToRun[]` (run in parallel) and `coverage` (true for the run before review) |
 | `pull_request.open` | replay_safe | `task:<id>` | `pull_request.record_step` per step, then `pull_request.record_push` and `pull_request.record`; or `pull_request.record_update_conflict` or `pull_request.record_hook_failure` instead of the push |
 | `pull_request.push` | replay_safe | `task:<id>` | as `pull_request.open`, without opening when the pull request is open |
-| `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record` |
+| `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record`; merges only `headSha` (`--match-head-commit`), and records a moved head instead of merging it |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
-| `workspace.update` | replay_safe | `task:<id>` | `task.record_workspace_update` once `but pull` updated the task's GitButler workspace (`guidance` is carried through) |
 | `briefing.request` | replay_safe | `briefing` | none: `Engine.writeBriefing` stores the Home guide beside the log (`docs/engine.md` → The briefing) |
 | `run.execute` | process_bound | `run:<id>` | `run.attempt`, `run.link`, `run.meter`, `run.end`, agent commands |
 | `run.wake` | process_bound | `run:<id>` | as `run.execute`, on the waiting step's session |
 | `run.cancel` | process_bound | `cancel:<id>` | `run.end` |
-| `run.steer` | process_bound | `steer:<id>` | `message.deliver` when it is too late to steer; `from: 'shinsa'` steers a note of Shinsa's (an overlap, a conflict, your edits in the Code tab) instead of your words |
+| `run.steer` | process_bound | `steer:<id>` | `message.deliver` when it is too late to steer; `from: 'shinsa'` steers a note of Shinsa's (an overlap, your edits in the Code tab) instead of your words |
 | `question.resolve` | process_bound | `gate:<id>` | none: releases the waiting `ask` call |
 | `delegation.steer` | process_bound | `steer:<id>` | `delegation.record_delivery`, `delegation.release` |
 | `delegation.reply` | process_bound | `reply:<id>` | none: answers the child's question |
@@ -1099,7 +1091,7 @@ The page never gets a run's prompts. The state on the socket is a `WireState` (`
 | `review` | The agent review found problems |
 | `changes` | The human asked for changes (`revise` on the review gate, with or without verdicts on findings) |
 | `pull_request` | The pull request needs work |
-| `conflicts` | GitButler left conflicted commits, or the human updated the workspace for a conflicting pull request |
+| `conflicts` | The pull request conflicts with its base, or the branch was being updated onto its base |
 
 A **state patch** (`StatePatch`, `packages/core/src/protocol/patch.ts`; `resolveStatePatch` makes one,
 `applyStatePatch` applies one, or answers null when its `from` is not the state's `seq`; a patch carries runs as
