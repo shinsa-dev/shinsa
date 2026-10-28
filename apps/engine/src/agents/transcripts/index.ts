@@ -20,6 +20,7 @@ interface Follower {
   count: number;
   watcher: FSWatcher | null;
   poll: (() => void) | null;
+  settle: ReturnType<typeof setTimeout> | null;
 }
 
 interface RunFile {
@@ -179,13 +180,14 @@ export class Transcripts {
 
   #startFollowing(runId: string) {
     const path = this.#pathOf(runId);
-    const follower: Follower = { count: 1, watcher: null, poll: null };
+    const follower: Follower = { count: 1, watcher: null, poll: null, settle: null };
     this.#followers.set(runId, follower);
     const size = readSize(path);
     this.#sync(runId, Math.max(size, 0));
     if (size < 0) return;
     follower.poll = () => this.#readAppended(runId);
     pollFile(path, { interval: this.#pollMs }, follower.poll);
+    follower.settle = setTimeout(follower.poll, this.#pollMs);
     follower.watcher = this.#watch(path, () => this.#readAppended(runId));
     follower.watcher.on('error', (error) => {
       log.warn('[Transcripts] Watching a transcript failed; the check every second carries on', {
@@ -210,6 +212,7 @@ export class Transcripts {
     follower.count -= 1;
     if (follower.count > 0) return;
     follower.watcher?.close();
+    clearTimeout(follower.settle ?? undefined);
     if (follower.poll) unwatchFile(this.#pathOf(runId), follower.poll);
     this.#followers.delete(runId);
   }
