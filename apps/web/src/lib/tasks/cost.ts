@@ -44,14 +44,6 @@ function describeAmount(line: CostLine, unit: BudgetUnit) {
   return unit === 'percent' ? describeWeeklyPercent(line.weeklyPercent) : formatCost(line);
 }
 
-export function describeSpent(state: ShinsaState, task: Task) {
-  const cost = resolveTaskCost(state, task).total;
-  if (cost.runs === 0) return null;
-  const unit = resolveCostUnit(cost);
-  const amount = describeAmount(cost, unit);
-  return unit === 'percent' ? `${amount} of the weekly limit so far` : `${amount} so far`;
-}
-
 function toRow(key: string, label: string, line: CostLine, unit: BudgetUnit): CostRow {
   return { key, label, cost: describeAmount(line, unit), tokens: formatTokens(line.tokens) };
 }
@@ -100,8 +92,7 @@ export function resolveCostFacts(state: ShinsaState, task: Task): CostFacts | nu
   const budget = selectShownBudget(state, task, unit);
   return {
     icon: UNIT_ICON[unit],
-    total:
-      unit === 'percent' ? `${describeAmount(cost.total, unit)} of weekly limit` : formatCost(cost.total),
+    total: describeAmount(cost.total, unit),
     heading: budget ? describeBudgetHeading(budget) : describeHeading(cost.total, unit),
     detail: describeDetail(cost.total, unit),
     budget: budget && { share: Math.min(1, budget.share), over: budget.spent >= budget.limit },

@@ -1,5 +1,6 @@
 import { DomainError, type Repo, resolveRoundBase, type Task } from '@shinsa/core';
-import { assertRefName } from '../git/index.ts';
+import { assertRefName, createPushError, hasPrePushHook } from '../git/index.ts';
+import type { BaseUpdate } from '../git/update.ts';
 import { resolveFreeBranch } from '../git/worktree.ts';
 import { describeError, log } from '../log/index.ts';
 import { runCommand, runCommandOrThrow } from '../shell/index.ts';
@@ -165,7 +166,9 @@ export class GitButlerStrategy implements WorkspaceStrategy {
     await this.#serially(repo, async () => {
       const status = await readButStatus(repo.path, signal);
       if (listConflictedBranches(status).includes(branch)) throw new ConflictedBranchError(branch);
-      await runBut(['push', branch], repo.path, { signal, timeoutMs: null });
+      const command = ['but', 'push', branch];
+      const result = await runCommand(command, repo.path, { signal, timeoutMs: null });
+      if (!result.ok) throw createPushError(command, result, await hasPrePushHook(repo.path));
     });
     return runCommandOrThrow(['git', 'rev-parse', `refs/heads/${branch}`], repo.path);
   }
@@ -177,6 +180,10 @@ export class GitButlerStrategy implements WorkspaceStrategy {
     } finally {
       release();
     }
+  }
+
+  syncBase(): Promise<BaseUpdate> {
+    return Promise.resolve({ status: 'skipped' });
   }
 
   listConflicted(repo: Repo) {

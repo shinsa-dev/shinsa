@@ -6,10 +6,9 @@ import { removeTempDirs } from './temp.ts';
 
 const STRAY_GH_WAIT_MS = 3_000;
 
-const runDir = mkdtempSync(join(tmpdir(), 'shinsa-run-'));
-process.env.TMPDIR = runDir;
-
-const home = mkdtempSync(join(tmpdir(), 'shinsa-test-home-'));
+const scratch = mkdtempSync(join(tmpdir(), 'shinsa-test-run-'));
+process.env.TMPDIR = scratch;
+const home = mkdtempSync(join(scratch, 'shinsa-test-home-'));
 const gitConfig = join(home, 'gitconfig');
 const ghRegistry = join(home, 'gh-processes');
 mkdirSync(ghRegistry);
@@ -94,11 +93,17 @@ async function assertNoStrays() {
 }
 
 afterEach(async () => {
-  await assertNoStrays();
-  removeTempDirs();
+  try {
+    await assertNoStrays();
+  } finally {
+    removeTempDirs();
+  }
 });
 
 afterAll(async () => {
-  await assertNoStrays();
-  rmSync(runDir, { recursive: true, force: true });
+  try {
+    await assertNoStrays();
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
 });

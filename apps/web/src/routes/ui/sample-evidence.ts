@@ -26,10 +26,17 @@ const NOTE = `Contrast on the dark settings page, measured on \`#18191b\`. The t
 | Hint text | 2.6:1 | 6.9:1 | 4.5:1 |
 | Borders | 1.2:1 | 1.6:1 | none, decorative |`;
 
+const DISABLED_NOTE =
+  'Disabled rows keep their grey (`--disabled`, 1.6:1): the request was about hint text and borders.';
+
 export const SAMPLE_EVIDENCE_TEXTS: readonly [string, string][] = [
   [`${SAMPLES}/tab-group-tests.txt`, TESTS],
   [`${SAMPLES}/checks.txt`, CHECKS],
   [`${SAMPLES}/contrast.md`, NOTE],
+];
+
+export const SAMPLE_REVISED_EVIDENCE_TEXTS: readonly [string, string][] = [
+  [`${SAMPLES}/disabled-rows.md`, DISABLED_NOTE],
 ];
 
 const PIECES: Omit<Evidence, 'taskId' | 'attachedAt'>[] = [
@@ -167,3 +174,45 @@ export const SAMPLE_EVIDENCE_LAYOUT: EvidenceLayout = {
   ...resolveEvidenceListLayout(EVIDENCE, {}),
   folder: '/Users/you/.config/shinsa/data/evidence/sample/round-1',
 };
+
+const REVISED: Evidence[] = [
+  {
+    id: 'revised-earlier',
+    taskId: 'sample',
+    runId: null,
+    kind: 'screenshot',
+    title: 'Disabled settings, dark mode',
+    detail: 'Disabled labels keep their old grey.',
+    width: 800,
+    theme: 'dark',
+    uri: `${SAMPLES}/settings-dark-before.png`,
+    attachedAt: 0,
+    replacedBy: 'revised-current',
+  },
+  {
+    id: 'revised-note',
+    taskId: 'sample',
+    runId: null,
+    kind: 'note',
+    title: 'Disabled rows, left as they are',
+    uri: `${SAMPLES}/disabled-rows.md`,
+    attachedAt: 1,
+    removedAt: 2,
+    removedReason: 'The disabled labels are raised now, as you asked.',
+  },
+  {
+    id: 'revised-current',
+    taskId: 'sample',
+    runId: null,
+    kind: 'screenshot',
+    title: 'Disabled settings, dark mode',
+    detail: 'Disabled labels are dimmer than the rest but readable.',
+    width: 800,
+    theme: 'dark',
+    uri: `${SAMPLES}/settings-dark-after.png`,
+    attachedAt: 3,
+    fixFor: 'you',
+  },
+];
+
+export const SAMPLE_REVISED_EVIDENCE_LAYOUT: EvidenceLayout = resolveEvidenceListLayout(REVISED, {});

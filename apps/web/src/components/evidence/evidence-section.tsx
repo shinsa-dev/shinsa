@@ -5,30 +5,41 @@ import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { CheckRowItem } from '@/components/checks/checks-list.tsx';
 import { CopyButton } from '@/components/controls/copy-button.tsx';
-import { EvidenceFigure, ReviewMark } from '@/components/evidence/evidence-figure.tsx';
+import { EvidenceFigure, ReviewMark, UpdatedMark } from '@/components/evidence/evidence-figure.tsx';
 import { EvidenceText } from '@/components/evidence/evidence-text.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { INSET } from '@/components/layout/surface/card.ts';
+import { DisclosureHeader } from '@/components/layout/surface/disclosure-header.tsx';
 import { Panel } from '@/components/layout/surface/panel.tsx';
 import { ImageViewer } from '@/components/overlays/image-viewer.tsx';
 import { useImageViewer } from '@/hooks/use-image-viewer.ts';
 import { useServerHealth } from '@/lib/connection/health.ts';
 import {
+  type EarlierEvidenceEntry,
   type EvidenceEntry,
   type EvidenceGroup,
   type EvidenceLayout,
   type EvidenceView,
   isVisualEvidence,
+  listShownEvidenceImages,
   resolveEvidenceLayout,
   shortenHomePath,
 } from '@/lib/evidence/layout.ts';
-import { type DisclosureId, resolveTaskDisclosureId } from '@/lib/preferences/disclosure.ts';
+import {
+  type Disclosure,
+  type DisclosureId,
+  extendDisclosureId,
+  resolveTaskDisclosureId,
+  useDisclosure,
+} from '@/lib/preferences/disclosure.ts';
 import { type ChecksView, resolveChecksView, resolveEvidenceCheckRow } from '@/lib/tasks/checks.ts';
 
 type Viewer = ReturnType<typeof useImageViewer>;
 
 export const EVIDENCE_EMPTY =
   'No screenshots, recordings or test runs were attached this round. Request changes to ask the agent for them.';
+
+const EVIDENCE_ALL_REMOVED = 'The agents removed the evidence they attached this round.';
 
 function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer }) {
   return (
@@ -38,6 +49,7 @@ function Comparison({ entry, viewer }: { entry: EvidenceEntry; viewer: Viewer })
           <span className='min-w-0 font-medium text-fg-4'>{entry.title}</span>
           {entry.facts && <span className='shrink-0 text-2xs text-fg-2'>{entry.facts}</span>}
           {entry.fromReview && <ReviewMark />}
+          {entry.updated && <UpdatedMark text={entry.updated} />}
         </h3>
         {entry.detail && <p className='selectable text-2xs text-fg-3'>{entry.detail}</p>}
       </div>
@@ -69,6 +81,7 @@ function LinkRow({ view }: { view: EvidenceView }) {
       <Icon size='sm' name='IconArrowUpRight' className='shrink-0 text-fg-2' />
       <span className='shrink-0 font-medium text-fg-4'>{view.evidence.title}</span>
       <Truncate className='min-w-0 text-2xs text-fg-2'>{view.evidence.uri}</Truncate>
+      {view.updated && <UpdatedMark text={view.updated} />}
     </a>
   );
 }
@@ -177,15 +190,73 @@ function Group({
   );
 }
 
-function EvidenceBody({ layout, checks }: { layout: EvidenceLayout; checks: ChecksView | null }) {
+function EarlierEntry({ entry, viewer }: { entry: EarlierEvidenceEntry; viewer: Viewer }) {
+  return (
+    <div className='flex min-w-0 flex-col gap-1.5'>
+      <p className='selectable text-2xs text-fg-3'>{entry.status}</p>
+      {entry.kind === 'comparison' ? (
+        <Comparison entry={entry} viewer={viewer} />
+      ) : (
+        <Pieces group={{ kind: entry.kind, label: entry.title, entries: [entry] }} viewer={viewer} />
+      )}
+    </div>
+  );
+}
+
+function EarlierVersions({
+  entries,
+  disclosure,
+  viewer,
+}: {
+  entries: EarlierEvidenceEntry[];
+  disclosure: Disclosure;
+  viewer: Viewer;
+}) {
+  return (
+    <section className='flex min-w-0 flex-col gap-2'>
+      <DisclosureHeader
+        disclosure={disclosure}
+        label='Earlier versions'
+        strip='line'
+        chevron='glyph'
+        className='w-fit gap-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4'
+      >
+        Earlier versions
+        <span className='font-normal tabular-nums'>{entries.length}</span>
+      </DisclosureHeader>
+      {disclosure.open && (
+        <div className='flex flex-col gap-4'>
+          {entries.map((entry) => (
+            <EarlierEntry key={entry.key} entry={entry} viewer={viewer} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EvidenceBody({
+  layout,
+  checks,
+  persistId,
+}: {
+  layout: EvidenceLayout;
+  checks: ChecksView | null;
+  persistId: DisclosureId;
+}) {
   const viewer = useImageViewer();
+  const earlier = useDisclosure(extendDisclosureId(persistId, 'earlier'), false);
   return (
     <div className='flex flex-col gap-5'>
+      {layout.count === 0 && <p className='text-fg-2 text-xs'>{EVIDENCE_ALL_REMOVED}</p>}
       {layout.groups.map((group) => (
         <Group key={group.kind} group={group} viewer={viewer} checks={checks} />
       ))}
+      {layout.earlier.length > 0 && (
+        <EarlierVersions entries={layout.earlier} disclosure={earlier} viewer={viewer} />
+      )}
       {layout.folder && <Folder path={layout.folder} />}
-      <ImageViewer images={layout.images} viewer={viewer} />
+      <ImageViewer images={listShownEvidenceImages(layout, earlier.open)} viewer={viewer} />
     </div>
   );
 }
@@ -201,7 +272,7 @@ export function EvidencePanel({
 }) {
   return (
     <Panel persistId={persistId} title='Evidence' icon='IconImages1' count={layout.count}>
-      <EvidenceBody layout={layout} checks={checks} />
+      <EvidenceBody layout={layout} checks={checks} persistId={persistId} />
     </Panel>
   );
 }
@@ -223,7 +294,7 @@ export function EvidenceSection({
   );
   const checks = React.useMemo(() => resolveChecksView({ evidence, repos }, task), [evidence, repos, task]);
   const persistId = resolveTaskDisclosureId(task.id, 'evidence', 'panel');
-  if (layout.count === 0) {
+  if (layout.count === 0 && layout.earlier.length === 0) {
     if (!showEmpty) return null;
     return (
       <Panel persistId={persistId} title='Evidence' icon='IconImages1'>

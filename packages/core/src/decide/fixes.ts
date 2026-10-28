@@ -1,5 +1,11 @@
-import type { FixReason, ReviewEscalation, ReviewEscalationReason, Task } from '../domain/index.ts';
-import { resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
+import {
+  type FixReason,
+  isOfCurrentRound,
+  type ReviewEscalation,
+  type ReviewEscalationReason,
+  type Task,
+} from '../domain/index.ts';
+import { describeEvidenceForFix, resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
 import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
@@ -17,6 +23,8 @@ const FIX_STAGE_REASON: Record<FixReason, string> = {
   you: 'making your changes',
   pull_request: 'fixing the pull request',
   conflict: 'resolving conflicts',
+  update: 'resolving conflicts with the base branch',
+  hook: 'fixing what the pre-push hook found',
 };
 
 type FixStop = { reason: Exclude<ReviewEscalationReason, 'rounds'>; stalled: number; limit: number };
@@ -74,6 +82,18 @@ function escalateReview(decider: Decider, taskId: string, reason: ReviewEscalati
   openReviewGate(decider, taskId, escalation);
 }
 
+function listAgentEvidence(decider: Decider, task: Task) {
+  return Object.values(decider.state.evidence)
+    .filter(
+      (piece) =>
+        piece.taskId === task.id &&
+        piece.runId !== null &&
+        decider.state.runs[piece.runId]?.role === 'agent' &&
+        isOfCurrentRound(task, piece)
+    )
+    .sort((a, b) => a.attachedAt - b.attachedAt);
+}
+
 export function startFix(
   decider: Decider,
   taskId: string,
@@ -103,10 +123,16 @@ export function startFix(
     treeHash: task.treeHash ?? null,
   });
   decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
-  decider.startRun(decider.task(taskId), 'agent', resolveAgentPrompt(prompt), {
-    purpose: 'fix',
-    resumeFrom: decider.taskSession(taskId, 'agent'),
-  });
+  const evidence = describeEvidenceForFix(listAgentEvidence(decider, task));
+  decider.startRun(
+    decider.task(taskId),
+    'agent',
+    resolveAgentPrompt([prompt, evidence].filter(Boolean).join('\n\n')),
+    {
+      purpose: 'fix',
+      resumeFrom: decider.taskSession(taskId, 'agent'),
+    }
+  );
 }
 
 function isDismissed(task: Task, finding: ReviewFinding) {

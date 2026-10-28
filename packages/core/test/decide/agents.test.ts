@@ -257,9 +257,9 @@ describe('agent hand-overs', () => {
     for (const _phase of harness.task(taskId).plan?.document?.phases ?? []) completePhase(harness, taskId);
     harness.send({ type: 'checks.record', taskId, results: PASSING });
     const prompt = harness.activeRun(taskId).prompt ?? '';
-    expect(prompt).toContain('- screenshot: Settings (after, 390px, light)');
-    expect(prompt).toContain('- comparison: Tabs (before and after, 1280px)');
-    expect(prompt).toContain('- test: Panel tests\n');
+    expect(prompt).toContain('- `settings-390-light`, screenshot: Settings (after, 390px, light)');
+    expect(prompt).toContain('- `tabs-1280`, comparison: Tabs (before and after, 1280px)');
+    expect(prompt).toContain('- `check-c1`, test: Panel tests\n');
     expect(prompt).toContain('independent evidence from the review');
   });
 

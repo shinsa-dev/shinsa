@@ -163,6 +163,7 @@ function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: nu
     configProblems: [],
     approvedEdits: null,
     heldConflict: null,
+    pushHookFailure: null,
     mergeStepsDone: [],
     carriedMergeSteps: listCarriedMergeSteps(task),
     ...resolveBranchPatch(task, choice, needsWorktree(next.pipeline), at),

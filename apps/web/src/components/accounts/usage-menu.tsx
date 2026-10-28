@@ -7,12 +7,14 @@ import {
 } from '@shinsa/core';
 import { Button } from '@shinsa/ui/components/button';
 import { cn } from '@shinsa/ui/lib/utils';
+import type * as React from 'react';
 import { AccountName } from '@/components/accounts/account-name.tsx';
 import { AccountStatusText } from '@/components/accounts/account-status.tsx';
 import { ResetTime, UsageBar } from '@/components/accounts/usage-bar.tsx';
 import { UsagePercent } from '@/components/accounts/usage-percent.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { InfoHeader, InfoPopover, InfoSection } from '@/components/overlays/info-popover.tsx';
+import { useUsageRecheck } from '@/hooks/use-usage-recheck.ts';
 import { ACCOUNT_LABEL, type AccountProvider, resolveAccountProvider } from '@/lib/accounts/account.ts';
 import {
   type AccountStatus,
@@ -134,11 +136,13 @@ export function UsageMenuButton({
   settings,
   onOpen,
   className,
+  children,
 }: {
   snapshot: AccountsSnapshot | null;
   settings: Settings;
   onOpen: () => void;
   className?: string;
+  children?: React.ReactNode;
 }) {
   const now = Date.now();
   const glance = resolveUsageGlance(snapshot, settings, now);
@@ -169,8 +173,14 @@ export function UsageMenuButton({
       {listProviderGlances(snapshot, now).map((provider) => (
         <ProviderGlanceRow key={provider.login.provider} glance={provider} next={glance} />
       ))}
+      {children}
     </InfoPopover>
   );
+}
+
+function UsageRecheckWhileOpen() {
+  useUsageRecheck(true);
+  return null;
 }
 
 export function UsageMenu({ state, className }: { state: ShinsaState; className?: string }) {
@@ -180,6 +190,8 @@ export function UsageMenu({ state, className }: { state: ShinsaState; className?
       settings={state.settings}
       onOpen={() => openSettingsSection(ACCOUNT_LABEL.section)}
       className={className}
-    />
+    >
+      <UsageRecheckWhileOpen />
+    </UsageMenuButton>
   );
 }

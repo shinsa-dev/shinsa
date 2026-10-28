@@ -16,7 +16,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createRepo, createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const DECIDED: TriageDecisions = {
   shape: { value: 'answer', why: 'It asks how something works.' },
@@ -73,6 +73,38 @@ describe('a task with no repository', () => {
     const [unbound, bound] = view.container.querySelectorAll('div.flex-wrap');
     expect(unbound?.textContent).not.toMatch(/kanna|repositor/i);
     expect(bound?.textContent).toContain('kanna');
+  });
+
+  it('marks the repository with a folder in its project’s colour, and a plain folder without a project', () => {
+    const task = createTask({ id: 'web', handle: 'SW-1', repoId: 'web' });
+    const state = createShinsaState({
+      tasks: [task, { ...task, id: 'loose', repoId: 'scratch' }],
+      projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
+      repos: [
+        createRepo({
+          id: 'web',
+          name: 'paywall-next',
+          projectId: 'p',
+          remote: 'git@github.com:sw/paywall-next.git',
+        }),
+        createRepo({ id: 'scratch', name: 'scratch' }),
+      ],
+    });
+    pushState(state);
+    const view = render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+        <TaskFacts state={state} task={state.tasks.loose as Task} />
+      </TooltipProvider>
+    );
+    const [bound, loose] = view.container.querySelectorAll('div.flex-wrap');
+    const ink = bound?.querySelector('[data-project-ink]') as SVGElement | null;
+    expect(ink?.getAttribute('data-project-ink')).toBe('purple');
+    expect(ink?.style.getPropertyValue('--icon-color')).toBe('var(--purple-4, var(--fg-2))');
+    expect(bound?.textContent).toContain('paywall-next');
+    expect(bound?.textContent).not.toContain('Superwall');
+    expect(loose?.textContent).toContain('scratch');
+    expect(loose?.querySelector('[data-project-ink]')).toBeNull();
   });
 });
 
@@ -237,6 +269,40 @@ describe('the round and the agents in the facts row', () => {
     expect(list.textContent).toBe('Answerer2 runs · working now');
     fireEvent.click(screen.getByRole('button', { name: /Answerer/ }));
     expect(window.location.pathname + window.location.search).toBe('/tasks/SW-7?tab=chat&run=b');
+  });
+});
+
+describe('the cost fact', () => {
+  it('shows its icon and value in the row and the breakdown in its popover, the one place a task’s cost shows', async () => {
+    const task = createTask({ id: 't', handle: 'SW-7' });
+    const usage = {
+      inputTokens: 2_000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+      costUsd: 3,
+    };
+    const state = createShinsaState({
+      tasks: [task],
+      runs: [createRun({ id: 'k', taskId: 't', role: 'answerer', usage })],
+    });
+    pushState(state);
+    render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+      </TooltipProvider>
+    );
+    const trigger = screen.getByRole('button', { name: '$3.00' });
+    expect(trigger.textContent).toBe('$3.00');
+    expect(screen.queryByText('By step')).toBeNull();
+    await act(async () => {
+      fireEvent.pointerEnter(trigger);
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerMove(trigger);
+      fireEvent.mouseMove(trigger);
+    });
+    expect(await screen.findByText('By step')).toBeTruthy();
+    expect(screen.getAllByText('$3.00').length).toBeGreaterThan(1);
   });
 });
 

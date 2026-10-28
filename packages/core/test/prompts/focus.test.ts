@@ -6,7 +6,9 @@ import {
   resolveHouseRules,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
+  resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
   resolveWorkspaceUpdatedFixPrompt,
 } from '../../src/prompts/index.ts';
@@ -34,6 +36,8 @@ describe('resolveFixFocus', () => {
       [resolvePullRequestFixPrompt(pullRequest({ number: 42 })), 'pull_request'],
       [resolveConflictFixPrompt('feat/banner'), 'conflicts'],
       [resolveWorkspaceUpdatedFixPrompt('feat/banner', null), 'conflicts'],
+      [resolveUpdateConflictFixPrompt('main', ['a.ts']), 'conflicts'],
+      [resolvePushHookFixPrompt('FAIL', null, null), 'push_hook'],
     ] as const;
     for (const [instruction, focus] of cases) {
       expect(resolveFixFocus({ purpose: 'fix', prompt: briefed(instruction) })).toBe(focus);

@@ -264,3 +264,31 @@ describe('the Evidence section', () => {
     expect(screen.queryByText('Test')).toBeNull();
   });
 });
+
+describe('evidence brought up to date', () => {
+  it('shows the current version marked as updated, and the earlier ones folded under Earlier versions', () => {
+    renderSection([
+      piece('before', { title: 'Settings', stage: 'before' }),
+      piece('old', { title: 'Settings', stage: 'after', replacedBy: 'new' }),
+      piece('new', { title: 'Settings', stage: 'after', fixFor: 'you' }),
+      piece('menu', { title: 'Menu', removedAt: NOW, removedReason: 'The menu is gone.' }),
+    ]);
+    const pair = screen.getByRole('heading', { name: /Settings/ }).closest('section') as HTMLElement;
+    expect(within(pair).getByText('Updated after your review')).toBeTruthy();
+    expect(screen.queryByText('Menu')).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Expand Earlier versions' });
+    expect(toggle.textContent).toBe('Earlier versions2');
+    fireEvent.click(toggle);
+    expect(screen.getByText('Replaced by a later version')).toBeTruthy();
+    expect(screen.getByText('Removed: The menu is gone.')).toBeTruthy();
+    expect(screen.getByText('Menu')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Earlier versions' }));
+    expect(screen.queryByText('Menu')).toBeNull();
+  });
+
+  it('says the evidence was removed when nothing current is left, and still shows the earlier versions', () => {
+    renderSection([piece('menu', { title: 'Menu', removedAt: NOW, removedReason: 'Gone.' })]);
+    expect(screen.getByText('The agents removed the evidence they attached this round.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Expand Earlier versions' })).toBeTruthy();
+  });
+});

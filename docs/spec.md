@@ -177,6 +177,13 @@ not chat text.
   request watch, Merge queues). A conflict is resolved by merging the base in, never by rebasing, and one GitButler
   leaves when a task below a stack is cancelled is resolved in place in your workspace (`docs/engine.md` → The pull
   request watch → Conflicts, Where agents work → GitButler).
+- **Every push is current and passes the hooks.** Before each push Shinsa merges the latest base into the branch
+  (never a rebase, so no force push), so it carries the base's fixes and its current pre-push hook; a conflict goes
+  to the agent, which resolves it before Shinsa checks and pushes again. The repository's pre-push hook always runs:
+  a rejection goes to the agent with the hook's output and the failing tests, never to a blind retry, and the same
+  failure twice stops at a gate (Send to the agent again, or Cancel). A network failure is retried, and the task shows
+  each attempt and why ("Pushing again in 30s, attempt 2 of 5: …"). GitButler workspaces skip the update: `but pull`
+  stays your choice (`docs/engine.md` → Pushing the branch).
 - **The briefing** says which decision to take now and why, the two or three after it, what agents
   are doing, and gives a heads-up when something is stuck (`docs/engine.md` → The briefing).
 - **Notes.** Agents keep notes on a task (`note`), so nothing depends on you remembering it.
@@ -496,7 +503,8 @@ Ported from Paperclip's execution semantics (`docs/engine.md` → Process and st
   then and on an API key. Two optional per-task limits pause the task: a share of the weekly window (for
   subscriptions; an early estimate while the account is learning) and a dollar amount (for API keys and Codex, and
   the limit that always holds while an account is learning). Both are off by default.
-  Unknown prices stay unknown.
+  Unknown prices stay unknown. A task's cost shows in one place, the popover of the cost icon among its facts;
+  nothing else on screen repeats it, and a paused task names the limit it reached, not what it spent.
 - **Quiet agents are flagged**, informationally, after 5 and 15 minutes without output.
 - **Recovery budgets follow durable state** (failing checks, finding files, the tree), so prose
   never resets them.

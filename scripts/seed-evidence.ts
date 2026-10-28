@@ -9,7 +9,15 @@ type SeedEvidence = Omit<Evidence, 'uri' | 'attachedAt' | 'taskId' | 'runId'> & 
   runId: string;
   minutesBeforeEnd: number;
   byShinsa?: true;
+  replaces?: string[];
 } & ({ file: string } | { name: string; text: string } | { url: string } | { check: string });
+
+interface SeedRemoval {
+  runId: string;
+  minutesBeforeEnd: number;
+  ids: string[];
+  reason: string;
+}
 
 type StoredEvidence = Exclude<SeedEvidence, { url: string } | { check: string }>;
 
@@ -139,6 +147,9 @@ const CONTRAST_NOTE = `Contrast on the dark settings page, measured on \`#18191b
 Light mode reads the same tokens it did before, so nothing changes there.
 `;
 
+const DISABLED_NOTE = `Disabled rows keep their grey (\`--disabled\`, 1.6:1). They are out of scope here: the request was about hint text and borders, and raising them changes every disabled control in the app.
+`;
+
 const SEED_EVIDENCE: SeedEvidence[] = [
   {
     id: 'evidence-contrast-1280-before',
@@ -202,6 +213,16 @@ const SEED_EVIDENCE: SeedEvidence[] = [
     file: 'settings-1280-light-after.png',
   },
   {
+    id: 'evidence-contrast-disabled-note',
+    runId: 'task-dark-contrast-run-0',
+    minutesBeforeEnd: 0.8,
+    kind: 'note',
+    title: 'Disabled rows, left as they are',
+    detail: 'Why the disabled labels did not change.',
+    name: 'disabled-rows.md',
+    text: DISABLED_NOTE,
+  },
+  {
     id: 'evidence-contrast-ratios',
     runId: 'task-dark-contrast-run-1',
     minutesBeforeEnd: 0.5,
@@ -236,6 +257,20 @@ const SEED_EVIDENCE: SeedEvidence[] = [
     theme: 'dark',
     stage: 'after',
     file: 'disabled-1280-dark-after.png',
+  },
+  {
+    id: 'evidence-contrast-1280-revised',
+    runId: 'task-dark-contrast-run-2',
+    minutesBeforeEnd: 0.4,
+    kind: 'screenshot',
+    title: 'Appearance settings, dark mode',
+    detail: 'Hint text, borders and now the disabled rows read on the panel.',
+    width: 1280,
+    theme: 'dark',
+    stage: 'after',
+    fixFor: 'you',
+    file: 'settings-1280-dark-revised.png',
+    replaces: ['evidence-contrast-1280-after'],
   },
   {
     id: 'evidence-tabs-1280-before',
@@ -387,6 +422,31 @@ const SEED_EVIDENCE: SeedEvidence[] = [
   createCheckOutput('task-sample-review-run-3', 'c1', 'Review spots', SPOTS_TESTS),
 ];
 
+const SEED_REMOVALS: SeedRemoval[] = [
+  {
+    runId: 'task-dark-contrast-run-2',
+    minutesBeforeEnd: 0.3,
+    ids: ['evidence-contrast-disabled-note'],
+    reason: 'The disabled labels are raised now, as you asked.',
+  },
+];
+
+function listSeedRemovalEvents(runEnds: ReadonlyMap<string, number>) {
+  return SEED_REMOVALS.flatMap(({ runId, minutesBeforeEnd, ids, reason }) => {
+    const end = runEnds.get(runId);
+    if (end === undefined) return [];
+    const at = end - minutesBeforeEnd * MINUTE;
+    const event: ShinsaEventInput = {
+      type: 'evidence.removed',
+      taskId: resolveTaskId(runId),
+      ids,
+      reason,
+      runId,
+    };
+    return [{ at, event }];
+  });
+}
+
 export function writeSeedEvidence(dataDir: string) {
   for (const piece of SEED_EVIDENCE) {
     if ('url' in piece || 'check' in piece) continue;
@@ -399,7 +459,11 @@ export function writeSeedEvidence(dataDir: string) {
 }
 
 export function listSeedEvidenceEvents(runEnds: ReadonlyMap<string, number>) {
-  return SEED_EVIDENCE.flatMap(({ runId, minutesBeforeEnd, byShinsa, ...piece }) => {
+  return [...listSeedAttachEvents(runEnds), ...listSeedRemovalEvents(runEnds)];
+}
+
+function listSeedAttachEvents(runEnds: ReadonlyMap<string, number>) {
+  return SEED_EVIDENCE.flatMap(({ runId, minutesBeforeEnd, byShinsa, replaces, ...piece }) => {
     const end = runEnds.get(runId);
     if (end === undefined) return [];
     const attachedAt = end - minutesBeforeEnd * MINUTE;
@@ -421,6 +485,7 @@ export function listSeedEvidenceEvents(runEnds: ReadonlyMap<string, number>) {
         uri: resolveUri({ runId, minutesBeforeEnd, ...piece }),
         attachedAt,
       },
+      ...(replaces ? { replaces } : {}),
     };
     return [{ at: attachedAt, event }];
   });

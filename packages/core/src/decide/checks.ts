@@ -211,8 +211,16 @@ export function retryChecks(decider: Decider, taskId: string) {
   runChecks(decider, taskId, [...(task.runningChecks ?? []), ...failing], task.stageReason);
 }
 
+function isPushingAfterFix(task: Task) {
+  return task.pushPending === true && task.fixFor !== 'you';
+}
+
 function proceedAfterChecks(decider: Decider, taskId: string) {
   const task = decider.task(taskId);
+  if (isPushingAfterFix(task)) {
+    shipReviewedWork(decider, taskId);
+    return;
+  }
   if (hasPhasesLeft(task)) {
     startPhase(decider, taskId, resolveCurrentPhase(task));
     return;

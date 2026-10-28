@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'bun:test';
-import { type Activity, type Briefing, resolveQueue, type Task } from '@shinsa/core';
+import { type Activity, resolveQueue, type Task } from '@shinsa/core';
 import {
   dropPullRequestNumbers,
-  listGuideTaskIds,
   listRecentConversations,
   listRecentlyFinished,
   resolveGreeting,
@@ -12,7 +11,6 @@ import {
   resolveRunningVerb,
 } from '@/lib/home.ts';
 import { listQueueSections } from '@/lib/queue.ts';
-import { createPullRequest } from '../support/pull-request.ts';
 import { createGate, createRepo, createShinsaState, createTask, NOW } from '../support/state.ts';
 
 const DAY = 24 * 60 * 60_000;
@@ -138,8 +136,7 @@ describe('resolveHomeSections', () => {
     });
     const { first, last } = resolveHomeSections(
       state,
-      listQueueSections(state, resolveQueue(state, NOW), null),
-      NONE,
+      listQueueSections(state, resolveQueue(state, NOW)),
       NOW
     );
     expect(first.map((section) => section.key)).toEqual(['needs', 'working']);
@@ -162,12 +159,7 @@ describe('resolveHomeSections', () => {
         createGate({ id: 'g-operate', taskId: 'operate', type: 'review' }),
       ],
     });
-    const home = resolveHomeSections(
-      state,
-      listQueueSections(state, resolveQueue(state, NOW), null),
-      NONE,
-      NOW
-    );
+    const home = resolveHomeSections(state, listQueueSections(state, resolveQueue(state, NOW)), NOW);
     const ids = [
       ...home.first.flatMap((section) => section.items.map((item) => item.task.id)),
       ...home.finished.map((task) => task.id),
@@ -189,64 +181,9 @@ describe('resolveHomeSections', () => {
       })
     );
     const state = createShinsaState({ tasks });
-    const home = resolveHomeSections(
-      state,
-      listQueueSections(state, resolveQueue(state, NOW), null),
-      NONE,
-      NOW
-    );
+    const home = resolveHomeSections(state, listQueueSections(state, resolveQueue(state, NOW)), NOW);
     expect(home.finished.map((task) => task.id)).toEqual(['t0', 't1']);
     expect(home.conversations.map(({ task }) => task.id)).toEqual(['t2', 't3', 't4', 't5', 't6']);
-  });
-});
-
-describe('listGuideTaskIds', () => {
-  const tasks = [
-    createTask({ id: 'lead', stage: 'reviewing' }),
-    createTask({ id: 'next', stage: 'reviewing' }),
-    createTask({ id: 'build', stage: 'building' }),
-    createTask({ id: 'linked', stage: 'done' }),
-    createTask({ id: 'quoted', title: 'Update the onboarding copy', stage: 'done' }),
-    createTask({ id: 'pr', stage: 'done', pullRequest: createPullRequest({ number: 7 }) }),
-    createTask({ id: 'noted', stage: 'done' }),
-    createTask({ id: 'quiet', stage: 'done' }),
-  ];
-  const state = createShinsaState({ tasks });
-
-  it('names the tasks the guide leads with, the ones it mentions, what is running and what the note links', () => {
-    const briefing: Briefing = {
-      now: { taskId: 'lead', why: 'It builds on [the fix](shinsa://task/linked).' },
-      next: [{ taskId: 'next', why: 'It follows “Update the onboarding copy”.' }],
-      running: '',
-      note: 'Pull request [#7](shinsa://pr/7) and [#99](shinsa://pr/99) are in [repo](shinsa://repo/web); see [this](shinsa://task/noted).',
-    };
-    expect([...listGuideTaskIds(state, resolveQueue(state, NOW), briefing)].sort()).toEqual(
-      ['build', 'lead', 'linked', 'next', 'noted', 'pr', 'quoted'].sort()
-    );
-  });
-
-  it('names only what is running when there is nothing to lead with and no note', () => {
-    const briefing: Briefing = { now: null, next: [], running: '', note: null };
-    expect([...listGuideTaskIds(state, resolveQueue(state, NOW), briefing)]).toEqual(['build']);
-  });
-
-  it('keeps the tasks the guide names out of Recently finished and Recent conversations', () => {
-    const talked = [entry({})];
-    const home = createShinsaState({
-      tasks: [
-        createTask({ id: 'guided', stage: 'done', stageChangedAt: NOW, activity: talked }),
-        createTask({ id: 'talked', stage: 'done', stageChangedAt: NOW - 30 * DAY, activity: talked }),
-        createTask({ id: 'other', stage: 'done', stageChangedAt: NOW - 30 * DAY, activity: talked }),
-      ],
-    });
-    const sections = resolveHomeSections(
-      home,
-      listQueueSections(home, resolveQueue(home, NOW), null),
-      new Set(['guided', 'talked']),
-      NOW
-    );
-    expect(sections.finished).toEqual([]);
-    expect(sections.conversations.map(({ task }) => task.id)).toEqual(['other']);
   });
 });
 

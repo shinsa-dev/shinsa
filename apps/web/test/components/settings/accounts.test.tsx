@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { type AccountsSnapshot, createSettings, type ProviderLogin } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AccountSettings } from '@/components/settings/accounts.tsx';
+import * as connectionAccounts from '@/lib/connection/accounts.ts';
 import { closeSignIn, useSignInDialog } from '@/lib/connection/accounts.ts';
 import { createAccount, createProviderLogin, createSnapshot, createWindow } from '../../support/accounts.ts';
 import { spyOnToasts } from '../../support/commands.ts';
@@ -25,6 +26,10 @@ let fake: ReturnType<typeof startFakeOnboarding>;
 
 let toasts: ReturnType<typeof spyOnToasts>;
 
+const stopWatching = mock(() => undefined);
+
+let watch: ReturnType<typeof spyOn>;
+
 const ACCOUNTS = createSnapshot({
   accounts: [
     createAccount({ id: 'a', isDefault: true }),
@@ -44,6 +49,8 @@ function DialogProbe() {
 }
 
 beforeEach(() => {
+  stopWatching.mockClear();
+  watch = spyOn(connectionAccounts, 'watchUsage').mockReturnValue(stopWatching);
   toasts = spyOnToasts();
   startFakeServer();
   fake = startFakeOnboarding({
@@ -63,6 +70,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => closeSignIn());
   fake.stop();
+  watch.mockRestore();
   toasts.restore();
   stopFakeServer();
 });
@@ -105,6 +113,13 @@ async function pickItem(name: string | RegExp) {
 }
 
 describe('the Accounts settings', () => {
+  it('reads usage again by itself while it is open, and stops once it closes', () => {
+    const view = renderAccounts(ACCOUNTS);
+    expect(watch).toHaveBeenCalledTimes(1);
+    view.unmount();
+    expect(stopWatching).toHaveBeenCalledTimes(1);
+  });
+
   it('lists each account with its provider, plan, default mark, status and usage', () => {
     renderAccounts(ACCOUNTS);
     expect(screen.getByText('Claude · a@example.com')).toBeTruthy();

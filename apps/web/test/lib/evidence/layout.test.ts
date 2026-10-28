@@ -6,7 +6,9 @@ import {
   describeEvidencePart,
   describeEvidenceStage,
   describeEvidenceSummary,
+  describeEvidenceUpdate,
   listEvidencePrefetch,
+  listShownEvidenceImages,
   resolveEvidenceFolder,
   resolveEvidenceLayout,
   shortenHomePath,
@@ -222,5 +224,56 @@ describe('resolveEvidenceLayout', () => {
       layout.groups.map((group) => group.entries.map((entry) => entry.parts.map((part) => part.evidence.id)))
     ).toEqual([[['before', 'again']], [['first'], ['lonely']]]);
     expect(layout.folder).toBeNull();
+  });
+});
+
+describe('evidence that was replaced or removed', () => {
+  const evidence = [
+    shot('before', 1, { title: 'Settings', stage: 'before' }),
+    shot('old-after', 2, { title: 'Settings', stage: 'after', replacedBy: 'new-after' }),
+    shot('note', 3, {
+      kind: 'note',
+      title: 'Timings',
+      uri: `${STORED}/t.md`,
+      removedAt: NOW,
+      removedReason: 'Stale.',
+    }),
+    shot('new-after', 4, { title: 'Settings', stage: 'after', fixFor: 'you' }),
+    shot('old-link', 5, {
+      kind: 'test',
+      title: 'Unit',
+      uri: 'shinsa://check/c1',
+      checkId: 'c1',
+      replacedBy: 'link',
+    }),
+    shot('link', 6, { kind: 'test', title: 'Unit', uri: 'shinsa://check/c1', checkId: 'c1', detail: 'Now.' }),
+  ];
+  const state = createShinsaState({ evidence, runs: [createRun({ id: 'build', taskId: 'task-1' })] });
+
+  it('shows only current items, the replacing one marked, and keeps the rest as earlier versions', () => {
+    const layout = resolveEvidenceLayout(state, createTask({ id: 'task-1' }));
+    expect(layout.count).toBe(2);
+    const [settings] = layout.groups[0]?.entries ?? [];
+    expect(settings?.parts.map((part) => part.evidence.id)).toEqual(['before', 'new-after']);
+    expect(settings?.updated).toBe('Updated after your review');
+    expect(layout.groups[1]?.entries[0]?.check?.links.map((link) => link.id)).toEqual(['link']);
+    expect(layout.earlier.map((entry) => [entry.key, entry.status])).toEqual([
+      ['earlier:old-after', 'Replaced by a later version'],
+      ['earlier:note', 'Removed: Stale.'],
+    ]);
+    expect(layout.images.map((image) => image.item)).toEqual(['before', 'before', 'earlier:old-after']);
+    expect(listShownEvidenceImages(layout, false).map((image) => image.item)).toEqual(['before', 'before']);
+    expect(listShownEvidenceImages(layout, true)).toBe(layout.images);
+    expect(listEvidencePrefetch(layout).images).toEqual([`${STORED}/before.png`, `${STORED}/new-after.png`]);
+    expect(describeEvidenceSummary(evidence)).toBe('1 comparison and 1 test');
+  });
+
+  it('says after what an item was updated', () => {
+    expect(describeEvidenceUpdate(null)).toBeNull();
+    expect(describeEvidenceUpdate('review')).toBe('Updated after the agent review');
+    expect(describeEvidenceUpdate('checks')).toBe('Updated after the checks');
+    expect(describeEvidenceUpdate('pull_request')).toBe('Updated after the pull request feedback');
+    expect(describeEvidenceUpdate('conflict')).toBe('Updated');
+    expect(describeEvidenceUpdate('work')).toBe('Updated');
   });
 });

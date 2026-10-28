@@ -120,6 +120,27 @@ describe('resolveTaskNow', () => {
     );
   });
 
+  it('says what the push is doing at each step, and what a retry waits for and why', () => {
+    const cases = [
+      ['updating the branch onto main', 'Updating the branch onto main'],
+      [
+        'pushing the branch (the repository’s pre-push hook is running)',
+        'Pushing the branch (the repository’s pre-push hook is running)',
+      ],
+      ['opening the pull request', 'Opening the pull request'],
+      [
+        'pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com',
+        'Pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com',
+      ],
+      ['fixing what the pre-push hook found', 'Fixing what the pre-push hook found'],
+    ] as const;
+    for (const [stageReason, shown] of cases) {
+      expect(nowFor({ stage: stageReason.startsWith('fixing') ? 'fixing' : 'shipping', stageReason })).toBe(
+        shown
+      );
+    }
+  });
+
   it('names the merged pull request', () => {
     expect(nowFor({ stage: 'merged', pullRequest: PULL_REQUEST })).toBe('PR #42 merged');
     expect(nowFor({ stage: 'merged', stageReason: 'merged' })).toBe('Merged');

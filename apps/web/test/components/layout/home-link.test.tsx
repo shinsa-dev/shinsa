@@ -115,4 +115,21 @@ describe('the way home', () => {
     expect(location.pathname).toBe('/settings');
     expect(screen.getByRole('button', { name: 'Settings' }).getAttribute('aria-current')).toBe('page');
   });
+
+  it('shows the queue button on every page but Home and the task list', () => {
+    act(() => navigate('/'));
+    render(
+      <TooltipProvider>
+        <CardsTopBar state={STATE} />
+      </TooltipProvider>
+    );
+    const queue = () => screen.queryByRole('button', { name: 'Nothing needs you' });
+    expect(queue()).toBeNull();
+    act(() => navigate('/tasks'));
+    expect(queue()).toBeNull();
+    for (const path of ['/settings', '/terminal', '/tasks/SW-1']) {
+      act(() => navigate(path));
+      expect(queue()).toBeTruthy();
+    }
+  });
 });

@@ -959,7 +959,7 @@ Rows inside a card never borrow a stat value's size; a figure in a row is `text-
 | Popover | `w-64` (256px), `p-2.5`, `gap-2`, 8px from its trigger |
 | Preview card (`InfoPopover`) | `w-72` (288px) |
 | Tooltip | `min-h-6`, `max-w-72`, `px-2 py-1`, `gap-1` |
-| Toast | `padding: 6px 10px`, `gap: 8px`, `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
+| Toast | `padding: 6px 10px`, `gap: 8px` (6px from the icon, whose box takes 2px back), `min-height: 34px`, `width: fit-content`, `max-width: 420px`; with a description `padding: 10px`; with an action the end padding is 5px (10px with a description) |
 | Command menu | 40px input row (`h-10 px-3 gap-2`, bottom hairline), list in a `SizeAnimator`, 28px footer (`h-7 px-3 gap-3`, top hairline) |
 | Card | `CARD`: `corner-superellipse/1.125 rounded-xl border border-border bg-card`; inset 12px (`p-3`) on all four sides; a list card `p-1` |
 | Inset (anything nested in a card or the chat column) | `INSET`: `corner-superellipse/1.125 rounded-lg border border-border` with its fill on top |
@@ -1262,8 +1262,8 @@ Three sizes, and only three, tied to the text an icon sits with:
 
 | Size | px | Where |
 | --- | --- | --- |
-| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
-| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs, toasts |
+| `sm` | 14 | Beside 12 to 13px text: every row (chat, list, menu, select, command, nav), facts, notices, toasts, badges, `Kbd`, `xs`/`sm` buttons and selects, status tiles' glyphs, card header icons. The default. |
+| `md` | 16 | Beside 14px+ text and in 26/30px controls: `default`/`lg` and `icon`/`icon-lg` buttons, default selects and inputs |
 | `lg` | 20 | Rare and alone: an empty-state tile (the `size='sm'` empty state uses `md`), a full-page wait's spinner, an evidence recording's play glyph, catalog specimens |
 
 - A primitive sets `--icon-size` for the glyphs inside it (`Button`, `Badge`, `Tabs`, `Select`, menu and command rows, `Kbd` set `[--icon-size:var(--icon-size-sm)]` or `-md`), so an icon there passes nothing. Anywhere else the call site passes `size`.
@@ -3566,7 +3566,7 @@ The live card uses `duration={240}`; the default 180ms is for popup content.
 | cancel button | `bk-toast-button corner-superellipse/1.125 !h-6 !cursor-pointer !rounded-control-sm !bg-bg-a2 !px-2.5 !font-medium !text-fg-3 !text-xs` |
 | close button | `bk-toast-button corner-superellipse/1.125 !cursor-pointer !rounded-control !bg-bg-2 !text-fg-3` |
 
-Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='md'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
+Icons (14px, `size='sm'`, the size beside the toast's 13px text): success `IconCheckCircle2Filled` `text-primary-4` (checkmarks are the accent), info `IconInfoSimple` `text-primary-4`, warning `IconExclamationTriangleFilled` `text-amber-4`, error `IconExclamationCircleFilled` `text-red-4`, loading `Spinner size='sm'` `text-fg-2`. The kind sets only the icon; the surface is always neutral.
 
 **Toast box CSS** (unlayered, so it beats sonner's own unlayered stylesheet):
 
@@ -3595,7 +3595,8 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
   color: var(--fg-2); margin-top: 6px; font-size: var(--text-2xs); line-height: 1.2;
 }
 [data-sonner-toast].bk-toast [data-icon] {
-  width: 16px; height: 16px; margin: 0; flex-shrink: 0;
+  width: 14px; height: 14px; flex-shrink: 0;
+  margin: 0 -2px 0 0;   /* the 8px gap less 2px: 6px to the text, as a menu row; the action stays 8px away */
   display: flex; align-items: center; justify-content: center; position: relative;
 }
 [data-sonner-toast].bk-toast [data-icon] > svg { margin: 0; }
@@ -3603,10 +3604,10 @@ Icons (16px, `size='md'`): success `IconCheckCircle2Filled` `text-primary-4` (ch
 [data-sonner-toaster] [data-sonner-toast].bk-toast [data-description] {
   text-box: trim-both cap alphabetic;   /* glyph edges line up with flex alignment */
 }
-[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2px; }
+[data-sonner-toast].bk-toast:has([data-description]) [data-icon] { align-self: flex-start; margin-top: -2.5px; }
 ```
 
-So a one-line toast is 34px tall: a 16px icon, 8px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
+So a one-line toast is 34px tall: 11px from the edge a 14px icon, 6px, the 13px medium title in `popover-foreground`, then (optionally) a 24px action button 5px from the right edge. With a description the toast pads 10px all round, the icon top-aligns with the title's cap height, and the description is 12px `fg-2` 6px under the title.
 
 **Loading → result cross-fade:** the loader stays absolutely centred in the icon box so the result icon lands in the same spot.
 
@@ -5225,7 +5226,7 @@ Smart anchors carry `data-smart`, so prose link styling (blue, underlined) never
   (`line-clamp-2 font-medium text-fg-4 text-sm`); under it, indented `ps-6` and `text-xs`, the status `font-medium` in
   its tone over what is happening now (`line-clamp-3 text-fg-3`, left out when it repeats the status); then a
   `flex flex-wrap items-center gap-x-3 gap-y-1 ps-6 text-2xs text-fg-2` line with the handle (`tabular-nums`), the
-  repository (`IconGithub` or `IconFolder1`), the branch (`IconBranch`, mono) and `IconPullRequest` `#N`, each icon
+  repository (`RepoIcon`: `IconGithub` or `IconFolder1` in its project's colour), the branch (`IconBranch`, mono) and `IconPullRequest` `#N`, each icon
   14px `gap-1`. A footer `flex items-center justify-between gap-3 border-border border-t px-3 py-2`: how long it has
   waited (`TimeAgo`, `text-2xs text-fg-2`) and its one action as an `outline` `sm` button.
 - **`TaskPopoverRows({ state, tasks })`**: task lists inside a popover, a `HoverHighlight` (`flex flex-col gap-px`,
@@ -5242,7 +5243,10 @@ Smart anchors carry `data-smart`, so prose link styling (blue, underlined) never
   `CHECK_TEXT` when all pass, else `text-red-text`); a `ul` `flex flex-col gap-1.5 px-3 pb-1.5` of
   `flex min-w-0 items-start gap-2` rows: `CheckOutcomeIcon`, then the name (`Truncate`, `text-fg-4 text-xs leading-4`)
   over the detail (`text-2xs text-fg-2`), `gap-px`.
-- **`RepoChip({ state, repo })`**: `InlineMark` `IconGithub` (remote) or `IconFolder1` (local) and the name; links to
+- **`RepoIcon({ state, repo, icon?, className })`**: a 14px icon, `IconGithub` (remote) or `IconFolder1` (local) unless
+  `icon` names one, whose ink (`--icon-color`) is its project's colour (`resolveProjectInk`, the dot's own ink) and
+  `data-project-ink` the colour name; without a project it keeps its text's ink. Every mark of a repository is one.
+- **`RepoChip({ state, repo })`**: `RepoIcon` placed as `InlineMark` is (`INLINE_MARK`) and the name; links to
   All tasks filtered by the repository. Its `w-64` card: `InfoHeader` (name over the path, `break-all font-mono`),
   an `InfoSection` with Project (`IconLayersTwo`, a 6px `ProjectDot` and the name, `gap-1.5`) and Default branch
   (`IconBranch`), and `InfoAction` "Show its tasks".
@@ -6545,9 +6549,9 @@ Example: moving the pointer down Home's In progress card, one grey block glides 
 - One list of tasks by what they need, in two sizes, `wide` and `compact`, from one component. Nothing else lists tasks by need.
 - Sections: Needs you (every open decision in priority order, then what it unblocks, then the kind of decision, then age), In progress, Waiting on another task (in chain order, collapsed by default in compact). The latter two take title, icon and tone from the same source as All tasks' groups, so the two never disagree.
 - Every section holds only the focus project's tasks: the focus is the filter; to see other work, switch focus. Only a search of every task reaches past it.
-- A task shows in one section only. Sections that summarise (Recently finished, Recent conversations) leave out tasks another section holds and tasks the page's guide already names; their own counts (five at most) are picked after that.
-- Wide (Home): under the composer, each section a `text-2xs` label over a `rounded-xl` list card; each row a 20px gate or stage tile, title, status line, age. On Home, Needs you becomes "Also needs you", leaves out the tasks the guide above names, and hides when none are left.
-- Home order: greeting, guide, composer, then Also needs you, In progress, Recently finished (merged or done in the last 24 hours, five at most), Recent conversations (latest agent message of five tasks, opening their chat), Waiting on another task. Reason: what needs you, what is moving, what just happened, then the long tail, so a long list never pushes the timely ones off screen.
+- A task shows in one section only. Sections that summarise (Recently finished, Recent conversations) leave out tasks another section holds, but not the tasks the page's guide names; their own counts (five at most) are picked after that.
+- Wide (Home): under the composer, each section a `text-2xs` label over a `rounded-xl` list card; each row a 20px gate or stage tile, title, status line, age. The guide above summarises these sections; a task it names is still listed in its section.
+- Home order: greeting, guide, composer, then Needs you, In progress, Recently finished (merged or done in the last 24 hours, five at most), Recent conversations (latest agent message of five tasks, opening their chat), Waiting on another task. Reason: what needs you, what is moving, what just happened, then the long tail, so a long list never pushes the timely ones off screen.
 - Compact (sidebar and queue popover): collapsible `h-6` headers, the whole header folds. Header: `w-full gap-2 rounded-control ps-1.5 pe-1 font-medium text-2xs text-fg-2 hover:text-fg-4 active:text-fg-4`; a 14px section icon in its tone in a 20px slot; the title truncating; the count in `font-normal tabular-nums`; the chevron shown only on hover (`opacity-0 group-hover/disclosure:opacity-100`) 6px after the count (`gap-1.5`), 5px from the header's top and bottom, never at the header's end: the chevron belongs to what it folds, and the end is where a section's action goes. Section: `flex flex-col border-border border-t px-2 py-1.5`, no top border on the first; rows `pt-0.5` below the header; the same rows as wide without the age; empty text `py-1 ps-8.5 pe-2.5 text-2xs text-fg-2`.
 - Open and closed state is shared by sidebar and popover through `localStorage` (key per section). A section can always be collapsed, including the one holding the task on screen. Until you have toggled a section yourself it opens when it holds the task on screen; after that your choice wins everywhere.
 - Queue popover: `max-h-(--available-height) w-80 gap-0 p-0` (320px, as tall as its content up to the room under the button, then it scrolls), list inset 6px more at the top (`pt-1.5`) so the first header's icon is as far from the top as from the side.
@@ -6623,7 +6627,7 @@ Example: under a task title: "SW-142 · (amber eye) Changes to review · (repo i
 
 - One inline component per entity, shared by prose, the chat, rendered markdown and facts. Base: `group/link cursor-pointer font-medium text-fg-4 no-underline outline-none`; the underline is transparent at rest and `fg-a3` on hover and press (`underline decoration-transparent underline-offset-3 group-hover/link:decoration-fg-a3 group-active/link:decoration-fg-a3`). Smart anchors carry `data-smart` so prose link styling (blue, underlined) never applies.
 - The leading glyph and the first word never part at a wrap (wrapped together in `whitespace-nowrap`). An inline tile or icon sits `relative -top-px me-1 align-middle` (centred between x-height and cap height).
-- Task link: 18px state tile and the title. Goes where the work is (the review tab for a review, the chat at the run for a question or running agent). Hover opens a preview card (`w-80`): an 18px tile and the title `line-clamp-2 font-medium text-fg-4 text-sm` (`gap-2`, the tile `mt-px`), then indented 24px (`ps-6`) the status in its tone (medium) over what is happening now (`line-clamp-3 text-fg-3`), then a wrapping meta line (`gap-x-3 gap-y-1 text-2xs text-fg-2`: handle, repository, branch in mono, each with a 14px icon `gap-1`), body `p-3 gap-2.5`; a footer `border-t px-3 py-2` with how long it waited (`text-2xs fg-2`, a time with exact tooltip) and its one action as a button.
+- Task link: 18px state tile and the title. Goes where the work is (the review tab for a review, the chat at the run for a question or running agent). Hover opens a preview card (`w-80`): an 18px tile and the title `line-clamp-2 font-medium text-fg-4 text-sm` (`gap-2`, the tile `mt-px`), then indented 24px (`ps-6`) the status in its tone (medium) over what is happening now (`line-clamp-3 text-fg-3`), then a wrapping meta line (`gap-x-3 gap-y-1 text-2xs text-fg-2`: handle, repository (its mark in its project's colour), branch in mono, each with a 14px icon `gap-1`), body `p-3 gap-2.5`; a footer `border-t px-3 py-2` with how long it waited (`text-2xs fg-2`, a time with exact tooltip) and its one action as a button.
 - Pull request link: a tile in the pull request's tone (green open, red failing, amber running, purple merged) and `#N` in `tabular-nums`; opens the host; its card (`w-72`) shows the task, CI, unresolved comments, conflicts and each check.
 - Repository and branch chips: a 14px `fg-2` icon and the name (the branch in mono); their cards are the repository and branch facts.
 - File link: inline code (`rounded-sm bg-bg-a2 px-1 font-mono text-fg-4`); with a repository it opens the file in the code view at its lines with a tooltip naming path and lines ("Open in Code ‹path› · lines 4-9"); elsewhere plain code.
@@ -6871,6 +6875,7 @@ Example: on a task page, ⌘K opens with "Approve the plan" first; typing "dark"
 - Real menus open on click; hover-only information uses info popovers (Menus, in 11.1).
 - A generic options trigger (`•••`) has no tooltip.
 - A project's dot lines up with menu icons: in any menu or select the 8px dot sits in a 14px box (`grid size-3.5 shrink-0 place-items-center`), the size of a menu icon, so its label starts where every other item's label does. Every place you pick a project shows the dot before each name, in the trigger and every option, through one renderer. "All work" is a grey dot.
+- A project and a repository are never mixed up: a project is its dot and name, a repository its own name after its GitHub or folder mark, tinted in its project's colour (`RepoIcon`). The task's facts row shows the folder the agent works in; the task card on hover, the roadmap's Repository column and repository links show GitHub with a remote. A folder never stands for a project.
 - Priority shows its level's mark everywhere: bars for low, normal, high, a red square with `!` for urgent; the priority menu's items carry the same marks.
 - Item actions have one source (label and icon), read by the page's `•••` menu, the list's context menu and the command menu, so every action carries the same icon everywhere; destructive actions (Cancel task) use the destructive style.
 - Dependency editing has one source too and is the same everywhere: a "Wait for another task" submenu of open tasks with a check on each current one (current ones sorted first; a click ticks or unticks one and the menu stays open) and "Stop waiting" (clears all). Several at once is the normal case: every list adds or removes one and never replaces the others. The label changes to "Merge after another task" once building has started. A locked dependency shows ticked and disabled with its reason, and Stop waiting is not offered when it is the only one.
@@ -7553,10 +7558,10 @@ Every waiting or result state of a running process is one card on the same frame
 | --- | --- | --- | --- |
 | Paused (a failure) | orange, Paused group | the gate's title, a link to the agent's last message or the body | Retry (primary, named for what it does); Cancel task as a quiet link |
 | Setup incomplete | orange, `IconToolbox` tile | the body (each problem and its fix) as markdown | Verify again (primary); Cancel task quiet. Nothing configured to check is never a setup problem |
-| Sign-in needed | orange, `IconUserKey` | title and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
+| Sign-in needed | orange, `IconUserKey` | the title ("Paused: a@b.com needs signing in", one status for the cause) and body | Sign in (primary); Retry anyway / Cancel task quiet. When the user must act outside the app, the fix on an inset strip with a `CopyButton` and the primary re-checks |
 | A wait | blue, "Waiting to check in again" | "The agent is waiting on something outside the repository", the notes (`selectable text-fg-4`) over "Check-in 2 of 10 · gives up in 3 hours" (`text-2xs text-fg-2`) | Check in now (`outline`); eyebrow counts down |
-| Waiting on a limit | blue, In progress | "Resumes when the usage limit resets", the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |
-| A revised plan | | eyebrow "Version 2 · 4 phases", then an inset with "You asked" and "What changed" | Approve plan sends the version on screen |
+| Waiting on a limit | blue, In progress | "Waiting for usage: continues at 3:40 PM on a@b.com" (when and where it carries on, in one line), the reset in the eyebrow | Resume now (`outline`); "Don’t resume automatically" / "Resume at the reset" quiet |
+| A revised plan | | eyebrow "Version 2 · 4 phases", an inset with "You asked" and your words alone, then the plan: "What changed" and the summary right before the goal, a quiet "New" or "Changed" `Badge` `sm` beside each added or reworked phase (the chat's plan card the same) | Approve plan sends the version on screen |
 | A proposed change | | eyebrow names who proposes it, title the question, the why, "What it would change" on an inset | Make it a change (primary); "Keep it as an investigation" quiet |
 | An operation to run | | the merge line with a mono copyable commit chip, the steps and impact as markdown, one editable notes box | Run the operation (primary); "Finish without it" quiet, behind a confirm |
 | A secret request | | eyebrow "The agent asked for the ‹label›", the reason, a password `Input` ("Paste the ‹label›") with Save | footer note "It goes to Shinsa’s secret store. The agent and the chat never see it." and "Don’t give it" quiet |
@@ -7576,13 +7581,15 @@ A secondary block inside a card sits on an inset: `INSET` + `bg-bg-a1`.
 
 | Use | Classes |
 | --- | --- |
-| A block of context ("You asked" / "What changed") | `flex flex-col gap-2 px-3 py-2.5 text-xs`; each part `flex flex-col gap-px`, its label `text-2xs text-fg-2`, its text `selectable text-fg-3` (the summary `text-fg-4`); a computed list as `·` rows (`flex gap-1.5`, the dot `text-fg-2`) |
+| A block of context (a revised plan's "You asked") | `flex flex-col gap-px px-3 py-2.5 text-xs`: the label `text-2xs text-fg-2`, the person's words `selectable text-fg-3`; only their words go here, the agent's summary belongs to the card's body |
 | A one-line strip with quiet links | `flex items-center gap-2 px-3 py-2 text-2xs text-fg-2`: icon and sentence (`text-fg-3`, `text-orange-text` once it is serious), a spacer, then quiet links |
 | A fix with a command to copy | `flex items-center gap-1.5 py-1 pr-1 pl-2`: the fix as inline markdown (`min-w-0 flex-1 text-fg-3 text-xs`) and a `CopyButton` |
 
 - An inset note never changes the process's status; it informs.
 - Example: "No output for 23 minutes" above the live feed (`IconClock`, `fg-3`, orange from 15 minutes) with Snooze
   and Dismiss.
+- Say what is happening when you know it: while a tool call is still running the strip reads "A command has been
+  running for 23 minutes" with the command's first line in mono (`font-mono text-fg-2`, truncated), not "No output".
 
 #### Choice buttons
 
@@ -7858,17 +7865,23 @@ An entry an agent caused through its management tools reads "‹handle› agent 
 it has a handle), a link to the acting task, and "Shinsa (on your behalf)" when no task is named. Its tool calls show
 in its turn like any tool, folded with the other Shinsa tools as "Used 2 Shinsa tools".
 
-#### Unknown costs
+#### A task's cost
 
-A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
-names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
+A task's cost shows in one place only: the cost control in its facts row, the unit's icon and the amount (a gauge icon
+and "1.8%" on a subscription, a coins icon and "$18.55" on an API key), whose popover on hover holds the rest. No other
+surface repeats it: not a now card, a run or round divider, a task row, an activity entry, the review, a preview card
+or the command menu. An account's usage (its weekly window, in the top bar's usage menu and Settings) is not a task's cost and
+stays. A limit's gate names the limit it reached, never what the task spent.
 
-A task's cost shows in one unit: its share of the weekly window when it ran on a subscription (a gauge icon, "1.8%
-of weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
-learned (a coins icon, "$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
+In that popover the cost is in one unit: its share of the weekly window when it ran on a subscription ("1.8% of the
+weekly limit"), dollars on an API key, a provider with no weekly window or an account whose rate is still being
+learned ("$1.75"). The other unit goes in the line under the popover's header ("$4.31 and 8.2M tokens,
 as estimated by the agent provider."), never beside the total as a second number. A share is an estimate, said once
 and quietly in that same line ("The share is learned from 12 tasks on this account."), never as a badge. It follows
 the account's current rate, so it can move a little as the rate improves. Shares show a tenth below 10% ("0.4%") and whole percentages above.
+
+A cost that cannot be priced reads "Unknown", or "$0.30 + unknown" for a partial, never "$0". A cost against a limit
+names both ("$1.75 of $5.00", "12% of the weekly limit, 10% allowed"). A cost past its limit turns the icon orange.
 
 ### 11.4 The desktop window, code, review, navigation, errors, selection and folding
 
@@ -8594,7 +8607,7 @@ export function useDelayed(active: boolean, delayMs: number = LOADING_DELAY_MS) 
 - No terminal: `EmptyState` with "Open a terminal" (`primary sm`, no tooltip).
 - Tabs are the kit's segmented `Tabs`, each trigger rendered as a `div` because it holds a close button: 22px inside the 26px list; the mark, the label (user name, else the shell's title, else the folder name), and a close button (`icon-2xs`, 18px) revealed on hover and always on the active tab. The close button sits in an even 2px inset: 2px from top and bottom, and the tab's end padding is 2px (`pe-0.5` over the kit's `px-2`), so the × is centred in its corner. A shell's mark is `IconConsole`, `IconConsoleFilled` on the front tab; a service tab's mark is its state glyph in its tone, filled when in front. An ended shell's label is `fg-2`. The tooltip names the folder and how it ended, or the service's state and command. Double-click renames in place (Enter keeps, Escape restores, empty reverts to the title); drag reorders; middle-click closes. The selected pill slides like every tab bar.
 - Closing: an ended terminal closes at once; a running shell closes at once unless a program other than the shell is in front, then "Close this terminal?" naming it ("vim is still running in “Dev server”."); a running service asks "Stop api?" with "Stop and close". The tab to the right shows next.
-- New terminal: one click opens it in the only place; with several, a menu groups Repositories, Folders and Task worktrees (`IconFolder1`, `IconFolders`, `IconBranch`, plain grey icons).
+- New terminal: one click opens it in the only place; with several, a menu groups Repositories, Folders and Task worktrees (`IconFolder1` in the project's colour, `IconFolders` and `IconBranch` plain grey).
 - Ended: the last screen stays, and a bar under it says why ("The shell exited with code 1.", "Shinsa’s engine restarted, so this shell ended. Its last output is above.", "api exited with code 1.") with Close (`secondary sm`) and Start again (`primary sm`, `IconArrowRotateClockwise`), which starts below the old output and takes the keyboard.
 - Look: the editor's mono font at 12px, line height 1.25, a non-blinking block cursor, and the editor's colours. `--terminal-*` tokens are the editor's (its background, `fg-4` text and cursor, `primary-a2` selection, the same with or without focus). ANSI palette from the syntax tokens:
 
@@ -9059,7 +9072,7 @@ A time that ticks re-renders once a minute (a shared minute clock), a live durat
 | --- | --- | --- |
 | task | job, ticket, issue | One piece of work you asked for |
 | decision, or the decision's own name ("Review", "Merge", "Plan to approve", "Question", "Paused") | gate | "gate" is the code's word |
-| Needs you | inbox, action items | The list of decisions; "Also needs you" on Home |
+| Needs you | inbox, action items | The list of decisions |
 | plan | spec | Everywhere, prompts and code included |
 | kind of task | shape, type | |
 | request | intent, prompt | What you asked for |

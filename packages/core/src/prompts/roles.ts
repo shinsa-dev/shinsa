@@ -180,6 +180,7 @@ function describeEvidenceForPhase(task: Task, repo: Repo | null, index: number, 
       ? 'Before you edit anything a user sees, run the app and capture those screens as they are now, with `stage: "before"`: the human sees each with its after shot as one comparison.'
       : '',
     'For user-facing changes, run the app and capture the evidence the evidence skill describes: a before and after comparison of every screen you changed at the widths and in the themes it lists (the after shot with `stage: "after"` and the same title, width and theme as its before shot, or both at once as `kind: "comparison"` with `parts`), a short recording for an interaction, the browser console read. Attach each with `attach_evidence`.',
+    'Give each item a `key` for what it shows (like `settings-dark-900`). When a later change alters it, attach the new one with the same `key`: it replaces the old one, so never add a second; remove what no longer applies with `remove_evidence`.',
     'For logic, write the test that fails without your change and passes with it, make sure one of the checks runs it (add one with `check_changes` when none does), and link that check with `attach_evidence` (`kind: "test"`, `check`: its id). Shinsa runs it and shows its command, outcome and output; never paste test output as evidence.',
     describeCoverageForPhase(repo),
     last && kinds.length > 0
@@ -324,21 +325,32 @@ function describeCoverageForReview(task: Task) {
 const REVIEW_AGAIN =
   'You reviewed earlier work on this task in this conversation. Judge this review on its own: check that your earlier blocking findings are fixed, read the new commits as closely as the first time, and never pass something because you passed it before.';
 
-function describeEvidenceItem({ kind, title, parts }: EvidenceItem) {
+function describeEvidenceItem({ key, kind, title, parts }: EvidenceItem) {
   const [first] = parts;
   const names =
     kind === 'comparison' ? parts.map((part) => part.label ?? part.stage).join(' and ') : first?.stage;
   const facts = [names, first?.width ? `${first.width}px` : null, first?.theme].filter(Boolean).join(', ');
-  return `- ${kind}: ${title}${facts ? ` (${facts})` : ''}`;
+  return `- \`${key}\`, ${kind}: ${title}${facts ? ` (${facts})` : ''}`;
+}
+
+export function describeEvidenceForFix(evidence: readonly Evidence[]) {
+  const items = listEvidenceItems(evidence).filter((item) => !item.parts.some((part) => part.checkId));
+  if (items.length === 0) return '';
+  return [
+    'The evidence you attached this round, which the human sees in the review:',
+    ...items.map(describeEvidenceItem),
+    'If your fix changes what one shows, replace it before you hand over (attach a new one with the same `key`). Shinsa refuses `complete_fix` while an item whose files your fix changed is not replaced, removed with `remove_evidence`, or named in `evidence_kept`.',
+  ].join('\n');
 }
 
 function describeEvidenceForReview(evidence: readonly Evidence[]) {
-  if (evidence.length === 0) {
+  const items = listEvidenceItems(evidence);
+  if (items.length === 0) {
     return 'The agent attached no evidence this round. If the change is visible to a user, capture your own as the evidence skill describes and attach it with `attach_evidence`: the human sees it as independent evidence from the review.';
   }
   return [
     'The evidence the agent attached this round (the human sees it in the review):',
-    ...listEvidenceItems(evidence).map(describeEvidenceItem),
+    ...items.map(describeEvidenceItem),
     'Check it shows what the change claims. Where a user-visible claim has none, or you doubt one, capture your own as the evidence skill describes and attach it with `attach_evidence`: the human sees it as independent evidence from the review.',
   ].join('\n');
 }

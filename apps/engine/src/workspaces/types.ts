@@ -1,4 +1,5 @@
 import type { Repo, Task, WorkspaceMode } from '@shinsa/core';
+import type { BaseUpdate, UpdateOptions } from '../git/update.ts';
 
 interface WorkspaceCheckout {
   path: string;
@@ -27,6 +28,7 @@ export interface WorkspaceStrategy {
   writeEdit(repo: Repo, task: Task, path: string, write: () => boolean): Promise<void>;
   listConflicted(repo: Repo): Promise<string[]>;
   update(repo: Repo, signal?: AbortSignal): Promise<void>;
+  syncBase(repo: Repo, task: Task, base: string, options: UpdateOptions): Promise<BaseUpdate>;
 }
 
 export class ConflictedBranchError extends Error {

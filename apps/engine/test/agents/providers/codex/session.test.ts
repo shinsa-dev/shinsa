@@ -123,11 +123,13 @@ describe('a Codex turn', () => {
     });
   });
 
-  test('a builder may write and run commands, but Shinsa declines a commit and tells the agent why', async () => {
+  test('a builder may write and run scoped commands, but Shinsa declines a commit and a whole suite and tells the agent why', async () => {
     const codex = new FakeCodex();
     codex.script('build', [
-      { run: 'bun test', output: '3 pass' },
+      { run: 'bun test src/parser', output: '3 pass' },
       { run: 'git commit -m wip' },
+      { run: 'bun run test > /tmp/all.log 2>&1' },
+      { run: "/bin/zsh -lc 'bun test'" },
       { write: 'notes.md', content: 'hello' },
       { tool: 'complete_phase', args: { summary: 'Done.', spots: [], judgement_calls: [] } },
       { say: 'Finished.' },
@@ -141,23 +143,26 @@ describe('a Codex turn', () => {
     });
     const approvals = codex.log.filter((entry) => entry.approval);
     expect(approvals.map((entry) => [entry.approval, entry.decision])).toEqual([
-      ['bun test', 'accept'],
+      ['bun test src/parser', 'accept'],
       ['git commit -m wip', 'decline'],
+      ['bun run test > /tmp/all.log 2>&1', 'decline'],
+      ["/bin/zsh -lc 'bun test'", 'decline'],
     ]);
     expect(codex.log.find((entry) => entry.patch)).toMatchObject({ patch: 'notes.md', decision: 'accept' });
     const warning = codex.requests('turn/steer').at(0);
     expect(String(warning?.prompt)).toContain('Shinsa blocked `git commit -m wip`');
+    expect(String(codex.requests('turn/steer').at(1)?.prompt)).toContain('runs the whole suite');
     const results = started.entries.filter((entry) => entry.type === 'tool_result');
-    expect(results.map((entry) => entry.status)).toEqual(['ok', 'error', 'ok', 'ok']);
+    expect(results.map((entry) => entry.status)).toEqual(['ok', 'error', 'error', 'error', 'ok', 'ok']);
     expect(started.entries).toContainEqual(
       expect.objectContaining({
         type: 'tool_call',
-        tool: { kind: 'command', action: 'run', command: 'bun test', description: null },
+        tool: { kind: 'command', action: 'run', command: 'bun test src/parser', description: null },
       })
     );
   });
 
-  test('a read-only role runs in Codex’s read-only sandbox, where a write never lands', async () => {
+  test('a read-only role runs in Codex’s read-only sandbox without approvals, since an accepted command would leave the sandbox', async () => {
     const codex = new FakeCodex();
     codex.script('reviewer', [
       { write: 'sneaky.md', content: 'no' },
@@ -165,6 +170,10 @@ describe('a Codex turn', () => {
     ]);
     const started = createInput('reviewer');
     await start(codex, started).done;
+    expect(codex.requests('thread/start')[0]).toMatchObject({
+      approvalPolicy: 'never',
+      sandbox: 'read-only',
+    });
     expect(codex.log.find((entry) => entry.patch)).toMatchObject({ patch: 'sneaky.md', decision: 'sandbox' });
     expect(await Bun.file(`${started.input.cwd}/sneaky.md`).exists()).toBe(false);
   });
@@ -441,7 +450,7 @@ describe('requests and refusals from the app server', () => {
     const result = await session.done;
     expect(result).toMatchObject({
       outcome: 'failed',
-      failure: { class: 'provider_error', message: 'Boom' },
+      failure: { class: 'overloaded', message: 'Codex’s API had a server error. Boom' },
       undelivered: ['Keep the old name.'],
     });
   });

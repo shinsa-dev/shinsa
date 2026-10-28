@@ -5,7 +5,9 @@ import {
   resolveFixFocus,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
+  resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
   resolveWorkspaceUpdatedFixPrompt,
 } from '../../src/prompts/index.ts';
@@ -40,6 +42,30 @@ describe('fix prompts', () => {
     expect(focusOf(resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, []))).toBe('changes');
     expect(focusOf(resolvePullRequestFixPrompt(pullRequest({ number: 42 })))).toBe('pull_request');
     expect(focusOf(resolveConflictFixPrompt('feat/banner'))).toBe('conflicts');
+    expect(focusOf(resolveUpdateConflictFixPrompt('main', ['a.ts']))).toBe('conflicts');
+    expect(focusOf(resolvePushHookFixPrompt('FAIL', null, null))).toBe('push_hook');
+  });
+
+  test('a conflict from updating onto the base lists the files, merges and never rebases', () => {
+    const prompt = resolveUpdateConflictFixPrompt('feat/base', ['src/a.ts', 'src/b.ts']);
+    expect(prompt).toStartWith(
+      'The branch was being updated onto `feat/base` before Shinsa pushed it, and these files conflict:\n- src/a.ts\n- src/b.ts'
+    );
+    expect(prompt).toContain('merge it in with `git merge origin/feat/base`');
+    expect(prompt).toContain('Never rebase or force-push.');
+    expect(prompt).toContain(
+      'Afterwards Shinsa runs the checks the resolved files touch, then updates the branch again and pushes it.'
+    );
+  });
+
+  test('a hook fix fences the output past its own backticks and keeps the agent off the whole suite', () => {
+    const prompt = resolvePushHookFixPrompt('see ```code``` here', ['a.test.ts › adds'], ' Look at a.ts. ');
+    expect(prompt).toContain('````\nsee ```code``` here\n````');
+    expect(prompt).toContain('The failures it names:\n- a.test.ts › adds');
+    expect(prompt).toContain('never the whole suite the hook runs');
+    expect(prompt).toContain('Guidance from the human: Look at a.ts.');
+    expect(prompt).toContain('then pushes again, which runs the hook again.');
+    expect(resolvePushHookFixPrompt('plain', [], null)).not.toContain('The failures it names');
   });
 
   test('a fix of the work says the checks and the review follow it', () => {

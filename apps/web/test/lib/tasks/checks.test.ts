@@ -328,7 +328,10 @@ describe('resolveEvidenceCheckRow', () => {
     expect([row.label, row.state, row.output]).toEqual(['Unit', 'passed', null]);
     const round = resolveEvidenceCheckRow(
       checks,
-      { id: 'c1', output: { evidence: output, media: 'text', facts: '', fromReview: false, image: null } },
+      {
+        id: 'c1',
+        output: { evidence: output, media: 'text', facts: '', fromReview: false, updated: null, image: null },
+      },
       'Unit'
     );
     expect(round.output?.id).toBe('out');

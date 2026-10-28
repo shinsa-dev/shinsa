@@ -25,9 +25,10 @@ function describeCheckFailures(results: ReportCheck[]) {
 function describeFixClosing(next: string) {
   return [
     '',
-    'Fix it, confirming the fix with the scoped commands it touches, never the whole suite: Shinsa runs the checks itself after you hand over.',
+    'Fix it, confirming the fix with the test files or folders it touches, never the whole suite (Shinsa refuses it): Shinsa runs the checks itself after you hand over.',
     'Then call `complete_fix` with a one or two sentence summary of what you changed. Shinsa runs again the checks that failed, the checks of every phase whose files your fix changes, and the ones you name in `checks` by their ids; add, change or remove a check with `check_changes` and a reason when the fix needs one.',
     'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.',
+    'When the fix changes what your evidence shows, refresh it before you hand over: attach the new shot with the same `key` so it replaces the old one (never add it beside it), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` what still shows the work as it is.',
     `${next} Then stop.`,
   ].join('\n');
 }
@@ -222,5 +223,45 @@ export function resolvePullRequestFixPrompt(
     '',
     'Fix what is right to fix. Judge each review comment: when one is wrong, reply on the thread explaining why and resolve it.',
     describeFixClosing('Afterwards Shinsa pushes your fix to the pull request.'),
+  ].join('\n');
+}
+
+export function resolveUpdateConflictFixPrompt(base: string, files: readonly string[]) {
+  return [
+    `The branch was being updated onto \`${base}\` before Shinsa pushed it, and these files conflict:`,
+    ...files.map((file) => `- ${file}`),
+    '',
+    `Shinsa stopped that merge, so the checkout is clean. Shinsa fetched \`${base}\`: merge it in with \`git merge origin/${base}\`, resolve every conflict and \`git add\` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.`,
+    describeFixClosing(
+      'Afterwards Shinsa runs the checks the resolved files touch, then updates the branch again and pushes it.'
+    ),
+  ].join('\n');
+}
+
+export function resolveCodeFence(output: string) {
+  const longest = Math.max(2, ...[...output.matchAll(/`+/g)].map((match) => match[0].length));
+  return '`'.repeat(longest + 1);
+}
+
+export function resolvePushHookFixPrompt(
+  output: string,
+  failures: readonly string[] | null,
+  guidance: string | null
+) {
+  const fence = resolveCodeFence(output);
+  return [
+    "The repository's pre-push hook rejected the push, so Shinsa did not push the branch. Shinsa never pushes without the hook: it has to pass.",
+    ...(failures && failures.length > 0
+      ? ['', 'The failures it names:', ...failures.map((failure) => `- ${failure}`)]
+      : []),
+    '',
+    'The end of its output:',
+    `${fence}\n${output}\n${fence}`,
+    '',
+    'Run only the failing tests or checks named above, scoped to their files, never the whole suite the hook runs. When a failure has nothing to do with this change, fix it anyway if it is small; otherwise ask the human with `ask`.',
+    ...(guidance?.trim() ? ['', `Guidance from the human: ${guidance.trim()}`] : []),
+    describeFixClosing(
+      'Afterwards Shinsa runs the checks your fix touches, then pushes again, which runs the hook again.'
+    ),
   ].join('\n');
 }
