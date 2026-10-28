@@ -189,7 +189,7 @@ function resolveBrowserRefusal(request: Request) {
   return request.headers.get('origin') === null ? BROWSER_ONLY : null;
 }
 
-export function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
+function resolveServicePlaceIn(state: ShinsaState, service: ServiceDefinition, home: string) {
   return resolveServicePlace(listTerminalPlaces(state, service.projectId), service.cwd, home);
 }
 
