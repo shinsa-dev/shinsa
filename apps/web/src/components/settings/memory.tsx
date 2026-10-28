@@ -10,6 +10,7 @@ import { SelectField } from '@/components/controls/select-field.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { ProjectDotIcon } from '@/components/status/project-dot.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
+import { isCancelKey, isSubmitKey } from '@/lib/keys.ts';
 import {
   describeProposal,
   describeRuleCount,
@@ -78,8 +79,8 @@ function RuleForm({
           aria-invalid={error ? true : undefined}
           className='min-h-0 resize-none'
           onKeyDown={(event) => {
-            if (event.key === 'Escape') onDone();
-            if (event.key === 'Enter' && !event.shiftKey) {
+            if (isCancelKey(event)) onDone();
+            if (isSubmitKey(event)) {
               event.preventDefault();
               void save();
             }
