@@ -152,4 +152,19 @@ describe('the release feed, read by electron-updater as each channel sets it up'
     });
     expect((await resolveFeedUpdate('canary', '3.1.1-canary.2', releases)).offered).toBe(false);
   });
+
+  it('offers the newest canary to a stable or beta build switched to Canary', async () => {
+    const releases = [{ tag: 'v3.0.1-canary.3', prerelease: true }, STABLE_3];
+    expect(await resolveFeedUpdate('canary', '3.0.0', releases)).toEqual({
+      version: '3.0.1-canary.3',
+      file: 'v3.0.1-canary.3/canary-mac.yml',
+      offered: true,
+    });
+    const afterBeta = [{ tag: 'v3.0.2-canary.1', prerelease: true }, BETA_3_0_1, STABLE_3];
+    expect(await resolveFeedUpdate('canary', '3.0.1-beta.1', afterBeta)).toEqual({
+      version: '3.0.2-canary.1',
+      file: 'v3.0.2-canary.1/canary-mac.yml',
+      offered: true,
+    });
+  });
 });
