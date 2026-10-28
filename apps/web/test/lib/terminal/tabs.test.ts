@@ -98,6 +98,14 @@ describe('places', () => {
       ['Folders', ['notes']],
       ['Task worktrees', ['SH-4 Fix the cart']],
     ]);
+    expect(groupTerminalPlaces(STATE, 'shop').map((group) => group.icon)).toEqual([
+      {
+        name: 'IconFolder1',
+        style: Object.fromEntries([['--icon-color', `var(--${STATE.projects.shop?.color}-4, var(--fg-2))`]]),
+      },
+      'IconFolders',
+      'IconBranch',
+    ]);
   });
 
   it('opens a new terminal in the first place, or the home folder for a project with none', () => {

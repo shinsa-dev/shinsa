@@ -1,6 +1,7 @@
 import { TooltipLabel } from '@shinsa/ui/components/tooltip';
 import { cn } from '@shinsa/ui/lib/utils';
 import { Hint } from '@/components/overlays/hint.tsx';
+import { resolveProjectInk } from '@/lib/projects.ts';
 
 export function ProjectDot({
   color,
@@ -16,7 +17,7 @@ export function ProjectDot({
       aria-hidden
       data-project-dot={color}
       className={cn('size-2 shrink-0 rounded-full', className)}
-      style={{ background: color === 'gray' ? 'var(--fg-2)' : `var(--${color}-4, var(--fg-2))` }}
+      style={{ background: resolveProjectInk(color) }}
     />
   );
   if (!label) return dot;

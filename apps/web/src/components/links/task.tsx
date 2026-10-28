@@ -5,6 +5,7 @@ import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import { GlyphLabel, INLINE_TILE, InAppLink, SMART_LINK } from '@/components/links/link.tsx';
+import { RepoIcon } from '@/components/links/repo.tsx';
 import { InfoPopover } from '@/components/overlays/info-popover.tsx';
 import { TaskMeta } from '@/components/status/text.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
@@ -43,7 +44,7 @@ function TaskPreview({ state, task, action }: { state: ShinsaState; task: Task; 
             {task.handle && <span className='tabular-nums'>{resolveHandleText(task)}</span>}
             {repo && (
               <span className='inline-flex min-w-0 items-center gap-1'>
-                <Icon size='sm' name={repo.remote ? 'IconGithub' : 'IconFolder1'} />
+                <RepoIcon state={state} repo={repo} />
                 <span className='truncate'>{repo.name}</span>
               </span>
             )}

@@ -10,7 +10,9 @@ import {
   listRepoChoiceGroups,
   PROJECT_ACTIONS,
   resolveDraftInput,
+  resolveProjectInk,
   resolveProjectInput,
+  resolveRepoIcon,
   selectProject,
   selectTaskProject,
   validateFolderPath,
@@ -65,6 +67,15 @@ describe('reading projects', () => {
     expect(selectProject(state, 'gone')).toBeNull();
     expect(selectTaskProject(state, createTask({ id: 't', repoId: 'web' }))?.name).toBe('Superwall');
     expect(selectTaskProject(state, createTask({ id: 't', projectId: 'p2' }))?.name).toBe('Basket');
+  });
+
+  it('inks a project in its colour, grey for none, and marks a repository by where it lives', () => {
+    expect(resolveProjectInk('purple')).toBe('var(--purple-4, var(--fg-2))');
+    expect(resolveProjectInk('gray')).toBe('var(--fg-2)');
+    expect(resolveRepoIcon(createRepo({ id: 'web', remote: 'git@github.com:you/web.git' }))).toBe(
+      'IconGithub'
+    );
+    expect(resolveRepoIcon(createRepo({ id: 'local', remote: null }))).toBe('IconFolder1');
   });
 
   it('explains the key by the handles it makes', () => {

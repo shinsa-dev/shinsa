@@ -24,6 +24,7 @@ import { TaskServicesPanel } from '@/components/services/task-menu.tsx';
 import { EndedBar } from '@/components/terminal/ended-bar.tsx';
 import { NewTerminalButton } from '@/components/terminal/place-menu.tsx';
 import { TerminalTabs } from '@/components/terminal/tab-bar.tsx';
+import { resolveProjectMark } from '@/lib/projects.ts';
 import type { ServiceGroup, TaskServiceRun } from '@/lib/terminal/services.ts';
 import {
   createServicesPanel,
@@ -218,6 +219,7 @@ const GROUPS: PlaceGroup[] = [
   {
     kind: 'repository',
     heading: 'Repositories',
+    icon: resolveProjectMark('IconFolder1', PROJECT.color),
     places: [
       { path: '~/Developer/shop', label: 'shop', kind: 'repository', taskId: null },
       { path: '~/Developer/shop-api', label: 'shop-api', kind: 'repository', taskId: null },
@@ -226,6 +228,7 @@ const GROUPS: PlaceGroup[] = [
   {
     kind: 'worktree',
     heading: 'Task worktrees',
+    icon: 'IconBranch',
     places: [
       {
         path: '~/.config/shinsa/data/worktrees/sh-4',

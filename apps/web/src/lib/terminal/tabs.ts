@@ -11,7 +11,8 @@ import {
   type TerminalsSnapshot,
 } from '@shinsa/core';
 import type { IconName } from '@shinsa/ui/components/icon';
-import { listProjects } from '@/lib/projects.ts';
+import type { MenuItemIcon } from '@shinsa/ui/components/menu-icon';
+import { listProjects, resolveProjectMark } from '@/lib/projects.ts';
 
 const PLACE_HEADINGS: Record<TerminalPlaceKind, string> = {
   repository: 'Repositories',
@@ -19,7 +20,7 @@ const PLACE_HEADINGS: Record<TerminalPlaceKind, string> = {
   worktree: 'Task worktrees',
 };
 
-export const PLACE_ICONS: Record<TerminalPlaceKind, IconName> = {
+const PLACE_ICONS: Record<TerminalPlaceKind, IconName> = {
   repository: 'IconFolder1',
   folder: 'IconFolders',
   worktree: 'IconBranch',
@@ -30,6 +31,7 @@ const PLACE_ORDER: TerminalPlaceKind[] = ['repository', 'folder', 'worktree'];
 export interface PlaceGroup {
   kind: TerminalPlaceKind;
   heading: string;
+  icon: MenuItemIcon;
   places: TerminalPlace[];
 }
 
@@ -90,11 +92,21 @@ export function moveTerminal(ids: string[], movedId: string, targetId: string) {
   return next;
 }
 
+function resolvePlaceIcon(state: ShinsaState, projectId: string, kind: TerminalPlaceKind) {
+  return resolveProjectMark(
+    PLACE_ICONS[kind],
+    kind === 'repository' ? state.projects[projectId]?.color : null
+  );
+}
+
 export function groupTerminalPlaces(state: ShinsaState, projectId: string): PlaceGroup[] {
   const places = listTerminalPlaces(state, projectId);
   return PLACE_ORDER.flatMap((kind) => {
     const group = places.filter((place) => place.kind === kind);
-    return group.length > 0 ? [{ kind, heading: PLACE_HEADINGS[kind], places: group }] : [];
+    if (group.length === 0) return [];
+    return [
+      { kind, heading: PLACE_HEADINGS[kind], icon: resolvePlaceIcon(state, projectId, kind), places: group },
+    ];
   });
 }
 

@@ -162,7 +162,7 @@ export function TaskQueue({
   state,
   variant,
   activeTaskId = null,
-  sections = listQueueSections(state, resolveQueue(state, Date.now()), null),
+  sections = listQueueSections(state, resolveQueue(state, Date.now())),
   className,
   onNavigate = () => {},
 }: {
