@@ -8,13 +8,19 @@ import { APP_ID } from '../lib/engine.ts';
 import {
   DOWNGRADE_ACCEPT,
   describeDowngradeDialog,
+  describeInstallError,
+  describeInstallFailure,
   describeManualResult,
   describeReadyNotice,
   describeUpdateFailure,
   describeUpdateItem,
+  INSTALL_TIMEOUT_MS,
+  isUpdateBusy,
   isUpdateSupported,
   needsDiscard,
   resolveDesktopUpdate,
+  resolveInstallTimeout,
+  resolvePreparedUpdate,
   resolveStagedUpdate,
   UPDATE_CHECK_MS,
   type UpdateState,
@@ -49,6 +55,7 @@ export class Updater {
     this.#open = open;
     if (!this.#supported) return;
     nativeUpdater.on('before-quit-for-update', markQuitting);
+    nativeUpdater.on('update-downloaded', () => this.#ready());
     this.#applyOptions();
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -60,10 +67,8 @@ export class Updater {
       if (this.#state.status === 'downloading') this.#set({ ...this.#state, percent: progress.percent });
     });
     autoUpdater.on('update-not-available', (info) => this.#current(info.version));
-    autoUpdater.on('update-downloaded', (info) => this.#ready(info.version));
-    autoUpdater.on('error', (error) =>
-      this.#settle({ status: 'failed', message: describeUpdateFailure(error) })
-    );
+    autoUpdater.on('update-downloaded', (info) => this.#prepare(info.version));
+    autoUpdater.on('error', (error) => this.#fail(describeUpdateFailure(error)));
   }
 
   get pageState() {
@@ -102,7 +107,7 @@ export class Updater {
   }
 
   async check(manual: boolean) {
-    if (!this.#supported || this.#state.status === 'downloading' || this.#state.status === 'ready') return;
+    if (!this.#supported || isUpdateBusy(this.#state)) return;
     this.#set({ status: 'checking', manual });
     try {
       const result = await autoUpdater.checkForUpdates();
@@ -131,7 +136,18 @@ export class Updater {
   }
 
   install() {
-    if (this.#state.status === 'ready') autoUpdater.quitAndInstall();
+    if (this.#state.status !== 'ready') return;
+    const version = this.#state.version;
+    this.#set({ status: 'installing', version });
+    setTimeout(() => this.#installTimedOut(), INSTALL_TIMEOUT_MS);
+    autoUpdater.quitAndInstall();
+  }
+
+  #installTimedOut() {
+    const next = resolveInstallTimeout(this.#state);
+    if (!next) return;
+    this.#set(next);
+    showNotice({ ...describeInstallFailure(next.version), tag: 'update', path: null }, () => this.#open());
   }
 
   async #discard() {
@@ -169,10 +185,22 @@ export class Updater {
     await this.answerDowngrade(answer.response === DOWNGRADE_ACCEPT);
   }
 
-  #ready(version: string) {
+  #prepare(version: string) {
     this.#download = null;
-    this.#set({ status: 'ready', version });
-    showNotice({ ...describeReadyNotice(version), tag: 'update', path: null }, () => this.#open());
+    this.#set({ status: 'preparing', version });
+  }
+
+  #ready() {
+    const next = resolvePreparedUpdate(this.#state);
+    if (!next) return;
+    this.#set(next);
+    showNotice({ ...describeReadyNotice(next.version), tag: 'update', path: null }, () => this.#open());
+  }
+
+  #fail(message: string) {
+    const notice = describeInstallError(this.#state, message);
+    this.#settle({ status: 'failed', message });
+    if (notice) showNotice({ ...notice, tag: 'update', path: null }, () => this.#open());
   }
 
   #settle(next: UpdateState) {

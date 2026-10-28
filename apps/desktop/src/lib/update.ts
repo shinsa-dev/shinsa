@@ -5,11 +5,15 @@ import { describeUpdateChannel, isAboveChannel } from './update-channel.ts';
 
 export const UPDATE_CHECK_MS = 4 * 60 * 60 * 1000;
 
+export const INSTALL_TIMEOUT_MS = 15_000;
+
 export type UpdateState =
   | { status: 'idle' }
   | { status: 'checking'; manual: boolean }
   | { status: 'downloading'; version: string; percent: number }
+  | { status: 'preparing'; version: string }
   | { status: 'ready'; version: string }
+  | { status: 'installing'; version: string }
   | { status: 'current'; latest: string | null }
   | { status: 'downgrade'; version: string }
   | { status: 'failed'; message: string };
@@ -34,8 +38,12 @@ export function describeUpdateItem(state: UpdateState): UpdateMenuItem {
         enabled: false,
         install: false,
       };
+    case 'preparing':
+      return { label: `Preparing ${APP_NAME} ${state.version}…`, enabled: false, install: false };
     case 'ready':
       return { label: `Restart to Update to ${state.version}`, enabled: true, install: true };
+    case 'installing':
+      return { label: 'Restarting to Update…', enabled: false, install: false };
     default:
       return { label: 'Check for Updates…', enabled: true, install: false };
   }
@@ -46,6 +54,30 @@ export function describeReadyNotice(version: string) {
     title: `${APP_NAME} ${version} is ready`,
     body: `It installs the next time you quit ${APP_NAME}, or restart now from the ${APP_NAME} menu. Agents keep working either way.`,
   };
+}
+
+export function isUpdateBusy(state: UpdateState) {
+  return ['downloading', 'preparing', 'ready', 'installing'].includes(state.status);
+}
+
+export function resolvePreparedUpdate(state: UpdateState) {
+  return state.status === 'preparing' ? { status: 'ready' as const, version: state.version } : null;
+}
+
+export function resolveInstallTimeout(state: UpdateState) {
+  return state.status === 'installing' ? { status: 'ready' as const, version: state.version } : null;
+}
+
+export function describeInstallFailure(version: string) {
+  return {
+    title: `${APP_NAME} ${version} did not restart`,
+    body: `Quit ${APP_NAME} to install it. Agents keep working either way.`,
+  };
+}
+
+export function describeInstallError(state: UpdateState, message: string) {
+  if (state.status !== 'preparing' && state.status !== 'installing') return null;
+  return { title: `${APP_NAME} ${state.version} could not be installed`, body: message };
 }
 
 function describeCurrent(current: string, latest: string | null, channel: UpdateChannel) {
@@ -84,7 +116,8 @@ export function describeDowngradeDialog(version: string, current: string, channe
 }
 
 export function needsDiscard(state: UpdateState, channel: UpdateChannel) {
-  if (state.status !== 'downloading' && state.status !== 'ready') return false;
+  if (state.status !== 'downloading' && state.status !== 'preparing' && state.status !== 'ready')
+    return false;
   return isAboveChannel(state.version, channel);
 }
 
@@ -108,8 +141,10 @@ export function resolveDesktopUpdate(state: UpdateState): DesktopUpdate {
     case 'failed':
       return { status: 'failed', message: state.message };
     case 'downloading':
+    case 'preparing':
       return { status: 'downloading', version: state.version };
     case 'ready':
+    case 'installing':
       return { status: 'ready', version: state.version };
     case 'downgrade':
       return { status: 'downgrade', version: state.version };

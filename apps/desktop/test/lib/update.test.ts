@@ -2,13 +2,19 @@ import { describe, expect, it } from 'bun:test';
 import {
   DOWNGRADE_ACCEPT,
   describeDowngradeDialog,
+  describeInstallError,
+  describeInstallFailure,
   describeManualResult,
   describeReadyNotice,
   describeUpdateFailure,
   describeUpdateItem,
+  INSTALL_TIMEOUT_MS,
+  isUpdateBusy,
   isUpdateSupported,
   needsDiscard,
   resolveDesktopUpdate,
+  resolveInstallTimeout,
+  resolvePreparedUpdate,
   resolveStagedUpdate,
   UPDATE_CHECK_MS,
 } from '../../src/lib/update.ts';
@@ -46,12 +52,100 @@ describe('describeUpdateItem', () => {
     });
   });
 
+  it('shows the update being prepared, and the restart once you clicked it, neither clickable', () => {
+    expect(describeUpdateItem({ status: 'preparing', version: '0.3.0' })).toEqual({
+      label: 'Preparing Shinsa 0.3.0…',
+      enabled: false,
+      install: false,
+    });
+    expect(describeUpdateItem({ status: 'installing', version: '0.3.0' })).toEqual({
+      label: 'Restarting to Update…',
+      enabled: false,
+      install: false,
+    });
+  });
+
   it('offers to restart once the update is downloaded', () => {
     expect(describeUpdateItem({ status: 'ready', version: '0.3.0' })).toEqual({
       label: 'Restart to Update to 0.3.0',
       enabled: true,
       install: true,
     });
+  });
+});
+
+describe('isUpdateBusy', () => {
+  it('holds off checks from the download until the app quits', () => {
+    expect(isUpdateBusy({ status: 'downloading', version: '0.3.0', percent: 10 })).toBe(true);
+    expect(isUpdateBusy({ status: 'preparing', version: '0.3.0' })).toBe(true);
+    expect(isUpdateBusy({ status: 'ready', version: '0.3.0' })).toBe(true);
+    expect(isUpdateBusy({ status: 'installing', version: '0.3.0' })).toBe(true);
+  });
+
+  it('lets a check run otherwise', () => {
+    expect(isUpdateBusy({ status: 'idle' })).toBe(false);
+    expect(isUpdateBusy({ status: 'checking', manual: false })).toBe(false);
+    expect(isUpdateBusy({ status: 'current', latest: null })).toBe(false);
+    expect(isUpdateBusy({ status: 'failed', message: 'offline' })).toBe(false);
+    expect(isUpdateBusy({ status: 'downgrade', version: '1.2.0' })).toBe(false);
+  });
+});
+
+describe('resolvePreparedUpdate', () => {
+  it('makes a prepared update ready once macOS has it staged', () => {
+    expect(resolvePreparedUpdate({ status: 'preparing', version: '0.3.0' })).toEqual({
+      status: 'ready',
+      version: '0.3.0',
+    });
+  });
+
+  it('changes nothing when no update was being prepared, so it notifies once', () => {
+    expect(resolvePreparedUpdate({ status: 'ready', version: '0.3.0' })).toBeNull();
+    expect(resolvePreparedUpdate({ status: 'idle' })).toBeNull();
+    expect(resolvePreparedUpdate({ status: 'downloading', version: '0.3.0', percent: 99 })).toBeNull();
+  });
+});
+
+describe('resolveInstallTimeout', () => {
+  it('offers the restart again when the app is still running after it', () => {
+    expect(INSTALL_TIMEOUT_MS).toBe(15_000);
+    expect(resolveInstallTimeout({ status: 'installing', version: '0.3.0' })).toEqual({
+      status: 'ready',
+      version: '0.3.0',
+    });
+  });
+
+  it('changes nothing once the install already ended another way', () => {
+    expect(resolveInstallTimeout({ status: 'failed', message: 'offline' })).toBeNull();
+    expect(resolveInstallTimeout({ status: 'ready', version: '0.3.0' })).toBeNull();
+  });
+});
+
+describe('describeInstallFailure', () => {
+  it('says the restart did not happen and how to install anyway', () => {
+    expect(describeInstallFailure('0.3.0')).toEqual({
+      title: 'Shinsa 0.3.0 did not restart',
+      body: 'Quit Shinsa to install it. Agents keep working either way.',
+    });
+  });
+});
+
+describe('describeInstallError', () => {
+  it('names the update that failed while it was prepared or installed', () => {
+    const notice = { title: 'Shinsa 0.3.0 could not be installed', body: 'Code signature invalid' };
+    expect(describeInstallError({ status: 'preparing', version: '0.3.0' }, 'Code signature invalid')).toEqual(
+      notice
+    );
+    expect(
+      describeInstallError({ status: 'installing', version: '0.3.0' }, 'Code signature invalid')
+    ).toEqual(notice);
+  });
+
+  it('leaves a failed check to the menu and the manual answer', () => {
+    expect(describeInstallError({ status: 'checking', manual: false }, 'offline')).toBeNull();
+    expect(
+      describeInstallError({ status: 'downloading', version: '0.3.0', percent: 5 }, 'offline')
+    ).toBeNull();
   });
 });
 
@@ -116,6 +210,14 @@ describe('resolveDesktopUpdate', () => {
       status: 'ready',
       version: '0.3.0',
     });
+    expect(resolveDesktopUpdate({ status: 'preparing', version: '0.3.0' })).toEqual({
+      status: 'downloading',
+      version: '0.3.0',
+    });
+    expect(resolveDesktopUpdate({ status: 'installing', version: '0.3.0' })).toEqual({
+      status: 'ready',
+      version: '0.3.0',
+    });
     expect(resolveDesktopUpdate({ status: 'checking', manual: true })).toEqual({ status: 'checking' });
     expect(resolveDesktopUpdate({ status: 'current', latest: '0.2.0' })).toEqual({ status: 'current' });
     expect(resolveDesktopUpdate({ status: 'failed', message: 'offline' })).toEqual({
@@ -158,6 +260,7 @@ describe('describeDowngradeDialog', () => {
 describe('needsDiscard', () => {
   it('drops a beta that is downloading or downloaded when you switch to Stable', () => {
     expect(needsDiscard({ status: 'ready', version: '1.3.0-beta.3' }, 'stable')).toBe(true);
+    expect(needsDiscard({ status: 'preparing', version: '1.3.0-beta.3' }, 'stable')).toBe(true);
     expect(needsDiscard({ status: 'downloading', version: '1.3.0-beta.3', percent: 10 }, 'stable')).toBe(
       true
     );
