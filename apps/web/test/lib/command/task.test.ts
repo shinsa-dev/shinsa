@@ -223,7 +223,9 @@ describe('the decision on a task page', () => {
     const all = sections(withPr.state, withPr.task);
     expect(labels(section(all, 'task.decide'))).toEqual(['Merge #42', 'Request changes']);
     run(find(all, 'task.t1.gate.g1.merge'));
-    expect(spies.sent.mock.calls).toEqual([answered('g1', 'approve', null, 'Merging.')] as never);
+    expect(spies.sent.mock.calls).toEqual([
+      answered('g1', 'approve', null, 'Approved. Merging the pull request.'),
+    ] as never);
     const without = setup(createTask({ id: 't1' }), [gate]);
     expect(find(sections(without.state, without.task), 'task.t1.gate.g1.merge').label).toBe(
       'Merge the pull request'
@@ -329,6 +331,17 @@ describe('the decision on a task page', () => {
     run(find(all, 'task.t1.gate.g1.retry'));
     expect(spies.sent.mock.calls).toEqual([
       answered('g1', 'approve', null, 'Updating the workspace with but pull.'),
+    ] as never);
+  });
+
+  it('offers sending a pre-push hook failure to the agent again, and no way to push without the hook', () => {
+    const gate = createGate({ id: 'g1', taskId: 't1', type: 'failure', cause: 'push_hook' });
+    const { state, task } = setup(createTask({ id: 't1' }), [gate]);
+    const all = sections(state, task);
+    expect(labels(section(all, 'task.decide'))).toEqual(['Send to the agent again', 'Retry with guidance']);
+    run(find(all, 'task.t1.gate.g1.retry'));
+    expect(spies.sent.mock.calls).toEqual([
+      answered('g1', 'approve', null, 'Sent to the agent again.'),
     ] as never);
   });
 

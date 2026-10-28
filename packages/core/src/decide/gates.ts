@@ -20,7 +20,7 @@ import { recordEditsApproval } from './edits.ts';
 import { clearFixLoop, startFix } from './fixes.ts';
 import { settleTask, startPlanning } from './lifecycle.ts';
 import { assertMergeStepsDone } from './merge-steps.ts';
-import { requestPush, shipReviewedWork, startMerge } from './pull-requests.ts';
+import { requestPush, retryHookFix, shipReviewedWork, startMerge } from './pull-requests.ts';
 import { retryTask } from './retry.ts';
 import { assertSecretAnswer } from './secrets.ts';
 import { answerOperation, answerProposal, startAfterPlan } from './shapes.ts';
@@ -142,6 +142,10 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
   }
   if (gate.cause === 'workspace_update') {
     updateWorkspace(decider, gate.taskId, decision === 'reply' ? response : null);
+    return;
+  }
+  if (gate.cause === 'push_hook') {
+    retryHookFix(decider, gate.taskId, decision === 'reply' ? response : null);
     return;
   }
   decider.resetRecoveries(gate.taskId);

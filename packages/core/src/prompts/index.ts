@@ -1,10 +1,13 @@
 export {
   resolveChecksFixPrompt,
+  resolveCodeFence,
   resolveConflictFixPrompt,
   resolveConflictSteer,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
+  resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
   resolveWorkspaceUpdatedFixPrompt,
 } from './fixes.ts';

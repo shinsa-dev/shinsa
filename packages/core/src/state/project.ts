@@ -795,6 +795,8 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'pull_request.watched':
     case 'pull_request.read_failed':
     case 'pull_request.read_failures_cleared':
+    case 'pull_request.push_retrying':
+    case 'pull_request.hook_failed':
       applyPullRequestEvent(state, event);
       break;
     case 'round.queued':

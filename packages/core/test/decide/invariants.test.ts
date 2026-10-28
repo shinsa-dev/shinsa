@@ -118,6 +118,14 @@ const SCHEDULE_ODDS = 0.06;
 
 const OUTAGE_ODDS = 0.05;
 
+const PUSH_ODDS = 0.9;
+
+const PUSH_MARKS = [
+  ['The pre-push hook rejected the push', 'hook failure'],
+  ['Pushing failed on attempt', 'retried push'],
+  ['Fix round 1: resolving conflicts with the base branch', 'update conflict'],
+] as const;
+
 const SHAPE_ODDS = 0.12;
 
 const ROUND_ODDS = 0.35;
@@ -439,6 +447,36 @@ function listWorkingCopyCommands(task: Task, random: Random): ShinsaCommand[] {
     commands.push({ type: 'task.commit_edits', taskId: task.id, treeHash: null });
   if (task.stage === 'shipping' && chance(random, 0.5))
     commands.push({ type: 'task.record_workspace_update', taskId: task.id, guidance: null });
+  return commands;
+}
+
+function selectPushCommand(state: ShinsaState, push: Random): ShinsaCommand | null {
+  const pushing = Object.values(state.tasks).filter(
+    (candidate) => candidate.pushPending && !isTaskSettled(candidate)
+  );
+  if (pushing.length === 0 || !chance(push, PUSH_ODDS)) return null;
+  const task = pick(push, pushing);
+  return task ? (pick(push, listShippingCommands(task, push)) ?? null) : null;
+}
+
+function listShippingCommands(task: Task, random: Random): ShinsaCommand[] {
+  const taskId = task.id;
+  const commands: ShinsaCommand[] = [
+    { type: 'pull_request.record_step', taskId, step: { kind: 'updating', base: 'main' } },
+    { type: 'pull_request.record_step', taskId, step: { kind: 'pushing', hook: chance(random, 0.5) } },
+    { type: 'pull_request.record_step', taskId, step: { kind: 'opening' } },
+    {
+      type: 'pull_request.record_retry',
+      taskId,
+      step: 'pushing',
+      attempt: 1,
+      attempts: 5,
+      retryAt: 30_000,
+      detail: 'Could not resolve host: github.com',
+    },
+    { type: 'pull_request.record_update_conflict', taskId, base: 'main', files: ['src/a.ts'] },
+    { type: 'pull_request.record_hook_failure', taskId, output: 'FAIL adds', failures: ['a.test.ts › adds'] },
+  ];
   return commands;
 }
 
@@ -921,6 +959,7 @@ type SideStream =
   | 'composed_rounds'
   | 'on_behalf'
   | 'workspaces'
+  | 'pushes'
   | null;
 
 function selectOnBehalfCommand(state: ShinsaState, random: Random): ShinsaCommand | null {
@@ -972,6 +1011,7 @@ interface SideRandoms {
   writer: Random;
   planner: Random;
   rounds: Random;
+  pushes: Random;
 }
 
 function selectSideCommand(
@@ -997,6 +1037,8 @@ function selectSideCommand(
       return selectOnBehalfCommand(state, randoms.rounds);
     case 'workspaces':
       return selectWorkspaceCommand(state, randoms.planner);
+    case 'pushes':
+      return selectPushCommand(state, randoms.pushes);
     default:
       return null;
   }
@@ -1041,6 +1083,7 @@ function simulate(
     writer: createRandom(seed * 67_867_967),
     planner: createRandom(seed * 86_028_121),
     rounds: createRandom(seed * 104_395_301),
+    pushes: createRandom(seed * 122_949_829),
   };
   let state = createState();
   state = applyEvent(state, {
@@ -1215,6 +1258,24 @@ describe('decide under random command sequences', () => {
       expect(reached).toContain('unreadable pull request');
     },
     RARE_SEEDS * 4_000
+  );
+
+  test(
+    'keeps every invariant while pushes update onto their base, a pre-push hook rejects them and the network fails',
+    () => {
+      const reached = new Set<string>();
+      const collect = (state: ShinsaState) => {
+        for (const task of Object.values(state.tasks)) {
+          for (const entry of task.activity) {
+            const mark = PUSH_MARKS.find(([prefix]) => entry.text.startsWith(prefix))?.[1];
+            if (mark) reached.add(mark);
+          }
+        }
+      };
+      for (let seed = 1; seed <= SEEDS; seed += 1) simulate(seed, STEPS, 'pushes', collect);
+      expect([...reached].sort()).toEqual(['hook failure', 'retried push', 'update conflict']);
+    },
+    SEEDS * 3_000
   );
 
   test(

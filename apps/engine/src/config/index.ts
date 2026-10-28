@@ -29,6 +29,8 @@ export interface ServerConfig {
   editor: string | null;
   terminal: string;
   settleDelayMs: number;
+  pushRetryMs: number;
+  overloadRetryMs: number;
   eunoe: EunoeConfig;
 }
 
@@ -127,6 +129,8 @@ export function resolveConfig(
     editor: env.SHINSA_EDITOR || machine.editor,
     terminal: env.SHINSA_TERMINAL || machine.terminal || 'Terminal',
     settleDelayMs: readNumber(env, 'SHINSA_SETTLE_DELAY_MS', 15_000),
+    pushRetryMs: readNumber(env, 'SHINSA_PUSH_RETRY_MS', 30_000),
+    overloadRetryMs: readNumber(env, 'SHINSA_OVERLOAD_RETRY_MS', 15_000),
     eunoe: resolveEunoe(env),
   };
 }

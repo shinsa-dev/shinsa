@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   createPullRequestWatch,
@@ -15,6 +15,7 @@ import { resolveScratchPath, type ServerConfig } from '../../src/config/index.ts
 import { createWorktree, inspectRepo } from '../../src/git/index.ts';
 import * as github from '../../src/github/index.ts';
 import { log } from '../../src/log/index.ts';
+import { EffectError, ShippingError } from '../../src/runtime/failures.ts';
 import { EffectRunner, type EffectRunnerOptions, Engine } from '../../src/runtime/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { resolveTriage } from '../../src/triage/index.ts';
@@ -126,7 +127,7 @@ let effectCount = 0;
 
 function createContext(signal: AbortSignal = new AbortController().signal) {
   effectCount += 1;
-  return { key: `effect-${effectCount}`, signal };
+  return { key: `effect-${effectCount}`, attempt: 1, signal };
 }
 
 function createRuns() {
@@ -819,6 +820,174 @@ describe('checks', () => {
   });
 });
 
+async function moveBase(repo: TestRepo, files: Record<string, string>) {
+  const other = join(repo.root, 'other');
+  await git(repo.root, 'clone', '-q', repo.origin, other);
+  writeFiles(other, files);
+  await git(other, 'add', '-A');
+  await git(other, 'commit', '-q', '-m', 'feat: move main');
+  await git(other, 'push', '-q', 'origin', 'main');
+}
+
+function writeHook(repo: TestRepo, script: string) {
+  writeFiles(repo.path, { '.git/hooks/pre-push': `#!/bin/sh\n${script}\n` });
+  chmodSync(join(repo.path, '.git/hooks/pre-push'), 0o755);
+}
+
+async function captureFailure(work: Promise<unknown>) {
+  try {
+    await work;
+  } catch (error) {
+    return error;
+  }
+  throw new Error('expected the effect to fail');
+}
+
+describe('getting the branch to GitHub', () => {
+  test('a branch behind its base gets the base merged in before the push, and each step is shown', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await moveBase(shipping, { '.husky/pre-push': 'bun run check-types\n' });
+    const { runner, dispatched, commandIds } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    const context = createContext();
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, context);
+    expect(dispatched.slice(0, 2)).toEqual([
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'updating', base: 'main' } },
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'pushing', hook: false } },
+    ]);
+    expect(commandIds[0]).toBe(`${context.key}:1:pull_request.record_step:updating`);
+    expect(await git(shipping.worktree, 'log', '-1', '--format=%s')).toBe(
+      "Merge branch 'main' into fix/tab-scroll"
+    );
+    const head = await git(shipping.worktree, 'rev-parse', 'HEAD');
+    expect(await git(shipping.origin, 'rev-parse', 'refs/heads/fix/tab-scroll')).toBe(head);
+    expect(await git(shipping.origin, 'show', 'refs/heads/fix/tab-scroll:.husky/pre-push')).toBe(
+      'bun run check-types'
+    );
+    await runner.stop();
+  });
+
+  test('conflicts while updating go to the agent with the files, and nothing is pushed', async () => {
+    const readGitHub = useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await moveBase(shipping, { 'a.txt': 'theirs\n' });
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched).toEqual([
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'updating', base: 'main' } },
+      { type: 'pull_request.record_update_conflict', taskId: 'task-1', base: 'main', files: ['a.txt'] },
+    ]);
+    expect(await git(shipping.worktree, 'status', '--porcelain')).toBe('');
+    expect(await git(shipping.origin, 'branch', '--list', 'fix/tab-scroll')).toBe('');
+    expect(readGitHub().calls).toEqual([]);
+    await runner.stop();
+  });
+
+  test('a pre-push hook that fails goes to the agent with its output and failures, and is never retried', async () => {
+    const readGitHub = useFakeGitHub();
+    const shipping = await createShippingRepo();
+    writeHook(shipping, 'echo "src/a.ts(3,1): error TS2322: Type \'string\' is not assignable."\nexit 1');
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched[0]).toEqual({
+      type: 'pull_request.record_step',
+      taskId: 'task-1',
+      step: { kind: 'pushing', hook: true },
+    });
+    expect(dispatched[1]).toMatchObject({
+      type: 'pull_request.record_hook_failure',
+      taskId: 'task-1',
+      output: expect.stringContaining("error TS2322: Type 'string' is not assignable."),
+      failures: ["src/a.ts: TS2322 Type 'string' is not assignable."],
+    });
+    expect(dispatched).toHaveLength(2);
+    expect(await git(shipping.origin, 'branch', '--list', 'fix/tab-scroll')).toBe('');
+    expect(readGitHub().calls).toEqual([]);
+    await runner.stop();
+  });
+
+  test('a hook failure it cannot read is still the agent’s, with no failures named', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    writeHook(shipping, 'echo "something went wrong"\nexit 1');
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo)
+    );
+    await runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext());
+    expect(dispatched[1]).toMatchObject({ type: 'pull_request.record_hook_failure', failures: null });
+    await runner.stop();
+  });
+
+  test('a remote it cannot reach fails the effect to be retried in 30s, and the retry names the step and why', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await git(shipping.path, 'remote', 'set-url', 'origin', 'https://127.0.0.1:1/acme/app.git');
+    const { runner, dispatched, commandIds } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree }, shipping.repo),
+      { config: { pushRetryMs: 30_000 } }
+    );
+    const error = await captureFailure(
+      runner.apply({ kind: 'pull_request.open', taskId: 'task-1' }, createContext())
+    );
+    expect(error).toBeInstanceOf(ShippingError);
+    expect(error).toMatchObject({ step: 'updating', policy: { retryable: true, delayMs: 30_000 } });
+    await runner.reportRetry(
+      { kind: 'pull_request.open', taskId: 'task-1' },
+      { attempt: 1, attempts: 5, retryAt: 40_000, error },
+      'open-key'
+    );
+    expect(dispatched.at(-1)).toMatchObject({
+      type: 'pull_request.record_retry',
+      taskId: 'task-1',
+      step: 'updating',
+      attempt: 1,
+      attempts: 5,
+      retryAt: 40_000,
+      detail: expect.stringMatching(/^Failed to connect to 127\.0\.0\.1 port 1/),
+    });
+    expect(commandIds.at(-1)).toBe('open-key:1:pull_request.record_retry');
+    await runner.stop();
+  });
+
+  test('a branch someone else moved on the remote fails at once with what to do; other retries are reported as pushes', async () => {
+    useFakeGitHub();
+    const shipping = await createShippingRepo();
+    await git(shipping.worktree, 'push', '-q', 'origin', 'HEAD:refs/heads/fix/tab-scroll');
+    await git(shipping.worktree, 'commit', '-q', '--amend', '-m', 'fix: a, again');
+    const { runner, dispatched } = setup(
+      withTask({ stage: 'shipping', worktreePath: shipping.worktree, pullRequest: PULL }, shipping.repo)
+    );
+    const error = await captureFailure(
+      runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext())
+    );
+    expect(error).toMatchObject({ step: 'pushing', policy: { retryable: false } });
+    expect((error as Error).message).toStartWith(
+      'The branch on the remote has commits this branch does not have'
+    );
+
+    const count = dispatched.length;
+    await runner.reportRetry({ kind: 'pull_request.merge', taskId: 'task-1' }, retryOf(new Error('x')), 'k');
+    expect(dispatched).toHaveLength(count);
+    await runner.reportRetry(
+      { kind: 'pull_request.push', taskId: 'task-1' },
+      retryOf(new EffectError('boom', 'boom', { retryable: true, delayMs: null })),
+      'k'
+    );
+    expect(dispatched.at(-1)).toMatchObject({ step: 'pushing', detail: 'boom' });
+    await runner.stop();
+  });
+});
+
+function retryOf(error: unknown) {
+  return { attempt: 2, attempts: 5, retryAt: 1, error };
+}
+
 describe('pull requests', () => {
   test('opening pushes, records the pull request with its comments and syncs it again once CI starts', async () => {
     const readGitHub = useFakeGitHub();
@@ -832,12 +1001,18 @@ describe('pull requests', () => {
     const head = await git(worktree, 'rev-parse', 'HEAD');
     expect(await git(origin, 'rev-parse', 'refs/heads/fix/tab-scroll')).toBe(head);
     expect(dispatched.map((command) => command.type)).toEqual([
+      'pull_request.record_step',
       'pull_request.record_push',
+      'pull_request.record_step',
       'pull_request.record',
     ]);
-    expect(commandIds[0]).toBe(`${context.key}:pull_request.record_push:${head}`);
-    expect(dispatched[1]).toMatchObject({ remarks: [], viewer: 'shinsa-user' });
-    await until('the follow-up sync', () => dispatched.length === 3);
+    expect(commandIds.slice(0, 3)).toEqual([
+      `${context.key}:1:pull_request.record_step:pushing`,
+      `${context.key}:pull_request.record_push:${head}`,
+      `${context.key}:1:pull_request.record_step:opening`,
+    ]);
+    expect(dispatched[3]).toMatchObject({ remarks: [], viewer: 'shinsa-user' });
+    await until('the follow-up sync', () => dispatched.length === 5);
     expect(readGitHub().pulls).toHaveLength(1);
     await runner.stop();
   });
@@ -848,13 +1023,18 @@ describe('pull requests', () => {
     const first = setup(withTask({ stage: 'shipping', worktreePath: worktree }, repo));
     await first.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     expect(first.dispatched.map((command) => command.type)).toEqual([
+      'pull_request.record_step',
       'pull_request.record_push',
+      'pull_request.record_step',
       'pull_request.record',
     ]);
     await first.runner.stop();
     const second = setup(withTask({ stage: 'shipping', worktreePath: worktree, pullRequest: PULL }, repo));
     await second.runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
-    expect(second.dispatched.map((command) => command.type)).toEqual(['pull_request.record_push']);
+    expect(second.dispatched.map((command) => command.type)).toEqual([
+      'pull_request.record_step',
+      'pull_request.record_push',
+    ]);
     await second.runner.stop();
   });
 
@@ -1007,12 +1187,19 @@ describe('merging a stack of pull requests', () => {
     ).rejects.toThrow('GitHub still shows pull request #7 below this one as open after merging it.');
   });
 
-  test('pull requests below that GitHub puts in its merge queue are waiting, and are never queued twice', async () => {
+  test('pull requests below that GitHub puts in its merge queue are waiting, not a failed merge', async () => {
     const readGitHub = useFakeGitHub(stackedPulls(), { mergeQueue: true });
     const { runner } = await setupStack();
     await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
-    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
     expect(listMerged(readGitHub().calls)).toEqual(['9', '8', '7']);
+  });
+
+  test('a stack already in GitHub’s merge queue is never queued twice', async () => {
+    const queue = { queue: { state: 'QUEUED', position: 1 } };
+    const readGitHub = useFakeGitHub(stackedPulls({ 7: queue, 8: queue, 9: queue }), { mergeQueue: true });
+    const { runner } = await setupStack();
+    await runner.apply({ kind: 'pull_request.merge', taskId: 'task-1' }, createContext());
+    expect(listMerged(readGitHub().calls)).toEqual([]);
   });
 
   test('a cancel between two merges merges nothing more', async () => {

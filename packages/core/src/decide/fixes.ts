@@ -1,5 +1,11 @@
-import type { FixReason, ReviewEscalation, ReviewEscalationReason, Task } from '../domain/index.ts';
-import { resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
+import {
+  type FixReason,
+  isOfCurrentRound,
+  type ReviewEscalation,
+  type ReviewEscalationReason,
+  type Task,
+} from '../domain/index.ts';
+import { describeEvidenceForFix, resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
 import type { ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
 import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
@@ -17,6 +23,8 @@ const FIX_STAGE_REASON: Record<FixReason, string> = {
   you: 'making your changes',
   pull_request: 'fixing the pull request',
   conflict: 'resolving conflicts',
+  update: 'resolving conflicts with the base branch',
+  hook: 'fixing what the pre-push hook found',
 };
 
 type FixStop = { reason: Exclude<ReviewEscalationReason, 'rounds'>; stalled: number; limit: number };

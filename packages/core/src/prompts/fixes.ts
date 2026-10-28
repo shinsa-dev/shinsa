@@ -225,3 +225,43 @@ export function resolvePullRequestFixPrompt(
     describeFixClosing('Afterwards Shinsa pushes your fix to the pull request.'),
   ].join('\n');
 }
+
+export function resolveUpdateConflictFixPrompt(base: string, files: readonly string[]) {
+  return [
+    `The branch was being updated onto \`${base}\` before Shinsa pushed it, and these files conflict:`,
+    ...files.map((file) => `- ${file}`),
+    '',
+    `Shinsa stopped that merge, so the checkout is clean. Shinsa fetched \`${base}\`: merge it in with \`git merge origin/${base}\`, resolve every conflict and \`git add\` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.`,
+    describeFixClosing(
+      'Afterwards Shinsa runs the checks the resolved files touch, then updates the branch again and pushes it.'
+    ),
+  ].join('\n');
+}
+
+export function resolveCodeFence(output: string) {
+  const longest = Math.max(2, ...[...output.matchAll(/`+/g)].map((match) => match[0].length));
+  return '`'.repeat(longest + 1);
+}
+
+export function resolvePushHookFixPrompt(
+  output: string,
+  failures: readonly string[] | null,
+  guidance: string | null
+) {
+  const fence = resolveCodeFence(output);
+  return [
+    "The repository's pre-push hook rejected the push, so Shinsa did not push the branch. Shinsa never pushes without the hook: it has to pass.",
+    ...(failures && failures.length > 0
+      ? ['', 'The failures it names:', ...failures.map((failure) => `- ${failure}`)]
+      : []),
+    '',
+    'The end of its output:',
+    `${fence}\n${output}\n${fence}`,
+    '',
+    'Run only the failing tests or checks named above, scoped to their files, never the whole suite the hook runs. When a failure has nothing to do with this change, fix it anyway if it is small; otherwise ask the human with `ask`.',
+    ...(guidance?.trim() ? ['', `Guidance from the human: ${guidance.trim()}`] : []),
+    describeFixClosing(
+      'Afterwards Shinsa runs the checks your fix touches, then pushes again, which runs the hook again.'
+    ),
+  ].join('\n');
+}

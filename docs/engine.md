@@ -439,7 +439,7 @@ A repository says where its agents work (`Repo.workspace`, Settings → Projects
 agents work in ‹repository›", `shinsa repos update --workspace`). It is a human-only repository field
 (`HUMAN_ONLY_REPO_FIELDS`): no agent tool, no shell command and nothing on your behalf changes it. There are three
 modes (`WORKSPACE_MODES`), each a strategy in `apps/engine/src/workspaces/` behind one interface
-(`WorkspaceStrategy`: prepare, claim, commit, push, remove), picked per task by `Workspaces.resolve`:
+(`WorkspaceStrategy`: prepare, claim, commit, syncBase, push, remove), picked per task by `Workspaces.resolve`:
 
 | Mode | A task gets | Commits | Pushes | When the task settles |
 |---|---|---|---|---|
@@ -618,7 +618,7 @@ every commit.
   - What an approval does is `resolveApprovalPath` (core), so the decision and the toast after it agree: "Approved.
     Committing your edits and running the checks.", "Approved. Pushing your edits. The pull request merges once CI
     passes.", and without edits "Approved. Opening the pull request.", "Approved. Pushing the changes." (a pull
-    request is open) or "Merging." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
+    request is open) or "Approved. Merging the pull request." (`resolveApprovalReply` in `apps/web/src/lib/tasks/gates.ts`).
   - A commit of your edits made while a merge is in progress in the checkout (a hand-over that was undone put it
     back) concludes the merge, so it carries git's own merge message, not `fix: apply the edits made in the Code
     tab`: `commitWorktree` builds every commit that concludes a merge that way (The pull request watch → Conflicts).
@@ -1092,7 +1092,10 @@ above), and `operation` an operation after the merge waiting for your OK on the 
 engine ran out of automatic recovery, an agent's wait ran out of time or check-ins (`cause: monitor`), the task
 reached its usage or cost limit (`cause: budget`), or a GitButler task's pull request conflicts with its base and only
 updating the workspace can bring it in (`cause: workspace_update`; its approve is Update the workspace, which runs
-`but pull`, and its `reply` does the same with your words for the agent; Where agents work → GitButler, above). `configuration` means setup verification found something missing
+`but pull`, and its `reply` does the same with your words for the agent; Where agents work → GitButler, above), or the
+repository's pre-push hook rejected the push again with the same failures after a fix round (`cause: push_hook`; its
+approve is Send to the agent again, another fix round with the hook's output, and its `reply` adds your words; there is
+no way to push without the hook; Pushing the branch, below). `configuration` means setup verification found something missing
 before any agent started. `sign_in` means a provider needs signing in again: the gate names the provider
 (`Gate.provider`, `claude` for a Claude account) and, for Claude, the account (Accounts and usage limits, below).
 The plan gate opens by one rule, `PLAN_GATE_RULE`: always for a task that runs an operation, a task created plan
@@ -2172,7 +2175,10 @@ changes costs one call.
   (`resolveEffectLane`; the lane of every kind is `docs/protocol.md` → Effects): one per task, a side lane per task
   for the cheap pull request watch, one for the briefing, and separate lanes per run for its session, its cancel and
   its steers, so a cancel is never stuck behind the session it cancels. Effects in a lane run in order. A failed replay-safe effect retries
-  after 100 ms × 2ⁿ (capped at 30 s), up to 5 attempts; a process-bound one fails on its first error.
+  after 100 ms × 2ⁿ (capped at 30 s), up to 5 attempts; a process-bound one fails on its first error. An error can
+  say otherwise (`EffectError`, `apps/engine/src/runtime/failures.ts`): never retried (a push the remote refuses as
+  non-fast-forward fails at once), or retried after a delay of its own (a remote that cannot be reached, 30 s).
+  Every retry of opening or pushing the pull request shows on its task (Pushing the branch, below).
   An effect that gives up opens a failure gate on its task when its kind has one (triage, setup
   verification, the worktree, checks, opening, pushing or merging the pull request); the others are logged.
   Effects report back only by dispatching commands.
@@ -2328,7 +2334,10 @@ keeps beside its events (`store/event-log.ts`).
   never share an id, and the same cause sent again gets the same id, so it is answered from its receipt instead of
   applied twice. An effect that reports back names its command after itself: `<effect key>:task.triage`,
   `:checks.record`, `:config.record`, `:worktree.ready`, `:worktree.gone`, `:pull_request.record_push:<sha>`,
-  `:task.commit_edits:<tree>`, `:task.record_workspace_update`, and `<effect key>:effect.fail` when it gives up, and a repository triage or the setup check registers
+  `:task.commit_edits:<tree>`, `:task.record_workspace_update`, and `<effect key>:effect.fail` when it gives up; the
+  push names each report after its attempt too (`<effect key>:<attempt>:pull_request.record_step:<step>`,
+  `:<attempt>:pull_request.record_update_conflict`, `:<attempt>:pull_request.record_hook_failure`), so a retry shows its
+  steps again, and the engine reports a retry as `<effect key>:<attempt>:pull_request.record_retry`; a repository triage or the setup check registers
   `<effect key>:repo.register`. The
   clocks name theirs after what they fire (`monitor:<id>:<attempt>`, `schedule:<id>:<dueAt>` and
   `schedule:<id>:<dueAt>:fail` for a fire that failed, `usage-resume:…`). The files two open tasks both change go
@@ -2396,12 +2405,78 @@ From T3 Code (harness plan WS4 names the sources), on `EventLog` and `Engine`.
   and a step waits for the runs before it, not for an effect, so the engine has no per-effect waiter
   (T3's `awaitSettled`). Tests wait for an effect's row to settle (`awaitEffect` in
   `apps/engine/test/helpers`).
+- **What an error says about a retry.** The handler throws; `Engine` reads `resolveRetryPolicy(error)`: an
+  `EffectError` carries `retryable` and `delayMs`, any other error is retried on the backoff. Before it requeues a
+  retry it calls the retry handler (`onEffectRetry`, `EffectRunner.reportRetry`) with the attempt that failed, the
+  attempts there are (5), when the next one runs and the error, so a retry is never silent. A handler that knows a
+  failure is not the outside world's (a pre-push hook, a conflict) does not throw at all: it reports the fact as a
+  command and settles.
 - **Damaged rows.** A stored effect that is not JSON, or whose payload does not match its kind,
   is failed when it is claimed and the next effect in its lane runs in the same claim.
 - **No gap between claim and cancel.** A claimed effect registers its abort controller in the
   same synchronous step that claims it, and commits run on the same thread, so a cancellation can
   never land between the two (T3 re-reads the row for this; one process with one connection does
   not need to).
+
+## Pushing the branch
+
+`pull_request.open` and `pull_request.push` (`apps/engine/src/runtime/effects.ts`) take the branch from "approved" to
+GitHub in four steps, and report each one to the task as `pull_request.record_step`, which core turns into the stage
+reason (`describeShippingStep`) while the task ships with a push pending and no failure gate open:
+
+1. **Commit your edits** from the Code tab, if any (as before).
+2. **Update onto the base.** The base is the pull request's base (`resolvePullRequestBase`: an earlier round's branch
+   for a stacked round, another task's branch for a stacked GitButler task, else the default branch). Shinsa fetches
+   it (`git fetch origin -- +refs/heads/<base>:refs/remotes/origin/<base>`) and, only when the branch does not already
+   contain it, says "updating the branch onto ‹base›" and **merges** it in (`git merge --no-edit -m "Merge branch
+   '‹base›' into ‹branch›"`, `updateOntoBase` in `git/update.ts`). A branch cut before a fix on the base, a newer
+   hook or a repaired test then pushes with all of them. A base the remote does not have is skipped.
+   - **Merge, not rebase.** Shinsa's code already chose merge: the agents' shell policy refuses `rebase` and force
+     pushes, every fix prompt about a conflicting pull request says "merge the base in; never rebase or force-push",
+     and `commitWorktree` finishes a merge an agent left uncommitted. A merge keeps the branch's commits, so the push
+     is a fast-forward and needs no `--force-with-lease`, open review threads stay on their lines, and the merge
+     method you choose on GitHub still decides what reaches the default branch.
+   - **Conflicts go to the agent.** When the merge conflicts, Shinsa lists the conflicted files, aborts the merge
+     (`git merge --abort`, so the checkout is never left mid-merge, whatever happens next) and sends
+     `pull_request.record_update_conflict`. Core starts a fix round (`fixFor: 'update'`, "resolving conflicts with the
+     base branch") whose prompt says the branch was being updated onto ‹base›, lists the files, and asks the agent to
+     `git merge origin/‹base›`, resolve, `git add` and hand over with the merge uncommitted. Shinsa commits the merge
+     with the fix, runs the checks the resolved files touch (`startFixChecks`: the failing, named and touched ones),
+     and, since a push is still pending, pushes again (`proceedAfterChecks` → `shipReviewedWork`) instead of going back
+     to your review.
+   - **GitButler skips this step** (`GitButlerStrategy.syncBase` answers `skipped`). The only update `but` offers is
+     `but pull`, which rebases every applied branch, yours and other tasks' included, so it stays behind the Update
+     the workspace gate you answer (GitButler: whose change is whose). Its working directory is the workspace itself,
+     so its hooks are your checkout's current ones anyway. The main checkout merges like a worktree, on the task's
+     branch (`MainCheckoutStrategy.syncBase` checks the checkout is still on it).
+3. **Push.** Shinsa reads whether the repository has a pre-push hook (`hasPrePushHook`: `git rev-parse --git-path
+   hooks/pre-push`, which follows `core.hooksPath`, executable, and for a husky stub in `…/_/` the hook it runs) and
+   says "pushing the branch (the repository’s pre-push hook is running)", or "pushing the changes (…)" to an open pull
+   request. The hook always runs: no push Shinsa makes skips it, and no gate offers to. A failed push is a typed
+   `PushError` (`git/push.ts`, `classifyPushFailure`): `non_fast_forward` (a `[rejected]` line), `network` (git's own
+   `fatal:`, `ssh:` or `RPC failed` line naming an unreachable host, a refused or reset connection, a 5xx or an
+   authentication failure), `hook` (a hook is there and git refused with no rejected ref), or `other`.
+   - **A hook rejection is deterministic and never retried.** The effect sends
+     `pull_request.record_hook_failure` with the last 80 lines of the output (6000 characters at most) and the
+     failures `listCheckFailures` reads from it (failing tests by file and name, or diagnostics), and settles. Core
+     starts a fix round (`fixFor: 'hook'`, "fixing what the pre-push hook found") with the output and the failures, and
+     tells the agent to run only those tests or checks, scoped to their files, never the whole suite the hook runs.
+     After the fix the touched checks run and Shinsa pushes again, which runs the hook again. Its failure identity is
+     the sorted failures (output it cannot read is one identity, `unreadable`); when the same identity comes back
+     after a fix round (`task.pushHookFailure` holds the last one until a push gets through), core stops with a
+     failure gate (`cause: 'push_hook'`, "The pre-push hook failed again", "the pre-push hook failed again") showing
+     the failures and the last 40 lines of output. Send to the agent again resets the fix budget and starts another
+     round with the same output (Retry with guidance adds your words); Cancel cancels the task.
+   - **The network is retried, visibly.** A `network` error is an `EffectError` retried after 30 s
+     (`SHINSA_PUSH_RETRY_MS`), up to 5 attempts;
+     each retry reaches the task as `pull_request.record_retry` with its step, so the stage reason reads "pushing again
+     in 30s, attempt 2 of 5: Could not resolve host: github.com" (`updating the branch again…` when the fetch failed,
+     `opening the pull request again…` when GitHub did) and the activity gets one entry per retry ("Pushing failed on
+     attempt 1 of 5, trying again in 30s", the error as its detail). The fifth failure opens the effect's failure gate.
+     `other` errors retry on the outbox's backoff and show the same way.
+   - **Non-fast-forward fails at once** with a failure gate: the remote branch has commits the task's does not
+     (someone pushed to it, or GitHub updated it), and a retry would only fail again.
+4. **Open the pull request** ("opening the pull request") for `pull_request.open`, or reuse the open one.
 
 ## The pull request watch
 

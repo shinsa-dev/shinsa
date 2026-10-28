@@ -71,7 +71,7 @@ One definition per term. **Code** is the name in `packages/core`; **UI** is the 
 | monitor | An agent's armed wait (`wait_for`): its run ends and a fresh one checks in again later | `Monitor` | "Waiting to check in again" |
 | usage wait | A step paused until a usage limit resets, then resumed on the same session | `UsageWait` | "Waiting for the usage limit" |
 | account | A Claude login a run is leased on | `RunAccount` | account |
-| provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Sign in to Codex as ‹email›" |
+| provider sign-in | A provider's own login (Codex), named on a Sign in gate with no account | `ProviderSignIn`, `Gate.provider` | "Paused: ‹email› needs signing in" |
 | command | A request to change state; `decide` turns it into events and effects or refuses it | `ShinsaCommand` (`UserCommand`, `AgentCommand`, `SystemCommand`) | not shown |
 | event | A past-tense fact; the only way state changes; replayed forever | `ShinsaEvent` | Activity (some of them) |
 | effect | Work with I/O that a decision asks for, run from the outbox, reporting back with commands | `ShinsaEffect` | not shown |
@@ -240,7 +240,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `reviewDisagreements?` | `ReviewDisagreement[]` | the judgement calls the last agent review would have made differently: the call's text and why |
 | `dismissedFindings?` | `ReviewFinding[]` (last 30) | findings you dismissed, never reported again |
 | `fixRounds` | number | automatic fix rounds used |
-| `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| null | what the current fix is for (`conflict`: commits GitButler left conflicted on the task's branch) |
+| `fixFor` | `checks` \| `review` \| `you` \| `pull_request` \| `conflict` \| `update` \| `hook` \| null | what the current fix is for (`conflict`: commits GitButler left conflicted on the task's branch; `update`: conflicts while updating the branch onto its base before a push; `hook`: the repository's pre-push hook rejected the push) |
 | `fixSignature`, `stalledFixes`, `fixFingerprints?` | | repeat detection: the same failures after the same tree |
 | `recoveries`, `recoveryFingerprint?` | number, string | the recovery budget and the durable state it is keyed to |
 
@@ -252,6 +252,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `pullRequestWatch?` | `PullRequestWatch` \| null | the watch's memory: per-check states, comment watermark, conflict, stop reason |
 | `pullRequestReadFailures?` | number | failed reads in a row (stops at 8) |
 | `pushedSha?`, `pushedFrom?`, `pushPending?` | | the push Shinsa made and whether GitHub has shown it |
+| `pushHookFailure?` | `PushHookFailure` \| null | the last pre-push hook rejection: its output tail, the failures read from it (null when unreadable) and their identity (`signature`); cleared by a push that gets through and by a new round |
 
 **Results**
 
@@ -577,7 +578,7 @@ Soft gates, decided by Shinsa or the reviewer:
 | `openedAt`, `answeredAt`, `decision`, `response` | | your answer and its words |
 | `planVersion?` | number | the plan version a plan gate is for |
 | `choices?`, `recommendation?` | | a question's one-click answers |
-| `cause?` | `budget` \| `monitor` \| `workspace_update` | why a failure gate opened, when not plain recovery; `workspace_update` is a GitButler pull request that conflicts with its base, whose approve runs `but pull` |
+| `cause?` | `budget` \| `monitor` \| `workspace_update` \| `push_hook` | why a failure gate opened, when not plain recovery; `workspace_update` is a GitButler pull request that conflicts with its base, whose approve runs `but pull`; `push_hook` is the same pre-push hook failure after a fix round, whose approve (Send to the agent again) starts another fix round |
 | `escalation?` | reason (`rounds`, `stalled`, `exhausted`), rounds | an escalated review |
 | `verdicts?` | `{ index, verdict: fix \| dismiss, note }[]` | your per-finding decisions |
 | `supersededBy?` | string \| null | the message that withdrew a question |
@@ -826,6 +827,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.record` | open, merge and watch effects | records a pull request read |
 | `pull_request.read_failed` | the watch effect | counts a failed read |
 | `pull_request.record_push` | open and push effects | records a pushed commit |
+| `pull_request.record_step` | open and push effects | `step`: `{ kind: 'updating', base }`, `{ kind: 'pushing', hook }` or `{ kind: 'opening' }`; sets the stage reason while the task ships with a push pending |
+| `pull_request.record_retry` | the engine, before it requeues a failed open or push | `step` (`updating`, `pushing`, `opening`), the `attempt` that failed, `attempts`, `retryAt`, a short `detail`: `pull_request.push_retrying` and the stage reason "pushing again in 30s, attempt 2 of 5: …" |
+| `pull_request.record_update_conflict` | open and push effects, after aborting the merge of the base | `base`, the conflicted `files`: a fix round (`fixFor: 'update'`) |
+| `pull_request.record_hook_failure` | open and push effects | the hook's `output` tail and the `failures` read from it (or null): `pull_request.hook_failed`, then a fix round (`fixFor: 'hook'`), or the `push_hook` failure gate when the same failures come back |
 | `effect.fail` | the engine and effects | an effect gave up: a failure gate when its kind has one |
 | `run.attempt`, `run.link`, `run.meter`, `run.end` | the run supervisor | an attempt starts, links its session, is metered, ends |
 | `run.interrupt`, `run.continue` | the supervisor at shutdown and boot | marks a run for restart continuation, continues it |
@@ -920,6 +925,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `pull_request.opened`, `pull_request.updated` | the pull request was opened; a read changed it |
 | `pull_request.push_requested`, `pull_request.pushed`, `pull_request.head_moved` | a push was asked for, made; someone else moved the head |
 | `pull_request.read_failed`, `pull_request.read_failures_cleared` | a read failed; the count reset |
+| `pull_request.push_retrying` | a failed update, push or open is retried: step, attempt, attempts, when, why (one activity entry) |
+| `pull_request.hook_failed` | the pre-push hook rejected the push: `failure` (output, failures, signature), kept as `task.pushHookFailure` |
 | `pull_request.watched` | the watch's memory changed (with what changed) |
 | `delegation.asked`, `delegation.answered` | a delegation asked its parent; was answered |
 | `delegation.acknowledged` | the parent read a finished result |
@@ -942,8 +949,8 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `worktree.remove` | replay_safe | `task:<id>` | `worktree.gone` |
 | `scratch.remove` | replay_safe | `task:<id>` | none: deletes `data/scratch/<id>` once the task's runs stop, if it is still settled |
 | `checks.run` | replay_safe | `task:<id>` | `task.commit_edits` first when the review was approved with edits, then `checks.record`; payload `round`, `checks: CheckToRun[]` (run in parallel) and `coverage` (true for the run before review) |
-| `pull_request.open` | replay_safe | `task:<id>` | `pull_request.record_push`, `pull_request.record` |
-| `pull_request.push` | replay_safe | `task:<id>` | `pull_request.record_push` |
+| `pull_request.open` | replay_safe | `task:<id>` | `pull_request.record_step` per step, then `pull_request.record_push` and `pull_request.record`; or `pull_request.record_update_conflict` or `pull_request.record_hook_failure` instead of the push |
+| `pull_request.push` | replay_safe | `task:<id>` | as `pull_request.open`, without opening when the pull request is open |
 | `pull_request.merge` | replay_safe | `task:<id>` | `pull_request.record` |
 | `pull_request.watch` | replay_safe | `side:<id>` | `pull_request.record`, `pull_request.read_failed` |
 | `workspace.update` | replay_safe | `task:<id>` | `task.record_workspace_update` once `but pull` updated the task's GitButler workspace (`guidance` is carried through) |

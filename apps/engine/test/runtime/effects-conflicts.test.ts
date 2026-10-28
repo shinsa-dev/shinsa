@@ -32,7 +32,7 @@ let effects = 0;
 
 function createContext() {
   effects += 1;
-  return { key: `conflict-effect-${effects}`, signal: new AbortController().signal };
+  return { key: `conflict-effect-${effects}`, attempt: 1, signal: new AbortController().signal };
 }
 
 function setup(tasks: Partial<Task>[], repo: Partial<Repo>, workspaces?: Workspaces) {
@@ -104,6 +104,7 @@ describe('conflicts in a GitButler stack', () => {
 
     await runner.apply({ kind: 'pull_request.push', taskId: 'task-2' }, createContext());
     expect(dispatched.slice(2)).toEqual([
+      { type: 'pull_request.record_step', taskId: 'task-2', step: { kind: 'pushing', hook: false } },
       { type: 'task.record_conflict', taskId: 'task-2', branch: 'feat/banner' },
     ]);
     expect(await git(origin, 'branch', '--list', 'feat/banner')).toBe('');

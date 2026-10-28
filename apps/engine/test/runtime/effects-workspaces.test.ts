@@ -25,7 +25,7 @@ let effects = 0;
 
 function createContext() {
   effects += 1;
-  return { key: `workspace-effect-${effects}`, signal: new AbortController().signal };
+  return { key: `workspace-effect-${effects}`, attempt: 1, signal: new AbortController().signal };
 }
 
 function setup(task: Partial<Task>, repo: Partial<ReturnType<typeof createRepo>>, workspaces?: Workspaces) {
@@ -154,7 +154,10 @@ describe('effects where agents work', () => {
     );
     await runner.apply({ kind: 'pull_request.push', taskId: 'task-1' }, createContext());
     const sha = await git(origin, 'rev-parse', 'refs/heads/fix/tab-scroll');
-    expect(dispatched[0]).toMatchObject({ type: 'pull_request.record_push', taskId: 'task-1', sha });
+    expect(dispatched).toEqual([
+      { type: 'pull_request.record_step', taskId: 'task-1', step: { kind: 'pushing', hook: false } },
+      { type: 'pull_request.record_push', taskId: 'task-1', sha },
+    ]);
     await runner.stop();
   });
 
@@ -184,7 +187,7 @@ describe('effects where agents work', () => {
       taskId: 'task-1',
       treeHash: await git(path, 'rev-parse', 'HEAD^{tree}'),
     });
-    expect(dispatched[1]).toMatchObject({ type: 'pull_request.record_push' });
+    expect(dispatched[2]).toMatchObject({ type: 'pull_request.record_push' });
     await runner.stop();
   });
 

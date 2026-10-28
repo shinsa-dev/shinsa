@@ -14,7 +14,7 @@ import type {
 import type { Coverage, CoverageSetting } from '../test-coverage/types.ts';
 import type { RunAccount, UsageWait, WeeklyReading } from './accounts.ts';
 import type { DeliveryCohort, RunDelegation, RunWait, TaskCreator, TaskSplit } from './delegations.ts';
-import type { CiRun, MergeQueueEntry, PullRequestWatch } from './pull-requests.ts';
+import type { CiRun, MergeQueueEntry, PullRequestWatch, PushHookFailure } from './pull-requests.ts';
 import type { Round } from './rounds.ts';
 import type { GateSecret } from './schedules.ts';
 import type { ChangeProposal, ShapeChange, TaskAuto, TaskResult, TriageDecisions } from './shapes.ts';
@@ -62,7 +62,7 @@ export type RunPurpose = 'plan' | 'build' | 'fix' | 'operate';
 
 export type AgentRole = 'classifier' | 'agent' | 'reviewer' | 'answerer' | 'writer';
 
-export type FixReason = 'checks' | 'review' | 'you' | 'pull_request' | 'conflict';
+export type FixReason = 'checks' | 'review' | 'you' | 'pull_request' | 'conflict' | 'update' | 'hook';
 
 export type RunStatus = 'queued' | 'running' | 'waiting';
 
@@ -147,7 +147,7 @@ export type GateType =
   | 'sign_in'
   | 'post_merge';
 
-export type GateCause = 'budget' | 'monitor' | 'workspace_update';
+export type GateCause = 'budget' | 'monitor' | 'workspace_update' | 'push_hook';
 
 export type EditsApproval = 'review' | 'merge';
 
@@ -461,6 +461,7 @@ export interface Task {
   overlaps?: TaskOverlap[];
   approvedEdits?: EditsApproval | null;
   heldConflict?: string | null;
+  pushHookFailure?: PushHookFailure | null;
   mergeStepsDone?: string[];
   carriedMergeSteps?: CarriedMergeStep[];
 }

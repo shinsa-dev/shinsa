@@ -1116,7 +1116,19 @@ Only these, and they win over anything below:
       link. Every failure gate uses it, an agent's wait that ran out ("The agent’s wait ran out", or "The agent’s
       wait ran out of checks") included; a task
       stopped at its usage or cost limit ("Reached its usage limit", "Reached its cost limit") names its Retry
-      for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too.
+      for what it does, "Allow another 10%" or "Allow another $5.00" (`describeBudgetRetry`), in ⌘K too; its body
+      names the limit it reached ("This task reached its $5.00 cost limit, so the next step did not start."), never
+      what the task spent.
+      A pre-push hook that rejected the push again with the same failures ("The pre-push hook failed again") names
+      its Retry "Send to the agent again" (`resolveRetryLabel`, toast "Sent to the agent again."), in ⌘K too; its body
+      lists the failures and shows the hook's last lines in a code block, and nothing on the card or in ⌘K pushes
+      without the hook.
+    - **A push in progress** has no card of its own: the now card's title is the stage reason, which says each step
+      as it happens: "Updating the branch onto main", "Pushing the branch (the repository’s pre-push hook is
+      running)" ("Pushing the changes (…)" to an open pull request), "Opening the pull request", and on a retry
+      "Pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com". Each retry is also one activity
+      entry ("Pushing failed on attempt 1 of 5, trying again in 30s", the error as its detail), and a hook fix run is
+      headed "Fixing what the pre-push hook found".
     - **Setup incomplete** (`setup-card.tsx`): status orange in the Paused group with the
       `IconToolbox` tile; the card renders the gate's body (each problem and its fix) as markdown, with Verify
       again (primary, `approve`) at the top right, and Cancel task as the footer's quiet link. A repository without

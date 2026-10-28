@@ -22,6 +22,8 @@ const FIX_COMMIT: Record<NonNullable<Task['fixFor']>, string> = {
   you: 'apply requested changes',
   pull_request: 'address pull request feedback',
   conflict: 'resolve conflicts',
+  update: 'resolve conflicts with the base branch',
+  hook: 'make the pre-push hook pass',
 };
 
 const SUBJECT_LIMIT = 72;
@@ -118,8 +120,8 @@ export function storeEvidence(
   }
   const handOver = result.value;
   if ('check' in handOver) {
-    const { kind, check, detail } = handOver;
-    return { type: 'agent.attach_check' as const, kind, checkId: check, detail };
+    const { kind, check, detail, replaces } = handOver;
+    return { type: 'agent.attach_check' as const, kind, checkId: check, detail, replaces };
   }
   if (handOver.kind === 'comparison') return storeComparison(handOver, worktreePath, evidence, folder);
   const { source: _source, ...fields } = handOver;

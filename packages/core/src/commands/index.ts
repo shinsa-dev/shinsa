@@ -27,7 +27,7 @@ import type {
   TaskSize,
   WeeklyReading,
 } from '../domain/index.ts';
-import type { PullRequestRemark } from '../domain/pull-requests.ts';
+import type { PullRequestRemark, ShippingStep, ShippingStepKind } from '../domain/pull-requests.ts';
 import type {
   CheckChangeHandOver,
   CodeSpot,
@@ -308,6 +308,18 @@ type SystemCommand =
   | { type: 'run.silence'; runId: string; since: number | null }
   | { type: 'config.record'; taskId: string; problems: ConfigProblem[]; repoId?: string }
   | { type: 'pull_request.record_push'; taskId: string; sha: string }
+  | { type: 'pull_request.record_step'; taskId: string; step: ShippingStep }
+  | {
+      type: 'pull_request.record_retry';
+      taskId: string;
+      step: ShippingStepKind;
+      attempt: number;
+      attempts: number;
+      retryAt: number;
+      detail: string;
+    }
+  | { type: 'pull_request.record_update_conflict'; taskId: string; base: string; files: string[] }
+  | { type: 'pull_request.record_hook_failure'; taskId: string; output: string; failures: string[] | null }
   | { type: 'usage_wait.resume'; taskId: string; waitId: string }
   | { type: 'account.signed_in'; account: RunAccount }
   | { type: 'provider.record_sign_in'; provider: string }

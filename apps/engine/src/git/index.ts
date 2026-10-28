@@ -1,7 +1,6 @@
 export {
   commitWorktree,
   listChangedFiles,
-  pushBranch,
   resolveHead,
   resolveTree,
   stashEdits,
@@ -14,8 +13,17 @@ export {
   removeIsolatedWorktrees,
   resolveIsolatedPath,
 } from './isolation.ts';
+export {
+  createPushError,
+  hasPrePushHook,
+  PushError,
+  pushBranch,
+  resolveOutputTail,
+  runPush,
+} from './push.ts';
 export { assertRefName, slugify } from './refs.ts';
 export { inspectRepo, resolveRepoRoot } from './repo.ts';
+export { updateOntoBase } from './update.ts';
 export {
   createWorktree,
   discardEdits,

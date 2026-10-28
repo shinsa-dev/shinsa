@@ -1,7 +1,8 @@
 import { describe, expect, setDefaultTimeout, spyOn, test } from 'bun:test';
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Repo, Task } from '@shinsa/core';
+import { PushError } from '../../src/git/index.ts';
 import { log } from '../../src/log/index.ts';
 import { runCommandOrThrow } from '../../src/shell/index.ts';
 import { readButStatus } from '../../src/workspaces/but.ts';
@@ -302,6 +303,19 @@ describe('GitButler workspaces', () => {
     const sha = await strategy.push(repo, task);
     expect(sha).toBe(await git(path, 'rev-parse', 'fix/scroll'));
     expect(await git(origin, 'rev-parse', 'refs/heads/fix/scroll')).toBe(sha);
+  });
+
+  test('a pre-push hook that refuses the push is a hook failure, and the branch never reaches the remote', async () => {
+    const { repo, path, origin, strategy } = await createWorkspace();
+    const task = await startTask(strategy, repo, 'task-1', 'fix/scroll');
+    await editAndCommit(strategy, repo, task, { 'a.txt': 'a, fixed\n' });
+    writeFiles(path, { '.git/hooks/pre-push': '#!/bin/sh\necho "FAIL test/a.test.ts"\nexit 1\n' });
+    chmodSync(join(path, '.git/hooks/pre-push'), 0o755);
+    const refused = await strategy.push(repo, task).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(PushError);
+    expect(refused).toMatchObject({ kind: 'hook' });
+    expect(await git(origin, 'branch', '--list', 'fix/scroll')).toBe('');
+    expect(await strategy.syncBase()).toEqual({ status: 'skipped' });
   });
 
   test('a cancelled task’s branch is unapplied and its untouched edits discarded; a merged one stays for GitButler', async () => {

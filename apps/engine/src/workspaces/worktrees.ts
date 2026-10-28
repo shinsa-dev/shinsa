@@ -10,9 +10,11 @@ import {
   removeWorktree,
   resolveHead,
   resolveTree,
+  updateOntoBase,
   writeMergeHead,
 } from '../git/index.ts';
 import { runGitOrThrow } from '../git/run.ts';
+import type { UpdateOptions } from '../git/update.ts';
 import {
   NO_CLAIM,
   refuseUpdate,
@@ -84,5 +86,10 @@ export class WorktreeStrategy implements WorkspaceStrategy {
 
   update() {
     return refuseUpdate();
+  }
+
+  syncBase(_repo: Repo, task: Task, base: string, options: UpdateOptions) {
+    const { path, branch } = requireCheckout(task);
+    return updateOntoBase(path, base, branch, options);
   }
 }

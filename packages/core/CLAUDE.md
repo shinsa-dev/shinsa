@@ -96,7 +96,11 @@ src/
 │   │                repository's checks)
 │   ├── fixes.ts     Fix loops: checks and review reactions, the automatic budget, stall detection, review escalation
 │   ├── fingerprints.ts  Recovery and fix fingerprints, so prose never resets a budget
-│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues
+│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues; the
+│   │                steps of a push as stage reasons (recordShippingStep), a visible retry (recordPushRetry), a
+│   │                conflict while updating onto the base (recordUpdateConflict, `fixFor: 'update'`) and a pre-push
+│   │                hook rejection (recordHookFailure, `fixFor: 'hook'`; the same failures again open the `push_hook`
+│   │                gate, retryHookFix answers it); after the checks of such a fix the push follows (checks.ts)
 │   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
 │   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks, stacking a GitButler
@@ -340,7 +344,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
 ## Tests
 
 `bun test` here enforces 100% line and function coverage (`bunfig.toml`). The property test runs each walk (the base
-one, outages, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
+one, outages, pushes, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
 seeds of 400 random commands, in about three minutes; when it fails it names the seed, the step and the command. Set
 `SHINSA_SEEDS` to sweep wider before landing a change to `decide` (`SHINSA_SEEDS=1000 bun test
 test/decide/invariants.test.ts` takes about an hour).

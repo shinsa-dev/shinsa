@@ -242,7 +242,7 @@ describe('NowCard on the Overview', () => {
     expect(listSentCommands()).toEqual([
       { type: 'gate.answer', gateId: 'gate-1', decision: 'approve', response: null },
     ]);
-    expect(await view.findByText('Merging.')).toBeTruthy();
+    expect(await view.findByText('Approved. Merging the pull request.')).toBeTruthy();
   });
 
   it('shows Approve plan over the plan itself on a plan gate', async () => {

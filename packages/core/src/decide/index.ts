@@ -39,7 +39,15 @@ import { checkInNow, fireMonitor, waitFor } from './monitors.ts';
 import { recordOnBehalfAction } from './on-behalf.ts';
 import { applyOrchestration } from './orchestration.ts';
 import { recordOverlaps } from './overlaps.ts';
-import { recordPullRequest, recordPullRequestReadFailure, recordPush } from './pull-requests.ts';
+import {
+  recordHookFailure,
+  recordPullRequest,
+  recordPullRequestReadFailure,
+  recordPush,
+  recordPushRetry,
+  recordShippingStep,
+  recordUpdateConflict,
+} from './pull-requests.ts';
 import { changeRoundShipping, removeRound, startQueuedRounds, updateRound } from './rounds.ts';
 import {
   assertCurrentAttempt,
@@ -203,6 +211,14 @@ function apply(decider: Decider, command: ShinsaCommand) {
       return recordPullRequest(decider, command);
     case 'pull_request.record_push':
       return recordPush(decider, command);
+    case 'pull_request.record_step':
+      return recordShippingStep(decider, command);
+    case 'pull_request.record_retry':
+      return recordPushRetry(decider, command);
+    case 'pull_request.record_update_conflict':
+      return recordUpdateConflict(decider, command);
+    case 'pull_request.record_hook_failure':
+      return recordHookFailure(decider, command);
     case 'pull_request.read_failed':
       return recordPullRequestReadFailure(decider, command);
     case 'run.link':
