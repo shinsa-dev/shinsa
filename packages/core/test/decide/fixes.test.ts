@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { type Coverage, listActiveRuns } from '../../src/index.ts';
+import { type Coverage, listActiveRuns, listOpenGates } from '../../src/index.ts';
 import {
   buildAll,
   completePhase,
@@ -248,18 +248,18 @@ describe('fix loop limits', () => {
     expect(harness.openGate(taskId).title).toBe('Fixing is not making progress');
   });
 
-  test('"until clean" still has a ceiling', () => {
+  test('"until clean" has no round cap while each round brings something new', () => {
     const harness = createHarness();
     createManyChecks(harness);
     const taskId = createTask(harness);
     buildAll(harness, taskId);
     for (let round = 0; round < 20; round += 1) {
       harness.send({ type: 'checks.record', taskId, results: failing(`r${round + 3}`) });
-      if (harness.task(taskId).stage !== 'fixing') break;
+      expect(harness.task(taskId).stage).toBe('fixing');
       harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'x' });
     }
-    expect(harness.openGate(taskId).title).toBe('Out of automatic fix rounds');
-    expect(harness.task(taskId).fixRounds).toBe(12);
+    expect(harness.task(taskId).fixRounds).toBe(20);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
 });
 

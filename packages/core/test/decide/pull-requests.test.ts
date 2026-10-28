@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { PULL_REQUEST_READ_FAILURE_LIMIT } from '../../src/decide/watch.ts';
 import {
+  CI_GRACE_MS,
   listActiveRuns,
   listOpenGates,
   type PullRequest,
   type PullRequestRemark,
+  type RepoCi,
   replayEventLog,
   type ShinsaCommand,
 } from '../../src/index.ts';
@@ -92,9 +94,14 @@ describe('reacting to the pull request', () => {
     expect(harness.lastEffect('worktree.remove').taskId).toBe(taskId);
   });
 
-  test('a pull request without CI reaches the merge gate', () => {
+  test('a pull request in a repository without CI reaches the merge gate', () => {
     const { harness, taskId } = shipping();
-    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'none' }) });
+    harness.send({
+      type: 'pull_request.record',
+      taskId,
+      pullRequest: pullRequest({ checks: 'none' }),
+      ci: 'none',
+    });
     expect(harness.openGate(taskId).type).toBe('merge');
   });
 
@@ -108,6 +115,35 @@ describe('reacting to the pull request', () => {
     const prompt = harness.activeRun(taskId).prompt ?? '';
     expect(prompt).toContain('2 unresolved review comments');
     expect(prompt).toContain('merge conflicts');
+  });
+
+  test('a pull request that conflicts with its base goes straight to the agent to resolve, in every workspace', () => {
+    for (const [workspace, base, reason] of [
+      ['worktrees', 'main', 'resolving conflicts with main'],
+      ['main_checkout', undefined, 'resolving conflicts with the base branch'],
+    ] as const) {
+      const { harness, taskId } = shipping();
+      const repoId = harness.task(taskId).repoId ?? '';
+      harness.send({ type: 'repo.update', repoId, patch: { workspace } });
+      harness.send({
+        type: 'pull_request.record',
+        taskId,
+        pullRequest: pullRequest({ mergeable: false, checks: 'pending', base }),
+      });
+      expect(harness.task(taskId)).toMatchObject({
+        stage: 'fixing',
+        fixFor: 'conflict',
+        stageReason: reason,
+      });
+      expect(listOpenGates(harness.state, taskId)).toEqual([]);
+      expect(harness.activeRun(taskId).prompt).toContain('The pull request conflicts with');
+      harness.send({
+        type: 'agent.complete_fix',
+        runId: harness.activeRun(taskId).id,
+        summary: 'Merged main.',
+      });
+      expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', pushPending: true });
+    }
   });
 
   test('a pull request that keeps failing the same way stops after two fix rounds', () => {
@@ -457,6 +493,11 @@ describe('watching the pull request', () => {
     record(harness, taskId, { checks: 'pending' });
     failReads(harness, taskId, 8, 'HTTP 502.');
     expect(harness.task(taskId).pullRequestWatch?.stopped).toBe('unreadable');
+    expect(harness.task(taskId).stageReason).toBe('waiting for CI');
+    record(harness, taskId, { checks: 'pending', mergeable: false, base: 'main' });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', stageReason: 'conflicts with main' });
+    record(harness, taskId, { checks: 'pending', mergeable: false });
+    expect(harness.task(taskId).stageReason).toBe('conflicts with the base branch');
     record(harness, taskId);
     expect(harness.openGate(taskId).type).toBe('merge');
     expect(harness.task(taskId).pullRequestWatch?.stopped).toBeNull();
@@ -622,7 +663,6 @@ describe('cancelling effects', () => {
           'pull_request.open',
           'pull_request.push',
           'pull_request.watch',
-          'workspace.update',
         ],
         reason: 'The task is finished.',
       },
@@ -768,7 +808,7 @@ describe('conflicts while updating onto the base', () => {
     });
     expect(harness.task(taskId)).toMatchObject({
       stage: 'fixing',
-      stageReason: 'resolving conflicts with the base branch',
+      stageReason: 'resolving conflicts with main',
       fixFor: 'update',
     });
     const prompt = harness.activeRun(taskId).prompt ?? '';
@@ -906,5 +946,240 @@ describe('a pre-push hook that rejects the push', () => {
       response: null,
     });
     expect(other.harness.task(other.taskId).stage).toBe('cancelled');
+  });
+});
+
+function readHead(harness: Harness, taskId: string, overrides: Partial<PullRequest>, ci?: RepoCi) {
+  return harness.send({
+    type: 'pull_request.record',
+    taskId,
+    pullRequest: pullRequest(overrides),
+    ...(ci ? { ci } : {}),
+  });
+}
+
+function hasMergeGate(harness: Harness, taskId: string) {
+  return listOpenGates(harness.state, taskId).some((gate) => gate.type === 'merge');
+}
+
+function listEventTypes(harness: Harness, taskId: string, from: number) {
+  return harness.events
+    .filter((event) => event.seq > from && 'taskId' in event && event.taskId === taskId)
+    .map((event) => event.type);
+}
+
+describe('no checks on a new head', () => {
+  test('wait for CI until the grace window after the push has passed, then reach the merge gate', () => {
+    const { harness, taskId } = shipping();
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { checks: 'none', mergeable: null, headSha: 'head' }, 'workflows');
+    expect(harness.task(taskId).stageReason).toBe('waiting for CI');
+    harness.advance(CI_GRACE_MS - 10);
+    readHead(harness, taskId, { checks: 'none', headSha: 'head' }, 'workflows');
+    expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', stageReason: 'waiting for CI' });
+    expect(hasMergeGate(harness, taskId)).toBe(false);
+    harness.advance(10);
+    readHead(harness, taskId, { checks: 'none', headSha: 'head' }, 'workflows');
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'merge', commit: 'head' });
+    expect(harness.task(taskId).pullRequestWatch?.ciAbsent).toBe(true);
+  });
+
+  test('a read that does not say whether the repository has CI waits the same window', () => {
+    const { harness, taskId } = shipping();
+    readHead(harness, taskId, { checks: 'none' });
+    expect(hasMergeGate(harness, taskId)).toBe(false);
+    harness.advance(CI_GRACE_MS);
+    readHead(harness, taskId, { checks: 'none' });
+    expect(harness.openGate(taskId).type).toBe('merge');
+  });
+
+  test('the window starts at the push of the head GitHub shows, not at an earlier one', () => {
+    const { harness, taskId } = shipping();
+    readHead(harness, taskId, { checks: 'failing' }, 'workflows');
+    harness.advance(CI_GRACE_MS * 2);
+    pushFix(harness, taskId);
+    const head = harness.task(taskId).pushedSha;
+    readHead(harness, taskId, { checks: 'none', headSha: head }, 'workflows');
+    expect(harness.task(taskId).stageReason).toBe('waiting for CI');
+    expect(hasMergeGate(harness, taskId)).toBe(false);
+  });
+
+  test('checks that appear within the window are waited on, and the merge gate opens once they pass', () => {
+    const { harness, taskId } = shipping();
+    const before = harness.state.seq;
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { checks: 'none', mergeable: null, headSha: 'head' }, 'workflows');
+    readHead(harness, taskId, { checks: 'none', mergeable: true, headSha: 'head' }, 'workflows');
+    readHead(harness, taskId, { checks: 'pending', headSha: 'head' }, 'workflows');
+    harness.advance(CI_GRACE_MS);
+    readHead(harness, taskId, { checks: 'pending', headSha: 'head' }, 'workflows');
+    expect(hasMergeGate(harness, taskId)).toBe(false);
+    expect(listEventTypes(harness, taskId, before)).not.toContain('gate.withdrawn');
+    readHead(harness, taskId, { checks: 'passing', headSha: 'head' }, 'workflows');
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'merge', commit: 'head' });
+  });
+
+  test('a repository whose base branch requires checks never counts no checks as clean', () => {
+    const { harness, taskId } = shipping();
+    readHead(harness, taskId, { checks: 'none' }, 'required');
+    harness.advance(CI_GRACE_MS * 10);
+    readHead(harness, taskId, { checks: 'none' }, 'required');
+    expect(harness.task(taskId).stageReason).toBe('waiting for CI');
+    expect(hasMergeGate(harness, taskId)).toBe(false);
+  });
+
+  test('the pull request #6 sequence: open, clean without checks, then CI registers, never opens and withdraws the gate', () => {
+    const { harness, taskId } = shipping();
+    const before = harness.state.seq;
+    const since = harness.now;
+    pushed(harness, taskId, '79ac117');
+    readHead(
+      harness,
+      taskId,
+      { number: 6, checks: 'none', mergeable: null, headSha: '79ac117' },
+      'workflows'
+    );
+    harness.advance(2_000);
+    readHead(
+      harness,
+      taskId,
+      { number: 6, checks: 'none', mergeable: true, headSha: '79ac117' },
+      'workflows'
+    );
+    harness.advance(14_000);
+    readHead(
+      harness,
+      taskId,
+      { number: 6, checks: 'pending', mergeable: true, headSha: '79ac117' },
+      'workflows'
+    );
+    expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', stageReason: 'waiting for CI' });
+    expect(listEventTypes(harness, taskId, before)).not.toContain('gate.opened');
+    readHead(
+      harness,
+      taskId,
+      { number: 6, checks: 'passing', mergeable: true, headSha: '79ac117' },
+      'workflows'
+    );
+    expect(harness.openGate(taskId).type).toBe('merge');
+    const entries = harness.task(taskId).activity.filter((entry) => entry.at > since);
+    expect(entries.map((entry) => entry.text)).toEqual(['Opened pull request #6', 'Ready to merge']);
+  });
+});
+
+describe('the merge gate on one head', () => {
+  test('checks that appear on the same head, or GitHub recomputing, leave the gate open', () => {
+    const { harness, taskId } = shipping();
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { checks: 'none', headSha: 'head' }, 'none');
+    const gate = harness.openGate(taskId);
+    const before = harness.state.seq;
+    readHead(harness, taskId, { checks: 'pending', headSha: 'head' }, 'none');
+    readHead(harness, taskId, { checks: 'pending', mergeable: null, headSha: 'head' }, 'none');
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'awaiting_merge',
+      stageReason: 'pull request is clean',
+    });
+    expect(listEventTypes(harness, taskId, before)).not.toContain('task.staged');
+  });
+
+  test('a failing check on the same head takes the gate back and goes to the agent', () => {
+    const { harness, taskId } = shipping();
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { checks: 'none', headSha: 'head' }, 'none');
+    readHead(harness, taskId, { checks: 'failing', headSha: 'head' }, 'none');
+    expect(hasMergeGate(harness, taskId)).toBe(false);
+    expect(harness.task(taskId).stage).toBe('fixing');
+  });
+
+  test('a new comment on the same head takes the gate back', () => {
+    const { harness, taskId } = shipping();
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { checks: 'none', headSha: 'head' }, 'none');
+    harness.send({
+      type: 'pull_request.record',
+      taskId,
+      pullRequest: pullRequest({ checks: 'pending', headSha: 'head' }),
+      ci: 'none',
+      remarks: [
+        {
+          id: 'c1',
+          author: 'reviewer',
+          createdAt: '2026-01-02T00:00:00Z',
+          editedAt: null,
+          body: 'Rename this.',
+          path: null,
+          url: null,
+          reviewState: null,
+        },
+      ],
+      viewer: 'me',
+    });
+    expect(hasMergeGate(harness, taskId)).toBe(false);
+    expect(harness.task(taskId).stage).toBe('fixing');
+  });
+
+  test('a gate opened without a known head is kept for reads without one', () => {
+    const { harness, taskId } = shipping();
+    readHead(harness, taskId, {});
+    const gate = harness.openGate(taskId);
+    expect(gate.commit).toBeNull();
+    readHead(harness, taskId, { checks: 'pending' });
+    expect(harness.openGate(taskId).id).toBe(gate.id);
+  });
+});
+
+describe('merging the head you approved', () => {
+  test('approving the merge asks GitHub to merge the head the gate was opened for', () => {
+    const { harness, taskId } = shipping();
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { headSha: 'head' });
+    approve(harness, taskId);
+    expect(harness.lastEffect('pull_request.merge')).toMatchObject({ taskId, headSha: 'head' });
+  });
+
+  test('a head that moves while the merge runs stops it and is judged like any new head', () => {
+    const { harness, taskId } = shipping();
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { headSha: 'head' });
+    approve(harness, taskId);
+    readHead(harness, taskId, { checks: 'pending', headSha: 'theirs' }, 'workflows');
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: 'waiting for CI',
+      pushedSha: 'theirs',
+    });
+    const texts = harness.task(taskId).activity.map((entry) => entry.text);
+    expect(texts).toContain('The branch changed before the merge');
+    expect(texts).toContain('The branch moved to theirs, a commit Shinsa did not push');
+    readHead(harness, taskId, { headSha: 'theirs' });
+    expect(harness.openGate(taskId)).toMatchObject({ type: 'merge', commit: 'theirs' });
+  });
+
+  test('a queued merge whose head GitHub reports differently stays in the queue', () => {
+    const { harness, taskId } = shipping();
+    pushed(harness, taskId, 'head');
+    readHead(harness, taskId, { headSha: 'head' });
+    approve(harness, taskId);
+    readHead(harness, taskId, { headSha: 'merge-group', mergeQueue: { state: 'queued', position: 1 } });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'awaiting_merge',
+      stageReason: 'waiting in GitHub’s merge queue (position 1)',
+    });
+  });
+});
+
+describe('the activity while shipping', () => {
+  test('going back from the merge gate to an open pull request says why, not that it opens it again', () => {
+    const { harness, taskId } = shipping();
+    readHead(harness, taskId, {});
+    harness.send({ type: 'task.retry', taskId });
+    const texts = harness
+      .task(taskId)
+      .activity.filter((entry) => entry.kind === 'stage')
+      .map((entry) => entry.text);
+    expect(texts.filter((text) => text === 'Opening the pull request')).toHaveLength(1);
+    expect(texts.at(-1)).toBe('Checking the pull request');
   });
 });

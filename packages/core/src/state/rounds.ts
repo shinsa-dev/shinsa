@@ -162,7 +162,6 @@ function resolveRoundPatch(task: Task, next: Round, choice: BranchChoice, at: nu
     shapeChanges: [],
     configProblems: [],
     approvedEdits: null,
-    heldConflict: null,
     pushHookFailure: null,
     mergeStepsDone: [],
     carriedMergeSteps: listCarriedMergeSteps(task),

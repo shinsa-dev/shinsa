@@ -13,7 +13,6 @@ import type { ShinsaState } from '../state/project.ts';
 import { listOpenGates } from '../state/queries.ts';
 import { startEditsChecks } from './checks.ts';
 import { answerConfiguration } from './config.ts';
-import { updateWorkspace } from './conflicts.ts';
 import { acknowledgeBudget } from './costs.ts';
 import type { Decider } from './decider.ts';
 import { recordEditsApproval } from './edits.ts';
@@ -140,10 +139,6 @@ function answerFailure(decider: Decider, gate: Gate, decision: GateDecision, res
     settleTask(decider, gate.taskId, 'cancelled', 'cancelled after a failure');
     return;
   }
-  if (gate.cause === 'workspace_update') {
-    updateWorkspace(decider, gate.taskId, decision === 'reply' ? response : null);
-    return;
-  }
   if (gate.cause === 'push_hook') {
     retryHookFix(decider, gate.taskId, decision === 'reply' ? response : null);
     return;
@@ -163,9 +158,10 @@ function approveReview(decider: Decider, taskId: string) {
   shipReviewedWork(decider, taskId);
 }
 
-function approveMerge(decider: Decider, taskId: string) {
+function approveMerge(decider: Decider, gate: Gate) {
+  const { taskId } = gate;
   if (resolveApprovalPath(decider.task(taskId), 'merge') === 'merge') {
-    startMerge(decider, taskId);
+    startMerge(decider, taskId, gate.commit ?? null);
     return;
   }
   recordEditsApproval(decider, taskId, 'merge');
@@ -213,7 +209,7 @@ function answerDecision(
     approveReview(decider, taskId);
     return;
   }
-  if (gate.type === 'merge') approveMerge(decider, taskId);
+  if (gate.type === 'merge') approveMerge(decider, gate);
 }
 
 export function answerGate(

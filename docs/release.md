@@ -4,8 +4,8 @@ Shinsa ships as one Mac app (`apps/desktop`) that carries its engine, interface 
 version (`docs/plans/app-plan.md` → Versions and updates). A release is a GitHub release of `shinsa-dev/shinsa`
 made by the Release workflow (`.github/workflows/release.yml`); nothing is bumped by hand, since the version lives
 in the tag. There are three channels: **Stable** and **Beta**, cut by hand, and **Canary**, built from every merge to
-`main` that passes the tests. Stable and Beta are releases of Shinsa; a canary is a build of **Shinsa Canary**, a
-separate app that installs beside Shinsa (Shinsa Canary, below).
+`main` that passes the tests. All three are builds of the same app, Shinsa (`studio.overclock.shinsa`), so you switch
+between them in Settings → General → Updates and Shinsa updates itself in place, with the same data and engine.
 
 ## Running a release
 
@@ -35,15 +35,12 @@ Blacksmith macOS 15 runner (`blacksmith-6vcpu-macos-15`), the `mac` job checks o
    five secrets set) or **not signed** (none set). Some but not all set fails the run, naming the missing ones.
 3. Builds the web app, the engine with `SHINSA_VERSION=<version>` (`apps/engine/scripts/build-engine.ts`) and the app
    with `extraMetadata.version=<version>`, then `electron-builder --mac dmg zip --arm64`, signing and notarizing when
-   the secrets are there. A canary builds the engine and the app with `SHINSA_FLAVOR=canary` and passes
-   `--config electron-builder.canary.yml`, which makes it Shinsa Canary. The disk image's volume is
-   `<app name> <version>` and opens on the install window, the app beside an Applications link on the site's
-   background; a beta passes `-c.dmg.background=dmg/background-beta.png` for the one with the Beta pill, and the
-   canary config names `background-canary.png`, the one with the Canary pill (`apps/desktop/CLAUDE.md` → The disk
-   image).
+   the secrets are there. Every channel builds the same app from `electron-builder.yml`. The disk image's volume is
+   `Shinsa <version>` and opens on the install window, the app beside an Applications link on the site's
+   background; a beta or a canary passes `-c.dmg.background=dmg/background-<channel>.png` for the one with its Beta
+   or Canary pill (`apps/desktop/CLAUDE.md` → The disk image).
 4. Checks that the app (`CFBundleShortVersionString`) and the engine inside it (`shinsa version --json`) both say the
-   release's version, prerelease suffix included, that the bundle id and the engine's `flavor` are the build's
-   (`studio.overclock.shinsa.canary` and `canary` for a canary), and verifies the signature (`codesign --verify --deep --strict`;
+   release's version, prerelease suffix included, that the bundle id is `studio.overclock.shinsa` on every channel, and verifies the signature (`codesign --verify --deep --strict`;
    `spctl` and `stapler validate` too when signed).
 5. Writes the update files for the channels (below) and publishes the release with GitHub's generated notes under a
    one-line channel note: `Shinsa-mac-arm64.dmg`, `.zip`, their `.blockmap`s and the update files. A beta or a canary
@@ -57,7 +54,7 @@ Blacksmith macOS 15 runner (`blacksmith-6vcpu-macos-15`), the `mac` job checks o
 ## Canary builds
 
 Every merge to `main` that passes the tests builds and publishes a canary, signed and notarized like any release, so
-the newest tested `main` is always installable as Shinsa Canary. The rules, all in `.github/workflows/release.yml`:
+the newest tested `main` is always what the Canary channel installs. The rules, all in `.github/workflows/release.yml`:
 
 - **What starts one.** The Release workflow runs on `workflow_run` of Test: when Test finishes, the `trigger` job goes
   on only if it succeeded on a push to `main` of this repository (`conclusion == 'success'`, `event == 'push'`,
@@ -84,15 +81,6 @@ the newest tested `main` is always installable as Shinsa Canary. The rules, all 
   merges and leave the Beta channel with nothing to find. `scripts/release-prune.ts` deletes the older canary
   releases with their tags (`gh release delete --cleanup-tag`), and `scripts/release-upload.ts` deletes their disk
   images from R2. Only `vX.Y.Z-canary.N` tags are ever touched (`listStaleCanaries` in `scripts/release-version.ts`).
-
-## Shinsa Canary
-
-A canary is its own app, so trying the newest `main` never replaces the Shinsa you use every day. Squirrel.Mac installs
-an update only into the app with the same bundle id, so Shinsa Canary updates only to canaries and Shinsa never to
-one. It has its own bundle id (`studio.overclock.shinsa.canary`), name and canary-yellow icon, engine job
-(`studio.overclock.shinsa.canary.engine`), data (`~/.config/shinsa-canary`: you sign in and onboard again there),
-port (7447), command (`~/.local/bin/shinsa-canary`) and links (`shinsa-canary://`). The full list and where each is
-set is `apps/desktop/CLAUDE.md` → Shinsa Canary; to build one locally, `bun run --cwd apps/desktop package:canary`.
 
 ## Versions
 
@@ -151,21 +139,23 @@ The app updates itself with electron-updater from the releases of `shinsa-dev/sh
   order), not the highest version: a stable hotfix `4.0.1` published after `4.1.0-beta.1` is what Beta offers a
   `4.0.0` until the next beta ships, while `4.1.0-beta.1` itself is not offered the lower `4.0.1`.
   `apps/desktop/test/lib/update-feed.test.ts` runs electron-updater's own GitHub provider over such feeds.
-- **Canary** (`channel = canary`, `allowPrerelease = true`) is Shinsa Canary's only channel. It reads the newest
-  canary and its `canary-mac.yml`: electron-updater's GitHub provider treats any pre-release word but `alpha` and
-  `beta` as a channel of its own, so a beta or stable release published after a canary is never offered (its zip is
-  Shinsa, another bundle id, which Squirrel.Mac would refuse to install anyway).
+- **Canary** (`channel = canary`, `allowPrerelease = true`) reads the newest canary and its `canary-mac.yml`:
+  electron-updater's GitHub provider treats any pre-release word but `alpha` and `beta` as a channel of its own, so
+  a beta or stable release is never offered on Canary. Nothing is missed: a canary's version is the patch above the
+  newest beta or stable release (Versions, above), so the next merge after a release brings a canary above it.
 - All three read the same `github` feed (`UPDATE_FEED` in `apps/desktop/src/lib/update-channel.ts`).
 - `allowDowngrade` is false (electron-updater turns it on whenever `channel` is set, so the app sets it back), with
-  one exception: going back from a beta when you switch Shinsa to Stable. A version's channel is its pre-release word
+  one exception: going back from a beta or a canary when you switch to a channel below it. A version's channel is its pre-release word
   (`resolveReleaseChannel` in `packages/core`). Switching from Beta to Stable on a beta newer than the latest stable
   (on `1.3.0-beta.2` with `1.2.0` the latest stable) offers to go back: Settings → General → Updates shows "Go back
   to 1.2.0 (stable)?" with Download and install and Stay on this beta, and the app asks the same once in a dialog
   right after the switch. Download and install turns `allowDowngrade` on for that one check, downloads the version and
   installs it when you quit, like any update. Stay keeps the version until the channel passes it, and the app stops
   offering (`keptVersion` in `userData/prefs.json`, cleared on the next channel switch); Shinsa → Check for Updates…
-  offers again. Downgrades stay off in every other case, and Shinsa Canary never goes back.
-- Switching Shinsa to Stable while a beta is downloading or downloaded discards it: the download is cancelled, and an
+  offers again. The same holds for a canary switched to Beta or Stable (on `1.3.1-canary.4` switched to Beta,
+  "Go back to 1.3.0-beta.2 (beta)?" with Stay on this canary). Downgrades stay off in every other case, and switching
+  to Canary never goes back.
+- Switching to a channel below a beta or canary that is downloading or downloaded discards it: the download is cancelled, and an
   update already handed to macOS's installer (Squirrel.Mac stages it for the next quit) is removed, its ShipIt job
   (`launchctl remove <bundle id>.ShipIt`) and its folder (`~/Library/Caches/<bundle id>.ShipIt`), before the new
   channel's check runs.
@@ -174,16 +164,16 @@ The app updates itself with electron-updater from the releases of `shinsa-dev/sh
   stable release uploads `latest-mac.yml` and a copy as `beta-mac.yml`, a beta uploads it as `beta-mac.yml` only and
   a canary as `canary-mac.yml` only. The file names the zip by its plain name (`Shinsa-mac-arm64.zip`), which the
   updater fetches from the same tag.
-- A new install of Shinsa starts on the channel of its own version (Beta for a beta, Stable otherwise); the choice is
-  the app's own (Settings → General → Updates, ⌘K's Update channel), switching checks again at once, and Shinsa
-  offers only Stable and Beta, with a link to `shinsa.dev/download/canary` for Shinsa Canary. Shinsa Canary's
-  channel is fixed: its Settings shows Canary with no picker.
+- A new install starts on the channel of its own version (Canary for a canary, Beta for a beta, Stable otherwise);
+  the choice is the app's own (Settings → General → Updates, ⌘K's Update channel), switching checks again at once,
+  and every channel is offered. An old Shinsa Canary app (`studio.overclock.shinsa.canary`, from before canaries were
+  a channel) is not updated any more: delete it and its `~/.config/shinsa-canary`, and pick Canary in Shinsa.
 
 ## Downloads
 
 `https://shinsa.dev/download` is the DMG of the newest stable release, `https://shinsa.dev/download/beta` the DMG
 of the newest beta or stable release, and `https://shinsa.dev/download/canary` the DMG of the newest canary, which
-installs Shinsa Canary beside Shinsa; until the first stable release, `/download` serves the beta. `/download` and
+installs Shinsa on the Canary channel; until the first stable release, `/download` serves the beta. `/download` and
 `/download/beta` never serve a canary, and `/download/canary` never serves anything else. All three come from
 Cloudflare R2, not from GitHub, so heavy traffic never meets GitHub's rate limits; the download is named
 `Shinsa-<version>.dmg` and never leaves shinsa.dev. GitHub's download count no longer includes them.

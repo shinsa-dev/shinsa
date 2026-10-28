@@ -24,6 +24,7 @@ import {
   resolvePanView,
   resolvePinch,
   resolvePinchView,
+  resolveShownSize,
   resolveStagePoint,
   resolveStepIndex,
   resolveSwap,
@@ -291,7 +292,11 @@ function ImageViewerDialog({
   const lastTap = React.useRef(0);
 
   const gutter = many ? 72 : 24;
-  const natural = image ? (sizes[image.src] ?? null) : null;
+  const resolveShown = (src: string) => {
+    const known = sizes[src];
+    return known ? resolveShownSize(known, images.find((entry) => entry.src === src)?.width) : null;
+  };
+  const natural = image ? resolveShown(image.src) : null;
   const fit = resolveFit(natural, viewport, gutter);
   const fitted = fit ? { width: fit.width, height: fit.height } : null;
   const { target, max: maxScale } = resolveZoomRange(fit);
@@ -363,7 +368,7 @@ function ImageViewerDialog({
   });
 
   function resolveLayerFit(src: string) {
-    const fitAt = resolveFit(sizes[src] ?? null, viewport, gutter);
+    const fitAt = resolveFit(resolveShown(src), viewport, gutter);
     return fitAt ? { width: fitAt.width, height: fitAt.height } : null;
   }
 

@@ -3,10 +3,9 @@ import {
   CODE_LIMITS,
   DomainError,
   resolveImageType,
-  resolvePullRequestBase,
+  resolveRoundBase,
   type SearchLine,
   type SearchMatch,
-  type SearchResult,
   selectTaskByReference,
   type TaskDiff,
   type TaskRefs,
@@ -31,7 +30,6 @@ import { ObjectCache } from '../git/objects.ts';
 import { resolveTaskCheckout, resolveTaskRefs } from '../git/task-refs.ts';
 import { describeError } from '../log/index.ts';
 import type { Engine } from '../runtime/engine.ts';
-import type { LedgerStore } from '../workspaces/ledger.ts';
 import { assertRepoPath, resolveInside } from './paths.ts';
 import type { ApiRoute } from './routes.ts';
 
@@ -39,13 +37,9 @@ interface CodeTask {
   task: NonNullable<Engine['state']['tasks'][string]>;
   repoPath: string;
   worktree: string | null;
-  workspace: string | null;
 }
 
-type ResolvedRef =
-  | { kind: 'commit'; sha: string }
-  | { kind: 'working'; worktree: string }
-  | { kind: 'owned'; sha: string; worktree: string; owned: ReadonlySet<string> };
+type ResolvedRef = { kind: 'commit'; sha: string } | { kind: 'working'; worktree: string };
 
 const IMMUTABLE = 'private, max-age=31536000, immutable';
 
@@ -91,40 +85,12 @@ function readSearch(url: URL): SearchQuery {
   };
 }
 
-function isOnDisk(worktree: string, path: string) {
-  const absolute = resolveInside(worktree, path);
-  return absolute !== null && existsSync(absolute);
-}
-
-function resolveSharedCheckout(task: CodeTask['task']) {
-  if (task.workspace !== 'gitbutler' || !task.worktreePath) return null;
-  return existsSync(task.worktreePath) ? task.worktreePath : null;
-}
-
-function mergeOwnedMatches(
-  committed: SearchResult,
-  working: SearchResult,
-  owned: ReadonlySet<string>
-): SearchResult {
-  const matches = [
-    ...committed.matches.filter((match) => !owned.has(match.path)),
-    ...working.matches.filter((match) => owned.has(match.path)),
-  ].sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
-  return {
-    ref: WORKING_REF,
-    matches: matches.slice(0, CODE_LIMITS.matches),
-    truncated: committed.truncated || working.truncated || matches.length > CODE_LIMITS.matches,
-    timedOut: committed.timedOut || working.timedOut,
-  };
-}
-
 function isWorkingRef(ref: ResolvedRef) {
   return ref.kind !== 'commit';
 }
 
 export function createCodeRoutes(
   engine: Engine,
-  ledgers: LedgerStore,
   cache = new ObjectCache(),
   blobs = new CatFilePool()
 ): ApiRoute[] {
@@ -136,25 +102,13 @@ export function createCodeRoutes(
       task,
       repoPath: repo.path,
       worktree: resolveTaskCheckout(task),
-      workspace: resolveSharedCheckout(task),
     };
   }
 
-  function listOwnedPaths(found: CodeTask) {
-    return ledgers.listOwned(found.task.repoId ?? '', found.task.id);
-  }
-
-  async function resolveRefs(found: CodeTask, signal: AbortSignal): Promise<TaskRefs> {
+  function resolveRefs(found: CodeTask, signal: AbortSignal): Promise<TaskRefs> {
     const repo = engine.state.repos[found.task.repoId ?? ''];
     if (!repo) throw new DomainError('code_unavailable', 'This task has no repository.');
-    const refs = await resolveTaskRefs(
-      repo,
-      found.task,
-      resolvePullRequestBase(engine.state, found.task),
-      signal
-    );
-    if (!found.workspace) return refs;
-    return { ...refs, working: true, dirty: listOwnedPaths(found).size > 0 };
+    return resolveTaskRefs(repo, found.task, resolveRoundBase(found.task), signal);
   }
 
   async function resolveRef(
@@ -162,10 +116,6 @@ export function createCodeRoutes(
     value: string | null,
     signal: AbortSignal
   ): Promise<ResolvedRef> {
-    if (value === WORKING_REF && found.workspace) {
-      const { head } = await resolveRefs(found, signal);
-      return { kind: 'owned', sha: head, worktree: found.workspace, owned: listOwnedPaths(found) };
-    }
     if (value === WORKING_REF) {
       if (!found.worktree) throw new DomainError('ref_invalid', 'This task has no working copy any more.');
       return { kind: 'working', worktree: found.worktree };
@@ -182,16 +132,9 @@ export function createCodeRoutes(
     );
   }
 
-  async function listPaths(found: CodeTask, ref: ResolvedRef, signal: AbortSignal) {
+  function listPaths(found: CodeTask, ref: ResolvedRef, signal: AbortSignal) {
     if (ref.kind === 'working') return listWorkingPaths(ref.worktree, signal);
-    const listed = await listCommitPathsCached(found, ref.sha, signal);
-    if (ref.kind === 'commit') return listed;
-    const paths = new Set(listed.paths);
-    for (const path of ref.owned) {
-      if (isOnDisk(ref.worktree, path)) paths.add(path);
-      else paths.delete(path);
-    }
-    return { ref: WORKING_REF, paths: [...paths].sort(), truncated: listed.truncated };
+    return listCommitPathsCached(found, ref.sha, signal);
   }
 
   async function readTree(found: CodeTask, ref: ResolvedRef, dir: string, signal: AbortSignal) {
@@ -206,29 +149,23 @@ export function createCodeRoutes(
     return listWorkingTree(await listPaths(found, ref, signal), dir);
   }
 
-  async function readFile(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
+  function readFile(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
     const reader = blobs.select(found.repoPath);
     if (ref.kind === 'commit') return readCommitFile(found.repoPath, ref.sha, path, cache, signal, reader);
-    if (ref.kind === 'owned' && !ref.owned.has(path)) {
-      return {
-        ...(await readCommitFile(found.repoPath, ref.sha, path, cache, signal, reader)),
-        ref: WORKING_REF,
-      };
-    }
     const absolute = resolveInside(ref.worktree, path);
     if (!absolute) throw new DomainError('path_invalid', 'That path leaves the working copy.');
-    return readWorkingFile(absolute, path);
+    return Promise.resolve(readWorkingFile(absolute, path));
   }
 
   function readBytes(found: CodeTask, ref: ResolvedRef, path: string, signal: AbortSignal) {
-    if (ref.kind === 'commit' || (ref.kind === 'owned' && !ref.owned.has(path))) {
+    if (ref.kind === 'commit') {
       return readCommitBytes(found.repoPath, ref.sha, path, signal, blobs.select(found.repoPath));
     }
     const absolute = resolveInside(ref.worktree, path);
     return Promise.resolve(absolute ? readWorkingBytes(absolute) : null);
   }
 
-  async function search(
+  function search(
     found: CodeTask,
     ref: ResolvedRef,
     query: SearchQuery,
@@ -236,25 +173,7 @@ export function createCodeRoutes(
     onMatches?: (matches: SearchMatch[]) => void
   ) {
     if (ref.kind === 'working') return searchFiles(ref.worktree, null, query, signal, onMatches);
-    if (ref.kind === 'commit') return searchFiles(found.repoPath, ref.sha, query, signal, onMatches);
-    const committed = await searchFiles(found.repoPath, ref.sha, query, signal);
-    if (ref.owned.size === 0) return { ...committed, ref: WORKING_REF };
-    return mergeOwnedMatches(committed, await searchFiles(ref.worktree, null, query, signal), ref.owned);
-  }
-
-  async function resolveOwnedDiff(
-    found: CodeTask,
-    base: string,
-    ref: ResolvedRef & { kind: 'owned' },
-    paths: string[] | null
-  ) {
-    const committed = await resolveCommitDiff(found.repoPath, base, ref.sha, undefined, paths);
-    const owned = [...ref.owned].filter((path) => paths === null || paths.includes(path));
-    if (owned.length === 0) return committed;
-    const working = await resolveWorkingDiff(ref.worktree, base, owned);
-    return [...committed.filter((file) => !ref.owned.has(file.path)), ...working].sort((a, b) =>
-      a.path.localeCompare(b.path)
-    );
+    return searchFiles(found.repoPath, ref.sha, query, signal, onMatches);
   }
 
   function readDiffPaths(url: URL) {
@@ -273,13 +192,11 @@ export function createCodeRoutes(
     const base = await assertCommit(found.repoPath, baseParam || refs?.base || refs?.head || '', signal);
     const head = await resolveRef(
       found,
-      headParam || (found.worktree || found.workspace ? WORKING_REF : (refs?.head ?? null)),
+      headParam || (found.worktree ? WORKING_REF : (refs?.head ?? null)),
       signal
     );
     if (head.kind === 'working')
       return { base, head: WORKING_REF, files: await resolveWorkingDiff(head.worktree, base, paths, signal) };
-    if (head.kind === 'owned')
-      return { base, head: WORKING_REF, files: await resolveOwnedDiff(found, base, head, paths) };
     const files = await cache.read(
       `${found.repoPath}\0diff\0${base}\0${head.sha}\0${paths?.join('\0') ?? ''}`,
       () => resolveCommitDiff(found.repoPath, base, head.sha, signal, paths),
@@ -322,15 +239,9 @@ export function createCodeRoutes(
         const send = (line: SearchLine) => controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
         try {
           const ref = await resolveRef(found, url.searchParams.get('ref'), request.signal);
-          const streamed = ref.kind !== 'owned';
-          const result = await search(
-            found,
-            ref,
-            query,
-            request.signal,
-            streamed ? (matches) => send({ kind: 'matches', matches }) : undefined
+          const result = await search(found, ref, query, request.signal, (matches) =>
+            send({ kind: 'matches', matches })
           );
-          if (!streamed) send({ kind: 'matches', matches: result.matches });
           send({ kind: 'done', result: { ...result, matches: [] } });
         } catch (error) {
           const code = error instanceof DomainError ? error.code : 'search_failed';

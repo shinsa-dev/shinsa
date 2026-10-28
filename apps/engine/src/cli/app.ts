@@ -1,17 +1,16 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
-import { type FlavorIdentity, resolveEngineLabel } from '@shinsa/core';
-import { FLAVOR } from '../instance/flavor.ts';
+import { APP_IDENTITY, resolveEngineLabel } from '@shinsa/core';
 
-export const APP_BUNDLE_ID = process.env.SHINSA_APP_ID || FLAVOR.appId;
+export const APP_BUNDLE_ID = process.env.SHINSA_APP_ID || APP_IDENTITY.appId;
 
-export function resolveHomeLink(flavor: FlavorIdentity = FLAVOR) {
-  return `${flavor.scheme}://home`;
+export function resolveHomeLink() {
+  return `${APP_IDENTITY.scheme}://home`;
 }
 
-export function resolveTaskLink(reference: string, flavor: FlavorIdentity = FLAVOR) {
-  return `${flavor.scheme}://task/${encodeURIComponent(reference)}`;
+export function resolveTaskLink(reference: string) {
+  return `${APP_IDENTITY.scheme}://task/${encodeURIComponent(reference)}`;
 }
 
 export function resolveLinkPage(link: string) {

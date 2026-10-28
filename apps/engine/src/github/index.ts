@@ -139,6 +139,13 @@ const PULL_REQUEST_FIELDS =
 
 const NO_PULL_REQUEST = /no pull requests found/i;
 
+const COMMIT_SHA = /^[0-9a-f]{7,64}$/i;
+
+function assertCommitSha(sha: string) {
+  if (!COMMIT_SHA.test(sha)) throw new Error(`"${sha}" is not a commit.`);
+  return sha;
+}
+
 interface GhOptions {
   input?: string;
   signal?: AbortSignal;
@@ -408,8 +415,10 @@ export async function mergePullRequest(
   repo: Repo,
   number: number,
   method: Settings['mergeMethod'],
+  headSha: string | null,
   signal?: AbortSignal
 ) {
   if (!MERGE_METHODS.has(method)) throw new Error(`"${method}" is not a merge method.`);
-  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`], repo.path, { signal });
+  const guard = headSha ? ['--match-head-commit', assertCommitSha(headSha)] : [];
+  await runGhOrThrow(['pr', 'merge', String(number), `--${method}`, ...guard], repo.path, { signal });
 }

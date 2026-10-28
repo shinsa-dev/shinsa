@@ -2,7 +2,7 @@ import { describe, expect, it, mock } from 'bun:test';
 import { act, fireEvent, render } from '@testing-library/react';
 import { MessageQueue } from '@/components/chat/message-queue.tsx';
 import { createRound } from '../../support/rounds.ts';
-import { createTask } from '../../support/state.ts';
+import { createShinsaState, createTask } from '../../support/state.ts';
 
 const task = createTask({
   id: 't',
@@ -13,17 +13,22 @@ const task = createTask({
   ],
 });
 
+const state = createShinsaState({ tasks: [task] });
+
 function renderQueue(
   onUpdate = mock(() => Promise.resolve(true)),
-  onRemove = mock(() => Promise.resolve(true))
+  onRemove = mock(() => Promise.resolve(true)),
+  onSend = mock(() => Promise.resolve(true))
 ) {
-  const view = render(<MessageQueue task={task} onUpdate={onUpdate} onRemove={onRemove} />);
-  return { view, onUpdate, onRemove };
+  const view = render(
+    <MessageQueue state={state} task={task} onUpdate={onUpdate} onSend={onSend} onRemove={onRemove} />
+  );
+  return { view, onUpdate, onRemove, onSend };
 }
 
 describe('MessageQueue', () => {
   it('shows nothing when no message waits', () => {
-    const view = render(<MessageQueue task={createTask({ id: 'plain' })} />);
+    const view = render(<MessageQueue state={state} task={createTask({ id: 'plain' })} />);
     expect(view.container.textContent).toBe('');
   });
 
@@ -75,6 +80,21 @@ describe('MessageQueue', () => {
     fireEvent.click(view.getAllByRole('button', { name: 'Remove from the queue' })[1] as HTMLElement);
     expect(onRemove).toHaveBeenCalledWith({ number: 3, text: 'And a toggle.' });
     const row = view.container.querySelectorAll('[data-queued-message]')[1];
+    expect(row?.className).toContain('opacity-60');
+    await act(async () => {
+      resolve(true);
+      await promise;
+    });
+    expect(row?.className).not.toContain('opacity-60');
+  });
+
+  it('sends a message now to the current round, dimmed until the server answers', async () => {
+    const { promise, resolve } = Promise.withResolvers<boolean>();
+    const onSend = mock(() => promise);
+    const { view } = renderQueue(undefined, undefined, onSend);
+    fireEvent.click(view.getAllByRole('button', { name: 'Send now' })[0] as HTMLElement);
+    expect(onSend).toHaveBeenCalledWith({ number: 2, text: 'Add dark mode.' });
+    const row = view.container.querySelectorAll('[data-queued-message]')[0];
     expect(row?.className).toContain('opacity-60');
     await act(async () => {
       resolve(true);

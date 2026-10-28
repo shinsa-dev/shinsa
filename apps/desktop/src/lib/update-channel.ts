@@ -1,6 +1,5 @@
-import { type AppFlavor, resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
+import { resolveReleaseChannel, resolveVersionOrder } from '@shinsa/core';
 import type { UpdateChannel } from './bridge.ts';
-import { FLAVOR } from './flavor.ts';
 
 export const UPDATE_FEED = { provider: 'github', owner: 'shinsa-dev', repo: 'shinsa' } as const;
 
@@ -8,29 +7,14 @@ const CHANNEL_LABELS: Record<UpdateChannel, string> = { stable: 'Stable', beta: 
 
 const CHANNEL_RANKS: Record<UpdateChannel, number> = { stable: 0, beta: 1, canary: 2 };
 
-const FLAVOR_CHANNELS: Record<AppFlavor, { channels: readonly UpdateChannel[]; nearest: UpdateChannel }> = {
-  stable: { channels: ['stable', 'beta'], nearest: 'beta' },
-  canary: { channels: ['canary'], nearest: 'canary' },
-};
+const UPDATE_CHANNELS: readonly UpdateChannel[] = ['stable', 'beta', 'canary'];
 
-export function listUpdateChannels(flavor: AppFlavor = FLAVOR.flavor) {
-  return FLAVOR_CHANNELS[flavor].channels;
+export function parseUpdateChannel(value: unknown): UpdateChannel | null {
+  return UPDATE_CHANNELS.find((channel) => channel === value) ?? null;
 }
 
-export function parseUpdateChannel(value: unknown, flavor: AppFlavor = FLAVOR.flavor): UpdateChannel | null {
-  return listUpdateChannels(flavor).find((channel) => channel === value) ?? null;
-}
-
-export function resolveUpdateChannel(
-  stored: unknown,
-  version: string,
-  flavor: AppFlavor = FLAVOR.flavor
-): UpdateChannel {
-  return (
-    parseUpdateChannel(stored, flavor) ??
-    parseUpdateChannel(resolveReleaseChannel(version), flavor) ??
-    FLAVOR_CHANNELS[flavor].nearest
-  );
+export function resolveUpdateChannel(stored: unknown, version: string): UpdateChannel {
+  return parseUpdateChannel(stored) ?? resolveReleaseChannel(version);
 }
 
 export function isAboveChannel(version: string, channel: UpdateChannel) {

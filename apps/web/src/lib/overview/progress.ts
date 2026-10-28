@@ -1,4 +1,12 @@
-import type { DisplayPhase, DisplayPhaseStatus, ShapeState, TaskProgress } from '@shinsa/core';
+import {
+  capitalise,
+  type DisplayPhase,
+  type DisplayPhaseStatus,
+  type FixReason,
+  type ShapeState,
+  type Task,
+  type TaskProgress,
+} from '@shinsa/core';
 import type { Tone } from '@/lib/format/tone.ts';
 
 export type StepStatus = 'done' | 'current' | 'waiting' | 'pending' | 'skipped';
@@ -42,6 +50,17 @@ export const STEP_STATUS_TONE: Record<StepStatus, Tone> = {
   waiting: 'amber',
   pending: 'neutral',
 };
+
+const CONFLICT_FIXES: ReadonlySet<FixReason | null> = new Set(['conflict', 'update']);
+
+export function resolveStageNote(task: Pick<Task, 'stage' | 'fixFor' | 'stageReason'>) {
+  if (task.stage !== 'fixing' || !CONFLICT_FIXES.has(task.fixFor) || !task.stageReason) return null;
+  return capitalise(task.stageReason);
+}
+
+export function resolveStepStatusLabel(step: Step, note: string | null) {
+  return step.status === 'current' && note ? note : STEP_STATUS_LABEL[step.status];
+}
 
 function toStepStatus(status: DisplayPhaseStatus): StepStatus {
   return status === 'active' ? 'current' : status;

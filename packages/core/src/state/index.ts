@@ -35,12 +35,9 @@ export {
   listPendingDependencies,
   listProjectRepos,
   listRunningRuns,
-  resolvePullRequestBase,
   resolveTaskProject,
   resolveTaskWorkspace,
   selectCheckoutHolder,
-  selectStackedOnTask,
-  selectStackTarget,
   selectTaskByHandle,
   selectTaskByReference,
 } from './queries.ts';

@@ -2,8 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import { type Gate, listMergeSteps, type Task } from '@shinsa/core';
 import {
   ATTENTION,
+  isResolvingConflicts,
   resolveGateGlyph,
   resolveGateStatus,
+  resolveStageLabel,
   resolveTaskGlyph,
   resolveTaskMenuIcon,
   resolveTaskStatus,
@@ -254,6 +256,28 @@ describe('resolveTaskStatus', () => {
     });
     const merged = createTask({ id: 'm', stage: 'merged' });
     expect(resolveTaskStatus(createShinsaState({ tasks: [merged] }), merged).label).toBe('Merged');
+  });
+
+  it('says a task fixing a conflict with its base is resolving conflicts, and any other fix is fixing', () => {
+    for (const fixFor of ['conflict', 'update'] as const) {
+      const task = createTask({
+        id: 't',
+        stage: 'fixing',
+        fixFor,
+        stageReason: 'resolving conflicts with main',
+      });
+      expect(isResolvingConflicts(task)).toBe(true);
+      expect(resolveStageLabel(task)).toBe('Resolving conflicts');
+      expect(resolveTaskStatus(createShinsaState({ tasks: [task] }), task)).toEqual({
+        label: 'Resolving conflicts',
+        tone: 'blue',
+      });
+    }
+    const checks = createTask({ id: 'c', stage: 'fixing', fixFor: 'pull_request' });
+    expect(isResolvingConflicts(checks)).toBe(false);
+    expect(resolveTaskStatus(createShinsaState({ tasks: [checks] }), checks).label).toBe('Fixing');
+    const shipping = createTask({ id: 's', stage: 'shipping', fixFor: 'conflict' });
+    expect(resolveStageLabel(shipping)).toBe('Pull request');
   });
 });
 

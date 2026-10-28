@@ -37,7 +37,7 @@ function applyPullRequestOpened(state: ShinsaState, event: EventOf<'pull_request
 }
 
 function applyPullRequestHeadMoved(state: ShinsaState, event: EventOf<'pull_request.head_moved'>) {
-  updateTask(state, event.taskId, event.at, { pushedSha: event.sha });
+  updateTask(state, event.taskId, event.at, { pushedSha: event.sha, pushedAt: event.at });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'pull_request',
@@ -71,6 +71,7 @@ export function applyPullRequestEvent(state: ShinsaState, event: PullRequestEven
     case 'pull_request.pushed':
       updateTask(state, event.taskId, event.at, {
         pushedSha: event.sha,
+        pushedAt: event.at,
         pushedFrom: state.tasks[event.taskId]?.pullRequest?.headSha ?? null,
         pushPending: false,
         pushHookFailure: null,

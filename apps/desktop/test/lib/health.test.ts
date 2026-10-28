@@ -19,12 +19,8 @@ describe('parseHealth', () => {
     expect(parseHealth({ status: 'ok' })).toBeNull();
   });
 
-  it('takes only its own flavor’s engine, so Shinsa never shows Shinsa Canary’s and back', () => {
-    expect(parseHealth({ ok: true, version: '1.0.0', flavor: 'stable' })).toEqual({ version: '1.0.0' });
-    expect(parseHealth({ ok: true, version: '1.0.1-canary.2', flavor: 'canary' })).toBeNull();
-    expect(parseHealth({ ok: true, flavor: 'canary' }, 'canary')).toEqual({ version: null });
-    expect(parseHealth({ ok: true, version: '1.0.0' }, 'canary')).toBeNull();
-    expect(parseHealthText('{"ok":true,"flavor":"canary"}', 'canary')).toEqual({ version: null });
+  it('takes an engine on any update channel, since a canary is Shinsa too', () => {
+    expect(parseHealth({ ok: true, version: '1.0.1-canary.2' })).toEqual({ version: '1.0.1-canary.2' });
   });
 });
 
@@ -44,8 +40,5 @@ describe('describeServer', () => {
       'Shinsa at http://127.0.0.1:5180'
     );
     expect(describeServer('http://127.0.0.1:5180', null)).toBe('Shinsa at http://127.0.0.1:5180');
-    expect(describeServer('http://127.0.0.1:5190', { version: '1.0.1-canary.2' }, 'Shinsa Canary')).toBe(
-      'Shinsa Canary 1.0.1-canary.2 at http://127.0.0.1:5190'
-    );
   });
 });

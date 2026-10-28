@@ -609,6 +609,11 @@ const READERS: Record<UserCommand['type'], (fields: Fields) => UserCommand> = {
     taskId: readId(fields, 'taskId'),
     number: readCount(fields, 'number'),
   }),
+  'round.send': (fields) => ({
+    type: 'round.send',
+    taskId: readId(fields, 'taskId'),
+    number: readCount(fields, 'number'),
+  }),
   'gate.answer': readGateAnswer,
   'merge_step.tick': readMergeStepTick,
   'suggestion.accept': readSuggestionAccept,

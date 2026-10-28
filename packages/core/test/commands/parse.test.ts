@@ -200,6 +200,10 @@ describe('parseUserCommand', () => {
         { type: 'round.remove', taskId: 't1', number: 2 },
       ],
       [
+        { type: 'round.send', taskId: 't1', number: 2 },
+        { type: 'round.send', taskId: 't1', number: 2 },
+      ],
+      [
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
         { type: 'merge_step.tick', taskId: 't1', key: 'pre_merge:Set API_KEY', done: true },
       ],

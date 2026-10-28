@@ -141,6 +141,29 @@ describe('resolveTaskNow', () => {
     }
   });
 
+  it('says a pull request that conflicts with its base conflicts, not that it waits for CI', () => {
+    const conflicting = { ...PULL_REQUEST, mergeable: false, base: 'main' };
+    expect(nowFor({ stage: 'shipping', stageReason: 'waiting for CI', pullRequest: conflicting })).toBe(
+      'PR #42 conflicts with main'
+    );
+    const unknownBase = { ...PULL_REQUEST, mergeable: false };
+    expect(nowFor({ stage: 'shipping', stageReason: 'waiting for CI', pullRequest: unknownBase })).toBe(
+      'PR #42 conflicts with the base branch'
+    );
+    expect(
+      nowFor({ stage: 'shipping', stageReason: 'pushing', pullRequest: conflicting, pushPending: true })
+    ).toBe('Pushing');
+    expect(nowFor({ stage: 'shipping', stageReason: 'waiting for CI', pullRequest: PULL_REQUEST })).toBe(
+      'Waiting for CI'
+    );
+  });
+
+  it('says what resolving conflicts works against', () => {
+    expect(
+      nowFor({ stage: 'fixing', fixFor: 'conflict', stageReason: 'resolving conflicts with main' })
+    ).toBe('Resolving conflicts with main');
+  });
+
   it('names the merged pull request', () => {
     expect(nowFor({ stage: 'merged', pullRequest: PULL_REQUEST })).toBe('PR #42 merged');
     expect(nowFor({ stage: 'merged', stageReason: 'merged' })).toBe('Merged');
