@@ -63,11 +63,36 @@ describe('worktrees', () => {
     expect(existsSync(join(again.path, 'README.md'))).toBe(true);
   });
 
+  test('a branch a crash left behind while naming the task’s worktree is taken back, not left as a stray', async () => {
+    const { repo, path } = await createGitRepo({ remote: false });
+    const worktrees = createTempDir();
+    const first = await createWorktree(repo, worktrees, 'task-abcdef', 'fix/value', null);
+    await git(first.path, 'checkout', '--quiet', '--detach');
+    expect(await createWorktree(repo, worktrees, 'task-abcdef', 'fix/value', null)).toEqual(first);
+    expect(await git(path, 'branch', '--format=%(refname:short)')).toBe('fix/value\nmain');
+  });
+
+  test('a branch with commits of its own, or checked out elsewhere, is never taken over', async () => {
+    const { repo, path } = await createGitRepo({ remote: false });
+    const worktrees = createTempDir();
+    await createWorktree(repo, worktrees, 'task-aaaaaa', 'fix/held', null);
+    expect((await createWorktree(repo, worktrees, 'task-bbbbbb', 'fix/held', null)).branch).toBe(
+      'fix/held-2'
+    );
+    await git(path, 'checkout', '-q', '-b', 'fix/own');
+    await git(path, 'commit', '--allow-empty', '-q', '-m', 'own work');
+    await git(path, 'checkout', '-q', 'main');
+    expect((await createWorktree(repo, worktrees, 'task-cccccc', 'fix/own', null)).branch).toBe('fix/own-2');
+  });
+
   test('a branch name taken on origin is not reused', async () => {
     const { repo, path } = await createGitRepo();
     await git(path, 'push', '-q', 'origin', 'main:refs/heads/fix/old');
     await git(path, 'fetch', '-q', 'origin');
     expect(await resolveFreeBranch(repo, 'fix/old')).toBe('fix/old-2');
+    await git(path, 'branch', 'fix/old', 'origin/fix/old');
+    const head = await git(path, 'rev-parse', 'main');
+    expect(await resolveFreeBranch(repo, 'fix/old', undefined, head)).toBe('fix/old-2');
   });
 
   test('after fifty taken names the branch gets a timestamp', async () => {
