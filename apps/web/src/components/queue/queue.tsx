@@ -59,7 +59,7 @@ export function WideSection({
         {title}
       </SectionLabel>
       {disclosure.open && (
-        <div className={cn(CARD, 'p-1 [--glyph-ring:var(--color-card)]')}>
+        <div className={cn(CARD, 'p-1')}>
           {count === 0 ? (
             <p className='p-2.5 text-2xs text-fg-2'>{empty}</p>
           ) : (
