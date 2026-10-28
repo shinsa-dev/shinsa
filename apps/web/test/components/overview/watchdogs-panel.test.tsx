@@ -21,6 +21,7 @@ function watchdog(overrides: Partial<Watchdog>): Watchdog {
     productionCheck: null,
     status: 'watching',
     armedAt: NOW,
+    awaitingSince: null,
     startedAt: NOW,
     endsAt: NOW + 31 * HOUR_MS,
     nextCheckAt: NOW + 6 * HOUR_MS,

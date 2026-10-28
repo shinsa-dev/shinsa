@@ -3983,6 +3983,7 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
     runId: null,
     forkTaskId: null,
     armedAt: mergedAt,
+    awaitingSince: null,
     startedAt: mergedAt,
   };
   return [
@@ -4075,6 +4076,7 @@ function listDocsGateWatchdogs(): ShinsaEventInput[] {
         productionCheck:
           'The production deployment of the docs site on Vercel includes the merge commit of #339.',
         status: 'awaiting_production',
+        awaitingSince: mergedAt,
         startedAt: null,
         endsAt: null,
         nextCheckAt: NOW + 20 * MINUTE,

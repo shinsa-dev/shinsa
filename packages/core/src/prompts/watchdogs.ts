@@ -34,7 +34,7 @@ function resolveProductionPrompt(task: Task, watchdog: Watchdog) {
     `Shinsa woke you to see whether the change you shipped${merged} is live in production yet, so the watchdog “${watchdog.title}” can start watching.`,
     `How to tell: ${watchdog.productionCheck ?? ''}`,
     'This check is read-only: look, do not change files.',
-    `Report with \`report_watch\`: \`live\` false and a \`summary\` of what you saw while it is not live; Shinsa asks again in ${WATCHDOG_LIMITS.productionPollMinutes} minutes, for up to ${WATCHDOG_LIMITS.productionWaitHours} hours.`,
+    `Report with \`report_watch\`: \`live\` false and a \`summary\` of what you saw while it is not live. Your answer counts for every watchdog of this task that waits for production. Shinsa asks again later, less often the longer it waits (from every ${WATCHDOG_LIMITS.productionPollMinutes} minutes to every ${WATCHDOG_LIMITS.productionPollMaxMinutes / 60} hours), for up to ${WATCHDOG_LIMITS.productionWaitHours} hours.`,
     `Once it is live, set \`live\` true and do the watchdog's first check in the same turn: ${watchdog.check}`,
     describeSource(watchdog),
     'Then report it as any check: `healthy`, the `summary`, and an `issue` when something is wrong that the change caused.',

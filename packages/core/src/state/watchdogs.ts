@@ -115,8 +115,11 @@ function applyEnded(state: ShinsaState, event: EventOf<'watchdog.ended'>) {
 function applyLive(state: ShinsaState, event: EventOf<'watchdog.live'>) {
   const next = updateWatchdog(state, event, () => ({
     status: 'watching',
+    awaitingSince: null,
     startedAt: event.at,
     endsAt: event.endsAt,
+    nextCheckAt: event.nextCheckAt,
+    runId: null,
   }));
   if (!next) return;
   record(state, event.taskId, event.at, {
@@ -130,6 +133,7 @@ function applyStarted(state: ShinsaState, event: EventOf<'watchdog.started'>) {
   const next = updateWatchdog(state, event, () => ({
     status: event.status,
     source: event.source,
+    awaitingSince: event.awaitingSince,
     startedAt: event.startedAt,
     endsAt: event.endsAt,
     nextCheckAt: event.nextCheckAt,

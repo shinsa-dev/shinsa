@@ -9,11 +9,12 @@ export type WatchdogEventBody =
       watchdogId: string;
       source: WatchdogSource;
       status: 'watching' | 'awaiting_production';
+      awaitingSince: number | null;
       startedAt: number | null;
       endsAt: number | null;
       nextCheckAt: number;
     }
-  | { type: 'watchdog.live'; taskId: string; watchdogId: string; endsAt: number }
+  | { type: 'watchdog.live'; taskId: string; watchdogId: string; endsAt: number; nextCheckAt: number }
   | { type: 'watchdog.checking'; taskId: string; watchdogId: string; runId: string }
   | { type: 'watchdog.deferred'; taskId: string; watchdogId: string; nextCheckAt: number }
   | {

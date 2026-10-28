@@ -19,6 +19,7 @@ function createWatchdog(overrides: Partial<Watchdog> = {}): Watchdog {
     productionCheck: null,
     status: 'watching',
     armedAt: 0,
+    awaitingSince: null,
     startedAt: 0,
     endsAt: 100_000,
     nextCheckAt: 1_000,

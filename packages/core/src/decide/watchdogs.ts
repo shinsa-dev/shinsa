@@ -48,13 +48,15 @@ function resolveWindowStart(schedule: WatchdogSchedule, now: number) {
   if (schedule.startsOn === 'production') {
     return {
       status: 'awaiting_production' as const,
+      awaitingSince: now,
       startedAt: null,
       endsAt: null,
-      nextCheckAt: resolveProductionPollAt(now),
+      nextCheckAt: resolveProductionPollAt(now, now),
     };
   }
   return {
     status: 'watching' as const,
+    awaitingSince: null,
     startedAt: now,
     endsAt: now + schedule.forMinutes * MINUTE_MS,
     nextCheckAt: now + schedule.firstCheckMinutes * MINUTE_MS,
@@ -73,7 +75,13 @@ function createWatchdog(decider: Decider, spec: WatchdogSpec, round: number): Wa
   };
   const window = spec.source
     ? resolveWindowStart(schedule, now)
-    : { status: 'needs_source' as const, startedAt: null, endsAt: null, nextCheckAt: null };
+    : {
+        status: 'needs_source' as const,
+        awaitingSince: null,
+        startedAt: null,
+        endsAt: null,
+        nextCheckAt: null,
+      };
   return {
     id: decider.context.newId(),
     round,
@@ -212,23 +220,30 @@ function resolveNextGapMinutes(watchdog: Watchdog) {
   return Math.min(doubled, watchdog.maxGapMinutes);
 }
 
-function resolveProductionPollAt(now: number) {
-  return now + WATCHDOG_LIMITS.productionPollMinutes * MINUTE_MS;
+function resolveProductionPollAt(awaitingSince: number, now: number) {
+  const least = WATCHDOG_LIMITS.productionPollMinutes * MINUTE_MS;
+  const most = WATCHDOG_LIMITS.productionPollMaxMinutes * MINUTE_MS;
+  return now + Math.min(Math.max(now - awaitingSince, least), most);
 }
 
 function resolveNextCheckAt(watchdog: Watchdog, now: number) {
-  if (watchdog.status === 'awaiting_production') return resolveProductionPollAt(now);
+  if (watchdog.status === 'awaiting_production') {
+    return resolveProductionPollAt(watchdog.awaitingSince ?? now, now);
+  }
   const next = now + resolveNextGapMinutes(watchdog) * MINUTE_MS;
   return watchdog.endsAt !== null && next > watchdog.endsAt ? null : next;
 }
 
 function hasWaitedTooLong(watchdog: Watchdog, now: number) {
-  return now - watchdog.armedAt >= WATCHDOG_LIMITS.productionWaitHours * HOUR_MS;
+  return now - (watchdog.awaitingSince ?? now) >= WATCHDOG_LIMITS.productionWaitHours * HOUR_MS;
 }
 
-function awaitProduction(decider: Decider, task: Task, watchdog: Watchdog, runId: string) {
+function listAwaitingProduction(task: Task) {
+  return (task.watchdogs ?? []).filter((watchdog) => watchdog.status === 'awaiting_production');
+}
+
+function awaitProductionFor(decider: Decider, task: Task, watchdog: Watchdog) {
   const now = decider.context.now;
-  const run = decider.state.runs[runId];
   if (hasWaitedTooLong(watchdog, now)) {
     decider.emit({
       type: 'watchdog.missed',
@@ -237,14 +252,19 @@ function awaitProduction(decider: Decider, task: Task, watchdog: Watchdog, runId
       reason: `The change did not reach production within ${WATCHDOG_LIMITS.productionWaitHours} hours, so the watchdog stopped waiting.`,
       nextCheckAt: null,
     });
-  } else {
-    decider.emit({
-      type: 'watchdog.deferred',
-      taskId: task.id,
-      watchdogId: watchdog.id,
-      nextCheckAt: resolveProductionPollAt(now),
-    });
+    return;
   }
+  decider.emit({
+    type: 'watchdog.deferred',
+    taskId: task.id,
+    watchdogId: watchdog.id,
+    nextCheckAt: resolveNextCheckAt(watchdog, now) ?? now,
+  });
+}
+
+function awaitProduction(decider: Decider, task: Task, runId: string) {
+  const run = decider.state.runs[runId];
+  for (const watchdog of listAwaitingProduction(task)) awaitProductionFor(decider, task, watchdog);
   if (run) decider.endRun(run, 'completed', 'The change is not live in production yet.');
   decider.progressed(task.id);
   settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'waiting for production');
@@ -252,12 +272,15 @@ function awaitProduction(decider: Decider, task: Task, watchdog: Watchdog, runId
 
 function startLiveWindow(decider: Decider, task: Task, watchdog: Watchdog) {
   const now = decider.context.now;
-  decider.emit({
-    type: 'watchdog.live',
-    taskId: task.id,
-    watchdogId: watchdog.id,
-    endsAt: now + watchdog.forMinutes * MINUTE_MS,
-  });
+  for (const waiting of listAwaitingProduction(task)) {
+    decider.emit({
+      type: 'watchdog.live',
+      taskId: task.id,
+      watchdogId: waiting.id,
+      endsAt: now + waiting.forMinutes * MINUTE_MS,
+      nextCheckAt: now + waiting.firstCheckMinutes * MINUTE_MS,
+    });
+  }
   return findWatchdog(decider.task(task.id), watchdog.id);
 }
 
@@ -284,7 +307,7 @@ export function reportWatch(decider: Decider, command: CommandOf<'agent.report_w
   if (!found) throw new DomainError('watchdog_not_found', 'No watchdog waits on this check. End your turn.');
   const watchdog = resolveCheckedWatchdog(decider, task, found, command);
   if (!watchdog) {
-    awaitProduction(decider, task, found, run.id);
+    awaitProduction(decider, task, run.id);
     return;
   }
   const now = decider.context.now;

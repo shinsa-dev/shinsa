@@ -28,6 +28,7 @@ export interface Watchdog {
   productionCheck: string | null;
   status: WatchdogStatus;
   armedAt: number;
+  awaitingSince: number | null;
   startedAt: number | null;
   endsAt: number | null;
   nextCheckAt: number | null;
@@ -50,6 +51,7 @@ export const WATCHDOG_LIMITS = {
   deferMinutes: 15,
   projectSources: 20,
   productionPollMinutes: 30,
+  productionPollMaxMinutes: 360,
   productionWaitHours: 168,
 } as const;
 

@@ -548,8 +548,38 @@ describe('a watchdog that starts on production', () => {
       status: 'awaiting_production',
       runId: null,
       checks: [],
-      nextCheckAt: harness.now + 30 * MINUTE_MS,
     });
+    expect(Math.round(((watchdog(harness, taskId).nextCheckAt ?? 0) - harness.now) / MINUTE_MS)).toBe(30);
+  });
+
+  test('asks less often the longer it waits: the gap doubles from half an hour to six hours', () => {
+    const { harness, taskId } = mergeWith([RELEASED]);
+    const gaps: number[] = [];
+    for (let ask = 0; ask < 7; ask += 1) {
+      fire(harness, taskId);
+      reportLive(harness, taskId, false);
+      gaps.push(Math.round(((watchdog(harness, taskId).nextCheckAt ?? 0) - harness.now) / MINUTE_MS));
+    }
+    expect(gaps).toEqual([30, 60, 120, 240, 360, 360, 360]);
+  });
+
+  test('one answer counts for every watchdog of the task that waits for production', () => {
+    const { harness, taskId } = mergeWith([RELEASED, { ...RELEASED, title: 'Checkout errors' }]);
+    fire(harness, taskId);
+    fire(harness, taskId, 1);
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(1);
+    expect(watchdog(harness, taskId, 1).runId).toBeNull();
+    reportLive(harness, taskId, false);
+    expect(watchdog(harness, taskId, 1).nextCheckAt).toBe(watchdog(harness, taskId).nextCheckAt);
+    fire(harness, taskId);
+    reportLive(harness, taskId, true);
+    expect(watchdog(harness, taskId, 1)).toMatchObject({
+      status: 'watching',
+      startedAt: harness.now,
+      checks: [],
+      nextCheckAt: harness.now + 360 * MINUTE_MS,
+    });
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
   });
 
   test('once live, the window starts then and the first check is recorded', () => {
@@ -594,8 +624,27 @@ describe('a watchdog that starts on production', () => {
     expect(watchdog(harness, taskId)).toMatchObject({
       status: 'awaiting_production',
       startedAt: null,
+      awaitingSince: harness.now,
       nextCheckAt: harness.now + 30 * MINUTE_MS,
     });
+  });
+
+  test('a source connected days later still waits a full week for production from then', () => {
+    const { harness, taskId } = mergeWith([
+      { ...RELEASED, source: null, sourceRequest: EVENTS.sourceRequest },
+    ]);
+    harness.advance(160 * HOUR_MS);
+    harness.send({
+      type: 'watchdog.connect',
+      taskId,
+      watchdogId: watchdog(harness, taskId).id,
+      server: 'maple',
+      data: 'Traces',
+    });
+    fire(harness, taskId);
+    harness.advance(24 * HOUR_MS);
+    reportLive(harness, taskId, false);
+    expect(watchdog(harness, taskId).status).toBe('awaiting_production');
   });
 });
 

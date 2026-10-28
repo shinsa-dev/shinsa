@@ -1224,11 +1224,16 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   read when the watchdog is armed (`resolveWatchdogDefaults`), so a change to them applies to later watchdogs.
 - **A watchdog can wait for production.** Where the merge is not the release (a staging environment, a release
   branch, a manual deploy), the agent sets `starts: production` and says how to tell (`production_check`). Armed, the
-  watchdog waits (`awaiting_production`) and its checks every 30 minutes (`productionPollMinutes`) only ask whether the
-  change is live (`resolveProductionPrompt`): `report_watch {live: false}` asks again later (`watchdog.deferred`), and
-  `live: true` starts the window then (`watchdog.live`) with that turn's check as its first. A change that is not live
-  within a week (`productionWaitHours`) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves
-  out `live` is refused (`live_required`).
+  watchdog waits (`awaiting_production`, from `awaitingSince`) and its checks only ask whether the change is live
+  (`resolveProductionPrompt`). Each costs a turn of the task's whole session, so they back off: the next one comes
+  after as long as the watchdog has already waited, at least 30 minutes (`productionPollMinutes`) and at most 6 hours
+  (`productionPollMaxMinutes`), about 30 turns in a week rather than one every half hour. One answer counts for every
+  watchdog of the task that waits for production, since they wait for the same change: `report_watch {live: false}`
+  asks again later for all of them (`watchdog.deferred`), and `live: true` starts every one's window then
+  (`watchdog.live`), with that turn's check as the first of the one that asked. A change that is not live within a week
+  of `awaitingSince` (`productionWaitHours`; for a watchdog that waited for a data source first, a week from when you
+  connected it) stops the watchdog (`watchdog.missed`). A check on such a watchdog that leaves out `live` is refused
+  (`live_required`).
 - **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
   `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot. A
   slot due exactly as the window ends still checks, however late the fire arrives, and a last check deferred past the

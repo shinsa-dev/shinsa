@@ -274,7 +274,7 @@ one reads as its empty value. The fields under Triage and shape, Plan and build,
 | `parentTaskId?` | string \| null | the task whose agent filed this one |
 | `createdBy?` | `TaskCreator` \| null | `courier` (`create_task`) or `split` (`split_task`), with the run and request key |
 | `forkOf?` | string \| null | the task this one was forked from: its first Agent run forks that task's session (`docs/engine.md` → Forking a task) |
-| `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskId` it filed, `endedAt` (`docs/engine.md` → Watchdogs) |
+| `watchdogs?` | `Watchdog[]` | the watchdogs of its merged rounds: `id`, `round`, `title`, `check`, `source` or `sourceRequest`, `firstCheckMinutes`, `maxGapMinutes`, `forMinutes`, `startsOn` (`merge` or `production`) and its `productionCheck`, `status` (`needs_source`, `awaiting_production`, `watching`, `passed`, `tripped`, `stopped`), `armedAt`, `awaitingSince` (when it began waiting for production), `startedAt`, `endsAt`, `nextCheckAt`, the `runId` of a check running now, the last 20 `checks` (`at`, `healthy`, `summary`), the `forkTaskId` it filed, `endedAt` (`docs/engine.md` → Watchdogs) |
 | `splits?` | `TaskSplit[]` | tasks `split_task` made, once per plan version (`planVersion`) |
 | `scheduleId?` | string \| null | the schedule that started it |
 
@@ -879,10 +879,10 @@ Sent by the server, each under an id named after its cause (`docs/engine.md` →
 | `phase.updated`, `phase.completed` | a phase's status changed; a phase was handed over (`judgementCalls`, and the last phase's `walkthrough`) |
 | `walkthrough.revised` | a fix changed how the change works (`walkthrough`: only the parts that changed, `runId`); merged into the latest phase report's walkthrough (`docs/engine.md` → The review report) |
 | `watchdog.armed` | a merged round's walkthrough armed a watchdog (watching, or waiting for a source) |
-| `watchdog.started` | a watchdog that waited got its source (`source`, `status`: watching, or waiting for production; `startedAt`, `endsAt`, `nextCheckAt`) |
+| `watchdog.started` | a watchdog that waited got its source (`source`, `status`: watching, or waiting for production; `awaitingSince`, `startedAt`, `endsAt`, `nextCheckAt`) |
 | `watchdog.checking`, `watchdog.deferred` | a check started on a run (`runId`), or moved on 15 minutes while the task worked (`nextCheckAt`) |
 | `watchdog.checked` | a check's result (`check`, `status`, `nextCheckAt`, `forkTaskId`) |
-| `watchdog.live` | the change reached production, so the window starts (`endsAt`) |
+| `watchdog.live` | the change reached production, so the window starts (`endsAt`, `nextCheckAt`), for every watchdog of the task that waited for it |
 | `watchdog.missed` | a check that could not run, given up without a gate (`reason`, `nextCheckAt`; none left stops the watchdog) |
 | `watchdog.ended` | you stopped a watchdog (Stop, or the task marked done or cancelled) |
 | `watch_source.written`, `watch_source.removed` | a project's data source added or changed, or removed |
