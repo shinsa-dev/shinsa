@@ -27,10 +27,12 @@ describe('UserMessage', () => {
   it('lights the border with no line while a message is delivered, and says plainly when it needs no reply or was not delivered', () => {
     const sending = render(<UserMessage persistId={ID} text='Ship it' status='delivering' />);
     expect(sending.container.querySelector('[data-phase="active"] .message-delivery-light')).not.toBeNull();
+    expect(sending.container.querySelector('[data-message]')?.getAttribute('data-delivery')).toBe('active');
     expect(sending.container.querySelector('.sr-only')?.textContent).toBe('Sending');
     expect(sending.container.textContent).toBe('Ship itSending');
     sending.rerender(<UserMessage persistId={ID} text='Ship it' />);
     expect(sending.container.querySelector('[data-phase="settling"]')).not.toBeNull();
+    expect(sending.container.querySelector('[data-message]')?.getAttribute('data-delivery')).toBe('settling');
     expect(sending.container.querySelector('.sr-only')).toBeNull();
     sending.unmount();
     const noted = render(<UserMessage persistId={ID} text='Thanks' status='noted' />);

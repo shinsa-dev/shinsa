@@ -123,10 +123,10 @@ describe('Change a setting', () => {
     ]);
   });
 
-  it('switches the app’s update channel, and only in the app', () => {
-    expect(() =>
-      find(listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES), 'settings.update-channel')
-    ).toThrow();
+  it('switches the app’s update channel between Stable and Beta, and only in the app', () => {
+    const browser = listSettingsSections(createSettings(), MODELS, DEFAULT_PREFERENCES);
+    expect(() => find(browser, 'settings.update-channel')).toThrow();
+    expect(() => find(browser, 'settings.canary.download')).toThrow();
     const fake = installDesktop();
     const sections = listSettingsSections(
       createSettings(),
@@ -140,11 +140,34 @@ describe('Change a setting', () => {
     expect(find(sections, 'settings.update-channel')).toMatchObject({
       label: 'Update channel',
       hint: 'Stable',
+      options: [
+        { value: 'stable', label: 'Stable' },
+        { value: 'beta', label: 'Beta' },
+      ],
     });
     pick(sections, 'settings.update-channel', 'beta');
     pick(sections, 'settings.update-channel', 'stable');
     expect(fake.channels).toEqual(['beta', 'stable']);
+    expect(find(sections, 'settings.canary.download')).toMatchObject({
+      kind: 'link',
+      label: 'Download Shinsa Canary',
+      href: 'https://shinsa.dev/download/canary',
+    });
     fake.restore();
+  });
+
+  it('in Shinsa Canary has no update channel to change and nothing to download', () => {
+    const sections = listSettingsSections(
+      createSettings(),
+      MODELS,
+      DEFAULT_PREFERENCES,
+      null,
+      undefined,
+      'left',
+      'canary'
+    );
+    expect(() => find(sections, 'settings.update-channel')).toThrow();
+    expect(() => find(sections, 'settings.canary.download')).toThrow();
   });
 
   it('moves the Code tab’s file list to either side', () => {
@@ -197,6 +220,51 @@ describe('Change a setting', () => {
     });
     const group = find(sections, 'settings.model.task');
     expect(group).not.toHaveProperty('searchOnly');
+  });
+
+  it('offers the cost limit while an account with a weekly limit is still learning its rate', () => {
+    const account = createAccount({ id: 'weekly' });
+    const weekly = createSnapshot({
+      accounts: [
+        {
+          ...account,
+          usage: {
+            ...account.usage,
+            windows: [
+              {
+                id: 'seven_day',
+                kind: 'weekly',
+                label: 'Weekly',
+                model: null,
+                usedPercent: 10,
+                resetsAt: null,
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const list = (trusted: boolean) =>
+      listSettingsSections(
+        createSettings(),
+        MODELS,
+        DEFAULT_PREFERENCES,
+        weekly,
+        undefined,
+        'left',
+        null,
+        new Map([['account:weekly', { percentPerUsd: 0.2, tasks: 5, trusted }]])
+      );
+    expect(
+      list(false)
+        .flatMap((section) => section.commands)
+        .map((command) => command.id)
+    ).toContain('settings.budget');
+    expect(
+      list(true)
+        .flatMap((section) => section.commands)
+        .map((command) => command.id)
+    ).not.toContain('settings.budget');
   });
 
   it('asks when to ask you about a limit only while a limit waits for you', () => {

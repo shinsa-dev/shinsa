@@ -56,7 +56,11 @@ describe('a task from request to merge', () => {
       new Set([planning?.sessionId ?? null])
     );
 
-    expect(task.checkResults?.map((check) => check.outcome)).toEqual(['pass', 'pass']);
+    expect(task.checkResults?.map((check) => [check.id, check.outcome])).toEqual([
+      ['c1', 'pass'],
+      ['r1', 'pass'],
+      ['r2', 'pass'],
+    ]);
     expect(task.report?.sections.map((phase) => phase.summary)).toEqual([
       'Wrote the file for phase 1.',
       'Wrote the file for phase 2.',
@@ -90,10 +94,10 @@ describe('a task from request to merge', () => {
 
 describe('fix loops', () => {
   test('a failing check goes back to the round agent on its one session, then checks and review run again', async () => {
-    const w = await open({ checks: ['test -f a.txt', 'test -f fixed.txt'] });
+    const w = await open({ checks: ['test -f a.txt', 'grep -q fixed a.txt'] });
     w.agents.queue('fix', async (agent) => {
-      expect(agent.prompt).toContain('`test -f fixed.txt` failed');
-      agent.write('fixed.txt', 'ok\n');
+      expect(agent.prompt).toContain('r2, grep -q fixed a.txt: `grep -q fixed a.txt` failed');
+      agent.write('a.txt', 'fixed\n');
       await agent.call('complete_fix', { summary: 'Added the missing file.' });
     });
     const taskId = await toReviewGate(w);
@@ -141,7 +145,7 @@ describe('fix loops', () => {
   });
 
   test('the same failure twice stops the loop with a failure gate', async () => {
-    const w = await open({ checks: ['test -f never.txt'] });
+    const w = await open({ checks: ['grep -q never a.txt'] });
     const taskId = await w.createTask();
     const gate = await w.untilGate(taskId, 'failure');
     expect(gate.title).toBe('Fixing is not making progress');

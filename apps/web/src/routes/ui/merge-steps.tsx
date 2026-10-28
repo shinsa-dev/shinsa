@@ -8,6 +8,7 @@ import { MergeStepsBlock, MergeStepsPanel } from '@/components/review/merge-step
 import { TestingPanel } from '@/components/review/testing.tsx';
 import { createDisclosureId } from '@/lib/preferences/disclosure.ts';
 import { describeMergeBlock } from '@/lib/review/merge-steps.ts';
+import { SAMPLE_EVIDENCE_CHECKS } from './sample-evidence.ts';
 import { createMergeStepTasks, FULL_COVERAGE, PARTIAL_COVERAGE, TESTING } from './sample-merge-steps.ts';
 import { acknowledgeSample } from './samples.ts';
 import { Specimen } from './section.tsx';
@@ -100,13 +101,13 @@ export function MergeStepSpecimens({ state }: { state: ShinsaState }) {
           <PostMerge state={scene} initial={tasks.merged} />
         </div>
       </Specimen>
-      <Specimen label='TestingPanel · the Review tab’s How to test: what the tests cover with the changed-line coverage and its files behind a toggle, then the steps to try yourself, each with its target (a command to copy or run, a link to open, a screen, a file in Code) and what you should see'>
+      <Specimen label='TestingPanel · the Review tab’s How to test: what the tests cover, the Checks list, the changed-line coverage and its files behind a toggle, then the steps to try yourself, each with its target (a command to copy or run, a link to open, a screen, a file in Code) and what you should see'>
         <div className='flex w-full max-w-xl flex-col gap-2'>
           <TestingPanel
             persistId={createDisclosureId('ui', 'testing', 'guided')}
             task={tasks.gate}
             testing={TESTING}
-            checks={[{ name: 'bun test', outcome: 'pass', detail: '48 tests' }]}
+            checks={SAMPLE_EVIDENCE_CHECKS}
             coverage={PARTIAL_COVERAGE}
           />
         </div>
@@ -117,7 +118,7 @@ export function MergeStepSpecimens({ state }: { state: ShinsaState }) {
             persistId={createDisclosureId('ui', 'testing', 'checks-only')}
             task={tasks.gate}
             testing={null}
-            checks={[{ name: 'bun test', outcome: 'pass', detail: '48 tests' }]}
+            checks={SAMPLE_EVIDENCE_CHECKS}
             coverage={FULL_COVERAGE}
           />
         </div>

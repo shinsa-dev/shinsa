@@ -254,14 +254,21 @@ export function EditorPane({
   const pinnedRead = useFileContent(task, gitRef, source.headPath);
   const liveRead = useFileContent(task, live ? WORKING_REF : null, live ? source.headPath : null);
   const head = live ? liveRead : pinnedRead;
-  const base = useFileContent(task, refs.base, source.basePath);
+  const base = useFileContent(task, refs.base, source.basePath ?? source.baselinePath);
   const [composer, setComposer] = React.useState<Composer | null>(null);
   const diffing = source.change !== null;
   const oneSide = hasOneSide(source);
   const shown = React.useRef<PaneContent | null>(null);
   const content = holdPaneContent(
     shown.current,
-    resolvePaneContent({ headPath: source.headPath, basePath: source.basePath, diffing, head, base })
+    resolvePaneContent({
+      headPath: source.headPath,
+      basePath: source.basePath,
+      baselinePath: source.baselinePath,
+      diffing,
+      head,
+      base,
+    })
   );
   shown.current = content;
   const [opened, setOpened] = React.useState(false);
@@ -352,6 +359,7 @@ export function EditorPane({
           {...(session ? { session } : {})}
           content={saver.start ?? content.content}
           original={content.original}
+          baseline={content.baseline}
           split={diffing && split && !oneSide}
           editable={editable}
           notes={notes}

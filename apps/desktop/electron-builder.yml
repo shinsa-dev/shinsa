@@ -1,15 +1,6 @@
+extends: electron-builder.shared.yml
 appId: studio.overclock.shinsa
 productName: Shinsa
-directories:
-  output: release
-  buildResources: resources
-files:
-  - dist/**
-  - static/**
-  - package.json
-extraResources:
-  - from: ../engine/dist/engine
-    to: engine
 extraFiles:
   - from: resources/LaunchAgents
     to: Library/LaunchAgents
@@ -18,30 +9,6 @@ protocols:
     schemes:
       - shinsa
 mac:
-  target:
-    - target: dir
-      arch: arm64
   icon: icon.icns
-  artifactName: Shinsa-mac-${arch}.${ext}
-  category: public.app-category.developer-tools
-  minimumSystemVersion: "14.0"
-  hardenedRuntime: true
-  entitlements: resources/entitlements.mac.plist
-  entitlementsInherit: resources/entitlements.mac.plist
 dmg:
-  title: ${productName} ${version}
   background: dmg/background-stable.png
-  iconSize: 112
-  iconTextSize: 13
-  contents:
-    - x: 180
-      y: 196
-      type: file
-    - x: 480
-      y: 196
-      type: link
-      path: /Applications
-publish:
-  provider: github
-  owner: shinsa-dev
-  repo: shinsa

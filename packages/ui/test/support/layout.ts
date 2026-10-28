@@ -25,6 +25,9 @@ export function layout(box: Partial<Record<Measured, number>>) {
  * absent), so layout effects measure what the test describes.
  */
 export function installLayout() {
+  const originals = MEASURED.map(
+    (key) => [key, Object.getOwnPropertyDescriptor(HTMLElement.prototype, key)] as const
+  );
   for (const key of MEASURED) {
     Object.defineProperty(HTMLElement.prototype, key, {
       configurable: true,
@@ -35,7 +38,10 @@ export function installLayout() {
     });
   }
   return () => {
-    for (const key of MEASURED) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+    for (const [key, original] of originals) {
+      if (original) Object.defineProperty(HTMLElement.prototype, key, original);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+    }
   };
 }
 

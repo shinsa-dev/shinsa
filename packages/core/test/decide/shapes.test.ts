@@ -9,6 +9,7 @@ import {
   resolveQueue,
   resolveQueueSummary,
   resolveTaskProgress,
+  resolveTaskRounds,
   resolveTaskShape,
   SHAPE_PIPELINES,
   type TaskShape,
@@ -327,6 +328,22 @@ describe('an investigation', () => {
     expect(harness.activeRun(taskId).prompt).toContain('The human followed up:\nCheck the CSV path too.');
   });
 
+  test('a message at your OK declines the proposal even when it reads as new work', () => {
+    const harness = createHarness();
+    const taskId = start(harness, { shape: 'investigate' });
+    passSetup(harness, taskId);
+    deliver(harness, taskId, 'investigate', PROPOSAL);
+    harness.send({
+      type: 'task.message',
+      taskId,
+      text: 'Also check exports.',
+      kind: 'new_round',
+      shape: 'change',
+    });
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(1);
+    expect(harness.task(taskId)).toMatchObject({ stage: 'investigating', proposal: { status: 'declined' } });
+  });
+
   test('a proposed change reads as one in Needs you, the guide and the status summary', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'investigate' });
@@ -527,7 +544,7 @@ describe('an operation', () => {
     const harness = createHarness();
     const taskId = start(harness, { shape: 'operation' });
     passSetup(harness, taskId);
-    proposePlan(harness, taskId, { ...PLAN, evidence: ['note'] });
+    proposePlan(harness, taskId, { ...PLAN, verification: [], evidence: ['note'] });
     approve(harness, taskId);
     const runId = harness.activeRun(taskId).id;
     expect(() => deliver(harness, taskId, 'operate')).toThrow(
@@ -1095,6 +1112,14 @@ describe('the operation after the merge waits for your OK', () => {
       response: 'Run it on staging first.',
     });
     expect(harness.activeRun(taskId).prompt).toContain('Guidance from the human:\nRun it on staging first.');
+  });
+
+  test('a message at the operation gate replaces the notes even when it reads as new work', () => {
+    const harness = createHarness();
+    const taskId = reachOperationGate(harness);
+    harness.send({ type: 'task.message', taskId, text: 'Wait for the deploy.', kind: 'new_round' });
+    expect(resolveTaskRounds(harness.task(taskId))).toHaveLength(1);
+    expect(harness.openGate(taskId).notes).toBe('Wait for the deploy.');
   });
 
   test('declining finishes the task without running the operation', () => {

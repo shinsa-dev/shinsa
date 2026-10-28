@@ -1,5 +1,5 @@
 import type { ReportCheck, Run, ShinsaEvent, ShinsaState, Task } from '../packages/core/src/index.ts';
-import { applyEvent, createState, splitHouseRules } from '../packages/core/src/index.ts';
+import { applyEvent, createState, listBlockingChecks, splitHouseRules } from '../packages/core/src/index.ts';
 import {
   resolveAgentPrompt,
   resolveChecksFixPrompt,
@@ -14,7 +14,13 @@ import { listTaskBases } from '../packages/core/src/prompts/root.ts';
 import type { TimedSeedEvent } from './seed-kit.ts';
 
 const SEED_FAILED_CHECKS: ReportCheck[] = [
-  { name: 'bun run test', outcome: 'fail', detail: '1 fail\n\nsrc/index.test.ts: expected 3 to be 2' },
+  {
+    id: 'c1',
+    label: 'Tests for the change',
+    command: 'bun test src/index.test.ts',
+    outcome: 'fail',
+    detail: '1 fail\n\nsrc/index.test.ts: expected 3 to be 2',
+  },
 ];
 
 interface PromptContext {
@@ -30,8 +36,9 @@ function resolveFixInstruction(context: PromptContext, task: Task) {
   if (task.fixFor === 'pull_request' && final.pullRequest) {
     return resolvePullRequestFixPrompt(final.pullRequest);
   }
-  const failing = task.checkResults?.some((check) => check.outcome === 'fail');
-  return resolveChecksFixPrompt(failing && task.checkResults ? task.checkResults : SEED_FAILED_CHECKS);
+  const blocking = listBlockingChecks(task);
+  const phasesLeft = task.phaseReports.length < (task.plan?.document?.phases.length ?? 0);
+  return resolveChecksFixPrompt(blocking.length > 0 ? blocking : SEED_FAILED_CHECKS, phasesLeft);
 }
 
 function resolveAgentRunPrompt(context: PromptContext, run: Run) {

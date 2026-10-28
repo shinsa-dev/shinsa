@@ -53,9 +53,10 @@ export const VERIFICATION_RULES: readonly VerificationRule[] = [
     applies: 'code',
     scope: 'always',
     check: { kind: 'plan', field: 'verification' },
-    requirement: 'The plan says up front how the change is proven.',
+    requirement:
+      'The plan names the checks that prove the change: each a label, its exact scoped command and the phases it covers.',
     message:
-      'This task changes code, so the plan needs a verification plan up front: list in `verification` how the change is proven (the tests, checks, runs or screenshots that show it works).',
+      'This task changes code, so the plan needs its checks up front: list in `verification` the checks that prove the change, each a `label`, the exact `command` scoped to what the change touches (the test files or folder, one package’s type check, the linter on the changed paths) and the `phases` it covers.',
   },
   {
     id: 'code.evidence',
@@ -70,9 +71,10 @@ export const VERIFICATION_RULES: readonly VerificationRule[] = [
     applies: 'code',
     scope: 'always',
     check: { kind: 'step', step: 'checks' },
-    requirement: 'Shinsa runs the repository’s checks, and the checks the plan adds, on every change.',
+    requirement:
+      'Shinsa runs the plan’s checks after each phase they cover, the failing ones after a fix, and the repository’s own commands once before review.',
     message:
-      "A code change is checked: put `checks` after `build`. Shinsa runs the repository's checks on every change; the plan's `checks` add to them.",
+      'A code change is checked: put `checks` after `build`. Shinsa runs the checks the plan lists after each phase they cover.',
   },
   {
     id: 'code.agent_review',
@@ -185,8 +187,10 @@ export function validatePlanRules(steps: readonly PipelineStep[], document: Plan
     if (rule.check.kind !== 'plan' || PLAN_FIELD_FILLED[rule.check.field](document)) return [];
     return [rule.message];
   });
-  if ((document.checks ?? []).length > 0 && !steps.includes('build')) {
-    errors.push('`checks` are for a code change, and this task changes no code: leave them out.');
+  if (document.verification.length > 0 && !steps.includes('build')) {
+    errors.push(
+      '`verification` lists checks for a code change, and this task changes no code: leave it empty.'
+    );
   }
   return errors;
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, mock } from 'bun:test';
 import { type AgentProviderInfo, KNOWN_AGENT_PROVIDERS } from '@shinsa/core';
 import { renderHook, waitFor } from '@testing-library/react';
-import { useAgentProviders } from '@/lib/connection/models.ts';
+import { resetAgentProviders, useAgentProviders } from '@/lib/connection/models.ts';
 
 const realFetch = globalThis.fetch;
 
@@ -15,6 +15,7 @@ const SERVED: AgentProviderInfo[] = [
 
 afterEach(() => {
   globalThis.fetch = realFetch;
+  resetAgentProviders();
 });
 
 describe('useAgentProviders', () => {

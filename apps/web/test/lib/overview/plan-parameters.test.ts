@@ -6,13 +6,19 @@ describe('resolvePlanParameters', () => {
     expect(
       resolvePlanParameters({
         evidence: ['preview', 'screenshot', 'recording', 'test', 'note'],
-        checks: ['bun test currency'],
+        verification: [
+          { label: 'Currency tests', command: 'bun test currency', phases: [1, 2] },
+          { label: 'Types', command: 'bun run check-types', phases: [] },
+        ],
         impact: '  About 400 rows.  ',
         approval: true,
       })
     ).toEqual({
-      evidence: ['Preview link', 'Screenshot', 'Recording', 'Test output', 'Note'],
-      checks: ['bun test currency'],
+      evidence: ['Preview link', 'Screenshot', 'Recording', 'Linked test', 'Note'],
+      checks: [
+        { label: 'Currency tests', command: 'bun test currency', phases: 'Phases 1 to 2' },
+        { label: 'Types', command: 'bun run check-types', phases: null },
+      ],
       impact: 'About 400 rows.',
       approval: true,
     });
@@ -20,7 +26,9 @@ describe('resolvePlanParameters', () => {
 
   it('is null for a plan without any of them, so nothing is drawn', () => {
     expect(resolvePlanParameters({})).toBeNull();
-    expect(resolvePlanParameters({ evidence: [], checks: [], impact: '  ', approval: false })).toBeNull();
+    expect(
+      resolvePlanParameters({ evidence: [], verification: [], impact: '  ', approval: false })
+    ).toBeNull();
   });
 
   it('shows a plan that only asked for your approval', () => {

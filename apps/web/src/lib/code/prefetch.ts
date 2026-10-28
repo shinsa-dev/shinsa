@@ -38,9 +38,10 @@ function requestFile(
   priority: number = TOKEN_PRIORITY.prefetch
 ) {
   const source = resolveFileSource(file, diff);
+  const basePath = source.basePath ?? source.baselinePath;
   return Promise.all([
     source.headPath ? requestText(task, ref, source.headPath, priority) : null,
-    source.basePath && refs.base ? requestText(task, refs.base, source.basePath, priority) : null,
+    basePath && refs.base ? requestText(task, refs.base, basePath, priority) : null,
   ]);
 }
 

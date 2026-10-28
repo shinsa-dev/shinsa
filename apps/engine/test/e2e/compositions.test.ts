@@ -206,12 +206,13 @@ describe('the verification rules a composition and its plan must pass', () => {
     expect(w.agents.sessions.map((session) => session.key)).toEqual(['plan', 'build', 'build', 'reviewer']);
   });
 
-  test("the plan's evidence is required before the last phase completes, and its checks run with the repository's", async () => {
+  test("the plan's test evidence is a linked check, required before the last phase, and its checks run with the repository's", async () => {
     const w = await World.create();
     world = w;
     let refusal = '';
     w.agents.queue('plan', async (agent) => {
-      await agent.call('propose_plan', toolPlan({ ...PLAN, evidence: ['test'], checks: ['test -s a.txt'] }));
+      const verification = [{ label: 'Greeting not empty', command: 'test -s a.txt', phases: [1, 2] }];
+      await agent.call('propose_plan', toolPlan({ ...PLAN, evidence: ['test'], verification }));
     });
     w.agents.queue('build', async (agent) => {
       agent.write('a.txt', 'phase 1\n');
@@ -225,16 +226,20 @@ describe('the verification rules a composition and its plan must pass', () => {
       agent.write('b.txt', 'phase 2\n');
       const report = { summary: 'Wrote b.txt.', spots: [], judgement_calls: [] };
       refusal = await agent.call('complete_phase', report).catch((error: Error) => error.message);
-      await agent.call('attach_evidence', { kind: 'test', title: 'Both files', text: 'a.txt b.txt' });
+      await agent.call('attach_evidence', { kind: 'test', check: 'c1', detail: 'The greeting is written.' });
       await agent.call('complete_phase', report);
     });
     const taskId = await w.createTask();
     await w.untilGate(taskId, 'review');
     expect(refusal).toContain('Attach it with `attach_evidence` before you complete the last phase.');
-    expect(w.task(taskId).checkResults?.map((check) => [check.name, check.outcome])).toEqual([
-      ['test -f a.txt', 'pass'],
-      ['test -f b.txt', 'pass'],
-      ['test -s a.txt', 'pass'],
+    expect(w.task(taskId).checkResults?.map((check) => [check.id, check.command, check.outcome])).toEqual([
+      ['c1', 'test -s a.txt', 'pass'],
+      ['r1', 'test -f a.txt', 'pass'],
+      ['r2', 'test -f b.txt', 'pass'],
     ]);
+    const linked = Object.values(w.state.evidence).find(
+      (item) => item.runId !== null && item.checkId === 'c1'
+    );
+    expect(linked).toMatchObject({ kind: 'test', title: 'Greeting not empty', uri: 'shinsa://check/c1' });
   });
 });

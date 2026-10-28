@@ -55,29 +55,13 @@ export function resolvePlanChanges(before: PlanDocument | null, after: PlanDocum
   ];
 }
 
-function describeFiles(added: number, removed: number) {
-  const parts = [
-    added > 0 ? `${added} new ${added === 1 ? 'file' : 'files'}` : null,
-    removed > 0 ? `${removed} ${removed === 1 ? 'file' : 'files'} dropped` : null,
-  ].filter((part) => part !== null);
-  return `Files: ${parts.join(', ')}`;
-}
+export type PhaseChange = 'added' | 'changed';
 
-export function describePlanChange(change: PlanChange) {
-  switch (change.kind) {
-    case 'goal':
-      return 'Changed the goal';
-    case 'approach':
-      return 'Changed the approach';
-    case 'phase_added':
-      return `Added the phase “${change.title}”`;
-    case 'phase_removed':
-      return `Dropped the phase “${change.title}”`;
-    case 'phase_changed':
-      return `Reworked the phase “${change.title}”`;
-    case 'phases_reordered':
-      return 'Put the phases in a new order';
-    case 'files':
-      return describeFiles(change.added, change.removed);
+export function resolvePhaseChange(changes: PlanChange[] | undefined, title: string): PhaseChange | null {
+  const key = normalize(title);
+  for (const change of changes ?? []) {
+    if (change.kind === 'phase_added' && normalize(change.title) === key) return 'added';
+    if (change.kind === 'phase_changed' && normalize(change.title) === key) return 'changed';
   }
+  return null;
 }

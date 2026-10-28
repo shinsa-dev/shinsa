@@ -37,6 +37,16 @@ describe('Icon', () => {
     expect(bell.innerHTML).toBe(markup(ICON_PATHS.IconBell['3'] as string));
   });
 
+  it('draws chevrons and crosses in the sm box whatever size they are asked for', () => {
+    for (const name of ['IconChevronDownMedium', 'IconCrossSmall', 'IconCrossMedium'] as const) {
+      const svg = render(<Icon name={name} size='md' />).container.querySelector('svg') as SVGElement;
+      expect(svg.classList.contains('size-(--icon-size-sm)')).toBe(true);
+      expect(svg.classList.contains('size-(--icon-size-md)')).toBe(false);
+    }
+    const cross = render(<Icon name='IconCrossSmall' />).container.querySelector('svg') as SVGElement;
+    expect(cross.innerHTML).toBe(markup(ICON_PATHS.IconCrossSmall['3'] as string));
+  });
+
   it('falls back to the default radius when a radius was never generated', () => {
     const svg = render(<Icon name='IconBell' radius='1' />).container.querySelector('svg') as SVGElement;
     expect(svg.innerHTML).toBe(markup(ICON_PATHS.IconBell['3'] as string));

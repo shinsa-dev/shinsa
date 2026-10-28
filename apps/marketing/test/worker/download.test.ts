@@ -29,7 +29,7 @@ const LAST_MODIFIED = 'Tue, 27 Oct 2026 12:11:13 GMT';
 
 const EARLIER = 'Mon, 26 Oct 2026 12:00:00 GMT';
 
-type StoredChannel = 'stable' | 'beta';
+type StoredChannel = 'stable' | 'beta' | 'canary';
 
 function pointerOf(version: string, overrides: Partial<DownloadPointer> = {}): DownloadPointer {
   return {
@@ -148,11 +148,13 @@ function dmgUrl(tag: string) {
 }
 
 describe('resolveChannel', () => {
-  it('reads the stable and beta download paths, with or without a trailing slash', () => {
+  it('reads the stable, beta and canary download paths, with or without a trailing slash', () => {
     expect(resolveChannel('/download')).toBe('stable');
     expect(resolveChannel('/download/')).toBe('stable');
     expect(resolveChannel('/download/beta')).toBe('beta');
     expect(resolveChannel('/download/beta/')).toBe('beta');
+    expect(resolveChannel('/download/canary')).toBe('canary');
+    expect(resolveChannel('/download/canary/')).toBe('canary');
   });
 
   it('leaves every other path to the static assets', () => {
@@ -167,6 +169,7 @@ describe('the bucket layout', () => {
     expect(resolveReleaseKey('1.0.0-beta.1')).toBe('releases/1.0.0-beta.1/Shinsa-mac-arm64.dmg');
     expect(resolveChannelKey('stable')).toBe('channels/stable.json');
     expect(resolvePointerCacheKey('beta')).toBe('https://shinsa.dev/cache/download/channels/beta.json');
+    expect(resolveChannelKey('canary')).toBe('channels/canary.json');
   });
 });
 
@@ -261,6 +264,17 @@ describe('respond from the bucket', () => {
       'attachment; filename="Shinsa-1.3.0-beta.2.dmg"'
     );
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(DMG_BYTES);
+  });
+
+  it('streams the canary pointer for canary', async () => {
+    const canary = storeChannels([['canary', pointerOf('1.3.1-canary.4')]]);
+    const response = await respond(
+      createRequest('/download/canary'),
+      createWorld({ bucket: createBucket(canary).bucket }).world
+    );
+    expect(response.headers.get('Content-Disposition')).toBe(
+      'attachment; filename="Shinsa-1.3.1-canary.4.dmg"'
+    );
   });
 
   it('serves the beta at /download while there is no stable release', async () => {
@@ -451,6 +465,31 @@ describe('respond when the bucket cannot serve', () => {
     await expectRedirect(await respond(createRequest('/download'), world), dmgUrl('v1.0.0-beta.11'));
   });
 
+  it('never serves another channel’s pointer for canary, and redirects to the newest canary', async () => {
+    const { bucket, calls } = createBucket(RELEASED);
+    const { world } = createWorld({ bucket, answer: answerFeed(['v1.3.1-canary.2', 'v1.2.9']) });
+    await expectRedirect(await respond(createRequest('/download/canary'), world), dmgUrl('v1.3.1-canary.2'));
+    expect(calls.map((call) => call.key)).toEqual(['channels/canary.json']);
+  });
+
+  it('never sends /download or /download/beta to a canary, nor /download/canary to anything else', async () => {
+    const mixed = answerFeed(['v1.3.1-canary.3', 'v1.3.1-canary.2', 'v1.3.0-beta.2', 'v1.2.9']);
+    const { world } = createWorld({ answer: mixed });
+    await expectRedirect(await respond(createRequest('/download'), world), LATEST_STABLE_URL);
+    await expectRedirect(await respond(createRequest('/download/beta'), world), dmgUrl('v1.3.0-beta.2'));
+    await expectRedirect(await respond(createRequest('/download/canary'), world), dmgUrl('v1.3.1-canary.3'));
+    const stableAfter = createWorld({ answer: answerFeed(['v1.4.0', 'v1.3.1-canary.3']) }).world;
+    await expectRedirect(
+      await respond(createRequest('/download/canary'), stableAfter),
+      dmgUrl('v1.3.1-canary.3')
+    );
+    const noCanary = createWorld({ answer: answerFeed(['v1.4.0', 'v1.4.1-beta.1']) }).world;
+    await expectRedirect(await respond(createRequest('/download/canary'), noCanary), RELEASES_PAGE);
+    const canaries = createWorld({ answer: answerFeed(['v1.3.1-canary.3']) }).world;
+    await expectRedirect(await respond(createRequest('/download'), canaries), LATEST_STABLE_URL);
+    await expectRedirect(await respond(createRequest('/download/beta'), canaries), RELEASES_PAGE);
+  });
+
   it('falls back to the latest release and the releases page when the feed fails too', async () => {
     const answers: Answer[] = [
       unreachable,
@@ -461,6 +500,7 @@ describe('respond when the bucket cannot serve', () => {
       const { world } = createWorld({ answer });
       await expectRedirect(await respond(createRequest('/download'), world), LATEST_STABLE_URL);
       await expectRedirect(await respond(createRequest('/download/beta'), world), RELEASES_PAGE);
+      await expectRedirect(await respond(createRequest('/download/canary'), world), RELEASES_PAGE);
     }
   });
 

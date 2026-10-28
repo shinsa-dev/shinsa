@@ -2,6 +2,7 @@ import {
   type Gate,
   listActiveRuns,
   listWaitsOn,
+  resolvePhaseChange,
   resolveTaskProgress,
   type ShinsaState,
   type Task,
@@ -10,6 +11,7 @@ import {
 import { Button } from '@shinsa/ui/components/button';
 import { MessageLink } from '@/components/chat/message-link.tsx';
 import { RoleMark } from '@/components/chat/role-mark.tsx';
+import { ChecksBlock } from '@/components/checks/checks-list.tsx';
 import { StepNumber } from '@/components/layout/surface/step-number.tsx';
 import { TaskLink } from '@/components/links/task.tsx';
 import { AnswerBox } from '@/components/overview/answer-box.tsx';
@@ -19,7 +21,7 @@ import { PostMergeCard } from '@/components/overview/merge-steps-card.tsx';
 import { Eyebrow, FooterNote, NowFrame, QuietLink } from '@/components/overview/now-frame.tsx';
 import { OperationCard } from '@/components/overview/operation-card.tsx';
 import { PlanParameterList } from '@/components/overview/plan-parameters.tsx';
-import { PlanRevision } from '@/components/overview/plan-revision.tsx';
+import { PlanChangeSummary, PlanFeedback, PlanPhaseTitle } from '@/components/overview/plan-revision.tsx';
 import { ProgressTrack, TaskTrack } from '@/components/overview/progress-track.tsx';
 import { QuestionChoices } from '@/components/overview/question-choices.tsx';
 import { ReviewActions } from '@/components/overview/review-actions.tsx';
@@ -31,7 +33,7 @@ import { UsageWaitCard } from '@/components/overview/usage-wait-card.tsx';
 import { WaitCard } from '@/components/overview/wait-card.tsx';
 import { MergeStepsBlock } from '@/components/review/merge-steps.tsx';
 import { InsetNote } from '@/components/text/inset-note.tsx';
-import { InlineMarkdown, Markdown } from '@/components/text/markdown.tsx';
+import { Markdown } from '@/components/text/markdown.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useBusy } from '@/hooks/use-busy.ts';
 import { formatSince } from '@/lib/format/time.ts';
@@ -45,11 +47,11 @@ import {
   resolveNowKind,
   resolveNowTitle,
 } from '@/lib/overview/now.ts';
-import { describePlanEyebrow } from '@/lib/overview/plan-version.ts';
+import { describePlanEyebrow, resolvePlanVersion } from '@/lib/overview/plan-version.ts';
 import { describeAnswerPlaceholder } from '@/lib/overview/question.ts';
 import { describeEscalationBody, describeReviewTitle } from '@/lib/overview/verdicts.ts';
 import { STALLED_REASON } from '@/lib/overview/wait.ts';
-import { describeSpent } from '@/lib/tasks/cost.ts';
+import { resolveChecksView } from '@/lib/tasks/checks.ts';
 import {
   type GateReplier,
   type GateReply,
@@ -81,15 +83,20 @@ function PlannedOperation({ task }: { task: Task }) {
 function PlanList({ task }: { task: Task }) {
   const document = task.plan?.document;
   if (!document) return null;
+  const version = resolvePlanVersion(task);
   return (
     <div className='flex flex-col gap-3'>
+      <PlanChangeSummary summary={version?.summary ?? null} />
       <Markdown text={document.goal} className='text-fg-3 text-xs' />
       <ol className='flex flex-col gap-2.5'>
         {document.phases.map((phase, index) => (
           <li key={phase.title} className='flex gap-2.5'>
             <StepNumber index={index} />
             <div className='flex min-w-0 flex-col gap-px'>
-              <InlineMarkdown text={phase.title} className='font-medium text-fg-4 text-xs leading-5' />
+              <PlanPhaseTitle
+                title={phase.title}
+                change={resolvePhaseChange(version?.changes, phase.title)}
+              />
               <Markdown text={phase.detail} className='text-fg-3 text-xs' />
             </div>
           </li>
@@ -215,7 +222,7 @@ export function PlanCard({
         </FooterNote>
       }
     >
-      <PlanRevision task={task} />
+      <PlanFeedback text={resolvePlanVersion(task)?.feedback ?? null} />
       <PlanList task={task} />
     </NowFrame>
   );
@@ -276,6 +283,7 @@ function ReviewCard({
 }) {
   const merge = gate.type === 'merge';
   const findings = merge ? [] : task.findings;
+  const checks = resolveChecksView(state, task);
   return (
     <NowFrame
       eyebrow={<Eyebrow state={state} task={task} extra={<TimeAgo at={gate.openedAt} />} />}
@@ -291,10 +299,9 @@ function ReviewCard({
       footer={<ProgressTrack progress={resolveTaskProgress(task)} />}
     >
       <p className='text-fg-3 text-xs'>
-        {gate.escalation
-          ? describeEscalationBody(gate.escalation)
-          : describeReviewFacts(task, merge, describeSpent(state, task))}
+        {gate.escalation ? describeEscalationBody(gate.escalation) : describeReviewFacts(task, merge)}
       </p>
+      {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {findings.length > 0 && <FindingVerdicts task={task} findings={findings} />}
       {merge && <MergeStepsBlock task={task} when='pre_merge' />}
     </NowFrame>
@@ -314,6 +321,7 @@ function WorkCard({
   const [run] = listActiveRuns(state, task.id);
   const current = progress.current;
   const leaf = traceStalledLeaf(state, task);
+  const checks = task.stage === 'checking' ? resolveChecksView(state, task) : null;
   return (
     <NowFrame
       eyebrow={
@@ -347,7 +355,10 @@ function WorkCard({
           Held up because <TaskLink state={state} task={leaf.task} /> {STALLED_REASON[leaf.reason]}.
         </p>
       )}
-      {current?.planned && current.detail && <Markdown text={current.detail} className='text-fg-3 text-xs' />}
+      {current?.planned && current.detail && !checks && (
+        <Markdown text={current.detail} className='text-fg-3 text-xs' />
+      )}
+      {checks && <ChecksBlock taskId={task.id} view={checks} />}
       {run && <SilenceNote state={state} run={run} />}
       {run && <LiveFeed run={run} />}
     </NowFrame>

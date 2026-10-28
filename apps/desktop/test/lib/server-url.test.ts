@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'bun:test';
+import { APP_FLAVORS } from '@shinsa/core';
 import { parseConfigPort, resolveConfigPath, resolveServerUrl } from '../../src/lib/server-url.ts';
 
 describe('resolveServerUrl', () => {
   it('uses the server on the port the command line uses', () => {
-    expect(resolveServerUrl({ env: {}, packaged: true, configPort: null })).toBe('http://127.0.0.1:5180');
+    expect(resolveServerUrl({ env: {}, packaged: true, configPort: null })).toBe('http://127.0.0.1:7446');
     expect(resolveServerUrl({ env: {}, packaged: true, configPort: 5300 })).toBe('http://127.0.0.1:5300');
     expect(resolveServerUrl({ env: { SHINSA_PORT: '5400' }, packaged: true, configPort: 5300 })).toBe(
       'http://127.0.0.1:5400'
     );
     expect(resolveServerUrl({ env: { SHINSA_PORT: 'abc' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:5180'
+      'http://127.0.0.1:7446'
+    );
+  });
+
+  it('finds Shinsa Canary’s engine on a port of its own', () => {
+    expect(resolveServerUrl({ env: {}, packaged: true, configPort: null, flavor: APP_FLAVORS.canary })).toBe(
+      'http://127.0.0.1:7447'
     );
   });
 
@@ -26,10 +33,10 @@ describe('resolveServerUrl', () => {
       })
     ).toBe('http://localhost:5190');
     expect(resolveServerUrl({ env: { SHINSA_URL: 'ftp://host' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:5180'
+      'http://127.0.0.1:7446'
     );
     expect(resolveServerUrl({ env: { SHINSA_URL: 'not a url' }, packaged: true, configPort: null })).toBe(
-      'http://127.0.0.1:5180'
+      'http://127.0.0.1:7446'
     );
   });
 });
@@ -39,6 +46,9 @@ describe('the config file', () => {
     expect(resolveConfigPath({}, '/Users/me')).toBe('/Users/me/.config/shinsa/config.json');
     expect(resolveConfigPath({ HOME: '/home/me' }, '/Users/me')).toBe('/home/me/.config/shinsa/config.json');
     expect(resolveConfigPath({ XDG_CONFIG_HOME: '/xdg' }, '/Users/me')).toBe('/xdg/shinsa/config.json');
+    expect(resolveConfigPath({}, '/Users/me', APP_FLAVORS.canary)).toBe(
+      '/Users/me/.config/shinsa-canary/config.json'
+    );
     expect(resolveConfigPath({ SHINSA_DATA_DIR: '/data' }, '/Users/me')).toBe('/data/config.json');
     expect(resolveConfigPath({ SHINSA_HOME: '/shinsa', SHINSA_DATA_DIR: '/data' }, '/Users/me')).toBe(
       '/shinsa/config.json'

@@ -45,7 +45,7 @@ describe('task shapes', () => {
     expect(validatePipeline(CHANGE.filter((step) => step !== 'checks'))).toEqual([]);
     expect(validatePipeline(bare)).toEqual([]);
     expect(validateComposition(FRESH, bare)).toEqual([
-      "A code change is checked: put `checks` after `build`. Shinsa runs the repository's checks on every change; the plan's `checks` add to them.",
+      'A code change is checked: put `checks` after `build`. Shinsa runs the checks the plan lists after each phase they cover.',
       'A code change gets an independent agent review: put `agent_review` after `checks`.',
     ]);
   });

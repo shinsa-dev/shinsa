@@ -35,9 +35,9 @@ export const REVIEW_FINDINGS: ReviewFinding[] = [
 ];
 
 export const REVIEW_CHECKS: ReportCheck[] = [
-  { name: 'bun lint', outcome: 'pass', detail: null },
-  { name: 'bun check-types', outcome: 'pass', detail: null },
-  { name: 'bun run test', outcome: 'pass', detail: '214 tests, 3 new' },
+  { id: 'r1', label: 'bun lint', command: 'bun lint', outcome: 'pass', detail: null },
+  { id: 'r2', label: 'bun check-types', command: 'bun check-types', outcome: 'pass', detail: null },
+  { id: 'r3', label: 'bun run test', command: 'bun run test', outcome: 'pass', detail: '214 tests, 3 new' },
 ];
 
 export const REVIEW_REPORT: WorkReport = {

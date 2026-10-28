@@ -18,7 +18,6 @@ const PROBLEM_FIX: Record<ConfigProblem['kind'], string> = {
   no_repository:
     'Say in a message which repository the task works in, and Shinsa verifies the setup again with it. A repository Shinsa does not know yet can be added to the project in Settings.',
   default_branch: 'Set the default branch in the repository settings, then verify the setup again.',
-  check_commands: 'Add check commands in the repository settings, or continue without checks.',
   workspace:
     'Fix it in the repository, or change where agents work in Settings → Projects, then verify the setup again.',
 };
@@ -27,7 +26,6 @@ const PROBLEM_TITLE: Record<ConfigProblem['kind'], string> = {
   repository: 'The repository is missing',
   no_repository: 'No repository for this task',
   default_branch: 'The default branch is missing',
-  check_commands: 'No checks to run',
   workspace: 'Agents cannot work in this repository yet',
 };
 
@@ -88,31 +86,10 @@ export function recordConfig(decider: Decider, command: CommandOf<'config.record
   decider.openGate(task.id, 'configuration', describeTitle(problems), describeProblems(problems));
 }
 
-function resolveWaivableRepo(decider: Decider, gate: Gate) {
-  const task = decider.task(gate.taskId);
-  const repo = decider.repoOf(task);
-  const problems = task.configProblems ?? [];
-  if (!repo || problems.some((problem) => problem.kind !== 'check_commands')) {
-    throw new DomainError(
-      'setup_incomplete',
-      'Only missing checks can be skipped. Fix the repository setup, then verify it again.'
-    );
-  }
-  return repo;
-}
-
-export function assertConfigurationAnswer(decider: Decider, gate: Gate, decision: GateDecision) {
-  if (gate.type === 'configuration' && decision === 'waive') resolveWaivableRepo(decider, gate);
-}
-
 export function answerConfiguration(decider: Decider, gate: Gate, decision: GateDecision) {
   if (decision === 'reject') {
     settleTask(decider, gate.taskId, 'cancelled', 'cancelled during setup');
     return;
-  }
-  if (decision === 'waive') {
-    const repo = resolveWaivableRepo(decider, gate);
-    if (!repo.checksWaived) decider.emit({ type: 'repo.updated', repo: { ...repo, checksWaived: true } });
   }
   startWork(decider, gate.taskId);
 }

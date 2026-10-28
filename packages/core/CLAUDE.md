@@ -27,7 +27,11 @@ src/
 │                    that escalatesTo one, resolveGateDefinition, PLAN_GATE_RULE and describePlanGateRule,
 │                    validatePipeline read from each step's needs), the verification rules
 │                    (verification.ts: VERIFICATION_RULES, validateVerification, validatePlanRules,
-│                    listMissingEvidence), projects (projects.ts: keys, task handles,
+│                    listMissingEvidence), a task's checks (checks.ts: isWholeSuiteCommand and
+│                    describeWholeSuiteRefusal for a plan's command and an agent's shell, listRepoChecks (the repository's commands as
+│                    r1…), listTaskChecks, listPhaseChecks, listTouchedPhaseChecks (the checks of the phases whose
+│                    files a fix changed, from PhaseReport.files), resolveNextCheckId, isBlockingCheck and
+│                    listBlockingChecks: a fail not noted fails_on_base), projects (projects.ts: keys, task handles,
 │                    folders: resolveProjectKey, parseTaskHandle, selectFolderProject), rounds (rounds.ts: Round,
 │                    resolveTaskRounds, resolveCurrentRound, isTaskResting, isTaskClosed, resolveRoundStamp and
 │                    isOfCurrentRound, the stack and how a round ships: resolveRoundBase, listStackedPullRequests,
@@ -60,10 +64,15 @@ src/
 │                    resolveTaskProject, selectTaskByReference, selectStackTarget, selectStackedOnTask and
 │                    resolvePullRequestBase for a GitButler task stacked on another's branch), and the folds by
 │                    concern, each an apply*Event:
-│                    runs.ts (attempts, links, lost sessions, metering, silence, compaction), gates.ts (opened,
+│                    runs.ts (attempts, links, lost sessions, metering per attempt with its weekly readings,
+│                    silence, compaction), gates.ts (opened,
 │                    answered, withdrawn, noted, superseded), pull-requests.ts, waits.ts (monitors and usage waits),
 │                    delegations.ts, schedules.ts, suggestions.ts, reviews.ts (verdicts), accounts.ts (binding),
-│                    shapes.ts (reshapes, results, proposed changes), on-behalf.ts (what agents did on your behalf),
+│                    shapes.ts (reshapes, results, proposed changes), project.ts also folds the checks
+│                    (plan.proposed sets Task.checks from the plan's verification; checks.changed applies the
+│                    agent's changes and drops a changed check's result; checks.started sets runningChecks, which
+│                    checks.recorded and leaving the checking stage clear; checks.recorded merges results by id),
+│                    on-behalf.ts (what agents did on your behalf),
 │                    inbox.ts (messages accepted and not yet routed), overlaps.ts (task.overlapped, task.overlaps_told),
 │                    rounds.ts (round 1 on task.created, archiving a round and starting the next, a round's branch
 │                    and pull request, where a merged pull request marks every round still shipped on it merged,
@@ -76,9 +85,22 @@ src/
 │   │                equality.ts (isSameValue)
 │   ├── lifecycle.ts Starting each step (work, planning, a phase, checks, review), the review gate, settling a task
 │   │                (which removes its worktree and its scratch folder: worktree.remove, scratch.remove)
+│   ├── checks.ts    The task's checks: which run after a phase, a fix or your edits (startPhaseChecks,
+│   │                startFixChecks: the blocking, named and changed ones and those of the phases whose files
+│   │                the fix commit changed, startEditsChecks, retryChecks: the run's set and the blocking ones again; an
+│   │                empty set skips the stage), checks.started (the run's ids, Task.runningChecks) and the checks.run
+│   │                effect with coverage on the run before review, recording a round (recordChecks: results,
+│   │                Shinsa's output piece per check, then the next phase, the agent review or a fix on the
+│   │                blocking ones), and the agent's check_changes (resolveCheckChanges, recordCheckChanges:
+│   │                checks.changed, refusing an unknown id, a repeated command, a phase out of range and the
+│   │                repository's checks)
 │   ├── fixes.ts     Fix loops: checks and review reactions, the automatic budget, stall detection, review escalation
 │   ├── fingerprints.ts  Recovery and fix fingerprints, so prose never resets a budget
-│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues
+│   ├── pull-requests.ts  Pushing, reacting to a synced pull request, the merge gate, merging and merge queues; the
+│   │                steps of a push as stage reasons (recordShippingStep), a visible retry (recordPushRetry), a
+│   │                conflict while updating onto the base (recordUpdateConflict, `fixFor: 'update'`) and a pre-push
+│   │                hook rejection (recordHookFailure, `fixFor: 'hook'`; the same failures again open the `push_hook`
+│   │                gate, retryHookFix answers it); after the checks of such a fix the push follows (checks.ts)
 │   ├── watch.ts     The pull request watch (T3's evaluatePullRequestWatch): per-check diff, required gate,
 │   │                comment watermark, sticky conflict, comment-only wake limit, the per-check stall key
 │   ├── dependencies.ts   Resolving and changing what a task waits on, releasing waiting tasks, stacking a GitButler
@@ -90,7 +112,7 @@ src/
 │   │                the pre_merge and post_merge steps of the pipeline, and the Post-merge gate)
 │   ├── edits.ts     Your edits from the Code tab: recording one (task.record_edit, steering a working agent
 │   │                with a note of Shinsa's), committing them (task.commit_edits), and approving the review or the
-│   │                merge with them (task.edits_approved: the checks run again before the push, or CI before the
+│   │                merge with them (task.edits_approved: every check runs before the push, or CI before the
 │   │                merge, as resolveApprovalPath in domain/workspaces.ts says; applyEditsApproval); the next
 │   │                run's prompt names them (Decider.startRun)
 │   ├── overlaps.ts  Files another open task of the repository changes too: recording the new ones
@@ -102,15 +124,19 @@ src/
 │   ├── messages.ts  A message from you: resolveMessageEffect says what it does where the task is (steer, retry,
 │   │                verify the setup, revise, fix, replace the operation's notes, a follow-up on a resting task…; the
 │   │                web's composer hint reads it), then it is delivered, only recorded (acknowledge), queued as a new
-│   │                round or suggested as a separate task by its kind; superseding an open question; a message sent
-│   │                for you to a task at a gate is only
-│   │                recorded, for its next agent; needsMessageKind (the server classifies such a message first);
+│   │                round or suggested as a separate task by its kind (at a gate that takes words, always delivered:
+│   │                FEEDBACK_ONLY_EFFECTS); the same text twice within a window is taken once (isRepeatedMessage);
+│   │                superseding an open question; a message sent for you to a task at a gate is only recorded, for
+│   │                its next agent; needsMessageKind (the server classifies such a message first, never at those
+│   │                gates);
 │   │                the inbox: receiveMessage, routeMessage (delivers with the classifier's kind), dropMessage
 │   ├── retry.ts     Retry: restart the current step with a fresh fix budget
 │   ├── runs.ts      Agent run ends, recovery by failure class (one nudge, a fresh session, or a gate at once),
 │   │                attempts and stale writes, restart continuation and its loop guards, lost sessions, dispatch
 │   ├── agents.ts    Agent hand-overs (propose_plan with the plan rules, complete_phase with the evidence the plan
-│   │                asks for, complete_fix, report_review, ask, evidence, note)
+│   │                asks for and its check changes, complete_fix with the checks it names and the earlier evidence
+│   │                it must account for (evidence_stale), report_review, ask, evidence that replaces what it shows
+│   │                again by key, a linked check (attachCheck), removing evidence (removeEvidence), note)
 │   ├── shapes.ts    Task shapes: the next step of a pipeline, the inquiry steps (answer, research, investigate)
 │   │                and the operation, results and proposals, your OK and its proposal gate, the agent's
 │   │                presets and composed steps, the operation gate and its notes after a merge, follow-ups (an
@@ -148,12 +174,15 @@ src/
 │   │                acting task, kept as `OnBehalfAction`); a system command records nothing here
 │   └── liveness.ts  isTaskLive and the stuck-task failure gate
 ├── accounts/        usage.ts (which windows count for a model, used percent, headroom, spent-until, the weekly
-│                    window and what a run used of it), plan.ts (resolvePlanLabel), pick.ts
+│                    window and a reading of it with its time and reset), plan.ts (resolvePlanLabel), pick.ts
 │                    (pickAccount: the account picker the server leases with; selectNextAccount: the web's next-account
 │                    glance) and fast-mode.ts (resolveFastModeAvailability: whether a provider's accounts have the
 │                    usage credits fast mode needs)
-├── costs/           A run's usage delta per session, the cost rollup per task, role and phase, the usage and
-│                    cost limits (listTaskBudgets)
+├── costs/           A run's usage delta per session, the cost rollup per task, role and phase, its unit
+│                    (resolveCostUnit), the usage and cost limits (listTaskBudgets: the usage limit counts an early
+│                    estimate while the account is learning), and each run's share of the weekly window: its cost
+│                    at the window's current rate, learned from the readings (rate.ts: resolveUsageRates,
+│                    resolveUsageShares, USAGE_RATE_LIMITS)
 ├── test-coverage/   Changed-line coverage, pure: the per-repository setting (setting.ts: resolveRepoCoverage,
 │                    resolveCoverageFormat), the lcov, Cobertura and Go profile parsers taking text (reports.ts),
 │                    unified diff to new-file line numbers and those lines moved through a later diff (diff.ts:
@@ -274,6 +303,9 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
     exactly while the task is `awaiting_operation`, which only happens after the merge; an open task with a merged
     pull request is waiting for that gate or running its operation;
   - no dependency cycles;
+  - checks (`check-invariants.ts`): no two checks of a task share an id, none is the repository's, a task without
+    `build` has none, every check covers at least one phase and none past the plan's last, and no result is kept for
+    a task check that was removed;
   - workspaces (`workspace-invariants.ts`): no two tasks of one repository hold its main checkout (from asking for it
     until it is given back), a task with a checkout knows its mode, and a task waiting on other tasks waits on an
     unfinished dependency, a gate or the task holding its checkout;
@@ -312,7 +344,7 @@ with a fixed clock and ids and has the steps a test needs (`createTask`, `reachR
 ## Tests
 
 `bun test` here enforces 100% line and function coverage (`bunfig.toml`). The property test runs each walk (the base
-one, outages, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
+one, outages, pushes, shapes, compositions, schedules, projects, on your behalf, accounts, rounds and composed rounds) over 30
 seeds of 400 random commands, in about three minutes; when it fails it names the seed, the step and the command. Set
 `SHINSA_SEEDS` to sweep wider before landing a change to `decide` (`SHINSA_SEEDS=1000 bun test
 test/decide/invariants.test.ts` takes about an hour).

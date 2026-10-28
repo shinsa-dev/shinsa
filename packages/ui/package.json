@@ -7,7 +7,7 @@
   "scripts": {
     "check-types": "tsc --noEmit && tsc --noEmit -p scripts",
     "generate:icons": "bun run scripts/generate-icons.ts",
-    "test": "bun test"
+    "test": "bun test --randomize"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",

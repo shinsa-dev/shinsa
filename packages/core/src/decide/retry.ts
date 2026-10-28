@@ -1,17 +1,11 @@
 import { isPausingGate } from '../domain/index.ts';
 import { resolveAgentPrompt } from '../prompts/index.ts';
 import { isTriaged } from '../state/queries.ts';
+import { retryChecks } from './checks.ts';
 import { UPDATING_WORKSPACE, updateWorkspace } from './conflicts.ts';
 import type { Decider } from './decider.ts';
 import { resetFixBudget } from './fixes.ts';
-import {
-  resolveCurrentPhase,
-  startChecks,
-  startPhase,
-  startPlanning,
-  startReview,
-  startWork,
-} from './lifecycle.ts';
+import { resolveCurrentPhase, startPhase, startPlanning, startReview, startWork } from './lifecycle.ts';
 import { recheckPullRequest, requestPush } from './pull-requests.ts';
 import { restartAnswer, startInquiry, startOperation } from './shapes.ts';
 
@@ -47,7 +41,7 @@ export function retryTask(decider: Decider, taskId: string, guidance: string | n
       startPhase(decider, taskId, resolveCurrentPhase(task), hint);
       return;
     case 'checking':
-      startChecks(decider, taskId);
+      retryChecks(decider, taskId);
       return;
     case 'reviewing':
       startReview(decider, taskId);

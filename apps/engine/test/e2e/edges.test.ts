@@ -343,6 +343,10 @@ describe('review fixes', () => {
       const key = `run.execute:${second?.id}`;
       return w.daemon.log.listEffectStatuses().some((row) => row.key === key && row.status === 'running');
     };
+    w.agents.queue('plan', async (agent) => {
+      const verification = [{ label: 'Second file', command: 'test -f b.txt', phases: [2] }];
+      await agent.call('propose_plan', toolPlan({ ...PLAN, verification }));
+    });
     w.agents.queue(
       'build',
       async (agent) => {

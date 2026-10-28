@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, jest } from 'bun:test';
+import { describe, expect, it, jest } from 'bun:test';
 import { DropdownMenuContent, DropdownMenuItem } from '@shinsa/ui/components/dropdown-menu';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import { LazyMenu, LazyMenuTrigger } from '@/components/controls/lazy-menu.tsx';
 import { LONG_PRESS_MS } from '@/lib/lazy-menu.ts';
+import { restoreRealTimers } from '../support/timers.ts';
 
 const TOUCH = { clientX: 10, clientY: 10, screenX: 10, screenY: 10 };
 
@@ -45,10 +46,6 @@ function DropdownButton({ triggerRef }: { triggerRef?: React.Ref<HTMLElement> })
   );
 }
 
-afterEach(() => {
-  jest.useRealTimers();
-});
-
 function touch(target: HTMLElement, type: 'touchStart' | 'touchMove', touches: (typeof TOUCH)[]) {
   fireEvent[type](target, { touches });
 }
@@ -75,7 +72,7 @@ describe('a lazy context menu', () => {
     await act(async () => {
       jest.advanceTimersByTime(LONG_PRESS_MS);
     });
-    jest.useRealTimers();
+    restoreRealTimers();
     expect(await screen.findByRole('menu')).toBeTruthy();
   });
 

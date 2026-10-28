@@ -98,6 +98,7 @@ function resolveNoticeBlock(entry: ChatEntry & { type: 'notice' }, path: string)
     case 'context':
     case 'account':
     case 'account_switched':
+    case 'retrying':
     case 'rate_limit':
     case 'delegation':
     case 'proxy':

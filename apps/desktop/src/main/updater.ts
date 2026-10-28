@@ -1,30 +1,41 @@
 import { execFile } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { app, dialog } from 'electron';
+import { app, dialog, autoUpdater as nativeUpdater } from 'electron';
 import electronUpdater from 'electron-updater';
 import type { UpdateChannel } from '../lib/bridge.ts';
+import { APP_NAME } from '../lib/dev-bundle.ts';
 import { APP_ID } from '../lib/engine.ts';
 import {
   DOWNGRADE_ACCEPT,
   describeDowngradeDialog,
+  describeInstallError,
+  describeInstallFailure,
   describeManualResult,
   describeReadyNotice,
   describeUpdateFailure,
   describeUpdateItem,
+  INSTALL_TIMEOUT_MS,
+  isUpdateBusy,
   isUpdateSupported,
   needsDiscard,
   resolveDesktopUpdate,
-  resolveInitialUpdate,
+  resolveInstallTimeout,
+  resolvePreparedUpdate,
   resolveStagedUpdate,
   UPDATE_CHECK_MS,
   type UpdateState,
 } from '../lib/update.ts';
-import { resolveDowngradeOffer, resolveUpdateChannel, resolveUpdaterOptions } from '../lib/update-channel.ts';
+import {
+  resolveDowngradeOffer,
+  resolveUpdateChannel,
+  resolveUpdaterOptions,
+  UPDATE_FEED,
+} from '../lib/update-channel.ts';
+import { describeStateChange } from '../lib/update-log.ts';
 import { showNotice } from './notifications.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
+import { createUpdateLog } from './update-log.ts';
 
 const { autoUpdater } = electronUpdater;
 
@@ -34,22 +45,31 @@ interface Download {
 }
 
 export class Updater {
-  readonly #supported = isUpdateSupported({
-    packaged: app.isPackaged,
-    platform: process.platform,
-    updateFile: existsSync(join(process.resourcesPath, 'app-update.yml')),
-  });
-  #state: UpdateState = resolveInitialUpdate(this.#supported);
+  #state: UpdateState = { status: 'idle' };
   readonly #changed: () => void;
   readonly #open: () => void;
+  readonly #supported = isUpdateSupported({ packaged: app.isPackaged, platform: process.platform });
   #channel: UpdateChannel = resolveUpdateChannel(readPrefs().updateChannel, app.getVersion());
   #download: Download | null = null;
   #ask = false;
+  #log: ReturnType<typeof createUpdateLog> | null = null;
 
-  constructor(changed: () => void, open: () => void) {
+  constructor(changed: () => void, open: () => void, markQuitting: () => void) {
     this.#changed = changed;
     this.#open = open;
     if (!this.#supported) return;
+    const log = createUpdateLog();
+    this.#log = log;
+    autoUpdater.logger = log;
+    log.info(`${APP_NAME} ${app.getVersion()} on the ${this.#channel} channel`);
+    nativeUpdater.on('before-quit-for-update', () => {
+      log.info('Squirrel: quitting to install');
+      markQuitting();
+    });
+    nativeUpdater.on('update-downloaded', () => {
+      log.info('Squirrel: update staged');
+      this.#ready();
+    });
     this.#applyOptions();
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -61,10 +81,8 @@ export class Updater {
       if (this.#state.status === 'downloading') this.#set({ ...this.#state, percent: progress.percent });
     });
     autoUpdater.on('update-not-available', (info) => this.#current(info.version));
-    autoUpdater.on('update-downloaded', (info) => this.#ready(info.version));
-    autoUpdater.on('error', (error) =>
-      this.#settle({ status: 'failed', message: describeUpdateFailure(error) })
-    );
+    autoUpdater.on('update-downloaded', (info) => this.#prepare(info.version));
+    autoUpdater.on('error', (error) => this.#fail(describeUpdateFailure(error)));
   }
 
   get pageState() {
@@ -78,12 +96,12 @@ export class Updater {
   async applyChannel(channel: UpdateChannel) {
     if (channel === this.#channel) return;
     this.#channel = channel;
-    writePrefs({ updateChannel: channel, keptBeta: null });
+    writePrefs({ updateChannel: channel, keptVersion: null });
     this.#changed();
     if (!this.#supported) return;
     this.#applyOptions();
     if (needsDiscard(this.#state, channel)) await this.#discard();
-    this.#ask = channel === 'stable';
+    this.#ask = true;
     await this.check(false);
   }
 
@@ -103,7 +121,7 @@ export class Updater {
   }
 
   async check(manual: boolean) {
-    if (!this.#supported || this.#state.status === 'downloading' || this.#state.status === 'ready') return;
+    if (!this.#supported || isUpdateBusy(this.#state)) return;
     this.#set({ status: 'checking', manual });
     try {
       const result = await autoUpdater.checkForUpdates();
@@ -118,11 +136,11 @@ export class Updater {
   async answerDowngrade(accept: boolean) {
     if (this.#state.status !== 'downgrade') return;
     if (!accept) {
-      writePrefs({ keptBeta: app.getVersion() });
+      writePrefs({ keptVersion: app.getVersion() });
       this.#set({ status: 'current', latest: this.#state.version });
       return;
     }
-    writePrefs({ keptBeta: null });
+    writePrefs({ keptVersion: null });
     this.#applyOptions(true);
     try {
       await this.check(false);
@@ -132,7 +150,18 @@ export class Updater {
   }
 
   install() {
-    if (this.#state.status === 'ready') autoUpdater.quitAndInstall();
+    if (this.#state.status !== 'ready') return;
+    const version = this.#state.version;
+    this.#set({ status: 'installing', version });
+    setTimeout(() => this.#installTimedOut(), INSTALL_TIMEOUT_MS);
+    autoUpdater.quitAndInstall();
+  }
+
+  #installTimedOut() {
+    const next = resolveInstallTimeout(this.#state);
+    if (!next) return;
+    this.#set(next);
+    showNotice({ ...describeInstallFailure(next.version), tag: 'update', path: null }, () => this.#open());
   }
 
   async #discard() {
@@ -149,7 +178,7 @@ export class Updater {
   #current(latest: string) {
     const manual = this.#state.status === 'checking' && this.#state.manual;
     const ask = manual || this.#ask;
-    const kept = readPrefs().keptBeta;
+    const kept = readPrefs().keptVersion;
     const version = resolveDowngradeOffer({
       channel: this.#channel,
       current: app.getVersion(),
@@ -165,15 +194,27 @@ export class Updater {
   async #askDowngrade(version: string) {
     const answer = await dialog.showMessageBox({
       type: 'question',
-      ...describeDowngradeDialog(version, app.getVersion()),
+      ...describeDowngradeDialog(version, app.getVersion(), this.#channel),
     });
     await this.answerDowngrade(answer.response === DOWNGRADE_ACCEPT);
   }
 
-  #ready(version: string) {
+  #prepare(version: string) {
     this.#download = null;
-    this.#set({ status: 'ready', version });
-    showNotice({ ...describeReadyNotice(version), tag: 'update', path: null }, () => this.#open());
+    this.#set({ status: 'preparing', version });
+  }
+
+  #ready() {
+    const next = resolvePreparedUpdate(this.#state);
+    if (!next) return;
+    this.#set(next);
+    showNotice({ ...describeReadyNotice(next.version), tag: 'update', path: null }, () => this.#open());
+  }
+
+  #fail(message: string) {
+    const notice = describeInstallError(this.#state, message);
+    this.#settle({ status: 'failed', message });
+    if (notice) showNotice({ ...notice, tag: 'update', path: null }, () => this.#open());
   }
 
   #settle(next: UpdateState) {
@@ -187,12 +228,15 @@ export class Updater {
 
   #applyOptions(downgrade = false) {
     const options = resolveUpdaterOptions(this.#channel, downgrade);
+    autoUpdater.setFeedURL(UPDATE_FEED);
     autoUpdater.channel = options.channel;
     autoUpdater.allowPrerelease = options.allowPrerelease;
     autoUpdater.allowDowngrade = options.allowDowngrade;
   }
 
   #set(next: UpdateState) {
+    const change = describeStateChange(this.#state, next);
+    if (change) this.#log?.info(change);
     this.#state = next;
     this.#changed();
   }

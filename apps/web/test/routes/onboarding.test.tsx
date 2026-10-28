@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import type { OnboardingFlow } from '@shinsa/core';
 import { TooltipProvider } from '@shinsa/ui/components/tooltip';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { closeSignIn } from '@/lib/connection/accounts.ts';
 import { OnboardingPage } from '@/routes/onboarding.tsx';
 import { createAccount, createSnapshot } from '../support/accounts.ts';
 import {
@@ -16,6 +17,7 @@ import { pushAccounts, startFakeServer, stopFakeServer } from '../support/server
 let fake: ReturnType<typeof startFakeOnboarding> | null = null;
 
 afterEach(() => {
+  act(() => closeSignIn());
   fake?.stop();
   fake = null;
   stopFakeServer();

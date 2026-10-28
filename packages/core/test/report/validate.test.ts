@@ -4,6 +4,7 @@ import {
   type Validation,
   validateDelivery,
   validateEvidence,
+  validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
@@ -54,6 +55,7 @@ describe('validatePhaseHandOver', () => {
         { title: 'Keep the cache', call: 'Kept the cache', reason: 'It is hot.', file: null, line: null },
       ],
       walkthrough: null,
+      checkChanges: [],
     });
   });
 
@@ -63,6 +65,7 @@ describe('validatePhaseHandOver', () => {
       spots: [],
       judgementCalls: [],
       walkthrough: null,
+      checkChanges: [],
     });
   });
 
@@ -116,6 +119,7 @@ describe('validatePhaseHandOver', () => {
         ],
         testing: { automated: ['Open the same file twice.'], manual: [] },
       },
+      checkChanges: [],
     });
   });
 
@@ -443,13 +447,89 @@ describe('how to test the change', () => {
   });
 });
 
+describe('the checks a hand-over changes', () => {
+  test('a phase adds, changes and removes checks, each with a reason', () => {
+    const value = readValue(
+      validatePhaseHandOver({
+        summary: 'Done.',
+        check_changes: [
+          { action: 'add', label: 'Reader tests', command: 'bun test src/reader', reason: 'New reader.' },
+          { action: 'change', id: 'c1', phases: [2, 3], reason: 'Covers the cache too.' },
+          { action: 'remove', id: 'c2', reason: 'Folded into c1.' },
+        ],
+      })
+    );
+    expect(value.checkChanges).toEqual([
+      {
+        action: 'add',
+        id: null,
+        label: 'Reader tests',
+        command: 'bun test src/reader',
+        phases: null,
+        reason: 'New reader.',
+      },
+      {
+        action: 'change',
+        id: 'c1',
+        label: null,
+        command: null,
+        phases: [2, 3],
+        reason: 'Covers the cache too.',
+      },
+      { action: 'remove', id: 'c2', label: null, command: null, phases: null, reason: 'Folded into c1.' },
+    ]);
+  });
+
+  test('names what each change is missing, and refuses the whole suite', () => {
+    expect(
+      errorsOf(
+        validatePhaseHandOver({
+          summary: 'Done.',
+          check_changes: [
+            { action: 'add', label: 'Tests', reason: 'x' },
+            { action: 'change', id: 'c1', reason: 'x' },
+            { action: 'move', id: 'c1', reason: 'x' },
+            { action: 'add', label: 'All', command: 'npm test', reason: 'x' },
+          ],
+        })
+      )
+    ).toEqual([
+      'check_changes[0] adds a check: give its label and its command.',
+      'check_changes[1] changes a check: give its new label, command or phases.',
+      'check_changes[2].action must be one of add, change, remove.',
+      'check_changes[3].command `npm test` runs the whole suite. Scope it to what the change touches: the test files or folder, one package’s type check (`bun run --cwd apps/web check-types`), the linter on the changed paths. CI runs the whole suite on the pull request.',
+    ]);
+  });
+
+  test('a fix names the checks to run again, once each', () => {
+    expect(readValue(validateFixHandOver({ summary: 'Fixed.', checks: ['c1', 'c1', 'r2'] })).checks).toEqual([
+      'c1',
+      'r2',
+    ]);
+  });
+});
+
 describe('validateFixHandOver', () => {
   test('needs a summary', () => {
     expect(readValue(validateFixHandOver({ summary: 'Fixed CI.' }))).toEqual({
       summary: 'Fixed CI.',
       walkthrough: null,
+      checks: [],
+      checkChanges: [],
+      evidenceKept: [],
     });
     expect(errorsOf(validateFixHandOver({}))).toEqual(['summary is required.']);
+  });
+
+  test('names the earlier evidence that still applies, each once', () => {
+    expect(
+      readValue(
+        validateFixHandOver({ summary: 'Fixed.', evidence_kept: ['settings-dark', ' settings-dark ', 'e1'] })
+      ).evidenceKept
+    ).toEqual(['settings-dark', 'e1']);
+    expect(errorsOf(validateFixHandOver({ summary: 'Fixed.', evidence_kept: 'settings-dark' }))).toEqual([
+      'evidence_kept must be a list.',
+    ]);
   });
 
   test('keeps only the parts of the walkthrough the fix sends', () => {
@@ -519,13 +599,13 @@ describe('validatePlanHandOver reads the plan document', () => {
         approach: 'Clamp the width.',
         files: [{ path: 'src/tabs.tsx', change: 'Clamp' }],
         out_of_scope: ['Mobile'],
-        verification: ['Open the page'],
+        verification: [{ label: ' Tab tests ', command: 'bun test src/tabs', phases: [2, 1] }],
         questions: [{ question: 'Which width?', options: ['200', '240'], recommendation: '240' }],
       })
     );
     expect(value).toMatchObject({
       outOfScope: ['Mobile'],
-      verification: ['Open the page'],
+      verification: [{ label: 'Tab tests', command: 'bun test src/tabs', phases: [1, 2] }],
       questions: [{ question: 'Which width?', options: ['200', '240'], recommendation: '240' }],
     });
   });
@@ -695,32 +775,29 @@ describe('the plan parameters', () => {
       { title: 'Two', detail: 'Second.' },
     ],
     approach: 'Plainly.',
-    verification: ['A test.'],
+    verification: [{ label: 'Tab tests', command: 'bun test src/tabs', phases: [1] }],
   };
 
-  test('keeps the impact, the evidence, the extra checks and the approval the agent asks for', () => {
+  test('keeps the impact, the evidence and the approval the agent asks for', () => {
     const result = validatePlanHandOver({
       ...plan,
       impact: ' Touches 40 rows. ',
       evidence: ['screenshot', 'test'],
-      checks: ['bun test tabs'],
       approval: true,
     });
     expect(result.ok && result.value.document).toMatchObject({
       impact: 'Touches 40 rows.',
       evidence: ['screenshot', 'test'],
-      checks: ['bun test tabs'],
       approval: true,
     });
     const bare = validatePlanHandOver({ ...plan, approval: false });
     expect(bare.ok && Object.keys(bare.value.document)).not.toContain('approval');
   });
 
-  test('refuses an unknown or repeated kind of evidence, a long command and an approval that is not a flag', () => {
+  test('refuses an unknown or repeated kind of evidence and an approval that is not a flag', () => {
     const result = validatePlanHandOver({
       ...plan,
       evidence: ['screenshot', 'screenshot', 'check'],
-      checks: ['x'.repeat(201)],
       approval: 'yes',
       impact: 'x'.repeat(1_001),
     });
@@ -728,8 +805,29 @@ describe('the plan parameters', () => {
       'impact is 1001 characters; the limit is 1000.',
       'evidence[2] must be one of screenshot, recording, test, note, preview.',
       'evidence names a kind twice.',
-      'checks[0] is 201 characters; the limit is 200.',
       'approval must be true or false.',
+    ]);
+  });
+
+  test('every check is a label, a scoped command and the phases it covers, never the whole suite', () => {
+    const errors = (verification: unknown) => errorsOf(validatePlanHandOver({ ...plan, verification }));
+    expect(
+      errors([
+        { label: 'Tests', command: 'bun test', phases: [1] },
+        { label: 'Types', command: 'bun   run check', phases: [3] },
+        { label: 'x'.repeat(61), command: 'x'.repeat(201), phases: [] },
+        { label: 'Again', command: 'bun test src/tabs', phases: [1, 1] },
+        { label: 'Twice', command: 'bun test src/tabs', phases: [2] },
+      ])
+    ).toEqual([
+      'verification[0].command `bun test` runs the whole suite. Scope it to what the change touches: the test files or folder, one package’s type check (`bun run --cwd apps/web check-types`), the linter on the changed paths. CI runs the whole suite on the pull request.',
+      'verification[1].command `bun   run check` runs the whole suite. Scope it to what the change touches: the test files or folder, one package’s type check (`bun run --cwd apps/web check-types`), the linter on the changed paths. CI runs the whole suite on the pull request.',
+      'verification[1].phases[0] must be a whole number from 1 to 2.',
+      'verification[2].label is 61 characters; the limit is 60.',
+      'verification[2].command is 201 characters; the limit is 200.',
+      'verification[2].phases needs at least 1 item.',
+      'verification[3].phases names a phase twice.',
+      'verification lists a command twice.',
     ]);
   });
 });
@@ -925,9 +1023,43 @@ describe('validateEvidence', () => {
       detail: 'The labels read clearly.',
       width: 1280,
       theme: 'dark',
+      key: null,
+      replaces: [],
       stage: 'before',
       source: { path: 'shots/settings.png' },
     });
+  });
+
+  test('reads a key for what it shows and the items it replaces', () => {
+    expect(
+      readValue(
+        validateEvidence({
+          kind: 'screenshot',
+          title: 'Settings',
+          key: 'settings-dark-900',
+          replaces: ['old-settings', 'e7'],
+          path: 'a.png',
+        })
+      )
+    ).toMatchObject({ key: 'settings-dark-900', replaces: ['old-settings', 'e7'] });
+    expect(
+      errorsOf(
+        validateEvidence({ kind: 'screenshot', title: 'Settings', key: 'Settings Dark', path: 'a.png' })
+      )
+    ).toEqual(['key takes lower-case letters, digits and single hyphens, like settings-dark-900.']);
+    expect(
+      errorsOf(
+        validateEvidence({
+          kind: 'screenshot',
+          title: 'Settings',
+          key: 'a'.repeat(PROTOCOL_LIMITS.evidenceKey + 1),
+          path: 'a.png',
+        })
+      )
+    ).toEqual([
+      `key is ${PROTOCOL_LIMITS.evidenceKey + 1} characters; the limit is ${PROTOCOL_LIMITS.evidenceKey}.`,
+      'key takes lower-case letters, digits and single hyphens, like settings-dark-900.',
+    ]);
   });
 
   test('the optional fields may be left out, and a url or text is the source', () => {
@@ -937,12 +1069,36 @@ describe('validateEvidence', () => {
       detail: null,
       width: null,
       theme: null,
+      key: null,
+      replaces: [],
       stage: null,
       source: { url: 'https://a.dev' },
     });
     expect(
-      readValue(validateEvidence({ kind: 'test', title: 'Tests', text: '3 pass', theme: '', stage: null }))
-    ).toMatchObject({ source: { text: '3 pass' } });
+      readValue(validateEvidence({ kind: 'note', title: 'Rows', text: '3 rows', theme: '', stage: null }))
+    ).toMatchObject({
+      source: { text: '3 rows' },
+    });
+  });
+
+  test('a test or check run links a check by its id instead of carrying output', () => {
+    expect(
+      readValue(validateEvidence({ kind: 'test', check: ' c2 ', detail: 'Fails without the fix.' }))
+    ).toEqual({
+      kind: 'test',
+      check: 'c2',
+      detail: 'Fails without the fix.',
+      replaces: [],
+    });
+    expect(
+      errorsOf(validateEvidence({ kind: 'check', title: 'Tests', text: '3 pass', stage: 'after' }))
+    ).toEqual([
+      'A test or check run is a check Shinsa runs: give `check`, its id, and leave out text, stage. Add the command with `check_changes` first when it is not a check yet.',
+      'check is required.',
+    ]);
+    expect(errorsOf(validateEvidence({ kind: 'note', title: 'Rows', text: 'x', check: 'c1' }))).toEqual([
+      'check is only for kind test or check.',
+    ]);
   });
 
   test('names every broken field, and wants exactly one source', () => {
@@ -993,6 +1149,8 @@ describe('validateEvidence', () => {
       detail: null,
       width: 1280,
       theme: 'light',
+      key: null,
+      replaces: [],
       parts: [
         { path: 'before.png', stage: 'before', label: null },
         { path: 'empty.png', stage: null, label: 'Empty list' },
@@ -1035,6 +1193,30 @@ describe('validateEvidence', () => {
       `parts[4].label is ${PROTOCOL_LIMITS.evidenceLabel + 1} characters; the limit is ${PROTOCOL_LIMITS.evidenceLabel}.`,
       'Each part needs its own stage or label; two parts are named the same.',
       'A comparison takes its files in parts: leave out path, url, text and stage.',
+    ]);
+  });
+});
+
+describe('validateEvidenceRemoval', () => {
+  test('names the items to remove and why', () => {
+    expect(
+      readValue(validateEvidenceRemoval({ items: ['settings-dark', 'e2'], reason: ' The banner is gone. ' }))
+    ).toEqual({ items: ['settings-dark', 'e2'], reason: 'The banner is gone.' });
+  });
+
+  test('needs at least one item and a reason', () => {
+    expect(errorsOf(validateEvidenceRemoval({ items: [] }))).toEqual([
+      'items names no evidence.',
+      'reason is required.',
+    ]);
+    expect(errorsOf(validateEvidenceRemoval({ reason: 'Gone.', items: [''] }))).toEqual([
+      'items[0] is required.',
+    ]);
+  });
+
+  test('a check link takes no key, since its check is what it shows', () => {
+    expect(errorsOf(validateEvidence({ kind: 'test', check: 'c1', key: 'tests' }))).toEqual([
+      'A test or check run is a check Shinsa runs: give `check`, its id, and leave out key. Add the command with `check_changes` first when it is not a check yet.',
     ]);
   });
 });

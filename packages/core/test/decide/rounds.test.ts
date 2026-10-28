@@ -783,7 +783,7 @@ describe('what each round keeps', () => {
       approach: '',
       files: [],
       outOfScope: [],
-      verification: ['A screenshot.'],
+      verification: [{ label: 'Panel tests', command: 'bun test src/panel', phases: [1] }],
       questions: [],
       evidence: ['screenshot'],
     });
@@ -820,7 +820,7 @@ describe('what each round keeps', () => {
       approach: '',
       files: [],
       outOfScope: [],
-      verification: ['A screenshot.'],
+      verification: [{ label: 'Panel tests', command: 'bun test src/panel', phases: [1] }],
       questions: [],
       evidence: ['screenshot'],
     });

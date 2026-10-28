@@ -22,6 +22,9 @@ describe('one-shot calls on Codex', () => {
       serviceTier: null,
     });
     expect(codex.requests('turn/start')[0]).toMatchObject({ effort: 'low', prompt: 'Is this small?' });
+  });
+
+  test('a call in fast mode asks for the fast tier', async () => {
     const fast = new FakeCodex({ quick: 'small' });
     await requestCodexCompletion({ ...REQUEST, fastMode: true }, fast.runtime);
     expect(fast.requests('thread/start')[0]?.serviceTier).toBe('fast');
@@ -33,19 +36,25 @@ describe('one-shot calls on Codex', () => {
       size: 'small',
     });
     expect(codex.requests('turn/start')[0]?.outputSchema).toEqual(SCHEMA);
-    const prose = new FakeCodex({ quick: 'small' });
-    expect(await requestCodexStructured({ ...REQUEST, schema: SCHEMA }, prose.runtime)).toBeNull();
-    const empty = new FakeCodex({ quick: '   ' });
-    expect(await requestCodexStructured({ ...REQUEST, schema: SCHEMA }, empty.runtime)).toBeNull();
   });
 
-  test('a failed turn, a refused start, a missing codex and a timeout all throw', async () => {
-    await expect(
-      requestCodexCompletion(REQUEST, new FakeCodex({ quickFails: true }).runtime)
-    ).rejects.toThrow('The quick model is down.');
-    await expect(
-      requestCodexCompletion(REQUEST, new FakeCodex({ refuse: ['thread/start'] }).runtime)
-    ).rejects.toThrow('fake codex refuses thread/start');
+  test.each([
+    ['prose', 'small'],
+    ['nothing', '   '],
+  ])('a structured call answered with %s is null', async (_name, quick) => {
+    const codex = new FakeCodex({ quick });
+    expect(await requestCodexStructured({ ...REQUEST, schema: SCHEMA }, codex.runtime)).toBeNull();
+  });
+
+  test.each<[string, ConstructorParameters<typeof FakeCodex>[0], string]>([
+    ['a failed turn', { quickFails: true }, 'The quick model is down.'],
+    ['a refused start', { refuse: ['thread/start'] }, 'fake codex refuses thread/start'],
+    ['a crash', { quick: '__crash__' }, 'the quick model crashed'],
+  ])('%s throws what Codex said', async (_name, state, message) => {
+    await expect(requestCodexCompletion(REQUEST, new FakeCodex(state).runtime)).rejects.toThrow(message);
+  });
+
+  test('a missing codex throws without starting anything', async () => {
     const missing = {
       resolveExecutable: () =>
         Promise.resolve({
@@ -56,12 +65,15 @@ describe('one-shot calls on Codex', () => {
         }),
     };
     await expect(requestCodexCompletion(REQUEST, missing)).rejects.toThrow('No codex.');
-    await expect(
-      requestCodexCompletion(REQUEST, new FakeCodex({ quick: '__crash__' }).runtime)
-    ).rejects.toThrow('the quick model crashed');
+  });
+
+  test('a question from Codex is refused, and the refusal comes back as the answer', async () => {
     expect(await requestCodexCompletion(REQUEST, new FakeCodex({ quick: '__ask__' }).runtime)).toContain(
       'A quick call does not answer item/tool/requestUserInput.'
     );
+  });
+
+  test('a call Codex never answers throws once its time is up', async () => {
     const slow = new FakeCodex({ refuse: [] });
     slow.script('*', [{ hang: true }]);
     await expect(

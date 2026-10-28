@@ -79,7 +79,7 @@ const SKILL_RULES: Record<string, readonly string[]> = {
     'report_review',
     'disagreements',
     'never the approval',
-    'A failing check is always',
+    'A check that fails because of the change is always',
   ],
 };
 

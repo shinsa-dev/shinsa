@@ -52,11 +52,24 @@ export function readProposedChange(args: ChatToolArgs) {
   return why ? { why, request: readString(proposal as ChatToolArgs, 'request') } : null;
 }
 
+function readPhases(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((phase): phase is number => Number.isInteger(phase) && phase > 0);
+}
+
+function readPlanChecks(args: ChatToolArgs) {
+  return readList(args, 'verification').flatMap((check) => {
+    const command = readString(check, 'command');
+    if (!command) return [];
+    return [{ label: readString(check, 'label') ?? command, command, phases: readPhases(check.phases) }];
+  });
+}
+
 export function readPlanParameters(args: ChatToolArgs): PlanParameters {
   return {
     impact: readString(args, 'impact') ?? undefined,
     evidence: listPlanEvidenceKinds(readStrings(args, 'evidence')),
-    checks: readStrings(args, 'checks'),
+    verification: readPlanChecks(args),
     approval: args.approval === true,
   };
 }

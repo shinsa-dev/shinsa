@@ -1,6 +1,9 @@
 import { describeList } from '../chat/text.ts';
 import {
   type Activity,
+  listPhaseChecks,
+  listRepoChecks,
+  listTaskChecks,
   type Repo,
   type Round,
   resolveCurrentRound,
@@ -10,7 +13,7 @@ import {
   SHAPE_LIMITS,
   type Task,
 } from '../domain/index.ts';
-import type { ReviewFinding } from '../report/types.ts';
+import type { CheckNote, ReportCheck, ReviewFinding, TaskCheck } from '../report/types.ts';
 
 export function describeRepository(repo: Repo | null) {
   if (!repo) return '';
@@ -55,12 +58,47 @@ export function describeBases(bases: Task[]) {
   return `This task builds on "${only.title}", which is finished. Build on what it left in the base branch.`;
 }
 
-export function describeCheckCommands(repo: Repo | null) {
-  if (!repo || repo.checkCommands.length === 0) {
-    return 'Run whatever lint, type check and tests the repository defines (see its package.json, CLAUDE.md and CI config).';
-  }
-  return `The checks for this repository are: ${repo.checkCommands.map((command) => `\`${command}\``).join(', ')}. Shinsa runs them after you hand over; run them yourself first.`;
+function describeCheckLine(check: TaskCheck) {
+  return `- ${check.id}, ${check.label}: \`${check.command}\``;
 }
+
+const CHECK_CHANGES_RULE =
+  'When this phase brings in files a check should cover, or a check no longer fits, send `check_changes` with `complete_phase`: `add` with a label, the scoped command and its phases, `change` or `remove` by id, each with a one-sentence reason. Shinsa runs what you add or change right away.';
+
+export function describePhaseChecks(task: Task, repo: Repo | null, phase: number, last: boolean) {
+  const checks = listPhaseChecks(task, phase);
+  const baseline = last ? listRepoChecks(repo) : [];
+  if (checks.length + baseline.length === 0) {
+    return `The plan lists no check for this phase, so Shinsa runs none when you hand it over.\n${CHECK_CHANGES_RULE}`;
+  }
+  return [
+    'When you hand this phase over, Shinsa runs these checks itself, and their result is what the human sees:',
+    ...checks.map(describeCheckLine),
+    ...(baseline.length > 0 ? ['and, once before review, the repository’s own commands:'] : []),
+    ...baseline.map(describeCheckLine),
+    'Run the ones your work touches yourself while you build, scoped as they are; never the whole suite, which Shinsa refuses.',
+    CHECK_CHANGES_RULE,
+  ].join('\n');
+}
+
+export function describeTaskChecks(task: Task, repo: Repo | null) {
+  const results = new Map((task.checkResults ?? []).map((result) => [result.id, result]));
+  const lines = listTaskChecks(task, repo).map((check) => {
+    const result = results.get(check.id);
+    const outcome = result ? CHECK_OUTCOME[result.note ?? result.outcome] : 'not run yet';
+    return `${describeCheckLine(check)} (${outcome})`;
+  });
+  if (lines.length === 0) return '';
+  return ['The checks Shinsa ran on the change, and where each stands:', ...lines].join('\n');
+}
+
+const CHECK_OUTCOME: Record<ReportCheck['outcome'] | CheckNote, string> = {
+  pass: 'passed',
+  fail: 'failed',
+  skipped: 'skipped',
+  passed_alone: 'passed when re-run alone',
+  fails_on_base: 'already failing on the base branch, so it does not block',
+};
 
 export function describePlan(task: Task) {
   const plan = task.plan?.document?.phases ?? [];

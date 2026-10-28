@@ -1,3 +1,9 @@
+export interface CheckToRun {
+  id: string;
+  label: string;
+  command: string;
+}
+
 export type ShinsaEffect =
   | { kind: 'task.triage'; taskId: string }
   | { kind: 'worktree.create'; taskId: string }
@@ -5,7 +11,7 @@ export type ShinsaEffect =
   | { kind: 'run.cancel'; runId: string }
   | { kind: 'run.steer'; runId: string; text: string; from?: 'shinsa' }
   | { kind: 'question.resolve'; gateId: string }
-  | { kind: 'checks.run'; taskId: string; round: number }
+  | { kind: 'checks.run'; taskId: string; round: number; checks: CheckToRun[]; coverage: boolean }
   | { kind: 'pull_request.open'; taskId: string }
   | { kind: 'pull_request.push'; taskId: string }
   | { kind: 'pull_request.merge'; taskId: string }

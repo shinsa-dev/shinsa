@@ -96,6 +96,8 @@ describe('storeEvidence', () => {
         width: 390,
         theme: 'dark',
         stage: 'after',
+        key: 'home-dark-390',
+        replaces: ['home-old'],
       },
       worktree,
       evidence,
@@ -108,6 +110,8 @@ describe('storeEvidence', () => {
       detail: 'The header wraps.',
       width: 390,
       theme: 'dark',
+      key: 'home-dark-390',
+      replaces: ['home-old'],
       stage: 'after',
       uri: expect.stringMatching(/^\/api\/evidence\/task-1\/round-2\/home-page-\w+\.png$/),
     });
@@ -133,11 +137,27 @@ describe('storeEvidence', () => {
       storeEvidence({ kind: 'preview', title: 'P', url: 'not a url' }, null, evidence, FOLDER)
     ).toThrow('http or https');
     expect(
-      storeEvidence({ kind: 'test', title: 'Tests', text: '12 pass' }, null, evidence, FOLDER)
+      storeEvidence({ kind: 'screenshot', title: 'Tests', text: '12 pass' }, null, evidence, FOLDER)
     ).toMatchObject({ uri: expect.stringMatching(/\/round-2\/tests-\w+\.txt$/) });
     expect(
       storeEvidence({ kind: 'note', title: 'Ratios', text: '| a | b |' }, null, evidence, FOLDER)
     ).toMatchObject({ uri: expect.stringMatching(/\/round-2\/ratios-\w+\.md$/) });
+  });
+
+  test('a test or check links a check by id, and anything else given with it is refused', () => {
+    const evidence = new EvidenceStore(createTempDir());
+    expect(
+      storeEvidence({ kind: 'test', check: 'c2', detail: 'The new file is read.' }, null, evidence, FOLDER)
+    ).toEqual({
+      type: 'agent.attach_check',
+      kind: 'test',
+      checkId: 'c2',
+      detail: 'The new file is read.',
+      replaces: [],
+    });
+    expect(() =>
+      storeEvidence({ kind: 'check', check: 'c1', text: '12 pass' }, null, evidence, FOLDER)
+    ).toThrow('leave out text');
   });
 
   test('a comparison copies each part, a video as a recording, and names each file by its part', () => {
@@ -164,6 +184,8 @@ describe('storeEvidence', () => {
       detail: null,
       width: 1280,
       theme: null,
+      key: null,
+      replaces: [],
       parts: [
         {
           kind: 'screenshot',

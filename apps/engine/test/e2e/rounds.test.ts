@@ -22,6 +22,7 @@ const BUILD: AgentScript = async (agent) => {
   const phase = (agent.phaseIndex ?? 0) + 1;
   const { round } = agent;
   agent.write(`round-${round}-phase-${phase}.txt`, `round ${round}, phase ${phase}\n`);
+  agent.write('a.txt', `greeting of round ${round}\n`);
   await agent.call('complete_phase', {
     summary: `Wrote round ${round}, phase ${phase}.`,
     spots: [
@@ -238,7 +239,7 @@ describe('a task that runs in rounds', () => {
         approach: 'Directly.',
         files: [],
         out_of_scope: [],
-        verification: ['The checks pass.'],
+        verification: [{ label: 'Round file', command: 'true', phases: [1] }],
         questions: [],
       });
     });
@@ -268,6 +269,70 @@ describe('a task that runs in rounds', () => {
     expect(events).toContain('Queued round 2: Add a dark mode toggle');
     (release as unknown as () => void)();
     await w.untilStage(taskId, 'awaiting_review');
+  });
+
+  test('a message at the plan gate revises the plan with it and queues no round, and its repeat is taken once', async () => {
+    const w = await open();
+    const asked: string[] = [];
+    const classify = createClassifier(<T>(_system: string, prompt: string) => {
+      asked.push(prompt);
+      return Promise.resolve({
+        kind: 'new_round',
+        shape: 'change',
+        title: 'Group projects',
+        why: 'New.',
+      } as T);
+    });
+    const revisions: string[] = [];
+    const proposePlan = (agent: Parameters<AgentScript>[0]) =>
+      agent.call('propose_plan', {
+        goal: 'Add MCP v2.',
+        phases: [
+          { title: 'Build it', detail: 'All of it.' },
+          { title: 'Wire it', detail: 'Into the app.' },
+        ],
+        behaviour: [],
+        approach: 'Directly.',
+        files: [],
+        out_of_scope: [],
+        verification: [{ label: 'Round file', command: 'true', phases: [1] }],
+        questions: [],
+        approval: true,
+      });
+    w.agents.queue(
+      'plan',
+      async (agent) => {
+        await proposePlan(agent);
+      },
+      async (agent) => {
+        revisions.push(agent.prompt);
+        await proposePlan(agent);
+      }
+    );
+    const taskId = await w.createTask('Add MCP v2');
+    const first = await w.untilGate(taskId, 'plan');
+    const text = 'Alright, sweet, I agree with this. And then group the projects.';
+    const message = { type: 'task.message', taskId, text } as const;
+    await routeUserCommand(w.engine, message, null, classify);
+    await routeUserCommand(w.engine, message, null, classify);
+    const inbox = new MessageInbox(w.engine, classify.message);
+    inbox.start();
+    await inbox.settle();
+    inbox.stop();
+    await w.until('the revised plan', () =>
+      w.gates(taskId).some((gate) => gate.type === 'plan' && gate.id !== first.id)
+    );
+    expect(asked).toEqual([]);
+    expect(revisions).toHaveLength(1);
+    expect(revisions[0]).toContain(text);
+    expect(w.state.gates[first.id]?.status).toBe('withdrawn');
+    expect(statuses(w, taskId)).toEqual([[1, 'active']]);
+    expect(
+      w
+        .task(taskId)
+        .activity.filter((entry) => entry.kind === 'message')
+        .map((entry) => entry.detail)
+    ).toEqual([text]);
   });
 
   test('a split-off the classifier suggests can be declined and kept in the chat as the next round', async () => {

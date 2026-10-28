@@ -1,16 +1,65 @@
 import { describe, expect, it } from 'bun:test';
 import { NOTICE_GROUP_LIMIT, resolveNoticeLine } from '@/lib/chat/notices.ts';
+import { formatClock } from '@/lib/format/time.ts';
 
 describe('a notice row', () => {
+  it('says a busy provider is tried again, which try this is and when, without calling it a failure', () => {
+    const retryAt = new Date(2026, 9, 28, 15, 41).getTime();
+    expect(
+      resolveNoticeLine({
+        kind: 'retrying',
+        key: 'n',
+        at: 0,
+        provider: 'claude',
+        detail: 'Claude’s API is overloaded (529).',
+        attempt: 2,
+        attempts: 3,
+        retryAt,
+      })
+    ).toEqual({
+      icon: 'IconArrowRotateClockwise',
+      label: 'Claude was busy, trying again',
+      meta: '2 of 3',
+      detail: `Claude’s API is overloaded (529). Shinsa tries the same step again by itself at ${formatClock(retryAt)}.`,
+    });
+  });
+
   it('says an account switched and why', () => {
     expect(
-      resolveNoticeLine({ kind: 'account', key: 'n', at: 0, email: 'b@example.com', reason: 'usage_limit' })
+      resolveNoticeLine({
+        kind: 'account',
+        key: 'n',
+        at: 0,
+        email: 'b@example.com',
+        previous: 'a@example.com',
+        reason: 'usage_limit',
+      })
     ).toEqual({
       icon: 'IconArrowsRepeatRightLeft',
       label: 'Account switched',
       meta: 'b@example.com',
       detail: 'The previous account hit its usage limit.',
     });
+  });
+
+  it('names the account that needed signing in again and the one the run carried on with', () => {
+    const switched = {
+      kind: 'account',
+      key: 'n',
+      at: 0,
+      email: 'b@example.com',
+      previous: 'a@example.com',
+      reason: 'signed_out',
+    } as const;
+    expect(resolveNoticeLine(switched).detail).toBe(
+      'Claude account a@example.com needed signing in again; continued on b@example.com.'
+    );
+    expect(resolveNoticeLine({ ...switched, previous: null }).detail).toBe(
+      'The previous account is signed out.'
+    );
+    expect(resolveNoticeLine({ ...switched, email: null }).detail).toBe(
+      'The previous account is signed out.'
+    );
   });
 
   it('says the conversation was compacted and what made it happen', () => {

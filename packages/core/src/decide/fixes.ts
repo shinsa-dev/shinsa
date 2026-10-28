@@ -1,19 +1,15 @@
-import type { CommandOf } from '../commands/index.ts';
 import {
-  type CheckEvidence,
   type FixReason,
+  isOfCurrentRound,
   type ReviewEscalation,
   type ReviewEscalationReason,
-  resolveRoundStamp,
   type Task,
 } from '../domain/index.ts';
-import { resolveAgentPrompt, resolveChecksFixPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
-import type { ReportCheck, ReviewFinding } from '../report/types.ts';
+import { describeEvidenceForFix, resolveAgentPrompt, resolveReviewFixPrompt } from '../prompts/index.ts';
+import type { ReviewFinding } from '../report/types.ts';
 import type { Decider } from './decider.ts';
-import { applyEditsApproval } from './edits.ts';
 import { countFixRepeats, countReviewRounds, countUnchangedRounds } from './fingerprints.ts';
-import { openReviewGate, startReview } from './lifecycle.ts';
-import { shipReviewedWork } from './pull-requests.ts';
+import { openReviewGate } from './lifecycle.ts';
 
 const MAX_STALLED_FIXES = 2;
 
@@ -27,6 +23,8 @@ const FIX_STAGE_REASON: Record<FixReason, string> = {
   you: 'making your changes',
   pull_request: 'fixing the pull request',
   conflict: 'resolving conflicts',
+  update: 'resolving conflicts with the base branch',
+  hook: 'fixing what the pre-push hook found',
 };
 
 type FixStop = { reason: Exclude<ReviewEscalationReason, 'rounds'>; stalled: number; limit: number };
@@ -84,6 +82,18 @@ function escalateReview(decider: Decider, taskId: string, reason: ReviewEscalati
   openReviewGate(decider, taskId, escalation);
 }
 
+function listAgentEvidence(decider: Decider, task: Task) {
+  return Object.values(decider.state.evidence)
+    .filter(
+      (piece) =>
+        piece.taskId === task.id &&
+        piece.runId !== null &&
+        decider.state.runs[piece.runId]?.role === 'agent' &&
+        isOfCurrentRound(task, piece)
+    )
+    .sort((a, b) => a.attachedAt - b.attachedAt);
+}
+
 export function startFix(
   decider: Decider,
   taskId: string,
@@ -113,26 +123,15 @@ export function startFix(
     treeHash: task.treeHash ?? null,
   });
   decider.stage(taskId, 'fixing', FIX_STAGE_REASON[reason]);
-  decider.startRun(decider.task(taskId), 'agent', resolveAgentPrompt(prompt), {
-    purpose: 'fix',
-    resumeFrom: decider.taskSession(taskId, 'agent'),
-  });
-}
-
-function reactToChecks(decider: Decider, taskId: string, results: ReportCheck[]) {
-  const failed = results.filter((check) => check.outcome === 'fail');
-  if (failed.length === 0) {
-    decider.progressed(taskId);
-    if (applyEditsApproval(decider, taskId, 'review')) shipReviewedWork(decider, taskId);
-    else startReview(decider, taskId);
-    return;
-  }
-  startFix(
-    decider,
-    taskId,
-    'checks',
-    resolveChecksFixPrompt(results),
-    resolveSignature(failed.map((check) => check.name))
+  const evidence = describeEvidenceForFix(listAgentEvidence(decider, task));
+  decider.startRun(
+    decider.task(taskId),
+    'agent',
+    resolveAgentPrompt([prompt, evidence].filter(Boolean).join('\n\n')),
+    {
+      purpose: 'fix',
+      resumeFrom: decider.taskSession(taskId, 'agent'),
+    }
   );
 }
 
@@ -169,34 +168,4 @@ export function reactToFindings(decider: Decider, taskId: string, findings: Revi
     resolveReviewFixPrompt(findings),
     resolveSignature(blocking.map((finding) => finding.file ?? ''))
   );
-}
-
-export function recordChecks(decider: Decider, command: CommandOf<'checks.record'>) {
-  const task = decider.task(command.taskId);
-  if (task.stage !== 'checking') return;
-  decider.emit({
-    type: 'checks.recorded',
-    taskId: command.taskId,
-    results: command.results,
-    ...(command.coverage ? { coverage: command.coverage } : {}),
-  });
-  if (command.evidence) attachCheckEvidence(decider, task, command.evidence);
-  reactToChecks(decider, command.taskId, command.results);
-}
-
-function attachCheckEvidence(decider: Decider, task: Task, evidence: CheckEvidence) {
-  decider.emit({
-    type: 'evidence.attached',
-    evidence: {
-      id: decider.context.newId(),
-      taskId: task.id,
-      runId: null,
-      kind: 'check',
-      title: evidence.title,
-      uri: evidence.uri,
-      attachedAt: decider.context.now,
-      ...resolveRoundStamp(task),
-      ...(evidence.detail ? { detail: evidence.detail } : {}),
-    },
-  });
 }

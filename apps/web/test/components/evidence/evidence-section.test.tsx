@@ -155,8 +155,8 @@ describe('the Evidence section', () => {
       piece('odd', { kind: 'test', title: 'Nothing ran', uri: `${STORED}/odd.txt` }),
     ]);
     expect(await screen.findByText('3 pass, 0 fail')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Test runs 2' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Check run' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Tests 2' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Check' })).toBeTruthy();
     expect(screen.getByText('After the fix.')).toBeTruthy();
     expect(await screen.findByText('bun run lint')).toBeTruthy();
     expect(screen.getByText('Passed')).toBeTruthy();
@@ -180,6 +180,60 @@ describe('the Evidence section', () => {
     ]);
     expect(await screen.findByRole('button', { name: 'Hide the output' })).toBeTruthy();
     expect(again.container.textContent).toContain('expected 2');
+  });
+
+  it('shows a linked test as its check, with the agent’s note and Shinsa’s latest output, never as text of its own', async () => {
+    answer({ [`${STORED}/c1.txt`]: ' 4 pass\n 0 fail' });
+    const task = createTask({
+      id: 't',
+      checks: [
+        { id: 'c1', label: 'Cart tests', command: 'bun test cart.test.ts', phases: [1], source: 'plan' },
+      ],
+      checkResults: [
+        { id: 'c1', label: 'Cart tests', command: 'bun test cart.test.ts', outcome: 'pass', detail: null },
+      ],
+    });
+    const state = createShinsaState({
+      tasks: [task],
+      evidence: [
+        piece('link', {
+          kind: 'test',
+          title: 'Cart tests',
+          uri: 'shinsa://check/c1',
+          checkId: 'c1',
+          detail: 'Covers the empty cart.',
+          runId: 'review',
+        }),
+        piece('out', {
+          kind: 'check',
+          title: 'Cart tests',
+          uri: `${STORED}/c1.txt`,
+          checkId: 'c1',
+          runId: null,
+        }),
+        piece('gone', {
+          kind: 'check',
+          title: 'Old tests',
+          uri: `${STORED}/c9.txt`,
+          checkId: 'c9',
+          runId: null,
+        }),
+      ],
+      runs: [createRun({ id: 'review', taskId: 't', role: 'reviewer' })],
+    });
+    const view = render(
+      <TooltipProvider>
+        <EvidenceSection state={state} task={task} />
+      </TooltipProvider>
+    );
+    expect(screen.getByRole('heading', { name: 'Test' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Check' })).toBeTruthy();
+    expect(screen.getByText('bun test cart.test.ts')).toBeTruthy();
+    expect(screen.getByText('Covers the empty cart.')).toBeTruthy();
+    expect(screen.getByText('No longer one of the task’s checks')).toBeTruthy();
+    expect(view.container.querySelector('a[href^="shinsa:"]')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show the output' })[0] as HTMLElement);
+    await waitFor(() => expect(view.container.textContent).toContain('4 pass'));
   });
 
   it('renders a note as markdown, a file reference as its label off a task page, and lists links', async () => {
@@ -207,6 +261,34 @@ describe('the Evidence section', () => {
     renderSection([piece('look', { kind: 'preview', title: 'Look', uri: `${STORED}/look.txt` })]);
     expect(screen.getByText('Look')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Preview' })).toBeTruthy();
-    expect(screen.queryByText('Test run')).toBeNull();
+    expect(screen.queryByText('Test')).toBeNull();
+  });
+});
+
+describe('evidence brought up to date', () => {
+  it('shows the current version marked as updated, and the earlier ones folded under Earlier versions', () => {
+    renderSection([
+      piece('before', { title: 'Settings', stage: 'before' }),
+      piece('old', { title: 'Settings', stage: 'after', replacedBy: 'new' }),
+      piece('new', { title: 'Settings', stage: 'after', fixFor: 'you' }),
+      piece('menu', { title: 'Menu', removedAt: NOW, removedReason: 'The menu is gone.' }),
+    ]);
+    const pair = screen.getByRole('heading', { name: /Settings/ }).closest('section') as HTMLElement;
+    expect(within(pair).getByText('Updated after your review')).toBeTruthy();
+    expect(screen.queryByText('Menu')).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Expand Earlier versions' });
+    expect(toggle.textContent).toBe('Earlier versions2');
+    fireEvent.click(toggle);
+    expect(screen.getByText('Replaced by a later version')).toBeTruthy();
+    expect(screen.getByText('Removed: The menu is gone.')).toBeTruthy();
+    expect(screen.getByText('Menu')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Earlier versions' }));
+    expect(screen.queryByText('Menu')).toBeNull();
+  });
+
+  it('says the evidence was removed when nothing current is left, and still shows the earlier versions', () => {
+    renderSection([piece('menu', { title: 'Menu', removedAt: NOW, removedReason: 'Gone.' })]);
+    expect(screen.getByText('The agents removed the evidence they attached this round.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Expand Earlier versions' })).toBeTruthy();
   });
 });

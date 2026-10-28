@@ -78,8 +78,8 @@ const REPORT: WorkReport = {
     },
   ],
   checks: [
-    { name: 'bun test', outcome: 'pass', detail: '12 tests' },
-    { name: 'bun lint', outcome: 'fail', detail: null },
+    { id: 'c1', label: 'Tests', command: 'bun test', outcome: 'pass', detail: '12 tests' },
+    { id: 'c2', label: 'Lint', command: 'bun lint', outcome: 'fail', detail: null },
   ],
   judgementCalls: [
     {
@@ -144,6 +144,11 @@ function reviewing(overrides: Partial<Task> = {}, gateType: 'review' | 'merge' |
     repoId: 'repo-1',
     stage: 'awaiting_review',
     report: REPORT,
+    checks: [
+      { id: 'c1', label: 'Tests', command: 'bun test', phases: [1], source: 'plan' },
+      { id: 'c2', label: 'Lint', command: 'bun lint', phases: [1], source: 'agent' },
+    ],
+    checkResults: REPORT.checks,
     reviewSummary: 'I ran the retry against a server that **drops** the first call.',
     findings: [
       {
@@ -247,13 +252,13 @@ describe('the Review tab', () => {
     expect(screen.getByText('The agent review disagrees')).toBeDefined();
     expect(screen.getByText('Two is enough here.')).toBeDefined();
     expect(screen.getByText('Drop the first call and watch it retry.')).toBeDefined();
-    expect(screen.getByText('1 of 2 checks passed. The Overview lists each check.')).toBeDefined();
+    expect(screen.getByText('1 of 2 failed')).toBeDefined();
+    expect(screen.getByText('bun lint')).toBeDefined();
     expect(screen.getByText('Suggested fix')).toBeDefined();
     expect(
       screen.getByText('Found 1 blocking finding and 1 suggestion. A signal for you, never the approval.')
     ).toBeDefined();
     expect(screen.getByText('drops')).toBeDefined();
-    expect(screen.queryByText('bun lint')).toBeNull();
     expect(screen.queryByText('Changed files the review does not point at')).toBeNull();
     fireEvent.click(await screen.findByText('Everything else'));
     expect(await screen.findByText('Changed files the review does not point at')).toBeDefined();
@@ -450,7 +455,7 @@ describe('the Review tab', () => {
     await screen.findAllByText('The retry never ends');
     expect(screen.getByText('Covered by tests')).toBeDefined();
     expect(screen.getByText('Unit tests cover a dropped call and a call that keeps failing.')).toBeDefined();
-    expect(screen.getByText('1 of 2 checks passed. The Overview lists each check.')).toBeDefined();
+    expect(screen.getByText('Building')).toBeDefined();
     expect(screen.getByText('Try it yourself')).toBeDefined();
     expect(screen.getAllByText('You should see')).toHaveLength(4);
     expect(screen.getByText('It stops after three tries.')).toBeDefined();

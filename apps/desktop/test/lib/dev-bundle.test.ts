@@ -4,6 +4,7 @@ import {
   DEV_BUNDLE_ID,
   listPlistEdits,
   resolveDevBundle,
+  resolveUserDataDir,
   serializeDevBundleStamp,
 } from '../../src/lib/dev-bundle.ts';
 
@@ -30,6 +31,18 @@ describe('listPlistEdits', () => {
       ['-replace', 'CFBundleDisplayName', '-string', 'Shinsa', '/b/Info.plist'],
       ['-replace', 'CFBundleIdentifier', '-string', DEV_BUNDLE_ID, '/b/Info.plist'],
     ]);
+  });
+});
+
+describe('resolveUserDataDir', () => {
+  it('keeps each app’s window, channel and single-instance lock in a folder of its own', () => {
+    const appData = '/Users/me/Library/Application Support';
+    expect(resolveUserDataDir(appData, true, undefined)).toBe(`${appData}/Shinsa`);
+    expect(resolveUserDataDir(appData, false, undefined)).toBe(`${appData}/Shinsa Dev`);
+    expect(resolveUserDataDir(appData, true, 'studio.overclock.shinsa.test')).toBe(
+      `${appData}/studio.overclock.shinsa.test`
+    );
+    expect(resolveUserDataDir(appData, true)).toBe(`${appData}/Shinsa`);
   });
 });
 

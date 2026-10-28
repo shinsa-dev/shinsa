@@ -1205,12 +1205,15 @@
 }
 
 /* Sonner's icon wrapper is sized for 16px icons with negative margins baked in.
- * Size our 16px icons explicitly and drop the margins — `auto` collapses to 0×0 for loading
- * toasts, whose loader sonner absolutely-positions (see below). */
+ * Size our 14px icons (`sm`, the size beside the toast's 13px text) explicitly and
+ * replace the margins — `auto` collapses to 0×0 for loading toasts, whose loader
+ * sonner absolutely-positions (see below). The -2px end margin takes the toast's
+ * 8px gap down to the 6px icon ↔ label of a menu row or button, so the gap to an
+ * action stays 8px. */
 [data-sonner-toast].bk-toast [data-icon] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
+  width: 14px;
+  height: 14px;
+  margin: 0 -2px 0 0;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -1243,7 +1246,7 @@
 }
 [data-sonner-toast].bk-toast:has([data-description]) [data-icon] {
   align-self: flex-start;
-  margin-top: -2px;
+  margin-top: -2.5px;
 }
 
 /* The result icon scales up as the loader shrinks away underneath it. */
