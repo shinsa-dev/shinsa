@@ -20,6 +20,13 @@
     <a href="#development">Development</a>
 </p>
 
+> [!WARNING]
+> **Shinsa is in early pre-release.** No stable version has shipped yet: every build so far is a beta or a canary,
+> and the 1.0.0 in their version numbers does not mean the product is finished. It is very early, and a lot will
+> change. Features, screens, commands and the data Shinsa keeps can change or break from one build to the next,
+> without a migration path. Try it, share what you think, and expect rough edges; do not rely on it for work you
+> cannot afford to lose.
+
 <p>
   <a href="https://shinsa.dev">
     <picture>
@@ -57,6 +64,8 @@ Shinsa (審査) means examination, judging. Agents do the work end to end; the j
 
 Shinsa is a Mac app for Apple Silicon: [shinsa.dev/download](https://shinsa.dev/download) always fetches the latest
 release. It needs git, the GitHub CLI signed in (`gh auth login`) and Claude Code signed in; Codex is optional.
+There is no stable release yet, so until the first one ships, `shinsa.dev/download` fetches the newest beta, and
+every build is a pre-release.
 
 To get new versions first, take the beta: [shinsa.dev/download/beta](https://shinsa.dev/download/beta) fetches the
 newest release, betas included. Betas update to newer betas and to each stable release once it is newer. For every
