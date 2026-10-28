@@ -228,10 +228,10 @@ Only these, and they win over anything below:
    tasks: the focus is the filter, and the way to see other work is to switch it. The last two take their
    title, icon and tone from the All tasks roadmap (`lib/tasks/roadmap.ts`, see 16; the sections are `lib/queue.ts`), so the two never disagree. Home
    renders it `wide` under the composer: a `text-2xs` label over a `rounded-xl` card, each row a
-   20px gate or stage tile, title, status line and age. There Needs you becomes Also needs you
-   and leaves out the tasks the guide above already names (hidden when none are left).
+   20px gate or stage tile, title, status line and age. The guide above is a short summary of
+   these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
-   the greeting, the guide and the composer, then Also needs you, In progress, Recently finished
+   the greeting, the guide and the composer, then Needs you, In progress, Recently finished
    (merged or done in the last 24 hours, five at most), Recent conversations (the latest agent message
    of five tasks, opening their chat) and Waiting on another task. Recently
    finished is closure news, so it follows the work still moving; Recent conversations is how you
@@ -240,9 +240,9 @@ Only these, and they win over anything below:
    (`resolveHomeSections` in `lib/home.ts` splits the queue around it). **A task shows in one section only**:
    the queue's sections own their tasks, Recently finished leaves those out, and Recent conversations shows
    only tasks no other section holds (its five are picked after that), so a finished task is in Recently
-   finished and never again under Recent conversations. Both also leave out every task the guide names: the
-   ones it leads with, the ones its reasons and note link or quote, and the running ones
-   (`listGuideTaskIds`). The rows of Recently finished and
+   finished and never again under Recent conversations. What the guide names plays no part in this:
+   every section lists its tasks whether or not the guide leads with them, links or quotes them.
+   The rows of Recently finished and
    Recent conversations start with the task's handle like the queue's (`TaskHandlePrefix`,
    `components/task/handle.tsx`). **The focus filters all of Home**: the guide, every section, every
    count and every row (Recently finished and Recent conversations through `isInFocus` in
@@ -252,7 +252,7 @@ Only these, and they win over anything below:
    search of every task, reaches past it. **Every Home section folds** from its `SectionLabel` header (a chevron, `aria-expanded`), is
    open until you fold it, the long tail included, and Home remembers each choice like every collapsible
    (`home:section:<section>`, `resolveHomeSectionId`, 40), apart from the compact queue's, where Waiting
-   still starts folded: folding Also needs you on Home never hides a decision in the queue button's
+   still starts folded: folding Needs you on Home never hides a decision in the queue button's
    list. The sections stack in `WideSections` (`components/queue/queue.tsx`) with one `gap-6` between
    them, and the visible gap is the same open or folded: a folded section is just its header, whose
    title (a 16px line, `leading-4`, in the 24px header) keeps 4px under it, so an open section
