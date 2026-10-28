@@ -14,8 +14,10 @@ export type DesktopUpdate =
   | { status: 'checking' }
   | { status: 'current' }
   | { status: 'failed'; message: string }
-  | { status: 'downloading'; version: string }
+  | { status: 'downloading'; version: string; percent: number }
+  | { status: 'preparing'; version: string }
   | { status: 'ready'; version: string }
+  | { status: 'installing'; version: string }
   | { status: 'downgrade'; version: string };
 
 export interface DesktopStart {

@@ -91,7 +91,19 @@ const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; u
     label: 'UpdatesGroup · Shinsa Canary, the next canary downloading',
     version: '1.3.1-canary.4',
     channel: 'canary',
-    update: { status: 'downloading', version: '1.3.1-canary.5' },
+    update: { status: 'downloading', version: '1.3.1-canary.5', percent: 42 },
+  },
+  {
+    label: 'UpdatesGroup · Beta, the downloaded beta being prepared to install',
+    version: '1.3.0-beta.2',
+    channel: 'beta',
+    update: { status: 'preparing', version: '1.3.0-beta.3' },
+  },
+  {
+    label: 'UpdatesGroup · Beta, restarting into the next beta',
+    version: '1.3.0-beta.2',
+    channel: 'beta',
+    update: { status: 'installing', version: '1.3.0-beta.3' },
   },
 ];
 

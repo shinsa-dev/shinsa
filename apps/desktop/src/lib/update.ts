@@ -141,11 +141,13 @@ export function resolveDesktopUpdate(state: UpdateState): DesktopUpdate {
     case 'failed':
       return { status: 'failed', message: state.message };
     case 'downloading':
+      return { status: 'downloading', version: state.version, percent: Math.floor(state.percent) };
     case 'preparing':
-      return { status: 'downloading', version: state.version };
+      return { status: 'preparing', version: state.version };
     case 'ready':
-    case 'installing':
       return { status: 'ready', version: state.version };
+    case 'installing':
+      return { status: 'installing', version: state.version };
     case 'downgrade':
       return { status: 'downgrade', version: state.version };
     default:

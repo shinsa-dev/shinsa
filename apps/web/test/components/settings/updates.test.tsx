@@ -59,9 +59,13 @@ describe('the Updates settings', () => {
   });
 
   it('in Shinsa Canary shows the channel as fixed and offers no other app', () => {
-    renderGroup({ status: 'downloading', version: '1.3.1-canary.5' }, '1.3.1-canary.4', 'canary');
+    renderGroup(
+      { status: 'downloading', version: '1.3.1-canary.5', percent: 42 },
+      '1.3.1-canary.4',
+      'canary'
+    );
     expect(screen.getByText('Shinsa Canary')).toBeTruthy();
-    expect(screen.getByText('Downloading 1.3.1-canary.5…')).toBeTruthy();
+    expect(screen.getByText('Downloading 1.3.1-canary.5… 42%')).toBeTruthy();
     expect(screen.getByText('Canary channel · Updates install when you quit Shinsa Canary')).toBeTruthy();
     expect(screen.getByText('Canary')).toBeTruthy();
     expect(
@@ -71,6 +75,18 @@ describe('the Updates settings', () => {
     ).toBeTruthy();
     expect(screen.queryByRole('combobox', { name: 'Update channel' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Download Shinsa Canary' })).toBeNull();
+  });
+
+  it('offers the restart only once the update is prepared, and not again while it restarts', () => {
+    renderGroup({ status: 'preparing', version: '1.3.0-beta.3' });
+    expect(screen.getByText('Preparing 1.3.0-beta.3…')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restart to update' })).toBeNull();
+  });
+
+  it('shows the restart under way without a button to click again', () => {
+    renderGroup({ status: 'installing', version: '1.3.0-beta.3' });
+    expect(screen.getByText('Restarting to install 1.3.0-beta.3…')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Restart to update' })).toBeNull();
   });
 
   it('has no restart button and no status before the first check', () => {

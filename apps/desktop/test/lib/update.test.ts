@@ -201,21 +201,22 @@ describe('describeUpdateFailure', () => {
 });
 
 describe('resolveDesktopUpdate', () => {
-  it('tells the page what the updater is doing, without the download’s progress', () => {
-    expect(resolveDesktopUpdate({ status: 'downloading', version: '0.3.0', percent: 40 })).toEqual({
+  it('tells the page what the updater is doing, with the download’s whole percent', () => {
+    expect(resolveDesktopUpdate({ status: 'downloading', version: '0.3.0', percent: 40.7 })).toEqual({
       status: 'downloading',
+      version: '0.3.0',
+      percent: 40,
+    });
+    expect(resolveDesktopUpdate({ status: 'preparing', version: '0.3.0' })).toEqual({
+      status: 'preparing',
       version: '0.3.0',
     });
     expect(resolveDesktopUpdate({ status: 'ready', version: '0.3.0' })).toEqual({
       status: 'ready',
       version: '0.3.0',
     });
-    expect(resolveDesktopUpdate({ status: 'preparing', version: '0.3.0' })).toEqual({
-      status: 'downloading',
-      version: '0.3.0',
-    });
     expect(resolveDesktopUpdate({ status: 'installing', version: '0.3.0' })).toEqual({
-      status: 'ready',
+      status: 'installing',
       version: '0.3.0',
     });
     expect(resolveDesktopUpdate({ status: 'checking', manual: true })).toEqual({ status: 'checking' });
