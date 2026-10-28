@@ -2560,7 +2560,10 @@ repository, branch and pull request, so agents never guess an id.
 **Live transcripts.** `Transcripts.record` appends and pushes to subscribers. While a socket
 watches a run, `Transcripts.follow` also tails the file, so lines another writer appends stream
 too. The follower also checks the file every second, so a change the file watch missed (a busy
-machine) or a watch that failed (out of file handles) never leaves it quiet.
+machine) or a watch that failed (out of file handles) never leaves it quiet. The check reads whatever
+the file holds past what the follower has already read, never comparing one look at the file with an
+earlier one, so a line appended the moment following starts arrives too. Both the watch and the check
+are the constructor's to replace, which is how the tests trigger them.
 
 ## Providers
 
@@ -3904,7 +3907,8 @@ How tests are written (fakes, waiting on conditions, the coverage floor) is in `
   the state version following the source (`test/serve.test.ts`: a real server keeps one and its next start reads it);
   `test/store/legacy.test.ts` the one-time rewrite and the move of briefings out of the log; and that a
   listener's state before and changes patch one state into the next. `test/agents/transcripts` covers a transcript
-  line torn by a crash, reading from a position, the entries kept in memory and each new entry's position;
+  line torn by a crash, reading from a position, the entries kept in memory, each new entry's position and
+following a file through its watch and the check every second, both triggered by hand, never waited for;
   `test/http/server.test.ts` the socket's patches, `state.sync` and transcript pages.
 - **Agents.** `apps/engine/test/agents/providers/claude/` covers every `terminal_reason` and failure class
   (`classify.test.ts`), executable discovery, session files under `CLAUDE_CONFIG_DIR`, prompt ids and echo matching,
