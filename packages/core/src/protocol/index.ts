@@ -86,14 +86,7 @@ export {
   sumLoadedTokens,
   type UsageFacts,
 } from './extensions.ts';
-export {
-  APP_FLAVORS,
-  type AppFlavor,
-  type FlavorIdentity,
-  parseAppFlavor,
-  resolveAppFlavor,
-  resolveEngineLabel,
-} from './flavor.ts';
+export { APP_IDENTITY, resolveEngineLabel } from './identity.ts';
 export {
   type ClientMessage,
   type DiffFile,

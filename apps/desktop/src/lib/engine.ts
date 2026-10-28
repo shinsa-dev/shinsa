@@ -1,8 +1,7 @@
 import { join } from 'node:path';
-import { type FlavorIdentity, resolveEngineLabel } from '@shinsa/core';
-import { FLAVOR } from './flavor.ts';
+import { APP_IDENTITY, resolveEngineLabel } from '@shinsa/core';
 
-export const APP_ID = process.env.SHINSA_APP_ID || FLAVOR.appId;
+export const APP_ID = process.env.SHINSA_APP_ID || APP_IDENTITY.appId;
 
 export const ENGINE_LABEL = resolveEngineLabel(APP_ID);
 
@@ -218,7 +217,8 @@ export function selectBusyPort(log: string) {
   return match?.[1] ? Number(match[1]) : null;
 }
 
-export function describeEngineScreen(screen: EngineScreen, name = FLAVOR.appName): EngineScreenView {
+export function describeEngineScreen(screen: EngineScreen): EngineScreenView {
+  const name = APP_IDENTITY.appName;
   switch (screen.kind) {
     case 'starting':
       return {
@@ -285,12 +285,8 @@ export function parseEngineAction(url: string): EngineAction | null {
   return action && action in ENGINE_ACTION_LABEL ? (action as EngineAction) : null;
 }
 
-export function resolveDataDir(
-  env: Record<string, string | undefined>,
-  home: string,
-  flavor: FlavorIdentity = FLAVOR
-) {
+export function resolveDataDir(env: Record<string, string | undefined>, home: string) {
   if (env.SHINSA_HOME) return join(env.SHINSA_HOME, 'data');
   if (env.SHINSA_DATA_DIR) return env.SHINSA_DATA_DIR;
-  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), flavor.configDir, 'data');
+  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), APP_IDENTITY.configDir, 'data');
 }

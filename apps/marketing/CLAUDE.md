@@ -155,8 +155,8 @@ channels/canary.json                      what /download/canary serves
 A channel file is a pointer, `{version, key, size, sha256, publishedAt}` (`parseDownloadPointer`), written after the
 GitHub release is published and only when its version is not older than the one there by semver (so a stable release
 moves `stable.json` and `beta.json`, a beta only `beta.json`, a canary only `canary.json`, and a stable hotfix below a
-running beta moves only `stable.json`). A canary is a different app, Shinsa Canary, so `canary.json` only ever points
-at a canary and the other two never do. Only the newest five canaries keep their disk image in the bucket;
+running beta moves only `stable.json`). `canary.json` only ever points at a canary and the other two never do, so
+`/download` and `/download/beta` never hand out a build of `main`. Only the newest five canaries keep their disk image in the bucket;
 the Release workflow deletes the older ones.
 
 - **Serving.** The Worker reads the channel's pointer (kept 60 seconds in the edge cache, `caches.default` under a

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { APP_FLAVORS } from '@shinsa/core';
+import { APP_IDENTITY } from '@shinsa/core';
 import {
   prepareDataDir,
   resolveConfig,
@@ -11,7 +11,7 @@ import {
 } from '../../src/config/index.ts';
 import { createTempDir } from '../helpers/index.ts';
 
-const DEFAULT_PORT = APP_FLAVORS.stable.port;
+const DEFAULT_PORT = APP_IDENTITY.port;
 
 describe('resolveShinsaPaths', () => {
   test('lives in ~/.config/shinsa, with the data beside config.json', () => {
@@ -22,15 +22,6 @@ describe('resolveShinsaPaths', () => {
     });
     expect(resolveShinsaPaths({ HOME: '/home/me', XDG_CONFIG_HOME: '/xdg' }).home).toBe('/xdg/shinsa');
     expect(resolveShinsaPaths({}).home).toBe(join(homedir(), '.config', 'shinsa'));
-  });
-
-  test('Shinsa Canary keeps everything in ~/.config/shinsa-canary, apart from Shinsa', () => {
-    expect(resolveShinsaPaths({ HOME: '/home/me' }, APP_FLAVORS.canary)).toEqual({
-      home: '/home/me/.config/shinsa-canary',
-      configPath: '/home/me/.config/shinsa-canary/config.json',
-      dataDir: '/home/me/.config/shinsa-canary/data',
-    });
-    expect(resolveShinsaPaths({ SHINSA_HOME: '/tmp/s' }, APP_FLAVORS.canary).home).toBe('/tmp/s');
   });
 
   test('SHINSA_HOME moves everything and SHINSA_DATA_DIR keeps the flat layout', () => {
@@ -143,19 +134,13 @@ describe('resolveConfig', () => {
     });
   });
 
-  test('Shinsa Canary defaults to a port of its own', () => {
-    const home = createTempDir();
-    expect(resolveConfig({ SHINSA_HOME: home }, null, APP_FLAVORS.canary).port).toBe(7447);
-    expect(resolveServerAddress({ SHINSA_HOME: home }, APP_FLAVORS.canary).port).toBe(7447);
-  });
-
   test('the installed app defaults to 7446, and a dev engine pins 5180 so the two never meet', async () => {
-    expect(resolveConfig({ SHINSA_HOME: createTempDir() }, null, APP_FLAVORS.stable).port).toBe(7446);
+    expect(resolveConfig({ SHINSA_HOME: createTempDir() }, null).port).toBe(7446);
     const { scripts } = await Bun.file(join(import.meta.dir, '../../package.json')).json();
     for (const script of [scripts.dev, scripts.start]) {
       expect(script).toMatch(/^SHINSA_PORT=\$\{SHINSA_PORT:-5180\} /);
     }
-    expect(Object.values(APP_FLAVORS).map((flavor) => flavor.port)).not.toContain(5180);
+    expect(APP_IDENTITY.port).not.toBe(5180);
   });
 });
 

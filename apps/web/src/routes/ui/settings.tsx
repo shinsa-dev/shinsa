@@ -88,7 +88,7 @@ const UPDATE_SCENES: { label: string; version: string; channel: UpdateChannel; u
     update: { status: 'downgrade', version: '1.2.0' },
   },
   {
-    label: 'UpdatesGroup · Shinsa Canary, the next canary downloading',
+    label: 'UpdatesGroup · Canary, the next canary downloading',
     version: '1.3.1-canary.4',
     channel: 'canary',
     update: { status: 'downloading', version: '1.3.1-canary.5', percent: 42 },

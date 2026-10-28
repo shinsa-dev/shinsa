@@ -3613,11 +3613,9 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
 
 ## Configuration and data
 
-Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa` when that is set). Shinsa
-Canary's engine, built with `SHINSA_FLAVOR=canary` (`APP_FLAVORS` in `packages/core/src/protocol/flavor.ts`), keeps the
-same layout in `~/.config/shinsa-canary` and listens on 7447 instead of 7446, so the two run side by side, each under
-its own data directory lock; `/api/health` and `shinsa version --json` report which one answers (`flavor`), and the
-canary's links use `shinsa-canary://` (`apps/desktop/CLAUDE.md` → Shinsa Canary):
+Shinsa keeps everything in one folder, `~/.config/shinsa` (`$XDG_CONFIG_HOME/shinsa` when that is set), on every
+update channel: a canary or a beta is the same app with the same identity (`APP_IDENTITY` in
+`packages/core/src/protocol/identity.ts`):
 
 ```
 ~/.config/shinsa/
@@ -3707,8 +3705,7 @@ scratch copy is one directory, and the event log, worktrees and config.json only
   above.
 - **config.json versus events.** `config.json` holds what belongs to this machine and nothing replay needs: `roots`
   (the folders that hold repositories), `port`, `hostname`, `editor`, `terminal` and `onboardedAt`. With no `port`
-  the engine takes its flavor's (`APP_FLAVORS`): 7446 for Shinsa, 7447 for Shinsa Canary, both in the unassigned
-  7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
+  the engine takes 7446 (`APP_IDENTITY`), in the unassigned 7444–7470 range and away from dev servers. A port another program holds stops the engine with "Failed to start
   server. Is port 7446 in use? Quit the program on it, or set another `port` in <config.json>." (`listenOnPort` in
   `http/server.ts`; the Mac app shows it as Port 7446 is taken). The environment wins over it (`SHINSA_PORT`, `SHINSA_HOST`, `SHINSA_EDITOR`, `SHINSA_TERMINAL`; `SHINSA_ROOTS` adds
   folders). Everything `decide` reads stays domain state, changed by `settings.change` events: the default model,
@@ -4028,11 +4025,10 @@ says hello counts as no desktop.
 
 ## Health
 
-`GET /api/health` answers `{ ok, seq, problems, version, protocol, flavor, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
+`GET /api/health` answers `{ ok, seq, problems, version, protocol, busy, restart, commit, installPath, dataDir, pid, startedAt, uptimeMs }`
 (`resolveHealth`, `apps/engine/src/instance/install.ts`), so a desktop app, a script or `shinsa health` can tell
 which Shinsa answered: `version` is the engine package's version, `commit` the checkout's `HEAD` (null outside a git
-checkout), `installPath` the folder holding `apps/engine`, `flavor` whether it is Shinsa's engine or Shinsa Canary's (`stable` or
-`canary`; each desktop app takes only its own), and `startedAt` and `uptimeMs` count from when the server
+checkout), `installPath` the folder holding `apps/engine`, and `startedAt` and `uptimeMs` count from when the server
 started. `problems` lists every event row the engine skipped at boot:
 `{ seq, type, kind: 'unreadable' | 'unappliable', error }` (a payload that is not JSON or does not match its type,
 or an event `applyEvent` threw on). Replay never stops at a damaged row: every later event is still applied, the

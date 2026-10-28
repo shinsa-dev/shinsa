@@ -17,7 +17,6 @@ describe('the shinsa command link', () => {
   it('lives in ~/.local/bin, where Claude Code, pipx and uv put theirs', () => {
     expect(resolveCommandDir('/Users/ada')).toBe('/Users/ada/.local/bin');
     expect(resolveCommandLink('/Users/ada')).toBe('/Users/ada/.local/bin/shinsa');
-    expect(resolveCommandLink('/Users/ada', 'shinsa-canary')).toBe('/Users/ada/.local/bin/shinsa-canary');
   });
 
   it('is made when missing and kept when it already points at this app', () => {
