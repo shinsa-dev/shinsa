@@ -1,3 +1,4 @@
+import { basename } from 'node:path';
 import {
   type AgentProviderInfo,
   DomainError,
@@ -30,7 +31,12 @@ import { createLoginResolver, type LoginResolver, type RootSource } from '../rep
 import type { Engine } from '../runtime/engine.ts';
 import type { Schedules } from '../schedules/index.ts';
 import { type CommandResult, runCommand } from '../shell/index.ts';
-import { AttachmentStore, type EvidenceStore, readAttachmentUpload } from '../store/index.ts';
+import {
+  ATTACHMENT_REQUEST_LIMIT_BYTES,
+  AttachmentStore,
+  type EvidenceStore,
+  readAttachmentUpload,
+} from '../store/index.ts';
 import { type Classifier, routeUserCommand } from '../triage/message.ts';
 import type { Versions } from '../versions/index.ts';
 import { createVersionRoutes } from '../versions/routes.ts';
@@ -39,7 +45,7 @@ import { LedgerStore } from '../workspaces/ledger.ts';
 import { type JsonObject, readJson, readJsonObject } from './body.ts';
 import { createCodeRoutes } from './code.ts';
 import { createEditRoutes } from './edits.ts';
-import { respondEvidenceFile } from './evidence.ts';
+import { resolveAttachmentHeaders, respondEvidenceFile } from './evidence.ts';
 import { resolveInside } from './paths.ts';
 import { createReadRoutes } from './reads.ts';
 
@@ -190,13 +196,16 @@ function createServerRoutes(context: ApiContext): ApiRoute[] {
   }
 
   async function respondAttachmentUpload(request: Request) {
-    return respondJson(attachments.write(readAttachmentUpload(await readJsonObject(request))));
+    const body = await readJsonObject(request, ATTACHMENT_REQUEST_LIMIT_BYTES);
+    return respondJson(attachments.write(readAttachmentUpload(body)));
   }
 
   function respondAttachment(name: string, request: Request) {
     const path = attachments.selectFile(name);
     if (!path) return Promise.resolve(new Response('Not found', { status: 404 }));
-    return Promise.resolve(respondEvidenceFile(Bun.file(path), request.headers.get('range')));
+    const file = Bun.file(path);
+    const headers = resolveAttachmentHeaders(file.type, basename(path));
+    return Promise.resolve(respondEvidenceFile(file, request.headers.get('range'), headers));
   }
 
   function respondEvidence(name: string, request: Request) {

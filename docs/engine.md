@@ -2271,7 +2271,7 @@ it is picked, pasted or dropped: `POST /api/attachments` with `{ name, mimeType,
 guard takes JSON bodies only) writes it to `<data>/attachments/<UUIDv7>/<safe file name>` (`AttachmentStore`, 25 MB a
 file; this route alone takes a body up to the base64 of that, every other one stays at 8 MB) and answers with a
 `StoredAttachment`: `{ kind, name, url, path, mimeType, size }`. `GET /api/attachments/<id>/<file name>` serves it
-like evidence (immutable, byte ranges); only names of that shape resolve. Inspect mode refuses the upload like every
+like evidence (immutable, byte ranges), with `Content-Security-Policy: default-src 'none'; sandbox` and `nosniff`, and as a download unless it is a PNG, JPEG, GIF, WebP or AVIF image, so an uploaded page never runs on Shinsa's origin (`resolveAttachmentHeaders`); only names of that shape resolve. Inspect mode refuses the upload like every
 other write.
 
 The files travel inside the text, never beside it: core's `serializeAttachments` appends one `<attachments>` block

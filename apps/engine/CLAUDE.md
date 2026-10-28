@@ -285,7 +285,7 @@ random points of a task's life; `test/http/fuzz.test.ts` throws malformed reques
   routes that skip part of it, are `docs/engine.md` → Who can change Shinsa). `parseUserCommand` (core) is the single
   gate for commands from outside: it accepts only `UserCommand` types and checks each field by field; never add an
   allowlist of your own. A socket message needs a string `id` or `runId`; request bodies are capped at 8 MB (an
-  attachment upload at the base64 of 25 MB, `ATTACHMENT_REQUEST_LIMIT_BYTES`) and read as JSON through `http/body.ts`; files are read through `resolveInside` (real paths, so a symlink cannot leave the
+  attachment upload at the base64 of 25 MB, `ATTACHMENT_REQUEST_LIMIT_BYTES`), by `Content-Length` and again by the bytes `http/body.ts` reads as JSON; files are read through `resolveInside` (real paths, so a symlink cannot leave the
   worktree) and evidence by plain name only.
 - **Human-only decisions have no agent path**: a `humanOnly` spec is left out of the agents' tools
   (`listAgentSpecs`) and its `shinsa` command is refused in an agent's shell (`agents/policy.ts`), and so are

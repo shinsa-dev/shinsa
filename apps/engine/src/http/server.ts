@@ -11,6 +11,7 @@ import {
   type TerminalSocketData,
   type Terminals,
 } from '../terminals/index.ts';
+import { MAX_BODY_BYTES } from './body.ts';
 import {
   resolveAllowedHosts,
   resolveBodyRefusal,
@@ -22,8 +23,6 @@ import {
 import { type ApiContext, createApiRoutes, respondError, respondFailure } from './routes.ts';
 import { createSocketHub, type SocketData } from './socket.ts';
 import { serveStatic } from './static.ts';
-
-const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 const ATTACHMENT_UPLOAD_PATH = '/api/attachments';
 
