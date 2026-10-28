@@ -9,7 +9,7 @@ import type { Command, CommandSection } from '@/lib/command/registry.ts';
 import { RANK } from '@/lib/command/registry.ts';
 import { describeClearKey, describeFindKey } from '@/lib/terminal/keys.ts';
 import { SERVICE_GLYPHS } from '@/lib/terminal/services.ts';
-import { PLACE_ICONS, type PlaceGroup } from '@/lib/terminal/tabs.ts';
+import type { PlaceGroup } from '@/lib/terminal/tabs.ts';
 
 interface TerminalPageActions {
   open: (place: TerminalPlace) => void;
@@ -69,7 +69,7 @@ function listNewCommand({ groups, fallback, actions }: TerminalPageContext): Com
             id: `terminal.place.${place.path}`,
             label: place.label,
             hint: place.path,
-            icon: PLACE_ICONS[place.kind],
+            icon: group.icon,
             run: () => actions.open(place),
           })),
         })),

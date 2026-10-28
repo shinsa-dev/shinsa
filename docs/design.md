@@ -297,14 +297,14 @@ Only these, and they win over anything below:
    (`TaskLink`) is a 16px state tile (gate or stage glyph) and the title, medium `fg-4`,
    underlined on hover; the tile and first word never part at a wrap. It goes where the work is
    (`?tab=review` for a review, `?tab=chat&run=` for a question or a running agent) and, on hover,
-   opens a preview card: status in its tone, what is happening now, repository, branch and pull
-   request (each with its icon), how long it has waited (`TimeAgo`, exact time on hover) and its
+   opens a preview card: status in its tone, what is happening now, repository (its mark in its project's
+   colour), branch and pull request (each with its icon), how long it has waited (`TimeAgo`, exact time on hover) and its
    one action as a button. A pull request link (`PrLink`) is a tile in the pull request's tone
    (green open, red failing, amber running, purple merged) and `#N`; it opens GitHub and its card
    (`PullRequestDetails`, the same body as the overview's pull request fact) shows the task, CI,
    unresolved comments, conflicts and the checks. `RepoChip` and `BranchChip` are a 14px `fg-2`
-   icon and the name (the branch in mono); their cards are the overview's repository and branch
-   facts. A file link (`FileLink`) is inline code; on a task with a repository it opens the file in the
+   icon and the name (the branch in mono; the repository's GitHub or folder mark in its project's colour); their
+   cards are the overview's repository and branch facts. A file link (`FileLink`) is inline code; on a task with a repository it opens the file in the
    Code tab at its lines (a diff tab in Changes once the task has changes, `?tab=code&mode=changes&file=&diff=1&line=`,
    the file in Files before that), with a tooltip naming the path and lines; elsewhere it stays plain code. Smart anchors carry `data-smart`, so prose link styling
    (blue, underlined) never applies to them.
@@ -396,7 +396,8 @@ Only these, and they win over anything below:
     The scale applies wherever the icon draws (the rail's rows, the Overview tab's house), never per call site;
     each shows its filled icon in `fg-4` with `aria-current="page"` on its own page (19), and Home has no buttons of
     its own for them. The queue button sits after Services, because that corner is navigation and nothing on the right (Focus) moves when it comes and
-    goes; it shows on every task page at every width, and it is the only place Cards lists the
+    goes; it shows on every page but Home, All tasks and setup (`isQueueButtonShown`), at every width: a task, Settings,
+    the Terminal page, /ui. It is the only place Cards lists the
     queue outside Home (there is no queue card beside the page). Sidebar is a permanent rail with
     the queue; it never hides. Its nav names the same places as Desk's bar, in the same words: New task (Home), Tasks,
     Services and Settings, each filled on its own page. From
@@ -526,7 +527,8 @@ Only these, and they win over anything below:
       the first icon sits on the column edge. Items with more to say open an `InfoPopover` on
       hover (see 15), never a tooltip: the pull request shows unresolved comments, mergeable, the Checks list in
       both stages (Building, then CI) and a link to GitHub; the branch its full name and base; the
-      repository its path, project and default branch; several related tasks list as links. A task with no
+      repository (its folder, the place the agent works, in its project's colour) its path, project and default
+      branch; several related tasks list as links. A task with no
       repository (a greeting, a general question) has no repository fact at all, and no branch; nothing in the web
       assumes `task.repoId` is set (the roadmap row's hint reads "No repository").
       Priority shows its level's mark (bars for low, normal and high, a red square with `!` for urgent, from `components/status/priority-icon.tsx`) and opens the priority menu, whose items carry the same marks; the task menu has no priority.
@@ -795,7 +797,7 @@ Only these, and they win over anything below:
       closed) and `aria-expanded` (`DisclosureHeader`, so the empty rest of the row folds it too); every Home section uses that
       (`WideSection`), Settings keeps the plain label.
     - **Settings has tabs** (`lib/settings-tabs.ts`, `SETTINGS_TABS`; `routes/settings.tsx`): General (Appearance,
-      Attention, Notifications, Context, Setup, Updates), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
+      Attention, Notifications, Context, Updates, Setup), Agents (Models, Engine, Versions), Agent usage (Accounts, Limits; the tab keeps `?tab=accounts`), Projects (Repository
       folders, then Projects: triage looks for repositories in those folders, so they come first), Integrations (Context optimizer, MCPs, Plugins, Skills; 29) and Automations (Schedules). There is no Advanced
       tab; an old `?tab=advanced` link opens General, which holds its sections. Each is its own pane, not a scroll position: the main use is a
       floating, tablet-sized window, where one long page meant scrolling past everything to reach anything, and a
@@ -848,6 +850,15 @@ Only these, and they win over anything below:
       Add services, an MCP server's Where agents use it), the MCP menu's Use in a project and ⌘K's choices (an option's
       `dot`; All work is grey, as in the Focus menu). `test/components/status/project-option.test.tsx` and ⌘K's
       focus choice in `test/components/command/menu.test.tsx` fail when one renders a project without it.
+    - **A project and a repository are two things, kept apart.** A project is its dot and its name; a repository is
+      its own name after its mark, never the project's name. The mark is tinted in its project's colour so you see
+      which project it belongs to (`RepoIcon` in `components/links/repo.tsx`, `resolveProjectInk` in
+      `lib/projects.ts`, the same ink as the dot), plain `fg-2` when the repository has no project. Where the
+      repository is a place it is `IconGithub` with a remote and `IconFolder1` without (`resolveRepoIcon`): a task
+      link's hover card, the roadmap's Repository column (its tooltip names the project, "Superwall project") and a
+      repository link (`RepoChip`). Where it is a folder something works in, it is always `IconFolder1`: the task's
+      facts row, an MCP server's "Only in ‹repo›" choice and the Terminal page's Repositories (a menu row's icon takes
+      the ink through `resolveProjectMark`).
     - **Cards** (`components/layout/surface/card.ts`): `CARD` (`rounded-xl`, hairline, `bg-card`) is the only
       card surface. A card pads the same on all four sides; the shared `Card` slot carries no
       padding of its own, so nothing doubles up. Settings groups are `p-1.5` (`SettingsCard`, which setup's cards use too; 6px on every side,

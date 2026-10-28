@@ -67,7 +67,10 @@ import { createProject, createRepo, createShinsaState } from '../support/state.t
 
 const PLACES: ExtensionPlaces = {
   projects: [{ id: 'sw', name: 'Superwall', color: 'blue' }],
-  repos: [{ path: '/code/paywall-next', name: 'paywall-next' }],
+  repos: [
+    { path: '/code/paywall-next', name: 'paywall-next', color: 'blue' },
+    { path: '/code/scratch', name: 'scratch', color: null },
+  ],
 };
 
 const VERCEL = createPlugin({ id: 'vercel', name: 'Vercel', enabled: false });
@@ -187,13 +190,16 @@ describe('where a server is used', () => {
   it('reads the projects and repositories from the state', () => {
     const state = createShinsaState({
       projects: [createProject({ id: 'sw', name: 'Superwall' })],
-      repos: [createRepo({ id: 'b', name: 'shinsa' }), createRepo({ id: 'a', name: 'paywall' })],
+      repos: [
+        createRepo({ id: 'b', name: 'shinsa' }),
+        createRepo({ id: 'a', name: 'paywall', projectId: 'sw' }),
+      ],
     });
     expect(resolveExtensionPlaces(state)).toEqual({
       projects: [{ id: 'sw', name: 'Superwall', color: 'blue' }],
       repos: [
-        { path: '/Users/you/Developer/a', name: 'paywall' },
-        { path: '/Users/you/Developer/b', name: 'shinsa' },
+        { path: '/Users/you/Developer/a', name: 'paywall', color: 'blue' },
+        { path: '/Users/you/Developer/b', name: 'shinsa', color: null },
       ],
     });
   });
@@ -238,9 +244,15 @@ describe('where a server is used', () => {
       'Everywhere',
       'Only in the Superwall project',
       'Only in paywall-next',
+      'Only in scratch',
     ]);
-    expect(listScopeItems(PLACES, { kind: 'project', project: 'sw' })).toHaveLength(3);
+    expect(listScopeItems(PLACES, { kind: 'project', project: 'sw' })).toHaveLength(4);
     expect(listScopeItems(PLACES, { kind: 'everywhere' })[1]).toMatchObject({ dot: 'blue' });
+    expect(listScopeItems(PLACES, { kind: 'everywhere' })[2]?.icon).toEqual({
+      name: 'IconFolder1',
+      style: Object.fromEntries([['--icon-color', 'var(--blue-4, var(--fg-2))']]),
+    });
+    expect(listScopeItems(PLACES, { kind: 'everywhere' })[3]?.icon).toBe('IconFolder1');
     expect(listScopeItems(PLACES, { kind: 'project', project: 'gone' }).at(-1)).toEqual({
       value: 'project:gone',
       label: 'Only in a project that is gone',
