@@ -229,12 +229,22 @@ describe('a watch check', () => {
     );
   });
 
-  test('a check that fires after the window ends passes it without a run', () => {
-    const { harness, taskId } = mergeWith();
-    const current = watchdog(harness, taskId);
-    harness.advance(49 * HOUR_MS);
-    harness.send({ type: 'watchdog.fire', taskId, watchdogId: current.id, dueAt: current.nextCheckAt ?? 0 });
-    expect(watchdog(harness, taskId).status).toBe('passed');
+  test('a check due exactly when the window ends still runs, and its report passes the watchdog', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 24, forHours: 24 }]);
+    expect(watchdog(harness, taskId).nextCheckAt).toBe(watchdog(harness, taskId).endsAt);
+    fire(harness, taskId);
+    expect(harness.activeRun(taskId).purpose).toBe('watch');
+    report(harness, taskId, true);
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'passed', checks: [{ healthy: true }] });
+  });
+
+  test('a check deferred past the window’s end passes it without a run', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 24, forHours: 24 }]);
+    harness.send({ type: 'task.message', taskId, text: 'Add a retry button too.', kind: 'new_round' });
+    fire(harness, taskId);
+    expect(watchdog(harness, taskId).nextCheckAt).toBe(harness.now + 15 * MINUTE_MS);
+    fire(harness, taskId);
+    expect(watchdog(harness, taskId)).toMatchObject({ status: 'passed', checks: [] });
     expect(harness.task(taskId).activity.at(-1)?.text).toBe('The watchdog “Checkout latency” passed');
   });
 
@@ -351,7 +361,7 @@ describe('a watch check', () => {
     expect(harness.activeRun(taskId).purpose).toBe('watch');
   });
 
-  test('a check that keeps ending without a report gives up after its nudges, at most at the window’s end', () => {
+  test('a check that keeps ending without a report gives up after its nudges, and stops when no slot is left', () => {
     const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 30, forHours: 48 }]);
     fire(harness, taskId);
     const first = harness.activeRun(taskId);
@@ -370,10 +380,12 @@ describe('a watch check', () => {
     expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
     expect(watchdog(harness, taskId)).toMatchObject({
       runId: null,
-      nextCheckAt: watchdog(harness, taskId).endsAt,
+      nextCheckAt: null,
+      status: 'stopped',
     });
-    fire(harness, taskId);
-    expect(watchdog(harness, taskId).status).toBe('passed');
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      'Could not check the watchdog “Checkout latency”, and its window has ended, so it stopped'
+    );
   });
 
   test('a check resumed after a usage limit reset can still report', () => {

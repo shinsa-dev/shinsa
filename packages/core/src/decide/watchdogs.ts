@@ -145,7 +145,7 @@ export function fireWatchdog(decider: Decider, command: CommandOf<'watchdog.fire
   if (!task || watchdog?.status !== 'watching' || watchdog.runId !== null) return;
   if (watchdog.nextCheckAt !== command.dueAt || isTaskClosed(task)) return;
   const now = decider.context.now;
-  if (watchdog.endsAt !== null && now >= watchdog.endsAt) {
+  if (watchdog.endsAt !== null && command.dueAt > watchdog.endsAt) {
     passWatchdog(decider, task, watchdog);
     return;
   }
@@ -227,14 +227,12 @@ export function missWatchCheck(decider: Decider, runId: string, reason: string) 
   const task = decider.task(decider.state.runs[runId]?.taskId ?? '');
   const watchdog = selectWatchingRun(task, runId);
   if (!watchdog) return false;
-  const now = decider.context.now;
-  const next = now + watchdog.everyMinutes * MINUTE_MS;
   decider.emit({
     type: 'watchdog.missed',
     taskId: task.id,
     watchdogId: watchdog.id,
     reason,
-    nextCheckAt: watchdog.endsAt === null ? next : Math.min(next, watchdog.endsAt),
+    nextCheckAt: resolveNextCheckAt(watchdog, decider.context.now),
   });
   settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'could not check a watchdog');
   return true;

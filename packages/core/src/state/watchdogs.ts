@@ -74,12 +74,19 @@ function applyChecked(state: ShinsaState, event: EventOf<'watchdog.checked'>) {
 }
 
 function applyMissed(state: ShinsaState, event: EventOf<'watchdog.missed'>) {
-  const next = updateWatchdog(state, event, () => ({ runId: null, nextCheckAt: event.nextCheckAt }));
+  const ended = event.nextCheckAt === null;
+  const next = updateWatchdog(state, event, () => ({
+    runId: null,
+    nextCheckAt: event.nextCheckAt,
+    ...(ended ? { status: 'stopped' as const, endedAt: event.at } : {}),
+  }));
   if (!next) return;
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
     kind: 'watchdog',
-    text: `Could not check the watchdog “${next.title}”; it tries again at its next check`,
+    text: ended
+      ? `Could not check the watchdog “${next.title}”, and its window has ended, so it stopped`
+      : `Could not check the watchdog “${next.title}”; it tries again at its next check`,
     detail: event.reason,
   });
 }

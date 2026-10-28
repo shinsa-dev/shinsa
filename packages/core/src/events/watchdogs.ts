@@ -13,7 +13,13 @@ export type WatchdogEventBody =
     }
   | { type: 'watchdog.checking'; taskId: string; watchdogId: string; runId: string }
   | { type: 'watchdog.deferred'; taskId: string; watchdogId: string; nextCheckAt: number }
-  | { type: 'watchdog.missed'; taskId: string; watchdogId: string; reason: string; nextCheckAt: number }
+  | {
+      type: 'watchdog.missed';
+      taskId: string;
+      watchdogId: string;
+      reason: string;
+      nextCheckAt: number | null;
+    }
   | {
       type: 'watchdog.checked';
       taskId: string;

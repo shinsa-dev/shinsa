@@ -1216,7 +1216,8 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   to the project's sources for the repository and starts its window then (`watchdog.started`).
 - **A check is a turn of the task's session.** `WatchdogClock` fires `watchdog.fire {dueAt}` (command id
   `watchdog:<id>:<dueAt>`) for each watching watchdog at its `nextCheckAt`. Core ignores a fire for another slot, and
-  passes the watchdog when its window already ended (`watchdog.ended`, `passed`). A task that is not resting, or has a
+  passes the watchdog without a check only when the slot falls after its window (`watchdog.ended`, `passed`); a slot
+  due exactly as the window ends still checks, however late the fire arrives. A task that is not resting, or has a
   live run (a later round at work), defers it 15 minutes (`watchdog.deferred`), so a check never shares the session
   with another turn. Otherwise the task goes to the stage `watching` and its Agent runs with purpose `watch`, read-only
   (`isReadOnlyRun`), in the repository itself, resuming the task's session (`Decider.taskSession`), so it knows what
@@ -1229,8 +1230,8 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   again (`merged`). A check run that fails or ends without `report_watch` is recovered like any run (its nudged or
   resumed run takes the check over, `watchdog.checking`), but where any other run would open a failure gate, the check
   gives up instead (`missWatchCheck`, `watchdog.missed` with the reason): no gate, the task rests again, and the next
-  check is due an interval later, at the latest when the window ends, so one broken check never freezes the watchdog
-  or the task's other watchdogs. A message while it checks steers it, and Retry at `watching` starts it again.
+  check is due an interval later; when that falls past the window, the watchdog stops (`stopped`, never `passed`,
+  since its last check never ran). One broken check never freezes the watchdog or the task's other watchdogs. A message while it checks steers it, and Retry at `watching` starts it again.
 - **You stop them.** `watchdog.stop` (Stop on the Overview, `shinsa watchdogs stop`) ends one, and its check if it is
   running. Marking the task done or cancelling it stops every active one; an agent cannot mark a task done while one
   is watching or waits for a source (`task_open`). While one is active the merged task's status reads Watching and its
