@@ -33,7 +33,7 @@ describe('codex errors become Shinsa failure classes', () => {
         'transport_error',
         'responseTooManyFailedAttempts',
       ],
-      ['internalServerError', 'provider_error', 'internalServerError'],
+      ['internalServerError', 'overloaded', 'internalServerError'],
       [null, 'provider_error', null],
       [42, 'provider_error', null],
     ];
@@ -57,8 +57,18 @@ describe('codex errors become Shinsa failure classes', () => {
       'Codex stopped: the conversation no longer fits the model’s context window. Too big'
     );
     expect(resolveCodexFailure({ codexErrorInfo: 'serverOverloaded' }).message).toBe(
-      'Codex’s API is overloaded. It retries shortly.'
+      'Codex’s API is overloaded.'
     );
+    expect(resolveCodexFailure({ codexErrorInfo: 'internalServerError' }).message).toBe(
+      'Codex’s API had a server error.'
+    );
+    expect(
+      resolveCodexFailure({ message: 'Bad gateway', codexErrorInfo: { other: { httpStatusCode: 502 } } })
+    ).toMatchObject({
+      class: 'overloaded',
+      message: 'Codex’s API had a server error. Bad gateway',
+      retryable: true,
+    });
     expect(resolveCodexFailure({ codexErrorInfo: { responseStreamDisconnected: {} } }).message).toBe(
       'Codex lost the connection to its API.'
     );
@@ -75,6 +85,21 @@ describe('codex errors become Shinsa failure classes', () => {
       resetAt: null,
     });
     expect(isUsageLimit(null)).toBe(false);
+  });
+
+  test('a limit or an empty credit balance Codex only reports in words is still a usage limit', () => {
+    expect(
+      resolveCodexFailure({ message: 'You’ve hit your usage limit. Try again at 3:40 PM.' })
+    ).toMatchObject({
+      class: 'usage_limit',
+      message: 'Codex’s usage limit is reached.',
+      retryable: true,
+    });
+    expect(resolveCodexFailure({ message: 'Your account is out of credits.' })).toMatchObject({
+      class: 'usage_limit',
+      message: 'The Codex account is out of credits.',
+    });
+    expect(isUsageLimit({ message: 'The model refused.' })).toBe(false);
   });
 
   test('the codes of every shape, and a resume of a thread codex does not have', () => {

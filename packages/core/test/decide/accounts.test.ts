@@ -388,25 +388,45 @@ describe('usage-limit waits', () => {
     expect(harness.task(taskId).usageWait).toBeUndefined();
   });
 
-  test('a limit whose reset is unknown or already past pauses at once instead of looping', () => {
+  test('a limit whose reset is unknown or already past waits 15 minutes and carries on, never failing', () => {
     for (const resetAt of [null, 1]) {
       const harness = createHarness();
       const taskId = createTask(harness);
       fail(harness, taskId, limit(resetAt));
-      expect(harness.openGate(taskId).title).toBe('The agent hit its usage limit');
-      expect(harness.task(taskId).usageWait).toBeUndefined();
+      const wait = harness.task(taskId).usageWait;
+      expect(wait).toMatchObject({ status: 'armed', autoResume: true, account: WORK });
+      expect(wait?.resetAt).toBe((wait?.armedAt ?? 0) + 15 * 60_000);
+      expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+      harness.advance(15 * 60_000);
+      fire(harness, taskId);
+      expect(harness.task(taskId).usageWait?.status).toBe('resumed');
+      expect(listActiveRuns(harness.state, taskId)).toHaveLength(1);
     }
   });
 
-  test('a resumed step that hits the same window again pauses instead of waiting again', () => {
+  test('a resumed step that hits the same window again waits at least 15 minutes more instead of failing', () => {
     const harness = createHarness();
     const { taskId } = waitingTask(harness);
     const resetAt = resetAtOf(harness, taskId);
     harness.advance(resetAt);
     fire(harness, taskId);
     fail(harness, taskId, limit(resetAt));
-    expect(harness.openGate(taskId).title).toBe('The agent hit its usage limit');
-    expect(harness.task(taskId).usageWait).toBeNull();
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    const wait = harness.task(taskId).usageWait;
+    expect(wait).toMatchObject({ status: 'armed' });
+    expect(wait?.resetAt).toBe((wait?.armedAt ?? 0) + 15 * 60_000);
+  });
+
+  test('a step resumed early that hits the same soon window again waits 15 minutes rather than looping', () => {
+    const harness = createHarness();
+    const { taskId } = waitingTask(harness, 5 * 60_000);
+    const resetAt = resetAtOf(harness, taskId);
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    fail(harness, taskId, limit(resetAt));
+    const wait = harness.task(taskId).usageWait;
+    expect(wait).toMatchObject({ status: 'armed' });
+    expect(wait?.resetAt).toBe((wait?.armedAt ?? 0) + 15 * 60_000);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
   });
 
   test('a resumed step that hits a later window waits for that one', () => {

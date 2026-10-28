@@ -112,7 +112,8 @@ src/
 │                        (use-transcript-window), the rows in view of a list (use-row-window) and a long list's rows a
 │                        batch at a time (use-progressive-count), use-delayed (useDelayed: true once a wait has
 │                        lasted LOADING_DELAY_MS, 300ms), use-settling (useSettling: active, then settling for
-│                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light)…)
+│                        SETTLE_MS, 400ms, so an effect can fade out: the delivering light), use-usage-recheck
+│                        (useUsageRecheck: re-reads account usage while Settings → Agent usage or the usage menu is open)…)
 └── lib/                 Everything that is not JSX, unit-tested at 100%:
     ├── connection/      socket.ts (the WebSocket client: the hello with this page's surface, the state and its
     │                    patches applied once per frame, acks, transcripts from the position held (every followed
@@ -131,7 +132,7 @@ src/
     │                    terminals.ts (useTerminals over the snapshot the socket holds, /api/terminals changes,
     │                    openTerminal and openTaskTerminal, the foreground check, every /api/services read and change),
     │                    accounts.ts (useAccounts over the snapshot the socket holds, /api/accounts/* changes,
-    │                    the sign-in dialog state), health.ts (/api/health on start and after each reconnect,
+    │                    the sign-in dialog state, refreshUsage and watchUsage over one shared usage recheck), health.ts (/api/health on start and after each reconnect,
     │                    the banner's text and its dismissal), engine.ts (the app against the engine: the engine
     │                    banner's view, the automatic restart and requestEngineRestart), extensions.ts (useExtensions over
     │                    /api/extensions, the server check, every /api/extensions/* change and the MCP
@@ -149,7 +150,8 @@ src/
     │                    an account's status and header, the glance at the account the server picks next and
     │                    which row it marks), limits.ts (switch thresholds, the Limits settings), providers.ts (a
     │                    provider's sign-in block: its header, state, the fix, the sign-in command), sign-in.ts (resolveSignInProvider: the Sign in gate's provider),
-    │                    usage-wait.ts
+    │                    usage-wait.ts, recheck.ts (createUsageRecheck: one read at a time, on open and every
+    │                    60 s while watched and the page is visible)
     ├── chat/            Transcript → timeline → turns, tool descriptions and output, run roles and headlines,
     │                    who worked on a task (agents.ts), notice
     │                    rows, the context meter (context.ts), run evidence, delegations (delegations.ts: views, the tree, a parked step's wait),

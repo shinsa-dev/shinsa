@@ -870,9 +870,11 @@ describe('NowCard about an account', () => {
     it('says the task resumes at the reset, and resumes now or stops resuming by itself', async () => {
       renderCard(createTask({ id: 't', usageWait: wait() }));
       expect(screen.getByText('Waiting for the usage limit')).toBeTruthy();
-      expect(screen.getByText('Resumes when the usage limit resets')).toBeTruthy();
+      expect(screen.getByText(/^Waiting for usage: continues at .+ on$/).textContent).toMatch(
+        / on a@example\.com$/
+      );
       expect(screen.getByText('Resets in 3h')).toBeTruthy();
-      expect(screen.getByText(/on a@example.com/)).toBeTruthy();
+      expect(screen.getByText('The agent stopped at the Claude usage limit on a@example.com.')).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Resume now' }));
       const stop = screen.getByRole('button', { name: 'Don’t resume automatically' }) as HTMLButtonElement;
       await waitFor(() => expect(stop.disabled).toBe(false));
@@ -887,7 +889,7 @@ describe('NowCard about an account', () => {
 
     it('says the task is paused until the reset, and resumes at it on request', async () => {
       renderCard(createTask({ id: 't', usageWait: wait({ autoResume: false }) }));
-      expect(screen.getByText('Paused until the usage limit resets')).toBeTruthy();
+      expect(screen.getByText(/^Waiting for usage: pauses for you at /)).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Resume at the reset' }));
       await waitFor(() =>
         expect(listSentCommands()).toEqual([{ type: 'usage_wait.change', taskId: 't', autoResume: true }])
@@ -896,7 +898,7 @@ describe('NowCard about an account', () => {
 
     it('shows the work again once the wait has resumed', () => {
       renderCard(createTask({ id: 't', usageWait: wait({ status: 'resumed' }) }));
-      expect(screen.queryByText('Resumes when the usage limit resets')).toBeNull();
+      expect(screen.queryByText(/^Waiting for usage/)).toBeNull();
     });
   });
 });

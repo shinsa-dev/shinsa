@@ -2964,19 +2964,38 @@ result as `failure: { class, message, code, retryable, resetAt }`:
 
 | Class | From | Recovery |
 | --- | --- | --- |
-| `usage_limit` | 429, a rejected rate-limit window (overage aside), a gateway's 503 wrapping a 429; `resetAt` is the latest reset of every spent window, or unknown | Another account, else a usage wait until the reset; a failure gate when the reset is unknown or past |
-| `auth` | the assistant's `authentication_failed` and other account errors, 401, or a failed turn whose text asks to log in or reports a dead token (login wins over quota) | Another account, else a Sign in gate for the account; a failure gate when the account is unknown |
+| `usage_limit` | 429, a rejected rate-limit window (overage aside), a gateway's 503 wrapping a 429, a failed turn whose text says the limit is reached ("Claude AI usage limit reached\|‹reset›", "hit your limit") or the account is out of credits ("Credit balance is too low", `code: out_of_credits`); `resetAt` is the latest reset of every spent window, the reset the text names, or unknown | Another account, else a usage wait until the reset; when the reset is unknown or already past the wait is 15 minutes, and a resumed step that hits the same window again waits at least 15 minutes more, so a usage limit never fails a task |
+| `auth` | the assistant's `authentication_failed` and other account errors, Claude Code's synthetic assistant message (`model: '<synthetic>'`) whose text asks to log in or reports a dead token, 401, or a failed turn whose text does (login wins over quota) | For a dead token, the login read again and the same account tried once; then another account, else a Sign in gate for the account; a failure gate when the account is unknown |
 | `setup_failed` | `turn_setup_failed`, a startup failure, a missing or outdated `claude`, a provider that cannot block forbidden commands | Failure gate at once |
 | `context_window_full` | `prompt_too_long`, `blocking_limit` without limit evidence, `rapid_refill_breaker`, a handoff too large to send | Fresh session |
 | `image_error` | `image_error` | Fresh session |
 | `session_lost` | the CLI cannot find the session to resume | Restored in place once, then a fresh session |
-| `overloaded` | 529 or the assistant's `overloaded` | Resume |
+| `overloaded` | 529, any other 5xx from the API ("Claude’s API had a server error (500).") or the assistant's `overloaded` | The same turn again after a short wait, three times, in the run (Overloaded providers, below); then Resume |
 | `aborted` | `aborted_tools` / `aborted_streaming` reported as success (an interruption, never "done"), or a restart loop | Resume |
 | `budget_exhausted`, `malformed_tool_use`, `model_error`, `provider_error` | the CLI's own reasons, the budget subtypes, anything else | Resume |
 | `transport_error` | the process crashed, or the stream ended with no result for the prompt | Resume |
 
 A stream that ends without a terminal result fails the run explicitly. During a shutdown the supervisor has
-cancelled the session first, so it ends as cancelled and nothing is recorded.
+cancelled the session first, so it ends as cancelled and nothing is recorded. A process that exits after its turn
+already settled as failed keeps that turn's failure: a login Claude could not refresh makes the CLI print "Failed to
+authenticate: OAuth session expired and could not be refreshed", answer the turn with an error result and then exit
+with code 1, and that run is an `auth` failure, not a `transport_error` (an account error the assistant reported
+fails its turn even when the result claims success). A process that exits before any result is
+classified from what the turn saw (an account error from the assistant) and from the exit text (a login prompt or a
+dead token), and only otherwise is a `transport_error`. The exit text is cleaned before anyone sees it
+(`cleanProcessError`): the SDK appends the CLI's stderr after ". stderr: ", and every line a Claude Code hook printed
+about itself (`SessionEnd hook [node "${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.mjs"] failed: Hook cancelled`,
+from a plugin in your user settings, which every run loads) is dropped, and the SDK's own words are put plainly, so
+the run error and the failure gate show "Claude Code stopped unexpectedly (exit code 1)." ("Claude Code was stopped
+by the system (SIGKILL)." for a signal) followed by "It printed: " and any other line the CLI wrote.
+
+**Overloaded providers.** A turn that fails as `overloaded` (Claude's 529 or another 5xx, Codex's `serverOverloaded`,
+`internalServerError` or an HTTP 5xx) is not a failure of the task: the supervisor tries the same turn again as a new
+attempt on the same account, after 15 s, then 30 s, then 60 s (`config.overloadRetryMs`, `SHINSA_OVERLOAD_RETRY_MS`,
+doubled each time), and only a fourth overloaded attempt ends the run, for core to resume it once. It never reaches
+the rejection seam, so the account is not marked or switched. Each wait is a `retrying` notice in the chat
+(`{ provider, detail, attempt, attempts, retryAt }`, the line "Claude was busy, trying again · 1 of 3"). A cancel, a
+restart or the run's time limit ends the wait at once (`waitToRetry` and `stopActiveRun` in `agents/active.ts`).
 
 **Steering by prompt id.** Every prompt the adapter sends carries a uuid, and a turn is matched to its prompts by the
 ids the CLI echoes on its result (`user_message_uuids`), never by counting. A result that answers none of our prompts
@@ -3092,18 +3111,18 @@ to resume, `thread/resume` with the stored thread id, and runs Shinsa's brief as
 
   | `codexErrorInfo` | Class |
   | --- | --- |
-  | `usageLimitExceeded`, `rateLimitExceeded`, `responseTooManyFailedAttempts` with HTTP 429 | `usage_limit`; the session leaves `resetAt` unknown and the accounts service fills it in (Accounts and usage limits, below) |
+  | `usageLimitExceeded`, `rateLimitExceeded`, `responseTooManyFailedAttempts` with HTTP 429, or any error whose text says the usage limit is reached ("hit your limit") or the account is out of credits ("The Codex account is out of credits.") | `usage_limit`; the session leaves `resetAt` unknown and the accounts service fills it in (Accounts and usage limits, below) |
   | `unauthorized`, or any HTTP 401 | `auth` ("Run `codex login`"); with no leased account this is a failure gate |
   | `contextWindowExceeded` | `context_window_full` |
   | `sessionBudgetExceeded` | `budget_exhausted` |
-  | `serverOverloaded` | `overloaded` |
+  | `serverOverloaded`, `internalServerError`, or any other HTTP 5xx | `overloaded` (tried again in the run: Overloaded providers, above) |
   | `sandboxError` | `setup_failed` |
   | `cyberPolicy`, `misalignmentPolicyViolation` | `model_error` |
   | `httpConnectionFailed`, `responseStream*`, `responseTooManyFailedAttempts` (not 429) | `transport_error` |
   | anything else | `provider_error` |
 
   A turn Codex ends as `interrupted` by itself is `aborted`; the app server exiting mid-turn is `transport_error`
-  with the last line it printed; a codex that cannot start is `setup_failed`; a `thread/resume` Codex answers with
+  with the last line it printed, or "Codex stopped unexpectedly (exit code 1)." when it printed nothing; a codex that cannot start is `setup_failed`; a `thread/resume` Codex answers with
   "no rollout found" (or not found, no such thread) is `session_lost`, so the supervisor restores the step on a fresh
   thread with the context handoff (Kanna falls back to `thread/start` silently; Shinsa hands the transcript over).
 - **Usage, context and compaction.** `thread/tokenUsage/updated` on the run's thread gives the running totals the
@@ -3521,6 +3540,39 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   (idle release), so the answer resumes it as a new attempt on another account. The flag belongs to the attempt; the
   next attempt leases afresh. When no account qualifies, the run ends with the failure, its account, and for a usage
   limit the earliest reset of the pool (or of the bound account).
+- **A run's failure shows on its account at once.** The mark a rejection makes (spent until the reset, or signed out)
+  is pushed in the same moment as the accounts snapshot on every socket, so Settings → Agent usage, the usage menu and
+  every account picker read "Out of usage until 3:40 PM" or "Needs sign-in" within a second, with no refresh; a
+  sign-in that works again (the login flow, or a renewed login) clears it the same way. Codex, which has one login and
+  no accounts to rotate, is marked too: a sign-out sets its `providers` entry to `signed_out` with the reason until the
+  next sign-in check reads it again, and a usage limit with a known reset reads Codex's usage again at once (one with
+  an unknown reset already does, to find the reset).
+- **A login Claude could not refresh** (`accounts/renewal.ts`). Refresh tokens are single-use: when another
+  program refreshes a login Shinsa also holds a copy of (claude-swap's usage polling or its switch of `~/.claude` to
+  that account, a Claude Code session on it, an import of the same login), Shinsa's copy is dead the next time its
+  access token expires, and the run's `claude` stops with "Failed to authenticate: OAuth session expired and could
+  not be refreshed". A rejection whose failure is a dead token (`auth` with `authentication_failed`, `login_required`
+  or `api_error_401`; not billing, a hold or a verification) is first read again, once per account and execution
+  (`RunRejection.renewed`): an account imported from claude-swap takes claude-swap's current copy (`cswap export`)
+  when its refresh token differs from Shinsa's, written into the account's keychain entry (`security -i` with the
+  value hex-encoded on stdin, so it never shows in the process list, or as arguments when it is too long for one line;
+  only `claudeAiOauth` is replaced, the rest of the entry such as MCP sign-ins is kept; `.credentials.json` off a
+  Mac); any account counts as renewed when its stored access token has not expired (another process refreshed it
+  meanwhile). A renewed account is tried again for the same turn (the verdict's `renewed`; the supervisor leases that
+  account for the next attempt and takes it out of the tried list, logged "Read a login again after Claude could not
+  refresh it"). Otherwise the account is marked signed out and the turn moves to the next usable account as for any
+  sign-out, and its chat row reads "Account switched · b@example.com" with "Claude account a@example.com needed
+  signing in again; continued on b@example.com." When no account can take over (or the run or task is bound to the
+  account) the Sign in gate's body names the account, the other accounts of this execution that need signing in, and
+  what to run: "Claude could not refresh the login of a@example.com, and b@example.com needs signing in again too."
+  then "Sign in to it here, or sign in to Claude Code as a@example.com and run `cswap add`: Shinsa takes the new login
+  from claude-swap." (claude-swap's account), "Sign in to it here, or run `claude auth login` in a terminal." (your
+  Claude Code login) or "Sign in to it here." (`failure.code` `login_expired`). Shinsa remembers the fingerprint of the
+  login that failed, in memory, and every usage refresh (5 minutes) and every refresh you ask for reads it again (a
+  claude-swap account taking claude-swap's copy when it changed): once it is another login, the account is signed
+  in again and `account.signed_in` answers its Sign in gates and retries those tasks, so a sign-in in claude-swap or
+  `claude auth login` carries the task on by itself. A sign-in through Shinsa clears the mark. The task is never
+  failed for a dead token: it moves, or waits at the Sign in gate.
 - **Usage waits** (core `waitForUsageReset`). A usage-limit failure with a reset later than now arms `task.usageWait`
   (`usage_wait.armed`: the run, role, phase, account, `resetAt` and `autoResume` frozen from `settings.autoResume`,
   default on) instead of a gate; the stage reason is "waiting for the usage limit to reset" ("paused until the usage
@@ -3533,8 +3585,10 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   previous turn stopped because the usage limit was reached. The limit has reset. Continue where you left off and
   finish the step with the hand-over tool." A wait without auto-resume (Settings → Agent usage → Limits, After a usage
   limit, with `settings.snoozeLimited` on) opens a failure gate at the reset instead; with both off the limit opens
-  the failure gate at once. Loop guards: no wait for an unknown or past reset, and a resumed step that hits a window
-  no later than the one it waited for opens the failure gate. `usage_wait.change` (auto-resume on or off) replaces the
+  the failure gate at once. A usage limit never fails a task on its own: a reset that is unknown or already past
+  waits 15 minutes (`ESTIMATED_RESET_MS`), and a resumed step that hits a window no later than the one it waited for
+  waits at least 15 minutes more instead of looping at once. The web titles the wait "Waiting for usage: continues at
+  3:40 PM on a@b.com" (`docs/design.md` → Waiting for the usage limit). `usage_wait.change` (auto-resume on or off) replaces the
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
   cancelling or any new step end the wait.
 - **The Sign in gate.** An `auth` failure with a known account opens a `sign_in` gate naming its provider

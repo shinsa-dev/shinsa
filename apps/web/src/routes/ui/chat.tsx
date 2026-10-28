@@ -40,7 +40,24 @@ const CONTEXT_TOKENS = [48_000, 156_000, 188_000];
 
 function createNoticeItems(now: number): TimelineItemOf<QuietNoticeKind>[] {
   return [
-    { kind: 'account', key: 'account', at: now, email: 'christo@example.com', reason: 'usage_limit' },
+    {
+      kind: 'account',
+      key: 'account',
+      at: now,
+      email: 'christo@example.com',
+      previous: null,
+      reason: 'usage_limit',
+    },
+    {
+      kind: 'retrying',
+      key: 'retrying',
+      at: now,
+      provider: 'claude',
+      detail: 'Claude’s API is overloaded (529).',
+      attempt: 1,
+      attempts: 3,
+      retryAt: now + 15_000,
+    },
     { kind: 'compaction', key: 'compaction', at: now, trigger: 'auto', by: 'claude' },
     { kind: 'compaction', key: 'eunoe-cut', at: now, trigger: 'auto', by: 'eunoe' },
     { kind: 'compaction', key: 'eunoe-fold', at: now, trigger: 'fold', by: 'eunoe' },

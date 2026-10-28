@@ -1378,7 +1378,7 @@ Only these, and they win over anything below:
       accounts at (Other…
       opens the same percentage dialog as an account's), After a usage limit (Resume automatically /
       Wait for me) and, only while that is Wait for me, Ask me what to do (When the limit resets / Right
-      away: the task waits as "Paused until the usage limit resets" and its failure gate opens at the
+      away: the task waits as "Waiting for usage: pauses for you at 3:40 PM" and its failure gate opens at the
       reset, or the failure gate opens at once; nothing is hidden). ⌘K's Change a setting has the same
       rows, without Other….
     - **Settings → Agents → Engine** is titles-only rows: Approve plans, Automatic fix rounds, Delegations at once
@@ -1426,6 +1426,14 @@ Only these, and they win over anything below:
       next turn uses (`isNextAccount`, `isNextProvider` over the glance) carries a 6px blue dot (`TONE_FILL.blue`)
       right after its name, "Used for the next turn" in its tooltip and `aria-label`. A click goes to Settings →
       Agent usage → Accounts. Hidden without accounts or a provider reading.
+    - **Usage re-checks itself while you look at it** (`lib/accounts/recheck.ts`, `useUsageRecheck`). Settings →
+      Agent usage and the usage menu's popover each read the accounts again when they open (unless a read finished
+      in the last 5 seconds) and then every 60 seconds while they stay open, and stop when they close or the page is
+      hidden; a hidden page that comes back reads again when the last read is a minute old. Every read, Refresh usage
+      and the Sign in card's check included, goes through one request: a read already on its way is shared, never
+      sent twice. A failed automatic read says nothing; Refresh usage shows its toast. A run that finds an account out
+      of usage or signed out changes the account the moment it fails, without any read (`docs/engine.md` → A run's
+      failure shows on its account at once).
     - **Every account names its provider.** Wherever an account is listed with its usage (Settings → Agent usage, the
       usage popover) it reads "Claude · a@b.com" or "Codex · a@b.com" ("Codex" alone without an email) after the
       provider's icon (`IconClaudeai`, `IconOpenaiCodex`; `IconRobot` for one Shinsa does not know): one helper,
@@ -1445,8 +1453,10 @@ Only these, and they win over anything below:
       primary is "Check the Codex sign-in again" (it refreshes the sign-ins, and one that finds Codex signed in
       answers the gate), and under the body, on a `bg-bg-a1` `rounded-lg` strip, the fix with its `CopyButton`
       ("Run `codex login` in a terminal, then refresh."); ⌘K offers the same check. **Waiting for the
-      usage limit** (`usage-wait-card.tsx`): an armed usage wait is blue and In progress, titled
-      "Resumes when the usage limit resets" or "Paused until the usage limit resets", the reset in
+      usage limit** (`usage-wait-card.tsx`): an armed usage wait is blue and In progress, titled in one
+      line with when and where it carries on, "Waiting for usage: continues at 3:40 PM on a@b.com" or, with automatic
+      resume off, "Waiting for usage: pauses for you at 3:40 PM on a@b.com" (`formatMoment`: a weekday or date
+      before the time when it is not today; no account when the wait names none), the reset in
       the eyebrow, Resume now (outline) and the quiet "Don’t resume automatically" / "Resume at the
       reset".
     - **Run on account**: a bound task has a "Runs on a@b.com" fact whose click menu, the task
@@ -1460,9 +1470,12 @@ Only these, and they win over anything below:
       the toast "Running this step again on a@b.com." ⌘K's This task has the same as "Run this step again on…".
       Earlier runs show the account as plain text.
     - **In the chat** every notice kind (`lib/chat/timeline.ts`, rows from `lib/chat/notices.ts`) does one of
-      these. Six are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
-      happened, the meta the value, and opening it shows the reason): `account_switched`
-      (`IconArrowsRepeatRightLeft`, "Account switched" · "a@b.com", the reason), `compaction` (Claude Code's or Codex's: `IconBubbleText`, "Conversation
+      these. Seven are a chat line ahead of their turn's work (`NoticeLine`, the line anatomy of 7: the label what
+      happened, the meta the value, and opening it shows the reason): `retrying` (`IconArrowRotateClockwise`, "Claude
+      was busy, trying again" · "1 of 3", the provider's message and "Shinsa tries the same step again by itself at
+      3:41 PM."; an overloaded provider is never shown as an error), `account_switched`
+      (`IconArrowsRepeatRightLeft`, "Account switched" · "a@b.com", the reason; after a sign-out it names both
+      accounts: "Claude account a@b.com needed signing in again; continued on c@d.com."), `compaction` (Claude Code's or Codex's: `IconBubbleText`, "Conversation
       compacted", why: the context filled up and the agent summarised it, or idle compaction; eunoe's: `IconMinimize`, "Conversation compacted by Eunoe"
       at the limit, or `IconLayersTwo`, "Finished turns folded" for a fold, the tooltip saying nothing was
       summarised), `proxy` (`IconCloudSimpleDisconnected`, "Eunoe unavailable · Claude Code compacts this run",
@@ -1483,6 +1496,10 @@ Only these, and they win over anything below:
       tones (neutral, amber from 75%, red from 90%), "84k of 200k tokens" over a muted "Context 42% full" in
       its tooltip. `rate_limit`, `account` and `interrupted` stay in the transcript and are not shown: the
       usage menu and the `account_switched` row already say it.
+      A turn's errors (`ErrorLine`: `IconExclamationCircle`, `red-text`) are one line per message: the same message
+      said again in a turn collapses into its first line, which ends in a `fg-2` "3 times" (`collapseErrors` in
+      `lib/chat/timeline.ts`), so a cause shows once however many attempts hit it. The task's state is the Overview's
+      one card for it (Sign in needed, Waiting for the usage limit), never a stack of errors.
     - **Delegations** (`components/chat/delegation-card.tsx`, `lib/chat/delegations.ts`) never
       gets a run section of its own: it lives in the turn of the step that delegated it. A
       `delegation` `started` notice is a spawn card (`CARD`, 36px row): a status mark (a pulse
