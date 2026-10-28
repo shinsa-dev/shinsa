@@ -27,7 +27,6 @@ export function CompactSection({
   title,
   count,
   action,
-  headerClassName,
   children,
 }: {
   persistId: DisclosurePersistId;
@@ -37,17 +36,19 @@ export function CompactSection({
   title: string;
   count: React.ReactNode;
   action?: React.ReactNode;
-  headerClassName?: string;
   children: React.ReactNode;
 }) {
   const disclosure = useDisclosure(persistId, defaultOpen);
   return (
-    <section className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'>
+    <section
+      data-folded={disclosure.open ? undefined : ''}
+      className='flex flex-col border-border border-t px-2 py-1.5 first-of-type:border-t-0'
+    >
       <DisclosureHeader
         disclosure={disclosure}
         label={label}
         action={action}
-        className={cn(HEADER, 'h-6 pe-1', headerClassName)}
+        className={cn(HEADER, 'h-6 pe-1')}
       >
         <span className={ICON_SLOT}>{leading}</span>
         <span className='min-w-0 truncate'>{title}</span>

@@ -91,7 +91,6 @@ function ServiceGroupSection({
       leading={<ProjectDot color={group.project.color} />}
       title={group.project.name}
       count={<GroupSummary views={group.views} />}
-      headerClassName='pe-0.5'
       action={
         !manage &&
         canStartAll(group.views) && (
@@ -115,7 +114,13 @@ function ServiceGroupSection({
           />
         ) : (
           <React.Fragment key={view.service.id}>
-            <ServiceRow view={view} project={group.project} now={now} handlers={handlers} />
+            <ServiceRow
+              view={view}
+              project={group.project}
+              now={now}
+              handlers={handlers}
+              hasRuns={(group.runs?.[view.service.id]?.length ?? 0) > 0}
+            />
             {group.runs?.[view.service.id]?.map((run, index, runs) => (
               <TaskRunRow
                 key={run.view.terminal?.id ?? run.view.taskId}
@@ -396,7 +401,9 @@ function ServicesPanelContent({
         </div>
       ) : (
         <div className='min-h-0 overflow-y-auto'>
-          <CompactSections className={cn(COMPACT_POPOVER_INSET, 'pb-1.5')}>
+          <CompactSections
+            className={cn(COMPACT_POPOVER_INSET, 'pb-0.5 has-[>section:last-of-type[data-folded]]:pb-1.5')}
+          >
             {groups.map((group) => (
               <ServiceGroupSection
                 key={group.project.id}

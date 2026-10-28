@@ -43,7 +43,7 @@ export function TaskServicesPanel({
   return (
     <>
       <PanelHeader title={copy.title} description={copy.description} />
-      <CompactSections className='px-2 py-1.5'>
+      <CompactSections className='p-1.5'>
         {views.map((view) => (
           <ServiceRow key={view.service.id} view={view} project={project} now={now} handlers={handlers} />
         ))}

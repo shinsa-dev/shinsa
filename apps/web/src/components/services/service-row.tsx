@@ -5,13 +5,7 @@ import type { IconName } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import {
-  LIST_ROW,
-  LIST_ROW_LINE,
-  LIST_ROW_LINES,
-  LIST_ROW_META,
-  LIST_ROW_TITLE,
-} from '@/components/layout/list-row.tsx';
+import { LIST_ROW, LIST_ROW_LINES, LIST_ROW_META, LIST_ROW_TITLE } from '@/components/layout/list-row.tsx';
 import { ICON_SLOT } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import { StatusTile } from '@/components/status/tile.tsx';
@@ -27,6 +21,8 @@ export interface ServiceHandlers {
 }
 
 const REVEAL = 'opacity-0 group-data-hovered/service:opacity-100';
+
+const TREE_LINE = 'pointer-events-none absolute start-3.75 w-px bg-bg-a4';
 
 export function ServiceActionButton({
   label,
@@ -82,17 +78,23 @@ export function ServiceRow({
   project,
   now,
   handlers,
+  hasRuns = false,
 }: {
   view: ServiceView;
   project: Project;
   now: number;
   handlers: ServiceHandlers;
+  hasRuns?: boolean;
 }) {
   const glyph = SERVICE_GLYPHS[view.state];
   const state = describeServiceState(view, now);
   const name = view.service.name;
   return (
-    <div data-highlight-item='' className='group/service flex items-center gap-1 rounded-control pe-0.5'>
+    <div
+      data-highlight-item=''
+      className='group/service relative flex items-center gap-1 rounded-control pe-1'
+    >
+      {hasRuns && <span aria-hidden className={cn(TREE_LINE, 'top-7.5 bottom-0')} />}
       <button
         type='button'
         disabled={!view.terminal}
@@ -145,21 +147,15 @@ export function TaskRunRow({
   return (
     <div
       data-highlight-item=''
-      className='group/service relative flex items-center gap-1 rounded-control ps-6 pe-0.5'
+      className='group/service relative flex items-center gap-1 rounded-control ps-6 pe-1'
     >
-      <span
-        aria-hidden
-        className={cn(
-          'pointer-events-none absolute start-3.75 top-0 w-px bg-bg-a4',
-          last ? 'h-1/2' : 'bottom-0'
-        )}
-      />
+      <span aria-hidden className={cn(TREE_LINE, 'top-0', last ? 'h-1/2' : 'bottom-0')} />
       <span aria-hidden className='pointer-events-none absolute start-3.75 top-1/2 h-px w-2.5 bg-bg-a4' />
       <button
         type='button'
         aria-label={`Open the terminal of ${view.service.name} for ${label}`}
         onClick={() => handlers.open(view, project)}
-        className={cn(LIST_ROW, LIST_ROW_LINE, 'min-w-0 flex-1 items-center ps-1.5')}
+        className={cn(LIST_ROW, 'h-8 min-w-0 flex-1 items-center ps-1.5')}
       >
         <StatusTile icon={glyph.icon} tone={glyph.tone} size='sm' label={state} />
         <Truncate className='min-w-0 flex-1 text-fg-3 text-xs'>{label}</Truncate>
@@ -210,7 +206,7 @@ export function ManagedServiceRow({
     <div
       data-highlight-item=''
       onClick={onPick}
-      className='group/service flex cursor-pointer items-center gap-1 rounded-control pe-0.5'
+      className='group/service flex cursor-pointer items-center gap-1 rounded-control pe-1'
     >
       <span className={cn(LIST_ROW, LIST_ROW_LINES, 'min-w-0 flex-1 ps-1.5')}>
         <span className={ICON_SLOT}>
