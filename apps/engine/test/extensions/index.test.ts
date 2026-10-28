@@ -398,7 +398,7 @@ describe('checking servers', () => {
     extensions.updatePluginChoice('docs@market', false);
     const snapshot = await extensions.check();
     expect(checked.map((definition) => definition.command)).toEqual(['npx', 'node']);
-    expect(checked[0]?.env).toEqual({ ROOT: machine.userHome });
+    expect(checked[0]?.env).toEqual({ ROOT: machine.userHome, PLAYWRIGHT_MCP_HEADLESS: 'true' });
     expect(findServer(snapshot.servers, 'claude:files').status).toEqual({
       state: 'connected',
       error: null,
@@ -544,6 +544,27 @@ describe('what an agent run loads', () => {
     expect(elsewhere.codexServersOff).toEqual(['maple', 'kampala']);
   });
 
+  test('every server a run starts on this machine keeps its browser out of sight', async () => {
+    const { extensions, machine } = createWorld();
+    writeFile(
+      join(machine.repo, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          browser: {
+            command: 'npx',
+            args: ['@playwright/mcp@latest'],
+            env: { PLAYWRIGHT_MCP_HEADLESS: 'false' },
+          },
+        },
+      })
+    );
+    const session = await extensions.resolveSession({ repoPath: machine.repo, project: null });
+    const browser = session.servers.find((server) => server.name === 'browser');
+    expect(browser?.definition.env).toEqual({ PLAYWRIGHT_MCP_HEADLESS: 'true' });
+    const linear = session.servers.find((server) => server.name === 'linear');
+    expect(linear?.definition.env).toEqual({});
+  });
+
   test('two repositories that run the same command each get their own environment', async () => {
     const { extensions, machine, state } = createWorld();
     const other = join(machine.userHome, 'code', 'other');
@@ -563,10 +584,12 @@ describe('what an agent run loads', () => {
     const inOther = await extensions.resolveSession({ repoPath: other, project: null });
     expect(inOther.servers.find((server) => server.name === 'db')?.definition.env).toEqual({
       DATABASE_URL: 'postgres://other',
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
     });
     const inApp = await extensions.resolveSession({ repoPath: machine.repo, project: null });
     expect(inApp.servers.find((server) => server.name === 'db')?.definition.env).toEqual({
       DATABASE_URL: 'postgres://app',
+      PLAYWRIGHT_MCP_HEADLESS: 'true',
     });
   });
 

@@ -32,9 +32,16 @@ describe('usage waits', () => {
     expect(isUsageWaitArmed(createTask({ id: 't' }))).toBe(false);
   });
 
-  it('says whether the task resumes by itself or waits for you', () => {
-    expect(describeUsageWaitTitle(wait())).toBe('Resumes when the usage limit resets');
-    expect(describeUsageWaitTitle(wait({ autoResume: false }))).toBe('Paused until the usage limit resets');
+  it('says, in one line, when the task carries on and on which account, or that it waits for you', () => {
+    const at = new Date(2026, 9, 28, 15, 40).getTime();
+    const morning = new Date(2026, 9, 28, 9, 0).getTime();
+    expect(describeUsageWaitTitle(wait({ resetAt: at }), morning)).toBe(
+      'Waiting for usage: continues at 3:40 PM on a@example.com'
+    );
+    expect(describeUsageWaitTitle(wait({ resetAt: at, autoResume: false, account: null }), morning)).toBe(
+      'Waiting for usage: pauses for you at 3:40 PM'
+    );
+    expect(describeUsageWaitTitle(wait())).toMatch(/^Waiting for usage: continues at .+ on a@example\.com$/);
     expect(describeUsageWaitBody(wait())).toBe(
       'The agent stopped at the Claude usage limit on a@example.com.'
     );

@@ -47,7 +47,7 @@ describe('the verification rules', () => {
     expect(
       validateVerification(['plan', 'build', 'agent_review', 'your_review', 'pull_request', 'merge'])
     ).toEqual([
-      "A code change is checked: put `checks` after `build`. Shinsa runs the repository's checks on every change; the plan's `checks` add to them.",
+      'A code change is checked: put `checks` after `build`. Shinsa runs the checks the plan lists after each phase they cover.',
     ]);
     expect(validateVerification(['plan', 'build', 'checks', 'your_review', 'pull_request', 'merge'])).toEqual(
       ['A code change gets an independent agent review: put `agent_review` after `checks`.']
@@ -58,7 +58,7 @@ describe('the verification rules', () => {
 
   test('a plan for a change needs a verification plan, and one for an operation its impact', () => {
     expect(validatePlanRules(SHAPE_PIPELINES.change, UNVERIFIED_PLAN)).toEqual([
-      'This task changes code, so the plan needs a verification plan up front: list in `verification` how the change is proven (the tests, checks, runs or screenshots that show it works).',
+      'This task changes code, so the plan needs its checks up front: list in `verification` the checks that prove the change, each a `label`, the exact `command` scoped to what the change touches (the test files or folder, one package’s type check, the linter on the changed paths) and the `phases` it covers.',
     ]);
     expect(validatePlanRules(SHAPE_PIPELINES.change, PLAN)).toEqual([]);
     expect(validatePlanRules(SHAPE_PIPELINES.operation, UNVERIFIED_PLAN)).toEqual([
@@ -70,13 +70,13 @@ describe('the verification rules', () => {
     ]);
   });
 
-  test('extra checks are a parameter of a code change only, while an operation may ask for evidence', () => {
-    const asks = { ...PLAN, impact: IMPACT, evidence: ['screenshot' as const], checks: ['bun test x'] };
+  test('checks are for a code change only, while an operation may ask for evidence', () => {
+    const asks = { ...PLAN, impact: IMPACT, evidence: ['screenshot' as const] };
     expect(validatePlanRules(SHAPE_PIPELINES.change, asks)).toEqual([]);
     expect(validatePlanRules(SHAPE_PIPELINES.operation, asks)).toEqual([
-      '`checks` are for a code change, and this task changes no code: leave them out.',
+      '`verification` lists checks for a code change, and this task changes no code: leave it empty.',
     ]);
-    expect(validatePlanRules(SHAPE_PIPELINES.operation, { ...asks, checks: [] })).toEqual([]);
+    expect(validatePlanRules(SHAPE_PIPELINES.operation, { ...asks, verification: [] })).toEqual([]);
   });
 
   test('an operation without a code change attaches its evidence before it reports, one after a merge does not', () => {

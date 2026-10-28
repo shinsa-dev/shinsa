@@ -1,4 +1,5 @@
 import { Button } from '@shinsa/ui/components/button';
+import { Icon } from '@shinsa/ui/components/icon';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
@@ -18,9 +19,14 @@ import {
 } from '@/lib/desktop.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
 import {
+  CANARY_DOWNLOAD_URL,
   describeAppDetail,
   describeChannelDetail,
+  describeStayLabel,
   describeUpdateStatus,
+  isChannelFixed,
+  resolveAppName,
+  resolveChannelItem,
   UPDATE_CHANNEL_ITEMS,
   UPDATES_LABEL,
   UPDATES_SECTION,
@@ -53,6 +59,16 @@ function RowText({ title, detail, children }: { title: string; detail: string; c
   );
 }
 
+function FixedChannel({ channel }: { channel: UpdateChannel }) {
+  const item = resolveChannelItem(channel);
+  return (
+    <span className='flex shrink-0 items-center gap-1.5 text-fg-4 text-xs'>
+      <Icon size='sm' name={item.icon} />
+      {item.label}
+    </span>
+  );
+}
+
 export function UpdatesGroup({
   app,
   actions,
@@ -74,7 +90,7 @@ export function UpdatesGroup({
       action={<RefreshButton label={UPDATES_LABEL.check} onRefresh={async () => actions.check()} />}
     >
       <div className={SETTING_ROW}>
-        <RowText title={UPDATES_LABEL.app} detail={describeAppDetail(app.channel)}>
+        <RowText title={resolveAppName(app.channel)} detail={describeAppDetail(app.channel)}>
           <span className={TOKEN_TEXT}>{app.version}</span>
           {status && <Truncate className={cn('min-w-0', TONE_TEXT[status.tone])}>{status.label}</Truncate>}
         </RowText>
@@ -86,7 +102,7 @@ export function UpdatesGroup({
         {app.update.status === 'downgrade' && (
           <div className='flex shrink-0 items-center gap-1'>
             <Button variant='secondary' size='sm' onClick={() => actions.answerDowngrade(false)}>
-              {UPDATES_LABEL.keepBeta}
+              {describeStayLabel(app.version)}
             </Button>
             <Button
               variant='secondary'
@@ -101,13 +117,31 @@ export function UpdatesGroup({
       </div>
       <div className={SETTING_ROW}>
         <RowText title={UPDATES_LABEL.channel} detail={describeChannelDetail(app.channel)} />
-        <SelectField<UpdateChannel>
-          label={UPDATES_LABEL.channel}
-          items={UPDATE_CHANNEL_ITEMS}
-          value={app.channel}
-          onValueChange={actions.changeChannel}
-        />
+        {isChannelFixed(app.channel) ? (
+          <FixedChannel channel={app.channel} />
+        ) : (
+          <SelectField<UpdateChannel>
+            label={UPDATES_LABEL.channel}
+            items={UPDATE_CHANNEL_ITEMS}
+            value={app.channel}
+            onValueChange={actions.changeChannel}
+          />
+        )}
       </div>
+      {!isChannelFixed(app.channel) && (
+        <div className={SETTING_ROW}>
+          <RowText title={UPDATES_LABEL.canaryApp} detail={UPDATES_LABEL.canaryOffer} />
+          <Button
+            variant='secondary'
+            size='sm'
+            icon={{ name: 'IconArrowUpRight', position: 'inline-end' }}
+            nativeButton={false}
+            render={<a href={CANARY_DOWNLOAD_URL} target='_blank' rel='noreferrer' />}
+          >
+            {UPDATES_LABEL.downloadCanary}
+          </Button>
+        </div>
+      )}
     </SettingsGroup>
   );
 }

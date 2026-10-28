@@ -39,10 +39,17 @@ import type {
   TaskSuggestion,
   TriageDecisions,
   UsageWait,
+  WeeklyReading,
   WorkspaceMode,
 } from '../domain/index.ts';
-import type { PullRequestWatch, PullRequestWatchChange } from '../domain/pull-requests.ts';
 import type {
+  PullRequestWatch,
+  PullRequestWatchChange,
+  PushHookFailure,
+  ShippingStepKind,
+} from '../domain/pull-requests.ts';
+import type {
+  CheckChange,
   PlanDocument,
   ReportCheck,
   ReportWalkthroughRevision,
@@ -191,6 +198,8 @@ type EventBody =
       treeHash?: string | null;
     }
   | { type: 'checks.recorded'; taskId: string; results: ReportCheck[]; coverage?: Coverage }
+  | { type: 'checks.changed'; taskId: string; changes: CheckChange[]; runId: string }
+  | { type: 'checks.started'; taskId: string; checkIds: string[] }
   | { type: 'gate.opened'; gate: Gate }
   | {
       type: 'gate.answered';
@@ -227,7 +236,8 @@ type EventBody =
   | { type: 'run.continued'; runId: string; reason: RunContinuationReason }
   | { type: 'run.session_lost'; runId: string; sessionId: string }
   | { type: 'run.compacted'; runId: string; sessionId: string }
-  | { type: 'evidence.attached'; evidence: Evidence }
+  | { type: 'evidence.attached'; evidence: Evidence; replaces?: string[] }
+  | { type: 'evidence.removed'; taskId: string; ids: string[]; reason: string; runId: string }
   | { type: 'pull_request.opened'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.updated'; taskId: string; pullRequest: PullRequest }
   | { type: 'pull_request.push_requested'; taskId: string }
@@ -235,6 +245,16 @@ type EventBody =
   | { type: 'pull_request.head_moved'; taskId: string; sha: string }
   | { type: 'pull_request.read_failed'; taskId: string; failures: number; detail: string }
   | { type: 'pull_request.read_failures_cleared'; taskId: string }
+  | {
+      type: 'pull_request.push_retrying';
+      taskId: string;
+      step: ShippingStepKind;
+      attempt: number;
+      attempts: number;
+      retryAt: number;
+      detail: string;
+    }
+  | { type: 'pull_request.hook_failed'; taskId: string; failure: PushHookFailure }
   | {
       type: 'pull_request.watched';
       taskId: string;
@@ -253,7 +273,7 @@ type EventBody =
       usage: RunUsage;
       sessionId?: string;
       sessionUsage?: RunUsage;
-      weeklyPercent?: number;
+      readings?: WeeklyReading[];
     }
   | { type: 'run.silenced'; runId: string; since: number | null }
   | { type: 'run.silence_snoozed'; runId: string; until: number }

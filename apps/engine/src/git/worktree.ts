@@ -7,7 +7,7 @@ import { describeFailure, runCommand, runCommandOrThrow } from '../shell/index.t
 import { assertRefName, slugify } from './refs.ts';
 import { runGitOrThrow } from './run.ts';
 
-export const GIT_NETWORK_TIMEOUT_MS = 2 * 60 * 1000;
+const GIT_NETWORK_TIMEOUT_MS = 2 * 60 * 1000;
 
 async function isBranchTaken(repo: Repo, branch: string, signal?: AbortSignal) {
   for (const ref of [`refs/heads/${branch}`, `refs/remotes/origin/${branch}`]) {
@@ -17,10 +17,20 @@ async function isBranchTaken(repo: Repo, branch: string, signal?: AbortSignal) {
   return false;
 }
 
-export async function resolveFreeBranch(repo: Repo, branch: string, signal?: AbortSignal) {
+async function isFreeBranch(repo: Repo, branch: string, head: string | null, signal?: AbortSignal) {
+  if (!(await isBranchTaken(repo, branch, signal))) return true;
+  return head !== null && (await isLeftBehind(repo, branch, head, signal));
+}
+
+export async function resolveFreeBranch(
+  repo: Repo,
+  branch: string,
+  signal?: AbortSignal,
+  head: string | null = null
+) {
   for (let attempt = 1; attempt < 50; attempt += 1) {
     const candidate = attempt === 1 ? branch : `${branch}-${attempt}`;
-    if (!(await isBranchTaken(repo, candidate, signal))) return candidate;
+    if (await isFreeBranch(repo, candidate, head, signal)) return candidate;
   }
   return `${branch}-${Date.now()}`;
 }
@@ -60,17 +70,43 @@ function isSamePath(a: string, b: string) {
   return existsSync(a) && existsSync(b) && realpathSync(a) === realpathSync(b);
 }
 
-async function selectRegisteredWorktree(repo: Repo, path: string, signal?: AbortSignal) {
+async function listRegisteredWorktrees(repo: Repo, signal?: AbortSignal) {
   const listed = await runCommandOrThrow(['git', 'worktree', 'list', '--porcelain'], repo.path, { signal });
-  for (const block of listed.split('\n\n')) {
+  return listed.split('\n\n').flatMap((block) => {
     const lines = block.split('\n');
-    const worktree = lines.find((line) => line.startsWith('worktree '))?.slice('worktree '.length);
-    const branch = lines
-      .find((line) => line.startsWith('branch refs/heads/'))
-      ?.slice('branch refs/heads/'.length);
-    if (worktree && branch && isSamePath(worktree, path)) return { path, branch };
-  }
-  return null;
+    const path = lines.find((line) => line.startsWith('worktree '))?.slice('worktree '.length);
+    const branch =
+      lines.find((line) => line.startsWith('branch refs/heads/'))?.slice('branch refs/heads/'.length) ?? null;
+    return path ? [{ path, branch }] : [];
+  });
+}
+
+async function selectRegisteredWorktree(repo: Repo, path: string, signal?: AbortSignal) {
+  const registered = await listRegisteredWorktrees(repo, signal);
+  return registered.find((worktree) => isSamePath(worktree.path, path)) ?? null;
+}
+
+async function isLeftBehind(repo: Repo, branch: string, head: string, signal?: AbortSignal) {
+  const ref = `refs/heads/${branch}`;
+  const tip = await runCommand(['git', 'rev-parse', '--verify', '--quiet', ref], repo.path, { signal });
+  if (!tip.ok || tip.stdout !== head) return false;
+  const remote = await runCommand(
+    ['git', 'show-ref', '--verify', '--quiet', `refs/remotes/origin/${branch}`],
+    repo.path,
+    {
+      signal,
+    }
+  );
+  if (remote.ok) return false;
+  const registered = await listRegisteredWorktrees(repo, signal);
+  return registered.every((worktree) => worktree.branch !== branch);
+}
+
+async function nameWorktree(repo: Repo, path: string, branch: string, signal?: AbortSignal) {
+  const head = await runCommandOrThrow(['git', 'rev-parse', 'HEAD'], path, { signal });
+  const name = await resolveFreeBranch(repo, branch, signal, head);
+  await runGitOrThrow(['checkout', '--quiet', '-B', name], path, { signal });
+  return name;
 }
 
 function resolveWorktreePath(repo: Repo, worktreesDir: string, taskId: string, branch: string) {
@@ -86,20 +122,20 @@ export async function createWorktree(
   signal?: AbortSignal
 ) {
   const path = resolveWorktreePath(repo, worktreesDir, taskId, assertRefName(branch));
-  if (existsSync(path)) {
-    const registered = await selectRegisteredWorktree(repo, path, signal);
-    if (registered) {
-      await prepareWorktree(path, signal);
-      return registered;
-    }
+  const registered = await selectRegisteredWorktree(repo, path, signal);
+  if (registered?.branch) {
+    await prepareWorktree(path, signal);
+    return { path, branch: registered.branch };
+  }
+  if (!registered) {
     rmSync(path, { recursive: true, force: true });
     await runCommand(['git', 'worktree', 'prune'], repo.path, { signal });
+    const base = await resolveStartPoint(repo, baseBranch, signal);
+    await runGitOrThrow(['worktree', 'add', '--detach', path, base], repo.path, { signal });
   }
-  const base = await resolveStartPoint(repo, baseBranch, signal);
-  const freeBranch = await resolveFreeBranch(repo, branch, signal);
-  await runGitOrThrow(['worktree', 'add', '--no-track', '-b', freeBranch, path, base], repo.path, { signal });
+  const named = await nameWorktree(repo, path, branch, signal);
   await prepareWorktree(path, signal);
-  return { path, branch: freeBranch };
+  return { path, branch: named };
 }
 
 export async function refreshWorktree(repo: Repo, path: string, signal?: AbortSignal) {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, jest } from 'bun:test';
 import { act, renderHook } from '@testing-library/react';
 import { useIdle, useIdleValue } from '@/hooks/use-idle.ts';
 
@@ -34,14 +34,21 @@ describe('useIdle', () => {
     expect(cancelled).toEqual([7]);
   });
 
-  it('falls back to a timer where there is no idle callback', async () => {
+  it('falls back to a timer where there is no idle callback', () => {
+    jest.useFakeTimers();
     // @ts-expect-error: a browser without requestIdleCallback
     globalThis.requestIdleCallback = undefined;
     const { result, unmount } = renderHook(() => useIdle());
     expect(result.current).toBe(false);
     unmount();
     const second = renderHook(() => useIdle());
-    await act(() => new Promise((resolve) => setTimeout(resolve, 2100)));
+    act(() => {
+      jest.advanceTimersByTime(1999);
+    });
+    expect(second.result.current).toBe(false);
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
     expect(second.result.current).toBe(true);
   });
 });

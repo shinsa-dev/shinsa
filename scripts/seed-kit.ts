@@ -3,12 +3,15 @@ import { join } from 'node:path';
 import type {
   ChatEvent,
   ChatTool,
+  CiRun,
   FixReason,
   Gate,
   GateType,
   PipelineStep,
+  PlanCheck,
   PlanDocument,
   Repo,
+  ReportCheck,
   ReviewDisagreement,
   ReviewFinding,
   RunPurpose,
@@ -22,7 +25,7 @@ import type {
   TriageDecisions,
   WorkReport,
 } from '../packages/core/src/index.ts';
-import { CHAT_PROTOCOL_VERSION } from '../packages/core/src/index.ts';
+import { CHAT_PROTOCOL_VERSION, listRepoChecks } from '../packages/core/src/index.ts';
 
 export const NOW = Date.now();
 
@@ -64,6 +67,7 @@ export interface SeedRun {
   summary: string;
   reply?: string;
   failed?: boolean;
+  handover?: ChatTool;
 }
 
 export function resolveAgentSession(taskId: string) {
@@ -85,7 +89,10 @@ export interface SeedTask {
   waitsOn?: string[];
   worktreePath?: string;
   plan?: PlanDocument;
-  report?: WorkReport;
+  verification?: PlanCheck[];
+  addedChecks?: SeedAddedCheck[];
+  report?: SeedReport;
+  checkResults?: Record<string, SeedCheckResult>;
   summary?: string;
   reviewSummary?: string;
   findings?: ReviewFinding[];
@@ -97,6 +104,7 @@ export interface SeedTask {
     checks: 'passing' | 'failing' | 'pending';
     comments?: number;
     mergeCommit?: string;
+    ciRuns?: CiRun[];
   };
   merged?: boolean;
   note?: string;
@@ -110,6 +118,43 @@ export interface SeedTask {
   provider?: 'codex';
   revision?: { afterRun: number; response: string };
   script?: (push: Push, clock: SeedClock) => void;
+}
+
+export type SeedReport = Omit<WorkReport, 'checks'>;
+
+export interface SeedAddedCheck extends PlanCheck {
+  phase: number;
+  run: number;
+  reason: string;
+}
+
+export type SeedCheckResult = Partial<Pick<ReportCheck, 'outcome' | 'detail' | 'note'>>;
+
+export function createPlanCheck(label: string, command: string, phases: number[] = [1]): PlanCheck {
+  return { label, command, phases };
+}
+
+export function listSeedCheckResults(
+  verification: readonly PlanCheck[],
+  repo: Pick<Repo, 'checkCommands'> | null,
+  results: Record<string, SeedCheckResult> = {}
+): ReportCheck[] {
+  const checks = [
+    ...verification.map((check, index) => ({
+      id: `c${index + 1}`,
+      label: check.label,
+      command: check.command,
+    })),
+    ...listRepoChecks(repo),
+  ];
+  return checks.map(({ id, label, command }) => ({
+    id,
+    label,
+    command,
+    outcome: 'pass',
+    detail: null,
+    ...results[id],
+  }));
 }
 
 export type TimedChatEvent = { at: number; event: ChatEvent };

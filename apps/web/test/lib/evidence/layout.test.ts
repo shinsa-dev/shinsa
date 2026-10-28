@@ -6,7 +6,9 @@ import {
   describeEvidencePart,
   describeEvidenceStage,
   describeEvidenceSummary,
+  describeEvidenceUpdate,
   listEvidencePrefetch,
+  listShownEvidenceImages,
   resolveEvidenceFolder,
   resolveEvidenceLayout,
   shortenHomePath,
@@ -53,9 +55,9 @@ describe('the evidence facts', () => {
       createEvidence({ id: 'd', taskId: 't', kind: 'test' }),
       createEvidence({ id: 'e', taskId: 't', kind: 'test' }),
     ];
-    expect(describeEvidenceSummary(evidence)).toBe('1 comparison, 1 recording and 2 test runs');
+    expect(describeEvidenceSummary(evidence)).toBe('1 comparison, 1 recording and 2 tests');
     expect(describeEvidenceSummary(evidence.slice(2, 3))).toBe('1 recording');
-    expect(describeEvidenceKind('check', 2)).toBe('Check runs');
+    expect(describeEvidenceKind('check', 2)).toBe('Checks');
   });
 });
 
@@ -108,7 +110,7 @@ describe('resolveEvidenceLayout', () => {
       ['Comparisons', ['dark-before', 'inbox']],
       ['Recording', ['clip']],
       ['Screenshots', ['light-after', 'plain']],
-      ['Test run', ['tests']],
+      ['Test', ['tests']],
       ['Note', ['trace']],
       ['Preview', ['preview']],
     ]);
@@ -132,6 +134,69 @@ describe('resolveEvidenceLayout', () => {
       images: layout.images.filter((image) => image.media === 'image').map((image) => image.src),
       texts: [`${STORED}/tests.txt`],
     });
+  });
+
+  it('turns the pieces of one check into one entry: the agent’s links and Shinsa’s latest output', () => {
+    const evidence = [
+      shot('link', 1, {
+        kind: 'test',
+        title: 'Unit tests',
+        uri: 'shinsa://check/c1',
+        checkId: 'c1',
+        detail: 'Covers the empty cart.',
+        runId: 'review',
+      }),
+      shot('old', 2, {
+        kind: 'check',
+        title: 'Unit tests',
+        uri: `${STORED}/c1-old.txt`,
+        checkId: 'c1',
+        runId: null,
+      }),
+      shot('new', 3, {
+        kind: 'check',
+        title: 'Unit tests',
+        uri: `${STORED}/c1.txt`,
+        checkId: 'c1',
+        runId: null,
+      }),
+      shot('lint', 4, {
+        kind: 'check',
+        title: 'bun run lint',
+        uri: `${STORED}/r1.txt`,
+        checkId: 'r1',
+        runId: null,
+      }),
+      shot('plain', 5, { title: 'Menu' }),
+    ];
+    const state = createShinsaState({
+      evidence,
+      runs: [createRun({ id: 'review', taskId: 'task-1', role: 'reviewer' })],
+    });
+    const layout = resolveEvidenceLayout(state, createTask({ id: 'task-1' }));
+    expect(layout.count).toBe(3);
+    expect(layout.groups.map((group) => [group.label, group.entries.map((entry) => entry.key)])).toEqual([
+      ['Screenshot', ['plain']],
+      ['Test', ['check:c1']],
+      ['Check', ['check:r1']],
+    ]);
+    const [unit] = layout.groups[1]?.entries ?? [];
+    expect([unit?.title, unit?.detail, unit?.fromReview, unit?.check?.taskId]).toEqual([
+      'Unit tests',
+      'Covers the empty cart.',
+      true,
+      'task-1',
+    ]);
+    expect(unit?.check?.links.map((link) => link.id)).toEqual(['link']);
+    expect(unit?.check?.output?.evidence.id).toBe('new');
+    expect(layout.groups[2]?.entries[0]?.check?.links).toEqual([]);
+    expect(listEvidencePrefetch(layout).texts).toEqual([`${STORED}/c1.txt`, `${STORED}/r1.txt`]);
+    expect(describeEvidenceSummary(evidence)).toBe('1 screenshot, 1 test and 1 check');
+    const linkOnly = resolveEvidenceLayout(
+      createShinsaState({ evidence: evidence.slice(0, 1) }),
+      createTask({ id: 'task-1' })
+    );
+    expect(linkOnly.groups[0]?.entries[0]?.parts).toEqual([]);
   });
 
   it('names the width alone when the parts of a comparison are the light and dark of one view', () => {
@@ -159,5 +224,56 @@ describe('resolveEvidenceLayout', () => {
       layout.groups.map((group) => group.entries.map((entry) => entry.parts.map((part) => part.evidence.id)))
     ).toEqual([[['before', 'again']], [['first'], ['lonely']]]);
     expect(layout.folder).toBeNull();
+  });
+});
+
+describe('evidence that was replaced or removed', () => {
+  const evidence = [
+    shot('before', 1, { title: 'Settings', stage: 'before' }),
+    shot('old-after', 2, { title: 'Settings', stage: 'after', replacedBy: 'new-after' }),
+    shot('note', 3, {
+      kind: 'note',
+      title: 'Timings',
+      uri: `${STORED}/t.md`,
+      removedAt: NOW,
+      removedReason: 'Stale.',
+    }),
+    shot('new-after', 4, { title: 'Settings', stage: 'after', fixFor: 'you' }),
+    shot('old-link', 5, {
+      kind: 'test',
+      title: 'Unit',
+      uri: 'shinsa://check/c1',
+      checkId: 'c1',
+      replacedBy: 'link',
+    }),
+    shot('link', 6, { kind: 'test', title: 'Unit', uri: 'shinsa://check/c1', checkId: 'c1', detail: 'Now.' }),
+  ];
+  const state = createShinsaState({ evidence, runs: [createRun({ id: 'build', taskId: 'task-1' })] });
+
+  it('shows only current items, the replacing one marked, and keeps the rest as earlier versions', () => {
+    const layout = resolveEvidenceLayout(state, createTask({ id: 'task-1' }));
+    expect(layout.count).toBe(2);
+    const [settings] = layout.groups[0]?.entries ?? [];
+    expect(settings?.parts.map((part) => part.evidence.id)).toEqual(['before', 'new-after']);
+    expect(settings?.updated).toBe('Updated after your review');
+    expect(layout.groups[1]?.entries[0]?.check?.links.map((link) => link.id)).toEqual(['link']);
+    expect(layout.earlier.map((entry) => [entry.key, entry.status])).toEqual([
+      ['earlier:old-after', 'Replaced by a later version'],
+      ['earlier:note', 'Removed: Stale.'],
+    ]);
+    expect(layout.images.map((image) => image.item)).toEqual(['before', 'before', 'earlier:old-after']);
+    expect(listShownEvidenceImages(layout, false).map((image) => image.item)).toEqual(['before', 'before']);
+    expect(listShownEvidenceImages(layout, true)).toBe(layout.images);
+    expect(listEvidencePrefetch(layout).images).toEqual([`${STORED}/before.png`, `${STORED}/new-after.png`]);
+    expect(describeEvidenceSummary(evidence)).toBe('1 comparison and 1 test');
+  });
+
+  it('says after what an item was updated', () => {
+    expect(describeEvidenceUpdate(null)).toBeNull();
+    expect(describeEvidenceUpdate('review')).toBe('Updated after the agent review');
+    expect(describeEvidenceUpdate('checks')).toBe('Updated after the checks');
+    expect(describeEvidenceUpdate('pull_request')).toBe('Updated after the pull request feedback');
+    expect(describeEvidenceUpdate('conflict')).toBe('Updated');
+    expect(describeEvidenceUpdate('work')).toBe('Updated');
   });
 });

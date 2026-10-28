@@ -1,4 +1,5 @@
 import { describeCount } from '../chat/text.ts';
+import { isBlockingCheck } from '../domain/checks.ts';
 import type { PullRequest, PullRequestWatchChange, ReviewComment } from '../domain/index.ts';
 import type { ReportCheck, ReviewFinding } from '../report/types.ts';
 import { describeFindingPlace } from './context.ts';
@@ -11,9 +12,12 @@ function describeFindingLines(findings: ReviewFinding[]) {
 
 function describeCheckFailures(results: ReportCheck[]) {
   return results
-    .filter((check) => check.outcome === 'fail')
+    .filter(isBlockingCheck)
     .map((check) =>
-      [`- \`${check.name}\` failed:`, check.detail ? `\`\`\`\n${check.detail}\n\`\`\`` : ''].join('\n')
+      [
+        `- ${check.id}, ${check.label}: \`${check.command}\` failed:`,
+        check.detail ? `\`\`\`\n${check.detail}\n\`\`\`` : '',
+      ].join('\n')
     )
     .join('\n');
 }
@@ -21,21 +25,25 @@ function describeCheckFailures(results: ReportCheck[]) {
 function describeFixClosing(next: string) {
   return [
     '',
-    'Fix it, re-run the checks yourself, then call `complete_fix` with a one or two sentence summary of what you changed.',
+    'Fix it, confirming the fix with the test files or folders it touches, never the whole suite (Shinsa refuses it): Shinsa runs the checks itself after you hand over.',
+    'Then call `complete_fix` with a one or two sentence summary of what you changed. Shinsa runs again the checks that failed, the checks of every phase whose files your fix changes, and the ones you name in `checks` by their ids; add, change or remove a check with `check_changes` and a reason when the fix needs one.',
     'When the fix changes the approach, the flow, a risk, how to test it or the steps the human takes around the merge, also send `walkthrough` with only the parts that changed. Otherwise leave it out.',
+    'When the fix changes what your evidence shows, refresh it before you hand over: attach the new shot with the same `key` so it replaces the old one (never add it beside it), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` what still shows the work as it is.',
     `${next} Then stop.`,
   ].join('\n');
 }
 
 const WORK_FIX_NEXT =
-  "Afterwards Shinsa runs the task's checks and agent review, where it has them, and then the human reviews the work.";
+  'Afterwards Shinsa runs those checks, then the agent review where the task has one, and then the human reviews the work.';
 
-export function resolveChecksFixPrompt(results: ReportCheck[]) {
+const PHASE_FIX_NEXT = 'Afterwards Shinsa runs those checks, then you build the next phase.';
+
+export function resolveChecksFixPrompt(results: ReportCheck[], phasesLeft: boolean) {
   return [
-    'The checks failed after the last change:',
+    "The checks failed after the last change. Shinsa ran each failing test file alone and on the base branch first: these failures are the change's own.",
     '',
     describeCheckFailures(results),
-    describeFixClosing(WORK_FIX_NEXT),
+    describeFixClosing(phasesLeft ? PHASE_FIX_NEXT : WORK_FIX_NEXT),
   ].join('\n');
 }
 
@@ -215,5 +223,45 @@ export function resolvePullRequestFixPrompt(
     '',
     'Fix what is right to fix. Judge each review comment: when one is wrong, reply on the thread explaining why and resolve it.',
     describeFixClosing('Afterwards Shinsa pushes your fix to the pull request.'),
+  ].join('\n');
+}
+
+export function resolveUpdateConflictFixPrompt(base: string, files: readonly string[]) {
+  return [
+    `The branch was being updated onto \`${base}\` before Shinsa pushed it, and these files conflict:`,
+    ...files.map((file) => `- ${file}`),
+    '',
+    `Shinsa stopped that merge, so the checkout is clean. Shinsa fetched \`${base}\`: merge it in with \`git merge origin/${base}\`, resolve every conflict and \`git add\` the files. Leave the merge uncommitted: Shinsa commits it with your fix. Never rebase or force-push.`,
+    describeFixClosing(
+      'Afterwards Shinsa runs the checks the resolved files touch, then updates the branch again and pushes it.'
+    ),
+  ].join('\n');
+}
+
+export function resolveCodeFence(output: string) {
+  const longest = Math.max(2, ...[...output.matchAll(/`+/g)].map((match) => match[0].length));
+  return '`'.repeat(longest + 1);
+}
+
+export function resolvePushHookFixPrompt(
+  output: string,
+  failures: readonly string[] | null,
+  guidance: string | null
+) {
+  const fence = resolveCodeFence(output);
+  return [
+    "The repository's pre-push hook rejected the push, so Shinsa did not push the branch. Shinsa never pushes without the hook: it has to pass.",
+    ...(failures && failures.length > 0
+      ? ['', 'The failures it names:', ...failures.map((failure) => `- ${failure}`)]
+      : []),
+    '',
+    'The end of its output:',
+    `${fence}\n${output}\n${fence}`,
+    '',
+    'Run only the failing tests or checks named above, scoped to their files, never the whole suite the hook runs. When a failure has nothing to do with this change, fix it anyway if it is small; otherwise ask the human with `ask`.',
+    ...(guidance?.trim() ? ['', `Guidance from the human: ${guidance.trim()}`] : []),
+    describeFixClosing(
+      'Afterwards Shinsa runs the checks your fix touches, then pushes again, which runs the hook again.'
+    ),
   ].join('\n');
 }

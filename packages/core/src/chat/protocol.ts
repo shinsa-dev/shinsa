@@ -109,6 +109,14 @@ export type ChatNotice =
       previous: string | null;
       reason: AccountSwitchReason;
     }
+  | {
+      kind: 'retrying';
+      provider: string;
+      detail: string;
+      attempt: number;
+      attempts: number;
+      retryAt: number;
+    }
   | { kind: 'delegation'; event: ChatDelegationEvent; runIds: string[] }
   | { kind: 'proxy'; proxy: 'eunoe'; status: 'unavailable'; detail: string | null }
   | { kind: 'fast_mode'; status: ChatFastModeStatus; reason: string | null }

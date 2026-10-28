@@ -1,10 +1,12 @@
 import type { ChangeProposalInput, InquiryShape } from '../commands/index.ts';
+import { describeWholeSuiteRefusal, isWholeSuiteCommand } from '../domain/checks.ts';
 import {
   COMPOSABLE_STEPS,
   type DeliveringStep,
   EVIDENCE_KINDS,
   EVIDENCE_STAGES,
   EVIDENCE_THEMES,
+  isEvidenceKey,
   MEMORY_LIMITS,
   MEMORY_SCOPES,
   type MemoryScope,
@@ -16,9 +18,12 @@ import type { EvidenceItemKind } from '../domain/types.ts';
 import { createTesting, isWebUrl, MANUAL_TEST_TARGETS, parseTestFile } from './testing.ts';
 import type {
   Attention,
+  CheckChangeAction,
+  CheckChangeHandOver,
   CodeSpot,
   ComparisonPartHandOver,
   EvidenceHandOver,
+  EvidenceRemovalHandOver,
   EvidenceSource,
   FixHandOver,
   JudgementAlternative,
@@ -29,6 +34,7 @@ import type {
   MergeStepKind,
   MergeStepTiming,
   PhaseHandOver,
+  PlanCheck,
   PlanDocument,
   PlanHandOver,
   QuestionHandOver,
@@ -105,8 +111,12 @@ export const PROTOCOL_LIMITS = {
   waitTimeoutMinutes: 7 * 24 * 60,
   waitAttempts: 100,
   impact: 1_000,
-  planChecks: 6,
+  checks: 12,
+  checkLabel: 60,
   checkCommand: 200,
+  checkChanges: 6,
+  checkReason: 200,
+  checkId: 12,
   evidenceTitle: 80,
   evidenceDetail: 280,
   evidenceWidth: 7_680,
@@ -114,6 +124,9 @@ export const PROTOCOL_LIMITS = {
   evidenceUrl: 2_000,
   evidenceParts: 6,
   evidenceLabel: 40,
+  evidenceKey: 60,
+  evidenceItems: 24,
+  evidenceReason: 200,
 } as const;
 
 export const ATTACHED_EVIDENCE_KINDS: readonly [EvidenceItemKind, ...EvidenceItemKind[]] = [
@@ -134,6 +147,14 @@ export const MERGE_STEP_KINDS: readonly [MergeStepKind, ...MergeStepKind[]] = [
   'config',
   'other',
 ];
+
+export const CHECK_CHANGE_ACTIONS: readonly [CheckChangeAction, ...CheckChangeAction[]] = [
+  'add',
+  'change',
+  'remove',
+];
+
+const LINKED_EVIDENCE_KINDS = ['test', 'check'] as const;
 
 export const ATTENTION_LEVELS: readonly [Attention, ...Attention[]] = ['critical', 'high', 'normal'];
 
@@ -431,6 +452,62 @@ function readTextList(reader: Reader, value: unknown, path: string, max: number,
   return reader.list(value, path, max).map((item, index) => reader.text(item, `${path}[${index}]`, itemMax));
 }
 
+function readCheckCommand(reader: Reader, value: unknown, path: string) {
+  const command = reader.text(value, path, PROTOCOL_LIMITS.checkCommand);
+  if (command && isWholeSuiteCommand(command)) reader.errors.push(describeWholeSuiteRefusal(path, command));
+  return command;
+}
+
+function readPhaseNumbers(reader: Reader, value: unknown, path: string, phases: number | null) {
+  const numbers = reader
+    .list(value, path, PROTOCOL_LIMITS.planPhases, 1)
+    .map((raw, index) => reader.count(raw, `${path}[${index}]`, phases ?? PROTOCOL_LIMITS.planPhases));
+  if (new Set(numbers).size !== numbers.length) reader.errors.push(`${path} names a phase twice.`);
+  return [...new Set(numbers)].sort((a, b) => a - b);
+}
+
+function readOptionalPhaseNumbers(reader: Reader, value: unknown, path: string) {
+  if (!isGiven(value)) return null;
+  return readPhaseNumbers(reader, value, path, null);
+}
+
+function readCheckChange(reader: Reader, raw: unknown, path: string): CheckChangeHandOver {
+  const record = reader.record(raw, path);
+  const action = reader.pick(record.action, `${path}.action`, CHECK_CHANGE_ACTIONS);
+  const id = action === 'add' ? null : reader.text(record.id, `${path}.id`, PROTOCOL_LIMITS.checkId);
+  const change = {
+    action,
+    id,
+    label: reader.optionalText(record.label, `${path}.label`, PROTOCOL_LIMITS.checkLabel),
+    command: isGiven(record.command) ? readCheckCommand(reader, record.command, `${path}.command`) : null,
+    phases: readOptionalPhaseNumbers(reader, record.phases, `${path}.phases`),
+    reason: reader.text(record.reason, `${path}.reason`, PROTOCOL_LIMITS.checkReason),
+  };
+  if (record.action === 'add' && (change.label === null || change.command === null)) {
+    reader.errors.push(`${path} adds a check: give its label and its command.`);
+  }
+  if (
+    record.action === 'change' &&
+    change.label === null &&
+    change.command === null &&
+    change.phases === null
+  ) {
+    reader.errors.push(`${path} changes a check: give its new label, command or phases.`);
+  }
+  return change;
+}
+
+function readCheckChanges(reader: Reader, value: unknown) {
+  return reader
+    .list(value, 'check_changes', PROTOCOL_LIMITS.checkChanges)
+    .map((raw, index) => readCheckChange(reader, raw, `check_changes[${index}]`));
+}
+
+function readCheckIds(reader: Reader, value: unknown) {
+  const ids = readTextList(reader, value, 'checks', PROTOCOL_LIMITS.checks, PROTOCOL_LIMITS.checkId);
+  return [...new Set(ids)];
+}
+
 export function validatePhaseHandOver(input: Record<string, unknown>): Validation<PhaseHandOver> {
   const reader = new Reader();
   return reader.result({
@@ -438,6 +515,7 @@ export function validatePhaseHandOver(input: Record<string, unknown>): Validatio
     spots: readSpots(reader, input.spots, 'spots'),
     judgementCalls: readJudgementCalls(reader, input.judgement_calls),
     walkthrough: readWalkthrough(reader, input.walkthrough),
+    checkChanges: readCheckChanges(reader, input.check_changes),
   });
 }
 
@@ -446,6 +524,9 @@ export function validateFixHandOver(input: Record<string, unknown>): Validation<
   return reader.result({
     summary: reader.text(input.summary, 'summary', PROTOCOL_LIMITS.phaseSummary),
     walkthrough: readWalkthroughRevision(reader, input.walkthrough),
+    checks: readCheckIds(reader, input.checks),
+    checkChanges: readCheckChanges(reader, input.check_changes),
+    evidenceKept: readEvidenceRefs(reader, input.evidence_kept, 'evidence_kept'),
   });
 }
 
@@ -504,6 +585,21 @@ function readPlanOperation(reader: Reader, input: unknown): Partial<PlanDocument
   };
 }
 
+function readPlanChecks(reader: Reader, input: unknown, phases: number): PlanCheck[] {
+  const checks = reader.list(input, 'verification', PROTOCOL_LIMITS.checks).map((raw, index) => {
+    const path = `verification[${index}]`;
+    const record = reader.record(raw, path);
+    return {
+      label: reader.text(record.label, `${path}.label`, PROTOCOL_LIMITS.checkLabel),
+      command: readCheckCommand(reader, record.command, `${path}.command`),
+      phases: readPhaseNumbers(reader, record.phases, `${path}.phases`, Math.max(1, phases)),
+    };
+  });
+  const commands = checks.map((check) => check.command);
+  if (new Set(commands).size !== commands.length) reader.errors.push('verification lists a command twice.');
+  return checks;
+}
+
 function validatePlanDocument(input: Record<string, unknown>): Validation<PlanDocument> {
   const reader = new Reader();
   const files = readPlanFiles(reader, input.files);
@@ -523,7 +619,7 @@ function validatePlanDocument(input: Record<string, unknown>): Validation<PlanDo
     approach: reader.text(input.approach, 'approach', PROTOCOL_LIMITS.approach),
     files,
     outOfScope: readTextList(reader, input.out_of_scope, 'out_of_scope', listItems, listItem),
-    verification: readTextList(reader, input.verification, 'verification', listItems, listItem),
+    verification: readPlanChecks(reader, input.verification, phases.length),
     questions,
     ...readPlanOperation(reader, input.operation),
     ...readPlanParameters(reader, input),
@@ -536,17 +632,9 @@ function readPlanParameters(reader: Reader, input: Record<string, unknown>): Par
     .list(input.evidence, 'evidence', PLAN_EVIDENCE_KINDS.length)
     .map((kind, index) => reader.pick(kind, `evidence[${index}]`, PLAN_EVIDENCE_KINDS));
   if (new Set(evidence).size !== evidence.length) reader.errors.push('evidence names a kind twice.');
-  const checks = readTextList(
-    reader,
-    input.checks,
-    'checks',
-    PROTOCOL_LIMITS.planChecks,
-    PROTOCOL_LIMITS.checkCommand
-  );
   return {
     ...(impact === null ? {} : { impact }),
     ...(evidence.length > 0 ? { evidence } : {}),
-    ...(checks.length > 0 ? { checks } : {}),
     ...(reader.flag(input.approval, 'approval') ? { approval: true } : {}),
   };
 }
@@ -653,12 +741,27 @@ function readOptionalPick<T extends string>(
   return reader.pick(value, path, allowed);
 }
 
+function readEvidenceRefs(reader: Reader, value: unknown, path: string) {
+  const refs = readTextList(reader, value, path, PROTOCOL_LIMITS.evidenceItems, PROTOCOL_LIMITS.evidenceKey);
+  return [...new Set(refs)];
+}
+
+function readEvidenceKey(reader: Reader, value: unknown) {
+  const key = reader.optionalText(value, 'key', PROTOCOL_LIMITS.evidenceKey);
+  if (key !== null && !isEvidenceKey(key)) {
+    reader.errors.push('key takes lower-case letters, digits and single hyphens, like settings-dark-900.');
+  }
+  return key;
+}
+
 function readEvidenceFacts(reader: Reader, input: Record<string, unknown>) {
   return {
     title: reader.text(input.title, 'title', PROTOCOL_LIMITS.evidenceTitle),
     detail: reader.optionalText(input.detail, 'detail', PROTOCOL_LIMITS.evidenceDetail),
     width: reader.optionalCount(input.width, 'width', PROTOCOL_LIMITS.evidenceWidth),
     theme: readOptionalPick(reader, input.theme, 'theme', EVIDENCE_THEMES),
+    key: readEvidenceKey(reader, input.key),
+    replaces: readEvidenceRefs(reader, input.replaces, 'replaces'),
   };
 }
 
@@ -687,9 +790,31 @@ function readComparisonParts(reader: Reader, input: Record<string, unknown>) {
   return parts;
 }
 
+function readCheckLink(reader: Reader, input: Record<string, unknown>) {
+  const given = ['path', 'url', 'text', 'parts', 'stage', 'width', 'theme', 'key'].filter((field) =>
+    isGiven(input[field])
+  );
+  if (given.length > 0) {
+    reader.errors.push(
+      `A test or check run is a check Shinsa runs: give \`check\`, its id, and leave out ${given.join(', ')}. Add the command with \`check_changes\` first when it is not a check yet.`
+    );
+  }
+  return {
+    check: reader.text(input.check, 'check', PROTOCOL_LIMITS.checkId),
+    detail: reader.optionalText(input.detail, 'detail', PROTOCOL_LIMITS.evidenceDetail),
+    replaces: readEvidenceRefs(reader, input.replaces, 'replaces'),
+  };
+}
+
+function isLinkedKind(kind: EvidenceItemKind): kind is (typeof LINKED_EVIDENCE_KINDS)[number] {
+  return (LINKED_EVIDENCE_KINDS as readonly EvidenceItemKind[]).includes(kind);
+}
+
 export function validateEvidence(input: Record<string, unknown>): Validation<EvidenceHandOver> {
   const reader = new Reader();
   const kind = reader.pick(input.kind, 'kind', ATTACHED_EVIDENCE_KINDS);
+  if (isLinkedKind(kind)) return reader.result<EvidenceHandOver>({ kind, ...readCheckLink(reader, input) });
+  if (isGiven(input.check)) reader.errors.push('check is only for kind test or check.');
   if (kind === 'comparison') {
     return reader.result<EvidenceHandOver>({
       kind,
@@ -704,6 +829,16 @@ export function validateEvidence(input: Record<string, unknown>): Validation<Evi
     ...readEvidenceFacts(reader, input),
     stage: readOptionalPick(reader, input.stage, 'stage', EVIDENCE_STAGES),
     source: readEvidenceSource(reader, input),
+  });
+}
+
+export function validateEvidenceRemoval(input: Record<string, unknown>): Validation<EvidenceRemovalHandOver> {
+  const reader = new Reader();
+  const items = readEvidenceRefs(reader, input.items, 'items');
+  if (items.length === 0 && reader.errors.length === 0) reader.errors.push('items names no evidence.');
+  return reader.result({
+    items,
+    reason: reader.text(input.reason, 'reason', PROTOCOL_LIMITS.evidenceReason),
   });
 }
 

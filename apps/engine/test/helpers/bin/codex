@@ -86,7 +86,7 @@ const PLAN = {
   approach: 'Write them.',
   files: [],
   out_of_scope: [],
-  verification: ['The checks pass.'],
+  verification: [{ label: 'Round file', command: 'true', phases: [1] }],
   questions: [],
 };
 
@@ -756,16 +756,7 @@ async function serve() {
 if (args[0] === '--version') {
   console.log(`codex-cli ${Bun.env.FAKE_CODEX_VERSION ?? '0.200.0'}`);
 } else if (args[0] === 'login' && args[1] === 'status') {
-  const login = Bun.env.FAKE_CODEX_LOGIN ?? 'chatgpt';
-  if (login === 'signed_out') {
-    console.error('Not logged in');
-    process.exit(1);
-  }
-  if (login === 'old') {
-    console.error("error: unrecognized subcommand 'login'");
-    process.exit(2);
-  }
-  console.log(login === 'api' ? 'Logged in using an API key - sk-proj-***' : 'Logged in using ChatGPT');
+  console.log('Logged in using ChatGPT');
 } else if (args[0] === 'app-server') {
   await serve();
 } else {

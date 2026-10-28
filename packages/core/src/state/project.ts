@@ -27,9 +27,10 @@ import type { EventOf, ShinsaEvent } from '../events/index.ts';
 import { resolveMergeStepKey } from '../report/merge-steps.ts';
 import { resolvePlanChanges } from '../report/plan-changes.ts';
 import { createTesting } from '../report/testing.ts';
-import type { ReportWalkthroughRevision } from '../report/types.ts';
+import type { ReportCheck, ReportWalkthroughRevision } from '../report/types.ts';
 import { applyAccountBound } from './accounts.ts';
 import {
+  describeCheckChange,
   describeChecks,
   describeDependencies,
   describeEscalation,
@@ -241,6 +242,7 @@ function applyStaged(state: ShinsaState, event: EventOf<'task.staged'>) {
     stage,
     stageReason: event.reason,
     stageChangedAt: event.at,
+    ...(stage === 'checking' ? {} : { runningChecks: [] }),
   });
   const answered = previous === 'answering' && (stage === 'done' || stage === 'merged');
   const text = answered ? null : describeStage(stage);
@@ -291,9 +293,16 @@ function applyPlanProposed(state: ShinsaState, event: EventOf<'plan.proposed'>) 
           changes: resolvePlanChanges(previous.document, document),
           feedback: event.feedback ?? null,
         };
+  const checks = (document?.verification ?? []).map((check, index) => ({
+    id: `c${index + 1}`,
+    ...check,
+    phases: [...check.phases],
+    source: 'plan' as const,
+  }));
   updateTask(state, event.taskId, event.at, {
     plan: { version, body: event.body, document, proposedAt: event.at, ...revision },
     phases: (document?.phases ?? []).map(() => ({ status: 'pending' as const, at: event.at })),
+    checks,
     ...(previous === null ? {} : { planHistory: listPlanHistory(task) }),
   });
   record(state, event.taskId, event.at, {
@@ -516,32 +525,93 @@ function applyReviewReported(state: ShinsaState, event: EventOf<'review.reported
   });
 }
 
+function mergeCheckResults(task: Task, results: ReportCheck[]) {
+  const ids = new Set(results.map((result) => result.id));
+  const kept = (task.checkResults ?? []).filter((result) => !ids.has(result.id));
+  return [...kept, ...structuredClone(results)];
+}
+
 function applyChecksRecorded(state: ShinsaState, event: EventOf<'checks.recorded'>) {
+  const task = state.tasks[event.taskId];
+  if (!task) return;
   updateTask(state, event.taskId, event.at, {
-    checkResults: event.results,
-    coverage: event.coverage ? structuredClone(event.coverage) : null,
+    checkResults: mergeCheckResults(task, event.results),
+    runningChecks: [],
+    ...(event.coverage ? { coverage: structuredClone(event.coverage) } : {}),
   });
   record(state, event.taskId, event.at, {
     actor: 'shinsa',
-    kind: 'review',
+    kind: 'check',
     text: describeChecks(event.results),
     detail: describeFailedChecks(event.results),
   });
+}
+
+function applyChecksChanged(state: ShinsaState, event: EventOf<'checks.changed'>) {
+  for (const change of event.changes) {
+    const task = state.tasks[event.taskId];
+    if (!task) return;
+    const checks = task.checks ?? [];
+    const id = change.check.id;
+    const next =
+      change.action === 'add'
+        ? [...checks, structuredClone(change.check)]
+        : checks.flatMap((check) => {
+            if (check.id !== id) return [check];
+            return change.action === 'remove' ? [] : [structuredClone(change.check)];
+          });
+    const results = (task.checkResults ?? []).filter((result) => result.id !== id);
+    updateTask(state, event.taskId, event.at, {
+      checks: next,
+      ...(change.action === 'add' ? {} : { checkResults: results }),
+    });
+    record(state, event.taskId, event.at, {
+      actor: 'agent',
+      kind: 'check',
+      text: describeCheckChange(change),
+      detail: `${change.action === 'remove' ? '' : `\`${change.check.command}\`: `}${change.reason}`,
+    });
+  }
 }
 
 function hasEvidenceItem(state: ShinsaState, itemId: string | undefined) {
   return itemId !== undefined && Object.values(state.evidence).some((piece) => piece.itemId === itemId);
 }
 
+function updateEvidence(state: ShinsaState, id: string, patch: Partial<Evidence>) {
+  const evidence = state.evidence[id];
+  if (!evidence) return;
+  writeEntry(state, 'evidence', id, { ...evidence, ...patch });
+}
+
 function applyEvidenceAttached(state: ShinsaState, event: EventOf<'evidence.attached'>) {
   const known = hasEvidenceItem(state, event.evidence.itemId);
+  const replaces = event.replaces ?? [];
   writeEntry(state, 'evidence', event.evidence.id, event.evidence);
+  for (const id of replaces) updateEvidence(state, id, { replacedBy: event.evidence.id });
   if (known) return;
   record(state, event.evidence.taskId, event.at, {
     actor: 'agent',
     kind: 'evidence',
-    text: `Attached ${event.evidence.title}`,
+    text: `${replaces.length > 0 ? 'Updated' : 'Attached'} ${event.evidence.title}`,
     evidenceId: event.evidence.id,
+  });
+}
+
+function applyEvidenceRemoved(state: ShinsaState, event: EventOf<'evidence.removed'>) {
+  const [first] = event.ids;
+  const removed = first ? state.evidence[first] : undefined;
+  for (const id of event.ids) {
+    updateEvidence(state, id, { removedAt: event.at, removedReason: event.reason });
+  }
+  if (!removed) return;
+  record(state, event.taskId, event.at, {
+    actor: 'agent',
+    kind: 'evidence',
+    text: `Removed ${removed.title}`,
+    detail: event.reason,
+    evidenceId: removed.id,
+    runId: event.runId,
   });
 }
 
@@ -699,6 +769,12 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'fix.started':
       applyFixStarted(state, event);
       break;
+    case 'checks.changed':
+      applyChecksChanged(state, event);
+      break;
+    case 'checks.started':
+      updateTask(state, event.taskId, event.at, { runningChecks: [...event.checkIds] });
+      break;
     case 'checks.recorded':
       applyChecksRecorded(state, event);
       break;
@@ -712,6 +788,9 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'evidence.attached':
       applyEvidenceAttached(state, event);
       break;
+    case 'evidence.removed':
+      applyEvidenceRemoved(state, event);
+      break;
     case 'pull_request.opened':
     case 'pull_request.updated':
     case 'pull_request.push_requested':
@@ -720,6 +799,8 @@ function applyEventBody(state: ShinsaState, event: ShinsaEvent): ShinsaState {
     case 'pull_request.watched':
     case 'pull_request.read_failed':
     case 'pull_request.read_failures_cleared':
+    case 'pull_request.push_retrying':
+    case 'pull_request.hook_failed':
       applyPullRequestEvent(state, event);
       break;
     case 'round.queued':

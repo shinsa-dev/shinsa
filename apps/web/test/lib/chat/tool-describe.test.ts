@@ -235,6 +235,10 @@ describe('describeTool', () => {
     expect(shinsa('report_review')).toBe('Reported the review');
     expect(shinsa('ask', { question: 'Which one?' })).toBe('Asked you: Which one?');
     expect(shinsa('attach_evidence', { title: 'Login page' })).toBe('Attached evidence: Login page');
+    expect(shinsa('attach_evidence', { kind: 'test', check: 'c2' })).toBe('Linked the check as evidence: c2');
+    expect(shinsa('remove_evidence', { items: ['login'], reason: 'The page changed' })).toBe(
+      'Removed evidence: The page changed'
+    );
     expect(shinsa('find_tasks', { query: 'login' })).toBe('Looked up tasks: login');
     expect(shinsa('find_tasks')).toBe('Looked up tasks');
     expect(shinsa('read_task', { task_id: 't1' })).toBe('Read a task');
@@ -445,6 +449,10 @@ describe('resolveGroupPhrase', () => {
       'Attached 2 pieces of evidence',
       'Looked up tasks once',
       'Looked up tasks 3 times',
+    ]);
+    expect([phrase('remove_evidence', 1), phrase('remove_evidence', 2)]).toEqual([
+      'Removed evidence',
+      'Removed evidence 2 times',
     ]);
     expect(phrase('note', 2)).toBe('Left 2 notes');
     expect([phrase('remember', 1), phrase('remember', 2)]).toEqual([

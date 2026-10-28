@@ -1,4 +1,4 @@
-import type { FixFingerprint, FixReason, Task } from '../domain/index.ts';
+import { type FixFingerprint, type FixReason, listBlockingChecks, type Task } from '../domain/index.ts';
 
 const FNV_OFFSET = 0x811c9dc5;
 
@@ -14,9 +14,8 @@ function hashText(text: string) {
 }
 
 function listFailingChecks(task: Task) {
-  return (task.checkResults ?? [])
-    .filter((check) => check.outcome === 'fail')
-    .map((check) => check.name)
+  return listBlockingChecks(task)
+    .map((check) => check.id)
     .sort();
 }
 

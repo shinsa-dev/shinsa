@@ -1,37 +1,35 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CoverageFormat } from '@shinsa/core';
+import type { CoverageDetection, CoverageFormat } from '@shinsa/core';
 
-export interface CoveragePlan {
+export interface CoverageRun {
   tool: string;
   command: string;
+  cwd: string;
   report: string;
   format: CoverageFormat;
 }
 
-interface PackageManifest {
-  scripts: Record<string, string>;
-  dependencies: Set<string>;
+type RunnerName = 'bun' | 'vitest' | 'jest' | 'pytest' | 'go';
+
+interface Runner {
+  tool: string;
+  prefixes: string[];
+  convert: (prefix: string, args: string[], dir: string) => { command: string; report: string } | null;
+  format: CoverageFormat;
 }
 
-const PACKAGE_EXECUTORS: [string, string][] = [
-  ['bun.lock', 'bunx'],
-  ['bun.lockb', 'bunx'],
-  ['pnpm-lock.yaml', 'pnpm exec'],
-  ['yarn.lock', 'yarn'],
-];
+const JS_PREFIXES = ['', 'bunx', 'npx', 'pnpm exec', 'pnpm', 'yarn'];
 
-const PYTHON_RUNNERS: [string, string][] = [
-  ['uv.lock', 'uv run pytest'],
-  ['poetry.lock', 'poetry run pytest'],
-  ['Pipfile.lock', 'pipenv run pytest'],
-];
-
-const PYTHON_MANIFESTS = ['pyproject.toml', 'setup.cfg', 'setup.py', 'Pipfile', 'tox.ini'];
+const PY_PREFIXES = ['', 'python -m', 'python3 -m', 'uv run', 'poetry run', 'pipenv run'];
 
 const SHELL_OPERATORS = /[;&|<>`$()]/;
 
-const WRAPPERS: Record<string, string> = { c8: 'c8', nyc: 'nyc' };
+const CD_PREFIX = /^cd\s+(\S+)\s*&&\s*(.+)$/;
+
+const CWD_OPTION = /^--cwd(?:=(.+))?$/;
+
+const PYTHON_MANIFESTS = ['pyproject.toml', 'setup.cfg', 'setup.py', 'Pipfile', 'tox.ini'];
 
 const VITEST_PROVIDERS = ['@vitest/coverage-v8', '@vitest/coverage-istanbul'];
 
@@ -39,85 +37,146 @@ function quote(path: string) {
   return `'${path.replace(/'/g, `'\\''`)}'`;
 }
 
+function joinCommand(parts: readonly string[]) {
+  return parts.filter((part) => part.length > 0).join(' ');
+}
+
+const RUNNERS: Record<RunnerName, Runner> = {
+  bun: {
+    tool: "Bun's test runner",
+    prefixes: [''],
+    format: 'lcov',
+    convert: (_prefix, args, dir) => {
+      if (args[0] !== 'test') return null;
+      const options = `--coverage --coverage-reporter=lcov --coverage-dir=${quote(dir)}`;
+      return {
+        command: joinCommand(['bun test', options, ...args.slice(1)]),
+        report: join(dir, 'lcov.info'),
+      };
+    },
+  },
+  vitest: {
+    tool: 'Vitest',
+    prefixes: JS_PREFIXES,
+    format: 'lcov',
+    convert: (prefix, args, dir) => {
+      const rest = args[0] === 'run' ? args.slice(1) : args;
+      const options = `--coverage.enabled=true --coverage.reporter=lcov --coverage.reportsDirectory=${quote(dir)}`;
+      return {
+        command: joinCommand([prefix, 'vitest run', options, ...rest]),
+        report: join(dir, 'lcov.info'),
+      };
+    },
+  },
+  jest: {
+    tool: 'Jest',
+    prefixes: JS_PREFIXES,
+    format: 'lcov',
+    convert: (prefix, args, dir) => {
+      const options = `--coverage --coverageReporters=lcov --coverageDirectory=${quote(dir)}`;
+      return { command: joinCommand([prefix, 'jest', options, ...args]), report: join(dir, 'lcov.info') };
+    },
+  },
+  pytest: {
+    tool: 'pytest-cov',
+    prefixes: PY_PREFIXES,
+    format: 'cobertura',
+    convert: (prefix, args, dir) => {
+      const report = join(dir, 'coverage.xml');
+      const options = `--cov=. --cov-report=xml:${quote(report)}`;
+      return { command: joinCommand([prefix, 'pytest', options, ...args]), report };
+    },
+  },
+  go: {
+    tool: 'go test',
+    prefixes: [''],
+    format: 'go',
+    convert: (_prefix, args, dir) => {
+      if (args[0] !== 'test') return null;
+      const report = join(dir, 'cover.out');
+      return {
+        command: joinCommand(['go test', `-coverprofile=${quote(report)}`, ...args.slice(1)]),
+        report,
+      };
+    },
+  },
+};
+
+interface Invocation {
+  cwd: string;
+  prefix: string;
+  name: RunnerName;
+  args: string[];
+}
+
+function readCwdOption(args: readonly string[], cwd: string) {
+  const index = args.findIndex((arg) => CWD_OPTION.test(arg));
+  if (index < 0) return cwd;
+  const folder = CWD_OPTION.exec(args[index] ?? '')?.[1] ?? args[index + 1] ?? '.';
+  return join(cwd, folder);
+}
+
+function readInvocation(tokens: string[], cwd: string): Invocation | null {
+  if (tokens[0] === 'bun')
+    return { cwd: readCwdOption(tokens, cwd), prefix: '', name: 'bun', args: tokens.slice(1) };
+  for (const name of ['vitest', 'jest', 'pytest', 'go'] as const) {
+    const index = tokens.indexOf(name);
+    const prefix = tokens.slice(0, Math.max(0, index)).join(' ');
+    if (index >= 0 && RUNNERS[name].prefixes.includes(prefix)) {
+      return { cwd, prefix, name, args: tokens.slice(index + 1) };
+    }
+  }
+  return null;
+}
+
+export function resolveCoverageRun(command: string, worktree: string, dir: string): CoverageRun | null {
+  const trimmed = command.trim();
+  const cd = CD_PREFIX.exec(trimmed);
+  const body = cd?.[2] ?? trimmed;
+  if (SHELL_OPERATORS.test(body)) return null;
+  const invocation = readInvocation(body.split(/\s+/), cd ? join(worktree, cd[1] ?? '.') : worktree);
+  if (!invocation) return null;
+  const runner = RUNNERS[invocation.name];
+  const converted = runner.convert(invocation.prefix, invocation.args, dir);
+  if (!converted) return null;
+  return {
+    tool: runner.tool,
+    command: cd ? `cd ${cd[1]} && ${converted.command}` : converted.command,
+    cwd: invocation.cwd,
+    report: converted.report,
+    format: runner.format,
+  };
+}
+
 function readText(path: string) {
   return existsSync(path) ? readFileSync(path, 'utf8') : null;
 }
 
-function readManifest(path: string): PackageManifest | null {
-  const text = readText(join(path, 'package.json'));
-  if (text === null) return null;
+function readManifest(path: string) {
   try {
-    const manifest = JSON.parse(text) as {
+    const manifest = JSON.parse(readText(join(path, 'package.json')) ?? 'null') as {
       scripts?: Record<string, string>;
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
-    };
-    return {
-      scripts: manifest.scripts ?? {},
-      dependencies: new Set([
-        ...Object.keys(manifest.dependencies ?? {}),
-        ...Object.keys(manifest.devDependencies ?? {}),
-      ]),
-    };
+    } | null;
+    if (!manifest) return null;
+    const names = [
+      ...Object.keys(manifest.dependencies ?? {}),
+      ...Object.keys(manifest.devDependencies ?? {}),
+    ];
+    return { test: manifest.scripts?.test ?? '', dependencies: new Set(names) };
   } catch {
     return null;
   }
 }
 
-function resolveExecutor(path: string) {
-  return PACKAGE_EXECUTORS.find(([lockfile]) => existsSync(join(path, lockfile)))?.[1] ?? 'npx';
-}
-
-function resolveLcovPlan(tool: string, command: string, dir: string): CoveragePlan {
-  return { tool, command, report: join(dir, 'lcov.info'), format: 'lcov' };
-}
-
-function resolveScriptPlan(script: string, path: string, dir: string): CoveragePlan | null {
-  const trimmed = script.trim();
-  if (SHELL_OPERATORS.test(trimmed)) return null;
-  const [first = '', ...rest] = trimmed.split(/\s+/);
-  const args = rest.join(' ');
-  const wrapper = WRAPPERS[first];
-  if (wrapper) {
-    return resolveLcovPlan(
-      wrapper,
-      `${resolveExecutor(path)} ${wrapper} --reporter=lcov --report-dir=${quote(dir)} ${args}`.trim(),
-      dir
-    );
-  }
-  if (first === 'bun' && rest[0] === 'test') {
-    const more = rest.slice(1).join(' ');
-    return resolveLcovPlan(
-      "Bun's test runner",
-      `bun test --coverage --coverage-reporter=lcov --coverage-dir=${quote(dir)} ${more}`.trim(),
-      dir
-    );
-  }
-  return null;
-}
-
-function resolveJavaScriptPlan(path: string, dir: string): CoveragePlan | null {
+function resolveJavaScriptTool(path: string) {
   const manifest = readManifest(path);
   if (!manifest) return null;
-  const script = manifest.scripts.test;
-  const fromScript = script ? resolveScriptPlan(script, path, dir) : null;
-  if (fromScript) return fromScript;
-  const executor = resolveExecutor(path);
   const has = (name: string) => manifest.dependencies.has(name);
-  if (has('vitest') && VITEST_PROVIDERS.some(has)) {
-    return resolveLcovPlan(
-      'Vitest',
-      `${executor} vitest run --coverage --coverage.reporter=lcov --coverage.reportsDirectory=${quote(dir)}`,
-      dir
-    );
-  }
-  if (has('jest')) {
-    return resolveLcovPlan(
-      'Jest',
-      `${executor} jest --coverage --coverageReporters=lcov --coverageDirectory=${quote(dir)}`,
-      dir
-    );
-  }
+  if (has('vitest') && VITEST_PROVIDERS.some(has)) return RUNNERS.vitest.tool;
+  if (has('jest')) return RUNNERS.jest.tool;
+  if (/^bun test\b/.test(manifest.test.trim())) return RUNNERS.bun.tool;
   return null;
 }
 
@@ -131,28 +190,18 @@ function hasPytestCov(path: string) {
   );
 }
 
-function resolvePythonPlan(path: string, dir: string): CoveragePlan | null {
-  if (!hasPytestCov(path)) return null;
-  const runner =
-    PYTHON_RUNNERS.find(([lockfile]) => existsSync(join(path, lockfile)))?.[1] ?? 'python3 -m pytest';
-  const report = join(dir, 'coverage.xml');
-  return {
-    tool: 'pytest-cov',
-    command: `${runner} --cov=. --cov-report=xml:${quote(report)}`,
-    report,
-    format: 'cobertura',
-  };
-}
-
-function resolveGoPlan(path: string, dir: string): CoveragePlan | null {
-  if (!existsSync(join(path, 'go.mod'))) return null;
-  const report = join(dir, 'cover.out');
-  return { tool: 'go test', command: `go test ./... -coverprofile=${quote(report)}`, report, format: 'go' };
-}
-
-export function resolveCoveragePlan(path: string, dir: string) {
+function resolveTool(path: string) {
   if (!existsSync(path)) return null;
-  return resolveJavaScriptPlan(path, dir) ?? resolvePythonPlan(path, dir) ?? resolveGoPlan(path, dir);
+  const javascript = resolveJavaScriptTool(path);
+  if (javascript) return javascript;
+  if (hasPytestCov(path)) return RUNNERS.pytest.tool;
+  return existsSync(join(path, 'go.mod')) ? RUNNERS.go.tool : null;
+}
+
+export function resolveCoverageDetection(path: string): CoverageDetection | null {
+  const tool = resolveTool(path);
+  if (!tool) return null;
+  return { tool, command: `The test checks of each task, run once more with ${tool}'s coverage report.` };
 }
 
 export function resolveGoModule(path: string) {

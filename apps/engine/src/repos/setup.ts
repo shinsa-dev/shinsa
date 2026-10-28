@@ -1,13 +1,11 @@
 import { existsSync } from 'node:fs';
 import type { ConfigProblem, Repo } from '@shinsa/core';
-import { resolveCheckCommands } from '../checks/index.ts';
 import { assertRefName } from '../git/index.ts';
 import { describeError } from '../log/index.ts';
 import { runCommand } from '../shell/index.ts';
 
 export interface SetupScope {
   defaultBranch: boolean;
-  checks: boolean;
 }
 
 const FETCH_TIMEOUT_MS = 60_000;
@@ -50,19 +48,6 @@ async function describeMissingDefaultBranch(repo: Repo, signal?: AbortSignal): P
   };
 }
 
-function describeMissingChecks(repo: Repo): ConfigProblem | null {
-  try {
-    if (resolveCheckCommands(repo, repo.path).length > 0) return null;
-    return {
-      kind: 'check_commands',
-      detail:
-        'No check commands are set, and package.json has no lint, check-types, typecheck or test script to run.',
-    };
-  } catch (error) {
-    return { kind: 'check_commands', detail: describeError(error) };
-  }
-}
-
 export async function verifySetup(
   repo: Repo,
   scope: SetupScope,
@@ -77,7 +62,5 @@ export async function verifySetup(
   const problems: ConfigProblem[] = [];
   const branch = scope.defaultBranch && (await describeMissingDefaultBranch(repo, signal));
   if (branch) problems.push(branch);
-  const checks = scope.checks && !repo.checksWaived && describeMissingChecks(repo);
-  if (checks) problems.push(checks);
   return problems;
 }

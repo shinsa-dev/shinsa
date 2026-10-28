@@ -72,11 +72,11 @@ describe('task activity', () => {
     harness.send({
       type: 'checks.record',
       taskId,
-      results: [{ name: 'lint', outcome: 'pass', detail: null }],
+      results: [{ id: 'r1', label: 'bun lint', command: 'bun lint', outcome: 'pass', detail: null }],
     });
     const checks = harness
       .task(taskId)
-      .activity.filter((entry) => entry.actor === 'shinsa' && entry.kind === 'review');
+      .activity.filter((entry) => entry.actor === 'shinsa' && entry.kind === 'check');
     expect(checks.map((entry) => entry.text)).toEqual(['The check passed']);
   });
 
@@ -177,7 +177,7 @@ describe('applying the process events', () => {
         approach: 'x',
         files: [],
         outOfScope: [],
-        verification: ['Check it by hand.'],
+        verification: [{ label: 'Tests', command: 'bun test src/a', phases: [1] }],
         questions: [],
       },
     });

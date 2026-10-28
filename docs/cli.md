@@ -81,8 +81,9 @@ The text an agent's management tool gets is the same as a pipe's: plain, unwrapp
 ## Where commands go
 
 Every command talks to the engine on the configured host (`SHINSA_HOST` or `hostname` in `config.json`; 127.0.0.1
-when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, 5180). When the Mac
-app runs the engine and it is not answering, a command asks launchd to start it and waits for it; `status` and
+when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, else 7446, 7447 for
+`shinsa-canary`; a `bun dev` engine is on 5180, so a command from source reaches it with `SHINSA_PORT=5180`). When the
+Mac app runs the engine and it is not answering, a command asks launchd to start it and waits for it; `status` and
 `version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app puts on your PATH
 (`~/.local/bin/shinsa`, linked on every launch, in zsh, bash and fish), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
 
@@ -567,7 +568,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 Answer any open decision by its gate id.
 
 ```
-shinsa gates answer <gate> --decision <approve|revise|reject|reply|waive> [--response <text>] [--plan-version <integer>] [--verdicts <json>] [--json]
+shinsa gates answer <gate> --decision <approve|revise|reject|reply> [--response <text>] [--plan-version <integer>] [--verdicts <json>] [--json]
 ```
 
 Yours alone: no agent has a tool for it, and an agent’s shell may not run it. Sends `gate.answer`.
@@ -575,7 +576,7 @@ Yours alone: no agent has a tool for it, and an agent’s shell may not run it. 
 | Argument | Kind | What it is |
 | --- | --- | --- |
 | `<gate>` | text, required | The gate id, from `shinsa tasks show`. |
-| `--decision` | choice, required | approve, revise, reject, reply or waive. |
+| `--decision` | choice, required | approve, revise, reject or reply. |
 | `--response` | text, optional | Your reply or feedback. |
 | `--plan-version` | integer, optional | The plan version you read, for a plan. |
 | `--verdicts` | json, optional | Review verdicts: [{"index":0,"verdict":"fix","note":null}]. |
@@ -1280,7 +1281,7 @@ Every task agent's tool: `repos_list` (reads).
 Change a repository's name, default branch, project, check commands, where agents work or how test coverage is measured.
 
 ```
-shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--waive-checks] [--workspace <worktrees|gitbutler|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
+shinsa repos update <repo> [--name <text>] [--default-branch <text>] [--project <text>] [--checks <list>] [--workspace <worktrees|gitbutler|main_checkout>] [--coverage <auto|custom|off>] [--coverage-command <text>] [--coverage-report <text>] [--coverage-format <lcov|cobertura|go>] [--json]
 ```
 
 Every task agent's tool: `repos_update`. Sends `repo.update`.
@@ -1291,10 +1292,9 @@ Every task agent's tool: `repos_update`. Sends `repo.update`.
 | `--name` | text, optional | Its name. |
 | `--default-branch` | text, optional | The branch pull requests target. |
 | `--project` | text, optional | Its project (key, name or id), or none. |
-| `--checks` | list, optional | The check commands, in order. Repeat the option for each. Only the human changes them. |
-| `--waive-checks` | boolean, optional | Work without checks. Only the human changes it. |
+| `--checks` | list, optional | The commands every task runs before review, in order, on top of the checks its agent plans. Repeat the option for each. Only the human changes them. |
 | `--workspace` | choice, optional | Where agents work: worktrees, gitbutler (a branch each in the GitButler workspace) or main_checkout (one task at a time in the checkout). Only the human changes it. |
-| `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines after the checks: auto (a coverage command it detects), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
+| `--coverage` | choice, optional | How Shinsa measures test coverage of the changed lines before review: auto (the test checks of the task, run once more with coverage), custom (yours, with --coverage-command and --coverage-report) or off. Only the human changes it. |
 | `--coverage-command` | text, optional | With --coverage custom: the command that runs the tests with coverage. |
 | `--coverage-report` | text, optional | With --coverage custom: the report it writes, relative to the repository. |
 | `--coverage-format` | choice, optional | With --coverage custom: the report format, when its name does not tell (lcov, cobertura or go). |

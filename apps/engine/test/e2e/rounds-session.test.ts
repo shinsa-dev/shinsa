@@ -54,7 +54,7 @@ const PLAN = {
   approach: 'Directly.',
   files: [],
   out_of_scope: [],
-  verification: ['The checks pass.'],
+  verification: [{ label: 'Round file', command: 'true', phases: [1] }],
   questions: [],
 };
 

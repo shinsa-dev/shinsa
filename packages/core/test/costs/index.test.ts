@@ -4,7 +4,9 @@ import {
   describeUsd,
   describeWeeklyPercent,
   listTaskBudgets,
+  type RunMeter,
   type RunUsage,
+  resolveCostUnit,
   resolveTaskCost,
   resolveUsageDelta,
 } from '../../src/index.ts';
@@ -37,6 +39,10 @@ describe('resolveTaskCost', () => {
       knownUsd: 1.1,
       unpricedRuns: 1,
       weeklyPercent: 0,
+      weeklyRuns: 0,
+      weeklyTasks: 0,
+      learningRuns: 0,
+      estimatedPercent: 0,
     });
     expect(cost.byRole.map((line) => [line.role, line.cost.runs])).toEqual([['agent', 3]]);
     expect(cost.byPhase.map((line) => [line.index, line.title, line.cost.knownUsd])).toEqual([
@@ -74,17 +80,57 @@ describe('resolveTaskCost', () => {
   });
 });
 
+function meterOnAccount(harness: ReturnType<typeof createHarness>, taskId: string, count: number) {
+  const run = harness.activeRun(taskId);
+  harness.state.runs = Object.fromEntries(
+    Array.from({ length: count }, (_, index) => {
+      const from = index * 1_000;
+      const id = `learned-${index}`;
+      const meter: RunMeter = {
+        attemptId: id,
+        window: 'account:acc-1',
+        from,
+        to: from + 100,
+        usage: usage(10),
+        readings: [
+          { percent: 40 + index * 2, at: from, resetsAt: null },
+          { percent: 42 + index * 2, at: from + 100, resetsAt: null },
+        ],
+      };
+      const taskOf = index === 0 ? taskId : `other-${index}`;
+      return [
+        id,
+        {
+          ...run,
+          id,
+          taskId: taskOf,
+          status: undefined,
+          endedAt: from + 100,
+          usage: usage(10),
+          meters: [meter],
+        },
+      ];
+    })
+  );
+}
+
 describe('listTaskBudgets', () => {
   test('is empty without a limit, and counts each limit from what you last allowed', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
-    const runId = harness.activeRun(taskId).id;
-    harness.send({ type: 'run.meter', runId, usage: usage(4), weeklyPercent: 3 });
+    meterOnAccount(harness, taskId, 5);
     expect(listTaskBudgets(harness.state, harness.task(taskId))).toEqual([]);
-    harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 5, taskUsageLimit: 12 } });
+    harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 12.5, taskUsageLimit: 8 } });
     expect(listTaskBudgets(harness.state, harness.task(taskId))).toEqual([
-      { unit: 'percent', cap: 12, limit: 12, spent: 3, share: 0.25 },
-      { unit: 'usd', cap: 5, limit: 5, spent: 4, share: 0.8 },
+      {
+        unit: 'percent',
+        cap: 8,
+        limit: 8,
+        spent: expect.closeTo(2, 9),
+        share: expect.closeTo(0.25, 9),
+        estimated: false,
+      },
+      { unit: 'usd', cap: 12.5, limit: 12.5, spent: 10, share: 0.8, estimated: false },
     ]);
     harness.send({ type: 'settings.change', patch: { taskBudgetUsd: null } });
     expect(listTaskBudgets(harness.state, harness.task(taskId)).map((budget) => budget.unit)).toEqual([
@@ -92,15 +138,21 @@ describe('listTaskBudgets', () => {
     ]);
   });
 
-  test('a run measured only by its weekly usage counts toward the usage limit', () => {
+  test('while the account is learning, the usage limit counts the early estimate and the cost limit dollars', () => {
     const harness = createHarness();
-    harness.send({ type: 'settings.change', patch: { taskUsageLimit: 10 } });
     const taskId = createTask(harness);
-    harness.state.runs.x = { ...harness.activeRun(taskId), id: 'x', usage: null, weeklyPercent: 4 };
+    meterOnAccount(harness, taskId, 2);
+    harness.send({ type: 'settings.change', patch: { taskBudgetUsd: 12.5, taskUsageLimit: 8 } });
     expect(resolveTaskCost(harness.state, harness.task(taskId)).total).toMatchObject({
-      runs: 0,
-      weeklyPercent: 4,
+      weeklyPercent: 0,
+      weeklyRuns: 0,
+      learningRuns: 1,
+      estimatedPercent: expect.closeTo(2, 9),
     });
+    expect(listTaskBudgets(harness.state, harness.task(taskId))).toEqual([
+      expect.objectContaining({ unit: 'percent', spent: expect.closeTo(2, 9), estimated: true }),
+      expect.objectContaining({ unit: 'usd', spent: 10, estimated: false }),
+    ]);
   });
 });
 
@@ -113,12 +165,26 @@ describe('describeUsd', () => {
 });
 
 describe('describeWeeklyPercent', () => {
-  test('rounds to a whole percentage, and a sliver reads as under one percent', () => {
+  test('shows a tenth below ten percent, whole percentages above, and a sliver as under a tenth', () => {
     expect(describeWeeklyPercent(0)).toBe('0%');
-    expect(describeWeeklyPercent(0.4)).toBe('<1%');
+    expect(describeWeeklyPercent(0.04)).toBe('<0.1%');
+    expect(describeWeeklyPercent(0.44)).toBe('0.4%');
+    expect(describeWeeklyPercent(2)).toBe('2%');
+    expect(describeWeeklyPercent(9.96)).toBe('10%');
     expect(describeWeeklyPercent(12.6)).toBe('13%');
     expect(describeBudgetAmount({ unit: 'percent' }, 10)).toBe('10%');
     expect(describeBudgetAmount({ unit: 'usd' }, 10)).toBe('$10.00');
+  });
+});
+
+describe('resolveCostUnit', () => {
+  test('is the weekly window once every priced run has a share of one, else dollars', () => {
+    const harness = createHarness();
+    const line = resolveTaskCost(harness.state, harness.task(createTask(harness))).total;
+    expect(resolveCostUnit(line)).toBe('usd');
+    expect(resolveCostUnit({ ...line, runs: 1, weeklyRuns: 1 })).toBe('percent');
+    expect(resolveCostUnit({ ...line, runs: 2, weeklyRuns: 1, unpricedRuns: 1 })).toBe('percent');
+    expect(resolveCostUnit({ ...line, runs: 2, weeklyRuns: 1, learningRuns: 1 })).toBe('usd');
   });
 });
 

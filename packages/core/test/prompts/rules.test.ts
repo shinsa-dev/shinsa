@@ -100,7 +100,10 @@ describe('the role and fix prompts', () => {
       resolveResearcherPrompt(task, repo, null),
       resolveInvestigatorPrompt(task, repo, null),
       resolveOperationInstruction(task, null),
-      resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]),
+      resolveChecksFixPrompt(
+        [{ id: 'c1', label: 'Tests', command: 'bun test src/a', outcome: 'fail', detail: '' }],
+        false
+      ),
       resolveReviewFixPrompt([{ severity: 'blocking', file: null, line: null, message: 'Handle it.' }]),
       resolveHumanFixPrompt('Rename it.', []),
       resolvePullRequestFixPrompt(pullRequest({ checks: 'failing' })),

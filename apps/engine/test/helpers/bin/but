@@ -1,5 +1,6 @@
 #!/bin/sh
 if [ -n "$FAKE_BUT_MISSING" ]; then echo "but: command not found" >&2; exit 127; fi
+if [ -n "$FAKE_BUT_VERSION" ] && [ "$1" = "--version" ]; then echo "but $FAKE_BUT_VERSION"; exit 0; fi
 here=$(cd "$(dirname "$0")" && pwd)
 PATH=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$here" | paste -sd: -)
 real=$(command -v but) || { echo "GitButler's but is not installed on this machine" >&2; exit 127; }

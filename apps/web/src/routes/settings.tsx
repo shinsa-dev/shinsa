@@ -1,4 +1,4 @@
-import type { ShinsaState } from '@shinsa/core';
+import { resolveUsageRates, type ShinsaState } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { Choice } from '@/components/controls/choice.tsx';
@@ -85,7 +85,7 @@ function TabSections({ state, tab }: { state: ShinsaState; tab: SettingsTabId })
       return (
         <>
           <AccountSettings settings={state.settings} />
-          <LimitSettings settings={state.settings} />
+          <LimitSettings settings={state.settings} rates={resolveUsageRates(state.runs)} />
         </>
       );
     case 'projects':
@@ -122,7 +122,8 @@ export function SettingsPage({ state }: { state: ShinsaState }) {
       accounts,
       { repos, support },
       explorerSide,
-      updateChannel
+      updateChannel,
+      resolveUsageRates(state.runs)
     )
   );
   const extensions = useExtensions();

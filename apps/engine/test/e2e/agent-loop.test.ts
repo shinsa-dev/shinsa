@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import type { Run, RunFailureClass } from '@shinsa/core';
+import { Transcripts } from '../../src/agents/index.ts';
 import type { ClaudeExecutable } from '../../src/agents/providers/claude/executable.ts';
 import { createClaudeProvider } from '../../src/agents/providers/claude/index.ts';
 import { ProviderRegistry } from '../../src/agents/providers/index.ts';
@@ -65,7 +66,7 @@ function listRuns(w: World, taskId: string): Run[] {
 }
 
 describe('every way a turn can end reaches core as its class', () => {
-  test('a usage limit pauses the task at once, keeping the reset time for automatic resume', async () => {
+  test('a usage limit with a reset already past waits a while and carries on by itself, never failing', async () => {
     const { w, sdk } = await openWithSdk([
       (call) => [
         init(call),
@@ -77,11 +78,13 @@ describe('every way a turn can end reaches core as its class', () => {
       ],
     ]);
     const taskId = await w.createTask();
-    const gate = await w.untilGate(taskId, 'failure');
-    expect(gate.title).toBe('The agent hit its usage limit');
+    await w.until('the wait', () => w.task(taskId).usageWait?.status === 'armed');
+    const wait = w.task(taskId).usageWait;
+    expect(wait).toMatchObject({ autoResume: true });
+    expect((wait?.resetAt ?? 0) - (wait?.armedAt ?? 0)).toBe(15 * 60_000);
     expect(listRuns(w, taskId)[0]?.failure).toMatchObject({ class: 'usage_limit', resetAt: 7_200_000 });
+    expect(w.gates(taskId)).toEqual([]);
     expect(sdk.params).toHaveLength(1);
-    expect(listRuns(w, taskId)).toHaveLength(1);
   });
 
   test('a signed-out account and a claude that cannot run pause the task with what to do', async () => {
@@ -127,13 +130,32 @@ describe('every way a turn can end reaches core as its class', () => {
     expect(sdk.params[1]?.options).not.toHaveProperty('resume');
   });
 
-  test('an overloaded API, an abort reported as success and a stream with no result resume the session once', async () => {
+  test('an overloaded API is tried again in the same run after a short wait, and the wait is in the chat', async () => {
+    const { w, sdk } = await openWithSdk([
+      (call) => [init(call), result({ is_error: true, api_error_status: 529, result: 'Overloaded' })],
+    ]);
+    const taskId = await w.createTask();
+    await w.until('the second attempt', () => sdk.params.length >= 2);
+    const [first] = listRuns(w, taskId);
+    await w.until('the attempt recorded', () => (w.state.runs[first?.id ?? '']?.attempts?.length ?? 0) >= 2);
+    expect(w.state.runs[first?.id ?? '']?.failure ?? null).toBeNull();
+    const transcripts = new Transcripts(w.config.transcriptsDir);
+    const notices = transcripts.listEntries(first?.id ?? '').filter((entry) => entry.type === 'notice');
+    expect(notices).toContainEqual(
+      expect.objectContaining({
+        notice: expect.objectContaining({
+          kind: 'retrying',
+          provider: 'claude',
+          detail: 'Claude’s API is overloaded (529).',
+          attempt: 1,
+          attempts: 3,
+        }),
+      })
+    );
+  });
+
+  test('an abort reported as success and a stream with no result resume the session once', async () => {
     const cases: [Script, RunFailureClass, string][] = [
-      [
-        (call) => [init(call), result({ is_error: true, api_error_status: 529, result: 'Overloaded' })],
-        'overloaded',
-        'overloaded',
-      ],
       [(call) => [init(call), result({ terminal_reason: 'aborted_tools' })], 'aborted', 'interrupted'],
       [(call) => [init(call)], 'transport_error', 'ended before it finished'],
     ];

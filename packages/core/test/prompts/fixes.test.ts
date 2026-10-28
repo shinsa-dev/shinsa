@@ -5,7 +5,9 @@ import {
   resolveFixFocus,
   resolveHumanFixPrompt,
   resolvePullRequestFixPrompt,
+  resolvePushHookFixPrompt,
   resolveReviewFixPrompt,
+  resolveUpdateConflictFixPrompt,
   resolveVerdictFixPrompt,
   resolveWorkspaceUpdatedFixPrompt,
 } from '../../src/prompts/index.ts';
@@ -27,23 +29,85 @@ const remark = {
 describe('fix prompts', () => {
   test('each fix prompt opens with the words its run’s focus is read from', () => {
     const focusOf = (prompt: string) => resolveFixFocus({ purpose: 'fix', prompt });
-    expect(focusOf(resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]))).toBe('checks');
+    expect(
+      focusOf(
+        resolveChecksFixPrompt(
+          [{ id: 'c1', label: 'Tests', command: 'bun test src/a', outcome: 'fail', detail: '' }],
+          false
+        )
+      )
+    ).toBe('checks');
     expect(focusOf(resolveReviewFixPrompt([finding]))).toBe('review');
     expect(focusOf(resolveHumanFixPrompt('Rename it.', []))).toBe('changes');
     expect(focusOf(resolveVerdictFixPrompt([{ ...finding, verdict: 'fix' }], null, []))).toBe('changes');
     expect(focusOf(resolvePullRequestFixPrompt(pullRequest({ number: 42 })))).toBe('pull_request');
     expect(focusOf(resolveConflictFixPrompt('feat/banner'))).toBe('conflicts');
+    expect(focusOf(resolveUpdateConflictFixPrompt('main', ['a.ts']))).toBe('conflicts');
+    expect(focusOf(resolvePushHookFixPrompt('FAIL', null, null))).toBe('push_hook');
+  });
+
+  test('a conflict from updating onto the base lists the files, merges and never rebases', () => {
+    const prompt = resolveUpdateConflictFixPrompt('feat/base', ['src/a.ts', 'src/b.ts']);
+    expect(prompt).toStartWith(
+      'The branch was being updated onto `feat/base` before Shinsa pushed it, and these files conflict:\n- src/a.ts\n- src/b.ts'
+    );
+    expect(prompt).toContain('merge it in with `git merge origin/feat/base`');
+    expect(prompt).toContain('Never rebase or force-push.');
+    expect(prompt).toContain(
+      'Afterwards Shinsa runs the checks the resolved files touch, then updates the branch again and pushes it.'
+    );
+  });
+
+  test('a hook fix fences the output past its own backticks and keeps the agent off the whole suite', () => {
+    const prompt = resolvePushHookFixPrompt('see ```code``` here', ['a.test.ts › adds'], ' Look at a.ts. ');
+    expect(prompt).toContain('````\nsee ```code``` here\n````');
+    expect(prompt).toContain('The failures it names:\n- a.test.ts › adds');
+    expect(prompt).toContain('never the whole suite the hook runs');
+    expect(prompt).toContain('Guidance from the human: Look at a.ts.');
+    expect(prompt).toContain('then pushes again, which runs the hook again.');
+    expect(resolvePushHookFixPrompt('plain', [], null)).not.toContain('The failures it names');
   });
 
   test('a fix of the work says the checks and the review follow it', () => {
     expect(resolveHumanFixPrompt('Rename it.', [])).toContain(
-      "Afterwards Shinsa runs the task's checks and agent review, where it has them, and then the human reviews the work."
+      'Afterwards Shinsa runs those checks, then the agent review where the task has one, and then the human reviews the work.'
+    );
+  });
+
+  test('a checks fix names each failing check by id, leaves out what fails on the base branch, and says what comes next', () => {
+    const results = [
+      { id: 'c1', label: 'Panel tests', command: 'bun test src/panel', outcome: 'fail', detail: 'boom' },
+      {
+        id: 'c2',
+        label: 'Engine tests',
+        command: 'bun test apps/engine/test/a',
+        outcome: 'fail',
+        detail: 'old',
+        note: 'fails_on_base',
+      },
+      {
+        id: 'c3',
+        label: 'Types',
+        command: 'bun run --cwd apps/web check-types',
+        outcome: 'pass',
+        detail: null,
+      },
+    ] as const;
+    const building = resolveChecksFixPrompt([...results], true);
+    expect(building).toContain('- c1, Panel tests: `bun test src/panel` failed:\n```\nboom\n```');
+    expect(building).not.toContain('Engine tests');
+    expect(building).toContain('Afterwards Shinsa runs those checks, then you build the next phase.');
+    expect(resolveChecksFixPrompt([...results], false)).toContain(
+      'then the agent review where the task has one'
     );
   });
 
   test('every fix prompt says when to send the parts of the walkthrough that changed', () => {
     for (const prompt of [
-      resolveChecksFixPrompt([{ name: 'test', outcome: 'fail', detail: '' }]),
+      resolveChecksFixPrompt(
+        [{ id: 'c1', label: 'Tests', command: 'bun test src/a', outcome: 'fail', detail: '' }],
+        false
+      ),
       resolveReviewFixPrompt([finding]),
       resolvePullRequestFixPrompt(pullRequest({ number: 42 })),
     ]) {

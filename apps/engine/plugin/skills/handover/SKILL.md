@@ -11,10 +11,34 @@ cannot say: how to fill the fields well.
 ## The plan (`propose_plan`)
 
 - Phases are steps you build yourself, in order, each committed on its own: a clear end, not a role or a file.
-- `verification` names the proof before the work: the test that fails without the change, the checks, the runs, the
-  screenshots. A change the user sees asks for `screenshot` in `evidence`.
+- `verification` is the list of checks that prove the change (below). A change the user sees asks for `screenshot`
+  in `evidence`.
 - Decide what you can from the code and say so in `approach`. `questions` are only for what the human must decide.
 - When the steps do not fit the request, call `reshape_task` instead of planning.
+
+### The checks (`verification`)
+
+A check is one command Shinsa runs for you after the phases it covers: a fact for the reviewer and the human, never
+your claim. Choose them like evidence, for what this change touches, and scope each one:
+
+```json
+[
+  { "label": "Transcript tests", "command": "bun test --cwd apps/engine test/agents/transcripts", "phases": [1, 2] },
+  { "label": "Web types", "command": "bun run --cwd apps/web check-types", "phases": [2] },
+  { "label": "Lint the changed files", "command": "bunx biome check apps/web/src/lib/chat", "phases": [2] }
+]
+```
+
+- One test file or folder, one package's type check, the linter on the paths you change. Never the whole suite
+  (`bun test`, `npm test`, `vitest`, `pytest`, `go test ./...`, `bun run check` and the like): Shinsa refuses it, and
+  CI runs the whole suite on the pull request.
+- Run each command once yourself before you plan it, from the repository root, where Shinsa runs it. Where each
+  package has its own test config (a monorepo), point the runner at the package (`bun test --cwd apps/engine …`): a
+  path that matches no test file is a broken check. A scoped run that misses the package's coverage floor passes;
+  the floor is CI's.
+- Cover every piece of new logic with tests, and make those tests checks: Shinsa measures changed-line coverage
+  from them before review.
+- The repository's own commands, when it has any, run once before review on their own; never list them.
 
 ## A phase (`complete_phase`)
 
@@ -51,16 +75,31 @@ disagrees. You built it and know why it is the way it is, so you write the expla
   command asks them to do it again, so change one only when what they must do changed. Never put `pre_merge` or
   `post_merge` in `reshape_task`.
 
-Attach evidence with `attach_evidence` before the last phase (the `evidence` skill).
+- **check_changes**: keep the checks current as you build. When a phase adds a file, a test or a package the checks
+  do not cover, add a check for it in that phase's hand-over, with a one-sentence `reason` the human reads. The
+  repository's own checks (`r1`…) are the human's. A failure your change caused comes back to you as a fix; one that
+  passes when its test files run alone, or already fails on the base branch, does not.
+
+Attach evidence with `attach_evidence` before the last phase (the `evidence` skill): for a test or a check, link the
+check by its id instead of pasting output.
 
 ## A fix (`complete_fix`)
+
+Shinsa runs again the failing checks and the checks of every phase whose files the fix changed. Name other checks the
+fix touches in `checks`, and fix a check whose command was wrong or too wide with `check_changes`; never widen one to
+the whole suite to make it pass. While you fix, run only the test files or folders the fix touches.
+
+Evidence must show the work as it is after the fix: attach what the fix changed again with the same `key` (it
+replaces the old item), remove what no longer applies with `remove_evidence`, and name in `evidence_kept` each earlier
+item the fix touched that still holds.
 
 Send `walkthrough` only when the fix changes the approach, the flow, a risk, the testing or the steps. Each part you
 send replaces that part whole, so send the full new list, not just the new item.
 
 ## Review findings (`report_review`)
 
-`blocking` is a bug, a missed requirement, a broken rule or a failing check; everything else is a `suggestion`. One
+`blocking` is a bug, a missed requirement, a broken rule or a check the change makes fail (not one already failing
+on main); everything else is a `suggestion`. One
 finding per problem, each one you reproduced (the `review` skill).
 
 ## Inquiries

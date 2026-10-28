@@ -97,7 +97,7 @@ describe('the step schema', () => {
     ).toEqual(['approve', 'reply', 'reject']);
     expect(
       resolveGateDefinition(gate({ type: 'configuration' })).decisions.map((choice) => choice.decision)
-    ).toEqual(['approve', 'waive', 'reject']);
+    ).toEqual(['approve', 'reject']);
   });
 
   test('plan, review and merge are the decision gates; a question and a secret are an agent’s questions', () => {

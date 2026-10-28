@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { describePlanChange, type PlanDocument, resolvePlanChanges } from '../../src/report/index.ts';
+import { type PlanDocument, resolvePhaseChange, resolvePlanChanges } from '../../src/report/index.ts';
 import { PLAN } from '../harness.ts';
 
 function revise(patch: Partial<PlanDocument>): PlanDocument {
@@ -48,30 +48,17 @@ describe('resolvePlanChanges', () => {
   });
 });
 
-describe('describePlanChange', () => {
-  test('says each change in a short sentence', () => {
-    expect(
-      [
-        { kind: 'goal' } as const,
-        { kind: 'approach' } as const,
-        { kind: 'phase_added', title: 'Add a test' } as const,
-        { kind: 'phase_removed', title: 'Find it' } as const,
-        { kind: 'phase_changed', title: 'Fix it' } as const,
-        { kind: 'phases_reordered' } as const,
-        { kind: 'files', added: 1, removed: 0 } as const,
-        { kind: 'files', added: 0, removed: 2 } as const,
-        { kind: 'files', added: 2, removed: 1 } as const,
-      ].map(describePlanChange)
-    ).toEqual([
-      'Changed the goal',
-      'Changed the approach',
-      'Added the phase “Add a test”',
-      'Dropped the phase “Find it”',
-      'Reworked the phase “Fix it”',
-      'Put the phases in a new order',
-      'Files: 1 new file',
-      'Files: 2 files dropped',
-      'Files: 2 new files, 1 file dropped',
-    ]);
+describe('resolvePhaseChange', () => {
+  test('says whether a phase is new or reworked, matching its title loosely', () => {
+    const changes = [
+      { kind: 'phase_added', title: 'Add a test' } as const,
+      { kind: 'phase_changed', title: 'Fix it' } as const,
+      { kind: 'phase_removed', title: 'Find it' } as const,
+      { kind: 'goal' } as const,
+    ];
+    expect(resolvePhaseChange(changes, ' add a  TEST ')).toBe('added');
+    expect(resolvePhaseChange(changes, 'Fix it')).toBe('changed');
+    expect(resolvePhaseChange(changes, 'Find it')).toBeNull();
+    expect(resolvePhaseChange(undefined, 'Fix it')).toBeNull();
   });
 });

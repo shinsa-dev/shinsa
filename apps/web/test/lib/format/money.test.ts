@@ -9,6 +9,10 @@ const LINE = {
   cacheWriteTokens: 0,
   tokens: 0,
   weeklyPercent: 0,
+  weeklyRuns: 0,
+  weeklyTasks: 0,
+  learningRuns: 0,
+  estimatedPercent: 0,
 };
 
 describe('money', () => {

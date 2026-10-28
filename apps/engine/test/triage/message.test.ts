@@ -455,7 +455,7 @@ const OPERATION_PLAN: PlanDocument = {
   approach: 'Move, then list.',
   files: [],
   outOfScope: [],
-  verification: ['List the folders after the move.'],
+  verification: [],
   questions: [],
   impact: 'Moves 39 folders; the dry run lists them. Undo by moving them back.',
 };

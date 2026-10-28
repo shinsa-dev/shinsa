@@ -6,10 +6,12 @@ import {
   type PullRequest,
   type PullRequestRemark,
   replayEventLog,
+  type ShinsaCommand,
 } from '../../src/index.ts';
 import {
   approve,
   buildAll,
+  checkResult,
   createHarness,
   createTask,
   type Harness,
@@ -639,5 +641,270 @@ describe('cancelling effects', () => {
     expect(retried.cancellations).toEqual([
       { taskId, kinds: ['checks.run'], reason: 'A new round of checks replaced it.' },
     ]);
+  });
+});
+
+function approved() {
+  const harness = createHarness();
+  const taskId = createTask(harness);
+  reachReviewGate(harness, taskId);
+  approve(harness, taskId);
+  return { harness, taskId };
+}
+
+const HOOK_OUTPUT = 'bun test v1.3\nFAIL test/a.test.ts > adds\nerror: script "test" exited with code 1';
+
+function failHook(harness: Harness, taskId: string, failures: string[] | null = ['test/a.test.ts › adds']) {
+  return harness.send({ type: 'pull_request.record_hook_failure', taskId, output: HOOK_OUTPUT, failures });
+}
+
+function finishFix(harness: Harness, taskId: string) {
+  harness.send({
+    type: 'agent.complete_fix',
+    runId: harness.activeRun(taskId).id,
+    summary: 'Fixed it.',
+    checks: ['c1'],
+  });
+  harness.send({ type: 'checks.record', taskId, results: [checkResult('c1', 'pass')] });
+}
+
+describe('getting the branch to GitHub', () => {
+  test('each step of the push shows on the task: updating onto the base, the hook, opening', () => {
+    const { harness, taskId } = approved();
+    harness.send({ type: 'pull_request.record_step', taskId, step: { kind: 'updating', base: 'main' } });
+    expect(harness.task(taskId).stageReason).toBe('updating the branch onto main');
+    harness.send({ type: 'pull_request.record_step', taskId, step: { kind: 'pushing', hook: true } });
+    expect(harness.task(taskId).stageReason).toBe(
+      'pushing the branch (the repository’s pre-push hook is running)'
+    );
+    harness.send({ type: 'pull_request.record_step', taskId, step: { kind: 'pushing', hook: false } });
+    expect(harness.task(taskId).stageReason).toBe('pushing the branch');
+    pushed(harness, taskId, 'abc');
+    harness.send({ type: 'pull_request.record_step', taskId, step: { kind: 'opening' } });
+    expect(harness.task(taskId).stageReason).toBe('opening the pull request');
+  });
+
+  test('pushing to an open pull request says it pushes the changes, and a late step changes nothing', () => {
+    const { harness, taskId } = shipping();
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'pending' }) });
+    const late = { type: 'pull_request.record_step', taskId, step: { kind: 'opening' } } as const;
+    expect(harness.send(late).events).toEqual([]);
+    expect(harness.task(taskId).stageReason).toBe('waiting for CI');
+
+    harness.send({ type: 'pull_request.record', taskId, pullRequest: pullRequest({ checks: 'failing' }) });
+    harness.send({ type: 'agent.complete_fix', runId: harness.activeRun(taskId).id, summary: 'Fixed CI.' });
+    harness.send({ type: 'pull_request.record_step', taskId, step: { kind: 'pushing', hook: true } });
+    expect(harness.task(taskId).stageReason).toBe(
+      'pushing the changes (the repository’s pre-push hook is running)'
+    );
+  });
+
+  test('a retry names the step, when it runs, the attempt and the error, and logs one entry', () => {
+    const { harness, taskId } = approved();
+    harness.send({
+      type: 'pull_request.record_retry',
+      taskId,
+      step: 'pushing',
+      attempt: 1,
+      attempts: 5,
+      retryAt: harness.now + 1 + 30_000,
+      detail: 'Could not resolve host: github.com',
+    });
+    const task = harness.task(taskId);
+    expect(task.stageReason).toBe('pushing again in 30s, attempt 2 of 5: Could not resolve host: github.com');
+    expect(task.activity.at(-1)).toMatchObject({
+      kind: 'pull_request',
+      text: 'Pushing failed on attempt 1 of 5, trying again in 30s',
+      detail: 'Could not resolve host: github.com',
+    });
+
+    harness.send({
+      type: 'pull_request.record_retry',
+      taskId,
+      step: 'opening',
+      attempt: 2,
+      attempts: 5,
+      retryAt: harness.now + 1,
+      detail: 'HTTP 502',
+    });
+    expect(harness.task(taskId).stageReason).toBe(
+      'opening the pull request again in 1s, attempt 3 of 5: HTTP 502'
+    );
+    expect(harness.task(taskId).activity.at(-1)?.text).toBe(
+      'Opening the pull request failed on attempt 2 of 5, trying again in 1s'
+    );
+  });
+
+  test('a step, a retry or a hook failure for a task that is not pushing is ignored', () => {
+    const harness = createHarness();
+    const taskId = createTask(harness);
+    reachReviewGate(harness, taskId);
+    const commands: ShinsaCommand[] = [
+      { type: 'pull_request.record_step', taskId, step: { kind: 'opening' } },
+      {
+        type: 'pull_request.record_retry',
+        taskId,
+        step: 'updating',
+        attempt: 1,
+        attempts: 5,
+        retryAt: 0,
+        detail: 'x',
+      },
+      { type: 'pull_request.record_update_conflict', taskId, base: 'main', files: ['a.ts'] },
+      { type: 'pull_request.record_hook_failure', taskId, output: 'x', failures: null },
+    ];
+    for (const command of commands) expect(harness.send(command).events).toEqual([]);
+  });
+});
+
+describe('conflicts while updating onto the base', () => {
+  test('go to the agent as a fix round, then the touched checks run and Shinsa pushes again', () => {
+    const { harness, taskId } = approved();
+    harness.send({
+      type: 'pull_request.record_update_conflict',
+      taskId,
+      base: 'main',
+      files: ['src/b.ts', 'src/a.ts'],
+    });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'fixing',
+      stageReason: 'resolving conflicts with the base branch',
+      fixFor: 'update',
+    });
+    const prompt = harness.activeRun(taskId).prompt ?? '';
+    expect(prompt).toContain(
+      'The branch was being updated onto `main` before Shinsa pushed it, and these files conflict:\n- src/a.ts\n- src/b.ts'
+    );
+    expect(prompt).toContain('merge it in with `git merge origin/main`');
+    const opened = harness.effectsOf('pull_request.open').length;
+
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Resolved.',
+      checks: ['c1'],
+    });
+    expect(harness.task(taskId).stage).toBe('checking');
+    harness.send({ type: 'checks.record', taskId, results: [checkResult('c1', 'pass')] });
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: 'opening the pull request',
+    });
+    expect(harness.effectsOf('pull_request.open')).toHaveLength(opened + 1);
+  });
+
+  test('a failing check after the resolution is fixed, and the push still follows', () => {
+    const { harness, taskId } = approved();
+    harness.send({ type: 'pull_request.record_update_conflict', taskId, base: 'main', files: ['a.ts'] });
+    harness.send({
+      type: 'agent.complete_fix',
+      runId: harness.activeRun(taskId).id,
+      summary: 'Resolved.',
+      checks: ['c1'],
+    });
+    harness.send({ type: 'checks.record', taskId, results: [checkResult('c1', 'fail', 'boom')] });
+    expect(harness.task(taskId).fixFor).toBe('checks');
+    finishFix(harness, taskId);
+    expect(harness.task(taskId)).toMatchObject({ stage: 'shipping', pushPending: true });
+  });
+});
+
+describe('a pre-push hook that rejects the push', () => {
+  test('goes to the agent with the output and the failures it names, never to a retry', () => {
+    const { harness, taskId } = approved();
+    failHook(harness, taskId);
+    const task = harness.task(taskId);
+    expect(task).toMatchObject({
+      stage: 'fixing',
+      stageReason: 'fixing what the pre-push hook found',
+      fixFor: 'hook',
+    });
+    expect(task.pushHookFailure?.signature).toBe('test/a.test.ts › adds');
+    expect(task.activity.find((entry) => entry.text === 'The pre-push hook rejected the push')?.detail).toBe(
+      'test/a.test.ts › adds'
+    );
+    const prompt = harness.activeRun(taskId).prompt ?? '';
+    expect(prompt).toContain("The repository's pre-push hook rejected the push");
+    expect(prompt).toContain('- test/a.test.ts › adds');
+    expect(prompt).toContain(`\`\`\`\n${HOOK_OUTPUT}\n\`\`\``);
+    expect(prompt).toContain('never the whole suite the hook runs');
+
+    finishFix(harness, taskId);
+    expect(harness.task(taskId)).toMatchObject({
+      stage: 'shipping',
+      stageReason: 'opening the pull request',
+    });
+  });
+
+  test('the same failure after a fix round opens a gate with the output; sending it again starts a round', () => {
+    const { harness, taskId } = approved();
+    failHook(harness, taskId);
+    finishFix(harness, taskId);
+    failHook(harness, taskId);
+    const gate = harness.openGate(taskId);
+    expect(gate).toMatchObject({
+      type: 'failure',
+      cause: 'push_hook',
+      title: 'The pre-push hook failed again',
+    });
+    expect(gate.body).toContain('- test/a.test.ts › adds');
+    expect(gate.body).toContain(`\`\`\`\n${HOOK_OUTPUT}\n\`\`\``);
+    expect(gate.body).toContain('Shinsa never pushes without the hook.');
+    expect(harness.task(taskId).stageReason).toBe('the pre-push hook failed again');
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+    expect(
+      harness.send({ type: 'pull_request.record_step', taskId, step: { kind: 'opening' } }).events
+    ).toEqual([]);
+
+    harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'approve', response: null });
+    expect(harness.task(taskId)).toMatchObject({ stage: 'fixing', fixFor: 'hook', fixRounds: 1 });
+    expect(harness.activeRun(taskId).prompt).toContain(HOOK_OUTPUT);
+
+    finishFix(harness, taskId);
+    failHook(harness, taskId);
+    harness.send({
+      type: 'gate.answer',
+      gateId: harness.openGate(taskId).id,
+      decision: 'reply',
+      response: 'Skip the flaky snapshot test',
+    });
+    expect(harness.activeRun(taskId).prompt).toContain(
+      'Guidance from the human: Skip the flaky snapshot test'
+    );
+  });
+
+  test('a different failure starts another round; output it cannot read counts as the same failure', () => {
+    const { harness, taskId } = approved();
+    failHook(harness, taskId);
+    finishFix(harness, taskId);
+    failHook(harness, taskId, ['test/b.test.ts › subtracts']);
+    expect(harness.task(taskId).stage).toBe('fixing');
+    finishFix(harness, taskId);
+    failHook(harness, taskId, null);
+    expect(harness.task(taskId).stage).toBe('fixing');
+    expect(harness.activeRun(taskId).prompt).not.toContain('The failures it names');
+    finishFix(harness, taskId);
+    failHook(harness, taskId, []);
+    expect(harness.openGate(taskId).cause).toBe('push_hook');
+  });
+
+  test('cancelling at the gate cancels the task; a push that gets through forgets the failure', () => {
+    const { harness, taskId } = approved();
+    failHook(harness, taskId);
+    finishFix(harness, taskId);
+    pushed(harness, taskId);
+    expect(harness.task(taskId).pushHookFailure).toBeNull();
+
+    const other = approved();
+    failHook(other.harness, other.taskId);
+    finishFix(other.harness, other.taskId);
+    failHook(other.harness, other.taskId);
+    other.harness.send({
+      type: 'gate.answer',
+      gateId: other.harness.openGate(other.taskId).id,
+      decision: 'reject',
+      response: null,
+    });
+    expect(other.harness.task(other.taskId).stage).toBe('cancelled');
   });
 });

@@ -1,6 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseAppFlavor } from '@shinsa/core';
 import { resolveStateVersion } from '../src/store/snapshot.ts';
 
 const engineDir = resolve(import.meta.dirname, '..');
@@ -8,6 +9,8 @@ const outDir = resolve(engineDir, 'dist/engine');
 const webDist = resolve(engineDir, '../web/dist');
 const version = Bun.env.SHINSA_VERSION?.replace(/^v/, '') || '0.0.0';
 const target = Bun.env.SHINSA_ENGINE_TARGET || 'bun-darwin-arm64';
+const flavor = parseAppFlavor(Bun.env.SHINSA_FLAVOR || 'stable');
+if (!flavor) throw new Error(`SHINSA_FLAVOR must be stable or canary, not "${Bun.env.SHINSA_FLAVOR}".`);
 
 function readCommit() {
   const result = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: engineDir });
@@ -48,6 +51,7 @@ mkdirSync(join(outDir, 'bin'), { recursive: true });
 await compile(join(engineDir, 'scripts/engine-main.ts'), 'shinsa', {
   'process.env.SHINSA_BUILD_VERSION': JSON.stringify(version),
   'process.env.SHINSA_BUILD_COMMIT': JSON.stringify(readCommit()),
+  'process.env.SHINSA_BUILD_FLAVOR': JSON.stringify(flavor),
   'process.env.SHINSA_BUILD_STATE_VERSION': JSON.stringify(stateVersion),
   'process.env.SHINSA_BUILD_SDK_VERSION': JSON.stringify(sdkPackage.version),
   'process.env.SHINSA_BUILD_SDK_CLAUDE_VERSION': JSON.stringify(sdkPackage.claudeCodeVersion),
@@ -56,4 +60,4 @@ await compile(join(engineDir, 'scripts/engine-main.ts'), 'shinsa', {
 cpSync(resolve(engineDir, 'plugin'), join(outDir, 'plugin'), { recursive: true });
 cpSync(webDist, join(outDir, 'web'), { recursive: true });
 
-process.stdout.write(`Shinsa ${version} engine in ${outDir}\n`);
+process.stdout.write(`Shinsa ${version} engine (${flavor}) in ${outDir}\n`);

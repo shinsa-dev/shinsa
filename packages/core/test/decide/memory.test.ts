@@ -124,7 +124,7 @@ describe('proposing a rule', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     buildAll(harness, taskId);
-    harness.send({ type: 'checks.record', taskId, results: [] });
+    harness.send({ type: 'checks.record', taskId, results: PASSING });
     expect(harness.activeRun(taskId).role).toBe('reviewer');
     expect(() => remember(harness, taskId, 'global', 'Keep plans short.')).toThrow();
     expect(entries(harness)).toEqual([]);

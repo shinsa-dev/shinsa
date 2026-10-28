@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { APP_FLAVORS } from '@shinsa/core';
 import {
   describeDuration,
   ENGINE_STOPPED,
@@ -270,8 +271,13 @@ describe('shinsa version', () => {
       },
       '/Applications/Shinsa.app/Contents/Resources/engine/bin/shinsa'
     );
-    expect(resolveCommandVersion(bundle)).toEqual({ version: '0.5.0', commit: 'b'.repeat(40) });
-    expect(resolveCommandVersion()).toEqual({ version: '0.0.0', commit: null });
+    expect(resolveCommandVersion(bundle)).toEqual({
+      version: '0.5.0',
+      commit: 'b'.repeat(40),
+      flavor: 'stable',
+    });
+    expect(resolveCommandVersion()).toEqual({ version: '0.0.0', commit: null, flavor: 'stable' });
+    expect(resolveCommandVersion(null, APP_FLAVORS.canary).flavor).toBe('canary');
     const { base } = startFakeEngine({ version: '0.4.2' });
     const behind = createEngineIo(base, null);
     await printVersion(behind.io, false, bundle);
@@ -284,7 +290,7 @@ describe('shinsa version', () => {
     const json = createEngineIo(base, null);
     await printVersion(json.io, true, bundle);
     expect(JSON.parse(json.out[0] ?? '')).toMatchObject({
-      command: { version: '0.5.0' },
+      command: { version: '0.5.0', flavor: 'stable' },
       engine: { version: '0.4.2', pid: 100 },
     });
   });

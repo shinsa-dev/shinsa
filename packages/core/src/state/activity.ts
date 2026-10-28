@@ -1,3 +1,4 @@
+import { isBlockingCheck } from '../domain/checks.ts';
 import type {
   FixReason,
   GateDecision,
@@ -5,8 +6,9 @@ import type {
   ReviewEscalationReason,
   TaskStage,
 } from '../domain/index.ts';
-import type { PullRequestWatchChange } from '../domain/pull-requests.ts';
-import type { ReportCheck, ReviewFinding } from '../report/types.ts';
+import type { PullRequestWatchChange, PushHookFailure, ShippingStepKind } from '../domain/pull-requests.ts';
+import type { EventOf } from '../events/index.ts';
+import type { CheckChange, CheckNote, ReportCheck, ReviewFinding } from '../report/types.ts';
 
 const STAGE_ACTIVITY: Partial<Record<TaskStage, string>> = {
   waiting_on_tasks: 'Waiting on another task',
@@ -32,14 +34,39 @@ const FIX_REASON_TEXT: Record<Exclude<FixReason, 'you'>, string> = {
   review: 'fixing what the agent review found',
   pull_request: 'fixing the pull request',
   conflict: 'resolving the conflicts GitButler left',
+  update: 'resolving conflicts with the base branch',
+  hook: 'fixing what the pre-push hook found',
 };
+
+const SHIPPING_STEP_TEXT: Record<ShippingStepKind, string> = {
+  updating: 'Updating the branch',
+  pushing: 'Pushing',
+  opening: 'Opening the pull request',
+};
+
+export function describeRetryDelay(retryAt: number, now: number) {
+  return `${Math.max(1, Math.round((retryAt - now) / 1000))}s`;
+}
+
+export function describePushRetry(event: EventOf<'pull_request.push_retrying'>) {
+  return {
+    text: `${SHIPPING_STEP_TEXT[event.step]} failed on attempt ${event.attempt} of ${event.attempts}, trying again in ${describeRetryDelay(event.retryAt, event.at)}`,
+    detail: event.detail,
+  };
+}
+
+export function describeHookFailure(failure: PushHookFailure) {
+  return {
+    text: 'The pre-push hook rejected the push',
+    detail: failure.failures && failure.failures.length > 0 ? failure.failures.join('\n') : null,
+  };
+}
 
 const DECISION_TEXT: Record<GateDecision, string> = {
   approve: 'Approved',
   revise: 'Asked for changes',
   reject: 'Rejected',
   reply: 'Answered',
-  waive: 'Started without checks',
 };
 
 export function describeStage(stage: TaskStage) {
@@ -61,17 +88,33 @@ export function describeDependencies(titles: string[]) {
 }
 
 export function describeChecks(results: ReportCheck[]) {
-  const failed = results.filter((check) => check.outcome === 'fail');
-  if (results.length === 0) return 'No checks are set up for this repository';
+  const failed = results.filter(isBlockingCheck);
   if (results.length === 1) return failed.length === 0 ? 'The check passed' : 'The check failed';
   if (failed.length === 0) return `All ${results.length} checks passed`;
   return `${failed.length} of ${results.length} checks failed`;
 }
 
+const NOTE_TEXT: Record<CheckNote, string> = {
+  passed_alone: 'passed when re-run alone',
+  fails_on_base: 'already failing on the base branch, so it does not block',
+};
+
 export function describeFailedChecks(results: ReportCheck[]) {
-  const failed = results.filter((check) => check.outcome === 'fail');
-  if (failed.length === 0) return null;
-  return failed.map((check) => `\`${check.name}\``).join(', ');
+  const lines = results.flatMap((check) => {
+    if (check.note) return [`${check.label}: ${NOTE_TEXT[check.note]}`];
+    return check.outcome === 'fail' ? [`${check.label}: \`${check.command}\` failed`] : [];
+  });
+  return lines.length === 0 ? null : lines.join('\n');
+}
+
+const CHANGE_VERB: Record<CheckChange['action'], string> = {
+  add: 'Added the check',
+  change: 'Changed the check',
+  remove: 'Removed the check',
+};
+
+export function describeCheckChange(change: CheckChange) {
+  return `${CHANGE_VERB[change.action]} “${change.check.label}”`;
 }
 
 export function describeFindings(findings: ReviewFinding[]) {

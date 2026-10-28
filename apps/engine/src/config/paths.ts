@@ -1,5 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { FlavorIdentity } from '@shinsa/core';
+import { FLAVOR } from '../instance/flavor.ts';
 
 export type Env = Record<string, string | undefined>;
 
@@ -15,7 +17,7 @@ export function resolveUserHome(env: Env) {
   return env.HOME || homedir();
 }
 
-export function resolveShinsaPaths(env: Env): ShinsaPaths {
+export function resolveShinsaPaths(env: Env, flavor: FlavorIdentity = FLAVOR): ShinsaPaths {
   if (env.SHINSA_HOME) {
     return {
       home: env.SHINSA_HOME,
@@ -31,7 +33,7 @@ export function resolveShinsaPaths(env: Env): ShinsaPaths {
     };
   }
   const user = resolveUserHome(env);
-  const home = join(env.XDG_CONFIG_HOME || join(user, '.config'), 'shinsa');
+  const home = join(env.XDG_CONFIG_HOME || join(user, '.config'), flavor.configDir);
   return {
     home,
     configPath: join(home, CONFIG_FILE),

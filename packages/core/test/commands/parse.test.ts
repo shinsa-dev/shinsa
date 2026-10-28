@@ -326,7 +326,7 @@ describe('parseUserCommand', () => {
       ],
       [
         { type: 'gate.answer', gateId: 'g1', decision: 'maybe' },
-        'decision must be one of approve, revise, reject, reply, waive.',
+        'decision must be one of approve, revise, reject, reply.',
       ],
     ];
     for (const [input, message] of refused) {
@@ -409,11 +409,13 @@ describe('parseUserCommand for the process commands', () => {
       type: 'settings.change',
       patch: { taskBudgetUsd: null },
     });
-    expect(parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { checksWaived: true } })).toEqual({
-      type: 'repo.update',
-      repoId: 'r',
-      patch: { checksWaived: true },
-    });
+    expect(parseUserCommand({ type: 'repo.update', repoId: 'r', patch: { workspace: 'worktrees' } })).toEqual(
+      {
+        type: 'repo.update',
+        repoId: 'r',
+        patch: { workspace: 'worktrees' },
+      }
+    );
     expect(
       parseUserCommand({
         type: 'repo.update',

@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DomainError, type Repo, type ShinsaCommand, type ShinsaEffect } from '@shinsa/core';
 import { log as logger } from '../../src/log/index.ts';
-import { Engine, MAX_EFFECT_ATTEMPTS, resolveBackoff } from '../../src/runtime/engine.ts';
+import { type EffectRetry, Engine, MAX_EFFECT_ATTEMPTS, resolveBackoff } from '../../src/runtime/engine.ts';
+import { EffectError } from '../../src/runtime/failures.ts';
 import { type CommandResult, runCommand } from '../../src/shell/index.ts';
 import { EventLog } from '../../src/store/index.ts';
 import { awaitEffect, until } from '../helpers/index.ts';
@@ -530,6 +531,87 @@ describe('engine lifecycle', () => {
       attempts: MAX_EFFECT_ATTEMPTS,
     });
     engine.stop();
+  });
+});
+
+describe('retries the effect reports', () => {
+  test('each retry is reported with its attempt, the attempts, when it runs and the error, then the effect runs again', async () => {
+    const log = new EventLog(createDatabasePath());
+    const engine = new Engine(log);
+    const retries: (Omit<EffectRetry, 'error'> & { key: string; error: string; attempt: number })[] = [];
+    const attempts: number[] = [];
+    engine.onEffect((effect, context) => {
+      if (effect.kind !== 'task.triage') return Promise.resolve();
+      attempts.push(context.attempt);
+      return context.attempt < 3 ? Promise.reject(new Error(`down ${context.attempt}`)) : Promise.resolve();
+    });
+    engine.onEffectRetry((_effect, retry, effectKey) => {
+      retries.push({ ...retry, key: effectKey, error: (retry.error as Error).message });
+      return Promise.resolve();
+    });
+    engine.start();
+    const before = Date.now();
+    await engine.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
+    const key = selectKey(log, 'task.triage');
+    await until('the third attempt', () => attempts.length === 3);
+    await awaitEffect(log, key);
+    expect(attempts).toEqual([1, 2, 3]);
+    expect(retries.map(({ attempt, attempts: of, error }) => [attempt, of, error])).toEqual([
+      [1, MAX_EFFECT_ATTEMPTS, 'down 1'],
+      [2, MAX_EFFECT_ATTEMPTS, 'down 2'],
+    ]);
+    expect(retries[0]?.key).toBe(key);
+    expect(retries[0]?.retryAt).toBeGreaterThanOrEqual(before + resolveBackoff(1));
+    engine.stop();
+  });
+
+  test('an error that says when to retry is retried then; one marked final fails at once', async () => {
+    const slow = new Engine(new EventLog(createDatabasePath()));
+    const retries: EffectRetry[] = [];
+    slow.onEffect(() =>
+      Promise.reject(new EffectError('slow', 'slow', { retryable: true, delayMs: 60_000 }))
+    );
+    slow.onEffectRetry((_effect, retry) => {
+      retries.push(retry);
+      return Promise.reject(new Error('report broke'));
+    });
+    const warn = spyOn(logger, 'warn');
+    try {
+      slow.start();
+      const before = Date.now();
+      await slow.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
+      await until('the retry to be reported', () => retries.length === 1);
+      expect(retries[0]?.retryAt).toBeGreaterThanOrEqual(before + 60_000);
+      await until('the warning', () =>
+        warn.mock.calls.some(([message]) => message === '[Engine] Could not report an effect retry')
+      );
+    } finally {
+      warn.mockRestore();
+    }
+    slow.stop();
+    await slow.settle();
+
+    const log = new EventLog(createDatabasePath());
+    const final = new Engine(log);
+    const exhausted: string[] = [];
+    final.onEffect(() =>
+      Promise.reject(new EffectError('refused', 'refused', { retryable: false, delayMs: null }))
+    );
+    final.onEffectRetry(() => Promise.reject(new Error('never retried')));
+    final.onEffectExhausted((effect, error) => {
+      exhausted.push(`${effect.kind}:${error}`);
+      return Promise.resolve();
+    });
+    final.start();
+    await final.dispatch({ type: 'task.create', request: 'Do it', repoId: null });
+    await awaitEffect(log, selectKey(log, 'task.triage'));
+    await final.settle();
+    expect(exhausted).toEqual(['task.triage:refused']);
+    expect(log.listEffectStatuses().find((row) => row.kind === 'task.triage')).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+    });
+    final.stop();
   });
 });
 

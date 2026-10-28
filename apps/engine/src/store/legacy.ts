@@ -58,10 +58,13 @@ const WALKTHROUGH_EVENT_TYPES = ['phase.completed', 'work.submitted', 'walkthrou
 
 const TESTING_LOG_VERSION = 3;
 
+const WEEKLY_READINGS_LOG_VERSION = 4;
+
 export function listLegacyEventTypes(version: number) {
   return [
     ...(version < 1 ? LEGACY_EVENT_TYPES : []),
     ...(version < TESTING_LOG_VERSION ? WALKTHROUGH_EVENT_TYPES : []),
+    ...(version < WEEKLY_READINGS_LOG_VERSION ? ['run.metered'] : []),
   ];
 }
 
@@ -140,6 +143,8 @@ function resolveEvent(event: Payload, stages: Map<string, string>): Payload {
       return resolveReport(event);
     case 'walkthrough.revised':
       return { ...event, walkthrough: resolveWalkthrough(event.walkthrough) };
+    case 'run.metered':
+      return withoutKeys(event, ['weeklyPercent']);
     default:
       return event;
   }

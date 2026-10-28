@@ -69,6 +69,10 @@ export function ReviewMark() {
   );
 }
 
+export function UpdatedMark({ text }: { text: string }) {
+  return <span className='shrink-0 text-2xs text-fg-2'>{text}</span>;
+}
+
 export function EvidenceFigure({
   view,
   viewer,
@@ -92,6 +96,7 @@ export function EvidenceFigure({
             <span className='flex min-w-0 items-center gap-1.5'>
               <span className='min-w-0 font-medium text-fg-4 text-xs'>{evidence.title}</span>
               {view.fromReview && <ReviewMark />}
+              {view.updated && <UpdatedMark text={view.updated} />}
             </span>
             {view.facts && <span className='text-2xs text-fg-2'>{view.facts}</span>}
           </>

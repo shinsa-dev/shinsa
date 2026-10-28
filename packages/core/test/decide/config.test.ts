@@ -8,9 +8,9 @@ import {
 } from '../../src/index.ts';
 import { createHarness, type Harness, registerRepo, verifySetup } from '../harness.ts';
 
-const MISSING_CHECKS: ConfigProblem = {
-  kind: 'check_commands',
-  detail: 'No check commands are set and package.json has none to run.',
+const MISSING_REPOSITORY: ConfigProblem = {
+  kind: 'repository',
+  detail: 'The folder /code/paywall-next does not exist.',
 };
 
 const MISSING_BRANCH: ConfigProblem = {
@@ -35,7 +35,7 @@ function triaged(mode: 'build' | 'ask' = 'build') {
   return { harness, taskId, repoId };
 }
 
-function answer(harness: Harness, taskId: string, decision: 'approve' | 'waive' | 'reject') {
+function answer(harness: Harness, taskId: string, decision: 'approve' | 'reject') {
   const gate = harness.openGate(taskId);
   harness.send({ type: 'gate.answer', gateId: gate.id, decision, response: null });
 }
@@ -52,7 +52,7 @@ describe('checking the setup before any agent starts', () => {
 
   test('a problem opens its own gate, with what is wrong and how to fix it', () => {
     const { harness, taskId } = triaged();
-    verifySetup(harness, taskId, [MISSING_BRANCH, MISSING_CHECKS]);
+    verifySetup(harness, taskId, [MISSING_BRANCH, MISSING_REPOSITORY]);
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({
       type: 'configuration',
@@ -65,7 +65,7 @@ describe('checking the setup before any agent starts', () => {
     expect(harness.task(taskId)).toMatchObject({
       stage: 'triage',
       stageReason: 'waiting for the setup to be fixed',
-      configProblems: [MISSING_BRANCH, MISSING_CHECKS],
+      configProblems: [MISSING_BRANCH, MISSING_REPOSITORY],
     });
     expect(harness.effectsOf('worktree.create')).toHaveLength(0);
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({ kind: 'failure', actor: 'shinsa' });
@@ -92,21 +92,13 @@ describe('checking the setup before any agent starts', () => {
     expect(listOpenGates(harness.state, taskId)).toHaveLength(1);
   });
 
-  test('missing checks can be skipped for the repository from then on', () => {
-    const { harness, taskId, repoId } = triaged();
-    verifySetup(harness, taskId, [MISSING_CHECKS]);
-    answer(harness, taskId, 'waive');
-    expect(harness.state.repos[repoId]?.checksWaived).toBe(true);
-    expect(harness.task(taskId).stageReason).toBe('verifying the setup');
-    verifySetup(harness, taskId, [MISSING_CHECKS]);
-    answer(harness, taskId, 'waive');
-    expect(harness.effectsOf('config.verify')).toHaveLength(3);
-  });
-
-  test('anything else cannot be skipped', () => {
+  test('nothing can be skipped: the gate takes only verify again or cancel', () => {
     const { harness, taskId } = triaged();
-    verifySetup(harness, taskId, [MISSING_BRANCH, MISSING_CHECKS]);
-    expect(() => answer(harness, taskId, 'waive')).toThrow('Only missing checks can be skipped.');
+    verifySetup(harness, taskId, [MISSING_BRANCH, MISSING_REPOSITORY]);
+    const gate = harness.openGate(taskId);
+    expect(() =>
+      harness.send({ type: 'gate.answer', gateId: gate.id, decision: 'reply', response: 'Go.' })
+    ).toThrow('Verify the setup again, or cancel the task.');
     expect(listOpenGates(harness.state, taskId)).toHaveLength(1);
   });
 
@@ -219,7 +211,6 @@ describe('a task without a repository', () => {
     expect(gate).toMatchObject({ type: 'configuration', title: 'No repository for this task' });
     expect(gate.body).toContain('Say in a message which repository the task works in');
     expect(harness.task(taskId).configProblems?.map((problem) => problem.kind)).toEqual(['no_repository']);
-    expect(() => answer(harness, taskId, 'waive')).toThrow('Only missing checks can be skipped.');
     harness.send({ type: 'task.message', taskId, text: 'It is paywall-next.' });
     expect(harness.effectsOf('config.verify')).toHaveLength(2);
     const again = harness.send({

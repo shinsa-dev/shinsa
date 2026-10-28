@@ -1,5 +1,14 @@
-import type { Run, RunRole, RunUsage, Task } from '../domain/index.ts';
+import type { RunRole, RunUsage, Task } from '../domain/index.ts';
 import type { ShinsaState } from '../state/project.ts';
+import { resolveUsageShares, type UsageShareState } from './rate.ts';
+
+export {
+  resolveMeterWindow,
+  resolveUsageRates,
+  resolveUsageShares,
+  USAGE_RATE_LIMITS,
+  type UsageRate,
+} from './rate.ts';
 
 export interface CostLine {
   runs: number;
@@ -11,6 +20,10 @@ export interface CostLine {
   knownUsd: number;
   unpricedRuns: number;
   weeklyPercent: number;
+  weeklyRuns: number;
+  weeklyTasks: number;
+  learningRuns: number;
+  estimatedPercent: number;
 }
 
 export interface TaskCost {
@@ -27,6 +40,7 @@ export interface TaskBudget {
   limit: number;
   spent: number;
   share: number;
+  estimated: boolean;
 }
 
 const ROLE_RANK: Record<RunRole, number> = {
@@ -50,23 +64,31 @@ function createLine(): CostLine {
     knownUsd: 0,
     unpricedRuns: 0,
     weeklyPercent: 0,
+    weeklyRuns: 0,
+    weeklyTasks: 0,
+    learningRuns: 0,
+    estimatedPercent: 0,
   };
 }
 
-function addRun(line: CostLine, run: Run): CostLine {
-  const usage = run.usage;
-  if (!usage) return { ...line, weeklyPercent: line.weeklyPercent + (run.weeklyPercent ?? 0) };
-  const tokens = usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens;
+function addRun(line: CostLine, usage: RunUsage, share: UsageShareState | undefined): CostLine {
+  const known = typeof share === 'object' && share.trusted ? share : null;
+  const estimate = typeof share === 'object' && !share.trusted ? share.percent : 0;
   return {
     runs: line.runs + 1,
     inputTokens: line.inputTokens + usage.inputTokens,
     outputTokens: line.outputTokens + usage.outputTokens,
     cacheReadTokens: line.cacheReadTokens + usage.cacheReadTokens,
     cacheWriteTokens: line.cacheWriteTokens + usage.cacheWriteTokens,
-    tokens: line.tokens + tokens,
+    tokens:
+      line.tokens + usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheWriteTokens,
     knownUsd: line.knownUsd + (usage.costUsd ?? 0),
     unpricedRuns: line.unpricedRuns + (usage.costUsd === null ? 1 : 0),
-    weeklyPercent: line.weeklyPercent + (run.weeklyPercent ?? 0),
+    weeklyPercent: line.weeklyPercent + (known?.percent ?? 0),
+    weeklyRuns: line.weeklyRuns + (known ? 1 : 0),
+    weeklyTasks: Math.max(line.weeklyTasks, known?.tasks ?? 0),
+    learningRuns: line.learningRuns + (share !== undefined && !known ? 1 : 0),
+    estimatedPercent: line.estimatedPercent + estimate,
   };
 }
 
@@ -98,18 +120,19 @@ export function resolveUsageDelta(previous: RunUsage | null, total: RunUsage): R
 }
 
 export function resolveTaskCost(state: ShinsaState, task: Task): TaskCost {
-  const runs = Object.values(state.runs).filter(
-    (run) => run.taskId === task.id && (run.usage || run.weeklyPercent !== undefined)
-  );
+  const shares = resolveUsageShares(state.runs);
+  const runs = Object.values(state.runs).filter((run) => run.taskId === task.id);
   const plan = task.plan?.document?.phases ?? [];
   const byRole = new Map<RunRole, CostLine>();
   const byPhase = new Map<number, CostLine>();
   let total = createLine();
   for (const run of runs) {
-    total = addRun(total, run);
-    byRole.set(run.role, addRun(byRole.get(run.role) ?? createLine(), run));
+    if (!run.usage) continue;
+    const share = shares.get(run.id);
+    total = addRun(total, run.usage, share);
+    byRole.set(run.role, addRun(byRole.get(run.role) ?? createLine(), run.usage, share));
     if (run.purpose === 'build' && typeof run.phaseIndex === 'number') {
-      byPhase.set(run.phaseIndex, addRun(byPhase.get(run.phaseIndex) ?? createLine(), run));
+      byPhase.set(run.phaseIndex, addRun(byPhase.get(run.phaseIndex) ?? createLine(), run.usage, share));
     }
   }
   return {
@@ -123,9 +146,15 @@ export function resolveTaskCost(state: ShinsaState, task: Task): TaskCost {
   };
 }
 
-function createBudget(unit: BudgetUnit, cap: number, acknowledged: number, spent: number): TaskBudget {
+function createBudget(
+  unit: BudgetUnit,
+  cap: number,
+  acknowledged: number,
+  spent: number,
+  estimated = false
+): TaskBudget {
   const limit = acknowledged + cap;
-  return { unit, cap, limit, spent, share: spent / limit };
+  return { unit, cap, limit, spent, share: spent / limit, estimated };
 }
 
 export function listTaskBudgets(state: ShinsaState, task: Task): TaskBudget[] {
@@ -135,7 +164,13 @@ export function listTaskBudgets(state: ShinsaState, task: Task): TaskBudget[] {
   const budgets: TaskBudget[] = [];
   if (taskUsageLimit != null) {
     budgets.push(
-      createBudget('percent', taskUsageLimit, task.usageAcknowledgedPercent ?? 0, total.weeklyPercent)
+      createBudget(
+        'percent',
+        taskUsageLimit,
+        task.usageAcknowledgedPercent ?? 0,
+        total.weeklyPercent + total.estimatedPercent,
+        total.learningRuns > 0
+      )
     );
   }
   if (taskBudgetUsd != null) {
@@ -162,8 +197,13 @@ export function describeUsd(value: number) {
 }
 
 export function describeWeeklyPercent(value: number) {
-  if (value > 0 && value < 1) return '<1%';
+  if (value > 0 && value < 0.1) return '<0.1%';
+  if (value < 10) return `${Number(value.toFixed(1))}%`;
   return `${Math.round(value)}%`;
+}
+
+export function resolveCostUnit(line: CostLine): BudgetUnit {
+  return line.weeklyRuns > 0 && line.weeklyRuns + line.unpricedRuns >= line.runs ? 'percent' : 'usd';
 }
 
 export function describeBudgetAmount(budget: Pick<TaskBudget, 'unit'>, value: number) {

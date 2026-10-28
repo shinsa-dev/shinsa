@@ -8,6 +8,7 @@ import {
   type ShinsaEvent,
   selectStackTarget,
   serializeTaskReferences,
+  validateEvidenceRemoval,
   validateFixHandOver,
   validatePhaseHandOver,
   validatePlanHandOver,
@@ -62,8 +63,8 @@ interface ToolCall {
 type CallDispatch = (command: ShinsaCommand, id?: string) => Promise<ShinsaEvent[]>;
 
 type CommitHandOver =
-  | Omit<CommandOf<'agent.complete_phase'>, 'treeHash'>
-  | Omit<CommandOf<'agent.complete_fix'>, 'treeHash'>;
+  | Omit<CommandOf<'agent.complete_phase'>, 'treeHash' | 'files'>
+  | Omit<CommandOf<'agent.complete_fix'>, 'treeHash' | 'files'>;
 
 type HandOverTool = 'propose_plan' | 'complete_phase' | 'complete_fix' | 'report_review';
 
@@ -91,6 +92,8 @@ export class ToolCalls {
         return this.#options.questions.requestSecret(runId, attemptId, input, signal, dispatch);
       case 'attach_evidence':
         return this.#attachEvidence(call, dispatch);
+      case 'remove_evidence':
+        return this.#removeEvidence(call, dispatch);
       case 'find_tasks':
         return Promise.resolve(
           serializeTaskReferences(this.#options.engine.state, readString(input, 'query') ?? '')
@@ -148,7 +151,7 @@ export class ToolCalls {
     try {
       if (commit.stackedOn) await dispatch({ type: 'task.stack', taskId: task.id, branch: commit.stackedOn });
       await this.#work.recordOverlaps(task.id, [], call.signal);
-      return await dispatch({ ...command, treeHash: commit.treeHash });
+      return await dispatch({ ...command, treeHash: commit.treeHash, files: commit.files });
     } catch (error) {
       await commit.undo();
       throw error;
@@ -203,6 +206,13 @@ export class ToolCalls {
     const evidence = storeEvidence(input, task.worktreePath, this.#options.evidence, folder);
     await dispatch({ ...evidence, runId, attemptId });
     return 'Attached.';
+  }
+
+  async #removeEvidence({ runId, attemptId, input }: ToolCall, dispatch: CallDispatch) {
+    const { items, reason } = assertProtocol(validateEvidenceRemoval(input));
+    this.#findCurrent(runId, attemptId);
+    await dispatch({ type: 'agent.remove_evidence', runId, attemptId, items, reason });
+    return 'Removed.';
   }
 
   #readTask(input: Record<string, unknown>) {
