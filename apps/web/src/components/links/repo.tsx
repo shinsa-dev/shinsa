@@ -1,5 +1,7 @@
 import type { Repo, ShinsaState } from '@shinsa/core';
-import { GlyphLabel, InAppLink, InlineMark, SMART_LINK } from '@/components/links/link.tsx';
+import { Icon, type IconName } from '@shinsa/ui/components/icon';
+import type * as React from 'react';
+import { GlyphLabel, INLINE_MARK, InAppLink, SMART_LINK } from '@/components/links/link.tsx';
 import {
   InfoAction,
   InfoHeader,
@@ -8,7 +10,7 @@ import {
   InfoSection,
 } from '@/components/overlays/info-popover.tsx';
 import { ProjectDot } from '@/components/status/project-dot.tsx';
-import { selectProject } from '@/lib/projects.ts';
+import { resolveProjectInk, resolveRepoIcon, selectProject } from '@/lib/projects.ts';
 import { navigate } from '@/router.ts';
 
 export function RepoDetails({ state, repo }: { state: ShinsaState; repo: Repo }) {
@@ -35,6 +37,31 @@ export function RepoDetails({ state, repo }: { state: ShinsaState; repo: Repo })
   );
 }
 
+export function RepoIcon({
+  state,
+  repo,
+  icon = resolveRepoIcon(repo),
+  className,
+}: {
+  state: ShinsaState;
+  repo: Repo;
+  icon?: IconName;
+  className?: string;
+}) {
+  const project = selectProject(state, repo.projectId);
+  return (
+    <Icon
+      size='sm'
+      name={icon}
+      data-project-ink={project?.color}
+      className={className}
+      style={
+        project ? ({ '--icon-color': resolveProjectInk(project.color) } as React.CSSProperties) : undefined
+      }
+    />
+  );
+}
+
 export function RepoChip({ state, repo }: { state: ShinsaState; repo: Repo }) {
   const path = `/tasks?q=${encodeURIComponent(repo.name)}`;
   return (
@@ -42,10 +69,7 @@ export function RepoChip({ state, repo }: { state: ShinsaState; repo: Repo }) {
       className='w-64'
       render={<InAppLink path={path} className={SMART_LINK} />}
       trigger={
-        <GlyphLabel
-          glyph={<InlineMark icon={repo.remote ? 'IconGithub' : 'IconFolder1'} />}
-          text={repo.name}
-        />
+        <GlyphLabel glyph={<RepoIcon state={state} repo={repo} className={INLINE_MARK} />} text={repo.name} />
       }
     >
       <RepoDetails state={state} repo={repo} />

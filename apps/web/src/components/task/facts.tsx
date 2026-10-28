@@ -18,7 +18,7 @@ import { useCopyText } from '@/components/controls/copy-button.tsx';
 import { BranchDetails } from '@/components/links/branch.tsx';
 import { InAppLink } from '@/components/links/link.tsx';
 import { PullRequestDetails } from '@/components/links/pull-request.tsx';
-import { RepoDetails } from '@/components/links/repo.tsx';
+import { RepoDetails, RepoIcon } from '@/components/links/repo.tsx';
 import { TaskPopoverRows } from '@/components/links/task.tsx';
 import { Hint } from '@/components/overlays/hint.tsx';
 import {
@@ -182,7 +182,7 @@ function RepoFact({ state, task }: { state: ShinsaState; task: Task }) {
     <FactPopover
       trigger={
         <>
-          <Icon size='sm' name='IconFolder1' />
+          <RepoIcon state={state} repo={repo} icon='IconFolder1' />
           <span className='truncate'>{repo.name}</span>
         </>
       }

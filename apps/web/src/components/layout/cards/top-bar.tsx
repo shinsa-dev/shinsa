@@ -11,6 +11,7 @@ import { ServicesMenu } from '@/components/services/menu.tsx';
 import { ConnectionStatus } from '@/components/status/connection-status.tsx';
 import { UpdateButton } from '@/components/status/update-button.tsx';
 import { resolveResetKey } from '@/lib/errors.ts';
+import { isQueueButtonShown } from '@/lib/queue.ts';
 import { useRoute, useRouteTaskId } from '@/router.ts';
 
 export function CardsTopBar({ state }: { state: ShinsaState }) {
@@ -29,7 +30,7 @@ export function CardsTopBar({ state }: { state: ShinsaState }) {
             </ErrorBoundary>
           </>
         )}
-        {route.name === 'task' && (
+        {isQueueButtonShown(route) && (
           <ErrorBoundary size='icon' resetKey={resetKey}>
             <QueueMenu state={state} activeTaskId={activeTaskId} />
           </ErrorBoundary>
