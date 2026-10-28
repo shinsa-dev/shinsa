@@ -11,8 +11,7 @@ import {
 import { Textarea } from '@shinsa/ui/components/textarea';
 import * as React from 'react';
 import { useShinsaState } from '@/lib/connection/selectors.ts';
-import { closeForkDialog, FORK_DESCRIPTION, FORK_TITLE, useForkDialog } from '@/lib/tasks/fork.ts';
-import { forkTask } from '@/lib/tasks/watchdogs.ts';
+import { closeForkDialog, FORK_DESCRIPTION, FORK_TITLE, forkTask, useForkDialog } from '@/lib/tasks/fork.ts';
 
 export function ForkDialog() {
   const taskId = useForkDialog();

@@ -1226,8 +1226,11 @@ stops when its window ends. The rules are core (`domain/watchdogs.ts`, `decide/w
   interval later; when that would fall past the window, the watchdog passes. An issue trips it: Shinsa files a new
   task forked from this one (`createdBy: {kind: 'watchdog'}`, its request the issue's title and request and which
   watchdog found it), so the fix starts from this conversation and goes through every gate. Either way the task rests
-  again (`merged`). A failed check run is recovered like any run, and Retry at `watching` starts the check again; a
-  message while it checks steers it.
+  again (`merged`). A check run that fails or ends without `report_watch` is recovered like any run (its nudged or
+  resumed run takes the check over, `watchdog.checking`), but where any other run would open a failure gate, the check
+  gives up instead (`missWatchCheck`, `watchdog.missed` with the reason): no gate, the task rests again, and the next
+  check is due an interval later, at the latest when the window ends, so one broken check never freezes the watchdog
+  or the task's other watchdogs. A message while it checks steers it, and Retry at `watching` starts it again.
 - **You stop them.** `watchdog.stop` (Stop on the Overview, `shinsa watchdogs stop`) ends one, and its check if it is
   running. Marking the task done or cancelling it stops every active one; an agent cannot mark a task done while one
   is watching or waits for a source (`task_open`). While one is active the merged task's status reads Watching and its

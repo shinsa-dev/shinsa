@@ -1,4 +1,6 @@
+import type { ShinsaState, Task } from '@shinsa/core';
 import { useSyncExternalStore } from 'react';
+import { sendCommandWithToast } from '@/lib/connection/commands.ts';
 import { createSignal } from '@/lib/signal.ts';
 
 export const FORK_TITLE = 'Fork into a new task';
@@ -22,4 +24,12 @@ export function closeForkDialog() {
 
 export function useForkDialog() {
   return useSyncExternalStore(forkSignal.subscribe, () => forking);
+}
+
+export function forkTask(state: ShinsaState, task: Task, request: string) {
+  const projectId = task.projectId ?? (task.repoId ? (state.repos[task.repoId]?.projectId ?? null) : null);
+  return sendCommandWithToast(
+    { type: 'task.create', request, repoId: task.repoId, projectId, forkOf: task.id },
+    `Forked ${task.handle ?? task.title} into a new task.`
+  );
 }

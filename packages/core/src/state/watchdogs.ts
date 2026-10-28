@@ -12,6 +12,7 @@ type WatchdogEvent = Extract<
       | 'watchdog.started'
       | 'watchdog.checking'
       | 'watchdog.deferred'
+      | 'watchdog.missed'
       | 'watchdog.checked'
       | 'watchdog.ended'
       | 'watch_source.written'
@@ -72,6 +73,17 @@ function applyChecked(state: ShinsaState, event: EventOf<'watchdog.checked'>) {
   });
 }
 
+function applyMissed(state: ShinsaState, event: EventOf<'watchdog.missed'>) {
+  const next = updateWatchdog(state, event, () => ({ runId: null, nextCheckAt: event.nextCheckAt }));
+  if (!next) return;
+  record(state, event.taskId, event.at, {
+    actor: 'shinsa',
+    kind: 'watchdog',
+    text: `Could not check the watchdog “${next.title}”; it tries again at its next check`,
+    detail: event.reason,
+  });
+}
+
 function applyEnded(state: ShinsaState, event: EventOf<'watchdog.ended'>) {
   const next = updateWatchdog(state, event, () => ({
     status: event.status,
@@ -119,6 +131,9 @@ export function applyWatchdogEvent(state: ShinsaState, event: WatchdogEvent) {
       return;
     case 'watchdog.deferred':
       updateWatchdog(state, event, () => ({ nextCheckAt: event.nextCheckAt }));
+      return;
+    case 'watchdog.missed':
+      applyMissed(state, event);
       return;
     case 'watchdog.checked':
       applyChecked(state, event);

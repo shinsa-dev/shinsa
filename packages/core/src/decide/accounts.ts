@@ -15,6 +15,7 @@ import { resolveUsageResumeNudge } from '../prompts/session.ts';
 import { listOpenGates } from '../state/queries.ts';
 import type { Decider } from './decider.ts';
 import { retryTask } from './retry.ts';
+import { moveWatchCheck } from './watchdogs.ts';
 
 const WAITING = 'waiting for the usage limit to reset';
 
@@ -83,7 +84,7 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
   const run = decider.state.runs[wait.runId] ?? null;
   decider.emit({ type: 'usage_wait.ended', taskId: task.id, waitId: wait.id, status: 'resumed' });
   const prompt = run?.rolePrompt ?? run?.prompt ?? '';
-  decider.startRun(decider.task(task.id), wait.role, `${prompt}${resolveUsageResumeNudge()}`, {
+  const next = decider.startRun(decider.task(task.id), wait.role, `${prompt}${resolveUsageResumeNudge()}`, {
     resumeFrom: decider.resumableFrom(run),
     purpose: run?.purpose ?? null,
     phaseIndex: wait.phaseIndex,
@@ -91,6 +92,7 @@ function resumeFromWait(decider: Decider, task: Task, wait: UsageWait) {
     usageWaitId: wait.id,
     account: run?.account ?? null,
   });
+  moveWatchCheck(decider, wait.runId, next.id);
 }
 
 function describeReset(wait: UsageWait) {

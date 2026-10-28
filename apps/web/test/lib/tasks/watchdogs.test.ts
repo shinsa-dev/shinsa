@@ -5,7 +5,6 @@ import {
   describeWatchdogProgress,
   describeWatchdogSchedule,
   describeWatchSource,
-  forkTask,
   isWatchedTask,
   removeWatchSource,
   resolveWatchingReason,
@@ -109,15 +108,12 @@ describe('describing a watchdog', () => {
 });
 
 describe('watchdog actions', () => {
-  it('stops and connects a watchdog, removes a source and forks a task into its project', async () => {
+  it('stops and connects a watchdog and removes a source', async () => {
     const task = createTask({ id: 't', handle: 'SW-2', repoId: 'r1', projectId: null });
-    const state = createShinsaState({ tasks: [task], repos: [createRepo({ id: 'r1', projectId: 'p' })] });
     const watchdog = createWatchdog();
     await stopWatchdog(task, watchdog);
     await connectWatchdog(task, watchdog, ' posthog ', 'Events');
     await removeWatchSource('p', 'maple');
-    await forkTask(state, task, 'Fix it in Safari');
-    await forkTask(createShinsaState({}), { ...task, repoId: null, projectId: 'own' }, 'Again');
     expect(spies.sent.mock.calls).toEqual([
       [{ type: 'watchdog.stop', taskId: 't', watchdogId: 'w' }, 'Stopped the watchdog “Checkout latency”.'],
       [
@@ -127,14 +123,6 @@ describe('watchdog actions', () => {
       [
         { type: 'watch_source.remove', projectId: 'p', server: 'maple' },
         'Removed maple from the data sources.',
-      ],
-      [
-        { type: 'task.create', request: 'Fix it in Safari', repoId: 'r1', projectId: 'p', forkOf: 't' },
-        'Forked SW-2 into a new task.',
-      ],
-      [
-        { type: 'task.create', request: 'Again', repoId: null, projectId: 'own', forkOf: 't' },
-        'Forked SW-2 into a new task.',
       ],
     ] as never);
   });

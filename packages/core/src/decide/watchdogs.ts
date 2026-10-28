@@ -216,6 +216,30 @@ export function reportWatch(decider: Decider, command: CommandOf<'agent.report_w
   settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'checked a watchdog');
 }
 
+export function moveWatchCheck(decider: Decider, from: string, to: string) {
+  const task = decider.task(decider.state.runs[to]?.taskId ?? '');
+  const watchdog = selectWatchingRun(task, from);
+  if (!watchdog) return;
+  decider.emit({ type: 'watchdog.checking', taskId: task.id, watchdogId: watchdog.id, runId: to });
+}
+
+export function missWatchCheck(decider: Decider, runId: string, reason: string) {
+  const task = decider.task(decider.state.runs[runId]?.taskId ?? '');
+  const watchdog = selectWatchingRun(task, runId);
+  if (!watchdog) return false;
+  const now = decider.context.now;
+  const next = now + watchdog.everyMinutes * MINUTE_MS;
+  decider.emit({
+    type: 'watchdog.missed',
+    taskId: task.id,
+    watchdogId: watchdog.id,
+    reason,
+    nextCheckAt: watchdog.endsAt === null ? next : Math.min(next, watchdog.endsAt),
+  });
+  settleTask(decider, task.id, resolveRestingStage(decider.task(task.id)), 'could not check a watchdog');
+  return true;
+}
+
 function endCheckRun(decider: Decider, task: Task, watchdog: Watchdog) {
   if (watchdog.runId === null || task.stage !== 'watching') return;
   settleTask(decider, task.id, resolveRestingStage(task), 'stopped a watchdog');

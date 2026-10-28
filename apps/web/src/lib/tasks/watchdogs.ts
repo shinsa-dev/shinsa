@@ -92,11 +92,3 @@ export function removeWatchSource(projectId: string, server: string) {
     `Removed ${server} from the data sources.`
   );
 }
-
-export function forkTask(state: ShinsaState, task: Task, request: string) {
-  const projectId = task.projectId ?? (task.repoId ? (state.repos[task.repoId]?.projectId ?? null) : null);
-  return sendCommandWithToast(
-    { type: 'task.create', request, repoId: task.repoId, projectId, forkOf: task.id },
-    `Forked ${task.handle ?? task.title} into a new task.`
-  );
-}

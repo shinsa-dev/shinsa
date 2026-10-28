@@ -3,8 +3,10 @@ import {
   type DomainError,
   HOUR_MS,
   listActiveRuns,
+  listOpenGates,
   MINUTE_MS,
   replayEventLog,
+  serializeTaskDetail,
   type Watchdog,
   type WatchdogSpec,
 } from '../../src/index.ts';
@@ -316,6 +318,87 @@ describe('a watch check', () => {
     expect(watchdog(harness, taskId).runId).toBe(again.id);
   });
 
+  test('a check that cannot run gives up without a failure gate, and the next slot still checks', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    const failed = harness.activeRun(taskId);
+    harness.send({
+      type: 'run.end',
+      runId: failed.id,
+      outcome: 'failed',
+      summary: 'The agent could not start.',
+      failure: {
+        class: 'setup_failed',
+        message: 'The agent could not start.',
+        code: 'spawn_failed',
+        retryable: null,
+        resetAt: null,
+      },
+    });
+    expect(listActiveRuns(harness.state, taskId)).toHaveLength(0);
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(harness.task(taskId).stage).toBe('merged');
+    expect(watchdog(harness, taskId)).toMatchObject({
+      status: 'watching',
+      runId: null,
+      nextCheckAt: harness.now + 6 * HOUR_MS,
+      checks: [],
+    });
+    expect(harness.task(taskId).activity.map((entry) => entry.text)).toContain(
+      'Could not check the watchdog “Checkout latency”; it tries again at its next check'
+    );
+    fire(harness, taskId);
+    expect(harness.activeRun(taskId).purpose).toBe('watch');
+  });
+
+  test('a check that keeps ending without a report gives up after its nudges, at most at the window’s end', () => {
+    const { harness, taskId } = mergeWith([{ ...LATENCY, everyHours: 30, forHours: 48 }]);
+    fire(harness, taskId);
+    const first = harness.activeRun(taskId);
+    harness.send({ type: 'run.end', runId: first.id, outcome: 'completed', summary: null });
+    const nudged = harness.activeRun(taskId);
+    expect(nudged.id).not.toBe(first.id);
+    expect(watchdog(harness, taskId).runId).toBe(nudged.id);
+    for (let attempt = 0; attempt < 10 && listActiveRuns(harness.state, taskId).length > 0; attempt += 1) {
+      harness.send({
+        type: 'run.end',
+        runId: harness.activeRun(taskId).id,
+        outcome: 'completed',
+        summary: null,
+      });
+    }
+    expect(listOpenGates(harness.state, taskId)).toHaveLength(0);
+    expect(watchdog(harness, taskId)).toMatchObject({
+      runId: null,
+      nextCheckAt: watchdog(harness, taskId).endsAt,
+    });
+    fire(harness, taskId);
+    expect(watchdog(harness, taskId).status).toBe('passed');
+  });
+
+  test('a check resumed after a usage limit reset can still report', () => {
+    const { harness, taskId } = mergeWith();
+    fire(harness, taskId);
+    harness.send({
+      type: 'run.end',
+      runId: harness.activeRun(taskId).id,
+      outcome: 'failed',
+      summary: 'Claude’s usage limit is reached.',
+      failure: {
+        class: 'usage_limit',
+        message: 'Claude’s usage limit is reached.',
+        code: 'rate_limit',
+        retryable: true,
+        resetAt: harness.now + HOUR_MS,
+        account: null,
+      },
+    });
+    harness.send({ type: 'usage_wait.resume_now', taskId });
+    expect(watchdog(harness, taskId).runId).toBe(harness.activeRun(taskId).id);
+    report(harness, taskId, true);
+    expect(watchdog(harness, taskId).checks).toHaveLength(1);
+  });
+
   test('a retry while watching with no check left goes back to rest', () => {
     const { harness, taskId } = mergeWith();
     fire(harness, taskId);
@@ -497,6 +580,19 @@ describe('watchdogs in the prompts', () => {
     expect(review).toContain('- Checkout latency: every 6 h for 48 h, from maple.');
     expect(review).toContain(
       '- Paywall events: every 12 h for 24 h, needs a source: Product analytics events'
+    );
+  });
+
+  test('read_task lists each watchdog with its source, state, checks and what it checks', () => {
+    const { harness, taskId } = mergeWith([LATENCY, EVENTS]);
+    fire(harness, taskId);
+    report(harness, taskId, true);
+    expect(serializeTaskDetail(harness.state, taskId)).toContain(
+      [
+        'Watchdogs on the merged change:',
+        `  1. Checkout latency from maple (watching, 1 check): ${LATENCY.check}`,
+        `  2. Paywall events (waits for a data source, 0 checks): ${EVENTS.check}`,
+      ].join('\n')
     );
   });
 
