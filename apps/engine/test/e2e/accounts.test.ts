@@ -230,7 +230,7 @@ describe('accounts end to end', () => {
     );
     const taskId = await world.createTask();
     const gate = await world.untilGate(taskId, 'sign_in');
-    expect(gate).toMatchObject({ title: 'Sign in to Claude as a@example.com', account: { id: only.id } });
+    expect(gate).toMatchObject({ title: 'Paused: a@example.com needs signing in', account: { id: only.id } });
     expect(world.agents.of('plan')).toHaveLength(1);
     expect(accounts.snapshot().accounts[0]?.signIn).toBe('signed_out');
     await accounts.startLogin(only.id);

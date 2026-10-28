@@ -94,7 +94,7 @@ export function OverviewSpecimens() {
             task={tasks.signIn}
             gate={{
               ...gates.signIn,
-              title: 'Sign in to Codex as christo@openai.example',
+              title: 'Paused: christo@openai.example needs signing in',
               body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
               provider: 'codex',
               account: null,

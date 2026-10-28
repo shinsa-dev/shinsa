@@ -126,8 +126,7 @@ export function changeUsageWait(decider: Decider, command: CommandOf<'usage_wait
 }
 
 function describeSignIn(provider: string, email: string | null) {
-  const label = resolveProviderLabel(provider);
-  return email ? `Sign in to ${label} as ${email}` : `Sign in to ${label}`;
+  return `Paused: ${email ?? resolveProviderLabel(provider)} needs signing in`;
 }
 
 function describeSignInReason(failure: RunFailure, provider: string) {

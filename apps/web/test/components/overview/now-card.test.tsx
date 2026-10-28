@@ -825,7 +825,7 @@ describe('NowCard about an account', () => {
       id: 'g',
       taskId: 't',
       type: 'sign_in',
-      title: 'Sign in to Claude as a@example.com',
+      title: 'Paused: a@example.com needs signing in',
       body: 'Claude says the login expired. Sign in again and the step starts again by itself.',
       account: { id: 'a', email: 'a@example.com' },
     });
@@ -834,7 +834,7 @@ describe('NowCard about an account', () => {
       renderCard(createTask({ id: 't' }), gate);
       expect(screen.getByText('Sign in needed')).toBeTruthy();
       expect(
-        screen.getByText((_, element) => element?.textContent === 'Sign in to Claude as a@example.com')
+        screen.getByText((_, element) => element?.textContent === 'Paused: a@example.com needs signing in')
       ).toBeTruthy();
       expect(screen.getByText(/the login expired/)).toBeTruthy();
       fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));

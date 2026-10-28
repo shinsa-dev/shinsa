@@ -12,7 +12,8 @@ import type { AccountLease, AccountLeaseRequest, RejectionVerdict, RunRejection 
 import { writeJsonFile } from '../config/file.ts';
 import { describeError, log } from '../log/index.ts';
 import type { UsageLimits } from './limits.ts';
-import type { AccountStore } from './store.ts';
+import { describeExpiredLogin, isTokenFailure, type LoginRenewal } from './renewal.ts';
+import type { AccountStore, StoredAccount } from './store.ts';
 
 export interface SignInState {
   signIn: AccountSignIn;
@@ -22,6 +23,7 @@ export interface SignInState {
 export interface AccountRotationOptions {
   store: AccountStore;
   limits: UsageLimits;
+  renewal: LoginRenewal;
   signIns: Map<string, SignInState>;
   state: () => ShinsaState;
   now: () => number;
@@ -148,11 +150,40 @@ export class AccountRotation {
     return { id: account.id, email: account.email, configDir: account.configDir, reason: picked.reason };
   }
 
-  recordRejection(rejection: RunRejection): RejectionVerdict {
+  recordRejection(rejection: RunRejection): RejectionVerdict | Promise<RejectionVerdict> {
     const { failure } = rejection;
     if (failure.class !== 'usage_limit' && failure.class !== 'auth') return { retry: false };
     const account = rejection.accountId ? this.#options.store.select(rejection.accountId) : null;
     if (!account) return { retry: false };
+    if (isTokenFailure(failure)) return this.#recordTokenFailure(rejection, account);
+    return this.#recordAccountFailure(rejection, account);
+  }
+
+  async #recordTokenFailure(rejection: RunRejection, account: StoredAccount): Promise<RejectionVerdict> {
+    const { renewal } = this.#options;
+    if (!rejection.renewed.includes(account.id) && (await renewal.renew(account))) {
+      log.info(
+        '[Accounts] Read a login again after Claude could not refresh it; trying the same account once more',
+        {
+          runId: rejection.runId,
+          accountId: account.id,
+        }
+      );
+      return { retry: true, renewed: account.id };
+    }
+    await renewal.recordFailed(account);
+    const verdict = this.#recordAccountFailure(rejection, account);
+    if (!verdict.failure) return verdict;
+    const others = rejection.tried.flatMap((id) => {
+      const other = id === account.id ? null : this.#options.store.select(id);
+      return other && this.#options.signIns.get(id)?.signIn === 'signed_out' ? [other] : [];
+    });
+    const message = describeExpiredLogin(account, others);
+    return { retry: false, failure: { ...verdict.failure, code: 'login_expired', message } };
+  }
+
+  #recordAccountFailure(rejection: RunRejection, account: StoredAccount): RejectionVerdict {
+    const { failure } = rejection;
     const now = this.#options.now();
     if (failure.class === 'usage_limit') this.#mark(account.id, { until: failure.resetAt, at: now });
     else this.#options.signIns.set(account.id, { signIn: 'signed_out', detail: failure.message });

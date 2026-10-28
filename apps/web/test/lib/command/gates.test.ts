@@ -302,14 +302,14 @@ describe('gate commands', () => {
       id: 'g',
       taskId: 't',
       type: 'sign_in',
-      title: 'Sign in to Claude as a@example.com',
+      title: 'Paused: a@example.com needs signing in',
       provider: 'claude',
       account: { id: 'a', email: 'a@example.com' },
     });
     const [signInCommand, retry] = commandsFor(task, gate);
     expect(signInCommand).toMatchObject({
       label: 'Sign in',
-      hint: 'Sign in to Claude as a@example.com',
+      hint: 'Paused: a@example.com needs signing in',
       icon: 'IconUserKey',
     });
     run(signInCommand);
@@ -329,7 +329,7 @@ describe('gate commands', () => {
       id: 'g',
       taskId: 't',
       type: 'sign_in',
-      title: 'Sign in to Codex as codex@example.com',
+      title: 'Paused: codex@example.com needs signing in',
       provider: 'codex',
       account: null,
     });

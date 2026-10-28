@@ -500,7 +500,7 @@ describe('the sign-in gate', () => {
     const gate = harness.openGate(taskId);
     expect(gate).toMatchObject({
       type: 'sign_in',
-      title: 'Sign in to Claude as work@example.com',
+      title: 'Paused: work@example.com needs signing in',
       provider: 'claude',
       account: WORK,
       runId: run.id,
@@ -511,7 +511,7 @@ describe('the sign-in gate', () => {
     expect(harness.task(taskId).activity.at(-1)).toMatchObject({
       actor: 'shinsa',
       kind: 'failure',
-      text: 'Sign in to Claude as work@example.com',
+      text: 'Paused: work@example.com needs signing in',
       runId: run.id,
       gateType: 'sign_in',
     });
@@ -539,7 +539,7 @@ describe('the sign-in gate', () => {
     const harness = createHarness();
     const taskId = createTask(harness);
     fail(harness, taskId, signedOut({ id: 'acc-x', email: null }));
-    expect(harness.openGate(taskId).title).toBe('Sign in to Claude');
+    expect(harness.openGate(taskId).title).toBe('Paused: Claude needs signing in');
   });
 
   test('signing the account in again retries every task waiting on it, and only those', () => {
@@ -633,7 +633,7 @@ describe('the sign-in gate', () => {
     });
     expect(harness.openGate(taskId)).toMatchObject({
       type: 'sign_in',
-      title: 'Sign in to Codex as me@example.com',
+      title: 'Paused: me@example.com needs signing in',
       body: 'Codex signed this account out, so the agent stopped. Signing in starts the step again.',
       provider: 'codex',
       account: null,
@@ -641,7 +641,7 @@ describe('the sign-in gate', () => {
     });
     const other = createTask(harness, { request: 'Other' });
     fail(harness, other, { ...signedOut(null), login: { provider: 'codex', email: null } });
-    expect(harness.openGate(other).title).toBe('Sign in to Codex');
+    expect(harness.openGate(other).title).toBe('Paused: Codex needs signing in');
   });
 
   test('a provider’s sign-in answers only that provider’s gates, and an account’s only its own', () => {

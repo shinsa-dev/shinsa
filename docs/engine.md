@@ -2361,7 +2361,9 @@ keeps beside its events (`store/event-log.ts`).
     `agent:<run>:<attempt>:delegate:<id>` and `agent:<run>:<attempt>:create_task:<id>`. A call that comes without a
     request id (only tests) gets a fresh id.
   - The accounts service: `login:<sign-in>:account.signed_in`, `account.removed:<account>`, and
-    `provider-login:<provider>:<gates>` for `provider.record_sign_in` when a provider's own sign-in is back. A secret pasted or declined at its
+    `provider-login:<provider>:<gates>` for `provider.record_sign_in` when a provider's own sign-in is back, and
+    `login-renewed:<account>:<fingerprint>` for `account.signed_in` when a login that needed signing in works again
+    outside Shinsa (the fingerprint is the first 16 hex of the sha256 of its refresh token). A secret pasted or declined at its
     gate: `secret:<gate>:saved`, `secret:<gate>:declined`. A repository added to a project (`POST
     /api/projects/<id>/repos` or `/folders`, or an agent's tool): `repo:<path>:<seq>` (the log position, so
     registering a path again after `repo.remove` is a new command); the project change it makes gets a fresh id.
@@ -3395,7 +3397,7 @@ accounts snapshot as `providers` (refreshed with the accounts, a failed read log
 Agent usage shows it under the Claude accounts with the sign-in command, and onboarding's tools check lists codex
 and its sign-in as optional. A Codex run Codex signs out stops at a Sign in gate like a Claude one: the failure
 arrives as `RunFailure.login` (`{ provider: 'codex', email }`, the email the usage reading found, no account), the gate
-names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Sign in to Codex as ‹email›", and
+names the provider (`Gate.provider: 'codex'`, `Gate.account: null`), its title "Paused: ‹email› needs signing in", and
 every sign-in check that finds Codex signed in again (the 5-minute refresh, or Check the Codex sign-in again in
 Settings, on the card or in ⌘K) sends `provider.record_sign_in { provider: 'codex' }` under
 `provider-login:codex:<gates>`, which answers every open Sign in gate of that provider and retries those tasks. The
@@ -3506,7 +3508,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   `account_switched` notice.
 - **Rotation on a rejection** (`accounts/rotation.ts`). A usage limit marks the account spent until its reset (15
   minutes from the rejection when the reset is unknown; the snapshot shows that guess as `spentUntil` too); a
-  signed-out account is marked signed out. The spent marks are kept in `data/account-marks.json` (written on every
+  signed-out account is marked signed out (a dead token is read again first: A login Claude could not refresh,
+  below). The spent marks are kept in `data/account-marks.json` (written on every
   mark and every sign-in that clears one; read at start without the marks that have run out, and an unreadable file
   is logged and starts empty), so a restart still skips a spent account. An unbound run then retries the same turn on
   another usable account, one try per account and three accounts at most per execution, counted from the rejection's
@@ -3535,7 +3538,8 @@ Agent usage glance in the top bar, which shows every connected provider (`docs/d
   wait under a new id, so a resume already on its way does nothing; `usage_wait.resume_now`, a retry, a message,
   cancelling or any new step end the wait.
 - **The Sign in gate.** An `auth` failure with a known account opens a `sign_in` gate naming its provider
-  (`Gate.provider`, `claude`) and the account (`Gate.account`), "Sign in to Claude as ‹email›". Its body says what stopped (the classifier's reason when it is
+  (`Gate.provider`, `claude`) and the account (`Gate.account`), titled "Paused: ‹email› needs signing in" (the
+  provider's name, "Paused: Claude needs signing in", when the email is not known), one status for the one cause. Its body says what stopped (the classifier's reason when it is
   more than signed out: on hold, verification, billing) and that signing in starts the step again; its activity
   entry is Shinsa's, like a failure gate's. It is answered like a failure gate (approve retries anyway, `reply`
   retries with your words as guidance, reject cancels; a message is a `reply`), only by you, and `account.signed_in` (a

@@ -439,7 +439,7 @@ export function createOverviewScene(now: number) {
       id: 'sign-in-gate',
       taskId: 'sign-in',
       type: 'sign_in',
-      title: 'Sign in to Claude as christo@example.com',
+      title: 'Paused: christo@example.com needs signing in',
       body: 'Claude signed this account out, so the agent stopped. Signing in starts the step again.',
       provider: 'claude',
       account: { id: 'side', email: 'christo@example.com' },

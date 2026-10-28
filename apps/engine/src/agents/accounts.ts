@@ -17,12 +17,14 @@ export interface RunRejection {
   attemptId: string;
   accountId: string | null;
   tried: string[];
+  renewed: string[];
   failure: RunFailure;
 }
 
 export interface RejectionVerdict {
   retry: boolean;
   failure?: RunFailure;
+  renewed?: string;
 }
 
 export type RejectionHandler = (rejection: RunRejection) => Promise<RejectionVerdict> | RejectionVerdict;
@@ -86,7 +88,7 @@ export class AccountLeasing {
     this.#transcripts = transcripts;
   }
 
-  async leaseAttempt(run: Run, exclude: string[]) {
+  async leaseAttempt(run: Run, exclude: string[], renewed: RunAccount | null = null) {
     if (!this.#broker) return null;
     const state = this.#state();
     const previous = selectPreviousAccount(state, run.taskId);
@@ -94,7 +96,7 @@ export class AccountLeasing {
       runId: run.id,
       taskId: run.taskId,
       model: run.model,
-      bound: run.account ?? state.tasks[run.taskId]?.account ?? null,
+      bound: renewed ?? run.account ?? state.tasks[run.taskId]?.account ?? null,
       previous,
       exclude,
     });

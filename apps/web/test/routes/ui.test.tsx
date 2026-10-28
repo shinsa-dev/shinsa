@@ -80,7 +80,7 @@ describe('the /ui gallery', () => {
     }
     expect(overview.getByRole('button', { name: 'Run the operation' })).toBeTruthy();
     expect(document.getElementById('shinsa-overview')?.textContent).toContain(
-      'Sign in to Claude as christo@example.com'
+      'Paused: christo@example.com needs signing in'
     );
     expect(overview.getByRole('button', { name: 'Allow another 10%' })).toBeTruthy();
     expect(overview.getAllByText(/^No output for/)).toHaveLength(2);

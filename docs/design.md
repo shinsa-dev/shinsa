@@ -1433,8 +1433,13 @@ Only these, and they win over anything below:
       `resolveProviderIcon` Settings → Agents uses for its model groups), rendered by `AccountName`
       (`components/accounts/account-name.tsx`: the icon at `size='sm'`, then the label as a `Truncate`).
     - **Sign in needed** (`sign-in-card.tsx`): a `sign_in` gate is orange with `IconUserKey`, in the
-      Paused group; the card shows the gate's title and body, Sign in (primary) opens the dialog for
-      that account, and Retry anyway / Cancel task are the footer's quiet links. The card reads the gate's provider
+      Paused group; the card shows the gate's title ("Paused: a@b.com needs signing in", the one status for that
+      cause) and body, Sign in (primary) opens the dialog for
+      that account, and Retry anyway / Cancel task are the footer's quiet links. For a login Claude could not
+      refresh the body names the account, the others that need signing in too, and what to run, from where the login
+      comes from ("…or sign in to Claude Code as a@b.com and run `cswap add`: Shinsa takes the new login from
+      claude-swap.", "…or run `claude auth login` in a terminal."), and the gate closes by itself once that login
+      works again (`docs/engine.md` → A login Claude could not refresh). The card reads the gate's provider
       (`resolveSignInProvider(gate)` over `gate.provider`: `claude` is a Claude account, anything else a provider with a
       sign-in of its own). A gate for such a provider (Codex) has no Sign in: Shinsa never signs Codex in. Its
       primary is "Check the Codex sign-in again" (it refreshes the sign-ins, and one that finds Codex signed in
