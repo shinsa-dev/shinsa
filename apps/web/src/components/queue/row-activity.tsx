@@ -25,17 +25,17 @@ function LiveActivity({ run, fallback }: { run: Run; fallback: string }) {
 }
 
 export function RowActivity({ state, task }: { state: ShinsaState; task: Task }) {
+  const [run] = selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
   if (resolveShapeState(task) !== 'settled') {
     return (
-      <span className='flex items-center gap-1.5'>
+      <span className='flex min-w-0 items-center gap-1.5'>
         <Spinner size='sm' />
-        {SHAPING_LABEL}
+        {run ? <LiveActivity run={run} fallback={SHAPING_LABEL} /> : SHAPING_LABEL}
       </span>
     );
   }
   const steps = resolveSteps(resolveTaskProgress(task));
   const current = selectCurrentStep(steps);
-  const [run] = selectLeadGate(state, task) ? [] : listActiveRuns(state, task.id);
   const step = current ? describeStep(current) : '';
   return (
     <span className='flex min-w-0 items-center gap-2'>

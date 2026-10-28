@@ -326,4 +326,27 @@ describe('a row’s activity line', () => {
     });
     expect(row(/Shape me/).textContent).toContain('Working out the steps');
   });
+
+  it('shows the planning agent’s latest action while it can still change the steps', () => {
+    renderQueue({
+      state: createShinsaState({
+        tasks: [
+          createTask({
+            id: 'planning',
+            title: 'Plan the export',
+            stage: 'planning',
+            auto: { shape: true, start: false, priority: false },
+            pipeline: ['plan', 'build'],
+          }),
+        ],
+        runs: [createRun({ id: 'run-plan', taskId: 'planning', purpose: 'plan' })],
+      }),
+    });
+    expect(row(/Plan the export/).textContent).toContain('Working out the steps');
+    pushTranscript('run-plan', [
+      createCallEntry('call-1', { kind: 'command', action: 'run', command: 'rg foo', description: null }),
+    ]);
+    expect(row(/Plan the export/).textContent).toContain('Running rg foo');
+    expect(row(/Plan the export/).textContent).not.toContain('Working out the steps');
+  });
 });

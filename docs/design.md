@@ -239,8 +239,9 @@ Only these, and they win over anything below:
    decision is open, that run's latest action in the present tense, shimmering as the work card's live
    feed does and still when the run is parked (`resolveLatestActivity` over the run's transcript, which
    the row follows only while it is mounted); otherwise the current step and its count ("Checks 2/5",
-   `describeStep`), so an open question never repeats the meta line. While triage still shapes the task
-   the line is a spinner and "Working out the steps". The guide above is a short summary of
+   `describeStep`), so an open question never repeats the meta line. While the steps can still change
+   (triage, or the agent planning before its plan) the line is a spinner, then the planning agent's
+   latest action or "Working out the steps". The guide above is a short summary of
    these sections, never a replacement: a task the guide names is still listed in its section below.
    **Home's order** reads what needs you, what is moving, what just happened, then the long tail:
    the greeting, the guide and the composer, then Needs you, In progress, Recently finished
