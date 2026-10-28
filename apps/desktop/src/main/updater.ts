@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { app, dialog } from 'electron';
+import { app, dialog, autoUpdater as nativeUpdater } from 'electron';
 import electronUpdater from 'electron-updater';
 import type { UpdateChannel } from '../lib/bridge.ts';
 import { APP_ID } from '../lib/engine.ts';
@@ -44,10 +44,11 @@ export class Updater {
   #download: Download | null = null;
   #ask = false;
 
-  constructor(changed: () => void, open: () => void) {
+  constructor(changed: () => void, open: () => void, markQuitting: () => void) {
     this.#changed = changed;
     this.#open = open;
     if (!this.#supported) return;
+    nativeUpdater.on('before-quit-for-update', markQuitting);
     this.#applyOptions();
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = true;

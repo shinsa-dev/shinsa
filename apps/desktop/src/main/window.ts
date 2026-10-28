@@ -10,6 +10,7 @@ import {
   parseEngineAction,
 } from '../lib/engine.ts';
 import { isAppUrl, type Navigation, resolveHistoryStep, resolveNavigation } from '../lib/navigation.ts';
+import { resolveCloseAction } from '../lib/window-close.ts';
 import { readPrefs, writePrefs } from './prefs.ts';
 
 type Page = 'none' | 'app' | 'waiting';
@@ -72,9 +73,10 @@ export class MainWindow {
     win.once('ready-to-show', () => win.show());
     win.on('close', (event) => {
       writePrefs({ windowBounds: win.getNormalBounds() });
-      if (this.#quitting) return;
+      const action = resolveCloseAction({ quitting: this.#quitting, fullScreen: win.isFullScreen() });
+      if (action === 'close') return;
       event.preventDefault();
-      if (!win.isFullScreen()) {
+      if (action === 'hide') {
         win.hide();
         return;
       }

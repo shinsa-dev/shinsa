@@ -94,7 +94,11 @@ async function start() {
     reload: () => main?.reload(),
     restartEngine: () => void restartEngine(),
   };
-  updater = new Updater(publishUpdate, () => main?.show());
+  updater = new Updater(
+    publishUpdate,
+    () => main?.show(),
+    () => main?.markQuitting()
+  );
   refreshMenu();
   updater.start();
   void syncCommandLine();
