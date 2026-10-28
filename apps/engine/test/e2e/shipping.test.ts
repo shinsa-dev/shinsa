@@ -152,3 +152,43 @@ describe('a remote that cannot be reached', () => {
     expect(status).toMatchObject({ status: 'failed', attempts: 5 });
   });
 });
+
+describe('a new pull request whose CI has not started yet', () => {
+  test('waits for CI instead of opening the merge gate and taking it back, then merges the head you approved', async () => {
+    const w = await open();
+    w.github.configure({ defaultChecks: 'none', workflows: { 'test.yml': 'on: pull_request\n' } });
+    const taskId = await w.createTask();
+    await approveReview(w, taskId);
+    await w.until('the pull request to open', () => w.task(taskId).pullRequest !== null);
+    w.github.update(1, { mergeable: 'UNKNOWN' });
+    await w.sync(taskId);
+    expect(w.task(taskId)).toMatchObject({ stage: 'shipping', stageReason: 'waiting for CI' });
+    w.github.update(1, { mergeable: 'MERGEABLE' });
+    await w.sync(taskId);
+    expect(w.task(taskId)).toMatchObject({ stage: 'shipping', stageReason: 'waiting for CI' });
+    w.github.update(1, { checks: 'pending' });
+    await w.sync(taskId);
+    expect(w.task(taskId)).toMatchObject({ stage: 'shipping', stageReason: 'waiting for CI' });
+    const mergeGates = () =>
+      Object.values(w.state.gates).filter((entry) => entry.taskId === taskId && entry.type === 'merge');
+    expect(mergeGates()).toEqual([]);
+
+    w.github.update(1, { checks: 'passing' });
+    await w.sync(taskId);
+    const gate = await w.untilGate(taskId, 'merge');
+    const head = (await git(w.origin, 'rev-parse', w.task(taskId).branch ?? '')).trim();
+    expect(gate.commit).toBe(head);
+    expect(mergeGates()).toHaveLength(1);
+    const stages = w
+      .task(taskId)
+      .activity.filter((entry) => entry.kind === 'stage')
+      .map((entry) => entry.text);
+    expect(stages.filter((text) => text === 'Opening the pull request')).toHaveLength(1);
+    expect(stages.at(-1)).toBe('Ready to merge');
+
+    await w.answer(gate, 'approve');
+    await w.untilStage(taskId, 'merged');
+    const merge = w.github.calls.find((call) => call[0] === 'pr' && call[1] === 'merge');
+    expect(merge?.slice(-2)).toEqual(['--match-head-commit', head]);
+  });
+});

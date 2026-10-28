@@ -434,6 +434,7 @@ interface GitHubState {
   defaultChecks: FakePullRequest['checks'];
   pulls: FakePullRequest[];
   calls: string[][];
+  workflows?: Record<string, string>;
 }
 
 export class FakeGitHub {
@@ -459,6 +460,10 @@ export class FakeGitHub {
 
   get calls() {
     return this.#read().calls;
+  }
+
+  configure(patch: Partial<Pick<GitHubState, 'defaultChecks' | 'workflows'>>) {
+    this.#write({ ...this.#read(), ...patch });
   }
 
   update(number: number, patch: Partial<FakePullRequest>) {

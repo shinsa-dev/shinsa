@@ -4,12 +4,14 @@ import {
   resolvePullRequestSignature,
   trimWatchChanges,
 } from '../../src/decide/watch.ts';
-import type { CiRun, PullRequest, PullRequestRemark, PullRequestWatch } from '../../src/index.ts';
+import type { CiRun, PullRequest, PullRequestRemark, PullRequestWatch, Task } from '../../src/index.ts';
 import {
+  CI_GRACE_MS,
   createPullRequestWatch,
   evaluatePullRequestWatch,
   isSamePullRequest,
   isSamePullRequestWatch,
+  resolvePullRequestCi,
 } from '../../src/index.ts';
 import { pullRequest } from '../harness.ts';
 
@@ -48,6 +50,61 @@ const remark = (login: string, createdAt: string, body = 'Please rename this.'):
 });
 
 const VIEWER = 'agent-user';
+
+const createTaskLike = (pushedAt: number | null) => ({ pushedAt }) as Task;
+
+describe('whether no checks means no CI', () => {
+  const none = detail({ checks: 'none', checkRuns: [] });
+  const at = (repo: 'none' | 'workflows' | 'required' | 'unknown', now: number) => ({
+    repo,
+    since: 1_000,
+    now,
+  });
+
+  test('a repository without CI has none at once; one with workflows only after the grace window', () => {
+    expect(evaluatePullRequestWatch(watch(), none, [], VIEWER, at('none', 1_000)).next.ciAbsent).toBe(true);
+    const early = evaluatePullRequestWatch(
+      watch(),
+      none,
+      [],
+      VIEWER,
+      at('workflows', 1_000 + CI_GRACE_MS - 1)
+    );
+    expect(early.next.ciAbsent).toBe(false);
+    expect(isSamePullRequestWatch(early.next, watch({ headSha: 'aaaaaaaaaa' }))).toBe(true);
+    const late = evaluatePullRequestWatch(watch(), none, [], VIEWER, at('unknown', 1_000 + CI_GRACE_MS));
+    expect(late.next.ciAbsent).toBe(true);
+    expect(late.changes).toEqual([]);
+  });
+
+  test('required checks, a read without the repository, or checks on the head never count as no CI', () => {
+    const later = 1_000 + CI_GRACE_MS * 10;
+    expect(evaluatePullRequestWatch(watch(), none, [], VIEWER, at('required', later)).next.ciAbsent).toBe(
+      false
+    );
+    expect(evaluatePullRequestWatch(watch(), none, [], VIEWER).next.ciAbsent).toBe(false);
+    expect(evaluatePullRequestWatch(watch(), detail(), [], VIEWER, at('none', later)).next.ciAbsent).toBe(
+      false
+    );
+  });
+
+  test('once decided it holds for the head, and a new head decides again', () => {
+    const decided = watch({ headSha: 'aaaaaaaaaa', ciAbsent: true });
+    expect(evaluatePullRequestWatch(decided, none, [], VIEWER).next.ciAbsent).toBe(true);
+    const moved = detail({ checks: 'none', checkRuns: [], headSha: 'bbbbbbbbbb' });
+    expect(evaluatePullRequestWatch(decided, moved, [], VIEWER).next.ciAbsent).toBe(false);
+  });
+
+  test('the window starts at the task’s last push, else when the watch started', () => {
+    const started = createPullRequestWatch(7);
+    expect(resolvePullRequestCi(createTaskLike(null), started, 'workflows', 9)).toEqual({
+      repo: 'workflows',
+      since: 7,
+      now: 9,
+    });
+    expect(resolvePullRequestCi(createTaskLike(5), started, 'none', 9).since).toBe(5);
+  });
+});
 
 describe('evaluatePullRequestWatch', () => {
   test('reports each failure at once, even while another check never finishes', () => {
@@ -261,6 +318,7 @@ describe('comparing watches and pull requests', () => {
       { conflicting: true },
       { wakes: 1 },
       { stopped: 'unreadable' as const },
+      { ciAbsent: true },
     ]) {
       expect(isSamePullRequestWatch(base, { ...base, ...patch })).toBe(false);
     }
