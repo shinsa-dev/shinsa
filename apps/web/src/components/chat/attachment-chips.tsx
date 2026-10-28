@@ -3,7 +3,7 @@ import { Spinner } from '@shinsa/ui/components/spinner';
 import { cn } from '@shinsa/ui/lib/utils';
 import * as React from 'react';
 import { FileCard } from '@/components/chat/file-card.tsx';
-import { INSET } from '@/components/layout/surface/card.ts';
+import { ATTACHMENT_CORNER, INSET } from '@/components/layout/surface/card.ts';
 import { Hint } from '@/components/overlays/hint.tsx';
 import type { Attachments } from '@/hooks/use-attachments.ts';
 import type { AttachmentDraft } from '@/lib/chat/attachment-drafts.ts';
@@ -27,7 +27,7 @@ function DraftChip({ draft, onRemove }: { draft: AttachmentDraft; onRemove: () =
     return (
       <li className='relative'>
         <Hint label={draft.name}>
-          <span className={cn(INSET, 'relative block size-14 overflow-hidden bg-bg-a1')}>
+          <span className={cn(INSET, ATTACHMENT_CORNER, 'relative block size-14 overflow-hidden bg-bg-a1')}>
             <img src={draft.preview} alt={draft.name} className='size-full object-cover' />
             {uploading && (
               <span className='absolute inset-0 grid place-items-center bg-background/60'>

@@ -3,19 +3,24 @@ import { Spinner } from '@shinsa/ui/components/spinner';
 import { Truncate } from '@shinsa/ui/components/truncate';
 import { cn } from '@shinsa/ui/lib/utils';
 import type * as React from 'react';
-import { CARD, INSET } from '@/components/layout/surface/card.ts';
+import { ATTACHMENT_CORNER, ATTACHMENT_TILE_CORNER, CARD, INSET } from '@/components/layout/surface/card.ts';
 import { describeAttachment, resolveFileGlyph } from '@/lib/chat/attachments.ts';
 
 const FILE_CARD = cn(
   CARD,
-  'group relative flex h-14 w-60 min-w-0 max-w-full items-center gap-3 rounded-3xl ps-2 pe-3'
+  ATTACHMENT_CORNER,
+  'group relative flex h-14 w-60 min-w-0 max-w-full items-center gap-3 ps-1 pe-3'
 );
 
 function FileTile({ name, mimeType, busy }: { name: string; mimeType: string | null; busy: boolean }) {
   return (
     <span
       aria-hidden
-      className={cn(INSET, 'file-icons-muted grid size-10 shrink-0 place-items-center bg-bg-a1 text-fg-3')}
+      className={cn(
+        INSET,
+        ATTACHMENT_TILE_CORNER,
+        'file-icons-muted grid size-12 shrink-0 place-items-center bg-bg-a1 text-fg-3'
+      )}
     >
       {busy ? <Spinner size='md' /> : <Icon size='lg' name={resolveFileGlyph({ name, mimeType })} />}
     </span>

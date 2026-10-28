@@ -2,6 +2,7 @@ import { type ChatAttachment, splitMessageAttachments } from '@shinsa/core';
 import { cn } from '@shinsa/ui/lib/utils';
 import { FileCard } from '@/components/chat/file-card.tsx';
 import { ImageStrip } from '@/components/chat/image-strip.tsx';
+import { ATTACHMENT_CORNER } from '@/components/layout/surface/card.ts';
 import { type SettlingPhase, useSettling } from '@/hooks/use-settling.ts';
 import { canOpenAttachment, splitAttachments } from '@/lib/chat/attachments.ts';
 import type { HumanMessage } from '@/lib/chat/timeline.ts';
@@ -31,6 +32,7 @@ function Attachments({ attachments }: { attachments: ChatAttachment[] }) {
         <ImageStrip
           images={images.map((attachment) => ({ src: attachment.url, caption: attachment.name }))}
           size='lg'
+          corner={ATTACHMENT_CORNER}
           className='max-w-4/5 justify-end'
         />
       )}
