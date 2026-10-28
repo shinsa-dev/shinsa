@@ -1384,12 +1384,13 @@ Only these, and they win over anything below:
       quiet context. A link inside it turns `fg-4` on hover.
     - **The usage menu, Agent usage** (`usage-menu.tsx`, `aria-label` "Agent usage"): an `sm` secondary button with
       `IconGauge` and the figure of what the next run uses, in the usage tone from 75%: when the agent runs on a
-      provider with a reading of its own (Codex) its 5-hour window, otherwise the Claude account picked by the same
+      provider with a reading of its own (Codex) its glance window, otherwise the Claude account picked by the same
       core picker the server leases with (`selectNextAccount` over `pickAccount`, `docs/engine.md` → Accounts and
-      usage limits) and its 5-hour window (`resolveUsageGlance`, `selectGlanceRow`; the fullest window that applies
-      to the agent's model only when there is no 5-hour one). A weekly window that applies to the agent's model
-      and is at 100% takes the 5-hour one's place, so a spent account never reads low while it is blocked; otherwise
-      the weekly windows stay in Settings → Agent usage.
+      usage limits) and its glance window (`resolveUsageGlance`, `selectGlanceRow`). The glance window is the one
+      closest to running out: the fullest of the windows that apply to the agent's model (the same rule as core's
+      `resolveUsedPercent`), the 5-hour one when two are as full once rounded. So an empty 5-hour window never hides
+      a nearly spent weekly one, and the row's label says which limit binds; every window stays in Settings → Agent
+      usage.
       Claude's and Codex's 5-hour window are both labelled "5-hour limit", everywhere. It reads "Agent usage" without a figure. It sits
       in the Cards top bar before Focus and in the rail header before search, opens an `InfoPopover` on hover, titled
       just "Agent usage" (no description), with every Claude account and then every connected provider
