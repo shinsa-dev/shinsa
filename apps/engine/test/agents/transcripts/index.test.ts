@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { EventEmitter } from 'node:events';
+import * as fs from 'node:fs';
 import { appendFileSync, type FSWatcher, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -195,6 +196,24 @@ describe('following a transcript', () => {
     appendFileSync(path, `${JSON.stringify({ v: 2, id: 'z', at: 1, type: 'error', text: 'missed' })}\n`);
     await until('the line the watch missed', () => seen.includes('run-3:error'));
     unfollow();
+  });
+
+  test('a line written as following starts arrives even when the periodic check takes it as its starting point', async () => {
+    const pollFile = spyOn(fs, 'watchFile').mockImplementation(
+      () => new EventEmitter() as unknown as fs.StatWatcher
+    );
+    try {
+      const { dir, transcripts, seen } = createWatched(20);
+      const path = join(dir, 'run-4.jsonl');
+      writeFileSync(path, '');
+      const unfollow = transcripts.follow('run-4');
+      expect(pollFile).toHaveBeenCalledTimes(1);
+      appendFileSync(path, `${JSON.stringify({ v: 2, id: 'w', at: 1, type: 'error', text: 'early' })}\n`);
+      await until('the line written as following started', () => seen.includes('run-4:error'));
+      unfollow();
+    } finally {
+      pollFile.mockRestore();
+    }
   });
 
   test('an unsubscribed listener hears nothing', () => {
