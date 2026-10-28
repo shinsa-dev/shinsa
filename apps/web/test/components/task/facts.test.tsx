@@ -16,7 +16,7 @@ import {
   startFakeServer,
   stopFakeServer,
 } from '../../support/server.ts';
-import { createRepo, createRun, createShinsaState, createTask } from '../../support/state.ts';
+import { createProject, createRepo, createRun, createShinsaState, createTask } from '../../support/state.ts';
 
 const DECIDED: TriageDecisions = {
   shape: { value: 'answer', why: 'It asks how something works.' },
@@ -73,6 +73,38 @@ describe('a task with no repository', () => {
     const [unbound, bound] = view.container.querySelectorAll('div.flex-wrap');
     expect(unbound?.textContent).not.toMatch(/kanna|repositor/i);
     expect(bound?.textContent).toContain('kanna');
+  });
+
+  it('marks the repository with a folder in its project’s colour, and a plain folder without a project', () => {
+    const task = createTask({ id: 'web', handle: 'SW-1', repoId: 'web' });
+    const state = createShinsaState({
+      tasks: [task, { ...task, id: 'loose', repoId: 'scratch' }],
+      projects: [createProject({ id: 'p', name: 'Superwall', color: 'purple' })],
+      repos: [
+        createRepo({
+          id: 'web',
+          name: 'paywall-next',
+          projectId: 'p',
+          remote: 'git@github.com:sw/paywall-next.git',
+        }),
+        createRepo({ id: 'scratch', name: 'scratch' }),
+      ],
+    });
+    pushState(state);
+    const view = render(
+      <TooltipProvider>
+        <TaskFacts state={state} task={task} />
+        <TaskFacts state={state} task={state.tasks.loose as Task} />
+      </TooltipProvider>
+    );
+    const [bound, loose] = view.container.querySelectorAll('div.flex-wrap');
+    const ink = bound?.querySelector('[data-project-ink]') as SVGElement | null;
+    expect(ink?.getAttribute('data-project-ink')).toBe('purple');
+    expect(ink?.style.getPropertyValue('--icon-color')).toBe('var(--purple-4, var(--fg-2))');
+    expect(bound?.textContent).toContain('paywall-next');
+    expect(bound?.textContent).not.toContain('Superwall');
+    expect(loose?.textContent).toContain('scratch');
+    expect(loose?.querySelector('[data-project-ink]')).toBeNull();
   });
 });
 
