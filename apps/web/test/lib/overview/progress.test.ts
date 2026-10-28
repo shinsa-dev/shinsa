@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { type PhaseProgress, resolveTaskProgress, type Task, type TaskProgress } from '@shinsa/core';
 import {
   describeStep,
+  describeStepCount,
   describeTrackPosition,
   isStepReached,
   resolveLabelFold,
@@ -393,24 +394,44 @@ describe('resolveLabelFold', () => {
   });
 });
 
-function step(key: string, status: Step['status'], count: string | null = null): Step {
+function sampleStep(key: string, status: Step['status'], count: string | null = null): Step {
   return { key, label: key, count, status, detail: [] };
 }
 
 describe('the current step', () => {
   it('picks the step in progress or the one waiting on you, and names it with its count', () => {
-    const building = [step('Plan', 'done'), step('Build', 'current', '1/2'), step('Checks', 'pending')];
+    const building = [
+      sampleStep('Plan', 'done'),
+      sampleStep('Build', 'current', '1/2'),
+      sampleStep('Checks', 'pending'),
+    ];
     expect(selectCurrentStep(building)?.key).toBe('Build');
     expect(describeStep(building[1] as Step)).toBe('Build 1/2');
     expect(describeTrackPosition(building)).toBe('Step 2 of 3: Build 1/2');
 
-    const review = [step('Build', 'done'), step('Your review', 'waiting')];
+    const review = [sampleStep('Build', 'done'), sampleStep('Your review', 'waiting')];
     expect(describeStep(selectCurrentStep(review) as Step)).toBe('Your review');
     expect(describeTrackPosition(review)).toBe('Step 2 of 2: Your review');
   });
 
+  it('names a step only when it has a count', () => {
+    expect(describeStepCount(sampleStep('Build', 'current', '1/2'), 'Building')).toBe('Build 1/2');
+    expect(describeStepCount(sampleStep('Your review', 'waiting'), 'Changes to review')).toBeNull();
+    expect(describeStepCount(null, 'Building')).toBeNull();
+  });
+
+  it('leaves the count out when the status already names the step', () => {
+    expect(
+      describeStepCount(sampleStep('Pre-merge', 'waiting', '1/2'), 'Pre-merge · 1 step left')
+    ).toBeNull();
+  });
+
   it('counts the steps done when none is current', () => {
-    const between = [step('Plan', 'done'), step('Run', 'skipped'), step('Build', 'pending')];
+    const between = [
+      sampleStep('Plan', 'done'),
+      sampleStep('Run', 'skipped'),
+      sampleStep('Build', 'pending'),
+    ];
     expect(selectCurrentStep(between)).toBeNull();
     expect(describeTrackPosition(between)).toBe('2 of 3 steps done');
   });

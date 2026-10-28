@@ -190,7 +190,7 @@ describe('wide queue', () => {
   });
 });
 
-describe('a row’s activity line', () => {
+describe('a row’s summary line', () => {
   beforeEach(() => {
     startFakeServer();
   });
@@ -252,7 +252,7 @@ describe('a row’s activity line', () => {
         .getByRole('img', { name: /^Step/ })
         .getAttribute('aria-label')
     ).toBe('Step 2 of 4: Build 1/2');
-    expect(row(/Build the export/).textContent).toContain('Phase 2 of 2: Wire the form');
+    expect(row(/Build the export/).textContent).not.toContain('Wire the form');
     expect(row(/Build the export/).textContent).toContain('Running bun test apps/web');
   });
 
@@ -266,7 +266,7 @@ describe('a row’s activity line', () => {
     expect(row(/Build the export/).textContent).toContain('Build 1/2');
   });
 
-  it('names the current step when no agent runs', () => {
+  it('names the current step’s count when no agent runs, and nothing when it has none', () => {
     renderQueue({
       state: createShinsaState({
         tasks: [
@@ -276,6 +276,7 @@ describe('a row’s activity line', () => {
       }),
     });
     expect(row(/Build the export/).textContent).toContain('Build 1/2');
+    expect(row(/Fresh task/).textContent).toBe('Fresh taskBuilding');
     expect(
       within(row(/Fresh task/))
         .getByRole('img', { name: /^Step/ })

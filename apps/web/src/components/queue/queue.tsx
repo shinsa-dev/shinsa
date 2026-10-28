@@ -7,10 +7,8 @@ import { CompactSection, CompactSections } from '@/components/layout/compact-sec
 import { ListRow } from '@/components/layout/list-row.tsx';
 import { SectionLabel } from '@/components/layout/page/section-label.tsx';
 import { CARD } from '@/components/layout/surface/card.ts';
-import { RowActivity } from '@/components/queue/row-activity.tsx';
+import { RowSummary } from '@/components/queue/row-summary.tsx';
 import { GateGlyph, TaskGlyph, WorkingGlyph } from '@/components/status/glyphs.tsx';
-import { TaskMeta } from '@/components/status/text.tsx';
-import { TaskHandlePrefix } from '@/components/task/handle.tsx';
 import { TimeAgo } from '@/components/text/time-ago.tsx';
 import { useProgressiveCount } from '@/hooks/use-progressive-count.ts';
 import { TONE_TEXT } from '@/lib/format/tone.ts';
@@ -127,13 +125,7 @@ function QueueSectionView({
       active={item.task.id === activeTaskId}
       revealWhenActive={variant === 'compact'}
       title={item.task.title}
-      meta={
-        <>
-          <TaskHandlePrefix task={item.task} />
-          <TaskMeta state={state} task={item.task} />
-        </>
-      }
-      detail={<RowActivity state={state} task={item.task} />}
+      summary={<RowSummary state={state} task={item.task} />}
       trailing={variant === 'wide' ? <TimeAgo at={item.since} compact detail={item.sinceLabel} /> : undefined}
       onClick={() => {
         navigate(resolveTaskPath(item.task));

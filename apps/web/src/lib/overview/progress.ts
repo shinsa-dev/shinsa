@@ -98,6 +98,11 @@ export function describeStep(step: Step) {
   return step.count ? `${step.label} ${step.count}` : step.label;
 }
 
+export function describeStepCount(step: Step | null, status: string) {
+  if (!step?.count || status.split(' · ')[0] === step.label) return null;
+  return describeStep(step);
+}
+
 export function describeTrackPosition(steps: Step[]) {
   const current = selectCurrentStep(steps);
   if (current) return `Step ${steps.indexOf(current) + 1} of ${steps.length}: ${describeStep(current)}`;
