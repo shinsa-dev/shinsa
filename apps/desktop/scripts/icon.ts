@@ -16,17 +16,7 @@ const MARK = { size: 488, viewBox: 365 };
 
 const ICONSET_SIZES = [16, 32, 128, 256, 512];
 
-type Flavor = 'stable' | 'canary';
-
-const FLAVORS: { flavor: Flavor; name: string }[] = [
-  { flavor: 'stable', name: 'icon' },
-  { flavor: 'canary', name: 'icon-canary' },
-];
-
-const BODY_INK: Record<Flavor, { top: string; bottom: string }> = {
-  stable: { top: '#fbfbfa', bottom: '#e7e7e5' },
-  canary: { top: '#ffd84d', bottom: '#f5b301' },
-};
+const BODY_INK = { top: '#fbfbfa', bottom: '#e7e7e5' };
 
 const desktopDir = resolve(import.meta.dirname, '..');
 
@@ -72,8 +62,7 @@ function resolveSquirclePath() {
   return `M${first} ${rest.map((point) => `L${point}`).join(' ')} Z`;
 }
 
-function serializeIcon(flavor: Flavor) {
-  const body = BODY_INK[flavor];
+function serializeIcon() {
   const scale = MARK.size / MARK.viewBox;
   const offset = (CANVAS - MARK.size) / 2;
   const squircle = resolveSquirclePath();
@@ -83,8 +72,8 @@ function serializeIcon(flavor: Flavor) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">
   <defs>
     <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${body.top}"/>
-      <stop offset="1" stop-color="${body.bottom}"/>
+      <stop offset="0" stop-color="${BODY_INK.top}"/>
+      <stop offset="1" stop-color="${BODY_INK.bottom}"/>
     </linearGradient>
     <linearGradient id="mark" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#3a3a3c"/>
@@ -117,9 +106,9 @@ function renderPng(svgPath: string, size: number, outPath: string) {
   run(['rsvg-convert', '--width', String(size), '--height', String(size), svgPath, '--output', outPath]);
 }
 
-function writeIcon(flavor: Flavor, name: string) {
+function writeIcon(name: string) {
   const svgPath = join(resourcesDir, `${name}.svg`);
-  writeFileSync(svgPath, serializeIcon(flavor));
+  writeFileSync(svgPath, serializeIcon());
   renderPng(svgPath, CANVAS, join(resourcesDir, `${name}.png`));
   const scratch = mkdtempSync(join(tmpdir(), 'shinsa-icon-'));
   const iconset = join(scratch, 'icon.iconset');
@@ -135,4 +124,4 @@ function writeIcon(flavor: Flavor, name: string) {
   }
 }
 
-for (const { flavor, name } of FLAVORS) writeIcon(flavor, name);
+writeIcon('icon');

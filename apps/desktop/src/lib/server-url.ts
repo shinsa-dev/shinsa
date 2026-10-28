@@ -1,6 +1,5 @@
 import { join } from 'node:path';
-import type { FlavorIdentity } from '@shinsa/core';
-import { FLAVOR } from './flavor.ts';
+import { APP_IDENTITY } from '@shinsa/core';
 
 type Env = Record<string, string | undefined>;
 
@@ -23,10 +22,14 @@ function parseOrigin(value: string | undefined) {
   }
 }
 
-export function resolveConfigPath(env: Env, home: string, flavor: FlavorIdentity = FLAVOR) {
+export function resolveConfigPath(env: Env, home: string) {
   if (env.SHINSA_HOME) return join(env.SHINSA_HOME, 'config.json');
   if (env.SHINSA_DATA_DIR) return join(env.SHINSA_DATA_DIR, 'config.json');
-  return join(env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'), flavor.configDir, 'config.json');
+  return join(
+    env.XDG_CONFIG_HOME || join(env.HOME || home, '.config'),
+    APP_IDENTITY.configDir,
+    'config.json'
+  );
 }
 
 export function parseConfigPort(text: string | null) {
@@ -45,15 +48,13 @@ export function resolveServerUrl({
   env,
   packaged,
   configPort,
-  flavor = FLAVOR,
 }: {
   env: Env;
   packaged: boolean;
   configPort: number | null;
-  flavor?: FlavorIdentity;
 }) {
   const configured = parseOrigin(env.SHINSA_URL);
   if (configured) return configured;
   if (!packaged) return `http://${HOST}:${DEV_PORT}`;
-  return `http://${HOST}:${parsePort(env.SHINSA_PORT) ?? configPort ?? flavor.port}`;
+  return `http://${HOST}:${parsePort(env.SHINSA_PORT) ?? configPort ?? APP_IDENTITY.port}`;
 }
