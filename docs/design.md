@@ -1596,27 +1596,22 @@ Only these, and they win over anything below:
     - **Settings → General → Updates** (`components/settings/updates.tsx`, `lib/updates.ts`; the app's updater is
       `apps/desktop`'s, `docs/release.md` → Channels and updates) is the last group of General. In the app: a
       secondary icon refresh button "Check for updates" in its header (the app's own check, which answers in a macOS
-      dialog), then 40px rows of two lines each. Shinsa (Shinsa Canary in that app): the app's version (`TOKEN_TEXT`)
+      dialog), then 40px rows of two lines each. Shinsa: the app's version (`TOKEN_TEXT`)
       and, once the updater has something to say, its status ("Checking for updates…", "Up to date", "Downloading
       1.3.1… 42%", "Preparing 1.3.1…" while macOS's installer unpacks and verifies it, the failure in orange,
       "Restarting to install 1.3.1…" after the click, or "1.3.1 is ready" in blue with a secondary `sm` Restart to
       update, offered only once nothing is left to wait for,
       `IconArrowRotateClockwise`; a beta on Stable that is newer than the latest stable reads "Go back to 1.2.0
       (stable)?" in blue with two secondary `sm` buttons, Stay on this beta, then Download and install with
-      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: in Shinsa a select
-      of Stable (`IconShieldCheck`) and Beta (`IconTestTube`) over what the chosen one gets: "Releases only. Coming
-      from a beta, you can go back to the latest stable." or "New versions first, as pre-releases, and every stable
-      release once it is newer than yours." Switching checks again at once. Under it a third row, Shinsa Canary: "A
-      separate app beside Shinsa with every change merged into main, and its own data and engine." and a secondary
-      `sm` Download Shinsa Canary (`IconArrowUpRight` at the end), a link to `https://shinsa.dev/download/canary` that
-      opens in the browser. Shinsa Canary is its own app (its own bundle id, data, engine and port), so its bridge
-      always reports `channel: 'canary'` and the web reads that as a fixed channel (`isChannelFixed`): the row shows
-      Canary (`IconFeather`) as text, no select, over "Shinsa Canary is built from every change merged into main and
-      updates only to the next canary.", the version row reads "Canary channel · Updates install when you quit Shinsa
-      Canary", and there is no download row. ⌘K's Change a setting has Update channel (Stable and Beta) in Shinsa
-      only, and Setup has Download Shinsa Canary there too; Shinsa Canary has neither. `/ui` → Settings shows Stable
-      up to date, Beta with an update ready, a beta switched to Stable offered the latest stable, Shinsa Canary
-      downloading the next canary, a downloaded beta being prepared, and a beta restarting to install.
+      `IconArrowDown`), over "Beta channel · Updates install when you quit Shinsa". Update channel: a select
+      of Stable (`IconShieldCheck`), Beta (`IconTestTube`) and Canary (`IconFeather`) over what the chosen one gets:
+      "Releases only. Coming from a beta or a canary, you can go back to the latest stable.", "New versions first, as
+      pre-releases, and every stable release once it is newer than yours." or "Every merge into main once its tests
+      pass. Less tested than Beta." Switching checks again at once, and a canary is Shinsa itself, so it updates in
+      place with the same data and engine. ⌘K's Change a setting has Update channel with the same three in the app.
+      `/ui` → Settings shows Stable up to date, Beta with an update ready, a beta switched to Stable offered the
+      latest stable, Canary downloading the next canary, a downloaded beta being prepared, and a beta restarting to
+      install.
       In a browser or Floaty the card holds one line: "Shinsa for Mac updates itself. Its version and update channel
       are in its own Settings."
 
@@ -1775,9 +1770,7 @@ Only these, and they win over anything below:
     web side). It loads the UI from the server (the CLI's port, `http://127.0.0.1:7446` by default), so the app, a
     browser tab and Floaty always show one version; Floaty stays the floating window and the app is the full one.
     The page learns it runs in the app only from the preload bridge `window.shinsaDesktop`; a browser and Floaty
-    have none and nothing below applies there. Shinsa Canary is the same app under its own name, icon (the mark on a
-    canary-yellow squircle, `icon-canary.*`) and engine on `http://127.0.0.1:7447`; its page differs only in Settings →
-    Updates (above).
+    have none and nothing below applies there. Every update channel, Canary included, is this one app.
     - **The title bar is the top bar.** The traffic lights sit inset over the 44px top bar, centred on it.
       `applyDesktop` (called from `main.tsx`) sets `data-desktop` on `<html>` (`window`, or `fullscreen` when the
       lights are gone), and the `desktop:` variant (`app.css`) holds the room they take: the Cards top bar

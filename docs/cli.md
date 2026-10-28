@@ -81,8 +81,7 @@ The text an agent's management tool gets is the same as a pipe's: plain, unwrapp
 ## Where commands go
 
 Every command talks to the engine on the configured host (`SHINSA_HOST` or `hostname` in `config.json`; 127.0.0.1
-when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, else 7446, 7447 for
-`shinsa-canary`; a `bun dev` engine is on 5180, so a command from source reaches it with `SHINSA_PORT=5180`). When the
+when the engine listens on every address) and port (`SHINSA_PORT` or `port` in `config.json`, else 7446; a `bun dev` engine is on 5180, so a command from source reaches it with `SHINSA_PORT=5180`). When the
 Mac app runs the engine and it is not answering, a command asks launchd to start it and waits for it; `status` and
 `version` only report. `start`, `stop` and `restart` work only with the `shinsa` the app puts on your PATH
 (`~/.local/bin/shinsa`, linked on every launch, in zsh, bash and fish), on the engine the app set up; from source, `bun dev` runs the engine in a terminal.
